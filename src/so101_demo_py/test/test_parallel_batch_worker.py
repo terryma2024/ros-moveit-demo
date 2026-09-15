@@ -520,6 +520,39 @@ def event_names(fake):
     return [entry[0] for entry in fake.coordinator.calls if entry[0] != "HEARTBEAT"]
 
 
+def test_prepare_for_start_is_idempotent_and_never_requests_a_lease():
+    fake = Fake(RunMode.PLAN_ONLY)
+    worker = ParallelWorker(fake.ports())
+
+    assert worker.prepare_for_start() is True
+    assert worker.prepare_for_start() is True
+    assert fake.coordinator.calls == [("register_worker", "w1", 1)]
+    assert fake.runtime.calls == ["worker_ready_gate"]
+
+
+@pytest.mark.parametrize(
+    ("result", "expected"),
+    [
+        (SimpleNamespace(point_id=None, terminal_status=None, recovered=False,
+                         stopped_reason="NO_POINT"), False),
+        (SimpleNamespace(point_id=None, terminal_status=None, recovered=False,
+                         stopped_reason="STOP_REQUESTED"), False),
+        (SimpleNamespace(point_id="p1", terminal_status=AttemptStatus.FAILED,
+                         recovered=True, stopped_reason="POINT_TERMINAL"), False),
+        (SimpleNamespace(point_id="p1", terminal_status=AttemptStatus.INVALID,
+                         recovered=True, stopped_reason="INITIAL_GATE_FAILED"), True),
+        (SimpleNamespace(point_id="p1", terminal_status=AttemptStatus.PASSED,
+                         recovered=False, stopped_reason="POINT_TERMINAL"), True),
+        (SimpleNamespace(point_id=None, terminal_status=None, recovered=False,
+                         stopped_reason="WORKER_NOT_READY"), True),
+    ],
+)
+def test_adaptive_worker_result_infrastructure_classification(result, expected):
+    from so101_demo.parallel_batch.worker import adaptive_result_is_infrastructure
+
+    assert adaptive_result_is_infrastructure(result) is expected
+
+
 @pytest.mark.parametrize(
     "boundary,message",
     [
@@ -1252,6 +1285,44 @@ def test_recovered_initial_gate_failure_continues_to_unique_remaining_point():
         call[0] == "LEASE_REQUEST" for call in fake.coordinator.calls
     ) == 3
     assert fake.coordinator.next_point == 3
+
+
+def test_adaptive_recovered_initial_gate_failure_stops_before_another_lease():
+    fake = Fake(point_count=2)
+    fake.runtime.raise_at = "point_initial_gate"
+    ports = {**fake.ports(), "adaptive_workers": True}
+
+    results = ParallelWorker(ports).run()
+
+    assert [result.stopped_reason for result in results] == [
+        "INITIAL_GATE_FAILED"
+    ]
+    assert results[0].terminal_status is AttemptStatus.INVALID
+    assert results[0].recovered is True
+    assert sum(
+        call[0] == "LEASE_REQUEST" for call in fake.coordinator.calls
+    ) == 1
+
+
+def test_adaptive_business_failure_recovers_and_takes_the_next_point():
+    fake = Fake(point_count=2)
+    fake.runtime.execute_decision = Decision(
+        AttemptStatus.FAILED,
+        "PLANNING_FAILED",
+        physical_action_proven_absent=True,
+    )
+    ports = {**fake.ports(), "adaptive_workers": True}
+
+    results = ParallelWorker(ports).run()
+
+    assert [result.terminal_status for result in results[:2]] == [
+        AttemptStatus.FAILED,
+        AttemptStatus.FAILED,
+    ]
+    assert results[-1].stopped_reason == "NO_POINT"
+    assert sum(
+        call[0] == "LEASE_REQUEST" for call in fake.coordinator.calls
+    ) == 3
 
 
 def test_recovery_deadline_starts_once_and_cannot_be_extended():

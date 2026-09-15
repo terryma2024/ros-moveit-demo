@@ -5,13 +5,23 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import threading
+import time
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 
-def fixture_runtime(tmp_path, monkeypatch, *, validation=False, failure=None):
+def fixture_runtime(
+    tmp_path,
+    monkeypatch,
+    *,
+    validation=False,
+    failure=None,
+    yolo_executor_count=1,
+    grounded_sam_executor_count=1,
+):
     from so101_demo.runtime.parallel_perception_runtime import (
         ParallelPerceptionRuntime, Snapshot, frozen_options)
     from so101_demo.adapters.perception import detector_factory
@@ -36,6 +46,7 @@ def fixture_runtime(tmp_path, monkeypatch, *, validation=False, failure=None):
         batch_id='b1', coordinator_epoch=1, worker_id='w1', worker_generation=1,
         point_id='p1', lease_generation=1, reset_epoch='reset1', image_timestamp_s=1.25,
         input_relative_path=relative, input_sha256=hashlib.sha256(target.read_bytes()).hexdigest(),
+        deadline_s=1000.0,
         attempt_id=None if validation else eid, validation_id=eid if validation else None)
     snapshot = Snapshot(shape=(2, 3, 3), source_stamp_ns=1250000000,
                         source_frame_id='camera', start_event_id='event1',
@@ -66,9 +77,12 @@ def fixture_runtime(tmp_path, monkeypatch, *, validation=False, failure=None):
     runtime = ParallelPerceptionRuntime(
         input_root=root, ready_receipt=ipc / 'ready.json',
         options=frozen_options(Path('/models/yolo/best.pt'), Path('/models/grounded')),
+        executor_counts={
+            'plastic-cup-yolo11n-seg-v1': yolo_executor_count,
+            'grounded-sam': grounded_sam_executor_count,
+        },
         provenance={'image_id': 'sha256:' + 'b' * 64, 'dockerfile_sha256': 'c' * 64,
                     'lock_sha256': 'd' * 64, 'source_sha256': 'e' * 64},
-        authorize=lambda request, snapshot: snapshot.start_event_id == 'event1',
         readonly_mount=lambda root: True)
     return SimpleNamespace(runtime=runtime, req=req, snapshot=snapshot, calls=calls,
                            file=target, root=root, receipt=ipc / 'ready.json')
@@ -90,6 +104,67 @@ def test_both_execution_kinds_normalize_lossless_candidates(tmp_path, monkeypatc
     assert f.receipt.stat().st_mode & 0o777 == 0o600
     assert f.receipt.stat().st_uid == os.getuid()
     assert json.loads(f.receipt.read_text())['ready'] is True
+
+
+def test_runtime_builds_independent_detector_instances_and_records_them(
+        tmp_path, monkeypatch):
+    from so101_demo.runtime.parallel_perception_runtime import GROUNDED_ID, YOLO_ID
+
+    f = fixture_runtime(tmp_path, monkeypatch, yolo_executor_count=2)
+    f.runtime.start()
+
+    assert len(f.runtime.detectors[YOLO_ID]) == 2
+    assert (
+        f.runtime.detectors[YOLO_ID][0].detector
+        is not f.runtime.detectors[YOLO_ID][1].detector
+    )
+    assert len(f.runtime.detectors[GROUNDED_ID]) == 1
+    receipt = json.loads(f.receipt.read_text(encoding='utf-8'))
+    assert receipt['models'][YOLO_ID]['executor_count'] == 2
+    assert [item['executor_index'] for item in receipt['models'][YOLO_ID]['instances']] == [0, 1]
+    assert receipt['models'][GROUNDED_ID]['executor_count'] == 1
+
+
+def test_runtime_infer_selects_the_requested_detector_instance(tmp_path, monkeypatch):
+    from so101_demo.runtime.parallel_perception_runtime import YOLO_ID
+
+    f = fixture_runtime(tmp_path, monkeypatch, yolo_executor_count=2)
+    f.runtime.start()
+    selected = []
+    first = f.runtime.detectors[YOLO_ID][0].detector
+    second = f.runtime.detectors[YOLO_ID][1].detector
+    first_detect = first.detect
+    second_detect = second.detect
+    first.detect = lambda frame, query: selected.append(0) or first_detect(frame, query)
+    second.detect = lambda frame, query: selected.append(1) or second_detect(frame, query)
+
+    f.runtime.infer(f.req, f.snapshot, executor_index=1)
+
+    assert selected == [1]
+
+
+def test_second_yolo_instance_setup_failure_never_publishes_ready(
+        tmp_path, monkeypatch):
+    from so101_demo.adapters.perception import detector_factory
+    from so101_demo.adapters.perception.errors import ModelRuntimeInfrastructureError
+
+    f = fixture_runtime(tmp_path, monkeypatch, yolo_executor_count=2)
+    build = detector_factory.build_detector
+    calls = []
+
+    def fail_second_yolo(options):
+        calls.append(options.backend)
+        if calls == ['yolo_seg', 'yolo_seg']:
+            raise RuntimeError('second YOLO warmup failed')
+        return build(options)
+
+    monkeypatch.setattr(detector_factory, 'build_detector', fail_second_yolo)
+    with pytest.raises(ModelRuntimeInfrastructureError, match='second YOLO'):
+        f.runtime.start()
+    assert calls == ['yolo_seg', 'yolo_seg']
+    assert f.runtime.detectors == {}
+    assert not f.receipt.exists()
+    assert not f.runtime.healthy
 
 
 def test_started_healthy_runtime_replays_ready_to_late_lifecycle_observer(
@@ -124,8 +199,9 @@ def test_started_unhealthy_runtime_still_requires_new_generation(tmp_path, monke
     assert sum(call[0] == 'build' for call in f.calls) == 2
 
 
-@pytest.mark.parametrize('bad', ['kind_path', 'event_type', 'event_identity', 'ack',
-                               'hash', 'shape', 'stamp', 'mode', 'symlink'])
+@pytest.mark.parametrize('bad', [
+    'kind_path', 'hash', 'shape', 'stamp', 'mode', 'symlink',
+])
 @pytest.mark.parametrize('validation', [False, True])
 def test_invalid_snapshot_never_reaches_model(tmp_path, monkeypatch, bad, validation):
     from so101_demo.parallel_batch.contracts import ModelOutcome
@@ -134,12 +210,6 @@ def test_invalid_snapshot_never_reaches_model(tmp_path, monkeypatch, bad, valida
     if bad == 'kind_path':
         f.req = replace(f.req, input_relative_path=f.req.input_relative_path.replace(
             'validations' if validation else 'attempts', 'attempts' if validation else 'validations'))
-    elif bad == 'event_type':
-        f.snapshot = replace(f.snapshot, start_event_type='LEASE_GRANTED')
-    elif bad == 'event_identity':
-        f.snapshot = replace(f.snapshot, start_identity=replace(f.snapshot.start_identity, point_id='p2'))
-    elif bad == 'ack':
-        f.snapshot = replace(f.snapshot, start_event_id='unacknowledged')
     elif bad == 'hash':
         f.req = replace(f.req, input_sha256='0' * 64)
     elif bad == 'shape':
@@ -215,7 +285,7 @@ def test_deterministic_error_is_model_error_and_empty_is_normal(tmp_path, monkey
     f.runtime.start()
     assert f.runtime.infer(f.req, f.snapshot).outcome is ModelOutcome.MODEL_ERROR
     assert f.runtime.healthy
-    detector = f.runtime.detectors[f.req.model_id].detector
+    detector = f.runtime.detectors[f.req.model_id][0].detector
     from so101_demo.core.detection import DetectionBatch
     detector.detect = lambda frame, query: DetectionBatch('fake', 'a' * 64, 'cuda', 0., 3, 2, ())
     assert f.runtime.infer(f.req, f.snapshot).outcome is ModelOutcome.NORMAL_REJECTION
@@ -324,7 +394,7 @@ def test_grounded_oom_has_infrastructure_type():
         detector.detect(None, None)
 
 
-def test_service_drives_real_broker_and_fences_late_ack(tmp_path, monkeypatch):
+def test_service_drives_real_broker_and_honors_local_generation_fence(tmp_path, monkeypatch):
     from so101_demo.runtime.parallel_perception_runtime import PerceptionService, GROUNDED_ID
     from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config
     config = load_parallel_runtime_config(Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
@@ -338,9 +408,299 @@ def test_service_drives_real_broker_and_fences_late_ack(tmp_path, monkeypatch):
     grounded = replace(f.req, request_id='r2', model_id=GROUNDED_ID)
     snap = replace(f.snapshot, start_identity=replace(f.snapshot.start_identity, request_id='r2'))
     assert service.submit(grounded, snap).accepted
-    f.runtime.authorize = lambda request, snapshot: False
+    service.broker.cancel_generation(grounded.worker_id, grounded.worker_generation)
     assert service.run_next() is None
     assert service.broker.poll_response(grounded).outcome is ModelOutcome.CANCELLED
+
+
+def test_service_executor_pool_overlaps_two_yolo_and_serializes_grounded(
+        tmp_path, monkeypatch):
+    from so101_demo.parallel_batch.broker import ModelResult
+    from so101_demo.parallel_batch.contracts import (
+        ModelOutcome,
+        load_parallel_runtime_config,
+    )
+    from so101_demo.runtime.parallel_perception_runtime import (
+        GROUNDED_ID,
+        PerceptionService,
+        YOLO_ID,
+    )
+    from so101_demo.runtime.parallel_ipc import _BrokerMetrics
+
+    f = fixture_runtime(tmp_path, monkeypatch)
+    release = threading.Event()
+    state_lock = threading.Lock()
+    active = {YOLO_ID: 0, GROUNDED_ID: 0}
+    peaks = {YOLO_ID: 0, GROUNDED_ID: 0}
+    calls = {YOLO_ID: [], GROUNDED_ID: []}
+
+    class Runtime:
+        executor_counts = {YOLO_ID: 2, GROUNDED_ID: 1}
+        healthy = False
+        health_changed = lambda _healthy: None
+
+        def start(self):
+            self.healthy = True
+            self.health_changed(True)
+
+        def infer(self, request, _snapshot, *, executor_index):
+            with state_lock:
+                active[request.model_id] += 1
+                peaks[request.model_id] = max(
+                    peaks[request.model_id], active[request.model_id]
+                )
+                calls[request.model_id].append(executor_index)
+            try:
+                assert release.wait(timeout=2.0)
+                return ModelResult(ModelOutcome.NORMAL_REJECTION)
+            finally:
+                with state_lock:
+                    active[request.model_id] -= 1
+
+        def record_failure(self, **_kwargs):
+            return None
+
+        def _unhealthy(self):
+            self.healthy = False
+            self.health_changed(False)
+
+    config = load_parallel_runtime_config(
+        Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml'
+    )
+    runtime = Runtime()
+    service = PerceptionService(runtime, config, generation=1)
+    metrics = _BrokerMetrics()
+    service.set_metrics(metrics)
+    service.start()
+    requests = [
+        replace(f.req, request_id=f'yolo-{index}', worker_id=f'y{index}')
+        for index in range(3)
+    ] + [
+        replace(
+            f.req,
+            request_id=f'grounded-{index}',
+            worker_id=f'g{index}',
+            model_id=GROUNDED_ID,
+        )
+        for index in range(2)
+    ]
+    for request in requests:
+        assert service.submit(request, f.snapshot).accepted
+
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline:
+        with state_lock:
+            if len(calls[YOLO_ID]) == 2 and len(calls[GROUNDED_ID]) == 1:
+                break
+        time.sleep(0.005)
+    with state_lock:
+        assert len(calls[YOLO_ID]) == 2
+        assert len(calls[GROUNDED_ID]) == 1
+        assert peaks == {YOLO_ID: 2, GROUNDED_ID: 1}
+    release.set()
+    responses = [service.wait_response(request, timeout_s=2.0) for request in requests]
+
+    assert all(response.outcome is ModelOutcome.NORMAL_REJECTION for response in responses)
+    assert len(calls[YOLO_ID]) == 3
+    assert len(calls[GROUNDED_ID]) == 2
+    summary = metrics.snapshot()
+    assert summary['queue_depth_peak'] > 1
+    assert summary['model_active_peak'] == {GROUNDED_ID: 1, YOLO_ID: 2}
+    assert service.close(timeout_s=1.0) is True
+
+
+def test_watchdog_times_out_blocked_inference_and_wakes_waiter(tmp_path, monkeypatch):
+    from so101_demo.parallel_batch.broker import ModelResult
+    from so101_demo.parallel_batch.contracts import (
+        ModelOutcome,
+        load_parallel_runtime_config,
+    )
+    from so101_demo.runtime.parallel_perception_runtime import (
+        GROUNDED_ID,
+        PerceptionService,
+        YOLO_ID,
+    )
+
+    f = fixture_runtime(tmp_path, monkeypatch)
+    entered = threading.Event()
+    release = threading.Event()
+    now = [1.0]
+
+    class Runtime:
+        executor_counts = {YOLO_ID: 1, GROUNDED_ID: 1}
+        healthy = False
+        health_changed = lambda _healthy: None
+
+        def start(self):
+            self.healthy = True
+            self.health_changed(True)
+
+        def infer(self, _request, _snapshot, *, executor_index):
+            assert executor_index == 0
+            entered.set()
+            assert release.wait(timeout=2.0)
+            return ModelResult(ModelOutcome.NORMAL_REJECTION)
+
+        def record_failure(self, **_kwargs):
+            return None
+
+        def _unhealthy(self):
+            self.healthy = False
+            self.health_changed(False)
+
+    config = load_parallel_runtime_config(
+        Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml'
+    )
+    runtime = Runtime()
+    service = PerceptionService(
+        runtime,
+        config,
+        generation=1,
+        clock=lambda: now[0],
+    )
+    service.start()
+    assert service.submit(f.req, f.snapshot).accepted
+    assert entered.wait(timeout=1.0)
+    now[0] += config.yolo_inference_timeout_s
+
+    response = service.wait_response(f.req, timeout_s=1.0)
+
+    assert response.outcome is ModelOutcome.INFERENCE_TIMEOUT
+    assert response.reason == 'INFERENCE_DEADLINE_EXCEEDED'
+    assert service.broker.healthy
+    assert runtime.healthy
+    assert service.close(timeout_s=0.01) is False
+    release.set()
+    assert service.close(timeout_s=1.0) is True
+
+
+def test_watchdog_waits_for_deadlines_without_reauthorizing_blocked_work(
+        tmp_path, monkeypatch):
+    """A blocked detector must not trigger a 20 ms remote-authorization loop."""
+    from so101_demo.parallel_batch.broker import ModelResult
+    from so101_demo.parallel_batch.contracts import (
+        ModelOutcome,
+        load_parallel_runtime_config,
+    )
+    from so101_demo.runtime.parallel_perception_runtime import (
+        GROUNDED_ID,
+        PerceptionService,
+        YOLO_ID,
+    )
+
+    f = fixture_runtime(tmp_path, monkeypatch)
+    entered = threading.Event()
+    release = threading.Event()
+    authorization_calls = []
+
+    class Runtime:
+        executor_counts = {YOLO_ID: 1, GROUNDED_ID: 1}
+        healthy = False
+        health_changed = lambda _healthy: None
+
+        def start(self):
+            self.healthy = True
+            self.health_changed(True)
+
+        def _authorized(self, request, _snapshot):
+            authorization_calls.append(request.request_id)
+
+        def infer(self, _request, _snapshot, *, executor_index):
+            assert executor_index == 0
+            entered.set()
+            assert release.wait(timeout=2.0)
+            return ModelResult(ModelOutcome.NORMAL_REJECTION)
+
+        def record_failure(self, **_kwargs):
+            return None
+
+        def _unhealthy(self):
+            self.healthy = False
+            self.health_changed(False)
+
+    config = load_parallel_runtime_config(
+        Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml'
+    )
+    service = PerceptionService(Runtime(), config, generation=1)
+    service.start()
+    assert service.submit(f.req, f.snapshot).accepted
+    assert entered.wait(timeout=1.0)
+    assert authorization_calls == []
+
+    time.sleep(0.10)
+
+    unchanged = authorization_calls == []
+    release.set()
+    assert service.wait_response(f.req, timeout_s=1.0).outcome is (
+        ModelOutcome.NORMAL_REJECTION
+    )
+    assert service.close(timeout_s=1.0) is True
+    assert unchanged
+
+
+def test_wait_response_does_not_run_watchdog_scan_on_client_thread(
+        tmp_path, monkeypatch):
+    from so101_demo.parallel_batch.broker import ModelResult
+    from so101_demo.parallel_batch.contracts import (
+        ModelOutcome,
+        load_parallel_runtime_config,
+    )
+    from so101_demo.runtime.parallel_perception_runtime import (
+        GROUNDED_ID,
+        PerceptionService,
+        YOLO_ID,
+    )
+
+    f = fixture_runtime(tmp_path, monkeypatch)
+    entered = threading.Event()
+    release = threading.Event()
+
+    class Runtime:
+        executor_counts = {YOLO_ID: 1, GROUNDED_ID: 1}
+        healthy = False
+        health_changed = lambda _healthy: None
+
+        def start(self):
+            self.healthy = True
+            self.health_changed(True)
+
+        def infer(self, _request, _snapshot, *, executor_index):
+            assert executor_index == 0
+            entered.set()
+            assert release.wait(timeout=2.0)
+            return ModelResult(ModelOutcome.NORMAL_REJECTION)
+
+        def record_failure(self, **_kwargs):
+            return None
+
+        def _unhealthy(self):
+            self.healthy = False
+            self.health_changed(False)
+
+    config = load_parallel_runtime_config(
+        Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml'
+    )
+    service = PerceptionService(Runtime(), config, generation=1)
+    service.start()
+    assert service.submit(f.req, f.snapshot).accepted
+    assert entered.wait(timeout=1.0)
+    waiting_thread = threading.current_thread()
+    sync_health = service._sync_health
+
+    def watchdog_only_scan():
+        assert threading.current_thread() is not waiting_thread
+        return sync_health()
+
+    monkeypatch.setattr(service, '_sync_health', watchdog_only_scan)
+    timer = threading.Timer(0.05, release.set)
+    timer.start()
+    try:
+        response = service.wait_response(f.req, timeout_s=1.0)
+    finally:
+        timer.join(timeout=1.0)
+
+    assert response.outcome is ModelOutcome.NORMAL_REJECTION
+    assert service.close(timeout_s=1.0) is True
 
 
 def test_service_preserves_initiating_runtime_failure_before_health_fanout(
@@ -395,7 +755,7 @@ def test_input_changed_during_detector_never_returns_candidate(tmp_path, monkeyp
     from so101_demo.parallel_batch.contracts import ModelOutcome
     f = fixture_runtime(tmp_path, monkeypatch)
     f.runtime.start()
-    detector = f.runtime.detectors[f.req.model_id].detector
+    detector = f.runtime.detectors[f.req.model_id][0].detector
     detect = detector.detect
     def changing(frame, query):
         result = detect(frame, query)
@@ -412,7 +772,7 @@ def test_normalized_schema_error_and_rle_roundtrip(tmp_path, monkeypatch):
     f = fixture_runtime(tmp_path, monkeypatch)
     f.runtime.start()
     frame = DetectionFrame(np.zeros((2, 3, 3), dtype=np.uint8), 1250000000, 'camera')
-    batch = f.runtime.detectors[f.req.model_id].detector.detect(frame, DetectionQuery('plastic_cup'))
+    batch = f.runtime.detectors[f.req.model_id][0].detector.detect(frame, DetectionQuery('plastic_cup'))
     mask = normalize_batch(batch, frame)['candidates'][0]['mask_rle']
     decoded = [bool(i % 2) for i, count in enumerate(mask['counts']) for _ in range(count)]
     assert decoded == [False, True, True, False, False, True]
@@ -434,7 +794,7 @@ def test_yolo_nonfinite_mask_is_deterministic_output_error():
                             inference_latency_ms=0., class_names={0: 'plastic_cup'})
 
 
-def test_service_preserves_empty_rejection_and_marks_deadline_unhealthy(tmp_path, monkeypatch):
+def test_service_preserves_empty_rejection_and_isolates_queue_deadline(tmp_path, monkeypatch):
     from so101_demo.runtime.parallel_perception_runtime import PerceptionService
     from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config
     from so101_demo.core.detection import DetectionBatch
@@ -443,7 +803,7 @@ def test_service_preserves_empty_rejection_and_marks_deadline_unhealthy(tmp_path
     now = [1.]
     service = PerceptionService(f.runtime, config, generation=1, clock=lambda: now[0])
     service.start()
-    detector = f.runtime.detectors[f.req.model_id].detector
+    detector = f.runtime.detectors[f.req.model_id][0].detector
     detector.detect = lambda frame, query: DetectionBatch('fake', 'a' * 64, 'cuda', 0., 3, 2, ())
     assert service.submit(f.req, f.snapshot).accepted
     assert service.run_next().outcome is ModelOutcome.NORMAL_REJECTION
@@ -452,13 +812,9 @@ def test_service_preserves_empty_rejection_and_marks_deadline_unhealthy(tmp_path
     assert service.submit(late, snapshot).accepted
     now[0] = 12.
     assert service.poll_response(late).outcome is ModelOutcome.QUEUE_TIMEOUT
-    assert not f.runtime.healthy
-    assert not service.broker.healthy
-    failure = json.loads(f.receipt.with_name('.failure.json').read_bytes())
-    assert failure['kind'] == 'broker_response_failure'
-    assert failure['error_type'] == 'BrokerResponse.QUEUE_TIMEOUT'
-    assert failure['reason'] == 'QUEUE_DEADLINE_EXCEEDED'
-    assert failure['request_id'] == 'late'
+    assert f.runtime.healthy
+    assert service.broker.healthy
+    assert not f.receipt.with_name('.failure.json').exists()
 
 
 def test_yolo_completed_result_count_error_is_model_error(tmp_path, monkeypatch):
@@ -470,7 +826,9 @@ def test_yolo_completed_result_count_error_is_model_error(tmp_path, monkeypatch)
     detector._model = SimpleNamespace(predict=lambda **kwargs: [])
     detector._imgsz, detector.runtime_device = 640, 'cuda'
     detector._monotonic_ns = lambda: 1
-    f.runtime.detectors[f.req.model_id] = replace(f.runtime.detectors[f.req.model_id], detector=detector)
+    f.runtime.detectors[f.req.model_id] = (
+        replace(f.runtime.detectors[f.req.model_id][0], detector=detector),
+    )
     assert f.runtime.infer(f.req, f.snapshot).outcome is ModelOutcome.MODEL_ERROR
     assert f.runtime.healthy
 
@@ -500,6 +858,31 @@ def test_smoke_records_independent_monotonic_latency_per_model(tmp_path, monkeyp
     assert all(item['outcome'] == 'QUALIFIED' for item in results.values())
     assert results['grounded-sam']['model_provenance'] == {'backend': 'grounded_sam'}
     assert json.loads(json.dumps(results, allow_nan=False)) == results
+
+
+def test_smoke_executes_and_indexes_every_detector_instance(tmp_path, monkeypatch):
+    from so101_demo.cli.parallel_perception_broker import smoke_models
+    from so101_demo.core.detection import DetectionFrame
+    from so101_demo.runtime.parallel_perception_runtime import GROUNDED_ID, YOLO_ID
+
+    f = fixture_runtime(tmp_path, monkeypatch, yolo_executor_count=2)
+    f.runtime.start()
+    frame = DetectionFrame(
+        np.zeros((2, 3, 3), dtype=np.uint8), 1250000000, 'camera'
+    )
+
+    results = smoke_models(
+        f.runtime,
+        frame,
+        clock=iter([1.0, 1.1, 1.1, 1.2, 1.2, 1.3]).__next__,
+    )
+
+    assert results[YOLO_ID]['executor_count'] == 2
+    assert [
+        item['executor_index'] for item in results[YOLO_ID]['instances']
+    ] == [0, 1]
+    assert results[GROUNDED_ID]['executor_count'] == 1
+    assert sum(call[0] == 'detect' for call in f.calls) == 3
 
 
 @pytest.mark.parametrize('clock_values', [[1., float('nan')], [1., .5],
@@ -543,7 +926,7 @@ def test_second_smoke_model_infra_does_not_hide_behind_first_success(tmp_path, m
     f.runtime.start()
     def fail(frame, query):
         raise RuntimeError('second model CUDA OOM')
-    f.runtime.detectors[GROUNDED_ID].detector.detect = fail
+    f.runtime.detectors[GROUNDED_ID][0].detector.detect = fail
     frame = DetectionFrame(np.zeros((2, 3, 3), dtype=np.uint8), 1250000000, 'camera')
     results = smoke_models(f.runtime, frame, clock=iter([1., 2., 2., 3.]).__next__)
     assert results[f.req.model_id]['outcome'] == 'QUALIFIED'
@@ -568,7 +951,7 @@ def test_transport_serve_failure_poison_runtime(tmp_path, monkeypatch):
         assert runtime.healthy and endpoint == Path('/runtime/perception.sock')
         raise ConnectionError('transport closed')
     with pytest.raises(ConnectionError, match='transport closed'):
-        cli.main(cli.broker_argv(), transport=SimpleNamespace(serve=serve), authorize=lambda *args: True)
+        cli.main(cli.broker_argv(), transport=SimpleNamespace(serve=serve))
     assert not f.runtime.healthy
 
 
@@ -596,10 +979,6 @@ def test_container_entry_installs_task11_transport_from_exact_runtime_spec(
     calls = []
 
     class Transport:
-        def authorize(self, request, snapshot):
-            calls.append(('authorize', request, snapshot))
-            return True
-
         def serve(self, runtime, *, endpoint):
             calls.append(('serve', runtime, endpoint))
             return 0
@@ -616,40 +995,6 @@ def test_container_entry_installs_task11_transport_from_exact_runtime_spec(
     assert calls[1] == ('serve', f.runtime, Path('/runtime/perception.sock'))
 
 
-@pytest.mark.parametrize('phase', ['submit', 'dispatch', 'completion'])
-@pytest.mark.parametrize('error_type', [ConnectionError, TimeoutError])
-def test_authority_failure_is_infrastructure_at_every_boundary(tmp_path, monkeypatch, phase, error_type):
-    from so101_demo.runtime.parallel_perception_runtime import PerceptionService
-    from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config
-    f = fixture_runtime(tmp_path, monkeypatch)
-    config = load_parallel_runtime_config(Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
-    service = PerceptionService(f.runtime, config, generation=1)
-    service.start()
-    failed = [phase == 'submit']
-    def authorize(request, snapshot):
-        if failed[0]:
-            raise error_type('authority unavailable')
-        return True
-    f.runtime.authorize = authorize
-    submission = service.submit(f.req, f.snapshot)
-    if phase == 'dispatch':
-        failed[0] = True
-    elif phase == 'completion':
-        detector = f.runtime.detectors[f.req.model_id].detector
-        detect = detector.detect
-        def complete(frame, query):
-            batch = detect(frame, query)
-            failed[0] = True
-            return batch
-        detector.detect = complete
-    if submission.accepted:
-        service.run_next()
-    response = service.broker.poll_response(f.req)
-    assert response.outcome is ModelOutcome.INFRA_ERROR
-    assert not service.broker.healthy
-    assert not f.runtime.healthy
-
-
 @pytest.mark.parametrize('running', [False, True])
 def test_dispatch_scan_timeout_poison_health_even_without_returned_result(tmp_path, monkeypatch, running):
     from so101_demo.runtime.parallel_perception_runtime import PerceptionService
@@ -658,7 +1003,8 @@ def test_dispatch_scan_timeout_poison_health_even_without_returned_result(tmp_pa
     config = load_parallel_runtime_config(Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
     now = [1.]
     service = PerceptionService(f.runtime, config, generation=1, clock=lambda: now[0])
-    service.start()
+    # This test drives dispatch synchronously; do not race the service executor.
+    service.runtime.start()
     assert service.submit(f.req, f.snapshot).accepted
     if running:
         assert service.broker.next_ready_request() == f.req
@@ -666,14 +1012,12 @@ def test_dispatch_scan_timeout_poison_health_even_without_returned_result(tmp_pa
     assert service.run_next() is None
     assert service.broker.poll_response(f.req).outcome is (
         ModelOutcome.INFERENCE_TIMEOUT if running else ModelOutcome.QUEUE_TIMEOUT)
-    assert not f.runtime.healthy
-    assert not service.broker.healthy
-    assert not service.submit(replace(f.req, request_id='next'), f.snapshot).accepted
+    assert f.runtime.healthy
+    assert service.broker.healthy
+    assert service.submit(replace(f.req, request_id='next'), f.snapshot).accepted
 
 
-@pytest.mark.parametrize('outcome', [
-    'INFRA_ERROR', 'QUEUE_TIMEOUT', 'INFERENCE_TIMEOUT',
-])
+@pytest.mark.parametrize('outcome', ['INFRA_ERROR'])
 def test_health_losing_response_reports_one_exact_event(
         tmp_path, monkeypatch, outcome):
     from so101_demo.parallel_batch.contracts import (
@@ -738,7 +1082,9 @@ def test_yolo_completed_schema_vs_tensor_transfer_boundary(tmp_path, monkeypatch
     detector._monotonic_ns = lambda: 1
     detector._model_id, detector._weights_sha256 = 'yolo', 'a' * 64
     detector._class_names = None if bad == 'class_mapping' else {0: 'plastic_cup'}
-    f.runtime.detectors[f.req.model_id] = replace(f.runtime.detectors[f.req.model_id], detector=detector)
+    f.runtime.detectors[f.req.model_id] = (
+        replace(f.runtime.detectors[f.req.model_id][0], detector=detector),
+    )
     expected = ModelOutcome.INFRA_ERROR if bad.startswith('transfer_') else ModelOutcome.MODEL_ERROR
     assert f.runtime.infer(f.req, f.snapshot).outcome is expected
     assert f.runtime.healthy is (expected is ModelOutcome.MODEL_ERROR)
@@ -783,6 +1129,8 @@ def test_grounded_preparation_is_not_a_completed_model_result(tmp_path, monkeypa
     detector._grounding_processor, detector._sam_processor = GroundingProcessor(), SamProcessor()
     detector._grounding_model, detector._sam_model = grounding_model, sam_model
     detector.runtime_device, detector.target_class_id = 'cuda', 'plastic_cup'
-    f.runtime.detectors[f.req.model_id] = replace(f.runtime.detectors[f.req.model_id], detector=detector)
+    f.runtime.detectors[f.req.model_id] = (
+        replace(f.runtime.detectors[f.req.model_id][0], detector=detector),
+    )
     assert f.runtime.infer(f.req, f.snapshot).outcome.value == expected
     assert calls == calls_expected

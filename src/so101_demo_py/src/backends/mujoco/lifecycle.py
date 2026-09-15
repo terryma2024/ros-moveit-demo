@@ -74,27 +74,70 @@ class MujocoLifecycleAdapter:
         return ShutdownResult(bool(accepted), None if accepted else "SHUTDOWN_FAILED")
 
 
+class MujocoPauseControl:
+    """Retain one private ROS participant across point pause/resume calls."""
+
+    def __init__(self) -> None:
+        import rclpy
+        from rclpy.executors import SingleThreadedExecutor
+        from mujoco_ros2_control_msgs.srv import SetPause
+
+        self._context = rclpy.context.Context()
+        rclpy.init(context=self._context)
+        self._node = rclpy.create_node(
+            "so101_live_runtime_pause_control", context=self._context
+        )
+        self._executor = SingleThreadedExecutor(context=self._context)
+        self._executor.add_node(self._node)
+        self._client = self._node.create_client(
+            SetPause, "/mujoco_ros2_control_node/set_pause"
+        )
+        self._request_type = SetPause.Request
+        self._closed = False
+
+    def set_paused(self, paused: bool) -> bool:
+        if self._closed:
+            raise RuntimeError("MuJoCo pause control is closed")
+        if type(paused) is not bool:
+            raise TypeError("paused must be bool")
+        if not self._client.wait_for_service(timeout_sec=5.0):
+            return False
+        request = self._request_type()
+        request.paused = paused
+        future = self._client.call_async(request)
+        deadline = time.monotonic() + 5.0
+        while not future.done() and time.monotonic() < deadline:
+            self._executor.spin_once(timeout_sec=0.01)
+        response = future.result() if future.done() else None
+        return bool(response is not None and response.success)
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._executor.remove_node(self._node)
+        self._executor.shutdown()
+        self._node.destroy_node()
+        self._context.shutdown()
+
+
+def _set_physics_paused(paused: bool) -> bool:
+    control = MujocoPauseControl()
+    try:
+        return control.set_paused(paused)
+    finally:
+        control.close()
+
+
+def pause_physics(config: Any) -> bool:
+    """Freeze a qualified MuJoCo stack while its immutable RGB waits for inference."""
+
+    del config
+    return _set_physics_paused(True)
+
+
 def resume_physics(config: Any) -> bool:
     """Resume a qualified MuJoCo stack; application code receives this as a callback."""
 
     del config
-    import rclpy
-    from mujoco_ros2_control_msgs.srv import SetPause
-
-    rclpy.init()
-    node = rclpy.create_node("so101_live_runtime_resume")
-    try:
-        client = node.create_client(SetPause, "/mujoco_ros2_control_node/set_pause")
-        if not client.wait_for_service(timeout_sec=5.0):
-            return False
-        request = SetPause.Request()
-        request.paused = False
-        future = client.call_async(request)
-        deadline = time.monotonic() + 5.0
-        while not future.done() and time.monotonic() < deadline:
-            rclpy.spin_once(node, timeout_sec=0.01)
-        response = future.result() if future.done() else None
-        return bool(response is not None and response.success)
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
+    return _set_physics_paused(False)

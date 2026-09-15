@@ -15,6 +15,7 @@ import re
 import stat
 import subprocess
 import sys
+import time
 from types import MappingProxyType
 from typing import Mapping
 import uuid
@@ -32,6 +33,15 @@ _BATCH_ID = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]*$')
 _DOMAIN_CLAIM_SCOPE = 'cooperating_same_uid_processes'
 _DOMAIN_CLAIM_PROTOCOL = 'uid_flock_v1'
 _MAX_LIVE_EVIDENCE_BYTES = 1024 * 1024
+_CLEANUP_PROC_SCAN_QUIESCENCE_ATTEMPTS = 601
+_CLEANUP_PROC_SCAN_QUIESCENCE_INTERVAL_S = 0.05
+_CLEANUP_TRANSIENT_PROC_SCAN_BOUNDARIES = (
+    'PROC_IDENTITY_UNVERIFIABLE:',
+    'PROC_METADATA_UNVERIFIABLE:',
+    'PROC_ENV_UNVERIFIABLE:',
+    'PROC_CLASSIFICATION_UNVERIFIABLE:',
+    'PROC_IDENTITY_CHANGED:',
+)
 _TASK14_ARTIFACT_NAMES = (
     'source_manifest',
     'install_manifest',
@@ -106,6 +116,41 @@ class ResourceThresholds:
             'available_ram_gib': self.available_ram_gib,
             'gpu_free_gib': self.gpu_free_gib,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class AllocationPolicy:
+    """Worker-count and Domain policy independent of observational resources."""
+
+    max_worker_count: int
+    ros_domain_ids: tuple[int, ...]
+    enforce_resource_thresholds: bool = True
+    persistent_cleanup_claims: bool = False
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.max_worker_count, bool)
+            or not isinstance(self.max_worker_count, int)
+            or self.max_worker_count <= 0
+        ):
+            raise ResourceAllocationError('ALLOCATION_POLICY_WORKER_COUNT')
+        domains = tuple(self.ros_domain_ids)
+        if (
+            len(domains) < self.max_worker_count
+            or len(domains) != len(set(domains))
+            or any(
+                isinstance(domain, bool)
+                or not isinstance(domain, int)
+                or not 0 <= domain <= 232
+                for domain in domains
+            )
+        ):
+            raise ResourceAllocationError('ALLOCATION_POLICY_ROS_DOMAIN_IDS')
+        if type(self.enforce_resource_thresholds) is not bool:
+            raise ResourceAllocationError('ALLOCATION_POLICY_RESOURCE_THRESHOLDS')
+        if type(self.persistent_cleanup_claims) is not bool:
+            raise ResourceAllocationError('ALLOCATION_POLICY_PERSISTENT_CLAIMS')
+        object.__setattr__(self, 'ros_domain_ids', domains)
 
 
 @dataclass(frozen=True, slots=True)
@@ -301,7 +346,7 @@ class SystemResourceProbe:
             if not stat.S_ISDIR(process_stat.st_mode):
                 raise ResourceAllocationError(f'PROC_IDENTITY_UNVERIFIABLE: {process.name}')
             try:
-                before, comm, argv = _read_process_identity(process)
+                before, comm, argv = _read_process_identity_with_retry(process)
             except (FileNotFoundError, ProcessLookupError):
                 if not os.path.lexists(process):
                     continue
@@ -315,7 +360,9 @@ class SystemResourceProbe:
             skip_reason = _frozen_non_candidate_reason(before[2], comm, argv)
             if skip_reason is not None:
                 try:
-                    after, _comm_after, _argv_after = _read_process_identity(process)
+                    after, _comm_after, _argv_after = (
+                        _read_process_identity_with_retry(process)
+                    )
                 except (OSError, UnicodeError, ValueError) as error:
                     raise ResourceAllocationError(
                         f'PROC_IDENTITY_CHANGED: {process.name}'
@@ -336,7 +383,7 @@ class SystemResourceProbe:
                 continue
             candidate = _is_high_recall_ros_candidate(comm, argv)
             try:
-                entries = (process / 'environ').read_bytes().split(b'\0')
+                entries = _read_process_environ_with_retry(process)
             except (FileNotFoundError, ProcessLookupError) as error:
                 if not os.path.lexists(process):
                     continue
@@ -353,7 +400,9 @@ class SystemResourceProbe:
                     f'{boundary}: {process.name}'
                 ) from error
             try:
-                after, _comm_after, _argv_after = _read_process_identity(process)
+                after, _comm_after, _argv_after = _read_process_identity_with_retry(
+                    process
+                )
             except (OSError, UnicodeError, ValueError) as error:
                 raise ResourceAllocationError(
                     f'PROC_IDENTITY_CHANGED: {process.name}'
@@ -381,6 +430,27 @@ class SystemResourceProbe:
     def socket_in_use(self, path: Path) -> bool:
         """Treat every existing filesystem object as a socket reservation."""
         return os.path.lexists(path)
+
+
+def _ros_domain_in_use_after_cleanup_quiescence(
+    probe: SystemResourceProbe, domain_id: int
+) -> bool:
+    """Rescan bounded transient process races only during verified cleanup."""
+
+    for attempt in range(_CLEANUP_PROC_SCAN_QUIESCENCE_ATTEMPTS):
+        try:
+            return probe.ros_domain_in_use(domain_id)
+        except ResourceAllocationError as error:
+            transient = str(error).startswith(
+                _CLEANUP_TRANSIENT_PROC_SCAN_BOUNDARIES
+            )
+            if (
+                not transient
+                or attempt + 1 >= _CLEANUP_PROC_SCAN_QUIESCENCE_ATTEMPTS
+            ):
+                raise
+            time.sleep(_CLEANUP_PROC_SCAN_QUIESCENCE_INTERVAL_S)
+    raise AssertionError('unreachable process scan retry loop')
 
 
 class Task14AcceptanceProvider:
@@ -815,6 +885,7 @@ class WorkerResourceAllocator:
         live_headroom_evidence: Path | None = None,
         live_headroom_verifier=None,
         batch_id: str | None = None,
+        allocation_policy: AllocationPolicy | None = None,
     ) -> None:
         if not isinstance(config, ParallelRuntimeConfig):
             raise ResourceAllocationError('CONFIG')
@@ -832,6 +903,13 @@ class WorkerResourceAllocator:
         if not isinstance(selected_batch_id, str) or _BATCH_ID.fullmatch(selected_batch_id) is None:
             raise ResourceAllocationError('BATCH_ID')
         self.batch_id = selected_batch_id
+        self.allocation_policy = (
+            AllocationPolicy(config.max_worker_count, config.ros_domain_ids)
+            if allocation_policy is None
+            else allocation_policy
+        )
+        if not isinstance(self.allocation_policy, AllocationPolicy):
+            raise ResourceAllocationError('ALLOCATION_POLICY')
         self.probe = probe if probe is not None else SystemResourceProbe()
         source_environment = os.environ if base_environment is None else base_environment
         if not isinstance(source_environment, Mapping):
@@ -877,38 +955,49 @@ class WorkerResourceAllocator:
         if (
             type(requested) is not int
             or requested <= 0
-            or requested > self.config.max_worker_count
+            or requested > self.allocation_policy.max_worker_count
         ):
             raise ResourceAllocationError('WORKER_COUNT')
-        if len(self.config.ros_domain_ids) < requested:
+        if len(self.allocation_policy.ros_domain_ids) < requested:
             raise ResourceAllocationError('ROS_DOMAIN_IDS')
         observed = self._probe_snapshot()
-        required = ResourceThresholds(
-            logical_cpu_count=self.config.min_logical_cpu_per_worker * requested,
-            available_ram_gib=float(
-                self.config.available_ram_base_gib
-                + self.config.available_ram_per_worker_gib * requested
-            ),
-            gpu_free_gib=float(self.config.min_available_gpu_gib),
-        )
-        failures = _resource_failures(observed, required)
+        if self.allocation_policy.enforce_resource_thresholds:
+            required = ResourceThresholds(
+                logical_cpu_count=self.config.min_logical_cpu_per_worker * requested,
+                available_ram_gib=float(
+                    self.config.available_ram_base_gib
+                    + self.config.available_ram_per_worker_gib * requested
+                ),
+                gpu_free_gib=float(self.config.min_available_gpu_gib),
+            )
+            failures = _resource_failures(observed, required)
+            headroom_ratio = self.config.required_live_headroom_ratio
+        else:
+            required = ResourceThresholds(0, 0.0, 0.0)
+            failures = ()
+            headroom_ratio = 0.0
         admission = ResourceAdmission(
             admitted=not failures,
             observed=observed,
             required=required,
-            required_live_headroom_ratio=self.config.required_live_headroom_ratio,
+            required_live_headroom_ratio=headroom_ratio,
             failures=failures,
         )
         if failures:
             raise ResourceAllocationError(', '.join(failures), admission=admission)
-        live_headroom = self._live_headroom(requested)
+        live_headroom = (
+            self._live_headroom(requested)
+            if self.allocation_policy.enforce_resource_thresholds
+            else None
+        )
 
         paths = tuple(self._paths(slot + 1) for slot in range(requested))
         parent_fd = None
         try:
             parent_fd = _open_trusted_parent(self.evidence_root)
-            self._claim_domains(self.config.ros_domain_ids[:requested])
-            self._preflight(paths, parent_fd)
+            domains = self.allocation_policy.ros_domain_ids[:requested]
+            self._claim_domains(domains)
+            self._preflight(paths, parent_fd, domains)
             scan_report = getattr(self.probe, 'process_scan_report', None)
             if callable(scan_report):
                 self._process_scan = scan_report()
@@ -918,6 +1007,7 @@ class WorkerResourceAllocator:
                 for slot in range(requested)
             )
         except Exception:
+            self._release_persistent_claims_no_processes_started()
             self.close()
             raise
         finally:
@@ -952,7 +1042,7 @@ class WorkerResourceAllocator:
             or manifest.worker_count != manifest.requested_worker_count
             or manifest.worker_count != len(manifest.workers)
             or manifest.worker_count <= 0
-            or manifest.worker_count > self.config.max_worker_count
+            or manifest.worker_count > self.allocation_policy.max_worker_count
         ):
             raise ResourceAllocationError('RECOVERY_MANIFEST')
         expected_paths = tuple(
@@ -969,7 +1059,9 @@ class WorkerResourceAllocator:
                 'render_context_namespace': paths['render_context_namespace'],
                 'socket_namespace': paths['socket_namespace'],
                 'socket_path': paths['socket_path'],
-                'ros_domain_id': self.config.ros_domain_ids[worker.slot_index - 1],
+                'ros_domain_id': self.allocation_policy.ros_domain_ids[
+                    worker.slot_index - 1
+                ],
                 'simulation_port': _NOT_APPLICABLE,
                 'bridge_port': _NOT_APPLICABLE,
                 'gz_partition': _NOT_APPLICABLE,
@@ -1202,6 +1294,28 @@ class WorkerResourceAllocator:
                         raise ResourceAllocationError(
                             f'ROS_DOMAIN_CLAIMED: {domain_id}'
                         ) from error
+                    if self.allocation_policy.persistent_cleanup_claims:
+                        try:
+                            os.lseek(descriptor, 0, os.SEEK_SET)
+                            payload = os.read(descriptor, 8193)
+                            if len(payload) > 8192:
+                                raise ValueError('oversized claim')
+                            if payload:
+                                prior = json.loads(payload.decode('utf-8'))
+                                if type(prior) is not dict:
+                                    raise ValueError('claim mapping')
+                                if prior.get('claim_state') == 'ACTIVE':
+                                    raise ResourceAllocationError(
+                                        f'ROS_DOMAIN_UNCLEAN: {domain_id}'
+                                    )
+                                if prior.get('claim_state') != 'RELEASED':
+                                    raise ValueError('claim state')
+                        except ResourceAllocationError:
+                            raise
+                        except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
+                            raise ResourceAllocationError(
+                                f'ROS_DOMAIN_CLAIM_INVALID: {domain_id}'
+                            ) from error
                     acquired[domain_id] = descriptor
                 except Exception:
                     os.close(descriptor)
@@ -1220,6 +1334,8 @@ class WorkerResourceAllocator:
                     'evidence_root': str(self.evidence_root),
                     'claim_path': str(self.claim_root / name),
                 }
+                if self.allocation_policy.persistent_cleanup_claims:
+                    record.update(claim_state='ACTIVE', generation=1)
                 _replace_fd_contents(descriptor, _json_bytes(record) + b'\n')
                 records.append(record)
             os.fsync(claim_root_fd)
@@ -1233,6 +1349,61 @@ class WorkerResourceAllocator:
             os.close(claim_parent_fd)
         self._claim_fds = acquired
         self._domain_claims = tuple(records)
+
+    def _release_persistent_claims_no_processes_started(self) -> None:
+        """Roll back claims only while allocation has not returned to a launcher."""
+
+        if (
+            not self.allocation_policy.persistent_cleanup_claims
+            or not self._domain_claims
+        ):
+            return
+        released = []
+        for record in self._domain_claims:
+            value = dict(record)
+            descriptor = self._claim_fds.get(value['domain_id'])
+            if descriptor is None or value.get('claim_state') != 'ACTIVE':
+                raise ResourceAllocationError('ROS_DOMAIN_CLAIM_ROLLBACK')
+            value.update(claim_state='RELEASED', no_processes_started=True)
+            _replace_fd_contents(descriptor, _json_bytes(value) + b'\n')
+            released.append(value)
+        self._domain_claims = tuple(released)
+
+    def release_persistent_claims(self, *, cleanup_verified: bool) -> bool:
+        """Publish RELEASED only while holding claims after exact cleanup readback."""
+
+        if type(cleanup_verified) is not bool or not cleanup_verified:
+            raise ResourceAllocationError('CLEANUP_NOT_VERIFIED')
+        if self._closed or self._manifest is None:
+            raise ResourceAllocationError('ALLOCATOR_NOT_ACTIVE')
+        if not self.allocation_policy.persistent_cleanup_claims:
+            return True
+        for worker in self._manifest.workers:
+            if self.probe.socket_in_use(worker.socket_path):
+                raise ResourceAllocationError('CLEANUP_SOCKET_ACTIVE')
+            if _ros_domain_in_use_after_cleanup_quiescence(
+                self.probe, worker.ros_domain_id
+            ):
+                raise ResourceAllocationError('CLEANUP_ROS_DOMAIN_ACTIVE')
+        released = []
+        for record in self._domain_claims:
+            value = dict(record)
+            if value.get('claim_state') == 'RELEASED':
+                released.append(value)
+                continue
+            descriptor = self._claim_fds.get(value.get('domain_id'))
+            if (
+                descriptor is None
+                or value.get('claim_state') != 'ACTIVE'
+                or value.get('batch_id') != self.batch_id
+                or value.get('evidence_root') != str(self.evidence_root)
+            ):
+                raise ResourceAllocationError('ROS_DOMAIN_CLAIM_RELEASE')
+            value.update(claim_state='RELEASED', cleanup_verified=True)
+            _replace_fd_contents(descriptor, _json_bytes(value) + b'\n')
+            released.append(value)
+        self._domain_claims = tuple(released)
+        return True
 
     def _probe_snapshot(self) -> ResourceSnapshot:
         try:
@@ -1277,7 +1448,8 @@ class WorkerResourceAllocator:
         }
 
     def _preflight(
-        self, paths: tuple[dict[str, Path | str | int], ...], parent_fd: int
+        self, paths: tuple[dict[str, Path | str | int], ...], parent_fd: int,
+        domains: tuple[int, ...],
     ) -> None:
         try:
             existing = os.stat(
@@ -1297,7 +1469,7 @@ class WorkerResourceAllocator:
             if len(os.fsencode(socket_path)) > _UNIX_SOCKET_PATH_MAX_BYTES:
                 raise ResourceAllocationError(f'UNIX_SOCKET_PATH_TOO_LONG: {socket_path}')
         self._probe_namespace_collisions(
-            paths, self.config.ros_domain_ids[: len(paths)]
+            paths, domains
         )
 
     def _probe_namespace_collisions(
@@ -1400,7 +1572,9 @@ class WorkerResourceAllocator:
         }
         environment.update(
             {
-                'ROS_DOMAIN_ID': str(self.config.ros_domain_ids[slot_index - 1]),
+                'ROS_DOMAIN_ID': str(
+                    self.allocation_policy.ros_domain_ids[slot_index - 1]
+                ),
                 'ROS_HOME': str(paths['ros_home']),
                 'ROS_LOG_DIR': str(paths['ros_log_dir']),
                 'TMPDIR': str(paths['temp_dir']),
@@ -1421,7 +1595,7 @@ class WorkerResourceAllocator:
             worker_id=worker_id,
             slot_index=slot_index,
             generation=generation,
-            ros_domain_id=self.config.ros_domain_ids[slot_index - 1],
+            ros_domain_id=self.allocation_policy.ros_domain_ids[slot_index - 1],
             simulation_port=_NOT_APPLICABLE,
             bridge_port=_NOT_APPLICABLE,
             gz_partition=_NOT_APPLICABLE,
@@ -1780,6 +1954,27 @@ def _read_process_identity(
         if item
     )
     return (pid, starttime, fields[0]), comm, argv
+
+
+def _read_process_identity_with_retry(
+    process: Path,
+) -> tuple[tuple[int, int, str], str, tuple[str, ...]]:
+    """Retry one transient procfs I/O race without weakening fail-closed reads."""
+
+    try:
+        return _read_process_identity(process)
+    except OSError:
+        return _read_process_identity(process)
+
+
+def _read_process_environ_with_retry(process: Path) -> list[bytes]:
+    """Retry one transient environ read; a repeated denial still propagates."""
+
+    try:
+        payload = (process / 'environ').read_bytes()
+    except OSError:
+        payload = (process / 'environ').read_bytes()
+    return payload.split(b'\0')
 
 
 def _frozen_non_candidate_reason(

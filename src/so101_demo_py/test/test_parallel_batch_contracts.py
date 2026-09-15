@@ -166,6 +166,7 @@ def test_batch_request_and_identities_reject_path_traversal_and_mixed_execution_
         image_timestamp_s=1.0,
         input_relative_path="perception/input/rgb.npy",
         input_sha256="a" * 64,
+        deadline_s=5.0,
         attempt_id="attempt-1",
     )
     with pytest.raises(ContractError, match="MIXED_EXECUTION_IDENTITY"):
@@ -289,6 +290,7 @@ def test_relative_input_path_rejects_dot_component():
             image_timestamp_s=1.0,
             input_relative_path=".",
             input_sha256="a" * 64,
+            deadline_s=5.0,
             attempt_id="attempt-1",
         )
 

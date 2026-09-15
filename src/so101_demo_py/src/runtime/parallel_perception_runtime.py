@@ -1,9 +1,9 @@
-"""Shared detector service; transport and durable ACK authority are injected.
+"""Shared detector service with bounded, stateless request processing.
 
 Input SHA256 covers the exact .npy file bytes (including its header). The Worker
-seals the file 0400 before submission. Snapshot metadata is verified against the
-authenticated start-event port on every dispatch and completion. This module
-does not localize depth, access TF, publish ROS messages, or authorize motion.
+seals the file 0400 before submission. This module does not interpret batch
+leases, start events, Worker generations, or journals, and it does not localize
+depth, access TF, publish ROS messages, or authorize motion.
 """
 
 from dataclasses import dataclass
@@ -15,6 +15,7 @@ from pathlib import Path
 import stat
 import sys
 import threading
+import time
 
 import numpy as np
 
@@ -27,7 +28,7 @@ from so101_demo.adapters.perception.grounded_sam_postprocess import GroundedSamT
 from so101_demo.core.detection import DetectionBatch, DetectionCandidate, DetectionFrame, DetectionQuery
 from so101_demo.parallel_batch.broker import BrokerSubmission, ModelResult, PerceptionBroker
 from so101_demo.parallel_batch.contracts import (
-    ExecutionKind, InferenceRequest, ModelOutcome, NormalizedInferenceResponseIdentity,
+    InferenceRequest, ModelOutcome, NormalizedInferenceResponseIdentity,
     ParallelRuntimeConfig,
 )
 
@@ -61,19 +62,15 @@ def frozen_options(yolo_weights, grounded_root):
 
 @dataclass(frozen=True)
 class Snapshot:
-    """Authenticated metadata alongside the canonical Task 1 request identity."""
+    """Image metadata; legacy scheduling fields are opaque compatibility data."""
 
     shape: tuple
     source_stamp_ns: int
     source_frame_id: str
-    start_event_id: str
-    start_event_type: str
-    start_identity: NormalizedInferenceResponseIdentity
+    start_event_id: str | None = None
+    start_event_type: str | None = None
+    start_identity: NormalizedInferenceResponseIdentity | None = None
     query_class_id: str = 'plastic_cup'
-
-
-class StartAuthorizationRejected(ValueError):
-    """A verified negative authorization or mismatched execution identity."""
 
 
 def checked_path(path, *, owner=None, mode=None, directory=False):
@@ -156,12 +153,27 @@ def normalize_batch(batch, frame):
 class ParallelPerceptionRuntime:
     """One model pair per service generation, with irreversible unhealthy state."""
 
-    def __init__(self, *, input_root, ready_receipt, options, provenance, authorize,
+    def __init__(self, *, input_root, ready_receipt, options, provenance,
+                 executor_counts=None,
                  readonly_mount=lambda root: bool(os.statvfs(root).f_flag & os.ST_RDONLY),
                  health_changed=lambda healthy: None):
         self.input_root, self.ready_receipt = Path(input_root), Path(ready_receipt)
         self.options, self.provenance = dict(options), dict(provenance)
-        self.authorize, self.readonly_mount = authorize, readonly_mount
+        self.executor_counts = (
+            {YOLO_ID: 1, GROUNDED_ID: 1}
+            if executor_counts is None
+            else dict(executor_counts)
+        )
+        if set(self.executor_counts) != {YOLO_ID, GROUNDED_ID}:
+            raise ValueError('EXECUTOR_COUNT_MODELS')
+        if (
+            type(self.executor_counts[YOLO_ID]) is not int
+            or self.executor_counts[YOLO_ID] not in {1, 2, 4}
+            or type(self.executor_counts[GROUNDED_ID]) is not int
+            or self.executor_counts[GROUNDED_ID] != 1
+        ):
+            raise ValueError('EXECUTOR_COUNT')
+        self.readonly_mount = readonly_mount
         self.health_changed = health_changed
         self.detectors = {}
         self.healthy = False
@@ -180,7 +192,10 @@ class ParallelPerceptionRuntime:
             'reason': reason,
             'request_id': request.request_id,
             'model_id': request.model_id,
-            'execution_kind': request.execution_kind.value,
+            'execution_kind': (
+                None if request.execution_kind is None
+                else request.execution_kind.value
+            ),
             'batch_id': request.batch_id,
             'worker_id': request.worker_id,
             'worker_generation': request.worker_generation,
@@ -217,47 +232,53 @@ class ParallelPerceptionRuntime:
             checked_path(self.input_root, owner=(os.getuid(), os.getgid()), directory=True)
             if self.readonly_mount(self.input_root) is not True:
                 raise ValueError('READONLY_INPUT_MOUNT_REQUIRED')
+            detectors = {}
             for model_id in (YOLO_ID, GROUNDED_ID):
-                built = detector_factory.build_detector(self.options[model_id])
-                if built.detector.runtime_device != 'cuda':
-                    raise ValueError('CUDA_REQUIRED')
-                self.detectors[model_id] = built
+                instances = []
+                for _executor_index in range(self.executor_counts[model_id]):
+                    built = detector_factory.build_detector(self.options[model_id])
+                    if built.detector.runtime_device != 'cuda':
+                        raise ValueError('CUDA_REQUIRED')
+                    instances.append(built)
+                detectors[model_id] = tuple(instances)
             receipt = {'ready': True, 'provenance': self.provenance, 'models': {
-                key: {'provenance': value.provenance_document,
-                      'cold_start_latency_ms': value.cold_start_latency_ms}
-                for key, value in self.detectors.items()}}
+                key: {
+                    'executor_count': len(instances),
+                    'instances': [
+                        {
+                            'executor_index': executor_index,
+                            'provenance': value.provenance_document,
+                            'cold_start_latency_ms': value.cold_start_latency_ms,
+                        }
+                        for executor_index, value in enumerate(instances)
+                    ],
+                }
+                for key, instances in detectors.items()}}
             write_receipt(self.ready_receipt, receipt)
+            self.detectors = detectors
             self.healthy = True
             self.health_changed(True)
         except Exception as error:
             self._unhealthy()
             raise ModelRuntimeInfrastructureError(f'START_FAILED: {error}') from error
 
-    def _authorized(self, request, snapshot):
+    def _frame(self, request, snapshot):
         if type(request) is not InferenceRequest or type(snapshot) is not Snapshot:
             raise ValueError('REQUEST_SNAPSHOT_REQUIRED')
-        expected = ('ATTEMPT_STARTED' if request.execution_kind is ExecutionKind.ATTEMPT
-                    else 'VALIDATION_STARTED')
-        if (snapshot.start_event_type != expected or not snapshot.start_event_id
-                or snapshot.start_identity != NormalizedInferenceResponseIdentity.from_request(request)):
-            raise StartAuthorizationRejected('START_ACK_IDENTITY')
-        authorized = self.authorize(request, snapshot)
-        if authorized is False:
-            raise StartAuthorizationRejected('START_ACK_REJECTED')
-        if authorized is not True:
-            raise ModelRuntimeInfrastructureError('INVALID_AUTHORITY_RESPONSE')
-
-    def _frame(self, request, snapshot):
-        self._authorized(request, snapshot)
-        branch, eid = (('attempts', request.attempt_id)
-                       if request.execution_kind is ExecutionKind.ATTEMPT
-                       else ('validations', request.validation_id))
-        expected = f'{request.worker_id}/{branch}/{request.point_id}/{eid}/working/perception/input/rgb.npy'
-        if request.input_relative_path != expected:
-            raise ValueError('EXECUTION_INPUT_PATH')
+        relative = Path(request.input_relative_path)
+        if (
+            relative.is_absolute()
+            or not relative.parts
+            or any(part in {'', '.', '..'} for part in relative.parts)
+        ):
+            raise ValueError('INPUT_RELATIVE_PATH')
         if self.readonly_mount(self.input_root) is not True:
             raise ValueError('READONLY_INPUT_MOUNT_REQUIRED')
-        path = checked_path(self.input_root / expected, owner=(os.getuid(), os.getgid()), mode=0o400)
+        path = checked_path(
+            self.input_root / relative,
+            owner=(os.getuid(), os.getgid()),
+            mode=0o400,
+        )
         path.relative_to(self.input_root)
         for parent in path.parents:
             if parent == self.input_root.parent:
@@ -284,14 +305,19 @@ class ParallelPerceptionRuntime:
             raise ValueError('INPUT_SHAPE_STAMP')
         return DetectionFrame(rgb, snapshot.source_stamp_ns, snapshot.source_frame_id)
 
-    def infer(self, request, snapshot):
+    def infer(self, request, snapshot, *, executor_index=0):
         try:
             if not self.healthy:
                 raise ModelRuntimeInfrastructureError('BROKER_UNHEALTHY')
+            if type(executor_index) is not int or executor_index < 0:
+                raise ModelRuntimeInfrastructureError('EXECUTOR_INDEX')
+            instances = self.detectors.get(request.model_id, ())
+            if executor_index >= len(instances):
+                raise ModelRuntimeInfrastructureError('EXECUTOR_INDEX')
             frame = self._frame(request, snapshot)
             query = DetectionQuery(snapshot.query_class_id)
             try:
-                batch = self.detectors[request.model_id].detector.detect(frame, query)
+                batch = instances[executor_index].detector.detect(frame, query)
                 candidate = normalize_batch(batch, frame)
                 result = (ModelResult(ModelOutcome.QUALIFIED, candidate=candidate)
                           if candidate['candidates'] else ModelResult(ModelOutcome.NORMAL_REJECTION))
@@ -317,7 +343,7 @@ class ParallelPerceptionRuntime:
 
 
 class PerceptionService:
-    """Bind authenticated snapshots to the one canonical bounded Broker.
+    """Bind immutable snapshots to the one canonical bounded Broker.
 
     Task 11 transport calls submit/run_next/poll_response; an independent timer
     must poll deadlines while run_next blocks on CUDA. The supervisor provides
@@ -327,6 +353,7 @@ class PerceptionService:
     def __init__(
         self, runtime, config, *, generation, clock=None,
         health_down=lambda _event: True,
+        queue_capacity_per_model=None,
     ):
         self.runtime = runtime
         self._snapshots = {}
@@ -334,35 +361,63 @@ class PerceptionService:
         self._lock = threading.RLock()
         self._health_down = health_down
         self._health_down_reported = False
+        self._started = False
+        self._closed = threading.Event()
+        self._work_available = threading.Event()
+        # Waiting/notification stays independent from snapshot ownership so
+        # request completion cannot block a concurrent submit or detector.
+        self._response_condition = threading.Condition()
+        self._executor_threads = []
+        self._watchdog_thread = None
+        self._metrics = None
         kwargs = {} if clock is None else {'clock': clock}
         self.broker = PerceptionBroker(
-            config, grounded_model_id=GROUNDED_ID, authorize=self._authorize,
+            config, grounded_model_id=GROUNDED_ID,
             generation=generation, detectors={model: self._detect for model in (YOLO_ID, GROUNDED_ID)},
+            queue_capacity_per_model=queue_capacity_per_model,
             **kwargs)
         runtime.health_changed = self._health_changed
+
+    def set_metrics(self, metrics):
+        self._metrics = metrics
 
     def _health_changed(self, healthy):
         for model in (YOLO_ID, GROUNDED_ID):
             self.broker.set_model_ready(model, healthy)
 
-    def _authorize(self, request):
-        with self._lock:
-            snapshot = self._snapshots.get(request.request_id)
-        if snapshot is None:
-            return False
-        try:
-            self.runtime._authorized(request, snapshot)
-            return True
-        except StartAuthorizationRejected:
-            return False
-
-    def _detect(self, request):
+    def _detect(self, request, *, executor_index=0):
         with self._lock:
             snapshot = self._snapshots[request.request_id]
-        return self.runtime.infer(request, snapshot)
+        return self.runtime.infer(
+            request,
+            snapshot,
+            executor_index=executor_index,
+        )
 
     def start(self):
         self.runtime.start()
+        with self._lock:
+            if self._started:
+                return
+            self._started = True
+            for model_id in (YOLO_ID, GROUNDED_ID):
+                for executor_index in range(
+                    self.runtime.executor_counts[model_id]
+                ):
+                    thread = threading.Thread(
+                        target=self._executor_loop,
+                        args=(model_id, executor_index),
+                        name=f'perception-{model_id}-{executor_index}',
+                        daemon=True,
+                    )
+                    self._executor_threads.append(thread)
+                    thread.start()
+            self._watchdog_thread = threading.Thread(
+                target=self._watchdog_loop,
+                name='perception-watchdog',
+                daemon=True,
+            )
+            self._watchdog_thread.start()
 
     def submit(self, request, snapshot):
         self._sync_health()
@@ -375,14 +430,121 @@ class PerceptionService:
         with self._lock:
             self._requests.setdefault(request.request_id, request)
         self._response_health(submission.response)
+        if submission.accepted and submission.response is None:
+            if self._metrics is not None:
+                self._metrics.queued(request)
+            self._work_available.set()
+        with self._response_condition:
+            self._response_condition.notify_all()
         return submission
+
+    def _executor_loop(self, model_id, executor_index):
+        while not self._closed.is_set():
+            request = self.broker.next_ready_request(model_id)
+            if request is None:
+                self._work_available.wait(0.02)
+                self._work_available.clear()
+                continue
+            if self._metrics is not None:
+                self._metrics.started(request, executor_index)
+            with self._response_condition:
+                self._response_condition.notify_all()
+            try:
+                result = self._detect(
+                    request,
+                    executor_index=executor_index,
+                )
+            except Exception as error:
+                result = ModelResult(
+                    ModelOutcome.INFRA_ERROR,
+                    reason=f'DETECTOR_RUNTIME_ERROR: {error}',
+                )
+            if self._metrics is not None:
+                self._metrics.model_completed(request, result.outcome.value)
+            response = self.broker.complete(request, result)
+            self._response_health(response)
+            with self._response_condition:
+                self._response_condition.notify_all()
+
+    def _watchdog_loop(self):
+        while not self._closed.is_set():
+            with self._response_condition:
+                changed = self._sync_health()
+                if self._closed.is_set():
+                    return
+                delay = self.broker.next_deadline_delay()
+                if changed:
+                    self._response_condition.notify_all()
+                self._response_condition.wait(delay)
+
+    def wait_response(self, request, timeout_s):
+        if (
+            isinstance(timeout_s, bool)
+            or not isinstance(timeout_s, (int, float))
+            or timeout_s <= 0
+        ):
+            raise ValueError('WAIT_RESPONSE_TIMEOUT')
+        deadline = time.monotonic() + float(timeout_s)
+        while True:
+            with self._response_condition:
+                response = self._response_health(
+                    self.broker.poll_response(request)
+                )
+                if response is not None:
+                    return response
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return None
+                # Executor completion and the independent deadline watchdog
+                # notify this condition; request handlers never scan other
+                # clients' state or enter a Coordinator path.
+                self._response_condition.wait(remaining)
+
+    def close(self, timeout_s):
+        if (
+            isinstance(timeout_s, bool)
+            or not isinstance(timeout_s, (int, float))
+            or timeout_s < 0
+        ):
+            raise ValueError('SERVICE_CLOSE_TIMEOUT')
+        self._closed.set()
+        with self._lock:
+            outstanding = tuple(self._requests.values())
+        for worker_id, generation in {
+            (request.worker_id, request.worker_generation)
+            for request in outstanding
+            if request.worker_id is not None
+            and request.worker_generation is not None
+        }:
+            self.broker.cancel_generation(worker_id, generation)
+        self.runtime._unhealthy()
+        self._work_available.set()
+        with self._response_condition:
+            self._response_condition.notify_all()
+        deadline = time.monotonic() + float(timeout_s)
+        threads = [*self._executor_threads]
+        if self._watchdog_thread is not None:
+            threads.append(self._watchdog_thread)
+        for thread in threads:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            thread.join(remaining)
+        return all(not thread.is_alive() for thread in threads)
 
     def run_next(self):
         self._sync_health()
         response = self.broker.run_next()
         self._sync_health()
-        return self._response_health(self.broker.poll_response(response.request)
-                                     if response is not None else None)
+        if response is not None:
+            return self._response_health(
+                self.broker.poll_response(response.request)
+            )
+        with self._lock:
+            pending = tuple(self._requests.values())
+        if len(pending) == 1:
+            return self.wait_response(pending[0], timeout_s=1.0)
+        return None
 
     def poll_response(self, request):
         self._sync_health()
@@ -393,18 +555,27 @@ class PerceptionService:
         # Poll only the public Broker API; no second deadline/state machine.
         with self._lock:
             requests = tuple(self._requests.values())
+        changed = False
         for request in requests:
-            self._response_health(self.broker.poll_response(request))
+            changed = (
+                self._response_health(self.broker.poll_response(request))
+                is not None
+            ) or changed
+        return changed
 
     def _response_health(self, response):
         if response is not None:
+            if self._metrics is not None:
+                self._metrics.completed(response.request)
             with self._lock:
                 self._requests.pop(response.request.request_id, None)
-        health_losing = response is not None and response.outcome in {
-            ModelOutcome.INFRA_ERROR,
-            ModelOutcome.QUEUE_TIMEOUT,
-            ModelOutcome.INFERENCE_TIMEOUT,
-        }
+            with self._response_condition:
+                self._response_condition.notify_all()
+        health_losing = (
+            response is not None
+            and response.outcome is ModelOutcome.INFRA_ERROR
+            and response.reason != 'QUEUE_FULL'
+        )
         if not self.broker.healthy or health_losing:
             if response is not None:
                 self.runtime.record_failure(

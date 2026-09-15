@@ -20,6 +20,7 @@ from so101_demo.parallel_batch.contracts import (
 PACKAGE = Path(__file__).resolve().parents[1]
 POINTS = PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml"
 CONFIG = PACKAGE / "config/mujoco/parallel_batch_v1.yaml"
+ADAPTIVE_CONFIG = PACKAGE / "config/mujoco/parallel_adaptive_workers_v1.yaml"
 YOLO_SHA = "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781"
 GROUNDED_SHA = "0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775"
 
@@ -50,8 +51,63 @@ def argv(root: Path, **changes):
     return result
 
 
+def adaptive_argv(root: Path, **changes):
+    values = {
+        "points": str(POINTS),
+        "config": str(CONFIG),
+        "adaptive_config": str(ADAPTIVE_CONFIG),
+        "batch_id": "a001",
+        "evidence_root": str(root),
+        "broker_image": "so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1",
+        "yolo_weights": "/models/yolo.pt",
+        "yolo_weights_sha256": YOLO_SHA,
+        "grounded_root": "/models/grounded",
+        "grounded_manifest_sha256": GROUNDED_SHA,
+        "run_mode": "dry_run",
+    }
+    values.update(changes)
+    result = ["--adaptive-workers"]
+    for key, value in values.items():
+        if value is None:
+            continue
+        if key == "point_id":
+            for item in value:
+                result += ["--point-id", item]
+        else:
+            result += ["--" + key.replace("_", "-"), str(value)]
+    return result
+
+
 def verified(_spec):
     return {"source_commit": "a" * 40, "models_verified": True, "image_verified": True}
+
+
+def test_shutdown_signal_handler_is_idempotent_while_cleanup_unwinds(monkeypatch):
+    import signal
+
+    from so101_demo.cli.mujoco_parallel_batch import (
+        CliError,
+        _run_with_shutdown_signals,
+    )
+
+    handlers = {}
+
+    def install(number, handler):
+        previous = handlers.get(number, signal.SIG_DFL)
+        handlers[number] = handler
+        return previous
+
+    monkeypatch.setattr(signal, "signal", install)
+
+    def interrupted_call():
+        try:
+            handlers[signal.SIGTERM](signal.SIGTERM, None)
+        except CliError as error:
+            handlers[signal.SIGINT](signal.SIGINT, None)
+            raise error
+
+    with pytest.raises(CliError, match="SHUTDOWN_SIGNAL:SIGTERM"):
+        _run_with_shutdown_signals(interrupted_call)
 
 
 def test_worker_result_evidence_is_private_structured_and_no_replace(tmp_path):
@@ -131,6 +187,38 @@ def test_recovered_initial_gate_terminal_is_not_a_worker_process_failure():
             recovered=True,
         ),
     )) is True
+
+
+def test_adaptive_worker_process_classifies_recovered_invalid_as_infrastructure():
+    from so101_demo.cli.mujoco_parallel_batch import _worker_results_failed
+    from so101_demo.parallel_batch.contracts import AttemptStatus
+
+    invalid = SimpleNamespace(
+        point_id="task_start",
+        stopped_reason="INITIAL_GATE_FAILED",
+        terminal_status=AttemptStatus.INVALID,
+        recovered=True,
+    )
+    exhausted = SimpleNamespace(
+        point_id=None,
+        stopped_reason="NO_POINT",
+        terminal_status=None,
+        recovered=False,
+    )
+    stopped = SimpleNamespace(
+        point_id=None,
+        stopped_reason="STOP_REQUESTED",
+        terminal_status=None,
+        recovered=False,
+    )
+
+    assert _worker_results_failed((invalid, exhausted)) is False
+    assert _worker_results_failed(
+        (invalid, exhausted), adaptive_workers=True
+    ) is True
+    assert _worker_results_failed(
+        (exhausted, stopped), adaptive_workers=True
+    ) is False
 
 
 @pytest.mark.parametrize(
@@ -549,9 +637,10 @@ def test_physical_composition_prepares_and_supervises_one_external_broker(
     broker_spec = json.loads(composition.broker_spec_path.read_text())
     assert broker_spec["broker_generation"] == 1
     assert broker_spec["coordinator_epoch"] == composition.journal.coordinator_epoch
-    assert broker_spec["authority_endpoint"] == "/runtime/broker-authority.sock"
+    assert "authority_endpoint" not in broker_spec
+    assert "queue_capacity_per_model" not in broker_spec
     assert broker_spec["config_path"] == "/runtime/runtime-config.yaml"
-    assert broker_spec["authority_token_path"] == "/runtime/broker-g1.token"
+    assert "authority_token_path" not in broker_spec
     worker_spec = json.loads(composition.worker_specs[0].read_text())
     assert worker_spec["broker_socket_path"] == str(root / "ipc/broker/perception.sock")
     assert worker_spec["broker_generation"] == 1
@@ -669,7 +758,7 @@ def test_workers_cannot_start_until_broker_socket_and_ready_receipt_exist(tmp_pa
         ProductionBatchComposition, _write_json, prepare_batch,
     )
     from so101_demo.parallel_batch.resources import ResourceSnapshot
-    from so101_demo.runtime.parallel_ipc import BrokerTransport, _BrokerCoordinatorClient
+    from so101_demo.runtime.parallel_ipc import BrokerTransport
 
     class Probe:
         def snapshot(self):
@@ -727,20 +816,10 @@ def test_workers_cannot_start_until_broker_socket_and_ready_receipt_exist(tmp_pa
                 },
             },
         }
-        composition._start_servers()
-        authority_call = _BrokerCoordinatorClient(
-            composition.broker_authority_server.path,
-            composition.broker_token_path,
-            coordinator_epoch=composition.journal.coordinator_epoch,
-            generation=1,
-            deadline_s=1.0,
-            max_frame_bytes=spec.config.broker_max_frame_bytes,
-        )
         transport = BrokerTransport(
             ipc_root=composition.broker_runtime_root,
             config=spec.config,
             generation=1,
-            authority_call=authority_call,
             deadline_s=1.0,
         )
         transport.bind_ready_identity(ready)
@@ -950,6 +1029,70 @@ def test_broker_cleanup_accepts_exact_container_removed_during_stop_race(tmp_pat
     owner._sleep = lambda _seconds: None
 
     assert owner._retire_broker_container() is True
+
+
+def test_broker_exit_capture_persists_process_container_logs_and_events(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
+
+    owner = object.__new__(ProductionBatchComposition)
+    owner.broker_runtime_root = tmp_path / "broker"
+    owner.broker_runtime_root.mkdir()
+    owner.broker_container_id_path = owner.broker_runtime_root / "container.cid"
+    container_id = "c" * 64
+    owner.broker_container_id_path.write_text(container_id + "\n", encoding="ascii")
+    owner.broker_container_id_path.chmod(0o600)
+    state = {
+        "Status": "exited",
+        "Running": False,
+        "Paused": False,
+        "Restarting": False,
+        "OOMKilled": False,
+        "Dead": False,
+        "Pid": 0,
+        "ExitCode": 17,
+        "Error": "broker crashed",
+        "StartedAt": "2026-09-15T11:00:00Z",
+        "FinishedAt": "2026-09-15T11:03:00Z",
+    }
+
+    def run(command, **_kwargs):
+        if command[1:3] == ["inspect", "--type"]:
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps([{"Id": container_id, "State": state}]),
+                stderr="",
+            )
+        if command[1] == "logs":
+            return SimpleNamespace(returncode=0, stdout="last broker line\n", stderr="")
+        assert command[1] == "events"
+        return SimpleNamespace(
+            returncode=0,
+            stdout='{"status":"die","exitCode":"17"}\n',
+            stderr="",
+        )
+
+    owner._container_runner = run
+    process = SimpleNamespace(
+        role="broker", pid=123, pgid=123, start_time=456,
+        cmdline=("docker", "run"), batch_id="a001-g01-w10",
+    )
+
+    owner._capture_broker_exit_evidence(process, 17)
+
+    report = json.loads(
+        (owner.broker_runtime_root / "broker-exit.json").read_text(encoding="utf-8")
+    )
+    assert report["process"] == {
+        "role": "broker",
+        "pid": 123,
+        "pgid": 123,
+        "start_time": 456,
+        "exit_code": 17,
+    }
+    assert report["container"]["id"] == container_id
+    assert report["container"]["state"] == state
+    assert report["logs"] == {"returncode": 0, "stdout": "last broker line\n", "stderr": ""}
+    assert report["events"]["stdout"] == '{"status":"die","exitCode":"17"}\n'
 
 
 def test_broker_cleanup_waits_for_exact_auto_remove_after_successful_stop(tmp_path):
@@ -1226,7 +1369,7 @@ def test_composition_always_runs_fail_closed_cleanup_when_worker_start_raises(tm
     assert (spec.request.evidence_root / "cleanup-gates.json").stat().st_mode & 0o777 == 0o600
 
 
-def test_broker_authority_verifies_the_exact_committed_start_event(tmp_path):
+def test_broker_transport_does_not_interpret_committed_start_event(tmp_path):
     import threading
 
     from so101_demo.cli.mujoco_parallel_batch import (
@@ -1240,10 +1383,8 @@ def test_broker_authority_verifies_the_exact_committed_start_event(tmp_path):
     from so101_demo.parallel_batch.resources import ResourceSnapshot
     from so101_demo.runtime.parallel_ipc import (
         BrokerTransport,
-        _BrokerCoordinatorClient,
     )
     from so101_demo.runtime.parallel_worker_runtime import InferenceSnapshotReceipt
-    from so101_demo.runtime.parallel_perception_runtime import Snapshot
 
     class Probe:
         def snapshot(self):
@@ -1328,19 +1469,10 @@ def test_broker_authority_verifies_the_exact_committed_start_event(tmp_path):
                 "no_stale_node": True,
             },
         )
-        authority_call = _BrokerCoordinatorClient(
-            composition.broker_authority_server.path,
-                root / "ipc/broker/broker-g1.token",
-            coordinator_epoch=composition.journal.coordinator_epoch,
-            generation=1,
-            deadline_s=1.0,
-            max_frame_bytes=spec.config.broker_max_frame_bytes,
-        )
         transport = BrokerTransport(
             ipc_root=root / "ipc/broker",
             config=spec.config,
             generation=1,
-            authority_call=authority_call,
             deadline_s=1.0,
         )
 
@@ -1352,7 +1484,9 @@ def test_broker_authority_verifies_the_exact_committed_start_event(tmp_path):
                 self.request = request
                 return BrokerSubmission(True)
 
-            def run_next(self):
+            def wait_response(self, request, timeout_s):
+                assert request == self.request
+                assert timeout_s == 1.0
                 return BrokerResponse(
                     self.request,
                     1,
@@ -1365,9 +1499,6 @@ def test_broker_authority_verifies_the_exact_committed_start_event(tmp_path):
                     13.1,
                     12.2,
                 )
-
-            def poll_response(self, _request):
-                return None
 
         broker_server = transport.server(
             Service(), endpoint=composition.broker_socket_path
@@ -1403,23 +1534,7 @@ def test_broker_authority_verifies_the_exact_committed_start_event(tmp_path):
         )
         thread.join(timeout=2.0)
         assert response.candidate == {"source": "broker-process"}
-        request = response.request
-        snapshot = Snapshot(
-            (4, 5, 3),
-            12_000_000_000,
-            "task_camera_frame",
-            "wrong-start-key",
-            "VALIDATION_STARTED",
-            response.identity,
-        )
-        assert transport.authorize(request, snapshot) is False
-        valid_snapshot = Snapshot(
-            (4, 5, 3), 12_000_000_000, "task_camera_frame",
-            start_key, "VALIDATION_STARTED", response.identity,
-        )
-        assert transport.authorize(request, valid_snapshot) is True
-        composition.coordinator.request_stop(reason="RACE_STOP")
-        assert transport.authorize(request, valid_snapshot) is False
+        assert not hasattr(transport, "authorize")
     finally:
         if broker_server is not None:
             broker_server.close()
@@ -1568,6 +1683,9 @@ def test_worker_broker_proxy_rejects_unexpected_generation_before_return(tmp_pat
         broker_generation=1,
     )
     proxy._call = lambda _message: {
+        "request_id": "attempt-1-plastic-cup-yolo11n-seg-v1",
+        "model_id": "plastic-cup-yolo11n-seg-v1",
+        "model_version": load_parallel_runtime_config(CONFIG).yolo_weights_sha256,
         "broker_generation": 1,
         "outcome": "NORMAL_REJECTION",
         "candidate": None,
@@ -1603,6 +1721,263 @@ def test_frozen_worker_topology_defaults_to_two_by_ten(tmp_path):
     assert prepared.request.max_points_per_worker == 10
     assert prepared.manifest["worker_count"] == 2
     assert prepared.manifest["max_points_per_worker"] == 10
+
+
+def test_adaptive_cli_uses_frozen_options_without_a_hard_capacity(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+
+    prepared = prepare_batch(
+        adaptive_argv(tmp_path / "adaptive"), provenance_verifier=verified
+    )
+
+    assert prepared.request is None
+    assert prepared.adaptive_request is not None
+    assert prepared.adaptive_request.options.levels == (8, 6, 4, 2, 1)
+    assert prepared.adaptive_request.options.initial_points_per_worker == 3
+    assert prepared.adaptive_request.options.yolo_executor_count == 2
+    assert prepared.adaptive_config_path == ADAPTIVE_CONFIG.resolve()
+    assert "max_points_per_worker" not in prepared.manifest
+
+
+def test_adaptive_cli_reuses_registered_root_but_reserves_short_runtime(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    root = tmp_path / "registered"
+    root.mkdir(mode=0o700)
+    (root / "experiment-ledger.md").write_text("retained", encoding="utf-8")
+
+    prepared = prepare_batch(adaptive_argv(root), provenance_verifier=verified)
+
+    assert prepared.adaptive_request.evidence_root == root
+    assert prepared.adaptive_request.runtime_root == root / "r/a001"
+    (root / "r/a001").mkdir(parents=True, mode=0o700)
+    with pytest.raises(CliError, match="DUPLICATE_BATCH"):
+        prepare_batch(adaptive_argv(root), provenance_verifier=verified)
+
+
+def test_adaptive_cli_rejects_legacy_hard_capacity_flag(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    with pytest.raises(CliError, match="ADAPTIVE_MAX_POINTS_CONFLICT"):
+        prepare_batch(
+            adaptive_argv(tmp_path / "adaptive")
+            + ["--max-points-per-worker", "3"],
+            provenance_verifier=verified,
+        )
+
+
+def test_adaptive_readiness_probe_does_not_treat_a_missing_socket_as_success(
+    tmp_path
+):
+    from so101_demo.cli.mujoco_parallel_batch import _WorkerControlProxy
+
+    token = tmp_path / "control.token"
+    token.write_text("ab" * 32, encoding="ascii")
+    control = _WorkerControlProxy(
+        tmp_path / "missing.sock",
+        token,
+        worker_id="worker-01",
+        generation=1,
+        coordinator_epoch=1,
+        deadline_s=1.0,
+    )
+
+    assert control.readiness() is None
+    assert control.release_start() is False
+
+
+def test_adaptive_cli_overrides_worker_options_and_records_them(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+
+    prepared = prepare_batch(
+        adaptive_argv(
+            tmp_path / "adaptive",
+            worker_count="6",
+            fallback_worker_counts="4,2,1",
+            initial_points_per_worker="2",
+            worker_start_timeout_s="45.5",
+            max_infra_attempts_per_point="4",
+            yolo_executor_count="4",
+        ),
+        provenance_verifier=verified,
+    )
+
+    options = prepared.adaptive_request.options
+    assert options.levels == (6, 4, 2, 1)
+    assert options.initial_points_per_worker == 2
+    assert options.worker_start_timeout_s == 45.5
+    assert options.max_infra_attempts_per_point == 4
+    assert options.yolo_executor_count == 4
+    assert prepared.manifest["adaptive_worker_options"] == {
+        "worker_count": 6,
+        "fallback_worker_counts": [4, 2, 1],
+        "initial_points_per_worker": 2,
+        "worker_start_timeout_s": 45.5,
+        "max_infra_attempts_per_point": 4,
+        "ros_domain_ids": list(range(215, 231)),
+        "yolo_executor_count": 4,
+    }
+
+
+@pytest.mark.parametrize("value", ["0", "3", "8", "true"])
+def test_adaptive_cli_rejects_invalid_yolo_executor_count(tmp_path, value):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    with pytest.raises(CliError, match="YOLO_EXECUTOR_COUNT|MALFORMED_INTEGER"):
+        prepare_batch(
+            adaptive_argv(
+                tmp_path / "adaptive",
+                yolo_executor_count=value,
+            ),
+            provenance_verifier=verified,
+        )
+
+
+def test_nonadaptive_cli_rejects_yolo_executor_count(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    with pytest.raises(CliError, match="ADAPTIVE_OPTIONS_REQUIRE_FLAG"):
+        prepare_batch(
+            argv(tmp_path / "ordinary") + ["--yolo-executor-count", "2"],
+            provenance_verifier=verified,
+        )
+
+
+@pytest.mark.parametrize(
+    ("worker_count", "levels"),
+    [("6", (6, 4, 2, 1)), ("1", (1,))],
+)
+def test_adaptive_cli_filters_default_fallbacks_below_preferred_count(
+    tmp_path, worker_count, levels
+):
+    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+
+    prepared = prepare_batch(
+        adaptive_argv(tmp_path / worker_count, worker_count=worker_count),
+        provenance_verifier=verified,
+    )
+
+    assert prepared.adaptive_request.options.levels == levels
+
+
+def test_adaptive_cli_accepts_w16_and_rejects_w17(tmp_path):
+    """The CLI exposes W16 as optional capacity without changing its W8 default."""
+
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    prepared = prepare_batch(
+        adaptive_argv(tmp_path / "w16", worker_count="16"),
+        provenance_verifier=verified,
+    )
+
+    assert prepared.adaptive_request.options.worker_count == 16
+    assert prepared.adaptive_request.options.levels == (16, 6, 4, 2, 1)
+    assert prepared.adaptive_request.options.ros_domain_ids == tuple(range(215, 231))
+
+    with pytest.raises(CliError, match="MAX_WORKER_COUNT"):
+        prepare_batch(
+            adaptive_argv(tmp_path / "w17", worker_count="17"),
+            provenance_verifier=verified,
+        )
+
+
+@pytest.mark.parametrize("fallbacks", ["6,4", "8,4", "4,6", "4,4", "4,,2"])
+def test_adaptive_cli_rejects_invalid_explicit_fallbacks(tmp_path, fallbacks):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    with pytest.raises(CliError, match="FALLBACK_WORKER_COUNTS"):
+        prepare_batch(
+            adaptive_argv(
+                tmp_path / "adaptive",
+                worker_count="6",
+                fallback_worker_counts=fallbacks,
+            ),
+            provenance_verifier=verified,
+        )
+
+
+@pytest.mark.parametrize(
+    ("changes", "extra", "error"),
+    [
+        ({"adaptive_config": None}, (), "ADAPTIVE_CONFIG_REQUIRED"),
+        ({}, ("--resume",), "ADAPTIVE_RESUME_CONFLICT"),
+        (
+            {"live_headroom_evidence": "/tmp/headroom"},
+            (),
+            "ADAPTIVE_LIVE_HEADROOM_CONFLICT",
+        ),
+    ],
+)
+def test_adaptive_cli_rejects_missing_config_and_legacy_modes(
+    tmp_path, changes, extra, error
+):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    with pytest.raises(CliError, match=error):
+        prepare_batch(
+            adaptive_argv(tmp_path / "adaptive", **changes) + list(extra),
+            provenance_verifier=verified,
+        )
+
+
+def test_legacy_w4_remains_rejected_by_the_v1_contract(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    with pytest.raises(CliError, match="MAX_WORKER_COUNT"):
+        prepare_batch(
+            argv(tmp_path / "legacy", worker_count="4"),
+            provenance_verifier=verified,
+        )
+
+
+def test_production_adaptive_factory_builds_an_internal_w8_pool(tmp_path):
+    from dataclasses import replace
+
+    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+    from so101_demo.parallel_batch.adaptive_contracts import (
+        PoolRequest,
+        _new_pool_request_for_production_factory,
+    )
+    from so101_demo.parallel_batch.adaptive_pool import (
+        ProductionAdaptivePoolFactory,
+    )
+
+    evidence_root = Path(
+        "/data/work/so101-evidence/parallel-adaptive-worker/20260914-a01"
+    )
+    prepared = prepare_batch(
+        adaptive_argv(
+            tmp_path / "source",
+            batch_id="abcde",
+            point_id=("task_start",),
+        ),
+        provenance_verifier=verified,
+    )
+    prepared = replace(
+        prepared,
+        adaptive_request=replace(
+            prepared.adaptive_request,
+            evidence_root=evidence_root,
+        ),
+    )
+    request = _new_pool_request_for_production_factory(
+        batch_id="abcde-g01-w08",
+        run_mode=RunMode.DRY_RUN,
+        selected_point_ids=("task_start",),
+        worker_count=8,
+        max_points_per_worker=1,
+        evidence_root=evidence_root / "r/abcde/p/g01w08",
+    )
+
+    pool = ProductionAdaptivePoolFactory(
+        prepared,
+        composition_factory=lambda *_args, **_kwargs: None,
+    )(request)
+
+    assert isinstance(pool.prepared.request, PoolRequest)
+    assert pool.context.request.worker_count == 8
+    assert pool.context.options.worker_count == 8
+    assert pool.context.selector.choose("worker-08", ("task_start",)) == "task_start"
 
 
 def test_worker_process_environment_is_the_exact_task8_whitelist(tmp_path):
@@ -1749,17 +2124,23 @@ def test_constructor_failure_releases_partial_allocator_journal_and_endpoints(tm
     real = batch_cli.AuthenticatedUnixServer
     calls = []
 
-    def fail_second(*args, **kwargs):
-        if len(calls) == 1:
+    def fail_first(*args, **kwargs):
+        if not calls:
             raise RuntimeError("constructor fault")
         calls.append(real(*args, **kwargs))
         return calls[-1]
 
-    monkeypatch.setattr(batch_cli, "AuthenticatedUnixServer", fail_second)
-    with pytest.raises(RuntimeError, match="constructor fault"):
+    monkeypatch.setattr(batch_cli, "AuthenticatedUnixServer", fail_first)
+    with pytest.raises(RuntimeError, match="constructor fault") as raised:
         ProductionBatchComposition(
             spec, resource_probe=Probe(), claim_root=scratch / "fc"
         )
+    assert raised.value.startup_stage == "worker_ipc"
+    assert raised.value.partial_cleanup == {
+        "worker_servers": [],
+        "journal": {"succeeded": True, "error_type": None, "error_message": None},
+        "allocator": {"succeeded": True, "error_type": None, "error_message": None},
+    }
     assert all(server.path.exists() is False for server in calls)
     assert not (scratch / "fc" / spec.request.batch_id).exists()
 
@@ -2129,8 +2510,6 @@ def test_broker_exit_restarts_fresh_generation_while_leases_remain_paused(tmp_pa
     old_process = composition._start_broker()
     old_root = composition.broker_runtime_root
     old_spec = composition.broker_spec_path
-    old_token = composition.broker_token_path
-    old_token_bytes = old_token.read_bytes()
     ready_checks = []
     composition._wait_broker_ready = lambda **values: ready_checks.append(values) or True
     try:
@@ -2139,118 +2518,14 @@ def test_broker_exit_restarts_fresh_generation_while_leases_remain_paused(tmp_pa
         assert composition.broker_generation == 2
         assert composition.broker_runtime_root != old_root
         assert composition.broker_spec_path != old_spec
-        assert composition.broker_token_path != old_token
-        assert composition.broker_token_path.read_bytes() != old_token_bytes
+        assert "authority_token_path" not in json.loads(
+            composition.broker_spec_path.read_text()
+        )
         assert json.loads(composition.broker_spec_path.read_text())[
             "broker_generation"
         ] == 2
         assert ready_checks == [{"deadline_monotonic_s": supervisor.pause_deadline}]
         assert composition.coordinator.snapshot().broker_healthy is True
-    finally:
-        composition._release_partial()
-
-
-def test_authenticated_live_broker_health_down_pauses_without_lease_debit(
-        tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import (
-        CliError,
-        ProductionBatchComposition,
-        prepare_batch,
-    )
-    from so101_demo.parallel_batch.resources import ResourceSnapshot
-    from so101_demo.runtime.parallel_ipc import (
-        _BrokerCoordinatorClient,
-        IpcError,
-    )
-
-    class Probe:
-        def snapshot(self):
-            return ResourceSnapshot(32, 64.0, 16.0)
-
-        def ros_domain_in_use(self, _domain):
-            return False
-
-        def socket_in_use(self, _path):
-            return False
-
-    scratch = Path(os.environ["TMPDIR"]).parent
-    root = scratch / "f2h"
-    spec = prepare_batch(
-        argv(
-            root,
-            worker_count="1",
-            max_points_per_worker="1",
-            point_id=("task_start",),
-            run_mode="plan_only",
-        ),
-        provenance_verifier=lambda value: {
-            **verified(value), "image_id": "sha256:" + "b" * 64,
-        },
-    )
-    composition = ProductionBatchComposition(
-        spec,
-        resource_probe=Probe(),
-        claim_root=scratch / "f2c",
-        broker_command_builder=lambda _owner: ("broker",),
-    )
-    composition.coordinator.register_worker("worker-01", generation=1)
-    payload = {
-        "operation": "broker_health_down",
-        "outcome": "INFERENCE_TIMEOUT",
-        "request_id": "request-1",
-        "reason": "deadline exceeded",
-    }
-    message = {
-        "worker_id": "broker",
-        "worker_generation": 1,
-        "payload": payload,
-    }
-    try:
-        composition._start_broker_authority_server()
-        broker_client = _BrokerCoordinatorClient(
-            composition.broker_runtime_root / "broker-authority.sock",
-            composition.broker_token_path,
-            coordinator_epoch=composition.journal.coordinator_epoch,
-            generation=1,
-            deadline_s=spec.config.heartbeat_timeout_s,
-            max_frame_bytes=spec.config.broker_max_frame_bytes,
-        )
-        assert broker_client("broker_health_down", {
-            key: value for key, value in payload.items() if key != "operation"
-        }) is True
-        snapshot = composition.coordinator.snapshot()
-        assert snapshot.broker_healthy is False
-        assert composition.coordinator.grant_lease(
-            "worker-01", generation=1
-        ) is None
-        assert composition.coordinator.snapshot().workers[
-            "worker-01"
-        ].lease_count == 0
-
-        with pytest.raises(CliError, match="BROKER_GENERATION"):
-            composition._coordinator_handler({
-                **message, "worker_generation": 0,
-            })
-        with pytest.raises(CliError, match="BROKER_RPC_PAYLOAD"):
-            composition._coordinator_handler({
-                **message,
-                "payload": {**payload, "outcome": "MODEL_ERROR"},
-            })
-
-        authenticated = {
-            "schema_version": 1,
-            "kind": "coordinator_call",
-            "coordinator_epoch": composition.journal.coordinator_epoch,
-            "worker_id": "broker",
-            "worker_generation": 1,
-            "lease": None,
-            "request_id": "broker-health-down-1",
-            "idempotency_key": "broker-health-down-1",
-            "token": "00" * 32,
-            "payload": payload,
-        }
-        with pytest.raises(IpcError, match="TOKEN"):
-            composition.broker_authority.authenticate(authenticated)
     finally:
         composition._release_partial()
 
@@ -2265,6 +2540,7 @@ def test_authenticated_worker_discovers_only_the_current_healthy_broker(tmp_path
         prepare_batch,
     )
     from so101_demo.parallel_batch.resources import ResourceSnapshot
+    from so101_demo.runtime.parallel_ipc import IpcError
 
     class Probe:
         def snapshot(self):
@@ -2315,7 +2591,21 @@ def test_authenticated_worker_discovers_only_the_current_healthy_broker(tmp_path
     try:
         with pytest.raises(CliError, match="ACTIVE_LEASE_REQUIRED"):
             proxy.current_broker()
+        composition.adaptive_context = SimpleNamespace()
+        with pytest.raises(IpcError, match="STARTUP_BROKER_WORKER"):
+            proxy.startup_broker()
         proxy.register_worker("worker-01", generation=1)
+        composition.coordinator.mark_broker_health(True)
+        assert proxy.startup_broker() == {
+            "healthy": True,
+            "broker_generation": 1,
+            "broker_socket_path": str(root / "ipc/broker/perception.sock"),
+            "recovery_deadline_monotonic_s": None,
+        }
+        assert composition.coordinator.snapshot().workers[
+            "worker-01"
+        ].lease_count == 0
+        composition.adaptive_context = None
         from so101_demo.parallel_batch.worker import LeaseGrantPaused
 
         composition.coordinator.mark_broker_health(False)
@@ -2366,8 +2656,6 @@ def test_authenticated_worker_discovers_only_the_current_healthy_broker(tmp_path
         )
         assert current["broker_socket_path"] != first["broker_socket_path"]
         from dataclasses import replace
-        from so101_demo.runtime.parallel_ipc import IpcError
-
         proxy._lease = replace(lease, attempt_id="stale-attempt")
         with pytest.raises(IpcError, match="STALE_LEASE"):
             proxy.current_broker()
@@ -2621,6 +2909,11 @@ def test_existing_worker_fetches_current_broker_before_each_request_and_recovery
             if operation == "cancel_generation":
                 return {"payload": {"cancelled": True}}
             return {"payload": {
+                "request_id": "attempt-1-plastic-cup-yolo11n-seg-v1",
+                "model_id": "plastic-cup-yolo11n-seg-v1",
+                "model_version": load_parallel_runtime_config(
+                    CONFIG
+                ).yolo_weights_sha256,
                 "broker_generation": 2,
                 "outcome": "NORMAL_REJECTION",
                 "candidate": None,

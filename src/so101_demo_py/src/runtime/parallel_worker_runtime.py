@@ -670,19 +670,29 @@ class ParallelWorkerRuntime:
         | None = None,
         cancel_motion: Callable[[Any], bool] | None = None,
         confirm_no_controller_goal: Callable[[Any], bool] | None = None,
+        pause_physics: Callable[[Any, Any], bool] | None = None,
         resume_physics: Callable[[Any, Any], bool] | None = None,
         recovery: Callable[[str, int, float], bool] | None = None,
         replace_resources: Callable[..., WorkerResources] | None = None,
         rebind_resources: Callable[[WorkerResources], bool] | None = None,
         close_runtime: Callable[[], None] | None = None,
+        pose_receive_timeout_s: float = 240.0,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         if not isinstance(resources, WorkerResources):
             raise TypeError("WorkerResources are required")
         if run_mode not in (RunMode.PLAN_ONLY, RunMode.EXECUTE):
             raise ValueError("physical Worker runtime requires plan_only or execute")
+        if (
+            isinstance(pose_receive_timeout_s, bool)
+            or not isinstance(pose_receive_timeout_s, (int, float))
+            or not math.isfinite(pose_receive_timeout_s)
+            or pose_receive_timeout_s <= 0.0
+        ):
+            raise ValueError("pose receive timeout must be finite and positive")
         self.resources = resources
         self.run_mode = run_mode
+        self._pose_receive_timeout_s = float(pose_receive_timeout_s)
         self._processes = process_group or WorkerOwnedProcessTree(
             manifest_path=resources.worker_root / "owned-runtime-processes.json"
         )
@@ -706,6 +716,7 @@ class ParallelWorkerRuntime:
         self._confirm_no_controller_goal = confirm_no_controller_goal or (
             lambda _lease: True
         )
+        self._pause_physics = pause_physics or (lambda _lease, _reset: True)
         self._resume_physics = resume_physics or (lambda _lease, _reset: True)
         self._recovery = recovery or (lambda _worker, _generation, _deadline: True)
         self._replace_resources = replace_resources or _required("replace_resources")
@@ -717,6 +728,7 @@ class ParallelWorkerRuntime:
         self._used_session_ids = {resources.session_id}
         self._batch_id: str | None = None
         self._reset_boundaries: dict[tuple[object, ...], float] = {}
+        self._reset_receipts: dict[tuple[object, ...], Any] = {}
         self._numeric_receipts: dict[
             tuple[object, ...], NumericEvidenceReceipt
         ] = {}
@@ -726,6 +738,7 @@ class ParallelWorkerRuntime:
         self._accepted_poses: dict[tuple[object, ...], Any] = {}
         self._published_pose_keys: set[tuple[object, ...]] = set()
         self._execute_consumers: dict[tuple[object, ...], Any] = {}
+        self._paused_for_inference: set[tuple[object, ...]] = set()
         self._active_lease: Any | None = None
         self._stop_requested = threading.Event()
         self._revocation_receipt_lock = threading.Lock()
@@ -934,6 +947,7 @@ class ParallelWorkerRuntime:
         if self._reserve_workspace(lease, receipt) is not True:
             raise RuntimeError("point workspace was not durably reserved")
         self._reset_boundaries[key] = boundary
+        self._reset_receipts[key] = receipt
         return receipt
 
     def inference_snapshot(self, lease: Any) -> InferenceSnapshotReceipt:
@@ -999,6 +1013,10 @@ class ParallelWorkerRuntime:
             )
         if reset_session is not None and inference.simulation_session_id != reset_session:
             raise RuntimeError("inference RGB simulation session mismatch")
+        if self.run_mode is RunMode.EXECUTE:
+            if self._pause_physics(lease, reset_receipt) is not True:
+                raise RuntimeError("inference snapshot could not freeze simulation")
+            self._paused_for_inference.add(key)
         return gate
 
     def reset_and_validate_point(self, lease: Any):
@@ -1014,6 +1032,10 @@ class ParallelWorkerRuntime:
             raise RuntimeError("point localization lacks a reset boundary") from error
         if key in self._accepted_poses:
             raise RuntimeError("point pose was already admitted")
+        if self.run_mode is RunMode.EXECUTE and key in self._paused_for_inference:
+            if self._resume_physics(lease, self._reset_receipts[key]) is not True:
+                raise RuntimeError("inference hold could not resume simulation")
+            self._paused_for_inference.remove(key)
         if getattr(broker_result, "perception_chain_complete", False) is True:
             if getattr(broker_result, "perception_terminal", False) is True:
                 return broker_result
@@ -1096,6 +1118,8 @@ class ParallelWorkerRuntime:
                 "--execute",
                 "--expected-reset-epoch",
                 str(self._reset_epoch_integer(reset_epoch)),
+                "--cup-pose-timeout-s",
+                str(self._pose_receive_timeout_s),
                 "--session-id",
                 self.resources.session_id,
                 "--batch-id",
@@ -1114,6 +1138,8 @@ class ParallelWorkerRuntime:
                 str(lease.lease_generation),
                 "--evidence-root",
                 str(point_root / "dynamic"),
+                "--ready-receipt",
+                str(point_root / "dynamic" / "consumer-ready.json"),
                 "--scene-source",
                 "observe_only",
             )
@@ -1134,6 +1160,7 @@ class ParallelWorkerRuntime:
         self._execution_allowed()
         if self.run_mode is not RunMode.EXECUTE:
             raise RuntimeError("expert execution requires execute")
+        key = self._lease_key(lease)
         if getattr(admitted, "perception_terminal", False) is True:
             status = (
                 AttemptStatus.FAILED
@@ -1148,7 +1175,6 @@ class ParallelWorkerRuntime:
         reset_epoch = getattr(admitted, "reset_epoch", None)
         if reset_epoch is None:
             raise RuntimeError("accepted pose lacks reset epoch")
-        key = self._lease_key(lease)
         if self._accepted_poses.get(key) is not admitted:
             raise RuntimeError("expert execution requires the admitted pose")
         if key in self._published_pose_keys:

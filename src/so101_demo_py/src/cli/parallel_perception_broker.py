@@ -20,7 +20,7 @@ from so101_demo.adapters.perception.errors import (
 )
 
 from so101_demo.runtime.parallel_perception_runtime import (
-    GROUNDED_SHA, IMAGE_TAG, PINS, YOLO_ID, YOLO_SHA,
+    GROUNDED_ID, GROUNDED_SHA, IMAGE_TAG, PINS, YOLO_ID, YOLO_SHA,
     ParallelPerceptionRuntime, canonical_json, checked_path, frozen_options,
     normalize_batch, write_receipt,
 )
@@ -250,37 +250,96 @@ def smoke_models(runtime, frame, *, clock=time.monotonic):
             raise ModelRuntimeInfrastructureError(f'SMOKE_CLOCK_FAILED: {error}') from error
 
     results = {}
-    for model_id, built in runtime.detectors.items():
-        started = now()
-        record = {'model_provenance': built.provenance_document, 'executed': False}
-        try:
-            if not runtime.healthy:
-                raise ModelRuntimeInfrastructureError('BROKER_UNHEALTHY')
-            record['executed'] = True
-            candidate = normalize_batch(built.detector.detect(frame, DetectionQuery('plastic_cup')), frame)
-            record.update(outcome='QUALIFIED' if candidate['candidates'] else 'NORMAL_REJECTION',
-                          result=candidate)
-        except DeterministicModelResultError as error:
-            if 'INFERENCE_FAILED' in str(error):
+    for model_id, instances in runtime.detectors.items():
+        instance_records = []
+        for executor_index, built in enumerate(instances):
+            started = now()
+            record = {
+                'executor_index': executor_index,
+                'model_provenance': built.provenance_document,
+                'executed': False,
+            }
+            try:
+                if not runtime.healthy:
+                    raise ModelRuntimeInfrastructureError('BROKER_UNHEALTHY')
+                record['executed'] = True
+                candidate = normalize_batch(
+                    built.detector.detect(frame, DetectionQuery('plastic_cup')),
+                    frame,
+                )
+                record.update(
+                    outcome=(
+                        'QUALIFIED'
+                        if candidate['candidates']
+                        else 'NORMAL_REJECTION'
+                    ),
+                    result=candidate,
+                )
+            except DeterministicModelResultError as error:
+                if 'INFERENCE_FAILED' in str(error):
+                    runtime._unhealthy()
+                    record.update(outcome='INFRA_ERROR', reason=str(error))
+                else:
+                    record.update(outcome='MODEL_ERROR', reason=str(error))
+            except Exception as error:
                 runtime._unhealthy()
                 record.update(outcome='INFRA_ERROR', reason=str(error))
-            else:
-                record.update(outcome='MODEL_ERROR', reason=str(error))
-        except Exception as error:
-            runtime._unhealthy()
-            record.update(outcome='INFRA_ERROR', reason=str(error))
-        completed = now()
-        latency = (completed - started) * 1000.
-        if not math.isfinite(latency) or latency < 0:
-            runtime._unhealthy()
-            raise ModelRuntimeInfrastructureError('SMOKE_CLOCK_LATENCY_INVALID')
-        record.update(started_monotonic_s=started, completed_monotonic_s=completed,
-                      latency_ms=latency)
-        results[model_id] = record
+            completed = now()
+            latency = (completed - started) * 1000.
+            if not math.isfinite(latency) or latency < 0:
+                runtime._unhealthy()
+                raise ModelRuntimeInfrastructureError(
+                    'SMOKE_CLOCK_LATENCY_INVALID'
+                )
+            record.update(
+                started_monotonic_s=started,
+                completed_monotonic_s=completed,
+                latency_ms=latency,
+            )
+            instance_records.append(record)
+        result = dict(instance_records[0])
+        result['executor_count'] = len(instance_records)
+        result['instances'] = instance_records
+        for record in instance_records:
+            if record['outcome'] == 'INFRA_ERROR':
+                result.update(outcome='INFRA_ERROR', reason=record.get('reason'))
+                break
+            if record['outcome'] == 'MODEL_ERROR':
+                result.update(outcome='MODEL_ERROR', reason=record.get('reason'))
+        results[model_id] = result
     return json.loads(canonical_json(results))
 
 
-def main(argv=None, *, transport=None, authorize=None):
+def _validate_runtime_concurrency(spec):
+    """Validate the optional adaptive Broker concurrency extension."""
+
+    capacity = spec.get("queue_capacity_per_model")
+    if capacity is not None and (
+        type(capacity) is not int or not 1 <= capacity <= 16
+    ):
+        raise ValueError("BROKER_RUNTIME_QUEUE_CAPACITY")
+    adaptive = {
+        "queue_capacity_per_model", "connection_handler_count",
+        "yolo_executor_count", "grounded_sam_executor_count",
+    }
+    if adaptive.issubset(spec):
+        handlers = spec["connection_handler_count"]
+        yolo_executors = spec["yolo_executor_count"]
+        grounded_executors = spec["grounded_sam_executor_count"]
+        if (
+            type(handlers) is not int
+            or not 1 <= handlers <= 16
+            or type(yolo_executors) is not int
+            or yolo_executors not in {1, 2, 4}
+            or yolo_executors > handlers
+            or type(grounded_executors) is not int
+            or grounded_executors != 1
+            or capacity != handlers
+        ):
+            raise ValueError("BROKER_RUNTIME_CONCURRENCY")
+
+
+def main(argv=None, *, transport=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == 'container':
         return container_main(argv[1:])
@@ -302,10 +361,6 @@ def main(argv=None, *, transport=None, authorize=None):
         from so101_demo.runtime.parallel_ipc import build_broker_transport
 
         transport = build_broker_transport(Path(args.runtime_spec))
-    if args.smoke_input is None and authorize is None:
-        authorize = getattr(transport, 'authorize', None)
-    if args.smoke_input is None and not callable(authorize):
-        raise ValueError('AUTHENTICATED_TRANSPORT_REQUIRED')
     versions = {}
     for pin in PINS:
         name, expected = pin.split('==')
@@ -321,21 +376,35 @@ def main(argv=None, *, transport=None, authorize=None):
         raise ValueError('IMAGE_ID_REQUIRED')
     ready_path = Path(args.ready_receipt)
     model_ready_path = ready_path.with_name(".model-ready.json")
+    runtime_identity = getattr(transport, 'runtime_identity', None)
+    runtime_identity = runtime_identity if type(runtime_identity) is dict else {}
     runtime = ParallelPerceptionRuntime(
         input_root=Path(args.input_root), ready_receipt=model_ready_path,
         options=frozen_options(Path(args.yolo_weights), Path(args.grounded_root)),
-        provenance=provenance, authorize=authorize or (lambda request, snapshot: False))
+        executor_counts={
+            YOLO_ID: runtime_identity.get('yolo_executor_count', 1),
+            GROUNDED_ID: runtime_identity.get('grounded_sam_executor_count', 1),
+        },
+        provenance=provenance)
     runtime.start()
     if args.smoke_input is None and model_ready_path.is_file():
         spec = getattr(transport, 'runtime_identity', None)
         required = {
             "schema_version", "kind", "batch_id", "coordinator_epoch",
             "broker_generation", "run_mode", "image_id", "yolo_weights_sha256",
-            "grounded_manifest_sha256", "config_path", "authority_endpoint",
-            "authority_token_path", "request_deadline_s", "max_frame_bytes",
+            "grounded_manifest_sha256", "config_path", "request_deadline_s",
+            "max_frame_bytes",
         }
-        if type(spec) is not dict or set(spec) != required:
+        adaptive = {
+            "queue_capacity_per_model", "connection_handler_count",
+            "yolo_executor_count", "grounded_sam_executor_count",
+        }
+        if type(spec) is not dict or set(spec) not in (
+            required,
+            required | adaptive,
+        ):
             raise ValueError("BROKER_RUNTIME_SPEC_SCHEMA")
+        _validate_runtime_concurrency(spec)
         model_receipt = json.loads(model_ready_path.read_text(encoding="utf-8"))
         if model_receipt.get("ready") is not True or set(runtime.detectors) != {
             YOLO_ID, "grounded-sam"

@@ -29,6 +29,25 @@ from so101_demo.parallel_batch.artifacts import (
     ValidationWorkspace,
     write_recovery_receipt,
 )
+from so101_demo.parallel_batch.adaptive_contracts import (
+    AdaptiveBatchRequest,
+    AdaptiveBatchSummary,
+    AdaptiveWorkerOptions,
+    BatchTerminalStatus,
+    PoolRequest,
+    load_adaptive_worker_options,
+)
+from so101_demo.parallel_batch.adaptive_pool import (
+    AdaptivePoolContext,
+    ProductionAdaptivePoolFactory,
+    WorkerReadinessReceipt,
+    WorkerStartGate,
+    adaptive_socket_paths,
+)
+from so101_demo.parallel_batch.adaptive_runner import (
+    AdaptiveBatchRunner,
+    AdaptiveRunnerError,
+)
 from so101_demo.parallel_batch.broker import BrokerResponse
 from so101_demo.parallel_batch.contracts import (
     AttemptIdentity,
@@ -51,6 +70,7 @@ from so101_demo.parallel_batch.contracts import (
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.parallel_batch.resources import (
+    AllocationPolicy,
     CurrentRuntimeProvenanceProbe,
     ResourceAdmission,
     ResourceManifest,
@@ -61,10 +81,15 @@ from so101_demo.parallel_batch.resources import (
     WorkerResourceAllocator,
     WorkerResources,
 )
-from so101_demo.parallel_batch.worker import LeaseGrantPaused, ParallelWorker
+from so101_demo.parallel_batch.worker import (
+    LeaseGrantPaused,
+    ParallelWorker,
+    adaptive_result_is_infrastructure,
+)
 from so101_demo.runtime.parallel_ipc import (
     AuthenticatedUnixServer,
     BrokerTransport,
+    IpcError,
     UnixRpcClient,
     WorkerTokenAuthority,
     _inference_request,
@@ -103,9 +128,11 @@ class _Parser(argparse.ArgumentParser):
 
 @dataclass(frozen=True, slots=True)
 class PreparedBatch:
-    request: BatchRequest
+    request: BatchRequest | PoolRequest | None
+    adaptive_request: AdaptiveBatchRequest | None
     config: ParallelRuntimeConfig
     config_path: Path
+    adaptive_config_path: Path | None
     points_path: Path
     catalog: Mapping[str, Mapping[str, object]]
     expected_final_cup_pose_world: tuple[float, ...]
@@ -133,8 +160,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--point-id", action="append", default=[])
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--batch-id", required=True)
-    parser.add_argument("--worker-count", default="2")
-    parser.add_argument("--max-points-per-worker", default="10")
+    parser.add_argument("--worker-count")
+    parser.add_argument("--max-points-per-worker")
+    parser.add_argument("--adaptive-workers", action="store_true")
+    parser.add_argument("--adaptive-config", type=Path)
+    parser.add_argument("--fallback-worker-counts")
+    parser.add_argument("--initial-points-per-worker")
+    parser.add_argument("--worker-start-timeout-s")
+    parser.add_argument("--max-infra-attempts-per-point")
+    parser.add_argument("--yolo-executor-count")
     parser.add_argument("--evidence-root", type=Path, required=True)
     parser.add_argument("--broker-image", required=True)
     parser.add_argument("--yolo-weights", type=Path, required=True)
@@ -156,6 +190,85 @@ def _integer(name: str, value: str) -> int:
     if result <= 0:
         raise CliError(f"MALFORMED_INTEGER: {name}")
     return result
+
+
+def _positive_float(name: str, value: str) -> float:
+    if not isinstance(value, str) or not value.isascii():
+        raise CliError(f"MALFORMED_NUMBER: {name}")
+    try:
+        result = float(value)
+    except ValueError as error:
+        raise CliError(f"MALFORMED_NUMBER: {name}") from error
+    if not (result > 0.0 and result < float("inf")):
+        raise CliError(f"MALFORMED_NUMBER: {name}")
+    return result
+
+
+def _adaptive_options(options) -> tuple[AdaptiveWorkerOptions, Path]:
+    if options.adaptive_config is None:
+        raise CliError("ADAPTIVE_CONFIG_REQUIRED")
+    adaptive_config_path = _absolute("adaptive_config", options.adaptive_config)
+    try:
+        defaults = load_adaptive_worker_options(adaptive_config_path)
+    except ContractError as error:
+        raise CliError(str(error)) from error
+    worker_count = (
+        defaults.worker_count
+        if options.worker_count is None
+        else _integer("worker_count", options.worker_count)
+    )
+    if options.fallback_worker_counts is None:
+        fallback_worker_counts = tuple(
+            count for count in defaults.fallback_worker_counts if count < worker_count
+        )
+    else:
+        try:
+            fallback_worker_counts = tuple(
+                _integer("fallback_worker_count", value)
+                for value in options.fallback_worker_counts.split(",")
+            )
+        except CliError as error:
+            raise CliError("FALLBACK_WORKER_COUNTS") from error
+    initial_points_per_worker = (
+        defaults.initial_points_per_worker
+        if options.initial_points_per_worker is None
+        else _integer(
+            "initial_points_per_worker", options.initial_points_per_worker
+        )
+    )
+    worker_start_timeout_s = (
+        defaults.worker_start_timeout_s
+        if options.worker_start_timeout_s is None
+        else _positive_float(
+            "worker_start_timeout_s", options.worker_start_timeout_s
+        )
+    )
+    max_infra_attempts_per_point = (
+        defaults.max_infra_attempts_per_point
+        if options.max_infra_attempts_per_point is None
+        else _integer(
+            "max_infra_attempts_per_point",
+            options.max_infra_attempts_per_point,
+        )
+    )
+    yolo_executor_count = (
+        defaults.yolo_executor_count
+        if options.yolo_executor_count is None
+        else _integer("yolo_executor_count", options.yolo_executor_count)
+    )
+    try:
+        adaptive = AdaptiveWorkerOptions(
+            worker_count=worker_count,
+            fallback_worker_counts=fallback_worker_counts,
+            initial_points_per_worker=initial_points_per_worker,
+            worker_start_timeout_s=worker_start_timeout_s,
+            max_infra_attempts_per_point=max_infra_attempts_per_point,
+            ros_domain_ids=defaults.ros_domain_ids,
+            yolo_executor_count=yolo_executor_count,
+        )
+    except ContractError as error:
+        raise CliError(str(error)) from error
+    return adaptive, adaptive_config_path
 
 
 def _sha256(path: Path) -> str:
@@ -533,6 +646,40 @@ if __name__ == '__main__':
 
 def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> PreparedBatch:
     options = build_parser().parse_args(argv)
+    adaptive_only = (
+        options.adaptive_config,
+        options.fallback_worker_counts,
+        options.initial_points_per_worker,
+        options.worker_start_timeout_s,
+        options.max_infra_attempts_per_point,
+        options.yolo_executor_count,
+    )
+    if options.adaptive_workers:
+        if options.resume:
+            raise CliError("ADAPTIVE_RESUME_CONFLICT")
+        if options.max_points_per_worker is not None:
+            raise CliError("ADAPTIVE_MAX_POINTS_CONFLICT")
+        if any(
+            value is not None
+            for value in (
+                options.live_headroom_evidence,
+                options.live_headroom_acceptance,
+                options.live_headroom_current_provenance_root,
+            )
+        ):
+            raise CliError("ADAPTIVE_LIVE_HEADROOM_CONFLICT")
+        adaptive_worker_options, adaptive_config_path = _adaptive_options(options)
+        worker_count = adaptive_worker_options.worker_count
+        max_points = None
+    else:
+        if any(value is not None for value in adaptive_only):
+            raise CliError("ADAPTIVE_OPTIONS_REQUIRE_FLAG")
+        adaptive_worker_options = None
+        adaptive_config_path = None
+        worker_count = _integer("worker_count", options.worker_count or "2")
+        max_points = _integer(
+            "max_points_per_worker", options.max_points_per_worker or "10"
+        )
     evidence_root = _absolute("evidence_root", options.evidence_root)
     if options.resume:
         try:
@@ -548,14 +695,25 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
             raise CliError("RECOVERY_BATCH_EVIDENCE_ROOT_INVALID")
         if (evidence_root / "aggregate_results.json").exists():
             raise CliError("RECOVERY_BATCH_ALREADY_FINALIZED")
+    elif options.adaptive_workers:
+        runtime_root = evidence_root / "r" / options.batch_id
+        if runtime_root.exists() or runtime_root.is_symlink():
+            raise CliError("DUPLICATE_BATCH_EVIDENCE_ROOT")
+        if evidence_root.exists() or evidence_root.is_symlink():
+            root_info = evidence_root.lstat()
+            if (
+                evidence_root.is_symlink()
+                or not stat.S_ISDIR(root_info.st_mode)
+                or root_info.st_uid != os.getuid()
+                or stat.S_IMODE(root_info.st_mode) != 0o700
+            ):
+                raise CliError("ADAPTIVE_EVIDENCE_ROOT_INVALID")
     elif evidence_root.exists() or evidence_root.is_symlink():
         raise CliError("DUPLICATE_BATCH_EVIDENCE_ROOT")
     try:
         mode = RunMode(options.run_mode)
     except ValueError as error:
         raise CliError("UNKNOWN_RUN_MODE") from error
-    worker_count = _integer("worker_count", options.worker_count)
-    max_points = _integer("max_points_per_worker", options.max_points_per_worker)
     catalog, catalog_sha = _catalog(options.points)
     supplied = tuple(options.point_id)
     if len(supplied) != len(set(supplied)):
@@ -568,12 +726,18 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
     selection_sha = hashlib.sha256(selection_payload).hexdigest()
     config_path = options.config.resolve()
     config = load_parallel_runtime_config(config_path)
-    (
-        live_headroom_evidence,
-        live_headroom_acceptance,
-        live_headroom_current_provenance,
-        live_headroom_verification,
-    ) = _prepare_live_headroom(options, config, worker_count)
+    if options.adaptive_workers:
+        live_headroom_evidence = None
+        live_headroom_acceptance = None
+        live_headroom_current_provenance = {}
+        live_headroom_verification = None
+    else:
+        (
+            live_headroom_evidence,
+            live_headroom_acceptance,
+            live_headroom_current_provenance,
+            live_headroom_verification,
+        ) = _prepare_live_headroom(options, config, worker_count)
     if options.yolo_weights_sha256 != config.yolo_weights_sha256:
         raise CliError("YOLO_HASH_MISMATCH")
     if options.grounded_manifest_sha256 != config.grounded_sam_manifest_sha256:
@@ -581,14 +745,25 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
     if options.broker_image != _BROKER_IMAGE:
         raise CliError("BROKER_IMAGE_MISMATCH")
     try:
-        request = BatchRequest(
-            options.batch_id,
-            mode,
-            selected,
-            worker_count,
-            max_points,
-            evidence_root,
-        )
+        if options.adaptive_workers:
+            request = None
+            adaptive_request = AdaptiveBatchRequest(
+                options.batch_id,
+                mode,
+                selected,
+                adaptive_worker_options,
+                evidence_root,
+            )
+        else:
+            request = BatchRequest(
+                options.batch_id,
+                mode,
+                selected,
+                worker_count,
+                max_points,
+                evidence_root,
+            )
+            adaptive_request = None
     except ContractError as error:
         message = str(error)
         if "INSUFFICIENT_CAPACITY" in message:
@@ -604,6 +779,8 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         "grounded_root": options.grounded_root,
         "grounded_manifest_sha256": options.grounded_manifest_sha256,
     }
+    if adaptive_config_path is not None:
+        inputs["adaptive_config"] = adaptive_config_path
     try:
         provenance = provenance_verifier(inputs)
     except CliError:
@@ -624,34 +801,65 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         ).values
     except Exception as error:
         raise CliError("TRUSTED_FINAL_TARGET_INVALID") from error
-    manifest = {
-        "schema_version": 1,
-        "batch_id": request.batch_id,
-        "run_mode": request.run_mode.value,
-        "selected_point_ids": list(selected),
-        "selection_sha256": selection_sha,
-        "catalog_sha256": catalog_sha,
-        "expected_final_cup_pose_world": list(expected_final_cup_pose_world),
-        "worker_count": worker_count,
-        "max_points_per_worker": max_points,
-        "evidence_root": str(evidence_root),
-        "provenance": dict(provenance),
-        "live_headroom": (
-            None
-            if live_headroom_verification is None
-            else {
-                "evidence_path": str(live_headroom_evidence),
-                "acceptance_path": str(live_headroom_acceptance),
-                "current_provenance_paths": {
-                    name: str(path)
-                    for name, path in sorted(
-                        live_headroom_current_provenance.items()
-                    )
-                },
-                "verification": dict(live_headroom_verification),
-            }
-        ),
-    }
+    if adaptive_request is not None:
+        manifest = {
+            "schema_version": 1,
+            "batch_id": adaptive_request.batch_id,
+            "run_mode": adaptive_request.run_mode.value,
+            "selected_point_ids": list(selected),
+            "selection_sha256": selection_sha,
+            "catalog_sha256": catalog_sha,
+            "expected_final_cup_pose_world": list(expected_final_cup_pose_world),
+            "evidence_root": str(evidence_root),
+            "provenance": dict(provenance),
+            "adaptive_config_path": str(adaptive_config_path),
+            "adaptive_worker_options": {
+                "worker_count": adaptive_worker_options.worker_count,
+                "fallback_worker_counts": list(
+                    adaptive_worker_options.fallback_worker_counts
+                ),
+                "initial_points_per_worker": (
+                    adaptive_worker_options.initial_points_per_worker
+                ),
+                "worker_start_timeout_s": (
+                    adaptive_worker_options.worker_start_timeout_s
+                ),
+                "max_infra_attempts_per_point": (
+                    adaptive_worker_options.max_infra_attempts_per_point
+                ),
+                "ros_domain_ids": list(adaptive_worker_options.ros_domain_ids),
+                "yolo_executor_count": adaptive_worker_options.yolo_executor_count,
+            },
+        }
+    else:
+        manifest = {
+            "schema_version": 1,
+            "batch_id": request.batch_id,
+            "run_mode": request.run_mode.value,
+            "selected_point_ids": list(selected),
+            "selection_sha256": selection_sha,
+            "catalog_sha256": catalog_sha,
+            "expected_final_cup_pose_world": list(expected_final_cup_pose_world),
+            "worker_count": worker_count,
+            "max_points_per_worker": max_points,
+            "evidence_root": str(evidence_root),
+            "provenance": dict(provenance),
+            "live_headroom": (
+                None
+                if live_headroom_verification is None
+                else {
+                    "evidence_path": str(live_headroom_evidence),
+                    "acceptance_path": str(live_headroom_acceptance),
+                    "current_provenance_paths": {
+                        name: str(path)
+                        for name, path in sorted(
+                            live_headroom_current_provenance.items()
+                        )
+                    },
+                    "verification": dict(live_headroom_verification),
+                }
+            ),
+        }
     if options.resume:
         existing = _read_existing_json(
             evidence_root / "batch_manifest.json", label="BATCH_MANIFEST"
@@ -659,28 +867,30 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         if existing != manifest:
             raise CliError("RECOVERY_BATCH_MANIFEST_MISMATCH")
     return PreparedBatch(
-        request,
-        config,
-        config_path,
-        options.points.resolve(),
-        catalog,
-        tuple(expected_final_cup_pose_world),
-        catalog_sha,
-        selection_sha,
-        options.broker_image,
-        options.yolo_weights,
-        options.yolo_weights_sha256,
-        options.grounded_root,
-        options.grounded_manifest_sha256,
-        dict(provenance),
-        manifest,
-        dict(inputs),
-        provenance_verifier,
-        live_headroom_evidence,
-        live_headroom_acceptance,
-        dict(live_headroom_current_provenance),
-        live_headroom_verification,
-        options.resume,
+        request=request,
+        adaptive_request=adaptive_request,
+        config=config,
+        config_path=config_path,
+        adaptive_config_path=adaptive_config_path,
+        points_path=options.points.resolve(),
+        catalog=catalog,
+        expected_final_cup_pose_world=tuple(expected_final_cup_pose_world),
+        catalog_sha256=catalog_sha,
+        selection_sha256=selection_sha,
+        broker_image=options.broker_image,
+        yolo_weights=options.yolo_weights,
+        yolo_weights_sha256=options.yolo_weights_sha256,
+        grounded_root=options.grounded_root,
+        grounded_manifest_sha256=options.grounded_manifest_sha256,
+        provenance=dict(provenance),
+        manifest=manifest,
+        provenance_inputs=dict(inputs),
+        provenance_verifier=provenance_verifier,
+        live_headroom_evidence=live_headroom_evidence,
+        live_headroom_acceptance=live_headroom_acceptance,
+        live_headroom_current_provenance=dict(live_headroom_current_provenance),
+        live_headroom_verification=live_headroom_verification,
+        resume=options.resume,
     )
 
 
@@ -911,6 +1121,7 @@ def _lease_wire(lease):
 
 _RPC_PAYLOAD_FIELDS = {
     "current_broker": set(),
+    "startup_broker": set(),
     "register_worker": {"generation", "recovery_deadline_monotonic_s"},
     "grant_lease": {"generation"},
     "record_recovery": {
@@ -960,35 +1171,6 @@ def _validate_rpc_payload(payload):
         deadline = values["recovery_deadline_monotonic_s"]
         if isinstance(deadline, bool) or not isinstance(deadline, (int, float)):
             raise CliError("RPC_PAYLOAD_TYPE")
-    return payload
-
-
-def _validate_broker_authority_payload(payload):
-    if type(payload) is not dict or type(payload.get("operation")) is not str:
-        raise CliError("BROKER_RPC_PAYLOAD_SCHEMA")
-    expected = {
-        "authenticate_broker_message": {"operation", "message"},
-        "authorize_inference": {"operation", "request", "snapshot"},
-        "broker_health_down": {
-            "operation", "outcome", "request_id", "reason",
-        },
-    }.get(payload["operation"])
-    if expected is None or set(payload) != expected:
-        raise CliError("BROKER_RPC_PAYLOAD_SCHEMA")
-    if payload["operation"] in {
-        "authenticate_broker_message", "authorize_inference"
-    } and any(
-        type(payload[name]) is not dict for name in expected - {"operation"}
-    ):
-        raise CliError("BROKER_RPC_PAYLOAD_TYPE")
-    if payload["operation"] == "broker_health_down":
-        if payload["outcome"] not in {
-            "INFRA_ERROR", "QUEUE_TIMEOUT", "INFERENCE_TIMEOUT"
-        } or any(
-            not isinstance(payload[name], str) or not payload[name]
-            for name in ("request_id", "reason")
-        ):
-            raise CliError("BROKER_RPC_PAYLOAD_TYPE")
     return payload
 
 
@@ -1159,10 +1341,8 @@ class _CoordinatorRpcProxy:
         )
         return _resource_from_dict(value)
 
-    def current_broker(self):
-        if self._lease is None:
-            raise CliError("BROKER_DISCOVERY_ACTIVE_LEASE_REQUIRED")
-        value = self._call("current_broker", lease=self._lease)
+    def _broker_state(self, operation, lease):
+        value = self._call(operation, lease=lease)
         fields = {
             "healthy", "broker_generation", "broker_socket_path",
             "recovery_deadline_monotonic_s",
@@ -1193,6 +1373,16 @@ class _CoordinatorRpcProxy:
             raise CliError("BROKER_AUTHORITY_SCHEMA")
         return value
 
+    def current_broker(self):
+        if self._lease is None:
+            raise CliError("BROKER_DISCOVERY_ACTIVE_LEASE_REQUIRED")
+        return self._broker_state("current_broker", self._lease)
+
+    def startup_broker(self):
+        if self._lease is not None:
+            raise CliError("STARTUP_BROKER_ACTIVE_LEASE")
+        return self._broker_state("startup_broker", None)
+
 
 class _WorkerControlProxy:
     """Parent-side authenticated control of one live Worker shutdown path."""
@@ -1216,6 +1406,51 @@ class _WorkerControlProxy:
         self._identity_probe = identity_probe
         self._signal_process = signal_process
         self._sequence = 0
+
+    def _startup_call(self, operation):
+        if operation not in {"readiness", "release_start"}:
+            raise CliError("WORKER_CONTROL_OPERATION")
+        try:
+            socket_info = self.socket_path.lstat()
+        except FileNotFoundError:
+            return None
+        if (
+            not stat.S_ISSOCK(socket_info.st_mode)
+            or socket_info.st_uid != os.getuid()
+            or stat.S_IMODE(socket_info.st_mode) != 0o600
+        ):
+            raise CliError("WORKER_CONTROL_SOCKET_INVALID")
+        self._sequence += 1
+        message = {
+            "schema_version": 1,
+            "kind": "worker_call",
+            "coordinator_epoch": self.coordinator_epoch,
+            "worker_id": f"{self.worker_id}-control",
+            "worker_generation": self.generation,
+            "lease": None,
+            "request_id": f"control-{self.worker_id}-{self._sequence}",
+            "idempotency_key": f"control-{operation}-{self._sequence}",
+            "token": self.token,
+            "payload": {"operation": operation},
+        }
+        return self.client.call(message)["payload"]
+
+    def readiness(self):
+        value = self._startup_call("readiness")
+        if value is None:
+            return None
+        if type(value) is not dict or set(value) != {"ready", "receipt"}:
+            raise CliError("WORKER_READINESS_SCHEMA")
+        if value["ready"] is not True or type(value["receipt"]) is not dict:
+            return None
+        try:
+            return WorkerReadinessReceipt(**value["receipt"])
+        except (TypeError, ValueError) as error:
+            raise CliError("WORKER_READINESS_SCHEMA") from error
+
+    def release_start(self):
+        value = self._startup_call("release_start")
+        return type(value) is dict and value == {"completed": True}
 
     def _orphan_identities(self):
         path = self.orphan_manifest
@@ -1418,10 +1653,14 @@ class _WorkerBrokerProxy:
         )
         return self._call(message)["cancelled"]
 
-    def _refresh_broker(self, *, wait_until_healthy):
+    def _refresh_broker(self, *, wait_until_healthy, startup=False):
         deadline = self._clock() + self.config.broker_recovery_timeout_s
         while True:
-            authority = self.coordinator.current_broker()
+            authority = (
+                self.coordinator.startup_broker()
+                if startup
+                else self.coordinator.current_broker()
+            )
             if authority["healthy"]:
                 generation = authority["broker_generation"]
                 if generation < self.broker_generation:
@@ -1522,6 +1761,11 @@ class _WorkerBrokerProxy:
                 snapshot.path.relative_to(self.resources.worker_root.parent)
             ),
             "input_sha256": snapshot.input_sha256,
+            "deadline_s": getattr(
+                self.client,
+                "deadline_s",
+                self.config.executing_hard_timeout_s,
+            ),
         }
         if execution_kind is ExecutionKind.ATTEMPT:
             identity["attempt_id"] = lease.attempt_id
@@ -1551,6 +1795,17 @@ class _WorkerBrokerProxy:
             },
         )
         value = self._call(message)
+        expected_model_version = (
+            self.config.yolo_weights_sha256
+            if model_id == self.config.yolo_model_id
+            else self.config.grounded_sam_manifest_sha256
+        )
+        if (
+            value.get("request_id") != request.request_id
+            or value.get("model_id") != request.model_id
+            or value.get("model_version") != expected_model_version
+        ):
+            raise CliError("BROKER_RESPONSE_IDENTITY")
         current_generation = self._refresh_broker(wait_until_healthy=False)
         if (
             value.get("broker_generation") != request_generation
@@ -1573,12 +1828,27 @@ class _WorkerBrokerProxy:
 
 def _build_worker_from_spec(path, *, runtime_side_effects=None):
     document = json.loads(Path(path).read_text(encoding="utf-8"))
-    if type(document) is not dict or set(document) != {
+    required_fields = {
         "schema_version", "batch_id", "run_mode", "config_path", "socket_path",
         "token_path", "coordinator_epoch", "resources", "broker_socket_path",
         "broker_generation", "catalog", "control_token_path",
         "control_socket_path", "shutdown_deadline_s", "max_frame_bytes",
-    } or document["schema_version"] != 1:
+    }
+    adaptive_fields = {
+        "start_paused", "worker_start_timeout_s", "adaptive_workers"
+    }
+    if (
+        type(document) is not dict
+        or set(document) not in (required_fields, required_fields | adaptive_fields)
+        or document["schema_version"] != 1
+        or (
+            "start_paused" in document
+            and (
+                document["start_paused"] is not True
+                or document["adaptive_workers"] is not True
+            )
+        )
+    ):
         raise CliError("WORKER_SPEC_INVALID")
     if type(document["broker_generation"]) is not int or document["broker_generation"] <= 0:
         raise CliError("WORKER_SPEC_BROKER_GENERATION")
@@ -1610,6 +1880,7 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
         )
         runtime_kwargs = runtime_ports.kwargs()
         runtime_kwargs["reserve_workspace"] = results.reserve_workspace
+        runtime_kwargs["pose_receive_timeout_s"] = config.executing_hard_timeout_s
         # A stable slot replacement is represented by the next private Worker
         # spec generation; it never reallocates ROS domains or directories.
         runtime_kwargs["replace_resources"] = coordinator.replace_resources
@@ -1642,6 +1913,11 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
         "config": config,
         "worker_id": resources.worker_id,
         "generation": resources.generation,
+        **(
+            {"adaptive_workers": True}
+            if document.get("adaptive_workers") is True
+            else {}
+        ),
     })
     return worker, runtime
 
@@ -1657,10 +1933,12 @@ def _write_worker_results(resources, results):
     return path
 
 
-def _worker_results_failed(results):
+def _worker_results_failed(results, *, adaptive_workers=False):
     """Classify only an unrecovered or nonterminal Worker result as fatal."""
     if not results:
         return True
+    if adaptive_workers:
+        return any(adaptive_result_is_infrastructure(result) for result in results)
     for result in results:
         if result.stopped_reason in {"POINT_TERMINAL", "NO_POINT"}:
             continue
@@ -1692,6 +1970,49 @@ def _run_worker_spec(path, *, runtime_side_effects=None):
     control_authority.load_token(
         control_id, resources.generation, Path(document["control_token_path"])
     )
+    start_gate = (
+        WorkerStartGate(
+            expected_worker_id=resources.worker_id,
+            generation=resources.generation,
+        )
+        if document.get("start_paused") is True
+        else None
+    )
+
+    if start_gate is not None and worker.prepare_for_start() is not True:
+        return 1
+
+    def current_readiness():
+        if start_gate is None:
+            raise CliError("WORKER_READINESS_NOT_ADAPTIVE")
+        try:
+            from so101_demo.runtime.task_stack import _linux_process_identity
+
+            process_start_ticks = _linux_process_identity(os.getpid())[2]
+            runtime_ready = runtime.worker_ready_gate() is True
+            if document["run_mode"] == RunMode.DRY_RUN.value:
+                broker_generation = document["broker_generation"]
+                broker_ready = True
+            else:
+                broker_generation = worker._broker._refresh_broker(
+                    wait_until_healthy=False,
+                    startup=True,
+                )
+                broker_ready = broker_generation == document["broker_generation"]
+            receipt = WorkerReadinessReceipt(
+                worker_id=resources.worker_id,
+                generation=resources.generation,
+                process_start_ticks=process_start_ticks,
+                coordinator_registered=worker._registered is True,
+                runtime_ready=runtime_ready,
+                broker_ready=broker_ready,
+                broker_generation=broker_generation,
+                observed_monotonic_s=time.monotonic(),
+            )
+            start_gate.record_readiness(receipt)
+            return receipt
+        except Exception:
+            return None
 
     def control_handler(message):
         if message.get("kind") != "worker_call":
@@ -1700,6 +2021,17 @@ def _run_worker_spec(path, *, runtime_side_effects=None):
         if type(payload) is not dict or set(payload) != {"operation"}:
             raise CliError("WORKER_CONTROL_SCHEMA")
         operation = payload["operation"]
+        if operation == "readiness":
+            receipt = current_readiness()
+            return {
+                "ready": receipt is not None,
+                "receipt": None if receipt is None else _jsonable(receipt),
+            }
+        if operation == "release_start":
+            if start_gate is None:
+                raise CliError("WORKER_READINESS_NOT_ADAPTIVE")
+            start_gate.release(resources.worker_id, resources.generation)
+            return {"completed": True}
         if operation not in {
             "stop", "cancel_motion", "confirm_no_controller_goal", "recover"
         }:
@@ -1722,9 +2054,18 @@ def _run_worker_spec(path, *, runtime_side_effects=None):
     control_thread = threading.Thread(target=control_server.serve_forever, daemon=True)
     control_thread.start()
     try:
+        if start_gate is not None and not start_gate.wait_released(
+            document["worker_start_timeout_s"]
+        ):
+            return 1
         results = worker.run()
         _write_worker_results(resources, results)
-        return int(_worker_results_failed(results))
+        return int(
+            _worker_results_failed(
+                results,
+                adaptive_workers=document.get("adaptive_workers", False),
+            )
+        )
     finally:
         try:
             runtime.shutdown_owned()
@@ -1743,13 +2084,18 @@ class ProductionBatchComposition:
     ):
         self.worker_servers = []
         self._server_threads = []
-        self.broker_authority_server = None
         self.allocator = None
         self.journal = None
+        self._startup_stage = "constructor"
         try:
             self._initialize(spec, **kwargs)
-        except BaseException:
-            self._release_partial()
+        except BaseException as error:
+            partial_cleanup = self._release_partial()
+            try:
+                error.startup_stage = self._startup_stage
+                error.partial_cleanup = partial_cleanup
+            except (AttributeError, TypeError):
+                pass
             raise
 
     def _initialize(
@@ -1768,10 +2114,31 @@ class ProductionBatchComposition:
         container_runner=subprocess.run,
         clock=time.monotonic,
         sleep=time.sleep,
+        adaptive_context: AdaptivePoolContext | None = None,
+        allocation_policy: AllocationPolicy | None = None,
+        pool_running_recorder=None,
     ):
+        self._startup_stage = "validate_context"
+        if spec.request is None:
+            raise CliError("POOL_REQUEST_REQUIRED")
+        if adaptive_context is not None:
+            if (
+                not isinstance(adaptive_context, AdaptivePoolContext)
+                or adaptive_context.request != spec.request
+                or not callable(pool_running_recorder)
+            ):
+                raise CliError("ADAPTIVE_POOL_CONTEXT")
         self.spec = spec
+        self.adaptive_context = adaptive_context
+        self._pool_running_recorder = pool_running_recorder
+        self.worker_exit_codes = ()
+        self.adaptive_attempt_statuses = {}
+        self.adaptive_result_locations = {}
+        self.adaptive_cleanup_complete = False
+        self.adaptive_diagnostics = []
         self._clock = clock
         self._sleep = sleep
+        self._startup_stage = "process_supervisor"
         self.supervisor = supervisor or ProcessSupervisor(
             spec.request.batch_id,
             manifest_path=spec.request.evidence_root / "owned-processes.json",
@@ -1800,6 +2167,7 @@ class ProductionBatchComposition:
                 raise CliError("THREE_WORKER_LIVE_EVIDENCE_INVALID") from error
             if dict(current_headroom) != dict(spec.live_headroom_verification):
                 raise CliError("THREE_WORKER_LIVE_EVIDENCE_CHANGED")
+        self._startup_stage = "allocator_create"
         self.allocator = WorkerResourceAllocator(
             spec.config,
             spec.request.evidence_root,
@@ -1808,7 +2176,20 @@ class ProductionBatchComposition:
             live_headroom_evidence=spec.live_headroom_evidence,
             live_headroom_verifier=live_headroom_verifier,
             batch_id=spec.request.batch_id,
+            allocation_policy=(
+                allocation_policy
+                if allocation_policy is not None
+                else None
+                if adaptive_context is None
+                else AllocationPolicy(
+                    max_worker_count=adaptive_context.options.worker_count,
+                    ros_domain_ids=adaptive_context.options.ros_domain_ids,
+                    enforce_resource_thresholds=False,
+                    persistent_cleanup_claims=True,
+                )
+            ),
         )
+        self._startup_stage = "resource_allocation"
         if spec.resume:
             self.journal = CoordinatorJournal.create(
                 spec.request.evidence_root / "coordinator", spec.request.batch_id
@@ -1838,16 +2219,21 @@ class ProductionBatchComposition:
             spec.request.run_mode,
             expected_final_cup_pose_world=spec.expected_final_cup_pose_world,
         )
+        self._startup_stage = "coordinator_journal"
         if self.journal is None:
             self.journal = CoordinatorJournal.create(
                 spec.request.evidence_root / "coordinator", spec.request.batch_id
             )
+        self._startup_stage = "coordinator"
         self.coordinator = BatchCoordinator(
             self.journal,
             spec.request,
             config=spec.config,
             result_port=self.result_verifier,
             clock=clock,
+            point_selector=(
+                None if adaptive_context is None else adaptive_context.selector.choose
+            ),
         )
         self.results = _ArtifactResults(worker_roots, spec.request.run_mode)
         self._recovered_worker_ids = None
@@ -1857,6 +2243,7 @@ class ProductionBatchComposition:
         if broker_request_model is not None:
             raise CliError("IN_PROCESS_BROKER_FORBIDDEN")
         self._worker_children_reaped = False
+        self._startup_stage = "control_authority"
         self.authority = WorkerTokenAuthority(
             spec.request.evidence_root,
             coordinator_epoch=self.journal.coordinator_epoch,
@@ -1869,15 +2256,13 @@ class ProductionBatchComposition:
             else provenance_revalidator
         )
         self.broker_spec_path = None
-        self.broker_authority_server = None
-        self._broker_authority_thread = None
         self.broker_generation = (
             self._prior_broker_generation() if spec.resume else 0
         )
         self.broker_runtime_root = self.authority.ipc_root / "broker"
         self.broker_input_root = spec.request.evidence_root / "broker-inputs"
-        self.broker_authority = None
         self.broker_socket_path = self.broker_runtime_root / "perception.sock"
+        self._startup_stage = "broker_runtime"
         if spec.request.run_mode is not RunMode.DRY_RUN:
             if spec.resume:
                 if not self.broker_input_root.is_dir() or self.broker_input_root.is_symlink():
@@ -1897,6 +2282,7 @@ class ProductionBatchComposition:
         self.worker_controls = []
         self._runtime_side_effects_factory = runtime_side_effects_factory
         self._worker_launcher = worker_launcher
+        self._startup_stage = "worker_ipc"
         for resources in self.resource_manifest.workers:
             if (
                 self._recovered_worker_ids is not None
@@ -1935,6 +2321,14 @@ class ProductionBatchComposition:
                 },
                 "resources": resources.to_dict(),
             }
+            if adaptive_context is not None:
+                worker_spec.update(
+                    start_paused=True,
+                    adaptive_workers=True,
+                    worker_start_timeout_s=(
+                        adaptive_context.options.worker_start_timeout_s
+                    ),
+                )
             worker_path = resources.worker_root / (
                 "worker-spec.json" if not spec.resume
                 else f"worker-spec-e{self.journal.coordinator_epoch}-g{resources.generation}.json"
@@ -1951,6 +2345,7 @@ class ProductionBatchComposition:
                 deadline_s=spec.config.heartbeat_timeout_s,
                 orphan_manifest=resources.worker_root / "owned-runtime-processes.json",
             ))
+        self._startup_stage = "initialized"
 
     def _remove_stale_worker_sockets(self):
         """Remove only prior generation sockets after exact process fencing."""
@@ -2058,108 +2453,110 @@ class ProductionBatchComposition:
     def _prepare_broker_generation(self, generation):
         if type(generation) is not int or generation != self.broker_generation + 1:
             raise CliError("BROKER_GENERATION_SEQUENCE")
-        previous_server = self.broker_authority_server
-        previous_thread = self._broker_authority_thread
-        if previous_server is not None:
-            previous_server.close()
-            self.broker_authority_server = None
-            self._broker_authority_thread = None
-        if previous_thread is not None:
-            previous_thread.join(
-                timeout=self.spec.config.heartbeat_timeout_s + 1.0
-            )
-            if previous_thread.is_alive():
-                raise CliError("BROKER_AUTHORITY_SHUTDOWN_TIMEOUT")
         runtime_root = (
             self.authority.ipc_root / "broker"
             if generation == 1
             else self.authority.ipc_root / f"broker-g{generation}"
         )
         runtime_root.mkdir(mode=0o700)
-        authority = WorkerTokenAuthority(
-            self.spec.request.evidence_root,
-            coordinator_epoch=self.journal.coordinator_epoch,
-            ipc_root=runtime_root,
-        )
-        token_path = authority.issue("broker", generation)
-        authority_server = AuthenticatedUnixServer(
-            runtime_root / "broker-authority.sock",
-            authority,
-            self._coordinator_handler,
-            deadline_s=self.spec.config.heartbeat_timeout_s,
-            max_frame_bytes=self.spec.config.broker_max_frame_bytes,
-        )
         config_copy = runtime_root / "runtime-config.yaml"
         _write_bytes(config_copy, self.spec.config_path.read_bytes())
         spec_path = runtime_root / "broker-spec.json"
-        _write_json(
-            spec_path,
-            {
-                "schema_version": 1,
-                "kind": "so101_parallel_broker_runtime",
-                "batch_id": self.spec.request.batch_id,
-                "coordinator_epoch": self.journal.coordinator_epoch,
-                "broker_generation": generation,
-                "run_mode": self.spec.request.run_mode.value,
-                "image_id": self.spec.provenance.get("image_id"),
-                "yolo_weights_sha256": self.spec.yolo_weights_sha256,
-                "grounded_manifest_sha256": self.spec.grounded_manifest_sha256,
-                "config_path": "/runtime/runtime-config.yaml",
-                "authority_endpoint": "/runtime/broker-authority.sock",
-                "authority_token_path": f"/runtime/{token_path.name}",
-                "request_deadline_s": self.spec.config.heartbeat_timeout_s,
-                "max_frame_bytes": self.spec.config.broker_max_frame_bytes,
-            },
-        )
+        broker_document = {
+            "schema_version": 1,
+            "kind": "so101_parallel_broker_runtime",
+            "batch_id": self.spec.request.batch_id,
+            "coordinator_epoch": self.journal.coordinator_epoch,
+            "broker_generation": generation,
+            "run_mode": self.spec.request.run_mode.value,
+            "image_id": self.spec.provenance.get("image_id"),
+            "yolo_weights_sha256": self.spec.yolo_weights_sha256,
+            "grounded_manifest_sha256": self.spec.grounded_manifest_sha256,
+            "config_path": "/runtime/runtime-config.yaml",
+            "request_deadline_s": self.spec.config.heartbeat_timeout_s,
+            "max_frame_bytes": self.spec.config.broker_max_frame_bytes,
+        }
+        if self.adaptive_context is not None:
+            worker_count = self.adaptive_context.request.worker_count
+            broker_document.update(
+                {
+                    "queue_capacity_per_model": worker_count,
+                    "connection_handler_count": worker_count,
+                    "yolo_executor_count": min(
+                        self.adaptive_context.options.yolo_executor_count,
+                        worker_count,
+                    ),
+                    "grounded_sam_executor_count": 1,
+                    "request_deadline_s": max(
+                        self.spec.config.yolo_queue_timeout_s
+                        + self.spec.config.yolo_inference_timeout_s,
+                        self.spec.config.grounded_sam_queue_timeout_s
+                        + self.spec.config.grounded_sam_inference_timeout_s,
+                    )
+                    + self.spec.config.heartbeat_timeout_s,
+                }
+            )
+        _write_json(spec_path, broker_document)
         self.broker_generation = generation
         self.broker_runtime_root = runtime_root
         self.broker_socket_path = runtime_root / "perception.sock"
         self.broker_container_id_path = runtime_root / "container.cid"
-        self.broker_authority = authority
-        self.broker_token_path = token_path
         self.broker_spec_path = spec_path
-        self.broker_authority_server = authority_server
-        self._broker_authority_thread = None
-
-    def _start_broker_authority_server(self):
-        if self.broker_authority_server is None:
-            return
-        thread = threading.Thread(
-            target=self.broker_authority_server.serve_forever,
-            daemon=True,
-        )
-        thread.start()
-        self._broker_authority_thread = thread
 
     def _release_partial(self):
+        outcomes = {"worker_servers": []}
         for server in getattr(self, "worker_servers", ()):
             try:
                 server.close()
-            except Exception:
-                pass
-        server = getattr(self, "broker_authority_server", None)
-        if server is not None:
-            try:
-                server.close()
-                self.broker_authority_server = None
-            except Exception:
-                pass
-        thread = getattr(self, "_broker_authority_thread", None)
-        if thread is not None:
-            thread.join(timeout=self.spec.config.heartbeat_timeout_s + 1.0)
-            self._broker_authority_thread = None
+            except Exception as error:
+                outcomes["worker_servers"].append({
+                    "succeeded": False,
+                    "error_type": type(error).__name__,
+                    "error_message": str(error),
+                })
+            else:
+                outcomes["worker_servers"].append({
+                    "succeeded": True,
+                    "error_type": None,
+                    "error_message": None,
+                })
         journal = getattr(self, "journal", None)
         if journal is not None:
             try:
                 journal.close()
-            except Exception:
-                pass
+            except Exception as error:
+                outcomes["journal"] = {
+                    "succeeded": False,
+                    "error_type": type(error).__name__,
+                    "error_message": str(error),
+                }
+            else:
+                outcomes["journal"] = {
+                    "succeeded": True,
+                    "error_type": None,
+                    "error_message": None,
+                }
+        else:
+            outcomes["journal"] = None
         allocator = getattr(self, "allocator", None)
         if allocator is not None:
             try:
                 allocator.close()
-            except Exception:
-                pass
+            except Exception as error:
+                outcomes["allocator"] = {
+                    "succeeded": False,
+                    "error_type": type(error).__name__,
+                    "error_message": str(error),
+                }
+            else:
+                outcomes["allocator"] = {
+                    "succeeded": True,
+                    "error_type": None,
+                    "error_message": None,
+                }
+        else:
+            outcomes["allocator"] = None
+        return outcomes
 
     def _start_broker(self):
         if self.broker_spec_path is None:
@@ -2383,7 +2780,7 @@ class ProductionBatchComposition:
                     "lease": None,
                     "request_id": f"broker-health-{self.broker_generation}",
                     "idempotency_key": f"broker-health-{self.broker_generation}",
-                    "token": self.broker_token_path.read_text(encoding="ascii"),
+                    "token": "0" * 64,
                     "payload": {"operation": "health", "ready_sha256": ready_sha256},
                 }
                 response = client.call(message)
@@ -2426,7 +2823,6 @@ class ProductionBatchComposition:
             ) is not True:
                 raise CliError("BROKER_CONTAINER_RETIRE_FAILED")
             self._prepare_broker_generation(self.broker_generation + 1)
-            self._start_broker_authority_server()
             replacement = self._start_broker()
             self._wait_broker_ready(deadline_monotonic_s=deadline)
             self.coordinator.mark_broker_health(True)
@@ -2492,6 +2888,7 @@ class ProductionBatchComposition:
         return self._worker_control("recover")
 
     def _start_workers(self):
+        adaptive_processes = {}
         for path, resources in zip(
             self.worker_specs, self.resource_manifest.workers, strict=True
         ):
@@ -2499,9 +2896,15 @@ class ProductionBatchComposition:
                 sys.executable, "-m", "so101_demo.cli.mujoco_parallel_batch",
                 "--internal-worker", str(path),
             )
-            self.supervisor.start(
+            process = self.supervisor.start(
                 "worker", command, environment=dict(resources.environment)
             )
+            if self.adaptive_context is not None:
+                adaptive_processes[resources.worker_id] = process
+        if self.adaptive_context is not None:
+            self._adaptive_worker_processes = adaptive_processes
+            self._release_adaptive_workers()
+            return
         if not callable(getattr(self.supervisor, "assert_healthy", None)):
             return
         deadline = time.monotonic() + self.spec.config.heartbeat_timeout_s
@@ -2516,6 +2919,71 @@ class ProductionBatchComposition:
                 return
             time.sleep(0.01)
         raise CliError("WORKER_CONTROL_READY_TIMEOUT")
+
+    def _release_adaptive_workers(self):
+        """Collect fresh readiness, durably linearize, then release every Worker."""
+
+        if not callable(getattr(self.supervisor, "assert_healthy", None)):
+            raise CliError("WORKER_HEALTH_PROBE_REQUIRED")
+        deadline = self._clock() + (
+            self.adaptive_context.options.worker_start_timeout_s
+        )
+        receipts = {}
+
+        def readiness_or_none(control):
+            try:
+                return control.readiness()
+            except (IpcError, OSError):
+                # A live readiness probe may outlast the request-local IPC
+                # deadline under multi-stack startup load.  No receipt means
+                # no release authority; retry only within the shared startup
+                # deadline and keep every schema/identity check below.
+                return None
+
+        while self._clock() < deadline:
+            self.supervisor.assert_healthy()
+            for control in self.worker_controls:
+                if control.worker_id not in receipts:
+                    receipt = readiness_or_none(control)
+                    if receipt is not None:
+                        receipts[control.worker_id] = receipt
+            if len(receipts) == len(self.worker_controls):
+                break
+            self._sleep(min(0.01, max(0.0, deadline - self._clock())))
+        if len(receipts) != len(self.worker_controls):
+            raise CliError("WORKER_READY_TIMEOUT")
+        final_receipts = []
+        for control in self.worker_controls:
+            receipt = None
+            while receipt is None and self._clock() < deadline:
+                self.supervisor.assert_healthy()
+                receipt = readiness_or_none(control)
+                if receipt is None:
+                    self._sleep(min(0.01, max(0.0, deadline - self._clock())))
+            now = self._clock()
+            process = self._adaptive_worker_processes.get(control.worker_id)
+            if receipt is None or (
+                receipt.worker_id != control.worker_id
+                or receipt.generation != control.generation
+                or not receipt.coordinator_registered
+                or not receipt.runtime_ready
+                or not receipt.broker_ready
+                or receipt.broker_generation != (self.broker_generation or 1)
+                or process is None
+                or receipt.process_start_ticks
+                != getattr(process, "start_time", None)
+                or receipt.observed_monotonic_s > now
+                or now - receipt.observed_monotonic_s > 1.0
+                or now >= deadline
+            ):
+                raise CliError("WORKER_READINESS_INVALID")
+            final_receipts.append(receipt)
+        self._pool_running_recorder(tuple(final_receipts))
+        for control in self.worker_controls:
+            if self._clock() >= deadline:
+                raise CliError("POOL_RUNTIME_RELEASE_FAILED")
+            if control.release_start() is not True:
+                raise CliError("POOL_RUNTIME_RELEASE_FAILED")
 
     def _active_lease(self, message):
         worker = self.coordinator.snapshot().workers.get(message["worker_id"])
@@ -2568,102 +3036,23 @@ class ProductionBatchComposition:
         operation = payload.get("operation")
         worker_id = message["worker_id"]
         generation = message["worker_generation"]
-        if worker_id == "broker":
-            _validate_broker_authority_payload(payload)
-            if generation != self.broker_generation:
-                raise CliError("BROKER_GENERATION")
-            if operation == "authenticate_broker_message":
-                inner = payload.get("message")
-                if type(inner) is not dict:
-                    raise CliError("BROKER_INNER_MESSAGE")
-                token_authority = (
-                    self.broker_authority
-                    if inner.get("worker_id") == "broker"
-                    else self.authority
-                )
-                token_authority.authenticate(inner)
-                return {"authenticated": True}
-            if operation == "broker_health_down":
-                self.coordinator.mark_broker_health(False)
-                return {"accepted": True}
-            if operation == "authorize_inference":
-                request = _inference_request(payload.get("request"))
-                snapshot = _snapshot(payload.get("snapshot"))
-                if snapshot.start_identity != NormalizedInferenceResponseIdentity.from_request(
-                    request
-                ):
-                    raise CliError("BROKER_START_IDENTITY")
-                worker = self.coordinator.snapshot().workers.get(request.worker_id)
-                if (
-                    worker is None
-                    or worker.state is not WorkerState.EXECUTING
-                    or worker.generation != request.worker_generation
-                    or worker.lease is None
-                    or worker.stop_requested
-                    or not worker.inference_allowed
-                ):
-                    return {"authorized": False}
-                lease = worker.lease
-                if any(
-                    getattr(lease, name) != getattr(request, name)
-                    for name in (
-                        "batch_id",
-                        "coordinator_epoch",
-                        "worker_id",
-                        "worker_generation",
-                        "point_id",
-                        "lease_generation",
-                    )
-                ) or lease.attempt_id != (
-                    request.attempt_id
-                    if request.execution_kind is ExecutionKind.ATTEMPT
-                    else request.validation_id
-                ):
-                    return {"authorized": False}
-                event = next(
-                    (
-                        item
-                        for item in self.journal.replay().events
-                        if item.idempotency_key == snapshot.start_event_id
-                    ),
-                    None,
-                )
-                expected_type = (
-                    "ATTEMPT_STARTED"
-                    if request.execution_kind is ExecutionKind.ATTEMPT
-                    else "VALIDATION_STARTED"
-                )
-                if (
-                    event is None
-                    or event.type != expected_type
-                    or snapshot.start_event_type != expected_type
-                    or event.coordinator_epoch != request.coordinator_epoch
-                ):
-                    return {"authorized": False}
-                identity = event.payload.get("identity")
-                if type(identity) is not dict:
-                    return {"authorized": False}
-                expected = {
-                    "batch_id": lease.batch_id,
-                    "coordinator_epoch": lease.coordinator_epoch,
-                    "worker_id": lease.worker_id,
-                    "worker_generation": lease.worker_generation,
-                    "point_id": lease.point_id,
-                    "attempt_id": lease.attempt_id,
-                    "lease_generation": lease.lease_generation,
-                }
-                authorized = (
-                    all(identity.get(name) == value for name, value in expected.items())
-                    and type(identity.get("gate_summary")) is dict
-                    and identity["gate_summary"].get("reset_epoch")
-                    == request.reset_epoch
-                )
-                return {"authorized": authorized}
-            raise CliError("BROKER_AUTHORITY_OPERATION")
         _validate_rpc_payload(payload)
-        if operation == "current_broker":
-            self._broker_discovery_lease(message)
+        if operation in {"current_broker", "startup_broker"}:
             snapshot = self.coordinator.snapshot()
+            if operation == "startup_broker":
+                worker = snapshot.workers.get(worker_id)
+                if (
+                    self.adaptive_context is None
+                    or message["lease"] is not None
+                    or worker is None
+                    or worker.generation != generation
+                    or worker.lease is not None
+                    or worker.lease_count != 0
+                    or worker.stop_requested
+                ):
+                    raise CliError("STARTUP_BROKER_WORKER")
+            else:
+                self._broker_discovery_lease(message)
             if not snapshot.broker_healthy:
                 return {
                     "healthy": False,
@@ -2738,21 +3127,12 @@ class ProductionBatchComposition:
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             self._server_threads.append(thread)
-        self._start_broker_authority_server()
 
     def _stop_servers(self):
         for server in self.worker_servers:
             server.close()
-        if self.broker_authority_server is not None:
-            self.broker_authority_server.close()
-            self.broker_authority_server = None
         for thread in self._server_threads:
             thread.join(timeout=1.0)
-        if self._broker_authority_thread is not None:
-            self._broker_authority_thread.join(
-                timeout=self.spec.config.heartbeat_timeout_s + 1.0
-            )
-            self._broker_authority_thread = None
 
     def _run_worker_local(self, path):
         resources = _resource_from_dict(json.loads(Path(path).read_text())["resources"])
@@ -2767,14 +3147,170 @@ class ProductionBatchComposition:
         try:
             results = worker.run()
             return int(
-                not results
-                or any(
-                    result.stopped_reason not in {"POINT_TERMINAL", "NO_POINT"}
-                    for result in results
+                _worker_results_failed(
+                    results,
+                    adaptive_workers=getattr(self, "adaptive_context", None)
+                    is not None,
                 )
             )
         finally:
             runtime.shutdown_owned()
+
+    def _capture_adaptive_results(self):
+        if self.adaptive_context is None:
+            return
+        statuses = {}
+        for resources in self.resource_manifest.workers:
+            path = resources.worker_root / "worker-run-results.json"
+            try:
+                document = json.loads(path.read_text(encoding="utf-8"))
+            except (FileNotFoundError, OSError, ValueError, TypeError):
+                continue
+            for result in document.get("results", ()):
+                point_id = result.get("point_id")
+                status = result.get("terminal_status")
+                if isinstance(point_id, str) and isinstance(status, str):
+                    try:
+                        statuses[point_id] = AttemptStatus(status)
+                    except ValueError:
+                        continue
+        locations = {}
+        for event in self.journal.replay().events:
+            if event.type != "RESULT_COMMITTED":
+                continue
+            response = event.payload.get("response", {})
+            identity = event.payload.get("identity", {})
+            point_id = identity.get("point_id")
+            location = response.get("location", identity.get("location"))
+            if isinstance(point_id, str) and isinstance(location, str):
+                locations[point_id] = location
+        self.adaptive_attempt_statuses = statuses
+        self.adaptive_result_locations = locations
+
+    def _record_adaptive_infrastructure_failure(self, process, code):
+        if self.adaptive_context is None:
+            raise CliError("ADAPTIVE_POOL_CONTEXT")
+        role = getattr(process, "role", "unknown")
+        self.adaptive_diagnostics.append(f"FIRST_INFRA:{role}:{code}")
+        if role == "broker":
+            try:
+                self._capture_broker_exit_evidence(process, code)
+            except Exception as error:
+                self.adaptive_diagnostics.append(
+                    f"BROKER_EXIT_EVIDENCE:{type(error).__name__}:{error}"
+                )
+        self.coordinator.request_stop(reason="ADAPTIVE_INFRASTRUCTURE_FAILURE")
+
+    def _capture_broker_exit_evidence(self, process, code):
+        """Persist bounded Docker evidence before cleanup can erase it."""
+
+        try:
+            identity = self.broker_container_id_path.lstat()
+            container_id = self.broker_container_id_path.read_text(
+                encoding="ascii"
+            ).strip()
+        except (OSError, UnicodeError) as error:
+            raise CliError("BROKER_CONTAINER_ID_MISSING") from error
+        if (
+            not stat.S_ISREG(identity.st_mode)
+            or identity.st_uid != os.getuid()
+            or stat.S_IMODE(identity.st_mode) != 0o600
+            or re.fullmatch(r"[0-9a-f]{64}", container_id) is None
+        ):
+            raise CliError("BROKER_CONTAINER_ID_INVALID")
+
+        def run(command):
+            try:
+                result = self._container_runner(
+                    command,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=5.0,
+                )
+            except Exception as error:
+                return {
+                    "returncode": None,
+                    "stdout": "",
+                    "stderr": f"{type(error).__name__}: {error}"[:65536],
+                }
+            return {
+                "returncode": result.returncode,
+                "stdout": (result.stdout or "")[-65536:],
+                "stderr": (result.stderr or "")[-65536:],
+            }
+
+        inspected = run(
+            ["docker", "inspect", "--type", "container", container_id]
+        )
+        state = None
+        if inspected["returncode"] == 0:
+            try:
+                documents = json.loads(inspected["stdout"])
+                if (
+                    type(documents) is list
+                    and len(documents) == 1
+                    and type(documents[0]) is dict
+                    and documents[0].get("Id") == container_id
+                    and type(documents[0].get("State")) is dict
+                ):
+                    state = documents[0]["State"]
+            except (TypeError, json.JSONDecodeError):
+                pass
+        logs = run(["docker", "logs", "--tail", "200", container_id])
+        events = run([
+            "docker", "events", "--since", "10m", "--until", "0s",
+            "--filter", f"container={container_id}", "--format", "{{json .}}",
+        ])
+        _write_json(
+            self.broker_runtime_root / "broker-exit.json",
+            {
+                "schema_version": 1,
+                "kind": "so101_broker_exit",
+                "recorded_unix_ns": time.time_ns(),
+                "process": {
+                    "role": getattr(process, "role", "unknown"),
+                    "pid": getattr(process, "pid", None),
+                    "pgid": getattr(process, "pgid", None),
+                    "start_time": getattr(process, "start_time", None),
+                    "exit_code": code,
+                },
+                "container": {
+                    "id": container_id,
+                    "state": state,
+                    "inspect": inspected,
+                },
+                "logs": logs,
+                "events": events,
+            },
+        )
+        return True
+
+    def _release_adaptive_resources(self, cleanup_verified):
+        if self.adaptive_context is None:
+            return True
+        if cleanup_verified is not True:
+            return False
+        try:
+            for path in adaptive_socket_paths(
+                self.spec.request.evidence_root,
+                self.spec.request.worker_count,
+            ):
+                try:
+                    identity = path.lstat()
+                except FileNotFoundError:
+                    continue
+                if not stat.S_ISSOCK(identity.st_mode) or identity.st_uid != os.getuid():
+                    raise CliError("ADAPTIVE_SOCKET_CLEANUP_IDENTITY")
+                path.unlink()
+            return self.allocator.release_persistent_claims(
+                cleanup_verified=True
+            )
+        except Exception as error:
+            self.adaptive_diagnostics.append(
+                f"CLEANUP:{type(error).__name__}:{error}"
+            )
+            return False
 
     def run(self) -> BatchSummary:
         failure = False
@@ -2809,16 +3345,29 @@ class ProductionBatchComposition:
                 codes = [self._worker_launcher(self, path) for path in self.worker_specs]
             else:
                 self._start_workers()
-                codes = self.supervisor.wait_for_children(
-                    deadline_monotonic_s=(
+                wait_kwargs = {
+                    "deadline_monotonic_s": (
                         self._clock() + self.spec.config.batch_hard_timeout_s
                     ),
-                    health_recovery=self._recover_broker,
-                    health_probe=lambda _expected: (
+                    "health_recovery": (
+                        None
+                        if self.adaptive_context is not None
+                        else self._recover_broker
+                    ),
+                    "health_probe": lambda _expected: (
                         self.coordinator.snapshot().broker_healthy
                     ),
+                }
+                if self.adaptive_context is not None:
+                    wait_kwargs.update(
+                        stop_on_nonzero=True,
+                        on_nonzero=self._record_adaptive_infrastructure_failure,
+                    )
+                codes = self.supervisor.wait_for_children(
+                    **wait_kwargs,
                 )
                 self._worker_children_reaped = True
+            self.worker_exit_codes = tuple(codes)
             failure = any(code != 0 for code in codes)
             self._settle_shared_dependency_failure()
             snapshot = self.coordinator.snapshot()
@@ -2872,11 +3421,14 @@ class ProductionBatchComposition:
                 }
                 cleanup = process_cleanup and container_cleanup
                 snapshot = self.coordinator.snapshot()
-                completion_attempted = bool(
-                    snapshot.terminal_reason and cleanup and not failure
+                completion_allowed = bool(
+                    snapshot.terminal_reason
+                    and cleanup
+                    and (not failure or self.adaptive_context is not None)
                 )
+                completion_attempted = completion_allowed
                 completion_error = None
-                if snapshot.terminal_reason and cleanup and not failure:
+                if completion_allowed:
                     try:
                         snapshot = self.coordinator.complete_cleanup(
                             owned_processes_stopped=True, controllers_stopped=True
@@ -2884,6 +3436,7 @@ class ProductionBatchComposition:
                     except Exception as error:
                         cleanup = False
                         completion_error = error
+                self._capture_adaptive_results()
                 _write_json(
                     self.spec.request.evidence_root / "cleanup-gates.json",
                     {
@@ -2920,6 +3473,12 @@ class ProductionBatchComposition:
                     raise completion_error
             finally:
                 self._stop_servers()
+                adaptive_released = self._release_adaptive_resources(cleanup)
+                self.adaptive_cleanup_complete = bool(
+                    cleanup
+                    and adaptive_released
+                    and snapshot.summary.batch_cleanup_complete
+                )
                 self.journal.close()
                 self.allocator.close()
         return snapshot.summary
@@ -2947,6 +3506,57 @@ def outcome_document(summary: BatchSummary) -> tuple[int, dict[str, object]]:
     else:
         passed = summary.validation_passed and summary.batch_cleanup_complete
     return (0 if passed else 1), document
+
+
+def adaptive_outcome_document(
+    summary: AdaptiveBatchSummary, *, elapsed_s: float
+) -> tuple[int, dict[str, object]]:
+    """Return the stable top-level projection for an adaptive batch."""
+
+    if not isinstance(summary, AdaptiveBatchSummary):
+        raise CliError("ADAPTIVE_BATCH_SUMMARY_REQUIRED")
+    if (
+        isinstance(elapsed_s, bool)
+        or not isinstance(elapsed_s, (int, float))
+        or not 0.0 <= float(elapsed_s) < float("inf")
+    ):
+        raise CliError("ADAPTIVE_ELAPSED_INVALID")
+    document = {
+        "schema_version": 1,
+        "mode": "adaptive_workers",
+        "status": summary.status.value,
+        "initial_worker_count": summary.initial_worker_count,
+        "final_worker_count": summary.final_worker_count,
+        "levels_used": list(summary.levels_used),
+        "fallback_transitions": [
+            {
+                "generation": transition.generation,
+                "from_count": transition.from_count,
+                "to_count": transition.to_count,
+                "failure": {
+                    "kind": transition.failure.kind.value,
+                    "generation": transition.failure.generation,
+                    "worker_count": transition.failure.worker_count,
+                    "detail": transition.failure.detail,
+                },
+            }
+            for transition in summary.transitions
+        ],
+        "point_statuses": {
+            result.point_id: result.status.value
+            for result in summary.point_results
+        },
+        "infra_attempts": {
+            result.point_id: result.infra_attempts
+            for result in summary.point_results
+        },
+        "batch_cleanup_complete": summary.cleanup_complete,
+        "elapsed_s": float(elapsed_s),
+    }
+    return (
+        0 if summary.status is BatchTerminalStatus.COMPLETED else 1,
+        document,
+    )
 
 
 def _write_json(path: Path, document: Mapping[str, object]) -> None:
@@ -3007,8 +3617,13 @@ def _run_with_shutdown_signals(call):
     if threading.current_thread() is not threading.main_thread():
         return call()
     previous = {number: signal.getsignal(number) for number in (signal.SIGINT, signal.SIGTERM)}
+    terminating = False
 
     def terminate(number, _frame):
+        nonlocal terminating
+        if terminating:
+            return
+        terminating = True
         raise CliError(f"SHUTDOWN_SIGNAL:{signal.Signals(number).name}")
 
     try:
@@ -3028,6 +3643,30 @@ def run_cli(
 ) -> int:
     try:
         spec = prepare_batch(argv, provenance_verifier=provenance_verifier)
+        if spec.adaptive_request is not None:
+            task_root = spec.adaptive_request.evidence_root
+            task_root.mkdir(parents=True, mode=0o700, exist_ok=True)
+            runner = AdaptiveBatchRunner(
+                spec.adaptive_request,
+                ProductionAdaptivePoolFactory(
+                    spec,
+                    composition_factory=composition_factory,
+                ),
+            )
+            root = spec.adaptive_request.runtime_root
+            started = time.monotonic()
+            try:
+                _write_json(root / "batch_manifest.json", spec.manifest)
+                summary = _run_with_shutdown_signals(runner.run)
+            finally:
+                runner.close()
+            code, document = adaptive_outcome_document(
+                summary,
+                elapsed_s=time.monotonic() - started,
+            )
+            _write_json(root / "aggregate_results.json", document)
+            print(json.dumps(document, sort_keys=True))
+            return code
         composition = composition_factory(spec)
         root = spec.request.evidence_root
         if not root.exists():
@@ -3040,7 +3679,13 @@ def run_cli(
         _write_json(aggregate, document)
         print(json.dumps(document, sort_keys=True))
         return code
-    except (CliError, ContractError, OSError, ValueError) as error:
+    except (
+        AdaptiveRunnerError,
+        CliError,
+        ContractError,
+        OSError,
+        ValueError,
+    ) as error:
         print(json.dumps({"status": "ERROR", "message": str(error)}, sort_keys=True), file=sys.stderr)
         return 1
 

@@ -451,6 +451,7 @@ def test_execute_consumer_is_ready_before_its_inference_snapshot(tmp_path: Path)
         initial_gate=lambda _lease, receipt: receipt,
         capture_rgb=capture,
         consumer_ready=lambda child: events.append(("ready", child.role)) or True,
+        pause_physics=lambda _lease, _reset: events.append(("pause",)) or True,
     )
     runtime.start_physical_runtime()
     events.clear()
@@ -463,6 +464,7 @@ def test_execute_consumer_is_ready_before_its_inference_snapshot(tmp_path: Path)
         ("start", "dynamic-consumer"),
         ("ready", "dynamic-consumer"),
         ("capture", "rgb.npy"),
+        ("pause",),
     ]
 
 
@@ -836,6 +838,8 @@ def test_execute_consumer_has_exact_mode_and_reset_epoch_semantics(tmp_path: Pat
         admit_pose=lambda _lease, value: events.append(("admit",)) or admitted,
         publish_pose=lambda value: events.append(("publish", value)) or True,
         consumer_ready=lambda child: events.append(("ready", child.role)) or True,
+        pause_physics=lambda _lease, _reset: events.append(("pause",)) or True,
+        resume_physics=lambda _lease, _reset: events.append(("resume",)) or True,
         execute_result=lambda _lease, _admitted, _child: events.append(("await",))
         or ExecutionCompletionReceipt(
             RuntimeDecision(
@@ -851,11 +855,17 @@ def test_execute_consumer_has_exact_mode_and_reset_epoch_semantics(tmp_path: Pat
     accepted = runtime.localize_and_admit_pose(lease, "broker-result")
 
     assert accepted is admitted
-    assert events == [("localize",), ("numeric", 10.0), ("admit",)]
+    assert events == [
+        ("resume",),
+        ("localize",),
+        ("numeric", 10.0),
+        ("admit",),
+    ]
     decision = runtime.execute_expert(lease, admitted)
 
     assert decision.status is AttemptStatus.PASSED
     assert events == [
+        ("resume",),
         ("localize",),
         ("numeric", 10.0),
         ("admit",),
@@ -1690,6 +1700,13 @@ def test_execute_consumer_receives_integer_reset_epoch_not_wire_label(tmp_path: 
     command = runtime.consumer_argv("reset-17", _lease())
     index = command.index("--expected-reset-epoch")
     assert command[index + 1] == "17"
+    timeout_index = command.index("--cup-pose-timeout-s")
+    assert command[timeout_index + 1] == "240.0"
+    ready_index = command.index("--ready-receipt")
+    assert command[ready_index + 1] == str(
+        tmp_path
+        / "worker-1/attempts/P01/attempt-1/working/dynamic/consumer-ready.json"
+    )
     lease = _lease()
     for flag, expected in {
         "--batch-id": lease.batch_id,

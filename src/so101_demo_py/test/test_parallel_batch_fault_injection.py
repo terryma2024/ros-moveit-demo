@@ -57,6 +57,7 @@ def request(generation=1, request_id="request-1"):
         image_timestamp_s=1.0,
         input_relative_path="workers/worker-01/input.npy",
         input_sha256="a" * 64,
+        deadline_s=5.0,
     )
 
 
@@ -293,7 +294,6 @@ def test_broker_restart_hook_interrupts_the_selected_generation_boundary(
     broker = PerceptionBroker(
         CONFIG,
         grounded_model_id=GROUNDED,
-        authorize=lambda _request: True,
         clock=clock,
         fault_hook=hook,
     )

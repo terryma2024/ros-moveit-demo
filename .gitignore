@@ -62,6 +62,7 @@ pnpm-debug.log*
 .codex-task/
 .idea/ctestState.xml
 assets/captures
+/MUJOCO_LOG.TXT
 
 *.gv
 *.pdf

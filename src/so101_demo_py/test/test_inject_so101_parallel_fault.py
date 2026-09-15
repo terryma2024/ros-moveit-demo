@@ -10,6 +10,9 @@ import pytest
 
 SCRIPT = Path(__file__).resolve().parents[3] / "scripts/inject_so101_parallel_fault.py"
 TASK_ROOT = Path("/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1")
+ADAPTIVE_TASK_ROOT = Path(
+    "/data/work/so101-evidence/parallel-adaptive-worker/20260914-a01"
+)
 
 
 @pytest.fixture
@@ -20,14 +23,14 @@ def module():
     return value
 
 
-def worker_command(root, worker_id="worker-01"):
+def worker_command(root, worker_id="worker-01", batch_id="batch-1"):
     path = root / "workers" / worker_id / "worker-spec.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(
             {
                 "schema_version": 1,
-                "batch_id": "batch-1",
+                "batch_id": batch_id,
                 "resources": {"worker_id": worker_id, "generation": 1},
             }
         ),
@@ -42,10 +45,12 @@ def worker_command(root, worker_id="worker-01"):
     )
 
 
-def write_manifest(root, entries, *, batch_id="batch-1", extra=None):
+def write_manifest(
+    root, entries, *, batch_id="batch-1", extra=None, task_root=TASK_ROOT
+):
     root.mkdir(parents=True, exist_ok=True)
     current = root
-    while current != TASK_ROOT / "scratch":
+    while current != task_root / "scratch":
         current.chmod(0o700)
         current = current.parent
     document = {
@@ -66,7 +71,20 @@ def evidence_root(tmp_path, suffix):
     return TASK_ROOT / "scratch" / run_id / "fault-injector" / tmp_path.name / suffix
 
 
+def adaptive_evidence_root(tmp_path, suffix):
+    run_id = Path(os.environ["TMPDIR"]).parent.name
+    return (
+        ADAPTIVE_TASK_ROOT
+        / "scratch"
+        / run_id
+        / "fault-injector"
+        / tmp_path.name
+        / suffix
+    )
+
+
 def entry(root, target="worker-01", *, broker_generation=1, **changes):
+    batch_id = changes.pop("batch_id", "batch-1")
     role = "broker" if target == "broker" else "worker"
     if role == "broker":
         runtime_name = (
@@ -79,7 +97,7 @@ def entry(root, target="worker-01", *, broker_generation=1, **changes):
             json.dumps({
                 "schema_version": 1,
                 "kind": "so101_parallel_broker_runtime",
-                "batch_id": "batch-1",
+                "batch_id": batch_id,
                 "coordinator_epoch": 1,
                 "broker_generation": broker_generation,
             }),
@@ -97,10 +115,10 @@ def entry(root, target="worker-01", *, broker_generation=1, **changes):
             "sha256:" + "a" * 64,
         )
         if role == "broker"
-        else worker_command(root, target)
+        else worker_command(root, target, batch_id)
     )
     value = {
-        "batch_id": "batch-1",
+        "batch_id": batch_id,
         "role": role,
         "pid": 41001,
         "pgid": 41001,
@@ -140,6 +158,44 @@ def test_exact_owned_identity_is_rechecked_before_term(module, tmp_path, target)
     assert result["pid"] == value["pid"]
     assert result["pgid"] == value["pgid"]
     assert sent == [(value["pgid"], module.signal.SIGTERM)]
+
+
+def test_adaptive_flag_interface_targets_worker_sixteen_and_rejects_seventeen(
+    module, tmp_path
+):
+    root = adaptive_evidence_root(tmp_path, "worker-16")
+    value = entry(root, "worker-16", batch_id="su01-g01-w16")
+    write_manifest(
+        root,
+        [value],
+        batch_id="su01-g01-w16",
+        task_root=ADAPTIVE_TASK_ROOT,
+    )
+    sent = []
+
+    result = module.inject_fault(
+        [
+            "--batch-root",
+            str(root),
+            "--worker-id",
+            "worker-16",
+            "--signal",
+            "TERM",
+        ],
+        proc_reader=lambda _pid: proc(value),
+        signal_group=lambda pgid, number: sent.append((pgid, number)),
+    )
+
+    assert result["batch_id"] == "su01-g01-w16"
+    assert result["target"] == "worker-16"
+    assert sent == [(value["pgid"], module.signal.SIGTERM)]
+
+    with pytest.raises(ValueError, match="TARGET_NOT_ALLOWED"):
+        module.inject_fault(
+            [str(root), "worker-17", "TERM"],
+            proc_reader=lambda _pid: proc(value),
+            signal_group=lambda _pgid, _number: None,
+        )
 
 
 def test_recovered_broker_generation_is_resolved_from_its_exact_runtime_mount(

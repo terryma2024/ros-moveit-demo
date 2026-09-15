@@ -4,6 +4,9 @@
 
 **Goal:** 在 ai-station 上实现轻量自适应 Worker 池：优先运行 W8，发生基础设施故障时按 `W8 → W6 → W4 → W2 → W1` 缩容，保留已完成点并完成同一批 20 点回归。
 
+2026-09-15 的扩展把显式请求上限设为 W16，并把 Domain 池扩展到 `215..230`。默认仍是 W8，
+默认降级序列不变；W10 只在单独登记的实验中运行，不能据此声称 W16 已通过现场测试。
+
 **Architecture:** 从 `origin/main` 的 v1 `ParallelBatchCoordinator` 新建干净实现分支。顶层 `AdaptiveBatchRunner` 跨 pool generation 保存点位终态和 fallback journal；每个档位复用现有 Coordinator、Worker、Broker、初始状态门控和精确进程清理。自适应扩展全部由显式 `--adaptive-workers` 开启，旧的 `--max-points-per-worker` 和 v1 资源门保持原行为。
 
 **Tech Stack:** Python 3.12、ROS 2 Jazzy、MuJoCo、MoveIt 2、pytest、colcon、YAML/JSONL、Unix socket、Linux process group、Fast DDS ROS Domain claim、Docker PerceptionBroker。
@@ -23,6 +26,7 @@
   elapsed time。
 - 自适应模式必须显式传 `--adaptive-workers`、`--config ...parallel_batch_v1.yaml` 和 `--adaptive-config ...parallel_adaptive_workers_v1.yaml`。
 - 默认降级序列是 `W8 → W6 → W4 → W2 → W1`；只有启动、进程、ROS/Broker 通信、OOM 或恢复/清理故障触发降级。
+- 显式 `worker_count` 支持 `1..16`，省略时仍使用 W8；Broker handler、每模型队列和精确清理必须使用同一上限。
 - 点位感知、IK、规划、碰撞、抓取、释放和放置失败是业务失败，提交 `FAILED` 后继续当前档位。
 - `initial_points_per_worker` 只控制初始亲和，不是硬容量；空闲 Worker 可以抢任何尚未 lease 的点。
 - 每个点开始前必须通过现有 `point_initial_gate` 的状态读回。不得用 reset 调用成功或 `DONE` 日志代替初始状态、动作和物理结果证据。
@@ -47,7 +51,7 @@
 - `src/so101_demo_py/test/test_parallel_adaptive_runner.py`：业务失败、基础设施中断和完整降级链。
 - `src/so101_demo_py/test/test_parallel_adaptive_pool.py`：READY barrier、资源分配、进程退出和 pool 结果导出。
 - `src/so101_demo_py/test/test_parallel_adaptive_integration.py`：CLI、journal、精确清理和 fallback 集成测试。
-- `scripts/run_so101_adaptive_worker_scaling.zsh`：W1/W2/W4/W6/W8 现场性能驱动和汇总。
+- `scripts/run_so101_adaptive_worker_scaling.zsh`：默认 W1/W2/W4/W6/W8 性能驱动，也接受单独登记的 W9–W16 显式实验。
 - `scripts/run_so101_adaptive_batch.zsh`：持有 Runner 子进程并在异常退出后调用精确清理入口。
 - `docs/experiments/so101-parallel-adaptive-worker-pool-experiment-ledger.md`：唯一长程实验账本。
 
@@ -120,7 +124,7 @@ def test_default_options_form_the_frozen_fallback_ladder():
     assert options.initial_points_per_worker == 3
     assert options.worker_start_timeout_s == 120.0
     assert options.max_infra_attempts_per_point == 5
-    assert options.ros_domain_ids == tuple(range(215, 223))
+    assert options.ros_domain_ids == tuple(range(215, 231))
 
 
 def test_initial_chunk_is_not_a_capacity_gate(tmp_path):
@@ -135,7 +139,7 @@ def test_initial_chunk_is_not_a_capacity_gate(tmp_path):
     assert request.options.worker_count * request.options.initial_points_per_worker == 24
 ```
 
-再覆盖布尔值、零值、重复/升序 fallback、W9、Domain 数不足、未知 YAML 字段和相对 evidence root。
+再覆盖布尔值、零值、重复/升序 fallback、W17、Domain 数不足、未知 YAML 字段和相对 evidence root。
 从 W1 启动时允许 `fallback_worker_counts=()`；`levels` 仍包含首选档位，因此序列不会为空。
 
 - [ ] **Step 3: 运行 RED**
@@ -220,7 +224,7 @@ class PoolRequest:
 同文件另行定义不可变的 `InfrastructureFailure`、`FallbackTransition`、
 `CommittedPointResult`、`PoolExecutionResult` 和 `AdaptiveBatchSummary`。所有路径必须为绝对路径；
 所有 ID 必须匹配 `[A-Za-z0-9][A-Za-z0-9_-]*`；所有浮点值必须有限。`PoolRequest` 与 v1
-`BatchRequest` 共享 Coordinator 所需字段和 `asdict()` 形状，但单独校验 Worker 为 1–8、点数不超过
+`BatchRequest` 共享 Coordinator 所需字段和 `asdict()` 形状，但单独校验 Worker 为 1–16、点数不超过
 20，且只允许 `ProductionAdaptivePoolFactory` 构造；不得放宽或继承 v1 `BatchRequest` 的 W3 冻结
 上限。自适应顶层 `batch_id` 同时作为 run ID，限制为 1–5 个 ASCII ID 字符；其 runtime root
 确定为 `evidence_root / "r" / batch_id`。
@@ -235,7 +239,7 @@ fallback_worker_counts: [6, 4, 2, 1]
 initial_points_per_worker: 3
 worker_start_timeout_s: 120.0
 max_infra_attempts_per_point: 5
-ros_domain_ids: [215, 216, 217, 218, 219, 220, 221, 222]
+ros_domain_ids: [215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230]
 ```
 
 - [ ] **Step 5: 使用新 scratch 运行 GREEN，并建立账本头部**
@@ -517,7 +521,7 @@ class AllocationPolicy:
 ```
 
 `WorkerResourceAllocator(..., allocation_policy=None)` 的默认策略必须从 v1 config 生成，保持现有
-资源阈值、三 Worker headroom 和 Domain 181–183。自适应策略使用 215–222，仍执行原子的 flock、
+资源阈值、三 Worker headroom 和 Domain 181–183。自适应策略使用 215–230，仍执行原子的 flock、
 ROS Domain 冲突探测、私有目录创建和环境隔离；只跳过 `_resource_failures` 的拒绝。manifest 中
 `admission.admitted=true`、`required=(0,0,0)`、`failures=()`，并保留 observed snapshot 供报告。
 自适应策略同时启用 `persistent_cleanup_claims`：取得 flock 后先读取 claim record；若上一次记录仍是

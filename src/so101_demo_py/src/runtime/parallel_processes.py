@@ -351,6 +351,8 @@ class ProcessSupervisor:
         health_role: str | None = "broker",
         health_recovery: Callable[[OwnedProcess, int | None], bool] | None = None,
         health_probe: Callable[[OwnedProcess], bool] | None = None,
+        stop_on_nonzero: bool = False,
+        on_nonzero: Callable[[OwnedProcess, int | None], object] | None = None,
     ) -> tuple[int, ...]:
         """Wait for one role while continuously proving its dependency healthy."""
         if isinstance(deadline_monotonic_s, bool) or not isinstance(
@@ -359,7 +361,23 @@ class ProcessSupervisor:
             raise SupervisorError("DEADLINE")
         if role not in _ROLES or health_role not in _ROLES | {None}:
             raise SupervisorError("UNOWNED_ROLE")
+        if type(stop_on_nonzero) is not bool or (
+            on_nonzero is not None and not callable(on_nonzero)
+        ):
+            raise SupervisorError("NONZERO_CALLBACK")
         codes = []
+        nonzero_reported = False
+
+        def report_nonzero(expected, code):
+            nonlocal nonzero_reported
+            if not stop_on_nonzero or nonzero_reported:
+                return
+            nonzero_reported = True
+            if on_nonzero is not None:
+                try:
+                    on_nonzero(expected, code)
+                except Exception as error:
+                    raise SupervisorError("NONZERO_CALLBACK_FAILED") from error
 
         def recover(expected, code, pid):
             if health_recovery is None:
@@ -414,10 +432,13 @@ class ProcessSupervisor:
                                 f"HEALTH_PROBE_FAILED: {expected.role}"
                             )
                         if not healthy:
+                            if health_recovery is None:
+                                report_nonzero(expected, None)
                             recover(expected, None, pid)
                             continue
                     if code is not None:
                         if health_recovery is None:
+                            report_nonzero(expected, int(code))
                             raise SupervisorError(
                                 f"EARLY_EXIT: {expected.role}: {code}"
                             )
@@ -436,8 +457,14 @@ class ProcessSupervisor:
                     )
                 codes.append(int(code))
                 completed.append(pid)
+                if code != 0 and stop_on_nonzero:
+                    report_nonzero(expected, int(code))
+                    break
             for pid in completed:
                 self._owned.pop(pid, None)
+            if nonzero_reported:
+                self.write_manifest()
+                return tuple(codes)
             if not completed:
                 time.sleep(0.01)
         self.write_manifest()
@@ -570,7 +597,14 @@ class ProcessSupervisor:
                 cleanup_ok = False
         stopped_pids = []
         for expected, poll in tuple(self._owned.values()):
-            if poll() is not None:
+            code = poll()
+            if code is None:
+                try:
+                    code = self._confirm_running_or_repoll_exit(expected, poll)
+                except (OSError, SupervisorError):
+                    cleanup_ok = False
+                    continue
+            if code is not None:
                 try:
                     first_signal = (
                         signal.SIGINT if expected.role == "worker" else signal.SIGTERM

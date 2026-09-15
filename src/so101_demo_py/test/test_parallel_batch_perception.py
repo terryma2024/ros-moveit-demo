@@ -24,7 +24,8 @@ def request(model='yolo', *, validation=False, **changes):
         'reset_epoch': 'reset-1', 'image_timestamp_s': 101.0,
         'input_relative_path': (f'worker-01/{folder}/point-1/{execution_id}'
                                 '/working/perception/input/rgb.npy'),
-        'input_sha256': 'a' * 64, 'attempt_id': None if validation else execution_id,
+        'input_sha256': 'a' * 64, 'deadline_s': 5.0,
+        'attempt_id': None if validation else execution_id,
         'validation_id': execution_id if validation else None,
     }
     return InferenceRequest(**(values | changes))

@@ -310,6 +310,7 @@ def test_broker_mask_is_decoded_row_major_and_localized_against_exact_depth_and_
             "perception/input/rgb.npy"
         ),
         input_sha256="ab" * 32,
+        deadline_s=5.0,
         attempt_id="attempt-1",
     )
     candidate_document = {
@@ -430,6 +431,7 @@ def test_localization_allows_bounded_fresh_stack_tf_discovery(monkeypatch):
             "perception/input/rgb.npy"
         ),
         input_sha256="ab" * 32,
+        deadline_s=5.0,
         attempt_id="attempt-1",
     )
     response = SimpleNamespace(
@@ -461,6 +463,47 @@ def test_production_port_factory_binds_every_task10_port_without_empty_side_effe
     assert set(ports) == RosWorkerRuntimePorts.REQUIRED
     assert all(callable(value) for value in ports.values())
     assert all("RUNTIME_PORT_NOT_READY" not in repr(value) for value in ports.values())
+
+
+def test_pause_control_is_retained_across_point_freeze_and_resume() -> None:
+    from so101_demo.runtime.parallel_ros_runtime import (
+        ParallelRosRuntimePorts,
+        ResetBoundaryReceipt,
+    )
+
+    events = []
+
+    class Control:
+        def set_paused(self, paused):
+            events.append(("set-paused", paused))
+            return True
+
+        def close(self):
+            events.append(("close",))
+
+    control = Control()
+    resources = SimpleNamespace(
+        worker_id="worker-01", generation=1, session_id="session-1"
+    )
+    ports = ParallelRosRuntimePorts(
+        resources,
+        catalog={},
+        dependencies={"pause_control_factory": lambda: control},
+    )
+    lease = _lease()
+    reset = ResetBoundaryReceipt("reset-2", "session-1", 10.0, 12.0, 2)
+
+    assert ports.resume_physics(lease, reset) is True
+    assert ports.pause_physics(lease, reset) is True
+    assert ports.resume_physics(lease, reset) is True
+    ports.close_runtime()
+
+    assert events == [
+        ("set-paused", False),
+        ("set-paused", True),
+        ("set-paused", False),
+        ("close",),
+    ]
 
 
 def test_recovery_requires_observed_child_and_ros_graph_absence():
@@ -591,7 +634,8 @@ def test_task5_policy_persists_admission_and_rejects_mixed_source_clock(
                 "worker-01/validations/task_start/attempt-1/working/"
                 "perception/input/rgb.npy"
             ),
-            input_sha256=snapshot.input_sha256, validation_id="attempt-1",
+            input_sha256=snapshot.input_sha256, deadline_s=5.0,
+            validation_id="attempt-1",
         )
         before_send(request)
         requested.append(model_id)
@@ -726,7 +770,8 @@ def test_perception_terminal_preserves_only_broker_infrastructure_diagnostic(
                 "worker-01/validations/task_start/attempt-1/working/"
                 "perception/input/rgb.npy"
             ),
-            input_sha256=snapshot.input_sha256, validation_id="attempt-1",
+            input_sha256=snapshot.input_sha256, deadline_s=5.0,
+            validation_id="attempt-1",
         )
         before_send(request)
         return BrokerResponse(
@@ -836,6 +881,56 @@ def test_capture_rgb_mirror_creates_private_directory_chain(tmp_path, monkeypatc
         assert stat.S_IMODE(info.st_mode) == 0o700
         current = current.parent
     source.close()
+
+
+def test_inference_capture_retries_frame_older_than_child_ready_fence(
+    tmp_path, monkeypatch
+):
+    from so101_demo.cli import rgbd_point_cloud
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    worker_root = tmp_path / "workers/worker-01"
+    worker_root.mkdir(parents=True, mode=0o700)
+    (tmp_path / "broker-inputs").mkdir(mode=0o700)
+    closed = []
+
+    def sample(stamp_ns):
+        source = SimpleNamespace(close=lambda: closed.append(stamp_ns))
+        color = SimpleNamespace(
+            header=SimpleNamespace(
+                frame_id="task_camera_frame",
+                stamp=SimpleNamespace(
+                    sec=stamp_ns // 1_000_000_000,
+                    nanosec=stamp_ns % 1_000_000_000,
+                ),
+            )
+        )
+        return source, (object(), color, object()), 11.0
+
+    captures = [sample(100), sample(200)]
+    ports = ParallelRosRuntimePorts(
+        SimpleNamespace(worker_root=worker_root, session_id="session-1"),
+        catalog={},
+    )
+    ports._minimum_inference_stamp_ns = 200
+    ports._capture_aligned = lambda: captures.pop(0)
+    monkeypatch.setattr(
+        rgbd_point_cloud,
+        "_decode_rgb",
+        lambda _message: np.zeros((2, 3, 3), dtype=np.uint8),
+    )
+    destination = (
+        worker_root
+        / "attempts/task_start/attempt-1/working/perception/input/rgb.npy"
+    )
+
+    receipt = ports.capture_rgb(destination, 10.0)
+
+    assert receipt.source_stamp_ns == 200
+    assert closed == [100]
+    assert ports._minimum_inference_stamp_ns is None
+    ports.close_runtime()
+    assert closed == [100, 200]
 
 
 def test_initial_gate_requires_exact_worker_node_inventory():
@@ -1078,7 +1173,8 @@ def test_localization_infrastructure_failure_never_triggers_fallback(tmp_path):
             point_id="task_start", lease_generation=1, reset_epoch="reset-2",
             image_timestamp_s=12.0,
             input_relative_path="worker-01/validations/task_start/attempt-1/working/perception/input/rgb.npy",
-            input_sha256=snapshot.input_sha256, validation_id="attempt-1",
+            input_sha256=snapshot.input_sha256, deadline_s=5.0,
+            validation_id="attempt-1",
         )
         before_send(request)
         calls.append(model_id)
@@ -1279,6 +1375,40 @@ def test_isolated_ros_node_owns_executor_for_its_private_context(monkeypatch):
     ]
 
 
+def test_isolated_ros_node_can_keep_sim_clock_callbacks_live_in_background():
+    import threading
+
+    from so101_demo.runtime.parallel_ros_runtime import _IsolatedRosNode
+
+    spun = threading.Event()
+
+    class Executor:
+        def spin_once(self, *, timeout_sec):
+            assert timeout_sec > 0.0
+            spun.set()
+
+        @staticmethod
+        def remove_node(_node):
+            return None
+
+        @staticmethod
+        def shutdown():
+            return None
+
+    owner = _IsolatedRosNode(
+        SimpleNamespace(
+            destroy_node=lambda: None,
+            get_name=lambda: "background-clock-test",
+        ),
+        SimpleNamespace(shutdown=lambda: None),
+        Executor(),
+    )
+
+    owner.start_background_spin()
+    assert spun.wait(1.0)
+    owner.close()
+
+
 def test_pose_publication_waits_for_admitted_source_on_isolated_sim_clock(monkeypatch):
     import rclpy
     from so101_demo.core.task_geometry import Pose7
@@ -1350,7 +1480,114 @@ def test_pose_publication_waits_for_admitted_source_on_isolated_sim_clock(monkey
     ) == admitted.pose_world.values
 
 
-def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(monkeypatch):
+def test_pose_publication_retransmits_until_consumer_subscription_closes(monkeypatch):
+    import rclpy
+    from so101_demo.core.task_geometry import Pose7
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    published = []
+    spin_durations = []
+
+    class Publisher:
+        @staticmethod
+        def get_subscription_count():
+            return 0 if len(published) >= 25 else 1
+
+        @staticmethod
+        def publish(message):
+            published.append(message)
+
+    class Node:
+        @staticmethod
+        def create_publisher(*_args):
+            return Publisher()
+
+        @staticmethod
+        def get_clock():
+            return SimpleNamespace(
+                now=lambda: SimpleNamespace(nanoseconds=200_000_000)
+            )
+
+        @staticmethod
+        def destroy_node():
+            return None
+
+    monkeypatch.setattr(rclpy, "ok", lambda: True)
+    monkeypatch.setattr(rclpy, "create_node", lambda *_args, **_kwargs: Node())
+    monkeypatch.setattr(
+        rclpy,
+        "spin_once",
+        lambda *_args, **kwargs: spin_durations.append(kwargs["timeout_sec"]),
+    )
+    admitted = SimpleNamespace(
+        source_stamp_ns=100_000_000,
+        pose_world=Pose7((1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 1.0)),
+    )
+
+    assert ParallelRosRuntimePorts(SimpleNamespace(), catalog={}).publish_pose(
+        admitted
+    ) is True
+    assert len(published) == 25
+    assert spin_durations == [0.02] * 241
+
+
+def test_pose_publication_allows_recovered_publisher_clock_to_catch_up(monkeypatch):
+    import rclpy
+    from so101_demo.core.task_geometry import Pose7
+    from so101_demo.runtime import parallel_ros_runtime as runtime_module
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    clock_ns = [0]
+    monotonic_s = [0.0]
+    published = []
+
+    class Publisher:
+        @staticmethod
+        def get_subscription_count():
+            return 0 if published else 1
+
+        @staticmethod
+        def publish(message):
+            published.append(message)
+
+    class Node:
+        @staticmethod
+        def create_publisher(*_args):
+            return Publisher()
+
+        @staticmethod
+        def get_clock():
+            return SimpleNamespace(
+                now=lambda: SimpleNamespace(nanoseconds=clock_ns[0])
+            )
+
+        @staticmethod
+        def destroy_node():
+            return None
+
+    def spin_once(_node, *, timeout_sec):
+        monotonic_s[0] += timeout_sec
+        clock_ns[0] += round(timeout_sec * 1_000_000_000)
+
+    monkeypatch.setattr(rclpy, "ok", lambda: True)
+    monkeypatch.setattr(rclpy, "create_node", lambda *_args, **_kwargs: Node())
+    monkeypatch.setattr(rclpy, "spin_once", spin_once)
+    monkeypatch.setattr(runtime_module.time, "monotonic", lambda: monotonic_s[0])
+    admitted = SimpleNamespace(
+        source_stamp_ns=3_000_000_000,
+        pose_world=Pose7((1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 1.0)),
+    )
+
+    assert ParallelRosRuntimePorts(SimpleNamespace(), catalog={}).publish_pose(
+        admitted
+    ) is True
+    assert len(published) == 1
+    assert clock_ns[0] >= admitted.source_stamp_ns
+
+
+def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(
+    tmp_path, monkeypatch
+):
     from so101_demo.core.task_geometry import Pose7
     from so101_demo.runtime import parallel_ros_runtime as runtime_module
     from so101_demo.runtime import task_batch_runtime
@@ -1362,7 +1599,7 @@ def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(monkeypat
     class Publisher:
         @staticmethod
         def get_subscription_count():
-            return 1
+            return 0 if published else 1
 
         @staticmethod
         def publish(message):
@@ -1392,6 +1629,10 @@ def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(monkeypat
         closed = False
 
         @staticmethod
+        def start_background_spin():
+            events.append("background-spin-started")
+
+        @staticmethod
         def spin_once(*, timeout_sec):
             events.append(("spin", timeout_sec))
 
@@ -1411,10 +1652,72 @@ def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(monkeypat
         "_open_isolated_ros_node",
         lambda *_args, **_kwargs: owner,
     )
-    ports = ParallelRosRuntimePorts(SimpleNamespace(), catalog={})
+    worker_root = tmp_path / "worker-01"
+    ready_receipt = (
+        worker_root
+        / "attempts/task_start/attempt-1/working/dynamic/consumer-ready.json"
+    )
+    ready_receipt.parent.mkdir(parents=True)
+    ready_receipt.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "kind": "dynamic_consumer_ready",
+                "session_id": "session-1",
+                "reset_epoch": 1,
+                "parallel_lease_identity": {
+                    "batch_id": "batch-1",
+                    "coordinator_epoch": 1,
+                    "worker_id": "worker-01",
+                    "worker_generation": 1,
+                    "point_id": "task_start",
+                    "attempt_id": "attempt-1",
+                    "lease_generation": 1,
+                },
+                "ready_ros_ns": 100_000_000,
+                "ready_monotonic_s": 1.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    ready_receipt.chmod(0o600)
+    child = SimpleNamespace(
+        pid=os.getpid(),
+        cmdline=(
+            "python3",
+            "-m",
+            "so101_demo.cli.dynamic_cup_pick_place",
+            "--batch-id",
+            "batch-1",
+            "--coordinator-epoch",
+            "1",
+            "--worker-id",
+            "worker-01",
+            "--worker-generation",
+            "1",
+            "--point-id",
+            "task_start",
+            "--attempt-id",
+            "attempt-1",
+            "--lease-generation",
+            "1",
+            "--session-id",
+            "session-1",
+            "--expected-reset-epoch",
+            "1",
+            "--ready-receipt",
+            str(ready_receipt),
+        ),
+    )
+    ports = ParallelRosRuntimePorts(
+        SimpleNamespace(worker_root=worker_root, session_id="session-1"),
+        catalog={},
+    )
 
-    assert ports.consumer_ready(SimpleNamespace(pid=os.getpid())) is True
+    assert ports.consumer_ready(child) is True
+    assert ports._minimum_inference_stamp_ns == 100_000_000
     assert events[0] == "publisher-created"
+    assert events[1] == "background-spin-started"
     admitted = SimpleNamespace(
         source_stamp_ns=100_000_000,
         pose_world=Pose7((1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 1.0)),
@@ -1520,6 +1823,38 @@ def test_exit_zero_unverifiable_dynamic_manifest_never_passes(
 
     assert receipt.decision.status is AttemptStatus.INDETERMINATE
     assert receipt.decision.reason == "DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE"
+
+
+def test_execute_result_waits_for_configured_execution_timeout(
+        tmp_path, monkeypatch):
+    import so101_demo.runtime.parallel_ros_runtime as runtime_module
+    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    observations = iter((100.0, 200.0, 300.0, 341.0, 342.0))
+    waitpid_calls = []
+
+    monkeypatch.setattr(runtime_module.time, "monotonic", lambda: next(observations))
+    monkeypatch.setattr(runtime_module.time, "sleep", lambda _duration: None)
+    monkeypatch.setattr(
+        os,
+        "waitpid",
+        lambda pid, options: (waitpid_calls.append((pid, options)) or (0, 0)),
+    )
+    ports = ParallelRosRuntimePorts(
+        SimpleNamespace(worker_root=tmp_path, session_id="session-1"),
+        catalog={},
+        config=SimpleNamespace(executing_hard_timeout_s=240.0),
+    )
+
+    receipt = ports.execute_result(
+        _lease(),
+        SimpleNamespace(reset_epoch="reset-17"),
+        SimpleNamespace(pid=417),
+    )
+
+    assert receipt.decision.status is AttemptStatus.INDETERMINATE
+    assert waitpid_calls == [(417, os.WNOHANG), (417, os.WNOHANG)]
 
 
 @pytest.mark.parametrize(

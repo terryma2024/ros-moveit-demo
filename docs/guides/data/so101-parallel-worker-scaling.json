@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "title": "SO-101 fixed Worker scaling under the frozen C2 contract",
+  "generated_from": {
+    "comparison_artifact": "/data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4/formal-worker-scaling-comparison.json",
+    "comparison_artifact_sha256": "9b523321fb477cdad7e1e94aa92ce203d96ccc89c4954609d0d1f263493b4848",
+    "w10_rerun_root": "/data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-w10-r2-df261a05",
+    "w10_rerun_aggregate_sha256": "23c07ddb8f1e43591f63805ba4e179d66b35cb67d4501daf92509d1a29dbe33b",
+    "w10_rerun_journal_sha256": "28f8a0cdc18f8576394069ad7a31a8aa54eb3fb817fde8b2b7b20ac8ab49fe75",
+    "w10_success_root": "/data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/w10",
+    "w10_success_aggregate_sha256": "971520cea8c6fb81cc750195dec62db6e50b9f44b6180db1aba2ee571e417137",
+    "w10_success_evidence_validation_sha256": "52984353ba4a90e26b2305b80a64b7790bfd7bd3b3db03cbd969f3d3dfe2a0a7",
+    "w10_success_final_cleanup_readback_sha256": "323df8d370a9337af7b2c13870374a3e6bd01df26186e8f686c41f4e2d3f232b"
+  },
+  "contract": {
+    "date": "2026-09-15",
+    "catalog_points": 20,
+    "worker_levels": [1, 2, 4, 6, 8, 10],
+    "broker_inference_concurrency": 2,
+    "adaptive_worker_fallback": [],
+    "runs_sequential": true,
+    "model_policy": "YOLO primary; Grounded-SAM fallback configured but unused in valid samples"
+  },
+  "levels": [
+    {
+      "workers": 1,
+      "experiment_id": "EXP-042-FORMAL-W1-R2",
+      "status": "PASSED",
+      "successful_points": 20,
+      "valid_performance_sample": true,
+      "execution_s": 1592.5133624076843,
+      "throughput_points_per_min": 0.753525859391062,
+      "speedup_vs_w1": 1.0,
+      "parallel_efficiency": 1.0,
+      "peak_memory_b": 1358749696
+    },
+    {
+      "workers": 2,
+      "experiment_id": "EXP-043-FORMAL-W2",
+      "status": "PASSED",
+      "successful_points": 20,
+      "valid_performance_sample": true,
+      "execution_s": 810.0461459159851,
+      "throughput_points_per_min": 1.481397085894486,
+      "speedup_vs_w1": 1.9659538785989776,
+      "parallel_efficiency": 0.9829769392994888,
+      "peak_memory_b": 2294722560
+    },
+    {
+      "workers": 4,
+      "experiment_id": "EXP-044-FORMAL-W4",
+      "status": "PASSED",
+      "successful_points": 20,
+      "valid_performance_sample": true,
+      "execution_s": 412.42340636253357,
+      "throughput_points_per_min": 2.9096311739037453,
+      "speedup_vs_w1": 3.861355436766393,
+      "parallel_efficiency": 0.9653388591915982,
+      "peak_memory_b": 4297502720
+    },
+    {
+      "workers": 6,
+      "experiment_id": "EXP-045-FORMAL-W6",
+      "status": "PASSED",
+      "successful_points": 20,
+      "valid_performance_sample": true,
+      "execution_s": 338.78217601776123,
+      "throughput_points_per_min": 3.5420989796614566,
+      "speedup_vs_w1": 4.700699963401245,
+      "parallel_efficiency": 0.7834499939002075,
+      "peak_memory_b": 6306103296
+    },
+    {
+      "workers": 8,
+      "experiment_id": "EXP-046-FORMAL-W8",
+      "status": "PASSED",
+      "successful_points": 20,
+      "valid_performance_sample": true,
+      "execution_s": 263.6432132720947,
+      "throughput_points_per_min": 4.551605880943091,
+      "speedup_vs_w1": 6.040410988179394,
+      "parallel_efficiency": 0.7550513735224242,
+      "peak_memory_b": 8266747904
+    },
+    {
+      "workers": 10,
+      "experiment_id": "EXP-049-W10-SUCCESS-RECOVERY",
+      "status": "PASSED",
+      "successful_points": 20,
+      "valid_performance_sample": true,
+      "execution_s": 215.4021017551422,
+      "throughput_points_per_min": 5.570976282135338,
+      "speedup_vs_w1": 7.3932118091306736,
+      "parallel_efficiency": 0.7393211809130673,
+      "peak_memory_b": 10148159488
+    }
+  ],
+  "failed_attempts": [
+    {
+      "workers": 10,
+      "experiment_id": "EXP-047-FORMAL-W10",
+      "successful_points": 10,
+      "pool_running": true,
+      "peak_memory_b": 9843302400,
+      "failure_boundary": "Coordinator event 1404 set broker_healthy=false after the Broker container disappeared.",
+      "cleanup_passed": true
+    },
+    {
+      "workers": 10,
+      "experiment_id": "EXP-048-FORMAL-W10-R2",
+      "successful_points": 0,
+      "pool_running": false,
+      "peak_memory_b": 6209536,
+      "elapsed_s": 0.045712864957749844,
+      "failure_boundary": "POOL_STARTING was durable, then all 20 points were marked POINT_INFRA_INTERRUPTED before POOL_RUNNING; the captured startup exception detail was not persisted.",
+      "docker_events": 0,
+      "kernel_oom_events": 0,
+      "cleanup_passed": true
+    }
+  ],
+  "conclusion": {
+    "fastest_valid_level": 10,
+    "efficiency_knee_workers": 4,
+    "recommended_default_workers": 8,
+    "w10_valid_performance_samples": 1,
+    "w10_failed_runtime_attempts": 2
+  }
+}

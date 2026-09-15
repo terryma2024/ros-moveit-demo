@@ -18,7 +18,7 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass, replace
 from functools import wraps
 from pathlib import Path
-from typing import Protocol
+from typing import Callable, Protocol
 
 from .contracts import (
     AttemptStatus, BatchSummary, LeaseIdentity, ParallelRuntimeConfig,
@@ -111,7 +111,8 @@ class BatchCoordinator:
 
     def __init__(
             self, journal, request, *, config, clock=time.monotonic, result_port,
-            fault_hook=None, recovery_start_authorization=None):
+            fault_hook=None, recovery_start_authorization=None,
+            point_selector: Callable[[str, frozenset[str]], str | None] | None = None):
         """Restore durable state or initialize one immutable batch."""
         self._lock = threading.RLock()
         self.journal, self.request = journal, request
@@ -123,6 +124,9 @@ class BatchCoordinator:
             raise ValueError('RECOVERY_AUTHORIZATION_CALLABLE')
         self._fault_hook = fault_hook
         self._recovery_start_authorization = recovery_start_authorization
+        if point_selector is not None and not callable(point_selector):
+            raise ValueError('POINT_SELECTOR_CALLABLE')
+        self._point_selector = point_selector
         if not isinstance(config, ParallelRuntimeConfig):
             raise ValueError('FROZEN_CONFIG_REQUIRED')
         self.config = config
@@ -610,16 +614,26 @@ class BatchCoordinator:
             }
         worker = self._worker(worker_id, generation)
         if (worker['state'] != 'AVAILABLE'
-                or worker['lease_count'] >= self.request.max_points_per_worker):
+                or (self._point_selector is None
+                    and worker['lease_count'] >= self.request.max_points_per_worker)):
             return {
                 'lease': None,
                 'lease_grant_paused': False,
                 'recovery_deadline_monotonic_s': None,
             }
-        point_id = next((p for p in self.request.selected_point_ids
-                         if not self._state['points'][p]['terminal']
-                         and not self._state['points'][p]['active_attempt']
-                         and not self._state['points'][p]['blocked_by']), None)
+        eligible = frozenset(
+            p for p in self.request.selected_point_ids
+            if not self._state['points'][p]['terminal']
+            and not self._state['points'][p]['active_attempt']
+            and not self._state['points'][p]['blocked_by']
+        )
+        if self._point_selector is None:
+            point_id = next((p for p in self.request.selected_point_ids
+                             if p in eligible), None)
+        else:
+            point_id = self._point_selector(worker_id, eligible)
+            if point_id is not None and point_id not in eligible:
+                raise ValueError('POINT_SELECTOR_RESULT')
         if point_id is None:
             return {
                 'lease': None,
@@ -910,10 +924,15 @@ class BatchCoordinator:
             workers = self._state['workers']
             if any(w['lease'] for w in workers.values()):
                 return
-            capacity = len(self._state['workers']) < self.request.worker_count or any(
-                w['state'] in ('AVAILABLE', 'RECOVERING')
-                and w['lease_count'] < self.request.max_points_per_worker
-                for w in workers.values())
+            if self._point_selector is None:
+                capacity = len(self._state['workers']) < self.request.worker_count or any(
+                    w['state'] in ('AVAILABLE', 'RECOVERING')
+                    and w['lease_count'] < self.request.max_points_per_worker
+                    for w in workers.values())
+            else:
+                capacity = len(self._state['workers']) < self.request.worker_count or any(
+                    w['state'] in ('AVAILABLE', 'RECOVERING')
+                    for w in workers.values())
             runnable = any(
                 not p['terminal'] and (
                     not p['blocked_by'] or workers[p['blocked_by']]['state'] == 'RECOVERING')
