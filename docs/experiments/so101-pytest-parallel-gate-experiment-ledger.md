@@ -5,7 +5,7 @@ success_contract: Omitting --workers selects pytest subprocess concurrency 8 whi
 worktree: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism
 branch: codex/pytest-gate-parallelism
 base_commit: b0f9e7168198285fba4133026d9d3b132075f88b
-current_commit: ae62559645c1a045c53bf5c376a0ef6e8e67343e
+current_commit: 0f6815e3d9ea62fb4cced5d9242e53d3272acb2f
 evidence_root: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01
 confirmed_conclusions:
   - The required base is the current HEAD and the worktree was clean at dispatch (CP-001).
@@ -27,13 +27,13 @@ confirmed_conclusions:
   - Pytest concurrency 12 passes all 3056 nodes in 27.952 seconds but is 3.249 percent slower than concurrency 10; select concurrency 10 and stop expansion (EXP-031-PYTEST-P12, CP-007).
   - Omitting --workers selects concurrency 8, while an explicit value still overrides it; the focused contract completed RED then 31/31 GREEN (EXP-032-DEFAULT-P8-TDD).
   - Commit ae62559645c1a045c53bf5c376a0ef6e8e67343e passes all 3058 ordinary pytest nodes when launched without --workers and records worker_count 8 (EXP-035-DEFAULT-P8-FULL-RETRY).
+  - Merged target commit 54477f67a068b06bf4cb53d51b7c9848c74126b2 passes all 3069 ordinary pytest nodes at default concurrency 8 from a complete local package overlay (EXP-038-MERGED-DEFAULT-P8-FULL-RETRY).
 disproven_routes:
   - Running W1/W2/W4 while the primary task is active is rejected as contaminated by the handoff's admission gate (CP-001).
   - SO-101 application Worker W1-W10 correctness validation is explicitly outside the resumed pytest-only optimization scope.
-open_hypotheses:
-  - The existing required --workers argument can become an optional default of 8 without changing explicit override behavior or full-gate semantics (EXP-032-DEFAULT-P8-TDD).
-latest_checkpoint: CP-008
-next_experiment: EXP-036-MERGE
+open_hypotheses: []
+latest_checkpoint: CP-009
+next_experiment: NONE
 ---
 
 # SO-101 pytest parallel gate experiment ledger
@@ -2813,4 +2813,228 @@ archived_runs:
 deletion_candidates:
   - All task scratch, build, install, and log trees; no deletion is authorized or performed.
 next_command: git -C /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool merge --no-ff codex/pytest-gate-parallelism
+```
+
+## EXP-036-MERGE — Merge pytest gate branch into adaptive-worker target
+
+```yaml
+experiment_id: EXP-036-MERGE
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T23:25:30+08:00
+  - status: RUNNING
+    at: 2026-09-15T23:27:00+08:00
+  - status: VALID
+    at: 2026-09-15T23:27:10+08:00
+prior_experiment: EXP-035-DEFAULT-P8-FULL-RETRY
+hypothesis: A no-ff merge preserves the target worktree's pre-existing unstaged test modification because the feature branch does not change that file.
+prediction: Merge succeeds without conflicts; target remains dirty only at the pre-existing path with identical file and diff hashes.
+single_variable: Merge codex/pytest-gate-parallelism into codex/parallel-adaptive-worker-pool.
+lifecycle: REUSE_STACK
+provenance:
+  source_commit: 0f6815e3d9ea62fb4cced5d9242e53d3272acb2f
+  target_pre_merge_commit: a09cea7a462b9e191bf9d638ce27e5003154fdc9
+  target_merge_commit: 54477f67a068b06bf4cb53d51b7c9848c74126b2
+  runtime_executable: NOT_APPLICABLE_MERGE_ONLY
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - command: git -C /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool merge --no-ff codex/pytest-gate-parallelism -m 'Merge pytest gate parallelism'
+    exit_code: 0
+observed:
+  - OBSERVED: Git ort merge completed without conflicts at target commit 54477f67a068b06bf4cb53d51b7c9848c74126b2.
+  - OBSERVED: Pre-existing target file SHA256 remained `3a0365dea4d62cc816286606f67664e0322d534958129d48d6591914a1d4c2e9` and its unstaged diff SHA256 remained `ae383016c78eca3c02e05f600d58fb4a65211f4783acf9612ea38e374baf380c`.
+  - OBSERVED: Target status remains exactly one unstaged path, src/so101_demo_py/test/test_parallel_batch_resources.py.
+inferred:
+  - NONE
+conclusion: The implementation branch is merged locally and the user's target-worktree modification is preserved byte-for-byte and diff-for-diff.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp036-merge-preflight.json
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp036-merge.log
+decision: KEEP
+next_experiment: EXP-037-MERGED-DEFAULT-P8-FULL
+```
+
+## EXP-037-MERGED-DEFAULT-P8-FULL — Verify merged target with default startup
+
+```yaml
+experiment_id: EXP-037-MERGED-DEFAULT-P8-FULL
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T23:27:10+08:00
+  - status: RUNNING
+    at: 2026-09-15T23:29:15+08:00
+prior_experiment: EXP-036-MERGE
+hypothesis: The merged target passes its complete ordinary pytest collection when the runner starts without --workers and reports worker_count 8.
+prediction: Fresh target overlay provenance passes; exact collection executes once; benchmark paths stay excluded; cleanup is complete.
+single_variable: Execute the merged target commit with its preserved pre-existing dirty test path allowlisted.
+lifecycle: REUSE_STACK
+preconditions:
+  - Target HEAD is 54477f67a068b06bf4cb53d51b7c9848c74126b2 on codex/parallel-adaptive-worker-pool.
+  - Target has exactly the preserved unstaged test_parallel_batch_resources.py change.
+  - Fresh build/install/log roots and fresh one-character runner ID e are absent before use.
+success_criteria:
+  - Merged runner summary reports PASS and worker_count=8 with exact once-only ordinary collection and complete cleanup.
+failure_criteria:
+  - Build, provenance, test, coverage, JUnit, timeout, or cleanup gate fails.
+invalid_criteria:
+  - Unexpected target/source drift, scratch collision, or external interruption.
+provenance:
+  source_commit: 54477f67a068b06bf4cb53d51b7c9848c74126b2
+  install_overlay: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-merged-54477
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - Build so101_demo_py from target commit 54477f67a068b06bf4cb53d51b7c9848c74126b2 into fresh task-owned build/install/log roots, then run the target's pytest gate without --workers using fresh run ID e.
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/e
+decision: RUN
+next_experiment: CP-009
+```
+
+### EXP-037 result update
+
+```yaml
+status: VALID
+status_history:
+  - status: VALID
+    at: 2026-09-15T23:31:00+08:00
+commands:
+  - command: colcon build --packages-select so101_demo_py into install-merged-54477
+    exit_code: 0
+  - command: tools/so101_pytest_gate.py without --workers using merged target and run ID e
+    exit_code: 1
+observed:
+  - OBSERVED: The target-only so101_demo_py build completed, then the gate collected 3069 ordinary nodes and recorded worker_count=8.
+  - OBSERVED: One test failed: test_mujoco_support_plugin_comes_from_the_candidate_project_overlay expected so101_mujoco_support under install-merged-54477 but resolved it from install-exp022.
+  - OBSERVED: The failure occurred because only so101_demo_py was rebuilt in the candidate overlay; it is an overlay-provenance failure, not a default-worker or test-semantic failure.
+  - OBSERVED: Final process readback found no pytest, runner, ROS daemon, Gazebo, or MuJoCo process.
+inferred:
+  - INFERRED: Rebuilding so101_demo_py and its repository-local so101_mujoco_support dependency into one fresh merged overlay satisfies the established package-prefix contract.
+conclusion: EXP-037 is a valid failing verification; merged acceptance remains incomplete until the local package closure shares one candidate overlay.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-merged-54477
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-merged-54477
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/log-merged-54477
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/e
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp037-merged-default-p8-full-console.log
+decision: REPEAT_WITH_COMPLETE_OVERLAY
+next_experiment: EXP-038-MERGED-DEFAULT-P8-FULL-RETRY
+```
+
+## EXP-038-MERGED-DEFAULT-P8-FULL-RETRY — Verify merged target with complete local overlay
+
+```yaml
+experiment_id: EXP-038-MERGED-DEFAULT-P8-FULL-RETRY
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T23:31:30+08:00
+  - status: RUNNING
+    at: 2026-09-15T23:32:30+08:00
+prior_experiment: EXP-037-MERGED-DEFAULT-P8-FULL
+hypothesis: Building so101_demo_py and so101_mujoco_support into one fresh target overlay resolves the sole EXP-037 provenance failure.
+prediction: Both package prefixes resolve to install-merged-closure-54477, then the default-W8 gate passes all 3069 ordinary nodes exactly once.
+single_variable: Replace the partial target overlay with a fresh overlay containing both repository-local packages; target commit and dirty file remain unchanged.
+lifecycle: REUSE_STACK
+preconditions:
+  - Target remains at merge commit 54477f67a068b06bf4cb53d51b7c9848c74126b2 with the exact preserved dirty-file and diff hashes.
+  - Fresh build/install/log closure roots and fresh runner ID f are absent.
+  - No relevant runtime process remains from EXP-037.
+success_criteria:
+  - Both local package prefixes resolve to the new overlay; runner reports PASS, worker_count=8, exact 3069-node execution, benchmark exclusion, and complete cleanup.
+failure_criteria:
+  - Build, prefix provenance, test, coverage, JUnit, timeout, or cleanup gate fails.
+invalid_criteria:
+  - Unexpected source drift, scratch collision, or external interruption.
+provenance:
+  source_commit: 54477f67a068b06bf4cb53d51b7c9848c74126b2
+  install_overlay: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-merged-closure-54477
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - Build so101_mujoco_support and so101_demo_py into the fresh closure overlay, verify both prefixes, then run the merged target gate without --workers using fresh run ID f.
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/f
+decision: RUN
+next_experiment: CP-009
+```
+
+### EXP-038 result update
+
+```yaml
+status: VALID
+status_history:
+  - status: VALID
+    at: 2026-09-15T23:35:00+08:00
+commands:
+  - command: colcon build --packages-select so101_mujoco_support so101_demo_py into install-merged-closure-54477
+    exit_code: 0
+  - command: tools/so101_pytest_gate.py --evidence-root /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01 --run-id f --timings /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp028-p6-fresh-timings.xml --python /usr/bin/python3 --expected-source-commit 54477f67a068b06bf4cb53d51b7c9848c74126b2 --allow-dirty-path src/so101_demo_py/test/test_parallel_batch_resources.py --timeout-s 1200
+    exit_code: 0
+observed:
+  - OBSERVED: Both so101_demo_py and so101_mujoco_support resolve to the fresh install-merged-closure-54477 overlay; the two-package build completed in 23.58 seconds.
+  - OBSERVED: Runner PASS with worker_count=8 and exact 3069 expected/actual nodes; collection SHA256 is `6df5bf1cb3311dd240ea1817a95e5a37406e2df1a8e378f8b61ce6e4f27e1dad`.
+  - OBSERVED: Setup=2.734 seconds, serial lane=10.444 seconds, parallel critical path=41.323 seconds, runner total=54.660 seconds, aggregate CPU time=105.150 seconds, and peak per-process RSS=1365012 KiB.
+  - OBSERVED: All child processes were reaped, benchmark paths stayed excluded, and final process readback is empty.
+  - OBSERVED: The target's pre-existing dirty file and diff SHA256 values remain unchanged after build and test.
+inferred:
+  - NONE
+conclusion: The locally merged target passes its complete ordinary pytest gate with startup default W8 and exact package/source provenance.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-merged-closure-54477
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-merged-closure-54477
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/log-merged-closure-54477
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp038-merged-default-p8-full.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/f
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp038-merged-default-p8-full-console.log
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp038-merged-default-p8-full-outer-time.txt
+decision: KEEP
+next_experiment: CP-009
+```
+
+## CP-009 — Default-W8 merge accepted
+
+```yaml
+checkpoint_id: CP-009
+status: COMPLETE
+timestamp: 2026-09-15T23:35:44+08:00
+last_valid_experiment: EXP-038-MERGED-DEFAULT-P8-FULL-RETRY
+current_hypothesis: NONE
+working_tree_status:
+  source: only this final ledger update is dirty
+  target: exactly one preserved unstaged user path, src/so101_demo_py/test/test_parallel_batch_resources.py
+owned_processes: NONE
+preserved_processes: NONE
+confirmed_conclusions:
+  - The pytest gate starts at concurrency 8 when --workers is omitted and still accepts explicit overrides.
+  - Source-branch focused contracts pass 31/31; its complete ordinary gate passes 3058/3058.
+  - Target merge commit 54477f67a068b06bf4cb53d51b7c9848c74126b2 passes 3069/3069 ordinary nodes with default W8 and complete cleanup.
+  - The user's unstaged target test change is preserved byte-for-byte and diff-for-diff with file SHA256 `3a0365dea4d62cc816286606f67664e0322d534958129d48d6591914a1d4c2e9` and diff SHA256 `ae383016c78eca3c02e05f600d58fb4a65211f4783acf9612ea38e374baf380c`.
+disproven_routes:
+  - Run IDs p and q were stale and excluded.
+  - A target overlay containing only so101_demo_py violates the established so101_mujoco_support prefix contract; the complete local two-package overlay passes.
+open_risks:
+  - NONE within the approved pytest-only merge scope.
+retained_runs:
+  - Entire registered evidence root, including invalid p/q/e evidence and valid m/n/o/r/f evidence.
+archived_runs:
+  - NONE
+deletion_candidates:
+  - All scratch, build, install, and log trees under the registered evidence root; no deletion is authorized or performed.
+next_command: Commit this ledger-only update, merge it into codex/parallel-adaptive-worker-pool, write final status, and stop without pushing.
 ```
