@@ -2,12 +2,12 @@
 
 ```yaml
 task_id: so101-adaptive-worker-pool
-goal: Formally compare the qualified stateless-Broker SO-101 twenty-point execute pool at fixed Worker counts W1, W2, W4, W6, W8, and W10 while holding C2, models, points, lifecycle, timeouts, retries, and evidence gates constant.
-success_contract: Complete one fresh coherent ascending W1/W2/W4/W6/W8/W10 series; each valid level must execute the exact twenty-point catalog once on first attempts at its fixed Worker count with no Worker/model fallback, retry, policy drift, or cleanup residue, then report machine-readable timing/resource/correlation evidence, speedup, efficiency, knee, bottleneck, and recommended default.
+goal: Re-run the frozen fixed-W10/C2 SO-101 twenty-point execute pool once for reproducibility, then publish the maintained W1-W10 source data and deterministic SVG scaling chart in the parallel Worker source guide.
+success_contract: Preserve EXP-047, perform exactly one new valid fixed-W10 runtime attempt under the unchanged v4 production contract with complete failure-or-success evidence and exact cleanup, then derive a validated versioned dataset, deterministic checked SVG, natural Chinese guide update, and scoped local commits without changing the user dirty test.
 worktree: /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool
 branch: codex/parallel-adaptive-worker-pool
 base_commit: 4c777fa722586be92a0b357b861ab4ce460a06ab
-current_commit: 74fef842e3f80038110ce9b835b95d27ecd2dfb5
+current_commit: 0c52cc42bf5b37610dfea49ac8d2b54f2e8ad0ae
 evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01
 confirmed_conclusions:
   - origin/main equals the reviewed baseline 4c777fa722586be92a0b357b861ab4ce460a06ab; startup preflight CP-001.
@@ -27,6 +27,8 @@ confirmed_conclusions:
   - EXP-006 completed all 20 execute points at fixed W8 with no fallback and complete timing/cleanup evidence; the 1.507 s median composite perception chain was driven by a 1.432 s median serialized Broker round trip, while every configured stage budget remained satisfied.
   - EXP-006 supplemental causal audit confirmed that sample_13_far_center and sample_15_far_center `TRUNCATED_FRAME` errors came from the 5 s AuthenticatedUnixServer cycle deadline starting before accept and exhausting the handler/reply remainder; identical idempotent retries recovered both original QUALIFIED results.
   - EXP-006 used a 240 s consumer get_one timeout, so none of its 20 points timed out under current configuration; against the separate 5 s target SLO, 5/20 exceeded from get_one start to POSE_ACCEPTED and 4/20 exceeded from consumer READY to accepted.
+  - The formal frozen C2 comparison qualifies W1, W2, W4, W6, and W8 with one complete 20/20 first-attempt sample each. W8 is fastest at 4.55 points/minute and W4 is the 96.5-percent-efficiency knee.
+  - EXP-048 is the second admitted W10 runtime failure and contributes no performance point. It stopped after POOL_STARTING and before POOL_RUNNING with 0/20 points; the exact cleanup readback passed and no third W10 run was launched.
   - Task 15 preflight at CP-010 confirmed the required linked worktree and HEAD, preserved the three existing dirty paths, and found no conflicting process, ROS node on Domains 0/215-222, Docker container, GPU compute app, or tmux session.
   - Task 15 implementation through CP-011 is committed at 3677e9d97f1367f861496817cee5edeb4349871f; EXP-007R2 qualified eight authenticated Broker clients with C2 YOLO execution, queue depth five, eight distinct logical inferences, zero replay, and zero transport truncation.
   - EXP-008 live-01 and live-02 are INVALID preflight attempts, and live-03 is INVALID because systemd-oomd killed its 16.2 GiB tmux scope before any point lease; CP-012.
@@ -46,7 +48,7 @@ disproven_routes:
 open_hypotheses:
   - Fixed-pool throughput should improve from W1 until shared C2 inference, host CPU/memory, and per-point motion lifecycles dominate; additional Workers beyond that knee may add startup/resource cost without proportional throughput.
   - The production Broker may not persist its optional concurrency summary before the frozen five-second Docker stop boundary; sealed request correlation remains authoritative, but queue/service distributions will be reported unavailable rather than estimated if the file is absent.
-latest_checkpoint: CP-045
+latest_checkpoint: CP-046
 next_experiment: NONE
 ```
 
@@ -3997,5 +3999,136 @@ retention:
 cleanup: PASS
 final_cleanup_readback: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4/final-cleanup-readback.txt
 final_cleanup_readback_sha256: cf6c4841868187ce0b881f83e634d18313c3b25c130ef4bc36f6b63b158fa8f5
+next_experiment: NONE
+```
+
+## EXP-048-FORMAL-W10-R2 — Fixed W10 reproducibility rerun
+
+```yaml
+experiment_id: EXP-048-FORMAL-W10-R2
+status: FAILED
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T20:14:21+08:00
+  - status: RUNNING
+    at: 2026-09-15T20:22:21+08:00
+  - status: FAILED
+    at: 2026-09-15T20:22:58+08:00
+prior_experiment: EXP-047-FORMAL-W10
+hypothesis: EXP-047's unexpected Broker-container disappearance was transient; one fresh W10 attempt under the byte-equivalent v4 runtime payload can complete all twenty points while preserving the fixed W10/C2 evidence contract.
+prediction: If the disappearance was transient, this one attempt completes 20/20 points on first attempts at `levels_used=[10]`; if the same failure repeats, the retained Docker/system/kernel/coordinator evidence will establish its first bad boundary without a third run.
+single_variable: NONE in production/runtime policy; this is one reproducibility repeat. A copied report-path wrapper adds passive Docker and journal capture without changing the runtime command/config payload or measurement boundaries.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - CP-045 is restored; original EXP-047 and all v4 artifacts remain immutable and independently retained.
+  - Coordination status is RUNNING for dispatch DF261A05-3907-49C9-95BE-B303D7CF879B, and no pytest/colcon, unrelated ROS/Gazebo/MuJoCo/MoveIt, Docker, or GPU workload overlaps admission.
+  - Candidate, implementation, submodule, overlay, image, model, catalog, selection, C2, timeout, reset, retry, YOLO-primary, and no-Worker-fallback contracts match v4.
+  - Runtime `/data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/m` and report `/data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-w10-r2-df261a05/w10` are absent; task Domains 215-224 and unit names are free.
+success_criteria:
+  - One runtime launch produces exactly twenty distinct first-attempt PASSED points, fixed `levels_used=[10]`, 20 YOLO correlations, zero retry/model/Worker fallback, complete initial/terminal evidence, clean exit, and exact cleanup.
+failure_criteria:
+  - A valid fixed-contract runtime starts but any behavior, infrastructure, evidence, or cleanup gate fails; preserve its first bad boundary and do not launch W10 again.
+invalid_criteria:
+  - Admission, provenance, source/config/image/model, runtime payload equivalence, unrelated workload, socket, or evidence contamination prevents a valid runtime start; wait for clean admission rather than count it as the requested rerun.
+provenance:
+  worktree_commit: e41ee9066bf13e5f21e073a5ce54716775d59f4b
+  worktree_delta_from_v4_source: documentation ledger only
+  runtime_candidate_commit: b0f9e7168198285fba4133026d9d3b132075f88b
+  implementation_commit: 59c831f0d771f45f6b930dd59fc85d673a7c96e5
+  submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
+  install_overlay: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp039-real-yolo-w10-c2/candidate-src/install
+  runtime_executable: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp039-real-yolo-w10-c2/candidate-src/install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch
+  ros_domain_id: [215, 216, 217, 218, 219, 220, 221, 222, 223, 224]
+  gz_partition: not_applicable
+  original_frozen_harness_manifest_sha256: 36dc215804dd756d89522c393e3a7e17befd0c621fe8811db3eaa7eb8e876562
+commands:
+  - command: /usr/bin/zsh /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-w10-r2-df261a05/forensic-run.zsh 10 m EXP-048-FORMAL-W10-R2
+    exit_code: 1
+observed:
+  - The clean second admission passed at 2026-09-15T20:20:26+08:00 with the frozen candidate, image, model, C2, W10, point-order, reset, timeout, single-attempt, YOLO-primary, and no-fallback identities intact. The first admission was pre-runtime INVALID only because the task-target guide appeared at its sealed baseline while admission was being prepared; it created no runtime and does not count as a W10 attempt.
+  - The one authorized runtime wrote BATCH_MANIFEST sequence 1 and POOL_STARTING sequence 2, then wrote POINT_INFRA_INTERRUPTED for all twenty points at sequences 3-22 and BATCH_TERMINAL at sequence 23. No POOL_RUNNING, Worker root, lease, attempt, Broker root, or container was created.
+  - Top-level status was INFRA_FAILED after 0.045712864957749844 s with levels_used=[10], 0/20 completed points, no fallback transition, no retry, and batch_cleanup_complete=false. The runner exited 1 after 1.727 s CPU with a 6,209,536-byte observed cgroup peak.
+  - Passive capture contains zero matching Docker events, no container state or log because no Broker container existed, and no kernel OOM entry. Host available memory increased from 29,070,241,792 to 29,115,985,920 bytes; swap free remained 4,700,258,304 bytes.
+  - Exact final readback found both task units absent/inactive, no owned runtime process, task-domain ROS daemon, container, live socket, GPU compute app, or active Domain 215-224 claim. cleanup=PASS.
+  - The frozen report validator exited 1 because the generation-local coordinator aggregate was absent. The report manifest's self-entry is expectedly stale because the frozen wrapper hashes report-files.sha256 while rewriting it; every other listed report file and the independently sealed forensic manifest verified.
+inferred:
+  - The first bad boundary is STARTUP after durable POOL_STARTING and before POOL_RUNNING. ProductionAdaptivePool caught the underlying exception, but the no-fallback top-level journal persisted only the interrupted points and INFRA_FAILED; the exception detail is unavailable and no deeper cause is asserted.
+  - EXP-047 and EXP-048 failed at different boundaries. Their shared W10 setting is insufficient evidence that they share one root cause, and neither OOM nor YOLO saturation is supported by EXP-048.
+conclusion: FAILED valid fixed-contract runtime attempt. W10 now has two admitted failures, zero valid twenty-point performance samples, and remains excluded from the W1-W8 scaling curve.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-w10-r2-df261a05
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/m
+  - admission_r2_sha256: a1f428df50579a5c3f747ba59eeeefe19ce26b4bd700d9c35a18880a7009f040
+  - aggregate_sha256: 23c07ddb8f1e43591f63805ba4e179d66b35cb67d4501daf92509d1a29dbe33b
+  - coordinator_journal_sha256: 28f8a0cdc18f8576394069ad7a31a8aa54eb3fb817fde8b2b7b20ac8ab49fe75
+  - final_cleanup_readback_sha256: f45f216acbd4f551d0f4882147d93bf2c6185918187d7c683ac13f31609d501c
+  - forensic_manifest_sha256: fb092e6f2f22e172abbb1975be4c6721366797074237b88a054fb603aeedbba7
+decision: STOP_W10_AND_PUBLISH_FAILED_POINT
+next_experiment: NONE
+```
+
+## CP-046 — W10 rerun closed; maintained guide and deterministic chart published
+
+```yaml
+checkpoint_id: CP-046
+last_valid_performance_experiment: EXP-046-FORMAL-W8
+last_runtime_experiment: EXP-048-FORMAL-W10-R2
+status: COMPLETE
+confirmed_conclusions:
+  - Exactly one new admitted fixed-W10/C2 runtime was launched. It failed before POOL_RUNNING with 0/20 points, and no third W10 run was launched.
+  - W1-W8 remain the only valid scaling points. W8 is the fastest valid level at 263.6432132720947 s and 4.551605880943091 points/minute; W4 is the efficiency knee at 0.9653388591915982.
+  - W10 has two independent admitted failures and zero valid performance samples. EXP-047 failed after 10/20 and a disappearing Broker container; EXP-048 failed during startup before any Worker or Broker existed.
+  - The guide uses maintained JSON and a deterministic standard-library SVG generator. Failed W10 data is marked in red and is not connected to the valid W1-W8 curve.
+  - Final SVG visual readback passed after a RED/GREEN correction of the full W1-W10 x-axis domain. The corrected 1200x900 render is retained, and the first incorrect render remains as diagnostic evidence.
+verification:
+  focused_pytest: 5 passed in 0.01 s
+  focused_pytest_elapsed_s: 0.26
+  final_scratch: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-final-df261a05
+  generator_check: PASS
+  json_parse: PASS
+  svg_xml_parse: PASS
+  git_diff_check: PASS
+  visual_readback: PASS
+source_commit: 0c52cc42bf5b37610dfea49ac8d2b54f2e8ad0ae
+artifacts:
+  guide: docs/guides/so101-parallel-adaptive-worker-pool-source-guide.md
+  guide_sha256: fa8b69d85180e83316c1d3a2a44697ecfe4049efed51a45cc0a89e7e2a3fb326
+  maintained_data: docs/guides/data/so101-parallel-worker-scaling.json
+  maintained_data_sha256: 9107ab348a31cb832709d15c51f7575fd1f687f2638599f10bb674ce490b6d9b
+  generator: scripts/generate_so101_parallel_worker_scaling_chart.py
+  generator_sha256: ca0cef5352519863a326c2aca11824e7af42a40b7c2427c798f09625644be975
+  generated_svg: docs/guides/assets/so101-parallel-worker-scaling.svg
+  generated_svg_sha256: 85ddb039bddd7219a1c52a81df8bbb3d8d34aca93fa0d9963678353e67285ed5
+  generator_test: src/so101_demo_py/test/test_generate_so101_parallel_worker_scaling_chart.py
+  generator_test_sha256: 8b763951dabcf7cefe2075e9f39217f2a84c5df1d2e9d06233d841ef217e4cca
+  comparison_v2: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-w10-r2-df261a05/comparison-v2
+  comparison_v2_manifest_sha256: 473d4508a641e48053ae4b36edabfc4261f2180540923c62c3f468eddd877698
+  corrected_render_sha256: 61cb8cf09b78aa844ee2a83a603bf2427266d47ccf3e59c1f1b09fa475fb253c
+protected_dirty_test:
+  path: src/so101_demo_py/test/test_parallel_batch_resources.py
+  diff_sha256: ae383016c78eca3c02e05f600d58fb4a65211f4783acf9612ea38e374baf380c
+  staged: false
+retention:
+  retained_runs:
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-w10-r2-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/g
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/h
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/i
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/j
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/k
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/l
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/m
+  archived_runs: []
+  deletion_candidates:
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-pytest-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-pytest2-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-red-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-green-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-final-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-w10-r2-df261a05/so101-parallel-worker-scaling-render.png
+    - /tmp/so101-debug-df261a05
+  deleted: []
+cleanup: PASS
 next_experiment: NONE
 ```
