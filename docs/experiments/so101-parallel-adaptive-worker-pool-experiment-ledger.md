@@ -2903,7 +2903,14 @@ next_experiment: EXP-039-REAL-YOLO-W10-C2
 
 ```yaml
 experiment_id: EXP-039-REAL-YOLO-W10-C2
-status: PLANNED
+status: PASSED
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T15:51:00+08:00
+  - status: RUNNING
+    at: 2026-09-15T16:17:00+08:00
+  - status: PASSED
+    at: 2026-09-15T16:18:00+08:00
 prior_experiment: EXP-038-ORDINARY-PACKAGE-GATE
 hypothesis: A Broker image built from the committed stateless candidate can serve ten simultaneous immutable YOLO inputs with two CUDA executors without any Coordinator inference endpoint or journal access.
 prediction: All ten independent requests return correlated terminal YOLO responses; Broker metrics report ten logical inferences, bounded queueing, model_active_peak no greater than two, and no transport error.
@@ -2922,8 +2929,146 @@ failure_criteria:
   - Any missing, duplicated, cross-wired, nonterminal, non-YOLO, provenance-invalid, over-C2, transport-error, authority-dependent, or cleanup-incomplete result.
 invalid_criteria:
   - Candidate/image/model/config/input provenance differs from the frozen preflight, another process owns a required resource, or the experiment starts simulation or motion.
-decision: AWAIT_COMMITTED_CANDIDATE_AND_PREFLIGHT
-next_experiment: NONE_UNTIL_RESULT
+provenance:
+  candidate_commit: b0f9e7168198285fba4133026d9d3b132075f88b
+  implementation_commit: 59c831f0d771f45f6b930dd59fc85d673a7c96e5
+  submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
+  install_overlay: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp039-real-yolo-w10-c2/candidate-src/install/so101_demo_py
+  broker_image_id: sha256:4fb57abe1109e7cc1c7fbf1780a7dd10b4167f12abfa59ba34b1903a60c4c972
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+  harness_sha256: e4cfbb3c970f8e3117a866f83193c8030f56c0811075b038deca8f0b431360bf
+  runner_sha256: cb61e55c53b08fbc94f9e748325301ef0aa02a03c0c4ae18fd0e6fbd00266058
+systemd_unit: so101-exp039-real-yolo.service
+observed:
+  - The detached candidate was clean at b0f9e7168198285fba4133026d9d3b132075f88b with implementation parent 59c831f0d771f45f6b930dd59fc85d673a7c96e5, matching submodule, source/build hashes, install entry point, frozen model hashes, and exact image provenance.
+  - Direct ai-station preflight found the registered root at mode 0700, no running container or GPU compute client, no task runtime, and no simulation or motion process; the only process-search hit was the read-only preflight command itself.
+  - The first and only frozen launch reached strict Broker READY in 8.816 s, accepted ten simultaneous minimal envelopes with no lease, token, Worker generation, start event, Coordinator endpoint, or journal, and returned ten exact request_id/model_id/model_version responses.
+  - All ten real YOLO results were QUALIFIED. Client elapsed time ranged from 0.0984 s to 0.1465 s with 0.1251 s median; completion order differed from request order without cross-wiring.
+  - Broker metrics recorded pending_rpc_peak 10, queue_depth_peak 8, YOLO model_active_peak 2, logical_inference_count 10 with the ten exact request IDs, no replay/authority/journal field, and zero transport errors.
+  - A precise SIGINT to the exact labeled container let the Broker persist final metrics; the expected Docker runner exit was 130. The systemd harness exited 0, and independent readback found the exact owned PID absent, no labeled container, no GPU compute application, and no live socket.
+conclusion: Real-YOLO perception-only W10/C2 is qualified for the committed stateless Broker candidate with exact correlation, bounded concurrency/backpressure, zero Coordinator inference work, and exact cleanup.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp039-real-yolo-w10-c2/preflight.txt SHA256 189c24605ffb67901e9c3c91fd603dc598dd8597cffe8889f1f1a71c4bed8a6d
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp039-real-yolo-w10-c2/broker-image.json SHA256 cc464527f589e48617475970ed72f413d8224bdb424b353e2a39708c69cd9d02
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp039-real-yolo-w10-c2/admission.json SHA256 f6de8440dd55733d60322dc4536761c7b6f260d58d3cf2cd3b740340b22f3321
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp039-real-yolo-w10-c2/result.json SHA256 bac7409f1712fb5fe26d94e91598c7b9a5b9a302439fc7b52f6a49e6bf322556
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp039-real-yolo-w10-c2/run/ipc/broker-concurrency-summary.json SHA256 6e758a93b617f9be11a446ea72128a44a695a25d67ff48be8231364b4911ed6c
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp039-real-yolo-w10-c2/harness.log SHA256 a3b37ce9086e2c865817cb87ef1a0a731320a2928c93e4907f7909d325ecd99f
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp039-real-yolo-w10-c2/broker.log SHA256 255e6de912407de62381b5f9c592dd0d6f051c6240e0884e6e24bf6cab843b4d
+retained_runs:
+  - The clean candidate tree, build output, image build/readback, sealed input copies, runtime specification, response payloads, metrics, and logs remain retained under exp039-real-yolo-w10-c2.
+deletion_candidates:
+  - The completed EXP-039 candidate/build tree, copied inputs, stopped runtime root, and temporary test harness are deletion candidates but remain retained pending explicit user authorization.
+decision: PROCEED_TO_ONE_FIXED_W10_20_POINT_GATE
+next_experiment: EXP-040-FIXED-W10-20-POINT
+```
+
+## EXP-040-FIXED-W10-20-POINT — One unmasked execute qualification
+
+```yaml
+experiment_id: EXP-040-FIXED-W10-20-POINT
+status: PASSED
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T16:20:00+08:00
+  - status: RUNNING
+    at: 2026-09-15T16:27:31+08:00
+  - status: PASSED
+    at: 2026-09-15T16:32:31+08:00
+prior_experiment: EXP-039-REAL-YOLO-W10-C2
+hypothesis: The exact stateless candidate and Broker image qualified by EXP-039 remove the prior W10 inference stall and can complete the frozen twenty-point execute catalog at fixed W10/C2 without retry, fallback, or policy drift.
+prediction: One fresh W10 generation completes all 20 distinct points PASSED on first attempts with levels_used [10], no lower Worker level, no Grounded-SAM fallback, complete physical/contact/model/timing/visual evidence, and exact cleanup.
+single_variable: Replace EXP-033's authority-coupled Broker candidate/image with the exact EXP-039 stateless candidate/image; preserve W10, C2, catalog, model artifacts, initial_points_per_worker 3, worker_start_timeout_s 120, max_infra_attempts_per_point 1, timeout policy, and execute semantics.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - EXP-039 passed ten real concurrent YOLO requests with exact cleanup.
+  - The fixed run uses candidate b0f9e7168198285fba4133026d9d3b132075f88b, image sha256:4fb57abe1109e7cc1c7fbf1780a7dd10b4167f12abfa59ba34b1903a60c4c972, and the same frozen model hashes.
+  - A fresh short batch/runtime identity keeps every Unix socket within its enforced limit; the report and runtime roots are absent.
+  - Domains 215-224, prospective units, claims, ROS graphs/daemons, task processes, containers, and GPU compute clients are empty immediately before launch.
+  - Fresh video/visual evidence procedure follows gazebo-video-debug together with so101-dev; no deadline, retry, fallback, Worker count, model, or point policy changes are allowed after launch.
+success_criteria:
+  - Exactly 20 distinct frozen catalog points are PASSED on first attempts in one W10 generation; levels_used is exactly [10], final_worker_count is 10, systemd exits 0, and no fallback transition or infrastructure retry occurs.
+  - Every point has exact Broker request/response identity and model/timing evidence plus controller/five-joint, TF, Planning Scene attach/detach, physical/contact, initial/final image, source-fence, and fresh visual evidence.
+  - Exact cleanup leaves no task-owned Worker, Broker, ROS, simulator, monitor, container, socket, GPU process, or unreleased Domain claim.
+failure_criteria:
+  - Any started point, first-attempt, W10-only, perception, motion, contact, evidence, provenance, systemd, or cleanup criterion fails; preserve the first new boundary and do not retry, tune, or fall back.
+invalid_criteria:
+  - A pre-runtime provenance, path, host-resource, or harness fault prevents the genuine fixed-W10 stack from starting.
+provenance:
+  candidate_commit: b0f9e7168198285fba4133026d9d3b132075f88b
+  implementation_commit: 59c831f0d771f45f6b930dd59fc85d673a7c96e5
+  submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
+  broker_image_id: sha256:4fb57abe1109e7cc1c7fbf1780a7dd10b4167f12abfa59ba34b1903a60c4c972
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+  evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp040-fixed-w10-20-point
+  runtime_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/z
+  systemd_unit: so101-w10-z.service
+  monitor_unit: so101-w10-z-monitor.service
+  runner_invocation_id: 1184991d90ca41d49edf9a1401caab06
+  monitor_invocation_id: bf7475491259418fb32e6536edc2cce1
+observed:
+  - The final preflight verified a clean detached candidate at b0f9e7168198285fba4133026d9d3b132075f88b, submodule c16b5a5fe880b6e1857f56486dab4ae726576969, matching source/build overlay files, exact Broker image and model hashes, root mode 0700, absent r/z, empty Domains 215-224 and ROS graphs, no container or GPU client, and the production-enumerated 107-byte longest socket within its exact limit.
+  - Two prelaunch diagnostic checks are retained: the first stopped before launch on an incorrect assumption that symlink-install Python modules existed as regular installed files, and the next used a nonexistent coordinator-authority pathname for a prospective length report. The corrected final preflight used the egg-link/import target and production adaptive_socket_paths enumerator. Neither diagnostic created the runtime or started a stack.
+  - The gui-capture inventory found an active GNOME desktop but no Gazebo client window. The frozen production Worker specification uses headless EGL and GZ_PARTITION not_applicable, so no unrelated GUI was started; fresh per-point initial and terminal RGB evidence was generated and inspected instead.
+  - Exactly one formal launch started at 16:27:31 with runner invocation 1184991d90ca41d49edf9a1401caab06 and monitor invocation bf7475491259418fb32e6536edc2cce1. All ten Workers passed the READY action/service/controller gate and executed one W10 generation.
+  - The top aggregate completed in 300.0503854181152 s with status COMPLETED, terminal reason POINTS_COMPLETE, 20/20 distinct points PASSED, levels_used [10], initial/final Worker count 10, zero infra attempts, and no fallback transition. Every point used exactly attempt 1.
+  - Independent sealed-evidence validation found 20 unique request IDs with exact pose/request correlation and only model plastic-cup-yolo11n-seg-v1. All required file hashes, input hashes, source fences, synchronized depth/TF timestamps, untruncated physical frames, MoveIt attach/detach and final detached scene, seven five-joint terminal motion states, initial/final table contact, final fingertip clearance, and DONE evidence passed.
+  - Fresh contact-sheet inspection found 20 distinct upright initial cup placements and 20 upright terminal cups in the red target-ring region with the gripper visibly raised and clear. Numeric corroboration measured maximum final XY error 0.0021397056023529444 m, maximum upright tilt 0.006774546362813859 rad, and minimum XY displacement 0.037565573692793876 m.
+  - Ready-to-pose timing was 0.3212-3.3206 s with 1.0964 s median and 3.3196 s p95. Peak sampled cgroup memory was 10334068736 bytes, peak GPU allocation 5412 MiB, peak GPU utilization 15 percent, and minimum host available memory 16554492 KiB.
+  - Automatic cleanup gates and the outer cleanup receipt passed. A cleanup ROS-graph probe unexpectedly spawned short-lived Domains 215-224 CLI daemons despite ROS2CLI_NO_DAEMON; the production run also left one Domain 0 CLI daemon. All eleven exact PIDs were resolved against the empty preflight, the ten probe daemons exited before signaling, and the remaining Domain 0 daemon was terminated precisely. Final non-spawning readback found no runtime process, ROS daemon, labeled container, socket, GPU client, active unit, or held Domain 215-224 claim.
+conclusion: The committed stateless perception Broker candidate is qualified by one unmasked fixed-W10/C2 20-point execute run with exact first-attempt correlation, complete physical and fresh visual evidence, no retry, model fallback, Worker reduction, or policy drift, and exact cleanup.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp040-fixed-w10-20-point/preflight.txt SHA256 808493ac9b52ea7979a937a31b3e6b27001759c59bc39bf20452569924587a3b
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp040-fixed-w10-20-point/aggregate_results.json SHA256 b0d0f7943010dd9c18c24f672508fc2e571e855ffe131badb1e6e6bc24fac762
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp040-fixed-w10-20-point/coordinator-aggregate-results.json SHA256 d413fc52bc633c882f2855ef928638f7e87906dde5a281f5fff729bf07a270b7
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp040-fixed-w10-20-point/evidence-validation.json SHA256 5c3258e80cc40c0281950842db4da5512bf79bd2467dc92d9f8888fc7760933c
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp040-fixed-w10-20-point/timing-summary.json SHA256 4b07649353aac6f7fa178093c7d0254bcf7755b08a0fbb34d583e37cb9425a4c
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp040-fixed-w10-20-point/resource-summary.json SHA256 a12ac5b370017da8be7fc2e4c50dfe997eabc94c0e8a0686fe73b3fb35348db0
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp040-fixed-w10-20-point/initial-contact-sheet.png SHA256 a14821af8e0d0473cc43bde9dbee0d2619004aacc4c8941634f0493606e26819
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp040-fixed-w10-20-point/terminal-contact-sheet.png SHA256 4b11ce83e2f3d7ab2d03531c00362fd3ea74a87a97c70a10a784ac90e69c4e3b
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp040-fixed-w10-20-point/visual-observation.txt SHA256 62fb1c20ed3d99effbeb14bd3ebc6330d4001c2addf7c5786543a03c26bd10cc
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp040-fixed-w10-20-point/final-cleanup-readback.txt SHA256 9f136697a9f34753b40bbf386552a5a500d889387be6d27a9c02cf8e921358ca
+retained_runs:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp039-real-yolo-w10-c2
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp040-fixed-w10-20-point
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/z
+archived_runs: []
+deletion_candidates:
+  - The completed EXP-039 candidate/build/runtime assets, completed EXP-040 report/runtime tree, and all prior retained test scratch and diagnostic trees under the registered evidence root are deletion candidates after readback but remain retained pending explicit user authorization.
+decision: ACCEPT_STATELESS_BROKER_AND_FIXED_W10_QUALIFICATION
+next_experiment: NONE
+```
+
+## CP-044 — Stateless Broker implementation and W10 closeout
+
+```yaml
+checkpoint_id: CP-044
+status: COMPLETE
+last_valid_experiment: EXP-040-FIXED-W10-20-POINT
+last_executed_experiment: EXP-040-FIXED-W10-20-POINT
+source_commits:
+  - 59c831f0d771f45f6b930dd59fc85d673a7c96e5 feat: make perception broker stateless
+  - b0f9e7168198285fba4133026d9d3b132075f88b chore: ignore MuJoCo runtime log
+confirmed_conclusions:
+  - The Broker inference path is stateless with respect to Coordinator leases, start events, authorization services, and journal replay while motion and final-result authority remain outside the Broker.
+  - Focused, integration, CLI/container, and the complete 3028-test ordinary package gate passed; benchmark_test was not collected.
+  - Real-YOLO perception-only W10/C2 passed ten simultaneous requests with exact out-of-order correlation and active YOLO peak two.
+  - One fixed W10/C2 execute generation passed all 20 catalog points on first attempts with no retry, Grounded-SAM fallback, Worker reduction, or timeout/policy change.
+  - Exact final cleanup found no task-owned runtime, ROS daemon, simulator, Worker, Broker, container, socket, GPU client, active unit, or held Domain claim.
+preserved_user_changes:
+  - src/so101_demo_py/test/test_parallel_batch_resources.py remains modified and unstaged exactly as found.
+owned_runtime: NONE
+retained_runs:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01
+archived_runs: []
+deletion_candidates:
+  - All completed candidates, run roots, diagnostics, ordinary-test scratch trees, and EXP-039/EXP-040 artifacts under the retained registered evidence root; none were deleted.
+external_actions:
+  - No push, merge, evidence deletion, Worker fallback, model substitution, timeout increase, or extra W10 execution was performed.
+open_risk: NONE_WITHIN_APPROVED_SCOPE
+next_command: NONE
 ```
 
 ## CP-042 — W10 Broker hot-path repair startup
