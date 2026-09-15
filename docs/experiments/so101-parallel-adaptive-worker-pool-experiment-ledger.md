@@ -2,12 +2,12 @@
 
 ```yaml
 task_id: so101-adaptive-worker-pool
-goal: Replace the superseded strict inference-authorization path with a stateless bounded Broker, then qualify the frozen twenty-point W10/C2 execute policy without weakening motion authority, final-result admission, deadlines, cleanup, or physical evidence gates.
-success_contract: Prove a Coordinator-free Broker with exact W10/C2 response correlation, duplicate semantic recomputation, isolated backpressure and request deadlines, pass focused, adjacent, and complete ordinary gates, pass a ten-request C2 real-YOLO perception-only diagnostic, then complete exactly one fresh W10 execute qualification at 20/20 first attempts with exact cleanup.
+goal: Formally compare the qualified stateless-Broker SO-101 twenty-point execute pool at fixed Worker counts W1, W2, W4, W6, W8, and W10 while holding C2, models, points, lifecycle, timeouts, retries, and evidence gates constant.
+success_contract: Complete one fresh coherent ascending W1/W2/W4/W6/W8/W10 series; each valid level must execute the exact twenty-point catalog once on first attempts at its fixed Worker count with no Worker/model fallback, retry, policy drift, or cleanup residue, then report machine-readable timing/resource/correlation evidence, speedup, efficiency, knee, bottleneck, and recommended default.
 worktree: /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool
 branch: codex/parallel-adaptive-worker-pool
 base_commit: 4c777fa722586be92a0b357b861ab4ce460a06ab
-current_commit: a982edc734b96a2f76ec8002c4c16c573f3639a5
+current_commit: 74fef842e3f80038110ce9b835b95d27ecd2dfb5
 evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01
 confirmed_conclusions:
   - origin/main equals the reviewed baseline 4c777fa722586be92a0b357b861ab4ce460a06ab; startup preflight CP-001.
@@ -44,11 +44,10 @@ disproven_routes:
   - YOLO compute, RGB capture, simulation pause/resume, exact-TF localization, numeric capture, pose admission, or DDS callback delivery is the first expected-budget violation in EXP-006; no configured budget was violated.
   - The two EXP-006 `TRUNCATED_FRAME` events are ordinary Broker internal queue waits; their failure boundary was the separate accept-eroded transport server-cycle deadline.
 open_hypotheses:
-  - Removing all Coordinator authentication, authorization, lease, start-event, and journal work from the inference request lifecycle will let bounded W10/C2 requests reach detector execution without weakening later motion or result gates.
-  - Queue/executor wakeup, transport lifecycle, or local deadline isolation may still expose an independent defect after the strict inference-authority path is removed.
-  - W16 itself remains contract-tested but runtime-untested unless separately authorized.
-latest_checkpoint: CP-043
-next_experiment: EXP-035-STATELESS-BROKER-RED
+  - Fixed-pool throughput should improve from W1 until shared C2 inference, host CPU/memory, and per-point motion lifecycles dominate; additional Workers beyond that knee may add startup/resource cost without proportional throughput.
+  - The production Broker may not persist its optional concurrency summary before the frozen five-second Docker stop boundary; sealed request correlation remains authoritative, but queue/service distributions will be reported unavailable rather than estimated if the file is absent.
+latest_checkpoint: CP-045
+next_experiment: NONE
 ```
 
 ## CP-016 — Configured execution timeout restored
@@ -3540,4 +3539,463 @@ external_actions:
 open_risk:
   - The Broker handler's internal W10 stall mechanism remains unknown because it produced no detector failure receipt; investigation requires a separately authorized experiment.
 next_command: NONE
+```
+
+## Formal scaling restoration from CP-044
+
+```yaml
+restored_at: 2026-09-15T18:23:00+08:00
+restored_checkpoint: CP-044
+last_valid_experiment: EXP-040-FIXED-W10-20-POINT
+confirmed_conclusions:
+  - The stateless Broker candidate b0f9e7168198285fba4133026d9d3b132075f88b and image sha256:4fb57abe1109e7cc1c7fbf1780a7dd10b4167f12abfa59ba34b1903a60c4c972 are qualified by EXP-039 and EXP-040.
+  - EXP-040 completed the exact twenty-point catalog at fixed W10/C2 on first attempts with no retry, model fallback, Worker reduction, or cleanup residue.
+disproven_routes:
+  - Worker levels in this task are runtime SO-101 pool sizes, not pytest process counts or sharding.
+  - Two-character batch IDs exceed the frozen Unix socket limit at 108 bytes; unique one-character IDs remain exactly within the 107-byte limit.
+working_tree_status:
+  - HEAD 74fef842e3f80038110ce9b835b95d27ecd2dfb5 on codex/parallel-adaptive-worker-pool.
+  - Preserved user src/so101_demo_py/test/test_parallel_batch_resources.py is the only pre-task dirty path; its diff SHA256 is ae383016c78eca3c02e05f600d58fb4a65211f4783acf9612ea38e374baf380c.
+owned_processes: NONE
+preserved_processes:
+  - PID 1983511 is an unrelated ROS Domain 0 daemon owned by /data/work/ws_moveit/.worktrees/pytest-gate-parallelism and is not touched.
+evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01
+formal_series_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f
+frozen_harness_sha256: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f/frozen-harness.sha256
+next_experiment: EXP-041-FORMAL-W1
+```
+
+## EXP-041-FORMAL-W1 — Fixed Worker baseline
+
+```yaml
+experiment_id: EXP-041-FORMAL-W1
+status: INVALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T18:23:00+08:00
+  - status: RUNNING
+    at: 2026-09-15T18:25:21+08:00
+  - status: INVALID
+    at: 2026-09-15T18:25:23+08:00
+prior_experiment: EXP-040-FIXED-W10-20-POINT
+hypothesis: One Worker provides the serial timing denominator while satisfying the exact EXP-040 behavior and evidence contract under the frozen stateless Broker C2 configuration.
+prediction: Exactly twenty catalog points pass once on first attempts at levels_used [1], with no retry, Worker/model fallback, policy drift, or cleanup residue; execution time becomes T1 for speedup and efficiency.
+single_variable: Fixed Worker count W1; every other series variable is frozen by formal-worker-scaling-8d75fe6f/frozen-plan.txt and frozen-harness.sha256.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - CP-044 is restored and the frozen source, runtime candidate, submodule, overlay, image, model, point, timeout, retry, C2, and no-fallback contracts match.
+  - The formal coordination status is RUNNING and resource-heavy pytest does not overlap.
+  - Runtime /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/a and report w01 are absent.
+  - Domains 215-224, prospective units, task processes, containers, sockets, and GPU clients are empty; the unrelated pytest-worktree Domain 0 daemon is preserved.
+success_criteria:
+  - Exactly twenty distinct points are PASSED on first attempts, levels_used is [1], initial/final Worker count is 1, and no retry or fallback occurs.
+  - Sealed correlation, initial/reset, model, TF, planning/controller, physical/contact, Planning Scene, final-placement, hash, and initial/terminal RGB gates all pass.
+  - Clean launch, pool readiness, twenty-point interval, cleanup, resource, and available Broker metrics are machine-readable, and exact post-run cleanup passes.
+failure_criteria:
+  - Any valid behavior, point, first-attempt, model, motion, physical, evidence, fixed-level, or cleanup gate fails; preserve it and do not silently rerun.
+invalid_criteria:
+  - Admission, provenance, source/config/image/model hash, socket, unrelated workload, launch harness, or evidence contamination prevents a valid W1 sample.
+provenance:
+  source_commit: 74fef842e3f80038110ce9b835b95d27ecd2dfb5
+  runtime_candidate_commit: b0f9e7168198285fba4133026d9d3b132075f88b
+  implementation_commit: 59c831f0d771f45f6b930dd59fc85d673a7c96e5
+  submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
+  install_overlay: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp039-real-yolo-w10-c2/candidate-src/install
+  runtime_executable: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp039-real-yolo-w10-c2/candidate-src/install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch
+  ros_domain_id: [215]
+  gz_partition: not_applicable
+commands:
+  - command: /usr/bin/zsh /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f/run-level.zsh 1 a EXP-041-FORMAL-W1
+    exit_code: 1
+observed:
+  - The complete preflight passed, then the production CLI exited before creating runtime r/a with `FROZEN_ADAPTIVE_VALUE: worker_count`; the generated formal configuration was incorrectly used as the input to the closed version-one defaults loader.
+  - The wrapper's expected post-error cleanup reported `RUNTIME_ROOT` because r/a was never created. Independent final readback passed with no task-domain daemon, process, container, socket, GPU client, unit, or Domain claim left behind.
+  - No Worker, Broker, simulator, point attempt, aggregate, or performance interval started, so this attempt contributes no behavioral or timing sample.
+inferred:
+  - EXP-040 passed W10 because it supplied the committed W8 defaults file to the loader and applied W10 through the production CLI override. The failed formal harness instead placed W10 directly in the defaults file, crossing the strict loader boundary before the override.
+conclusion: INVALID pre-runtime harness/configuration attempt; it says nothing about W1 behavior or performance.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f/w01
+  - run.log SHA256 7ec2ce2eebb17c60f533177290d25ec85ac65e6ca4f4eeccc9a75347ccc3b0b4
+  - runner-end.json SHA256 047ff7f5cce590bfa9849aade2a23af1c43845091cbdc8e46fe0a2d4b58dbb31
+  - final-cleanup-readback.txt SHA256 322b8b90cc1a75045121d18650da1bb4062e10ca072a2454bd59c34dc1b15124
+decision: RESTART_SERIES_FROM_W1_WITH_FROZEN_V4_HARNESS
+next_experiment: EXP-042-FORMAL-W1-R2
+```
+
+## EXP-042-FORMAL-W1-R2 — Fixed Worker baseline, corrected frozen harness
+
+```yaml
+experiment_id: EXP-042-FORMAL-W1-R2
+status: PASSED
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T18:31:39+08:00
+  - status: RUNNING
+    at: 2026-09-15T18:32:41+08:00
+  - status: PASSED
+    at: 2026-09-15T19:00:48+08:00
+prior_experiment: EXP-041-FORMAL-W1
+hypothesis: With the closed defaults loader fed its exact committed W8 configuration and the previously audited measurement-only boundary freezing parsed fallbacks to empty, W1 provides a valid serial denominator under the EXP-040 C2 behavior contract.
+prediction: Exactly twenty catalog points pass once on first attempts at levels_used [1], with no retry, Worker/model fallback, policy drift, or cleanup residue; execution time becomes T1.
+single_variable: Fixed Worker count W1; every other variable is frozen by formal-worker-scaling-8d75fe6f-v4/frozen-plan.txt and frozen-harness.sha256.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - EXP-041 is retained INVALID and did not create r/a or start any runtime component.
+  - The v4 harness restores the byte-identical committed adaptive defaults and freezes the parsed fallback tuple to empty through one immutable measurement-only sitecustomize overlay shared by all six levels.
+  - Candidate, source, submodule, install, image, models, point catalog, timeout, reset, retry, C2, evidence, and measurement contracts remain those restored from CP-044.
+  - Runtime /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/g and report formal-worker-scaling-8d75fe6f-v4/w01 are absent.
+success_criteria:
+  - Exactly twenty distinct points are PASSED on first attempts, levels_used is [1], initial/final Worker count is 1, manifest fallback_worker_counts is empty, and no retry or fallback occurs.
+  - All sealed correlation, initial/reset, model, TF, planning/controller, physical/contact, Planning Scene, final-placement, hash, and fresh initial/terminal RGB gates pass.
+  - Machine-readable timing/resource/Broker evidence and exact post-run cleanup pass.
+failure_criteria:
+  - Any valid behavior, evidence, fixed-level, resource, or cleanup gate fails; preserve it without a silent rerun.
+invalid_criteria:
+  - Admission, provenance, source/config/overlay/image/model hash, unrelated workload, launch harness, or evidence contamination prevents a valid W1 sample.
+provenance:
+  source_commit: 74fef842e3f80038110ce9b835b95d27ecd2dfb5
+  runtime_candidate_commit: b0f9e7168198285fba4133026d9d3b132075f88b
+  implementation_commit: 59c831f0d771f45f6b930dd59fc85d673a7c96e5
+  submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
+  broker_image_id: sha256:4fb57abe1109e7cc1c7fbf1780a7dd10b4167f12abfa59ba34b1903a60c4c972
+  frozen_harness_manifest_sha256: 36dc215804dd756d89522c393e3a7e17befd0c621fe8811db3eaa7eb8e876562
+commands:
+  - command: /usr/bin/zsh /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4/run-level.zsh 1 g EXP-042-FORMAL-W1-R2
+    exit_code: 0
+observed:
+  - The one formal W1 launch passed preflight, formed one Worker, and completed all 20 catalog points PASSED on first attempts with levels_used [1], manifest fallback_worker_counts [], 20 exact YOLO request correlations, zero retry, zero Grounded-SAM fallback, and zero correlation error.
+  - Startup-to-ready was 19.737433060072362 s; the twenty-point interval was 1592.5133624076843 s; clean launch through production cleanup was 1620.8567272040527 s; throughput was 0.753525859391062 points/minute.
+  - Descriptive n=20 READY-to-POSE timing was p50 0.6758952140808105 s and p95 1.6583109617233278 s. Total READY-to-DONE was p50 66.18522572517395 s and p95 83.9186247587204 s.
+  - Sampled peak cgroup memory was 1358749696 bytes, peak GPU allocation 3435 MiB, peak GPU utilization 9 percent, minimum host available memory 25133100 KiB, CPU time 1594.934625 s, and swap-used delta 4400 KiB.
+  - Broker optional shutdown summary was unavailable; the validator therefore records 20 logical inferences and zero correlation errors derived from 20 distinct sealed YOLO requests without inventing queue/service distributions.
+  - Fresh initial/terminal contact sheets show all 20 distinct upright source cups and all 20 upright terminal cups in the target ring with grippers raised and clear, corroborating maximum final XY error 0.002162304721854786 m and maximum upright tilt 0.006831916386352743 rad.
+  - Exact final cleanup passed with no task process, task-domain daemon, container, socket, GPU client, held claim, or active unit; the unrelated Domain 0 daemon remained untouched.
+conclusion: PASSED; W1 is the valid serial denominator T1=1592.5133624076843 s for formal speedup and efficiency.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4/w01
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/g
+  - level-summary.json SHA256 5ee4847dd5023005daf4b8ae6ea2f2b4468b4db8ab243293a4c68026914a31c5
+  - evidence-validation.json SHA256 1e49f8d6a98437bb60f93dab9747c7e1cd11e326480d8fc1f4a30e28ec4d2041
+  - initial-contact-sheet.png SHA256 597c27e844972056856cd03a1cdd03e814d969630d3dbbf01485cfb4c84ab4ad
+  - terminal-contact-sheet.png SHA256 e8dacba58b0cffa9cd9eac92e4164259804fb067166501696654d0e50155bb52
+  - visual-observation.txt SHA256 4bcf71f4127837605efe646da9f00aaf6baadc655f8924edfc491104159b1814
+  - final-cleanup-readback.txt SHA256 f13665e5d676b10d33e03eef15acf91428920724bed198dd45e2ead95347d913
+decision: PROCEED_TO_W2
+next_experiment: EXP-043-FORMAL-W2
+```
+
+## EXP-043-FORMAL-W2 — Fixed Worker scaling level
+
+```yaml
+experiment_id: EXP-043-FORMAL-W2
+status: PASSED
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T19:01:30+08:00
+  - status: RUNNING
+    at: 2026-09-15T19:02:33+08:00
+  - status: PASSED
+    at: 2026-09-15T19:17:09+08:00
+prior_experiment: EXP-042-FORMAL-W1-R2
+hypothesis: Two Workers reduce the 20-point interval relative to W1 while preserving the exact frozen behavior and evidence contract.
+prediction: Exactly 20 points pass on first attempts at levels_used [2] with no retry, fallback, drift, or cleanup residue; T1/T2 exceeds one.
+single_variable: Fixed Worker count changes from W1 to W2; the v4 harness and every non-Worker input remain frozen.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - EXP-042 passed and its exact cleanup readback is clean.
+  - The v4 frozen-harness manifest validates; candidate, dirty file, image/model/config/catalog, Domains, socket, host/GPU admission, timeout/retry, C2, and empty-fallback checks pass.
+  - Runtime r/h and report w02 are absent; no measured runs overlap.
+success_criteria:
+  - Twenty distinct first-attempt PASSED points, levels_used [2], empty fallbacks, YOLO-only exact correlation, complete sealed/visual evidence, and clean exit/readback.
+failure_criteria:
+  - Any valid behavior, evidence, fixed-level, or cleanup gate fails; preserve without silent rerun.
+invalid_criteria:
+  - Any admission, provenance, source/config/overlay/image/model, workload, harness, or evidence contamination.
+provenance:
+  frozen_harness_manifest_sha256: 36dc215804dd756d89522c393e3a7e17befd0c621fe8811db3eaa7eb8e876562
+commands:
+  - command: /usr/bin/zsh /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4/run-level.zsh 2 h EXP-043-FORMAL-W2
+    exit_code: 0
+observed:
+  - The single W2 launch passed all gates: 20/20 distinct first-attempt PASSED points, levels_used [2], empty fallbacks, 20 YOLO correlations, zero retry/model fallback/correlation error, and exact cleanup.
+  - Startup was 19.66266585793346 s, execution 810.0461459159851 s, end-to-end 835.7975381789729 s, and throughput 1.481397085894486 points/minute.
+  - Against W1 execution, speedup is 1.9659538785989776, parallel efficiency 0.9829769392994888, and interval reduction 49.134106812686645 percent.
+  - Sampled peak cgroup memory was 2294722560 bytes, CPU time 1493.11772 s, peak GPU allocation 3703 MiB, peak GPU utilization 5 percent, minimum host available memory 23981124 KiB, and swap-used delta 9972 KiB.
+  - Visual review found all source cups upright/distinct and all terminal cups upright in the target ring with grippers raised and clear; numeric maximum final XY error was 0.0021527989156644146 m.
+conclusion: PASSED; W2 nearly doubles W1 throughput with 98.30 percent parallel efficiency.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4/w02
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/h
+  - level-summary.json SHA256 3f2a2523c80fa74323459a6ce3940cb54e202d34a4475fc309b3ab2c86c9aee2
+  - evidence-validation.json SHA256 cb46951d23655ea49746c9b0463bda45a86a68fef4479eebc114835b33c71210
+  - initial-contact-sheet.png SHA256 1f5f6b2d1d0c6eef7e6493914fc6371294b4e42fa16a6735e97cc6cfbc626e79
+  - terminal-contact-sheet.png SHA256 c5c5c24aefe235680f680765af355378d456d06d911b9503949753f009ea6a7d
+  - visual-observation.txt SHA256 df505740bc476090f4de0cf5441570459755cecd9b763ee36f17e31ca4153396
+  - final-cleanup-readback.txt SHA256 fadfe887790e2091bde1b5425f667bfd8ab069921cfd056b13dff93013de12ca
+decision: PROCEED_TO_W4
+next_experiment: EXP-044-FORMAL-W4
+```
+
+## EXP-044-FORMAL-W4 — Fixed Worker scaling level
+
+```yaml
+experiment_id: EXP-044-FORMAL-W4
+status: PASSED
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T19:17:58+08:00
+  - status: RUNNING
+    at: 2026-09-15T19:18:34+08:00
+  - status: PASSED
+    at: 2026-09-15T19:27:05+08:00
+prior_experiment: EXP-043-FORMAL-W2
+hypothesis: Four Workers further reduce the interval while preserving the frozen behavior/evidence contract and may approach the practical throughput knee.
+prediction: Twenty points pass on first attempts at levels_used [4], with no fallback/retry/drift/residue and higher throughput than W2.
+single_variable: Fixed Worker count changes from W2 to W4; all v4 non-Worker inputs remain frozen.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - W2 passed and cleaned exactly; v4 hashes and live source/dirty/image/model/config/catalog/domain/socket/host/GPU admission all pass.
+  - Runtime r/i and report w04 are absent; no measured runs overlap.
+success_criteria:
+  - Exact 20-point first-attempt fixed-W4 YOLO-only completion, complete sealed/visual evidence, clean exit and cleanup.
+failure_criteria:
+  - Any valid behavior, evidence, fixed-level, or cleanup failure; preserve without silent rerun.
+invalid_criteria:
+  - Any admission, provenance, frozen-input, workload, harness, or evidence contamination.
+provenance:
+  frozen_harness_manifest_sha256: 36dc215804dd756d89522c393e3a7e17befd0c621fe8811db3eaa7eb8e876562
+commands:
+  - command: /usr/bin/zsh /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4/run-level.zsh 4 i EXP-044-FORMAL-W4
+    exit_code: 0
+observed:
+  - The single W4 run passed 20/20 distinct first-attempt points at levels_used [4], empty fallbacks, YOLO-only exact correlation, zero retry/fallback/error, complete sealed and visual evidence, and exact cleanup.
+  - Startup was 31.48484530299902 s, execution 412.42340636253357 s, end-to-end 450.33535863785073 s, and throughput 2.9096311739037453 points/minute.
+  - W1 speedup is 3.861355436766393, W4 efficiency 0.9653388591915982, and improvement from W2 is 49.08643063832211 percent.
+  - Peak cgroup memory was 4297502720 bytes, CPU time 1745.681273 s, peak GPU allocation 4127 MiB, peak GPU utilization 12 percent, minimum host available memory 22132316 KiB, and swap-used delta 27400 KiB.
+  - Fresh visual review found all initial cups upright/distinct and all terminal cups upright in target with grippers clear; maximum final XY error was 0.002155183015562726 m.
+conclusion: PASSED; W4 remains close to linear scaling and is the current fastest valid level.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4/w04
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/i
+  - level-summary.json SHA256 7c241501911067f735471a2cd907812541499a286da3d65fa164e9e515dbde52
+  - evidence-validation.json SHA256 95794f89cd17d3a09ee08afc49cf0b7e1e5bfe809be96badd996f4e976e97e99
+  - initial-contact-sheet.png SHA256 672db4c01f52d48476a0e4241204c51688b6e1875e673417d232e71ae1d212bf
+  - terminal-contact-sheet.png SHA256 ca0ecf79f7bed00c9b83bd9c01e9d3aa38fdbbdb9b8f9276574b92e80985ec64
+  - visual-observation.txt SHA256 fb094d1f66881cb532b4e03aa5eea21324f51e7230174d275c14a7a2c0171806
+  - final-cleanup-readback.txt SHA256 0e094ed4df15d29dbf847cc2c287fe68cb2e73bc69b18b17091f27d6b9d3cf08
+decision: PROCEED_TO_W6
+next_experiment: EXP-045-FORMAL-W6
+```
+
+## EXP-045-FORMAL-W6 — Fixed Worker scaling level
+
+```yaml
+experiment_id: EXP-045-FORMAL-W6
+status: PASSED
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T19:27:50+08:00
+  - status: RUNNING
+    at: 2026-09-15T19:28:25+08:00
+  - status: PASSED
+    at: 2026-09-15T19:36:01+08:00
+prior_experiment: EXP-044-FORMAL-W4
+hypothesis: W6 improves on W4 while beginning to expose startup, CPU, memory, and C2 inference bottlenecks.
+prediction: Exact first-attempt fixed-W6 completion with higher throughput than W4 and lower marginal efficiency than W4.
+single_variable: Fixed Worker count changes from W4 to W6; all v4 non-Worker inputs remain frozen.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - W4 passed and cleaned exactly; frozen hashes and live source/dirty/image/model/config/catalog/domain/socket/host/GPU admission pass.
+  - Runtime r/j and report w06 are absent; no measured runs overlap.
+success_criteria:
+  - Exact 20-point first-attempt fixed-W6 YOLO-only completion, complete sealed/visual evidence, clean exit/readback.
+failure_criteria:
+  - Any valid behavior, evidence, fixed-level, or cleanup failure; preserve without silent rerun.
+invalid_criteria:
+  - Any admission, provenance, frozen-input, workload, harness, or evidence contamination.
+provenance:
+  frozen_harness_manifest_sha256: 36dc215804dd756d89522c393e3a7e17befd0c621fe8811db3eaa7eb8e876562
+commands:
+  - command: /usr/bin/zsh /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4/run-level.zsh 6 j EXP-045-FORMAL-W6
+    exit_code: 0
+observed:
+  - The single W6 run passed 20/20 distinct first-attempt points at levels_used [6], empty fallbacks, YOLO-only exact correlation, zero retry/fallback/error, complete sealed and visual evidence, and exact cleanup.
+  - Startup was 44.906895893858746 s, execution 338.78217601776123 s, end-to-end 392.5487897649873 s, and throughput 3.5420989796614566 points/minute.
+  - W1 speedup is 4.700699963401245, W6 efficiency 0.7834499939002075, and execution improvement from W4 is 17.85573495798134 percent.
+  - Peak cgroup memory was 6306103296 bytes, CPU time 2241.036074 s, peak GPU allocation 4555 MiB, peak GPU utilization 35 percent, minimum host available memory 20005612 KiB, and swap-used delta 17524 KiB.
+  - Visual review passed all initial/terminal frames; maximum final XY error was 0.0021676550480557496 m.
+conclusion: PASSED; W6 is faster than W4, but scaling efficiency falls to 78.34 percent and startup/resource cost grows.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4/w06
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/j
+  - level-summary.json SHA256 4ebd9595d39597379e48b85c7dab290a8965db510d630cfffb8a76740042ced8
+  - evidence-validation.json SHA256 82d201b708feab68ca86dd55a485562f6dac04fca622f023ccab3dbb8599ae2d
+  - initial-contact-sheet.png SHA256 c6f87405c47f95ecb794964922062fd95cc89dd62a69d0f5e5fdee937a7b7c14
+  - terminal-contact-sheet.png SHA256 3706723c1d105558f5f6bb5917935b0ed3ff74d47fae1a738ffe35cd0ac8fbe4
+  - visual-observation.txt SHA256 f0cf7d00b381b1793c7a4d2597501c4021f49dac00a011e034c5be04f2469d00
+  - final-cleanup-readback.txt SHA256 2059bb0ce66ca5cb0226e3d54e994fd11937b053281acfec77a9626fb362f1c7
+decision: PROCEED_TO_W8
+next_experiment: EXP-046-FORMAL-W8
+```
+
+## EXP-046-FORMAL-W8 — Fixed Worker scaling level
+
+```yaml
+experiment_id: EXP-046-FORMAL-W8
+status: PASSED
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T19:36:35+08:00
+  - status: RUNNING
+    at: 2026-09-15T19:37:13+08:00
+  - status: PASSED
+    at: 2026-09-15T19:43:46+08:00
+prior_experiment: EXP-045-FORMAL-W6
+hypothesis: W8 may improve throughput beyond W6, but C2 perception, startup, memory, and the 20-point tail may dominate marginal gains.
+prediction: Exact first-attempt fixed-W8 completion; throughput gain over W6 is smaller than earlier doublings.
+single_variable: Fixed Worker count changes from W6 to W8; all v4 non-Worker inputs remain frozen.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - W6 passed and cleaned exactly; frozen hashes and live admission pass.
+  - Runtime r/k and report w08 are absent; no measured runs overlap.
+success_criteria:
+  - Exact 20-point first-attempt fixed-W8 YOLO-only completion, complete sealed/visual evidence, clean exit/readback.
+failure_criteria:
+  - Any valid behavior, evidence, fixed-level, or cleanup failure; preserve without silent rerun.
+invalid_criteria:
+  - Any admission, provenance, frozen-input, workload, harness, or evidence contamination.
+provenance:
+  frozen_harness_manifest_sha256: 36dc215804dd756d89522c393e3a7e17befd0c621fe8811db3eaa7eb8e876562
+commands:
+  - command: /usr/bin/zsh /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4/run-level.zsh 8 k EXP-046-FORMAL-W8
+    exit_code: 0
+observed:
+  - The single W8 run passed 20/20 distinct first-attempt points at levels_used [8], empty fallbacks, YOLO-only exact correlation, zero retry/fallback/error, complete sealed and visual evidence, and exact cleanup.
+  - Startup was 62.286955520976335 s, execution 263.6432132720947 s, end-to-end 333.63622800190933 s, and throughput 4.551605880943091 points/minute.
+  - W1 speedup is 6.040410988179394, W8 efficiency 0.7550513735224242, and execution improvement from W6 is 22.17913693952046 percent.
+  - Peak cgroup memory was 8266747904 bytes, CPU time 2889.238315 s, peak GPU allocation 4983 MiB, peak GPU utilization 23 percent, minimum host available memory 18356520 KiB, and swap-used delta 142004 KiB.
+  - Visual review passed all frames; maximum final XY error was 0.0021525180220600608 m.
+conclusion: PASSED; W8 beats W6, while startup and memory costs continue rising and efficiency is 75.51 percent.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4/w08
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/k
+  - level-summary.json SHA256 5a89379c5033189c77f67c65fa7938d681f9af2de958e6e25cec1bec9686b0f6
+  - evidence-validation.json SHA256 862e953d15a2a9c5ea78483cc6fb4762bd9083ce8d8509c04dbc20ce813d8b30
+  - initial-contact-sheet.png SHA256 e8b79eb785ae6116c487fab7d3f144ff7945c65e33bc5a751f80fdeec3e6de1c
+  - terminal-contact-sheet.png SHA256 b84081dc212feb18c58d76959cb4b58a30156390ecea5cdeac54078ae2a02ebc
+  - visual-observation.txt SHA256 eba152e66ab7046c69a3d1ab99df6767847711724f431649f19b382f26551c8d
+  - final-cleanup-readback.txt SHA256 ba21b0700ef4344e1c54926b8a202491a14db19f68db2d90b9d09329b1f0b918
+decision: PROCEED_TO_W10
+next_experiment: EXP-047-FORMAL-W10
+```
+
+## EXP-047-FORMAL-W10 — Fixed Worker scaling level
+
+```yaml
+experiment_id: EXP-047-FORMAL-W10
+status: FAILED
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T19:44:30+08:00
+  - status: RUNNING
+    at: 2026-09-15T19:45:05+08:00
+  - status: FAILED
+    at: 2026-09-15T19:50:35+08:00
+prior_experiment: EXP-046-FORMAL-W8
+hypothesis: W10 may be fastest because 20 points divide evenly into two per Worker, but C2 inference, startup, memory, and CPU costs may erase the gain over W8.
+prediction: Exact first-attempt fixed-W10 completion; measured throughput determines whether additional Workers after W8 help or hurt.
+single_variable: Fixed Worker count changes from W8 to W10; all v4 non-Worker inputs remain frozen.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - W8 passed and cleaned exactly; frozen hashes and live admission pass.
+  - Runtime r/l and report w10 are absent; no measured runs overlap.
+success_criteria:
+  - Exact 20-point first-attempt fixed-W10 YOLO-only completion, complete sealed/visual evidence, clean exit/readback.
+failure_criteria:
+  - Any valid behavior, evidence, fixed-level, or cleanup failure; preserve without silent rerun.
+invalid_criteria:
+  - Any admission, provenance, frozen-input, workload, harness, or evidence contamination.
+provenance:
+  frozen_harness_manifest_sha256: 36dc215804dd756d89522c393e3a7e17befd0c621fe8811db3eaa7eb8e876562
+commands:
+  - command: /usr/bin/zsh /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4/run-level.zsh 10 l EXP-047-FORMAL-W10
+    exit_code: 1
+observed:
+  - Admission and frozen-contract checks passed, all ten Workers formed READY at fixed W10/C2 with empty Worker fallback, and the one authorized formal launch began without overlap or provenance drift.
+  - The first wave sealed 10/10 points PASSED on first attempts with 10 exact YOLO correlations, zero retry, zero Grounded-SAM fallback, and zero correlation error. The other ten points did not complete: aggregate status counts are 10 PASSED, 3 UNRUN, and 7 INDETERMINATE.
+  - Coordinator journal event 1404 is the first authoritative failure boundary: it set `broker_healthy: false`, changed the terminal reason to `ADAPTIVE_INFRASTRUCTURE_FAILURE`, revoked authorization, and stopped all ten Workers. The Broker Docker scope/container had deactivated immediately beforehand. Worker SIGINT, pybind conversion, terminal-ack, and rclpy cleanup errors followed this stop boundary and are downstream effects.
+  - The system journal contains no OOM event for the Broker container, and no container-internal exit receipt or optional Broker shutdown summary was retained. The directly observed cause is therefore unexpected Broker-container disappearance; its deeper internal cause remains UNKNOWN rather than inferred.
+  - Startup-to-ready was 79.10071084089577 s, end-to-end through cleanup was 203.09369269385934 s, sampled peak cgroup memory was 9843302400 bytes, CPU time was 2778.36991 s, peak GPU allocation was 5412 MiB, minimum host available memory was 16833864 KiB, and swap-used delta was 199304 KiB.
+  - The level validator's 93.36296343803406 s interval and 12.853062454433038 points/minute cover only the 10 sealed successes, not twenty points. They are retained as partial failure diagnostics and excluded from the formal performance curve, speedup, and efficiency calculations.
+  - Visual review passes the initial and terminal frames for the 10 sealed first-wave successes only. The interrupted second wave lacks complete terminal evidence, and sample_16_far_right is INDETERMINATE because physical action is not proven absent; W10 therefore receives no full visual/behavior pass.
+  - Exact cleanup and final readback passed with no task Worker, Broker, simulator, ROS daemon, container, socket, GPU client, systemd unit, or Domain claim left behind.
+conclusion: FAILED; this is a valid W10 behavioral/infrastructure failure, not an INVALID admission, and it is preserved without rerun. No valid W10 performance sample exists.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4/w10
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/l
+  - level-summary.json SHA256 7590cc32c8d4587728dbdeb4c73258d2f80d454374b8f7e2f191d5d9c00656c8
+  - evidence-validation.json SHA256 1026c05bf6b9ddba960d3e3bfb86c6d45ffe1ea12a53c9e36319b2f3b33dca38
+  - coordinator journal SHA256 6fbabd8cb0e0f85ee9b28d4d7b0a756a876c9387c7f90cec35452ef484648c67
+  - initial-contact-sheet.png SHA256 2564784702991ba6b8b7202764323b9dedcfbb484216c16f44fa501c0b89f148
+  - terminal-contact-sheet.png SHA256 7a6a5f9a93604428fd50c6cf4844c2136e1b14b9cb8b3ede5d18b0fb10d83b5a
+  - visual-observation.txt SHA256 bf44e942e9e8e8589a3eeaf2c7dd7d0f640aed2d60e0fdc2c8cc890409435085
+  - final-cleanup-readback.txt SHA256 4aaec6acb884e39b2e0f13d86ebbe5f1aa1c4a35a15ba882fcb8f19093923457
+decision: CLOSE_SERIES_WITH_W8_AS_FASTEST_VALID_AND_RECOMMENDED_DEFAULT
+next_experiment: NONE
+```
+
+## CP-045 — Formal fixed-Worker scaling comparison complete
+
+```yaml
+checkpoint_id: CP-045
+completed_at: 2026-09-15T19:57:28+08:00
+dispatch_id: 8D75FE6F-14B7-474F-AC97-3EB5302D1C3A
+prior_checkpoint: CP-044
+experiments:
+  invalid_pre_runtime: [EXP-041-FORMAL-W1]
+  valid_performance_samples: [EXP-042-FORMAL-W1-R2, EXP-043-FORMAL-W2, EXP-044-FORMAL-W4, EXP-045-FORMAL-W6, EXP-046-FORMAL-W8]
+  valid_behavioral_failures: [EXP-047-FORMAL-W10]
+comparison:
+  w1: {execution_s: 1592.5133624076843, throughput_points_per_min: 0.753525859391062, speedup: 1.0, efficiency: 1.0}
+  w2: {execution_s: 810.0461459159851, throughput_points_per_min: 1.481397085894486, speedup: 1.9659538785989776, efficiency: 0.9829769392994888}
+  w4: {execution_s: 412.42340636253357, throughput_points_per_min: 2.9096311739037453, speedup: 3.861355436766393, efficiency: 0.9653388591915982}
+  w6: {execution_s: 338.78217601776123, throughput_points_per_min: 3.5420989796614566, speedup: 4.700699963401245, efficiency: 0.7834499939002075}
+  w8: {execution_s: 263.6432132720947, throughput_points_per_min: 4.551605880943091, speedup: 6.040410988179394, efficiency: 0.7550513735224242}
+  w10: {status: FAILED, successful_points: 10, terminal_reason: ADAPTIVE_INFRASTRUCTURE_FAILURE, performance_sample: null}
+confirmed_conclusions:
+  - W8 is the fastest valid level and the practical recommended default for this frozen twenty-point C2 workload.
+  - W4 is the efficiency knee at 96.53 percent. W6 and W8 still improve throughput, but startup, process/CPU load, and roughly two additional GiB of peak cgroup memory per step lower marginal efficiency.
+  - W10 hurts usable throughput and reliability: its Broker container disappeared after ten successful first-wave points, so no twenty-point W10 throughput, speedup, or efficiency is valid.
+  - All valid samples passed 20/20 on first attempts at their fixed level with YOLO, no retry, no Worker/model fallback, zero sealed-request correlation error, complete initial/terminal evidence, and exact cleanup.
+  - The optional Broker shutdown summary was absent for every level. Maximum active inference and queue/service distributions remain unavailable; derived sealed-request counts are reported without invented values.
+  - p50/p95 values are descriptive over one n=20 batch per valid level, not repeated-batch statistical confidence. W10's n=10 partial values are failure diagnostics only.
+  - After coordination became COMPLETE, `codex/pytest-gate-parallelism` was inspected at e81286bf5aa465168d7d611de349635cbcae8a9e. Its experiment ledger remained modified and no merge-ready receipt/status existed, so the branch is not eligible for merge and integration remains pending.
+artifacts:
+  comparison_json: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4/formal-worker-scaling-comparison.json
+  comparison_json_sha256: 9b523321fb477cdad7e1e94aa92ce203d96ccc89c4954609d0d1f263493b4848
+  comparison_csv: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4/formal-worker-scaling-comparison.csv
+  comparison_csv_sha256: 99c9f4224ea65fc48893046613204e2d199590c49595734ced315a7175e12956
+  report_markdown: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4/formal-worker-scaling-report.md
+  report_markdown_sha256: 9c0d8b5495b6a7ae8bdc20a9e1d199e71d455e1c14b364c77fdf727fc0e08899
+  report_manifest_sha256: 3de38e42bacc788c9ad2fd36b4bdd90f1ae6cf89cad2664eebb008cfbcf41b14
+retention:
+  retained_runs:
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/g
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/h
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/i
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/j
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/k
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/l
+  archived_runs: []
+  deletion_candidates:
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f
+    - the six retained per-level MUJOCO_LOG.TXT files under formal-worker-scaling-8d75fe6f-v4
+  deleted: []
+cleanup: PASS
+final_cleanup_readback: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4/final-cleanup-readback.txt
+final_cleanup_readback_sha256: cf6c4841868187ce0b881f83e634d18313c3b25c130ef4bc36f6b63b158fa8f5
+next_experiment: NONE
 ```
