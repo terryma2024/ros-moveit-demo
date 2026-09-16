@@ -55,7 +55,17 @@ class Service:
     def preflight_api(self, body):
         receipt_id = "receipt-1"
         self.receipts[receipt_id] = dict(body)
-        return {"receipt_id": receipt_id, "admitted": True, **body}
+        return {
+            "receipt_id": receipt_id,
+            "admitted": True,
+            "manifest_id": body["manifest_id"],
+            "execution_mode": body["execution_mode"],
+            "execution_config": {
+                key: value
+                for key, value in body.items()
+                if key not in {"service_session_id", "lease_id", "lease_generation", "manifest_id"}
+            },
+        }
 
     def start_campaign_api(self, body):
         expected = self.receipts[body["preflight_receipt_id"]]

@@ -231,6 +231,22 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AttemptProjectionResponse */
+        AttemptProjectionResponse: {
+            /** Generation */
+            generation: number;
+            /** Reason */
+            reason?: string | null;
+            /** Status */
+            status: string;
+        };
+        /** BrokerProjectionResponse */
+        BrokerProjectionResponse: {
+            /** Available */
+            available: boolean;
+            /** Reason */
+            reason?: string | null;
+        };
         /** CampaignCancelRequest */
         CampaignCancelRequest: {
             /** Command Id */
@@ -274,6 +290,116 @@ export interface components {
             /** Yolo Executor Count */
             yolo_executor_count?: (1 | 2 | 4) | null;
         };
+        /** CampaignProjectionResponse */
+        CampaignProjectionResponse: {
+            /**
+             * Batch Cleanup Complete
+             * @default false
+             */
+            batch_cleanup_complete: boolean;
+            /** Batch Id */
+            batch_id?: string | null;
+            broker?: components["schemas"]["BrokerProjectionResponse"] | null;
+            /** Campaign Id */
+            campaign_id: string;
+            /** Coverage Complete */
+            coverage_complete?: boolean | null;
+            /** Current Generation */
+            current_generation?: number | null;
+            /**
+             * Evaluated
+             * @default 0
+             */
+            evaluated: number;
+            /**
+             * Evaluation Coverage
+             * @default 0
+             */
+            evaluation_coverage: number;
+            /** Execution Complete */
+            execution_complete?: boolean | null;
+            /**
+             * Execution Coverage
+             * @default 0
+             */
+            execution_coverage: number;
+            /** Execution Mode */
+            execution_mode?: ("SEQUENTIAL" | "PARALLEL" | "ADAPTIVE") | null;
+            /**
+             * Execution Started
+             * @default 0
+             */
+            execution_started: number;
+            /**
+             * Fallback History
+             * @default []
+             */
+            fallback_history: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Indeterminate
+             * @default 0
+             */
+            indeterminate: number;
+            /**
+             * Infra Attempts
+             * @default 0
+             */
+            infra_attempts: number;
+            /**
+             * Levels Used
+             * @default []
+             */
+            levels_used: number[];
+            /**
+             * Not Executed
+             * @default 0
+             */
+            not_executed: number;
+            /** Owner Kind */
+            owner_kind?: ("COORDINATOR" | "ADAPTIVE_WRAPPER") | null;
+            /**
+             * Points
+             * @default []
+             */
+            points: components["schemas"]["PointProjectionResponse"][];
+            /** Qualification Passed */
+            qualification_passed?: boolean | null;
+            /** Qualified Success Rate */
+            qualified_success_rate?: number | null;
+            /**
+             * Requested
+             * @default 0
+             */
+            requested: number;
+            /**
+             * Resource Observations
+             * @default {}
+             */
+            resource_observations: {
+                [key: string]: unknown;
+            };
+            /** Sequence */
+            sequence: number;
+            /** Status */
+            status?: string | null;
+            /**
+             * Valid Failed
+             * @default 0
+             */
+            valid_failed: number;
+            /**
+             * Valid Succeeded
+             * @default 0
+             */
+            valid_succeeded: number;
+            /**
+             * Workers
+             * @default []
+             */
+            workers: components["schemas"]["WorkerProjectionResponse"][];
+        };
         /** CampaignStartRequest */
         CampaignStartRequest: {
             /** Command Id */
@@ -310,6 +436,67 @@ export interface components {
             /** Yolo Executor Count */
             yolo_executor_count?: (1 | 2 | 4) | null;
         };
+        /** CapabilitiesResponse */
+        CapabilitiesResponse: {
+            /**
+             * Adaptive Default Ladder
+             * @default [
+             *       8,
+             *       6,
+             *       4,
+             *       2,
+             *       1
+             *     ]
+             */
+            adaptive_default_ladder: number[];
+            /** Available */
+            available: boolean;
+            /**
+             * Default Execution Mode
+             * @default SEQUENTIAL
+             * @enum {string}
+             */
+            default_execution_mode: "SEQUENTIAL" | "PARALLEL" | "ADAPTIVE";
+            /**
+             * Execution Modes
+             * @default []
+             */
+            execution_modes: ("SEQUENTIAL" | "PARALLEL" | "ADAPTIVE")[];
+            /**
+             * Fixed Max Points Per Worker
+             * @default 20
+             */
+            fixed_max_points_per_worker: number;
+            /**
+             * Fixed Worker Counts
+             * @default [
+             *       1,
+             *       2,
+             *       3
+             *     ]
+             */
+            fixed_worker_counts: number[];
+            /**
+             * Lease Duration S
+             * @default 30
+             */
+            lease_duration_s: number;
+            /**
+             * Lease Renewal Margin S
+             * @default 10
+             */
+            lease_renewal_margin_s: number;
+            /**
+             * Maximum Points
+             * @default 20
+             */
+            maximum_points: number;
+            /**
+             * Minimum Points
+             * @default 4
+             */
+            minimum_points: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -327,10 +514,129 @@ export interface components {
             /** Service Session Id */
             service_session_id: string;
         };
+        /** LeaseReleaseResponse */
+        LeaseReleaseResponse: {
+            /** Lease Id */
+            lease_id: string;
+            /** Released */
+            released: boolean;
+        };
+        /** LeaseResponse */
+        LeaseResponse: {
+            /** Expires Monotonic Ns */
+            expires_monotonic_ns: number;
+            /** Generation */
+            generation: number;
+            /** Lease Id */
+            lease_id: string;
+            /** Service Session Id */
+            service_session_id: string;
+        };
         /** ManifestCreateRequest */
         ManifestCreateRequest: {
             /** Total Points */
             total_points: number;
+        };
+        /** ManifestPointResponse */
+        ManifestPointResponse: {
+            /** Display Id */
+            display_id: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Position World M */
+            position_world_m: [
+                number,
+                number,
+                number
+            ];
+            /** Stratum */
+            stratum: string;
+        };
+        /** ManifestResponse */
+        ManifestResponse: {
+            /** Catalog Sha256 */
+            catalog_sha256?: string | null;
+            /** Manifest Id */
+            manifest_id: string;
+            /**
+             * Point Count
+             * @default 0
+             */
+            point_count: number;
+            /**
+             * Points
+             * @default []
+             */
+            points: components["schemas"]["ManifestPointResponse"][];
+            /** Selection Sha256 */
+            selection_sha256?: string | null;
+            /**
+             * Stale
+             * @default false
+             */
+            stale: boolean;
+        };
+        /** PointProjectionResponse */
+        PointProjectionResponse: {
+            /** Active Worker Id */
+            active_worker_id?: string | null;
+            /**
+             * Artifact Ids
+             * @default []
+             */
+            artifact_ids: string[];
+            /**
+             * Attempts
+             * @default []
+             */
+            attempts: components["schemas"]["AttemptProjectionResponse"][];
+            /** Display Id */
+            display_id?: string | null;
+            /** Point Id */
+            point_id: string;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Retry Eligible
+             * @default false
+             */
+            retry_eligible: boolean;
+            /** Status */
+            status: string;
+        };
+        /** PreflightResponse */
+        PreflightResponse: {
+            /** Admitted */
+            admitted: boolean;
+            /**
+             * Execution Config
+             * @default {}
+             */
+            execution_config: {
+                [key: string]: unknown;
+            };
+            /** Execution Mode */
+            execution_mode?: ("SEQUENTIAL" | "PARALLEL" | "ADAPTIVE") | null;
+            /** Expires At Monotonic Ns */
+            expires_at_monotonic_ns?: number | null;
+            /** Manifest Id */
+            manifest_id?: string | null;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            /** Receipt Id */
+            receipt_id: string;
+            /**
+             * Resource Observations
+             * @default {}
+             */
+            resource_observations: {
+                [key: string]: unknown;
+            };
         };
         /** RetryRequest */
         RetryRequest: {
@@ -355,6 +661,30 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** WorkerProjectionResponse */
+        WorkerProjectionResponse: {
+            /** Current Point Id */
+            current_point_id?: string | null;
+            /** Generation */
+            generation: number;
+            /** Heartbeat Deadline Monotonic S */
+            heartbeat_deadline_monotonic_s?: number | null;
+            /**
+             * Lease Count
+             * @default 0
+             */
+            lease_count: number;
+            /** Max Points Per Worker */
+            max_points_per_worker?: number | null;
+            /** Quarantine Reason */
+            quarantine_reason?: string | null;
+            /** Recovery Result */
+            recovery_result?: string | null;
+            /** State */
+            state: string;
+            /** Worker Id */
+            worker_id: string;
         };
     };
     responses: never;
@@ -411,7 +741,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CampaignProjectionResponse"][];
                 };
             };
         };
@@ -435,7 +765,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CampaignProjectionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -468,7 +798,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PreflightResponse"];
                 };
             };
             /** @description Validation Error */
@@ -499,7 +829,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CampaignProjectionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -534,7 +864,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CampaignProjectionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -569,7 +899,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CampaignProjectionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -598,7 +928,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CapabilitiesResponse"];
                 };
             };
         };
@@ -622,7 +952,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["LeaseResponse"];
                 };
             };
             /** @description Validation Error */
@@ -657,7 +987,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["LeaseResponse"];
                 };
             };
             /** @description Validation Error */
@@ -692,7 +1022,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["LeaseReleaseResponse"];
                 };
             };
             /** @description Validation Error */
@@ -725,7 +1055,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ManifestResponse"];
                 };
             };
             /** @description Validation Error */
@@ -756,7 +1086,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ManifestResponse"];
                 };
             };
             /** @description Validation Error */

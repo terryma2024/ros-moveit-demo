@@ -96,6 +96,124 @@ class RetryRequest(CampaignCancelRequest):
     confirmation: str
 
 
+class CapabilitiesResponse(ClosedModel):
+    available: bool
+    execution_modes: tuple[Literal["SEQUENTIAL", "PARALLEL", "ADAPTIVE"], ...] = ()
+    default_execution_mode: Literal["SEQUENTIAL", "PARALLEL", "ADAPTIVE"] = "SEQUENTIAL"
+    minimum_points: int = 4
+    maximum_points: int = 20
+    fixed_worker_counts: tuple[int, ...] = (1, 2, 3)
+    fixed_max_points_per_worker: int = 20
+    adaptive_default_ladder: tuple[int, ...] = (8, 6, 4, 2, 1)
+    lease_duration_s: float = 30.0
+    lease_renewal_margin_s: float = 10.0
+
+
+class LeaseResponse(ClosedModel):
+    lease_id: str
+    service_session_id: str
+    generation: int
+    expires_monotonic_ns: int
+
+
+class LeaseReleaseResponse(ClosedModel):
+    lease_id: str
+    released: bool
+
+
+class ManifestPointResponse(ClosedModel):
+    id: str
+    display_id: str
+    label: str
+    stratum: str
+    position_world_m: tuple[float, float, float]
+
+
+class ManifestResponse(ClosedModel):
+    manifest_id: str
+    point_count: int = 0
+    catalog_sha256: str | None = None
+    selection_sha256: str | None = None
+    stale: bool = False
+    points: tuple[ManifestPointResponse, ...] = ()
+
+
+class PreflightResponse(ClosedModel):
+    receipt_id: str
+    admitted: bool
+    manifest_id: str | None = None
+    execution_mode: Literal["SEQUENTIAL", "PARALLEL", "ADAPTIVE"] | None = None
+    execution_config: dict[str, object] = {}
+    resource_observations: dict[str, object] = {}
+    reason_codes: tuple[str, ...] = ()
+    expires_at_monotonic_ns: int | None = None
+
+
+class AttemptProjectionResponse(ClosedModel):
+    generation: int
+    status: str
+    reason: str | None = None
+
+
+class PointProjectionResponse(ClosedModel):
+    point_id: str
+    display_id: str | None = None
+    status: str
+    retry_eligible: bool = False
+    active_worker_id: str | None = None
+    reason: str | None = None
+    attempts: tuple[AttemptProjectionResponse, ...] = ()
+    artifact_ids: tuple[str, ...] = ()
+
+
+class WorkerProjectionResponse(ClosedModel):
+    worker_id: str
+    generation: int
+    state: str
+    current_point_id: str | None = None
+    lease_count: int = 0
+    max_points_per_worker: int | None = None
+    heartbeat_deadline_monotonic_s: float | None = None
+    recovery_result: str | None = None
+    quarantine_reason: str | None = None
+
+
+class BrokerProjectionResponse(ClosedModel):
+    available: bool
+    reason: str | None = None
+
+
+class CampaignProjectionResponse(ClosedModel):
+    campaign_id: str
+    sequence: int
+    execution_mode: Literal["SEQUENTIAL", "PARALLEL", "ADAPTIVE"] | None = None
+    owner_kind: Literal["COORDINATOR", "ADAPTIVE_WRAPPER"] | None = None
+    batch_id: str | None = None
+    status: str | None = None
+    points: tuple[PointProjectionResponse, ...] = ()
+    workers: tuple[WorkerProjectionResponse, ...] = ()
+    broker: BrokerProjectionResponse | None = None
+    requested: int = 0
+    evaluated: int = 0
+    execution_started: int = 0
+    valid_succeeded: int = 0
+    valid_failed: int = 0
+    indeterminate: int = 0
+    not_executed: int = 0
+    evaluation_coverage: float = 0.0
+    execution_coverage: float = 0.0
+    qualified_success_rate: float | None = None
+    coverage_complete: bool | None = None
+    execution_complete: bool | None = None
+    batch_cleanup_complete: bool = False
+    qualification_passed: bool | None = None
+    levels_used: tuple[int, ...] = ()
+    fallback_history: tuple[dict[str, object], ...] = ()
+    current_generation: int | None = None
+    infra_attempts: int = 0
+    resource_observations: dict[str, object] = {}
+
+
 async def _invoke(method, *args):
     value = method(*args)
     return await value if inspect.isawaitable(value) else value
@@ -119,78 +237,87 @@ def create_expert_validation_app(
     async def health():
         return await _invoke(service.health)
 
-    @app.get("/expert-validation/capabilities")
+    @app.get("/expert-validation/capabilities", response_model=CapabilitiesResponse)
     async def capabilities():
         return await _invoke(service.capabilities)
 
-    @app.post("/expert-validation/lease")
+    @app.post("/expert-validation/lease", response_model=LeaseResponse)
     async def acquire_lease(body: LeaseAcquireRequest):
         try:
             return await _invoke(service.acquire_lease, body.model_dump())
         except Exception as error:
             return _error(error)
 
-    @app.put("/expert-validation/lease/{lease_id}")
+    @app.put("/expert-validation/lease/{lease_id}", response_model=LeaseResponse)
     async def renew_lease(lease_id: str, body: LeaseMutationRequest):
         try:
             return await _invoke(service.renew_lease, lease_id, body.model_dump())
         except Exception as error:
             return _error(error)
 
-    @app.delete("/expert-validation/lease/{lease_id}")
+    @app.delete("/expert-validation/lease/{lease_id}", response_model=LeaseReleaseResponse)
     async def release_lease(lease_id: str, body: LeaseMutationRequest):
         try:
             return await _invoke(service.release_lease, lease_id, body.model_dump())
         except Exception as error:
             return _error(error)
 
-    @app.post("/expert-validation/manifests")
+    @app.post("/expert-validation/manifests", response_model=ManifestResponse)
     async def create_manifest(body: ManifestCreateRequest):
         try:
             return await _invoke(service.create_manifest_from_count, body.total_points)
         except Exception as error:
             return _error(error)
 
-    @app.get("/expert-validation/manifests/{manifest_id}")
+    @app.get("/expert-validation/manifests/{manifest_id}", response_model=ManifestResponse)
     async def get_manifest(manifest_id: str):
         try:
             return await _invoke(service.get_manifest, manifest_id)
         except Exception as error:
             return _error(error, default_status=404)
 
-    @app.post("/expert-validation/campaigns/preflight")
+    @app.post("/expert-validation/campaigns/preflight", response_model=PreflightResponse)
     async def preflight(body: CampaignConfiguration):
         try:
             return await _invoke(service.preflight_api, body.model_dump(exclude_none=True))
         except Exception as error:
             return _error(error)
 
-    @app.post("/expert-validation/campaigns")
+    @app.post("/expert-validation/campaigns", response_model=CampaignProjectionResponse)
     async def start_campaign(body: CampaignStartRequest):
         try:
             return await _invoke(service.start_campaign_api, body.model_dump(exclude_none=True))
         except Exception as error:
             return _error(error)
 
-    @app.get("/expert-validation/campaigns")
+    @app.get("/expert-validation/campaigns", response_model=list[CampaignProjectionResponse])
     async def list_campaigns():
         return await _invoke(service.list_campaigns)
 
-    @app.get("/expert-validation/campaigns/{campaign_id}")
+    @app.get(
+        "/expert-validation/campaigns/{campaign_id}",
+        response_model=CampaignProjectionResponse,
+    )
     async def get_campaign(campaign_id: str):
         try:
             return await _invoke(service.get_campaign, campaign_id)
         except Exception as error:
             return _error(error, default_status=404)
 
-    @app.post("/expert-validation/campaigns/{campaign_id}/cancel")
+    @app.post(
+        "/expert-validation/campaigns/{campaign_id}/cancel",
+        response_model=CampaignProjectionResponse,
+    )
     async def cancel_campaign(campaign_id: str, body: CampaignCancelRequest):
         try:
             return await _invoke(service.cancel_campaign, campaign_id, body.model_dump())
         except Exception as error:
             return _error(error)
 
-    @app.post("/expert-validation/campaigns/{campaign_id}/full-restart-retries")
+    @app.post(
+        "/expert-validation/campaigns/{campaign_id}/full-restart-retries",
+        response_model=CampaignProjectionResponse,
+    )
     async def retry_campaign(campaign_id: str, body: RetryRequest):
         if body.confirmation != "CONFIRM FULL_RESTART RETRIES":
             return JSONResponse(status_code=409, content={"code": "CONFIRMATION_REQUIRED"})

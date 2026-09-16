@@ -1,6 +1,61 @@
 {
   "components": {
     "schemas": {
+      "AttemptProjectionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "generation",
+          "status"
+        ],
+        "title": "AttemptProjectionResponse",
+        "type": "object"
+      },
+      "BrokerProjectionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "available"
+        ],
+        "title": "BrokerProjectionResponse",
+        "type": "object"
+      },
       "CampaignCancelRequest": {
         "additionalProperties": false,
         "properties": {
@@ -183,6 +238,237 @@
         "title": "CampaignConfiguration",
         "type": "object"
       },
+      "CampaignProjectionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "batch_cleanup_complete": {
+            "default": false,
+            "title": "Batch Cleanup Complete",
+            "type": "boolean"
+          },
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
+          "broker": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BrokerProjectionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "coverage_complete": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Complete"
+          },
+          "current_generation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Generation"
+          },
+          "evaluated": {
+            "default": 0,
+            "title": "Evaluated",
+            "type": "integer"
+          },
+          "evaluation_coverage": {
+            "default": 0.0,
+            "title": "Evaluation Coverage",
+            "type": "number"
+          },
+          "execution_complete": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Complete"
+          },
+          "execution_coverage": {
+            "default": 0.0,
+            "title": "Execution Coverage",
+            "type": "number"
+          },
+          "execution_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "SEQUENTIAL",
+                  "PARALLEL",
+                  "ADAPTIVE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Mode"
+          },
+          "execution_started": {
+            "default": 0,
+            "title": "Execution Started",
+            "type": "integer"
+          },
+          "fallback_history": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Fallback History",
+            "type": "array"
+          },
+          "indeterminate": {
+            "default": 0,
+            "title": "Indeterminate",
+            "type": "integer"
+          },
+          "infra_attempts": {
+            "default": 0,
+            "title": "Infra Attempts",
+            "type": "integer"
+          },
+          "levels_used": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Levels Used",
+            "type": "array"
+          },
+          "not_executed": {
+            "default": 0,
+            "title": "Not Executed",
+            "type": "integer"
+          },
+          "owner_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "COORDINATOR",
+                  "ADAPTIVE_WRAPPER"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Kind"
+          },
+          "points": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PointProjectionResponse"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "qualification_passed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qualification Passed"
+          },
+          "qualified_success_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qualified Success Rate"
+          },
+          "requested": {
+            "default": 0,
+            "title": "Requested",
+            "type": "integer"
+          },
+          "resource_observations": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Resource Observations",
+            "type": "object"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "valid_failed": {
+            "default": 0,
+            "title": "Valid Failed",
+            "type": "integer"
+          },
+          "valid_succeeded": {
+            "default": 0,
+            "title": "Valid Succeeded",
+            "type": "integer"
+          },
+          "workers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/WorkerProjectionResponse"
+            },
+            "title": "Workers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "campaign_id",
+          "sequence"
+        ],
+        "title": "CampaignProjectionResponse",
+        "type": "object"
+      },
       "CampaignStartRequest": {
         "additionalProperties": false,
         "properties": {
@@ -344,6 +630,94 @@
         "title": "CampaignStartRequest",
         "type": "object"
       },
+      "CapabilitiesResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "adaptive_default_ladder": {
+            "default": [
+              8,
+              6,
+              4,
+              2,
+              1
+            ],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Adaptive Default Ladder",
+            "type": "array"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "default_execution_mode": {
+            "default": "SEQUENTIAL",
+            "enum": [
+              "SEQUENTIAL",
+              "PARALLEL",
+              "ADAPTIVE"
+            ],
+            "title": "Default Execution Mode",
+            "type": "string"
+          },
+          "execution_modes": {
+            "default": [],
+            "items": {
+              "enum": [
+                "SEQUENTIAL",
+                "PARALLEL",
+                "ADAPTIVE"
+              ],
+              "type": "string"
+            },
+            "title": "Execution Modes",
+            "type": "array"
+          },
+          "fixed_max_points_per_worker": {
+            "default": 20,
+            "title": "Fixed Max Points Per Worker",
+            "type": "integer"
+          },
+          "fixed_worker_counts": {
+            "default": [
+              1,
+              2,
+              3
+            ],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Fixed Worker Counts",
+            "type": "array"
+          },
+          "lease_duration_s": {
+            "default": 30.0,
+            "title": "Lease Duration S",
+            "type": "number"
+          },
+          "lease_renewal_margin_s": {
+            "default": 10.0,
+            "title": "Lease Renewal Margin S",
+            "type": "number"
+          },
+          "maximum_points": {
+            "default": 20,
+            "title": "Maximum Points",
+            "type": "integer"
+          },
+          "minimum_points": {
+            "default": 4,
+            "title": "Minimum Points",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "available"
+        ],
+        "title": "CapabilitiesResponse",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -393,6 +767,54 @@
         "title": "LeaseMutationRequest",
         "type": "object"
       },
+      "LeaseReleaseResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "lease_id": {
+            "title": "Lease Id",
+            "type": "string"
+          },
+          "released": {
+            "title": "Released",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "lease_id",
+          "released"
+        ],
+        "title": "LeaseReleaseResponse",
+        "type": "object"
+      },
+      "LeaseResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_monotonic_ns": {
+            "title": "Expires Monotonic Ns",
+            "type": "integer"
+          },
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          },
+          "lease_id": {
+            "title": "Lease Id",
+            "type": "string"
+          },
+          "service_session_id": {
+            "title": "Service Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lease_id",
+          "service_session_id",
+          "generation",
+          "expires_monotonic_ns"
+        ],
+        "title": "LeaseResponse",
+        "type": "object"
+      },
       "ManifestCreateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -407,6 +829,257 @@
           "total_points"
         ],
         "title": "ManifestCreateRequest",
+        "type": "object"
+      },
+      "ManifestPointResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "display_id": {
+            "title": "Display Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "position_world_m": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Position World M",
+            "type": "array"
+          },
+          "stratum": {
+            "title": "Stratum",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "display_id",
+          "label",
+          "stratum",
+          "position_world_m"
+        ],
+        "title": "ManifestPointResponse",
+        "type": "object"
+      },
+      "ManifestResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "catalog_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Sha256"
+          },
+          "manifest_id": {
+            "title": "Manifest Id",
+            "type": "string"
+          },
+          "point_count": {
+            "default": 0,
+            "title": "Point Count",
+            "type": "integer"
+          },
+          "points": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ManifestPointResponse"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "selection_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selection Sha256"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "manifest_id"
+        ],
+        "title": "ManifestResponse",
+        "type": "object"
+      },
+      "PointProjectionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "active_worker_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Worker Id"
+          },
+          "artifact_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Artifact Ids",
+            "type": "array"
+          },
+          "attempts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AttemptProjectionResponse"
+            },
+            "title": "Attempts",
+            "type": "array"
+          },
+          "display_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Id"
+          },
+          "point_id": {
+            "title": "Point Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "retry_eligible": {
+            "default": false,
+            "title": "Retry Eligible",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "point_id",
+          "status"
+        ],
+        "title": "PointProjectionResponse",
+        "type": "object"
+      },
+      "PreflightResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "admitted": {
+            "title": "Admitted",
+            "type": "boolean"
+          },
+          "execution_config": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Execution Config",
+            "type": "object"
+          },
+          "execution_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "SEQUENTIAL",
+                  "PARALLEL",
+                  "ADAPTIVE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Mode"
+          },
+          "expires_at_monotonic_ns": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At Monotonic Ns"
+          },
+          "manifest_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Id"
+          },
+          "reason_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "receipt_id": {
+            "title": "Receipt Id",
+            "type": "string"
+          },
+          "resource_observations": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Resource Observations",
+            "type": "object"
+          }
+        },
+        "required": [
+          "receipt_id",
+          "admitted"
+        ],
+        "title": "PreflightResponse",
         "type": "object"
       },
       "RetryRequest": {
@@ -488,6 +1161,90 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "WorkerProjectionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "current_point_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Point Id"
+          },
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          },
+          "heartbeat_deadline_monotonic_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heartbeat Deadline Monotonic S"
+          },
+          "lease_count": {
+            "default": 0,
+            "title": "Lease Count",
+            "type": "integer"
+          },
+          "max_points_per_worker": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Points Per Worker"
+          },
+          "quarantine_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quarantine Reason"
+          },
+          "recovery_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery Result"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "worker_id": {
+            "title": "Worker Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "worker_id",
+          "generation",
+          "state"
+        ],
+        "title": "WorkerProjectionResponse",
+        "type": "object"
       }
     }
   },
@@ -541,7 +1298,13 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CampaignProjectionResponse"
+                  },
+                  "title": "Response List Campaigns Expert Validation Campaigns Get",
+                  "type": "array"
+                }
               }
             },
             "description": "Successful Response"
@@ -565,7 +1328,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignProjectionResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -601,7 +1366,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PreflightResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -638,7 +1405,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignProjectionResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -685,7 +1454,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignProjectionResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -732,7 +1503,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignProjectionResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -758,7 +1531,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilitiesResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -784,7 +1559,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/LeaseResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -831,7 +1608,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/LeaseReleaseResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -876,7 +1655,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/LeaseResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -912,7 +1693,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ManifestResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -949,7 +1732,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ManifestResponse"
+                }
               }
             },
             "description": "Successful Response"

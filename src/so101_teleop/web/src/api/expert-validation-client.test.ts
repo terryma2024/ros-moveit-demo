@@ -1,0 +1,104 @@
+import { describe, expect, test } from "vitest";
+
+import { ExpertValidationApiError, ExpertValidationClient } from "./expert-validation-client";
+
+function recorder(responses: Array<{ ok: boolean; status: number; body: unknown }>) {
+  const calls: Array<{ path: string; init?: RequestInit; body?: Record<string, unknown> }> = [];
+  const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    calls.push({ path, init, body });
+    const response = responses.shift() ?? { ok: true, status: 200, body: {} };
+    return {
+      ok: response.ok,
+      status: response.status,
+      json: async () => response.body,
+    } as Response;
+  };
+  return { fetcher: fetcher as typeof fetch, calls };
+}
+
+const lease = {
+  service_session_id: "browser-a",
+  lease_id: "lease-a",
+  lease_generation: 3,
+};
+
+describe("ExpertValidationClient", () => {
+  test("parallel start preserves admitted mode N and K", async () => {
+    const transport = recorder([
+      { ok: true, status: 200, body: { receipt_id: "receipt-1", admitted: true } },
+      { ok: true, status: 200, body: { campaign_id: "campaign-1", sequence: 1 } },
+    ]);
+    const client = new ExpertValidationClient(transport.fetcher, () => "command-1");
+    const config = {
+      manifest_id: "manifest-20",
+      execution_mode: "PARALLEL" as const,
+      worker_count: 2,
+      max_points_per_worker: 10,
+    };
+    const receipt = await client.preflight(config, lease);
+    await client.startCampaign({ ...config, preflight_receipt_id: receipt.receipt_id }, lease);
+
+    expect(transport.calls[1].body).toMatchObject({
+      execution_mode: "PARALLEL",
+      worker_count: 2,
+      max_points_per_worker: 10,
+      command_id: "command-1",
+    });
+  });
+
+  test("adaptive start preserves ladder and never sends K", async () => {
+    const transport = recorder([
+      { ok: true, status: 200, body: { receipt_id: "receipt-1", admitted: true } },
+      { ok: true, status: 200, body: { campaign_id: "campaign-1", sequence: 1 } },
+    ]);
+    const client = new ExpertValidationClient(transport.fetcher, () => "command-2");
+    const request = {
+      manifest_id: "manifest-20",
+      execution_mode: "ADAPTIVE" as const,
+      preferred_worker_count: 8,
+      fallback_worker_counts: [6, 4, 2, 1],
+      initial_points_per_worker: 3,
+      worker_start_timeout_s: 120,
+      max_infra_attempts_per_point: 5,
+      yolo_executor_count: 2 as const,
+    };
+    const receipt = await client.preflight(request, lease);
+    await client.startCampaign({ ...request, preflight_receipt_id: receipt.receipt_id }, lease);
+
+    expect(transport.calls[1].body?.max_points_per_worker).toBeUndefined();
+    expect(transport.calls[1].body?.fallback_worker_counts).toEqual([6, 4, 2, 1]);
+    expect(transport.calls[1].body?.yolo_executor_count).toBe(2);
+  });
+
+  test("retry sends exact confirmation and selected failed ids", async () => {
+    const transport = recorder([
+      { ok: true, status: 200, body: { campaign_id: "campaign-1", sequence: 9 } },
+    ]);
+    const client = new ExpertValidationClient(transport.fetcher, () => "retry-1");
+    await client.retry(
+      "campaign-1",
+      ["sample_05_near_center"],
+      lease,
+      "CONFIRM FULL_RESTART RETRIES",
+    );
+    expect(transport.calls[0].body).toMatchObject({
+      command_id: "retry-1",
+      point_ids: ["sample_05_near_center"],
+      confirmation: "CONFIRM FULL_RESTART RETRIES",
+    });
+  });
+
+  test("machine-readable error codes survive non-2xx responses", async () => {
+    const transport = recorder([
+      { ok: false, status: 409, body: { code: "PREFLIGHT_REQUEST_MISMATCH" } },
+    ]);
+    const client = new ExpertValidationClient(transport.fetcher);
+    await expect(client.campaign("campaign-1")).rejects.toMatchObject({
+      name: "ExpertValidationApiError",
+      code: "PREFLIGHT_REQUEST_MISMATCH",
+      status: 409,
+    } satisfies Partial<ExpertValidationApiError>);
+  });
+});
