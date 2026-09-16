@@ -21,7 +21,7 @@ disproven_routes:
   - At commit 654756ba32cfc0697aff1444c79752ff1e61c4ee, a four-point manifest could not be returned because its source field violated the closed response model.
 open_hypotheses:
   - A read-only verified journal projection and authoritative HTTP watcher can synchronize fresh Web progress and terminal state without acquiring upstream coordinator authority.
-latest_checkpoint: CP-003
+latest_checkpoint: CP-004
 next_experiment: EXP-046
 ```
 
@@ -1075,6 +1075,55 @@ decision: RUN_AFTER_FINAL_REGRESSION_SCOPED_COMMITS_FRESH_COPY_BUILD_AND_BINDING
 next_experiment: EXP-047
 ```
 
+### EXP-047 — Same-selection fixed parallel Web smoke
+
+```yaml
+experiment_id: EXP-047
+status: PLANNED
+prior_experiment: EXP-046
+single_variable: Change the same immutable four-point selection from N1/K4 to N2/K2.
+lifecycle: FRESH_ISOLATED_STACK
+success_criteria:
+  - Two isolated Workers execute the exact same selection without sequential fallback, with authoritative qualification and cleanup.
+  - Web progress, opaque artifacts, per-Worker domain/session/generation/lease evidence, shared Broker identities and sealed physical evidence agree.
+invalid_criteria: Unqualified mode, mixed provenance, cross-Worker evidence or pose leak, missing independent evidence, or surviving owned processes.
+decision: RUN_ONLY_AFTER_EXP_046_VALID_AND_VERIFIED_UPSTREAM_PARALLEL_QUALIFICATION
+next_experiment: EXP-048
+```
+
+### EXP-048 — Exact twenty-point adaptive first pass
+
+```yaml
+experiment_id: EXP-048
+status: PLANNED
+prior_experiment: EXP-047
+single_variable: Use the production adaptive wrapper and exact twenty-point ai_station_baseline_v1 selection.
+lifecycle: FRESH_ISOLATED_STACK
+config: {preferred_worker_count: 8, fallback_worker_counts: [6, 4, 2, 1], initial_points_per_worker: 3, worker_start_timeout_s: 120, max_infra_attempts_per_point: 5, yolo_executor_count: 2}
+success_criteria:
+  - Runner-authoritative twenty-point terminal results, attempts, levels, fallbacks and generations reach the Web with complete cleanup and independent sealed visual/numeric evidence.
+  - Fixed K and fixed-mode resource admission are absent; observations do not select tiers.
+invalid_criteria: Missing verified upstream fault/performance/twenty-point qualification, alternate execution path, mixed provenance, or missing independent evidence.
+decision: RUN_ONLY_AFTER_FIXED_SMOKES_VALID_AND_VERIFIED_UPSTREAM_ADAPTIVE_QUALIFICATION
+next_experiment: EXP-049
+```
+
+### EXP-049 — Conditional business-failure FULL_RESTART retry
+
+```yaml
+experiment_id: EXP-049
+status: PLANNED
+prior_experiment: EXP-048
+single_variable: Independently retry the earliest eligible business FAILED point through confirmed fixed N1/K1 FULL_RESTART.
+lifecycle: FULL_RESTART
+success_criteria:
+  - New batch/attempt/epoch/session/domain/process identities and cleanup-before-next-start; first-pass statistics remain immutable.
+  - All-success first pass records LIVE_RETRY_NOT_APPLICABLE_ALL_SUCCEEDED without manufacturing a failure.
+invalid_criteria: Retry of unsafe cleanup, INFRA_FAILED, INFRA_INTERRUPTED, INDETERMINATE, UNRUN or PASSED.
+decision: WAIT_FOR_AUTHORITATIVE_ADAPTIVE_TERMINAL_CLASSIFICATION
+next_experiment: NONE
+```
+
 ## Journal/Web synchronization repair checkpoint (in progress)
 
 - The production Web service did not consume its existing coordinator event reader. Fixed campaign GET/list now verify read-only journal frames and committed result references, merge point/Worker deltas, preserve upstream qualification policy, and persist the final accepted cursor without taking a coordinator lock or rotating its epoch.
@@ -1100,6 +1149,29 @@ next_experiment: EXP-047
 - t40 exited before testing because ROS setup is incompatible with shell nounset. t41 passed all 47 Teleop CTest entries, but Demo collection failed before execution because the clean shell omitted the existing ML venv's torch dependency. This is not a passing Demo gate.
 - t42 repeats only the ordinary Demo package gate with the existing Grounded-SAM dependency site-packages appended after release13/ROS imports. Its unique NVMe scratch is scratch/t42-release13-demo-colcon-001/tmp; the exact test Python must verify tempfile before collection. No benchmark or evidence deletion is authorized.
 - EXP-046 remains PLANNED until the installed package gates and runtime ownership preflight are complete. The previous simulation processes were stopped; this continuation has started no simulation stack.
+
+## CP-004 — Installed readback and cleanup test budget correction
+
+- Installed release13 Teleop JUnit readback: 47 XML files, 394 test cases, zero failures/errors/skips. Installed core colcon t44: one CTest, 42 gtest cases, zero failures, 4.11 seconds; the optional lidar dependency hook now resolves.
+- t43 completed 3,090 installed Demo cases with 68 failures in 412 seconds. Its shell bootstrap did not preflight colcon's actual /usr/bin/python3 and omitted venv Pydantic 2; long scratch paths caused UDS failures. Text Agent's separate provenance tests require a module-side Git checkout and reject a copied external install. This probe is retained and is not a passing package gate; colcon's default exit zero does not override JUnit failures.
+- Short scratch t45 passes all 285 allocator/CLI/IPC cases without implementation or assertion changes (6.53 seconds). Related installed t46 produced 1,272 passes and two failures in cleanup/concurrent claims; t48 observers preserved the original calls/results and reproduced both original assertions as passing, with the expected loser rejected ROS_DOMAIN_CLAIMED:181. The historical t46 triggers remain unconfirmed, not silently reclassified as successful.
+- After the full ML gate stopped, the same unmodified 1,274 related installed cases passed under colcon t51 (66.50 seconds). /usr/bin/python3 preflight and Pydantic 2.13.4 were verified, return-code-on-test-failure was enabled, and ROS logs used scratch/c9/ros-home/log.
+- Full source t47: 3,089 passes, one failure, four existing Demo fork warnings, 365.93 seconds. Its failing receipt has machine_accepted=true and no remaining process, but records cleanup timeout after every 50ms test-only signal budget. Production budgets are SIGINT 10s, TERM 5s and KILL 5s.
+- t49 RED deterministically reproduces rejection of a controlled 150ms SIGINT recovery under the 50ms fixture (one failure). The normal real-process fixture now leaves production budgets intact; only the dedicated escalation fault case requests the original fast budgets. t50 GREEN and adjacent launch gate: 49/49, eight seconds, no warnings. No production timeout or physical acceptance threshold changed.
+- Earlier t43/t47 LaunchService default logs also referenced /home/lenovo/.ros/log; their console evidence is retained here. All subsequent test/runtime shells explicitly bind ROS_HOME and ROS_LOG_DIR to the registered root. No default-log tree was deleted.
+- Auto-review rejected publication again after the submodule increment was checked (only 10 added and two removed source/test lines). No external code publication occurred; a plain renewed user confirmation remains required by auto-review.
+
+```yaml
+checkpoint_id: CP-004
+last_valid_experiment: EXP-001
+current_hypothesis: The unchanged production cleanup budgets remove the normal real-process fixture's false deadline failure; a fresh full source gate must still prove this.
+working_tree_status: Only the task-owned cleanup test and this ledger pending scoped commit.
+owned_processes: NONE; all launched test children have completed their scoped cleanup.
+preserved_processes: codex/kimi tmux and Software Updater desktop windows are unrelated and untouched.
+next_command: Commit the verified fixture/ledger changes, run a fresh full source gate, and build a new copied release14 overlay from that clean commit before EXP-046.
+```
+
+Retained: the registered 20260916-e1701375-a01 root, release13 and all t40-t51 evidence. Archived: none. Deletion candidates after readback: all used scratch trees, including c2-c9; no deletion authorized. EXP-046/047/048/049 remain PLANNED, not runtime successes.
 
 ## Task 1 checkpoint
 
