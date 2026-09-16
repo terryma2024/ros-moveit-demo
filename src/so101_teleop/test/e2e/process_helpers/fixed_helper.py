@@ -298,13 +298,29 @@ def main(argv: list[str]) -> int:
                 simulation_session_id=f"e2e-helper-{args.batch_id}",
                 reason=reason,
             )
+            identity_document = asdict(identity)
+            location = str(sealed)
+            tamper = spec.get("tamper") if index == 0 else None
+            if tamper == "sha256":
+                target = sealed / "initial-rgb.png"
+                target.write_bytes(target.read_bytes() + b"tampered")
+            elif tamper == "symlink":
+                manifest_file = sealed / "attempt_result_manifest.json"
+                manifest_file.unlink()
+                os.symlink("/etc/hostname", manifest_file)
+            elif tamper == "identity":
+                identity_document = {**identity_document, "attempt_id": "attempt-999"}
+            elif tamper == "escape":
+                location = str(batch_root.parent / "outside-sealed")
+            elif tamper is not None:
+                raise RuntimeError("HELPER_TAMPER_MODE_UNKNOWN")
             journal.append(
                 "RESULT_COMMITTED",
                 f"result-{point_id}",
                 {
-                    "identity": {**asdict(identity), "location": str(sealed)},
+                    "identity": {**identity_document, "location": location},
                     "response": {
-                        "location": str(sealed),
+                        "location": location,
                         "sha256": manifest_sha,
                         "status": "FAILED",
                     },

@@ -1,0 +1,8 @@
+{
+  "points": {},
+  "default_outcome": "FAILED",
+  "per_point_delay_s": 0.05,
+  "descendant_mode": "none",
+  "stop_after": null,
+  "tamper": "identity"
+}
