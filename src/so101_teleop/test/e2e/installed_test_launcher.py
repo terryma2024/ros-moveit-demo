@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from dataclasses import asdict
 import json
 import os
 from pathlib import Path
@@ -113,7 +114,7 @@ async def _run(args: argparse.Namespace) -> int:
             "port": args.port,
             "pid": os.getpid(),
             "install_prefix": str(install_prefix),
-            "qualification": port.qualification_manifest().__dict__,
+            "qualification": asdict(port.qualification_manifest()),
         }) + "\n",
         encoding="utf-8",
     )
