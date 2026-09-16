@@ -290,6 +290,34 @@ def _absolute(name: str, path: Path) -> Path:
     return path
 
 
+def _external_binding_source_root(binding_path: Path) -> Path:
+    """Read only the candidate source root needed to locate Git authority."""
+
+    binding_path = Path(binding_path)
+    if (
+        not binding_path.is_absolute()
+        or binding_path.is_symlink()
+        or not binding_path.is_file()
+    ):
+        raise CliError("PROVENANCE_EXTERNAL_BINDING_PATH")
+    try:
+        if binding_path.stat().st_size > 1024 * 1024:
+            raise CliError("PROVENANCE_EXTERNAL_BINDING_DOCUMENT")
+        document = json.loads(binding_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise CliError("PROVENANCE_EXTERNAL_BINDING_DOCUMENT") from error
+    value = document.get("source_root") if type(document) is dict else None
+    source_root = Path(value) if isinstance(value, str) else Path()
+    if (
+        not isinstance(value, str)
+        or not source_root.is_absolute()
+        or source_root.is_symlink()
+        or not source_root.is_dir()
+    ):
+        raise CliError("PROVENANCE_EXTERNAL_SOURCE_ROOT")
+    return source_root.resolve()
+
+
 def _live_headroom_verifier(
     acceptance_path: Path,
     current_provenance: Mapping[str, Path],
@@ -420,14 +448,19 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
         raise CliError("PROVENANCE_BROKER_IMAGE")
     module_import_path = Path(__file__).absolute()
     module_path = module_import_path.resolve()
+    external_binding = spec.get("provenance_binding")
     try:
-        repository_root = Path(subprocess.run(
-            ["git", "-C", str(module_path.parent), "rev-parse", "--show-toplevel"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=5.0,
-        ).stdout.strip()).resolve()
+        repository_root = (
+            _external_binding_source_root(Path(external_binding))
+            if external_binding is not None
+            else Path(subprocess.run(
+                ["git", "-C", str(module_path.parent), "rev-parse", "--show-toplevel"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=5.0,
+            ).stdout.strip()).resolve()
+        )
         source_commit = subprocess.run(
             ["git", "-C", str(repository_root), "rev-parse", "HEAD"],
             check=True, capture_output=True, text=True, timeout=5.0,
@@ -448,8 +481,8 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
     if console is None:
         raise CliError("PROVENANCE_CONSOLE_MISSING")
     console_path = Path(console).resolve()
-    config_path = Path(spec["config"]).resolve()
-    points_path = Path(spec["points"]).resolve()
+    config_path = Path(spec["config"]).absolute()
+    points_path = Path(spec["points"]).absolute()
     overlay_identity = _validate_provenance_overlay(
         repository_root,
         module_path,
@@ -458,7 +491,7 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
         points_path,
         module_import_path=module_import_path,
         source_commit=source_commit,
-        external_binding=spec.get("provenance_binding"),
+        external_binding=external_binding,
     )
     if overlay_identity["external_overlay_bound"]:
         try:
@@ -622,7 +655,11 @@ def _validate_external_overlay_binding(
     expected_source_module = (
         source_root / "src/so101_demo_py/src/cli/mujoco_parallel_batch.py"
     ).resolve()
-    if module_path.resolve() != expected_source_module:
+    if (
+        not expected_source_module.is_file()
+        or expected_source_module.is_symlink()
+        or module_path.resolve() != module_import_path.resolve()
+    ):
         raise CliError("PROVENANCE_EXTERNAL_SOURCE_ROOT")
 
     package_prefixes = document["package_prefixes"]
@@ -653,22 +690,22 @@ def _validate_external_overlay_binding(
         / "share/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml"
     )
     if (
-        console_path.resolve() != expected_console.resolve()
-        or config_path.resolve() != expected_config.resolve()
-        or points_path.resolve() != expected_points.resolve()
+        console_path.absolute() != expected_console.absolute()
+        or config_path.absolute() != expected_config.absolute()
+        or points_path.absolute() != expected_points.absolute()
     ):
         raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX")
     try:
-        module_import_path.absolute().relative_to(build_root)
+        module_import_path.absolute().relative_to(demo_prefix)
     except ValueError as error:
         raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX") from error
 
     artifacts = document["artifacts"]
     artifact_paths = {
-        "coordinator_console": console_path.resolve(),
+        "coordinator_console": console_path.absolute(),
         "coordinator_module": module_import_path.absolute(),
-        "parallel_config": config_path.resolve(),
-        "point_catalog": points_path.resolve(),
+        "parallel_config": config_path.absolute(),
+        "point_catalog": points_path.absolute(),
     }
     if type(artifacts) is not dict or set(artifacts) != {
         *artifact_paths,
@@ -715,7 +752,12 @@ def _validate_external_overlay_binding(
         "console_scripts" not in parser
         or parser["console_scripts"].get("so101_parallel_batch")
         != "so101_demo.cli.mujoco_parallel_batch:main"
-        or console_path.read_bytes() != _expected_console_wrapper()
+        or console_path.read_bytes() not in {
+            _expected_console_wrapper(),
+            _expected_console_wrapper().replace(
+                b"so101-demo-py'", b"so101-demo-py==0.1.0'"
+            ),
+        }
     ):
         raise CliError("PROVENANCE_EXTERNAL_ARTIFACT_IDENTITY")
     module_tree = module_import_path.absolute().parents[1]

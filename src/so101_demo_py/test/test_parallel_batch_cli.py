@@ -2359,8 +2359,6 @@ def _external_overlay_fixture(tmp_path):
     build_root = tmp_path / "candidate/build"
     build_package = build_root / "so101_demo_py"
     build_package.mkdir(parents=True)
-    (build_package / "so101_demo").symlink_to(source, target_is_directory=True)
-    module_import = build_package / "so101_demo/cli/mujoco_parallel_batch.py"
     metadata = build_package / "so101_demo_py.egg-info/entry_points.txt"
     metadata.parent.mkdir(parents=True)
     metadata.write_text(
@@ -2370,9 +2368,20 @@ def _external_overlay_fixture(tmp_path):
     )
     install_root = tmp_path / "candidate/install"
     package_prefix = install_root / "so101_demo_py"
+    module_import = (
+        package_prefix
+        / "lib/python3.12/site-packages/so101_demo/cli/mujoco_parallel_batch.py"
+    )
+    module_import.parent.mkdir(parents=True)
+    module_import.write_bytes(module_source.read_bytes())
     console = package_prefix / "lib/so101_demo_py/so101_parallel_batch"
     console.parent.mkdir(parents=True)
-    console.write_text(_canonical_console_wrapper(), encoding="utf-8")
+    console.write_text(
+        _canonical_console_wrapper().replace(
+            "so101-demo-py'", "so101-demo-py==0.1.0'"
+        ),
+        encoding="utf-8",
+    )
     support_prefix = install_root / "so101_mujoco_support"
     support_prefix.mkdir(parents=True)
     share = package_prefix / "share/so101_demo_py/config/mujoco"
@@ -2439,7 +2448,7 @@ def test_explicit_external_overlay_binding_accepts_exact_candidate(tmp_path):
     fixture = _external_overlay_fixture(tmp_path)
     identity = _validate_provenance_overlay(
         fixture["repository"],
-        fixture["module_source"],
+        fixture["module_import"],
         fixture["console"],
         fixture["config"],
         fixture["points"],
@@ -2486,7 +2495,7 @@ def test_external_overlay_binding_rejects_identity_mismatch(tmp_path, mutation, 
     with pytest.raises(CliError, match=error):
         _validate_provenance_overlay(
             fixture["repository"],
-            fixture["module_source"],
+            fixture["module_import"],
             fixture["console"],
             fixture["config"],
             fixture["points"],
