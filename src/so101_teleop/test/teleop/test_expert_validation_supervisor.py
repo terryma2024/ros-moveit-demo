@@ -1,15 +1,22 @@
 import asyncio
+import json
 import os
 from pathlib import Path
+import sys
+import time
 
 import pytest
 
 from so101_teleop.expert_validation.models import CleanupReceipt
+from so101_teleop.expert_validation.coordinator import CoordinatorStartRequest
+from so101_teleop.expert_validation.lease import ValidationLeaseService
+from so101_teleop.expert_validation.process_owner import ExecutionProcessOwner
 from so101_teleop.expert_validation.preflight import PreflightEngine, PreflightRejected
 from so101_teleop.expert_validation.store import SupervisorStore
 from so101_teleop.expert_validation.supervisor import ExpertValidationSupervisor
 
 from test_expert_validation_preflight import Resources, _request
+from test_expert_validation_adaptive_owner import request as _adaptive_owner_request
 
 
 class Owner:
@@ -38,6 +45,71 @@ def _supervisor(tmp_path, resources=None):
         preflight_engine=PreflightEngine(resources or Resources()),
     )
     return supervisor, owner, store
+
+
+def test_lease_expiry_does_not_cancel_an_already_exited_owner_without_descendants(tmp_path):
+    """A retained binding is not evidence that the completed batch can be cancelled."""
+    supervisor, _, store = _supervisor(tmp_path)
+    owner = ExecutionProcessOwner(cleanup_checker=lambda _: True)
+    supervisor.process_owner = owner
+    root = (tmp_path / "batch").resolve()
+    execution = owner.spawn(CoordinatorStartRequest(
+        campaign_id="campaign-a", batch_id="batch-a", execution_mode="SEQUENTIAL",
+        worker_count=1, max_points_per_worker=1,
+        argv=(sys.executable, "-c", "import time; time.sleep(0.2)"),
+        environment={}, batch_root=root, control_socket=root / "control.sock",
+        control_token_sha256="a" * 64,
+    ))
+    try:
+        deadline = time.monotonic() + 3
+        while owner.poll(execution).running and time.monotonic() < deadline:
+            time.sleep(0.01)
+        status = owner.poll(execution)
+        assert status.exit_code == 0 and not status.descendants_alive
+        assert owner.active_execution == execution
+        assert supervisor.has_unresolved_campaign() is False
+        clock = [1_000]
+        lease_service = ValidationLeaseService(
+            store, supervisor, clock_ns=lambda: clock[0], duration_ns=100,
+        )
+        lease = lease_service.acquire("browser-a")
+        clock[0] = lease.expires_monotonic_ns
+        assert lease_service.expire_due() is True
+        assert lease_service.current() is None
+        assert supervisor.has_unresolved_campaign() is False
+    finally:
+        if owner.poll(execution).running:
+            owner.stop_after_cleanup(execution)
+        store.close()
+
+
+def test_cancel_for_reason_still_delegates_to_the_live_exact_adaptive_wrapper(tmp_path):
+    supervisor, _, store = _supervisor(tmp_path)
+    owner = ExecutionProcessOwner()
+    supervisor.process_owner = owner
+    request = _adaptive_owner_request(tmp_path / "adaptive")
+    execution = owner.spawn(request)
+    try:
+        deadline = time.monotonic() + 3
+        handshake = request.runtime_root / "handshake.json"
+        while not handshake.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert handshake.is_file()
+        assert supervisor.has_unresolved_campaign() is True
+        supervisor.cancel_for_reason("LEASE_EXPIRED")
+        deadline = time.monotonic() + 3
+        while owner.poll(execution).running and time.monotonic() < deadline:
+            time.sleep(0.01)
+        status = owner.poll(execution)
+        assert not status.running and not status.descendants_alive
+        assert json.loads((request.runtime_root / "cleanup.json").read_text())["cleanup_complete"] is True
+    finally:
+        if owner.poll(execution).running:
+            owner.request_cancel(execution)
+            deadline = time.monotonic() + 3
+            while owner.poll(execution).running and time.monotonic() < deadline:
+                time.sleep(0.01)
+        store.close()
 
 
 def test_sequential_and_parallel_use_same_coordinator_path(tmp_path):

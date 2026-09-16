@@ -1,5 +1,25 @@
 # SO-101 MoveIt Expert Validation Web Experiment Ledger
 
+## CP-009 — Exited owner is not cancellation authority
+
+- Source preceding this fix: `1faf89fe8af24805e0cbb0ea605afc51956e3d0a`. No new physical campaign; EXP-052 remains pending. Last actual runtime EXP-051 used source79a/copy release16, server domain231 and Worker domains181/182/183, GZ_PARTITION=not_applicable (MuJoCo).
+- RED t80 recreated lease-expiry failure with a real short-lived non-ROS child owned by ExecutionProcessOwner. After natural exit0 and no live descendants, its retained binding still triggered FIXED_CANCEL_REQUIRES_CONTROL_SOCKET.1fail,exit1,elapsed1.05s. Child reaped; scratch/cx/tmp exact venv tempfile verified.
+- Minimal fix: cancel_for_reason polls the recorded execution and skips only when both leader and descendants are no longer live. It does not clear the binding, alter retry/statistics, grant authority or equate leader exit with cleanup. Existing expiry recovery fence remains conservative.
+- GREEN t81:complete strict Teleop411passed,elapsed9.95s,exit0. Additional real toy adaptive-wrapper cancellation proves the live branch delegates to exact wrapper PID; wrapper stops its own child and writes cleanup.json. Final t82 strict gate412passed,elapsed10.23s,exit0,no warning summary. Scratch/cy/cz exact tempfile verified; all tests and toy processes terminal.
+- Remaining control gap: fixed cancel_for_reason still reaches ExecutionProcessOwner.request_cancel, which intentionally rejects fixed owners. CoordinatorControlClient exists but is not wired to production Supervisor; no matching authenticated Web-control server exists in upstream CLI. Do not claim active fixed cancellation or durable reconciliation complete. Implement the approved authenticated channel; do not weaken the reject gate or signal Worker/Runner/Broker groups.
+- Other incomplete original gates: actual immutable-manifest map cardinality/geometry and reload restoration, verified Runner adaptive projection and qualified capabilities, corruption/restart recovery fencing and start idempotency, full producer RGB-D/cloud previews and all-layer artifact/visual acceptance, fixed N2/K2 and exact20adaptive, conditional retry, fresh installed gates and publication. Source tests/readback do not qualify these live gates.
+- Evidence: registered root t80/t81/t82 logs, JUnit and metadata. Retained:unchanged root and all historical artifacts. Archived:none. Deletion candidates:cx/cy/cz and earlier scratch/superseded overlays; none deleted.
+
+```yaml
+checkpoint_id: CP-009
+last_valid_experiment: EXP-006
+current_hypothesis: Fixed production control must consume the authenticated client and upstream Coordinator request-stop/cleanup authority; the map must consume its bound immutable manifest instead of20fixture points.
+working_tree_status: task-owned supervisor.py, test_expert_validation_supervisor.py and ledger changes
+owned_processes: no task simulation/server/browser; handles terminal and toy leaders/descendants reaped
+preserved_processes: all unrelated user sessions/processes
+next_command: Commit the verified exited-owner guard, audit control transport and manifest/projection contracts, then build production integration RED tests without launching another simulation.
+```
+
 ## CP-008 — Commit-authorized artifact metadata reaches the point panel
 
 - Boundary confirmed: production projection hard-coded empty attempts/artifact_ids and App hard-coded an empty evidence list. The earlier registry-only tests never exercised this composition.
@@ -58,7 +78,7 @@ success_contract: Source and package gates pass; fresh fixed four-point and adap
 worktree: /data/work/ws_moveit/.worktrees/teleop-expert-validation-web
 branch: codex/teleop-expert-validation-web
 base_commit: e1701375690321bc83b5f30ec044da1847d373aa
-current_commit: a23d494d2a995daa7c8684a061e17ae5a5e34a47
+current_commit: 1faf89fe8af24805e0cbb0ea605afc51956e3d0a
 evidence_root: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01
 confirmed_conclusions:
   - origin/main exactly matched the required documentation commit e1701375690321bc83b5f30ec044da1847d373aa at CP-001.
@@ -72,7 +92,7 @@ disproven_routes:
   - At commit 654756ba32cfc0697aff1444c79752ff1e61c4ee, a four-point manifest could not be returned because its source field violated the closed response model.
 open_hypotheses:
   - A read-only verified journal projection and authoritative HTTP watcher can synchronize fresh Web progress and terminal state without acquiring upstream coordinator authority.
-latest_checkpoint: CP-008
+latest_checkpoint: CP-009
 next_experiment: EXP-052
 ```
 

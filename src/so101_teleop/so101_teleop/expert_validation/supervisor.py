@@ -280,4 +280,7 @@ class ExpertValidationSupervisor:
         active = getattr(self.process_owner, "active_execution", None)
         if active is None:
             return None
+        status = self.process_owner.poll(active)
+        if not status.running and not status.descendants_alive:
+            return None
         return self.process_owner.request_cancel(active)
