@@ -124,6 +124,13 @@ class ExecutionProcessOwner:
         self._active: OwnedExecution | None = None
         self._children: dict[int, subprocess.Popen] = {}
 
+    @property
+    def active_execution(self) -> OwnedExecution | None:
+        return self._active
+
+    def has_active_execution(self) -> bool:
+        return self._active is not None and self.poll(self._active).running
+
     def spawn(self, request: CoordinatorStartRequest | AdaptiveStartRequest) -> OwnedExecution:
         if self._active is not None and self.poll(self._active).running:
             raise CoordinatorOwnershipError("EXECUTION_OWNER_EXISTS")
@@ -189,7 +196,7 @@ class ExecutionProcessOwner:
 
     def _await_identity(self, pid: int, argv: tuple[str, ...]) -> _ProcessIdentity:
         expected_hash = _canonical_hash(argv)
-        deadline = time.monotonic() + 1.0
+        deadline = time.monotonic() + 10.0
         last_error = None
         while time.monotonic() < deadline:
             try:
@@ -219,7 +226,7 @@ class ExecutionProcessOwner:
                 time.sleep(0.01)
             except (json.JSONDecodeError, OSError) as error:
                 raise CoordinatorOwnershipError("RUNNER_BINDING_MISMATCH") from error
-        return None, None
+        raise CoordinatorOwnershipError("RUNNER_BINDING_ACK_MISSING")
 
     def reconnect(self, binding: OwnedExecution) -> OwnedExecution:
         self._verify(binding)

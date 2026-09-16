@@ -272,7 +272,8 @@ def create_expert_validation_app(
     @app.get("/expert-validation/manifests/{manifest_id}", response_model=ManifestResponse)
     async def get_manifest(manifest_id: str):
         try:
-            return await _invoke(service.get_manifest, manifest_id)
+            method = getattr(service, "get_manifest_api", service.get_manifest)
+            return await _invoke(method, manifest_id)
         except Exception as error:
             return _error(error, default_status=404)
 

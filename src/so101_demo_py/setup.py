@@ -35,6 +35,10 @@ setup(
             [f"resource/{package_name}"],
         ),
         (f"share/{package_name}", ["package.xml"]),
+        (
+            f"lib/{package_name}",
+            [str(package_root.parents[1] / "scripts/run_so101_adaptive_batch.zsh")],
+        ),
     ]
     + installed_resources(),
     install_requires=["PyYAML==6.0.2", "setuptools", "typing_extensions"],

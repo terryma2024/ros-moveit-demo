@@ -59,6 +59,7 @@ def test_upstream_adaptive_runtime_and_catalog_are_installable():
     assert "installed_resources()" in setup
     assert "so101_parallel_batch =" in setup
     assert "so101_parallel_batch_cleanup =" in setup
+    assert "run_so101_adaptive_batch.zsh" in setup
     for relative in (
         "src/parallel_batch/adaptive_runner.py",
         "src/parallel_batch/adaptive_pool.py",

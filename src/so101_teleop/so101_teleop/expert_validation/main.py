@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Mapping
 
 from .api import create_expert_validation_app
+from .production import create_production_service
 from so101_teleop.api import validate_bind_address
 
 
@@ -31,16 +32,20 @@ def main(service_factory=None) -> None:
     address = validate_bind_address(
         os.environ.get("SO101_VALIDATION_BIND", "127.0.0.1")
     )
-    if service_factory is None:
-        raise RuntimeError("SO101_VALIDATION_SERVICE_FACTORY_REQUIRED")
-    service = service_factory(root)
+    factory = create_production_service if service_factory is None else service_factory
+    service = factory(root)
     static_dir = os.environ.get("SO101_VALIDATION_WEB_ROOT")
-    uvicorn.run(
-        create_expert_validation_app(
-            service,
-            static_dir,
-            bind_address=address,
-        ),
-        host=address,
-        port=int(os.environ.get("SO101_VALIDATION_PORT", "8010")),
-    )
+    try:
+        uvicorn.run(
+            create_expert_validation_app(
+                service,
+                static_dir,
+                bind_address=address,
+            ),
+            host=address,
+            port=int(os.environ.get("SO101_VALIDATION_PORT", "8010")),
+        )
+    finally:
+        close = getattr(service, "close", None)
+        if close is not None:
+            close()

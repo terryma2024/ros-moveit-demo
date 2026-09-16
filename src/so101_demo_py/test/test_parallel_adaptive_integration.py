@@ -192,6 +192,66 @@ def test_adaptive_wrapper_preserves_runner_status_after_successful_cleanup(tmp_p
     ]
 
 
+def test_adaptive_wrapper_emits_exact_runner_handshake(tmp_path):
+    import json
+    import signal
+    import time
+
+    script = Path(__file__).resolve().parents[3] / "scripts/run_so101_adaptive_batch.zsh"
+    commands = tmp_path / "commands"
+    commands.mkdir()
+    runner = commands / "so101_parallel_batch"
+    runner.write_text(
+        "#!/bin/sh\n"
+        "root=\n"
+        "batch=\n"
+        "while [ $# -gt 0 ]; do\n"
+        "  case \"$1\" in\n"
+        "    --evidence-root) root=$2; shift 2 ;;\n"
+        "    --batch-id) batch=$2; shift 2 ;;\n"
+        "    *) shift ;;\n"
+        "  esac\n"
+        "done\n"
+        "mkdir -p \"$root/r/$batch\"\n"
+        "trap 'exit 0' INT TERM\n"
+        "while :; do sleep 1; done\n",
+        encoding="utf-8",
+    )
+    runner.chmod(0o700)
+    cleanup = commands / "so101_parallel_batch_cleanup"
+    cleanup.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    cleanup.chmod(0o700)
+    evidence_root = tmp_path / "evidence"
+    environment = dict(os.environ)
+    environment["PATH"] = f"{commands}:{environment['PATH']}"
+    process = subprocess.Popen(
+        [
+            str(script),
+            "--adaptive-workers",
+            "--evidence-root",
+            str(evidence_root),
+            "--batch-id",
+            "a01",
+        ],
+        env=environment,
+    )
+    handshake_path = evidence_root / "r/a01/handshake.json"
+    try:
+        deadline = time.monotonic() + 5.0
+        while not handshake_path.is_file() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        document = json.loads(handshake_path.read_text(encoding="utf-8"))
+        assert document["wrapper_pid"] == process.pid
+        assert document["runner_pid"] > 0
+        assert document["batch_id"] == "a01"
+    finally:
+        if "document" in locals():
+            os.kill(document["runner_pid"], signal.SIGTERM)
+        else:
+            process.send_signal(signal.SIGTERM)
+        process.wait(timeout=5.0)
+
+
 def test_scaling_driver_accepts_w16_and_rejects_w17_in_dry_run(tmp_path):
     """The maintained launcher must expose the same optional ceiling as the CLI."""
 

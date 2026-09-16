@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 import hashlib
 import json
 import math
@@ -76,7 +76,9 @@ class CampaignStartRequest:
     resource_manifest_sha256: str
     yolo_weights_path: Path = Path("/models/yolo.pt")
     grounded_root: Path = Path("/models/grounded")
+    coordinator_executable_path: Path | None = None
     adaptive_wrapper_path: Path | None = None
+    provenance_binding_path: Path | None = None
     environment: Mapping[str, str] = None
 
     def __post_init__(self) -> None:
@@ -86,6 +88,16 @@ class CampaignStartRequest:
         object.__setattr__(self, "adaptive_config_path", Path(self.adaptive_config_path))
         object.__setattr__(self, "yolo_weights_path", Path(self.yolo_weights_path))
         object.__setattr__(self, "grounded_root", Path(self.grounded_root))
+        if self.coordinator_executable_path is not None:
+            object.__setattr__(
+                self,
+                "coordinator_executable_path",
+                Path(self.coordinator_executable_path),
+            )
+        if self.provenance_binding_path is not None:
+            object.__setattr__(
+                self, "provenance_binding_path", Path(self.provenance_binding_path)
+            )
         if self.environment is None:
             object.__setattr__(self, "environment", {})
 

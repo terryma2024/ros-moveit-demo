@@ -16,11 +16,11 @@ from .models import (
     PreflightReceipt,
 )
 from .preflight import (
-    AdaptiveExecutionConfig,
     CampaignPreflightReceipt,
     CampaignStartRequest,
     FixedExecutionConfig,
     PreflightEngine,
+    canonical_start_request_sha256,
 )
 
 
@@ -34,18 +34,28 @@ class ExpertValidationSupervisor:
     async def preflight(self, request: CampaignStartRequest) -> CampaignPreflightReceipt:
         return self.preflight_engine.preflight(request)
 
-    async def start_first_pass(self, request: CampaignStartRequest):
-        receipt = self.preflight_engine.require_admitted(request)
-        self.store.record_manifest(
+    async def start_first_pass(self, request: CampaignStartRequest, *, receipt=None):
+        receipt = receipt or self.preflight_engine.require_admitted(request)
+        if (
+            not receipt.admitted
+            or receipt.canonical_start_request_sha256
+            != canonical_start_request_sha256(request)
+        ):
+            raise RuntimeError("PREFLIGHT_REQUEST_MISMATCH")
+        if self.store.manifest(
             request.manifest_id,
-            {
-                "catalog_sha256": request.selection.catalog_sha256,
-                "selection_sha256": request.selection.selection_sha256,
-                "point_ids": request.selection.point_ids,
-            },
-            source_config_sha256=request.parallel_config_sha256,
-            created_at_ns=receipt.observed_at_ns,
-        )
+            current_source_config_sha256=request.parallel_config_sha256,
+        ) is None:
+            self.store.record_manifest(
+                request.manifest_id,
+                {
+                    "catalog_sha256": request.selection.catalog_sha256,
+                    "selection_sha256": request.selection.selection_sha256,
+                    "point_ids": request.selection.point_ids,
+                },
+                source_config_sha256=request.parallel_config_sha256,
+                created_at_ns=receipt.observed_at_ns,
+            )
         self.store.record_preflight_receipt(
             PreflightReceipt(
                 receipt_id=receipt.receipt_id,
@@ -112,7 +122,15 @@ class ExpertValidationSupervisor:
         if isinstance(receipt.execution_config, FixedExecutionConfig):
             config = receipt.execution_config
             argv = [
-                "ros2", "run", "so101_demo_py", "so101_parallel_batch",
+                "/usr/bin/python3"
+                if request.coordinator_executable_path is not None
+                else "ros2",
+            ]
+            if request.coordinator_executable_path is not None:
+                argv.append(str(request.coordinator_executable_path))
+            if request.coordinator_executable_path is None:
+                argv.extend(("run", "so101_demo_py", "so101_parallel_batch"))
+            argv.extend([
                 "--points", str(request.points_path),
                 "--config", str(request.parallel_config_path),
                 "--batch-id", batch_id,
@@ -125,9 +143,11 @@ class ExpertValidationSupervisor:
                 "--grounded-root", str(request.grounded_root),
                 "--grounded-manifest-sha256", request.grounded_sam_manifest_sha256,
                 "--run-mode", "execute",
-            ]
+            ])
             for point_id in selected:
                 argv.extend(("--point-id", point_id))
+            if request.provenance_binding_path is not None:
+                argv.extend(("--provenance-binding", str(request.provenance_binding_path)))
             token_sha = hashlib.sha256(
                 f"{request.campaign_id}:{batch_id}".encode("utf-8")
             ).hexdigest()
@@ -150,7 +170,7 @@ class ExpertValidationSupervisor:
             Path(__file__).resolve().parents[4] / "scripts/run_so101_adaptive_batch.zsh"
         )
         argv = [
-            str(wrapper), "--adaptive-workers",
+            "/usr/bin/zsh", str(wrapper), "--adaptive-workers",
             "--points", str(request.points_path),
             "--config", str(request.parallel_config_path),
             "--adaptive-config", str(request.adaptive_config_path),
@@ -171,6 +191,8 @@ class ExpertValidationSupervisor:
         ]
         for point_id in selected:
             argv.extend(("--point-id", point_id))
+        if request.provenance_binding_path is not None:
+            argv.extend(("--provenance-binding", str(request.provenance_binding_path)))
         return AdaptiveStartRequest(
             campaign_id=request.campaign_id,
             batch_id=batch_id,
@@ -237,3 +259,16 @@ class ExpertValidationSupervisor:
 
     def reconcile_startup(self):
         return self.store.reconcile()
+
+    def has_unresolved_campaign(self):
+        active = getattr(self.process_owner, "active_execution", None)
+        if active is None:
+            return False
+        status = self.process_owner.poll(active)
+        return status.running or status.descendants_alive
+
+    def cancel_for_reason(self, _reason):
+        active = getattr(self.process_owner, "active_execution", None)
+        if active is None:
+            return None
+        return self.process_owner.request_cancel(active)
