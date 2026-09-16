@@ -1,4 +1,5 @@
 import asyncio
+import os
 from pathlib import Path
 
 import pytest
@@ -84,6 +85,9 @@ def test_installed_coordinator_is_discoverable_on_child_path(tmp_path):
 
         assert owner.requests[-1].environment["PATH"] == (
             f"{coordinator.parent.resolve()}:/usr/bin"
+        )
+        assert owner.requests[-1].environment["SO101_PARALLEL_IPC_BASE"] == (
+            f"/run/user/{os.getuid()}"
         )
     finally:
         store.close()

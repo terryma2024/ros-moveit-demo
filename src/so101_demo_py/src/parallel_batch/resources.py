@@ -84,6 +84,34 @@ class ResourceAllocationError(ValueError):
         self.admission = admission
 
 
+def configured_runtime_ipc_root(
+    batch_id: str, environment: Mapping[str, str] | None = None
+) -> Path | None:
+    """Resolve an explicitly configured short, same-user runtime socket root."""
+
+    source = os.environ if environment is None else environment
+    value = source.get('SO101_PARALLEL_IPC_BASE')
+    if value is None:
+        return None
+    expected = Path(f'/run/user/{os.getuid()}')
+    base = Path(value)
+    try:
+        info = base.lstat()
+    except OSError as error:
+        raise ResourceAllocationError('IPC_BASE') from error
+    if (
+        base != expected
+        or base.is_symlink()
+        or not stat.S_ISDIR(info.st_mode)
+        or info.st_uid != os.getuid()
+        or stat.S_IMODE(info.st_mode) != 0o700
+        or not isinstance(batch_id, str)
+        or _BATCH_ID.fullmatch(batch_id) is None
+    ):
+        raise ResourceAllocationError('IPC_BASE')
+    return base / f'so101-{batch_id}'
+
+
 @dataclass(frozen=True, slots=True)
 class ResourceSnapshot:
     """Host resources observed at admission time."""
@@ -886,6 +914,7 @@ class WorkerResourceAllocator:
         live_headroom_verifier=None,
         batch_id: str | None = None,
         allocation_policy: AllocationPolicy | None = None,
+        ipc_root: Path | None = None,
     ) -> None:
         if not isinstance(config, ParallelRuntimeConfig):
             raise ResourceAllocationError('CONFIG')
@@ -899,6 +928,14 @@ class WorkerResourceAllocator:
             raise ResourceAllocationError('EVIDENCE_ROOT')
         self.config = config
         self.evidence_root = root
+        self._external_ipc_root = ipc_root is not None
+        self.ipc_root = root / 'ipc' if ipc_root is None else Path(ipc_root)
+        if (
+            not self.ipc_root.is_absolute()
+            or self.ipc_root != self.ipc_root.absolute()
+            or self.ipc_root == root
+        ):
+            raise ResourceAllocationError('IPC_ROOT')
         selected_batch_id = root.name if batch_id is None else batch_id
         if not isinstance(selected_batch_id, str) or _BATCH_ID.fullmatch(selected_batch_id) is None:
             raise ResourceAllocationError('BATCH_ID')
@@ -1434,7 +1471,7 @@ class WorkerResourceAllocator:
     def _paths(self, slot_index: int) -> dict[str, Path | str | int]:
         worker_id = f'worker-{slot_index:02d}'
         worker_root = self.evidence_root / 'workers' / worker_id
-        socket_namespace = self.evidence_root / 'ipc' / str(slot_index)
+        socket_namespace = self.ipc_root / str(slot_index)
         return {
             'worker_id': worker_id,
             'slot_index': slot_index,
@@ -1463,6 +1500,10 @@ class WorkerResourceAllocator:
             if stat.S_ISLNK(existing.st_mode):
                 raise ResourceAllocationError(f'SYMLINK_PATH: {self.evidence_root}')
             raise ResourceAllocationError(f'DIRECTORY_CONFLICT: {self.evidence_root}')
+        if self._external_ipc_root and (
+            self.ipc_root.exists() or self.ipc_root.is_symlink()
+        ):
+            raise ResourceAllocationError(f'DIRECTORY_CONFLICT: {self.ipc_root}')
         for item in paths:
             socket_path = item['socket_path']
             assert isinstance(socket_path, Path)
@@ -1509,7 +1550,15 @@ class WorkerResourceAllocator:
             root_stat = os.fstat(root_fd)
             self._root_identity = (root_stat.st_dev, root_stat.st_ino)
             workers_fd = _mkdir_private_at(root_fd, 'workers')
-            ipc_fd = _mkdir_private_at(root_fd, 'ipc')
+            if self._external_ipc_root:
+                ipc_parent_fd = _open_trusted_parent(self.ipc_root)
+                try:
+                    ipc_fd = _mkdir_private_at(ipc_parent_fd, self.ipc_root.name)
+                    os.fsync(ipc_parent_fd)
+                finally:
+                    os.close(ipc_parent_fd)
+            else:
+                ipc_fd = _mkdir_private_at(root_fd, 'ipc')
             self._directory_fds.extend((workers_fd, ipc_fd))
             for item in paths:
                 worker_fd = _mkdir_private_at(workers_fd, str(item['worker_id']))

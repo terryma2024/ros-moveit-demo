@@ -125,6 +125,9 @@ class ExpertValidationSupervisor:
             environment["PATH"] = os.pathsep.join(
                 (str(request.coordinator_executable_path.parent), inherited_path)
             )
+            environment.setdefault(
+                "SO101_PARALLEL_IPC_BASE", f"/run/user/{os.getuid()}"
+            )
         if isinstance(receipt.execution_config, FixedExecutionConfig):
             config = receipt.execution_config
             argv = [

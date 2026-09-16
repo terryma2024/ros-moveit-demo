@@ -20,7 +20,7 @@ disproven_routes:
 open_hypotheses:
   - The repaired installed API can now cross manifest creation and authorize a fresh sequential simulation campaign.
 latest_checkpoint: CP-003
-next_experiment: EXP-021
+next_experiment: EXP-025
 ```
 
 ## Registered evidence and ownership
@@ -562,14 +562,25 @@ decision: LIVE_RETRY_NOT_APPLICABLE_NO_VALID_FIRST_PASS
 
 ```yaml
 experiment_id: EXP-021
-status: PLANNED
+status: INVALID
 prior_experiment: EXP-017
 hypothesis: Supplying the installed coordinator directory on the owned child PATH closes provenance console discovery and permits the four-anchor N1/K4 campaign.
 single_variable: Owned coordinator and adaptive-wrapper child PATH begins with the exact installed coordinator directory.
 lifecycle: FRESH_ISOLATED_STACK
 selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
 fixed_config: {worker_count: 1, max_points_per_worker: 4}
-decision: RUN_AFTER_CLEAN_COMMIT_AND_REBUILD
+observed:
+  - Release5 safe dry-run crossed broker-image and console provenance, then stopped at UNIX_SOCKET_PATH_TOO_LONG before simulation.
+  - The registered durable evidence root makes the shortest broker and Worker Unix endpoints exceed Linux's 107-byte pathname limit once batch IPC suffixes are appended.
+  - The repair keeps all durable evidence under the registered root and moves only ephemeral Unix sockets/tokens into the closed same-UID 0700 runtime directory /run/user/1000.
+  - Five focused fixed/adaptive/resource/IPC/Teleop contracts pass; the broad legacy diagnostic was invalid because its mandated long TMPDIR caused 56 pre-existing default-path tests to hit the same length guard before their intended assertions.
+first_bad_boundary: UNIX_SOCKET_PATH_TOO_LONG
+evidence:
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/child-path-green-dryrun.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t20-demo-green2.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t20-teleop-green.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t20-demo-regression.log
+decision: STOP_FAIL_CLOSED_AND_SEPARATE_EPHEMERAL_IPC_ROOT
 next_experiment: EXP-022
 ```
 
@@ -577,12 +588,14 @@ next_experiment: EXP-022
 
 ```yaml
 experiment_id: EXP-022
-status: PLANNED
+status: NOT_RUN
 prior_experiment: EXP-021
 single_variable: execution_mode=PARALLEL, worker_count=2, max_points_per_worker=2
 lifecycle: FRESH_ISOLATED_STACK
 selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
-decision: RUN_AFTER_EXP_021_VALID
+observed:
+  - Not started because EXP-021 stopped before server or simulation startup.
+decision: BLOCKED_BY_EXP_021_INVALID
 next_experiment: EXP-023
 ```
 
@@ -590,11 +603,13 @@ next_experiment: EXP-023
 
 ```yaml
 experiment_id: EXP-023
-status: PLANNED
+status: NOT_RUN
 prior_experiment: EXP-022
 single_variable: execution_mode=ADAPTIVE with preferred W8 and fallback [6, 4, 2, 1]
 lifecycle: FRESH_ISOLATED_STACK
-decision: RUN_AFTER_EXP_022_VALID
+observed:
+  - Not started because no valid sequential campaign exists after the socket-path boundary.
+decision: BLOCKED_BY_EXP_021_INVALID
 next_experiment: EXP-024
 ```
 
@@ -602,11 +617,64 @@ next_experiment: EXP-024
 
 ```yaml
 experiment_id: EXP-024
-status: PLANNED
+status: NOT_APPLICABLE
 prior_experiment: EXP-023
 single_variable: FULL_RESTART retry of eligible FAILED points only
 lifecycle: FRESH_ISOLATED_STACK_PER_POINT
-decision: CONDITIONAL_AFTER_EXP_023
+observed:
+  - No valid first-pass terminal result or eligible FAILED point exists; no retry was manufactured.
+decision: LIVE_RETRY_NOT_APPLICABLE_NO_VALID_FIRST_PASS
+```
+
+### EXP-025 — Short runtime IPC and fresh sequential simulation
+
+```yaml
+experiment_id: EXP-025
+status: PLANNED
+prior_experiment: EXP-021
+hypothesis: Separating ephemeral same-user Unix IPC from durable evidence closes the pathname boundary without weakening evidence or runtime ownership.
+single_variable: Unix sockets and tokens use the validated same-UID runtime directory; durable evidence layout and all execution semantics are unchanged.
+lifecycle: FRESH_ISOLATED_STACK
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+fixed_config: {worker_count: 1, max_points_per_worker: 4}
+decision: RUN_AFTER_CLEAN_COMMIT_BUILD_AND_DRY_RUN
+next_experiment: EXP-026
+```
+
+### EXP-026 — Fresh same-selection parallel simulation with short IPC
+
+```yaml
+experiment_id: EXP-026
+status: PLANNED
+prior_experiment: EXP-025
+single_variable: execution_mode=PARALLEL, worker_count=2, max_points_per_worker=2
+lifecycle: FRESH_ISOLATED_STACK
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+decision: RUN_AFTER_EXP_025_VALID
+next_experiment: EXP-027
+```
+
+### EXP-027 — Fresh twenty-point adaptive simulation with short IPC
+
+```yaml
+experiment_id: EXP-027
+status: PLANNED
+prior_experiment: EXP-026
+single_variable: execution_mode=ADAPTIVE with preferred W8 and fallback [6, 4, 2, 1]
+lifecycle: FRESH_ISOLATED_STACK
+decision: RUN_AFTER_EXP_026_VALID
+next_experiment: EXP-028
+```
+
+### EXP-028 — Conditional FULL_RESTART retry with short IPC
+
+```yaml
+experiment_id: EXP-028
+status: PLANNED
+prior_experiment: EXP-027
+single_variable: FULL_RESTART retry of eligible FAILED points only
+lifecycle: FRESH_ISOLATED_STACK_PER_POINT
+decision: CONDITIONAL_AFTER_EXP_027
 ```
 
 ## Task 1 checkpoint

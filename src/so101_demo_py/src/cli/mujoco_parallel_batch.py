@@ -80,6 +80,7 @@ from so101_demo.parallel_batch.resources import (
     Task14LiveHeadroomVerifier,
     WorkerResourceAllocator,
     WorkerResources,
+    configured_runtime_ipc_root,
 )
 from so101_demo.parallel_batch.worker import (
     LeaseGrantPaused,
@@ -2422,6 +2423,9 @@ class ProductionBatchComposition:
             ):
                 raise CliError("ADAPTIVE_POOL_CONTEXT")
         self.spec = spec
+        self.runtime_ipc_root = configured_runtime_ipc_root(
+            spec.request.batch_id
+        )
         self.adaptive_context = adaptive_context
         self._pool_running_recorder = pool_running_recorder
         self.worker_exit_codes = ()
@@ -2481,6 +2485,7 @@ class ProductionBatchComposition:
                     persistent_cleanup_claims=True,
                 )
             ),
+            ipc_root=self.runtime_ipc_root,
         )
         self._startup_stage = "resource_allocation"
         if spec.resume:
@@ -2540,6 +2545,7 @@ class ProductionBatchComposition:
         self.authority = WorkerTokenAuthority(
             spec.request.evidence_root,
             coordinator_epoch=self.journal.coordinator_epoch,
+            ipc_root=self.runtime_ipc_root,
         )
         self._broker_command_builder = broker_command_builder
         self._broker_health_client_factory = broker_health_client_factory
@@ -2642,7 +2648,7 @@ class ProductionBatchComposition:
 
     def _remove_stale_worker_sockets(self):
         """Remove only prior generation sockets after exact process fencing."""
-        ipc_root = self.spec.request.evidence_root / "ipc"
+        ipc_root = self.authority.ipc_root
         for worker in self.resource_manifest.workers:
             for name in (f"{worker.worker_id}.sock", f"{worker.worker_id}-control.sock"):
                 path = ipc_root / name
@@ -2722,7 +2728,7 @@ class ProductionBatchComposition:
         if self.spec.request.run_mode is RunMode.DRY_RUN:
             return 0
         generations = []
-        ipc_root = self.spec.request.evidence_root / "ipc"
+        ipc_root = self.authority.ipc_root
         for path in ipc_root.glob("broker*/broker-spec.json"):
             document = _read_existing_json(path, label="BROKER_SPEC")
             generation = document.get("broker_generation")
@@ -3588,6 +3594,7 @@ class ProductionBatchComposition:
             for path in adaptive_socket_paths(
                 self.spec.request.evidence_root,
                 self.spec.request.worker_count,
+                ipc_root=self.authority.ipc_root,
             ):
                 try:
                     identity = path.lstat()
@@ -3604,6 +3611,21 @@ class ProductionBatchComposition:
                 f"CLEANUP:{type(error).__name__}:{error}"
             )
             return False
+
+    def _release_runtime_ipc_root(self):
+        if self.runtime_ipc_root is None:
+            return True
+        expected = configured_runtime_ipc_root(self.spec.request.batch_id)
+        if expected != self.runtime_ipc_root or self.runtime_ipc_root.is_symlink():
+            raise CliError("RUNTIME_IPC_CLEANUP_IDENTITY")
+        try:
+            info = self.runtime_ipc_root.lstat()
+        except FileNotFoundError:
+            return True
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+            raise CliError("RUNTIME_IPC_CLEANUP_IDENTITY")
+        shutil.rmtree(self.runtime_ipc_root)
+        return not self.runtime_ipc_root.exists()
 
     def run(self) -> BatchSummary:
         failure = False
@@ -3774,6 +3796,8 @@ class ProductionBatchComposition:
                 )
                 self.journal.close()
                 self.allocator.close()
+                if self._release_runtime_ipc_root() is not True:
+                    raise CliError("RUNTIME_IPC_CLEANUP_INCOMPLETE")
         return snapshot.summary
 
 

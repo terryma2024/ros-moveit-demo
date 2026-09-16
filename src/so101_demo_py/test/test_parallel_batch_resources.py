@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 from queue import Queue
 import signal
+import shutil
 import subprocess
 import sys
 from threading import Barrier, Event
@@ -30,6 +31,7 @@ from so101_demo.parallel_batch.resources import (
     ResourceSnapshot,
     SystemResourceProbe,
     WorkerResourceAllocator,
+    configured_runtime_ipc_root,
 )
 
 
@@ -2749,6 +2751,41 @@ def test_socket_path_must_fit_linux_unix_domain_limit(tmp_path, config, monkeypa
     with pytest.raises(ResourceAllocationError, match='UNIX_SOCKET_PATH_TOO_LONG'):
         resource_allocator.allocate()
     assert not root.exists()
+
+
+def test_short_external_ipc_root_preserves_long_durable_evidence_root(tmp_path, config):
+    root = tmp_path / ("durable-" + "x" * 90)
+    ipc_root = Path(f"/run/user/{os.getuid()}/so101-test-{os.getpid()}")
+    assert not ipc_root.exists()
+    resource_allocator = WorkerResourceAllocator(
+        config,
+        root,
+        probe=FakeProbe(),
+        claim_root=claim_root(),
+        ipc_root=ipc_root,
+    )
+    try:
+        manifest = resource_allocator.allocate(1)
+        worker = manifest.workers[0]
+
+        assert worker.worker_root.is_relative_to(root)
+        assert worker.socket_path == ipc_root / "1/s"
+        assert len(os.fsencode(worker.socket_path)) <= 107
+        assert not (root / "ipc").exists()
+    finally:
+        resource_allocator.close()
+        shutil.rmtree(ipc_root, ignore_errors=True)
+
+
+def test_runtime_ipc_base_is_closed_to_same_user_runtime_directory():
+    expected = Path(f"/run/user/{os.getuid()}")
+    assert configured_runtime_ipc_root(
+        "b1234", {"SO101_PARALLEL_IPC_BASE": str(expected)}
+    ) == expected / "so101-b1234"
+    with pytest.raises(ResourceAllocationError, match="IPC_BASE"):
+        configured_runtime_ipc_root(
+            "b1234", {"SO101_PARALLEL_IPC_BASE": "/tmp"}
+        )
 
 
 def test_probe_exceptions_fail_closed_without_allocating(tmp_path, config):
