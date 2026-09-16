@@ -115,6 +115,9 @@ _CURRENT_PROVENANCE_FILES = {
     "container_sha256": "container_sha256.json",
     "catalog_sha256": "catalog_sha256.json",
 }
+_DYNAMIC_MUJOCO_POLICY = Path(
+    "config/policies/dynamic_cup_pick/v1/mujoco.yaml"
+)
 
 
 class CliError(RuntimeError):
@@ -152,6 +155,35 @@ class PreparedBatch:
     live_headroom_current_provenance: Mapping[str, Path]
     live_headroom_verification: Mapping[str, object] | None
     resume: bool
+
+
+def _runtime_package_root(
+    *,
+    module_path: Path | None = None,
+    share_directory_provider: Callable[[str], str] | None = None,
+) -> Path:
+    """Locate packaged policy data in either a source tree or a copied install."""
+
+    module = (module_path or Path(__file__)).resolve()
+    source_root = module.parents[2]
+    source_policy = source_root / _DYNAMIC_MUJOCO_POLICY
+    if source_policy.is_file() and not source_policy.is_symlink():
+        return source_root
+    if share_directory_provider is None:
+        from ament_index_python.packages import get_package_share_directory
+
+        share_directory_provider = get_package_share_directory
+    share_root = Path(share_directory_provider("so101_demo_py"))
+    share_policy = share_root / _DYNAMIC_MUJOCO_POLICY
+    if (
+        not share_root.is_absolute()
+        or not share_root.is_dir()
+        or share_root.is_symlink()
+        or not share_policy.is_file()
+        or share_policy.is_symlink()
+    ):
+        raise CliError("RUNTIME_POLICY_ROOT_INVALID")
+    return share_root
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1054,7 +1086,7 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         from so101_demo.core.dynamic_pick import compose_pose, inverse_pose
         from so101_demo.core.dynamic_pick_policy import load_dynamic_policy_variant
 
-        package_root = Path(__file__).resolve().parents[2]
+        package_root = _runtime_package_root()
         loaded_policy = load_dynamic_policy_variant(package_root, backend="mujoco")
         expected_final_cup_pose_world = compose_pose(
             loaded_policy.template.place_tcp_world,

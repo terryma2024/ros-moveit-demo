@@ -82,6 +82,27 @@ def verified(_spec):
     return {"source_commit": "a" * 40, "models_verified": True, "image_verified": True}
 
 
+def test_runtime_package_root_uses_installed_share_for_copied_module(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import _runtime_package_root
+
+    module_path = (
+        tmp_path
+        / "install/so101_demo_py/lib/python3.12/site-packages/so101_demo/cli"
+        / "mujoco_parallel_batch.py"
+    )
+    module_path.parent.mkdir(parents=True)
+    module_path.write_text("# installed module\n", encoding="utf-8")
+    share = tmp_path / "install/so101_demo_py/share/so101_demo_py"
+    policy = share / "config/policies/dynamic_cup_pick/v1/mujoco.yaml"
+    policy.parent.mkdir(parents=True)
+    policy.write_text("schema_version: 1\n", encoding="utf-8")
+
+    assert _runtime_package_root(
+        module_path=module_path,
+        share_directory_provider=lambda _package: str(share),
+    ) == share
+
+
 def test_shutdown_signal_handler_is_idempotent_while_cleanup_unwinds(monkeypatch):
     import signal
 
