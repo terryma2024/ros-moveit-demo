@@ -119,7 +119,21 @@ def resource_root(tmp_path, suffix='batch'):
 
 
 def claim_root():
-    return Path(os.environ['TMPDIR']).parent / 'claims'
+    # Persistent claim records intentionally survive descriptor release. Give
+    # each pytest case its own stable claim namespace so a crash-recovery case
+    # cannot make a later, independent allocator case look unclean.
+    node_id = os.environ.get('PYTEST_CURRENT_TEST', 'standalone').split(' (', 1)[0]
+    suffix = hashlib.sha256(node_id.encode('utf-8')).hexdigest()[:12]
+    return Path(os.environ['TMPDIR']).parent / f'claims-{suffix}'
+
+
+def test_claim_root_is_stable_per_test_and_isolated_between_tests(monkeypatch):
+    monkeypatch.setenv('PYTEST_CURRENT_TEST', 'test/module.py::test_a (call)')
+    first = claim_root()
+    assert claim_root() == first
+
+    monkeypatch.setenv('PYTEST_CURRENT_TEST', 'test/module.py::test_b (call)')
+    assert claim_root() != first
 
 
 def test_observational_policy_allocates_eight_without_headroom_rejection(
