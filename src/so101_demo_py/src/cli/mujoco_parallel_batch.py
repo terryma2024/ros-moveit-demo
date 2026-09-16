@@ -2649,7 +2649,7 @@ class ProductionBatchComposition:
 
     def _remove_stale_worker_sockets(self):
         """Remove only prior generation sockets after exact process fencing."""
-        ipc_root = self.authority.ipc_root
+        ipc_root = self.allocator.ipc_root
         for worker in self.resource_manifest.workers:
             for name in (f"{worker.worker_id}.sock", f"{worker.worker_id}-control.sock"):
                 path = ipc_root / name

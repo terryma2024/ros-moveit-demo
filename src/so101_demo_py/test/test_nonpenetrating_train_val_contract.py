@@ -808,7 +808,7 @@ def test_legacy_sample_limit_control_is_unchanged() -> None:
 def test_contract_tests_load_no_rendering_modules() -> None:
     source_root = (Path(__file__).resolve().parents[1] / "src").resolve()
     program = """
-import importlib
+import importlib.util
 import sys
 from pathlib import Path
 
@@ -829,6 +829,13 @@ def loaded_forbidden_roots():
     return {name.split(".", 1)[0] for name in sys.modules} & forbidden_roots
 
 source_root = Path(sys.argv[1]).resolve()
+spec = importlib.util.spec_from_file_location(
+    "so101_demo", source_root / "__init__.py",
+    submodule_search_locations=[str(source_root)],
+)
+package = importlib.util.module_from_spec(spec)
+sys.modules["so101_demo"] = package
+spec.loader.exec_module(package)
 before = loaded_forbidden_roots()
 print(f"interpreter={sys.executable}")
 print(f"source_root={source_root}")
