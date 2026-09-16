@@ -84,6 +84,19 @@
     "terminal_campaign": {
       "type": ["string", "null"],
       "enum": ["COMPLETED", "COMPLETED_WITH_FAILURES", "INFRA_FAILED", "CANCELLED", "NEEDS_OPERATOR_RECOVERY", null]
+    },
+    "manifest_point_count": {"type": "integer", "minimum": 4, "maximum": 20},
+    "artifact_files": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file", "media_type"],
+        "properties": {
+          "file": {"type": "string"},
+          "media_type": {"type": "string"}
+        }
+      }
     }
   }
 }

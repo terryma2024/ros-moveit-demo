@@ -1,20 +1,22 @@
 import { defineConfig } from "@playwright/test";
 
+import { evidenceOutputDir, evidenceReportFile, sharedUse } from "./e2e/expert-validation/fixtures/config";
+
 const baseURL = process.env.SO101_TELEOP_BASE_URL || "http://127.0.0.1:4173";
-const executablePath = process.env.SO101_PLAYWRIGHT_CHROME || (
-  process.platform === "darwin"
-    ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-    : "/usr/bin/google-chrome"
-);
 
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: ["expert-validation/installed/**", "expert-validation/live-sim/**"],
+  outputDir: evidenceOutputDir("default"),
+  reporter: [
+    ["list"],
+    ...(evidenceReportFile("default")
+      ? [["json", { outputFile: evidenceReportFile("default")! }] as ["json", { outputFile: string }]]
+      : []),
+  ],
   use: {
+    ...sharedUse,
     baseURL,
-    browserName: "chromium",
-    launchOptions: { executablePath },
-    screenshot: "only-on-failure",
-    trace: "retain-on-failure",
   },
   webServer: process.env.SO101_TELEOP_BASE_URL ? undefined : {
     command: "bun run dev -- --host 127.0.0.1 --port 4173",

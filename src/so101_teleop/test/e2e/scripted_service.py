@@ -75,6 +75,8 @@ _ALLOWED_TOP_LEVEL = frozenset(
         "expected_http_refresh_after",
         "terminal_campaign",
         "retry_results",
+        "manifest_point_count",
+        "artifact_files",
     }
 )
 
@@ -133,6 +135,8 @@ class _ScenarioModel(_ClosedModel):
     expected_http_refresh_after: int | None = None
     terminal_campaign: str | None = None
     retry_results: dict[str, str] = {}
+    manifest_point_count: int = 20
+    artifact_files: dict[str, dict[str, str]] = {}
 
 
 @dataclass(frozen=True)
@@ -223,6 +227,8 @@ def load_scenario(path: Path) -> tuple[ScriptedScenario, str]:
             "lease_renewal_margin_s": model.lease_renewal_margin_s,
             "terminal_campaign": model.terminal_campaign,
             "retry_results": dict(model.retry_results),
+            "manifest_point_count": model.manifest_point_count,
+            "artifact_files": copy.deepcopy(model.artifact_files),
         },
         expected_commands=model.expected_commands,
         event_script=tuple(
@@ -337,9 +343,38 @@ class ScriptedValidationService:
         self.emitted_sequences: list[int] = []
         self.lease_service = _ScriptedLeaseService(self)
         self.artifacts = _ScriptedArtifactRegistry()
+        artifacts_root = (
+            Path(__file__).resolve().parents[1] / "fixtures" / "expert_validation_e2e" / "artifacts"
+        )
+        for artifact_id, spec in initial["artifact_files"].items():
+            path = (artifacts_root / spec["file"]).resolve()
+            if not path.is_file() or not path.is_relative_to(artifacts_root):
+                raise ScenarioError(f"ARTIFACT_FIXTURE_INVALID:{artifact_id}")
+            self.artifacts.register(artifact_id, path, spec["media_type"])
         if initial["initial_campaign"] is not None:
             campaign = copy.deepcopy(initial["initial_campaign"])
             self._campaigns[campaign["campaign_id"]] = campaign
+            manifest_id = campaign.get("manifest_id")
+            if manifest_id:
+                self._manifests[manifest_id] = self._build_manifest(
+                    manifest_id, initial["manifest_point_count"]
+                )
+            if "points" not in campaign:
+                manifest = self._manifests[campaign["manifest_id"]]
+                campaign["points"] = [
+                    {
+                        "point_id": point["id"],
+                        "display_id": point["display_id"],
+                        "status": "UNRUN",
+                        "retry_eligible": False,
+                        "active_worker_id": None,
+                        "reason": None,
+                        "attempts": (),
+                        "artifact_ids": (),
+                        "artifacts": (),
+                    }
+                    for point in manifest["points"]
+                ]
 
     # -- internal helpers -------------------------------------------------
 
@@ -431,14 +466,11 @@ class ScriptedValidationService:
         self._lease["state"] = "RELEASED"
         return {"lease_id": lease_id, "released": True}
 
-    def create_manifest_from_count(self, total_points: int) -> dict[str, Any]:
-        self._check_http_fault("create_manifest")
-        self._log_command("create_manifest", {"total_points": total_points})
+    def _build_manifest(self, manifest_id: str, total_points: int) -> dict[str, Any]:
         points = _golden_points()[:total_points]
         document_points = [_manifest_point(point, index) for index, point in enumerate(points)]
-        manifest_id = "manifest-" + uuid.uuid4().hex
         canonical = json.dumps(document_points, sort_keys=True, separators=(",", ":"))
-        manifest = {
+        return {
             "manifest_id": manifest_id,
             "point_count": total_points,
             "catalog_sha256": hashlib.sha256(b"ai_station_baseline_v1").hexdigest(),
@@ -456,6 +488,12 @@ class ScriptedValidationService:
             "source_hashes": None,
             "top_view": _golden_top_view(total_points),
         }
+
+    def create_manifest_from_count(self, total_points: int) -> dict[str, Any]:
+        self._check_http_fault("create_manifest")
+        self._log_command("create_manifest", {"total_points": total_points})
+        manifest_id = "manifest-" + uuid.uuid4().hex
+        manifest = self._build_manifest(manifest_id, total_points)
         self._manifests[manifest_id] = manifest
         return manifest
 
@@ -464,6 +502,9 @@ class ScriptedValidationService:
             return self._manifests[manifest_id]
         except KeyError as error:
             raise ScriptedServiceError("VALIDATION_MANIFEST_NOT_FOUND") from error
+
+    def get_manifest(self, manifest_id: str) -> dict[str, Any]:
+        return self.get_manifest_api(manifest_id)
 
     async def preflight_api(self, body: dict[str, Any]) -> dict[str, Any]:
         self._check_http_fault("preflight")
@@ -475,7 +516,7 @@ class ScriptedValidationService:
         reason = self._mode_availability.get(body["execution_mode"])
         if reason:
             raise ScriptedServiceError(reason)
-        self._log_command("preflight", {"manifest_id": body["manifest_id"]})
+        self._log_command("preflight", {"manifest_id": body["manifest_id"], "body": dict(body)})
         if self._preflight_rejection is not None:
             return {
                 "receipt_id": "receipt-rejected",
@@ -610,9 +651,11 @@ class ScriptedValidationService:
         return result
 
     def list_campaigns(self) -> list[dict[str, Any]]:
+        self._log_command("list_campaigns", {})
         return [copy.deepcopy(campaign) for campaign in self._campaigns.values()]
 
     def get_campaign(self, campaign_id: str) -> dict[str, Any]:
+        self._log_command("get_campaign", {"campaign_id": campaign_id})
         try:
             return copy.deepcopy(self._campaigns[campaign_id])
         except KeyError as error:
@@ -677,6 +720,7 @@ class ScriptedValidationService:
         return copy.deepcopy(campaign)
 
     def subscribe(self) -> asyncio.Queue:
+        self._log_command("subscribe_events", {})
         queue: asyncio.Queue = asyncio.Queue()
         self._subscribers.add(queue)
         return queue

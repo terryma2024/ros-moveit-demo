@@ -12,7 +12,9 @@
     "generate:api:validation": "openapi-typescript ../so101_teleop/expert_validation_openapi.json -o src/api/expert-validation-schema.d.ts",
     "build": "tsc -b && vite build",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test --config playwright.config.ts",
+    "test:e2e:installed": "playwright test --config playwright.installed.config.ts",
+    "test:e2e:live-sim": "playwright test --config playwright.live-sim.config.ts"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "1.1.6",

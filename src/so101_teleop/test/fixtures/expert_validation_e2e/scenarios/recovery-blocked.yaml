@@ -1,0 +1,39 @@
+schema_version: 1
+scenario_id: recovery-blocked
+description: Campaign blocked by operator recovery; every point projects as blocked, not failed.
+manifest_point_count: 4
+initial_campaign:
+  campaign_id: campaign-recovery
+  manifest_id: manifest-recovery
+  sequence: 7
+  execution_mode: SEQUENTIAL
+  owner_kind: COORDINATOR
+  batch_id: batch-recovery
+  status: NEEDS_OPERATOR_RECOVERY
+  requested: 4
+  evaluated: 2
+  execution_started: 2
+  valid_succeeded: 2
+  valid_failed: 0
+  indeterminate: 0
+  not_executed: 2
+  batch_cleanup_complete: false
+  broker: {available: true, reason: null}
+  points:
+    - point_id: task_start
+      display_id: P01
+      status: PASSED
+      retry_eligible: false
+    - point_id: cup_test_forward_5cm
+      display_id: P02
+      status: PASSED
+      retry_eligible: false
+    - point_id: cup_test_left_5cm
+      display_id: P03
+      status: UNRUN
+      retry_eligible: false
+    - point_id: cup_test_right_5cm
+      display_id: P04
+      status: UNRUN
+      retry_eligible: false
+terminal_campaign: NEEDS_OPERATOR_RECOVERY

@@ -1,0 +1,56 @@
+schema_version: 1
+scenario_id: adaptive-fallback
+description: Adaptive campaign with W8 to W6 fallback, generation switch and late stale events.
+manifest_point_count: 20
+initial_campaign:
+  campaign_id: campaign-adaptive-fb
+  manifest_id: manifest-adaptive-fb
+  sequence: 1
+  execution_mode: ADAPTIVE
+  owner_kind: ADAPTIVE_WRAPPER
+  batch_id: adaptive-fb
+  status: RUNNING
+  requested: 20
+  evaluated: 0
+  execution_started: 0
+  valid_succeeded: 0
+  valid_failed: 0
+  indeterminate: 0
+  not_executed: 20
+  batch_cleanup_complete: false
+  levels_used: [8]
+  current_generation: 1
+  infra_attempts: 0
+  resource_observations: {memory_pressure: LOW}
+  broker: {available: true, reason: null}
+  workers:
+    - worker_id: worker-08-01
+      generation: 1
+      state: READY
+      lease_count: 0
+event_script:
+  - sequence: 2
+    hint: POOL_DEGRADING
+    patch:
+      broker: {available: false, reason: RECOVERING}
+      infra_attempts: 1
+  - sequence: 3
+    hint: GENERATION_STARTED
+    patch:
+      levels_used: [8, 6]
+      fallback_history: [{from_count: 8, to_count: 6, reason: WORKER_START_FAILED}]
+      current_generation: 2
+      broker: {available: true, reason: null}
+      resource_observations: {memory_pressure: HIGH}
+      workers:
+        worker-06-01: {generation: 2, state: READY, lease_count: 0}
+  - sequence: 4
+    hint: WORKER_PROGRESS
+    patch:
+      points:
+        task_start: {status: RUNNING, active_worker_id: worker-06-01}
+      workers:
+        worker-06-01: {state: EXECUTING, current_point_id: task_start, lease_count: 1}
+faults:
+  - late_sequence: 2
+terminal_campaign: null

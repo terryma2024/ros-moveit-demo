@@ -1,0 +1,8 @@
+schema_version: 1
+scenario_id: renew-fails
+description: Lease renewal fails once; the page must drop authority and show the server code.
+lease_duration_s: 3
+lease_renewal_margin_s: 1
+faults:
+  - http_error_once: {operation: renew_lease, code: LEASE_EXPIRED}
+terminal_campaign: null

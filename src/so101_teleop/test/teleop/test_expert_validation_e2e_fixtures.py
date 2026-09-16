@@ -21,7 +21,7 @@ from scripted_service import (  # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "expert_validation_e2e"
 EXPECTED_BASELINE_SHA256 = (
-    "746052476af84686fccab6d9eb6497cce865b9b1e3634d9ea4c9e58e0e683691"
+    "a269cb23678301137e9a9edf454c1707326f1eb82c5d80487afd7c1f18dae79d"
 )
 
 
@@ -33,11 +33,11 @@ def _write_scenario(tmp_path: Path, document: dict) -> Path:
 
 
 def _baseline_document() -> dict:
-    return yaml.safe_load((FIXTURES / "scenarios" / "baseline.yaml").read_text("utf-8"))
+    return yaml.safe_load((FIXTURES / "scenarios" / "baseline-sequential-4.yaml").read_text("utf-8"))
 
 
 def test_scenario_hash_is_canonical():
-    scenario, digest = load_scenario(FIXTURES / "scenarios" / "baseline.yaml")
+    scenario, digest = load_scenario(FIXTURES / "scenarios" / "baseline-sequential-4.yaml")
     assert scenario.schema_version == 1
     assert scenario.scenario_id == "baseline-sequential-4"
     assert digest == EXPECTED_BASELINE_SHA256

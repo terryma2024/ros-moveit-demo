@@ -17,7 +17,20 @@ export function CampaignProgress({ campaign }: { campaign: CampaignView }) {
         <span>Evaluated {evaluated}</span>
         <span>Execution started {campaign.execution_started ?? 0}</span>
         <span>First pass {succeeded} / {evaluated} valid</span>
+        <span>Failed {campaign.valid_failed ?? 0}</span>
+        <span>Indeterminate {campaign.indeterminate ?? 0}</span>
+        <span>Unrun {campaign.not_executed ?? 0}</span>
       </div>
+      {campaign.execution_mode === "ADAPTIVE" ? (
+        <>
+          <p>Infra attempts {campaign.infra_attempts ?? 0}</p>
+          <p className="text-slate-400">
+            Resource observations only: {Object.entries(campaign.resource_observations ?? {})
+              .map(([key, value]) => `${key}=${String(value)}`)
+              .join(", ") || "none"}
+          </p>
+        </>
+      ) : null}
       {campaign.broker && !campaign.broker.available ? (
         <p className="text-amber-300">Broker degraded: {campaign.broker.reason ?? "UNKNOWN"}</p>
       ) : <p>Broker healthy</p>}
