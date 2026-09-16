@@ -53,6 +53,7 @@ export type InstalledServer = {
   serverPid: () => number;
   specId: string;
   stop: () => Promise<number | null>;
+  killHard: () => Promise<void>;
   start: () => Promise<void>;
   restart: () => Promise<void>;
 };
@@ -181,6 +182,17 @@ export const installedTest = base.extend<InstalledFixtures>({
       }
       return current.exitCode;
     };
+    const killHard = async (): Promise<void> => {
+      if (!child) return;
+      const current = child;
+      child = null;
+      current.kill("SIGKILL");
+      const deadline = Date.now() + 15_000;
+      while (current.exitCode === null) {
+        if (Date.now() > deadline) throw new Error("SERVER_SIGKILL_TIMEOUT");
+        await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
+      }
+    };
 
     await start();
     const server: InstalledServer = {
@@ -192,6 +204,7 @@ export const installedTest = base.extend<InstalledFixtures>({
       serverPid: () => currentPid,
       specId,
       stop,
+      killHard,
       start,
       restart: async () => {
         await stop();

@@ -587,6 +587,18 @@ class SupervisorStore:
             state=row["state"], batch_id=row["batch_id"]
         )
 
+    def retry_items(self, campaign_id: str) -> tuple[RetryItem, ...]:
+        return tuple(
+            RetryItem(
+                campaign_id=row["campaign_id"], ordinal=row["ordinal"],
+                point_id=row["point_id"], state=row["state"], batch_id=row["batch_id"],
+            )
+            for row in self._connection.execute(
+                "SELECT * FROM retry_queue WHERE campaign_id = ? ORDER BY ordinal",
+                (campaign_id,),
+            )
+        )
+
     def record_cleanup_and_advance_retry(self, receipt: CleanupReceipt) -> None:
         with self._transaction():
             row = self._connection.execute(

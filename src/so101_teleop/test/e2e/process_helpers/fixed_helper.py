@@ -385,7 +385,10 @@ def main(argv: list[str]) -> int:
             "batch-terminal",
             {"delta": {"terminal_reason": terminal_reason}},
         )
-        if spec.get("stop_after") == "terminal-before-cleanup":
+        stop_after = spec.get("stop_after")
+        if spec.get("stop_after_scope") == "retry" and not args.batch_id.startswith("retry-"):
+            stop_after = None
+        if stop_after == "terminal-before-cleanup":
             return 0
         finalize_cleanup()
         return 0

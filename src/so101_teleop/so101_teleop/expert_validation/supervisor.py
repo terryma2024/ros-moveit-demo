@@ -260,15 +260,29 @@ class ExpertValidationSupervisor:
         if not point_ids:
             return {"status": "LIVE_RETRY_NOT_APPLICABLE_ALL_SUCCEEDED"}
         original = self._requests[campaign_id]
-        self.store.enqueue_retries(campaign_id, point_ids)
-        for index, point_id in enumerate(point_ids, start=1):
-            batch_id = f"retry-{index:03d}"
+        if not self.store.retry_items(campaign_id):
+            self.store.enqueue_retries(campaign_id, point_ids)
+        while True:
+            item = self.store.next_retry(campaign_id)
+            if item is None:
+                break
+            batch_id = f"retry-{item.ordinal + 1:03d}"
             batch_root = self._batch_root(original, batch_id)
+            if item.state == "RUNNING":
+                # A prior attempt reached spawn for this queue entry. Reconcile
+                # the durable journal; never re-execute and never skip ahead.
+                receipt_sha256 = self._reconcile_retry_batch(
+                    original, batch_id, batch_root
+                )
+                self.store.record_cleanup_and_advance_retry(
+                    CleanupReceipt(campaign_id, batch_id, item.point_id, receipt_sha256)
+                )
+                continue
             batch = BatchBinding(
                 batch_id=batch_id,
                 campaign_id=campaign_id,
                 batch_kind="FULL_RESTART_RETRY",
-                point_id=point_id,
+                point_id=item.point_id,
                 journal_root=batch_root,
                 coordinator_epoch=1,
             )
@@ -276,7 +290,7 @@ class ExpertValidationSupervisor:
             config = FixedExecutionConfig("SEQUENTIAL", 1, 1)
             receipt = type("RetryReceipt", (), {"execution_config": config})()
             owner_request = self._owner_request(
-                original, receipt, batch_id, batch_root, point_ids=(point_id,)
+                original, receipt, batch_id, batch_root, point_ids=(item.point_id,)
             )
             result = await self._spawn(owner_request)
             if isinstance(result, dict):
@@ -288,14 +302,23 @@ class ExpertValidationSupervisor:
                     result, original, batch_id, batch_root
                 )
             self.store.record_cleanup_and_advance_retry(
-                CleanupReceipt(
-                    campaign_id,
-                    batch_id,
-                    point_id,
-                    receipt_sha256,
-                )
+                CleanupReceipt(campaign_id, batch_id, item.point_id, receipt_sha256)
             )
         return {"status": "RETRIES_COMPLETE"}
+
+    def _reconcile_retry_batch(
+        self, request: CampaignStartRequest, batch_id: str, batch_root: Path
+    ) -> str:
+        record = self.store.owned_execution(batch_id)
+        if record is None or record.state == "INTENT":
+            # The spawn outcome is unknowable; never replay or skip this entry.
+            raise RuntimeError("COMMAND_OUTCOME_UNKNOWN")
+        if ExecutionProcessOwner.identity_alive(
+            record.pid, record.started_ticks, record.argv_sha256
+        ):
+            # The previous owner is still provably live; never overlap it.
+            raise RuntimeError("RETRY_EXECUTION_STILL_RUNNING")
+        return self._verify_retry_journal(request, batch_id, batch_root)
 
     async def _await_fixed_retry_cleanup(
         self, owned, request: CampaignStartRequest, batch_id: str, batch_root: Path
@@ -312,6 +335,11 @@ class ExpertValidationSupervisor:
             await asyncio.sleep(0.1)
         if status.exit_code not in (0, None):
             raise RuntimeError("RETRY_EXECUTION_FAILED")
+        return self._verify_retry_journal(request, batch_id, batch_root)
+
+    def _verify_retry_journal(
+        self, request: CampaignStartRequest, batch_id: str, batch_root: Path
+    ) -> str:
         journal_root = batch_root / "coordinator"
         epoch_path = journal_root / "coordinator_epoch.json"
         if epoch_path.is_symlink() or not epoch_path.is_file():
