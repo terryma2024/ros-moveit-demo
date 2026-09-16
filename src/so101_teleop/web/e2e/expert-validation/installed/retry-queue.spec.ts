@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import { installedTest as test, expect, pythonExecutable } from "../fixtures/installed";
-import { readJournalEvents } from "../assertions/journal";
+import { readJournalEvents, storeQuery } from "../assertions/journal";
 import { ExpertValidationPage } from "../pages/expert-validation-page";
 import {
   api, acquireLease, createManifest, fixedConfig, preflight, startCampaign,
@@ -18,7 +19,9 @@ function query(serverRoot: string, sql: string): Array<Record<string, any>> {
 }
 
 function journalEvents(serverRoot: string, campaignId: string, batchId: string) {
-  return readJournalEvents(join(serverRoot, "campaigns", campaignId, batchId, "coordinator"));
+  const root = join(serverRoot, "campaigns", campaignId, batchId, "coordinator");
+  if (!existsSync(root)) return [];
+  return readJournalEvents(root);
 }
 
 function hasJournalEvent(events: Array<{ type?: string }>, type: string): boolean {
