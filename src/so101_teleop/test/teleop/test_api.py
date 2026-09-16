@@ -106,6 +106,14 @@ def test_health_and_snapshot_remain_available_without_web_assets():
     assert client.get("/snapshot").json()["simulation_session_id"] == "sim-a"
 
 
+def test_regular_server_reports_validation_unavailable():
+    client = TestClient(create_app(Service()))
+    assert client.get("/expert-validation/capabilities").json() == {
+        "available": False,
+        "reason": "VALIDATION_SERVER_REQUIRED",
+    }
+
+
 def test_missing_web_assets_return_machine_readable_service_unavailable():
     """A missing production bundle must be diagnosable instead of looking like a lost route."""
     client = TestClient(create_app(Service()))

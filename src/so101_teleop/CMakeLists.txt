@@ -46,6 +46,7 @@ install(DIRECTORY config docs launch
 install(
   PROGRAMS
     scripts/so101_teleop_server.py
+    scripts/so101_expert_validation_server.py
     scripts/tile_ai_station_guis.py
     scripts/gazebo_window_recorder.py
     scripts/so101_stack_inventory.py

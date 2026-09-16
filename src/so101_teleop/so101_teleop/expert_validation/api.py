@@ -1,0 +1,277 @@
+"""Dedicated FastAPI surface for expert-validation campaigns."""
+
+from __future__ import annotations
+
+import asyncio
+import inspect
+from pathlib import Path
+from typing import Literal
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from so101_teleop.api import validate_bind_address
+from so101_teleop.task_artifacts import ArtifactAccessError
+
+
+class ClosedModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class LeaseAcquireRequest(ClosedModel):
+    service_session_id: str = Field(min_length=1)
+
+
+class LeaseMutationRequest(ClosedModel):
+    service_session_id: str = Field(min_length=1)
+    generation: int = Field(ge=1)
+
+
+class ManifestCreateRequest(ClosedModel):
+    total_points: int = Field(ge=4, le=20)
+
+
+class CampaignConfiguration(ClosedModel):
+    service_session_id: str = Field(min_length=1)
+    lease_id: str = Field(min_length=1)
+    lease_generation: int = Field(ge=1)
+    manifest_id: str = Field(min_length=1)
+    execution_mode: Literal["SEQUENTIAL", "PARALLEL", "ADAPTIVE"]
+    worker_count: int | None = Field(default=None, ge=1, le=3)
+    max_points_per_worker: int | None = Field(default=None, ge=1, le=20)
+    preferred_worker_count: int | None = Field(default=None, ge=1, le=16)
+    fallback_worker_counts: tuple[int, ...] | None = None
+    initial_points_per_worker: int | None = Field(default=None, ge=1, le=20)
+    worker_start_timeout_s: float | None = Field(default=None, gt=0)
+    max_infra_attempts_per_point: int | None = Field(default=None, ge=1)
+    yolo_executor_count: Literal[1, 2, 4] | None = None
+
+    @model_validator(mode="after")
+    def validate_mode(self):
+        fixed = (self.worker_count, self.max_points_per_worker)
+        adaptive = (
+            self.preferred_worker_count,
+            self.fallback_worker_counts,
+            self.initial_points_per_worker,
+            self.worker_start_timeout_s,
+            self.max_infra_attempts_per_point,
+            self.yolo_executor_count,
+        )
+        if self.execution_mode in {"SEQUENTIAL", "PARALLEL"}:
+            if any(value is None for value in fixed) or any(value is not None for value in adaptive):
+                raise ValueError("FIXED_EXECUTION_CONFIG")
+            if self.execution_mode == "SEQUENTIAL" and self.worker_count != 1:
+                raise ValueError("SEQUENTIAL_WORKER_COUNT")
+            if self.execution_mode == "PARALLEL" and not 2 <= self.worker_count <= 3:
+                raise ValueError("PARALLEL_WORKER_COUNT")
+        else:
+            if any(value is not None for value in fixed):
+                raise ValueError("ADAPTIVE_FIXED_FIELD")
+            if any(value is None for value in adaptive):
+                raise ValueError("ADAPTIVE_EXECUTION_CONFIG")
+            levels = (self.preferred_worker_count, *self.fallback_worker_counts)
+            if any(next_level >= level for level, next_level in zip(levels, levels[1:])):
+                raise ValueError("ADAPTIVE_FALLBACK_TIERS")
+            if self.yolo_executor_count != 2:
+                raise ValueError("ADAPTIVE_YOLO_EXECUTOR_COUNT")
+        return self
+
+
+class CampaignStartRequest(CampaignConfiguration):
+    command_id: str = Field(min_length=1)
+    preflight_receipt_id: str = Field(min_length=1)
+
+
+class CampaignCancelRequest(ClosedModel):
+    service_session_id: str = Field(min_length=1)
+    lease_id: str = Field(min_length=1)
+    lease_generation: int = Field(ge=1)
+    command_id: str = Field(min_length=1)
+
+
+class RetryRequest(CampaignCancelRequest):
+    point_ids: tuple[str, ...] = Field(min_length=1)
+    confirmation: str
+
+
+async def _invoke(method, *args):
+    value = method(*args)
+    return await value if inspect.isawaitable(value) else value
+
+
+def _error(error: Exception, *, default_status: int = 409) -> JSONResponse:
+    code = str(error) or type(error).__name__
+    return JSONResponse(status_code=default_status, content={"code": code})
+
+
+def create_expert_validation_app(
+    service,
+    static_dir: str | Path | None = None,
+    *,
+    bind_address: str = "127.0.0.1",
+) -> FastAPI:
+    validate_bind_address(bind_address)
+    app = FastAPI(title="SO-101 Expert Validation", version="1.0.0")
+
+    @app.get("/health")
+    async def health():
+        return await _invoke(service.health)
+
+    @app.get("/expert-validation/capabilities")
+    async def capabilities():
+        return await _invoke(service.capabilities)
+
+    @app.post("/expert-validation/lease")
+    async def acquire_lease(body: LeaseAcquireRequest):
+        try:
+            return await _invoke(service.acquire_lease, body.model_dump())
+        except Exception as error:
+            return _error(error)
+
+    @app.put("/expert-validation/lease/{lease_id}")
+    async def renew_lease(lease_id: str, body: LeaseMutationRequest):
+        try:
+            return await _invoke(service.renew_lease, lease_id, body.model_dump())
+        except Exception as error:
+            return _error(error)
+
+    @app.delete("/expert-validation/lease/{lease_id}")
+    async def release_lease(lease_id: str, body: LeaseMutationRequest):
+        try:
+            return await _invoke(service.release_lease, lease_id, body.model_dump())
+        except Exception as error:
+            return _error(error)
+
+    @app.post("/expert-validation/manifests")
+    async def create_manifest(body: ManifestCreateRequest):
+        try:
+            return await _invoke(service.create_manifest_from_count, body.total_points)
+        except Exception as error:
+            return _error(error)
+
+    @app.get("/expert-validation/manifests/{manifest_id}")
+    async def get_manifest(manifest_id: str):
+        try:
+            return await _invoke(service.get_manifest, manifest_id)
+        except Exception as error:
+            return _error(error, default_status=404)
+
+    @app.post("/expert-validation/campaigns/preflight")
+    async def preflight(body: CampaignConfiguration):
+        try:
+            return await _invoke(service.preflight_api, body.model_dump(exclude_none=True))
+        except Exception as error:
+            return _error(error)
+
+    @app.post("/expert-validation/campaigns")
+    async def start_campaign(body: CampaignStartRequest):
+        try:
+            return await _invoke(service.start_campaign_api, body.model_dump(exclude_none=True))
+        except Exception as error:
+            return _error(error)
+
+    @app.get("/expert-validation/campaigns")
+    async def list_campaigns():
+        return await _invoke(service.list_campaigns)
+
+    @app.get("/expert-validation/campaigns/{campaign_id}")
+    async def get_campaign(campaign_id: str):
+        try:
+            return await _invoke(service.get_campaign, campaign_id)
+        except Exception as error:
+            return _error(error, default_status=404)
+
+    @app.post("/expert-validation/campaigns/{campaign_id}/cancel")
+    async def cancel_campaign(campaign_id: str, body: CampaignCancelRequest):
+        try:
+            return await _invoke(service.cancel_campaign, campaign_id, body.model_dump())
+        except Exception as error:
+            return _error(error)
+
+    @app.post("/expert-validation/campaigns/{campaign_id}/full-restart-retries")
+    async def retry_campaign(campaign_id: str, body: RetryRequest):
+        if body.confirmation != "CONFIRM FULL_RESTART RETRIES":
+            return JSONResponse(status_code=409, content={"code": "CONFIRMATION_REQUIRED"})
+        try:
+            return await _invoke(service.retry_campaign, campaign_id, body.model_dump())
+        except Exception as error:
+            return _error(error)
+
+    @app.get("/expert-validation/artifacts/{artifact_id}")
+    async def artifact(artifact_id: str):
+        try:
+            verified = service.artifacts.resolve_opaque_id(artifact_id)
+        except (ArtifactAccessError, KeyError, ValueError):
+            return JSONResponse(status_code=404, content={"code": "ARTIFACT_NOT_FOUND"})
+        return FileResponse(
+            verified.path,
+            media_type=verified.media_type,
+            filename=verified.path.name,
+        )
+
+    @app.websocket("/expert-validation/events")
+    async def events(websocket: WebSocket):
+        await websocket.accept()
+        subscribe = getattr(service, "subscribe", None)
+        if subscribe is None:
+            await websocket.close(code=1011, reason="EVENT_STREAM_UNAVAILABLE")
+            return
+        queue = subscribe()
+        try:
+            while True:
+                event = await queue.get()
+                await websocket.send_json(
+                    event.model_dump() if hasattr(event, "model_dump") else event
+                )
+        except WebSocketDisconnect:
+            return
+        finally:
+            unsubscribe = getattr(service, "unsubscribe", None)
+            if unsubscribe is not None:
+                unsubscribe(queue)
+
+    @app.post("/tasks/runs")
+    async def disabled_task_runs():
+        return JSONResponse(status_code=503, content={"code": "VALIDATION_TASKS_DISABLED"})
+
+    @app.api_route(
+        "/tasks/{path:path}",
+        methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+        include_in_schema=False,
+    )
+    async def disabled_tasks(path: str):
+        return JSONResponse(status_code=503, content={"code": "VALIDATION_TASKS_DISABLED"})
+
+    @app.get("/", include_in_schema=False)
+    async def root_redirect():
+        return RedirectResponse("/expert-validation", status_code=307)
+
+    if static_dir is not None:
+        root = Path(static_dir)
+        if root.is_dir() and (root / "index.html").is_file():
+            app.mount(
+                "/expert-validation/assets",
+                StaticFiles(directory=root / "assets", follow_symlink=True),
+                name="expert-validation-assets",
+            )
+
+            @app.get("/expert-validation", include_in_schema=False)
+            async def validation_page():
+                return FileResponse(root / "index.html")
+
+            @app.get("/expert-validation/{path:path}", include_in_schema=False)
+            async def validation_fallback(path: str):
+                candidate = root / path
+                return FileResponse(candidate if candidate.is_file() else root / "index.html")
+        else:
+            @app.get("/expert-validation", include_in_schema=False)
+            async def validation_assets_missing():
+                return JSONResponse(status_code=503, content={"code": "WEB_ASSETS_NOT_BUILT"})
+    else:
+        @app.get("/expert-validation", include_in_schema=False)
+        async def validation_assets_unconfigured():
+            return JSONResponse(status_code=503, content={"code": "WEB_ASSETS_NOT_BUILT"})
+
+    return app

@@ -60,6 +60,13 @@ def create_app(
     async def capabilities():
         return await service.capabilities()
 
+    @app.get("/expert-validation/capabilities")
+    async def expert_validation_unavailable():
+        return {
+            "available": False,
+            "reason": "VALIDATION_SERVER_REQUIRED",
+        }
+
     @app.get("/gazebo/camera/presets")
     async def camera_presets():
         return await service.camera_presets()
