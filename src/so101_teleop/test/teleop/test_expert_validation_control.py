@@ -1,7 +1,10 @@
 from dataclasses import replace
 import hashlib
 import json
+import os
 from pathlib import Path
+import socket
+import threading
 
 import pytest
 
@@ -102,6 +105,149 @@ def test_control_rejects_mismatched_reply_identity(tmp_path, changes, error):
 
     with pytest.raises(ControlProtocolError, match=error):
         control.status(command_id="status-1", binding=_binding(tmp_path))
+
+
+@pytest.mark.parametrize(
+    ("changes", "error"),
+    [
+        ({"schema_version": True}, "CONTROL_SCHEMA_VERSION"),
+        ({"schema_version": 1.0}, "CONTROL_SCHEMA_VERSION"),
+        ({"coordinator_epoch": True}, "COORDINATOR_EPOCH_MISMATCH"),
+        ({"coordinator_epoch": 1.0}, "COORDINATOR_EPOCH_MISMATCH"),
+    ],
+)
+def test_control_does_not_coerce_reply_identity_integers(tmp_path, changes, error):
+    """Equality with integer1 must not authenticate bool or float identities."""
+    transport = RecordingTransport()
+    transport.changes = changes
+    with pytest.raises(ControlProtocolError, match=error):
+        CoordinatorControlClient(transport=transport).status(
+            command_id="status-1", binding=_binding(tmp_path, epoch=1)
+        )
+
+
+def test_real_control_transport_preserves_a_long_private_batch_socket(tmp_path):
+    """The bound socket stays inside the durable batch even beyond sun_path."""
+    root = tmp_path / ("long-owned-batch-" + "x" * 100)
+    root.mkdir(mode=0o700)
+    binding = _binding(root)
+    assert len(os.fsencode(binding.control_socket)) > 108
+    parent_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    peer = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    observed = {}
+    errors = []
+
+    def serve():
+        try:
+            peer.settimeout(2)
+            with peer.accept()[0] as connection:
+                connection.settimeout(2)
+                frame = bytearray()
+                while len(frame) < 4:
+                    frame.extend(connection.recv(4 - len(frame)))
+                size = int.from_bytes(frame, "big")
+                while len(frame) < size + 4:
+                    part = connection.recv(size + 4 - len(frame))
+                    if not part:
+                        raise AssertionError("Client sent a partial frame")
+                    frame.extend(part)
+                observed.update(json.loads(frame[4:]))
+                # This transport peer grants no cleanup: ACK is just STOPPING.
+                reply = _reply(
+                    observed, state="STOPPING", batch_terminal=False,
+                    batch_cleanup_complete=False, owned_descendants_gone=False,
+                    assigned_ros_domains_clear=False, cleanup_receipt_sha256=None,
+                )
+                payload = json.dumps(reply, sort_keys=True, separators=(",", ":")).encode()
+                connection.sendall(len(payload).to_bytes(4, "big") + payload)
+        except BaseException as error:
+            errors.append(error)
+
+    try:
+        peer.bind(f"/proc/self/fd/{parent_fd}/control.sock")
+        os.chmod(binding.control_socket, 0o600)
+        peer.listen(1)
+        thread = threading.Thread(target=serve)
+        thread.start()
+        try:
+            result = CoordinatorControlClient().cancel(
+                command_id="cancel-long-1", binding=binding
+            )
+            assert result.state == "STOPPING" and result.batch_cleanup_complete is False
+            with pytest.raises(CleanupNotAuthorized, match="BATCH_NOT_TERMINAL"):
+                authorize_coordinator_stop(result, binding)
+        finally:
+            thread.join(timeout=3)
+        assert not thread.is_alive() and errors == []
+        assert set(observed) == {
+            "schema_version", "command_id", "campaign_id", "batch_id",
+            "coordinator_epoch", "operation", "request_sha256", "control_token",
+        }
+        assert observed["control_token"] == "secret-token"
+        assert observed["campaign_id"] == "campaign-a"
+        assert observed["batch_id"] == "batch-a"
+        assert observed["coordinator_epoch"] == 4
+        assert observed["operation"] == "CANCEL_BATCH"
+        unsigned = {key: value for key, value in observed.items()
+                    if key not in {"request_sha256", "control_token"}}
+        canonical = json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+        assert observed["request_sha256"] == hashlib.sha256(canonical).hexdigest()
+        assert binding.control_socket.parent == root.resolve()
+    finally:
+        peer.close()
+        os.close(parent_fd)
+
+
+def test_real_client_cancel_reaches_the_upstream_durable_coordinator(tmp_path):
+    """No injected transport or stand-in terminal-result authority on this path."""
+    from so101_demo.parallel_batch.contracts import (
+        BatchRequest, RunMode, load_parallel_runtime_config,
+    )
+    from so101_demo.parallel_batch.coordinator import BatchCoordinator
+    from so101_demo.parallel_batch.journal import CoordinatorJournal
+    from so101_demo.parallel_batch.web_control import FixedCoordinatorControlServer
+
+    class UnusedResultPort:
+        def verify(self, *_args):
+            raise AssertionError("Control must not verify or fabricate attempt outcomes")
+
+        def discover(self, *_args):
+            raise AssertionError("Control must not discover attempt outcomes")
+
+    root = (tmp_path / "real-upstream-batch").resolve()
+    journal = CoordinatorJournal.create(root / "coordinator", "batch-a")
+    try:
+        request = BatchRequest("batch-a", RunMode.EXECUTE, ("p1", "p2"), 2, 2, root)
+        demo_root = Path(__file__).resolve().parents[3] / "so101_demo_py"
+        config = load_parallel_runtime_config(demo_root / "config/mujoco/parallel_batch_v1.yaml")
+        coordinator = BatchCoordinator(journal, request, config=config, result_port=UnusedResultPort())
+        coordinator.register_worker("w1", generation=1)
+        coordinator.register_worker("w2", generation=1)
+        control_root = root / "control"
+        control_root.mkdir(mode=0o700)
+        token = "9a" * 32
+        binding = CoordinatorBinding(
+            campaign_id="campaign-a", batch_id="batch-a", batch_root=root,
+            control_socket=control_root / "control.sock", coordinator_epoch=journal.coordinator_epoch,
+            control_token=token, control_token_sha256=hashlib.sha256(token.encode()).hexdigest(),
+        )
+        server = FixedCoordinatorControlServer(
+            coordinator=coordinator, campaign_id="campaign-a", control_token=token,
+            path=binding.control_socket,
+        )
+        server.start()
+        try:
+            result = CoordinatorControlClient().cancel(command_id="cancel-real-1", binding=binding)
+            assert result.state == "STOPPING"
+            assert result.batch_cleanup_complete is False
+            assert coordinator.snapshot().terminal_reason == "WEB_CANCEL_REQUESTED"
+            assert coordinator.grant_lease("w1", generation=1) is None
+            assert coordinator.grant_lease("w2", generation=1) is None
+            assert [event.type for event in journal.replay().events].count("BATCH_STOPPING") == 1
+        finally:
+            server.close()
+    finally:
+        journal.close()
 
 
 @pytest.mark.parametrize(

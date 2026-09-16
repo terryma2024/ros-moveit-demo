@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import os
 import socket
 import stat
 from typing import Callable, Literal, Mapping
@@ -159,12 +160,16 @@ class CoordinatorControlClient:
         if not isinstance(reply, dict) or set(reply) != _REPLY_FIELDS:
             raise ControlProtocolError("CONTROL_REPLY_SCHEMA")
         checks = (
-            (reply["schema_version"] == 1, "CONTROL_SCHEMA_VERSION"),
+            (
+                type(reply["schema_version"]) is int and reply["schema_version"] == 1,
+                "CONTROL_SCHEMA_VERSION",
+            ),
             (reply["command_id"] == request["command_id"], "COMMAND_ID_MISMATCH"),
             (reply["campaign_id"] == request["campaign_id"], "CAMPAIGN_ID_MISMATCH"),
             (reply["batch_id"] == request["batch_id"], "BATCH_ID_MISMATCH"),
             (
-                reply["coordinator_epoch"] == request["coordinator_epoch"],
+                type(reply["coordinator_epoch"]) is int
+                and reply["coordinator_epoch"] == request["coordinator_epoch"],
                 "COORDINATOR_EPOCH_MISMATCH",
             ),
             (reply["operation"] == request["operation"], "CONTROL_OPERATION_MISMATCH"),
@@ -207,22 +212,37 @@ class CoordinatorControlClient:
     def _socket_transport(
         self, binding: CoordinatorBinding, request: dict, timeout_s: float
     ) -> dict:
-        try:
-            directory_mode = stat.S_IMODE(binding.control_socket.parent.stat().st_mode)
-            socket_stat = binding.control_socket.stat(follow_symlinks=False)
-        except OSError as error:
-            raise ControlProtocolError("COORDINATOR_SOCKET_UNAVAILABLE") from error
-        if directory_mode != 0o700 or not stat.S_ISSOCK(socket_stat.st_mode):
-            raise ControlProtocolError("COORDINATOR_SOCKET_MODE")
-        if stat.S_IMODE(socket_stat.st_mode) != 0o600:
-            raise ControlProtocolError("COORDINATOR_SOCKET_MODE")
         wire = {**request, "control_token": binding.control_token}
         frame = encode_frame(wire, max_frame_bytes=self._max_frame_bytes)
         try:
+            parent_fd = os.open(
+                binding.control_socket.parent,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+            )
+        except OSError as error:
+            raise ControlProtocolError("COORDINATOR_SOCKET_UNAVAILABLE") from error
+        try:
+            directory_mode = stat.S_IMODE(os.fstat(parent_fd).st_mode)
+            try:
+                socket_stat = os.stat(
+                    binding.control_socket.name, dir_fd=parent_fd, follow_symlinks=False
+                )
+            except OSError as error:
+                raise ControlProtocolError("COORDINATOR_SOCKET_UNAVAILABLE") from error
+            if (
+                directory_mode != 0o700
+                or not stat.S_ISSOCK(socket_stat.st_mode)
+                or stat.S_IMODE(socket_stat.st_mode) != 0o600
+            ):
+                raise ControlProtocolError("COORDINATOR_SOCKET_MODE")
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
                 peer.settimeout(timeout_s)
-                peer.connect(str(binding.control_socket))
+                # Pin the actual bound parent, as upstream parallel IPC does.
+                # The socket remains inside batch_root even beyond sun_path.
+                peer.connect(f"/proc/self/fd/{parent_fd}/{binding.control_socket.name}")
                 peer.sendall(frame)
+                # The upstream frame reader checks EOF for a one-request frame.
+                peer.shutdown(socket.SHUT_WR)
                 header = _recv_exact(peer, 4)
                 length = int.from_bytes(header, "big")
                 if length > self._max_frame_bytes:
@@ -232,6 +252,8 @@ class CoordinatorControlClient:
             raise ControlProtocolError("CONTROL_ACK_TIMEOUT") from error
         except OSError as error:
             raise ControlProtocolError("COORDINATOR_SOCKET_DISCONNECTED") from error
+        finally:
+            os.close(parent_fd)
         return decode_frame(header + payload, max_frame_bytes=self._max_frame_bytes)
 
 
