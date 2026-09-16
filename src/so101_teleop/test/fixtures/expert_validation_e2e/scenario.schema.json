@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SO-101 expert-validation scripted E2E scenario",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scenario_id"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "scenario_id": {"type": "string", "minLength": 1, "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "description": {"type": "string"},
+    "lease_duration_s": {"type": "number", "exclusiveMinimum": 0},
+    "lease_renewal_margin_s": {"type": "number", "exclusiveMinimum": 0},
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "available": {"type": "boolean"},
+        "execution_modes": {
+          "type": "array",
+          "items": {"enum": ["SEQUENTIAL", "PARALLEL", "ADAPTIVE"]}
+        },
+        "default_execution_mode": {"enum": ["SEQUENTIAL", "PARALLEL", "ADAPTIVE"]},
+        "minimum_points": {"type": "integer"},
+        "maximum_points": {"type": "integer"},
+        "fixed_worker_counts": {"type": "array", "items": {"type": "integer"}},
+        "fixed_max_points_per_worker": {"type": "integer"},
+        "adaptive_default_ladder": {"type": "array", "items": {"type": "integer"}}
+      }
+    },
+    "mode_availability": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "SEQUENTIAL": {"type": ["string", "null"]},
+        "PARALLEL": {"type": ["string", "null"]},
+        "ADAPTIVE": {"type": ["string", "null"]}
+      }
+    },
+    "initial_campaign": {"type": ["object", "null"]},
+    "preflight_rejection": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "reason_codes": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "expected_commands": {"type": "array", "items": {"type": "string"}},
+    "event_script": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sequence"],
+        "properties": {
+          "sequence": {"type": "integer", "minimum": 1},
+          "hint": {"type": "string"},
+          "patch": {"type": "object"}
+        }
+      }
+    },
+    "faults": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "omit_sequence": {"type": "integer"},
+          "duplicate_sequence": {"type": "integer"},
+          "late_sequence": {"type": "integer"},
+          "ws_disconnect": {"type": "boolean"},
+          "http_error_once": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["operation", "code"],
+            "properties": {
+              "operation": {"type": "string"},
+              "code": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "expected_http_refresh_after": {"type": ["integer", "null"]},
+    "terminal_campaign": {
+      "type": ["string", "null"],
+      "enum": ["COMPLETED", "COMPLETED_WITH_FAILURES", "INFRA_FAILED", "CANCELLED", "NEEDS_OPERATOR_RECOVERY", null]
+    }
+  }
+}
