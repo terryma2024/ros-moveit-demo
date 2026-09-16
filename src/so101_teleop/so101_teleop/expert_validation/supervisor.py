@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import asyncio
 import hashlib
 import inspect
 import json
