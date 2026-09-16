@@ -863,6 +863,14 @@
             "title": "Position World M",
             "type": "array"
           },
+          "source": {
+            "enum": [
+              "anchor",
+              "generated"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
           "stratum": {
             "title": "Stratum",
             "type": "string"
@@ -872,6 +880,7 @@
           "id",
           "display_id",
           "label",
+          "source",
           "stratum",
           "position_world_m"
         ],

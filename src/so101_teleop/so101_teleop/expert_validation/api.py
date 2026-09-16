@@ -125,6 +125,7 @@ class ManifestPointResponse(ClosedModel):
     id: str
     display_id: str
     label: str
+    source: Literal["anchor", "generated"]
     stratum: str
     position_world_m: tuple[float, float, float]
 

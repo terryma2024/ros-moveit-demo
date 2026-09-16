@@ -47,7 +47,21 @@ class Service:
         return {"lease_id": lease_id, "released": True}
 
     def create_manifest_from_count(self, total_points):
-        return {"manifest_id": f"manifest-{total_points}", "point_count": total_points}
+        return {
+            "manifest_id": f"manifest-{total_points}",
+            "point_count": total_points,
+            "points": [
+                {
+                    "id": f"anchor-{index}",
+                    "display_id": f"A{index}",
+                    "label": f"Anchor {index}",
+                    "source": "anchor",
+                    "stratum": "anchor",
+                    "position_world_m": [float(index), 0.0, 0.0],
+                }
+                for index in range(total_points)
+            ],
+        }
 
     def get_manifest(self, manifest_id):
         return {"manifest_id": manifest_id, "stale": False}
@@ -177,3 +191,18 @@ def test_health_and_capabilities_are_available(tmp_path):
     client = _client(tmp_path)
     assert client.get("/health").json()["ok"] is True
     assert client.get("/expert-validation/capabilities").json()["available"] is True
+
+
+def test_manifest_response_exposes_declared_point_source(tmp_path):
+    response = _client(tmp_path).post(
+        "/expert-validation/manifests",
+        json={"total_points": 4},
+    )
+
+    assert response.status_code == 200
+    assert [point["source"] for point in response.json()["points"]] == [
+        "anchor",
+        "anchor",
+        "anchor",
+        "anchor",
+    ]

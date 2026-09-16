@@ -551,6 +551,11 @@ export interface components {
                 number,
                 number
             ];
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "anchor" | "generated";
             /** Stratum */
             stratum: string;
         };
