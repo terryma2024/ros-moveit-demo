@@ -22,6 +22,11 @@ import sys
 import threading
 import time
 
+for _entry in os.environ.get("AMENT_PREFIX_PATH", "").split(os.pathsep):
+    _site = Path(_entry) / "lib" / "python3.12" / "site-packages"
+    if _site.is_dir() and str(_site) not in sys.path:
+        sys.path.insert(0, str(_site))
+
 from so101_demo.parallel_batch.artifacts import verify_attempt
 from so101_demo.parallel_batch.contracts import AttemptIdentity, BatchRequest, RunMode
 from so101_demo.parallel_batch.journal import CoordinatorJournal
