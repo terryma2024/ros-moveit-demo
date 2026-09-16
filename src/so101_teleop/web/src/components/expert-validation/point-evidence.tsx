@@ -1,0 +1,31 @@
+import type { PointProjection } from "@/api/expert-validation-types";
+
+type PointView = Pick<PointProjection, "point_id"> & Partial<PointProjection>;
+type Artifact = { artifact_id: string; role: string; media_type: string };
+
+export function PointEvidence({ point, artifacts }: { point: PointView; artifacts: Artifact[] }) {
+  return (
+    <section aria-label={`Evidence for ${point.display_id ?? point.point_id}`} className="space-y-2 rounded-lg border border-slate-700 p-4">
+      <h2>Point evidence · {point.display_id ?? point.point_id}</h2>
+      <p>{point.status ?? "UNKNOWN"}{point.reason ? ` · ${point.reason}` : ""}</p>
+      {point.attempts?.map((attempt) => (
+        <p key={attempt.generation}>FULL_RESTART attempt {attempt.generation}: {attempt.status}</p>
+      ))}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {artifacts.map((artifact) => {
+          const url = `/expert-validation/artifacts/${encodeURIComponent(artifact.artifact_id)}`;
+          return artifact.media_type.startsWith("image/") ? (
+            <figure key={artifact.artifact_id}>
+              <img src={url} alt={artifact.role} className="max-h-72 rounded" />
+              <figcaption>{artifact.role}</figcaption>
+            </figure>
+          ) : (
+            <a key={artifact.artifact_id} href={url} download className="text-sky-300 underline">
+              Download {artifact.role}
+            </a>
+          );
+        })}
+      </div>
+    </section>
+  );
+}

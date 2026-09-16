@@ -1,8 +1,11 @@
 import { createCommandId } from "@/lib/command-id";
 import type {
+  Capabilities,
   CampaignHint,
   CampaignProjection,
+  Lease,
   LeaseAuthority,
+  Manifest,
   PreflightInput,
   PreflightReceipt,
   StartCampaignInput,
@@ -48,6 +51,22 @@ export class ExpertValidationClient {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
+    });
+  }
+
+  capabilities(): Promise<Capabilities> {
+    return this.request<Capabilities>("/expert-validation/capabilities");
+  }
+
+  acquireLease(serviceSessionId: string): Promise<Lease> {
+    return this.post<Lease>("/expert-validation/lease", {
+      service_session_id: serviceSessionId,
+    });
+  }
+
+  createManifest(totalPoints: number): Promise<Manifest> {
+    return this.post<Manifest>("/expert-validation/manifests", {
+      total_points: totalPoints,
     });
   }
 
