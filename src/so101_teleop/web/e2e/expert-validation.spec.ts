@@ -14,8 +14,9 @@ const baseCampaign = {
     retry_eligible: false,
     active_worker_id: "worker-2",
     reason: "BROKER_PAUSED",
-    attempts: [{ generation: 1, status: "INDETERMINATE", reason: "BROKER_PAUSED" }],
+    attempts: [{ generation: 1, kind: "FIRST_PASS", status: "INDETERMINATE", reason: "BROKER_PAUSED" }],
     artifact_ids: [],
+    artifacts: [],
   }],
   workers: [
     { worker_id: "worker-1", generation: 2, state: "READY", lease_count: 2 },
@@ -131,7 +132,7 @@ async function installFakeRunner(page: Page) {
         reason: null,
         attempts: [
           ...terminalCampaign.points[0].attempts,
-          { generation: 2, status: "PASSED", reason: null },
+          { generation: 2, kind: "FULL_RESTART_RETRY", status: "PASSED", reason: null },
         ],
       }],
     };
@@ -160,4 +161,32 @@ test("restores an adaptive campaign and retries a business-failed point", async 
 
   expect(fake.lastRetryBody?.point_ids).toEqual(["sample_05_near_center"]);
   await expect(page.getByText("FULL_RESTART attempt 2: PASSED")).toBeVisible();
+});
+
+test("selected committed point loads inline RGB and opaque numeric evidence", async ({ page }) => {
+  await installFakeRunner(page);
+  const image = {
+    artifact_id: "rgb-opaque", campaign_id: "campaign-adaptive", batch_id: "adaptive-first-pass",
+    worker_id: "worker-2", worker_generation: 2, attempt_id: "attempt-a",
+    role: "task-rgb-before", media_type: "image/png", size_bytes: 68, sha256: "a".repeat(64),
+  };
+  const numeric = { ...image, artifact_id: "numeric-opaque", role: "physical-evidence", media_type: "application/json" };
+  await page.route("**/expert-validation/campaigns/campaign-adaptive", route => route.fulfill({
+    contentType: "application/json", body: JSON.stringify({ ...terminalCampaign, points: [{
+      ...terminalCampaign.points[0], artifact_ids: [image.artifact_id, numeric.artifact_id],
+      artifacts: [image, numeric],
+    }] }),
+  }));
+  await page.route("**/expert-validation/artifacts/rgb-opaque", route => route.fulfill({
+    contentType: "image/png", body: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aL1sAAAAASUVORK5CYII=", "base64",
+    ),
+  }));
+  await page.goto("/expert-validation");
+  await page.getByLabel("P09 FAILED TARGET_TOLERANCE_EXCEEDED").click();
+  const preview = page.getByAltText("task-rgb-before");
+  await expect(preview).toBeVisible();
+  await expect.poll(() => preview.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBe(1);
+  await expect(page.getByRole("link", { name: "Download physical-evidence" }))
+    .toHaveAttribute("href", "/expert-validation/artifacts/numeric-opaque");
 });

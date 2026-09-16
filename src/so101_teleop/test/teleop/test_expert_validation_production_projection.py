@@ -1,9 +1,18 @@
 import hashlib
+import json
+from dataclasses import asdict
 from types import SimpleNamespace
 
+import pytest
+from fastapi.testclient import TestClient
+from so101_demo.parallel_batch.contracts import AttemptIdentity
 from so101_demo.parallel_batch.journal import CoordinatorJournal
-from so101_teleop.expert_validation.api import CampaignProjectionResponse
+from so101_teleop.expert_validation.api import CampaignProjectionResponse, create_expert_validation_app
+from so101_teleop.expert_validation.artifacts import ValidationArtifactRegistry
 from so101_teleop.expert_validation.production import ProductionExpertValidationService
+from so101_teleop.expert_validation.service import ServiceConflict
+
+from validation_seal_fixture import make_sealed_attempt
 
 
 class CursorStore:
@@ -14,15 +23,85 @@ class CursorStore:
         self.accepted.append(cursor)
 
 
+def _one_committed_service(tmp_path, *, identity_change=None, committed=True):
+    root = tmp_path / "campaigns/campaign-a/batch-a"
+    who = AttemptIdentity("batch-a", 1, "worker-01", 1, "point-a", "lease-1", 1)
+    sealed = make_sealed_attempt(root / "workers/worker-01", who, succeeded=False)
+    manifest = sealed.path / "attempt_result_manifest.json"
+    identity = asdict(who)
+    identity.update(identity_change or {})
+    with CoordinatorJournal.create(root / "coordinator", "batch-a") as journal:
+        journal.append("BATCH_STARTED", "start", {"delta": {"points": {
+            "point-a": {"status": "UNRUN", "attempts": 1, "terminal": False},
+        }}})
+        if committed:
+            journal.append("RESULT_COMMITTED", "result", {
+                "identity": {**identity, "location": str(sealed.path)},
+                "response": {"location": str(sealed.path), "status": "FAILED",
+                             "sha256": hashlib.sha256(manifest.read_bytes()).hexdigest()},
+                "delta": {"points": {"point-a": {
+                    "status": "FAILED", "attempts": 1, "terminal": True,
+                }}},
+            })
+    service = object.__new__(ProductionExpertValidationService)
+    service.store = CursorStore()
+    service.artifacts = ValidationArtifactRegistry()
+    service._campaigns = {"campaign-a": {"campaign_id": "campaign-a", "sequence": 0}}
+    service._campaign_requests = {"campaign-a": SimpleNamespace(
+        campaign_id="campaign-a", batch_id="batch-a", execution_mode="SEQUENTIAL",
+        evidence_root=tmp_path, selection=SimpleNamespace(
+            point_ids=("point-a",), points=(SimpleNamespace(id="point-a", display_id="P01"),),
+        ),
+    )}
+    return service, sealed
+
+
+@pytest.mark.parametrize("identity_change", [
+    {"point_id": "point-b"}, {"worker_id": "worker-02"},
+    {"worker_generation": 2}, {"attempt_id": "other-attempt"},
+    {"batch_id": "other-batch"}, {"lease_generation": 2},
+])
+def test_committed_evidence_identity_mismatch_blocks_projection_before_cursor(tmp_path, identity_change):
+    service, _ = _one_committed_service(tmp_path, identity_change=identity_change)
+    with pytest.raises(ServiceConflict, match="UPSTREAM_PROJECTION_INVALID"):
+        service.get_campaign("campaign-a")
+    assert service.store.accepted == []
+
+
+def test_committed_evidence_content_drift_blocks_projection_before_cursor(tmp_path):
+    service, sealed = _one_committed_service(tmp_path)
+    image = sealed.path / "initial-rgb.png"
+    image.chmod(0o644)
+    image.write_bytes(b"drift")
+    with pytest.raises(ServiceConflict, match="UPSTREAM_PROJECTION_INVALID"):
+        service.get_campaign("campaign-a")
+    assert service.store.accepted == []
+
+
+def test_uncommitted_worker_seal_is_not_scanned_or_exposed(tmp_path):
+    service, _ = _one_committed_service(tmp_path, committed=False)
+    point = service.get_campaign("campaign-a")["points"][0]
+    assert point["artifact_ids"] == ()
+    assert point.get("artifacts", ()) == ()
+
+
 def test_get_campaign_projects_terminal_fixed_journal_and_persists_cursor(tmp_path):
     campaign_id = "campaign-a"
     batch_id = "batch-a"
     batch_root = tmp_path / "campaigns" / campaign_id / batch_id
-    sealed = batch_root / "workers/worker-01/attempts/point-a/lease-1/sealed"
-    sealed.mkdir(parents=True)
-    manifest = sealed / "attempt_result_manifest.json"
-    manifest.write_text('{"schema_version":1}', encoding="utf-8")
-    digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    identities = {
+        point: AttemptIdentity(batch_id, 1, "worker-01", index, point, f"{point}-lease-1", 1)
+        for index, point in enumerate(("point-a", "point-b"), start=1)
+    }
+    seals = {
+        point: make_sealed_attempt(batch_root / "workers/worker-01", who)
+        for point, who in identities.items()
+    }
+    references = {
+        point: {"location": str(seal.path), "status": "PASSED",
+                "sha256": hashlib.sha256((seal.path / "attempt_result_manifest.json").read_bytes()).hexdigest()}
+        for point, seal in seals.items()
+    }
     with CoordinatorJournal.create(batch_root / "coordinator", batch_id) as journal:
         journal.append(
             "BATCH_STARTED",
@@ -47,7 +126,7 @@ def test_get_campaign_projects_terminal_fixed_journal_and_persists_cursor(tmp_pa
             },
         )
         journal.append(
-            "ATTEMPT_STARTED", "attempt-a", {"identity": {"point_id": "point-a"}}
+            "ATTEMPT_STARTED", "attempt-a", {"identity": asdict(identities["point-a"])}
         )
         journal.append(
             "RESULT_COMMITTED",
@@ -58,11 +137,12 @@ def test_get_campaign_projects_terminal_fixed_journal_and_persists_cursor(tmp_pa
                         "point-a": {"status": "PASSED", "attempts": 1, "terminal": True}
                     }
                 },
-                "response": {"location": str(sealed), "sha256": digest},
+                "identity": {**asdict(identities["point-a"]), "location": str(seals["point-a"].path)},
+                "response": references["point-a"],
             },
         )
         journal.append(
-            "ATTEMPT_STARTED", "attempt-b", {"identity": {"point_id": "point-b"}}
+            "ATTEMPT_STARTED", "attempt-b", {"identity": asdict(identities["point-b"])}
         )
         journal.append(
             "RESULT_COMMITTED",
@@ -73,7 +153,8 @@ def test_get_campaign_projects_terminal_fixed_journal_and_persists_cursor(tmp_pa
                         "point-b": {"status": "PASSED", "attempts": 1, "terminal": True}
                     }
                 },
-                "response": {"location": str(sealed), "sha256": digest},
+                "identity": {**asdict(identities["point-b"]), "location": str(seals["point-b"].path)},
+                "response": references["point-b"],
             },
         )
         journal.append(
@@ -111,6 +192,7 @@ def test_get_campaign_projects_terminal_fixed_journal_and_persists_cursor(tmp_pa
     )
     service = object.__new__(ProductionExpertValidationService)
     service.store = CursorStore()
+    service.artifacts = ValidationArtifactRegistry()
     service._campaigns = {
         campaign_id: {
             "campaign_id": campaign_id,
@@ -154,6 +236,24 @@ def test_get_campaign_projects_terminal_fixed_journal_and_persists_cursor(tmp_pa
     assert len(service.store.accepted) == 1
     assert service.store.accepted[0].event_id == "event-00000000000000000006"
     assert CampaignProjectionResponse.model_validate(projected).status == "COMPLETED"
+    for point in projected["points"]:
+        assert len(point["attempts"]) == 1
+        assert point["attempts"][0]["status"] == "PASSED"
+        views = {artifact["role"]: artifact for artifact in point["artifacts"]}
+        assert {"task-rgb-before", "task-rgb-after", "depth-evidence", "tf-evidence",
+                "physical-evidence", "dynamic-execute", "sealed-result"} <= views.keys()
+        assert views["task-rgb-before"]["media_type"] == "image/png"
+        assert set(point["artifact_ids"]) == {artifact["artifact_id"] for artifact in point["artifacts"]}
+        for artifact in point["artifacts"]:
+            assert artifact["attempt_id"] == identities[point["point_id"]].attempt_id
+            assert artifact["worker_generation"] == identities[point["point_id"]].worker_generation
+    assert set(projected["points"][0]["artifact_ids"]).isdisjoint(projected["points"][1]["artifact_ids"])
+    assert str(tmp_path) not in json.dumps(projected)
+    client = TestClient(create_expert_validation_app(service))
+    before = projected["points"][0]["artifacts"][0]
+    response = client.get(f'/expert-validation/artifacts/{before["artifact_id"]}')
+    assert response.status_code == 200
+    assert hashlib.sha256(response.content).hexdigest() == before["sha256"]
 
 
 def test_get_campaign_keeps_last_projection_during_an_incomplete_journal_frame(tmp_path):

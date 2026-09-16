@@ -231,14 +231,53 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ArtifactProjectionResponse */
+        ArtifactProjectionResponse: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Attempt Id */
+            attempt_id?: string | null;
+            /** Batch Id */
+            batch_id: string;
+            /** Campaign Id */
+            campaign_id: string;
+            /** Media Type */
+            media_type: string;
+            /** Pool Generation */
+            pool_generation?: number | null;
+            /** Role */
+            role: string;
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Worker Generation */
+            worker_generation?: number | null;
+            /** Worker Id */
+            worker_id?: string | null;
+        };
         /** AttemptProjectionResponse */
         AttemptProjectionResponse: {
+            /** Attempt Id */
+            attempt_id?: string | null;
+            /** Batch Id */
+            batch_id?: string | null;
             /** Generation */
             generation: number;
+            /**
+             * Kind
+             * @default FIRST_PASS
+             * @enum {string}
+             */
+            kind: "FIRST_PASS" | "FULL_RESTART_RETRY";
             /** Reason */
             reason?: string | null;
             /** Status */
             status: string;
+            /** Worker Generation */
+            worker_generation?: number | null;
+            /** Worker Id */
+            worker_id?: string | null;
         };
         /** BrokerProjectionResponse */
         BrokerProjectionResponse: {
@@ -592,6 +631,11 @@ export interface components {
              * @default []
              */
             artifact_ids: string[];
+            /**
+             * Artifacts
+             * @default []
+             */
+            artifacts: components["schemas"]["ArtifactProjectionResponse"][];
             /**
              * Attempts
              * @default []

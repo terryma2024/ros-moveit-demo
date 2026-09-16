@@ -18,6 +18,7 @@ from so101_demo.parallel_batch.journal import CoordinatorJournal
 
 from .artifacts import ValidationArtifactRegistry
 from .catalog import CatalogPoint, PointSelection, select_catalog_points
+from .committed_artifacts import register_committed_attempt
 from .coordinator_events import (
     AcceptedCoordinatorCursor,
     CampaignUpstreamBinding,
@@ -659,6 +660,16 @@ class ProductionExpertValidationService(ExpertValidationService):
                 raise CoordinatorProjectionError("ATTEMPT_PROJECTION_INVALID")
             execution_started_ids.add(identity["point_id"])
         display_ids = {point.id: point.display_id for point in request.selection.points}
+        evidence_by_point = {point_id: [] for point_id in selected}
+        committed_identities = set()
+        for event in batch.events:
+            if event.type != "RESULT_COMMITTED":
+                continue
+            evidence = register_committed_attempt(event, binding, selected, self.artifacts)
+            if evidence.identity in committed_identities:
+                raise CoordinatorProjectionError("DUPLICATE_COMMITTED_ATTEMPT")
+            committed_identities.add(evidence.identity)
+            evidence_by_point[evidence.identity.point_id].append(evidence)
         points = []
         point_statuses = {}
         for point_id in selected:
@@ -788,8 +799,23 @@ class ProductionExpertValidationService(ExpertValidationService):
                 "retry_eligible": point.retry_eligible,
                 "active_worker_id": point.active_worker_id,
                 "reason": point.reason,
-                "attempts": (),
-                "artifact_ids": (),
+                "attempts": tuple(
+                    {"generation": evidence.identity.lease_generation,
+                     "attempt_id": evidence.identity.attempt_id,
+                     "worker_id": evidence.identity.worker_id,
+                     "worker_generation": evidence.identity.worker_generation,
+                     "batch_id": evidence.identity.batch_id, "kind": "FIRST_PASS",
+                     "status": evidence.status}
+                    for evidence in evidence_by_point[point.point_id]
+                ),
+                "artifact_ids": tuple(
+                    artifact.artifact_id for evidence in evidence_by_point[point.point_id]
+                    for artifact in evidence.artifacts
+                ),
+                "artifacts": tuple(
+                    asdict(artifact) for evidence in evidence_by_point[point.point_id]
+                    for artifact in evidence.artifacts
+                ),
             }
             for point in statistics.points
         )

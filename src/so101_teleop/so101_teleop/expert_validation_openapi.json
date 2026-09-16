@@ -1,12 +1,131 @@
 {
   "components": {
     "schemas": {
+      "ArtifactProjectionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "attempt_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "media_type": {
+            "title": "Media Type",
+            "type": "string"
+          },
+          "pool_generation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pool Generation"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "worker_generation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Generation"
+          },
+          "worker_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Id"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "campaign_id",
+          "batch_id",
+          "role",
+          "media_type",
+          "size_bytes",
+          "sha256"
+        ],
+        "title": "ArtifactProjectionResponse",
+        "type": "object"
+      },
       "AttemptProjectionResponse": {
         "additionalProperties": false,
         "properties": {
+          "attempt_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
           "generation": {
             "title": "Generation",
             "type": "integer"
+          },
+          "kind": {
+            "default": "FIRST_PASS",
+            "enum": [
+              "FIRST_PASS",
+              "FULL_RESTART_RETRY"
+            ],
+            "title": "Kind",
+            "type": "string"
           },
           "reason": {
             "anyOf": [
@@ -22,6 +141,28 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "worker_generation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Generation"
+          },
+          "worker_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Id"
           }
         },
         "required": [
@@ -961,6 +1102,14 @@
               "type": "string"
             },
             "title": "Artifact Ids",
+            "type": "array"
+          },
+          "artifacts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ArtifactProjectionResponse"
+            },
+            "title": "Artifacts",
             "type": "array"
           },
           "attempts": {

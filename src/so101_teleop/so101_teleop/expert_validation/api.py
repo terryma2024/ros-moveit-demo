@@ -156,6 +156,25 @@ class AttemptProjectionResponse(ClosedModel):
     generation: int
     status: str
     reason: str | None = None
+    kind: Literal["FIRST_PASS", "FULL_RESTART_RETRY"] = "FIRST_PASS"
+    attempt_id: str | None = None
+    worker_id: str | None = None
+    worker_generation: int | None = None
+    batch_id: str | None = None
+
+
+class ArtifactProjectionResponse(ClosedModel):
+    artifact_id: str
+    campaign_id: str
+    batch_id: str
+    pool_generation: int | None = None
+    worker_id: str | None = None
+    worker_generation: int | None = None
+    attempt_id: str | None = None
+    role: str
+    media_type: str
+    size_bytes: int
+    sha256: str
 
 
 class PointProjectionResponse(ClosedModel):
@@ -167,6 +186,7 @@ class PointProjectionResponse(ClosedModel):
     reason: str | None = None
     attempts: tuple[AttemptProjectionResponse, ...] = ()
     artifact_ids: tuple[str, ...] = ()
+    artifacts: tuple[ArtifactProjectionResponse, ...] = ()
 
 
 class WorkerProjectionResponse(ClosedModel):

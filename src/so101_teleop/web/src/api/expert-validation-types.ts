@@ -17,6 +17,7 @@ export type PointProjection = Schemas["PointProjectionResponse"];
 export type WorkerProjection = Schemas["WorkerProjectionResponse"];
 export type BrokerProjection = Schemas["BrokerProjectionResponse"];
 export type AttemptProjection = Schemas["AttemptProjectionResponse"];
+export type ArtifactProjection = Schemas["ArtifactProjectionResponse"];
 
 export type LeaseAuthority = Pick<
   CampaignConfiguration,

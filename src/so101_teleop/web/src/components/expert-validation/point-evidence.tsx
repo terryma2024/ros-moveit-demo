@@ -1,7 +1,7 @@
-import type { PointProjection } from "@/api/expert-validation-types";
+import type { ArtifactProjection, PointProjection } from "@/api/expert-validation-types";
 
 type PointView = Pick<PointProjection, "point_id"> & Partial<PointProjection>;
-type Artifact = { artifact_id: string; role: string; media_type: string };
+type Artifact = Pick<ArtifactProjection, "artifact_id" | "role" | "media_type">;
 
 export function PointEvidence({ point, artifacts }: { point: PointView; artifacts: Artifact[] }) {
   return (
@@ -9,8 +9,11 @@ export function PointEvidence({ point, artifacts }: { point: PointView; artifact
       <h2>Point evidence · {point.display_id ?? point.point_id}</h2>
       <p>{point.status ?? "UNKNOWN"}{point.reason ? ` · ${point.reason}` : ""}</p>
       {point.attempts?.map((attempt) => (
-        <p key={attempt.generation}>FULL_RESTART attempt {attempt.generation}: {attempt.status}</p>
+        <p key={attempt.attempt_id ?? attempt.generation}>
+          {attempt.kind === "FULL_RESTART_RETRY" ? "FULL_RESTART" : "First-pass"} attempt {attempt.generation}: {attempt.status}
+        </p>
       ))}
+      {artifacts.length === 0 ? <p>No committed evidence available</p> : null}
       <div className="grid gap-3 sm:grid-cols-2">
         {artifacts.map((artifact) => {
           const url = `/expert-validation/artifacts/${encodeURIComponent(artifact.artifact_id)}`;

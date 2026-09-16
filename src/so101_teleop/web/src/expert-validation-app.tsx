@@ -228,7 +228,7 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
           <CampaignProgress campaign={campaign} />
         </div>
       ) : null}
-      {selectedPoint ? <PointEvidence point={selectedPoint} artifacts={[]} /> : null}
+      {selectedPoint ? <PointEvidence point={selectedPoint} artifacts={selectedPoint.artifacts ?? []} /> : null}
       {campaign ? (
         <RetryPanel
           campaign={campaign}

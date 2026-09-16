@@ -1,5 +1,30 @@
 # SO-101 MoveIt Expert Validation Web Experiment Ledger
 
+## CP-008 — Commit-authorized artifact metadata reaches the point panel
+
+- Boundary confirmed: production projection hard-coded empty attempts/artifact_ids and App hard-coded an empty evidence list. The earlier registry-only tests never exercised this composition.
+- `committed_artifacts.py` now imports only RESULT_COMMITTED references from the verified bound Coordinator journal. It checks full AttemptIdentity, exact Worker/point/attempt sealed path, journal reference hash and result status, then invokes the public upstream verify_attempt for complete inventory and mode-specific semantics. No directory scan, alternate verifier, scheduler or result writer was introduced.
+- Registered records carry opaque IDs, allow-listed media types, semantic roles and campaign/batch/Worker generation/attempt identity. The original sealed manifest is offered as a separate sealed-result artifact. All validation occurs before advancing the accepted cursor. Duplicate committed identities fail closed. Production points now expose typed artifacts, existing artifact_ids and real first-pass attempts; the closed API and generated OpenAPI/TypeScript contracts are synchronized.
+- App consumes the real typed artifact list. PointEvidence distinguishes FIRST_PASS from FULL_RESTART_RETRY and reports empty committed evidence explicitly. Geometry/manifest point cardinality and durable campaign restart restoration remain separate open gaps; this patch does not claim they are repaired.
+- RED t74:8 expected failures and3 passes, exit1, elapsed1.09s. Identity mismatch across point, Worker, Worker generation, attempt, batch and lease generation was previously accepted; file drift was ignored and accepted attempts stayed empty. The old synthetic schema-only shared PASSED manifest was replaced by two distinct public-producer-shaped valid seals without weakening statistics assertions. Scratch/cu/tmp and exact venv tempfile verified.
+- GREEN t75:11/11 projection tests, exit0, elapsed1.09s. They prove no cursor advancement on corruption, no uncommitted seal discovery, opaque route byte/hash readback, roles and cross-point artifact disjointness.
+- Web RED t76:2 expected failures,9 passes; missing selected-point images/downloads and false FULL_RESTART first-pass label. Its transient log was retained at /tmp/so101-validation-t76-red.log and copied into the registered root as t76-web-red.log; no second evidence directory or deletion was performed.
+- GREEN t77:96 Web tests passed; TS/Vite production build exit0, existing large-chunk advisory retained. GREEN t79:12 browser regressions passed in18.9s, including real browser image decoding and opaque numeric link. The fake Runner is regression only, not live/adaptive qualification.
+- Complete source gate t78:410 Teleop tests passed under -W error except the two documented exact external compatibility emitters; no warning summary, elapsed9.70s, exit0. New scratch/cw/tmp; exact test venv tempfile verified.
+- Real retained EXP-051 source-adapter readback: all4 accepted PASSED attempts projected13 artifacts each (12 inventory files plus original sealed manifest); all52 real ASGI opaque-route responses were checked for byte size and SHA256. No absolute evidence path appears in the campaign projection. Existing durable cursor update was idempotent; store closed. Evidence exp051/source-committed-artifacts-readback.json explicitly labels this source-only diagnostic NOT_INSTALLED_LIVE_QUALIFICATION. Original runtime was clean79a/release16, server domain231/Worker domains181,182,183, GZ_PARTITION=not_applicable. No new simulation or campaign started and EXP-051 is not retroactively qualified.
+- Next EXP-052 remains pending: fix terminal owner expiry cancellation, actual immutable manifest/map restoration, corruption recovery fencing and fresh copied installed gates before actual-page sequential acceptance. Parallel/adaptive/conditional retry and complete RGB-D/cloud/controller/physics/scene/cleanup acceptance remain required by the original plan.
+- Retained: single registered root, all historical seals/releases/gates and new readbacks. Archived:none. Deletion candidates: cu/cv/cw scratch and historical superseded candidates; none deleted. Publication remains unpushed pending plain trusted confirmation after prior auto-review rejection.
+
+```yaml
+checkpoint_id: CP-008
+last_valid_experiment: EXP-006
+current_hypothesis: Correct accepted artifacts now reach the page; actual manifest cardinality/restoration and exact terminal owner reconciliation are the next independent gates before installed live acceptance.
+working_tree_status: only task-owned evidence bridge/API/generated contracts/tests/Web/ledger changes
+owned_processes: no task motion/server/browser processes; t74/t75/t77/t78/t79 and diagnostic readback handles terminal
+preserved_processes: all unrelated user sessions and processes
+next_command: Commit the verified sealed-evidence bridge, then write RED tests for terminal-owner cancellation and immutable manifest map/reload binding.
+```
+
 ## CP-007 — EXP-051 terminal readback and idle WebSocket disconnect repair
 
 - EXP-051 final status: INVALID for full Web acceptance; its four physical outcomes are independently observed successes, not a completed Task16/17 gate. This supersedes the historical PLANNED/RUNNING entries without rewriting their frozen criteria.
@@ -33,7 +58,7 @@ success_contract: Source and package gates pass; fresh fixed four-point and adap
 worktree: /data/work/ws_moveit/.worktrees/teleop-expert-validation-web
 branch: codex/teleop-expert-validation-web
 base_commit: e1701375690321bc83b5f30ec044da1847d373aa
-current_commit: 79a51c1e2c7e680af681f81460d66e9342ab6851
+current_commit: a23d494d2a995daa7c8684a061e17ae5a5e34a47
 evidence_root: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01
 confirmed_conclusions:
   - origin/main exactly matched the required documentation commit e1701375690321bc83b5f30ec044da1847d373aa at CP-001.
@@ -47,7 +72,7 @@ disproven_routes:
   - At commit 654756ba32cfc0697aff1444c79752ff1e61c4ee, a four-point manifest could not be returned because its source field violated the closed response model.
 open_hypotheses:
   - A read-only verified journal projection and authoritative HTTP watcher can synchronize fresh Web progress and terminal state without acquiring upstream coordinator authority.
-latest_checkpoint: CP-007
+latest_checkpoint: CP-008
 next_experiment: EXP-052
 ```
 

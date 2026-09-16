@@ -11,10 +11,10 @@ const campaign = {
   campaign_id: "campaign-1", sequence: 9, execution_mode: "PARALLEL" as const,
   status: "COMPLETED_WITH_FAILURES", batch_cleanup_complete: true,
   points: [
-    { point_id: "p1", display_id: "P01", status: "PASSED", retry_eligible: false, attempts: [], artifact_ids: [] },
-    { point_id: "p2", display_id: "P02", status: "FAILED", retry_eligible: true, attempts: [], artifact_ids: [] },
-    { point_id: "p3", display_id: "P03", status: "INDETERMINATE", retry_eligible: false, attempts: [], artifact_ids: [] },
-    { point_id: "p4", display_id: "P04", status: "UNRUN", retry_eligible: false, attempts: [], artifact_ids: [] },
+    { point_id: "p1", display_id: "P01", status: "PASSED", retry_eligible: false, attempts: [], artifact_ids: [], artifacts: [] },
+    { point_id: "p2", display_id: "P02", status: "FAILED", retry_eligible: true, attempts: [], artifact_ids: [], artifacts: [] },
+    { point_id: "p3", display_id: "P03", status: "INDETERMINATE", retry_eligible: false, attempts: [], artifact_ids: [], artifacts: [] },
+    { point_id: "p4", display_id: "P04", status: "UNRUN", retry_eligible: false, attempts: [], artifact_ids: [], artifacts: [] },
   ],
   workers: [
     { worker_id: "worker-1", generation: 2, state: "STOPPED", lease_count: 2 },
@@ -63,5 +63,13 @@ describe("expert validation campaign components", () => {
     );
     expect((screen.getByRole("link", { name: "Download controller-log" }) as HTMLAnchorElement).href)
       .toContain("/expert-validation/artifacts/log-1");
+  });
+
+  test("first-pass attempt evidence is not labelled as a FULL_RESTART retry", () => {
+    render(<PointEvidence point={{ ...campaign.points[0], attempts: [{
+      generation: 1, status: "PASSED", kind: "FIRST_PASS", attempt_id: "attempt-a",
+    }] }} artifacts={[]} />);
+    expect(screen.getByText("First-pass attempt 1: PASSED")).toBeTruthy();
+    expect(screen.queryByText(/FULL_RESTART attempt/)).toBeNull();
   });
 });

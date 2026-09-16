@@ -70,6 +70,28 @@ function fakeApi(overrides: Partial<ExpertValidationApi> = {}): ExpertValidation
 }
 
 describe("ExpertValidationApp", () => {
+  test("selecting a committed point renders its typed sealed evidence rather than empty placeholders", async () => {
+    const user = userEvent.setup();
+    const image = {
+      artifact_id: "opaque-rgb-a", campaign_id: "campaign-1", batch_id: "batch-1",
+      worker_id: "worker-01", worker_generation: 2, attempt_id: "attempt-a",
+      role: "task-rgb-before", media_type: "image/png", size_bytes: 68, sha256: "a".repeat(64),
+    };
+    const numeric = { ...image, artifact_id: "opaque-physical-a", role: "physical-evidence", media_type: "application/json" };
+    render(<ExpertValidationApp api={fakeApi({ restoreCampaign: async () => ({
+      campaign_id: "campaign-1", sequence: 9, status: "COMPLETED",
+      points: [{ point_id: "task_start", display_id: "P01", status: "PASSED",
+        retry_eligible: false, attempts: [], artifact_ids: [image.artifact_id, numeric.artifact_id],
+        artifacts: [image, numeric] }],
+    }) })} />);
+    await user.click(await screen.findByRole("button", { name: "P01 PASSED" }));
+    expect((screen.getByAltText("task-rgb-before") as HTMLImageElement).src)
+      .toContain("/expert-validation/artifacts/opaque-rgb-a");
+    expect((screen.getByRole("link", { name: "Download physical-evidence" }) as HTMLAnchorElement).href)
+      .toContain("/expert-validation/artifacts/opaque-physical-a");
+    expect(screen.queryByText(/No committed evidence/)).toBeNull();
+  });
+
   test("renewal at the server margin replaces stale preflight authority before start", async () => {
     vi.useFakeTimers();
     try {
