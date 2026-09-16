@@ -19,6 +19,7 @@ from so101_demo.parallel_batch.journal import CoordinatorJournal
 from .artifacts import ValidationArtifactRegistry
 from .catalog import CatalogPoint, PointSelection, select_catalog_points
 from .committed_artifacts import register_committed_attempt
+from .control import ControlProtocolError
 from .coordinator_events import (
     AcceptedCoordinatorCursor,
     CampaignUpstreamBinding,
@@ -30,7 +31,7 @@ from .lease import ValidationLeaseService
 from .manifest_geometry import current_manifest_source_hash, freeze_manifest_context
 from .models import UpstreamCursor
 from .preflight import CampaignStartRequest
-from .process_owner import ExecutionProcessOwner
+from .process_owner import CoordinatorOwnershipError, ExecutionProcessOwner, OwnedCoordinator
 from .service import ExpertValidationService, ServiceConflict, _request_hash, StartCampaignCommand
 from .store import SupervisorStore
 from .statistics import (
@@ -581,16 +582,23 @@ class ProductionExpertValidationService(ExpertValidationService):
             raise ServiceConflict("VALIDATION_CAMPAIGN_NOT_FOUND") from error
         request = self._campaign_requests.get(campaign_id)
         if request is None or request.execution_mode == "ADAPTIVE":
-            return cached
+            return self._with_recovery_fence(campaign_id, cached)
         try:
             projection = self._fixed_campaign_projection(request)
         except (CoordinatorProjectionError, ContractError, StatisticsProjectionError) as error:
             if str(error) == "JOURNAL_REPLAY_INCOMPLETE":
-                return cached
+                return self._with_recovery_fence(campaign_id, cached)
             raise ServiceConflict("UPSTREAM_PROJECTION_INVALID") from error
         if projection is None:
-            return cached
+            return self._with_recovery_fence(campaign_id, cached)
+        projection = self._with_recovery_fence(campaign_id, projection)
         self._campaigns[campaign_id] = projection
+        return projection
+
+    def _with_recovery_fence(self, campaign_id, projection):
+        # Web admission state must not rewrite upstream outcomes or receipts.
+        if self.store.recovery_fence(campaign_id) is not None:
+            return {**projection, "status": "NEEDS_OPERATOR_RECOVERY"}
         return projection
 
     def _fixed_campaign_projection(self, request):
@@ -782,7 +790,9 @@ class ProductionExpertValidationService(ExpertValidationService):
                 reason="BROKER_RECOVERY_FAILED" if broker_failed else None,
             ),
         )
-        if terminal and cleanup_complete and statistics.qualification_passed:
+        if terminal_reason == "WEB_CANCEL_REQUESTED":
+            status = "CANCELLED" if terminal and cleanup_complete else "CANCELLING"
+        elif terminal and cleanup_complete and statistics.qualification_passed:
             status = "COMPLETED"
         elif terminal and cleanup_complete and statistics.valid_failed:
             status = "COMPLETED_WITH_FAILURES"
@@ -871,12 +881,51 @@ class ProductionExpertValidationService(ExpertValidationService):
         }
 
     def cancel_campaign(self, campaign_id, body):
+        document = {"operation": "CANCEL_CAMPAIGN", "campaign_id": campaign_id, "request": body}
+        digest = hashlib.sha256(
+            json.dumps(document, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        repeated = self.store.repeat_command(body["command_id"], digest)
+        if repeated is not None:
+            # A stored outcome is a read, not renewed cancellation authority.
+            return repeated
         self.lease_service.authorize(
             body["lease_id"], body["lease_generation"], service_session_id=body["service_session_id"]
         )
-        self.supervisor.cancel_for_reason("USER_CANCELLED")
-        projection = {**self.get_campaign(campaign_id), "status": "CANCELLING"}
+        projection = self.get_campaign(campaign_id)
+        terminal_statuses = {
+            "COMPLETED", "COMPLETED_WITH_FAILURES", "INFRA_FAILED", "CANCELLED",
+        }
+        clean_terminal = projection.get("batch_cleanup_complete") is True and projection["status"] in terminal_statuses
+        active = getattr(self.supervisor.process_owner, "active_execution", None)
+        if not clean_terminal and active is not None and (
+            active.campaign_id != campaign_id or active.batch_id != projection["batch_id"]
+        ):
+            raise ServiceConflict("VALIDATION_CAMPAIGN_OWNER_MISMATCH")
+        self.store.begin_command(body["command_id"], digest, "CANCEL_CAMPAIGN")
+        if not clean_terminal and projection["status"] != "NEEDS_OPERATOR_RECOVERY":
+            try:
+                outcome = self.supervisor.cancel_for_reason(
+                    "USER_CANCELLED", campaign_id=campaign_id, batch_id=projection["batch_id"],
+                    command_id=body["command_id"],
+                )
+                if active is None or (isinstance(active, OwnedCoordinator) and outcome is None):
+                    self.store.record_recovery_fence(
+                        campaign_id, projection["batch_id"], reason="EXECUTION_OWNER_UNAVAILABLE",
+                        command_id=body["command_id"],
+                    )
+            except (ControlProtocolError, CoordinatorOwnershipError):
+                # Only a durable, campaign-bound fence resolves this Web
+                # command. It is not a successful stop ACK or cleanup receipt.
+                if self.store.recovery_fence(campaign_id) is None:
+                    raise
+            projection = self.get_campaign(campaign_id)
+            if projection["status"] != "NEEDS_OPERATOR_RECOVERY" and not (
+                projection.get("batch_cleanup_complete") is True and projection["status"] in terminal_statuses
+            ):
+                projection = {**projection, "status": "CANCELLING"}
         self._campaigns[campaign_id] = projection
+        self.store.finish_command(body["command_id"], projection)
         return projection
 
     async def retry_campaign(self, campaign_id, body):

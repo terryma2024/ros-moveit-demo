@@ -1,6 +1,11 @@
 import hashlib
 import json
 from dataclasses import asdict
+from dataclasses import replace
+from pathlib import Path
+import sys
+import time
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
@@ -11,6 +16,12 @@ from so101_teleop.expert_validation.api import CampaignProjectionResponse, creat
 from so101_teleop.expert_validation.artifacts import ValidationArtifactRegistry
 from so101_teleop.expert_validation.production import ProductionExpertValidationService
 from so101_teleop.expert_validation.service import ServiceConflict
+from so101_teleop.expert_validation.lease import ValidationLeaseService
+from so101_teleop.expert_validation.process_owner import ExecutionProcessOwner
+from so101_teleop.expert_validation.store import SupervisorStore
+
+from test_expert_validation_supervisor import _bound_without_execution
+from test_expert_validation_frozen_manifest import SameThreadApi
 
 from validation_seal_fixture import make_sealed_attempt
 
@@ -21,6 +32,214 @@ class CursorStore:
 
     def accept_upstream_cursor(self, cursor):
         self.accepted.append(cursor)
+
+    def recovery_fence(self, _campaign_id):
+        return None
+
+
+@contextmanager
+def _control_service(tmp_path):
+    supervisor, store, request = _bound_without_execution(tmp_path)
+    owner = ExecutionProcessOwner(store=store)
+    supervisor.process_owner = owner
+    lease_service = ValidationLeaseService(store, supervisor)
+    service = ProductionExpertValidationService(
+        layout=SimpleNamespace(), registry=None, artifacts=ValidationArtifactRegistry(),
+        store=store, supervisor=supervisor, lease_service=lease_service,
+        current_source_config_sha256=lambda: "a" * 64,
+    )
+    service._campaign_requests = supervisor._requests.copy()
+    service._campaigns = {request.campaign_id: {
+        "campaign_id": request.campaign_id, "manifest_id": supervisor._requests[request.campaign_id].manifest_id,
+        "sequence": 1, "execution_mode": "SEQUENTIAL", "owner_kind": "COORDINATOR",
+        "batch_id": request.batch_id, "status": "STARTED",
+        "points": tuple({"point_id": point, "status": "UNRUN"} for point in request.selected_point_ids),
+    }}
+    lease = lease_service.acquire("browser-a")
+    body = {"command_id": "cancel-web-1", "service_session_id": lease.service_session_id,
+            "lease_id": lease.lease_id, "lease_generation": lease.generation}
+    try:
+        yield service, owner, request, body
+    finally:
+        for child in owner._children.values():
+            child.wait(timeout=5)
+        service.store.close()
+
+
+@pytest.mark.parametrize("known_target", [False, True])
+def test_cancel_api_validates_campaign_target_before_touching_active_owner(tmp_path, known_target):
+    with _control_service(tmp_path) as (service, owner, request, body):
+        execution = owner.spawn(replace(request, argv=(sys.executable, "-c", "import time; time.sleep(0.8)")))
+        if known_target:
+            service._campaigns["campaign-other"] = {
+                **service._campaigns[request.campaign_id], "campaign_id": "campaign-other", "batch_id": "b002",
+            }
+        with SameThreadApi(service) as api:
+            response = api.request("POST", "/expert-validation/campaigns/campaign-other/cancel", json=body)
+        expected = "VALIDATION_CAMPAIGN_OWNER_MISMATCH" if known_target else "VALIDATION_CAMPAIGN_NOT_FOUND"
+        assert response.status_code == 409 and response.json() == {"code": expected}
+        assert owner.poll(execution).running
+        assert service.store.recovery_fence(request.campaign_id) is None
+        assert service.store._connection.execute("SELECT count(*) FROM commands WHERE command_id='cancel-web-1'").fetchone()[0] == 0
+
+
+def test_cancel_api_rejects_same_campaign_with_a_different_active_batch(tmp_path):
+    with _control_service(tmp_path) as (service, owner, request, body):
+        execution = owner.spawn(replace(request, argv=(sys.executable, "-c", "import time; time.sleep(0.8)")))
+        service._campaign_requests.pop(request.campaign_id)
+        service._campaigns[request.campaign_id]["batch_id"] = "b002"
+        with SameThreadApi(service) as api:
+            response = api.request("POST", f"/expert-validation/campaigns/{request.campaign_id}/cancel", json=body)
+        assert response.status_code == 409 and response.json() == {"code": "VALIDATION_CAMPAIGN_OWNER_MISMATCH"}
+        assert owner.poll(execution).running
+        assert service.store.recovery_fence(request.campaign_id) is None
+        assert service.store._connection.execute("SELECT count(*) FROM commands").fetchone()[0] == 0
+
+
+def _coordinator_for_control_projection(service, request):
+    from so101_demo.parallel_batch.contracts import BatchRequest, RunMode, load_parallel_runtime_config
+    from so101_demo.parallel_batch.coordinator import BatchCoordinator
+
+    journal = CoordinatorJournal.create(request.batch_root / "coordinator", request.batch_id)
+    config = Path(__file__).resolve().parents[3] / "so101_demo_py/config/mujoco/parallel_batch_v1.yaml"
+    batch = BatchRequest(request.batch_id, RunMode.EXECUTE, request.selected_point_ids, 1, 4, request.batch_root)
+    coordinator = BatchCoordinator(journal, batch, config=load_parallel_runtime_config(config), result_port=None)
+    coordinator.register_worker("worker-01", generation=1)
+    return coordinator, journal
+
+
+@pytest.mark.parametrize("cleanup,expected", [(False, "CANCELLING"), (True, "CANCELLED")])
+def test_fixed_cancel_classification_preserves_upstream_unrun_statistics(tmp_path, cleanup, expected):
+    with _control_service(tmp_path) as (service, _owner, request, _body):
+        coordinator, journal = _coordinator_for_control_projection(service, request)
+        try:
+            coordinator.request_stop(reason="WEB_CANCEL_REQUESTED")
+            if cleanup:
+                # No Worker/controller/runtime was started or leased in this
+                # unit scenario. This cannot qualify an execute point outcome.
+                coordinator.complete_cleanup(owned_processes_stopped=True, controllers_stopped=True)
+            with SameThreadApi(service) as api:
+                response = api.request("GET", f"/expert-validation/campaigns/{request.campaign_id}")
+            document = response.json()
+            assert response.status_code == 200 and document["status"] == expected
+            assert document["requested"] == document["not_executed"] == 4
+            assert document["evaluated"] == document["execution_started"] == 0
+            assert document["valid_succeeded"] == document["valid_failed"] == 0
+            assert document["qualification_passed"] is False
+            assert document["batch_cleanup_complete"] is cleanup
+        finally:
+            journal.close()
+
+
+def test_cancel_of_clean_terminal_campaign_is_durable_noop_not_cancelling(tmp_path):
+    with _control_service(tmp_path) as (service, _owner, request, body):
+        coordinator, journal = _coordinator_for_control_projection(service, request)
+        try:
+            coordinator.request_stop(reason="WEB_CANCEL_REQUESTED")
+            coordinator.complete_cleanup(owned_processes_stopped=True, controllers_stopped=True)
+            with SameThreadApi(service) as api:
+                response = api.request("POST", f"/expert-validation/campaigns/{request.campaign_id}/cancel", json=body)
+            assert response.status_code == 200 and response.json()["status"] == "CANCELLED"
+            assert service.store.recovery_fence(request.campaign_id) is None
+            assert service.store._connection.execute("SELECT state FROM commands WHERE command_id='cancel-web-1'").fetchone()[0] == "COMPLETE"
+        finally:
+            journal.close()
+
+
+def test_cancel_channel_failure_projects_durable_recovery_without_rewriting_points(tmp_path):
+    with _control_service(tmp_path) as (service, owner, request, body):
+        original = service._campaigns[request.campaign_id]["points"]
+        execution = owner.spawn(replace(request, argv=(sys.executable, "-c", "import time; time.sleep(0.8)")))
+        with SameThreadApi(service) as api:
+            failed = api.request("POST", f"/expert-validation/campaigns/{request.campaign_id}/cancel", json=body)
+            assert failed.status_code == 200 and failed.json()["status"] == "NEEDS_OPERATOR_RECOVERY"
+            assert owner.poll(execution).running
+            assert failed.json()["batch_cleanup_complete"] is False
+        root = service.store.root
+        owner._children[execution.pid].wait(timeout=3)
+        service.store.close()
+        service.store = SupervisorStore.open(root)
+        service.supervisor.store = service.store
+        service.lease_service = ValidationLeaseService(service.store, service.supervisor)
+        recovery_lease = service.lease_service.acquire("browser-recovery")
+        assert not service.lease_service.can_start_campaign(recovery_lease.service_session_id)
+        with SameThreadApi(service) as api:
+            restored = api.request("GET", f"/expert-validation/campaigns/{request.campaign_id}")
+            replay = api.request("POST", f"/expert-validation/campaigns/{request.campaign_id}/cancel", json=body)
+        assert restored.json()["status"] == "NEEDS_OPERATOR_RECOVERY"
+        assert tuple((point["point_id"], point["status"]) for point in restored.json()["points"]) == tuple((point["point_id"], point["status"]) for point in original)
+        assert replay.status_code == 200 and replay.json() == failed.json()
+        assert service.store.batch(request.batch_id).cleanup_receipt_sha256 is None
+
+
+@pytest.mark.parametrize("finish_before_projection", [False, True])
+def test_cancel_command_replays_durably_and_conflicting_target_never_contacts_owner(tmp_path, finish_before_projection):
+    with _control_service(tmp_path) as (service, owner, request, body):
+        config = Path(__file__).resolve().parents[3] / "so101_demo_py/config/mujoco/parallel_batch_v1.yaml"
+        program = '''
+import os, pathlib, time
+from so101_demo.parallel_batch.contracts import BatchRequest, RunMode, load_parallel_runtime_config
+from so101_demo.parallel_batch.coordinator import BatchCoordinator
+from so101_demo.parallel_batch.journal import CoordinatorJournal
+from so101_demo.parallel_batch.web_control import FixedCoordinatorControlServer
+root = pathlib.Path(os.environ["TEST_BATCH_ROOT"])
+with CoordinatorJournal.create(root / "coordinator", "b001") as journal:
+    import json
+    batch = BatchRequest("b001", RunMode.EXECUTE, tuple(json.loads(os.environ["TEST_POINT_IDS"])), 1, 4, root)
+    coordinator = BatchCoordinator(journal, batch, config=load_parallel_runtime_config(os.environ["TEST_CONFIG"]), result_port=None)
+    coordinator.register_worker("worker-01", generation=1)
+    path = pathlib.Path(os.environ["SO101_FIXED_CONTROL_SOCKET"])
+    path.parent.mkdir(mode=0o700)
+    server = FixedCoordinatorControlServer(coordinator=coordinator, campaign_id=os.environ["SO101_FIXED_CONTROL_CAMPAIGN_ID"], control_token=os.environ["SO101_FIXED_CONTROL_TOKEN"], path=path)
+    server.start()
+    try:
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            if os.environ["TEST_COMPLETE_CLEANUP"] == "1" and coordinator.snapshot().terminal_reason and not coordinator.snapshot().summary.batch_cleanup_complete:
+                # No Worker/controller was launched or leased: unit cleanup
+                # exercises the public gate, never physical qualification.
+                coordinator.complete_cleanup(owned_processes_stopped=True, controllers_stopped=True)
+                (root / "unit-cleanup-complete").touch()
+            time.sleep(0.01)
+    finally:
+        server.close()
+'''
+        execution = owner.spawn(replace(request, argv=(sys.executable, "-c", program), environment={
+            **request.environment, "TEST_BATCH_ROOT": str(request.batch_root), "TEST_CONFIG": str(config),
+            "TEST_POINT_IDS": json.dumps(request.selected_point_ids),
+            "TEST_COMPLETE_CLEANUP": "1" if finish_before_projection else "0",
+        }))
+        deadline = time.monotonic() + 2
+        while not request.control_socket.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert request.control_socket.exists()
+        if finish_before_projection:
+            real_cancel = service.supervisor.cancel_for_reason
+
+            def cancel_then_wait_for_actual_journal(*args, **kwargs):
+                response = real_cancel(*args, **kwargs)
+                deadline = time.monotonic() + 1
+                while not (request.batch_root / "unit-cleanup-complete").exists() and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                assert (request.batch_root / "unit-cleanup-complete").exists()
+                return response
+
+            # Establish the scheduling boundary using the real child, real
+            # transport, real public cleanup gate and fsynced journal.
+            service.supervisor.cancel_for_reason = cancel_then_wait_for_actual_journal
+        with SameThreadApi(service) as api:
+            first = api.request("POST", f"/expert-validation/campaigns/{request.campaign_id}/cancel", json=body)
+            replay = api.request("POST", f"/expert-validation/campaigns/{request.campaign_id}/cancel", json=body)
+            conflict = api.request("POST", "/expert-validation/campaigns/campaign-other/cancel", json=body)
+        assert first.status_code == replay.status_code == 200
+        assert replay.json() == first.json()
+        assert first.json()["status"] == ("CANCELLED" if finish_before_projection else "CANCELLING")
+        assert first.json()["batch_cleanup_complete"] is finish_before_projection
+        assert first.json()["qualification_passed"] is False
+        assert conflict.status_code == 409 and conflict.json() == {"code": "COMMAND_ID_REUSED"}
+        assert owner.poll(execution).running
+        assert service.store.recovery_fence(request.campaign_id) is None
+        assert service.store._connection.execute("SELECT state FROM commands WHERE command_id=?", (body["command_id"],)).fetchone()[0] == "COMPLETE"
 
 
 def _one_committed_service(tmp_path, *, identity_change=None, committed=True):

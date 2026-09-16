@@ -1,5 +1,33 @@
 # SO-101 MoveIt Expert Validation Web Experiment Ledger
 
+## CP-014 — Campaign-bound durable API cancellation and recovery projection
+
+- Starting clean source a527d14f0dff944a9ffaf4c52e0e6d83a30afb94, same branch/worktree, unchanged clean MuJoCo submodule e4c0241. Scoped source progress, not original17-task completion. No publication retry, copied overlay or physical campaign; EXP-052 pending.
+- New cancels authorize the live lease and resolve the campaign before touching an owner. Campaign and batch must match at API and Supervisor boundaries. Invalid targets do not begin a command, contact the current endpoint or create a recovery fence. Canonical operation/campaign/request SHA binds the durable Web command. Exact completed replay returns its original result, including after lease invalidation/store reopen; conflicting content rejects COMMAND_ID_REUSED. Actual Web command identity contributes to the Coordinator wire command binding. No fixed PID/group, Worker/Broker/Runner signal authority is added.
+- Real upstream WEB_CANCEL_REQUESTED projects CANCELLING until terminal cleanup, then CANCELLED, preserving UNRUN/not-executed statistics and false qualification. Clean terminal cancellation is a durable no-op. Cleanup finishing between stop ACK and projection remains terminal. STOPPING is not a receipt or physical cleanup authorization.
+- Durable recovery fences overlay only Web status NEEDS_OPERATOR_RECOVERY, never upstream outcomes, seals, statistics or cleanup receipts. Known channel/identity failure resolves to this Web recovery outcome only with a campaign-bound durable fence. Existing unknown command outcomes remain unresolved. Missing fixed owner is not inferred clean. SQLite reopen regression retains in-memory campaign binding: fence/admission/replay persistence is verified, NOT full production campaign/owner restart restoration.
+- t141 RED:6intended failures11passes3.65s/elapsed3.97s. t142:7failures11passes6.89s/elapsed7.20s;6intended plus1INVALID new child-point mismatch. Corrected child points to actual request IDs; t143 independently reproduces missing command conflict fencing,1failed17deselected3.75s/elapsed4.06s. t144 GREEN32passed9.27s/elapsed9.58s. Review t145 RED same-campaign/different-batch:1failed18deselected1.50s/elapsed1.81s; t146 GREEN43passed10.35s/elapsed10.66s. t147 is test/teleop subset only,323passed15.29s/elapsed15.64s; t148 complete package448passed19.21s/elapsed19.57s. Real child/journal cleanup-between-ACK/projection t149 RED:1failed1passed18deselected7.05s/elapsed7.36s. Final complete package t150 GREEN449passed22.40s/elapsed22.76s,exit0,no warning summary.
+- Exact registered venv, fresh NVMe scratch eq..ez/tmp, tempfile/TMPDIR/TMP/TEMP proofs/logs/JUnit/metadata retained. Final source gate covers src/so101_teleop/test, not only its teleop child. Strict -W error with only existing exact third-party general_plain_validator_function exemption; no new warning filter or benchmark collection. Full ordinary Demo t124 stays unqualified. Real no-started-Worker unit cleanup is not installed/physical acceptance.
+- Inline review under no-subagent handoff, not independent reviewer verdict: target fences before side effects, durable canonical replay, real child-owned authenticated endpoint/public cleanup journal, terminal race, private token boundary, unchanged upstream stats/adaptive wrapper authority. Still open: full restart/operator recovery/corruption, qualified adaptive projection/capabilities, full RGB-D/cloud evidence, fresh copied overlay/ordinary Demo/installed gates, actual-page sequential four/same-four parallel/exact20adaptive/conditional independent FULL_RESTART retry with six-layer evidence and cleanup.
+- Historical EXP-05179a/release16 remains INVALID full Web acceptance; server ROS_DOMAIN_ID231/Workers181,182,183/GZ_PARTITION not_applicable. All t141..t150 handles terminal, bounded children exited naturally. Retained:single root/all runs. Archived:none. Deletion candidates:eq..ez scratch and historical candidates; no evidence deleted. No publication retry/bypass.
+
+```yaml
+checkpoint_id: CP-014
+last_valid_experiment: EXP-006
+current_hypothesis: Complete durable lifecycle and qualified adaptive evidence integration before fresh installed actual-page acceptance.
+working_tree_status: four task-owned API/Supervisor/test/ledger paths verified for scoped local commit
+owned_processes: NONE; all bounded gate handles terminal
+preserved_processes: all unrelated user sessions/processes
+next_command: Add remaining lifecycle/adaptive integration regressions, then build complete fresh copied overlay and run ordinary/installed gates before EXP-052.
+```
+
+## API campaign-target/cancel/recovery continuation — planned t141 RED
+
+- Starting clean source a527d14f0dff944a9ffaf4c52e0e6d83a30afb94, CP-013, same implementation worktree/branch/MuJoCo submodule. Previous turn progress: CLI endpoint/cooperative cleanup commit and full related157/Teleop440 gates. Original17-task goal active; no publication retry, new copied install or physical campaign.
+- Confirmed first boundaries: cancel acts on current owner before campaign lookup, ignores durable Web command identity, overwrites terminal status with CANCELLING, fixed WEB_CANCEL_REQUESTED is projected RUNNING/INFRA_FAILED, and durable recovery fences are not exposed by HTTP campaign reads. Planned tests use real store/lease/Supervisor/process identity/journal/Coordinator and actual child-owned Unix endpoint; no fake transport or producer success/cleanup receipt. Non-started-point unit cleanup is not physical execute acceptance.
+- Reserve fresh scratch eq/tmp for t141 RED, exact venv tempfile proof/logs/JUnit/elapsed mandatory. Verify unknown/mismatched targets preserve the active child, repeat command returns its durable result/conflicting content is rejected, cancellation classification preserves original stats, and unavailable channel returns durable NEEDS_OPERATOR_RECOVERY through real SQLite reopen. This is recovery-fence persistence with retained in-memory binding, NOT full production campaign/owner restart restoration; that separate original requirement stays open.
+- Historical runtime EXP-05179a/release16 INVALID full Web acceptance, server ROS_DOMAIN_ID231/Workers181,182,183/GZ_PARTITION not_applicable. No new stack/motion/visual claim; EXP-052 pending. Retain all evidence, no archive/delete, used scratch deletion candidates only.
+
 ## CP-013 — CLI authenticated endpoint and cooperative existing cleanup
 
 - Starting clean source e8abd451092aa0b6361740eb7c36861b8b2cab8b, CP-012; same implementation branch/worktree, clean unchanged MuJoCo submodule e4c0241. Previous turn progress; this turn implements the missing upstream CLI composition and verifies real dry-run protocol/cleanup plus complete related and Teleop regressions. No new installed release, physical campaign or publication retry; original17-task goal remains active.
@@ -214,7 +242,7 @@ success_contract: Source and package gates pass; fresh fixed four-point and adap
 worktree: /data/work/ws_moveit/.worktrees/teleop-expert-validation-web
 branch: codex/teleop-expert-validation-web
 base_commit: e1701375690321bc83b5f30ec044da1847d373aa
-current_commit: e8abd451092aa0b6361740eb7c36861b8b2cab8b
+current_commit: a527d14f0dff944a9ffaf4c52e0e6d83a30afb94
 evidence_root: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01
 confirmed_conclusions:
   - origin/main exactly matched the required documentation commit e1701375690321bc83b5f30ec044da1847d373aa at CP-001.
@@ -228,7 +256,7 @@ disproven_routes:
   - At commit 654756ba32cfc0697aff1444c79752ff1e61c4ee, a four-point manifest could not be returned because its source field violated the closed response model.
 open_hypotheses:
   - A read-only verified journal projection and authoritative HTTP watcher can synchronize fresh Web progress and terminal state without acquiring upstream coordinator authority.
-latest_checkpoint: CP-013
+latest_checkpoint: CP-014
 next_experiment: EXP-052
 ```
 

@@ -288,16 +288,21 @@ class ExpertValidationSupervisor:
         status = self.process_owner.poll(active)
         return status.running or status.descendants_alive
 
-    def cancel_for_reason(self, reason):
+    def cancel_for_reason(self, reason, *, campaign_id=None, batch_id=None, command_id=None):
         active = getattr(self.process_owner, "active_execution", None)
         if active is None:
             return None
+        if (
+            campaign_id is not None and active.campaign_id != campaign_id
+            or batch_id is not None and active.batch_id != batch_id
+        ):
+            raise CoordinatorOwnershipError("VALIDATION_CAMPAIGN_OWNER_MISMATCH")
         status = self.process_owner.poll(active)
         if not status.running and not status.descendants_alive:
             return None
         if isinstance(active, OwnedCoordinator):
             command_id = "cancel-" + hashlib.sha256(
-                f"{active.campaign_id}:{active.batch_id}:{active.coordinator_epoch}:{reason}".encode()
+                f"{active.campaign_id}:{active.batch_id}:{active.coordinator_epoch}:{reason}:{command_id or ''}".encode()
             ).hexdigest()
             try:
                 self.process_owner.verify_execution_identity(active)
