@@ -1,5 +1,6 @@
 import sys
 from types import SimpleNamespace
+import json
 
 import pytest
 
@@ -26,6 +27,47 @@ def test_validation_main_module_does_not_import_rclpy():
     import so101_teleop.expert_validation.main as validation_main
 
     assert "rclpy" not in validation_main.__dict__
+
+
+def test_source_identity_uses_binding_for_copied_installed_module(tmp_path):
+    from so101_teleop.expert_validation.production import _source_identity
+
+    source_root = (tmp_path / "checkout").resolve()
+    source_root.mkdir()
+    installed_module = (
+        tmp_path
+        / "install/so101_demo_py/lib/python3.12/site-packages/so101_demo/__init__.py"
+    )
+    installed_module.parent.mkdir(parents=True)
+    installed_module.write_text("", encoding="utf-8")
+    binding = (tmp_path / "binding.json").resolve()
+    binding.write_text(
+        json.dumps({
+            "schema_version": 1,
+            "source_root": str(source_root),
+            "source_commit": "a" * 40,
+        }),
+        encoding="utf-8",
+    )
+
+    calls = []
+
+    def run(command, **_kwargs):
+        calls.append(command)
+        if command[-2:] == ["rev-parse", "--show-toplevel"]:
+            return SimpleNamespace(stdout=f"{source_root}\n")
+        if command[-2:] == ["rev-parse", "HEAD"]:
+            return SimpleNamespace(stdout="a" * 40 + "\n")
+        if command[-1] == "--untracked-files=no":
+            return SimpleNamespace(stdout="")
+        raise AssertionError(command)
+
+    assert _source_identity(
+        module_path=installed_module,
+        provenance_binding=binding,
+        subprocess_runner=run,
+    ) == (source_root, "a" * 40)
+    assert all(str(installed_module.parent) not in command for command in calls)
 
 
 def test_installed_entry_point_uses_production_factory_and_closes(monkeypatch, tmp_path):

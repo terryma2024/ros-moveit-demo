@@ -55,6 +55,89 @@ def _optional_file(environment: Mapping[str, str], name: str) -> Path | None:
     return path.resolve()
 
 
+def _source_identity(
+    *,
+    module_path: Path,
+    provenance_binding: Path | None,
+    subprocess_runner=subprocess.run,
+) -> tuple[Path, str]:
+    """Read source authority from Git or an explicit copied-overlay binding."""
+
+    bound_commit = None
+    if provenance_binding is not None:
+        if (
+            not provenance_binding.is_absolute()
+            or provenance_binding.is_symlink()
+            or not provenance_binding.is_file()
+            or provenance_binding.stat().st_size > 1024 * 1024
+        ):
+            raise RuntimeError("SO101_VALIDATION_PROVENANCE_BINDING_INVALID")
+        try:
+            document = json.loads(provenance_binding.read_text(encoding="utf-8"))
+            source_root = Path(document["source_root"])
+            bound_commit = document["source_commit"]
+        except (OSError, KeyError, TypeError, ValueError) as error:
+            raise RuntimeError("SO101_VALIDATION_PROVENANCE_BINDING_INVALID") from error
+        if (
+            document.get("schema_version") != 1
+            or not source_root.is_absolute()
+            or source_root.is_symlink()
+            or not source_root.is_dir()
+            or not isinstance(bound_commit, str)
+        ):
+            raise RuntimeError("SO101_VALIDATION_PROVENANCE_BINDING_INVALID")
+        source_root = source_root.resolve()
+    else:
+        try:
+            source_root = Path(
+                subprocess_runner(
+                    ["git", "-C", str(module_path.parent), "rev-parse", "--show-toplevel"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                ).stdout.strip()
+            ).resolve()
+        except (OSError, subprocess.SubprocessError) as error:
+            raise RuntimeError("SO101_VALIDATION_SOURCE_IDENTITY") from error
+    try:
+        git_root = Path(
+            subprocess_runner(
+                ["git", "-C", str(source_root), "rev-parse", "--show-toplevel"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            ).stdout.strip()
+        ).resolve()
+        source_commit = subprocess_runner(
+            ["git", "-C", str(source_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout.strip()
+        dirty = subprocess_runner(
+            ["git", "-C", str(source_root), "status", "--porcelain", "--untracked-files=no"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout
+    except (OSError, subprocess.SubprocessError) as error:
+        raise RuntimeError("SO101_VALIDATION_SOURCE_IDENTITY") from error
+    if (
+        git_root != source_root
+        or len(source_commit) != 40
+        or any(character not in "0123456789abcdef" for character in source_commit)
+        or dirty
+    ):
+        raise RuntimeError("SO101_VALIDATION_SOURCE_IDENTITY")
+    if bound_commit is not None and bound_commit != source_commit:
+        raise RuntimeError("SO101_VALIDATION_SOURCE_COMMIT_MISMATCH")
+    return source_root, source_commit
+
+
 @dataclass(frozen=True, slots=True)
 class ProductionRuntimeLayout:
     source_root: Path
@@ -111,28 +194,22 @@ class ProductionRuntimeLayout:
             "SO101_VALIDATION_ADAPTIVE_WRAPPER",
             demo_prefix / "lib/so101_demo_py/run_so101_adaptive_batch.zsh",
         )
+        provenance_binding = _optional_file(
+            environment, "SO101_VALIDATION_PROVENANCE_BINDING"
+        )
         import so101_demo
 
-        module = Path(so101_demo.__file__).resolve()
-        try:
-            source_root = Path(
-                subprocess.run(
-                    ["git", "-C", str(module.parent), "rev-parse", "--show-toplevel"],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                ).stdout.strip()
-            ).resolve()
-            source_commit = subprocess.run(
-                ["git", "-C", str(source_root), "rev-parse", "HEAD"],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=5,
-            ).stdout.strip()
-        except (OSError, subprocess.SubprocessError) as error:
-            raise RuntimeError("SO101_VALIDATION_SOURCE_IDENTITY") from error
+        module = Path(so101_demo.__file__).absolute()
+        if provenance_binding is not None and (
+            module.is_symlink()
+            or not module.is_file()
+            or not module.is_relative_to(demo_prefix)
+        ):
+            raise RuntimeError("SO101_VALIDATION_INSTALLED_MODULE_INVALID")
+        source_root, source_commit = _source_identity(
+            module_path=module,
+            provenance_binding=provenance_binding,
+        )
         configured_source = environment.get("SO101_VALIDATION_SOURCE_ROOT")
         if configured_source and Path(configured_source).resolve() != source_root:
             raise RuntimeError("SO101_VALIDATION_SOURCE_ROOT_MISMATCH")
@@ -166,7 +243,7 @@ class ProductionRuntimeLayout:
             coordinator_executable=coordinator,
             cleanup_executable=cleanup,
             adaptive_wrapper=wrapper,
-            provenance_binding=_optional_file(environment, "SO101_VALIDATION_PROVENANCE_BINDING"),
+            provenance_binding=provenance_binding,
             yolo_weights_path=yolo_path,
             grounded_root=grounded_root,
             yolo_weights_sha256=(
