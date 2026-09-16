@@ -73,11 +73,20 @@ test("S07 a surviving descendant blocks the next batch until inventory clears sp
   const campaignB = await startCampaign(
     client, configB, "s07-start-b", await preflight(client, configB),
   );
-  await waitStatus(
-    client, campaignB,
-    (value) => value.status === "COMPLETED_WITH_FAILURES" && value.batch_cleanup_complete === true,
+  await expect
+    .poll(() => ownerRows(installedServer.serverRoot).length, { timeout: 15_000 })
+    .toBe(2);
+  const ownerB = ownerRows(installedServer.serverRoot)[1];
+  expect(ownerB.batch_id).not.toBe(owner.batch_id);
+  const projectionB = (await client.get(`/expert-validation/campaigns/${campaignB}`)).body;
+  expect(projectionB.status).toBe("RUNNING");
+
+  // This spec's helpers always leave a descendant behind; reap B's as well.
+  const descendantB = readDescendantPid(
+    join(campaignRoot(installedServer.serverRoot, campaignB), `${ownerB.batch_id}.coordinator.log`),
   );
-  expect(ownerRows(installedServer.serverRoot)).toHaveLength(2);
+  process.kill(descendantB, "SIGTERM");
+  await waitProcessGone(descendantB);
 });
 
 test("S09 adaptive ownership stays on the wrapper spec:default", async ({ installedServer }) => {
