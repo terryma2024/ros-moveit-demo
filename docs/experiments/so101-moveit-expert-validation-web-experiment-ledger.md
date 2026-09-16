@@ -630,7 +630,7 @@ decision: LIVE_RETRY_NOT_APPLICABLE_NO_VALID_FIRST_PASS
 
 ```yaml
 experiment_id: EXP-025
-status: PLANNED
+status: INVALID
 prior_experiment: EXP-021
 hypothesis: Separating ephemeral same-user Unix IPC from durable evidence closes the pathname boundary without weakening evidence or runtime ownership.
 single_variable: Unix sockets and tokens use the validated same-UID runtime directory; durable evidence layout and all execution semantics are unchanged.
@@ -641,23 +641,40 @@ prestart_diagnostics:
   - The first release6 dry-run was invalid because its copied binding retained the pre-change coordinator-module hash; provenance rejected it before runtime composition.
   - A fresh binding with all artifact hashes recomputed crossed provenance and short-path allocation, then the Worker rejected its external control token because Worker-side authority reconstruction still assumed evidence_root/ipc.
   - Worker-side authority now binds to the authenticated control socket parent explicitly; no server, simulation, or robot action occurred in either diagnostic.
+observed:
+  - Release7 safe dry-run completed all four validations with cleanup complete, proving the broker, child-PATH, short-IPC, and Worker-token repairs before the live attempt.
+  - The installed service returned health; manifest POST/GET preserved the exact four anchors and source=anchor; N1/K4 preflight admitted; start returned a durable campaign and batch identity.
+  - The owned coordinator then exited before writing any batch evidence or starting a Worker, Broker, MoveIt, controller, MuJoCo, or robot action.
+  - ExecutionProcessOwner had created the final batch_root before exec, while the upstream coordinator requires its evidence root to be absent so it can claim the batch atomically. The empty pre-created batch directory is the first bad boundary.
+  - Shutdown left no validation server, coordinator, simulation, or container process; the durable-store lock was reacquired and released. Its RUNNING owner record is retained as truthful evidence of the lost child rather than rewritten.
+first_bad_boundary: DUPLICATE_BATCH_EVIDENCE_ROOT
 evidence:
   - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/short-ipc-green-dryrun.log
   - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/short-ipc-green-dryrun2.log
-decision: RUN_AFTER_CLEAN_COMMIT_BUILD_AND_DRY_RUN
-next_experiment: EXP-026
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/short-ipc-green-dryrun3.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp025/manifest-post.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp025/preflight-response.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp025/start-response.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp025/postinventory.txt
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp025/store-lock-readback.txt
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t21-owner-red.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t21-owner-green.log
+decision: STOP_FAIL_CLOSED_AND_FIX_BATCH_ROOT_OWNERSHIP
+next_experiment: EXP-029
 ```
 
 ### EXP-026 — Fresh same-selection parallel simulation with short IPC
 
 ```yaml
 experiment_id: EXP-026
-status: PLANNED
+status: NOT_RUN
 prior_experiment: EXP-025
 single_variable: execution_mode=PARALLEL, worker_count=2, max_points_per_worker=2
 lifecycle: FRESH_ISOLATED_STACK
 selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
-decision: RUN_AFTER_EXP_025_VALID
+observed:
+  - Not started because EXP-025 stopped at the coordinator evidence-root ownership boundary before any Worker or simulation startup.
+decision: BLOCKED_BY_EXP_025_INVALID
 next_experiment: EXP-027
 ```
 
@@ -665,11 +682,13 @@ next_experiment: EXP-027
 
 ```yaml
 experiment_id: EXP-027
-status: PLANNED
+status: NOT_RUN
 prior_experiment: EXP-026
 single_variable: execution_mode=ADAPTIVE with preferred W8 and fallback [6, 4, 2, 1]
 lifecycle: FRESH_ISOLATED_STACK
-decision: RUN_AFTER_EXP_026_VALID
+observed:
+  - Not started because the repaired sequential campaign did not reach a valid runtime result.
+decision: BLOCKED_BY_EXP_025_INVALID
 next_experiment: EXP-028
 ```
 
@@ -677,11 +696,65 @@ next_experiment: EXP-028
 
 ```yaml
 experiment_id: EXP-028
-status: PLANNED
+status: NOT_APPLICABLE
 prior_experiment: EXP-027
 single_variable: FULL_RESTART retry of eligible FAILED points only
 lifecycle: FRESH_ISOLATED_STACK_PER_POINT
-decision: CONDITIONAL_AFTER_EXP_027
+observed:
+  - No valid first-pass terminal result or eligible FAILED point exists; no retry was manufactured.
+decision: LIVE_RETRY_NOT_APPLICABLE_NO_VALID_FIRST_PASS
+```
+
+### EXP-029 — Coordinator-owned batch root and fresh sequential simulation
+
+```yaml
+experiment_id: EXP-029
+status: PLANNED
+prior_experiment: EXP-025
+hypothesis: Leaving the final fixed batch evidence root absent until coordinator exec restores atomic evidence ownership and permits the exact four-anchor N1/K4 campaign.
+single_variable: ExecutionProcessOwner creates only batch_root.parent for fixed starts; the coordinator creates batch_root itself.
+lifecycle: FRESH_ISOLATED_STACK
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+fixed_config: {worker_count: 1, max_points_per_worker: 4}
+success_criteria: Four authoritative PASSED results with complete runtime, artifact, cleanup, Web, and independently inspected visual evidence.
+decision: RUN_AFTER_CLEAN_COMMIT_BUILD_AND_TEST
+next_experiment: EXP-030
+```
+
+### EXP-030 — Fresh same-selection parallel simulation after batch-root repair
+
+```yaml
+experiment_id: EXP-030
+status: PLANNED
+prior_experiment: EXP-029
+single_variable: execution_mode=PARALLEL, worker_count=2, max_points_per_worker=2
+lifecycle: FRESH_ISOLATED_STACK
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+decision: RUN_AFTER_EXP_029_VALID
+next_experiment: EXP-031
+```
+
+### EXP-031 — Fresh twenty-point adaptive simulation after batch-root repair
+
+```yaml
+experiment_id: EXP-031
+status: PLANNED
+prior_experiment: EXP-030
+single_variable: execution_mode=ADAPTIVE with preferred W8 and fallback [6, 4, 2, 1]
+lifecycle: FRESH_ISOLATED_STACK
+decision: RUN_AFTER_EXP_030_VALID
+next_experiment: EXP-032
+```
+
+### EXP-032 — Conditional FULL_RESTART retry after batch-root repair
+
+```yaml
+experiment_id: EXP-032
+status: PLANNED
+prior_experiment: EXP-031
+single_variable: FULL_RESTART retry of eligible FAILED points only
+lifecycle: FRESH_ISOLATED_STACK_PER_POINT
+decision: CONDITIONAL_AFTER_EXP_031
 ```
 
 ## Task 1 checkpoint

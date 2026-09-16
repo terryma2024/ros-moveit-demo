@@ -138,7 +138,7 @@ class ExecutionProcessOwner:
             raise CoordinatorOwnershipError("START_REQUEST_INVALID")
         if self._store is not None:
             self._store.record_execution_owner_intent(request)
-        request.batch_root.mkdir(parents=True, exist_ok=True) if isinstance(
+        request.batch_root.parent.mkdir(parents=True, exist_ok=True) if isinstance(
             request, CoordinatorStartRequest
         ) else request.runtime_root.mkdir(parents=True, exist_ok=True)
         environment = os.environ.copy()
