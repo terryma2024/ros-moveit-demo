@@ -380,6 +380,12 @@ def create_expert_validation_app(
     if static_dir is not None:
         root = Path(static_dir)
         if root.is_dir() and (root / "index.html").is_file():
+            # The shared Vite build emits absolute /assets URLs for both SPAs.
+            app.mount(
+                "/assets",
+                StaticFiles(directory=root / "assets"),
+                name="validation-vite-assets",
+            )
             app.mount(
                 "/expert-validation/assets",
                 StaticFiles(directory=root / "assets", follow_symlink=True),

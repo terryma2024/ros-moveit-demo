@@ -7,7 +7,7 @@ success_contract: Source and package gates pass; fresh fixed four-point and adap
 worktree: /data/work/ws_moveit/.worktrees/teleop-expert-validation-web
 branch: codex/teleop-expert-validation-web
 base_commit: e1701375690321bc83b5f30ec044da1847d373aa
-current_commit: 97a789311c220f554d4958ba8fdee9e668331868
+current_commit: 7fd1ef6ea61f652793c2ef05b9dfcb254fb960fe
 evidence_root: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01
 confirmed_conclusions:
   - origin/main exactly matched the required documentation commit e1701375690321bc83b5f30ec044da1847d373aa at CP-001.
@@ -21,8 +21,8 @@ disproven_routes:
   - At commit 654756ba32cfc0697aff1444c79752ff1e61c4ee, a four-point manifest could not be returned because its source field violated the closed response model.
 open_hypotheses:
   - A read-only verified journal projection and authoritative HTTP watcher can synchronize fresh Web progress and terminal state without acquiring upstream coordinator authority.
-latest_checkpoint: CP-004
-next_experiment: EXP-046
+latest_checkpoint: CP-005
+next_experiment: EXP-050
 ```
 
 ## Registered evidence and ownership
@@ -1172,6 +1172,50 @@ next_command: Commit the verified fixture/ledger changes, run a fresh full sourc
 ```
 
 Retained: the registered 20260916-e1701375-a01 root, release13 and all t40-t51 evidence. Archived: none. Deletion candidates after readback: all used scratch trees, including c2-c9; no deletion authorized. EXP-046/047/048/049 remain PLANNED, not runtime successes.
+
+## EXP-046 boundary update — Installed SPA asset URLs
+
+- EXP-046 is INVALID before campaign creation: the real release14 page returned index.html, but its absolute /assets JS/CSS URLs received 404. The heading never rendered; the browser driver exited 1. No Worker, Broker or simulation started.
+- Source is clean 7fd1ef6ea61f652793c2ef05b9dfcb254fb960fe; all five package prefixes resolve to manifest-source-install-release14, both MuJoCo packages declare 0.1.0. Server PID 3506067 used the release14 installed launcher, ROS_DOMAIN_ID=231, GZ_PARTITION=not_applicable. Native window inventory identified owned Chrome ID 50331652; capture after driver shutdown correctly failed instead of reusing pixels. The fresh page-failure.png was inspected and is blank.
+- Final source ordinary Demo t52 passed 3,091/3,091 in 342.98s, with four known Demo detector fork warnings; installed Teleop t53 passed 47/47 CTest, core t54 passed its simulation CTest, and installed related Demo t55 passed 1,274/1,274 in 60.58s. All scratch ca/cc/cd/ce trees are retained deletion candidates. No benchmark collected.
+- Retained command diagnostics are not source regressions: initial browser launcher searched an absent bundled browser instead of the project's /usr/bin/google-chrome; dry-run 001 mistyped a model hash, dry-run r selected 20 points with capacity four, and dry-run s omitted the coordinator console directory from PATH. Production supervisor explicitly prepends that directory. All probes are retained under exp046.
+- Confirmed first-bad boundary: shared Vite build emits /assets URLs, regular Teleop mounts /assets, but dedicated validation API mounted only /expert-validation/assets. Add a RED route regression, serve the build's real URLs, preserve /tasks disablement and Web execution authority, then rebuild a fresh copied overlay.
+
+```yaml
+experiment_id: EXP-050
+status: PLANNED
+prior_experiment: EXP-046
+hypothesis: Serving the shared Vite build's absolute asset URLs lets the actual installed validation page render and reach the verified fixed journal projection.
+single_variable: Dedicated SPA static asset route repair; no coordinator, Worker, model, physics or authority change.
+lifecycle: FULL_RESTART
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+fixed_config: {worker_count: 1, max_points_per_worker: 4}
+success_criteria:
+  - Real page loads all production JS/CSS, creates the frozen four-point manifest, and starts only after lease and preflight.
+  - Actual API and page reach the authoritative terminal state, with independent sealed visual/numeric/cleanup evidence.
+invalid_criteria:
+  - Wrong source/install identity, blank/stale page, missing sealed evidence, or surviving owned descendants.
+decision: RUN_AFTER_RED_GREEN_AND_FRESH_COPY_BUILD
+next_experiment: EXP-047
+```
+
+## CP-005 — SPA assets RED/GREEN and clean shutdown
+
+- t56 RED: the real FastAPI regression failed with 404 instead of 200 for the shared Vite build's /assets URL. Production now mounts /assets from the explicitly configured static assets directory, while preserving the validation-prefixed route and disabled /tasks surface. No coordinator, lease or simulator behavior changed.
+- t57 GREEN: dedicated plus regular API tests passed 19/19, including actual JS/CSS content and missing-file 404. t59 complete source warning gate passed 396/396 in 8.16s, no warning summary. Only the established external fastapi.openapi.models and pydantic_core.core_schema emitters were exempted. t58 is an invalid collection bootstrap: -W message handling treated the attempted wildcard filter literally; the external warning was not suppressed.
+- Idle owned server PID 3506067 received SIGINT after GET campaigns returned an empty list; server exit code zero and port 18115 was released. The owned browser launcher exited 1 after the heading timeout, and its tmux session disappeared. No campaign or MuJoCo/MoveIt/Worker/Broker started. Unrelated Software Updater and codex/kimi remain untouched.
+
+```yaml
+checkpoint_id: CP-005
+last_valid_experiment: EXP-001
+current_hypothesis: The new absolute Vite asset mount repairs the real blank page; fresh installed/browser acceptance must still prove it and the journal terminal sync.
+working_tree_status: Only the task-owned API, API test and experiment ledger pending scoped commit.
+owned_processes: NONE
+preserved_processes: codex/kimi tmux and Software Updater windows.
+next_command: Commit the route/test/ledger changes; build a fresh copied release15 overlay, bind its clean source commit, run installed Teleop gates, then execute EXP-050 through the actual page.
+```
+
+Retained: the registered root, exp046 invalid page evidence and all t52-t59 gates/diagnostics. Archived: none. Deletion candidates: scratch ca-cj as used, and superseded copied build/install/log directories; no evidence deleted. Push remains unpublished after auto-review rejection and requires plain renewed publication confirmation.
 
 ## Task 1 checkpoint
 

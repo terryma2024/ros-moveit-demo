@@ -113,6 +113,30 @@ def test_dedicated_root_redirects_and_tasks_are_disabled(tmp_path):
     assert response.json()["code"] == "VALIDATION_TASKS_DISABLED"
 
 
+def test_validation_page_serves_vite_absolute_asset_urls(tmp_path):
+    """The shared Vite build uses /assets, not a validation-only base URL."""
+    web_root = tmp_path / "web"
+    assets = web_root / "assets"
+    assets.mkdir(parents=True)
+    (web_root / "index.html").write_text(
+        '<script type="module" src="/assets/app.js"></script>'
+        '<link rel="stylesheet" href="/assets/app.css">'
+    )
+    (assets / "app.js").write_text("window.validationPageLoaded = true;")
+    (assets / "app.css").write_text("body { color: white; }")
+    client = TestClient(create_expert_validation_app(Service(tmp_path), web_root))
+    assert client.get("/expert-validation").status_code == 200
+    for name, expected in (
+        ("app.js", "window.validationPageLoaded = true;"),
+        ("app.css", "body { color: white; }"),
+    ):
+        response = client.get(f"/assets/{name}")
+        assert response.status_code == 200
+        assert response.text == expected
+    assert client.get("/assets/missing.js").status_code == 404
+    assert client.get("/tasks/runs").status_code == 503
+
+
 def test_retry_requires_lease_command_and_confirmation(tmp_path):
     response = _client(tmp_path).post(
         "/expert-validation/campaigns/c1/full-restart-retries",
