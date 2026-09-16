@@ -68,6 +68,27 @@ def test_sequential_and_parallel_use_same_coordinator_path(tmp_path):
         store.close()
 
 
+def test_installed_coordinator_is_discoverable_on_child_path(tmp_path):
+    supervisor, owner, store = _supervisor(tmp_path)
+    coordinator = tmp_path / "install/lib/so101_demo_py/so101_parallel_batch"
+    coordinator.parent.mkdir(parents=True)
+    coordinator.write_text("console\n", encoding="utf-8")
+    try:
+        request = _request(
+            tmp_path / "seq",
+            "SEQUENTIAL",
+            coordinator_executable_path=coordinator.resolve(),
+            environment={"PATH": "/usr/bin"},
+        )
+        asyncio.run(supervisor.start_first_pass(request))
+
+        assert owner.requests[-1].environment["PATH"] == (
+            f"{coordinator.parent.resolve()}:/usr/bin"
+        )
+    finally:
+        store.close()
+
+
 def test_parallel_rejection_never_spawns_or_downgrades(tmp_path):
     supervisor, owner, store = _supervisor(
         tmp_path, Resources(admitted=False, reasons=("GPU_HEADROOM",))

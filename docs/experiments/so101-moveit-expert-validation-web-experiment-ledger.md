@@ -20,7 +20,7 @@ disproven_routes:
 open_hypotheses:
   - The repaired installed API can now cross manifest creation and authorize a fresh sequential simulation campaign.
 latest_checkpoint: CP-003
-next_experiment: EXP-017
+next_experiment: EXP-021
 ```
 
 ## Registered evidence and ownership
@@ -490,7 +490,7 @@ decision: LIVE_RETRY_NOT_APPLICABLE_NO_VALID_FIRST_PASS
 
 ```yaml
 experiment_id: EXP-017
-status: PLANNED
+status: INVALID
 prior_experiment: EXP-013
 hypothesis: Matching the production default broker image to the fixed coordinator tag removes the early-exit boundary and permits the four-anchor N1/K4 campaign.
 single_variable: Teleop production broker-image default now equals the fixed upstream coordinator contract.
@@ -498,7 +498,18 @@ lifecycle: FRESH_ISOLATED_STACK
 selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
 fixed_config: {worker_count: 1, max_points_per_worker: 4}
 success_criteria: Four authoritative PASSED results with complete runtime, artifact, cleanup, Web, and independently inspected visual evidence.
-decision: RUN_AFTER_CLEAN_COMMIT_AND_REBUILD
+observed:
+  - Release4 safe coordinator dry-run crossed the repaired broker-image comparison, then stopped at PROVENANCE_CONSOLE_MISSING before simulation.
+  - The installed console is a regular file and matches the bound hash, but the child PATH did not contain its package lib directory, so the upstream coordinator could not discover its own installed console with shutil.which.
+  - Focused RED reproduced the missing child-PATH prefix; focused GREEN passes after the supervisor prepends the exact installed console directory.
+  - The complete strict Teleop gate passes 390 tests under -W error with no warning summary.
+first_bad_boundary: PROVENANCE_CONSOLE_MISSING
+evidence:
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/broker-contract-green-dryrun.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t19-path-red.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t19-path-green.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t19-teleop-strict.log
+decision: STOP_FAIL_CLOSED_AND_FIX_CHILD_PATH
 next_experiment: EXP-018
 ```
 
@@ -506,13 +517,15 @@ next_experiment: EXP-018
 
 ```yaml
 experiment_id: EXP-018
-status: PLANNED
+status: NOT_RUN
 prior_experiment: EXP-017
 hypothesis: The same four anchors run through two isolated fixed Workers with N2/K2 and no cross-Worker leakage.
 single_variable: execution_mode=PARALLEL, worker_count=2, max_points_per_worker=2
 lifecycle: FRESH_ISOLATED_STACK
 selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
-decision: RUN_AFTER_EXP_017_VALID
+observed:
+  - Not started because EXP-017 stopped before server or simulation startup.
+decision: BLOCKED_BY_EXP_017_INVALID
 next_experiment: EXP-019
 ```
 
@@ -520,12 +533,14 @@ next_experiment: EXP-019
 
 ```yaml
 experiment_id: EXP-019
-status: PLANNED
+status: NOT_RUN
 prior_experiment: EXP-018
 hypothesis: The production adaptive wrapper owns the W8/W6/W4/W2/W1 lifecycle and preserves authoritative results across any real fallback.
 single_variable: execution_mode=ADAPTIVE with preferred W8 and fallback [6, 4, 2, 1]
 lifecycle: FRESH_ISOLATED_STACK
-decision: RUN_AFTER_EXP_018_VALID
+observed:
+  - Not started because no valid sequential campaign exists after the new provenance boundary.
+decision: BLOCKED_BY_EXP_017_INVALID
 next_experiment: EXP-020
 ```
 
@@ -533,12 +548,65 @@ next_experiment: EXP-020
 
 ```yaml
 experiment_id: EXP-020
-status: PLANNED
+status: NOT_APPLICABLE
 prior_experiment: EXP-019
 hypothesis: Any eligible authoritative FAILED point can be retried only as a new serial N1/K1 FULL_RESTART batch after cleanup; otherwise retry is not applicable.
 single_variable: FULL_RESTART retry of eligible FAILED points only
 lifecycle: FRESH_ISOLATED_STACK_PER_POINT
-decision: CONDITIONAL_AFTER_EXP_019
+observed:
+  - No valid first-pass terminal result or eligible FAILED point exists; no retry was manufactured.
+decision: LIVE_RETRY_NOT_APPLICABLE_NO_VALID_FIRST_PASS
+```
+
+### EXP-021 — Child-PATH repair and fresh sequential simulation
+
+```yaml
+experiment_id: EXP-021
+status: PLANNED
+prior_experiment: EXP-017
+hypothesis: Supplying the installed coordinator directory on the owned child PATH closes provenance console discovery and permits the four-anchor N1/K4 campaign.
+single_variable: Owned coordinator and adaptive-wrapper child PATH begins with the exact installed coordinator directory.
+lifecycle: FRESH_ISOLATED_STACK
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+fixed_config: {worker_count: 1, max_points_per_worker: 4}
+decision: RUN_AFTER_CLEAN_COMMIT_AND_REBUILD
+next_experiment: EXP-022
+```
+
+### EXP-022 — Fresh same-selection parallel simulation after PATH repair
+
+```yaml
+experiment_id: EXP-022
+status: PLANNED
+prior_experiment: EXP-021
+single_variable: execution_mode=PARALLEL, worker_count=2, max_points_per_worker=2
+lifecycle: FRESH_ISOLATED_STACK
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+decision: RUN_AFTER_EXP_021_VALID
+next_experiment: EXP-023
+```
+
+### EXP-023 — Fresh twenty-point adaptive simulation after PATH repair
+
+```yaml
+experiment_id: EXP-023
+status: PLANNED
+prior_experiment: EXP-022
+single_variable: execution_mode=ADAPTIVE with preferred W8 and fallback [6, 4, 2, 1]
+lifecycle: FRESH_ISOLATED_STACK
+decision: RUN_AFTER_EXP_022_VALID
+next_experiment: EXP-024
+```
+
+### EXP-024 — Conditional FULL_RESTART retry after PATH repair
+
+```yaml
+experiment_id: EXP-024
+status: PLANNED
+prior_experiment: EXP-023
+single_variable: FULL_RESTART retry of eligible FAILED points only
+lifecycle: FRESH_ISOLATED_STACK_PER_POINT
+decision: CONDITIONAL_AFTER_EXP_023
 ```
 
 ## Task 1 checkpoint

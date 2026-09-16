@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 import hashlib
 import inspect
+import os
 from pathlib import Path
 
 from .adaptive import AdaptiveStartRequest
@@ -119,6 +120,11 @@ class ExpertValidationSupervisor:
     def _owner_request(self, request, receipt, batch_id, batch_root, point_ids=None):
         selected = tuple(point_ids or request.selection.point_ids)
         environment = dict(request.environment)
+        if request.coordinator_executable_path is not None:
+            inherited_path = environment.get("PATH", os.environ.get("PATH", ""))
+            environment["PATH"] = os.pathsep.join(
+                (str(request.coordinator_executable_path.parent), inherited_path)
+            )
         if isinstance(receipt.execution_config, FixedExecutionConfig):
             config = receipt.execution_config
             argv = [
