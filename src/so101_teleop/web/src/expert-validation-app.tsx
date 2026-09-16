@@ -32,6 +32,11 @@ export type ExpertValidationApi = {
     confirmation: string,
   ): Promise<CampaignProjection>;
   restoreCampaign?(): Promise<CampaignView | null>;
+  watchCampaign?(
+    campaignId: string,
+    after: number,
+    apply: (campaign: CampaignProjection) => void,
+  ): () => void;
 };
 
 const defaultClient = new ExpertValidationClient();
@@ -62,8 +67,18 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
   const sessionId = useMemo(stableSessionId, []);
 
   useEffect(() => {
+    let stopWatching: (() => void) | undefined;
+    let disposed = false;
     api.capabilities().then(setCapabilities).catch(() => setNotice("Capabilities unavailable"));
-    api.restoreCampaign?.().then((value) => { if (value) setCampaign(value); });
+    api.restoreCampaign?.().then((value) => {
+      if (!value || disposed) return;
+      setCampaign(value);
+      stopWatching = api.watchCampaign?.(value.campaign_id, value.sequence, setCampaign);
+    });
+    return () => {
+      disposed = true;
+      stopWatching?.();
+    };
   }, [api]);
 
   const authority = (): LeaseAuthority => {

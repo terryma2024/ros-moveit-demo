@@ -14,6 +14,7 @@ import type {
 type Fetcher = typeof fetch;
 type CommandId = () => string;
 type EventHandler = (event: CampaignHint) => void;
+type CampaignHandler = (campaign: CampaignProjection) => void;
 type SocketFactory = (url: string) => WebSocket;
 
 const browserFetch: Fetcher = (input, init) => fetch(input, init);
@@ -92,6 +93,41 @@ export class ExpertValidationClient {
     return this.request<CampaignProjection>(
       `/expert-validation/campaigns/${encodeURIComponent(campaignId)}`,
     );
+  }
+
+  async restoreCampaign(): Promise<CampaignProjection | null> {
+    const campaigns = await this.request<CampaignProjection[]>(
+      "/expert-validation/campaigns",
+    );
+    return campaigns.at(-1) ?? null;
+  }
+
+  watchCampaign(
+    campaignId: string,
+    after: number,
+    apply: CampaignHandler,
+  ): () => void {
+    let sequence = after;
+    let closed = false;
+    let refresh = Promise.resolve();
+    const stop = this.openEvents(after, (event) => {
+      if (closed || event.campaign_id !== campaignId || event.sequence <= sequence) return;
+      if (event.sequence === sequence + 1) {
+        sequence = event.sequence;
+        return;
+      }
+      refresh = refresh.then(async () => {
+        const campaign = await this.campaign(campaignId);
+        if (!closed && campaign.sequence > sequence) {
+          sequence = campaign.sequence;
+          apply(campaign);
+        }
+      });
+    });
+    return () => {
+      closed = true;
+      stop();
+    };
   }
 
   retry(

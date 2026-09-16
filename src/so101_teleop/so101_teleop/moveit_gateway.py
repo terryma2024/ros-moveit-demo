@@ -43,13 +43,13 @@ class MoveItGateway:
         solution = await self._backend.solve_ik(request.target, seed)
         arm_request = JointPlanRequest(command_id=request.command_id, target_joints_rad=solution)
         result = await self.plan_joints(arm_request, snapshot)
-        return GatewayPlanResult(result.code, result.plan.copy(update={"ik_solution_rad": solution}), result.collisions)
+        return GatewayPlanResult(result.code, result.plan.model_copy(update={"ik_solution_rad": solution}), result.collisions)
 
     async def _trajectory_collisions(self, trajectory: List[Dict[str, float]]) -> List[CollisionPair]:
         for index, waypoint in enumerate(trajectory):
             collisions = await self._backend.validate(waypoint, index)
             if collisions:
-                return [collision.copy(update={"waypoint_index": index}) for collision in collisions]
+                return [collision.model_copy(update={"waypoint_index": index}) for collision in collisions]
         return []
 
     def _result(self, code: str, target: Dict[str, float], snapshot: TelemetrySnapshot,

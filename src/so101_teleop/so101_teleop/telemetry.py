@@ -103,12 +103,12 @@ class TelemetryCollector:
 
     def publish(self, snapshot: TelemetrySnapshot) -> TelemetrySnapshot:
         self._sequence += 1
-        published = snapshot.copy(update={
+        published = snapshot.model_copy(update={
             "sequence": self._sequence,
             "server_timestamp": time.time(),
         }, deep=True)
         self._latest = published
-        return published.copy(deep=True)
+        return published.model_copy(deep=True)
 
     def snapshot(self) -> TelemetrySnapshot:
-        return self._latest.copy(deep=True)
+        return self._latest.model_copy(deep=True)

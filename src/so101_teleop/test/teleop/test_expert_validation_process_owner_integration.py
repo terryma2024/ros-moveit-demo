@@ -61,6 +61,9 @@ def test_real_process_identity_restart_reconnect_and_cleanup_gate(tmp_path):
     cleanup_allowed = True
     restarted_owner.stop_after_cleanup(running)
     assert not restarted_owner.poll(running).running
+    # Reap the child retained by the pre-restart owner in this in-process
+    # restart simulation.
+    assert not first_owner.poll(running).running
 
 
 def test_leader_exit_is_not_mistaken_for_descendant_cleanup(tmp_path):

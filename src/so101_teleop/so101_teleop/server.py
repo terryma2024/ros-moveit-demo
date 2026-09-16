@@ -344,7 +344,7 @@ class RosTelemetryWorker:
         with self._lock: self._latest = self._collector.publish(snapshot)
 
     def snapshot(self) -> TelemetrySnapshot:
-        with self._lock: return self._latest.copy(deep=True)
+        with self._lock: return self._latest.model_copy(deep=True)
 
     def _current_positions(self) -> dict[str, float]:
         snapshot = self.snapshot()
@@ -831,7 +831,7 @@ class TeleopService:
                         if not isinstance(owner_physical_outcome, Mapping):
                             return self._result(body,False,"BACKEND_OUTPUT_INVALID","backend physical outcome is not an object")
                         try:
-                            physical_outcome = PhysicalOutcomeEvidence.parse_obj(
+                            physical_outcome = PhysicalOutcomeEvidence.model_validate(
                                 owner_physical_outcome
                             )
                         except ValueError:
@@ -850,7 +850,7 @@ class TeleopService:
                         isinstance(evidence_manifest, str)
                         and Path(evidence_manifest).is_file()
                     )
-                    return self._result(body,True,"OK","backend checkpoint owner completed workflow request",data={"workflow":{"run_id":run_id,"current_state":states[-1] if states else "IDLE","next_state":None,"trace":states,"checkpoint_fresh":checkpoint.is_file() or manifest_fresh,"evidence_manifest":evidence_manifest if manifest_fresh else None,"physical_outcome":physical_outcome.dict() if physical_outcome else None}})
+                    return self._result(body,True,"OK","backend checkpoint owner completed workflow request",data={"workflow":{"run_id":run_id,"current_state":states[-1] if states else "IDLE","next_state":None,"trace":states,"checkpoint_fresh":checkpoint.is_file() or manifest_fresh,"evidence_manifest":evidence_manifest if manifest_fresh else None,"physical_outcome":physical_outcome.model_dump() if physical_outcome else None}})
                 return self._result(body,False,"READINESS_NOT_SATISFIED",f"{name} requires a live dedicated gateway")
             except (RuntimeError, PlanRejected, KeyError, ValueError) as error:
                 layers = dict(getattr(self._worker, "_attachment_evidence", {})) if name.startswith("attachment_") else {}

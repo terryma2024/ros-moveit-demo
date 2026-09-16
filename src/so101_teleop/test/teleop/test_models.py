@@ -21,7 +21,7 @@ def test_pose_keeps_explicit_frames_and_si_units():
         yaw_rad=0.0,
     )
 
-    assert {"frame_id", "tcp_frame", "x_m", "roll_rad"} <= set(pose.dict())
+    assert {"frame_id", "tcp_frame", "x_m", "roll_rad"} <= set(pose.model_dump())
 
 
 def test_command_result_separates_transport_acceptance_from_robot_result():
@@ -66,4 +66,4 @@ def test_snapshot_exposes_bounded_physical_outcome_evidence():
     snapshot = TelemetrySnapshot(physical_outcome=evidence)
 
     assert snapshot.physical_outcome == evidence
-    assert snapshot.dict()["physical_outcome"]["last_sequence"] == 46
+    assert snapshot.model_dump()["physical_outcome"]["last_sequence"] == 46

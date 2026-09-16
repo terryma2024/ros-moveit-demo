@@ -22,7 +22,7 @@ def ready_snapshot():
 
 def test_missing_q6_forces_read_only_mode():
     """Dropping gripper feedback must disable mutation rather than authorizing a partial robot."""
-    snapshot = ready_snapshot().copy(update={"joints": {
+    snapshot = ready_snapshot().model_copy(update={"joints": {
         str(index): JointSample(name=str(index), position_rad=0.0) for index in range(1, 6)
     }})
 
@@ -34,7 +34,7 @@ def test_missing_q6_forces_read_only_mode():
 
 def test_stale_tcp_forces_read_only_even_with_active_controllers():
     """Ignoring source age would allow a motion command based on stale Cartesian state."""
-    snapshot = ready_snapshot().copy(update={"source_ages_s": {
+    snapshot = ready_snapshot().model_copy(update={"source_ages_s": {
         "joints": 0.01, "tcp": 2.0, "object": 0.01, "scene": 0.01
     }})
 

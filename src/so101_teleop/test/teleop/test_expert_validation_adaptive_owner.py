@@ -80,3 +80,8 @@ def test_adaptive_reconnect_rejects_wrapper_pid_reuse(tmp_path):
     finally:
         if owner.poll(running).running:
             os.kill(running.pid, signal.SIGINT)
+        for _ in range(150):
+            if not owner.poll(running).running:
+                break
+            time.sleep(0.02)
+        assert not owner.poll(running).running

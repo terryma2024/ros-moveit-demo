@@ -63,7 +63,7 @@ def apply_translation_step(pose: Pose6D, axis: str, distance_m: float, frame: St
         matrix = _rotation_matrix(quaternion_from_rpy(pose.roll_rad, pose.pitch_rad, pose.yaw_rad))
         delta = tuple(sum(matrix[row][column] * delta[column] for column in range(3))
                       for row in range(3))
-    return pose.copy(update={"x_m": pose.x_m + delta[0], "y_m": pose.y_m + delta[1],
+    return pose.model_copy(update={"x_m": pose.x_m + delta[0], "y_m": pose.y_m + delta[1],
                              "z_m": pose.z_m + delta[2]})
 
 
@@ -77,4 +77,4 @@ def apply_rotation_step(pose: Pose6D, axis: str, angle_rad: float, frame: StepFr
     current = quaternion_from_rpy(pose.roll_rad, pose.pitch_rad, pose.yaw_rad)
     rotated = _multiply(delta, current) if frame is StepFrame.WORLD else _multiply(current, delta)
     roll, pitch, yaw = rpy_from_quaternion(rotated)
-    return pose.copy(update={"roll_rad": roll, "pitch_rad": pitch, "yaw_rad": yaw})
+    return pose.model_copy(update={"roll_rad": roll, "pitch_rad": pitch, "yaw_rad": yaw})
