@@ -241,6 +241,45 @@ def test_process_layout_reserves_the_linux_unix_socket_path_budget() -> None:
         validate_process_path_budget(run_root.parent / "abc")
 
 
+def test_compact_layout_preserves_existing_directory_on_collision(tmp_path: Path) -> None:
+    run_root = tmp_path / "compact"
+    run_root.mkdir()
+    layout = create_process_layout(run_root, "shard-01", process_id_chars=4)
+    assert len(layout.root.name) == 4
+    assert layout.tmp_dir.parent == layout.root
+    sentinel = layout.root / "retained.json"
+    sentinel.write_bytes(b'{"retained":true}\n')
+    with pytest.raises(FileExistsError):
+        create_process_layout(run_root, "shard-01", process_id_chars=4)
+    assert sentinel.read_bytes() == b'{"retained":true}\n'
+
+
+def test_compact_layout_respects_the_actual_long_evidence_path_budget() -> None:
+    run_root = Path(
+        "/data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/scratch/fw"
+    )
+    assert validate_process_path_budget(run_root, process_id_chars=4) == 107
+    with pytest.raises(ValueError, match="AF_UNIX"):
+        validate_process_path_budget(run_root.parent / "fwx", process_id_chars=4)
+
+
+@pytest.mark.parametrize("width", (0, 3, 13, True))
+def test_compact_layout_rejects_invalid_width_before_creating_paths(
+    tmp_path: Path, width: int
+) -> None:
+    with pytest.raises(ValueError, match="process ID"):
+        create_process_layout(tmp_path, "serial", process_id_chars=width)
+    with pytest.raises(ValueError, match="process ID"):
+        validate_process_path_budget(tmp_path, process_id_chars=width)
+    assert tuple(tmp_path.iterdir()) == ()
+
+
+def test_compact_cli_keeps_default_width_and_accepts_explicit_override(tmp_path: Path) -> None:
+    common = ["--evidence-root", str(tmp_path), "--run-id", "compact"]
+    assert _parser().parse_args(common).process_id_chars == 12
+    assert _parser().parse_args([*common, "--process-id-chars", "4"]).process_id_chars == 4
+
+
 def test_resource_metrics_accept_gnu_time_label_indentation(tmp_path: Path) -> None:
     resource = tmp_path / "resource.txt"
     resource.write_text(

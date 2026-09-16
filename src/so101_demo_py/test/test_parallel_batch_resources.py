@@ -116,7 +116,7 @@ def resource_root(tmp_path, suffix='batch'):
     """Keep UDS fixtures in this registered scratch tree without pytest's deep suffix."""
     key = str(tmp_path / suffix)
     if key not in _ROOTS:
-        _ROOTS[key] = Path(os.environ['TMPDIR']).parent / f'r{next(_ROOT_IDS):x}'
+        _ROOTS[key] = Path(os.environ['TMPDIR']).parent / f'rr{next(_ROOT_IDS):x}'
     return _ROOTS[key]
 
 
@@ -136,6 +136,31 @@ def test_claim_root_is_stable_per_test_and_isolated_between_tests(monkeypatch):
 
     monkeypatch.setenv('PYTEST_CURRENT_TEST', 'test/module.py::test_b (call)')
     assert claim_root() != first
+
+
+def test_allocator_fixture_does_not_reuse_retained_cli_claim_namespace(
+    tmp_path, config, monkeypatch
+):
+    # Earlier CLI tests retain their 'rc' claim namespace in this same scratch.
+    # Hexadecimal allocator root counters must not select it as evidence root.
+    # Reserve the forced ID in the normal sequence too: evidence directories
+    # survive this case and must not be selected again after monkeypatch undo.
+    while next(_ROOT_IDS) <= 12:
+        pass
+    monkeypatch.setattr(sys.modules[__name__], '_ROOT_IDS', itertools.count(12))
+    monkeypatch.setattr(sys.modules[__name__], '_ROOTS', {})
+    retained = Path(os.environ['TMPDIR']).parent / 'rc'
+    retained.mkdir(mode=0o700, exist_ok=True)
+    original = retained / 'retained-claim.json'
+    original.write_bytes(b'{"role":"earlier-cli-claim"}\n')
+    owner = allocator(tmp_path, config, suffix='after-cli')
+    try:
+        manifest = owner.allocate()
+        assert [worker.ros_domain_id for worker in manifest.workers] == [181, 182]
+        assert manifest.evidence_root != retained
+        assert original.read_bytes() == b'{"role":"earlier-cli-claim"}\n'
+    finally:
+        owner.close()
 
 
 def test_observational_policy_allocates_eight_without_headroom_rejection(

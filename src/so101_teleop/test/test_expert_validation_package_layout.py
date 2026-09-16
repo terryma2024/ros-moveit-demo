@@ -1,5 +1,7 @@
 from pathlib import Path
 import re
+import subprocess
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -38,6 +40,26 @@ def test_cmake_registers_every_expert_validation_python_gate():
     assert registered == EXPERT_VALIDATION_TESTS | {
         "test_expert_validation_package_layout"
     }
+
+
+def test_generated_cmake_registry_includes_backend_result_gate(tmp_path):
+    build = tmp_path / "cmake-registry"
+    configured = subprocess.run(
+        [
+            "cmake", "-S", str(TELEOP), "-B", str(build),
+            "-DBUILD_TESTING=ON",
+            f"-DPython3_EXECUTABLE={sys.executable}",
+            f"-DPYTHON_EXECUTABLE={sys.executable}",
+        ],
+        capture_output=True, text=True,
+    )
+    assert configured.returncode == 0, configured.stdout + configured.stderr
+    generated = (build / "CTestTestfile.cmake").read_text(encoding="utf-8")
+    pytest_paths = set(re.findall(
+        r'^add_test\(.*? "-m" "pytest" "([^"]+)"', generated, re.MULTILINE,
+    ))
+
+    assert str(TELEOP / "test/teleop/test_backend_result.py") in pytest_paths
 
 
 def test_teleop_install_contract_contains_validation_server_fixture_and_spa():

@@ -108,12 +108,26 @@ def test_mujoco_support_plugin_comes_from_the_candidate_project_overlay() -> Non
 
 def test_pytest_collection_is_nonzero() -> None:
     test_root = Path(__file__).resolve().parent
+    environment = dict(os.environ)
+    environment.pop("PYTEST_ADDOPTS", None)
     completed = subprocess.run(
         [sys.executable, "-m", "pytest", "--collect-only", "-q", str(test_root)],
         check=True,
         capture_output=True,
         text=True,
+        env=environment,
     )
     terminal = completed.stdout.strip().splitlines()[-1]
     assert terminal.endswith("tests collected in 0.00s") or "tests collected" in terminal
     assert not terminal.startswith("no tests collected")
+
+
+def test_collection_probe_preserves_parent_pytest_result(tmp_path, monkeypatch) -> None:
+    parent_result = tmp_path / "parent-result.xml"
+    original = b"parent result must not be replaced by child collection\n"
+    parent_result.write_bytes(original)
+    monkeypatch.setenv("PYTEST_ADDOPTS", f"--junit-xml={parent_result}")
+
+    test_pytest_collection_is_nonzero()
+
+    assert parent_result.read_bytes() == original

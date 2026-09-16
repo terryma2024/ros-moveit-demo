@@ -270,13 +270,20 @@ def validate_process_outcomes(outcomes: Sequence[ProcessOutcome]) -> None:
         raise RuntimeError("pytest process failed closed: " + "; ".join(failures))
 
 
-def create_process_layout(run_root: Path, name: str) -> ProcessLayout:
+def _validate_process_id_chars(width: int) -> int:
+    if type(width) is not int or not 4 <= width <= PHYSICAL_PROCESS_ID_HEX_CHARS:
+        raise ValueError("process ID width must be an integer between 4 and 12")
+    return width
+
+
+def create_process_layout(
+    run_root: Path, name: str, *, process_id_chars: int = PHYSICAL_PROCESS_ID_HEX_CHARS
+) -> ProcessLayout:
+    width = _validate_process_id_chars(process_id_chars)
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", name):
         raise ValueError(f"invalid process layout name: {name}")
     identity_input = f"{run_root.resolve()}\0{name}".encode()
-    physical_name = hashlib.sha256(identity_input).hexdigest()[
-        :PHYSICAL_PROCESS_ID_HEX_CHARS
-    ]
+    physical_name = hashlib.sha256(identity_input).hexdigest()[:width]
     root = run_root / physical_name
     root.mkdir(mode=0o700, parents=False, exist_ok=False)
     tmp_dir = root / "tmp"
@@ -306,10 +313,11 @@ def create_process_layout(run_root: Path, name: str) -> ProcessLayout:
     )
 
 
-def validate_process_path_budget(run_root: Path) -> int:
-    reserved_path = (
-        run_root / ("0" * PHYSICAL_PROCESS_ID_HEX_CHARS) / RESERVED_SOCKET_SUFFIX
-    )
+def validate_process_path_budget(
+    run_root: Path, *, process_id_chars: int = PHYSICAL_PROCESS_ID_HEX_CHARS
+) -> int:
+    width = _validate_process_id_chars(process_id_chars)
+    reserved_path = run_root / ("0" * width) / RESERVED_SOCKET_SUFFIX
     path_bytes = len(os.fsencode(reserved_path))
     if path_bytes > AF_UNIX_PATH_MAX_BYTES:
         raise ValueError(
@@ -631,7 +639,7 @@ def run_gate(arguments: argparse.Namespace) -> dict[str, object]:
         raise FileNotFoundError(f"Python executable does not exist: {python}")
     workers = validate_worker_count(arguments.workers)
     run_root = arguments.evidence_root.resolve() / "scratch" / arguments.run_id
-    validate_process_path_budget(run_root)
+    validate_process_path_budget(run_root, process_id_chars=arguments.process_id_chars)
     run_root.mkdir(mode=0o700, parents=True, exist_ok=False)
     summary_path = run_root / "summary.json"
     source_commit = _git(repo_root, "rev-parse", "HEAD")
@@ -657,7 +665,9 @@ def run_gate(arguments: argparse.Namespace) -> dict[str, object]:
     fallback_values = [value for value in durations.values() if value > 0]
     fallback = statistics.median(fallback_values) if fallback_values else 1.0
 
-    collection_layout = create_process_layout(run_root, "collection")
+    collection_layout = create_process_layout(
+        run_root, "collection", process_id_chars=arguments.process_id_chars
+    )
     collection = _run_pytest_process(
         python=python,
         repo_root=repo_root,
@@ -674,7 +684,9 @@ def run_gate(arguments: argparse.Namespace) -> dict[str, object]:
         raise CoverageError("benchmark node ID entered expected collection")
     setup_elapsed_s = time.monotonic() - overall_started
 
-    serial_layout = create_process_layout(run_root, "serial")
+    serial_layout = create_process_layout(
+        run_root, "serial", process_id_chars=arguments.process_id_chars
+    )
     serial = _run_pytest_process(
         python=python,
         repo_root=repo_root,
@@ -692,7 +704,11 @@ def run_gate(arguments: argparse.Namespace) -> dict[str, object]:
             continue
         shard_inputs.append(
             (
-                create_process_layout(run_root, f"shard-{index:02d}"),
+                create_process_layout(
+                    run_root,
+                    f"shard-{index:02d}",
+                    process_id_chars=arguments.process_id_chars,
+                ),
                 assignment,
             )
         )
@@ -738,6 +754,7 @@ def run_gate(arguments: argparse.Namespace) -> dict[str, object]:
         "install_overlay": os.environ.get("SO101_DEMO_EXPECTED_PREFIX"),
         "ament_prefix_path": os.environ.get("AMENT_PREFIX_PATH"),
         "worker_count": workers,
+        "process_id_chars": arguments.process_id_chars,
         "timing_input": str(timing_input) if timing_input else None,
         "timing_input_sha256": _sha256(timing_input),
         "fallback_duration_s": fallback,
@@ -793,6 +810,13 @@ def _parser() -> argparse.ArgumentParser:
     repo_root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument(
+        "--process-id-chars",
+        type=int,
+        choices=range(4, 13),
+        default=PHYSICAL_PROCESS_ID_HEX_CHARS,
+        help="physical process directory width; shorten for long evidence roots",
+    )
     parser.add_argument("--evidence-root", type=Path, required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--timings", type=Path)
