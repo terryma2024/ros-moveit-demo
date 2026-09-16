@@ -217,11 +217,11 @@ test("S15 cleanup-to-dequeue window advances exactly once spec:slow", async ({ i
 
   await installedServer.start();
 
-  // The crashed command remains outcome-unknown; a new command reconciles.
+  // The crashed command remains outcome-unknown under its original digest.
   const leaseB = await acquireLease(client, session);
   const replay = await client.post(
     `/expert-validation/campaigns/${campaignId}/full-restart-retries`,
-    retryBody(leaseB, session, "s15w2-retry", pointIds),
+    retryBody(lease, session, "s15w2-retry", pointIds),
   );
   expect(replay.status).toBe(409);
   expect(replay.body.code).toBe("COMMAND_OUTCOME_UNKNOWN");
