@@ -22,6 +22,22 @@ description: Use when recording or analyzing SO-101 pick-place video in Gazebo o
 
 MuJoCo Viewer 只用于操作员视角，它不是 `task_camera` RGB-D 传感器。Viewer 视频不能证明感知节点实际收到的 RGB、depth、segmentation 或 `CameraInfo`。
 
+## MuJoCo 启动模式
+
+只验证 Viewer 取景和录屏链路时，使用公开的持久仿真入口，并关闭不需要的传感器渲染：
+
+```bash
+ros2 launch so101_demo_py so101_mujoco.launch.py \
+  run_mode:=execute execute:=true \
+  headless:=false sensor_rendering:=false \
+  session_id:=<unique-id> \
+  evidence_file:=<fresh-absolute-json-path>
+```
+
+这个入口仍会启动可见 Viewer、物理、controller 和 MoveIt，但不提供 `task_camera` RGB-D。关闭传感器渲染还能避免 Viewer 与 camera plugin 同时初始化 GLFW；若日志出现 `_glfwGrabErrorHandlerX11` 断言，先检查是否错误地为纯 Viewer 录屏启用了 `sensor_rendering:=true`。
+
+需要感知、任务站或正式抓取时，必须使用对应 launch 并保留 `sensor_rendering:=true`。这类运行如果发生 GLFW 生命周期故障，应作为运行时失败修复；不得切换到上面的 video-only 模式后宣称 `task_camera` 或抓取任务通过。
+
 ## 工具和证据目录
 
 所有运行工具必须来自已确认的安装产物：
@@ -35,7 +51,7 @@ MuJoCo Viewer 只用于操作员视角，它不是 `task_camera` RGB-D 传感器
 
 `simulator_window_recorder.py` 当前支持 ai-station 的 GNOME X11 窗口录制。GNOME Wayland、macOS 或 headless MuJoCo 没有满足该契约的窗口时，按 `$gui-capture` 保存可用截图并把视频 gate 标记为未通过；不得改录全屏或把截图序列描述成完整录屏。
 
-整个任务只登记一个 `/tmp/so101-debug-<task-id>/` evidence root。每轮实验在其中使用不重复的子目录，例如 `<run-id>/`，包含：
+整个任务只登记一个 evidence root。视频属于高频、需保留的证据，使用 `/data/work/so101-evidence/<task-family>/<run-id>/`；只有不产生视频的普通低频诊断才可按 `$so101-dev` 使用 `/tmp/so101-debug-<task-id>/`。每轮实验在已登记根目录下使用不重复的子目录，例如 `<experiment-id>/`，包含：
 
 ```text
 manifest.json
@@ -60,7 +76,7 @@ report.md
 
 按顺序经过以下 gate。每一步都由 Codex 查看证据后决定是否继续。
 
-1. **Provenance 和 backend 冻结**：记录本地与 ai-station 的 commit、branch、`git status --short`、安装前缀、工具版本和 `backend`。从运行进程、安装产物和 source tree 三层确认版本。MuJoCo 还要记录 `mujoco_ros2_control`、`so101_mujoco_support`、owner PID、`simulation_session_id` 和 `reset_epoch`；尚未生成的运行身份写 `PENDING`，启动后补齐。
+1. **Provenance 和 backend 冻结**：记录本地与 ai-station 的 commit、branch、`git status --short`、安装前缀、工具版本和 `backend`。从运行进程、安装产物和 source tree 三层确认版本。MuJoCo 还要冻结 `sensor_rendering` 模式，并记录 `mujoco_ros2_control`、`so101_mujoco_support`、owner PID、`simulation_session_id` 和 `reset_epoch`；尚未生成的运行身份写 `PENDING`，启动后补齐。
 2. **相机设置与 readback**：Gazebo 先 compute，人工核对数值和 SDF diff 后 apply。MuJoCo 只用已安装 preset，通过服务设置并读回相机状态。数学覆盖或服务成功都只是候选，最终视角由 ready 末帧验收。
 3. **Inventory 与精确清理**：保存清理前清单，把资源分为“本轮停止”“必须保留”“不确定”。只向确认属于本轮旧 stack 的 PID 发送正常终止信号，超时后才对同一 PID 升级。保存清理后清单，证明选定 backend、MoveIt、controller、`robot_state_publisher` 和任务进程没有重复。同一任务域同时出现 Gazebo 与 MuJoCo 时停止，先消除后端歧义。
 4. **GUI 与唯一窗口**：在明确的 tmux session 中 source `~/gui-env.zsh`、ROS Jazzy 和本轮 overlay，不硬编码 `DISPLAY` 或 `XAUTHORITY`。MuJoCo 必须以 `headless:=false` 启动。运行 `tile_ai_station_guis.py --maximize <backend>`，要求 `LAYOUT_OK`。窗口为零或多于一个都不能录屏；截图和内部 GUI 控制交给 `$gui-capture`。

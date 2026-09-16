@@ -9,7 +9,7 @@
 - 本地 commit / branch / `git status --short`：
 - ai-station commit / branch / `git status --short`：
 - 安装前缀与工具版本：
-- evidence root 与本轮子目录：`/tmp/so101-debug-<task-id>/<run-id>/`
+- evidence root 与本轮子目录：视频使用 `/data/work/so101-evidence/<task-family>/<run-id>/<experiment-id>/`；不产生视频的普通低频诊断才使用 `/tmp/so101-debug-<task-id>/`。
 - Gazebo 专属：world、`GZ_PARTITION`、进程 PID；不适用时写 `N/A`。
 - MuJoCo 专属：`mujoco_ros2_control` / `so101_mujoco_support` 版本、owner PID、`simulation_session_id`、`reset_epoch`；不适用时写 `N/A`。
 
