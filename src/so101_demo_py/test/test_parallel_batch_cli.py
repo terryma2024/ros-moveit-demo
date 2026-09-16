@@ -82,6 +82,217 @@ def verified(_spec):
     return {"source_commit": "a" * 40, "models_verified": True, "image_verified": True}
 
 
+def _fixed_web_spec(tmp_path, monkeypatch, *, run_mode="dry_run"):
+    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+
+    root = tmp_path / "batch"
+    # Worker IPC uses the production short runtime namespace. The fixed Web
+    # socket remains in the actual long durable batch root via pinned dirfd.
+    ipc_base = Path(f"/run/user/{os.getuid()}")
+    batch_id = "fw-" + hashlib.sha256(str(tmp_path).encode()).hexdigest()[:12]
+    monkeypatch.setenv("SO101_PARALLEL_IPC_BASE", str(ipc_base))
+    values = {
+        "SO101_FIXED_CONTROL_TOKEN": "9a" * 32,
+        "SO101_FIXED_CONTROL_CAMPAIGN_ID": "campaign-a",
+        "SO101_FIXED_CONTROL_EPOCH": "1",
+        "SO101_FIXED_CONTROL_SOCKET": str(root / "control/control.sock"),
+    }
+    for key, value in values.items():
+        monkeypatch.setenv(key, value)
+    spec = prepare_batch(argv(
+        root, batch_id=batch_id, worker_count="1", max_points_per_worker="1",
+        point_id=("task_start",), run_mode=run_mode,
+    ), provenance_verifier=verified)
+    return spec, values
+
+
+class _FixedWebProbe:
+    def snapshot(self):
+        from so101_demo.parallel_batch.resources import ResourceSnapshot
+        return ResourceSnapshot(32, 64.0, 16.0)
+
+    def ros_domain_in_use(self, _domain):
+        return False
+
+    def socket_in_use(self, _path):
+        return False
+
+
+def _cancel_fixed_cli(values, batch_id):
+    import socket
+
+    unsigned = {
+        "schema_version": 1, "command_id": "cli-cancel-1", "campaign_id": "campaign-a",
+        "batch_id": batch_id, "coordinator_epoch": 1, "operation": "CANCEL_BATCH",
+    }
+    canonical = json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+    wire = {**unsigned, "control_token": values["SO101_FIXED_CONTROL_TOKEN"],
+            "request_sha256": hashlib.sha256(canonical).hexdigest()}
+    payload = json.dumps(wire, sort_keys=True, separators=(",", ":")).encode()
+    path = Path(values["SO101_FIXED_CONTROL_SOCKET"])
+    parent_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
+            peer.settimeout(2)
+            peer.connect(f"/proc/self/fd/{parent_fd}/{path.name}")
+            peer.sendall(len(payload).to_bytes(4, "big") + payload)
+            peer.shutdown(socket.SHUT_WR)
+            received = bytearray()
+            while part := peer.recv(65536):
+                received.extend(part)
+        assert len(received) > 4 and int.from_bytes(received[:4], "big") == len(received) - 4
+        return json.loads(received[4:])
+    finally:
+        os.close(parent_fd)
+
+
+@pytest.mark.parametrize("corrupt_cleanup", [False, True])
+def test_fixed_cli_authenticated_stop_uses_existing_cleanup_not_worker_launch(
+    tmp_path, monkeypatch, corrupt_cleanup,
+):
+    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
+
+    spec, values = _fixed_web_spec(tmp_path, monkeypatch)
+
+    def forbidden_worker_launch(_owner, _path):
+        raise AssertionError("cancelled Worker must not be launched")
+
+    composition = ProductionBatchComposition(
+        spec, resource_probe=_FixedWebProbe(), claim_root=tmp_path / "claims",
+        worker_launcher=forbidden_worker_launch,
+    )
+    run_entered = False
+    try:
+        path = Path(values["SO101_FIXED_CONTROL_SOCKET"])
+        assert path.is_socket()
+        assert all(key not in os.environ for key in values)
+        assert values["SO101_FIXED_CONTROL_TOKEN"] not in composition.worker_specs[0].read_text()
+        if corrupt_cleanup:
+            orphan = composition.resource_manifest.workers[0].worker_root / "owned-runtime-processes.json"
+            orphan.write_text(json.dumps({"schema_version": 1, "processes": [{"invalid": "identity"}]}))
+            orphan.chmod(0o600)
+        wait = composition._wait_broker_ready
+
+        def observe_cancel_before_workers():
+            ack = _cancel_fixed_cli(values, spec.request.batch_id)
+            assert ack["state"] == "STOPPING" and ack["batch_cleanup_complete"] is False
+            assert ack["owned_descendants_gone"] is False
+            assert ack["assigned_ros_domains_clear"] is False
+            assert ack["cleanup_receipt_sha256"] is None
+            return wait()
+
+        monkeypatch.setattr(composition, "_wait_broker_ready", observe_cancel_before_workers)
+        run_entered = True
+        summary = composition.run()
+        assert composition.coordinator.snapshot().terminal_reason == "WEB_CANCEL_REQUESTED"
+        assert summary.point_statuses == {"task_start": PointStatus.UNRUN}
+        assert summary.qualification_passed is False
+        assert summary.batch_cleanup_complete is (not corrupt_cleanup)
+        gates = json.loads((spec.request.evidence_root / "cleanup-gates.json").read_text())
+        assert set(gates["actions"]) == {"stop_leases", "cancel_goal", "confirm_goal_cancelled", "request_recovery"}
+        assert gates["cleanup_gates_passed"] is (not corrupt_cleanup)
+        assert not path.exists()
+    finally:
+        if not run_entered:
+            composition._release_partial()
+            composition._release_runtime_ipc_root()
+
+
+@pytest.mark.parametrize("key,value,reason", [
+    ("SO101_FIXED_CONTROL_TOKEN", None, "FIXED_CONTROL_ENV_INCOMPLETE"),
+    ("SO101_FIXED_CONTROL_TOKEN", "predictable", "FIXED_CONTROL_TOKEN_INVALID"),
+    ("SO101_FIXED_CONTROL_CAMPAIGN_ID", "bad/campaign", "FIXED_CONTROL_CAMPAIGN_INVALID"),
+    ("SO101_FIXED_CONTROL_EPOCH", "0", "FIXED_CONTROL_EPOCH_INVALID"),
+    ("SO101_FIXED_CONTROL_SOCKET", "/tmp/unbound-control.sock", "FIXED_CONTROL_SOCKET_INVALID"),
+])
+def test_fixed_cli_rejects_unbound_credentials_before_allocation(tmp_path, monkeypatch, key, value, reason):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, ProductionBatchComposition
+
+    spec, values = _fixed_web_spec(tmp_path, monkeypatch)
+    if value is None:
+        monkeypatch.delenv(key)
+    else:
+        monkeypatch.setenv(key, value)
+    composition = None
+    try:
+        with pytest.raises(CliError, match=reason):
+            composition = ProductionBatchComposition(
+                spec, resource_probe=_FixedWebProbe(), claim_root=tmp_path / "claims",
+            )
+        assert not spec.request.evidence_root.exists()
+        assert all(name not in os.environ for name in values)
+    finally:
+        if composition is not None:
+            composition._release_partial()
+            composition._release_runtime_ipc_root()
+
+
+def test_fixed_cli_epoch_matches_real_journal_before_endpoint_or_worker_setup(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from so101_demo.cli.mujoco_parallel_batch import CliError, ProductionBatchComposition
+
+    spec, values = _fixed_web_spec(tmp_path, monkeypatch)
+    # A short source-test root needs no external IPC. Retain its allocated
+    # evidence and partial cleanup record; do not delete durable scratch.
+    monkeypatch.delenv("SO101_PARALLEL_IPC_BASE")
+    root = Path(os.environ["TMPDIR"]).parent / "qe"
+    spec = replace(spec, request=replace(spec.request, evidence_root=root))
+    monkeypatch.setenv("SO101_FIXED_CONTROL_SOCKET", str(root / "control/control.sock"))
+    monkeypatch.setenv("SO101_FIXED_CONTROL_EPOCH", "2")
+    with pytest.raises(CliError, match="FIXED_CONTROL_COORDINATOR_EPOCH_MISMATCH") as rejected:
+        ProductionBatchComposition(spec, resource_probe=_FixedWebProbe(), claim_root=tmp_path / "claims")
+    assert rejected.value.partial_cleanup["journal"]["succeeded"] is True
+    assert rejected.value.partial_cleanup["worker_servers"] == []
+    assert not (root / "control/control.sock").exists()
+    assert all(key not in os.environ for key in values)
+
+
+def test_fixed_cli_credentials_cannot_open_an_adaptive_pool_endpoint(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from so101_demo.cli.mujoco_parallel_batch import CliError, ProductionBatchComposition
+    from so101_demo.parallel_batch.adaptive_contracts import _new_pool_request_for_production_factory
+
+    spec, values = _fixed_web_spec(tmp_path, monkeypatch)
+    pool = _new_pool_request_for_production_factory(
+        batch_id=spec.request.batch_id, run_mode=spec.request.run_mode,
+        selected_point_ids=spec.request.selected_point_ids, worker_count=1,
+        max_points_per_worker=1, evidence_root=spec.request.evidence_root,
+    )
+    with pytest.raises(CliError, match="FIXED_CONTROL_REQUEST_REQUIRED"):
+        ProductionBatchComposition(replace(spec, request=pool), resource_probe=_FixedWebProbe())
+    assert not spec.request.evidence_root.exists()
+    assert all(key not in os.environ for key in values)
+
+
+def test_fixed_cli_checks_authenticated_stop_during_broker_ready_loop(tmp_path, monkeypatch):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, ProductionBatchComposition
+
+    spec, values = _fixed_web_spec(tmp_path, monkeypatch, run_mode="plan_only")
+    composition = ProductionBatchComposition(
+        spec, resource_probe=_FixedWebProbe(), claim_root=tmp_path / "claims",
+        broker_command_builder=lambda _owner: ("unused-broker",),
+    )
+    slept = []
+
+    def observe_stop_at_first_sleep(delay):
+        slept.append(delay)
+        ack = _cancel_fixed_cli(values, spec.request.batch_id)
+        assert ack["state"] == "STOPPING" and ack["batch_cleanup_complete"] is False
+
+    composition._start_servers()
+    try:
+        monkeypatch.setattr(composition, "_sleep", observe_stop_at_first_sleep)
+        with pytest.raises(CliError, match="WEB_CANCEL_REQUESTED"):
+            composition._wait_broker_ready()
+        assert slept == [0.01]
+        assert composition.supervisor.processes == ()
+    finally:
+        composition._stop_servers()
+        composition.journal.close()
+        composition.allocator.close()
+        composition._release_runtime_ipc_root()
+
+
 def test_runtime_package_root_uses_installed_share_for_copied_module(tmp_path):
     from so101_demo.cli.mujoco_parallel_batch import _runtime_package_root
 
@@ -669,8 +880,7 @@ def test_physical_composition_prepares_and_supervises_one_external_broker(
     assert supervisor.started == [
         ("broker", ("docker", "run", str(composition.broker_spec_path)))
     ]
-    composition.journal.close()
-    composition.allocator.close()
+    composition._release_partial()
 
 
 def test_physical_broker_receives_validated_external_ipc_root(tmp_path, monkeypatch):
@@ -788,8 +998,7 @@ def test_physical_worker_launches_receive_exact_isolated_environments(tmp_path):
         item.session_id for item in resources
     ]
     assert len(set(env["ROS_DOMAIN_ID"] for env in environments)) == 2
-    composition.journal.close()
-    composition.allocator.close()
+    composition._release_partial()
 
 
 def test_broker_start_rejects_missing_image_id_and_mutable_tag_drift(tmp_path, monkeypatch):
@@ -818,8 +1027,7 @@ def test_broker_start_rejects_missing_image_id_and_mutable_tag_drift(tmp_path, m
     )
     with pytest.raises(CliError, match="IMAGE_ID_REQUIRED"):
         missing._start_broker()
-    missing.journal.close()
-    missing.allocator.close()
+    missing._release_partial()
 
     bound = prepare_batch(
         argv(scratch / "id", worker_count="1", max_points_per_worker="1",
@@ -837,8 +1045,7 @@ def test_broker_start_rejects_missing_image_id_and_mutable_tag_drift(tmp_path, m
     })
     with pytest.raises(CliError, match="TAG_DRIFT"):
         drift._start_broker()
-    drift.journal.close()
-    drift.allocator.close()
+    drift._release_partial()
 
 
 def test_workers_cannot_start_until_broker_socket_and_ready_receipt_exist(tmp_path):

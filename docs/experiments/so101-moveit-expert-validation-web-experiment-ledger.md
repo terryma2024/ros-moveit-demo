@@ -1,5 +1,35 @@
 # SO-101 MoveIt Expert Validation Web Experiment Ledger
 
+## CP-013 — CLI authenticated endpoint and cooperative existing cleanup
+
+- Starting clean source e8abd451092aa0b6361740eb7c36861b8b2cab8b, CP-012; same implementation branch/worktree, clean unchanged MuJoCo submodule e4c0241. Previous turn progress; this turn implements the missing upstream CLI composition and verifies real dry-run protocol/cleanup plus complete related and Teleop regressions. No new installed release, physical campaign or publication retry; original17-task goal remains active.
+- ProductionBatchComposition consumes all four fixed control environment fields before resource allocation or child launch, including on invalid input. It validates fixed BatchRequest,64hex credential, bounded campaign identity, canonical positive epoch and normalized in-root socket path. After the actual journal/Coordinator exists, the supplied epoch must match its real epoch before endpoint/Worker preparation. Fixed credentials cannot open an adaptive PoolRequest endpoint and are not inherited by Broker/Worker launches or serialized Worker specifications.
+- The composition starts the real FixedCoordinatorControlServer before Broker/Workers, closes it in normal and partial cleanup, and checks endpoint health/durable WEB_CANCEL_REQUESTED through Broker launch/readiness/recovery, Worker launch/readiness and child waits. ProcessSupervisor's optional strict boolean stop probe exits before dependency recovery, preserves all tracked identities and adds no signal/retirement authority. Recovery does not consume the full deadline after a recognized Web stop. Only the recognized cooperative exception reaches normal finally; unrelated errors are not reclassified as cancellation.
+- Recognized cancellation runs the existing ordered stop_leases/cancel_goal/confirm_goal_cancelled/request_recovery, exact owned-process shutdown, Broker containment and public Coordinator.complete_cleanup gates. No outcome, seal, scheduler, Worker lease or physical success is invented. The endpoint's STOPPING ACK still has cleanup=false, independent descendant/domain flags=false and no receipt. Real dry-run tests confirm cancelled points remain UNRUN/qualification=false; valid existing no-started-Worker cleanup may finish, while malformed orphan identities remain cleanup=false. Neither case qualifies an execute campaign.
+- t133:10failures/121deselected in0.97s,elapsed1.25s,exit1;3intended missing-stop-probe failures,7INVALID new fixture IPC_BASE failures. Fixed fixture uses the exact approved /run/user/<uid> base and unique batch IDs, not a permissive IPC base change. t134:10intended executable failures/121deselected in0.70s,elapsed0.97s,exit1. t135:2INVALID new-test double-close failures/8passes in1.15s,elapsed1.43s; production run already owns final cleanup, so fixture stops closing it twice. t136 GREEN10pass/121deselected in1.06s,elapsed1.33s,exit0.
+- Complete related t137:3failed151passed in8.02s,elapsed8.30s,exit1 under -W error. Existing characterization fixtures only closed journal/allocator, leaking Worker sockets into later GC. Four targeted cleanup pairs now invoke existing partial cleanup, with no resource-warning filter or new production test-only destructor. t138 GREEN154passed8.37s,elapsed8.65s,exit0. Supplementary real-journal epoch, fixed/adaptive authority and actual Broker-ready loop stop regressions pass in final complete related t139:157passed8.52s,elapsed8.81s,exit0,no warning summary.
+- Final complete strict source Teleop t140:440passed12.25s,elapsed12.61s,exit0,no warning summary; only the existing exact third-party general_plain_validator_function compatibility exemption. All t133..t140 scratch ei..ep/tmp exact venv tempfile proofs, logs, JUnit and metadata retained. No benchmark suite collected. Related157cases are not the full ordinary Demo or installed package gate; t124 remains unqualified and is not overwritten.
+- Inline review under authoritative no-subagent handoff checked inherited credentials, actual upstream journal/epoch, fixed-only endpoint, exact stop exception, recovery/launch polling, ownership-preserving wait and fail-closed cleanup. This is not an independent reviewer verdict or complete feature acceptance. Remaining before live: durable recovery API projection/operator recovery, campaign-targeted cancellation/terminal classification, other restart/idempotency/corruption gates, complete RGB-D/cloud evidence, qualified adaptive projection/capabilities, fresh complete copied release/ordinary Demo/installed gates, then pending EXP-052 and actual-page sequential/same-four parallel/exact20adaptive/conditional FULL_RESTART retry with all independent layers.
+- Runtime remains historical EXP-051 source79a/copied release16, ROS_DOMAIN_ID server231/Workers181,182,183, GZ_PARTITION=not_applicable (MuJoCo). It remains INVALID full Web acceptance and is not retroactively qualified. No new screenshot/physics/controller claim. All gate handles terminal; no runtime stack, Worker/Broker launch or surviving owned child is introduced by these controlled fixtures. Preserve unrelated user processes/sessions.
+- Retained: single registered root/all releases/runs/new evidence. Archived:none. Deletion candidates: scratch ei..ep and historical candidates, including invalid/failed gates; none deleted. Short own runtime IPC cleanup is normal socket namespace release, not durable evidence deletion. Publication remains unperformed after earlier denial; no retry/bypass. Next unused t141/scratch eq/tmp.
+
+```yaml
+checkpoint_id: CP-013
+last_valid_experiment: EXP-006
+current_hypothesis: Project durable recovery fences and campaign-targeted cooperative cancellation accurately before fresh copied installed/live acceptance.
+working_tree_status: five task-owned CLI/process/test/ledger paths verified for scoped local commit
+owned_processes: NONE; all t133..t140 gate handles terminal
+preserved_processes: unrelated user sessions/processes
+next_command: Add production API recovery/campaign-target/terminal cancellation RED tests, then build the complete fresh copied release and ordinary/installed gates before EXP-052.
+```
+
+## CLI fixed-control/cooperative-stop continuation — planned t133 RED
+
+- Starting clean source e8abd451092aa0b6361740eb7c36861b8b2cab8b, CP-012, unchanged implementation worktree/branch/MuJoCo submodule. Previous turn progress: committed durable production credentials/authenticated Supervisor cancellation and complete440-case Teleop gate. Full original17-task acceptance remains open; no publication retry or physical campaign.
+- First boundary confirmed by source: ProductionBatchComposition does not consume the fixed credential environment or start the real fixed endpoint. Broker readiness, Worker readiness and ProcessSupervisor child/recovery waits do not observe Web stop. Existing public Coordinator request_stop and production cleanup remain the authorities.
+- Planned t133 RED uses real fsync-backed dry-run composition/Unix endpoint and independent literal frames, validates credentials before resource allocation/child launch and removes them from inherited environment. It proves authenticated stop reaches existing cleanup without launching cancelled Workers; malformed orphan evidence must not become cleanup success. ProcessSupervisor regression proves stop is observed before dependency recovery without signalling/removing its owned identities. No fabricated execute qualification/results or second scheduler.
+- Fresh registered scratch ei/tmp, exact task venv tempfile proof/logs/JUnit/elapsed required. Runtime historical EXP-05179a/release16; server ROS_DOMAIN_ID231, Workers181/182/183, GZ_PARTITION not_applicable (MuJoCo); new physical EXP-052 remains pending. Retain all evidence, archive/delete none; used scratch deletion candidates only.
+
 ## CP-012 — Durable production fixed credentials and authenticated Supervisor cancellation
 
 - Starting source: `edebfeb1d711234e4917bcfe61bf1a1dbce4a0c3`, CP-011; same implementation worktree/branch, unchanged clean MuJoCo submodule `e4c0241aee52a40727681bd5872c09bf814e941a`. The preceding status-only turn was no progress; this continuation changes authoritative production source and completes fresh RED/GREEN/package evidence. No physical campaign, copied install or publication retry.
@@ -184,7 +214,7 @@ success_contract: Source and package gates pass; fresh fixed four-point and adap
 worktree: /data/work/ws_moveit/.worktrees/teleop-expert-validation-web
 branch: codex/teleop-expert-validation-web
 base_commit: e1701375690321bc83b5f30ec044da1847d373aa
-current_commit: 10b368cf5a1cb01adf693f76853873dba2ec3e7a
+current_commit: e8abd451092aa0b6361740eb7c36861b8b2cab8b
 evidence_root: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01
 confirmed_conclusions:
   - origin/main exactly matched the required documentation commit e1701375690321bc83b5f30ec044da1847d373aa at CP-001.
@@ -198,7 +228,7 @@ disproven_routes:
   - At commit 654756ba32cfc0697aff1444c79752ff1e61c4ee, a four-point manifest could not be returned because its source field violated the closed response model.
 open_hypotheses:
   - A read-only verified journal projection and authoritative HTTP watcher can synchronize fresh Web progress and terminal state without acquiring upstream coordinator authority.
-latest_checkpoint: CP-011
+latest_checkpoint: CP-013
 next_experiment: EXP-052
 ```
 

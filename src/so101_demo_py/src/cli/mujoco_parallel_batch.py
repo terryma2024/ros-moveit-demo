@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import configparser
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 import hashlib
 import json
@@ -68,6 +68,7 @@ from so101_demo.parallel_batch.contracts import (
     load_parallel_runtime_config,
 )
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
+from so101_demo.parallel_batch.web_control import FixedCoordinatorControlServer
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.parallel_batch.resources import (
     AllocationPolicy,
@@ -96,7 +97,7 @@ from so101_demo.runtime.parallel_ipc import (
     _inference_request,
     _snapshot,
 )
-from so101_demo.runtime.parallel_processes import ProcessSupervisor
+from so101_demo.runtime.parallel_processes import ProcessSupervisor, SupervisorError
 from so101_demo.runtime.parallel_ros_runtime import (
     ParallelRosRuntimePorts as _ConcreteRosWorkerRuntimePorts,
 )
@@ -123,6 +124,47 @@ _DYNAMIC_MUJOCO_POLICY = Path(
 
 class CliError(RuntimeError):
     """Startup or batch composition failed closed."""
+
+
+class _FixedWebStopRequested(CliError):
+    """An authenticated durable stop must enter the existing cleanup path."""
+
+
+@dataclass(frozen=True, slots=True)
+class _FixedWebControl:
+    campaign_id: str
+    path: Path
+    coordinator_epoch: int
+    token: str = field(repr=False)
+
+
+def _take_fixed_web_control(spec: PreparedBatch) -> _FixedWebControl | None:
+    keys = (
+        "SO101_FIXED_CONTROL_TOKEN", "SO101_FIXED_CONTROL_CAMPAIGN_ID",
+        "SO101_FIXED_CONTROL_EPOCH", "SO101_FIXED_CONTROL_SOCKET",
+    )
+    if not any(key in os.environ for key in keys):
+        return None
+    # Consume all credentials before validation and before any child launch.
+    values = {key: os.environ.pop(key) for key in keys if key in os.environ}
+    if len(values) != len(keys):
+        raise CliError("FIXED_CONTROL_ENV_INCOMPLETE")
+    if not isinstance(spec.request, BatchRequest):
+        raise CliError("FIXED_CONTROL_REQUEST_REQUIRED")
+    token, campaign, epoch, socket_path = (values[key] for key in keys)
+    if re.fullmatch(r"[0-9a-f]{64}", token) is None:
+        raise CliError("FIXED_CONTROL_TOKEN_INVALID")
+    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", campaign) is None:
+        raise CliError("FIXED_CONTROL_CAMPAIGN_INVALID")
+    if re.fullmatch(r"[1-9][0-9]{0,19}", epoch) is None:
+        raise CliError("FIXED_CONTROL_EPOCH_INVALID")
+    path = Path(socket_path)
+    if (
+        not path.is_absolute() or path != path.resolve(strict=False)
+        or not path.is_relative_to(spec.request.evidence_root)
+    ):
+        raise CliError("FIXED_CONTROL_SOCKET_INVALID")
+    return _FixedWebControl(campaign, path, int(epoch), token)
 
 
 class _Parser(argparse.ArgumentParser):
@@ -2378,6 +2420,7 @@ class ProductionBatchComposition:
         **kwargs,
     ):
         self.worker_servers = []
+        self.fixed_control_server = None
         self._server_threads = []
         self.allocator = None
         self.journal = None
@@ -2414,6 +2457,7 @@ class ProductionBatchComposition:
         pool_running_recorder=None,
     ):
         self._startup_stage = "validate_context"
+        self._fixed_web_control = _take_fixed_web_control(spec)
         if spec.request is None:
             raise CliError("POOL_REQUEST_REQUIRED")
         if adaptive_context is not None:
@@ -2534,6 +2578,16 @@ class ProductionBatchComposition:
                 None if adaptive_context is None else adaptive_context.selector.choose
             ),
         )
+        if self._fixed_web_control is not None:
+            binding = self._fixed_web_control
+            if binding.coordinator_epoch != self.journal.coordinator_epoch:
+                raise CliError("FIXED_CONTROL_COORDINATOR_EPOCH_MISMATCH")
+            self._startup_stage = "fixed_web_control"
+            binding.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            self.fixed_control_server = FixedCoordinatorControlServer(
+                coordinator=self.coordinator, campaign_id=binding.campaign_id,
+                control_token=binding.token, path=binding.path,
+            )
         self.results = _ArtifactResults(worker_roots, spec.request.run_mode)
         self._recovered_worker_ids = None
         if spec.resume:
@@ -2805,6 +2859,14 @@ class ProductionBatchComposition:
 
     def _release_partial(self):
         outcomes = {"worker_servers": []}
+        if getattr(self, "fixed_control_server", None) is not None:
+            try:
+                self.fixed_control_server.close()
+                outcomes["fixed_control_server"] = {"succeeded": True}
+            except Exception as error:
+                outcomes["fixed_control_server"] = {
+                    "succeeded": False, "error_type": type(error).__name__,
+                }
         for server in getattr(self, "worker_servers", ()):
             try:
                 server.close()
@@ -2859,6 +2921,7 @@ class ProductionBatchComposition:
         return outcomes
 
     def _start_broker(self):
+        self._check_fixed_web_stop()
         if self.broker_spec_path is None:
             return None
         try:
@@ -3014,6 +3077,7 @@ class ProductionBatchComposition:
         return True
 
     def _wait_broker_ready(self, *, deadline_monotonic_s=None):
+        self._check_fixed_web_stop()
         if self.broker_spec_path is None:
             return True
         deadline = (
@@ -3023,6 +3087,7 @@ class ProductionBatchComposition:
         )
         ready = self.broker_runtime_root / "ready.json"
         while self._clock() < deadline:
+            self._check_fixed_web_stop()
             self.supervisor.assert_healthy()
             try:
                 socket_info = self.broker_socket_path.lstat()
@@ -3108,6 +3173,7 @@ class ProductionBatchComposition:
         raise CliError("BROKER_READY_TIMEOUT")
 
     def _recover_broker(self, expected, _exit_code):
+        self._check_fixed_web_stop()
         snapshot = self.coordinator.mark_broker_health(False)
         deadline = snapshot.broker_recovery_deadline_monotonic_s
         if deadline is None:
@@ -3128,6 +3194,8 @@ class ProductionBatchComposition:
             self._wait_broker_ready(deadline_monotonic_s=deadline)
             self.coordinator.mark_broker_health(True)
             return True
+        except _FixedWebStopRequested:
+            raise
         except Exception:
             if replacement is not None:
                 try:
@@ -3135,6 +3203,7 @@ class ProductionBatchComposition:
                 except Exception:
                     pass
             while self._clock() < deadline:
+                self._check_fixed_web_stop()
                 self._sleep(min(0.01, max(0.0, deadline - self._clock())))
             self.coordinator.tick()
             return False
@@ -3189,10 +3258,12 @@ class ProductionBatchComposition:
         return self._worker_control("recover")
 
     def _start_workers(self):
+        self._check_fixed_web_stop()
         adaptive_processes = {}
         for path, resources in zip(
             self.worker_specs, self.resource_manifest.workers, strict=True
         ):
+            self._check_fixed_web_stop()
             command = (
                 sys.executable, "-m", "so101_demo.cli.mujoco_parallel_batch",
                 "--internal-worker", str(path),
@@ -3210,6 +3281,7 @@ class ProductionBatchComposition:
             return
         deadline = time.monotonic() + self.spec.config.heartbeat_timeout_s
         while time.monotonic() < deadline:
+            self._check_fixed_web_stop()
             self.supervisor.assert_healthy()
             if all(
                 control.socket_path.is_socket()
@@ -3424,6 +3496,8 @@ class ProductionBatchComposition:
         raise CliError("RPC_UNKNOWN_OPERATION")
 
     def _start_servers(self):
+        if self.fixed_control_server is not None:
+            self.fixed_control_server.start()
         for server in self.worker_servers:
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
@@ -3434,6 +3508,19 @@ class ProductionBatchComposition:
             server.close()
         for thread in self._server_threads:
             thread.join(timeout=1.0)
+        if self.fixed_control_server is not None:
+            self.fixed_control_server.close()
+
+    def _fixed_web_stop_requested(self):
+        server = getattr(self, "fixed_control_server", None)
+        if server is None:
+            return False
+        server.check_health()
+        return self.coordinator.snapshot().terminal_reason == "WEB_CANCEL_REQUESTED"
+
+    def _check_fixed_web_stop(self):
+        if self._fixed_web_stop_requested():
+            raise _FixedWebStopRequested("WEB_CANCEL_REQUESTED")
 
     def _run_worker_local(self, path):
         resources = _resource_from_dict(json.loads(Path(path).read_text())["resources"])
@@ -3659,7 +3746,10 @@ class ProductionBatchComposition:
             self._start_broker()
             self._wait_broker_ready()
             if self._worker_launcher is not None:
-                codes = [self._worker_launcher(self, path) for path in self.worker_specs]
+                codes = []
+                for path in self.worker_specs:
+                    self._check_fixed_web_stop()
+                    codes.append(self._worker_launcher(self, path))
             else:
                 self._start_workers()
                 wait_kwargs = {
@@ -3675,6 +3765,8 @@ class ProductionBatchComposition:
                         self.coordinator.snapshot().broker_healthy
                     ),
                 }
+                if self.fixed_control_server is not None:
+                    wait_kwargs["stop_requested"] = self._fixed_web_stop_requested
                 if self.adaptive_context is not None:
                     wait_kwargs.update(
                         stop_on_nonzero=True,
@@ -3688,6 +3780,17 @@ class ProductionBatchComposition:
             failure = any(code != 0 for code in codes)
             self._settle_shared_dependency_failure()
             snapshot = self.coordinator.snapshot()
+        except _FixedWebStopRequested:
+            # No new execution/result path: finally performs the same verified
+            # Worker/controller/Broker cleanup and public completion below.
+            pass
+        except SupervisorError as error:
+            if not (
+                self._fixed_web_stop_requested()
+                and (str(error) == "COOPERATIVE_STOP_REQUESTED"
+                     or isinstance(error.__cause__, _FixedWebStopRequested))
+            ):
+                raise
         finally:
             try:
                 process_error = None

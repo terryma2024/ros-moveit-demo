@@ -6,6 +6,44 @@ import time
 import pytest
 
 
+def test_cooperative_stop_fences_wait_before_broker_recovery_without_signalling():
+    from so101_demo.runtime.parallel_processes import OwnedProcess, ProcessSupervisor, SupervisorError
+
+    broker = OwnedProcess("batch-1", "broker", 101, 101, ("broker",), 11)
+    worker = OwnedProcess("batch-1", "worker", 102, 102, ("worker",), 12)
+    signals, recoveries = [], []
+    supervisor = ProcessSupervisor(
+        "batch-1", identity_reader=lambda pid: {101: broker, 102: worker}.get(pid),
+        signal_group=lambda *args: signals.append(args),
+        group_members_reader=lambda _pgid: (),
+    )
+    supervisor._record_started(broker, poll=lambda: 17)
+    supervisor._record_started(worker, poll=lambda: None)
+    with pytest.raises(SupervisorError, match="COOPERATIVE_STOP_REQUESTED"):
+        supervisor.wait_for_children(
+            deadline_monotonic_s=time.monotonic() + 0.1,
+            stop_requested=lambda: True,
+            health_recovery=lambda *args: recoveries.append(args),
+        )
+    assert signals == [] and recoveries == []
+    assert supervisor.processes == (broker, worker)
+
+
+@pytest.mark.parametrize("value", [1, None])
+def test_stop_probe_rejects_non_boolean_without_erasing_owned_child(value):
+    from so101_demo.runtime.parallel_processes import OwnedProcess, ProcessSupervisor, SupervisorError
+
+    worker = OwnedProcess("batch-1", "worker", 102, 102, ("worker",), 12)
+    supervisor = ProcessSupervisor("batch-1", identity_reader=lambda _pid: worker)
+    supervisor._record_started(worker, poll=lambda: None)
+    with pytest.raises(SupervisorError, match="STOP_CALLBACK_FAILED"):
+        supervisor.wait_for_children(
+            deadline_monotonic_s=time.monotonic() + 0.1, health_role=None,
+            stop_requested=lambda: value,
+        )
+    assert supervisor.processes == (worker,)
+
+
 def test_proc_stat_start_time_parser_ignores_spaces_and_parentheses_in_comm():
     from so101_demo.runtime.parallel_processes import _parse_proc_stat_start_time
 
