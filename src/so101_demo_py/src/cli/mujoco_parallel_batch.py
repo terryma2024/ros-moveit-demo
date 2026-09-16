@@ -2893,6 +2893,7 @@ class ProductionBatchComposition:
             command = container_run_argv(
                 self.spec.request.evidence_root,
                 runtime_root=self.broker_runtime_root,
+                runtime_ipc_root=self.runtime_ipc_root,
                 input_root=self.broker_input_root,
                 image_id=image_id,
                 yolo_weights=self.spec.yolo_weights.resolve(),

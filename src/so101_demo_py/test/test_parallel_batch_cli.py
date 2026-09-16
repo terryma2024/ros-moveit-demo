@@ -673,6 +673,75 @@ def test_physical_composition_prepares_and_supervises_one_external_broker(
     composition.allocator.close()
 
 
+def test_physical_broker_receives_validated_external_ipc_root(tmp_path, monkeypatch):
+    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, prepare_batch
+    from so101_demo.parallel_batch.resources import ResourceSnapshot
+    import so101_demo.cli.parallel_perception_broker as broker_cli
+
+    class Probe:
+        def snapshot(self):
+            return ResourceSnapshot(32, 64.0, 16.0)
+
+        def ros_domain_in_use(self, _domain):
+            return False
+
+        def socket_in_use(self, _path):
+            return False
+
+    class Supervisor:
+        def __init__(self):
+            self.started = []
+
+        def start(self, role, command):
+            self.started.append((role, tuple(command)))
+            return SimpleNamespace(role=role)
+
+    batch_id = 't23-broker-call'
+    runtime_base = Path(f'/run/user/{os.getuid()}')
+    monkeypatch.setenv('SO101_PARALLEL_IPC_BASE', str(runtime_base))
+    record = {
+        **verified({}),
+        'image_id': 'sha256:' + 'b' * 64,
+    }
+    spec = prepare_batch(
+        argv(
+            tmp_path / 'batch',
+            batch_id=batch_id,
+            worker_count='1',
+            max_points_per_worker='1',
+            point_id=('task_start',),
+            run_mode='plan_only',
+        ),
+        provenance_verifier=lambda _value: record,
+    )
+    supervisor = Supervisor()
+    captured = {}
+    monkeypatch.setattr(broker_cli, 'image_record', lambda _image: {
+        'image_id': record['image_id'],
+    })
+    monkeypatch.setattr(broker_cli, 'gpu_groups', lambda: [44])
+
+    def command_builder(batch_root, **kwargs):
+        captured.update(batch_root=batch_root, **kwargs)
+        return ('docker', 'run', 'broker')
+
+    monkeypatch.setattr(broker_cli, 'container_run_argv', command_builder)
+    composition = ProductionBatchComposition(
+        spec,
+        resource_probe=Probe(),
+        claim_root=tmp_path / 'claims',
+        supervisor=supervisor,
+    )
+    try:
+        composition._start_broker()
+        assert captured['runtime_ipc_root'] == runtime_base / f'so101-{batch_id}'
+        assert captured['runtime_root'] == captured['runtime_ipc_root'] / 'broker'
+        assert supervisor.started == [('broker', ('docker', 'run', 'broker'))]
+    finally:
+        composition._release_partial()
+        assert composition._release_runtime_ipc_root() is True
+
+
 def test_physical_worker_launches_receive_exact_isolated_environments(tmp_path):
     from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot

@@ -784,7 +784,7 @@ decision: LIVE_RETRY_NOT_APPLICABLE_NO_VALID_FIRST_PASS
 
 ```yaml
 experiment_id: EXP-033
-status: PLANNED
+status: INVALID
 prior_experiment: EXP-029
 hypothesis: A private exclusive coordinator process log will expose the exact Worker failure while preserving coordinator-owned batch-root creation and bounded file-descriptor ownership.
 single_variable: ExecutionProcessOwner routes merged coordinator stdout/stderr to a 0600 O_EXCL campaign log instead of /dev/null.
@@ -792,20 +792,35 @@ lifecycle: FRESH_ISOLATED_STACK
 selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
 fixed_config: {worker_count: 1, max_points_per_worker: 4}
 success_criteria: Four authoritative PASSED results, or a precise first bad boundary retained in the coordinator log, with complete owned-process readback.
-decision: RUN_AFTER_CLEAN_COMMIT_BUILD_AND_TEST
-next_experiment: EXP-034
+observed:
+  - Release9 started the dedicated service from a clean bound source and repeated successful health, capability, lease, exact four-anchor manifest, and admitted N1/K4 preflight boundaries.
+  - The private 0600 coordinator log retained the exact first error: RUNTIME_ROOT_OUTSIDE_BATCH_IPC.
+  - The short-IPC composition supplied /run/user/1000/so101-ba11a/broker, but the Broker container argument validator still accepted only durable <batch>/ipc paths. The two valid security contracts were not yet connected.
+  - No Worker, MoveIt, controller, or MuJoCo process started. Post-failure inventory found no owned process, runtime IPC directory, or Broker container; the durable-store lock was reacquired and released.
+first_bad_boundary: RUNTIME_ROOT_OUTSIDE_BATCH_IPC
+evidence:
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp033/manifest-post.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp033/preflight-response.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp033/start-response.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp033/campaigns/campaign-86c96e6a711842ad9d119fdc5321ee3d/ba11a.coordinator.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp033/postinventory.txt
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp033/store-lock-readback.txt
+decision: STOP_FAIL_CLOSED_AND_BIND_BROKER_TO_VALIDATED_EXTERNAL_IPC_ROOT
+next_experiment: EXP-037
 ```
 
 ### EXP-034 — Fresh same-selection parallel simulation after diagnostic repair
 
 ```yaml
 experiment_id: EXP-034
-status: PLANNED
+status: NOT_RUN
 prior_experiment: EXP-033
 single_variable: execution_mode=PARALLEL, worker_count=2, max_points_per_worker=2
 lifecycle: FRESH_ISOLATED_STACK
 selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
-decision: RUN_AFTER_EXP_033_VALID
+observed:
+  - Not started because EXP-033 failed before Worker or simulation startup.
+decision: BLOCKED_BY_EXP_033_INVALID
 next_experiment: EXP-035
 ```
 
@@ -813,11 +828,13 @@ next_experiment: EXP-035
 
 ```yaml
 experiment_id: EXP-035
-status: PLANNED
+status: NOT_RUN
 prior_experiment: EXP-034
 single_variable: execution_mode=ADAPTIVE with preferred W8 and fallback [6, 4, 2, 1]
 lifecycle: FRESH_ISOLATED_STACK
-decision: RUN_AFTER_EXP_034_VALID
+observed:
+  - Not started because no valid sequential runtime result exists after EXP-033.
+decision: BLOCKED_BY_EXP_033_INVALID
 next_experiment: EXP-036
 ```
 
@@ -825,11 +842,75 @@ next_experiment: EXP-036
 
 ```yaml
 experiment_id: EXP-036
-status: PLANNED
+status: NOT_APPLICABLE
 prior_experiment: EXP-035
 single_variable: FULL_RESTART retry of eligible FAILED points only
 lifecycle: FRESH_ISOLATED_STACK_PER_POINT
-decision: CONDITIONAL_AFTER_EXP_035
+observed:
+  - No authoritative first-pass business result or eligible FAILED point exists; no retry was manufactured.
+decision: LIVE_RETRY_NOT_APPLICABLE_NO_VALID_FIRST_PASS
+```
+
+### EXP-037 — Validated external Broker IPC and fresh sequential simulation
+
+```yaml
+experiment_id: EXP-037
+status: PLANNED
+prior_experiment: EXP-033
+hypothesis: Explicitly binding the Broker runtime mount to the validated same-UID, 0700, batch-specific external IPC root closes the container argument boundary without exposing Worker tokens or accepting arbitrary external paths.
+single_variable: container_run_argv accepts an explicit runtime_ipc_root only when it equals /run/user/<uid>/so101-<batch_id> and the Broker child name matches its generation.
+lifecycle: FRESH_ISOLATED_STACK
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+fixed_config: {worker_count: 1, max_points_per_worker: 4}
+success_criteria: Four authoritative PASSED results with complete runtime, artifact, cleanup, Web, and independently inspected visual evidence.
+prestart_tests:
+  - Broker container argument and composition isolation: 26 passed.
+  - Focused external-root allow/reject and mount-isolation set: 13 passed.
+  - Production composition forwards the exact validated external IPC root and removes its ephemeral directory: 1 passed.
+  - Full parallel CLI diagnostic: 99 passed and four unrelated retained failures, led by the existing resume authority-order boundary and subsequent strict ResourceWarnings.
+evidence:
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t23-broker-ipc-red.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t23-broker-ipc-green4.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t23-broker-composition-green.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t23-parallel-cli-green.log
+decision: RUN_AFTER_CLEAN_COMMIT_BUILD_AND_TEST
+next_experiment: EXP-038
+```
+
+### EXP-038 — Fresh same-selection parallel simulation after Broker IPC repair
+
+```yaml
+experiment_id: EXP-038
+status: PLANNED
+prior_experiment: EXP-037
+single_variable: execution_mode=PARALLEL, worker_count=2, max_points_per_worker=2
+lifecycle: FRESH_ISOLATED_STACK
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+decision: RUN_AFTER_EXP_037_VALID
+next_experiment: EXP-039
+```
+
+### EXP-039 — Fresh twenty-point adaptive simulation after Broker IPC repair
+
+```yaml
+experiment_id: EXP-039
+status: PLANNED
+prior_experiment: EXP-038
+single_variable: execution_mode=ADAPTIVE with preferred W8 and fallback [6, 4, 2, 1]
+lifecycle: FRESH_ISOLATED_STACK
+decision: RUN_AFTER_EXP_038_VALID
+next_experiment: EXP-040
+```
+
+### EXP-040 — Conditional FULL_RESTART retry after Broker IPC repair
+
+```yaml
+experiment_id: EXP-040
+status: PLANNED
+prior_experiment: EXP-039
+single_variable: FULL_RESTART retry of eligible FAILED points only
+lifecycle: FRESH_ISOLATED_STACK_PER_POINT
+decision: CONDITIONAL_AFTER_EXP_039
 ```
 
 ## Task 1 checkpoint
