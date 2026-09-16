@@ -5,8 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Iterable
 
-from parallel_batch.adaptive_contracts import AdaptiveBatchSummary, BatchTerminalStatus
-from parallel_batch.contracts import BatchSummary, PointStatus
+from so101_demo.parallel_batch.adaptive_contracts import (
+    AdaptiveBatchSummary,
+    BatchTerminalStatus,
+)
+from so101_demo.parallel_batch.contracts import BatchSummary, PointStatus
 
 
 class StatisticsProjectionError(ValueError):

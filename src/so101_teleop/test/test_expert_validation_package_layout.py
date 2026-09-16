@@ -69,3 +69,12 @@ def test_upstream_adaptive_runtime_and_catalog_are_installable():
         "config/mujoco/moveit_expert_validation_points_v1.yaml",
     ):
         assert (DEMO / relative).is_file(), relative
+
+
+def test_teleop_imports_the_packaged_upstream_runtime_namespace():
+    statistics = (
+        TELEOP / "so101_teleop/expert_validation/statistics.py"
+    ).read_text(encoding="utf-8")
+
+    assert "from so101_demo.parallel_batch" in statistics
+    assert "from parallel_batch" not in statistics

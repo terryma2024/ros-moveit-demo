@@ -2,12 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from parallel_batch.adaptive_contracts import (
+from so101_demo.parallel_batch.adaptive_contracts import (
     AdaptiveBatchSummary,
     BatchTerminalStatus,
     CommittedPointResult,
 )
-from parallel_batch.contracts import BatchSummary, PointStatus, RunMode
+from so101_demo.parallel_batch.contracts import BatchSummary, PointStatus, RunMode
 from so101_teleop.expert_validation.statistics import (
     AdaptivePointProjection,
     AttemptProjection,
