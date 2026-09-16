@@ -1,4 +1,6 @@
 import asyncio
+from dataclasses import replace
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -8,11 +10,12 @@ import time
 import pytest
 
 from so101_teleop.expert_validation.models import CleanupReceipt
+from so101_teleop.expert_validation.control import ControlProtocolError
 from so101_teleop.expert_validation.coordinator import CoordinatorStartRequest
 from so101_teleop.expert_validation.lease import ValidationLeaseService
 from so101_teleop.expert_validation.process_owner import ExecutionProcessOwner
 from so101_teleop.expert_validation.preflight import PreflightEngine, PreflightRejected
-from so101_teleop.expert_validation.store import SupervisorStore
+from so101_teleop.expert_validation.store import StoreConflict, SupervisorStore
 from so101_teleop.expert_validation.supervisor import ExpertValidationSupervisor
 
 from test_expert_validation_preflight import Resources, _request
@@ -45,6 +48,165 @@ def _supervisor(tmp_path, resources=None):
         preflight_engine=PreflightEngine(resources or Resources()),
     )
     return supervisor, owner, store
+
+
+def _bound_without_execution(tmp_path):
+    """Persist the real admitted Web binding without any physical/test outcome."""
+    class CaptureOwner:
+        def spawn(self, request):
+            self.request = request
+            return None
+
+    supervisor, _, store = _supervisor(tmp_path)
+    capture = CaptureOwner()
+    supervisor.process_owner = capture
+    asyncio.run(supervisor.start_first_pass(_request(tmp_path / "request", "SEQUENTIAL")))
+    return supervisor, store, capture.request
+
+
+def test_fixed_owner_request_has_random_identity_bound_control_credentials(tmp_path):
+    supervisor, store, request = _bound_without_execution(tmp_path)
+    try:
+        binding = request.control_binding
+        original = supervisor._requests[request.campaign_id]
+        receipt = supervisor.preflight_engine.preflight(original)
+        again = supervisor._owner_request(original, receipt, request.batch_id, request.batch_root)
+        assert binding is not None
+        assert len(binding.control_token) == 64
+        assert binding.control_token != again.control_binding.control_token
+        assert binding.control_token_sha256 == hashlib.sha256(binding.control_token.encode()).hexdigest()
+        assert binding.control_token_sha256 != hashlib.sha256(
+            f"{request.campaign_id}:{request.batch_id}".encode()
+        ).hexdigest()
+        assert binding.campaign_id == "campaign-1" and binding.batch_id == "b001"
+        assert binding.coordinator_epoch == 1
+        assert binding.control_socket == request.batch_root / "control" / "control.sock"
+        assert request.environment["SO101_FIXED_CONTROL_TOKEN"] == binding.control_token
+        assert request.environment["SO101_FIXED_CONTROL_CAMPAIGN_ID"] == "campaign-1"
+        assert request.environment["SO101_FIXED_CONTROL_EPOCH"] == "1"
+        assert request.environment["SO101_FIXED_CONTROL_SOCKET"] == str(binding.control_socket)
+    finally:
+        store.close()
+
+
+def test_fixed_control_binding_is_durable_with_the_real_spawn_intent(tmp_path):
+    _, store, request = _bound_without_execution(tmp_path)
+    root = store.root
+    try:
+        store.record_execution_owner_intent(request)
+        assert store.fixed_control_binding(request.batch_id) == request.control_binding
+    finally:
+        store.close()
+    reopened = SupervisorStore.open(root)
+    try:
+        assert reopened.fixed_control_binding(request.batch_id) == request.control_binding
+        assert reopened.owned_execution(request.batch_id).state == "INTENT"
+        assert reopened.batch(request.batch_id).cleanup_receipt_sha256 is None
+    finally:
+        reopened.close()
+
+
+def test_fixed_owner_ack_cannot_change_the_durable_control_epoch(tmp_path):
+    _, store, request = _bound_without_execution(tmp_path)
+    try:
+        store.record_execution_owner_intent(request)
+        with pytest.raises(StoreConflict, match="FIXED_CONTROL_OWNER_ACK_MISMATCH"):
+            store.acknowledge_execution_owner(
+                batch_id=request.batch_id, pid=101, pgid=101, started_ticks=100,
+                coordinator_epoch=2,
+            )
+        assert store.owned_execution(request.batch_id).state == "INTENT"
+        assert store.fixed_control_binding(request.batch_id).coordinator_epoch == 1
+        assert store.batch(request.batch_id).cleanup_receipt_sha256 is None
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("reason", ["USER_CANCELLED", "LEASE_EXPIRED"])
+def test_live_fixed_supervisor_uses_real_authenticated_coordinator_not_signals(tmp_path, reason):
+    supervisor, store, request = _bound_without_execution(tmp_path)
+    owner = ExecutionProcessOwner(store=store)
+    supervisor.process_owner = owner
+    # Evaluate the new binding before spawning; RED never starts an accidental CLI.
+    binding = request.control_binding
+    assert binding is not None
+    config = Path(__file__).resolve().parents[3] / "so101_demo_py/config/mujoco/parallel_batch_v1.yaml"
+    program = '''
+import json, os, pathlib, time
+from so101_demo.parallel_batch.contracts import BatchRequest, RunMode, load_parallel_runtime_config
+from so101_demo.parallel_batch.coordinator import BatchCoordinator
+from so101_demo.parallel_batch.journal import CoordinatorJournal
+from so101_demo.parallel_batch.web_control import FixedCoordinatorControlServer
+root = pathlib.Path(os.environ["TOY_BATCH_ROOT"])
+journal = CoordinatorJournal.create(root / "coordinator", "b001")
+request = BatchRequest("b001", RunMode.EXECUTE, ("p1", "p2"), 2, 2, root)
+coordinator = BatchCoordinator(journal, request, config=load_parallel_runtime_config(os.environ["TOY_CONFIG"]), result_port=None)
+coordinator.register_worker("w1", generation=1)
+coordinator.register_worker("w2", generation=1)
+path = pathlib.Path(os.environ["SO101_FIXED_CONTROL_SOCKET"])
+path.parent.mkdir(mode=0o700)
+server = FixedCoordinatorControlServer(coordinator=coordinator, campaign_id=os.environ["SO101_FIXED_CONTROL_CAMPAIGN_ID"], control_token=os.environ["SO101_FIXED_CONTROL_TOKEN"], path=path)
+server.start()
+try:
+    deadline = time.monotonic() + 4
+    while time.monotonic() < deadline:
+        snapshot = coordinator.snapshot()
+        if snapshot.terminal_reason:
+            (root / "toy-stop.json").write_text(json.dumps({"reason": snapshot.terminal_reason, "fenced": all(w.stop_requested and not w.action_allowed for w in snapshot.workers.values()), "cleanup": snapshot.summary.batch_cleanup_complete}))
+            break
+        time.sleep(0.01)
+finally:
+    server.close()
+    journal.close()
+'''
+    toy = replace(request, argv=(sys.executable, "-c", program), environment={
+        **request.environment, "TOY_BATCH_ROOT": str(request.batch_root), "TOY_CONFIG": str(config),
+    })
+    execution = owner.spawn(toy)
+    try:
+        deadline = time.monotonic() + 3
+        while not binding.control_socket.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert binding.control_socket.exists()
+        result = supervisor.cancel_for_reason(reason)
+        assert result.state == "STOPPING" and result.batch_cleanup_complete is False
+        deadline = time.monotonic() + 3
+        while owner.poll(execution).running and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert owner.poll(execution).exit_code == 0
+        stop = json.loads((request.batch_root / "toy-stop.json").read_text())
+        assert stop == {"reason": "WEB_CANCEL_REQUESTED", "fenced": True, "cleanup": False}
+        assert store.batch(request.batch_id).cleanup_receipt_sha256 is None
+        assert store.recovery_fence(request.campaign_id) is None
+    finally:
+        owner._children[execution.pid].wait(timeout=5)
+        store.close()
+
+
+def test_missing_fixed_channel_preserves_child_and_durably_fences_recovery(tmp_path):
+    supervisor, store, request = _bound_without_execution(tmp_path)
+    owner = ExecutionProcessOwner(store=store)
+    supervisor.process_owner = owner
+    toy = replace(request, argv=(sys.executable, "-c", "import time; time.sleep(0.8)"))
+    execution = owner.spawn(toy)
+    root = store.root
+    try:
+        with pytest.raises(ControlProtocolError, match="COORDINATOR_SOCKET_UNAVAILABLE"):
+            supervisor.cancel_for_reason("USER_CANCELLED")
+        assert owner.poll(execution).running
+        fence = store.recovery_fence(request.campaign_id)
+        assert fence["reason"] == "COORDINATOR_SOCKET_UNAVAILABLE"
+        assert store.has_recovery_fence() is True
+        assert store.batch(request.batch_id).cleanup_receipt_sha256 is None
+    finally:
+        owner._children[execution.pid].wait(timeout=3)
+        store.close()
+    reopened = SupervisorStore.open(root)
+    try:
+        assert reopened.recovery_fence(request.campaign_id)["reason"] == "COORDINATOR_SOCKET_UNAVAILABLE"
+        assert reopened.has_recovery_fence() is True
+    finally:
+        reopened.close()
 
 
 def test_lease_expiry_does_not_cancel_an_already_exited_owner_without_descendants(tmp_path):

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import re
 from types import MappingProxyType
@@ -28,7 +28,7 @@ class CoordinatorStartRequest:
     worker_count: int
     max_points_per_worker: int
     argv: tuple[str, ...]
-    environment: Mapping[str, str]
+    environment: Mapping[str, str] = field(repr=False)
     batch_root: Path
     control_socket: Path
     control_token_sha256: str
@@ -74,6 +74,31 @@ class CoordinatorStartRequest:
         if len(point_ids) != len(set(point_ids)):
             raise ValueError("SELECTED_POINT_IDS")
         object.__setattr__(self, "selected_point_ids", point_ids)
+        self.control_binding
+
+    @property
+    def control_binding(self) -> CoordinatorBinding | None:
+        keys = (
+            "SO101_FIXED_CONTROL_TOKEN", "SO101_FIXED_CONTROL_CAMPAIGN_ID",
+            "SO101_FIXED_CONTROL_EPOCH", "SO101_FIXED_CONTROL_SOCKET",
+        )
+        present = tuple(key in self.environment for key in keys)
+        if not any(present):
+            return None
+        if not all(present):
+            raise ValueError("CONTROL_BINDING_INCOMPLETE")
+        token, campaign, epoch, socket_path = (self.environment[key] for key in keys)
+        if (
+            _SHA256.fullmatch(token) is None
+            or campaign != self.campaign_id
+            or epoch != str(self.coordinator_epoch)
+            or socket_path != str(self.control_socket)
+        ):
+            raise ValueError("CONTROL_BINDING_MISMATCH")
+        return CoordinatorBinding(
+            self.campaign_id, self.batch_id, self.batch_root, self.control_socket,
+            self.coordinator_epoch, token, self.control_token_sha256,
+        )
 
     @property
     def owner_kind(self) -> str:
@@ -87,7 +112,7 @@ class CoordinatorBinding:
     batch_root: Path
     control_socket: Path
     coordinator_epoch: int
-    control_token: str
+    control_token: str = field(repr=False)
     control_token_sha256: str
 
     def __post_init__(self) -> None:

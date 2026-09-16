@@ -1,5 +1,7 @@
 from dataclasses import replace
 import hashlib
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -21,6 +23,19 @@ from so101_teleop.expert_validation.store import (
 
 SHA_A = "a" * 64
 SHA_B = "b" * 64
+
+
+def test_private_database_rejects_external_hard_link_without_changing_alias(tmp_path):
+    outside = tmp_path / "unbound.sqlite3"
+    outside.write_bytes(b"unbound database")
+    outside.chmod(0o640)
+    root = tmp_path / "private-store"
+    root.mkdir(mode=0o700)
+    os.link(outside, root / "supervisor.sqlite3")
+    with pytest.raises(StoreConflict, match="STORE_DATABASE_INVALID"):
+        SupervisorStore.open(root)
+    assert outside.read_bytes() == b"unbound database"
+    assert stat.S_IMODE(outside.stat().st_mode) == 0o640
 
 
 def _manifest(store, suffix="1"):
@@ -221,5 +236,14 @@ def test_schema_has_no_second_truth_for_worker_point_or_broker_state(tmp_path):
         assert "point_results" not in names
         assert "broker_health" not in names
         assert {"upstream_cursors", "adaptive_projection_cache"}.issubset(names)
+    finally:
+        store.close()
+
+
+def test_sensitive_control_store_database_is_private_before_any_binding(tmp_path):
+    store = SupervisorStore.open(tmp_path.resolve())
+    try:
+        assert stat.S_IMODE((store.root / "supervisor.sqlite3").stat().st_mode) == 0o600
+        assert stat.S_IMODE(store.root.stat().st_mode) == 0o700
     finally:
         store.close()

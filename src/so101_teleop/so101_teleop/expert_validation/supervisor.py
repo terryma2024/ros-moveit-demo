@@ -7,9 +7,13 @@ import hashlib
 import inspect
 import os
 from pathlib import Path
+import secrets
 
 from .adaptive import AdaptiveStartRequest
 from .coordinator import CoordinatorStartRequest
+from .control import ControlProtocolError, CoordinatorControlClient
+from .process_owner import CoordinatorOwnershipError, OwnedCoordinator
+from .store import StoreConflict
 from .models import (
     BatchBinding,
     CampaignBinding,
@@ -157,9 +161,15 @@ class ExpertValidationSupervisor:
                 argv.extend(("--point-id", point_id))
             if request.provenance_binding_path is not None:
                 argv.extend(("--provenance-binding", str(request.provenance_binding_path)))
-            token_sha = hashlib.sha256(
-                f"{request.campaign_id}:{batch_id}".encode("utf-8")
-            ).hexdigest()
+            token = secrets.token_hex(32)
+            token_sha = hashlib.sha256(token.encode("utf-8")).hexdigest()
+            control_socket = batch_root / "control" / "control.sock"
+            environment.update({
+                "SO101_FIXED_CONTROL_TOKEN": token,
+                "SO101_FIXED_CONTROL_CAMPAIGN_ID": request.campaign_id,
+                "SO101_FIXED_CONTROL_EPOCH": "1",
+                "SO101_FIXED_CONTROL_SOCKET": str(control_socket),
+            })
             return CoordinatorStartRequest(
                 campaign_id=request.campaign_id,
                 batch_id=batch_id,
@@ -169,7 +179,7 @@ class ExpertValidationSupervisor:
                 argv=tuple(argv),
                 environment=environment,
                 batch_root=batch_root,
-                control_socket=batch_root / "control.sock",
+                control_socket=control_socket,
                 control_token_sha256=token_sha,
                 coordinator_epoch=1,
                 selected_point_ids=selected,
@@ -270,17 +280,44 @@ class ExpertValidationSupervisor:
         return self.store.reconcile()
 
     def has_unresolved_campaign(self):
+        if self.store.has_recovery_fence():
+            return True
         active = getattr(self.process_owner, "active_execution", None)
         if active is None:
             return False
         status = self.process_owner.poll(active)
         return status.running or status.descendants_alive
 
-    def cancel_for_reason(self, _reason):
+    def cancel_for_reason(self, reason):
         active = getattr(self.process_owner, "active_execution", None)
         if active is None:
             return None
         status = self.process_owner.poll(active)
         if not status.running and not status.descendants_alive:
             return None
+        if isinstance(active, OwnedCoordinator):
+            command_id = "cancel-" + hashlib.sha256(
+                f"{active.campaign_id}:{active.batch_id}:{active.coordinator_epoch}:{reason}".encode()
+            ).hexdigest()
+            try:
+                self.process_owner.verify_execution_identity(active)
+                binding = self.store.fixed_control_binding(active.batch_id)
+                record = self.store.owned_execution(active.batch_id)
+                if (
+                    binding is None or record is None or record.state != "RUNNING"
+                    or binding.campaign_id != active.campaign_id
+                    or binding.coordinator_epoch != active.coordinator_epoch
+                    or binding.control_socket != active.control_socket
+                    or any(getattr(record, name) != getattr(active, name) for name in (
+                        "pid", "pgid", "started_ticks", "argv_sha256", "environment_sha256",
+                        "control_socket", "coordinator_epoch",
+                    ))
+                ):
+                    raise ControlProtocolError("FIXED_CONTROL_BINDING_MISMATCH")
+                return CoordinatorControlClient().cancel(command_id=command_id, binding=binding)
+            except (ControlProtocolError, CoordinatorOwnershipError, StoreConflict, ValueError) as error:
+                self.store.record_recovery_fence(
+                    active.campaign_id, active.batch_id, reason=str(error), command_id=command_id
+                )
+                raise
         return self.process_owner.request_cancel(active)

@@ -10,8 +10,11 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import stat
 import time
 import uuid
+
+from .coordinator import CoordinatorBinding, CoordinatorStartRequest
 
 from .models import (
     BatchBinding,
@@ -99,6 +102,17 @@ CREATE TABLE IF NOT EXISTS leases (
   lease_id TEXT PRIMARY KEY, service_session_id TEXT NOT NULL, generation INTEGER NOT NULL,
   expires_monotonic_ns INTEGER NOT NULL, state TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS fixed_control_bindings (
+  batch_id TEXT PRIMARY KEY REFERENCES owned_execution(batch_id),
+  campaign_id TEXT NOT NULL REFERENCES campaigns(campaign_id), batch_root TEXT NOT NULL,
+  control_socket TEXT NOT NULL, coordinator_epoch INTEGER NOT NULL,
+  control_token TEXT NOT NULL, control_token_sha256 TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS recovery_fences (
+  campaign_id TEXT PRIMARY KEY REFERENCES campaigns(campaign_id),
+  batch_id TEXT NOT NULL REFERENCES campaign_batches(batch_id),
+  reason TEXT NOT NULL, command_id TEXT NOT NULL, created_at_ns INTEGER NOT NULL
+);
 """
 
 
@@ -114,15 +128,34 @@ class SupervisorStore:
         if not root.is_absolute() or root != root.resolve(strict=False) or root.is_symlink():
             raise StoreConflict("STORE_ROOT_INVALID")
         root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        root_stat = root.stat()
+        if root_stat.st_uid != os.getuid() or stat.S_IMODE(root_stat.st_mode) != 0o700:
+            raise StoreConflict("STORE_ROOT_NOT_PRIVATE")
         lock_path = root / "supervisor.lock"
-        lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
+        lock_fd = os.open(
+            lock_path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600
+        )
         try:
             fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
             os.close(lock_fd)
             raise StoreConflict("VALIDATION_SUPERVISOR_ACTIVE") from error
         try:
-            connection = sqlite3.connect(root / "supervisor.sqlite3", isolation_level=None)
+            database = root / "supervisor.sqlite3"
+            database_fd = os.open(
+                database, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600
+            )
+            try:
+                metadata = os.fstat(database_fd)
+                if (
+                    not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid()
+                    or metadata.st_nlink != 1
+                ):
+                    raise StoreConflict("STORE_DATABASE_INVALID")
+                os.fchmod(database_fd, 0o600)
+            finally:
+                os.close(database_fd)
+            connection = sqlite3.connect(database, isolation_level=None)
             connection.row_factory = sqlite3.Row
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA synchronous=FULL")
@@ -321,6 +354,7 @@ class SupervisorStore:
             )
 
     def record_execution_owner_intent(self, intent) -> str:
+        binding = intent.control_binding if isinstance(intent, CoordinatorStartRequest) else None
         if not isinstance(intent, ExecutionOwnerIntent):
             request = intent
             owner_kind = (
@@ -341,6 +375,8 @@ class SupervisorStore:
                 control_socket=getattr(request, "control_socket", None),
             )
         with self._transaction():
+            if binding is not None:
+                self._validate_fixed_binding(binding)
             try:
                 self._connection.execute(
                     "INSERT INTO owned_execution "
@@ -360,9 +396,60 @@ class SupervisorStore:
                         str(intent.control_socket) if intent.control_socket else None,
                     ),
                 )
+                if binding is not None:
+                    self._connection.execute(
+                        "INSERT INTO fixed_control_bindings VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (binding.batch_id, binding.campaign_id, str(binding.batch_root),
+                         str(binding.control_socket), binding.coordinator_epoch,
+                         binding.control_token, binding.control_token_sha256),
+                    )
             except sqlite3.IntegrityError as error:
                 raise StoreConflict("EXECUTION_OWNER_INTENT_CONFLICT") from error
         return intent.spawn_token
+
+    def _validate_fixed_binding(self, binding: CoordinatorBinding) -> None:
+        batch = self.batch(binding.batch_id)
+        if (
+            batch is None or batch.campaign_id != binding.campaign_id
+            or batch.journal_root != binding.batch_root
+            or batch.coordinator_epoch != binding.coordinator_epoch
+        ):
+            raise StoreConflict("FIXED_CONTROL_BATCH_BINDING_MISMATCH")
+
+    def fixed_control_binding(self, batch_id: str) -> CoordinatorBinding | None:
+        row = self._connection.execute(
+            "SELECT * FROM fixed_control_bindings WHERE batch_id=?", (batch_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        binding = CoordinatorBinding(
+            row["campaign_id"], row["batch_id"], Path(row["batch_root"]),
+            Path(row["control_socket"]), row["coordinator_epoch"],
+            row["control_token"], row["control_token_sha256"],
+        )
+        self._validate_fixed_binding(binding)
+        return binding
+
+    def record_recovery_fence(
+        self, campaign_id: str, batch_id: str, *, reason: str, command_id: str
+    ) -> None:
+        with self._transaction():
+            batch = self.batch(batch_id)
+            if batch is None or batch.campaign_id != campaign_id:
+                raise StoreConflict("RECOVERY_FENCE_BATCH_MISMATCH")
+            self._connection.execute(
+                "INSERT OR IGNORE INTO recovery_fences VALUES (?, ?, ?, ?, ?)",
+                (campaign_id, batch_id, reason, command_id, time.time_ns()),
+            )
+
+    def recovery_fence(self, campaign_id: str) -> dict | None:
+        row = self._connection.execute(
+            "SELECT * FROM recovery_fences WHERE campaign_id=?", (campaign_id,)
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+    def has_recovery_fence(self) -> bool:
+        return self._connection.execute("SELECT 1 FROM recovery_fences LIMIT 1").fetchone() is not None
 
     def acknowledge_execution_owner(self, owned=None, **values) -> None:
         if owned is not None:
@@ -384,6 +471,12 @@ class SupervisorStore:
             ).fetchone()
             if row is None or row["state"] != "INTENT":
                 raise StoreConflict("EXECUTION_OWNER_INTENT_MISSING")
+            binding = self.fixed_control_binding(batch_id)
+            if binding is not None and (
+                values.get("coordinator_epoch") != binding.coordinator_epoch
+                or type(values.get("coordinator_epoch")) is not int
+            ):
+                raise StoreConflict("FIXED_CONTROL_OWNER_ACK_MISMATCH")
             for name in ("argv_sha256", "environment_sha256"):
                 if values.get(name) is not None and values[name] != row[name]:
                     raise StoreConflict("EXECUTION_OWNER_FINGERPRINT_MISMATCH")

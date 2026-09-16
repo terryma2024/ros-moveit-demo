@@ -269,6 +269,10 @@ class ExecutionProcessOwner:
     def request_status(self, owned: OwnedExecution) -> ProcessStatus:
         return self.poll(owned)
 
+    def verify_execution_identity(self, owned: OwnedExecution) -> None:
+        """Prove the recorded leader without signalling or changing ownership."""
+        self._verify(owned)
+
     def request_cancel(self, owned: OwnedExecution) -> None:
         if not isinstance(owned, OwnedAdaptiveWrapper):
             raise CoordinatorOwnershipError("FIXED_CANCEL_REQUIRES_CONTROL_SOCKET")
