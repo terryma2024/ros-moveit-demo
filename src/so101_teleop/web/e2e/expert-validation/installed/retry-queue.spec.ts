@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -262,22 +262,51 @@ test("S15 spawn-intent-to-ack window stays fenced spec:slow", async ({ installed
   );
   const pointIds = [terminal.points[0].point_id];
 
-  // Kill the server between the durable spawn intent and its ACK.
+  // Kill the server between the durable spawn intent and its ACK.  A
+  // persistent watcher polls the store in-process; per-poll subprocess
+  // spawns are too slow for this window.
+  const watcher = spawn(
+    pythonExecutable(),
+    [
+      "-c",
+      "import sqlite3, sys, time\n"
+        + "db = sys.argv[1]\n"
+        + "seen = 'NONE'\n"
+        + "end = time.time() + 60\n"
+        + "while time.time() < end:\n"
+        + "    try:\n"
+        + "        c = sqlite3.connect(f'file:{db}?mode=ro', uri=True)\n"
+        + "        row = c.execute(\"SELECT state FROM owned_execution WHERE batch_id='retry-001'\").fetchone()\n"
+        + "        c.close()\n"
+        + "        state = row[0] if row else 'NONE'\n"
+        + "    except Exception:\n"
+        + "        state = 'NONE'\n"
+        + "    if state != seen:\n"
+        + "        print(state, flush=True)\n"
+        + "        seen = state\n"
+        + "    if state == 'RUNNING':\n"
+        + "        break\n"
+        + "    time.sleep(0.002)\n",
+      database(installedServer.serverRoot),
+    ],
+    { stdio: ["ignore", "pipe", "ignore"] },
+  );
+  const intentSeen = new Promise<void>((resolvePromise, rejectPromise) => {
+    let buffer = "";
+    watcher.stdout?.on("data", (chunk) => {
+      buffer += chunk.toString();
+      if (buffer.split("\n").includes("INTENT")) resolvePromise();
+    });
+    watcher.on("exit", () => rejectPromise(new Error("INTENT_WINDOW_MISSED")));
+  });
   const pending = client
     .post(
       `/expert-validation/campaigns/${campaignId}/full-restart-retries`,
       retryBody(lease, session, "s15w3-retry", pointIds),
     )
     .catch((error) => error);
-  await expect
-    .poll(
-      () => query(
-        installedServer.serverRoot,
-        "SELECT state FROM owned_execution WHERE batch_id='retry-001'",
-      )[0]?.state,
-      { timeout: 30_000, intervals: [2, 5, 10] },
-    )
-    .toBe("INTENT");
+  await intentSeen;
+  watcher.kill("SIGKILL");
   await installedServer.killHard();
   await pending;
 

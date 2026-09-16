@@ -167,13 +167,15 @@ export const installedTest = base.extend<InstalledFixtures>({
       const ready = JSON.parse(readFileSync(readyFile, "utf-8"));
       currentPid = ready.pid;
     };
+    const exited = (process_: ChildProcess) =>
+      process_.exitCode !== null || process_.signalCode !== null;
     const stop = async (): Promise<number | null> => {
       if (!child) return null;
       const current = child;
       child = null;
       current.kill("SIGINT");
       const deadline = Date.now() + 15_000;
-      while (current.exitCode === null) {
+      while (!exited(current)) {
         if (Date.now() > deadline) {
           current.kill("SIGKILL");
           break;
@@ -188,7 +190,7 @@ export const installedTest = base.extend<InstalledFixtures>({
       child = null;
       current.kill("SIGKILL");
       const deadline = Date.now() + 15_000;
-      while (current.exitCode === null) {
+      while (!exited(current)) {
         if (Date.now() > deadline) throw new Error("SERVER_SIGKILL_TIMEOUT");
         await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
       }
