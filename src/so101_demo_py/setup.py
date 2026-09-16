@@ -37,7 +37,7 @@ setup(
         (f"share/{package_name}", ["package.xml"]),
         (
             f"lib/{package_name}",
-            [str(package_root.parents[1] / "scripts/run_so101_adaptive_batch.zsh")],
+            ["../../scripts/run_so101_adaptive_batch.zsh"],
         ),
     ]
     + installed_resources(),

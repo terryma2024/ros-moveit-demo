@@ -424,6 +424,30 @@ def test_setup_installs_adaptive_config_and_cleanup_entry_point(monkeypatch):
     ) in captured["entry_points"]["console_scripts"]
 
 
+def test_setup_adaptive_wrapper_source_is_relative_and_resolves(monkeypatch):
+    import setuptools
+
+    package = Path(__file__).resolve().parents[1]
+    captured = {}
+    monkeypatch.setattr(setuptools, "setup", lambda **values: captured.update(values))
+
+    runpy.run_path(str(package / "setup.py"), run_name="__task_runtime_setup__")
+
+    wrapper_sources = [
+        source
+        for destination, sources in captured["data_files"]
+        if destination == "lib/so101_demo_py"
+        for source in sources
+    ]
+    assert len(wrapper_sources) == 1
+    source = Path(wrapper_sources[0])
+    assert not source.is_absolute()
+    assert (package / source).resolve() == (
+        package.parents[1] / "scripts/run_so101_adaptive_batch.zsh"
+    )
+    assert (package / source).is_file()
+
+
 def test_adaptive_help_is_explicit_and_rejects_heavy_admission_flags():
     from so101_demo.cli.mujoco_parallel_batch import build_parser, CliError
 
