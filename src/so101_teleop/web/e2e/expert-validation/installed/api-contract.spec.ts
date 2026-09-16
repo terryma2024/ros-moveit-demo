@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync } from "node:fs";
+import { request as httpRequest } from "node:http";
 import { join } from "node:path";
 
 import { installedTest as test, expect, pythonExecutable } from "../fixtures/installed";
@@ -106,6 +107,25 @@ test("API command ids: replay, conflict reuse, outcome unknown @api-contract spe
   expect(campaigns.body).toHaveLength(1);
 });
 
+function rawGet(port: number, path: string): Promise<{ status: number; body: string }> {
+  // Raw sockets: no client-side URL normalization of dot segments.
+  return new Promise((resolvePromise, rejectPromise) => {
+    const request = httpRequest(
+      { host: "127.0.0.1", port, path, method: "GET" },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk) => chunks.push(chunk));
+        response.on("end", () => resolvePromise({
+          status: response.statusCode ?? 0,
+          body: Buffer.concat(chunks).toString("utf-8"),
+        }));
+      },
+    );
+    request.on("error", rejectPromise);
+    request.end();
+  });
+}
+
 test("API artifact route rejects forged and encoded ids @api-contract spec:default", async ({ installedServer }) => {
   const client = api(installedServer.baseURL);
   const forged = [
@@ -121,13 +141,12 @@ test("API artifact route rejects forged and encoded ids @api-contract spec:defau
     "%00",
   ];
   for (const id of forged) {
-    const response = await fetch(
-      `${installedServer.baseURL}/expert-validation/artifacts/${id}`,
+    const response = await rawGet(
+      installedServer.port, `/expert-validation/artifacts/${id}`,
     );
     expect(response.status).toBe(404);
-    const body = await response.text();
-    expect(body).not.toContain(installedServer.serverRoot);
-    expect(body).not.toContain("/data/work");
+    expect(response.body).not.toContain(installedServer.serverRoot);
+    expect(response.body).not.toContain("/data/work");
   }
 
   const database = join(installedServer.serverRoot, "validation-service", "supervisor.sqlite3");

@@ -76,9 +76,11 @@ for (const mode of ["identity", "sha256", "escape", "symlink"] as const) {
     await expect
       .poll(async () => {
         const response = await client.get(`/expert-validation/campaigns/${campaignId}`);
-        return response.status === 409 ? response.body.code : response.status;
+        return response.body?.code ?? response.status;
       }, { timeout: 30_000 })
       .toBe("UPSTREAM_PROJECTION_INVALID");
+    const rejected = await client.get(`/expert-validation/campaigns/${campaignId}`);
+    expect(rejected.status).toBe(404);
 
     // Nothing was registered: no opaque id exists for this server.
     const guess = await client.get(`/expert-validation/artifacts/${"1".repeat(32)}`);
