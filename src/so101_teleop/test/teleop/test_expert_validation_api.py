@@ -9,6 +9,49 @@ from so101_teleop.expert_validation.lease import ValidationLeaseService
 from so101_teleop.expert_validation.store import SupervisorStore
 
 
+def test_idle_event_socket_disconnect_unsubscribes_without_waiting_for_an_event():
+    """A disconnected idle page must not keep an ASGI task alive at shutdown."""
+    async def run():
+        queue = asyncio.Queue()
+        subscriptions = set()
+        incoming = asyncio.Queue()
+        accepted = asyncio.Event()
+
+        def subscribe():
+            subscriptions.add(queue)
+            return queue
+
+        app = create_expert_validation_app(SimpleNamespace(
+            subscribe=subscribe, unsubscribe=subscriptions.remove,
+        ))
+
+        async def send(message):
+            if message["type"] == "websocket.accept":
+                accepted.set()
+
+        await incoming.put({"type": "websocket.connect"})
+        task = asyncio.create_task(app({
+            "type": "websocket", "asgi": {"version": "3.0"},
+            "scheme": "ws", "path": "/expert-validation/events",
+            "raw_path": b"/expert-validation/events", "query_string": b"",
+            "headers": [], "client": ("127.0.0.1", 1234),
+            "server": ("127.0.0.1", 8010), "subprotocols": [],
+        }, incoming.get, send))
+        try:
+            await asyncio.wait_for(accepted.wait(), timeout=2)
+            assert subscriptions == {queue}
+            await incoming.put({"type": "websocket.disconnect", "code": 1000})
+            await asyncio.wait_for(asyncio.shield(task), timeout=2)
+            assert subscriptions == set()
+            assert queue.empty()
+        finally:
+            if not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(run())
+
+
 class Artifacts:
     def resolve_opaque_id(self, artifact_id):
         assert artifact_id == "artifact-1"

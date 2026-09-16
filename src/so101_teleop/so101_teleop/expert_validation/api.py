@@ -396,15 +396,34 @@ def create_expert_validation_app(
             await websocket.close(code=1011, reason="EVENT_STREAM_UNAVAILABLE")
             return
         queue = subscribe()
-        try:
+
+        async def send_events():
             while True:
                 event = await queue.get()
                 await websocket.send_json(
                     event.model_dump() if hasattr(event, "model_dump") else event
                 )
+
+        async def receive_disconnect():
+            while True:
+                message = await websocket.receive()
+                if message["type"] == "websocket.disconnect":
+                    return
+
+        tasks = {
+            asyncio.create_task(send_events()),
+            asyncio.create_task(receive_disconnect()),
+        }
+        try:
+            completed, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in completed:
+                task.result()
         except WebSocketDisconnect:
             return
         finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
             unsubscribe = getattr(service, "unsubscribe", None)
             if unsubscribe is not None:
                 unsubscribe(queue)

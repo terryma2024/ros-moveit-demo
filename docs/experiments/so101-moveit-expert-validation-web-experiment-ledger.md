@@ -1,5 +1,31 @@
 # SO-101 MoveIt Expert Validation Web Experiment Ledger
 
+## CP-007 — EXP-051 terminal readback and idle WebSocket disconnect repair
+
+- EXP-051 final status: INVALID for full Web acceptance; its four physical outcomes are independently observed successes, not a completed Task16/17 gate. This supersedes the historical PLANNED/RUNNING entries without rewriting their frozen criteria.
+- Clean runtime source: `79a51c1e2c7e680af681f81460d66e9342ab6851`; copied overlay `manifest-source-install-release16`, closed binding `manifest-source-release16-overlay-binding.json`. Server domain231, configured worker domains181/182/183, GZ_PARTITION=not_applicable (MuJoCo).
+- Actual page campaign `campaign-02fbb834c64a45a2b9bdc19dce8e2995`, batch `b2bb8`, four anchors, SEQUENTIAL N1/K4. Final API sequence390: COMPLETED, requested4, evaluated4, execution_started4, valid_succeeded4, valid_failed0, qualification_passed=true, batch_cleanup_complete=true. Verified Coordinator state: POINTS_COMPLETE, qualification_passed=true, batch_cleanup_complete=true. The separate upstream dry-run `validation_passed=false` field is not relabelled as true or used as execute qualification.
+- Actual page terminal DOM confirms COMPLETED and first pass4/4. Page-owned renewal responses001..025 advanced lease generation1..26; the observation driver did not renew authority. Browser exit metadata0.
+- Independent installed upstream `verify_attempt` accepted all four sealed attempt manifests, each containing12 files, with exact AttemptIdentity and inventory/content hashes. First-point initial/terminal images were inspected previously; all-four visual and complete controller/physics semantic audit remain incomplete.
+- First unpassed evidence-display boundary: every final API point still has empty attempts/artifact_ids despite accepted sealed evidence. Do not count this run as full artifact/page acceptance or start parallel/adaptive based on it.
+- Shutdown observation: exact owned Web PID3547922 hung after first SIGINT at Waiting for background tasks; events route awaited queue.get without receiving disconnect. Second SIGINT cancelled only that server's tasks; server metadata exit0. Host readback found no listener18117 or running Docker containers. User codex/kimi sessions preserved; no broad signals or evidence deletion.
+- Additional lifecycle risk observed after browser closure: lease expiry cancellation referenced stale fixed owner without a control socket, causing FIXED_CANCEL_REQUIRES_CONTROL_SOCKET and maintenance failure. Terminal owner reconciliation requires its own regression/fix; not concealed by socket repair.
+- RED t72: real ASGI idle socket connect/disconnect timed out while route remained subscribed, 1 failed in2.52s. New NVMe scratch/cs/tmp, exact task venv tempfile verified; exit1, elapsed2.84s.
+- GREEN t73: receive-disconnect and send-event tasks now race, owned tasks are cancelled/awaited and subscription removed in finally. Complete source Teleop strict gate402 passed in8.91s, elapsed9.27s, exit0, no warning summary; only the two documented exact external emitters exempted. New scratch/ct/tmp, exact task venv tempfile verified. Installed/live post-fix qualification is not yet run.
+- Evidence: registered root `exp051/browser-driver.log`, `campaign-final-api.json`, `ui-13-terminal.txt`, `browser-exit.metadata`, `server.log`, `server-exit.metadata`, all four sealed manifests; `t72.log/.xml/.metadata`, `t73.log/.xml/.metadata`.
+- Retained: single existing root and all historical releases/runs. Archived:none. Deletion candidates: used scratch/cs and scratch/ct plus earlier scratch and superseded build/install/log batches; none deleted.
+- Publication: still unpublished after recorded auto-review rejection; no retry or alternate transport. Plain renewed trusted publication confirmation required.
+
+```yaml
+checkpoint_id: CP-007
+last_valid_experiment: EXP-006
+current_hypothesis: Accepted upstream sealed manifests must be registered and projected to typed opaque Web artifact metadata; terminal owner reconciliation must prevent expiry cancellation of already-cleaned batches.
+working_tree_status: task-owned api.py, test_expert_validation_api.py and this ledger modified
+owned_processes: no surviving task Web server, browser, Coordinator, Worker, MuJoCo, MoveIt or running Broker container observed after exact server shutdown
+preserved_processes: unrelated codex/kimi tasks and all other user processes
+next_command: Commit the verified idle-socket repair; add production sealed-evidence bridge RED tests and terminal-owner reconciliation RED tests before fresh copied release and EXP-052 page acceptance.
+```
+
 ```yaml
 task_id: so101-moveit-expert-validation-web-20260916-e1701375-a01
 goal: Implement and validate the approved 17-task Teleop MoveIt expert validation Web plan in MuJoCo simulation only.
@@ -7,7 +33,7 @@ success_contract: Source and package gates pass; fresh fixed four-point and adap
 worktree: /data/work/ws_moveit/.worktrees/teleop-expert-validation-web
 branch: codex/teleop-expert-validation-web
 base_commit: e1701375690321bc83b5f30ec044da1847d373aa
-current_commit: d3b33adb14836316f13999c159bc7389480b329a
+current_commit: 79a51c1e2c7e680af681f81460d66e9342ab6851
 evidence_root: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01
 confirmed_conclusions:
   - origin/main exactly matched the required documentation commit e1701375690321bc83b5f30ec044da1847d373aa at CP-001.
@@ -21,8 +47,8 @@ disproven_routes:
   - At commit 654756ba32cfc0697aff1444c79752ff1e61c4ee, a four-point manifest could not be returned because its source field violated the closed response model.
 open_hypotheses:
   - A read-only verified journal projection and authoritative HTTP watcher can synchronize fresh Web progress and terminal state without acquiring upstream coordinator authority.
-latest_checkpoint: CP-006
-next_experiment: EXP-051
+latest_checkpoint: CP-007
+next_experiment: EXP-052
 ```
 
 ## Registered evidence and ownership
