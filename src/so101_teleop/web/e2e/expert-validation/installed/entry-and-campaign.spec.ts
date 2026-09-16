@@ -95,7 +95,7 @@ async function waitCampaignTerminal(baseURL: string, campaignId: string, timeout
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const response = await fetch(`${baseURL}/expert-validation/campaigns/${campaignId}`);
-    expect(response.status()).toBe(200);
+    expect(response.status).toBe(200);
     const projection = await response.json();
     if (
       ["COMPLETED", "COMPLETED_WITH_FAILURES", "INFRA_FAILED", "CANCELLED"].includes(projection.status)
@@ -120,7 +120,7 @@ test("S01 installed production console entry serves health and page spec:default
 
   const first = await startProductionEntry(join(root, "state"), port, join(root, "entry-1.log"));
   const health = await fetch(`http://127.0.0.1:${port}/health`);
-  expect(health.status()).toBe(200);
+  expect(health.status).toBe(200);
   expect((await health.json()).service).toBe("expert-validation");
 
   await page.goto(`http://127.0.0.1:${port}/expert-validation`);
@@ -134,7 +134,7 @@ test("S01 installed production console entry serves health and page spec:default
   const second = await startProductionEntry(join(root, "state"), secondPort, join(root, "entry-2.log"));
   try {
     const healthAfter = await fetch(`http://127.0.0.1:${secondPort}/health`);
-    expect(healthAfter.status()).toBe(200);
+    expect(healthAfter.status).toBe(200);
   } finally {
     await second.stop();
   }
