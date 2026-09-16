@@ -1,8 +1,12 @@
+import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
 from so101_teleop.expert_validation.api import create_expert_validation_app
+from so101_teleop.expert_validation.lease import ValidationLeaseService
+from so101_teleop.expert_validation.store import SupervisorStore
 
 
 class Artifacts:
@@ -135,6 +139,82 @@ def test_validation_page_serves_vite_absolute_asset_urls(tmp_path):
         assert response.text == expected
     assert client.get("/assets/missing.js").status_code == 404
     assert client.get("/tasks/runs").status_code == 503
+
+
+def test_server_lifespan_expires_lease_without_browser_traffic_and_stops_monitor(tmp_path):
+    """Disconnect leaves authority until expiry, which must run independently of HTTP."""
+    async def run():
+        store = SupervisorStore.open((tmp_path / "store").resolve())
+        clock = [1_000]
+        cancellations = []
+        cancelled = asyncio.Event()
+
+        def cancel(reason):
+            cancellations.append(reason)
+            cancelled.set()
+
+        supervisor = SimpleNamespace(
+            cancel_for_reason=cancel, has_unresolved_campaign=lambda: True
+        )
+        lease_service = ValidationLeaseService(
+            store, supervisor, clock_ns=lambda: clock[0], duration_ns=100
+        )
+        app = create_expert_validation_app(SimpleNamespace(lease_service=lease_service))
+        try:
+            async with app.router.lifespan_context(app):
+                first = lease_service.acquire("browser-a")
+                await asyncio.sleep(0)
+                assert lease_service.current() == first
+                assert cancellations == []
+                clock[0] = first.expires_monotonic_ns
+                await asyncio.wait_for(cancelled.wait(), timeout=2)
+                assert lease_service.current() is None
+                assert cancellations == ["LEASE_EXPIRED"]
+            replacement = lease_service.acquire("browser-b")
+            clock[0] = replacement.expires_monotonic_ns
+            await asyncio.sleep(0.3)
+            assert lease_service.current() == replacement
+            assert cancellations == ["LEASE_EXPIRED"]
+        finally:
+            store.close()
+
+    asyncio.run(run())
+
+
+def test_failed_lease_maintenance_fails_closed_and_requests_owner_cancel():
+    import httpx
+
+    async def run():
+        cancellations = []
+
+        def broken_tick():
+            raise RuntimeError("STORE_UNAVAILABLE")
+
+        service = SimpleNamespace(
+            lease_service=SimpleNamespace(expire_due=broken_tick),
+            supervisor=SimpleNamespace(cancel_for_reason=cancellations.append),
+        )
+        app = create_expert_validation_app(service)
+        async with app.router.lifespan_context(app):
+            await asyncio.sleep(0)
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app), base_url="http://test"
+            ) as client:
+                response = await client.post(
+                    "/expert-validation/campaigns",
+                    json={
+                        "service_session_id": "browser-a", "lease_id": "lease-a",
+                        "lease_generation": 1, "manifest_id": "manifest-a",
+                        "execution_mode": "SEQUENTIAL", "worker_count": 1,
+                        "max_points_per_worker": 4, "command_id": "start-a",
+                        "preflight_receipt_id": "receipt-a",
+                    },
+                )
+            assert response.status_code == 503
+            assert response.json()["code"] == "LEASE_MAINTENANCE_FAILED"
+            assert cancellations == ["LEASE_MAINTENANCE_FAILED"]
+
+    asyncio.run(run())
 
 
 def test_retry_requires_lease_command_and_confirmation(tmp_path):

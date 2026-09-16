@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, test, vi } from "vitest";
 
 import { ExpertValidationApp, type ExpertValidationApi } from "./expert-validation-app";
+import type { Lease } from "@/api/expert-validation-types";
 
 function fakeApi(overrides: Partial<ExpertValidationApi> = {}): ExpertValidationApi {
   return {
@@ -28,6 +29,9 @@ function fakeApi(overrides: Partial<ExpertValidationApi> = {}): ExpertValidation
         generation: 1,
         expires_monotonic_ns: 10_000,
       };
+    },
+    async renewLease(current) {
+      return { ...current, generation: current.generation + 1, expires_monotonic_ns: current.expires_monotonic_ns + 30_000_000_000 };
     },
     async createManifest(totalPoints) {
       return {
@@ -66,6 +70,53 @@ function fakeApi(overrides: Partial<ExpertValidationApi> = {}): ExpertValidation
 }
 
 describe("ExpertValidationApp", () => {
+  test("renewal at the server margin replaces stale preflight authority before start", async () => {
+    vi.useFakeTimers();
+    try {
+      const base = fakeApi();
+      const preflight = vi.fn(base.preflight);
+      const startCampaign = vi.fn(base.startCampaign);
+      const renewLease = vi.fn(async (current: Lease) => ({ ...current, generation: current.generation + 1, expires_monotonic_ns: current.expires_monotonic_ns + 30_000_000_000 }));
+      const api = { ...base, preflight, startCampaign, renewLease };
+      const { unmount } = render(<ExpertValidationApp api={api} />);
+      await act(async () => {});
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Acquire lease" })); });
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Generate points" })); });
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Check resources" })); });
+      expect(preflight.mock.calls[0][1]).toMatchObject({ lease_generation: 1 });
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Start validation" })); });
+
+      expect(startCampaign.mock.calls[0][1]).toMatchObject({ lease_generation: 2 });
+      expect(preflight.mock.calls).toHaveLength(2);
+      expect(preflight.mock.calls[1][1]).toMatchObject({ lease_generation: 2 });
+      unmount();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(renewLease).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("failed renewal disables execution and allows a fresh lease request", async () => {
+    vi.useFakeTimers();
+    try {
+      const api = { ...fakeApi(), renewLease: async () => { throw new Error("LEASE_EXPIRED"); } };
+      render(<ExpertValidationApp api={api} />);
+      await act(async () => {});
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Acquire lease" })); });
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Generate points" })); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+
+      expect((screen.getByRole("button", { name: "Start validation" }) as HTMLButtonElement).disabled).toBe(true);
+      expect((screen.getByRole("button", { name: "Acquire lease" }) as HTMLButtonElement).disabled).toBe(false);
+      expect(screen.getByText(/LEASE_EXPIRED/)).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("newly started campaign begins watching and unmount stops it", async () => {
     const user = userEvent.setup();
     const stop = vi.fn();

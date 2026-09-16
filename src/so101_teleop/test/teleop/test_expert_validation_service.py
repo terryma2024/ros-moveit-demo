@@ -121,3 +121,21 @@ def test_stale_lease_cannot_mutate(tmp_path):
         assert renewed.generation > lease.generation
     finally:
         store.close()
+
+
+def test_expired_campaign_replacement_holder_cannot_start_new_work(tmp_path):
+    service, lease_service, supervisor, store = _service(tmp_path)
+    try:
+        manifest = service.create_manifest(_selection(), source_config_sha256=SHA)
+        first = lease_service.acquire("browser-a")
+        lease_service.expire_due(now_ns=first.expires_monotonic_ns)
+        replacement = lease_service.acquire("browser-b")
+        with pytest.raises(ServiceConflict, match="VALIDATION_RECOVERY_REQUIRED"):
+            service.start_campaign(StartCampaignCommand(
+                command_id="cmd-replacement", lease_id=replacement.lease_id,
+                lease_generation=replacement.generation, manifest_id=manifest.manifest_id,
+                request={"campaign_id": "campaign-replacement", "batch_id": "replacement"},
+            ))
+        assert supervisor.requests == []
+    finally:
+        store.close()

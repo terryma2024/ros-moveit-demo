@@ -89,13 +89,7 @@ class ValidationLeaseService:
     def renew(
         self, service_session_id: str, lease_id: str, generation: int
     ) -> Lease:
-        current = self.current()
-        if current is None:
-            raise LeaseConflict("LEASE_NOT_ACTIVE")
-        if current.lease_id != lease_id or current.service_session_id != service_session_id:
-            raise LeaseConflict("LEASE_IDENTITY_MISMATCH")
-        if current.generation != generation:
-            raise LeaseConflict("STALE_LEASE_GENERATION")
+        self.authorize(lease_id, generation, service_session_id=service_session_id)
         new_generation = self.store.next_lease_generation()
         renewed = Lease(
             lease_id,

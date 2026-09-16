@@ -1,3 +1,6 @@
+import asyncio
+from types import SimpleNamespace
+
 import pytest
 
 from so101_teleop.expert_validation.lease import LeaseConflict, ValidationLeaseService
@@ -69,6 +72,45 @@ def test_renew_fences_stale_generation(tmp_path):
         assert renewed.generation == first.generation + 1
         with pytest.raises(LeaseConflict, match="STALE_LEASE_GENERATION"):
             service.renew("browser-a", first.lease_id, first.generation)
+    finally:
+        store.close()
+
+
+def test_expired_lease_cannot_be_resurrected_by_renewal(tmp_path):
+    service, store, clock, _supervisor = _lease(tmp_path)
+    try:
+        first = service.acquire("browser-a")
+        clock.now = first.expires_monotonic_ns
+        with pytest.raises(LeaseConflict, match="LEASE_EXPIRED"):
+            service.renew("browser-a", first.lease_id, first.generation)
+        assert service.current() == first
+    finally:
+        store.close()
+
+
+def test_replacement_holder_cannot_preflight_before_expired_campaign_recovery(tmp_path):
+    from so101_teleop.expert_validation.production import ProductionExpertValidationService
+    from so101_teleop.expert_validation.service import ServiceConflict
+
+    lease_service, store, clock, supervisor = _lease(tmp_path)
+    try:
+        first = lease_service.acquire("browser-a")
+        supervisor.active = True
+        clock.now = first.expires_monotonic_ns
+        lease_service.expire_due()
+        replacement = lease_service.acquire("browser-b")
+        service = object.__new__(ProductionExpertValidationService)
+        service.lease_service = lease_service
+        service.registry = SimpleNamespace(require=lambda *_args: SimpleNamespace(
+            mode_availability={"SEQUENTIAL": SimpleNamespace(available=True)}
+        ))
+        service.layout = SimpleNamespace(yolo_weights_path=None, grounded_root=None)
+        with pytest.raises(ServiceConflict, match="VALIDATION_RECOVERY_REQUIRED"):
+            asyncio.run(service.preflight_api({
+                "service_session_id": "browser-b", "lease_id": replacement.lease_id,
+                "lease_generation": replacement.generation, "execution_mode": "SEQUENTIAL",
+            }))
+        assert supervisor.cancel_requests == ["LEASE_EXPIRED"]
     finally:
         store.close()
 

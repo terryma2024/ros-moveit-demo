@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager, suppress
 import inspect
+import logging
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -232,10 +234,56 @@ def create_expert_validation_app(
     bind_address: str = "127.0.0.1",
 ) -> FastAPI:
     validate_bind_address(bind_address)
-    app = FastAPI(title="SO-101 Expert Validation", version="1.0.0")
+
+    async def maintain_lease(app):
+        lease_service = getattr(service, "lease_service", None)
+        expire_due = getattr(lease_service, "expire_due", None)
+        if expire_due is None:
+            return
+        while True:
+            try:
+                expire_due()
+            except Exception:
+                app.state.lease_maintenance_failed = True
+                logging.getLogger(__name__).exception("LEASE_MAINTENANCE_FAILED")
+                supervisor = getattr(service, "supervisor", None)
+                cancel = getattr(supervisor, "cancel_for_reason", None)
+                if cancel is not None:
+                    try:
+                        await _invoke(cancel, "LEASE_MAINTENANCE_FAILED")
+                    except Exception:
+                        logging.getLogger(__name__).exception("LEASE_OWNER_CANCEL_FAILED")
+                return
+            await asyncio.sleep(0.25)
+
+    @asynccontextmanager
+    async def lifespan(app):
+        task = asyncio.create_task(maintain_lease(app))
+        try:
+            await asyncio.sleep(0)
+            yield
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+    app = FastAPI(title="SO-101 Expert Validation", version="1.0.0", lifespan=lifespan)
+    app.state.lease_maintenance_failed = False
+
+    @app.middleware("http")
+    async def fence_failed_maintenance(request: Request, call_next):
+        if (
+            app.state.lease_maintenance_failed
+            and request.method not in {"GET", "HEAD", "OPTIONS"}
+            and not request.url.path.endswith("/cancel")
+        ):
+            return JSONResponse(status_code=503, content={"code": "LEASE_MAINTENANCE_FAILED"})
+        return await call_next(request)
 
     @app.get("/health")
     async def health():
+        if app.state.lease_maintenance_failed:
+            return JSONResponse(status_code=503, content={"code": "LEASE_MAINTENANCE_FAILED"})
         return await _invoke(service.health)
 
     @app.get("/expert-validation/capabilities", response_model=CapabilitiesResponse)

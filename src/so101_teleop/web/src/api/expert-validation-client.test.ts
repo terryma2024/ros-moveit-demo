@@ -25,6 +25,21 @@ const lease = {
 };
 
 describe("ExpertValidationClient", () => {
+  test("renewal sends current server lease identity and fencing generation via PUT", async () => {
+    const renewed = { lease_id: "lease-a", service_session_id: "browser-a", generation: 4, expires_monotonic_ns: 2000 };
+    const transport = recorder([{ ok: true, status: 200, body: renewed }]);
+    const client = new ExpertValidationClient(transport.fetcher);
+    const result = await client.renewLease({
+      lease_id: "lease-a", service_session_id: "browser-a", generation: 3, expires_monotonic_ns: 1000,
+    });
+    expect(result).toEqual(renewed);
+    expect(transport.calls[0]).toMatchObject({
+      path: "/expert-validation/lease/lease-a",
+      init: { method: "PUT" },
+      body: { service_session_id: "browser-a", generation: 3 },
+    });
+  });
+
   test("watch polls authoritative HTTP without hints and stops cleanly", async () => {
     vi.useFakeTimers();
     try {

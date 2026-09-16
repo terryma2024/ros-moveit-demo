@@ -7,7 +7,7 @@ success_contract: Source and package gates pass; fresh fixed four-point and adap
 worktree: /data/work/ws_moveit/.worktrees/teleop-expert-validation-web
 branch: codex/teleop-expert-validation-web
 base_commit: e1701375690321bc83b5f30ec044da1847d373aa
-current_commit: 7fd1ef6ea61f652793c2ef05b9dfcb254fb960fe
+current_commit: d3b33adb14836316f13999c159bc7389480b329a
 evidence_root: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01
 confirmed_conclusions:
   - origin/main exactly matched the required documentation commit e1701375690321bc83b5f30ec044da1847d373aa at CP-001.
@@ -21,8 +21,8 @@ disproven_routes:
   - At commit 654756ba32cfc0697aff1444c79752ff1e61c4ee, a four-point manifest could not be returned because its source field violated the closed response model.
 open_hypotheses:
   - A read-only verified journal projection and authoritative HTTP watcher can synchronize fresh Web progress and terminal state without acquiring upstream coordinator authority.
-latest_checkpoint: CP-005
-next_experiment: EXP-050
+latest_checkpoint: CP-006
+next_experiment: EXP-051
 ```
 
 ## Registered evidence and ownership
@@ -1216,6 +1216,54 @@ next_command: Commit the route/test/ledger changes; build a fresh copied release
 ```
 
 Retained: the registered root, exp046 invalid page evidence and all t52-t59 gates/diagnostics. Archived: none. Deletion candidates: scratch ca-cj as used, and superseded copied build/install/log directories; no evidence deleted. Push remains unpublished after auto-review rejection and requires plain renewed publication confirmation.
+
+## EXP-050 update and EXP-051 pre-registration
+
+- EXP-050 is INVALID before campaign creation: the owned driver timed out its 120s visual-approval wait while host screenshot review was pending. No Start request exists and GET campaigns returned []. Correct the temporary driver by checking the rendered setup before acquiring lease/preflight, not by extending server authority.
+- The installed static-route repair is OBSERVED: actual release15 JS/CSS load, four-point manifest and lease POSTs and fixed preflight return 200. Native window 50331652 (Chrome's Unjvu6 profile, not the previous exp046 window despite reused X11 ID) was freshly captured under exp050/gui-prestart/20260916T161713-4d632d786038 and inspected: SEQUENTIAL N1/K4, capacity4/4, seed20260911, rendered setup and preflight status.
+- Independent read-only SQLite at monotonic1366743888400364 found lease generation1 still ACTIVE, expiry1366560524918368, despite more than30s without browser traffic. The production API has no maintenance lifespan; expire_due is never invoked. The actual Web app has no renewal path. renew currently accepts a matching ACTIVE lease after expiry, so it can resurrect stale authority. These contradict the approved design's renewable, server-expiring lease contract; add RED tests before fixes.
+- Owned idle server PID3522832 received SIGINT after confirming [] campaigns. No Worker/Broker/MoveIt/MuJoCo started. Retain browser timeout, native pixels, complete DOM snapshots, model/provenance/dry-run and release15 gate artifacts under the registered root.
+
+```yaml
+experiment_id: EXP-051
+status: PLANNED
+prior_experiment: EXP-050
+hypothesis: Server-managed expiry and actual-page renewal preserve the approved lease contract and let fresh four-point page acceptance reach authoritative terminal state.
+single_variable: Web lease lifecycle integration and expiry enforcement; physics and upstream 0.1.0 core unchanged.
+lifecycle: FULL_RESTART
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+fixed_config: {worker_count: 1, max_points_per_worker: 4}
+success_criteria:
+  - Actual page renews before the server-defined expiry; every renewal replaces fencing generation and invalidates old preflight.
+  - Server expires without HTTP/browser traffic and requests only owner-authenticated cooperative cancellation.
+  - New installed page/API agree with independent sealed four-point physical, visual and cleanup results.
+invalid_criteria:
+  - Wrong source/install, stale authority, missing evidence, driver observation pollution, or surviving owned runtime.
+decision: RUN_AFTER_RED_GREEN_FRESH_COPY_BUILD_AND_PRELEASE_VISUAL_GATE
+next_experiment: EXP-047
+```
+
+## CP-006 — Renewable and independently expiring Web authority
+
+- Backend RED t61: no autonomous expiry/cancel without traffic, and a matching expired ACTIVE lease could renew (two intended failures). t64 RED: broken maintenance did not fence new campaign mutation (409 instead of dedicated503). t67 RED: replacement holder preflight bypassed recovery authority, and the normal service actually submitted replacement work to its test supervisor (two intended failures). No real execution was involved in these regression tests.
+- API lifespan now runs a task that calls the existing lease expiry boundary every250ms and cancels/awaits that task before service/store shutdown. Expiry requests only the existing supervisor-to-owner cancellation channel. An unexpected maintenance failure fences HTTP mutations, makes health unhealthy, and requests owner-authenticated cancellation; it never signals Worker, Broker, Runner or simulator groups. Renew now authorizes current identity/generation and monotonic expiry before advancing generation. Preflight/start honor can_start_campaign, so an expired campaign's replacement holder remains read/cancel-only until recovery.
+- Actual Web client now sends renewal PUT with current service session, lease ID and fencing generation. App schedules renewal using server capabilities, replaces authority on success, discards old-generation preflight, disables controls while pending, and clears authority/displays the error on failure. A preflight response arriving after authority replacement is rejected rather than cached. Unmount stops scheduling; it does not release server authority or cancel the campaign.
+- t65 backend related GREEN25/25; t66 Web client/app/setup GREEN15/15. Final t68 complete Teleop strict gate401/401 in8.91s, no warning summary, with only the established two exact external compatibility emitters exempted. t69 full Web94/94 and TypeScript/Vite build passed; the pre-existing large-bundle advisory remains, outside pytest warning scope. t70 real browser regression11/11 in20.4s, including ordinary Teleop/task isolation; fake backend data is not live simulation qualification.
+- t62 Web attempt is INVALID for app timer assertions: user-event/RTL async-wrapper timers deadlocked under Vitest fake timers and contaminated later tests. t63 uses synchronous real DOM clicks inside act for timer tests and reaches the intended three missing-renewal/fencing failures in1.47s. All test-only diagnostics are retained; none changed server lease duration or physical gates.
+- EXP-050 server exit0, no listener18116, no surviving task-owned browser/server or simulation. The temporary live driver now freezes its visual gate before acquiring authority, with bounded300s observation; it never extends server lease/preflight. EXP-051 is still PLANNED pending clean commit and release16 installed gates. EXP-047/048/049 remain not run; their new start reference follows the next valid sequential campaign, not invalid EXP-046.
+- Completion remains unproven for production opaque artifact registration/display, adaptive real journal projection, durable server restart restoration and live retry. These must be checked against the original plan; source/mock gates alone cannot close them.
+
+```yaml
+checkpoint_id: CP-006
+last_valid_experiment: EXP-001
+current_hypothesis: Actual-page renewal and server expiry integration satisfy authority safety; a fresh installed four-point campaign must still prove progress/evidence/cleanup.
+working_tree_status: Only the scoped lease API/service/UI/tests and this ledger pending commit.
+owned_processes: NONE
+preserved_processes: codex/kimi tmux, Software Updater and all unrelated worktrees/processes.
+next_command: Commit the verified lease integration; build/bind release16 from clean source; run installed gates; start EXP-051 through the actual page after prelease native visual inspection.
+```
+
+Retained: the registered root, exp050 visual/boundary evidence, release15 and t60-t70 results. Archived: none. Deletion candidates: all used scratch ck-cp and superseded copied overlays/build/logs; no evidence deleted. Publication remains rejected/unpublished; no protocol or permission bypass attempted.
 
 ## Task 1 checkpoint
 

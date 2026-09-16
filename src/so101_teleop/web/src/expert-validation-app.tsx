@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ExpertValidationClient } from "@/api/expert-validation-client";
 import type {
@@ -22,6 +22,7 @@ import fixture from "@/fixtures/top_view_projection_v1.json";
 export type ExpertValidationApi = {
   capabilities(): Promise<Capabilities>;
   acquireLease(serviceSessionId: string): Promise<Lease>;
+  renewLease(lease: Lease): Promise<Lease>;
   createManifest(totalPoints: number): Promise<Manifest>;
   preflight(input: PreflightInput, lease: LeaseAuthority): Promise<PreflightReceipt>;
   startCampaign(input: StartCampaignInput, lease: LeaseAuthority): Promise<CampaignProjection>;
@@ -53,6 +54,9 @@ function stableSessionId(): string {
 export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValidationApi }) {
   const [capabilities, setCapabilities] = useState<Capabilities>();
   const [lease, setLease] = useState<Lease>();
+  const leaseRef = useRef<Lease>();
+  const receiptGeneration = useRef<number>();
+  const [leaseRenewing, setLeaseRenewing] = useState(false);
   const [manifest, setManifest] = useState<Manifest>();
   const [receipt, setReceipt] = useState<PreflightReceipt>();
   const [campaign, setCampaign] = useState<CampaignView | null>(null);
@@ -65,6 +69,49 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
     maxPointsPerWorker: 20,
   });
   const sessionId = useMemo(stableSessionId, []);
+
+  const replaceLease = (next?: Lease) => {
+    leaseRef.current = next;
+    setLease(next);
+    setReceipt(undefined);
+    receiptGeneration.current = undefined;
+  };
+
+  const reportError = (error: unknown) => {
+    setReceipt(undefined);
+    setNotice(error instanceof Error ? error.message : String(error));
+  };
+
+  useEffect(() => {
+    if (!lease || !capabilities) return;
+    let disposed = false;
+    const duration = capabilities.lease_duration_s;
+    const margin = capabilities.lease_renewal_margin_s;
+    if (!Number.isFinite(duration) || !Number.isFinite(margin) || margin <= 0 || margin >= duration) {
+      replaceLease();
+      setNotice("LEASE_CAPABILITIES_INVALID");
+      return;
+    }
+    const timer = setTimeout(() => {
+      setLeaseRenewing(true);
+      api.renewLease(lease).then((next) => {
+        if (disposed) return;
+        if (next.lease_id !== lease.lease_id || next.service_session_id !== lease.service_session_id
+          || next.generation <= lease.generation || next.expires_monotonic_ns <= lease.expires_monotonic_ns) {
+          throw new Error("LEASE_RENEWAL_INVALID");
+        }
+        setLeaseRenewing(false);
+        replaceLease(next);
+        setNotice("Lease renewed; check resources again");
+      }).catch((error: unknown) => {
+        if (disposed) return;
+        setLeaseRenewing(false);
+        replaceLease();
+        reportError(error);
+      });
+    }, (duration - margin) * 1_000);
+    return () => { disposed = true; clearTimeout(timer); };
+  }, [api, lease, capabilities]);
 
   useEffect(() => {
     let disposed = false;
@@ -84,11 +131,12 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
   }, [api, campaign?.campaign_id]);
 
   const authority = (): LeaseAuthority => {
-    if (!lease) throw new Error("LEASE_REQUIRED");
+    const current = leaseRef.current;
+    if (!current) throw new Error("LEASE_REQUIRED");
     return {
       service_session_id: sessionId,
-      lease_id: lease.lease_id,
-      lease_generation: lease.generation,
+      lease_id: current.lease_id,
+      lease_generation: current.generation,
     };
   };
 
@@ -111,8 +159,13 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
     };
 
   const runPreflight = async () => {
-    if (!manifest || !lease) return undefined;
-    const result = await api.preflight(preflightInput(), authority());
+    if (!manifest || !leaseRef.current || leaseRenewing) return undefined;
+    const boundAuthority = authority();
+    const result = await api.preflight(preflightInput(), boundAuthority);
+    if (leaseRef.current?.generation !== boundAuthority.lease_generation) {
+      throw new Error("LEASE_CHANGED_DURING_PREFLIGHT");
+    }
+    receiptGeneration.current = boundAuthority.lease_generation;
     setReceipt(result);
     setNotice(result.admitted
       ? setup.executionMode === "PARALLEL" ? "Parallel admission passed" : "Preflight passed"
@@ -121,7 +174,9 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
   };
 
   const start = async () => {
-    const admitted = receipt ?? await runPreflight();
+    if (leaseRenewing || !leaseRef.current) return;
+    const admitted = receipt && receiptGeneration.current === leaseRef.current.generation
+      ? receipt : await runPreflight();
     if (!manifest || !admitted?.admitted) return;
     const result = await api.startCampaign(
       { ...preflightInput(), preflight_receipt_id: admitted.receipt_id } as StartCampaignInput,
@@ -158,13 +213,14 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
         capabilities={capabilities}
         state={setup}
         leaseHeld={Boolean(lease)}
+        leaseRenewing={leaseRenewing}
         manifestReady={Boolean(manifest)}
         preflightMessage={notice}
         onChange={changeSetup}
-        onAcquireLease={() => api.acquireLease(sessionId).then(setLease)}
+        onAcquireLease={() => { void api.acquireLease(sessionId).then(replaceLease).catch(reportError); }}
         onGenerate={() => api.createManifest(setup.pointCount).then((value) => { setManifest(value); setReceipt(undefined); })}
-        onPreflight={() => { void runPreflight(); }}
-        onStart={() => { void start(); }}
+        onPreflight={() => { void runPreflight().catch(reportError); }}
+        onStart={() => { void start().catch(reportError); }}
       />
       {campaign ? (
         <div className="grid gap-5 lg:grid-cols-2">

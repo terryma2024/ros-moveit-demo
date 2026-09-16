@@ -484,6 +484,8 @@ class ProductionExpertValidationService(ExpertValidationService):
             body["lease_generation"],
             service_session_id=body["service_session_id"],
         )
+        if not self.lease_service.can_start_campaign(body["service_session_id"]):
+            raise ServiceConflict("VALIDATION_RECOVERY_REQUIRED")
         capability = self.registry.require("moveit_expert", "validate_pick_place")
         availability = capability.mode_availability[body["execution_mode"]]
         if not availability.available:
@@ -523,6 +525,8 @@ class ProductionExpertValidationService(ExpertValidationService):
             body["lease_generation"],
             service_session_id=body["service_session_id"],
         )
+        if not self.lease_service.can_start_campaign(body["service_session_id"]):
+            raise ServiceConflict("VALIDATION_RECOVERY_REQUIRED")
         command = StartCampaignCommand(
             command_id=body["command_id"],
             lease_id=body["lease_id"],

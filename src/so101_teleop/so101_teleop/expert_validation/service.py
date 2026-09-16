@@ -112,9 +112,11 @@ class ExpertValidationService:
         if manifest.stale:
             raise ServiceConflict("VALIDATION_MANIFEST_STALE")
         try:
-            self.lease_service.authorize(command.lease_id, command.lease_generation)
+            lease = self.lease_service.authorize(command.lease_id, command.lease_generation)
         except LeaseConflict as error:
             raise ServiceConflict(str(error)) from error
+        if not self.lease_service.can_start_campaign(lease.service_session_id):
+            raise ServiceConflict("VALIDATION_RECOVERY_REQUIRED")
         self.store.begin_command(command.command_id, digest, "START_CAMPAIGN")
         request = command.request
         if isinstance(request, dict):

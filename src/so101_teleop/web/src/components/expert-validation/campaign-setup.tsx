@@ -12,6 +12,7 @@ type Props = {
   capabilities?: Capabilities;
   state: SetupState;
   leaseHeld: boolean;
+  leaseRenewing?: boolean;
   manifestReady: boolean;
   preflightMessage?: string;
   onChange: (state: SetupState, field: keyof SetupState) => void;
@@ -25,6 +26,7 @@ export function CampaignSetup({
   capabilities,
   state,
   leaseHeld,
+  leaseRenewing = false,
   manifestReady,
   preflightMessage,
   onChange,
@@ -106,10 +108,10 @@ export function CampaignSetup({
       )}
       {preflightMessage ? <p aria-live="polite">{preflightMessage}</p> : null}
       <div className="flex flex-wrap gap-2">
-        <Button onClick={onAcquireLease} disabled={leaseHeld}>Acquire lease</Button>
+        <Button onClick={onAcquireLease} disabled={leaseHeld || leaseRenewing}>Acquire lease</Button>
         <Button onClick={onGenerate} disabled={!validCount}>Generate points</Button>
-        <Button onClick={onPreflight} disabled={!leaseHeld || !manifestReady}>Check resources</Button>
-        <Button onClick={onStart} disabled={!leaseHeld || !manifestReady || capacity < state.pointCount && !adaptive}>Start validation</Button>
+        <Button onClick={onPreflight} disabled={!leaseHeld || leaseRenewing || !manifestReady}>Check resources</Button>
+        <Button onClick={onStart} disabled={!leaseHeld || leaseRenewing || !manifestReady || capacity < state.pointCount && !adaptive}>Start validation</Button>
       </div>
     </section>
   );

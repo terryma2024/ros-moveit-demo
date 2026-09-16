@@ -65,6 +65,20 @@ export class ExpertValidationClient {
     });
   }
 
+  renewLease(lease: Lease): Promise<Lease> {
+    return this.request<Lease>(
+      `/expert-validation/lease/${encodeURIComponent(lease.lease_id)}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          service_session_id: lease.service_session_id,
+          generation: lease.generation,
+        }),
+      },
+    );
+  }
+
   createManifest(totalPoints: number): Promise<Manifest> {
     return this.post<Manifest>("/expert-validation/manifests", {
       total_points: totalPoints,
