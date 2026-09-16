@@ -937,7 +937,7 @@ decision: LIVE_RETRY_NOT_APPLICABLE_NO_VALID_FIRST_PASS
 
 ```yaml
 experiment_id: EXP-041
-status: PLANNED
+status: INVALID
 prior_experiment: EXP-037
 hypothesis: Contact-force evidence can be extracted safely from the controller write-path copy without dereferencing absent copied solver storage, while authoritative physics-step evidence retains exact forces.
 single_variable: Contact-force extraction rejects a copied snapshot whose active constraint has no solver-force storage, proven by a copied-contact regression before rebuilding a fresh bound overlay.
@@ -953,8 +953,88 @@ evidence:
   - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t24-copied-contact-green-gdb.log
   - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t24-simulation-evidence-full-green2.log
   - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t24-support-ctest-green2.log
-decision: RUN_AFTER_RED_GREEN_REGRESSION_CLEAN_COMMIT_BUILD_AND_BINDING
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/manifest-source-test-release11-support2.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/manifest-source-test-result-release11-support2.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp041/manifest-post.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp041/start-response.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp041/campaigns/campaign-1a0eecd6709d4b05a542988ea0d0f0eb/b2017.coordinator.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp041/campaigns/campaign-1a0eecd6709d4b05a542988ea0d0f0eb/b2017/workers/worker-01/worker-run-results.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp041/postinventory.txt
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp041/store-lock-readback.txt
+observed:
+  - Release11 passed health, capability, lease, exact four-anchor source assertions, admitted N1/K4 preflight, and campaign-start boundaries.
+  - The controller manager and all three controllers became active, MoveIt became ready, and the copied-contact SIGSEGV did not recur.
+  - worker-01 then failed the initial evidence gate at reset_point with `initial evidence unavailable`; no point execution started.
+  - The initial-snapshot retry calls pause(true), but MujocoSimulation returned early when already paused without dispatching a new authoritative state snapshot, so a missed or contended first snapshot could not be recovered idempotently.
+  - Cleanup stopped the owned stack, released the service port, removed the short runtime IPC tree, and allowed the durable-store lock to be reacquired.
+first_bad_boundary: PAUSED_NOOP_RETRY_DID_NOT_REPUBLISH_STATE_SNAPSHOT
+decision: STOP_FAIL_CLOSED_AND_FIX_IDEMPOTENT_PAUSED_SNAPSHOT_RETRY
 next_experiment: EXP-042
+```
+
+### EXP-042 — Fresh same-selection parallel simulation after paused-snapshot repair
+
+```yaml
+experiment_id: EXP-042
+status: NOT_RUN
+prior_experiment: EXP-041
+single_variable: execution_mode=PARALLEL, worker_count=2, max_points_per_worker=2
+lifecycle: FRESH_ISOLATED_STACK
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+observed:
+  - Not started because EXP-041 failed before initial evidence acceptance and point execution.
+decision: BLOCKED_BY_EXP_041_INVALID
+next_experiment: EXP-043
+```
+
+### EXP-043 — Fresh twenty-point adaptive simulation after paused-snapshot repair
+
+```yaml
+experiment_id: EXP-043
+status: NOT_RUN
+prior_experiment: EXP-042
+single_variable: execution_mode=ADAPTIVE with preferred W8 and fallback [6, 4, 2, 1]
+lifecycle: FRESH_ISOLATED_STACK
+observed:
+  - Not started because no valid sequential runtime result exists after EXP-041.
+decision: BLOCKED_BY_EXP_041_INVALID
+next_experiment: EXP-044
+```
+
+### EXP-044 — Conditional FULL_RESTART retry after paused-snapshot repair
+
+```yaml
+experiment_id: EXP-044
+status: NOT_APPLICABLE
+prior_experiment: EXP-043
+single_variable: FULL_RESTART retry of eligible FAILED points only
+lifecycle: FRESH_ISOLATED_STACK_PER_POINT
+observed:
+  - No authoritative first-pass business result or eligible FAILED point exists; no retry was manufactured.
+decision: LIVE_RETRY_NOT_APPLICABLE_NO_VALID_FIRST_PASS
+```
+
+### EXP-045 — Idempotent paused-snapshot retry and fresh sequential simulation
+
+```yaml
+experiment_id: EXP-045
+status: PLANNED
+prior_experiment: EXP-041
+hypothesis: A repeated pause(true) request can recover a missed initial evidence snapshot by refreshing the control snapshot and dispatching one authoritative paused state snapshot without duplicating the pause lifecycle transition.
+single_variable: An already-paused set_pause request republishes control and authoritative state snapshots while preserving the existing no-duplicate-pause-notification contract.
+lifecycle: FRESH_ISOLATED_STACK
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+fixed_config: {worker_count: 1, max_points_per_worker: 4}
+prestart_tests:
+  - Valid RED focused regression observed no state_snapshot on the repeated pause request.
+  - GREEN focused regression passed 1 of 1 and the full MujocoSimulation binary passed 42 of 42.
+evidence:
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t25-pause-retry-red2.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t25-pause-retry-green2-build.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t25-pause-retry-green2.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t25-mujoco-simulation-full-green2.log
+decision: RUN_AFTER_RED_GREEN_REGRESSION_CLEAN_COMMITS_BUILD_AND_BINDING
+next_experiment: EXP-046
 ```
 
 ## Task 1 checkpoint
