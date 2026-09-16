@@ -556,6 +556,9 @@ def create_expert_validation_app(
 
             @app.get("/expert-validation/{path:path}", include_in_schema=False)
             async def validation_fallback(path: str):
+                if path.startswith("artifacts/"):
+                    # The SPA fallback must never shadow the artifact namespace.
+                    return JSONResponse(status_code=404, content={"code": "ARTIFACT_NOT_FOUND"})
                 candidate = root / path
                 return FileResponse(candidate if candidate.is_file() else root / "index.html")
         else:
