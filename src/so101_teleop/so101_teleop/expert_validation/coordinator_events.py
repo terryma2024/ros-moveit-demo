@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 import hashlib
 from pathlib import Path
@@ -71,6 +72,7 @@ class CoordinatorEventBatch:
     events: tuple[UpstreamEventView, ...]
     next_cursor: AcceptedCoordinatorCursor
     projected_point_states: Mapping[str, str]
+    projected_state: Mapping[str, object]
 
 
 ManifestVerifier = Callable[[Mapping[str, object], CampaignUpstreamBinding], None]
@@ -110,7 +112,11 @@ def _verified_history(
         raise CoordinatorProjectionError("CURSOR_OWNER_MISMATCH")
     try:
         history = tuple(journal.replay().events)
-    except (JournalCorruption, OSError, RuntimeError, ValueError) as error:
+    except JournalCorruption as error:
+        if str(error) == "incomplete journal tail":
+            raise CoordinatorProjectionError("JOURNAL_REPLAY_INCOMPLETE") from error
+        raise CoordinatorProjectionError("JOURNAL_REPLAY_INVALID") from error
+    except (OSError, RuntimeError, ValueError) as error:
         raise CoordinatorProjectionError("JOURNAL_REPLAY_INVALID") from error
     for expected_sequence, event in enumerate(history, start=1):
         verify_event_binding(event, binding)
@@ -167,10 +173,38 @@ def _default_manifest_verifier(
         resolved.relative_to(binding.batch_root)
     except (OSError, ValueError) as error:
         raise CoordinatorProjectionError("RESULT_REFERENCE_OUTSIDE_BATCH") from error
-    if path.is_symlink() or not resolved.is_file():
+    if path.is_symlink():
         raise CoordinatorProjectionError("RESULT_REFERENCE_INVALID")
-    if hashlib.sha256(resolved.read_bytes()).hexdigest() != digest:
+    manifest = resolved
+    if resolved.is_dir():
+        manifest = resolved / "attempt_result_manifest.json"
+        if manifest.is_symlink() or not manifest.is_file():
+            raise CoordinatorProjectionError("RESULT_REFERENCE_INVALID")
+    elif not resolved.is_file():
+        raise CoordinatorProjectionError("RESULT_REFERENCE_INVALID")
+    if hashlib.sha256(manifest.read_bytes()).hexdigest() != digest:
         raise CoordinatorProjectionError("RESULT_REFERENCE_HASH_MISMATCH")
+
+
+def _merge_projection_delta(state: dict[str, object], delta: Mapping[str, object]) -> None:
+    for key, value in delta.items():
+        if not isinstance(key, str):
+            raise CoordinatorProjectionError("PROJECTION_DELTA_INVALID")
+        if key in {"points", "workers"}:
+            if not isinstance(value, Mapping):
+                raise CoordinatorProjectionError("PROJECTION_DELTA_INVALID")
+            collection = state.setdefault(key, {})
+            if not isinstance(collection, dict):
+                raise CoordinatorProjectionError("PROJECTION_DELTA_INVALID")
+            for item_id, item_delta in value.items():
+                if not isinstance(item_id, str) or not isinstance(item_delta, Mapping):
+                    raise CoordinatorProjectionError("PROJECTION_DELTA_INVALID")
+                item = collection.setdefault(item_id, {})
+                if not isinstance(item, dict):
+                    raise CoordinatorProjectionError("PROJECTION_DELTA_INVALID")
+                item.update(deepcopy(dict(item_delta)))
+        else:
+            state[key] = deepcopy(value)
 
 
 class CoordinatorEventReader:
@@ -196,7 +230,7 @@ class CoordinatorEventReader:
             cursor,
             owner_kind="COORDINATOR",
         )
-        point_states: dict[str, str] = {}
+        projected_state: dict[str, object] = {}
         for event in history:
             payload = event.payload
             if event.type in {"RESULT_COMMITTED", "VALIDATION_COMMITTED"}:
@@ -207,19 +241,22 @@ class CoordinatorEventReader:
             delta = payload.get("delta")
             if not isinstance(delta, Mapping):
                 continue
-            points = delta.get("points")
-            if not isinstance(points, Mapping):
-                continue
-            for point_id, point in points.items():
-                if not isinstance(point_id, str) or not isinstance(point, Mapping):
+            _merge_projection_delta(projected_state, delta)
+        point_states: dict[str, str] = {}
+        points = projected_state.get("points", {})
+        if not isinstance(points, Mapping):
+            raise CoordinatorProjectionError("POINT_PROJECTION_INVALID")
+        for point_id, point in points.items():
+            if not isinstance(point_id, str) or not isinstance(point, Mapping):
+                raise CoordinatorProjectionError("POINT_PROJECTION_INVALID")
+            status = point.get("status") or point.get("validation_status")
+            if status is not None:
+                if not isinstance(status, str):
                     raise CoordinatorProjectionError("POINT_PROJECTION_INVALID")
-                status = point.get("status") or point.get("validation_status")
-                if status is not None:
-                    if not isinstance(status, str):
-                        raise CoordinatorProjectionError("POINT_PROJECTION_INVALID")
-                    point_states[point_id] = status
+                point_states[point_id] = status
         return CoordinatorEventBatch(
             events=tuple(_event_view(event, self.binding.batch_id) for event in fresh),
             next_cursor=_next_cursor(history, self.binding),
             projected_point_states=point_states,
+            projected_state=projected_state,
         )

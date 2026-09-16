@@ -110,22 +110,26 @@ export class ExpertValidationClient {
     let sequence = after;
     let closed = false;
     let refresh = Promise.resolve();
-    const stop = this.openEvents(after, (event) => {
-      if (closed || event.campaign_id !== campaignId || event.sequence <= sequence) return;
-      if (event.sequence === sequence + 1) {
-        sequence = event.sequence;
-        return;
-      }
+    const refreshFromHttp = () => {
       refresh = refresh.then(async () => {
+        if (closed) return;
         const campaign = await this.campaign(campaignId);
         if (!closed && campaign.sequence > sequence) {
           sequence = campaign.sequence;
           apply(campaign);
         }
+      }).catch(() => {
+        // Keep the last authoritative projection; the next poll can recover.
       });
+    };
+    const stop = this.openEvents(after, (event) => {
+      if (closed || event.campaign_id !== campaignId || event.sequence <= sequence) return;
+      refreshFromHttp();
     });
+    const timer = setInterval(refreshFromHttp, 2_000);
     return () => {
       closed = true;
+      clearInterval(timer);
       stop();
     };
   }

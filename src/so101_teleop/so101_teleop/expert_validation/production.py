@@ -13,20 +13,45 @@ import uuid
 from typing import Mapping
 
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
+from so101_demo.parallel_batch.contracts import BatchSummary, ContractError, PointStatus, RunMode
+from so101_demo.parallel_batch.journal import CoordinatorJournal
 
 from .artifacts import ValidationArtifactRegistry
 from .catalog import CatalogPoint, PointSelection, select_catalog_points
+from .coordinator_events import (
+    AcceptedCoordinatorCursor,
+    CampaignUpstreamBinding,
+    CoordinatorEventReader,
+    CoordinatorProjectionError,
+)
 from .executor_registry import ExecutorRegistry, QualificationProbes
 from .lease import ValidationLeaseService
+from .models import UpstreamCursor
 from .preflight import CampaignStartRequest
 from .process_owner import ExecutionProcessOwner
 from .service import ExpertValidationService, ServiceConflict, _request_hash, StartCampaignCommand
 from .store import SupervisorStore
+from .statistics import (
+    BrokerProjection,
+    PointProjection,
+    StatisticsProjectionError,
+    WorkerProjection,
+    summarize_first_pass,
+)
 from .supervisor import ExpertValidationSupervisor
 from .preflight import PreflightEngine
 
 
 _BROKER_IMAGE = "so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class _ReadOnlyCoordinatorJournal:
+    root: Path
+    batch_id: str
+
+    def replay(self):
+        return CoordinatorJournal.read_only_replay(self.root, self.batch_id)
 
 
 def _sha256(path: Path) -> str:
@@ -303,6 +328,7 @@ class ProductionExpertValidationService(ExpertValidationService):
         self.artifacts = artifacts
         self._pending: dict[str, tuple[CampaignStartRequest, object, dict[str, object]]] = {}
         self._campaigns: dict[str, dict[str, object]] = {}
+        self._campaign_requests: dict[str, CampaignStartRequest] = {}
         self._subscribers: set[asyncio.Queue] = set()
 
     def close(self) -> None:
@@ -523,18 +549,283 @@ class ProductionExpertValidationService(ExpertValidationService):
             ),
         }
         self._campaigns[request.campaign_id] = projection
+        self._campaign_requests[request.campaign_id] = request
         self.store.finish_command(command.command_id, projection)
         del self._pending[receipt_id]
         return projection
 
     def list_campaigns(self):
-        return tuple(self._campaigns.values())
+        return tuple(self.get_campaign(campaign_id) for campaign_id in self._campaigns)
 
     def get_campaign(self, campaign_id):
         try:
-            return self._campaigns[campaign_id]
+            cached = self._campaigns[campaign_id]
         except KeyError as error:
             raise ServiceConflict("VALIDATION_CAMPAIGN_NOT_FOUND") from error
+        request = self._campaign_requests.get(campaign_id)
+        if request is None or request.execution_mode == "ADAPTIVE":
+            return cached
+        try:
+            projection = self._fixed_campaign_projection(request)
+        except (CoordinatorProjectionError, ContractError, StatisticsProjectionError) as error:
+            if str(error) == "JOURNAL_REPLAY_INCOMPLETE":
+                return cached
+            raise ServiceConflict("UPSTREAM_PROJECTION_INVALID") from error
+        if projection is None:
+            return cached
+        self._campaigns[campaign_id] = projection
+        return projection
+
+    def _fixed_campaign_projection(self, request):
+        batch_root = (
+            Path(request.evidence_root)
+            / "campaigns"
+            / request.campaign_id
+            / request.batch_id
+        ).resolve()
+        journal_root = batch_root / "coordinator"
+        epoch_path = journal_root / "coordinator_epoch.json"
+        if epoch_path.is_symlink():
+            raise CoordinatorProjectionError("OWNER_EPOCH_INVALID")
+        if not epoch_path.exists():
+            return None
+        if not epoch_path.is_file():
+            raise CoordinatorProjectionError("OWNER_EPOCH_INVALID")
+        try:
+            epoch_document = json.loads(epoch_path.read_text(encoding="utf-8"))
+            epoch = epoch_document["coordinator_epoch"]
+        except (OSError, KeyError, TypeError, ValueError) as error:
+            raise CoordinatorProjectionError("OWNER_EPOCH_INVALID") from error
+        if (
+            set(epoch_document) != {"batch_id", "coordinator_epoch"}
+            or epoch_document["batch_id"] != request.batch_id
+            or isinstance(epoch, bool)
+            or not isinstance(epoch, int)
+            or epoch <= 0
+        ):
+            raise CoordinatorProjectionError("OWNER_EPOCH_INVALID")
+        binding = CampaignUpstreamBinding(
+            campaign_id=request.campaign_id,
+            batch_id=request.batch_id,
+            owner_kind="COORDINATOR",
+            owner_epoch_or_generation=epoch,
+            journal_root=journal_root,
+            batch_root=batch_root,
+        )
+        reader = CoordinatorEventReader(
+            _ReadOnlyCoordinatorJournal(journal_root, request.batch_id),
+            binding,
+        )
+        batch = reader.read_after(AcceptedCoordinatorCursor.initial(binding))
+        if not batch.events:
+            return None
+        state = batch.projected_state
+        raw_points = state.get("points")
+        if not isinstance(raw_points, Mapping):
+            raise CoordinatorProjectionError("POINT_PROJECTION_INVALID")
+        selected = tuple(request.selection.point_ids)
+        if set(raw_points) != set(selected):
+            raise CoordinatorProjectionError("POINT_PROJECTION_INVALID")
+        raw_workers = state.get("workers", {})
+        if not isinstance(raw_workers, Mapping):
+            raise CoordinatorProjectionError("WORKER_PROJECTION_INVALID")
+        active_by_point = {}
+        for worker_id, raw_worker in raw_workers.items():
+            if not isinstance(worker_id, str) or not isinstance(raw_worker, Mapping):
+                raise CoordinatorProjectionError("WORKER_PROJECTION_INVALID")
+            lease = raw_worker.get("lease")
+            if lease is not None:
+                if not isinstance(lease, Mapping):
+                    raise CoordinatorProjectionError("WORKER_PROJECTION_INVALID")
+                point_id = lease.get("point_id")
+                attempt_id = lease.get("attempt_id")
+                if (
+                    point_id not in selected
+                    or not isinstance(attempt_id, str)
+                    or point_id in active_by_point
+                ):
+                    raise CoordinatorProjectionError("WORKER_PROJECTION_INVALID")
+                active_by_point[point_id] = (attempt_id, worker_id)
+        execution_started_ids = set()
+        for event in batch.events:
+            if event.type != "ATTEMPT_STARTED":
+                continue
+            identity = event.payload.get("identity")
+            if not isinstance(identity, Mapping) or identity.get("point_id") not in selected:
+                raise CoordinatorProjectionError("ATTEMPT_PROJECTION_INVALID")
+            execution_started_ids.add(identity["point_id"])
+        display_ids = {point.id: point.display_id for point in request.selection.points}
+        points = []
+        point_statuses = {}
+        for point_id in selected:
+            raw_point = raw_points[point_id]
+            if not isinstance(raw_point, Mapping):
+                raise CoordinatorProjectionError("POINT_PROJECTION_INVALID")
+            try:
+                status = PointStatus(raw_point["status"])
+            except (KeyError, TypeError, ValueError) as error:
+                raise CoordinatorProjectionError("POINT_PROJECTION_INVALID") from error
+            attempts = raw_point.get("attempts", 0)
+            if isinstance(attempts, bool) or not isinstance(attempts, int) or attempts < 0:
+                raise CoordinatorProjectionError("POINT_PROJECTION_INVALID")
+            if not isinstance(raw_point.get("terminal", False), bool):
+                raise CoordinatorProjectionError("POINT_PROJECTION_INVALID")
+            active_attempt = raw_point.get("active_attempt")
+            active_worker_id = None
+            if active_attempt is not None:
+                active_lease = active_by_point.get(point_id)
+                if (
+                    not isinstance(active_attempt, str)
+                    or active_lease is None
+                    or active_lease[0] != active_attempt
+                ):
+                    raise CoordinatorProjectionError("POINT_PROJECTION_INVALID")
+                active_worker_id = active_lease[1]
+            elif point_id in active_by_point:
+                raise CoordinatorProjectionError("POINT_PROJECTION_INVALID")
+            reason = raw_point.get("blocked_by")
+            if reason is not None and not isinstance(reason, str):
+                raise CoordinatorProjectionError("POINT_PROJECTION_INVALID")
+            point_statuses[point_id] = status
+            points.append(
+                PointProjection(
+                    point_id=point_id,
+                    status=status,
+                    evaluated=status in {PointStatus.PASSED, PointStatus.FAILED},
+                    execution_started=point_id in execution_started_ids,
+                    active_worker_id=active_worker_id,
+                    reason=reason,
+                )
+            )
+
+        workers = []
+        for worker_id, raw_worker in sorted(raw_workers.items()):
+            if not isinstance(worker_id, str) or not isinstance(raw_worker, Mapping):
+                raise CoordinatorProjectionError("WORKER_PROJECTION_INVALID")
+            lease = raw_worker.get("lease")
+            if lease is not None and not isinstance(lease, Mapping):
+                raise CoordinatorProjectionError("WORKER_PROJECTION_INVALID")
+            generation = raw_worker.get("generation")
+            lease_count = raw_worker.get("lease_count", 0)
+            worker_state = raw_worker.get("state")
+            if (
+                type(generation) is not int or generation <= 0
+                or type(lease_count) is not int or lease_count < 0
+                or not isinstance(worker_state, str) or not worker_state
+            ):
+                raise CoordinatorProjectionError("WORKER_PROJECTION_INVALID")
+            workers.append(
+                WorkerProjection(
+                    worker_id=worker_id,
+                    generation=generation,
+                    state=worker_state,
+                    active_point_id=lease.get("point_id") if lease is not None else None,
+                    lease_count=lease_count,
+                    quarantine_reason=raw_worker.get("quarantine_reason"),
+                    recovery_result=raw_worker.get("recovery_result"),
+                )
+            )
+
+        terminal_reason = state.get("terminal_reason")
+        if terminal_reason is not None and not isinstance(terminal_reason, str):
+            raise CoordinatorProjectionError("BATCH_PROJECTION_INVALID")
+        terminal = terminal_reason is not None and all(
+            raw_points[point_id].get("terminal", False) for point_id in selected
+        )
+        cleanup_complete = state.get("batch_cleanup_complete", False)
+        if not isinstance(cleanup_complete, bool):
+            raise CoordinatorProjectionError("BATCH_PROJECTION_INVALID")
+        summary = BatchSummary(
+            run_mode=RunMode.EXECUTE,
+            point_statuses=point_statuses,
+            batch_terminal=terminal,
+            batch_cleanup_complete=cleanup_complete,
+            terminal_reason=terminal_reason,
+        )
+        broker_healthy = state.get("broker_healthy", True)
+        broker_failed = state.get("broker_recovery_failed", False)
+        if not isinstance(broker_healthy, bool) or not isinstance(broker_failed, bool):
+            raise CoordinatorProjectionError("BROKER_PROJECTION_INVALID")
+        statistics = summarize_first_pass(
+            summary,
+            points,
+            workers=workers,
+            broker=BrokerProjection(
+                available=broker_healthy and not broker_failed,
+                reason="BROKER_RECOVERY_FAILED" if broker_failed else None,
+            ),
+        )
+        if terminal and cleanup_complete and statistics.qualification_passed:
+            status = "COMPLETED"
+        elif terminal and cleanup_complete and statistics.valid_failed:
+            status = "COMPLETED_WITH_FAILURES"
+        elif terminal and cleanup_complete:
+            status = "INFRA_FAILED"
+        elif terminal:
+            status = "CLEANING_UP"
+        else:
+            status = "RUNNING"
+        final_event = batch.events[-1]
+        self.store.accept_upstream_cursor(
+            UpstreamCursor(
+                batch_id=request.batch_id,
+                owner_kind="COORDINATOR",
+                owner_epoch_or_generation=final_event.owner_epoch,
+                segment_id=f"segment-{final_event.owner_epoch:020d}",
+                event_id=f"event-{final_event.sequence:020d}",
+                frame_sha256=final_event.frame_sha256,
+            )
+        )
+        projected_points = tuple(
+            {
+                "point_id": point.point_id,
+                "display_id": display_ids[point.point_id],
+                "status": point.status.value,
+                "retry_eligible": point.retry_eligible,
+                "active_worker_id": point.active_worker_id,
+                "reason": point.reason,
+                "attempts": (),
+                "artifact_ids": (),
+            }
+            for point in statistics.points
+        )
+        projected_workers = tuple(
+            {
+                "worker_id": worker.worker_id,
+                "generation": worker.generation,
+                "state": worker.state,
+                "current_point_id": worker.active_point_id,
+                "lease_count": worker.lease_count,
+                "recovery_result": worker.recovery_result,
+                "quarantine_reason": worker.quarantine_reason,
+            }
+            for worker in statistics.workers
+        )
+        return {
+            "campaign_id": request.campaign_id,
+            "sequence": batch.next_cursor.sequence,
+            "execution_mode": request.execution_mode,
+            "owner_kind": "COORDINATOR",
+            "batch_id": request.batch_id,
+            "status": status,
+            "points": projected_points,
+            "workers": projected_workers,
+            "broker": asdict(statistics.broker),
+            "requested": statistics.requested,
+            "evaluated": statistics.evaluated,
+            "execution_started": statistics.execution_started,
+            "valid_succeeded": statistics.valid_succeeded,
+            "valid_failed": statistics.valid_failed,
+            "indeterminate": statistics.indeterminate,
+            "not_executed": statistics.not_executed,
+            "evaluation_coverage": statistics.evaluation_coverage,
+            "execution_coverage": statistics.execution_coverage,
+            "qualified_success_rate": statistics.qualified_success_rate,
+            "coverage_complete": statistics.coverage_complete,
+            "execution_complete": statistics.execution_complete,
+            "batch_cleanup_complete": statistics.batch_cleanup_complete,
+            "qualification_passed": statistics.qualification_passed,
+        }
 
     def cancel_campaign(self, campaign_id, body):
         self.lease_service.authorize(

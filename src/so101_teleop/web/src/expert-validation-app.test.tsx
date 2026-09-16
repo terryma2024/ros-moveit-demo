@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import { ExpertValidationApp, type ExpertValidationApi } from "./expert-validation-app";
 
@@ -66,6 +66,22 @@ function fakeApi(overrides: Partial<ExpertValidationApi> = {}): ExpertValidation
 }
 
 describe("ExpertValidationApp", () => {
+  test("newly started campaign begins watching and unmount stops it", async () => {
+    const user = userEvent.setup();
+    const stop = vi.fn();
+    const watchCampaign = vi.fn(() => stop);
+    const { unmount } = render(
+      <ExpertValidationApp api={fakeApi({ watchCampaign })} />,
+    );
+    await user.click(await screen.findByRole("button", { name: "Acquire lease" }));
+    await user.click(screen.getByRole("button", { name: "Generate points" }));
+    await user.click(screen.getByRole("button", { name: "Start validation" }));
+
+    expect(watchCampaign).toHaveBeenCalledWith("campaign-1", 1, expect.any(Function));
+    unmount();
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
   test("changing count invalidates generated preview", async () => {
     const user = userEvent.setup();
     render(<ExpertValidationApp api={fakeApi()} />);

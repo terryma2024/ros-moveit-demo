@@ -128,6 +128,16 @@ class CoordinatorJournal:
         journal.acquire()
         return journal
 
+    @classmethod
+    def read_only_replay(cls, root, batch_id):
+        """Verify committed history without acquiring or changing authority."""
+        journal = cls(root, batch_id)
+        with journal._mutex:
+            events, _, _, tail = journal._read_history()
+            if tail:
+                raise JournalCorruption('incomplete journal tail')
+            return JournalReplay(tuple(deepcopy(events)))
+
     def acquire(self):
         """Acquire the nonblocking flock, validate history, then open a new epoch."""
         with self._mutex:

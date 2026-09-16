@@ -113,3 +113,62 @@ def test_cursor_or_binding_mismatch_fails_closed(tmp_path: Path) -> None:
                     tmp_path,
                 ),
             )
+
+
+def test_reader_verifies_real_sealed_directory_manifest_and_merges_deltas(
+    tmp_path: Path,
+) -> None:
+    sealed = tmp_path / "workers/worker-01/attempts/task_start/lease-1/sealed"
+    sealed.mkdir(parents=True)
+    manifest = sealed / "attempt_result_manifest.json"
+    manifest.write_text('{"schema_version":1}', encoding="utf-8")
+    digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
+
+    with CoordinatorJournal.create(tmp_path / "journal", "batch-a") as journal:
+        upstream = binding(journal, tmp_path)
+        reader = CoordinatorEventReader(journal, upstream)
+        journal.append(
+            "BATCH_STARTED",
+            "start",
+            {
+                "delta": {
+                    "points": {"task_start": {"status": "UNRUN", "attempts": 0}},
+                    "workers": {"worker-01": {"generation": 1, "state": "AVAILABLE"}},
+                    "batch_cleanup_complete": False,
+                }
+            },
+        )
+        journal.append(
+            "RESULT_COMMITTED",
+            "result-p01",
+            {
+                "delta": {
+                    "points": {"task_start": {"status": "PASSED", "attempts": 1}},
+                    "workers": {"worker-01": {"generation": 2, "state": "RECOVERING"}},
+                },
+                "identity": {"point_id": "task_start"},
+                "response": {"location": str(sealed), "sha256": digest},
+            },
+        )
+        journal.append(
+            "BATCH_CLEANUP_COMPLETE",
+            "cleanup",
+            {
+                "delta": {
+                    "workers": {"worker-01": {"generation": 2, "state": "STOPPED"}},
+                    "batch_cleanup_complete": True,
+                }
+            },
+        )
+
+        projected = reader.read_after(reader.initial_cursor).projected_state
+
+    assert projected["points"]["task_start"] == {
+        "status": "PASSED",
+        "attempts": 1,
+    }
+    assert projected["workers"]["worker-01"] == {
+        "generation": 2,
+        "state": "STOPPED",
+    }
+    assert projected["batch_cleanup_complete"] is True

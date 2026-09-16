@@ -396,3 +396,53 @@ def test_nonstring_json_keys_rejected_before_commit(tmp_path, payload):
         journal.append('LEASE_GRANTED', 'valid-key', {'nested': [{'10': 'ten', '2': 'two'}]})
     with CoordinatorJournal.create(tmp_path, 'batch-a') as journal:
         assert [event.idempotency_key for event in journal.replay().events] == ['valid-key']
+
+
+def test_read_only_replay_does_not_advance_epoch_or_create_files(tmp_path):
+    """A Web projection reader must never acquire coordinator authority."""
+    with CoordinatorJournal.create(tmp_path, 'batch-a') as journal:
+        journal.append('BATCH_STARTED', 'start', {'delta': {'points': {}}})
+
+    before = {
+        path.relative_to(tmp_path): path.read_bytes()
+        for path in tmp_path.rglob('*')
+        if path.is_file()
+    }
+
+    replay = CoordinatorJournal.read_only_replay(tmp_path, 'batch-a')
+
+    assert [event.type for event in replay.events] == ['BATCH_STARTED']
+    after = {
+        path.relative_to(tmp_path): path.read_bytes()
+        for path in tmp_path.rglob('*')
+        if path.is_file()
+    }
+    assert after == before
+
+
+def test_read_only_replay_accepts_an_active_owner_without_taking_its_lock(tmp_path):
+    """Projection must coexist with the only writer and leave its epoch intact."""
+    with CoordinatorJournal.create(tmp_path, 'batch-a') as journal:
+        first = journal.append('BATCH_STARTED', 'start', {})
+        before = (tmp_path / 'coordinator_epoch.json').read_bytes()
+        replay = CoordinatorJournal.read_only_replay(tmp_path, 'batch-a')
+        assert replay.events == (first,)
+        assert (tmp_path / 'coordinator_epoch.json').read_bytes() == before
+        assert journal.append('LEASE_GRANTED', 'lease-1', {}).sequence == 2
+
+
+def test_read_only_replay_rejects_torn_tail_without_preserving_or_rotating_it(tmp_path):
+    """A reader cannot perform the writer's torn-tail recovery mutations."""
+    path, _, _ = seed(tmp_path)
+    path.write_bytes(path.read_bytes() + b'\x00\x00\x00')
+    before = {
+        item.relative_to(tmp_path): item.read_bytes()
+        for item in tmp_path.rglob('*') if item.is_file()
+    }
+    with pytest.raises(JournalCorruption, match='incomplete journal tail'):
+        CoordinatorJournal.read_only_replay(tmp_path, 'batch-a')
+    after = {
+        item.relative_to(tmp_path): item.read_bytes()
+        for item in tmp_path.rglob('*') if item.is_file()
+    }
+    assert after == before

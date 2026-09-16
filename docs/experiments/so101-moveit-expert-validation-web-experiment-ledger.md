@@ -7,20 +7,22 @@ success_contract: Source and package gates pass; fresh fixed four-point and adap
 worktree: /data/work/ws_moveit/.worktrees/teleop-expert-validation-web
 branch: codex/teleop-expert-validation-web
 base_commit: e1701375690321bc83b5f30ec044da1847d373aa
-current_commit: 12aeeb43ad68bc004fde9a3355388f7707e958ec
+current_commit: 2d85d53594df1b5b7292aba6d959f4a51bad398f
 evidence_root: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01
 confirmed_conclusions:
   - origin/main exactly matched the required documentation commit e1701375690321bc83b5f30ec044da1847d373aa at CP-001.
   - The canonical checkout and new implementation worktree were clean at CP-001.
   - No pre-existing SO-101 application stack or ROS nodes were observed at CP-001.
   - The production server and coordinator accept the final bound copied overlay without symlinks or source fallback.
-  - The manifest point source is an explicit closed API enum, and the final so101_teleop source gate passes 388 tests under -W error with no warning summary.
+  - The manifest point source is an explicit closed API enum; t38-final-source passes all 395 Teleop and 35 journal tests under -W error with only the documented system FastAPI/Pydantic compatibility warning excluded and no warning summary.
+  - EXP-045 completed all four simulation points as PASSED with authoritative qualification and cleanup, but its production Web API remained at the initial STARTED/UNRUN projection.
+  - EXP-045 used the worktree-derived release12 installed MuJoCo fork version 0.1.0 at e4c0241aee52a40727681bd5872c09bf814e941a, not a system 0.0.3 patch overlay.
 disproven_routes:
   - At commit 654756ba32cfc0697aff1444c79752ff1e61c4ee, a four-point manifest could not be returned because its source field violated the closed response model.
 open_hypotheses:
-  - The repaired installed API can now cross manifest creation and authorize a fresh sequential simulation campaign.
+  - A read-only verified journal projection and authoritative HTTP watcher can synchronize fresh Web progress and terminal state without acquiring upstream coordinator authority.
 latest_checkpoint: CP-003
-next_experiment: EXP-025
+next_experiment: EXP-046
 ```
 
 ## Registered evidence and ownership
@@ -1018,7 +1020,7 @@ decision: LIVE_RETRY_NOT_APPLICABLE_NO_VALID_FIRST_PASS
 
 ```yaml
 experiment_id: EXP-045
-status: PLANNED
+status: INVALID
 prior_experiment: EXP-041
 hypothesis: A repeated pause(true) request can recover a missed initial evidence snapshot by refreshing the control snapshot and dispatching one authoritative paused state snapshot without duplicating the pause lifecycle transition.
 single_variable: An already-paused set_pause request republishes control and authoritative state snapshots while preserving the existing no-duplicate-pause-notification contract.
@@ -1033,9 +1035,62 @@ evidence:
   - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t25-pause-retry-green2-build.log
   - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t25-pause-retry-green2.log
   - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t25-mujoco-simulation-full-green2.log
-decision: RUN_AFTER_RED_GREEN_REGRESSION_CLEAN_COMMITS_BUILD_AND_BINDING
+observed:
+  - Campaign campaign-d54278fee68f42e59c9c0ca8242d0bd7 and batch b2b97 ran through the release12 installed coordinator/core plugin path.
+  - All four selected points were PASSED; the coordinator terminal reason was POINTS_COMPLETE, qualification_passed and batch_cleanup_complete were true, and Worker worker-01 was STOPPED.
+  - Independent initial/terminal RGB inspection showed the distinct anchor positions and the cup in the red target circle after each completed attempt.
+  - No owned runtime process, port, container, short IPC root, or store lock survived cleanup.
+  - campaign-final-api.json still reported STARTED with all four points UNRUN and cleanup false because ProductionExpertValidationService cached only its initial projection.
+  - Readback of the actual executable/package.xml proved the worktree-derived MuJoCo fork version 0.1.0. The old so101-0.0.3-r8 git-describe prefix was only the nearest ancestor tag.
+new_boundary: PRODUCTION_WEB_PROJECTION_STALE
+decision: INVALID_WEB_ACCEPTANCE_DESPITE_VALID_FOUR_POINT_SIMULATION
 next_experiment: EXP-046
 ```
+
+### EXP-046 — Verified journal/Web terminal synchronization
+
+```yaml
+experiment_id: EXP-046
+status: PLANNED
+prior_experiment: EXP-045
+hypothesis: Read-only verified journal replay plus authoritative HTTP watching makes new Web campaigns progress to their actual upstream terminal state.
+single_variable: Fixed-mode Web projection and watcher synchronization; the release12 MuJoCo 0.1.0 core behavior remains unchanged.
+lifecycle: FRESH_ISOLATED_STACK
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+fixed_config: {worker_count: 1, max_points_per_worker: 4}
+success_criteria:
+  - Installed Web API reaches COMPLETED with four PASSED points, evaluated/execution counts of four, qualification_passed true, and batch_cleanup_complete true.
+  - New-campaign page watching reads authoritative HTTP projections and renders terminal point/Worker progress.
+  - Independent sealed image, MoveIt/controller, physics, Planning Scene, artifact-manifest and cleanup readbacks agree.
+invalid_criteria:
+  - Mixed/unbound install, wrong source commit, stale Web state, missing independent evidence, or surviving owned runtime processes.
+prestart_tests:
+  - t26-web-projection-red reproduced missing read-only replay and rejection of the real sealed-directory reference.
+  - t26-web-projection-green6 passed 2 of 2; t28-related-full passed 38 of 38.
+  - t27-production-projection-red reproduced STARTED after a terminal journal; GREEN passed 1 of 1.
+  - EXP-045's real 389-event journal now projects COMPLETED, four PASSED points, qualification and cleanup true, with its verified final frame cursor.
+  - t34-web-watch-red reproduced absent new-campaign watching and absent no-hint HTTP polling; GREEN passed 9 of 9.
+  - t35-web-full passed 91 tests and t35-web-build completed TypeScript/Vite output.
+decision: RUN_AFTER_FINAL_REGRESSION_SCOPED_COMMITS_FRESH_COPY_BUILD_AND_BINDING
+next_experiment: EXP-047
+```
+
+## Journal/Web synchronization repair checkpoint (in progress)
+
+- The production Web service did not consume its existing coordinator event reader. Fixed campaign GET/list now verify read-only journal frames and committed result references, merge point/Worker deltas, preserve upstream qualification policy, and persist the final accepted cursor without taking a coordinator lock or rotating its epoch.
+- The real runtime result reference names a sealed directory whose SHA256 covers `attempt_result_manifest.json`. The reader now supports that contract while retaining regular-file and hash checks.
+- New campaign pages previously never started a watcher, and a watcher with no hints never refreshed. The app now watches both new and restored campaigns; the client polls HTTP every two seconds and refreshes on every newer hint without treating hints as terminal truth.
+- The new production projection test is explicitly registered in CMake after t33-layout-red proved its omission.
+- Invalid/superseded command attempts retained: t26 GREEN 1/2 lacked ROS imports; GREEN 3 loaded the copied old demo package; GREEN 4/5 stopped at source-binding preflight; t29 strict 1/2 failed to exempt the exact external compatibility warning; t30 combined collection collided on duplicate module names; t30-demo-full2 was terminated as source-path binding was invalid (166 seconds, exit 143).
+- t32-demo-full completed 3,083 passes and one skip with four failures in 339.70 seconds: stale dependency-lock pin, a child loading copied rather than source modules, a genuine resume initialization-order bug, and an existing launch cleanup timing failure. The first three have targeted fixes pending focused readback; the launch case will be replayed without changing its acceptance semantics.
+- Ordinary demo fork warnings remain outside the requested Teleop warning scope. No benchmark suite was collected.
+- All t26 through t36 scratch trees are retained deletion candidates after readback. No evidence was deleted or archived; the registered durable root is unchanged.
+- t36-focused passed all 66 focused cases, including all four prior demo failures under their original acceptance assertions. The only two warnings were the documented external FastAPI/Pydantic emitters from collecting two package trees without package-local filters.
+- t37-active-red reproduced the actual active_attempt string/Worker lease contract mismatch. Fixed projections now match active attempt IDs through authoritative Worker leases and count physical execution only from ATTEMPT_STARTED, never from a lease/attempt allocation counter.
+- t38-final-source passed 430 tests (395 complete Teleop plus 35 journal), exit zero, 8.64 seconds, with the exact external compatibility warning excluded and no warning summary. The new active-owner and torn-tail tests prove that projection readers do not acquire, rotate, or repair coordinator authority.
+- t39-browser passed all 11 browser tests in 24.7 seconds. The full Web unit gate passed 91 tests and the TypeScript/Vite build passed; its existing large-chunk advisory is unrelated to pytest warnings.
+- Commit 2d85d53594df1b5b7292aba6d959f4a51bad398f synchronizes both dependency locks and the backend contract to the actual 0.1.0 gitlink, uses the allocator IPC root before authority construction during resume, and explicitly binds the no-rendering child test to its asserted source root.
+- t37/t38 scratch trees and t39 browser output are retained; scratch remains a deletion candidate only. No push, merge, evidence deletion, or real-robot action occurred.
 
 ## Task 1 checkpoint
 

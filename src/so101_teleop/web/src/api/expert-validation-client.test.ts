@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import { ExpertValidationApiError, ExpertValidationClient } from "./expert-validation-client";
 
@@ -25,6 +25,33 @@ const lease = {
 };
 
 describe("ExpertValidationClient", () => {
+  test("watch polls authoritative HTTP without hints and stops cleanly", async () => {
+    vi.useFakeTimers();
+    try {
+      const terminal = { campaign_id: "campaign-1", sequence: 2, status: "COMPLETED" };
+      const transport = recorder([{ ok: true, status: 200, body: terminal }]);
+      const close = vi.fn();
+      const client = new ExpertValidationClient(
+        transport.fetcher,
+        () => "command-1",
+        () => ({ addEventListener: vi.fn(), close }) as unknown as WebSocket,
+      );
+      const apply = vi.fn();
+      const stop = client.watchCampaign("campaign-1", 1, apply);
+
+      await vi.advanceTimersByTimeAsync(2_000);
+
+      expect(transport.calls).toHaveLength(1);
+      expect(apply).toHaveBeenCalledWith(terminal);
+      stop();
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(transport.calls).toHaveLength(1);
+      expect(close).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("parallel start preserves admitted mode N and K", async () => {
     const transport = recorder([
       { ok: true, status: 200, body: { receipt_id: "receipt-1", admitted: true } },

@@ -67,19 +67,21 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
   const sessionId = useMemo(stableSessionId, []);
 
   useEffect(() => {
-    let stopWatching: (() => void) | undefined;
     let disposed = false;
     api.capabilities().then(setCapabilities).catch(() => setNotice("Capabilities unavailable"));
     api.restoreCampaign?.().then((value) => {
       if (!value || disposed) return;
       setCampaign(value);
-      stopWatching = api.watchCampaign?.(value.campaign_id, value.sequence, setCampaign);
     });
     return () => {
       disposed = true;
-      stopWatching?.();
     };
   }, [api]);
+
+  useEffect(() => {
+    if (!campaign) return;
+    return api.watchCampaign?.(campaign.campaign_id, campaign.sequence, setCampaign);
+  }, [api, campaign?.campaign_id]);
 
   const authority = (): LeaseAuthority => {
     if (!lease) throw new Error("LEASE_REQUIRED");
