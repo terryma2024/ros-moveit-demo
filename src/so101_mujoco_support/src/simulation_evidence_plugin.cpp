@@ -190,7 +190,13 @@ msg::SimulationEvidence EvidenceBuilder::build(
       continue;
     }
     mjtNum wrench[6]{};
-    mj_contactForce(model, data, index, wrench);
+    if (contact.efc_address >= 0) {
+      if (data->efc_force == nullptr || contact.efc_address >= data->nefc) {
+        output.truncated = true;
+        continue;
+      }
+      mj_contactForce(model, data, index, wrench);
+    }
     if (!std::isfinite(wrench[0])) {
       continue;
     }

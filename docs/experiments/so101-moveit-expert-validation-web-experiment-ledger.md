@@ -855,7 +855,7 @@ decision: LIVE_RETRY_NOT_APPLICABLE_NO_VALID_FIRST_PASS
 
 ```yaml
 experiment_id: EXP-037
-status: PLANNED
+status: INVALID
 prior_experiment: EXP-033
 hypothesis: Explicitly binding the Broker runtime mount to the validated same-UID, 0700, batch-specific external IPC root closes the container argument boundary without exposing Worker tokens or accepting arbitrary external paths.
 single_variable: container_run_argv accepts an explicit runtime_ipc_root only when it equals /run/user/<uid>/so101-<batch_id> and the Broker child name matches its generation.
@@ -873,7 +873,21 @@ evidence:
   - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t23-broker-ipc-green4.log
   - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t23-broker-composition-green.log
   - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t23-parallel-cli-green.log
-decision: RUN_AFTER_CLEAN_COMMIT_BUILD_AND_TEST
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp037/manifest-post.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp037/preflight-response.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp037/start-response.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp037/campaigns/campaign-4a5dfa57289649708421cc566b080af8/bc800.coordinator.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp037/campaigns/campaign-4a5dfa57289649708421cc566b080af8/bc800/workers/worker-01/worker-run-results.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp037/postinventory.txt
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp037/store-lock-readback.txt
+observed:
+  - Release10 passed health, capability, lease, exact four-anchor manifest, admitted N1/K4 preflight, and campaign-start boundaries.
+  - The Broker accepted the validated short IPC root, published readiness, and connected worker-01; MoveIt and the MuJoCo task station started.
+  - ros2_control_node then exited with SIGSEGV in mj_contactForce called by SimulationEvidencePlugin::EvidenceBuilder::build from the controller write-path plugin update.
+  - The update path receives an mj_copyData control snapshot; current unit tests cover authoritative mjData after mj_forward but do not cover contact-force extraction from a copied snapshot.
+  - No point execution started. Cleanup removed the Broker container, Worker/coordinator processes, and /run/user/1000/so101-bc800; the service port was released and the durable-store lock was reacquired.
+first_bad_boundary: COPIED_MJDATA_CONTACT_FORCE_SEGFAULT
+decision: STOP_FAIL_CLOSED_AND_FIX_COPIED_SNAPSHOT_CONTACT_FORCE_EXTRACTION
 next_experiment: EXP-038
 ```
 
@@ -881,12 +895,14 @@ next_experiment: EXP-038
 
 ```yaml
 experiment_id: EXP-038
-status: PLANNED
+status: NOT_RUN
 prior_experiment: EXP-037
 single_variable: execution_mode=PARALLEL, worker_count=2, max_points_per_worker=2
 lifecycle: FRESH_ISOLATED_STACK
 selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
-decision: RUN_AFTER_EXP_037_VALID
+observed:
+  - Not started because EXP-037 failed before controller readiness and point execution.
+decision: BLOCKED_BY_EXP_037_INVALID
 next_experiment: EXP-039
 ```
 
@@ -894,11 +910,13 @@ next_experiment: EXP-039
 
 ```yaml
 experiment_id: EXP-039
-status: PLANNED
+status: NOT_RUN
 prior_experiment: EXP-038
 single_variable: execution_mode=ADAPTIVE with preferred W8 and fallback [6, 4, 2, 1]
 lifecycle: FRESH_ISOLATED_STACK
-decision: RUN_AFTER_EXP_038_VALID
+observed:
+  - Not started because no valid sequential runtime result exists after EXP-037.
+decision: BLOCKED_BY_EXP_037_INVALID
 next_experiment: EXP-040
 ```
 
@@ -906,11 +924,37 @@ next_experiment: EXP-040
 
 ```yaml
 experiment_id: EXP-040
-status: PLANNED
+status: NOT_APPLICABLE
 prior_experiment: EXP-039
 single_variable: FULL_RESTART retry of eligible FAILED points only
 lifecycle: FRESH_ISOLATED_STACK_PER_POINT
-decision: CONDITIONAL_AFTER_EXP_039
+observed:
+  - No authoritative first-pass business result or eligible FAILED point exists; no retry was manufactured.
+decision: LIVE_RETRY_NOT_APPLICABLE_NO_VALID_FIRST_PASS
+```
+
+### EXP-041 — Copied-contact snapshot safety and fresh sequential simulation
+
+```yaml
+experiment_id: EXP-041
+status: PLANNED
+prior_experiment: EXP-037
+hypothesis: Contact-force evidence can be extracted safely from the controller write-path copy without dereferencing absent copied solver storage, while authoritative physics-step evidence retains exact forces.
+single_variable: Contact-force extraction rejects a copied snapshot whose active constraint has no solver-force storage, proven by a copied-contact regression before rebuilding a fresh bound overlay.
+lifecycle: FRESH_ISOLATED_STACK
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+fixed_config: {worker_count: 1, max_points_per_worker: 4}
+prestart_tests:
+  - Valid RED copied-contact snapshot regression exited 139 in mj_contactForce.
+  - GREEN copied-contact snapshot regression passed under gdb readback after the guard.
+  - Full simulation-evidence binary passed 21 tests; package CTest passed 1 of 1.
+evidence:
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t24-copied-contact-red3.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t24-copied-contact-green-gdb.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t24-simulation-evidence-full-green2.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/t24-support-ctest-green2.log
+decision: RUN_AFTER_RED_GREEN_REGRESSION_CLEAN_COMMIT_BUILD_AND_BINDING
+next_experiment: EXP-042
 ```
 
 ## Task 1 checkpoint
