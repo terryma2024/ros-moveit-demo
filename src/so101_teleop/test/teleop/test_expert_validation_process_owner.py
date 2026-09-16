@@ -29,7 +29,7 @@ class RecordingStore:
 
 
 def request(tmp_path):
-    root = tmp_path.resolve()
+    root = (tmp_path / "batch-a").resolve()
     return CoordinatorStartRequest(
         campaign_id="campaign-a",
         batch_id="batch-a",
@@ -67,17 +67,23 @@ def test_spawn_records_intent_before_running_ack(tmp_path):
 
 def test_fixed_spawn_leaves_batch_root_for_coordinator_to_create(tmp_path, monkeypatch):
     batch_root = tmp_path / "campaign-a" / "batch-a"
-    start_request = request(batch_root)
+    start_request = request(batch_root.parent)
+    observed = {}
 
     def observe_spawn(*_args, **_kwargs):
         assert batch_root.parent.is_dir()
         assert not batch_root.exists()
+        observed["stream"] = _kwargs["stdout"]
+        assert Path(_kwargs["stdout"].name) == batch_root.parent / "batch-a.coordinator.log"
+        assert _kwargs["stderr"] is process_owner_module.subprocess.STDOUT
         raise RuntimeError("SPAWN_OBSERVED")
 
     monkeypatch.setattr(process_owner_module.subprocess, "Popen", observe_spawn)
 
     with pytest.raises(RuntimeError, match="SPAWN_OBSERVED"):
         ExecutionProcessOwner().spawn(start_request)
+    assert observed["stream"].closed
+    assert (batch_root.parent / "batch-a.coordinator.log").stat().st_mode & 0o777 == 0o600
 
 
 def test_owner_reconnects_only_to_exact_recorded_coordinator(tmp_path):

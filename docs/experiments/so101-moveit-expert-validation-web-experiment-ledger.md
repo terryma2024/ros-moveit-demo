@@ -709,7 +709,7 @@ decision: LIVE_RETRY_NOT_APPLICABLE_NO_VALID_FIRST_PASS
 
 ```yaml
 experiment_id: EXP-029
-status: PLANNED
+status: INVALID
 prior_experiment: EXP-025
 hypothesis: Leaving the final fixed batch evidence root absent until coordinator exec restores atomic evidence ownership and permits the exact four-anchor N1/K4 campaign.
 single_variable: ExecutionProcessOwner creates only batch_root.parent for fixed starts; the coordinator creates batch_root itself.
@@ -717,20 +717,39 @@ lifecycle: FRESH_ISOLATED_STACK
 selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
 fixed_config: {worker_count: 1, max_points_per_worker: 4}
 success_criteria: Four authoritative PASSED results with complete runtime, artifact, cleanup, Web, and independently inspected visual evidence.
-decision: RUN_AFTER_CLEAN_COMMIT_BUILD_AND_TEST
-next_experiment: EXP-030
+observed:
+  - Release8 passed the five-package copy-install build, all 46 installed Teleop CTest commands, and 436 underlying tests with no failures.
+  - Health, capabilities, lease, exact four-anchor manifest POST/GET, and N1/K4 preflight all succeeded; start returned campaign-ae2346f120344a128717165a529d89c2 and batch bc3f0.
+  - The coordinator atomically created its previously absent batch root, verified the bound release8 provenance, allocated Worker resources and short IPC, started a healthy Broker, and wrote a Worker spec.
+  - The Worker exited before registering or writing a result. The coordinator entered SUPERVISOR_SHUTDOWN with all four points UNRUN; cleanup removed owned processes and runtime IPC but could not prove Broker-container cleanup because no hardened container ID had been retained.
+  - Existing ExecutionProcessOwner routing sent coordinator stdout and stderr to /dev/null, so the exact Worker exception was not auditable. A no-run construction probe passed, narrowing the failure to the Worker run/control phase.
+  - The validation server stopped; no coordinator, Worker, Broker container, MoveIt, controller, or MuJoCo process survived, and the durable-store lock was reacquired and released.
+first_bad_boundary: WORKER_RUNTIME_EARLY_EXIT_WITHOUT_DURABLE_PROCESS_LOG
+evidence:
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp029/manifest-post.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp029/preflight-response.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp029/start-response.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp029/campaigns/campaign-ae2346f120344a128717165a529d89c2/bc3f0/coordinator/aggregate_results.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp029/campaigns/campaign-ae2346f120344a128717165a529d89c2/bc3f0/cleanup-gates.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp029/worker-construction-probe.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp029/postinventory.txt
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp029/store-lock-readback.txt
+decision: STOP_FAIL_CLOSED_AND_RETAIN_COORDINATOR_PROCESS_LOG
+next_experiment: EXP-033
 ```
 
 ### EXP-030 — Fresh same-selection parallel simulation after batch-root repair
 
 ```yaml
 experiment_id: EXP-030
-status: PLANNED
+status: NOT_RUN
 prior_experiment: EXP-029
 single_variable: execution_mode=PARALLEL, worker_count=2, max_points_per_worker=2
 lifecycle: FRESH_ISOLATED_STACK
 selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
-decision: RUN_AFTER_EXP_029_VALID
+observed:
+  - Not started because EXP-029 stopped at an unobservable Worker runtime early exit.
+decision: BLOCKED_BY_EXP_029_INVALID
 next_experiment: EXP-031
 ```
 
@@ -738,11 +757,13 @@ next_experiment: EXP-031
 
 ```yaml
 experiment_id: EXP-031
-status: PLANNED
+status: NOT_RUN
 prior_experiment: EXP-030
 single_variable: execution_mode=ADAPTIVE with preferred W8 and fallback [6, 4, 2, 1]
 lifecycle: FRESH_ISOLATED_STACK
-decision: RUN_AFTER_EXP_030_VALID
+observed:
+  - Not started because no valid sequential runtime result exists after EXP-029.
+decision: BLOCKED_BY_EXP_029_INVALID
 next_experiment: EXP-032
 ```
 
@@ -750,11 +771,65 @@ next_experiment: EXP-032
 
 ```yaml
 experiment_id: EXP-032
-status: PLANNED
+status: NOT_APPLICABLE
 prior_experiment: EXP-031
 single_variable: FULL_RESTART retry of eligible FAILED points only
 lifecycle: FRESH_ISOLATED_STACK_PER_POINT
-decision: CONDITIONAL_AFTER_EXP_031
+observed:
+  - No authoritative first-pass business result or eligible FAILED point exists; no retry was manufactured.
+decision: LIVE_RETRY_NOT_APPLICABLE_NO_VALID_FIRST_PASS
+```
+
+### EXP-033 — Durable coordinator diagnostics and fresh sequential simulation
+
+```yaml
+experiment_id: EXP-033
+status: PLANNED
+prior_experiment: EXP-029
+hypothesis: A private exclusive coordinator process log will expose the exact Worker failure while preserving coordinator-owned batch-root creation and bounded file-descriptor ownership.
+single_variable: ExecutionProcessOwner routes merged coordinator stdout/stderr to a 0600 O_EXCL campaign log instead of /dev/null.
+lifecycle: FRESH_ISOLATED_STACK
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+fixed_config: {worker_count: 1, max_points_per_worker: 4}
+success_criteria: Four authoritative PASSED results, or a precise first bad boundary retained in the coordinator log, with complete owned-process readback.
+decision: RUN_AFTER_CLEAN_COMMIT_BUILD_AND_TEST
+next_experiment: EXP-034
+```
+
+### EXP-034 — Fresh same-selection parallel simulation after diagnostic repair
+
+```yaml
+experiment_id: EXP-034
+status: PLANNED
+prior_experiment: EXP-033
+single_variable: execution_mode=PARALLEL, worker_count=2, max_points_per_worker=2
+lifecycle: FRESH_ISOLATED_STACK
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+decision: RUN_AFTER_EXP_033_VALID
+next_experiment: EXP-035
+```
+
+### EXP-035 — Fresh twenty-point adaptive simulation after diagnostic repair
+
+```yaml
+experiment_id: EXP-035
+status: PLANNED
+prior_experiment: EXP-034
+single_variable: execution_mode=ADAPTIVE with preferred W8 and fallback [6, 4, 2, 1]
+lifecycle: FRESH_ISOLATED_STACK
+decision: RUN_AFTER_EXP_034_VALID
+next_experiment: EXP-036
+```
+
+### EXP-036 — Conditional FULL_RESTART retry after diagnostic repair
+
+```yaml
+experiment_id: EXP-036
+status: PLANNED
+prior_experiment: EXP-035
+single_variable: FULL_RESTART retry of eligible FAILED points only
+lifecycle: FRESH_ISOLATED_STACK_PER_POINT
+decision: CONDITIONAL_AFTER_EXP_035
 ```
 
 ## Task 1 checkpoint

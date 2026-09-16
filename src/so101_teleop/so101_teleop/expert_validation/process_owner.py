@@ -138,20 +138,29 @@ class ExecutionProcessOwner:
             raise CoordinatorOwnershipError("START_REQUEST_INVALID")
         if self._store is not None:
             self._store.record_execution_owner_intent(request)
-        request.batch_root.parent.mkdir(parents=True, exist_ok=True) if isinstance(
-            request, CoordinatorStartRequest
-        ) else request.runtime_root.mkdir(parents=True, exist_ok=True)
+        if isinstance(request, CoordinatorStartRequest):
+            request.batch_root.parent.mkdir(parents=True, exist_ok=True)
+            process_log = request.batch_root.parent / f"{request.batch_id}.coordinator.log"
+        else:
+            request.runtime_root.mkdir(parents=True, exist_ok=True)
+            process_log = request.runtime_root / "adaptive-wrapper.log"
         environment = os.environ.copy()
         environment.update(request.environment)
-        process = subprocess.Popen(
-            request.argv,
-            env=environment,
-            start_new_session=True,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            close_fds=True,
-        )
+        with open(
+            process_log,
+            "xb",
+            buffering=0,
+            opener=lambda path, flags: os.open(path, flags | os.O_NOFOLLOW, 0o600),
+        ) as output:
+            process = subprocess.Popen(
+                request.argv,
+                env=environment,
+                start_new_session=True,
+                stdin=subprocess.DEVNULL,
+                stdout=output,
+                stderr=subprocess.STDOUT,
+                close_fds=True,
+            )
         self._children[process.pid] = process
         try:
             identity = self._await_identity(process.pid, request.argv)
