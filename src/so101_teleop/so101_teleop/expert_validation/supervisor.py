@@ -30,10 +30,13 @@ from .preflight import (
 
 
 class ExpertValidationSupervisor:
-    def __init__(self, *, store, process_owner, preflight_engine: PreflightEngine) -> None:
+    def __init__(
+        self, *, store, process_owner, preflight_engine: PreflightEngine, execution_port=None
+    ) -> None:
         self.store = store
         self.process_owner = process_owner
         self.preflight_engine = preflight_engine
+        self._execution_port = execution_port
         self._requests: dict[str, CampaignStartRequest] = {}
 
     async def preflight(self, request: CampaignStartRequest) -> CampaignPreflightReceipt:
@@ -170,7 +173,7 @@ class ExpertValidationSupervisor:
                 "SO101_FIXED_CONTROL_EPOCH": "1",
                 "SO101_FIXED_CONTROL_SOCKET": str(control_socket),
             })
-            return CoordinatorStartRequest(
+            return self._apply_execution_port(CoordinatorStartRequest(
                 campaign_id=request.campaign_id,
                 batch_id=batch_id,
                 execution_mode=config.execution_mode,
@@ -183,7 +186,7 @@ class ExpertValidationSupervisor:
                 control_token_sha256=token_sha,
                 coordinator_epoch=1,
                 selected_point_ids=selected,
-            )
+            ))
         config = receipt.execution_config
         wrapper = request.adaptive_wrapper_path or (
             Path(__file__).resolve().parents[4] / "scripts/run_so101_adaptive_batch.zsh"
@@ -212,7 +215,7 @@ class ExpertValidationSupervisor:
             argv.extend(("--point-id", point_id))
         if request.provenance_binding_path is not None:
             argv.extend(("--provenance-binding", str(request.provenance_binding_path)))
-        return AdaptiveStartRequest(
+        return self._apply_execution_port(AdaptiveStartRequest(
             campaign_id=request.campaign_id,
             batch_id=batch_id,
             preferred_worker_count=config.preferred_worker_count,
@@ -230,7 +233,19 @@ class ExpertValidationSupervisor:
             grounded_sam_manifest_sha256=request.grounded_sam_manifest_sha256,
             broker_image_id=request.broker_image_id,
             selected_point_ids=selected,
-        )
+        ))
+
+    def _apply_execution_port(self, owner_request):
+        """Only a dedicated test launcher injects this typed port; the
+        production entry point always uses the installed executables."""
+        port = self._execution_port
+        if port is None:
+            return owner_request
+        from dataclasses import replace
+
+        if isinstance(owner_request, CoordinatorStartRequest):
+            return replace(owner_request, argv=tuple(port.fixed_argv(owner_request)))
+        return replace(owner_request, argv=tuple(port.adaptive_argv(owner_request)))
 
     async def start_retries(self, campaign_id: str, point_ids: tuple[str, ...]):
         if not point_ids:

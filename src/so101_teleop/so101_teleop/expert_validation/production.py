@@ -947,9 +947,18 @@ class ProductionExpertValidationService(ExpertValidationService):
 
 
 def create_production_service(
-    evidence_root: Path, *, environment: Mapping[str, str] | None = None
+    evidence_root: Path,
+    *,
+    environment: Mapping[str, str] | None = None,
+    execution_port=None,
 ) -> ProductionExpertValidationService:
-    """Compose all durable authorities used by the installed server entry point."""
+    """Compose all durable authorities used by the installed server entry point.
+
+    ``execution_port`` is a typed test seam: only the repository's L2
+    installed-test launcher passes it.  The production console entry point
+    (``main.py``) never does, so installed production composition always
+    targets the installed upstream executables.
+    """
 
     environment = dict(os.environ if environment is None else environment)
     layout = ProductionRuntimeLayout.discover(environment)
@@ -962,7 +971,8 @@ def create_production_service(
             singleton_probe=lambda: not owner.has_active_execution(),
         )
         supervisor = ExpertValidationSupervisor(
-            store=store, process_owner=owner, preflight_engine=preflight
+            store=store, process_owner=owner, preflight_engine=preflight,
+            execution_port=execution_port,
         )
         lease = ValidationLeaseService(store, supervisor)
         probes = QualificationProbes(
