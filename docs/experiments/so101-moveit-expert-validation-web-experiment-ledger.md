@@ -7,24 +7,27 @@ success_contract: Source and package gates pass; fresh fixed four-point and adap
 worktree: /data/work/ws_moveit/.worktrees/teleop-expert-validation-web
 branch: codex/teleop-expert-validation-web
 base_commit: e1701375690321bc83b5f30ec044da1847d373aa
-current_commit: 3442b18c15201450a4f6b2c134f1ee974d8ce3f2
+current_commit: 654756ba32cfc0697aff1444c79752ff1e61c4ee
 evidence_root: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01
 confirmed_conclusions:
   - origin/main exactly matched the required documentation commit e1701375690321bc83b5f30ec044da1847d373aa at CP-001.
   - The canonical checkout and new implementation worktree were clean at CP-001.
   - No pre-existing SO-101 application stack or ROS nodes were observed at CP-001.
+  - The production server and coordinator accept the final bound copied overlay without symlinks or source fallback.
+  - The final so101_teleop source gate passes 387 tests under -W error with no warning summary.
 disproven_routes:
-  - NONE
+  - A four-point manifest can currently be returned by the production API; its internal source field violates the closed response model and produces HTTP 500.
 open_hypotheses:
-  - The merged fixed coordinator and adaptive Runner interfaces satisfy all Web adapter contracts without compatibility shims.
-latest_checkpoint: CP-002
-next_experiment: EXP-006
+  - Fixing the manifest response projection is required before any Web-authorized simulation can start.
+latest_checkpoint: CP-003
+next_experiment: STOP_FAIL_CLOSED
 ```
 
 ## Registered evidence and ownership
 
 - Durable evidence root: `/data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01`
 - Dispatch ID: `58403c0d-21cf-49b1-a2d3-1ab92a5f7b2a`
+- Runtime-fix dispatch ID: `23EAC586-3035-444F-96F9-54B85A7E427D`
 - Host: `ai-station`
 - Python: `/usr/bin/python3` (`Python 3.12.3`)
 - Bun: `/home/lenovo/.bun/bin/bun` (`1.3.14`)
@@ -207,22 +210,33 @@ run has a fresh monotonic identity.
 
 ```yaml
 experiment_id: EXP-006
-status: PLANNED
+status: PASS
 prior_experiment: EXP-004
 hypothesis: The installed dedicated server now composes the durable production service and the coordinator accepts only an explicitly content-bound external overlay.
 prediction: The installed server binds, serves health, and shuts down cleanly; the exact installed coordinator dry run crosses both original CP-002 boundaries while stale, mixed, mismatched, and unbound overlays remain rejected.
 single_variable: Production service composition plus explicit external-overlay provenance binding.
 lifecycle: ISOLATED_NO_SIMULATION_BOUNDARY_PROBES
-source_commit: 3442b18c15201450a4f6b2c134f1ee974d8ce3f2
-planned_build_overlay: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/runtime-fix-build
-planned_install_overlay: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/runtime-fix-install
+source_commit: 654756ba32cfc0697aff1444c79752ff1e61c4ee
+build_overlay: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/runtime-fix-build-release
+install_overlay: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/runtime-fix-install-release
 success_criteria:
   - Focused RED evidence reproduces both original boundaries and focused GREEN gates pass.
   - Installed server returns health from the production factory and releases its singleton lock on clean shutdown.
   - Coordinator dry run accepts the explicit binding and records exact source commit, package prefixes, entry points, config, catalog, and executable identities.
 failure_criteria: Either original boundary remains after the fresh install, or a negative identity case is accepted.
 invalid_criteria: Stale install, dirty source, wrong test Python/TMPDIR, source-tree fallback, symlink bypass, or any simulation process started by these probes.
-decision: RUN_AFTER_FRESH_INSTALL
+observed:
+  - The release copy overlay contains ordinary installed files and is bound by runtime-fix-release-overlay-binding.json to exact source, build, install, package-prefix, console, module, config, catalog, and entry-point identities.
+  - The installed coordinator dry run crossed PROVENANCE_MIXED_OVERLAY and TRUSTED_FINAL_TARGET_INVALID, recorded VALIDATION_PASSED, and completed cleanup.
+  - The installed production server returned health, advertised only SEQUENTIAL without manufacturing parallel/adaptive acceptance, served the installed SPA, shut down cleanly, and released its durable-store lock.
+  - Negative provenance-binding tests, 117 coordinator/adaptive tests, and all 387 strict-warning Teleop source tests passed.
+evidence:
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/runtime-fix-release-overlay-binding.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/runtime-fix-coordinator-release.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/runtime-fix-server-release.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/runtime-fix-server-health.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/runtime-fix-server-capabilities.json
+decision: ADVANCE_TO_EXP_007
 next_experiment: EXP-007
 ```
 
@@ -230,26 +244,37 @@ next_experiment: EXP-007
 
 ```yaml
 experiment_id: EXP-007
-status: PLANNED
+status: INVALID
 prior_experiment: EXP-006
 hypothesis: The repaired Web authority can start the fixed coordinator for the frozen four-point selection with N1/K4 and retain authoritative point and cleanup evidence.
 prediction: All four points reach an authoritative terminal state and the owned stack completes cleanup without identity or evidence leakage.
 single_variable: execution_mode=SEQUENTIAL, worker_count=1, max_points_per_worker=4
 lifecycle: FRESH_ISOLATED_STACK
-source_commit: 3442b18c15201450a4f6b2c134f1ee974d8ce3f2
+source_commit: 654756ba32cfc0697aff1444c79752ff1e61c4ee
 selection: [task_start, cup_test_forward_5cm, sample_05_near_center, sample_14_far_right]
 success_criteria: Four authoritative PASSED results, all fixed qualification flags true, complete cleanup, and independently inspected visual evidence.
 failure_criteria: Any authoritative business failure, indeterminate result, or incomplete cleanup.
 invalid_criteria: Provenance, reset/session, ownership, camera, MoveIt/controller, physics, Planning Scene, artifact, or visual evidence mismatch.
-decision: RUN_ONLY_AFTER_EXP_006_PASS
-next_experiment: EXP-008
+observed:
+  - Lease acquisition succeeded and persisted generation 1.
+  - Four-point manifest creation persisted manifest-d38e32943c674b76856e6688144ea9cb, but FastAPI returned HTTP 500 before preflight.
+  - Each internal manifest point includes source=anchor while the closed ManifestPointResponse omits source; response validation reported four extra_forbidden errors.
+  - No campaign directory, coordinator, Worker, Broker, MoveIt, controller, MuJoCo, or robot action was started. Post-failure inventory was clean and the durable-store lock was released.
+first_bad_boundary: MANIFEST_RESPONSE_VALIDATION_ERROR
+evidence:
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/runtime-fix-live-sequential-lease.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/runtime-fix-live-first-invalid-boundary.txt
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/runtime-fix-server-live.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/runtime-fix-live-postinventory.txt
+decision: STOP_RUNTIME_SEQUENCE_FAIL_CLOSED
+next_experiment: STOP_FAIL_CLOSED
 ```
 
 ### EXP-008 — Fresh same-selection parallel simulation
 
 ```yaml
 experiment_id: EXP-008
-status: PLANNED
+status: NOT_RUN
 prior_experiment: EXP-007
 hypothesis: The identical four-point selection runs through two isolated fixed Workers with dynamic leases and no cross-Worker leakage.
 prediction: N2/K2 reaches a safe terminal state with distinct Worker, ROS domain, simulation session, artifact, and cleanup identities.
@@ -260,7 +285,9 @@ selection: [task_start, cup_test_forward_5cm, sample_05_near_center, sample_14_f
 success_criteria: Four authoritative PASSED results with correct N2/K2 ownership, Broker routing, evidence isolation, and complete cleanup.
 failure_criteria: Any business failure, admission failure, cross-Worker leak, or incomplete cleanup.
 invalid_criteria: Any provenance/reset/session/owner mismatch, stale artifact, duplicate lease, or missing per-Worker evidence.
-decision: RUN_ONLY_AFTER_EXP_007_SAFE_TERMINAL
+observed:
+  - Not started because EXP-007 failed at the production manifest response boundary before simulation start.
+decision: BLOCKED_BY_EXP_007_INVALID
 next_experiment: EXP-009
 ```
 
@@ -268,7 +295,7 @@ next_experiment: EXP-009
 
 ```yaml
 experiment_id: EXP-009
-status: PLANNED
+status: NOT_RUN
 prior_experiment: EXP-008
 hypothesis: The installed production wrapper and Runner own the full W8/W6/W4/W2/W1 adaptive lifecycle and preserve authoritative results across any real infrastructure fallback.
 prediction: The exact twenty-point catalog reaches COMPLETED or COMPLETED_WITH_FAILURES with top-level Runner journal authority, sealed generations, and complete cleanup.
@@ -278,7 +305,9 @@ source_commit: 3442b18c15201450a4f6b2c134f1ee974d8ce3f2
 success_criteria: Twenty authoritative final states, exact wrapper/Runner handshake and ownership, truthful fallback history, complete cleanup, and independently inspected visual evidence.
 failure_criteria: INFRA_FAILED, unsafe cleanup, unknown descendants, or missing authoritative final point state.
 invalid_criteria: Fixed-K semantics, non-production wrapper, provenance mismatch, stale evidence, Teleop-derived Runner truth, or missing generation evidence.
-decision: RUN_ONLY_AFTER_EXP_008_SAFE_TERMINAL
+observed:
+  - Not started because EXP-007 failed closed before a valid sequential campaign existed.
+decision: BLOCKED_BY_EXP_007_INVALID
 next_experiment: EXP-010
 ```
 
@@ -286,7 +315,7 @@ next_experiment: EXP-010
 
 ```yaml
 experiment_id: EXP-010
-status: PLANNED_CONDITIONAL
+status: NOT_APPLICABLE
 prior_experiment: EXP-009
 hypothesis: An eligible authoritative FAILED point, if one exists, can be retried only as a new serial N1/K1 FULL_RESTART batch after prior cleanup is committed.
 prediction: Each eligible selected point receives a new batch, attempt, simulation session, domain, owner, evidence child, and cleanup receipt; otherwise the ledger records LIVE_RETRY_NOT_APPLICABLE_ALL_SUCCEEDED.
@@ -296,7 +325,9 @@ source_commit: 3442b18c15201450a4f6b2c134f1ee974d8ce3f2
 success_criteria: Eligible retries satisfy the independent restart contract, or no eligible failure exists and non-applicability is recorded without manufacturing one.
 failure_criteria: Reuse of a first-pass Worker/session, retry before cleanup, or unsafe terminal cleanup.
 invalid_criteria: Retrying PASSED, INDETERMINATE, UNRUN, unresolved INVALID, or adaptive infrastructure interruption as a product failure.
-decision: RUN_ONLY_IF_EXP_009_HAS_ELIGIBLE_FAILED_POINTS
+observed:
+  - No authoritative adaptive terminal campaign or eligible FAILED point exists; no retry was manufactured.
+decision: LIVE_RETRY_NOT_APPLICABLE_NO_VALID_FIRST_PASS
 ```
 
 ## Task 1 checkpoint
@@ -499,4 +530,39 @@ disproven_routes:
 open_risks:
   - No fresh task-camera, MoveIt/controller, physics, Planning Scene, fixed-parallel, adaptive, cleanup, visual, or live-retry evidence exists for this implementation.
 next_command: Add and test a production ExpertValidationService composition, add an adaptive wrapper handshake compatible with exact ownership, and make installed provenance accept the explicitly bound task-owned overlay without weakening source/install identity checks; then create fresh experiment IDs instead of reusing EXP-002 through EXP-004.
+```
+
+## Runtime-fix checkpoint
+
+- Runtime repair commits from CP-002 are `8a59deaa2`, `3442b18c1`, `6e9be24e2`, `40590e94c`, `458224107`, `382beb92f`, and `654756ba3`.
+- The final non-symlink overlay is `runtime-fix-install-release`; its source commit is `654756ba32cfc0697aff1444c79752ff1e61c4ee` and its closed binding is `runtime-fix-release-overlay-binding.json`.
+- Final source warning gate `runtime-fix-teleop-strict-release` passed 387 tests under `-W error`. Only the two exact external FastAPI/Pydantic emitters were exempted, and the run produced no warning summary.
+- Release colcon gates passed: all 46 Teleop CTest commands and 386 underlying pytest cases were green; the proportionate installed coordinator/adaptive gate passed 117 tests. The ordinary suite did not collect `benchmark_test`.
+- Web unit, TypeScript build, and Playwright gates remained green at 89 tests, successful production build, and 11 browser tests respectively.
+- EXP-006 passed both repaired runtime boundaries. The final coordinator dry run returned `VALIDATION_PASSED` with cleanup complete; the dedicated server returned health and installed SPA content, advertised only `SEQUENTIAL`, exited zero, and released its lock.
+- EXP-007 stopped before preflight or simulation: the production manifest response failed closed with four `extra_forbidden` errors on the internal `source` field. EXP-008 and EXP-009 were not run; EXP-010 is not applicable because no valid first pass or eligible failed point exists.
+- Pre- and post-live inventories found no owned Gazebo, MuJoCo, MoveIt, coordinator, Worker, Broker, or validation-server process. No campaign directory was created.
+- Retained run: `/data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01`.
+- Archived runs: none.
+- Deletion candidates retained without deletion: every `scratch/` attempt; superseded `runtime-fix-build*`, `runtime-fix-install*`, and `runtime-fix-log*` trees except the release set; failed and superseded test-result/log trees; `e6d`, `e6v`, `e6a`, and final dry-run `e6r`; and all earlier build/install/test candidates already listed at CP-002.
+
+## Checkpoint CP-003
+
+```yaml
+checkpoint_id: CP-003
+last_valid_experiment: EXP-006
+current_hypothesis: The copied-overlay runtime composition is valid, but the production manifest response projection must exclude or model its internal source field before any Web-authorized simulation can start.
+working_tree_status: only the task-owned experiment ledger is modified before its final commit
+owned_processes: no validation server, coordinator, adaptive wrapper, Worker, Broker, MoveIt, controller, Gazebo, or MuJoCo process survives
+preserved_processes: all processes not explicitly spawned and recorded by this task
+confirmed_conclusions:
+  - Both original CP-002 runtime boundaries are repaired without symlinks or source fallback.
+  - Final source, Web, browser, installed Teleop, and proportionate coordinator/adaptive gates pass.
+  - so101_teleop emits no first-party pytest warnings under the strict final gate.
+  - Production manifest creation mutates durable state before its response fails closed on an undeclared source field.
+disproven_routes:
+  - The current closed ManifestPointResponse can serialize the canonical internal manifest point document.
+open_risks:
+  - No fresh task-camera, MoveIt/controller, physics, Planning Scene, artifact, visual, parallel, adaptive, or retry acceptance exists because EXP-007 never reached preflight.
+next_command: Add a RED API test for the production manifest point projection, fix the closed response contract without exposing unintended internal fields, rebuild a fresh bound copy overlay, and create new experiment IDs rather than reusing EXP-007 through EXP-010.
 ```
