@@ -26,3 +26,49 @@ open_hypotheses:
   - L1/L2 can be implemented and run independently with isolated ports/DB/Chrome profiles per the handoff.
 latest_checkpoint: CP-K00
 next_experiment: EXP-K01 (Task 1 scenario schema RED)
+
+## CP-K01 — L1 Chrome contract suite complete
+
+```yaml
+checkpoint_id: CP-K01
+last_valid_experiment: EXP-K01
+current_commit: 8ffa8c01e (local commits 464af3286 + 8ffa8c01e on frozen base e2ffff62)
+working_tree_status: clean after commit 8ffa8c01e
+owned_processes: NONE (all scripted servers/Chrome exited; exit codes recorded per case dir)
+preserved_processes: tmux codex (developer), tmux kimi (unrelated path-audit)
+confirmed_conclusions:
+  - EXP-K01: L1 chrome-contract suite 24/24 PASS covering C01-C22 (C18 and C21 each split into two tests by scenario). Full default gate (legacy 13 + contract 24) = 37 passed, exit 0, elapsed ~94s. Vitest 108/108, build exit 0.
+  - Scripted server reuses production create_expert_validation_app routes and serves the real Vite dist bundle to official Google Chrome 150.0.7871.181 over real HTTP/WebSocket; faults (duplicate/late/omitted sequences, ws close, http error once) inject at transport level only.
+  - Production port requires service.get_manifest to exist because api.py evaluates the getattr default eagerly; fixture alias added (no production change).
+  - Minimal production display seam added: CampaignProgress now renders Failed/Indeterminate/Unrun counts and adaptive infra attempts + observational resource readings (design 6.2 requires them; they were absent).
+  - Environment facts: Chrome requires short TMPDIR (SingletonSocket 107-byte limit) -> /run/user/1000/so101-kimi-e2e/<run>/tmp; --no-proxy-server arg required because the host exports http_proxy; Node 24 at /data/work/tools/node-v24.18.1-linux-x64/bin required (system node18 cannot parse import attributes); Playwright TS loader rejects parameter properties and __dirname.
+disproven_routes:
+  - Deep NVMe scratch as Chrome TMPDIR (socket path too long); reusing stale ready files across runs.
+open_risks:
+  - C13 gap-triggered GET is asserted by convergence + log, not by exact GET count (page polls every 2s by design).
+next_command: Task 8 - L2 typed execution port, real process helpers, installed test launcher (RED first).
+```
+
+```yaml
+experiment_id: EXP-K01
+status: VALID
+lifecycle: ISOLATED_STACK
+single_variable: L1 contract suite implementation
+provenance:
+  source_commit: 8ffa8c01e (worktree codex/kimi-teleop-chrome-e2e)
+  install_overlay: NONE (source tree + web/dist build)
+  runtime_executable: /usr/bin/google-chrome 150.0.7871.181, scripted uvicorn per case
+  ros_domain_id: not_applicable
+  gz_partition: not_applicable
+commands:
+  - command: bun run test:e2e -- e2e/expert-validation/contract (SO101_E2E_EVIDENCE_ROOT set)
+    exit_code: 0
+observed:
+  - 24/24 contract tests passed in 1.6m; full default gate 37 passed; Vitest 108/108.
+conclusion: L1 Chrome contract layer complete and green.
+evidence:
+  - /data/work/so101-evidence/teleop-chrome-e2e/20260916T130435Z-e2ffff62-kimi01/reports/playwright-default.json
+  - /data/work/so101-evidence/teleop-chrome-e2e/20260916T130435Z-e2ffff62-kimi01/browser/chrome-contract/ (per-case dirs incl. retained failure runs)
+decision: KEEP
+next_experiment: EXP-K02 (L2 execution port)
+```
