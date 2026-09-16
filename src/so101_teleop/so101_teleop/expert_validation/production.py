@@ -14,7 +14,6 @@ from typing import Mapping
 
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
 from so101_demo.parallel_batch.contracts import BatchSummary, ContractError, PointStatus, RunMode
-from so101_demo.parallel_batch.journal import CoordinatorJournal
 
 from .artifacts import ValidationArtifactRegistry
 from .catalog import CatalogPoint, PointSelection, select_catalog_points
@@ -25,6 +24,7 @@ from .coordinator_events import (
     CampaignUpstreamBinding,
     CoordinatorEventReader,
     CoordinatorProjectionError,
+    ReadOnlyCoordinatorJournal,
 )
 from .executor_registry import ExecutorRegistry, QualificationProbes
 from .lease import ValidationLeaseService
@@ -32,8 +32,8 @@ from .manifest_geometry import current_manifest_source_hash, freeze_manifest_con
 from .models import UpstreamCursor
 from .preflight import CampaignStartRequest
 from .process_owner import CoordinatorOwnershipError, ExecutionProcessOwner, OwnedCoordinator
-from .service import ExpertValidationService, ServiceConflict, _request_hash, StartCampaignCommand
-from .store import SupervisorStore
+from .service import ExpertValidationService, ServiceConflict
+from .store import StoreConflict, SupervisorStore
 from .statistics import (
     BrokerProjection,
     PointProjection,
@@ -46,15 +46,6 @@ from .preflight import PreflightEngine
 
 
 _BROKER_IMAGE = "so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1"
-
-
-@dataclass(frozen=True, slots=True)
-class _ReadOnlyCoordinatorJournal:
-    root: Path
-    batch_id: str
-
-    def replay(self):
-        return CoordinatorJournal.read_only_replay(self.root, self.batch_id)
 
 
 def _sha256(path: Path) -> str:
@@ -334,6 +325,112 @@ class ProductionExpertValidationService(ExpertValidationService):
         self._campaigns: dict[str, dict[str, object]] = {}
         self._campaign_requests: dict[str, CampaignStartRequest] = {}
         self._subscribers: set[asyncio.Queue] = set()
+        self._restore_campaigns()
+
+    def _restore_campaigns(self) -> None:
+        """Rebind durable campaigns after a restart so reads reconcile."""
+        for row in self.store.campaign_records():
+            campaign_id = row["campaign_id"]
+            try:
+                request = self._restored_request(row)
+            except (ServiceConflict, StoreConflict, KeyError, ValueError):
+                continue
+            self._campaign_requests[campaign_id] = request
+            self.supervisor._requests[campaign_id] = request
+            projection: dict[str, object] = {
+                "campaign_id": campaign_id,
+                "manifest_id": request.manifest_id,
+                "sequence": 1,
+                "execution_mode": request.execution_mode,
+                "owner_kind": (
+                    "ADAPTIVE_WRAPPER" if request.execution_mode == "ADAPTIVE" else "COORDINATOR"
+                ),
+                "batch_id": request.batch_id,
+                "status": "STARTED",
+                "points": tuple(
+                    {"point_id": point_id, "status": "UNRUN"}
+                    for point_id in request.selection.point_ids
+                ),
+            }
+            if request.execution_mode != "ADAPTIVE":
+                try:
+                    projected = self._fixed_campaign_projection(request)
+                except (
+                    CoordinatorProjectionError,
+                    ContractError,
+                    StatisticsProjectionError,
+                ):
+                    projected = None
+                if projected is not None:
+                    projection = projected
+            self._campaigns[campaign_id] = projection
+
+    def _restored_request(self, row) -> CampaignStartRequest:
+        batches = self.store.campaign_batches(row["campaign_id"])
+        first_pass = next(
+            (batch for batch in batches if batch.batch_kind == "FIRST_PASS"), None
+        )
+        if first_pass is None:
+            raise ServiceConflict("CAMPAIGN_FIRST_PASS_MISSING")
+        config = json.loads(row["execution_config_json"])
+        selection = self._selection(row["manifest_id"])
+        environment = {}
+        if self.layout.provenance_binding is not None:
+            environment["SO101_PARALLEL_PROVENANCE_BINDING"] = str(
+                self.layout.provenance_binding
+            )
+        adaptive = row["execution_mode"] == "ADAPTIVE"
+        resource_document = json.dumps(
+            {"mode": row["execution_mode"], "worker_count": config.get("worker_count")},
+            sort_keys=True,
+        ).encode("utf-8")
+        return CampaignStartRequest(
+            campaign_id=row["campaign_id"],
+            batch_id=first_pass.batch_id,
+            manifest_id=row["manifest_id"],
+            selection=selection,
+            execution_mode=row["execution_mode"],
+            evidence_root=self.store.root.parent,
+            points_path=self.layout.points_path,
+            parallel_config_path=self.layout.parallel_config_path,
+            adaptive_config_path=self.layout.adaptive_config_path,
+            worker_count=(
+                config.get("preferred_worker_count", 8)
+                if adaptive
+                else config.get("worker_count", 1)
+            ),
+            max_points_per_worker=config.get("max_points_per_worker"),
+            fallback_worker_counts=tuple(config.get("fallback_worker_counts", (6, 4, 2, 1))),
+            initial_points_per_worker=config.get("initial_points_per_worker", 3),
+            worker_start_timeout_s=config.get("worker_start_timeout_s", 120.0),
+            max_infra_attempts_per_point=config.get("max_infra_attempts_per_point", 5),
+            yolo_executor_count=config.get("yolo_executor_count", 2),
+            service_session_id=row.get("service_session_id") or "",
+            lease_generation=row.get("lease_generation") or 1,
+            source_commit=self.layout.source_commit,
+            install_prefix=str(self.layout.demo_prefix),
+            coordinator_executable_sha256=_sha256(self.layout.coordinator_executable),
+            adaptive_runner_module_sha256=_sha256(
+                Path(__import__("so101_demo.parallel_batch.adaptive_runner", fromlist=["x"]).__file__)
+            ),
+            adaptive_pool_module_sha256=_sha256(
+                Path(__import__("so101_demo.parallel_batch.adaptive_pool", fromlist=["x"]).__file__)
+            ),
+            adaptive_cleanup_executable_sha256=_sha256(self.layout.cleanup_executable),
+            adaptive_wrapper_sha256=_sha256(self.layout.adaptive_wrapper),
+            parallel_config_sha256=_sha256(self.layout.parallel_config_path),
+            adaptive_config_sha256=_sha256(self.layout.adaptive_config_path),
+            yolo_weights_sha256=self.layout.yolo_weights_sha256,
+            grounded_sam_manifest_sha256=self.layout.grounded_manifest_sha256,
+            broker_image_id=self.layout.broker_image_id,
+            resource_manifest_sha256=hashlib.sha256(resource_document).hexdigest(),
+            yolo_weights_path=self.layout.yolo_weights_path or Path("/models/yolo.pt"),
+            grounded_root=self.layout.grounded_root or Path("/models/grounded"),
+            coordinator_executable_path=self.layout.coordinator_executable,
+            adaptive_wrapper_path=self.layout.adaptive_wrapper,
+            provenance_binding_path=self.layout.provenance_binding,
+            environment=environment,
+        )
 
     def close(self) -> None:
         self.store.close()
@@ -520,6 +617,14 @@ class ProductionExpertValidationService(ExpertValidationService):
         }
 
     async def start_campaign_api(self, body):
+        # Idempotency digests only the client-visible command fields; the
+        # generated campaign/batch identifiers never participate.
+        digest = hashlib.sha256(
+            json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        repeated = self.store.repeat_command(body["command_id"], digest)
+        if repeated is not None:
+            return repeated
         receipt_id = body["preflight_receipt_id"]
         try:
             request, receipt, preflight_body = self._pending[receipt_id]
@@ -540,18 +645,7 @@ class ProductionExpertValidationService(ExpertValidationService):
         )
         if not self.lease_service.can_start_campaign(body["service_session_id"]):
             raise ServiceConflict("VALIDATION_RECOVERY_REQUIRED")
-        command = StartCampaignCommand(
-            command_id=body["command_id"],
-            lease_id=body["lease_id"],
-            lease_generation=body["lease_generation"],
-            manifest_id=body["manifest_id"],
-            request=request,
-        )
-        digest = _request_hash(command)
-        repeated = self.store.repeat_command(command.command_id, digest)
-        if repeated is not None:
-            return repeated
-        self.store.begin_command(command.command_id, digest, "START_CAMPAIGN")
+        self.store.begin_command(body["command_id"], digest, "START_CAMPAIGN")
         result = await self.supervisor.start_first_pass(request, receipt=receipt)
         projection = {
             "campaign_id": result["campaign_id"],
@@ -568,7 +662,7 @@ class ProductionExpertValidationService(ExpertValidationService):
         }
         self._campaigns[request.campaign_id] = projection
         self._campaign_requests[request.campaign_id] = request
-        self.store.finish_command(command.command_id, projection)
+        self.store.finish_command(body["command_id"], projection)
         del self._pending[receipt_id]
         return projection
 
@@ -638,7 +732,7 @@ class ProductionExpertValidationService(ExpertValidationService):
             batch_root=batch_root,
         )
         reader = CoordinatorEventReader(
-            _ReadOnlyCoordinatorJournal(journal_root, request.batch_id),
+            ReadOnlyCoordinatorJournal(journal_root, request.batch_id),
             binding,
         )
         batch = reader.read_after(AcceptedCoordinatorCursor.initial(binding))
@@ -929,12 +1023,23 @@ class ProductionExpertValidationService(ExpertValidationService):
         return projection
 
     async def retry_campaign(self, campaign_id, body):
+        document = {
+            "operation": "FULL_RESTART_RETRY", "campaign_id": campaign_id, "request": body,
+        }
+        digest = hashlib.sha256(
+            json.dumps(document, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        repeated = self.store.repeat_command(body["command_id"], digest)
+        if repeated is not None:
+            return repeated
         self.lease_service.authorize(
             body["lease_id"], body["lease_generation"], service_session_id=body["service_session_id"]
         )
+        self.store.begin_command(body["command_id"], digest, "FULL_RESTART_RETRY")
         result = await self.supervisor.start_retries(campaign_id, tuple(body["point_ids"]))
         projection = {**self.get_campaign(campaign_id), "status": result["status"]}
         self._campaigns[campaign_id] = projection
+        self.store.finish_command(body["command_id"], projection)
         return projection
 
     def subscribe(self):

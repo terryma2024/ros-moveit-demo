@@ -5,14 +5,22 @@ from __future__ import annotations
 from dataclasses import asdict
 import hashlib
 import inspect
+import json
 import os
 from pathlib import Path
 import secrets
+import time
 
 from .adaptive import AdaptiveStartRequest
 from .coordinator import CoordinatorStartRequest
 from .control import ControlProtocolError, CoordinatorControlClient
-from .process_owner import CoordinatorOwnershipError, OwnedCoordinator
+from .coordinator_events import (
+    AcceptedCoordinatorCursor,
+    CampaignUpstreamBinding,
+    CoordinatorEventReader,
+    ReadOnlyCoordinatorJournal,
+)
+from .process_owner import CoordinatorOwnershipError, ExecutionProcessOwner, OwnedCoordinator
 from .store import StoreConflict
 from .models import (
     BatchBinding,
@@ -270,17 +278,68 @@ class ExpertValidationSupervisor:
                 original, receipt, batch_id, batch_root, point_ids=(point_id,)
             )
             result = await self._spawn(owner_request)
-            if not isinstance(result, dict) or not result.get("cleanup_complete"):
-                raise RuntimeError("RETRY_CLEANUP_INCOMPLETE")
+            if isinstance(result, dict):
+                if not result.get("cleanup_complete"):
+                    raise RuntimeError("RETRY_CLEANUP_INCOMPLETE")
+                receipt_sha256 = result.get("receipt_sha256", "0" * 64)
+            else:
+                receipt_sha256 = await self._await_fixed_retry_cleanup(
+                    result, original, batch_id, batch_root
+                )
             self.store.record_cleanup_and_advance_retry(
                 CleanupReceipt(
                     campaign_id,
                     batch_id,
                     point_id,
-                    result.get("receipt_sha256", "0" * 64),
+                    receipt_sha256,
                 )
             )
         return {"status": "RETRIES_COMPLETE"}
+
+    async def _await_fixed_retry_cleanup(
+        self, owned, request: CampaignStartRequest, batch_id: str, batch_root: Path
+    ) -> str:
+        """Wait out one real retry coordinator and verify its journal cleanup."""
+
+        deadline = time.monotonic() + 120.0
+        while True:
+            status = self.process_owner.poll(owned)
+            if not status.running and not status.descendants_alive:
+                break
+            if time.monotonic() > deadline:
+                raise RuntimeError("RETRY_EXECUTION_TIMEOUT")
+            await asyncio.sleep(0.1)
+        if status.exit_code not in (0, None):
+            raise RuntimeError("RETRY_EXECUTION_FAILED")
+        journal_root = batch_root / "coordinator"
+        epoch_path = journal_root / "coordinator_epoch.json"
+        if epoch_path.is_symlink() or not epoch_path.is_file():
+            raise RuntimeError("RETRY_OWNER_EPOCH_INVALID")
+        try:
+            epoch_document = json.loads(epoch_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise RuntimeError("RETRY_OWNER_EPOCH_INVALID") from error
+        if (
+            epoch_document.get("batch_id") != batch_id
+            or epoch_document.get("coordinator_epoch") != 1
+        ):
+            raise RuntimeError("RETRY_OWNER_EPOCH_INVALID")
+        binding = CampaignUpstreamBinding(
+            campaign_id=request.campaign_id,
+            batch_id=batch_id,
+            owner_kind="COORDINATOR",
+            owner_epoch_or_generation=1,
+            journal_root=journal_root,
+            batch_root=batch_root,
+        )
+        reader = CoordinatorEventReader(
+            ReadOnlyCoordinatorJournal(journal_root, batch_id), binding
+        )
+        batch = reader.read_after(AcceptedCoordinatorCursor.initial(binding))
+        state = batch.projected_state
+        if state.get("terminal_reason") is None or state.get("batch_cleanup_complete") is not True:
+            raise RuntimeError("RETRY_CLEANUP_INCOMPLETE")
+        return batch.events[-1].frame_sha256 if batch.events else "0" * 64
 
     def cancel(self, owned):
         return self.process_owner.request_cancel(owned)
@@ -298,10 +357,19 @@ class ExpertValidationSupervisor:
         if self.store.has_recovery_fence():
             return True
         active = getattr(self.process_owner, "active_execution", None)
-        if active is None:
-            return False
-        status = self.process_owner.poll(active)
-        return status.running or status.descendants_alive
+        if active is not None:
+            status = self.process_owner.poll(active)
+            if status.running or status.descendants_alive:
+                return True
+        for record in self.store.owned_executions(("INTENT", "RUNNING")):
+            if record.state == "INTENT":
+                # Spawn intent without ACK: the outcome is unknowable.
+                return True
+            if ExecutionProcessOwner.identity_alive(
+                record.pid, record.started_ticks, record.argv_sha256
+            ):
+                return True
+        return False
 
     def cancel_for_reason(self, reason, *, campaign_id=None, batch_id=None, command_id=None):
         active = getattr(self.process_owner, "active_execution", None)

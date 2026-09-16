@@ -8,7 +8,20 @@ import hashlib
 from pathlib import Path
 from typing import Callable, Literal, Mapping
 
-from so101_demo.parallel_batch.journal import JournalCorruption, JournalEvent
+from so101_demo.parallel_batch.journal import (
+    CoordinatorJournal,
+    JournalCorruption,
+    JournalEvent,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ReadOnlyCoordinatorJournal:
+    root: Path
+    batch_id: str
+
+    def replay(self):
+        return CoordinatorJournal.read_only_replay(self.root, self.batch_id)
 
 
 class CoordinatorProjectionError(RuntimeError):

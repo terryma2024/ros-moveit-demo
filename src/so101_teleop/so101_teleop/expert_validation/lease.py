@@ -151,6 +151,12 @@ class ValidationLeaseService:
 
     def can_start_campaign(self, service_session_id: str) -> bool:
         current = self.current()
+        if (
+            self._unresolved
+            and not getattr(self.supervisor, "has_unresolved_campaign", lambda: False)()
+        ):
+            # Restart reconciliation proved no fence, intent, or live owner remains.
+            self.mark_recovered()
         return (
             current is not None
             and current.service_session_id == service_session_id

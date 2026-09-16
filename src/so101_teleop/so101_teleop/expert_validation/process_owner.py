@@ -266,6 +266,19 @@ class ExecutionProcessOwner:
         descendants = _group_has_live_descendants(owned.pgid, owned.pid)
         return ProcessStatus(running=running, exit_code=exit_code, descendants_alive=descendants)
 
+    @staticmethod
+    def identity_alive(pid: int, started_ticks: int, argv_sha256: str) -> bool:
+        """Prove whether a durable owner record still names a live process."""
+        try:
+            identity = _read_identity(pid)
+        except CoordinatorOwnershipError:
+            return False
+        return (
+            identity.state != "Z"
+            and identity.started_ticks == started_ticks
+            and identity.argv_sha256 == argv_sha256
+        )
+
     def request_status(self, owned: OwnedExecution) -> ProcessStatus:
         return self.poll(owned)
 

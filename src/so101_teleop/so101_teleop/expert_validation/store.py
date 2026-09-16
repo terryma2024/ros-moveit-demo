@@ -39,8 +39,6 @@ class CommandOutcomeUnknown(RuntimeError):
 
 def _json(value) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-
-
 def _sha(value) -> str:
     return hashlib.sha256(_json(value).encode("utf-8")).hexdigest()
 
@@ -639,6 +637,31 @@ class SupervisorStore:
             dict(row)
             for row in self._connection.execute(
                 "SELECT campaign_id, state, execution_mode FROM campaigns ORDER BY campaign_id"
+            )
+        )
+
+    def campaign_records(self) -> tuple[dict, ...]:
+        return tuple(
+            dict(row)
+            for row in self._connection.execute("SELECT * FROM campaigns ORDER BY campaign_id")
+        )
+
+    def campaign_batches(self, campaign_id: str) -> tuple[BatchBinding, ...]:
+        return tuple(
+            self.batch(row["batch_id"])
+            for row in self._connection.execute(
+                "SELECT batch_id FROM campaign_batches WHERE campaign_id=? ORDER BY batch_id",
+                (campaign_id,),
+            )
+        )
+
+    def owned_executions(self, states: tuple[str, ...]) -> tuple[OwnedExecutionRecord, ...]:
+        marks = ",".join("?" for _ in states)
+        return tuple(
+            self.owned_execution(row["batch_id"])
+            for row in self._connection.execute(
+                f"SELECT batch_id FROM owned_execution WHERE state IN ({marks}) ORDER BY batch_id",
+                states,
             )
         )
 
