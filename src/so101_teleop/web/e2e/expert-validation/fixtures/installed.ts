@@ -1,6 +1,6 @@
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,7 +12,7 @@ const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../
 const LAUNCHER = join(PACKAGE_ROOT, "test/e2e/installed_test_launcher.py");
 const HELPER_SPECS = join(PACKAGE_ROOT, "test/fixtures/expert_validation_e2e/helper-specs");
 
-function installPrefix(): string {
+export function installPrefix(): string {
   const value = process.env.SO101_E2E_INSTALL_PREFIX;
   if (!value || !existsSync(join(value, "so101_teleop"))) {
     throw new Error("SO101_E2E_INSTALL_PREFIX_INVALID");
@@ -20,7 +20,7 @@ function installPrefix(): string {
   return value;
 }
 
-function pythonExecutable(): string {
+export function pythonExecutable(): string {
   const value = process.env.SO101_E2E_PYTHON;
   if (!value || !existsSync(value)) {
     throw new Error("SO101_E2E_PYTHON_REQUIRED");
@@ -49,10 +49,12 @@ export type InstalledServer = {
   baseURL: string;
   evidenceDir: string;
   serverRoot: string;
-  serverPid: number;
+  serverLog: string;
+  serverPid: () => number;
   specId: string;
   stop: () => Promise<number | null>;
   start: () => Promise<void>;
+  restart: () => Promise<void>;
 };
 
 type InstalledFixtures = {
@@ -116,8 +118,10 @@ export const installedTest = base.extend<InstalledFixtures>({
     const staticDir = join(prefix, "so101_teleop/share/so101_teleop/web");
 
     let child: ChildProcess | null = null;
+    let currentPid = 0;
     const start = async () => {
       if (child) throw new Error("SERVER_ALREADY_STARTED");
+      if (existsSync(readyFile)) rmSync(readyFile);
       child = spawn(
         pythonExecutable(),
         [
@@ -159,6 +163,8 @@ export const installedTest = base.extend<InstalledFixtures>({
         }
         await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
       }
+      const ready = JSON.parse(readFileSync(readyFile, "utf-8"));
+      currentPid = ready.pid;
     };
     const stop = async (): Promise<number | null> => {
       if (!child) return null;
@@ -177,17 +183,19 @@ export const installedTest = base.extend<InstalledFixtures>({
     };
 
     await start();
-    const ready = JSON.parse(readFileSync(readyFile, "utf-8"));
     const server: InstalledServer = {
       port,
       baseURL: `http://127.0.0.1:${port}`,
       evidenceDir,
       serverRoot,
-      serverPid: ready.pid,
+      serverLog,
+      serverPid: () => currentPid,
       specId,
       stop,
-      start: async () => {
-        throw new Error("RESTART_REQUIRES_OWNED_FIXTURE_METHOD");
+      start,
+      restart: async () => {
+        await stop();
+        await start();
       },
     };
     await use(server);
