@@ -637,6 +637,13 @@ single_variable: Unix sockets and tokens use the validated same-UID runtime dire
 lifecycle: FRESH_ISOLATED_STACK
 selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
 fixed_config: {worker_count: 1, max_points_per_worker: 4}
+prestart_diagnostics:
+  - The first release6 dry-run was invalid because its copied binding retained the pre-change coordinator-module hash; provenance rejected it before runtime composition.
+  - A fresh binding with all artifact hashes recomputed crossed provenance and short-path allocation, then the Worker rejected its external control token because Worker-side authority reconstruction still assumed evidence_root/ipc.
+  - Worker-side authority now binds to the authenticated control socket parent explicitly; no server, simulation, or robot action occurred in either diagnostic.
+evidence:
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/short-ipc-green-dryrun.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/short-ipc-green-dryrun2.log
 decision: RUN_AFTER_CLEAN_COMMIT_BUILD_AND_DRY_RUN
 next_experiment: EXP-026
 ```

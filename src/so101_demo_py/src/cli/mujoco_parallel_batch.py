@@ -2260,6 +2260,7 @@ def _run_worker_spec(path, *, runtime_side_effects=None):
     control_authority = WorkerTokenAuthority(
         control_path.parent.parent,
         coordinator_epoch=document["coordinator_epoch"],
+        ipc_root=control_path.parent,
     )
     control_authority.load_token(
         control_id, resources.generation, Path(document["control_token_path"])
