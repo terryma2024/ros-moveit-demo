@@ -20,6 +20,7 @@ SPEC.loader.exec_module(MODULE)
 def test_classifies_real_ai_station_window_classes():
     assert MODULE.classify_window('moveit.rviz* - RViz', ('rviz2', 'rviz2')) == 'rviz'
     assert MODULE.classify_window('Gazebo Sim', ('gz-sim-gui', 'Gazebo GUI')) == 'gazebo'
+    assert MODULE.classify_window('MuJoCo', ('glfw-application', 'GLFW-Application')) == 'mujoco'
     assert MODULE.classify_window('/data/work', ('ghostty', 'com.mitchellh.ghostty')) is None
 
 
@@ -65,12 +66,14 @@ def test_parses_window_title_class_and_geometry():
 WM_CLASS(STRING) = "gz-sim-gui", "Gazebo GUI"
 _NET_WM_NAME(UTF8_STRING) = "Gazebo Sim"
 WM_NAME(STRING) = "Gazebo Sim"
+_NET_WM_PID(CARDINAL) = 4242
 '''
     window = MODULE.parse_window_properties(0x3E0000E, properties)
     assert window == MODULE.WindowInfo(
         0x3E0000E,
         'Gazebo Sim',
         ('gz-sim-gui', 'Gazebo GUI'),
+        owner_pid=4242,
     )
 
     client_geometry = MODULE.parse_xwininfo_geometry('''
@@ -247,6 +250,8 @@ class FakeBackend:
 RVIZ = MODULE.WindowInfo(0x31, 'MoveIt - RViz', ('rviz2', 'rviz2'))
 GAZEBO = MODULE.WindowInfo(0x32, 'Gazebo Sim', ('gz-sim-gui', 'Gazebo GUI'))
 GAZEBO_EXTRA = MODULE.WindowInfo(0x33, 'Gazebo Sim', ('gz-sim-gui', 'Gazebo GUI'))
+MUJOCO = MODULE.WindowInfo(0x34, 'MuJoCo', ('glfw-application', 'GLFW-Application'))
+MUJOCO_EXTRA = MODULE.WindowInfo(0x35, 'MuJoCo', ('glfw-application', 'GLFW-Application'))
 
 
 def test_waits_then_tiles_and_verifies_both_windows():
@@ -266,6 +271,28 @@ def test_waits_then_tiles_and_verifies_both_windows():
         ('clear', 0x32),
         ('move', 0x31, MODULE.Rect(66, 32, 1887, 2128)),
         ('move', 0x32, MODULE.Rect(1953, 32, 1887, 2128)),
+    ]
+
+
+def test_tiles_rviz_and_selected_mujoco_window():
+    backend = FakeBackend([[RVIZ, MUJOCO]])
+    result = MODULE.tile_windows(
+        backend,
+        timeout_sec=1,
+        poll_sec=0,
+        geometry_tolerance=12,
+        right_role='mujoco',
+        monotonic=lambda: 0,
+        sleep=lambda _: None,
+    )
+
+    assert result['rviz'] == MODULE.Rect(66, 32, 1887, 2128)
+    assert result['mujoco'] == MODULE.Rect(1953, 32, 1887, 2128)
+    assert backend.requests == [
+        ('clear', 0x31),
+        ('clear', 0x34),
+        ('move', 0x31, MODULE.Rect(66, 32, 1887, 2128)),
+        ('move', 0x34, MODULE.Rect(1953, 32, 1887, 2128)),
     ]
 
 
@@ -307,6 +334,14 @@ def test_cli_parses_selected_workarea_maximize_mode():
     assert args.maximize == 'gazebo'
 
 
+def test_cli_accepts_mujoco_for_split_and_maximize_modes():
+    split = MODULE.parse_args(['--right', 'mujoco'])
+    maximize = MODULE.parse_args(['--maximize', 'mujoco'])
+
+    assert split.right == 'mujoco'
+    assert maximize.maximize == 'mujoco'
+
+
 def test_maximize_gazebo_requests_ewmh_state_and_verifies_workarea():
     backend = FakeBackend([[RVIZ, GAZEBO]])
 
@@ -335,6 +370,24 @@ def test_maximize_rejects_ambiguous_gazebo_windows():
             poll_sec=0,
             geometry_tolerance=12,
             monotonic=lambda: 0,
+            sleep=lambda _: None,
+        )
+
+    assert backend.requests == []
+
+
+def test_maximize_rejects_ambiguous_mujoco_windows():
+    backend = FakeBackend([[RVIZ, MUJOCO, MUJOCO_EXTRA]])
+    ticks = iter((0.0, 0.5, 1.1))
+
+    with pytest.raises(RuntimeError, match='multiple mujoco windows'):
+        MODULE.maximize_role(
+            backend,
+            'mujoco',
+            timeout_sec=1,
+            poll_sec=0,
+            geometry_tolerance=12,
+            monotonic=lambda: next(ticks),
             sleep=lambda _: None,
         )
 

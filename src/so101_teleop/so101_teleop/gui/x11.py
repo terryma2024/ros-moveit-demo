@@ -26,14 +26,22 @@ class WindowInfo:
     title: str
     wm_class: tuple[str, ...]
     geometry: Rect | None = None
+    owner_pid: int | None = None
 
 
 def classify_window(title: str, wm_class: tuple[str, ...]) -> str | None:
     classes = {value.casefold() for value in wm_class}
+    folded_title = title.casefold()
     if 'rviz2' in classes:
         return 'rviz'
     if 'gz-sim-gui' in classes or 'gazebo gui' in classes:
         return 'gazebo'
+    if (
+        'mujoco' in classes
+        or folded_title.strip() == 'mujoco'
+        or ('mujoco' in folded_title and any('glfw' in value for value in classes))
+    ):
+        return 'mujoco'
     return None
 
 
@@ -66,9 +74,11 @@ def parse_window_properties(window_id, text):
     if title_match is None:
         title_match = re.search(r'WM_NAME\([^)]*\) = "([^"]*)"', text)
     class_match = re.search(r'WM_CLASS\([^)]*\) = (.+)', text)
+    pid_match = re.search(r'_NET_WM_PID(?:\([^)]*\))?\s*=\s*(\d+)', text)
     title = title_match.group(1) if title_match else ''
     classes = tuple(re.findall(r'"([^"]*)"', class_match.group(1))) if class_match else ()
-    return WindowInfo(window_id, title, classes)
+    owner_pid = int(pid_match.group(1)) if pid_match else None
+    return WindowInfo(window_id, title, classes, owner_pid=owner_pid)
 
 
 def parse_xwininfo_geometry(text):
@@ -262,7 +272,7 @@ class X11EwmhBackend:
                 window_id,
                 self._command([
                     'xprop', '-id', hex(window_id),
-                    '_NET_WM_NAME', 'WM_NAME', 'WM_CLASS',
+                    '_NET_WM_NAME', 'WM_NAME', 'WM_CLASS', '_NET_WM_PID',
                 ]),
             )
             for window_id in ids
@@ -314,21 +324,30 @@ class X11EwmhBackend:
 
 def describe_windows(windows):
     return '; '.join(
-        f'0x{window.window_id:x} title={window.title!r} class={window.wm_class!r}'
+        f'0x{window.window_id:x} title={window.title!r} '
+        f'class={window.wm_class!r} owner_pid={window.owner_pid!r}'
         for window in windows
     ) or '<none>'
 
 
-def select_unique_window(windows: list[WindowInfo], role: str) -> WindowInfo:
+def select_unique_window(
+    windows: list[WindowInfo],
+    role: str,
+    owner_pid: int | None = None,
+) -> WindowInfo:
     """Return the one window matching role; never pick from ambiguous matches."""
     matches = [
         window
         for window in windows
-        if classify_window(window.title, window.wm_class) == role
+        if (
+            classify_window(window.title, window.wm_class) == role
+            and (owner_pid is None or window.owner_pid == owner_pid)
+        )
     ]
     if not matches:
+        owner = '' if owner_pid is None else f' for owner pid {owner_pid}'
         raise RuntimeError(
-            f'no {role} window; observed: {describe_windows(windows)}'
+            f'no {role} window{owner}; observed: {describe_windows(windows)}'
         )
     if len(matches) > 1:
         raise RuntimeError(

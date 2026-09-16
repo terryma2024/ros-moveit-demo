@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Read-only inventory of the SO101 simulation stack on ai-station.
+"""Read-only inventory of the SO101 Gazebo or MuJoCo stack on ai-station.
 
-Lists related processes from /proc, ROS nodes, tmux panes, and RViz/Gazebo
+Lists related processes from /proc, ROS nodes, tmux panes, and RViz/simulator
 windows so an operator can select exact PIDs before stopping a stack. The
 tool never sends signals and never mutates tmux or ROS state; every external
 command goes through the injectable read-only ``default_runner``.
@@ -28,6 +28,9 @@ TMUX_PANE_FORMAT = (
     '\t#{pane_pid}\t#{pane_current_command}'
 )
 GZ_SIM_RE = re.compile(r'(?:^|/)gz\s+sim\b')
+MUJOCO_NODE_RE = re.compile(
+    r'(?:^|/)mujoco_ros2_control/(?:ros2_control_node|mujoco_ros2_control_node)\b'
+)
 RVIZ_RE = re.compile(r'(?:^|/)rviz2?\b')
 
 
@@ -45,9 +48,15 @@ def classify_process(cmdline):
     """Return the SO101 stack role for a cmdline, or None when unrelated."""
     if GZ_SIM_RE.search(cmdline) or 'gz-sim' in cmdline:
         return 'gazebo'
+    if (
+        MUJOCO_NODE_RE.search(cmdline)
+        or 'mujoco_ros2_control' in cmdline
+        or 'so101_mujoco_task_station.launch.py' in cmdline
+    ):
+        return 'mujoco'
     if 'move_group' in cmdline or 'moveit_ros' in cmdline:
         return 'moveit'
-    if 'pick_place' in cmdline:
+    if 'pick_place' in cmdline or 'so101_mujoco_rgbd_batch' in cmdline:
         return 'pick_place'
     if RVIZ_RE.search(cmdline):
         return 'rviz'
@@ -186,7 +195,7 @@ def collect_tmux_panes(runner, warnings):
 
 
 def collect_windows(backend_factory, warnings):
-    """List RViz/Gazebo windows through the shared X11 discovery module."""
+    """List RViz and simulator windows through the shared X11 discovery module."""
     try:
         backend = backend_factory()
         observed = backend.windows()
@@ -203,6 +212,7 @@ def collect_windows(backend_factory, warnings):
             'role': role,
             'title': window.title,
             'wm_class': list(window.wm_class),
+            'owner_pid': window.owner_pid,
         }
         try:
             geometry = backend.geometry(window.window_id)

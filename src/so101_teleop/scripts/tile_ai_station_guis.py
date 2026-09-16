@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tile RViz and Gazebo Sim across the current EWMH work area."""
+"""Tile RViz and the selected simulator across the current EWMH work area."""
 
 import argparse
 import ctypes  # noqa: F401  (re-exported for tests and callers)
@@ -73,20 +73,23 @@ def tile_windows(
     geometry_tolerance,
     monotonic=time.monotonic,
     sleep=time.sleep,
+    right_role='gazebo',
 ):
+    if right_role not in ('gazebo', 'mujoco'):
+        raise ValueError(f'unsupported simulator window role: {right_role}')
     selected = wait_for_windows(
-        backend, ('rviz', 'gazebo'), timeout_sec, poll_sec, monotonic, sleep
+        backend, ('rviz', right_role), timeout_sec, poll_sec, monotonic, sleep
     )
 
     left, right = split_workarea(backend.workarea())
-    targets = {'rviz': left, 'gazebo': right}
-    for role in ('rviz', 'gazebo'):
+    targets = {'rviz': left, right_role: right}
+    for role in ('rviz', right_role):
         backend.clear_maximize(selected[role].window_id)
-    for role in ('rviz', 'gazebo'):
+    for role in ('rviz', right_role):
         backend.move_resize(selected[role].window_id, targets[role])
     sleep(0.5)
 
-    for role in ('rviz', 'gazebo'):
+    for role in ('rviz', right_role):
         actual = backend.geometry(selected[role].window_id)
         if not rect_is_close(actual, targets[role], geometry_tolerance):
             raise RuntimeError(
@@ -114,11 +117,11 @@ def maximize_role(
 
 def parse_args(arguments=None):
     parser = argparse.ArgumentParser(
-        description='Tile RViz left and Gazebo Sim right on ai-station.'
+        description='Tile RViz left and Gazebo or MuJoCo right on ai-station.'
     )
     parser.add_argument('--left', choices=('rviz',), default='rviz')
-    parser.add_argument('--right', choices=('gazebo',), default='gazebo')
-    parser.add_argument('--maximize', choices=('gazebo', 'rviz'))
+    parser.add_argument('--right', choices=('gazebo', 'mujoco'), default='gazebo')
+    parser.add_argument('--maximize', choices=('gazebo', 'mujoco', 'rviz'))
     parser.add_argument('--timeout-sec', type=float, default=30.0)
     parser.add_argument('--poll-sec', type=float, default=0.25)
     parser.add_argument('--geometry-tolerance', type=int, default=12)
@@ -143,6 +146,7 @@ def main(arguments=None):
                 timeout_sec=args.timeout_sec,
                 poll_sec=args.poll_sec,
                 geometry_tolerance=args.geometry_tolerance,
+                right_role=args.right,
             )
     except (OSError, subprocess.SubprocessError, RuntimeError, ValueError) as error:
         print(f'LAYOUT_ERROR {error}', file=sys.stderr)
@@ -150,7 +154,10 @@ def main(arguments=None):
     if args.maximize:
         print(f'LAYOUT_OK {args.maximize.upper()}={target}')
     else:
-        print(f'LAYOUT_OK RVIZ={result["rviz"]} GAZEBO={result["gazebo"]}')
+        print(
+            f'LAYOUT_OK RVIZ={result["rviz"]} '
+            f'{args.right.upper()}={result[args.right]}'
+        )
     return 0
 
 

@@ -30,6 +30,13 @@ read_process = MODULE.read_process
         ('/usr/bin/gz sim -v 3 so101_pick_place.sdf', 'gazebo'),
         ('ruby /usr/bin/gz sim -g --render-engine ogre2', 'gazebo'),
         ('gz-sim-gui --render-engine ogre2', 'gazebo'),
+        (
+            '/data/work/ws/install/mujoco_ros2_control/lib/'
+            'mujoco_ros2_control/ros2_control_node --ros-args',
+            'mujoco',
+        ),
+        ('python3 so101_mujoco_task_station.launch.py', 'mujoco'),
+        ('ros2 run so101_demo_py so101_mujoco_rgbd_batch --execute', 'pick_place'),
         ('/opt/ros/jazzy/lib/moveit_ros_move_group/move_group', 'moveit'),
         ('pick_place_state_machine --ros-args', 'pick_place'),
         (

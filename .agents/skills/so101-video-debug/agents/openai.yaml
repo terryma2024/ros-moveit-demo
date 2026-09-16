@@ -1,0 +1,4 @@
+interface:
+  display_name: "SO-101 Video Debug"
+  short_description: "Analyze Gazebo or MuJoCo pick-place video"
+  default_prompt: "Use $so101-video-debug to localize a Gazebo or MuJoCo pick-place failure from video and runtime evidence."

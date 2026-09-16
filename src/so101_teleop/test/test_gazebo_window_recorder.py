@@ -27,6 +27,12 @@ Rect = MODULE.Rect
 WindowInfo = MODULE.WindowInfo
 
 GAZEBO = WindowInfo(0x32, 'Gazebo Sim', ('gz-sim-gui', 'Gazebo GUI'))
+MUJOCO = WindowInfo(
+    0x34,
+    'MuJoCo',
+    ('glfw-application', 'GLFW-Application'),
+    owner_pid=4242,
+)
 CLIENT = Rect(66, 32, 1920, 1080)
 SUPERVISOR_CMDLINE = (
     f'python3 {SCRIPT_PATH} {MODULE.SUPERVISOR_MARKER} --state state.json'
@@ -248,6 +254,72 @@ def test_start_launches_detached_supervisor_and_waits_for_recording(tmp_path):
     assert argv[argv.index('--display') + 1] == ':1'
 
 
+def test_resolve_simulator_client_selects_the_requested_mujoco_window():
+    class Backend:
+        environment = {'DISPLAY': ':1'}
+
+        def windows(self):
+            return [GAZEBO, MUJOCO]
+
+    calls = []
+    window, client = MODULE.resolve_simulator_client(
+        'mujoco',
+        owner_pid=4242,
+        backend_factory=Backend,
+        runner=lambda argv, env: calls.append((argv, env)) or '''
+  Absolute upper-left X:  66
+  Absolute upper-left Y:  32
+  Width: 1920
+  Height: 1080
+''',
+    )
+
+    assert window == MUJOCO
+    assert client == CLIENT
+    assert calls == [
+        (['xwininfo', '-id', hex(MUJOCO.window_id)], {'DISPLAY': ':1'})
+    ]
+
+
+def test_start_records_selected_simulator_in_supervisor_command(tmp_path):
+    output = tmp_path / 'run.mkv'
+    state_path = tmp_path / 'state.json'
+    launched = []
+
+    def fake_popen(argv, **kwargs):
+        launched.append(list(argv))
+        MODULE.atomic_write_json(state_path, {'phase': 'recording'})
+        return type('FakeProcess', (), {'pid': 777})()
+
+    MODULE.start_recorder(
+        output,
+        state_path,
+        simulator='mujoco',
+        owner_pid=4242,
+        resolver=lambda: (MUJOCO, CLIENT),
+        prober=lambda _encoder: (True, None),
+        popen=fake_popen,
+        environ={'DISPLAY': ':1'},
+        sleep=lambda _: None,
+    )
+
+    argv = launched[0]
+    assert argv[argv.index('--simulator') + 1] == 'mujoco'
+    assert argv[argv.index('--owner-pid') + 1] == '4242'
+
+
+def test_start_requires_owner_pid_for_mujoco(tmp_path):
+    with pytest.raises(RuntimeError, match='owner PID is required'):
+        MODULE.start_recorder(
+            tmp_path / 'run.mkv',
+            tmp_path / 'state.json',
+            simulator='mujoco',
+            resolver=lambda: (MUJOCO, CLIENT),
+            popen=lambda *args, **kwargs: None,
+            environ={'DISPLAY': ':1'},
+        )
+
+
 def test_stop_rejects_reused_supervisor_pid(tmp_path):
     state_path = recorder_state(
         tmp_path, supervisor_pid=42, supervisor_start_ticks=100,
@@ -368,6 +440,22 @@ def test_status_on_a_stopped_recording_needs_no_process_checks(tmp_path):
     assert report['output_bytes'] == 10
 
 
+def test_status_reports_simulator_and_bound_owner_pid(tmp_path):
+    state_path = recorder_state(
+        tmp_path,
+        phase='stopped',
+        simulator='mujoco',
+        owner_pid=4242,
+    )
+
+    report = MODULE.status_recorder(
+        state_path, proc=FakeProc(), sleep=lambda _: None,
+    )
+
+    assert report['simulator'] == 'mujoco'
+    assert report['owner_pid'] == 4242
+
+
 SYNTHETIC_FFMPEG = textwrap.dedent(
     '''
     import signal
@@ -447,6 +535,8 @@ def test_supervisor_forwards_sigint_and_writes_final_metadata(tmp_path):
     assert recording['display'] == ':1'
     assert recording['codec'] == 'libx264'
     assert recording['fps'] == 30
+    assert recording['simulator'] == 'gazebo'
+    assert recording['owner_pid'] is None
     event.set()
     thread.join(timeout=30.0)
     assert not thread.is_alive()
@@ -496,3 +586,18 @@ def test_help_lists_the_three_user_subcommands(capsys):
     help_text = capsys.readouterr().out
     for name in ('start', 'status', 'stop'):
         assert name in help_text
+
+
+def test_start_cli_accepts_explicit_mujoco_simulator():
+    arguments = MODULE._build_parser().parse_args(
+        [
+            'start',
+            '--simulator', 'mujoco',
+            '--owner-pid', '4242',
+            '--output', '/tmp/run.mkv',
+            '--state', '/tmp/recorder.json',
+        ]
+    )
+
+    assert arguments.simulator == 'mujoco'
+    assert arguments.owner_pid == 4242

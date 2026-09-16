@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Supervised recorder for the unique Gazebo client window on ai-station.
+"""Supervised recorder for one unique simulator window on ai-station.
 
-``start`` resolves the unique Gazebo window through the shared X11 module,
+``start`` resolves the selected Gazebo or MuJoCo window through the shared X11 module,
 launches a detached supervisor that owns the ffmpeg child, and returns once
 the state file reports ``phase=recording``. ``status`` cross-checks the
 state file, the supervisor PID identity (/proc start ticks and cmdline),
@@ -98,21 +98,35 @@ def default_runner(arguments, env=None, timeout=COMMAND_TIMEOUT_SEC):
     ).stdout
 
 
-def resolve_gazebo_client(backend_factory=X11EwmhBackend, runner=None):
-    """Return (WindowInfo, client Rect) of the one Gazebo window.
+def resolve_simulator_client(
+    simulator,
+    owner_pid=None,
+    backend_factory=X11EwmhBackend,
+    runner=None,
+):
+    """Return (WindowInfo, client Rect) of the selected simulator window.
 
     Reuses the shared X11 module for window classification and geometry
     parsing so the identification rules never drift between tools.
     """
+    if simulator not in ('gazebo', 'mujoco'):
+        raise ValueError(f'unsupported simulator: {simulator}')
     if runner is None:
         runner = default_runner
     backend = backend_factory()
-    window = select_unique_window(backend.windows(), 'gazebo')
+    window = select_unique_window(backend.windows(), simulator, owner_pid)
     text = runner(
         ['xwininfo', '-id', hex(window.window_id)],
         env=backend.environment,
     )
     return window, parse_xwininfo_geometry(text)
+
+
+def resolve_gazebo_client(backend_factory=X11EwmhBackend, runner=None):
+    """Compatibility wrapper for callers that still request Gazebo directly."""
+    return resolve_simulator_client(
+        'gazebo', backend_factory=backend_factory, runner=runner,
+    )
 
 
 def even_geometry(rect):
@@ -121,7 +135,7 @@ def even_geometry(rect):
     height = rect.height - rect.height % 2
     if width <= 0 or height <= 0:
         raise ValueError(
-            f'Gazebo client region too small to record: {rect!r}'
+            f'Simulator client region too small to record: {rect!r}'
         )
     return Rect(rect.x, rect.y, width, height)
 
@@ -247,7 +261,8 @@ def verify_supervisor_identity(state, proc):
 def start_recorder(output, state_path, encoder='auto', fps=DEFAULT_FPS,
                    resolver=None, prober=probe_encoder, popen=None,
                    environ=None, monotonic=time.monotonic, sleep=time.sleep,
-                   timeout_sec=START_TIMEOUT_SEC):
+                   timeout_sec=START_TIMEOUT_SEC, simulator='gazebo',
+                   owner_pid=None):
     """Launch the detached supervisor and wait for phase=recording."""
     output = Path(output)
     state_path = Path(state_path)
@@ -255,8 +270,14 @@ def start_recorder(output, state_path, encoder='auto', fps=DEFAULT_FPS,
         raise RuntimeError(f'refusing to overwrite existing output: {output}')
     if state_path.exists():
         raise RuntimeError(f'refusing to overwrite existing state: {state_path}')
+    if simulator not in ('gazebo', 'mujoco'):
+        raise ValueError(f'unsupported simulator: {simulator}')
+    if owner_pid is not None and owner_pid <= 0:
+        raise ValueError('owner PID must be positive')
+    if simulator == 'mujoco' and owner_pid is None:
+        raise RuntimeError('MuJoCo owner PID is required for window recording')
     if resolver is None:
-        resolver = resolve_gazebo_client
+        resolver = lambda: resolve_simulator_client(simulator, owner_pid)
     if popen is None:
         popen = subprocess.Popen
     if environ is None:
@@ -276,10 +297,13 @@ def start_recorder(output, state_path, encoder='auto', fps=DEFAULT_FPS,
         '--geometry',
         f'{geometry.x},{geometry.y},{geometry.width},{geometry.height}',
         '--window-id', hex(window.window_id),
+        '--simulator', simulator,
         '--encoder', codec,
         '--fps', str(fps),
         '--log', str(log_path),
     ]
+    if owner_pid is not None:
+        argv += ['--owner-pid', str(owner_pid)]
     if fallback_reason:
         argv += ['--encoder-fallback-reason', fallback_reason]
     popen(
@@ -318,6 +342,8 @@ def status_recorder(state_path, proc=None, sleep=time.sleep,
     report = {
         'phase': state['phase'],
         'output': state['output'],
+        'simulator': state.get('simulator', 'gazebo'),
+        'owner_pid': state.get('owner_pid'),
         'supervisor_alive': False,
         'ffmpeg_alive': False,
         'output_bytes': None,
@@ -385,7 +411,8 @@ def run_supervisor(state_path, output, display, geometry, window_id, encoder,
                    popen_factory=subprocess.Popen, ffprobe=probe_video,
                    proc=None, terminate_event=None,
                    monotonic=time.monotonic, sleep=time.sleep,
-                   finalize_grace_sec=FINALIZE_GRACE_SEC):
+                   finalize_grace_sec=FINALIZE_GRACE_SEC,
+                   simulator='gazebo', owner_pid=None):
     """Own ffmpeg; on SIGTERM forward SIGINT and finalize metadata atomically.
 
     The MKV and the ffmpeg log are always preserved; an abnormal ffmpeg
@@ -413,6 +440,8 @@ def run_supervisor(state_path, output, display, geometry, window_id, encoder,
         'supervisor_pid': os.getpid(),
         'supervisor_start_ticks': proc.start_ticks(os.getpid()),
         'window_id': window_id,
+        'simulator': simulator,
+        'owner_pid': owner_pid,
         'geometry': {
             'x': geometry.x,
             'y': geometry.y,
@@ -487,13 +516,21 @@ def run_supervisor(state_path, output, display, geometry, window_id, encoder,
 
 def _build_parser():
     parser = argparse.ArgumentParser(
-        description='Record the unique Gazebo client window (MKV/H.264).',
+        description='Record one unique Gazebo or MuJoCo window (MKV/H.264).',
     )
     subparsers = parser.add_subparsers(
         dest='command', required=True, metavar='{start,status,stop}',
     )
     start = subparsers.add_parser(
-        'start', help='start recording the Gazebo client region',
+        'start', help='start recording the selected simulator client region',
+    )
+    start.add_argument(
+        '--simulator', choices=('gazebo', 'mujoco'), default='gazebo',
+        help='simulator window to record (default: gazebo)',
+    )
+    start.add_argument(
+        '--owner-pid', type=int,
+        help='required MuJoCo runtime PID used to bind the viewer window',
     )
     start.add_argument('--output', required=True,
                        help='MKV output path; must not exist yet')
@@ -518,6 +555,10 @@ def _build_parser():
     supervise.add_argument('--display', required=True)
     supervise.add_argument('--geometry', required=True)
     supervise.add_argument('--window-id', required=True)
+    supervise.add_argument(
+        '--simulator', choices=('gazebo', 'mujoco'), default='gazebo',
+    )
+    supervise.add_argument('--owner-pid', type=int)
     supervise.add_argument('--encoder', required=True)
     supervise.add_argument('--fps', type=int, required=True)
     supervise.add_argument('--log', required=True)
@@ -532,6 +573,8 @@ def main(argv=None):
             payload = start_recorder(
                 arguments.output, arguments.state,
                 encoder=arguments.encoder, fps=arguments.fps,
+                simulator=arguments.simulator,
+                owner_pid=arguments.owner_pid,
             )
         elif arguments.command == 'status':
             payload = status_recorder(arguments.state)
@@ -544,6 +587,8 @@ def main(argv=None):
                 display=arguments.display,
                 geometry=parse_geometry(arguments.geometry),
                 window_id=arguments.window_id,
+                simulator=arguments.simulator,
+                owner_pid=arguments.owner_pid,
                 encoder=arguments.encoder,
                 fps=arguments.fps,
                 log_path=arguments.log,

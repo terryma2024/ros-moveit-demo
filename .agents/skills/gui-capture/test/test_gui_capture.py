@@ -216,7 +216,7 @@ class GuiCaptureTest(unittest.TestCase):
             / "so101-dev"
             / "references"
             / "test-and-acceptance.md",
-            REPOSITORY / ".agents" / "skills" / "gazebo-video-debug" / "SKILL.md",
+            REPOSITORY / ".agents" / "skills" / "so101-video-debug" / "SKILL.md",
         )
 
         for path in current_docs:

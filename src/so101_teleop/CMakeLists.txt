@@ -48,6 +48,7 @@ install(
     scripts/so101_teleop_server.py
     scripts/tile_ai_station_guis.py
     scripts/gazebo_window_recorder.py
+    scripts/simulator_window_recorder.py
     scripts/so101_stack_inventory.py
   DESTINATION lib/${PROJECT_NAME}
 )

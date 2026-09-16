@@ -121,9 +121,9 @@ Repository-level agent workflows live in `.agents/skills/`:
 - [`gui-capture`](.agents/skills/gui-capture/SKILL.md) routes GUI inspection on
   macOS and GNOME Linux. Visual acceptance requires a fresh screenshot paired
   with runtime data.
-- [`gazebo-video-debug`](.agents/skills/gazebo-video-debug/SKILL.md) records and
-  inspects Gazebo pick-place video. It supplements ROS, MoveIt, and physics
-  evidence rather than replacing them.
+- [`so101-video-debug`](.agents/skills/so101-video-debug/SKILL.md) records and
+  inspects Gazebo or MuJoCo pick-place video. It supplements ROS, MoveIt, and
+  physics evidence rather than replacing them.
 
 ## Requirements
 
