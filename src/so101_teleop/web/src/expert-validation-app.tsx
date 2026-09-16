@@ -16,14 +16,14 @@ import { CampaignProgress, type CampaignView } from "@/components/expert-validat
 import { CampaignSetup, type SetupState } from "@/components/expert-validation/campaign-setup";
 import { PointEvidence } from "@/components/expert-validation/point-evidence";
 import { RetryPanel } from "@/components/expert-validation/retry-panel";
-import { TopViewMap } from "@/components/expert-validation/top-view-map";
-import fixture from "@/fixtures/top_view_projection_v1.json";
+import { TopViewMap, type MapPointState } from "@/components/expert-validation/top-view-map";
 
 export type ExpertValidationApi = {
   capabilities(): Promise<Capabilities>;
   acquireLease(serviceSessionId: string): Promise<Lease>;
   renewLease(lease: Lease): Promise<Lease>;
   createManifest(totalPoints: number): Promise<Manifest>;
+  getManifest(manifestId: string): Promise<Manifest>;
   preflight(input: PreflightInput, lease: LeaseAuthority): Promise<PreflightReceipt>;
   startCampaign(input: StartCampaignInput, lease: LeaseAuthority): Promise<CampaignProjection>;
   retry(
@@ -42,6 +42,29 @@ export type ExpertValidationApi = {
 
 const defaultClient = new ExpertValidationClient();
 
+const TERMINAL_CAMPAIGNS = new Set([
+  "COMPLETED", "COMPLETED_WITH_FAILURES", "INFRA_FAILED", "CLEANING_UP",
+  "CANCELLED", "STOPPED", "NEEDS_OPERATOR_RECOVERY",
+]);
+
+function mapPointState(status: string | undefined, campaign: CampaignView | null): MapPointState {
+  const terminal = TERMINAL_CAMPAIGNS.has(campaign?.status ?? "");
+  if (campaign?.status === "NEEDS_OPERATOR_RECOVERY") return "INVALID_BLOCKED";
+  if (status === "PASSED" || status === "FAILED" || status === "INDETERMINATE"
+    || status === "INVALID_BLOCKED" || status === "TERMINAL_UNRUN"
+    || status === "INFRA_FAILED_REMAINDER") return status;
+  if (status === "INFRA_INTERRUPTED" || status === "INFRA_INTERRUPTED_REQUEUEABLE") {
+    if (terminal) return "INFRA_FAILED_REMAINDER";
+    return campaign?.execution_mode === "ADAPTIVE" ? "INFRA_INTERRUPTED_REQUEUEABLE" : "INVALID_BLOCKED";
+  }
+  if (status === "LEASED") return "LEASED";
+  if (status === "RUNNING" || status === "EXECUTING") return "EXECUTING";
+  if (!status || status === "UNRUN" || status === "ELIGIBLE_UNRUN") {
+    return terminal ? "TERMINAL_UNRUN" : "ELIGIBLE_UNRUN";
+  }
+  return "INVALID_BLOCKED";
+}
+
 function stableSessionId(): string {
   const key = "so101-expert-validation-service-session";
   const existing = sessionStorage.getItem(key);
@@ -58,8 +81,12 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
   const receiptGeneration = useRef<number>();
   const [leaseRenewing, setLeaseRenewing] = useState(false);
   const [manifest, setManifest] = useState<Manifest>();
+  const manifestRequestGeneration = useRef(0);
+  const [campaignManifest, setCampaignManifest] = useState<Manifest>();
+  const [mapError, setMapError] = useState("");
   const [receipt, setReceipt] = useState<PreflightReceipt>();
   const [campaign, setCampaign] = useState<CampaignView | null>(null);
+  const campaignRef = useRef<CampaignView | null>(null);
   const [selectedPointId, setSelectedPointId] = useState<string>();
   const [notice, setNotice] = useState("");
   const [setup, setSetup] = useState<SetupState>({
@@ -69,6 +96,11 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
     maxPointsPerWorker: 20,
   });
   const sessionId = useMemo(stableSessionId, []);
+
+  const replaceCampaign = (next: CampaignView) => {
+    campaignRef.current = next;
+    setCampaign(next);
+  };
 
   const replaceLease = (next?: Lease) => {
     leaseRef.current = next;
@@ -117,18 +149,38 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
     let disposed = false;
     api.capabilities().then(setCapabilities).catch(() => setNotice("Capabilities unavailable"));
     api.restoreCampaign?.().then((value) => {
-      if (!value || disposed) return;
-      setCampaign(value);
-    });
+      if (!value || disposed || campaignRef.current) return;
+      replaceCampaign(value);
+    }).catch((error: unknown) => { if (!disposed) reportError(error); });
     return () => {
       disposed = true;
+      manifestRequestGeneration.current += 1;
     };
   }, [api]);
 
   useEffect(() => {
     if (!campaign) return;
-    return api.watchCampaign?.(campaign.campaign_id, campaign.sequence, setCampaign);
+    return api.watchCampaign?.(campaign.campaign_id, campaign.sequence, replaceCampaign);
   }, [api, campaign?.campaign_id]);
+
+  useEffect(() => {
+    let disposed = false;
+    setCampaignManifest(undefined);
+    setSelectedPointId(undefined);
+    setMapError("");
+    if (!campaign) return;
+    const manifestId = campaign.manifest_id;
+    if (!manifestId) { setMapError("CAMPAIGN_MANIFEST_ID_MISSING"); return; }
+    api.getManifest(manifestId).then((value) => {
+      if (disposed) return;
+      if (value.manifest_id !== manifestId) throw new Error("CAMPAIGN_MANIFEST_ID_MISMATCH");
+      if (!value.top_view) throw new Error("CAMPAIGN_MAP_NOT_AVAILABLE");
+      setCampaignManifest(value);
+    }).catch((error: unknown) => {
+      if (!disposed) setMapError(error instanceof Error ? error.message : String(error));
+    });
+    return () => { disposed = true; };
+  }, [api, campaign?.campaign_id, campaign?.manifest_id]);
 
   const authority = (): LeaseAuthority => {
     const current = leaseRef.current;
@@ -182,24 +234,39 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
       { ...preflightInput(), preflight_receipt_id: admitted.receipt_id } as StartCampaignInput,
       authority(),
     );
-    setCampaign(result);
+    replaceCampaign(result);
   };
 
   const changeSetup = (next: SetupState, field: keyof SetupState) => {
     setSetup(next);
     setReceipt(undefined);
-    if (field === "pointCount") setManifest(undefined);
+    if (field === "pointCount") {
+      manifestRequestGeneration.current += 1;
+      setManifest(undefined);
+    }
   };
 
+  const generateManifest = async () => {
+    const generation = ++manifestRequestGeneration.current;
+    const count = setup.pointCount;
+    const value = await api.createManifest(count);
+    if (generation !== manifestRequestGeneration.current) return;
+    if (value.point_count !== count || value.stale) throw new Error("GENERATED_MANIFEST_INVALID");
+    setManifest(value);
+    setReceipt(undefined);
+  };
+
+  const mapManifest = campaign
+    ? campaignManifest?.manifest_id === campaign.manifest_id ? campaignManifest : undefined
+    : manifest;
   const mapCampaign = {
-    points: fixture.points.map((point) => {
+    points: (mapManifest?.top_view?.points ?? []).map((point) => {
       const projected = campaign?.points?.find((candidate) => candidate.point_id === point.id);
       return {
         point_id: point.id,
-        status: (projected?.status === "PASSED" || projected?.status === "FAILED"
-          ? projected.status
-          : "ELIGIBLE_UNRUN") as "PASSED" | "FAILED" | "ELIGIBLE_UNRUN",
+        status: mapPointState(projected?.status, campaign),
         active_worker_id: projected?.active_worker_id ?? undefined,
+        phase: campaign?.workers?.find((worker) => worker.worker_id === projected?.active_worker_id)?.state,
         reason: projected?.reason ?? undefined,
       };
     }),
@@ -218,14 +285,15 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
         preflightMessage={notice}
         onChange={changeSetup}
         onAcquireLease={() => { void api.acquireLease(sessionId).then(replaceLease).catch(reportError); }}
-        onGenerate={() => api.createManifest(setup.pointCount).then((value) => { setManifest(value); setReceipt(undefined); })}
+        onGenerate={() => { void generateManifest().catch(reportError); }}
         onPreflight={() => { void runPreflight().catch(reportError); }}
         onStart={() => { void start().catch(reportError); }}
       />
-      {campaign ? (
+      {campaign || mapManifest?.top_view ? (
         <div className="grid gap-5 lg:grid-cols-2">
-          <TopViewMap manifest={fixture} campaign={mapCampaign} selectedPointId={selectedPointId} onSelect={setSelectedPointId} />
-          <CampaignProgress campaign={campaign} />
+          {mapManifest?.top_view ? <TopViewMap manifest={mapManifest.top_view} campaign={mapCampaign} selectedPointId={selectedPointId} onSelect={setSelectedPointId} />
+            : <p role="status">Map unavailable: {mapError || "Loading bound manifest"}</p>}
+          {campaign ? <CampaignProgress campaign={campaign} /> : null}
         </div>
       ) : null}
       {selectedPoint ? <PointEvidence point={selectedPoint} artifacts={selectedPoint.artifacts ?? []} /> : null}
@@ -234,7 +302,7 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
           campaign={campaign}
           onRetry={async (pointIds, confirmation) => {
             const result = await api.retry(campaign.campaign_id, pointIds, authority(), confirmation);
-            setCampaign(result);
+            replaceCampaign(result);
           }}
         />
       ) : null}

@@ -48,7 +48,7 @@ def _one_committed_service(tmp_path, *, identity_change=None, committed=True):
     service.artifacts = ValidationArtifactRegistry()
     service._campaigns = {"campaign-a": {"campaign_id": "campaign-a", "sequence": 0}}
     service._campaign_requests = {"campaign-a": SimpleNamespace(
-        campaign_id="campaign-a", batch_id="batch-a", execution_mode="SEQUENTIAL",
+        campaign_id="campaign-a", manifest_id="manifest-a", batch_id="batch-a", execution_mode="SEQUENTIAL",
         evidence_root=tmp_path, selection=SimpleNamespace(
             point_ids=("point-a",), points=(SimpleNamespace(id="point-a", display_id="P01"),),
         ),
@@ -185,6 +185,7 @@ def test_get_campaign_projects_terminal_fixed_journal_and_persists_cursor(tmp_pa
     )
     request = SimpleNamespace(
         campaign_id=campaign_id,
+        manifest_id="manifest-a",
         batch_id=batch_id,
         execution_mode="SEQUENTIAL",
         evidence_root=tmp_path,
@@ -212,6 +213,7 @@ def test_get_campaign_projects_terminal_fixed_journal_and_persists_cursor(tmp_pa
     projected = service.get_campaign(campaign_id)
 
     assert projected["status"] == "COMPLETED"
+    assert projected["manifest_id"] == "manifest-a"
     assert projected["sequence"] == 6
     assert [(point["display_id"], point["status"]) for point in projected["points"]] == [
         ("P01", "PASSED"),
@@ -270,6 +272,7 @@ def test_get_campaign_keeps_last_projection_during_an_incomplete_journal_frame(t
     service._campaign_requests = {
         "campaign-a": SimpleNamespace(
             campaign_id="campaign-a",
+            manifest_id="manifest-a",
             batch_id="batch-a",
             execution_mode="SEQUENTIAL",
             evidence_root=tmp_path,
@@ -287,6 +290,7 @@ def test_fixed_projection_maps_real_active_attempt_and_counts_only_started_execu
     service.store = CursorStore()
     request = SimpleNamespace(
         campaign_id="campaign-a",
+        manifest_id="manifest-a",
         batch_id="batch-a",
         execution_mode="SEQUENTIAL",
         evidence_root=tmp_path,

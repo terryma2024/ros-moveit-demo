@@ -508,6 +508,17 @@
             "title": "Levels Used",
             "type": "array"
           },
+          "manifest_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Id"
+          },
           "not_executed": {
             "default": 0,
             "title": "Not Executed",
@@ -1031,6 +1042,17 @@
       "ManifestResponse": {
         "additionalProperties": false,
         "properties": {
+          "catalog_seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Seed"
+          },
           "catalog_sha256": {
             "anyOf": [
               {
@@ -1042,9 +1064,31 @@
             ],
             "title": "Catalog Sha256"
           },
+          "geometry_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Geometry Sha256"
+          },
           "manifest_id": {
             "title": "Manifest Id",
             "type": "string"
+          },
+          "manifest_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Sha256"
           },
           "point_count": {
             "default": 0,
@@ -1059,6 +1103,28 @@
             "title": "Points",
             "type": "array"
           },
+          "sampler_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sampler Id"
+          },
+          "sampler_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sampler Version"
+          },
           "selection_sha256": {
             "anyOf": [
               {
@@ -1070,16 +1136,441 @@
             ],
             "title": "Selection Sha256"
           },
+          "source_commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Commit"
+          },
+          "source_hashes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestSourceHashes"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "stale": {
             "default": false,
             "title": "Stale",
             "type": "boolean"
+          },
+          "top_view": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestTopViewResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "manifest_id"
         ],
         "title": "ManifestResponse",
+        "type": "object"
+      },
+      "ManifestSourceHashes": {
+        "additionalProperties": false,
+        "properties": {
+          "adaptive_config": {
+            "title": "Adaptive Config",
+            "type": "string"
+          },
+          "anchors": {
+            "title": "Anchors",
+            "type": "string"
+          },
+          "catalog": {
+            "title": "Catalog",
+            "type": "string"
+          },
+          "dynamic_policy": {
+            "title": "Dynamic Policy",
+            "type": "string"
+          },
+          "execution_policy": {
+            "title": "Execution Policy",
+            "type": "string"
+          },
+          "parallel_config": {
+            "title": "Parallel Config",
+            "type": "string"
+          },
+          "placement_policy": {
+            "title": "Placement Policy",
+            "type": "string"
+          },
+          "scene": {
+            "title": "Scene",
+            "type": "string"
+          },
+          "target_mesh": {
+            "title": "Target Mesh",
+            "type": "string"
+          },
+          "task_scene": {
+            "title": "Task Scene",
+            "type": "string"
+          }
+        },
+        "required": [
+          "catalog",
+          "parallel_config",
+          "adaptive_config",
+          "execution_policy",
+          "dynamic_policy",
+          "placement_policy",
+          "task_scene",
+          "scene",
+          "target_mesh",
+          "anchors"
+        ],
+        "title": "ManifestSourceHashes",
+        "type": "object"
+      },
+      "ManifestTopViewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "cup_footprint_radius_px": {
+            "exclusiveMinimum": 0.0,
+            "title": "Cup Footprint Radius Px",
+            "type": "number"
+          },
+          "geometry": {
+            "$ref": "#/components/schemas/MapGeometryResponse"
+          },
+          "marker_radius_px": {
+            "exclusiveMinimum": 0.0,
+            "title": "Marker Radius Px",
+            "type": "number"
+          },
+          "palette": {
+            "$ref": "#/components/schemas/MapPaletteResponse"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/MapPointResponse"
+            },
+            "maxItems": 20,
+            "minItems": 4,
+            "title": "Points",
+            "type": "array"
+          },
+          "projection": {
+            "$ref": "#/components/schemas/MapProjectionResponse"
+          },
+          "target_tolerance_radius_px": {
+            "exclusiveMinimum": 0.0,
+            "title": "Target Tolerance Radius Px",
+            "type": "number"
+          }
+        },
+        "required": [
+          "projection",
+          "geometry",
+          "cup_footprint_radius_px",
+          "target_tolerance_radius_px",
+          "marker_radius_px",
+          "points",
+          "palette"
+        ],
+        "title": "ManifestTopViewResponse",
+        "type": "object"
+      },
+      "MapGeometryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "base_bounds": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Base Bounds",
+            "type": "array"
+          },
+          "candidate_bounds": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Candidate Bounds",
+            "type": "array"
+          },
+          "cup_radius_m": {
+            "exclusiveMinimum": 0.0,
+            "title": "Cup Radius M",
+            "type": "number"
+          },
+          "table_bounds": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Table Bounds",
+            "type": "array"
+          },
+          "target_bounds": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Target Bounds",
+            "type": "array"
+          },
+          "target_center": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Target Center",
+            "type": "array"
+          },
+          "target_tolerance_radius_m": {
+            "exclusiveMinimum": 0.0,
+            "title": "Target Tolerance Radius M",
+            "type": "number"
+          }
+        },
+        "required": [
+          "table_bounds",
+          "base_bounds",
+          "target_center",
+          "target_bounds",
+          "candidate_bounds",
+          "cup_radius_m",
+          "target_tolerance_radius_m"
+        ],
+        "title": "MapGeometryResponse",
+        "type": "object"
+      },
+      "MapPaletteResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "blue": {
+            "$ref": "#/components/schemas/MapPaletteStyle"
+          },
+          "green": {
+            "$ref": "#/components/schemas/MapPaletteStyle"
+          },
+          "red": {
+            "$ref": "#/components/schemas/MapPaletteStyle"
+          }
+        },
+        "required": [
+          "blue",
+          "green",
+          "red"
+        ],
+        "title": "MapPaletteResponse",
+        "type": "object"
+      },
+      "MapPaletteStyle": {
+        "additionalProperties": false,
+        "properties": {
+          "fill": {
+            "title": "Fill",
+            "type": "string"
+          },
+          "icon": {
+            "enum": [
+              "pending",
+              "passed",
+              "failed"
+            ],
+            "title": "Icon",
+            "type": "string"
+          },
+          "stroke": {
+            "title": "Stroke",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stroke",
+          "fill",
+          "icon"
+        ],
+        "title": "MapPaletteStyle",
+        "type": "object"
+      },
+      "MapPointResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "display_id": {
+            "title": "Display Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "position_world_m": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Position World M",
+            "type": "array"
+          },
+          "projected_px": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Projected Px",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "display_id",
+          "position_world_m",
+          "projected_px"
+        ],
+        "title": "MapPointResponse",
+        "type": "object"
+      },
+      "MapProjectionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "bounds_m": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Bounds M",
+            "type": "array"
+          },
+          "height_px": {
+            "exclusiveMinimum": 0.0,
+            "title": "Height Px",
+            "type": "integer"
+          },
+          "offset_x_px": {
+            "title": "Offset X Px",
+            "type": "number"
+          },
+          "offset_y_px": {
+            "title": "Offset Y Px",
+            "type": "number"
+          },
+          "padding_px": {
+            "minimum": 0.0,
+            "title": "Padding Px",
+            "type": "number"
+          },
+          "pixels_per_m": {
+            "exclusiveMinimum": 0.0,
+            "title": "Pixels Per M",
+            "type": "number"
+          },
+          "width_px": {
+            "exclusiveMinimum": 0.0,
+            "title": "Width Px",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "width_px",
+          "height_px",
+          "bounds_m",
+          "padding_px",
+          "pixels_per_m",
+          "offset_x_px",
+          "offset_y_px"
+        ],
+        "title": "MapProjectionResponse",
         "type": "object"
       },
       "PointProjectionResponse": {

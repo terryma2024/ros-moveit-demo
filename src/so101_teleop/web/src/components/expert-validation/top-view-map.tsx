@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from "react";
+import { Fragment, type KeyboardEvent } from "react";
 
 import { projectBounds, projectXY, type Projection } from "./projection";
 
@@ -30,6 +30,7 @@ export type TopViewManifest = {
     base_bounds: readonly number[];
     target_center: readonly number[];
     target_bounds: readonly number[];
+    candidate_bounds?: readonly number[];
     cup_radius_m: number;
     target_tolerance_radius_m: number;
   };
@@ -78,11 +79,20 @@ function PointIcon({ icon }: { icon: string }) {
   return <circle r="2.5" fill="currentColor" />;
 }
 
+function worldGridTicks(lower: number, upper: number): number[] {
+  const step = Math.max(0.05, (upper - lower) / 100);
+  const first = Math.ceil(lower / step - 1e-9);
+  const last = Math.floor(upper / step + 1e-9);
+  return Array.from({ length: Math.max(0, last - first + 1) }, (_, index) =>
+    Number(((first + index) * step).toFixed(12)));
+}
+
 export function TopViewMap({ manifest, campaign, selectedPointId, onSelect }: Props) {
   const { projection, geometry } = manifest;
   const table = projectBounds(projection, geometry.table_bounds);
   const base = projectBounds(projection, geometry.base_bounds);
   const target = projectBounds(projection, geometry.target_bounds);
+  const candidates = geometry.candidate_bounds ? projectBounds(projection, geometry.candidate_bounds) : undefined;
   const [targetX, targetY] = projectXY(
     projection,
     geometry.target_center[0],
@@ -114,14 +124,15 @@ export function TopViewMap({ manifest, campaign, selectedPointId, onSelect }: Pr
         stroke="#64748b"
         strokeWidth="2"
       />
-      {Array.from({ length: 11 }, (_, index) => -0.25 + index * 0.05).map((x) => {
+      {worldGridTicks(geometry.table_bounds[0], geometry.table_bounds[1]).map((x) => {
         const [projectedX] = projectXY(projection, x, 0);
         return <line key={`x-${x}`} x1={projectedX} y1={table.y} x2={projectedX} y2={table.y + table.height} stroke="#e2e8f0" />;
       })}
-      {Array.from({ length: 13 }, (_, index) => -0.5 + index * 0.05).map((y) => {
+      {worldGridTicks(geometry.table_bounds[2], geometry.table_bounds[3]).map((y) => {
         const [, projectedY] = projectXY(projection, 0, y);
         return <line key={`y-${y}`} x1={table.x} y1={projectedY} x2={table.x + table.width} y2={projectedY} stroke="#e2e8f0" />;
       })}
+      {candidates ? <rect data-geometry="candidate-region" x={candidates.x} y={candidates.y} width={candidates.width} height={candidates.height} fill="none" stroke="#64748b" strokeDasharray="5 4" /> : null}
       <rect data-geometry="base" x={base.x} y={base.y} width={base.width} height={base.height} fill="#cbd5e1" stroke="#334155" strokeWidth="3" />
       <rect x={originX - 5} y={originY - 5} width="10" height="10" fill="#0f172a" aria-label="Robot base origin" />
       <rect data-geometry="target-region" x={target.x} y={target.y} width={target.width} height={target.height} fill="#fef3c7" stroke="#d97706" />
@@ -145,8 +156,8 @@ export function TopViewMap({ manifest, campaign, selectedPointId, onSelect }: Pr
           point.reason,
         ].filter(Boolean).join(" ");
         return (
+          <Fragment key={manifestPoint.id}>
           <g
-            key={manifestPoint.id}
             role="button"
             tabIndex={0}
             aria-label={label}
@@ -177,6 +188,9 @@ export function TopViewMap({ manifest, campaign, selectedPointId, onSelect }: Pr
             />
             <PointIcon icon={style.icon} />
           </g>
+          <text x={manifestPoint.projected_px[0] + 15} y={manifestPoint.projected_px[1] + 4}
+            fontSize="12" fill="#334155" pointerEvents="none" aria-hidden="true">{manifestPoint.display_id}</text>
+          </Fragment>
         );
       })}
     </svg>

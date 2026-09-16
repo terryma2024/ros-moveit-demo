@@ -85,6 +85,12 @@ export class ExpertValidationClient {
     });
   }
 
+  getManifest(manifestId: string): Promise<Manifest> {
+    return this.request<Manifest>(
+      `/expert-validation/manifests/${encodeURIComponent(manifestId)}`,
+    );
+  }
+
   preflight(input: PreflightInput, lease: LeaseAuthority): Promise<PreflightReceipt> {
     return this.post<PreflightReceipt>("/expert-validation/campaigns/preflight", {
       ...input,

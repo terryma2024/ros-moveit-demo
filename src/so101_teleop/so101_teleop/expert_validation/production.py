@@ -27,6 +27,7 @@ from .coordinator_events import (
 )
 from .executor_registry import ExecutorRegistry, QualificationProbes
 from .lease import ValidationLeaseService
+from .manifest_geometry import current_manifest_source_hash, freeze_manifest_context
 from .models import UpstreamCursor
 from .preflight import CampaignStartRequest
 from .process_owner import ExecutionProcessOwner
@@ -325,6 +326,7 @@ class ProductionExpertValidationService(ExpertValidationService):
     def __init__(self, *, layout: ProductionRuntimeLayout, registry, artifacts, **kwargs):
         super().__init__(**kwargs)
         self.layout = layout
+        self._current_source_config_sha256 = lambda: current_manifest_source_hash(self.layout)
         self.registry = registry
         self.artifacts = artifacts
         self._pending: dict[str, tuple[CampaignStartRequest, object, dict[str, object]]] = {}
@@ -372,8 +374,9 @@ class ProductionExpertValidationService(ExpertValidationService):
 
     def create_manifest_from_count(self, total_points):
         selection = select_catalog_points(total_points)
+        context, source_hash = freeze_manifest_context(self.layout, selection)
         manifest = self.create_manifest(
-            selection, source_config_sha256=_sha256(self.layout.parallel_config_path)
+            selection, source_config_sha256=source_hash, frozen_context=context,
         )
         return self._manifest_response(manifest)
 
@@ -390,6 +393,14 @@ class ProductionExpertValidationService(ExpertValidationService):
             "selection_sha256": document["selection_sha256"],
             "stale": manifest.stale,
             "points": document["points"],
+            "manifest_sha256": manifest.manifest_sha256,
+            "source_commit": document.get("source_commit"),
+            "sampler_id": document.get("sampler_id"),
+            "sampler_version": document.get("sampler_version"),
+            "catalog_seed": document["catalog_seed"],
+            "geometry_sha256": document.get("geometry_sha256"),
+            "source_hashes": document.get("source_hashes"),
+            "top_view": document.get("top_view"),
         }
 
     def _selection(self, manifest_id: str) -> PointSelection:
@@ -543,6 +554,7 @@ class ProductionExpertValidationService(ExpertValidationService):
         result = await self.supervisor.start_first_pass(request, receipt=receipt)
         projection = {
             "campaign_id": result["campaign_id"],
+            "manifest_id": request.manifest_id,
             "sequence": 1,
             "execution_mode": request.execution_mode,
             "owner_kind": "ADAPTIVE_WRAPPER" if request.execution_mode == "ADAPTIVE" else "COORDINATOR",
@@ -833,6 +845,7 @@ class ProductionExpertValidationService(ExpertValidationService):
         )
         return {
             "campaign_id": request.campaign_id,
+            "manifest_id": request.manifest_id,
             "sequence": batch.next_cursor.sequence,
             "execution_mode": request.execution_mode,
             "owner_kind": "COORDINATOR",

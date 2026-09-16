@@ -1,5 +1,42 @@
 # SO-101 MoveIt Expert Validation Web Experiment Ledger
 
+## CP-010 — Server-frozen map and campaign-bound restoration
+
+- Starting clean source: `10b368cf5a1cb01adf693f76853873dba2ec3e7a`. This is a bounded source integration repair within the approved immutable-manifest and exact-map contract; no new physical campaign. EXP-052 remains pending.
+- `manifest_geometry.py` reads only the bound installed Demo share/config paths. It hashes catalog, both execution configs, execution/dynamic/placement policies, task-scene config, scene XML, target mesh and anchor file together with source commit/sampler version. Geometry is derived from actual table/base/cup/target scene elements and physical target policy; target mesh clearance, policy centre/tolerance, anchors, finite coordinates, edge clearance and baseline15mm sampling separation are checked. Inconsistent input fails before persistence; input identities are checked again before freeze.
+- The canonical store document now includes its manifest ID, source/sampler identities, per-input hashes, geometry hash, selected top-view points and one equal-scale transform. Response carries the canonical store SHA256. Legacy records remain readable with top_view=null and are stale under the stronger identity, rather than acquiring geometry from current config. Input drift preserves the frozen map but prevents `_selection`/start.
+- API nested map/source-hash models remain closed, with finite coordinate tuples and4..20 map points; generated OpenAPI/TypeScript are synchronized. Production initial and fixed-journal campaign projections now carry the authoritative manifest_id.
+- App no longer imports a golden fixture at runtime. It fetches the campaign-bound manifest through typed read-only GET, isolates it from mutable generated setup, clears selection on binding change, rejects identity mismatch, ignores disposed/late map responses and shows missing-map errors without inventing coordinates. Preview is visible before a campaign; count changes invalidate it, including a pending Generate response. Grid follows returned table bounds; candidate region and display labels are visible; Worker stage comes from the authoritative Worker projection.
+- Semantic colours retain PASSED/FAILED/INDETERMINATE and terminal/unresolved blockers. Only an adaptive nonterminal infrastructure interruption may stay blue/requeueable; fixed interruption fails closed red. Original campaign statistics and attempt histories are not rewritten.
+- RED t84:14 intended failures in0.83s,elapsed1.14s,exit1, scratch/db/tmp exact venv tempfile verified. t83's3 API cases first hit SQLite cross-thread TestClient misuse; that run is retained INVALID for those cases. SameThreadApi uses real ASGI/httpx on the creating SQLite thread, not disabled SQLite integrity/thread checks.
+- GREEN t85:18 focused manifest/service cases,elapsed1.36s,exit0. Independent12-point literals prove largest-remainder selection is not a prefix of20fixture points; finalP12 sample_14_far_right projects to[668.37082,636.8563]. Ten distinct installed-input drift cases preserve frozen map/hash after actual store reopening and fence selection. No motion owner or simulated Producer is used for this gate.
+- RED t89:6 expected Web failures/14passes (20tests); missing bound GET,20instead of4markers, wrong coordinates/terminal colours and fabricated map after read failure. RED t90:1 missing campaign manifest_id failure/10passes,elapsed1.13s. RED t92:2 failures/27passes prove pending Generate resurrected stale setup and grid used baseline bounds. RED t98:fixed infrastructure interruption incorrectly blue. All intended production boundaries ran, but early Web commands inherited the system Node18 wrapper; their diagnostic observations are not the final approved toolchain qualification.
+- Environment-only failed gates retained: t86 export lacked source PYTHONPATH before pytest (exit94); t87 pytest CLI treated `.*` in the warning message as a literal and stopped at external warning collection (exit2); t88 was only test/teleop (301passes), not the full package; t94 full package had new-test registration expectation and missing subprocess PYTHONPATH failures (424passes/2failures). New test is registered in CMake and the complete package-layout inventory, without weakening the equality gate.
+- Browser environment failures t97/t99 occurred before test collection: JSON import required runtime attributes; Node18 rejected modern `with`. Default `node` was independently identified as /home/lenovo/.local/bin/node -> Node18. Forced Bun t102 hit Vitest MessagePort API incompatibility (0tests/28errors); t101 remained live without browser/child startup, then only its verified CLI PID3611879 was SIGINT-stopped and reaped (exit130). No wrapper/server/Worker/Broker signal was sent. Final gates use existing /data/work/tools/node-v24.18.1-linux-x64/bin/node and Bun1.3.14, with paths/versions recorded; no user tool was replaced/downloaded.
+- True-browser RED t105:11passed/2failed, trace confirms newly added inline text enlarged the interactive SVG group's bounding box, causing normal point click to hit the table. Minimal repair places noninteractive visual labels outside the marker group. No force click or timeout increase. GREEN t106:all13 browser cases passed in18.7s, including exact4markers/world-to-pixel coordinates after page reload, fixed indeterminate red, original adaptive retry and real browser RGB decoding/opaque numeric link. These are mocked-API regression cases, NOT live/adaptive qualification.
+- Final complete source t103:426 Teleop tests passed in10.60s,elapsed10.97s,exit0,no warning summary; -W error with only the documented exact external general_plain_validator_function compatibility message exempted. Scratch/dj/tmp and exact venv tempfile verified. Final Web t107 and production build use Bun1.3.14/Node24.18.1; see terminal evidence. Existing Vite large-chunk advisory is retained, not suppressed. No benchmark collected.
+- Review was performed inline per authoritative no-subagent handoff. No Coordinator/Runner scheduling, terminal-result authority, cancellation gate or producer seal was recreated or weakened. Publication remains unpushed after prior auto-review denial; no retry/bypass. Original full17-task completion is NOT claimed.
+- Remaining gates: authenticated active fixed cancellation, durable restart/idempotency and corruption recovery fencing, qualified capabilities/Runner projection, full producer RGB-D/cloud evidence, new copied installed release/package gates, actual-page sequential/parallel/exact20adaptive/conditional retry and complete independent physics/controller/scene/visual/cleanup acceptance. Historical EXP-051 still uses79a/release16, server domain231, Worker domains181/182/183, GZ_PARTITION=not_applicable and remains INVALID for full Web acceptance.
+- Retained:single registered root plus all new gate logs/JUnit/traces. Archived:none. Deletion candidates: scratch/da..dj, including failed/unused scratch/dd, and all historical superseded candidates. None deleted. Final host process/port readback shows no task motion/server/browser regression CLI or4173/18117listener; unrelated user sessions preserved.
+
+```yaml
+checkpoint_id: CP-010
+last_valid_experiment: EXP-006
+current_hypothesis: Wire the already-approved authenticated Coordinator cancellation channel before a fresh installed physical campaign; do not loosen the fixed-owner reject gate.
+working_tree_status: task-owned manifest/map/API/generated-contract/package-test/ledger changes only, prepared for scoped commit
+owned_processes: all gate handles terminal; no task physical campaign or test Web server remains
+preserved_processes: all unrelated user sessions/processes
+next_command: Commit the verified immutable-map integration, then write real authenticated fixed-control RED tests against the upstream Coordinator request-stop/cleanup composition.
+```
+
+## Manifest/map integration — next bounded source gate
+
+- Starting clean source: `10b368cf5a1cb01adf693f76853873dba2ec3e7a`; no new physical campaign or installed release. EXP-052 remains pending.
+- Observed first boundary: production canonical manifests contain points but no frozen geometry/projection or policy/scene hashes; the actual App imports the twenty-point golden test fixture for every map and drops non-PASSED/FAILED semantic states.
+- Approved contract: installed scene/policy/anchor/catalog/config identities and derived geometry must be frozen with the selected points. The page must consume the campaign-bound manifest, not a static fixture or mutable setup preview.
+- Planned t83 RED: exercise real production manifest creation against a copied installed input tree; independently assert 4/12/20 point cardinality, hand-checked coordinates/radii, persisted readback after reopening, source-input staleness and inconsistent scene/policy rejection. Then integrate closed API/schema and page restoration in separate RED/GREEN gates.
+- Runtime provenance remains historical EXP-051 source79a/release16, server domain231, Worker domains181/182/183, GZ_PARTITION=not_applicable (MuJoCo). No source-only test qualifies the pending installed/live gates.
+
 ## CP-009 — Exited owner is not cancellation authority
 
 - Source preceding this fix: `1faf89fe8af24805e0cbb0ea605afc51956e3d0a`. No new physical campaign; EXP-052 remains pending. Last actual runtime EXP-051 used source79a/copy release16, server domain231 and Worker domains181/182/183, GZ_PARTITION=not_applicable (MuJoCo).
@@ -78,7 +115,7 @@ success_contract: Source and package gates pass; fresh fixed four-point and adap
 worktree: /data/work/ws_moveit/.worktrees/teleop-expert-validation-web
 branch: codex/teleop-expert-validation-web
 base_commit: e1701375690321bc83b5f30ec044da1847d373aa
-current_commit: 1faf89fe8af24805e0cbb0ea605afc51956e3d0a
+current_commit: 10b368cf5a1cb01adf693f76853873dba2ec3e7a
 evidence_root: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01
 confirmed_conclusions:
   - origin/main exactly matched the required documentation commit e1701375690321bc83b5f30ec044da1847d373aa at CP-001.
@@ -92,7 +129,7 @@ disproven_routes:
   - At commit 654756ba32cfc0697aff1444c79752ff1e61c4ee, a four-point manifest could not be returned because its source field violated the closed response model.
 open_hypotheses:
   - A read-only verified journal projection and authoritative HTTP watcher can synchronize fresh Web progress and terminal state without acquiring upstream coordinator authority.
-latest_checkpoint: CP-009
+latest_checkpoint: CP-010
 next_experiment: EXP-052
 ```
 

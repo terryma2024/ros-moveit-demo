@@ -12,7 +12,7 @@ from typing import Literal
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_validator
 
 from so101_teleop.api import validate_bind_address
 from so101_teleop.task_artifacts import ArtifactAccessError
@@ -132,6 +132,68 @@ class ManifestPointResponse(ClosedModel):
     position_world_m: tuple[float, float, float]
 
 
+class ManifestSourceHashes(ClosedModel):
+    catalog: str
+    parallel_config: str
+    adaptive_config: str
+    execution_policy: str
+    dynamic_policy: str
+    placement_policy: str
+    task_scene: str
+    scene: str
+    target_mesh: str
+    anchors: str
+
+
+class MapProjectionResponse(ClosedModel):
+    width_px: int = Field(gt=0)
+    height_px: int = Field(gt=0)
+    bounds_m: tuple[FiniteFloat, FiniteFloat, FiniteFloat, FiniteFloat]
+    padding_px: FiniteFloat = Field(ge=0)
+    pixels_per_m: FiniteFloat = Field(gt=0)
+    offset_x_px: FiniteFloat
+    offset_y_px: FiniteFloat
+
+
+class MapGeometryResponse(ClosedModel):
+    table_bounds: tuple[FiniteFloat, FiniteFloat, FiniteFloat, FiniteFloat]
+    base_bounds: tuple[FiniteFloat, FiniteFloat, FiniteFloat, FiniteFloat]
+    target_center: tuple[FiniteFloat, FiniteFloat]
+    target_bounds: tuple[FiniteFloat, FiniteFloat, FiniteFloat, FiniteFloat]
+    candidate_bounds: tuple[FiniteFloat, FiniteFloat, FiniteFloat, FiniteFloat]
+    cup_radius_m: FiniteFloat = Field(gt=0)
+    target_tolerance_radius_m: FiniteFloat = Field(gt=0)
+
+
+class MapPointResponse(ClosedModel):
+    id: str
+    display_id: str
+    position_world_m: tuple[FiniteFloat, FiniteFloat, FiniteFloat]
+    projected_px: tuple[FiniteFloat, FiniteFloat]
+
+
+class MapPaletteStyle(ClosedModel):
+    stroke: str
+    fill: str
+    icon: Literal["pending", "passed", "failed"]
+
+
+class MapPaletteResponse(ClosedModel):
+    blue: MapPaletteStyle
+    green: MapPaletteStyle
+    red: MapPaletteStyle
+
+
+class ManifestTopViewResponse(ClosedModel):
+    projection: MapProjectionResponse
+    geometry: MapGeometryResponse
+    cup_footprint_radius_px: FiniteFloat = Field(gt=0)
+    target_tolerance_radius_px: FiniteFloat = Field(gt=0)
+    marker_radius_px: FiniteFloat = Field(gt=0)
+    points: tuple[MapPointResponse, ...] = Field(min_length=4, max_length=20)
+    palette: MapPaletteResponse
+
+
 class ManifestResponse(ClosedModel):
     manifest_id: str
     point_count: int = 0
@@ -139,6 +201,14 @@ class ManifestResponse(ClosedModel):
     selection_sha256: str | None = None
     stale: bool = False
     points: tuple[ManifestPointResponse, ...] = ()
+    manifest_sha256: str | None = None
+    source_commit: str | None = None
+    sampler_id: str | None = None
+    sampler_version: int | None = None
+    catalog_seed: int | None = None
+    geometry_sha256: str | None = None
+    source_hashes: ManifestSourceHashes | None = None
+    top_view: ManifestTopViewResponse | None = None
 
 
 class PreflightResponse(ClosedModel):
@@ -208,6 +278,7 @@ class BrokerProjectionResponse(ClosedModel):
 
 class CampaignProjectionResponse(ClosedModel):
     campaign_id: str
+    manifest_id: str | None = None
     sequence: int
     execution_mode: Literal["SEQUENTIAL", "PARALLEL", "ADAPTIVE"] | None = None
     owner_kind: Literal["COORDINATOR", "ADAPTIVE_WRAPPER"] | None = None

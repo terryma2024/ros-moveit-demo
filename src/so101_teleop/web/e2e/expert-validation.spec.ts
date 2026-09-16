@@ -1,7 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
+import golden from "../src/fixtures/top_view_projection_v1.json" with { type: "json" };
 
 const baseCampaign = {
   campaign_id: "campaign-adaptive",
+  manifest_id: "manifest-e2e-20",
   sequence: 4,
   execution_mode: "ADAPTIVE",
   owner_kind: "ADAPTIVE_WRAPPER",
@@ -103,6 +105,16 @@ async function installFakeRunner(page: Page) {
       lease_renewal_margin_s: 10,
     }),
   }));
+  await page.route("**/expert-validation/manifests/manifest-e2e-20", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      manifest_id: "manifest-e2e-20", point_count: 20, stale: false,
+      points: golden.points.map((point, index) => ({ ...point, label: point.id,
+        source: index < 4 ? "anchor" : "generated", stratum: index < 4 ? "anchor" : point.id.split("_").slice(2).join("/"),
+      })),
+      top_view: { ...golden, geometry: { ...golden.geometry, candidate_bounds: [-0.045, 0.08, -0.34, -0.24] } },
+    }),
+  }));
   await page.route("**/expert-validation/lease", (route) => route.fulfill({
     contentType: "application/json",
     body: JSON.stringify({
@@ -140,6 +152,45 @@ async function installFakeRunner(page: Page) {
   });
   return state;
 }
+
+test("reload restores exactly four server-projected markers, including fixed indeterminate red", async ({ page }) => {
+  await installFakeRunner(page);
+  const selected = golden.points.slice(0, 4).map((point, index) => ({ ...point,
+    projected_px: index === 0 ? [640.2, 597.4] : point.projected_px,
+    position_world_m: index === 0 ? [0.03, -0.31, 0.165] : point.position_world_m,
+  }));
+  const campaign = { ...baseCampaign, campaign_id: "campaign-four", manifest_id: "manifest-four",
+    execution_mode: "SEQUENTIAL", status: "RUNNING", requested: 4,
+    points: selected.map((point, index) => ({ point_id: point.id, display_id: point.display_id,
+      status: index === 0 ? "INDETERMINATE" : "UNRUN", retry_eligible: false,
+      attempts: [], artifact_ids: [], artifacts: [],
+    })),
+  };
+  await page.route("**/expert-validation/campaigns", route => route.fulfill({
+    contentType: "application/json", body: JSON.stringify([campaign]),
+  }));
+  await page.route("**/expert-validation/campaigns/campaign-four", route => route.fulfill({
+    contentType: "application/json", body: JSON.stringify(campaign),
+  }));
+  await page.route("**/expert-validation/manifests/manifest-four", route => route.fulfill({
+    contentType: "application/json", body: JSON.stringify({
+      manifest_id: "manifest-four", point_count: 4, stale: false,
+      points: selected.map(point => ({ ...point, label: point.id, source: "anchor", stratum: "anchor" })),
+      top_view: { ...golden, points: selected,
+        geometry: { ...golden.geometry, candidate_bounds: [-0.045, 0.08, -0.34, -0.24] } },
+    }),
+  }));
+  await page.goto("/expert-validation");
+  await expect(page.locator("[data-point-id]")).toHaveCount(4);
+  await expect(page.getByRole("button", { name: "P01 INDETERMINATE" }))
+    .toHaveAttribute("transform", "translate(640.2 597.4)");
+  await expect(page.getByRole("button", { name: "P01 INDETERMINATE" }))
+    .toHaveAttribute("data-color", "red");
+  await page.reload();
+  await expect(page.locator("[data-point-id]")).toHaveCount(4);
+  await expect(page.getByRole("button", { name: "P01 INDETERMINATE" }))
+    .toHaveAttribute("transform", "translate(640.2 597.4)");
+});
 
 test("restores an adaptive campaign and retries a business-failed point", async ({ page }) => {
   const fake = await installFakeRunner(page);

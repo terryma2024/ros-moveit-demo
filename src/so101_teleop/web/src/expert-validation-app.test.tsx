@@ -4,7 +4,32 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, test, vi } from "vitest";
 
 import { ExpertValidationApp, type ExpertValidationApi } from "./expert-validation-app";
-import type { Lease } from "@/api/expert-validation-types";
+import type { Lease, Manifest } from "@/api/expert-validation-types";
+import golden from "@/fixtures/top_view_projection_v1.json";
+
+function frozenManifest(count = 4, manifestId = "manifest-4"): Manifest {
+  const points = golden.points.slice(0, count);
+  return {
+    manifest_id: manifestId, point_count: count, stale: false,
+    points: points.map((point, index) => ({ ...point, label: point.id,
+      source: index < 4 ? "anchor" : "generated", stratum: index < 4 ? "anchor" : point.id.split("_").slice(2).join("/"),
+      position_world_m: point.position_world_m as [number, number, number] })),
+    top_view: { ...golden,
+      projection: { ...golden.projection, bounds_m: golden.projection.bounds_m as [number, number, number, number] },
+      geometry: { ...golden.geometry,
+        table_bounds: golden.geometry.table_bounds as [number, number, number, number],
+        base_bounds: golden.geometry.base_bounds as [number, number, number, number],
+        target_bounds: golden.geometry.target_bounds as [number, number, number, number],
+        target_center: golden.geometry.target_center as [number, number],
+        candidate_bounds: [-0.045, 0.08, -0.34, -0.24] },
+      points: points.map(point => ({ ...point,
+        position_world_m: point.position_world_m as [number, number, number],
+        projected_px: point.projected_px as [number, number] })),
+      palette: { blue: { ...golden.palette.blue, icon: "pending" },
+        green: { ...golden.palette.green, icon: "passed" }, red: { ...golden.palette.red, icon: "failed" } },
+    },
+  };
+}
 
 function fakeApi(overrides: Partial<ExpertValidationApi> = {}): ExpertValidationApi {
   return {
@@ -34,13 +59,9 @@ function fakeApi(overrides: Partial<ExpertValidationApi> = {}): ExpertValidation
       return { ...current, generation: current.generation + 1, expires_monotonic_ns: current.expires_monotonic_ns + 30_000_000_000 };
     },
     async createManifest(totalPoints) {
-      return {
-        manifest_id: `manifest-${totalPoints}`,
-        point_count: totalPoints,
-        stale: false,
-        points: [],
-      };
+      return frozenManifest(totalPoints, `manifest-${totalPoints}`);
     },
+    async getManifest(manifestId) { return frozenManifest(4, manifestId); },
     async preflight(input) {
       return {
         receipt_id: "receipt-1",
@@ -52,9 +73,10 @@ function fakeApi(overrides: Partial<ExpertValidationApi> = {}): ExpertValidation
         reason_codes: [],
       };
     },
-    async startCampaign() {
+    async startCampaign(input) {
       return {
         campaign_id: "campaign-1",
+        manifest_id: input.manifest_id,
         sequence: 1,
         execution_mode: "SEQUENTIAL",
         batch_cleanup_complete: false,
@@ -70,6 +92,82 @@ function fakeApi(overrides: Partial<ExpertValidationApi> = {}): ExpertValidation
 }
 
 describe("ExpertValidationApp", () => {
+  test("restored map uses its bound four-point server document, not twenty golden coordinates or a new setup", async () => {
+    const user = userEvent.setup();
+    const frozen = frozenManifest();
+    frozen.top_view!.points[0] = { ...frozen.top_view!.points[0],
+      position_world_m: [0.03, -0.31, 0.165], projected_px: [640.2, 597.4] };
+    const { container } = render(<ExpertValidationApp api={fakeApi({
+      getManifest: async () => frozen,
+      restoreCampaign: async () => ({ campaign_id: "campaign-1", manifest_id: "manifest-4",
+        sequence: 4, status: "RUNNING", requested: 4,
+        points: [{ point_id: "task_start", status: "UNRUN", retry_eligible: false,
+          attempts: [], artifact_ids: [], artifacts: [] }] }),
+    })} />);
+    const marker = await screen.findByRole("button", { name: "P01 ELIGIBLE_UNRUN" });
+    expect(container.querySelectorAll("[data-point-id]")).toHaveLength(4);
+    expect(marker.getAttribute("transform")).toBe("translate(640.2 597.4)");
+    await user.click(screen.getByRole("button", { name: "Generate points" }));
+    expect(container.querySelectorAll("[data-point-id]")).toHaveLength(4);
+    expect(marker.getAttribute("transform")).toBe("translate(640.2 597.4)");
+  });
+
+  test.each([
+    ["RUNNING", "UNRUN", "blue", "SEQUENTIAL"],
+    ["RUNNING", "INDETERMINATE", "red", "SEQUENTIAL"],
+    ["RUNNING", "INFRA_INTERRUPTED", "red", "SEQUENTIAL"],
+    ["RUNNING", "INFRA_INTERRUPTED", "blue", "ADAPTIVE"],
+    ["INFRA_FAILED", "UNRUN", "red", "ADAPTIVE"],
+    ["INFRA_FAILED", "INFRA_INTERRUPTED_REQUEUEABLE", "red", "ADAPTIVE"],
+  ] as const)("map preserves authoritative point semantics for %s/%s", async (status, pointStatus, color, executionMode) => {
+    render(<ExpertValidationApp api={fakeApi({ restoreCampaign: async () => ({
+      campaign_id: "campaign-1", manifest_id: "manifest-4", sequence: 5, status, execution_mode: executionMode,
+      points: [{ point_id: "task_start", status: pointStatus, retry_eligible: false,
+        attempts: [], artifact_ids: [], artifacts: [] }],
+    }) })} />);
+    const marker = await screen.findByRole("button", { name: /^P01 / });
+    expect(marker.getAttribute("data-color")).toBe(color);
+  });
+
+  test("failed bound-manifest read leaves progress visible without a fabricated map", async () => {
+    render(<ExpertValidationApp api={fakeApi({
+      getManifest: async () => { throw new Error("MANIFEST_NOT_FOUND"); },
+      restoreCampaign: async () => ({ campaign_id: "campaign-1", manifest_id: "manifest-4", sequence: 5 }),
+    })} />);
+    expect(await screen.findByText(/MANIFEST_NOT_FOUND/)).toBeTruthy();
+    expect(screen.queryByRole("img", { name: "Expert validation top view" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Campaign progress" })).toBeTruthy();
+  });
+
+  test("late map response cannot overwrite a replacement campaign's manifest", async () => {
+    let apply: ((campaign: any) => void) | undefined;
+    let release: ((manifest: Manifest) => void) | undefined;
+    const oldManifest = new Promise<Manifest>((resolve) => { release = resolve; });
+    const { container } = render(<ExpertValidationApp api={fakeApi({
+      restoreCampaign: async () => ({ campaign_id: "old", manifest_id: "manifest-4", sequence: 1 }),
+      getManifest: async (id) => id === "manifest-4" ? oldManifest : frozenManifest(20, id),
+      watchCampaign: (_id, _sequence, update) => { apply = update; return () => {}; },
+    })} />);
+    await act(async () => {});
+    await act(async () => { apply!({ campaign_id: "new", manifest_id: "manifest-20", sequence: 2 }); });
+    await screen.findByRole("button", { name: "P20 ELIGIBLE_UNRUN" });
+    await act(async () => { release!(frozenManifest()); });
+    expect(container.querySelectorAll("[data-point-id]")).toHaveLength(20);
+  });
+
+  test("changing count while Generate is pending prevents stale preview resurrection", async () => {
+    const user = userEvent.setup();
+    let release: ((manifest: Manifest) => void) | undefined;
+    const pending = new Promise<Manifest>((resolve) => { release = resolve; });
+    render(<ExpertValidationApp api={fakeApi({ createManifest: async () => pending })} />);
+    await user.click(await screen.findByRole("button", { name: "Acquire lease" }));
+    await user.click(screen.getByRole("button", { name: "Generate points" }));
+    fireEvent.change(screen.getByLabelText("Final point count"), { target: { value: "12" } });
+    await act(async () => { release!(frozenManifest(20, "manifest-20")); });
+    expect((screen.getByRole("button", { name: "Start validation" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("img", { name: "Expert validation top view" })).toBeNull();
+  });
+
   test("selecting a committed point renders its typed sealed evidence rather than empty placeholders", async () => {
     const user = userEvent.setup();
     const image = {
@@ -79,7 +177,7 @@ describe("ExpertValidationApp", () => {
     };
     const numeric = { ...image, artifact_id: "opaque-physical-a", role: "physical-evidence", media_type: "application/json" };
     render(<ExpertValidationApp api={fakeApi({ restoreCampaign: async () => ({
-      campaign_id: "campaign-1", sequence: 9, status: "COMPLETED",
+      campaign_id: "campaign-1", manifest_id: "manifest-4", sequence: 9, status: "COMPLETED",
       points: [{ point_id: "task_start", display_id: "P01", status: "PASSED",
         retry_eligible: false, attempts: [], artifact_ids: [image.artifact_id, numeric.artifact_id],
         artifacts: [image, numeric] }],

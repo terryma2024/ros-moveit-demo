@@ -65,10 +65,12 @@ class ExpertValidationService:
         self._current_source_config_sha256 = current_source_config_sha256
         self._clock_ns = clock_ns
 
-    def create_manifest(self, selection, *, source_config_sha256: str):
+    def create_manifest(self, selection, *, source_config_sha256: str, frozen_context=None):
         manifest_id = "manifest-" + uuid.uuid4().hex
         document = {
             "schema_version": 1,
+            "manifest_id": manifest_id,
+            **(frozen_context or {}),
             "catalog_id": selection.catalog_id,
             "catalog_seed": selection.catalog_seed,
             "catalog_sha256": selection.catalog_sha256,

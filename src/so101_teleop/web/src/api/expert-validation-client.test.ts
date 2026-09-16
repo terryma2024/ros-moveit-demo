@@ -25,6 +25,14 @@ const lease = {
 };
 
 describe("ExpertValidationClient", () => {
+  test("restores a bound manifest by an encoded read-only URL without execution authority", async () => {
+    const document = { manifest_id: "manifest/4", point_count: 4, stale: true, points: [] };
+    const transport = recorder([{ ok: true, status: 200, body: document }]);
+    const result = await new ExpertValidationClient(transport.fetcher).getManifest("manifest/4");
+    expect(result).toEqual(document);
+    expect(transport.calls).toEqual([{ path: "/expert-validation/manifests/manifest%2F4", init: {}, body: undefined }]);
+  });
+
   test("renewal sends current server lease identity and fencing generation via PUT", async () => {
     const renewed = { lease_id: "lease-a", service_session_id: "browser-a", generation: 4, expires_monotonic_ns: 2000 };
     const transport = recorder([{ ok: true, status: 200, body: renewed }]);

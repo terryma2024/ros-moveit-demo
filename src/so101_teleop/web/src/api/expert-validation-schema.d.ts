@@ -391,6 +391,8 @@ export interface components {
              * @default []
              */
             levels_used: number[];
+            /** Manifest Id */
+            manifest_id?: string | null;
             /**
              * Not Executed
              * @default 0
@@ -600,10 +602,16 @@ export interface components {
         };
         /** ManifestResponse */
         ManifestResponse: {
+            /** Catalog Seed */
+            catalog_seed?: number | null;
             /** Catalog Sha256 */
             catalog_sha256?: string | null;
+            /** Geometry Sha256 */
+            geometry_sha256?: string | null;
             /** Manifest Id */
             manifest_id: string;
+            /** Manifest Sha256 */
+            manifest_sha256?: string | null;
             /**
              * Point Count
              * @default 0
@@ -614,13 +622,156 @@ export interface components {
              * @default []
              */
             points: components["schemas"]["ManifestPointResponse"][];
+            /** Sampler Id */
+            sampler_id?: string | null;
+            /** Sampler Version */
+            sampler_version?: number | null;
             /** Selection Sha256 */
             selection_sha256?: string | null;
+            /** Source Commit */
+            source_commit?: string | null;
+            source_hashes?: components["schemas"]["ManifestSourceHashes"] | null;
             /**
              * Stale
              * @default false
              */
             stale: boolean;
+            top_view?: components["schemas"]["ManifestTopViewResponse"] | null;
+        };
+        /** ManifestSourceHashes */
+        ManifestSourceHashes: {
+            /** Adaptive Config */
+            adaptive_config: string;
+            /** Anchors */
+            anchors: string;
+            /** Catalog */
+            catalog: string;
+            /** Dynamic Policy */
+            dynamic_policy: string;
+            /** Execution Policy */
+            execution_policy: string;
+            /** Parallel Config */
+            parallel_config: string;
+            /** Placement Policy */
+            placement_policy: string;
+            /** Scene */
+            scene: string;
+            /** Target Mesh */
+            target_mesh: string;
+            /** Task Scene */
+            task_scene: string;
+        };
+        /** ManifestTopViewResponse */
+        ManifestTopViewResponse: {
+            /** Cup Footprint Radius Px */
+            cup_footprint_radius_px: number;
+            geometry: components["schemas"]["MapGeometryResponse"];
+            /** Marker Radius Px */
+            marker_radius_px: number;
+            palette: components["schemas"]["MapPaletteResponse"];
+            /** Points */
+            points: components["schemas"]["MapPointResponse"][];
+            projection: components["schemas"]["MapProjectionResponse"];
+            /** Target Tolerance Radius Px */
+            target_tolerance_radius_px: number;
+        };
+        /** MapGeometryResponse */
+        MapGeometryResponse: {
+            /** Base Bounds */
+            base_bounds: [
+                number,
+                number,
+                number,
+                number
+            ];
+            /** Candidate Bounds */
+            candidate_bounds: [
+                number,
+                number,
+                number,
+                number
+            ];
+            /** Cup Radius M */
+            cup_radius_m: number;
+            /** Table Bounds */
+            table_bounds: [
+                number,
+                number,
+                number,
+                number
+            ];
+            /** Target Bounds */
+            target_bounds: [
+                number,
+                number,
+                number,
+                number
+            ];
+            /** Target Center */
+            target_center: [
+                number,
+                number
+            ];
+            /** Target Tolerance Radius M */
+            target_tolerance_radius_m: number;
+        };
+        /** MapPaletteResponse */
+        MapPaletteResponse: {
+            blue: components["schemas"]["MapPaletteStyle"];
+            green: components["schemas"]["MapPaletteStyle"];
+            red: components["schemas"]["MapPaletteStyle"];
+        };
+        /** MapPaletteStyle */
+        MapPaletteStyle: {
+            /** Fill */
+            fill: string;
+            /**
+             * Icon
+             * @enum {string}
+             */
+            icon: "pending" | "passed" | "failed";
+            /** Stroke */
+            stroke: string;
+        };
+        /** MapPointResponse */
+        MapPointResponse: {
+            /** Display Id */
+            display_id: string;
+            /** Id */
+            id: string;
+            /** Position World M */
+            position_world_m: [
+                number,
+                number,
+                number
+            ];
+            /** Projected Px */
+            projected_px: [
+                number,
+                number
+            ];
+        };
+        /** MapProjectionResponse */
+        MapProjectionResponse: {
+            /** Bounds M */
+            bounds_m: [
+                number,
+                number,
+                number,
+                number
+            ];
+            /** Height Px */
+            height_px: number;
+            /** Offset X Px */
+            offset_x_px: number;
+            /** Offset Y Px */
+            offset_y_px: number;
+            /** Padding Px */
+            padding_px: number;
+            /** Pixels Per M */
+            pixels_per_m: number;
+            /** Width Px */
+            width_px: number;
         };
         /** PointProjectionResponse */
         PointProjectionResponse: {

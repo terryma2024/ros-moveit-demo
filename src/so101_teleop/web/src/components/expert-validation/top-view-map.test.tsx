@@ -25,6 +25,23 @@ function renderState(state: MapPointState, options: Record<string, unknown> = {}
 }
 
 describe("TopViewMap", () => {
+  test("world grid remains inside the server-provided table rather than baseline bounds", () => {
+    const serverManifest = { ...fixture,
+      geometry: { ...fixture.geometry, table_bounds: [-0.1, 0.1, -0.35, -0.2] },
+      projection: { ...fixture.projection, bounds_m: [-0.1, 0.1, -0.35, -0.2],
+        pixels_per_m: 3000, offset_x_px: 600, offset_y_px: -375 },
+    };
+    const { container } = render(<TopViewMap manifest={serverManifest} campaign={{ points: [] }} onSelect={() => {}} />);
+    const lines = Array.from(container.querySelectorAll("line"));
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) {
+      for (const key of ["x1", "x2"]) expect(Number(line.getAttribute(key))).toBeGreaterThanOrEqual(300);
+      for (const key of ["x1", "x2"]) expect(Number(line.getAttribute(key))).toBeLessThanOrEqual(900);
+      for (const key of ["y1", "y2"]) expect(Number(line.getAttribute(key))).toBeGreaterThanOrEqual(225);
+      for (const key of ["y1", "y2"]) expect(Number(line.getAttribute(key))).toBeLessThanOrEqual(675);
+    }
+  });
+
   test.each([
     ["ELIGIBLE_UNRUN", "blue"],
     ["LEASED", "blue"],
