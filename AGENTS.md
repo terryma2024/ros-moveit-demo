@@ -30,6 +30,29 @@
   tree as a deletion candidate after readback, and do not delete it without explicit user
   authorization. Do not apply this `/data` path rule on macOS or other hosts, and do not disable
   `fsync`, filesystem journaling, or integrity checks or substitute `tmpfs` to make the test faster.
+- The default interactive shell in this workspace is `zsh`. Do not assign to zsh special or
+  read-only parameters such as `status`; store an exit code in a task-specific name such as `rc` or
+  `test_rc` instead.
+- When a command whose result matters is piped through `tee` or another process, enable
+  `set -o pipefail` before running it. `set -e` alone does not prevent the final process in a
+  pipeline from hiding an earlier failure. Record and check the actual command exit code before
+  reporting success.
+- Do not pass an optional unmatched glob directly to a command under zsh, because zsh fails with
+  `no matches found` before the command starts. Prefer `rg` with `-g`, `find` with `-name`, or an
+  explicit existence check.
+- Before starting a long-running service or test, resolve and verify the exact executable and
+  environment paths with read-only checks such as `test -x`. Do not rely on a summarized or older
+  virtual-environment path when the filesystem can provide the current path.
+- A fresh colcon `--build-base` or `--install-base` must have a complete dependency closure. Before
+  treating a failed build as a source regression, distinguish missing package setup files,
+  incomplete underlays, package-selection errors, and override errors from compiler or test
+  failures. Do not count a test as RED unless the intended test or code boundary actually ran.
+- A sandbox denial for the Docker socket, network namespace, or host process metadata does not prove
+  that the corresponding resource is absent. Repeat the read-only check with the approved host
+  access required by the task, then base cleanup and ownership conclusions on that result.
+- If a tool call or shell session is interrupted, inspect its process state, logs, and declared
+  outputs before retrying. An interrupted poll is not evidence that the underlying command failed,
+  succeeded, or stopped.
 - This repository uses the following remote mapping:
   - `origin`: `git@gitee.com:zjumty/ros-moveit-demo.git`
   - `github`: `git@github.com:terryma2024/ros-moveit-demo.git`
