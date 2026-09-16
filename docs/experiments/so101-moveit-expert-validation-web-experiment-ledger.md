@@ -20,7 +20,7 @@ disproven_routes:
 open_hypotheses:
   - The repaired installed API can now cross manifest creation and authorize a fresh sequential simulation campaign.
 latest_checkpoint: CP-003
-next_experiment: EXP-011
+next_experiment: EXP-017
 ```
 
 ## Registered evidence and ownership
@@ -411,7 +411,7 @@ next_experiment: EXP-013
 
 ```yaml
 experiment_id: EXP-013
-status: PLANNED
+status: INVALID
 prior_experiment: EXP-012
 hypothesis: A fresh copy-install overlay bound to the clean registration commit starts the installed service and permits the repaired four-anchor N1/K4 campaign.
 single_variable: Build and bind from the clean post-registration commit; product code, model identities, selection, and fixed execution configuration remain unchanged.
@@ -420,7 +420,21 @@ selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_
 fixed_config: {worker_count: 1, max_points_per_worker: 4}
 success_criteria: Four authoritative PASSED results, complete cleanup, Web projection, and independently inspected runtime evidence.
 invalid_criteria: Any provenance, reset/session, ownership, camera, MoveIt/controller, physics, Planning Scene, artifact, cleanup, Web, or visual mismatch.
-decision: RUN_AFTER_CLEAN_COMMIT_AND_REBUILD
+observed:
+  - The release3 installed service started from a clean bound source tree.
+  - Manifest POST and GET returned the exact four anchor points with source=anchor, and N1/K4 preflight admitted with no reason codes.
+  - The coordinator process exited immediately after the API returned STARTED; no Worker, Broker, MoveIt, controller, MuJoCo, or robot action started.
+  - A captured safe dry-run reproduced BROKER_IMAGE_MISMATCH: the Teleop production default was a digest while the fixed coordinator contract accepts the frozen image tag.
+  - The server stopped cleanly, no owned runtime survived, and the durable-store lock was released.
+first_bad_boundary: BROKER_IMAGE_MISMATCH
+evidence:
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp013/manifest-post.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp013/preflight-response.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp013/start-response.json
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp013/postinventory.txt
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp013/store-lock-readback.txt
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp013-diagnostic/coordinator-dryrun.log
+decision: STOP_FAIL_CLOSED_AND_FIX_DEFAULT_CONTRACT
 next_experiment: EXP-014
 ```
 
@@ -428,14 +442,16 @@ next_experiment: EXP-014
 
 ```yaml
 experiment_id: EXP-014
-status: PLANNED
+status: NOT_RUN
 prior_experiment: EXP-013
 hypothesis: The same four anchors run through two isolated fixed Workers with N2/K2 and no cross-Worker leakage.
 single_variable: execution_mode=PARALLEL, worker_count=2, max_points_per_worker=2
 lifecycle: FRESH_ISOLATED_STACK
 selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
 success_criteria: Four authoritative PASSED results with distinct Worker/runtime identities and complete cleanup.
-decision: RUN_AFTER_EXP_013_VALID
+observed:
+  - Not started because EXP-013 failed before Worker or simulation startup.
+decision: BLOCKED_BY_EXP_013_INVALID
 next_experiment: EXP-015
 ```
 
@@ -443,13 +459,15 @@ next_experiment: EXP-015
 
 ```yaml
 experiment_id: EXP-015
-status: PLANNED
+status: NOT_RUN
 prior_experiment: EXP-014
 hypothesis: The production adaptive wrapper owns the W8/W6/W4/W2/W1 lifecycle and preserves authoritative results across any real fallback.
 single_variable: execution_mode=ADAPTIVE with preferred W8 and fallback [6, 4, 2, 1]
 lifecycle: FRESH_ISOLATED_STACK
 success_criteria: Twenty authoritative terminal point states, truthful generation/fallback history, and complete cleanup.
-decision: RUN_AFTER_EXP_014_VALID
+observed:
+  - Not started because no valid repaired sequential campaign exists yet.
+decision: BLOCKED_BY_EXP_013_INVALID
 next_experiment: EXP-016
 ```
 
@@ -457,13 +475,70 @@ next_experiment: EXP-016
 
 ```yaml
 experiment_id: EXP-016
-status: PLANNED
+status: NOT_APPLICABLE
 prior_experiment: EXP-015
 hypothesis: Any eligible authoritative FAILED point can be retried only as a new serial N1/K1 FULL_RESTART batch after cleanup; otherwise retry is not applicable.
 single_variable: FULL_RESTART retry of eligible FAILED points only
 lifecycle: FRESH_ISOLATED_STACK_PER_POINT
 success_criteria: Eligible retries satisfy independent restart identity and cleanup, or non-applicability is recorded without manufacturing a failure.
-decision: CONDITIONAL_AFTER_EXP_015
+observed:
+  - No valid first-pass terminal result or eligible FAILED point exists; no retry was manufactured.
+decision: LIVE_RETRY_NOT_APPLICABLE_NO_VALID_FIRST_PASS
+```
+
+### EXP-017 — Broker-contract repair and fresh sequential simulation
+
+```yaml
+experiment_id: EXP-017
+status: PLANNED
+prior_experiment: EXP-013
+hypothesis: Matching the production default broker image to the fixed coordinator tag removes the early-exit boundary and permits the four-anchor N1/K4 campaign.
+single_variable: Teleop production broker-image default now equals the fixed upstream coordinator contract.
+lifecycle: FRESH_ISOLATED_STACK
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+fixed_config: {worker_count: 1, max_points_per_worker: 4}
+success_criteria: Four authoritative PASSED results with complete runtime, artifact, cleanup, Web, and independently inspected visual evidence.
+decision: RUN_AFTER_CLEAN_COMMIT_AND_REBUILD
+next_experiment: EXP-018
+```
+
+### EXP-018 — Fresh same-selection parallel simulation after broker repair
+
+```yaml
+experiment_id: EXP-018
+status: PLANNED
+prior_experiment: EXP-017
+hypothesis: The same four anchors run through two isolated fixed Workers with N2/K2 and no cross-Worker leakage.
+single_variable: execution_mode=PARALLEL, worker_count=2, max_points_per_worker=2
+lifecycle: FRESH_ISOLATED_STACK
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+decision: RUN_AFTER_EXP_017_VALID
+next_experiment: EXP-019
+```
+
+### EXP-019 — Fresh twenty-point adaptive simulation after broker repair
+
+```yaml
+experiment_id: EXP-019
+status: PLANNED
+prior_experiment: EXP-018
+hypothesis: The production adaptive wrapper owns the W8/W6/W4/W2/W1 lifecycle and preserves authoritative results across any real fallback.
+single_variable: execution_mode=ADAPTIVE with preferred W8 and fallback [6, 4, 2, 1]
+lifecycle: FRESH_ISOLATED_STACK
+decision: RUN_AFTER_EXP_018_VALID
+next_experiment: EXP-020
+```
+
+### EXP-020 — Conditional FULL_RESTART retry after broker repair
+
+```yaml
+experiment_id: EXP-020
+status: PLANNED
+prior_experiment: EXP-019
+hypothesis: Any eligible authoritative FAILED point can be retried only as a new serial N1/K1 FULL_RESTART batch after cleanup; otherwise retry is not applicable.
+single_variable: FULL_RESTART retry of eligible FAILED points only
+lifecycle: FRESH_ISOLATED_STACK_PER_POINT
+decision: CONDITIONAL_AFTER_EXP_019
 ```
 
 ## Task 1 checkpoint

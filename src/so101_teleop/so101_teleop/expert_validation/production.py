@@ -26,7 +26,7 @@ from .supervisor import ExpertValidationSupervisor
 from .preflight import PreflightEngine
 
 
-_BROKER_IMAGE = "sha256:4fb57abe1109e7cc1c7fbf1780a7dd10b4167f12abfa59ba34b1903a60c4c972"
+_BROKER_IMAGE = "so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1"
 
 
 def _sha256(path: Path) -> str:
