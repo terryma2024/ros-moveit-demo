@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export type JournalEvent = {
@@ -34,6 +34,7 @@ function parseJournalFile(path: string): JournalEvent[] {
 
 export function readJournalEvents(journalRoot: string): JournalEvent[] {
   const eventsDir = join(journalRoot, "events");
+  if (!existsSync(eventsDir)) return [];
   const segments = readdirSync(eventsDir)
     .filter((name) => name.endsWith(".journal"))
     .sort();
