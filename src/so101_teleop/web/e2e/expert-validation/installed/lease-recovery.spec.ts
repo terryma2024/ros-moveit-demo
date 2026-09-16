@@ -137,6 +137,15 @@ test("S05 server restart reconciles a running campaign spec:slow", async ({ page
   );
   expect(terminal.points).toHaveLength(4);
 
+  // Journal cleanup precedes process exit by a small window; wait for the
+  // recorded owner pid to actually disappear before expecting control back.
+  const oldPid = ownersBefore[0].pid as number;
+  const exitDeadline = Date.now() + 15_000;
+  while (existsSync(`/proc/${oldPid}`)) {
+    if (Date.now() > exitDeadline) throw new Error(`OWNER_PROCESS_STILL_ALIVE: ${oldPid}`);
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
+  }
+
   // A new lease regains control only after reconciliation is clean.
   const leaseB = await acquireLease(client, "s05-session-b");
   const manifestB = await createManifest(client, 4);
