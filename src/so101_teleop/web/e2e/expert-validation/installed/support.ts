@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { expect } from "@playwright/test";
 
 export type ApiResponse = { status: number; body: any };
@@ -112,10 +114,19 @@ export async function waitStatus(
   }
 }
 
+export function processAlive(pid: number): boolean {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf-8");
+    const tail = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+    return tail[0] !== "Z";
+  } catch {
+    return false;
+  }
+}
+
 export async function waitProcessGone(pid: number, timeoutMs = 15_000) {
   const deadline = Date.now() + timeoutMs;
-  const { existsSync } = await import("node:fs");
-  while (existsSync(`/proc/${pid}`)) {
+  while (processAlive(pid)) {
     if (Date.now() > deadline) throw new Error(`PROCESS_STILL_ALIVE: ${pid}`);
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
   }

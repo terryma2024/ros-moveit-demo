@@ -1,6 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";import { join } from "node:path";
 
 import { installedTest as test, expect, pythonExecutable } from "../fixtures/installed";
 import { readJournalEvents, storeQuery } from "../assertions/journal";
@@ -133,7 +132,7 @@ test("S09 adaptive ownership stays on the wrapper spec:default", async ({ instal
   }
 });
 
-test("S11 fixed lease expiry cancels only through the control channel spec:slow", async ({ installedServer }) => {
+test("S11 fixed lease expiry cancels only through the control channel spec:expire", async ({ installedServer }) => {
   test.setTimeout(120_000);
   const client = api(installedServer.baseURL);
   const session = "s11-session";
