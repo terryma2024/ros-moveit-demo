@@ -7,7 +7,7 @@ success_contract: Source and package gates pass; fresh fixed four-point and adap
 worktree: /data/work/ws_moveit/.worktrees/teleop-expert-validation-web
 branch: codex/teleop-expert-validation-web
 base_commit: e1701375690321bc83b5f30ec044da1847d373aa
-current_commit: 2d85d53594df1b5b7292aba6d959f4a51bad398f
+current_commit: 97a789311c220f554d4958ba8fdee9e668331868
 evidence_root: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01
 confirmed_conclusions:
   - origin/main exactly matched the required documentation commit e1701375690321bc83b5f30ec044da1847d373aa at CP-001.
@@ -1091,6 +1091,15 @@ next_experiment: EXP-047
 - t39-browser passed all 11 browser tests in 24.7 seconds. The full Web unit gate passed 91 tests and the TypeScript/Vite build passed; its existing large-chunk advisory is unrelated to pytest warnings.
 - Commit 2d85d53594df1b5b7292aba6d959f4a51bad398f synchronizes both dependency locks and the backend contract to the actual 0.1.0 gitlink, uses the allocator IPC root before authority construction during resume, and explicitly binds the no-rendering child test to its asserted source root.
 - t37/t38 scratch trees and t39 browser output are retained; scratch remains a deletion candidate only. No push, merge, evidence deletion, or real-robot action occurred.
+
+## Release13 installed verification continuation
+
+- The user now requests publication before continuing to the original plan endpoint. Gitee readback found no existing Teleop task branch; the MuJoCo remote retains c16b5a5 on its earlier parallel-validation branch. Auto-review rejected the scoped publication command using the old handoff's prohibition; no push occurred, and renewed explicit publication confirmation was requested. Local verification continues without remote mutations.
+- Clean implementation HEAD 97a789311c220f554d4958ba8fdee9e668331868 contains the journal/Web synchronization repair. Release13 copied installation built all seven selected packages in 55.7 seconds; the 0.1.0 MuJoCo gitlink remains e4c0241aee52a40727681bd5872c09bf814e941a.
+- The release13 binding was generated from new installed artifact SHA256 values. ProductionRuntimeLayout resolves the clean worktree commit and release13 coordinator, and all five checked package prefixes are exact non-symlink release13 prefixes.
+- t40 exited before testing because ROS setup is incompatible with shell nounset. t41 passed all 47 Teleop CTest entries, but Demo collection failed before execution because the clean shell omitted the existing ML venv's torch dependency. This is not a passing Demo gate.
+- t42 repeats only the ordinary Demo package gate with the existing Grounded-SAM dependency site-packages appended after release13/ROS imports. Its unique NVMe scratch is scratch/t42-release13-demo-colcon-001/tmp; the exact test Python must verify tempfile before collection. No benchmark or evidence deletion is authorized.
+- EXP-046 remains PLANNED until the installed package gates and runtime ownership preflight are complete. The previous simulation processes were stopped; this continuation has started no simulation stack.
 
 ## Task 1 checkpoint
 
