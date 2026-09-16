@@ -179,6 +179,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--live-headroom-evidence", type=Path)
     parser.add_argument("--live-headroom-acceptance", type=Path)
     parser.add_argument("--live-headroom-current-provenance-root", type=Path)
+    parser.add_argument("--provenance-binding", type=Path)
     parser.add_argument("--resume", action="store_true")
     return parser
 
@@ -449,9 +450,27 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
     console_path = Path(console).resolve()
     config_path = Path(spec["config"]).resolve()
     points_path = Path(spec["points"]).resolve()
-    _validate_provenance_overlay(
-        repository_root, module_path, console_path, config_path, points_path
+    overlay_identity = _validate_provenance_overlay(
+        repository_root,
+        module_path,
+        console_path,
+        config_path,
+        points_path,
+        module_import_path=module_import_path,
+        source_commit=source_commit,
+        external_binding=spec.get("provenance_binding"),
     )
+    if overlay_identity["external_overlay_bound"]:
+        try:
+            from ament_index_python.packages import get_package_prefix
+
+            for package, expected_prefix in overlay_identity["package_prefixes"].items():
+                if Path(get_package_prefix(package)).resolve() != Path(expected_prefix):
+                    raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX")
+        except CliError:
+            raise
+        except Exception as error:
+            raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX") from error
     policy_path = package_root / "config/mujoco/headless_execution.yaml"
     scene_config = package_root / "config/mujoco/task_scene.yaml"
     scene_model = package_root / "assets/mujoco/scene.xml"
@@ -461,9 +480,21 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
     )):
         raise CliError("PROVENANCE_INSTALLED_INPUT_MISSING")
     from so101_demo.cli.parallel_perception_broker import source_hash
-    installed_identity = _installed_overlay_identity(
-        repository_root, module_import_path, console_path, source_hash=source_hash
-    )
+    if overlay_identity["external_overlay_bound"]:
+        source_tree = source_hash(package_root / "src")
+        build_tree_path = Path(overlay_identity["installed_module_tree_path"])
+        build_tree = source_hash(build_tree_path.resolve())
+        if build_tree != source_tree:
+            raise CliError("PROVENANCE_INSTALLED_BYTES")
+        installed_identity = {
+            **overlay_identity,
+            "source_module_tree_sha256": source_tree,
+            "installed_module_tree_sha256": build_tree,
+        }
+    else:
+        installed_identity = _installed_overlay_identity(
+            repository_root, module_import_path, console_path, source_hash=source_hash
+        )
     try:
         from so101_demo.cli.parallel_perception_broker import image_record
 
@@ -497,7 +528,11 @@ def _validate_provenance_overlay(
     console_path: Path,
     config_path: Path,
     points_path: Path,
-) -> None:
+    *,
+    module_import_path: Path | None = None,
+    source_commit: str | None = None,
+    external_binding: Path | str | None = None,
+) -> Mapping[str, object]:
     """Reject a source/import/console/config selection spanning checkouts."""
 
     repository_root = Path(repository_root).resolve()
@@ -508,17 +543,197 @@ def _validate_provenance_overlay(
     expected_console_root = (
         repository_root / "install/so101_demo_py/lib/so101_demo_py"
     ).resolve()
-    try:
-        Path(config_path).resolve().relative_to(package_root.resolve())
-        Path(points_path).resolve().relative_to(package_root.resolve())
-    except ValueError as error:
-        raise CliError("PROVENANCE_MIXED_OVERLAY") from error
-    if (
+    local_overlay = (
         Path(module_path).resolve() != expected_module
         or Path(console_path).resolve()
         != (expected_console_root / "so101_parallel_batch").resolve()
-    ):
+    )
+    try:
+        Path(config_path).resolve().relative_to(package_root.resolve())
+        Path(points_path).resolve().relative_to(package_root.resolve())
+    except ValueError:
+        local_overlay = True
+    if not local_overlay:
+        return {"external_overlay_bound": False}
+    if external_binding is None:
         raise CliError("PROVENANCE_MIXED_OVERLAY")
+    if module_import_path is None or source_commit is None:
+        raise CliError("PROVENANCE_EXTERNAL_BINDING_CONTEXT")
+    return _validate_external_overlay_binding(
+        Path(external_binding),
+        repository_root=repository_root,
+        source_commit=source_commit,
+        module_path=Path(module_path),
+        module_import_path=Path(module_import_path),
+        console_path=Path(console_path),
+        config_path=Path(config_path),
+        points_path=Path(points_path),
+    )
+
+
+def _validate_external_overlay_binding(
+    binding_path: Path,
+    *,
+    repository_root: Path,
+    source_commit: str,
+    module_path: Path,
+    module_import_path: Path,
+    console_path: Path,
+    config_path: Path,
+    points_path: Path,
+) -> Mapping[str, object]:
+    """Validate a closed, content-bound external build/install overlay."""
+
+    binding_path = Path(binding_path)
+    if not binding_path.is_absolute() or binding_path.is_symlink() or not binding_path.is_file():
+        raise CliError("PROVENANCE_EXTERNAL_BINDING_PATH")
+    try:
+        document = json.loads(binding_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise CliError("PROVENANCE_EXTERNAL_BINDING_DOCUMENT") from error
+    expected_keys = {
+        "schema_version",
+        "source_root",
+        "source_commit",
+        "build_root",
+        "install_root",
+        "package_prefixes",
+        "artifacts",
+    }
+    if type(document) is not dict or set(document) != expected_keys or document["schema_version"] != 1:
+        raise CliError("PROVENANCE_EXTERNAL_BINDING_SCHEMA")
+
+    def absolute_directory(name: str) -> Path:
+        value = document.get(name)
+        if not isinstance(value, str):
+            raise CliError("PROVENANCE_EXTERNAL_BINDING_SCHEMA")
+        path = Path(value)
+        if not path.is_absolute() or path.is_symlink() or not path.is_dir():
+            raise CliError("PROVENANCE_EXTERNAL_BINDING_PATH")
+        return path.resolve()
+
+    source_root = absolute_directory("source_root")
+    build_root = absolute_directory("build_root")
+    install_root = absolute_directory("install_root")
+    if source_root != repository_root.resolve():
+        raise CliError("PROVENANCE_EXTERNAL_SOURCE_ROOT")
+    if document["source_commit"] != source_commit:
+        raise CliError("PROVENANCE_EXTERNAL_SOURCE_COMMIT")
+    expected_source_module = (
+        source_root / "src/so101_demo_py/src/cli/mujoco_parallel_batch.py"
+    ).resolve()
+    if module_path.resolve() != expected_source_module:
+        raise CliError("PROVENANCE_EXTERNAL_SOURCE_ROOT")
+
+    package_prefixes = document["package_prefixes"]
+    if type(package_prefixes) is not dict or set(package_prefixes) != {
+        "so101_demo_py",
+        "so101_mujoco_support",
+    }:
+        raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX")
+    prefixes: dict[str, Path] = {}
+    for package, value in package_prefixes.items():
+        if not isinstance(value, str):
+            raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX")
+        prefix = Path(value)
+        if not prefix.is_absolute() or prefix.is_symlink() or not prefix.is_dir():
+            raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX")
+        prefix = prefix.resolve()
+        try:
+            prefix.relative_to(install_root)
+        except ValueError as error:
+            raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX") from error
+        prefixes[package] = prefix
+
+    demo_prefix = prefixes["so101_demo_py"]
+    expected_console = demo_prefix / "lib/so101_demo_py/so101_parallel_batch"
+    expected_config = demo_prefix / "share/so101_demo_py/config/mujoco/parallel_batch_v1.yaml"
+    expected_points = (
+        demo_prefix
+        / "share/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml"
+    )
+    if (
+        console_path.resolve() != expected_console.resolve()
+        or config_path.resolve() != expected_config.resolve()
+        or points_path.resolve() != expected_points.resolve()
+    ):
+        raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX")
+    try:
+        module_import_path.absolute().relative_to(build_root)
+    except ValueError as error:
+        raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX") from error
+
+    artifacts = document["artifacts"]
+    artifact_paths = {
+        "coordinator_console": console_path.resolve(),
+        "coordinator_module": module_import_path.absolute(),
+        "parallel_config": config_path.resolve(),
+        "point_catalog": points_path.resolve(),
+    }
+    if type(artifacts) is not dict or set(artifacts) != {
+        *artifact_paths,
+        "entry_points",
+    }:
+        raise CliError("PROVENANCE_EXTERNAL_BINDING_SCHEMA")
+    verified_artifacts: dict[str, str] = {}
+    for name, expected_path in artifact_paths.items():
+        entry = artifacts[name]
+        if type(entry) is not dict or set(entry) != {"path", "sha256"}:
+            raise CliError("PROVENANCE_EXTERNAL_BINDING_SCHEMA")
+        path = Path(entry["path"])
+        if (
+            not path.is_absolute()
+            or path.absolute() != expected_path
+            or path.is_symlink()
+            or not path.is_file()
+            or entry["sha256"] != _sha256(path)
+        ):
+            raise CliError("PROVENANCE_EXTERNAL_ARTIFACT_IDENTITY")
+        verified_artifacts[name] = str(path)
+
+    entry_points_entry = artifacts["entry_points"]
+    if type(entry_points_entry) is not dict or set(entry_points_entry) != {"path", "sha256"}:
+        raise CliError("PROVENANCE_EXTERNAL_BINDING_SCHEMA")
+    entry_points = Path(entry_points_entry["path"])
+    try:
+        entry_points.absolute().relative_to(build_root)
+    except ValueError as error:
+        raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX") from error
+    if (
+        not entry_points.is_absolute()
+        or entry_points.is_symlink()
+        or not entry_points.is_file()
+        or entry_points_entry["sha256"] != _sha256(entry_points)
+    ):
+        raise CliError("PROVENANCE_EXTERNAL_ARTIFACT_IDENTITY")
+    parser = configparser.ConfigParser(interpolation=None, strict=True)
+    try:
+        parser.read_string(entry_points.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, configparser.Error) as error:
+        raise CliError("PROVENANCE_EXTERNAL_ARTIFACT_IDENTITY") from error
+    if (
+        "console_scripts" not in parser
+        or parser["console_scripts"].get("so101_parallel_batch")
+        != "so101_demo.cli.mujoco_parallel_batch:main"
+        or console_path.read_bytes() != _expected_console_wrapper()
+    ):
+        raise CliError("PROVENANCE_EXTERNAL_ARTIFACT_IDENTITY")
+    module_tree = module_import_path.absolute().parents[1]
+    return {
+        "external_overlay_bound": True,
+        "external_overlay_binding_path": str(binding_path),
+        "external_overlay_binding_sha256": _sha256(binding_path),
+        "package_prefixes": {
+            package: str(prefix) for package, prefix in sorted(prefixes.items())
+        },
+        "module_import_path": str(module_import_path.absolute()),
+        "module_import_sha256": _sha256(module_import_path),
+        "installed_module_tree_path": str(module_tree),
+        "installed_egg_link_path": None,
+        "installed_egg_link_sha256": None,
+        "installed_entry_points_path": str(entry_points),
+        "installed_entry_points_sha256": _sha256(entry_points),
+    }
 
 
 def _installed_overlay_identity(
@@ -779,6 +994,10 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         "grounded_root": options.grounded_root,
         "grounded_manifest_sha256": options.grounded_manifest_sha256,
     }
+    if options.provenance_binding is not None:
+        inputs["provenance_binding"] = _absolute(
+            "provenance_binding", options.provenance_binding
+        )
     if adaptive_config_path is not None:
         inputs["adaptive_config"] = adaptive_config_path
     try:

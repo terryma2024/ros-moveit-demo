@@ -2350,6 +2350,171 @@ def test_provenance_rejects_mixed_source_install_overlay_before_snapshot(tmp_pat
         _validate_provenance_overlay(repository, module, foreign, config, points)
 
 
+def _external_overlay_fixture(tmp_path):
+    repository = tmp_path / "checkout"
+    source = repository / "src/so101_demo_py/src"
+    module_source = source / "cli/mujoco_parallel_batch.py"
+    module_source.parent.mkdir(parents=True)
+    module_source.write_text("approved = True\n", encoding="utf-8")
+    build_root = tmp_path / "candidate/build"
+    build_package = build_root / "so101_demo_py"
+    build_package.mkdir(parents=True)
+    (build_package / "so101_demo").symlink_to(source, target_is_directory=True)
+    module_import = build_package / "so101_demo/cli/mujoco_parallel_batch.py"
+    metadata = build_package / "so101_demo_py.egg-info/entry_points.txt"
+    metadata.parent.mkdir(parents=True)
+    metadata.write_text(
+        "[console_scripts]\n"
+        "so101_parallel_batch = so101_demo.cli.mujoco_parallel_batch:main\n",
+        encoding="utf-8",
+    )
+    install_root = tmp_path / "candidate/install"
+    package_prefix = install_root / "so101_demo_py"
+    console = package_prefix / "lib/so101_demo_py/so101_parallel_batch"
+    console.parent.mkdir(parents=True)
+    console.write_text(_canonical_console_wrapper(), encoding="utf-8")
+    support_prefix = install_root / "so101_mujoco_support"
+    support_prefix.mkdir(parents=True)
+    share = package_prefix / "share/so101_demo_py/config/mujoco"
+    share.mkdir(parents=True)
+    config = share / "parallel_batch_v1.yaml"
+    points = share / "moveit_expert_validation_points_v1.yaml"
+    config.write_text("schema_version: 1\n", encoding="utf-8")
+    points.write_text("schema_version: 1\n", encoding="utf-8")
+    binding = tmp_path / "candidate/provenance-binding.json"
+    binding.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "source_root": str(repository.resolve()),
+                "source_commit": "a" * 40,
+                "build_root": str(build_root.resolve()),
+                "install_root": str(install_root.resolve()),
+                "package_prefixes": {
+                    "so101_demo_py": str(package_prefix.resolve()),
+                    "so101_mujoco_support": str(support_prefix.resolve()),
+                },
+                "artifacts": {
+                    "coordinator_console": {
+                        "path": str(console.resolve()),
+                        "sha256": hashlib.sha256(console.read_bytes()).hexdigest(),
+                    },
+                    "coordinator_module": {
+                        "path": str(module_import.absolute()),
+                        "sha256": hashlib.sha256(module_import.read_bytes()).hexdigest(),
+                    },
+                    "entry_points": {
+                        "path": str(metadata.resolve()),
+                        "sha256": hashlib.sha256(metadata.read_bytes()).hexdigest(),
+                    },
+                    "parallel_config": {
+                        "path": str(config.resolve()),
+                        "sha256": hashlib.sha256(config.read_bytes()).hexdigest(),
+                    },
+                    "point_catalog": {
+                        "path": str(points.resolve()),
+                        "sha256": hashlib.sha256(points.read_bytes()).hexdigest(),
+                    },
+                },
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    return {
+        "repository": repository,
+        "module_source": module_source,
+        "module_import": module_import,
+        "console": console,
+        "config": config,
+        "points": points,
+        "binding": binding,
+        "package_prefix": package_prefix,
+    }
+
+
+def test_explicit_external_overlay_binding_accepts_exact_candidate(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import _validate_provenance_overlay
+
+    fixture = _external_overlay_fixture(tmp_path)
+    identity = _validate_provenance_overlay(
+        fixture["repository"],
+        fixture["module_source"],
+        fixture["console"],
+        fixture["config"],
+        fixture["points"],
+        module_import_path=fixture["module_import"],
+        source_commit="a" * 40,
+        external_binding=fixture["binding"],
+    )
+
+    assert identity["external_overlay_bound"] is True
+    assert identity["package_prefixes"]["so101_demo_py"] == str(
+        fixture["package_prefix"].resolve()
+    )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "error"),
+    [
+        ("commit", "SOURCE_COMMIT"),
+        ("package_prefix", "PACKAGE_PREFIX"),
+        ("console", "ARTIFACT_IDENTITY"),
+        ("config", "ARTIFACT_IDENTITY"),
+    ],
+)
+def test_external_overlay_binding_rejects_identity_mismatch(tmp_path, mutation, error):
+    from so101_demo.cli.mujoco_parallel_batch import (
+        CliError,
+        _validate_provenance_overlay,
+    )
+
+    fixture = _external_overlay_fixture(tmp_path)
+    document = json.loads(fixture["binding"].read_text(encoding="utf-8"))
+    if mutation == "commit":
+        document["source_commit"] = "b" * 40
+    elif mutation == "package_prefix":
+        document["package_prefixes"]["so101_demo_py"] = str(
+            (tmp_path / "foreign-prefix").resolve()
+        )
+    elif mutation == "console":
+        document["artifacts"]["coordinator_console"]["sha256"] = "0" * 64
+    else:
+        document["artifacts"]["parallel_config"]["sha256"] = "0" * 64
+    fixture["binding"].write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(CliError, match=error):
+        _validate_provenance_overlay(
+            fixture["repository"],
+            fixture["module_source"],
+            fixture["console"],
+            fixture["config"],
+            fixture["points"],
+            module_import_path=fixture["module_import"],
+            source_commit="a" * 40,
+            external_binding=fixture["binding"],
+        )
+
+
+def test_external_overlay_remains_rejected_when_not_explicitly_bound(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import (
+        CliError,
+        _validate_provenance_overlay,
+    )
+
+    fixture = _external_overlay_fixture(tmp_path)
+    with pytest.raises(CliError, match="MIXED_OVERLAY"):
+        _validate_provenance_overlay(
+            fixture["repository"],
+            fixture["module_source"],
+            fixture["console"],
+            fixture["config"],
+            fixture["points"],
+            module_import_path=fixture["module_import"],
+            source_commit="a" * 40,
+        )
+
+
 def test_installed_provenance_binds_exact_editable_tree_and_rejects_stale_target(tmp_path):
     from so101_demo.cli.mujoco_parallel_batch import (
         CliError, _installed_overlay_identity,
