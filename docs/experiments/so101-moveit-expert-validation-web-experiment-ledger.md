@@ -7,20 +7,20 @@ success_contract: Source and package gates pass; fresh fixed four-point and adap
 worktree: /data/work/ws_moveit/.worktrees/teleop-expert-validation-web
 branch: codex/teleop-expert-validation-web
 base_commit: e1701375690321bc83b5f30ec044da1847d373aa
-current_commit: 654756ba32cfc0697aff1444c79752ff1e61c4ee
+current_commit: 12aeeb43ad68bc004fde9a3355388f7707e958ec
 evidence_root: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01
 confirmed_conclusions:
   - origin/main exactly matched the required documentation commit e1701375690321bc83b5f30ec044da1847d373aa at CP-001.
   - The canonical checkout and new implementation worktree were clean at CP-001.
   - No pre-existing SO-101 application stack or ROS nodes were observed at CP-001.
   - The production server and coordinator accept the final bound copied overlay without symlinks or source fallback.
-  - The final so101_teleop source gate passes 387 tests under -W error with no warning summary.
+  - The manifest point source is an explicit closed API enum, and the final so101_teleop source gate passes 388 tests under -W error with no warning summary.
 disproven_routes:
-  - A four-point manifest can currently be returned by the production API; its internal source field violates the closed response model and produces HTTP 500.
+  - At commit 654756ba32cfc0697aff1444c79752ff1e61c4ee, a four-point manifest could not be returned because its source field violated the closed response model.
 open_hypotheses:
-  - Fixing the manifest response projection is required before any Web-authorized simulation can start.
+  - The repaired installed API can now cross manifest creation and authorize a fresh sequential simulation campaign.
 latest_checkpoint: CP-003
-next_experiment: STOP_FAIL_CLOSED
+next_experiment: EXP-011
 ```
 
 ## Registered evidence and ownership
@@ -328,6 +328,142 @@ invalid_criteria: Retrying PASSED, INDETERMINATE, UNRUN, unresolved INVALID, or 
 observed:
   - No authoritative adaptive terminal campaign or eligible FAILED point exists; no retry was manufactured.
 decision: LIVE_RETRY_NOT_APPLICABLE_NO_VALID_FIRST_PASS
+```
+
+### EXP-011 — Repaired manifest contract and fresh sequential simulation
+
+```yaml
+experiment_id: EXP-011
+status: INVALID
+prior_experiment: EXP-007
+hypothesis: Declaring the stable point source enum in the closed public response model removes the first EXP-007 boundary without weakening response validation, allowing the same four-point sequential campaign to reach a safe authoritative terminal state.
+prediction: Manifest creation returns HTTP 200 with four source=anchor points, preflight admits N1/K4, and the fresh sequential campaign retains complete coordinator, Worker, MoveIt/controller, MuJoCo physics, Planning Scene, artifact, cleanup, Web, and visual evidence.
+single_variable: ManifestPointResponse now declares source as the closed enum anchor or generated.
+lifecycle: FRESH_ISOLATED_STACK
+preconditions:
+  - Source commit 12aeeb43ad68bc004fde9a3355388f7707e958ec is clean.
+  - The copied overlay and binding below match the source commit and contain no symlink install artifacts.
+  - No validation server, coordinator, Worker, Broker, MoveIt, controller, Gazebo, or MuJoCo process is active.
+success_criteria:
+  - POST and GET manifest return the exact four selected points including source=anchor.
+  - Preflight admits SEQUENTIAL worker_count=1 and max_points_per_worker=4.
+  - All four points reach authoritative PASSED with complete cleanup and independently inspected visual evidence.
+failure_criteria:
+  - A valid campaign reaches an authoritative business failure or safe non-passing terminal state.
+invalid_criteria:
+  - Any provenance, reset/session, owner, camera, MoveIt/controller, physics, Planning Scene, artifact, cleanup, Web, or visual evidence mismatch.
+provenance:
+  source_commit: 12aeeb43ad68bc004fde9a3355388f7707e958ec
+  install_overlay: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/manifest-source-install-release2
+  runtime_executable: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/manifest-source-install-release2/so101_teleop/lib/so101_teleop/so101_expert_validation_server
+  provenance_binding: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/manifest-source-release2-overlay-binding.json
+  ros_domain_id: 91
+  gz_partition: so101-exp011-12aeeb43
+  simulation_session_id: exp011-seq-12aeeb43
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+fixed_config: {worker_count: 1, max_points_per_worker: 4}
+commands:
+  - command: Start the installed dedicated server, create the four-point manifest, preflight, and start the Web-authorized sequential campaign.
+    exit_code: 127
+observed:
+  - The frozen four-point selector returns the four anchor points above; the prior generated-point selection text was stale and contradicted both the selector and EXP-007 response-validation evidence.
+  - The YOLO weights and Grounded-SAM manifest independently hash to the frozen values before server start.
+  - The declared runtime path omitted the installed `.py` suffix and the shell exited 127 before importing product code.
+  - No listener, validation server, coordinator, Worker, Broker, MoveIt, controller, Gazebo, or MuJoCo process survived the invalid probe.
+inferred:
+  - This run can test the repaired public source contract without changing point-selection behavior.
+conclusion: Invalid operator path; no product or simulation boundary was exercised.
+evidence:
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp011/server.log
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp011/preinventory.txt
+decision: STOP_FAIL_CLOSED_AND_USE_FRESH_ID
+next_experiment: EXP-012
+```
+
+### EXP-012 — Corrected installed entry point and fresh sequential simulation
+
+```yaml
+experiment_id: EXP-012
+status: INVALID
+prior_experiment: EXP-011
+hypothesis: The installed `.py` entry point exposes the repaired four-anchor manifest contract and permits the fresh N1/K4 sequential campaign to reach an authoritative terminal state.
+prediction: POST and GET manifest return HTTP 200 with four source=anchor points, preflight admits N1/K4, and the campaign retains complete runtime and cleanup evidence.
+single_variable: Correct the operator command to the installed executable filename; source, overlay, models, manifest count, and fixed execution configuration are unchanged.
+lifecycle: FRESH_ISOLATED_STACK
+source_commit: 12aeeb43ad68bc004fde9a3355388f7707e958ec
+runtime_executable: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/manifest-source-install-release2/so101_teleop/lib/so101_teleop/so101_expert_validation_server.py
+provenance_binding: /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/manifest-source-release2-overlay-binding.json
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+fixed_config: {worker_count: 1, max_points_per_worker: 4}
+observed:
+  - The corrected installed `.py` entry point imported the installed production composition root.
+  - Source identity then rejected the registered but uncommitted ledger update with SO101_VALIDATION_SOURCE_IDENTITY before binding admission, socket bind, or campaign state creation.
+  - No listener, validation server, coordinator, Worker, Broker, MoveIt, controller, Gazebo, or MuJoCo process survived.
+conclusion: Invalid protocol ordering: runtime registration made the otherwise bound source tree dirty before production startup.
+evidence:
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp012/preinventory.txt
+  - /data/work/so101-evidence/moveit-expert-validation-web/20260916-e1701375-a01/exp012/server.log
+decision: STOP_FAIL_CLOSED_COMMIT_REGISTRATION_AND_REBUILD
+next_experiment: EXP-013
+```
+
+### EXP-013 — Clean committed source and fresh sequential simulation
+
+```yaml
+experiment_id: EXP-013
+status: PLANNED
+prior_experiment: EXP-012
+hypothesis: A fresh copy-install overlay bound to the clean registration commit starts the installed service and permits the repaired four-anchor N1/K4 campaign.
+single_variable: Build and bind from the clean post-registration commit; product code, model identities, selection, and fixed execution configuration remain unchanged.
+lifecycle: FRESH_ISOLATED_STACK
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+fixed_config: {worker_count: 1, max_points_per_worker: 4}
+success_criteria: Four authoritative PASSED results, complete cleanup, Web projection, and independently inspected runtime evidence.
+invalid_criteria: Any provenance, reset/session, ownership, camera, MoveIt/controller, physics, Planning Scene, artifact, cleanup, Web, or visual mismatch.
+decision: RUN_AFTER_CLEAN_COMMIT_AND_REBUILD
+next_experiment: EXP-014
+```
+
+### EXP-014 — Fresh same-selection parallel simulation
+
+```yaml
+experiment_id: EXP-014
+status: PLANNED
+prior_experiment: EXP-013
+hypothesis: The same four anchors run through two isolated fixed Workers with N2/K2 and no cross-Worker leakage.
+single_variable: execution_mode=PARALLEL, worker_count=2, max_points_per_worker=2
+lifecycle: FRESH_ISOLATED_STACK
+selection: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+success_criteria: Four authoritative PASSED results with distinct Worker/runtime identities and complete cleanup.
+decision: RUN_AFTER_EXP_013_VALID
+next_experiment: EXP-015
+```
+
+### EXP-015 — Fresh twenty-point adaptive simulation
+
+```yaml
+experiment_id: EXP-015
+status: PLANNED
+prior_experiment: EXP-014
+hypothesis: The production adaptive wrapper owns the W8/W6/W4/W2/W1 lifecycle and preserves authoritative results across any real fallback.
+single_variable: execution_mode=ADAPTIVE with preferred W8 and fallback [6, 4, 2, 1]
+lifecycle: FRESH_ISOLATED_STACK
+success_criteria: Twenty authoritative terminal point states, truthful generation/fallback history, and complete cleanup.
+decision: RUN_AFTER_EXP_014_VALID
+next_experiment: EXP-016
+```
+
+### EXP-016 — Conditional FULL_RESTART retry
+
+```yaml
+experiment_id: EXP-016
+status: PLANNED
+prior_experiment: EXP-015
+hypothesis: Any eligible authoritative FAILED point can be retried only as a new serial N1/K1 FULL_RESTART batch after cleanup; otherwise retry is not applicable.
+single_variable: FULL_RESTART retry of eligible FAILED points only
+lifecycle: FRESH_ISOLATED_STACK_PER_POINT
+success_criteria: Eligible retries satisfy independent restart identity and cleanup, or non-applicability is recorded without manufacturing a failure.
+decision: CONDITIONAL_AFTER_EXP_015
 ```
 
 ## Task 1 checkpoint
