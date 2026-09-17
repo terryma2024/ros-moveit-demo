@@ -313,13 +313,9 @@ test("S15 spawn-intent-to-ack window stays fenced spec:slow", async ({ installed
   await installedServer.killHard();
   await pending;
 
-  // Let the possibly-spawned helper finish and exit before judging.
-  await expect
-    .poll(
-      () => hasJournalEvent(journalEvents(installedServer.serverRoot, campaignId, "retry-001"), "BATCH_FINISHED"),
-      { timeout: 30_000 },
-    )
-    .toBe(true);
+  // The helper may or may not have been spawned before the kill; if it was,
+  // it runs to completion on its own.  Wait until no process for this
+  // campaign remains instead of assuming a journal appears.
   await expect
     .poll(() => {
       try {
