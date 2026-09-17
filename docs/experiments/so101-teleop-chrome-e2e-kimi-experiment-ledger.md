@@ -129,10 +129,25 @@ observed:
     probe; (5) real coordinator journal uses BATCH_CLEANUP_COMPLETE, helper uses BATCH_FINISHED.
   - R01 robot-side result on attempt 4: 4/4 points PASSED, batch cleanup complete, broker container
     ran, sealed attempts for all points; test-side assertion failed only on the event name.
+  - 20260917 continuation: attempt N failed test-side with LIVE_SIM_PROVENANCE_INVALID after a fully
+    green robot run. Root cause: the spec re-ran validateLiveSimPreconditions() after the run;
+    MuJoCo appends to the tracked web/MUJOCO_LOG.TXT during execution, so the tree is dirty by then.
+    Fix b2ac87f0f: capture startup-verified preconditions; follow-up d2b7cc8ca exposes them on the
+    liveServer fixture (in-test re-validation also trips LIVE_SIM_STACK_PRESENT on the run's own
+    just-spawned server).
+  - Same commit b2ac87f0f adds the missing ADAPTIVE campaign projection in production.py
+    (get_campaign returned the cached STARTED snapshot forever for adaptive runs; R03 could never
+    terminate). Runner journal projected via AdaptiveEventReader with fail-closed epoch binding.
+    New unit tests in test_expert_validation_production_projection.py; full teleop suite 344/344.
+  - Repaired two pre-existing test regressions from the restart-reconciliation commit: lease/service
+    expiry tests now model supervisor unresolved state explicitly (auto-recovery applies only when
+    reconciliation is clean); projection-test stub layout carries real path attributes.
 disproven_routes:
   - "3-key web provenance binding is accepted by the upstream coordinator" (it needs the full
     content-bound overlay schema with build_root/install_root/package_prefixes/artifacts).
+  - "Re-validating live-sim preconditions after the run is safe" (tree dirty + own stack present).
 open_risks:
   - R01 gate receipt still pending a green rerun; R02/R03 specs written but unrun.
-next_experiment: R01 rerun after event-name fix
+  - Each live run dirties web/MUJOCO_LOG.TXT; restore it before the next gated run.
+next_experiment: R01 rerun after precondition-capture fix
 ```
