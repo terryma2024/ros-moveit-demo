@@ -167,5 +167,15 @@ observed_extra:
     retry was executed; the conditional contract itself was verified).
 open_risks:
   - Each live run dirties web/MUJOCO_LOG.TXT; restore it before the next gated run.
-next_experiment: Task 17 final gates + acceptance summary
+  - Task 17 gate battery at final HEAD: L1 45/45, L2 installed 25/25 + api-contract 7/7,
+    package pytest 471/471 (direct venv pytest; colcon test collection under /usr/bin/python3
+    pydantic 1.10 is an environment failure per the so101-dev contract), vitest 110/110,
+    build clean, codegen no-diff.
+  - L2 fixes during the battery: adaptive helper owns runtime-root creation (342515320);
+    S15 spawn-intent test now branches on the durable owner record (88f327be7) because a kill
+    after ACK + helper completion reconciles exactly once (200) instead of fencing (409).
+  - Full live-sim serial collection pending: blocked fail-closed by the OTHER task's live
+    ACT calibration stack (LIVE_SIM_STACK_PRESENT); per its dispatch note it must not be
+    killed. Waiting for it to clear, then running the full collection once.
+next_experiment: full live-sim serial collection once the external stack clears, then acceptance summary
 ```
