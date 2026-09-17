@@ -1,5 +1,4 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 
 import { test, expect } from "@playwright/test";
 
@@ -47,8 +46,8 @@ test("live gate requires a valid provenance binding", ({ }, testInfo) => {
   delete env.SO101_VALIDATION_PROVENANCE_BINDING;
   expect(() => validateLiveSimPreconditions(env)).toThrow("LIVE_SIM_PROVENANCE_INVALID");
 
-  const tampered = join(testInfo.outputPath, "tampered-binding.json");
-  mkdirSync(testInfo.outputPath, { recursive: true });
+  const tampered = testInfo.outputPath("tampered-binding.json");
+  mkdirSync(testInfo.outputPath(), { recursive: true });
   writeFileSync(
     tampered,
     JSON.stringify({
