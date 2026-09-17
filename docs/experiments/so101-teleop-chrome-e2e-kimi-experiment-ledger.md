@@ -160,8 +160,12 @@ observed_extra:
     DUPLICATE_BATCH_EVIDENCE_ROOT, so the runner died before its journal and the campaign could
     never leave STARTED. Fix c0e2bbb9b prepares only the evidence root (0700) with the wrapper log
     inside it; teleop pytest 344/344. Rerun shows handshake + journal + pool executing.
+  - R03 rerun PASS: 20/20 points PASSED at W8, levels_used=[8], no fallbacks, COMPLETED in 6.4m.
+    The live run exercised the new ADAPTIVE journal projection end to end (terminal status and
+    cleanup reached only through it).
+  - R05 verdict: LIVE_RETRY_NOT_APPLICABLE_ALL_SUCCEEDED (no business FAILED point existed, so no
+    retry was executed; the conditional contract itself was verified).
 open_risks:
-  - R03 (20-point adaptive, W8 ladder) never run; R05 retry only if a business FAILED point exists.
   - Each live run dirties web/MUJOCO_LOG.TXT; restore it before the next gated run.
-next_experiment: R03+R05 live adaptive run
+next_experiment: Task 17 final gates + acceptance summary
 ```
