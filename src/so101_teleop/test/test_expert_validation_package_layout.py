@@ -16,6 +16,8 @@ EXPERT_VALIDATION_TESTS = {
     "test_expert_validation_catalog",
     "test_expert_validation_control",
     "test_expert_validation_coordinator_events",
+    "test_expert_validation_e2e_fixtures",
+    "test_expert_validation_e2e_installed_port",
     "test_expert_validation_executor_registry",
     "test_expert_validation_frozen_manifest",
     "test_expert_validation_lease",
@@ -35,11 +37,27 @@ EXPERT_VALIDATION_TESTS = {
 def test_cmake_registers_every_expert_validation_python_gate():
     cmake = (TELEOP / "CMakeLists.txt").read_text(encoding="utf-8")
     registered = set(
-        re.findall(r"so101_add_pytest_test\((test_expert_validation_[a-z_]+)", cmake)
+        re.findall(r"so101_add_pytest_test\((test_expert_validation_[a-z0-9_]+)", cmake)
     )
     assert registered == EXPERT_VALIDATION_TESTS | {
         "test_expert_validation_package_layout"
     }
+
+
+def test_e2e_launcher_helpers_and_scenarios_are_not_installed():
+    cmake = (TELEOP / "CMakeLists.txt").read_text(encoding="utf-8")
+    install_blocks = re.findall(r"install\((.*?)\)", cmake, re.DOTALL)
+    assert install_blocks
+    for block in install_blocks:
+        assert "test/e2e" not in block
+        assert "process_helpers" not in block
+        assert "expert_validation_e2e" not in block
+    # The E2E launcher, execution port, helpers, and scenario fixtures live
+    # outside the installed python package and installed script set.
+    assert not (TELEOP / "so101_teleop" / "expert_validation" / "installed_test_launcher.py").exists()
+    scripts_block = re.search(r"install\(\s*PROGRAMS(.*?)\)", cmake, re.DOTALL)
+    assert scripts_block is not None
+    assert "installed_test_launcher" not in scripts_block.group(1)
 
 
 def test_generated_cmake_registry_includes_backend_result_gate(tmp_path):
