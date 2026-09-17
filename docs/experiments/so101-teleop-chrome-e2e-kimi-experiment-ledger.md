@@ -146,8 +146,17 @@ disproven_routes:
   - "3-key web provenance binding is accepted by the upstream coordinator" (it needs the full
     content-bound overlay schema with build_root/install_root/package_prefixes/artifacts).
   - "Re-validating live-sim preconditions after the run is safe" (tree dirty + own stack present).
+observed_extra:
+  - R01 PASS: 4/4 points PASSED, COMPLETED, 5.5m; gate receipt runtime/gates/R01.passed.json.
+  - R02 first run FAIL: the mid-run Chrome reload dropped the SPA lease (lease lived only in React
+    state); renewal stopped, the 30s lease expired, and LEASE_EXPIRED cancel SIGINT'd both workers
+    ~40s in (all points UNRUN, batch burned to the 25m polling deadline). This is exactly the
+    product bug R04 exists to catch.
+  - Fix 8eb45ee7d: lease persisted in sessionStorage and reattached by renewal on mount; a
+    non-renewable stored lease is dropped for a fresh acquire. Vitest 110/110 incl. 2 new tests.
+  - R02 rerun PASS: COMPLETED in 2.9m, workers worker-01/worker-02, r04_reloaded=true.
 open_risks:
-  - R01 gate receipt still pending a green rerun; R02/R03 specs written but unrun.
+  - R03 (20-point adaptive, W8 ladder) never run; R05 retry only if a business FAILED point exists.
   - Each live run dirties web/MUJOCO_LOG.TXT; restore it before the next gated run.
-next_experiment: R01 rerun after precondition-capture fix
+next_experiment: R03+R05 live adaptive run
 ```
