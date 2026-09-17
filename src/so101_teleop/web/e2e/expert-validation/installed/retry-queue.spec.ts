@@ -262,16 +262,15 @@ test("S15 spawn-intent-to-ack window stays fenced spec:slow", async ({ installed
   );
   const pointIds = [terminal.points[0].point_id];
 
-  // Kill the server between the durable spawn intent and its ACK.  A
-  // persistent watcher polls the store in-process; per-poll subprocess
-  // spawns are too slow for this window.
+  // Kill the server between the durable spawn intent and its ACK.  The
+  // watcher kills from inside the polling process: the INTENT->ACK window
+  // is only a few milliseconds, too tight for a Node round-trip.
   const watcher = spawn(
     pythonExecutable(),
     [
       "-c",
-      "import sqlite3, sys, time\n"
-        + "db = sys.argv[1]\n"
-        + "seen = 'NONE'\n"
+      "import os, signal, sqlite3, sys, time\n"
+        + "db, server_pid = sys.argv[1], int(sys.argv[2])\n"
         + "end = time.time() + 60\n"
         + "while time.time() < end:\n"
         + "    try:\n"
@@ -281,23 +280,28 @@ test("S15 spawn-intent-to-ack window stays fenced spec:slow", async ({ installed
         + "        state = row[0] if row else 'NONE'\n"
         + "    except Exception:\n"
         + "        state = 'NONE'\n"
-        + "    if state != seen:\n"
-        + "        print(state, flush=True)\n"
-        + "        seen = state\n"
-        + "    if state == 'RUNNING':\n"
+        + "    if state == 'INTENT':\n"
+        + "        os.kill(server_pid, signal.SIGKILL)\n"
+        + "        print('KILLED_IN_WINDOW', flush=True)\n"
         + "        break\n"
-        + "    time.sleep(0.002)\n",
+        + "    if state == 'RUNNING':\n"
+        + "        print('WINDOW_MISSED', flush=True)\n"
+        + "        break\n"
+        + "    time.sleep(0.001)\n",
       database(installedServer.serverRoot),
+      String(installedServer.serverPid()),
     ],
     { stdio: ["ignore", "pipe", "ignore"] },
   );
-  const intentSeen = new Promise<void>((resolvePromise, rejectPromise) => {
+  const windowHit = new Promise<string>((resolvePromise, rejectPromise) => {
     let buffer = "";
     watcher.stdout?.on("data", (chunk) => {
       buffer += chunk.toString();
-      if (buffer.split("\n").includes("INTENT")) resolvePromise();
     });
-    watcher.on("exit", () => rejectPromise(new Error("INTENT_WINDOW_MISSED")));
+    watcher.on("exit", () => {
+      if (buffer.includes("KILLED_IN_WINDOW")) resolvePromise(buffer);
+      else rejectPromise(new Error(`INTENT_WINDOW_MISSED: ${buffer.trim()}`));
+    });
   });
   const pending = client
     .post(
@@ -305,8 +309,7 @@ test("S15 spawn-intent-to-ack window stays fenced spec:slow", async ({ installed
       retryBody(lease, session, "s15w3-retry", pointIds),
     )
     .catch((error) => error);
-  await intentSeen;
-  watcher.kill("SIGKILL");
+  await windowHit;
   await installedServer.killHard();
   await pending;
 
