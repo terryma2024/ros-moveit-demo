@@ -44,7 +44,12 @@ def _control_service(tmp_path):
     supervisor.process_owner = owner
     lease_service = ValidationLeaseService(store, supervisor)
     service = ProductionExpertValidationService(
-        layout=SimpleNamespace(), registry=None, artifacts=ValidationArtifactRegistry(),
+        layout=SimpleNamespace(
+            demo_prefix=tmp_path / "missing-prefix",
+            points_path=tmp_path / "missing-points.yaml",
+            parallel_config_path=tmp_path / "missing-parallel.yaml",
+            adaptive_config_path=tmp_path / "missing-adaptive.yaml",
+        ), registry=None, artifacts=ValidationArtifactRegistry(),
         store=store, supervisor=supervisor, lease_service=lease_service,
         current_source_config_sha256=lambda: "a" * 64,
     )
@@ -555,3 +560,77 @@ def test_fixed_projection_maps_real_active_attempt_and_counts_only_started_execu
             },
         )
         assert service._fixed_campaign_projection(request)["execution_started"] == 1
+
+
+def _adaptive_service(tmp_path, *, point_ids=("point-a", "point-b")):
+    service = object.__new__(ProductionExpertValidationService)
+    service.store = CursorStore()
+    service._campaigns = {"campaign-a": {"campaign_id": "campaign-a", "sequence": 0, "status": "STARTED"}}
+    service._campaign_requests = {
+        "campaign-a": SimpleNamespace(
+            campaign_id="campaign-a",
+            manifest_id="manifest-a",
+            batch_id="batch-a",
+            execution_mode="ADAPTIVE",
+            evidence_root=tmp_path,
+            selection=SimpleNamespace(
+                point_ids=point_ids,
+                points=tuple(
+                    SimpleNamespace(id=point_id, display_id=f"P{index:02d}")
+                    for index, point_id in enumerate(point_ids, start=1)
+                ),
+            ),
+        )
+    }
+    return service
+
+
+def _adaptive_journal(tmp_path):
+    batch_root = tmp_path / "campaigns/campaign-a/batch-a"
+    return CoordinatorJournal.create(batch_root / "r/batch-a/journal", "batch-a")
+
+
+def test_adaptive_projection_advances_from_runner_journal(tmp_path):
+    service = _adaptive_service(tmp_path)
+    with _adaptive_journal(tmp_path) as journal:
+        journal.append("BATCH_MANIFEST", "manifest", {"selected_point_ids": ["point-a", "point-b"]})
+        journal.append("POOL_STARTING", "pool-starting-01", {"generation": 1, "worker_count": 8})
+
+        running = service.get_campaign("campaign-a")
+        assert running["status"] == "RUNNING"
+        assert running["owner_kind"] == "ADAPTIVE_WRAPPER"
+        assert running["levels_used"] == (8,)
+        assert running["points"][0]["status"] == "UNRUN"
+        assert running["requested"] == 2
+
+        journal.append("POINT_RESULT_IMPORTED", "result-a", {"generation": 1, "result": {
+            "point_id": "point-a", "status": "PASSED",
+            "evidence_root": str(tmp_path / "g1"), "infra_attempts": 0,
+        }})
+        journal.append("POINT_RESULT_IMPORTED", "result-b", {"generation": 1, "result": {
+            "point_id": "point-b", "status": "FAILED",
+            "evidence_root": str(tmp_path / "g1"), "infra_attempts": 0,
+        }})
+        journal.append("BATCH_TERMINAL", "batch-terminal", {
+            "status": "COMPLETED_WITH_FAILURES", "initial_worker_count": 8,
+            "final_worker_count": 8, "levels_used": [8], "point_results": [],
+            "transitions": [], "cleanup_complete": True,
+        })
+
+        terminal = service.get_campaign("campaign-a")
+        assert terminal["status"] == "COMPLETED_WITH_FAILURES"
+        assert terminal["batch_cleanup_complete"] is True
+        assert terminal["valid_succeeded"] == 1 and terminal["valid_failed"] == 1
+        assert terminal["qualification_passed"] is False
+        points = {point["point_id"]: point for point in terminal["points"]}
+        assert points["point-b"]["retry_eligible"] is True
+        assert points["point-a"]["retry_eligible"] is False
+        assert len(service.store.accepted) == 2
+        assert service.store.accepted[-1].owner_kind == "ADAPTIVE_RUNNER"
+
+
+def test_adaptive_projection_falls_back_to_cache_before_runner_journal_exists(tmp_path):
+    service = _adaptive_service(tmp_path)
+    cached = service._campaigns["campaign-a"]
+    assert service.get_campaign("campaign-a") is cached
+    assert service.store.accepted == []

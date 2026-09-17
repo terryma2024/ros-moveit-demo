@@ -15,6 +15,8 @@ import { ExpertValidationPage } from "../pages/expert-validation-page";
 
 test("R01 four-point sequential live smoke @live-sim", async ({ page, liveServer }) => {
   test.setTimeout(1_800_000);
+  // Provenance is proven at startup; MuJoCo runtime logs dirty the tree mid-run.
+  const preconditions = validateLiveSimPreconditions();
   const app = new ExpertValidationPage(page);
   await app.goto();
   await app.acquireLease();
@@ -91,7 +93,7 @@ test("R01 four-point sequential live smoke @live-sim", async ({ page, liveServer
   const identity = {
     ros_domain_id: process.env.SO101_LIVE_ROS_DOMAIN_ID ?? "179",
     gz_partition: "not_applicable",
-    source_commit: validateLiveSimPreconditions().sourceCommit,
+    source_commit: preconditions.sourceCommit,
     install_prefix: process.env.SO101_E2E_INSTALL_PREFIX,
     server_pid: null as null,
   };

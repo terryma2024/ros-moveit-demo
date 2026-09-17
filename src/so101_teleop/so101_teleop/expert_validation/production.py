@@ -15,6 +15,7 @@ from typing import Mapping
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
 from so101_demo.parallel_batch.contracts import BatchSummary, ContractError, PointStatus, RunMode
 
+from .adaptive_events import AdaptiveEventReader
 from .artifacts import ValidationArtifactRegistry
 from .catalog import CatalogPoint, PointSelection, select_catalog_points
 from .committed_artifacts import register_committed_attempt
@@ -675,8 +676,20 @@ class ProductionExpertValidationService(ExpertValidationService):
         except KeyError as error:
             raise ServiceConflict("VALIDATION_CAMPAIGN_NOT_FOUND") from error
         request = self._campaign_requests.get(campaign_id)
-        if request is None or request.execution_mode == "ADAPTIVE":
+        if request is None:
             return self._with_recovery_fence(campaign_id, cached)
+        if request.execution_mode == "ADAPTIVE":
+            try:
+                projection = self._adaptive_campaign_projection(request)
+            except CoordinatorProjectionError as error:
+                if str(error) == "JOURNAL_REPLAY_INCOMPLETE":
+                    return self._with_recovery_fence(campaign_id, cached)
+                raise ServiceConflict("UPSTREAM_PROJECTION_INVALID") from error
+            if projection is None:
+                return self._with_recovery_fence(campaign_id, cached)
+            projection = self._with_recovery_fence(campaign_id, projection)
+            self._campaigns[campaign_id] = projection
+            return projection
         try:
             projection = self._fixed_campaign_projection(request)
         except (CoordinatorProjectionError, ContractError, StatisticsProjectionError) as error:
@@ -972,6 +985,144 @@ class ProductionExpertValidationService(ExpertValidationService):
             "execution_complete": statistics.execution_complete,
             "batch_cleanup_complete": statistics.batch_cleanup_complete,
             "qualification_passed": statistics.qualification_passed,
+        }
+
+    def _adaptive_campaign_projection(self, request):
+        """Project the adaptive Runner journal; never the nested pool journals."""
+        batch_root = (
+            Path(request.evidence_root)
+            / "campaigns"
+            / request.campaign_id
+            / request.batch_id
+        ).resolve()
+        journal_root = batch_root / "r" / request.batch_id / "journal"
+        epoch_path = journal_root / "coordinator_epoch.json"
+        if epoch_path.is_symlink():
+            raise CoordinatorProjectionError("OWNER_EPOCH_INVALID")
+        if not epoch_path.exists():
+            return None
+        if not epoch_path.is_file():
+            raise CoordinatorProjectionError("OWNER_EPOCH_INVALID")
+        try:
+            epoch_document = json.loads(epoch_path.read_text(encoding="utf-8"))
+            epoch = epoch_document["coordinator_epoch"]
+        except (OSError, KeyError, TypeError, ValueError) as error:
+            raise CoordinatorProjectionError("OWNER_EPOCH_INVALID") from error
+        if (
+            epoch_document.get("batch_id") != request.batch_id
+            or isinstance(epoch, bool)
+            or not isinstance(epoch, int)
+            or epoch <= 0
+        ):
+            raise CoordinatorProjectionError("OWNER_EPOCH_INVALID")
+        binding = CampaignUpstreamBinding(
+            campaign_id=request.campaign_id,
+            batch_id=request.batch_id,
+            owner_kind="ADAPTIVE_RUNNER",
+            owner_epoch_or_generation=epoch,
+            journal_root=journal_root,
+            batch_root=batch_root,
+        )
+        reader = AdaptiveEventReader(
+            ReadOnlyCoordinatorJournal(journal_root, request.batch_id),
+            binding,
+        )
+        batch = reader.read_after(AcceptedCoordinatorCursor.initial(binding))
+        if not batch.events:
+            return None
+        view = batch.projection
+        selected = tuple(request.selection.point_ids)
+        display_ids = {point.id: point.display_id for point in request.selection.points}
+        projected_points = []
+        succeeded = failed = indeterminate = 0
+        for point_id in selected:
+            point_view = view.points.get(point_id)
+            point_status = point_view.status if point_view is not None else "UNRUN"
+            if point_status == "PASSED":
+                succeeded += 1
+            elif point_status == "FAILED":
+                failed += 1
+            elif point_status not in {"UNRUN"}:
+                indeterminate += 1
+            projected_points.append({
+                "point_id": point_id,
+                "display_id": display_ids[point_id],
+                "status": point_status,
+                "retry_eligible": point_status == "FAILED",
+                "active_worker_id": None,
+                "reason": None,
+                "attempts": (),
+                "artifact_ids": (),
+                "artifacts": (),
+            })
+        terminal_status = view.terminal_status
+        cleanup_complete = view.cleanup_complete is True
+        if terminal_status is None:
+            status = "RUNNING"
+        elif not cleanup_complete:
+            status = "CLEANING_UP"
+        else:
+            # The Runner's terminal vocabulary is already the campaign one.
+            status = terminal_status
+        requested = len(selected)
+        evaluated = succeeded + failed
+        final_event = batch.events[-1]
+        self.store.accept_upstream_cursor(
+            UpstreamCursor(
+                batch_id=request.batch_id,
+                owner_kind="ADAPTIVE_RUNNER",
+                owner_epoch_or_generation=final_event.owner_epoch,
+                segment_id=f"segment-{final_event.owner_epoch:020d}",
+                event_id=f"event-{final_event.sequence:020d}",
+                frame_sha256=final_event.frame_sha256,
+            )
+        )
+        return {
+            "campaign_id": request.campaign_id,
+            "manifest_id": request.manifest_id,
+            "sequence": batch.next_cursor.sequence,
+            "execution_mode": request.execution_mode,
+            "owner_kind": "ADAPTIVE_WRAPPER",
+            "batch_id": request.batch_id,
+            "status": status,
+            "points": tuple(projected_points),
+            "workers": (),
+            "broker": None,
+            "requested": requested,
+            "evaluated": evaluated,
+            "execution_started": evaluated + indeterminate,
+            "valid_succeeded": succeeded,
+            "valid_failed": failed,
+            "indeterminate": indeterminate,
+            "not_executed": requested - evaluated - indeterminate,
+            "evaluation_coverage": evaluated / requested if requested else 0.0,
+            "execution_coverage": (
+                (evaluated + indeterminate) / requested if requested else 0.0
+            ),
+            "qualified_success_rate": (
+                succeeded / evaluated if evaluated else None
+            ),
+            "coverage_complete": terminal_status is not None and evaluated == requested,
+            "execution_complete": terminal_status is not None,
+            "batch_cleanup_complete": cleanup_complete,
+            "qualification_passed": (
+                terminal_status == "COMPLETED" if terminal_status is not None else None
+            ),
+            "levels_used": view.levels_used,
+            "fallback_history": tuple(
+                {
+                    "generation": fallback.generation,
+                    "from_count": fallback.from_count,
+                    "to_count": fallback.to_count,
+                    "reason": fallback.reason,
+                    "transition": fallback.transition,
+                }
+                for fallback in view.fallbacks
+            ),
+            "current_generation": view.current_generation,
+            "infra_attempts": sum(
+                point.infra_attempts for point in view.points.values()
+            ),
         }
 
     def cancel_campaign(self, campaign_id, body):

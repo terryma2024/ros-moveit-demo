@@ -20,6 +20,7 @@ class Supervisor:
     def __init__(self):
         self.requests = []
         self.cancel_requests = []
+        self.unresolved = False
 
     async def start_first_pass(self, request):
         self.requests.append(request)
@@ -29,7 +30,7 @@ class Supervisor:
         self.cancel_requests.append(reason)
 
     def has_unresolved_campaign(self):
-        return False
+        return self.unresolved
 
 
 def _selection():
@@ -130,6 +131,8 @@ def test_expired_campaign_replacement_holder_cannot_start_new_work(tmp_path):
         first = lease_service.acquire("browser-a")
         lease_service.expire_due(now_ns=first.expires_monotonic_ns)
         replacement = lease_service.acquire("browser-b")
+        # Blocking holds only while the supervisor still reports unresolved work.
+        supervisor.unresolved = True
         with pytest.raises(ServiceConflict, match="VALIDATION_RECOVERY_REQUIRED"):
             service.start_campaign(StartCampaignCommand(
                 command_id="cmd-replacement", lease_id=replacement.lease_id,

@@ -59,7 +59,11 @@ def test_expiry_requests_cancel_and_blocks_new_campaign(tmp_path):
         assert supervisor.cancel_requests == ["LEASE_EXPIRED"]
         replacement = service.acquire("browser-b")
         assert replacement.service_session_id == "browser-b"
+        supervisor.active = True
         assert service.can_start_campaign("browser-b") is False
+        supervisor.active = False
+        # Clean reconciliation auto-recovers; nothing unresolved remains.
+        assert service.can_start_campaign("browser-b") is True
     finally:
         store.close()
 
