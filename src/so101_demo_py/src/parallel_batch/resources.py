@@ -1292,6 +1292,9 @@ class WorkerResourceAllocator:
         return replacement
 
     def _live_headroom(self, worker_count: int) -> Mapping[str, object] | None:
+        if worker_count > 3:
+            # Adaptive W8 evidence does not qualify fixed-mode execution.
+            raise ResourceAllocationError('FIXED_WORKER_LIVE_QUALIFICATION_REQUIRED')
         if worker_count != 3:
             return None
         if self.live_headroom_evidence is None:

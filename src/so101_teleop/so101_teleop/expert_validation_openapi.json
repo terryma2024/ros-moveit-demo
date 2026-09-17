@@ -330,7 +330,7 @@
           "worker_count": {
             "anyOf": [
               {
-                "maximum": 3.0,
+                "maximum": 8.0,
                 "minimum": 1.0,
                 "type": "integer"
               },
@@ -731,7 +731,7 @@
           "worker_count": {
             "anyOf": [
               {
-                "maximum": 3.0,
+                "maximum": 8.0,
                 "minimum": 1.0,
                 "type": "integer"
               },
@@ -835,7 +835,12 @@
             "default": [
               1,
               2,
-              3
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
             ],
             "items": {
               "type": "integer"

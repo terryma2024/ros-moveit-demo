@@ -413,6 +413,8 @@ def _prepare_live_headroom(options, config, worker_count):
         options.live_headroom_acceptance,
         options.live_headroom_current_provenance_root,
     )
+    if worker_count > 3:
+        raise CliError("FIXED_WORKER_LIVE_QUALIFICATION_REQUIRED")
     if worker_count != 3:
         if any(value is not None for value in supplied):
             raise CliError("LIVE_HEADROOM_EVIDENCE_UNEXPECTED")

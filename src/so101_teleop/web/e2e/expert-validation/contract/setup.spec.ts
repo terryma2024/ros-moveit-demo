@@ -258,3 +258,36 @@ test("C22 renewed lease invalidates the preflight receipt scenario:short-lease",
   const reread = await page.request.get(`/expert-validation/manifests/${manifest.manifest_id}`);
   expect((await reread.json()).manifest_sha256).toBe(manifest.manifest_sha256);
 });
+
+test("N8 exact twenty-point fixed preview and rejected admission scenario:parallel-unavailable", async ({ page, scriptedServer, consoleErrors }) => {
+  const app = new ExpertValidationPage(page);
+  await app.goto();
+  await app.acquireLease();
+  await app.generateManifest(20);
+  await page.getByLabel("Execution mode").selectOption("PARALLEL");
+  const options = page.getByLabel("Worker count").locator("option");
+  await expect(options).toHaveCount(8);
+  expect(await options.evaluateAll(nodes => nodes.map(node => (node as HTMLOptionElement).value)))
+    .toEqual(["1", "2", "3", "4", "5", "6", "7", "8"]);
+  await expect(options.first()).toHaveJSProperty("disabled", true);
+  await expect(options.first()).toHaveText("1 (SEQUENTIAL only)");
+  await expect(app.notice("Capacity 20 / 20")).toBeVisible();
+  await page.getByLabel("Worker count").selectOption("8");
+  await page.getByLabel("Max points per worker").fill("3");
+  await expect(app.notice("Capacity 24 / 20")).toBeVisible();
+  const responsePromise = page.waitForResponse(response =>
+    response.url().endsWith("/expert-validation/campaigns/preflight")
+      && response.request().method() === "POST");
+  await app.runPreflight();
+  const response = await responsePromise;
+  await expect(app.notice("PARALLEL_NOT_QUALIFIED")).toBeVisible();
+  expect(response.status()).toBe(409);
+  expect(await response.json()).toEqual({ code: "PARALLEL_NOT_QUALIFIED" });
+  const request = response.request().postDataJSON();
+  expect(request).toMatchObject({ execution_mode: "PARALLEL", worker_count: 8, max_points_per_worker: 3 });
+  expect(request).not.toHaveProperty("preferred_worker_count");
+  const commands = await scriptedServer.control.commands();
+  expect(commands.filter(command => command.operation === "start_campaign")).toEqual([]);
+  const expectedRejection = `Failed to load resource: the server responded with a status of 409 (Conflict) (${response.url()})`;
+  expect(consoleErrors.filter(error => error !== expectedRejection)).toEqual([]);
+});

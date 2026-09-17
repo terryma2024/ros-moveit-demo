@@ -38,6 +38,9 @@ export function CampaignSetup({
   const validCount = state.pointCount >= 4 && state.pointCount <= 20;
   const capacity = state.workerCount * state.maxPointsPerWorker;
   const adaptive = state.executionMode === "ADAPTIVE";
+  const fixedWorkerCounts = capabilities?.fixed_worker_counts ?? [];
+  const validFixedWorkers = fixedWorkerCounts.includes(state.workerCount)
+    && (state.executionMode === "SEQUENTIAL" ? state.workerCount === 1 : state.workerCount >= 2);
   return (
     <section aria-label="Campaign setup" className="space-y-3 rounded-lg border border-slate-700 bg-slate-900 p-4">
       <h2 className="text-lg font-semibold">Campaign setup</h2>
@@ -81,11 +84,15 @@ export function CampaignSetup({
             <select
               aria-label="Worker count"
               value={state.workerCount}
-              disabled={state.executionMode === "SEQUENTIAL"}
+              disabled={!capabilities || state.executionMode === "SEQUENTIAL"}
               onChange={(event) => onChange({ ...state, workerCount: Number(event.target.value) }, "workerCount")}
               className="ml-2 bg-slate-800 px-2"
             >
-              {[1, 2, 3].map((count) => <option key={count} value={count}>{count}</option>)}
+              {fixedWorkerCounts.map((count) => (
+                <option key={count} value={count} disabled={state.executionMode === "PARALLEL" && count === 1}>
+                  {count === 1 && state.executionMode === "PARALLEL" ? "1 (SEQUENTIAL only)" : count}
+                </option>
+              ))}
             </select>
           </label>
           <label className="block">Max points per worker
@@ -110,8 +117,8 @@ export function CampaignSetup({
       <div className="flex flex-wrap gap-2">
         <Button onClick={onAcquireLease} disabled={leaseHeld || leaseRenewing}>Acquire lease</Button>
         <Button onClick={onGenerate} disabled={!validCount}>Generate points</Button>
-        <Button onClick={onPreflight} disabled={!leaseHeld || leaseRenewing || !manifestReady}>Check resources</Button>
-        <Button onClick={onStart} disabled={!leaseHeld || leaseRenewing || !manifestReady || capacity < state.pointCount && !adaptive}>Start validation</Button>
+        <Button onClick={onPreflight} disabled={!leaseHeld || leaseRenewing || !manifestReady || !adaptive && !validFixedWorkers}>Check resources</Button>
+        <Button onClick={onStart} disabled={!leaseHeld || leaseRenewing || !manifestReady || !adaptive && !validFixedWorkers || capacity < state.pointCount && !adaptive}>Start validation</Button>
       </div>
     </section>
   );

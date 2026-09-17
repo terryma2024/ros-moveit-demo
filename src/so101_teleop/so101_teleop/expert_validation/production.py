@@ -31,7 +31,7 @@ from .executor_registry import ExecutorRegistry, QualificationProbes
 from .lease import ValidationLeaseService
 from .manifest_geometry import current_manifest_source_hash, freeze_manifest_context
 from .models import UpstreamCursor
-from .preflight import CampaignStartRequest
+from .preflight import CampaignStartRequest, FIXED_WORKER_COUNTS
 from .process_owner import CoordinatorOwnershipError, ExecutionProcessOwner, OwnedCoordinator
 from .service import ExpertValidationService, ServiceConflict
 from .store import StoreConflict, SupervisorStore
@@ -301,6 +301,9 @@ class _HostResourceProbe:
                 gpu_free_gib=snapshot.gpu_free_gib,
             )
             workers = getattr(config, "worker_count", 1)
+            observations["requested_worker_count"] = workers
+            if workers > 3:
+                reasons.append("FIXED_WORKER_LIVE_QUALIFICATION_REQUIRED")
             if snapshot.logical_cpu_count < 4 * workers:
                 reasons.append("CPU_HEADROOM")
             if snapshot.available_ram_gib < 6 + 4 * workers:
@@ -450,6 +453,7 @@ class ProductionExpertValidationService(ExpertValidationService):
         return {
             "available": bool(available_modes),
             "execution_modes": available_modes,
+            "fixed_worker_counts": FIXED_WORKER_COUNTS,
             "default_execution_mode": capability.default_execution_mode,
             "lease_duration_s": lease.duration_s,
             "lease_renewal_margin_s": lease.renewal_margin_s,

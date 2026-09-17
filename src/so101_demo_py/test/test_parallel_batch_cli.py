@@ -2217,10 +2217,10 @@ def test_adaptive_cli_rejects_missing_config_and_legacy_modes(
         )
 
 
-def test_legacy_w4_remains_rejected_by_the_v1_contract(tmp_path):
+def test_fixed_w4_remains_rejected_without_live_qualification(tmp_path):
     from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
 
-    with pytest.raises(CliError, match="MAX_WORKER_COUNT"):
+    with pytest.raises(CliError, match="FIXED_WORKER_LIVE_QUALIFICATION_REQUIRED"):
         prepare_batch(
             argv(tmp_path / "legacy", worker_count="4"),
             provenance_verifier=verified,

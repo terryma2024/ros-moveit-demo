@@ -353,3 +353,38 @@ def test_manifest_response_exposes_declared_point_source(tmp_path):
         "anchor",
         "anchor",
     ]
+
+
+def test_fixed_capability_range_and_api_boundaries(tmp_path):
+    client = _client(tmp_path)
+    assert client.get("/expert-validation/capabilities").json()["fixed_worker_counts"] == [1, 2, 3, 4, 5, 6, 7, 8]
+    base = dict(service_session_id="s", lease_id="l", lease_generation=1,
+                manifest_id="m", max_points_per_worker=3)
+    for mode, workers, expected in (("SEQUENTIAL", 1, 200), ("SEQUENTIAL", 2, 422),
+                                     ("PARALLEL", 1, 422), ("PARALLEL", 2, 200),
+                                     ("PARALLEL", 8, 200), ("PARALLEL", 9, 422)):
+        response = client.post("/expert-validation/campaigns/preflight",
+                               json={**base, "execution_mode": mode, "worker_count": workers})
+        assert response.status_code == expected, response.text
+        if expected == 200:
+            assert response.json()["execution_config"]["worker_count"] == workers
+
+
+def test_installed_asset_symlink_chain_is_served_without_shadowing_artifacts(tmp_path):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "app.js").write_text("window.validationLoaded = true;")
+    web = tmp_path / "installed"
+    (web / "assets").mkdir(parents=True)
+    (web / "index.html").write_text('<script src="/assets/app.js"></script>')
+    (web / "assets/app.js").symlink_to(source / "app.js")
+    service = Service(tmp_path)
+    def missing_artifact(artifact_id):
+        raise KeyError(artifact_id)
+    service.artifacts = SimpleNamespace(resolve_opaque_id=missing_artifact)
+    client = TestClient(create_expert_validation_app(service, web))
+    assert client.get("/assets/app.js").status_code == 200
+    assert client.get("/assets/app.js").text == "window.validationLoaded = true;"
+    assert client.get("/assets/missing.js").status_code == 404
+    assert client.get("/expert-validation/artifacts/missing").status_code == 404
+    assert client.get("/expert-validation/results").text == (web / "index.html").read_text()

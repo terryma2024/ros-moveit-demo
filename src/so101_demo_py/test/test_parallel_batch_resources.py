@@ -2580,7 +2580,7 @@ def test_three_workers_are_explicit_and_never_silently_downgraded(tmp_path, conf
     assert not resource_allocator.evidence_root.exists()
 
 
-@pytest.mark.parametrize('worker_count', [True, 0, -1, 4])
+@pytest.mark.parametrize('worker_count', [True, 0, -1, 9])
 def test_worker_count_must_be_positive_and_within_frozen_maximum(tmp_path, config, worker_count):
     with pytest.raises(ResourceAllocationError, match='WORKER_COUNT'):
         allocator(tmp_path, config).allocate(worker_count=worker_count)
@@ -2942,3 +2942,30 @@ def test_cli_requires_dry_run_and_does_not_create_output(tmp_path):
             claim_root=claim_root(),
         )
     assert not root.exists()
+
+
+@pytest.mark.parametrize("cpu,ram,gpu,reason", [(31, 64, 12, "INSUFFICIENT_LOGICAL_CPU"),
+                                               (32, 37, 12, "INSUFFICIENT_AVAILABLE_RAM"),
+                                               (32, 64, 7, "INSUFFICIENT_GPU_MEMORY")])
+def test_fixed_eight_rejects_actual_resources_without_reducing_count(tmp_path, config, cpu, ram, gpu, reason):
+    owner = allocator(tmp_path, config, FakeProbe(cpu=cpu, ram=ram, gpu=gpu))
+    try:
+        with pytest.raises(ResourceAllocationError, match=reason) as caught:
+            owner.allocate(8)
+        assert caught.value.admission.required.logical_cpu_count == 32
+        assert caught.value.admission.required.available_ram_gib == 38
+        assert not owner.evidence_root.exists()
+    finally:
+        owner.close()
+
+
+def test_fixed_eight_rejects_missing_live_qualification_before_domain_claims(tmp_path, config):
+    probe = FakeProbe()
+    owner = allocator(tmp_path, config, probe)
+    try:
+        with pytest.raises(ResourceAllocationError, match="FIXED_WORKER_LIVE_QUALIFICATION_REQUIRED"):
+            owner.allocate(8)
+        assert probe.domain_calls == []
+        assert not owner.evidence_root.exists()
+    finally:
+        owner.close()

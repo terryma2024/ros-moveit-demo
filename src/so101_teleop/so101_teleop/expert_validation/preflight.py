@@ -15,6 +15,9 @@ import uuid
 from .catalog import PointSelection
 
 
+FIXED_WORKER_COUNTS = tuple(range(1, 9))
+
+
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _SHORT_BATCH = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,4}$", re.ASCII)
 
@@ -180,7 +183,7 @@ class PreflightEngine:
         if request.execution_mode in {"SEQUENTIAL", "PARALLEL"}:
             if request.execution_mode == "SEQUENTIAL" and request.worker_count != 1:
                 reasons.append("SEQUENTIAL_WORKER_COUNT")
-            if request.execution_mode == "PARALLEL" and not 2 <= request.worker_count <= 3:
+            if request.execution_mode == "PARALLEL" and request.worker_count not in FIXED_WORKER_COUNTS[1:]:
                 reasons.append("PARALLEL_WORKER_COUNT")
             maximum = request.max_points_per_worker
             if maximum is None and request.worker_count > 0:

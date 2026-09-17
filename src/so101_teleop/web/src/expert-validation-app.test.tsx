@@ -354,3 +354,39 @@ describe("ExpertValidationApp", () => {
     expect((screen.getByRole("button", { name: "Acquire lease" }) as HTMLButtonElement).disabled).toBe(false);
   });
 });
+
+
+test("server capability supplies all eight options and exact twenty-point N8 K3 request", async () => {
+  const user = userEvent.setup();
+  const preflight = vi.fn(fakeApi().preflight);
+  const original = fakeApi();
+  render(<ExpertValidationApp api={fakeApi({
+    capabilities: async () => ({ ...await original.capabilities(), fixed_worker_counts: [1,2,3,4,5,6,7,8] }),
+    preflight,
+  })} />);
+  await act(async () => {});
+  const workers = screen.getByRole("combobox", { name: "Worker count" }) as HTMLSelectElement;
+  expect(Array.from(workers.options).map(option => option.value)).toEqual(["1","2","3","4","5","6","7","8"]);
+  await user.selectOptions(screen.getByRole("combobox", { name: "Execution mode" }), "PARALLEL");
+  expect(workers.options[0].disabled).toBe(true);
+  expect(workers.options[0].text).toMatch(/SEQUENTIAL/);
+  fireEvent.change(screen.getByRole("spinbutton", { name: "Final point count" }), { target: { value: "20" } });
+  expect(screen.getByText("Capacity 20 / 20")).toBeTruthy();
+  await user.selectOptions(workers, "8");
+  fireEvent.change(screen.getByRole("spinbutton", { name: "Max points per worker" }), { target: { value: "3" } });
+  expect(screen.getByText("Capacity 24 / 20")).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: "Acquire lease" }));
+  await user.click(screen.getByRole("button", { name: "Generate points" }));
+  await user.click(screen.getByRole("button", { name: "Check resources" }));
+  expect(preflight).toHaveBeenCalledWith(expect.objectContaining({ execution_mode: "PARALLEL", worker_count: 8, max_points_per_worker: 3 }), expect.objectContaining({ lease_id: "lease-a", lease_generation: 1 }));
+});
+
+test("worker choices follow a narrower server capability without invented counts", async () => {
+  const original = fakeApi();
+  render(<ExpertValidationApp api={fakeApi({ capabilities: async () => ({
+    ...await original.capabilities(), fixed_worker_counts: [1,2,4],
+  }) })} />);
+  await act(async () => {});
+  const workers = screen.getByRole("combobox", { name: "Worker count" }) as HTMLSelectElement;
+  expect(Array.from(workers.options).map(option => option.value)).toEqual(["1","2","4"]);
+});

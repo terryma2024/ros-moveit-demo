@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_validator
 
+from .preflight import FIXED_WORKER_COUNTS
 from so101_teleop.api import validate_bind_address
 from so101_teleop.task_artifacts import ArtifactAccessError
 
@@ -41,7 +42,7 @@ class CampaignConfiguration(ClosedModel):
     lease_generation: int = Field(ge=1)
     manifest_id: str = Field(min_length=1)
     execution_mode: Literal["SEQUENTIAL", "PARALLEL", "ADAPTIVE"]
-    worker_count: int | None = Field(default=None, ge=1, le=3)
+    worker_count: int | None = Field(default=None, ge=1, le=FIXED_WORKER_COUNTS[-1])
     max_points_per_worker: int | None = Field(default=None, ge=1, le=20)
     preferred_worker_count: int | None = Field(default=None, ge=1, le=16)
     fallback_worker_counts: tuple[int, ...] | None = None
@@ -66,7 +67,7 @@ class CampaignConfiguration(ClosedModel):
                 raise ValueError("FIXED_EXECUTION_CONFIG")
             if self.execution_mode == "SEQUENTIAL" and self.worker_count != 1:
                 raise ValueError("SEQUENTIAL_WORKER_COUNT")
-            if self.execution_mode == "PARALLEL" and not 2 <= self.worker_count <= 3:
+            if self.execution_mode == "PARALLEL" and self.worker_count not in FIXED_WORKER_COUNTS[1:]:
                 raise ValueError("PARALLEL_WORKER_COUNT")
         else:
             if any(value is not None for value in fixed):
@@ -104,7 +105,7 @@ class CapabilitiesResponse(ClosedModel):
     default_execution_mode: Literal["SEQUENTIAL", "PARALLEL", "ADAPTIVE"] = "SEQUENTIAL"
     minimum_points: int = 4
     maximum_points: int = 20
-    fixed_worker_counts: tuple[int, ...] = (1, 2, 3)
+    fixed_worker_counts: tuple[int, ...] = FIXED_WORKER_COUNTS
     fixed_max_points_per_worker: int = 20
     adaptive_default_ladder: tuple[int, ...] = (8, 6, 4, 2, 1)
     lease_duration_s: float = 30.0
@@ -541,7 +542,7 @@ def create_expert_validation_app(
             # The shared Vite build emits absolute /assets URLs for both SPAs.
             app.mount(
                 "/assets",
-                StaticFiles(directory=root / "assets"),
+                StaticFiles(directory=root / "assets", follow_symlink=True),
                 name="validation-vite-assets",
             )
             app.mount(

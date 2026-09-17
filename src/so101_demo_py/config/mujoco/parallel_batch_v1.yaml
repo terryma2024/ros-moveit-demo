@@ -1,8 +1,8 @@
 schema_version: 1
 backend: mujoco
-max_worker_count: 3
+max_worker_count: 8
 max_points_per_worker_upper_bound: 20
-ros_domain_ids: [181, 182, 183]
+ros_domain_ids: [181, 182, 183, 184, 185, 186, 187, 188]
 heartbeat_interval_s: 1.0
 heartbeat_timeout_s: 5.0
 lease_duration_s: 300.0

@@ -513,7 +513,12 @@ export interface components {
              * @default [
              *       1,
              *       2,
-             *       3
+             *       3,
+             *       4,
+             *       5,
+             *       6,
+             *       7,
+             *       8
              *     ]
              */
             fixed_worker_counts: number[];

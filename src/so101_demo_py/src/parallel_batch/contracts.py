@@ -74,7 +74,7 @@ class ModelOutcome(StrEnum):
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 
-_FROZEN_MAX_WORKER_COUNT = 3
+_FROZEN_MAX_WORKER_COUNT = 8
 _FROZEN_MAX_POINTS_PER_WORKER = 20
 _FROZEN_YOLO_WEIGHTS_SHA256 = (
     "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781"
@@ -503,7 +503,7 @@ _FROZEN_RUNTIME_VALUES = {
     "backend": "mujoco",
     "max_worker_count": _FROZEN_MAX_WORKER_COUNT,
     "max_points_per_worker_upper_bound": _FROZEN_MAX_POINTS_PER_WORKER,
-    "ros_domain_ids": (181, 182, 183),
+    "ros_domain_ids": (181, 182, 183, 184, 185, 186, 187, 188),
     "heartbeat_interval_s": 1.0,
     "heartbeat_timeout_s": 5.0,
     "lease_duration_s": 300.0,

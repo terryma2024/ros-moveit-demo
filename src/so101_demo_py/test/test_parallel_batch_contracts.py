@@ -58,8 +58,8 @@ def test_runtime_config_loads_the_frozen_values():
 
     config = load_parallel_runtime_config(CONFIG_PATH)
     assert config.backend == "mujoco"
-    assert config.ros_domain_ids == (181, 182, 183)
-    assert config.max_worker_count == 3
+    assert config.ros_domain_ids == (181, 182, 183, 184, 185, 186, 187, 188)
+    assert config.max_worker_count == 8
     assert config.max_points_per_worker_upper_bound == 20
     assert config.heartbeat_interval_s == 1.0
     assert config.lease_duration_s == 300.0
@@ -387,7 +387,7 @@ def test_batch_request_rejects_duplicate_empty_and_overbound_selection_controls(
         BatchRequest(
             **shared,
             selected_point_ids=("task_start",),
-            worker_count=4,
+            worker_count=9,
             max_points_per_worker=1,
         )
     with pytest.raises(ContractError, match="MAX_POINTS_PER_WORKER"):
@@ -524,3 +524,17 @@ def test_validation_pass_requires_normal_points_complete_terminal_reason(run_mod
     assert summary.validation_statuses["task_start"] is ValidationStatus.VALIDATION_PASSED
     assert summary.validation_complete is True
     assert summary.validation_passed is False
+
+
+@pytest.mark.parametrize("workers", [1, 2, 8])
+def test_fixed_batch_contract_supports_exact_count_through_eight(tmp_path, workers):
+    from so101_demo.parallel_batch.contracts import BatchRequest, RunMode
+    request = BatchRequest("eight", RunMode.EXECUTE, tuple(f"p{i}" for i in range(20)),
+                           workers, 20 if workers == 1 else 10 if workers == 2 else 3, tmp_path)
+    assert request.worker_count == workers
+
+
+def test_fixed_batch_nine_is_outside_supported_range(tmp_path):
+    from so101_demo.parallel_batch.contracts import BatchRequest, RunMode, ContractError
+    with pytest.raises(ContractError, match="MAX_WORKER_COUNT"):
+        BatchRequest("nine", RunMode.EXECUTE, ("p1",), 9, 1, tmp_path)

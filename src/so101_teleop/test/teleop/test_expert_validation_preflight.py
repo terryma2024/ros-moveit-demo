@@ -90,7 +90,7 @@ def test_fixed_default_k_uses_ceiling_capacity(tmp_path):
     [
         ("SEQUENTIAL", 2, "SEQUENTIAL_WORKER_COUNT"),
         ("PARALLEL", 1, "PARALLEL_WORKER_COUNT"),
-        ("PARALLEL", 4, "PARALLEL_WORKER_COUNT"),
+        ("PARALLEL", 9, "PARALLEL_WORKER_COUNT"),
     ],
 )
 def test_fixed_worker_count_is_closed(tmp_path, mode, worker_count, error):
@@ -141,3 +141,33 @@ def test_receipt_binds_canonical_request_session_and_expiry(tmp_path):
     assert receipt.observed_at_ns == 100
     assert receipt.expires_at_monotonic_ns > receipt.observed_at_ns
     assert len(receipt.canonical_start_request_sha256) == 64
+
+
+@pytest.mark.parametrize("workers,maximum,capacity", [(2, 10, 20), (8, 3, 24)])
+def test_fixed_twenty_points_keeps_exact_requested_capacity(tmp_path, workers, maximum, capacity):
+    receipt = PreflightEngine(Resources()).preflight(
+        _request(tmp_path, count=20, worker_count=workers, max_points_per_worker=maximum))
+    assert receipt.admitted
+    assert receipt.capacity == capacity
+    assert receipt.execution_config.worker_count == workers
+    assert receipt.execution_config.max_points_per_worker == maximum
+
+
+def test_eight_worker_resource_rejection_keeps_supported_count(tmp_path):
+    receipt = PreflightEngine(Resources(False, ("CPU_HEADROOM",))).preflight(
+        _request(tmp_path, count=20, worker_count=8, max_points_per_worker=3))
+    assert not receipt.admitted
+    assert receipt.reason_codes == ("CPU_HEADROOM",)
+    assert receipt.capacity == 24
+    assert receipt.execution_config.worker_count == 8
+
+
+def test_host_fixed_eight_remains_unqualified_even_with_enough_resources(monkeypatch):
+    from so101_demo.parallel_batch.resources import ResourceSnapshot, SystemResourceProbe
+    from so101_teleop.expert_validation.production import _HostResourceProbe
+    from so101_teleop.expert_validation.preflight import FixedExecutionConfig
+    monkeypatch.setattr(SystemResourceProbe, "snapshot", lambda self: ResourceSnapshot(32, 64, 12))
+    admitted, reasons, observations = _HostResourceProbe().probe(None, FixedExecutionConfig("PARALLEL", 8, 3))
+    assert not admitted
+    assert reasons == ("FIXED_WORKER_LIVE_QUALIFICATION_REQUIRED",)
+    assert observations["requested_worker_count"] == 8
