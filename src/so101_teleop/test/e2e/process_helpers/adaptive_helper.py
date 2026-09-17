@@ -50,8 +50,10 @@ def main(argv: list[str]) -> int:
     args = _parse_args(argv)
     spec = json.loads(args.spec.read_text(encoding="utf-8"))
     runtime_root = args.runtime_root
-    if not runtime_root.is_dir():
-        raise RuntimeError("ADAPTIVE_RUNTIME_ROOT_MISSING")
+    if runtime_root.exists() or runtime_root.is_symlink():
+        # Mirrors the upstream CLI: the runner owns runtime-root creation.
+        raise RuntimeError("ADAPTIVE_DUPLICATE_RUNTIME_ROOT")
+    runtime_root.mkdir(mode=0o700, parents=True)
 
     runner = subprocess.Popen(
         [sys.executable, str(Path(__file__).parent / "descendant_helper.py")],
