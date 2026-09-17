@@ -72,3 +72,37 @@ evidence:
 decision: KEEP
 next_experiment: EXP-K02 (L2 execution port)
 ```
+```yaml
+experiment_id: EXP-K02
+status: VALID
+lifecycle: ISOLATED_STACK
+single_variable: L2 installed production composition + real OS helpers
+provenance:
+  source_commit: d029b441d (worktree codex/kimi-teleop-chrome-e2e)
+  install_overlay: /data/work/so101-evidence/teleop-chrome-e2e/20260916T130435Z-e2ffff62-kimi01/install-runtime (copied 7-package colcon prefix, rebuilt per production change)
+  runtime_executable: python-venv/bin/python3 launcher + /usr/bin/google-chrome 150.0.7871.181
+  ros_domain_id: not_applicable
+  gz_partition: not_applicable
+commands:
+  - command: bun run test:e2e:installed (full L2)
+    exit_code: 0
+    elapsed: 192s
+  - command: bun run test:e2e:installed -- --grep @api-contract
+    exit_code: 0
+observed:
+  - 25/25 installed tests passed; S01-S16 all PASS; @api-contract collected 7 tests, all PASS.
+  - fixed_helper AMENT sys.path bootstrap fixed (c9eb9099b) after ModuleNotFoundError in smoke-t022/t023.
+  - Production gaps found RED and fixed minimally (171d59b5c): restart campaign reconciliation
+    (_restore_campaigns from durable store), stable command digests + repeat-first idempotency for
+    start/retry, resumable retry queue with crash-window reconciliation, INTENT-row fencing,
+    lease auto-recovery after clean reconciliation, SPA fallback no longer shadows /artifacts/*.
+  - Test-side flakes diagnosed and fixed: fetch Response.status property, zombie-aware process
+    liveness, SIGKILL exit detection (exitCode stays null on signal death), in-process watcher
+    for the INTENT->ACK window (few ms), lease renew before slow-spec crash windows.
+conclusion: L2 installed layer complete and green, including the three S15 crash windows.
+evidence:
+  - /data/work/so101-evidence/teleop-chrome-e2e/20260916T130435Z-e2ffff62-kimi01/reports/playwright-installed.json
+  - /data/work/so101-evidence/teleop-chrome-e2e/20260916T130435Z-e2ffff62-kimi01/server/S*/
+decision: KEEP
+next_experiment: EXP-K03 (L3 preflight/evidence adapters)
+```
