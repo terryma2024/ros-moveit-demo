@@ -191,6 +191,7 @@ export type LiveServer = {
   baseURL: string;
   caseDir: string;
   stateDir: string;
+  preconditions: LiveSimPreconditions;
   stop: () => Promise<void>;
 };
 
@@ -284,6 +285,7 @@ export const liveSimTest = base.extend<{ liveServer: LiveServer }>({
       baseURL: `http://127.0.0.1:${port}`,
       caseDir,
       stateDir,
+      preconditions,
       stop,
     });
     await stop();
