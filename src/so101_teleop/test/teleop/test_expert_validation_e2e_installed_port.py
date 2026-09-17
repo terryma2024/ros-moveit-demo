@@ -182,7 +182,7 @@ def test_fixed_helper_descendant_survives_leader_exit(tmp_path):
 def test_adaptive_helper_handshake_and_sigint_cleanup(tmp_path):
     port = _port(tmp_path)
     runtime_root = tmp_path / "r" / "a001"
-    runtime_root.mkdir(parents=True)
+    # The helper owns runtime-root creation, mirroring the production CLI.
     request = type(
         "Request",
         (),
