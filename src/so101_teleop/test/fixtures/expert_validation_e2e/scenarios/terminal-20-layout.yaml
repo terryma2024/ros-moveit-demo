@@ -1,0 +1,274 @@
+schema_version: 1
+scenario_id: terminal-20-layout
+description: Independent terminal layout fixture with twenty mixed passed, failed
+  and unrun points, long text and committed evidence.
+manifest_point_count: 20
+artifact_files:
+  rgb-opaque-p03:
+    file: valid.png
+    media_type: image/png
+  numeric-opaque-p03:
+    file: valid.json
+    media_type: application/json
+initial_campaign:
+  campaign_id: campaign-layout-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  manifest_id: manifest-layout-20
+  sequence: 9
+  execution_mode: SEQUENTIAL
+  owner_kind: COORDINATOR
+  batch_id: batch-t4
+  status: COMPLETED_WITH_FAILURES
+  requested: 20
+  evaluated: 14
+  execution_started: 14
+  valid_succeeded: 8
+  valid_failed: 6
+  indeterminate: 0
+  not_executed: 6
+  evaluation_coverage: 0.7
+  execution_coverage: 0.7
+  qualified_success_rate: 0.5714285714285714
+  coverage_complete: false
+  execution_complete: true
+  batch_cleanup_complete: true
+  qualification_passed: false
+  workers:
+  - worker_id: worker-01
+    generation: 1
+    state: STOPPED
+    current_point_id: null
+    lease_count: 14
+  broker:
+    available: true
+    reason: null
+  points:
+  - point_id: task_start
+    display_id: P01
+    status: PASSED
+    retry_eligible: false
+    attempts:
+    - generation: 1
+      status: PASSED
+      kind: FIRST_PASS
+      attempt_id: attempt-p01
+      worker_id: worker-01
+      worker_generation: 1
+      batch_id: batch-t4
+  - point_id: cup_test_forward_5cm
+    display_id: P02
+    status: PASSED
+    retry_eligible: false
+    attempts:
+    - generation: 1
+      status: PASSED
+      kind: FIRST_PASS
+      attempt_id: attempt-p02
+      worker_id: worker-01
+      worker_generation: 1
+      batch_id: batch-t4
+  - point_id: cup_test_left_5cm
+    display_id: P03
+    status: FAILED
+    retry_eligible: true
+    reason: TARGET_TOLERANCE_EXCEEDED
+    attempts:
+    - generation: 1
+      status: FAILED
+      reason: TARGET_TOLERANCE_EXCEEDED
+      kind: FIRST_PASS
+      attempt_id: attempt-p03
+      worker_id: worker-01
+      worker_generation: 1
+      batch_id: batch-t4
+    artifact_ids:
+    - rgb-opaque-p03
+    - numeric-opaque-p03
+    artifacts:
+    - artifact_id: rgb-opaque-p03
+      campaign_id: campaign-layout-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      batch_id: batch-t4
+      worker_id: worker-01
+      worker_generation: 1
+      attempt_id: attempt-p03
+      role: task-rgb-before
+      media_type: image/png
+      size_bytes: 68
+      sha256: c054eec0ca71070d8406b12c9e0b1745c861d337f4818c5fe8334e1b4c0dc425
+    - artifact_id: numeric-opaque-p03
+      campaign_id: campaign-layout-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      batch_id: batch-t4
+      worker_id: worker-01
+      worker_generation: 1
+      attempt_id: attempt-p03
+      role: physical-evidence
+      media_type: application/json
+      size_bytes: 40
+      sha256: f76459e7a85fe6fc9c7b04dc7b53297e6b0298f7fb1ccc08cce2448289c87a01
+  - point_id: cup_test_right_5cm
+    display_id: P04
+    status: UNRUN
+    retry_eligible: false
+    attempts: []
+  - point_id: sample_01_near_left
+    display_id: P05
+    status: PASSED
+    retry_eligible: false
+    attempts:
+    - generation: 1
+      status: PASSED
+      kind: FIRST_PASS
+      attempt_id: attempt-layout-5
+      worker_id: worker-01
+      worker_generation: 1
+      batch_id: batch-t4
+  - point_id: sample_02_near_center
+    display_id: P06
+    status: FAILED
+    retry_eligible: true
+    attempts:
+    - generation: 1
+      status: FAILED
+      kind: FIRST_PASS
+      attempt_id: attempt-layout-6
+      worker_id: worker-01
+      worker_generation: 1
+      batch_id: batch-t4
+    reason: LAYOUT_REASON_RECOVERABILITY_RECOVERABILITY_RECOVERABILITY_RECOVERABILITY_RECOVERABILITY_RECOVERABILITY_RECOVERABILITY_RECOVERABILITY_RECOVERABILITY_RECOVERABILITY_RECOVERABILITY_RECOVERABILITY_RECOVERABILITY_RECOVERABILITY_RECOVERABILITY_RECOVERABILITY_
+  - point_id: sample_03_near_right
+    display_id: P07
+    status: UNRUN
+    retry_eligible: false
+    attempts: []
+  - point_id: sample_04_near_left
+    display_id: P08
+    status: PASSED
+    retry_eligible: false
+    attempts:
+    - generation: 1
+      status: PASSED
+      kind: FIRST_PASS
+      attempt_id: attempt-layout-8
+      worker_id: worker-01
+      worker_generation: 1
+      batch_id: batch-t4
+  - point_id: sample_05_near_center
+    display_id: P09
+    status: FAILED
+    retry_eligible: true
+    attempts:
+    - generation: 1
+      status: FAILED
+      kind: FIRST_PASS
+      attempt_id: attempt-layout-9
+      worker_id: worker-01
+      worker_generation: 1
+      batch_id: batch-t4
+    reason: TARGET_TOLERANCE_EXCEEDED
+  - point_id: sample_06_mid_left
+    display_id: P10
+    status: UNRUN
+    retry_eligible: false
+    attempts: []
+  - point_id: sample_07_mid_center
+    display_id: P11
+    status: PASSED
+    retry_eligible: false
+    attempts:
+    - generation: 1
+      status: PASSED
+      kind: FIRST_PASS
+      attempt_id: attempt-layout-11
+      worker_id: worker-01
+      worker_generation: 1
+      batch_id: batch-t4
+  - point_id: sample_08_mid_right
+    display_id: P12
+    status: FAILED
+    retry_eligible: true
+    attempts:
+    - generation: 1
+      status: FAILED
+      kind: FIRST_PASS
+      attempt_id: attempt-layout-12
+      worker_id: worker-01
+      worker_generation: 1
+      batch_id: batch-t4
+    reason: TARGET_TOLERANCE_EXCEEDED
+  - point_id: sample_09_mid_left
+    display_id: P13
+    status: UNRUN
+    retry_eligible: false
+    attempts: []
+  - point_id: sample_10_mid_center
+    display_id: P14
+    status: PASSED
+    retry_eligible: false
+    attempts:
+    - generation: 1
+      status: PASSED
+      kind: FIRST_PASS
+      attempt_id: attempt-layout-14
+      worker_id: worker-01
+      worker_generation: 1
+      batch_id: batch-t4
+  - point_id: sample_11_mid_right
+    display_id: P15
+    status: FAILED
+    retry_eligible: true
+    attempts:
+    - generation: 1
+      status: FAILED
+      kind: FIRST_PASS
+      attempt_id: attempt-layout-15
+      worker_id: worker-01
+      worker_generation: 1
+      batch_id: batch-t4
+    reason: TARGET_TOLERANCE_EXCEEDED
+  - point_id: sample_12_far_left
+    display_id: P16
+    status: UNRUN
+    retry_eligible: false
+    attempts: []
+  - point_id: sample_13_far_center
+    display_id: P17
+    status: PASSED
+    retry_eligible: false
+    attempts:
+    - generation: 1
+      status: PASSED
+      kind: FIRST_PASS
+      attempt_id: attempt-layout-17
+      worker_id: worker-01
+      worker_generation: 1
+      batch_id: batch-t4
+  - point_id: sample_14_far_right
+    display_id: P18
+    status: FAILED
+    retry_eligible: true
+    attempts:
+    - generation: 1
+      status: FAILED
+      kind: FIRST_PASS
+      attempt_id: attempt-layout-18
+      worker_id: worker-01
+      worker_generation: 1
+      batch_id: batch-t4
+    reason: TARGET_TOLERANCE_EXCEEDED
+  - point_id: sample_15_far_center
+    display_id: P19
+    status: UNRUN
+    retry_eligible: false
+    attempts: []
+  - point_id: sample_16_far_right
+    display_id: P20
+    status: PASSED
+    retry_eligible: false
+    attempts:
+    - generation: 1
+      status: PASSED
+      kind: FIRST_PASS
+      attempt_id: attempt-layout-20
+      worker_id: worker-01
+      worker_generation: 1
+      batch_id: batch-t4
+terminal_campaign: COMPLETED_WITH_FAILURES

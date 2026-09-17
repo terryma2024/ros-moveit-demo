@@ -12,7 +12,7 @@ const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../
 const REPO_ROOT = resolve(PACKAGE_ROOT, "../..");
 const SERVER_SCRIPT = join(PACKAGE_ROOT, "test/e2e/scripted_validation_server.py");
 const SCENARIOS = join(PACKAGE_ROOT, "test/fixtures/expert_validation_e2e/scenarios");
-const DIST_DIR = join(PACKAGE_ROOT, "web/dist");
+const DIST_DIR = resolve(process.env.SO101_E2E_WEB_ROOT ?? join(PACKAGE_ROOT, "web/dist"));
 
 function pythonExecutable(): string {
   const value = process.env.SO101_E2E_PYTHON;

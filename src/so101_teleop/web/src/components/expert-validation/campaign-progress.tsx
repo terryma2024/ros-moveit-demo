@@ -3,11 +3,15 @@ import type { CampaignProjection } from "@/api/expert-validation-types";
 export type CampaignView = Pick<CampaignProjection, "campaign_id" | "sequence"> &
   Partial<Omit<CampaignProjection, "campaign_id" | "sequence">>;
 
-export function CampaignProgress({ campaign }: { campaign: CampaignView }) {
+export function CampaignProgress({ campaign, selectedPointId, onSelect }: {
+  campaign: CampaignView;
+  selectedPointId?: string;
+  onSelect?: (pointId: string) => void;
+}) {
   const evaluated = campaign.evaluated ?? 0;
   const succeeded = campaign.valid_succeeded ?? 0;
   return (
-    <section aria-label="Campaign progress" className="space-y-3 rounded-lg border border-slate-700 bg-slate-900 p-4">
+    <section aria-label="Campaign progress" className="validation-progress min-w-0 space-y-3 rounded-lg border border-slate-700 bg-slate-900 p-4 [overflow-wrap:anywhere]">
       <header>
         <h2 className="text-lg font-semibold">Campaign {campaign.campaign_id}</h2>
         <p>{campaign.execution_mode ?? "UNKNOWN"} · {campaign.status ?? "RUNNING"} · sequence {campaign.sequence}</p>
@@ -42,6 +46,23 @@ export function CampaignProgress({ campaign }: { campaign: CampaignView }) {
           W{String(transition.from_count)} -&gt; W{String(transition.to_count)}: {String(transition.reason)}
         </p>
       ))}
+      <h3 className="font-semibold">Point execution results</h3>
+      <div role="group" aria-label="Point execution results" className="validation-point-results gap-2">
+        {campaign.points?.map((point) => (
+          <button
+            key={point.point_id}
+            type="button"
+            aria-label={`Point ${point.display_id ?? point.point_id}`}
+            aria-pressed={selectedPointId === point.point_id}
+            onClick={() => onSelect?.(point.point_id)}
+            className="min-w-0 rounded border border-slate-600 p-2 text-left text-sm aria-pressed:border-sky-300 aria-pressed:bg-sky-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300"
+          >
+            <span className="block font-semibold">{point.display_id ?? point.point_id}</span>
+            <span className="block">{point.status ?? "UNKNOWN"}</span>
+            {point.reason ? <span className="block text-slate-400">{point.reason}</span> : null}
+          </button>
+        ))}
+      </div>
       <div className="grid gap-2 md:grid-cols-2">
         {campaign.workers?.map((worker) => (
           <article key={worker.worker_id} aria-label={`Worker ${worker.worker_id}`} className="rounded border border-slate-600 p-3">

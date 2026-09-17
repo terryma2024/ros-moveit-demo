@@ -74,7 +74,7 @@ test("C11 broker pause and recovery stay infrastructure scenario:running-two-wor
   await scriptedServer.control.emit();
   await scriptedServer.control.emit();
   await expect(page.getByText("Broker healthy")).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText(/RUNNING/)).toBeVisible();
+  await expect(page.getByRole("region", { name: "Campaign progress" }).locator("header").getByText(/RUNNING/)).toBeVisible();
 
   await scriptedServer.control.emitAll();
   await expect(page.getByText("First pass 4 / 4 valid")).toBeVisible({ timeout: 10_000 });

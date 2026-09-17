@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, test, vi } from "vitest";
 
@@ -29,6 +29,25 @@ const campaign = {
 };
 
 describe("expert validation campaign components", () => {
+  test("point results preserve order, status, keyboard selection and selected indication", async () => {
+    const select = vi.fn();
+    const user = userEvent.setup();
+    render(<CampaignProgress campaign={campaign} selectedPointId="p2" onSelect={select} />);
+    const results = screen.getByRole("group", { name: "Point execution results" });
+    const buttons = within(results).getAllByRole("button");
+    expect(buttons.map(button => button.getAttribute("aria-label")))
+      .toEqual(["Point P01", "Point P02", "Point P03", "Point P04"]);
+    expect(buttons[1].getAttribute("aria-pressed")).toBe("true");
+    expect(buttons[0].getAttribute("aria-pressed")).toBe("false");
+    expect(buttons[1].textContent).toContain("FAILED");
+    expect(buttons[3].textContent).toContain("UNRUN");
+    await user.click(buttons[1]);
+    expect(select).toHaveBeenLastCalledWith("p2");
+    buttons[0].focus();
+    await user.keyboard(" ");
+    expect(select).toHaveBeenLastCalledWith("p1");
+  });
+
   test("only valid failures are retry eligible and confirmation is exact", async () => {
     const user = userEvent.setup();
     const retry = vi.fn();

@@ -318,7 +318,7 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
   const selectedPoint = campaign?.points?.find((point) => point.point_id === selectedPointId);
 
   return (
-    <main className="mx-auto max-w-7xl space-y-5 p-6 text-slate-100">
+    <main className="mx-auto w-full max-w-[2400px] space-y-4 p-3 text-slate-100 [overflow-wrap:anywhere] sm:p-6">
       <header><h1 className="text-2xl font-bold">SO-101 Expert Validation</h1></header>
       <CampaignSetup
         capabilities={capabilities}
@@ -334,10 +334,10 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
         onStart={() => { void start().catch(reportError); }}
       />
       {campaign || mapManifest?.top_view ? (
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           {mapManifest?.top_view ? <TopViewMap manifest={mapManifest.top_view} campaign={mapCampaign} selectedPointId={selectedPointId} onSelect={setSelectedPointId} />
             : <p role="status">Map unavailable: {mapError || "Loading bound manifest"}</p>}
-          {campaign ? <CampaignProgress campaign={campaign} /> : null}
+          {campaign ? <CampaignProgress campaign={campaign} selectedPointId={selectedPointId} onSelect={setSelectedPointId} /> : null}
         </div>
       ) : null}
       {selectedPoint ? <PointEvidence point={selectedPoint} artifacts={selectedPoint.artifacts ?? []} /> : null}

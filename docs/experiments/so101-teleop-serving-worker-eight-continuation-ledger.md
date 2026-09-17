@@ -4,10 +4,10 @@ success_contract: RED/GREEN regressions; package/frontend/build/codegen/native C
 worktree: /data/work/ws_moveit
 branch: main
 base_commit: 9ce38e2c931b0435113c9c72a7c6753fa0d54a83
-current_commit: 64c19bf77e8c2fd870bf61ecead1005dbf66a0a6
+current_commit: 4f0fabbc6e60571ca4ff9bc7621bc1c47318e507
 evidence_root: /data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main
-latest_checkpoint: CP-C05
-next_experiment: NONE
+latest_checkpoint: CP-L02
+next_experiment: EXP-L02
 
 ## CP-C01 — inherited state verified
 
@@ -105,3 +105,39 @@ next_command: commit scoped source then final-continuation-restart.py and final-
 - Full ordinarydemo d3 final process exit1, JUnit3144tests/1failure/0errors/1skip;3142passes; elapsed640s. Sole failure classified shared-install contamination with d5fresh-installPASS. This limitation and fixed4..8 live qualification remain explicit; strict copied-install acceptance notPASS.
 - Requested blank-page and1..8dropdown work complete; no fixed8 live execution claim. Independent dst task unmodified/unmessaged; no subagents, push, evidence deletion, dependency installation, hardware use or shared robot restart.
 - Retained all continuation evidence at registered root; archivednone. Deletioncandidates scratch/* and owned short browser temp directory; no deletion authorized or performed.
+
+## EXP-L01 — PLANNED approved layout follow-up
+
+- User approved bounded layout with ok; no repeated design/spec/plan or subagents. New exact dispatch receipt exclusively created/read back first.
+- Last trustworthy checkpoint CP-C06: cleanmain4f0fabbc6; canonical authority/installed-web symlink serving, onlyTailscale8000; fixed8qualification remains failclosed. Historical completion preserved.
+- Evidence root unchanged:/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main; new layout/ evidence batch.
+- source:4f0fabbc6e60571ca4ff9bc7621bc1c47318e507; install:/data/work/ws_moveit/install; runtimePython:/data/work/so101-evidence/teleop-chrome-e2e/20260916T130435Z-e2ffff62-kimi01/python-venv/bin/python3; ROS_DOMAIN_ID179; GZ_PARTITIONnot_applicable.
+- single_variable:responsive frontend layout; lifecycle REUSE_STACK, independent loopback scripted20point terminal scenario only, no robot launch.
+- hypothesis:wider60/40row and container-width point grid improve map/readable results with unchanged projection/evidence selection/retry.
+- RED criteria:current layout fails width/ratio/grid/selection regression at intended UI boundary. GREEN:1920/1280/390 dimensions/columns3/2/1/nooverflow; projectiongoldens byteidentical; native before/after captures; fullfrontend/buildpass.
+- safe refresh:only exact owned webPID/start/pane and no active campaign/lease/execution; otherwise serving pending. Preserve independentdst and user robot stack. Retain all old/new evidence; archivednone; no deletion.
+
+## CP-L02 — approved layout / inline review verified
+
+- Source boundary only: wider page max2400px, desktop60/40 map/progress with12px gutter, mobile12px page padding; progress point-result buttons share existing selectedPointId with map/evidence. Point results are distinct from Worker cards and FULL_RESTART controls.
+- Container queries use actual progress content width:384px=>2columns,640px=>3; below384=>1. minmax0 tracks/min-width0 plus anywhere wrapping prevent long campaign/reason text overflow. Stable API point order/status, mouse/keyboard selection, visible pressed indicator preserved. No scheduler/qualification/worker configuration/first-pass statistics change.
+- UnitRED1failure/4passes on missing point execution results. Native/browserRED fails overflow with absent grid; matching1920/1280/390 before screenshots inspected. GREEN focused42passed; fullfrontend113passed/28files; TypeScript/Vitebuildexit0 into registered-root layout/dist (live old assets untouched); known largechunk warning only.
+- Golden server/frontend fixtures, projection.ts and TopViewMap.tsx SHA256 byte-identical. Related unit map14/projection2/evidence/retry/app tests pass. Mixed terminal20-point independent scenario has8PASSED/6FAILED/6UNRUN, evaluated14, long campaignID/reason and real registered opaque artifacts; no robot/physics truth or MuJoCo launch.
+- Native after browserPASS1; measured desktop1920 map1107x830.25/progress738x1178/grid704x754=3cols, medium1280 map723x542.25/progress482x1572/grid448x1072=2cols;390 map351x263.25/progress351x2168/grid317x1552=1col, stacked. No horizontal overflow at any width; long strings wrap fully. Main widths1905/1265/375 include native scrollbar reduction.
+- Native before/after images at matching three viewport widths plus mobile P03evidence inspected at original generated resolutions via exact Chrome window/cua-driver window scope. Full table geometry remains in SVG; desktop map requires ordinary vertical page scrolling as it enlarges, not cropping/zoom/projection change.
+- Related browser13cases:12passed, C11 failed only because broad RUNNING locator now matches new point status as well as campaign header. Inspected trace; scoped retained assertion to campaign header. Recheck2passed: C11 plus new layout browser regression including wide viewport/narrow sidebar1/2/3columns, exact20point order, long-reason selected evidence nooverflow, map/result mutual selection, retryeligibility and unchanged stats. Thus all13related cases have passing evidence across retained runs; not a single13/13run.
+- Scripted fixture loader12passed, validated exact Python/NVMe scratch/layout-p1/tmp; JUnit12/0errors/failures, elapsed0s. No benchmark/dependency installs. Native/scripted cases bind only ephemeral loopback ports, production remains solelyTailscale8000.
+- Fresh precommit campaign/lease/owned execution state empty. Source review/diffcheckclean, only9task-owned paths dirty. Independent dst untouched/unmessaged, no subagents. Final refresh must repeat exactPID571672/parent461503/start/pane%63 and empty-state gates.
+- Retained layout/before,after,related,recheck,dist,logs/images/traces and scratch evidence at original registered root. Archivednone. Deletioncandidate scratch/layout-p1 afterreadback and existing task-owned short browser temp tree; no deletion.
+
+## EXP-L02 — PLANNED safe compiled-layout serving refresh
+
+prior_experiment: EXP-L01
+single_variable: local committed frontend revision/compiled assets
+lifecycle: REUSE_STACK (restart only idle dedicated web service)
+source: layoutbase4f0fabbc6e60571ca4ff9bc7621bc1c47318e507 plus tested scoped diff
+install: /data/work/ws_moveit/install; Python exact Kimi venv; ROS_DOMAIN_ID179; GZ_PARTITIONnot_applicable
+preconditions: empty campaign/ACTIVElease/ownedexecution, exact owned PID/start/pane/executables; failclosed if active
+next_command: locally commit9scoped paths; layout/refresh-serving.py retains previous dist and promotes staged build while owned web is stopped, scoped Teleop overlay build; restart same pane/bind/authority
+success_criteria: onlyTailscale8000, actual native served page max2400px/new assets/source/install/HTTP match, generated20point manifest finalGitHEAD, full geometry/native capture inspected; no campaign launched
+terminal_receipt: exact final source/runtime hashes and safe refresh status in registered-root layout/completion-report.md and task-ledger.md; do not rewrite prior completion-report.md
