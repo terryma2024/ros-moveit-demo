@@ -309,14 +309,12 @@ test("S15 spawn-intent-to-ack window stays fenced spec:slow", async ({ installed
       retryBody(lease, session, "s15w3-retry", pointIds),
     )
     .catch((error) => error);
-  const raced = await Promise.race([
-    windowHit.then(() => "window" as const),
-    pending.then((result) => ({ http: result })),
-  ]);
-  if (raced !== "window") {
-    const result = (raced as { http: any }).http;
+  try {
+    await windowHit;
+  } catch (error) {
+    const result = await pending;
     throw new Error(
-      `RETRY_COMPLETED_BEFORE_INTENT_WINDOW: ${JSON.stringify(result?.body ?? result)}`,
+      `INTENT_WINDOW_FAILURE: ${error}; http=${JSON.stringify(result?.body ?? String(result))}`,
     );
   }
   await installedServer.killHard();

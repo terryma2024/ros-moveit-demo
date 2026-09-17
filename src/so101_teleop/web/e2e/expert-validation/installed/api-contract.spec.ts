@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { installedTest as test, expect, pythonExecutable } from "../fixtures/installed";
 import { storeQuery } from "../assertions/journal";
 import {
-  api, acquireLease, createManifest, fixedConfig, preflight, startCampaign,
+  api, acquireLease, createManifest, fixedConfig, preflight, startCampaign, waitStatus,
 } from "./support";
 
 function canonicalDigest(body: Record<string, unknown>): string {
@@ -105,6 +105,10 @@ test("API command ids: replay, conflict reuse, outcome unknown @api-contract spe
 
   const campaigns = await client.get("/expert-validation/campaigns");
   expect(campaigns.body).toHaveLength(1);
+  await waitStatus(
+    client, first.body.campaign_id,
+    (value) => value.status === "COMPLETED_WITH_FAILURES" && value.batch_cleanup_complete === true,
+  );
 });
 
 function rawGet(port: number, path: string): Promise<{ status: number; body: string }> {
