@@ -25,6 +25,31 @@ function renderState(state: MapPointState, options: Record<string, unknown> = {}
 }
 
 describe("TopViewMap", () => {
+  test("trims legacy canvas whitespace while retaining measured outlying labels and selection clearance", () => {
+    // jsdom has no SVG layout engine. Supply the browser-measured content envelope,
+    // including a label outside the table, rather than mocking projection math.
+    const measured = { x: 265, y: 48, width: 800, height: 804 };
+    const original = Object.getOwnPropertyDescriptor(SVGElement.prototype, "getBBox");
+    Object.defineProperty(SVGElement.prototype, "getBBox", { configurable: true, value: () => measured });
+    try {
+      const { container, rerender } = renderState("PASSED");
+      const svg = container.querySelector("svg")!;
+      const [x, y, width, height] = svg.getAttribute("viewBox")!.split(" ").map(Number);
+      expect(width).toBeLessThan(fixture.projection.width_px);
+      expect(x).toBeLessThan(measured.x);
+      expect(y).toBeLessThan(measured.y);
+      expect(x + width).toBeGreaterThan(measured.x + measured.width);
+      expect(y + height).toBeGreaterThan(measured.y + measured.height);
+      const initial = svg.getAttribute("viewBox");
+      rerender(<TopViewMap manifest={fixture} campaign={{ points: [] }}
+        selectedPointId="task_start" onSelect={() => {}} />);
+      expect(container.querySelector('[data-focus-ring="task_start"]')).toBeTruthy();
+      expect(svg.getAttribute("viewBox")).toBe(initial);
+    } finally {
+      if (original) Object.defineProperty(SVGElement.prototype, "getBBox", original);
+      else delete (SVGElement.prototype as unknown as Record<string, unknown>).getBBox;
+    }
+  });
   test("world grid remains inside the server-provided table rather than baseline bounds", () => {
     const serverManifest = { ...fixture,
       geometry: { ...fixture.geometry, table_bounds: [-0.1, 0.1, -0.35, -0.2] },

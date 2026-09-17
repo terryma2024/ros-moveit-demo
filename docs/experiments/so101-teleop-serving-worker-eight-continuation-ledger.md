@@ -141,3 +141,41 @@ preconditions: empty campaign/ACTIVElease/ownedexecution, exact owned PID/start/
 next_command: locally commit9scoped paths; layout/refresh-serving.py retains previous dist and promotes staged build while owned web is stopped, scoped Teleop overlay build; restart same pane/bind/authority
 success_criteria: onlyTailscale8000, actual native served page max2400px/new assets/source/install/HTTP match, generated20point manifest finalGitHEAD, full geometry/native capture inspected; no campaign launched
 terminal_receipt: exact final source/runtime hashes and safe refresh status in registered-root layout/completion-report.md and task-ledger.md; do not rewrite prior completion-report.md
+
+## EXP-M01 — PLANNED actual visible map fill correction
+
+prior_experiment: EXP-L01/CP-L03 (SVG allocation passed; visible table fill acceptance disproven)
+single_variable: display SVG viewport only, full geometry union and small stroke margin
+lifecycle: REUSE_STACK; isolated scripted Chrome fixture, no robot launch
+source: c48438e565e43d15b3d9487209fee522be6a9bb4 clean canonical main
+evidence_root: existing registered root; batch layout-map-fill/
+receipt: dispatch-map-fill-20260917.receipt exact CODEX-TELEOP-MAP-FILL-20260917-C48438E5 no newline, created/read back
+preconditions: read-only dedicated runtime; two ACTIVE/STARTED campaigns, ACTIVE lease and two RUNNING owned executions confirmed; live assets and service must remain unchanged
+acceptance: native matching 1920/1280/390 before/after, real table screen width >=95percent of SVG panel when complete envelope permits, isotropic CTM, every geometry/label enclosed; 60/40 and 3/2/1 unchanged; golden/projection bytes unchanged
+next_command: RED browser visible table metrics/native capture; measure SVG content union and trim unused legacy viewBox; staged frontend tests/build/Chrome; scoped local commit; live refresh pending while active
+retained: all new batch evidence; archived none; no deletion
+
+## CP-M01 — source correction verified; live refresh pending
+
+- Root cause: legacy1200x900 display canvas gives table670/1200=55.83percent width despite full-width SVG. New measured complete SVG content group includes table/grid/base/origin/target/candidate/cup/tolerance/20points and actual label extents; reserve all marker selection rings, add4projection-pixel margin per edge, explicit xMidYMid meet. Only display viewBox changes; autoheight isotropic. 60/40 row and responsive3/2/1 point results unchanged.
+- RED: new unit1failure/14passes on unchanged legacy viewBox; native before browser table/panel ratios55.83percent at1920/1280/390. Native matching before captures inspected.
+- Inline review caught an initially incomplete measurement group; outlying-label Chrome regression reproduced clipping (labelright1626.53, viewportright939) and passes after group encompasses all layers. Test-only display text changes no metrics/IDs/backend golden fixtures. Initial build and all failed evidence retained, not used as final acceptance.
+- Chromium screen rect float rounding difference0.0000305CSSpx corrected to sub-layout-pixel bound1/64CSSpx; strict isotropic getScreenCTM equality at8decimals retained. No metric/projection contracts relaxed.
+- Final GREEN: focused43passed; fullfrontend114passed/28files after final source change; TypeScript/Vite buildexit0 into layout-map-fill/dist only; relatedChrome15/15single run, 0flaky/skipped/unexpected; headed native final1/1pass. No pytest/fsync fixtures or benchmark/dependency install needed for frontend-only scope.
+- Actual SCREEN table/panel widths:1920 1093.9329/1107=98.8196percent (6.5336CSSpx margin each);1280 714.4664/723=98.8197percent (4.2668each);390 346.8547/351=98.8190percent (2.0727each). EqualX/Y scale,20markers/20labels, fullgeometry envelopes inside viewport, no horizontaloverflow;3/2/1cols.
+- Native final images layout-map-fill/native-final/native-{1920,1280,390}.png plus wide lower extent and mobileP03evidence inspected at original generated resolution. Full table corners visible medium/mobile. Wide map grows vertically and needs ordinary page scroll. Native Chrome minimum outer width exceeds CSS390viewport; CSS metrics independently confirm width390. Existing point/label cluster spacing preserved.
+- Server/frontend golden projection fixtures and projection.ts SHA256 byte-identical; backend manifests/scheduler/provenance/evidence selection/keyboard/retry/statistics unchanged. Source/install/liveHTTP still serving previous c48438e56 bundle, hashes verified equal. Final staged asset hashes separate; no installed/copied qualification claim.
+- Live safety: exact owned web PID966736/parent461503/startticks147733632, only100.82.102.56:8000, no8001. Two ACTIVE/STARTEDcampaigns, ACTIVElease, two declared RUNNINGowned executions block any refresh. No live asset promotion, colcon install or restart/cancellation performed.
+- User authorized cleanup of all other ROS/Teleop processes. Authoritative host executable/argument and Docker inventory found no eligible other runtime/running containers; task-owned scripted fixtures excluded and close normally. No signals sent; independent dst untouched/unmessaged; no subagents/push/hardware/robot launch.
+- Scope local commit: TopViewMap, its unit regression, layout Chrome regressions and this continuation audit ledger (4paths); preserve unrelated changes. Immutable final revision and latest operational readback recorded in registered-root layout-map-fill/completion-report.md and root task-ledger.md.
+- Retained all prior and new batch evidence including initial-dist/failures/finaldist/native/projection/hash/process reports; archivednone. No new pytest scratch. Existing scratch/layout-p1 and task-owned short browser temp remain deletioncandidates, no deletion.
+
+## EXP-M02 — PENDING safe port8000 asset refresh
+
+prior_experiment: EXP-M01/CP-M01
+single_variable: compiled validated frontend assets and committed source revision
+lifecycle: REUSE_STACK; dedicated web only after idle
+preconditions: fresh exactPID/start/parent/pane/bind/executables and no ACTIVEcampaign/lease/ownedexecution, clean canonicalHEAD; failclosed otherwise
+next_command: re-read authoritative campaign/lease/ownedexecution and listener identity; only when safe retain previous dist, promote layout-map-fill/dist, scoped Teleop overlay build and guarded same-pane8000restart; actualserved source/install/HTTP/native/hash validation
+current_blocker: two ACTIVEcampaigns; user explicitly forbids interruption for asset refresh
+terminal_receipt: root layout-map-fill/completion-report.md carries stagedPASS and servingPENDING, not new-live-layoutPASS

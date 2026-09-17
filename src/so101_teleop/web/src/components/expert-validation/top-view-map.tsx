@@ -1,4 +1,4 @@
-import { Fragment, type KeyboardEvent } from "react";
+import { Fragment, type KeyboardEvent, useLayoutEffect, useRef, useState } from "react";
 
 import { projectBounds, projectXY, type Projection } from "./projection";
 
@@ -89,6 +89,32 @@ function worldGridTicks(lower: number, upper: number): number[] {
 
 export function TopViewMap({ manifest, campaign, selectedPointId, onSelect }: Props) {
   const { projection, geometry } = manifest;
+  const content = useRef<SVGGElement>(null);
+  const [displayViewBox, setDisplayViewBox] = useState(
+    `0 0 ${projection.width_px} ${projection.height_px}`,
+  );
+  useLayoutEffect(() => {
+    // Measure the actual labels as well as every rendered shape in projection pixels.
+    // Only the display viewport changes; metric projection and point coordinates do not.
+    if (!content.current?.getBBox) return;
+    const bounds = content.current.getBBox();
+    let left = bounds.x;
+    let top = bounds.y;
+    let right = left + bounds.width;
+    let bottom = top + bounds.height;
+    // Reserve every possible selection ring so selection/status never moves the viewport.
+    const clearance = manifest.marker_radius_px + 8;
+    for (const point of manifest.points) {
+      const [x, y] = point.projected_px;
+      left = Math.min(left, x - clearance);
+      top = Math.min(top, y - clearance);
+      right = Math.max(right, x + clearance);
+      bottom = Math.max(bottom, y + clearance);
+    }
+    // getBBox excludes strokes; four projection pixels cover the widest half-stroke.
+    const margin = 4;
+    setDisplayViewBox(`${left - margin} ${top - margin} ${right - left + 2 * margin} ${bottom - top + 2 * margin}`);
+  }, [manifest]);
   const table = projectBounds(projection, geometry.table_bounds);
   const base = projectBounds(projection, geometry.base_bounds);
   const target = projectBounds(projection, geometry.target_bounds);
@@ -109,11 +135,13 @@ export function TopViewMap({ manifest, campaign, selectedPointId, onSelect }: Pr
 
   return (
     <svg
-      viewBox={`0 0 ${projection.width_px} ${projection.height_px}`}
+      viewBox={displayViewBox}
+      preserveAspectRatio="xMidYMid meet"
       role="img"
       aria-label="Expert validation top view"
       className="h-auto w-full"
     >
+      <g ref={content}>
       <rect
         data-geometry="table"
         x={table.x}
@@ -193,6 +221,7 @@ export function TopViewMap({ manifest, campaign, selectedPointId, onSelect }: Pr
           </Fragment>
         );
       })}
+      </g>
     </svg>
   );
 }
