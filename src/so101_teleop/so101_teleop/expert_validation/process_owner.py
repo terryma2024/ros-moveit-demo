@@ -142,8 +142,14 @@ class ExecutionProcessOwner:
             request.batch_root.parent.mkdir(parents=True, exist_ok=True)
             process_log = request.batch_root.parent / f"{request.batch_id}.coordinator.log"
         else:
-            request.runtime_root.mkdir(parents=True, exist_ok=True)
-            process_log = request.runtime_root / "adaptive-wrapper.log"
+            # The upstream adaptive CLI claims exclusive creation of
+            # runtime_root (DUPLICATE_BATCH_EVIDENCE_ROOT otherwise) but
+            # accepts a pre-existing evidence root with mode 0700, so only
+            # that root is prepared here and the wrapper log lives inside it.
+            request.evidence_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+            process_log = (
+                request.evidence_root / f"{request.batch_id}.adaptive-wrapper.log"
+            )
         environment = os.environ.copy()
         environment.update(request.environment)
         with open(
