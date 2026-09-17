@@ -213,6 +213,7 @@ export const liveSimTest = base.extend<{ liveServer: LiveServer }>({
     const prefixes = PACKAGE_PREFIXES.map((name) => join(preconditions.installPrefix, name))
       .filter((path) => existsSync(path));
     const sitePackages = prefixes.map((entry) => join(entry, "lib/python3.12/site-packages"));
+    const libraryPaths = prefixes.map((entry) => join(entry, "lib"));
     const entry = join(
       preconditions.installPrefix, "so101_teleop/lib/so101_teleop/so101_expert_validation_server.py",
     );
@@ -230,6 +231,9 @@ export const liveSimTest = base.extend<{ liveServer: LiveServer }>({
         PYTHONNOUSERSITE: "1",
         PYTHONPATH: [...sitePackages, "/opt/ros/jazzy/lib/python3.12/site-packages"].join(":"),
         AMENT_PREFIX_PATH: [...prefixes, "/opt/ros/jazzy"].join(":"),
+        LD_LIBRARY_PATH: [...libraryPaths, process.env.LD_LIBRARY_PATH ?? ""]
+          .filter(Boolean)
+          .join(":"),
         ROS_HOME: join(stateDir, "ros-home"),
         ROS_LOG_DIR: join(stateDir, "ros-home", "log"),
         ROS_DOMAIN_ID: process.env.SO101_LIVE_ROS_DOMAIN_ID ?? "179",
