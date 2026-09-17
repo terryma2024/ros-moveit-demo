@@ -76,8 +76,12 @@ test("S07 a surviving descendant blocks the next batch until inventory clears sp
   await expect
     .poll(() => ownerRows(installedServer.serverRoot).length, { timeout: 15_000 })
     .toBe(2);
-  const ownerB = ownerRows(installedServer.serverRoot)[1];
-  expect(ownerB.batch_id).not.toBe(owner.batch_id);
+  const ownerIds = ownerRows(installedServer.serverRoot).map((row) => row.batch_id);
+  expect(new Set(ownerIds).size).toBe(2);
+  expect(ownerIds).toContain(owner.batch_id);
+  const ownerB = ownerRows(installedServer.serverRoot).find(
+    (row) => row.batch_id !== owner.batch_id,
+  )!;
   const projectionB = (await client.get(`/expert-validation/campaigns/${campaignB}`)).body;
   expect(projectionB.status).toBe("RUNNING");
 
