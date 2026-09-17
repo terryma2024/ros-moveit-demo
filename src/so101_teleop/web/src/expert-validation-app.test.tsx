@@ -1,11 +1,15 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, test, vi, beforeEach } from "vitest";
 
 import { ExpertValidationApp, type ExpertValidationApi } from "./expert-validation-app";
 import type { Lease, Manifest } from "@/api/expert-validation-types";
 import golden from "@/fixtures/top_view_projection_v1.json";
+
+beforeEach(() => {
+  sessionStorage.removeItem("so101-expert-validation-lease");
+});
 
 function frozenManifest(count = 4, manifestId = "manifest-4"): Manifest {
   const points = golden.points.slice(0, count);
@@ -310,5 +314,43 @@ describe("ExpertValidationApp", () => {
     expect(screen.getByText("W8 -> W6 -> W4 -> W2 -> W1")).toBeTruthy();
     expect(screen.getByText("Resource observations only")).toBeTruthy();
     expect(await screen.findByText("W8 -> W6: WORKER_START_FAILED")).toBeTruthy();
+  });
+
+  test("reload reattaches the persisted lease by renewing it instead of abandoning it", async () => {
+    const sessionId = "session-reload";
+    sessionStorage.setItem("so101-expert-validation-service-session", sessionId);
+    const stored: Lease = {
+      lease_id: "lease-a", service_session_id: sessionId, generation: 3,
+      expires_monotonic_ns: 40_000_000_000,
+    };
+    sessionStorage.setItem("so101-expert-validation-lease", JSON.stringify(stored));
+    const base = fakeApi();
+    const renewLease = vi.fn(base.renewLease);
+    const acquireLease = vi.fn(base.acquireLease);
+    render(<ExpertValidationApp api={{ ...base, renewLease, acquireLease }} />);
+
+    await vi.waitFor(() => expect(renewLease).toHaveBeenCalledOnce());
+    expect(renewLease.mock.calls[0][0]).toMatchObject({ lease_id: "lease-a", generation: 3 });
+    expect(acquireLease).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(
+      (screen.getByRole("button", { name: "Acquire lease" }) as HTMLButtonElement).disabled,
+    ).toBe(true));
+  });
+
+  test("a stored lease that no longer renews is dropped for a fresh acquire", async () => {
+    const sessionId = "session-stale";
+    sessionStorage.setItem("so101-expert-validation-service-session", sessionId);
+    const stored: Lease = {
+      lease_id: "lease-gone", service_session_id: sessionId, generation: 1,
+      expires_monotonic_ns: 1,
+    };
+    sessionStorage.setItem("so101-expert-validation-lease", JSON.stringify(stored));
+    const base = fakeApi();
+    const renewLease = vi.fn(async () => { throw new Error("LEASE_EXPIRED"); });
+    render(<ExpertValidationApp api={{ ...base, renewLease }} />);
+
+    await vi.waitFor(() => expect(screen.getByText(/LEASE_EXPIRED/)).toBeTruthy());
+    expect(sessionStorage.getItem("so101-expert-validation-lease")).toBeNull();
+    expect((screen.getByRole("button", { name: "Acquire lease" }) as HTMLButtonElement).disabled).toBe(false);
   });
 });

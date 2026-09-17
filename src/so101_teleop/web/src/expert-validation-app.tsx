@@ -74,6 +74,25 @@ function stableSessionId(): string {
   return value;
 }
 
+const LEASE_STORAGE_KEY = "so101-expert-validation-lease";
+
+function storedLease(sessionId: string): Lease | undefined {
+  const raw = sessionStorage.getItem(LEASE_STORAGE_KEY);
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (
+      typeof parsed?.lease_id !== "string" || !parsed.lease_id
+      || parsed.service_session_id !== sessionId
+      || !Number.isInteger(parsed.generation) || parsed.generation < 1
+      || !Number.isInteger(parsed.expires_monotonic_ns)
+    ) return undefined;
+    return parsed as Lease;
+  } catch {
+    return undefined;
+  }
+}
+
 export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValidationApi }) {
   const [capabilities, setCapabilities] = useState<Capabilities>();
   const [lease, setLease] = useState<Lease>();
@@ -105,6 +124,8 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
   const replaceLease = (next?: Lease) => {
     leaseRef.current = next;
     setLease(next);
+    if (next) sessionStorage.setItem(LEASE_STORAGE_KEY, JSON.stringify(next));
+    else sessionStorage.removeItem(LEASE_STORAGE_KEY);
     setReceipt(undefined);
     receiptGeneration.current = undefined;
   };
@@ -113,6 +134,29 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
     setReceipt(undefined);
     setNotice(error instanceof Error ? error.message : String(error));
   };
+
+  // A page reload must not abandon the lease: the campaign outlives the tab's
+  // React state, so reattach by renewing the lease persisted in this session.
+  useEffect(() => {
+    const stored = storedLease(sessionId);
+    if (!stored) return;
+    let disposed = false;
+    api.renewLease(stored).then((renewed) => {
+      if (disposed) return;
+      if (renewed.lease_id !== stored.lease_id
+        || renewed.service_session_id !== stored.service_session_id
+        || renewed.generation <= stored.generation) {
+        throw new Error("LEASE_RENEWAL_INVALID");
+      }
+      replaceLease(renewed);
+    }).catch((error: unknown) => {
+      if (disposed) return;
+      sessionStorage.removeItem(LEASE_STORAGE_KEY);
+      reportError(error);
+    });
+    return () => { disposed = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, sessionId]);
 
   useEffect(() => {
     if (!lease || !capabilities) return;
