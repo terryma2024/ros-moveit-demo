@@ -63,7 +63,7 @@ test("R01 four-point sequential live smoke @live-sim", async ({ page, liveServer
   const events = readJournalEvents(join(batchRoot, "coordinator"));
   expect(events.filter((event) => event.type === "BATCH_STARTED")).toHaveLength(1);
   expect(events.filter((event) => event.type === "RESULT_COMMITTED")).toHaveLength(4);
-  expect(events.some((event) => event.type === "BATCH_FINISHED")).toBe(true);
+  expect(events.some((event) => event.type === "BATCH_CLEANUP_COMPLETE")).toBe(true);
   expect(existsSync(join(batchRoot, "cleanup-gates.json"))).toBe(true);
 
   // Evidence-level: every point has a verifiable sealed attempt on disk.

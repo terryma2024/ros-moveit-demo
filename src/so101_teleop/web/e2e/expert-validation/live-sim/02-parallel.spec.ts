@@ -77,7 +77,7 @@ test("R02 parallel two-worker live run with mid-run reload @live-sim", async ({ 
   const events = readJournalEvents(join(batchRoot, "coordinator"));
   expect(events.filter((event) => event.type === "BATCH_STARTED")).toHaveLength(1);
   expect(events.filter((event) => event.type === "RESULT_COMMITTED")).toHaveLength(4);
-  expect(events.some((event) => event.type === "BATCH_FINISHED")).toBe(true);
+  expect(events.some((event) => event.type === "BATCH_CLEANUP_COMPLETE")).toBe(true);
 
   // The reload neither interrupted nor duplicated the campaign.
   const campaignsAfter = await (
