@@ -119,24 +119,26 @@ test("S01 installed production console entry serves health and page spec:default
   const port = await freePort();
 
   const first = await startProductionEntry(join(root, "state"), port, join(root, "entry-1.log"));
-  const health = await fetch(`http://127.0.0.1:${port}/health`);
-  expect(health.status).toBe(200);
-  expect((await health.json()).service).toBe("expert-validation");
-
-  await page.goto(`http://127.0.0.1:${port}/expert-validation`);
-  await expect(page.getByRole("heading", { name: "SO-101 Expert Validation" })).toBeVisible();
-
-  const exitCode = await first.stop();
-  expect(exitCode).toBe(0);
-
-  // The writer lock and database handle must be re-acquirable after exit.
-  const secondPort = await freePort();
-  const second = await startProductionEntry(join(root, "state"), secondPort, join(root, "entry-2.log"));
+  let second: EntryHandle | null = null;
   try {
+    const health = await fetch(`http://127.0.0.1:${port}/health`);
+    expect(health.status).toBe(200);
+    expect((await health.json()).service).toBe("expert-validation");
+
+    await page.goto(`http://127.0.0.1:${port}/expert-validation`);
+    await expect(page.getByRole("heading", { name: "SO-101 Expert Validation" })).toBeVisible();
+
+    const exitCode = await first.stop();
+    expect(exitCode).toBe(0);
+
+    // The writer lock and database handle must be re-acquirable after exit.
+    const secondPort = await freePort();
+    second = await startProductionEntry(join(root, "state"), secondPort, join(root, "entry-2.log"));
     const healthAfter = await fetch(`http://127.0.0.1:${secondPort}/health`);
     expect(healthAfter.status).toBe(200);
   } finally {
-    await second.stop();
+    await first.stop();
+    if (second) await second.stop();
   }
 });
 
