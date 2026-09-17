@@ -4,10 +4,10 @@ success_contract: RED/GREEN regressions; package/frontend/build/codegen/native C
 worktree: /data/work/ws_moveit
 branch: main
 base_commit: 9ce38e2c931b0435113c9c72a7c6753fa0d54a83
-current_commit: 9ce38e2c931b0435113c9c72a7c6753fa0d54a83
+current_commit: 64c19bf77e8c2fd870bf61ecead1005dbf66a0a6
 evidence_root: /data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main
-latest_checkpoint: CP-C04
-next_experiment: EXP-C03
+latest_checkpoint: CP-C05
+next_experiment: NONE
 
 ## CP-C01 — inherited state verified
 
@@ -94,3 +94,14 @@ preconditions: fresh servicePID548153/starttime/pane%63 match; campaigns empty, 
 success_criteria: health200; only100.82.102.56:8000; counts1..8; generated manifest source_commit equals committedHEAD; source/install/HTTP hashes identical; exactN2K10capacity20 andN8K3capacity24 with qualification rejection; own lease released
 invalid_criteria: stale ownership or any active lease/campaign; do not interrupt those
 next_command: commit scoped source then final-continuation-restart.py and final-runtime-readback.py
+
+## CP-C05 — canonical committed serving verified
+
+- Verified implementation commit64c19bf77e8c2fd870bf61ecead1005dbf66a0a6, before9ce38e2c931b0435113c9c72a7c6753fa0d54a83; local commit only,19paths. Final ledger-only commit/rebound service receipt will be recorded in registered root.
+- Final revision assertion caught inherited SO101_VALIDATION_PROVENANCE_BINDING pointing to historical kimi-overlay-binding.json/worktree9d5da0bb. This explained prior startup succeeding while canonical source was dirty. Preserved historical binding; owned serve.sh now unsets inherited validation/parallel bindings, requires SO101_VALIDATION_SOURCE_ROOT canonicalWS and SOURCE_COMMIT actual GitHEAD. Strict clean-Git/module/config identity checks unchanged.
+- Guarded web-only restart validated exact process/start/pane plus empty campaigns, no ACTIVE leases and no owned_execution. Final source manifest reports canonical committed64c19bf77, not historicalKimi. Earlier failed final assertion and inherited env evidence retained; no campaign was started.
+- Verification script initially assumed capacity wire field; published PreflightResponse intentionally exposes execution_config. Corrected audit script to compute capacity from exact returnedN*K and compare20-point count, retained prior script version. Final readback exit0: N2K10capacity20 admittedtrue/reasons[]; N8K3capacity24 admittedfalse/reasons[FIXED_WORKER_LIVE_QUALIFICATION_REQUIRED,CPU_HEADROOM,RAM_HEADROOM]. Own lease release200; campaigns empty.
+- Final source/install/HTTP assets and backend bytes rechecked unchanged. Real served URL http://100.82.102.56:8000/expert-validation. OnlyTailscale8000; regulartasks503; missingasset/artifact404. Frontend native image remains applicable because code/builded assets unchanged after native inspection.
+- Full ordinarydemo d3 final process exit1, JUnit3144tests/1failure/0errors/1skip;3142passes; elapsed640s. Sole failure classified shared-install contamination with d5fresh-installPASS. This limitation and fixed4..8 live qualification remain explicit; strict copied-install acceptance notPASS.
+- Requested blank-page and1..8dropdown work complete; no fixed8 live execution claim. Independent dst task unmodified/unmessaged; no subagents, push, evidence deletion, dependency installation, hardware use or shared robot restart.
+- Retained all continuation evidence at registered root; archivednone. Deletioncandidates scratch/* and owned short browser temp directory; no deletion authorized or performed.
