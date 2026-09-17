@@ -174,8 +174,10 @@ open_risks:
   - L2 fixes during the battery: adaptive helper owns runtime-root creation (342515320);
     S15 spawn-intent test now branches on the durable owner record (88f327be7) because a kill
     after ACK + helper completion reconciles exactly once (200) instead of fencing (409).
-  - Full live-sim serial collection pending: blocked fail-closed by the OTHER task's live
-    ACT calibration stack (LIVE_SIM_STACK_PRESENT); per its dispatch note it must not be
-    killed. Waiting for it to clear, then running the full collection once.
-next_experiment: full live-sim serial collection once the external stack clears, then acceptance summary
+  - Full live-sim serial collection at final HEAD dd3674dab: 5/5 PASS in 16.0 min after the
+    external ACT stack cleared (gate held fail-closed while it ran; stack preserved).
+    R01 5.5m, R02+reload 3.1m, R03 7.4m; all gate receipts re-recorded.
+  - case-status.tsv: 43/43 PASS at dd3674dab; acceptance summary at
+    <evidence-root>/reports/acceptance-summary.md.
+next_experiment: none - acceptance complete
 ```
