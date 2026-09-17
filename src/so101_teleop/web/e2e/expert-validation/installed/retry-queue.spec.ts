@@ -184,6 +184,14 @@ test("S15 cleanup-to-dequeue window advances exactly once spec:slow", async ({ i
   );
   const pointIds = terminal.points.slice(0, 2).map((point: any) => point.point_id);
 
+  // Renew before the retry: the slow first pass consumes most of the TTL.
+  const renewed = await client.put(`/expert-validation/lease/${lease.lease_id}`, {
+    service_session_id: session,
+    generation: lease.generation,
+  });
+  expect(renewed.status).toBe(200);
+  lease.generation = renewed.body.generation;
+
   // Crash the server while retry-001 is executing; the helper survives and
   // commits terminal+cleanup to its journal while the server is down.
   const pending = client
@@ -261,6 +269,14 @@ test("S15 spawn-intent-to-ack window stays fenced spec:slow", async ({ installed
     (value) => value.status === "COMPLETED_WITH_FAILURES" && value.batch_cleanup_complete === true,
   );
   const pointIds = [terminal.points[0].point_id];
+
+  // Renew before the retry: the slow first pass consumes most of the TTL.
+  const renewedW3 = await client.put(`/expert-validation/lease/${lease.lease_id}`, {
+    service_session_id: session,
+    generation: lease.generation,
+  });
+  expect(renewedW3.status).toBe(200);
+  lease.generation = renewedW3.body.generation;
 
   // Kill the server between the durable spawn intent and its ACK.  The
   // watcher kills from inside the polling process: the INTENT->ACK window
