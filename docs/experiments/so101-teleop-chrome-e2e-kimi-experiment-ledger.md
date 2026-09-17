@@ -155,6 +155,11 @@ observed_extra:
   - Fix 8eb45ee7d: lease persisted in sessionStorage and reattached by renewal on mount; a
     non-renewable stored lease is dropped for a fresh acquire. Vitest 110/110 incl. 2 new tests.
   - R02 rerun PASS: COMPLETED in 2.9m, workers worker-01/worker-02, r04_reloaded=true.
+  - R03 first attempt FAIL: the supervisor's process owner pre-created the adaptive runtime root
+    to host the wrapper log; the upstream CLI claims exclusive creation and fails closed with
+    DUPLICATE_BATCH_EVIDENCE_ROOT, so the runner died before its journal and the campaign could
+    never leave STARTED. Fix c0e2bbb9b prepares only the evidence root (0700) with the wrapper log
+    inside it; teleop pytest 344/344. Rerun shows handshake + journal + pool executing.
 open_risks:
   - R03 (20-point adaptive, W8 ladder) never run; R05 retry only if a business FAILED point exists.
   - Each live run dirties web/MUJOCO_LOG.TXT; restore it before the next gated run.
