@@ -199,6 +199,9 @@ export type LiveServer = {
  * no test execution port.  Requires the global-setup gate to have passed.
  */
 export const liveSimTest = base.extend<{ liveServer: LiveServer }>({
+  baseURL: async ({ liveServer }, use) => {
+    await use(liveServer.baseURL);
+  },
   liveServer: async ({ }, use, testInfo) => {
     const preconditions = validateLiveSimPreconditions();
     const slug = testInfo.title.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
