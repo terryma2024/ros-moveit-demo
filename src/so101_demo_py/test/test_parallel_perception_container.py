@@ -135,6 +135,81 @@ def test_batch_specific_mounts_identity_and_gpu_groups(tmp_path, name):
     assert '--no-cpu-fallback' in argv
 
 
+def test_explicit_same_user_batch_ipc_root_can_host_broker_runtime(tmp_path):
+    from so101_demo.cli.parallel_perception_broker import container_run_argv
+
+    root = tmp_path / 'batch'
+    root.mkdir(mode=0o700)
+    inputs = root / 'broker-inputs'
+    inputs.mkdir(mode=0o700)
+    weights = tmp_path / 'best.pt'
+    weights.write_bytes(b'model')
+    grounded = tmp_path / 'grounded'
+    grounded.mkdir()
+    batch_ipc = Path(f'/run/user/{os.getuid()}/so101-batch-1')
+    runtime = batch_ipc / 'broker'
+
+    argv = container_run_argv(
+        root,
+        runtime_root=runtime,
+        runtime_ipc_root=batch_ipc,
+        input_root=inputs,
+        image_id='sha256:' + 'b' * 64,
+        yolo_weights=weights,
+        grounded_root=grounded,
+        gpu_groups=[44],
+        uid=os.getuid(),
+        gid=os.getgid(),
+        batch_id='batch-1',
+        broker_generation=1,
+        path_checker=lambda path, **_kwargs: Path(path),
+    )
+
+    assert f'{runtime}:/runtime:rw' in argv
+    assert argv[argv.index('--cidfile') + 1] == str(runtime / 'container.cid')
+
+
+@pytest.mark.parametrize(
+    'runtime_ipc_root,runtime_root,generation',
+    [
+        ('so101-other-batch', 'broker', 1),
+        ('so101-batch-1', 'broker-g2', 1),
+        ('so101-batch-1', 'nested/broker', 1),
+    ],
+)
+def test_external_broker_runtime_rejects_cross_batch_or_wrong_generation(
+    tmp_path, runtime_ipc_root, runtime_root, generation
+):
+    from so101_demo.cli.parallel_perception_broker import container_run_argv
+
+    root = tmp_path / 'batch'
+    root.mkdir(mode=0o700)
+    inputs = root / 'broker-inputs'
+    inputs.mkdir(mode=0o700)
+    weights = tmp_path / 'best.pt'
+    weights.write_bytes(b'model')
+    grounded = tmp_path / 'grounded'
+    grounded.mkdir()
+    batch_ipc = Path(f'/run/user/{os.getuid()}') / runtime_ipc_root
+
+    with pytest.raises(ValueError, match='RUNTIME_ROOT_OUTSIDE_BATCH_IPC'):
+        container_run_argv(
+            root,
+            runtime_root=batch_ipc / runtime_root,
+            runtime_ipc_root=batch_ipc,
+            input_root=inputs,
+            image_id='sha256:' + 'b' * 64,
+            yolo_weights=weights,
+            grounded_root=grounded,
+            gpu_groups=[44],
+            uid=os.getuid(),
+            gid=os.getgid(),
+            batch_id='batch-1',
+            broker_generation=generation,
+            path_checker=lambda path, **_kwargs: Path(path),
+        )
+
+
 @pytest.mark.parametrize('bad', ['relative', 'symlink', 'ipc_mode', 'root_user', 'no_gpu', 'image'])
 def test_unknown_or_unsafe_container_inputs_fail_closed(tmp_path, bad):
     from so101_demo.cli.parallel_perception_broker import container_run_argv

@@ -1,0 +1,6 @@
+schema_version: 1
+scenario_id: parallel-unavailable
+description: Fixed parallel mode is not qualified on this host; the server rejects with a reason.
+mode_availability:
+  PARALLEL: PARALLEL_NOT_QUALIFIED
+terminal_campaign: null

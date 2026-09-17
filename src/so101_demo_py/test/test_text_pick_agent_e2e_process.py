@@ -79,6 +79,7 @@ def _run_graph(
     required: ExecuteProcess,
     patch_supervisor=None,
     acceptance_document: dict[str, object] | None = None,
+    fast_cleanup_timeouts: bool = False,
 ) -> tuple[int, E2ESupervisor]:
     workflow_id = "process-workflow"
     run_root = tmp_path / "run"
@@ -107,10 +108,11 @@ def _run_graph(
         perception_action=perception,
         validator_action=validator,
     )
-    supervisor._RECOVERY_TIMEOUT_S = 0.05
-    supervisor._SIGINT_TIMEOUT_S = 0.05
-    supervisor._SIGTERM_TIMEOUT_S = 0.05
-    supervisor._SIGKILL_TIMEOUT_S = 0.05
+    if fast_cleanup_timeouts:
+        supervisor._RECOVERY_TIMEOUT_S = 0.05
+        supervisor._SIGINT_TIMEOUT_S = 0.05
+        supervisor._SIGTERM_TIMEOUT_S = 0.05
+        supervisor._SIGKILL_TIMEOUT_S = 0.05
     supervisor.register_owned(
         required,
         label="required runtime",
@@ -252,6 +254,32 @@ def test_real_launch_service_accepts_only_after_owned_cleanup(tmp_path: Path) ->
     assert result["primary_failure"] is None
 
 
+def test_real_launch_service_accepts_bounded_signal_recovery_before_owned_cleanup(
+    tmp_path: Path,
+) -> None:
+    text, perception, validator = _success_processes()
+    required = ExecuteProcess(
+        cmd=[
+            sys.executable,
+            "-c",
+            "import signal,sys,time;"
+            "signal.signal(signal.SIGINT,lambda *_: (time.sleep(0.15),sys.exit(0)));"
+            "time.sleep(30)",
+        ],
+        output="both",
+    )
+    returncode, supervisor = _run_graph(
+        tmp_path, text=text, perception=perception, validator=validator,
+        required=required,
+    )
+    assert returncode == 0
+    result = json.loads(supervisor.result_file.read_text(encoding="utf-8"))
+    assert result["machine_accepted"] is True
+    assert result["owned_process_cleanup"]["complete"] is True
+    assert result["owned_process_cleanup"]["remaining"] == []
+    assert result["primary_failure"] is None
+
+
 def test_real_launch_service_preserves_failure_before_child_exit(tmp_path: Path) -> None:
     text = _event_process(
         [
@@ -326,6 +354,7 @@ def test_real_launch_service_signal_escalation_makes_acceptance_nonzero(
         perception=perception,
         validator=validator,
         required=_sleep_process(ignore_term=True),
+        fast_cleanup_timeouts=True,
     )
     assert returncode != 0
     assert supervisor.accepted is True

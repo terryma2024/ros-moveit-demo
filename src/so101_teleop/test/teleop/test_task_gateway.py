@@ -112,6 +112,8 @@ def test_start_batch_owns_fixed_process_group_and_exclusive_input(tmp_path):
     ]
     assert options["shell"] is False
     assert options["start_new_session"] is True
+    assert options["stdout"].closed
+    assert options["stderr"].closed
 
 
 def test_start_batch_attaches_to_explicit_task_station_mujoco_pid(tmp_path):

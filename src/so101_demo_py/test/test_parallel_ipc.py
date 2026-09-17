@@ -97,6 +97,22 @@ def test_authority_rejects_missing_wrong_types_and_bool_as_int(tmp_path):
             authority.authenticate(value)
 
 
+def test_authority_accepts_explicit_private_external_ipc_root(tmp_path):
+    from so101_demo.runtime.parallel_ipc import WorkerTokenAuthority
+
+    evidence_root = tmp_path / "durable"
+    evidence_root.mkdir()
+    ipc_root = tmp_path / "runtime-ipc"
+    ipc_root.mkdir(mode=0o700)
+
+    authority = WorkerTokenAuthority(
+        evidence_root, coordinator_epoch=7, ipc_root=ipc_root
+    )
+
+    assert authority.ipc_root == ipc_root
+    assert authority.issue("worker-01", 1).is_relative_to(ipc_root)
+
+
 def test_generation_advance_retires_old_lease_instead_of_rewriting_it(tmp_path):
     from so101_demo.runtime.parallel_ipc import IpcError, WorkerTokenAuthority
 

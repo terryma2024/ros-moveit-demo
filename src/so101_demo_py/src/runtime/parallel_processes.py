@@ -353,6 +353,7 @@ class ProcessSupervisor:
         health_probe: Callable[[OwnedProcess], bool] | None = None,
         stop_on_nonzero: bool = False,
         on_nonzero: Callable[[OwnedProcess, int | None], object] | None = None,
+        stop_requested: Callable[[], bool] | None = None,
     ) -> tuple[int, ...]:
         """Wait for one role while continuously proving its dependency healthy."""
         if isinstance(deadline_monotonic_s, bool) or not isinstance(
@@ -368,6 +369,20 @@ class ProcessSupervisor:
         codes = []
         nonzero_reported = False
 
+        def check_stop():
+            if stop_requested is None:
+                return
+            try:
+                pending = stop_requested()
+            except Exception as error:
+                raise SupervisorError("STOP_CALLBACK_FAILED") from error
+            if type(pending) is not bool:
+                raise SupervisorError("STOP_CALLBACK_FAILED")
+            if pending:
+                # Cleanup belongs to the composition, not this wait path.
+                # Preserve all owned identities without signalling them.
+                raise SupervisorError("COOPERATIVE_STOP_REQUESTED")
+
         def report_nonzero(expected, code):
             nonlocal nonzero_reported
             if not stop_on_nonzero or nonzero_reported:
@@ -380,6 +395,7 @@ class ProcessSupervisor:
                     raise SupervisorError("NONZERO_CALLBACK_FAILED") from error
 
         def recover(expected, code, pid):
+            check_stop()
             if health_recovery is None:
                 raise SupervisorError(
                     f"HEALTH_RECOVERY_FAILED: {expected.role}: {code}"
@@ -411,11 +427,14 @@ class ProcessSupervisor:
             self._confirm_identity(replacements[0][0])
             return True
 
+        check_stop()
         while any(item[0].role == role for item in self._owned.values()):
+            check_stop()
             if time.monotonic() >= deadline_monotonic_s:
                 raise SupervisorError("CHILD_DEADLINE")
             completed = []
             for pid, (expected, poll) in tuple(self._owned.items()):
+                check_stop()
                 code = poll()
                 if expected.role == health_role:
                     if code is None:

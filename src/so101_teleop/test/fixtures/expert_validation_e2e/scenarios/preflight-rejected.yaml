@@ -1,0 +1,6 @@
+schema_version: 1
+scenario_id: preflight-rejected
+description: Resource admission rejects the fixed request with a stable reason code.
+preflight_rejection:
+  reason_codes: [GPU_HEADROOM]
+terminal_campaign: null

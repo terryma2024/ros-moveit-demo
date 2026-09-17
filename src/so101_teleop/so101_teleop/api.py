@@ -60,6 +60,13 @@ def create_app(
     async def capabilities():
         return await service.capabilities()
 
+    @app.get("/expert-validation/capabilities")
+    async def expert_validation_unavailable():
+        return {
+            "available": False,
+            "reason": "VALIDATION_SERVER_REQUIRED",
+        }
+
     @app.get("/gazebo/camera/presets")
     async def camera_presets():
         return await service.camera_presets()
@@ -70,7 +77,7 @@ def create_app(
             return result
         return JSONResponse(status_code=409 if getattr(result, "code", "").startswith(
             ("PLAN_", "LEASE_", "SERVER_", "CHECKPOINT_", "OVERRIDE_", "SESSION_", "CONFIRMATION_", "READINESS_", "COMMAND_", "WORKFLOW_", "MOVEIT_IK_", "BACKEND_CAPABILITY_")) else 503,
-            content=result.dict())
+            content=result.model_dump())
 
     @app.post("/plans/{plan_id}/execute")
     async def execute(plan_id: str, body: dict):
@@ -78,7 +85,7 @@ def create_app(
         if not result.succeeded:
             return JSONResponse(
             status_code=409 if result.code.startswith(("PLAN_", "LEASE_", "SERVER_", "SESSION_", "READINESS_", "COMMAND_")) else 503,
-                content=result.dict(),
+                content=result.model_dump(),
             )
         return result
 
@@ -117,7 +124,9 @@ def create_app(
         await websocket.accept()
         try:
             while True:
-                await websocket.send_json((await service.current_snapshot()).dict())
+                await websocket.send_json(
+                    (await service.current_snapshot()).model_dump()
+                )
                 await service.telemetry_wait()
         except WebSocketDisconnect:
             return

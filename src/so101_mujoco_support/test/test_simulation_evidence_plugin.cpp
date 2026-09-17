@@ -237,6 +237,31 @@ TEST_F(AtomicEvidenceTest, ClassifiesLeftRightAndOtherContactsWithIdsAndAggregat
   EXPECT_DOUBLE_EQ(message.maximum_normal_force_n, observed_maximum_force);
 }
 
+TEST_F(AtomicEvidenceTest, CopiedContactSnapshotWithoutSolverForcesFailsClosed)
+{
+  place_free_body("left_joint", -.045, 0, .08);
+  place_free_body("right_joint", .045, 0, .08);
+  mj_forward(model_.get(), data_.get());
+  ASSERT_GT(data_->ncon, 0);
+
+  std::unique_ptr<mjData, DataDeleter> snapshot(mj_makeData(model_.get()));
+  ASSERT_NE(snapshot, nullptr);
+  ASSERT_NE(mj_copyData(snapshot.get(), model_.get(), data_.get()), nullptr);
+  ASSERT_GT(snapshot->ncon, 0);
+
+  auto * solver_forces = snapshot->efc_force;
+  ASSERT_GT(snapshot->nefc, 0);
+  ASSERT_NE(solver_forces, nullptr);
+  snapshot->efc_force = nullptr;
+  const auto message = builder_.build(model_.get(), snapshot.get(), false, state_);
+  snapshot->efc_force = solver_forces;
+
+  EXPECT_TRUE(message.truncated);
+  EXPECT_FALSE(message.has_contact);
+  EXPECT_TRUE(message.left_fingertip_contacts.empty());
+  EXPECT_TRUE(message.right_fingertip_contacts.empty());
+}
+
 TEST(SimulationEvidencePluginContactSets,
      ClassifiesEveryConfiguredFingertipGeomWithoutAggregateCollision)
 {

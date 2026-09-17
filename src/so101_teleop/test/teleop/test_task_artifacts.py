@@ -7,10 +7,18 @@ import pytest
 from so101_teleop.task_artifacts import (
     ArtifactAccessError,
     ManifestArtifactStore,
+    validate_artifact_media_type,
 )
 
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"task-view"
+
+
+def test_media_type_allow_list_is_shared_with_validation_artifacts():
+    assert validate_artifact_media_type("image/png") == "image/png"
+    assert validate_artifact_media_type("application/json") == "application/json"
+    with pytest.raises(ArtifactAccessError, match="ARTIFACT_MEDIA_TYPE"):
+        validate_artifact_media_type("application/x-dangerous")
 
 
 def test_registered_artifact_opens_by_opaque_id_and_verifies_content(tmp_path):

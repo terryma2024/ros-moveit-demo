@@ -18,6 +18,12 @@ def test_teleop_is_a_single_standalone_package():
     assert (PACKAGE / "scripts" / "simulator_window_recorder.py").is_file()
     assert (PACKAGE / "scripts" / "so101_stack_inventory.py").is_file()
     assert (PACKAGE / "so101_teleop" / "gui" / "x11.py").is_file()
+    assert (PACKAGE / "so101_teleop" / "expert_validation" / "catalog.py").is_file()
+    assert (PACKAGE / "scripts" / "so101_expert_validation_server.py").is_file()
+    assert (PACKAGE / "web" / "src" / "expert-validation-app.tsx").is_file()
+    assert (
+        PACKAGE / "config" / "expert_validation" / "top_view_projection_v1.json"
+    ).is_file()
 
 
 def test_cpp_package_has_no_legacy_teleop_or_tiler_entry():

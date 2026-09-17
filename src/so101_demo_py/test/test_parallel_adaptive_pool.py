@@ -527,6 +527,17 @@ def test_adaptive_socket_paths_freeze_the_107_byte_boundary():
     assert all("broker-authority.sock" not in str(path) for path in paths)
 
 
+def test_adaptive_socket_paths_can_use_explicit_short_runtime_root():
+    from so101_demo.parallel_batch.adaptive_pool import adaptive_socket_paths
+
+    durable = Path("/data/work/so101-evidence/" + "x" * 120)
+    ipc = Path("/run/user/1000/so101-a1-g01-w08")
+    paths = adaptive_socket_paths(durable, 8, ipc_root=ipc)
+
+    assert all(path.is_relative_to(ipc) for path in paths)
+    assert max(len(str(path).encode()) for path in paths) < 108
+
+
 @pytest.mark.parametrize(
     ("worker_count", "yolo_executor_count"),
     [(8, 2), (1, 1)],

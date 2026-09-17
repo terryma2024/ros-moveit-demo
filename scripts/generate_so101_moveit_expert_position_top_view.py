@@ -400,18 +400,20 @@ def validate(
     *,
     required_minimum_separation_m: float = MIN_SEPARATION_M,
 ) -> float:
-    if len(points) != CANDIDATE_COUNT:
-        raise ValueError(f"expected {CANDIDATE_COUNT} positions, got {len(points)}")
-    if [point.id for point in points] != [f"P{index:02d}" for index in range(1, 21)]:
-        raise ValueError("position display IDs must be consecutive P01 through P20")
+    if not 4 <= len(points) <= CANDIDATE_COUNT:
+        raise ValueError(f"expected 4 to {CANDIDATE_COUNT} positions, got {len(points)}")
+    if [point.id for point in points] != [
+        f"P{index:02d}" for index in range(1, len(points) + 1)
+    ]:
+        raise ValueError("position display IDs must be consecutive")
     if len({point.name for point in points}) != len(points):
         raise ValueError("position manifest IDs must be unique")
     if len({(point.x_m, point.y_m, point.z_m) for point in points}) != len(points):
         raise ValueError("position coordinates must be unique")
     if sum(point.source == "existing" for point in points) != 4:
         raise ValueError("the first four points must be canonical anchors")
-    if sum(point.source == "generated" for point in points) != 16:
-        raise ValueError("exactly 16 generated points are required")
+    if sum(point.source == "generated" for point in points) != len(points) - 4:
+        raise ValueError("all non-anchor points must be generated")
 
     xmin, xmax, ymin, ymax = geometry.table_bounds
     sample_xmin, sample_xmax, sample_ymin, sample_ymax = sample_bounds(geometry)
@@ -460,15 +462,25 @@ def svg_figure(
     outcomes: Mapping[str, Outcome] | None = None,
     manifest_note: str | None = None,
 ) -> str:
+    from so101_teleop.expert_validation.projection import Projection, project_xy
+
     width, height = 1600, 1100
     plot_left, plot_top, scale = 90.0, 115.0, 1300.0
     table_xmin, table_xmax, table_ymin, table_ymax = geometry.table_bounds
+    projection = Projection(
+        width_px=width,
+        height_px=height,
+        bounds_m=geometry.table_bounds,
+        pixels_per_m=scale,
+        offset_x_px=plot_left - table_xmin * scale,
+        offset_y_px=plot_top + table_ymax * scale,
+    )
 
     def px(x_m: float) -> float:
-        return plot_left + (x_m - table_xmin) * scale
+        return project_xy(projection, x_m, 0.0)[0]
 
     def py(y_m: float) -> float:
-        return plot_top + (table_ymax - y_m) * scale
+        return project_xy(projection, 0.0, y_m)[1]
 
     def rect(bounds: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
         xmin, xmax, ymin, ymax = bounds
@@ -731,16 +743,27 @@ def render_png(svg_path: Path, png_path: Path, *, width: int, height: int) -> No
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    default_root = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser(
         description=(
             "Generate a deterministic, dimensionally accurate SO-101 MoveIt expert "
             "position map plus YAML and CSV manifests."
         )
     )
-    parser.add_argument("--repo-root", type=Path, default=default_root)
+    parser.add_argument(
+        "--repository-root",
+        "--repo-root",
+        dest="repository_root",
+        type=Path,
+        required=True,
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
+    parser.add_argument(
+        "--catalog-profile",
+        choices=("ai_station_baseline_v1", "geometry_v2"),
+        default="ai_station_baseline_v1",
+    )
+    parser.add_argument("--total-points", type=int, default=CANDIDATE_COUNT)
     parser.add_argument(
         "--points-yaml",
         type=Path,
@@ -757,7 +780,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
-    repository_root = args.repo_root.resolve()
+    repository_root = args.repository_root.resolve()
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -770,7 +793,43 @@ def main(argv: Sequence[str] | None = None) -> int:
             required_minimum_separation_m=0.0,
         )
         manifest_note = f"冻结清单：{args.points_yaml.name}"
+    elif args.catalog_profile == "ai_station_baseline_v1":
+        from so101_teleop.expert_validation.catalog import (
+            CATALOG_RELATIVE_PATH,
+            CATALOG_SHA256,
+            _parse_catalog_bytes,
+            _select_catalog_points,
+        )
+
+        catalog_path = repository_root / "src/so101_demo_py" / CATALOG_RELATIVE_PATH
+        catalog = _parse_catalog_bytes(
+            catalog_path.read_bytes(), expected_sha256=CATALOG_SHA256
+        )
+        selection = _select_catalog_points(catalog, args.total_points)
+        points = [
+            Point(
+                id=point.display_id,
+                name=point.id,
+                source="existing" if point.source == "anchor" else point.source,
+                stratum=point.stratum.replace("/", "-"),
+                x_m=point.position_world_m[0],
+                y_m=point.position_world_m[1],
+                z_m=point.position_world_m[2],
+            )
+            for point in selection.points
+        ]
+        minimum_separation = validate(
+            points,
+            geometry,
+            required_minimum_separation_m=0.015,
+        )
+        manifest_note = (
+            f"{selection.catalog_id} seed {selection.catalog_seed}; "
+            f"selection {selection.selection_sha256}"
+        )
     else:
+        if args.total_points != CANDIDATE_COUNT:
+            raise ValueError("geometry_v2 currently requires --total-points 20")
         anchors = load_anchors(repository_root)
         points = generate_positions(anchors, geometry, seed=args.seed)
         minimum_separation = validate(points, geometry)
@@ -805,6 +864,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             height=1100,
         )
 
+    print(f"PROFILE={args.catalog_profile}")
     print(f"POINTS={len(points)}")
     print(f"ANCHORS={sum(point.source == 'existing' for point in points)}")
     print(f"GENERATED={sum(point.source == 'generated' for point in points)}")

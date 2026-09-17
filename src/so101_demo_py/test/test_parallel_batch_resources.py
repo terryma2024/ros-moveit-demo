@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 from queue import Queue
 import signal
+import shutil
 import subprocess
 import sys
 from threading import Barrier, Event
@@ -30,6 +31,7 @@ from so101_demo.parallel_batch.resources import (
     ResourceSnapshot,
     SystemResourceProbe,
     WorkerResourceAllocator,
+    configured_runtime_ipc_root,
 )
 
 
@@ -114,12 +116,51 @@ def resource_root(tmp_path, suffix='batch'):
     """Keep UDS fixtures in this registered scratch tree without pytest's deep suffix."""
     key = str(tmp_path / suffix)
     if key not in _ROOTS:
-        _ROOTS[key] = Path(os.environ['TMPDIR']).parent / f'r{next(_ROOT_IDS):x}'
+        _ROOTS[key] = Path(os.environ['TMPDIR']).parent / f'rr{next(_ROOT_IDS):x}'
     return _ROOTS[key]
 
 
 def claim_root():
-    return Path(os.environ['TMPDIR']).parent / 'claims'
+    # Persistent claim records intentionally survive descriptor release. Give
+    # each pytest case its own stable claim namespace so a crash-recovery case
+    # cannot make a later, independent allocator case look unclean.
+    node_id = os.environ.get('PYTEST_CURRENT_TEST', 'standalone').split(' (', 1)[0]
+    suffix = hashlib.sha256(node_id.encode('utf-8')).hexdigest()[:12]
+    return Path(os.environ['TMPDIR']).parent / f'claims-{suffix}'
+
+
+def test_claim_root_is_stable_per_test_and_isolated_between_tests(monkeypatch):
+    monkeypatch.setenv('PYTEST_CURRENT_TEST', 'test/module.py::test_a (call)')
+    first = claim_root()
+    assert claim_root() == first
+
+    monkeypatch.setenv('PYTEST_CURRENT_TEST', 'test/module.py::test_b (call)')
+    assert claim_root() != first
+
+
+def test_allocator_fixture_does_not_reuse_retained_cli_claim_namespace(
+    tmp_path, config, monkeypatch
+):
+    # Earlier CLI tests retain their 'rc' claim namespace in this same scratch.
+    # Hexadecimal allocator root counters must not select it as evidence root.
+    # Reserve the forced ID in the normal sequence too: evidence directories
+    # survive this case and must not be selected again after monkeypatch undo.
+    while next(_ROOT_IDS) <= 12:
+        pass
+    monkeypatch.setattr(sys.modules[__name__], '_ROOT_IDS', itertools.count(12))
+    monkeypatch.setattr(sys.modules[__name__], '_ROOTS', {})
+    retained = Path(os.environ['TMPDIR']).parent / 'rc'
+    retained.mkdir(mode=0o700, exist_ok=True)
+    original = retained / 'retained-claim.json'
+    original.write_bytes(b'{"role":"earlier-cli-claim"}\n')
+    owner = allocator(tmp_path, config, suffix='after-cli')
+    try:
+        manifest = owner.allocate()
+        assert [worker.ros_domain_id for worker in manifest.workers] == [181, 182]
+        assert manifest.evidence_root != retained
+        assert original.read_bytes() == b'{"role":"earlier-cli-claim"}\n'
+    finally:
+        owner.close()
 
 
 def test_observational_policy_allocates_eight_without_headroom_rejection(
@@ -2735,6 +2776,41 @@ def test_socket_path_must_fit_linux_unix_domain_limit(tmp_path, config, monkeypa
     with pytest.raises(ResourceAllocationError, match='UNIX_SOCKET_PATH_TOO_LONG'):
         resource_allocator.allocate()
     assert not root.exists()
+
+
+def test_short_external_ipc_root_preserves_long_durable_evidence_root(tmp_path, config):
+    root = tmp_path / ("durable-" + "x" * 90)
+    ipc_root = Path(f"/run/user/{os.getuid()}/so101-test-{os.getpid()}")
+    assert not ipc_root.exists()
+    resource_allocator = WorkerResourceAllocator(
+        config,
+        root,
+        probe=FakeProbe(),
+        claim_root=claim_root(),
+        ipc_root=ipc_root,
+    )
+    try:
+        manifest = resource_allocator.allocate(1)
+        worker = manifest.workers[0]
+
+        assert worker.worker_root.is_relative_to(root)
+        assert worker.socket_path == ipc_root / "1/s"
+        assert len(os.fsencode(worker.socket_path)) <= 107
+        assert not (root / "ipc").exists()
+    finally:
+        resource_allocator.close()
+        shutil.rmtree(ipc_root, ignore_errors=True)
+
+
+def test_runtime_ipc_base_is_closed_to_same_user_runtime_directory():
+    expected = Path(f"/run/user/{os.getuid()}")
+    assert configured_runtime_ipc_root(
+        "b1234", {"SO101_PARALLEL_IPC_BASE": str(expected)}
+    ) == expected / "so101-b1234"
+    with pytest.raises(ResourceAllocationError, match="IPC_BASE"):
+        configured_runtime_ipc_root(
+            "b1234", {"SO101_PARALLEL_IPC_BASE": "/tmp"}
+        )
 
 
 def test_probe_exceptions_fail_closed_without_allocating(tmp_path, config):

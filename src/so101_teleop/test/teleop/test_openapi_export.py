@@ -1,6 +1,6 @@
 import json
 
-from so101_teleop.openapi_export import export_openapi
+from so101_teleop.openapi_export import export_openapi, export_validation_openapi
 
 
 def test_openapi_export_is_byte_deterministic_and_contains_control_routes(tmp_path):
@@ -62,3 +62,15 @@ def test_openapi_exports_separate_task_station_contract(tmp_path):
         "/tasks/artifacts/{artifact_id}", "/tasks/environment/shutdown",
     } <= set(schema["paths"])
     assert "TaskRunRequest" in schema["components"]["schemas"]
+
+
+def test_validation_openapi_is_deterministic_and_separate(tmp_path):
+    first = tmp_path / "validation-first.json"
+    second = tmp_path / "validation-second.json"
+    export_validation_openapi(first)
+    export_validation_openapi(second)
+    assert first.read_bytes() == second.read_bytes()
+    schema = json.loads(first.read_text())
+    assert schema["info"]["title"] == "SO-101 Expert Validation"
+    assert "/expert-validation/campaigns/preflight" in schema["paths"]
+    assert "/tasks/runs" in schema["paths"]

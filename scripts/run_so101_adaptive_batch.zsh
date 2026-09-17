@@ -58,6 +58,29 @@ trap 'forward_signal TERM' TERM
 
 so101_parallel_batch "$@" &
 runner_pid=$!
+integer handshake_attempt=0
+while (( handshake_attempt < 1000 )); do
+  if [[ -d "$runtime_root" ]]; then
+    umask 077
+    typeset handshake_tmp="${runtime_root}/.handshake.${$}.tmp"
+    print -r -- "{\"schema_version\":1,\"wrapper_pid\":${$},\"runner_pid\":${runner_pid},\"batch_id\":\"${batch_id}\"}" >! "$handshake_tmp"
+    mv "$handshake_tmp" "${runtime_root}/handshake.json"
+    break
+  fi
+  typeset runner_state="$(ps -o state= -p "$runner_pid" 2>/dev/null | tr -d '[:space:]')"
+  [[ -n "$runner_state" && "$runner_state" != Z* ]] || break
+  sleep 0.01
+  (( handshake_attempt += 1 ))
+done
+if [[ ! -f "${runtime_root}/handshake.json" ]]; then
+  typeset runner_state="$(ps -o state= -p "$runner_pid" 2>/dev/null | tr -d '[:space:]')"
+  if [[ -n "$runner_state" && "$runner_state" != Z* ]]; then
+    forward_signal TERM
+    wait "$runner_pid" 2>/dev/null || true
+    print -u2 "adaptive runner handshake was not established"
+    exit 70
+  fi
+fi
 integer runner_code=0
 wait "$runner_pid" || runner_code=$?
 while (( runner_code > 128 )) && kill -0 "$runner_pid" 2>/dev/null; do

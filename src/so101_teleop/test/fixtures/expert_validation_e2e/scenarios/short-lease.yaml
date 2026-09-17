@@ -1,0 +1,10 @@
+schema_version: 1
+scenario_id: short-lease
+description: Four-second lease with two-second margin so the page auto-renews during the test.
+lease_duration_s: 4
+lease_renewal_margin_s: 2
+capabilities:
+  available: true
+  execution_modes: [SEQUENTIAL, PARALLEL, ADAPTIVE]
+  default_execution_mode: SEQUENTIAL
+terminal_campaign: null

@@ -82,6 +82,238 @@ def verified(_spec):
     return {"source_commit": "a" * 40, "models_verified": True, "image_verified": True}
 
 
+def _fixed_web_spec(tmp_path, monkeypatch, *, run_mode="dry_run"):
+    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+
+    root = tmp_path / "batch"
+    # Worker IPC uses the production short runtime namespace. The fixed Web
+    # socket remains in the actual long durable batch root via pinned dirfd.
+    ipc_base = Path(f"/run/user/{os.getuid()}")
+    batch_id = "fw-" + hashlib.sha256(str(tmp_path).encode()).hexdigest()[:12]
+    monkeypatch.setenv("SO101_PARALLEL_IPC_BASE", str(ipc_base))
+    values = {
+        "SO101_FIXED_CONTROL_TOKEN": "9a" * 32,
+        "SO101_FIXED_CONTROL_CAMPAIGN_ID": "campaign-a",
+        "SO101_FIXED_CONTROL_EPOCH": "1",
+        "SO101_FIXED_CONTROL_SOCKET": str(root / "control/control.sock"),
+    }
+    for key, value in values.items():
+        monkeypatch.setenv(key, value)
+    spec = prepare_batch(argv(
+        root, batch_id=batch_id, worker_count="1", max_points_per_worker="1",
+        point_id=("task_start",), run_mode=run_mode,
+    ), provenance_verifier=verified)
+    return spec, values
+
+
+class _FixedWebProbe:
+    def snapshot(self):
+        from so101_demo.parallel_batch.resources import ResourceSnapshot
+        return ResourceSnapshot(32, 64.0, 16.0)
+
+    def ros_domain_in_use(self, _domain):
+        return False
+
+    def socket_in_use(self, _path):
+        return False
+
+
+def _cancel_fixed_cli(values, batch_id):
+    import socket
+
+    unsigned = {
+        "schema_version": 1, "command_id": "cli-cancel-1", "campaign_id": "campaign-a",
+        "batch_id": batch_id, "coordinator_epoch": 1, "operation": "CANCEL_BATCH",
+    }
+    canonical = json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+    wire = {**unsigned, "control_token": values["SO101_FIXED_CONTROL_TOKEN"],
+            "request_sha256": hashlib.sha256(canonical).hexdigest()}
+    payload = json.dumps(wire, sort_keys=True, separators=(",", ":")).encode()
+    path = Path(values["SO101_FIXED_CONTROL_SOCKET"])
+    parent_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
+            peer.settimeout(2)
+            peer.connect(f"/proc/self/fd/{parent_fd}/{path.name}")
+            peer.sendall(len(payload).to_bytes(4, "big") + payload)
+            peer.shutdown(socket.SHUT_WR)
+            received = bytearray()
+            while part := peer.recv(65536):
+                received.extend(part)
+        assert len(received) > 4 and int.from_bytes(received[:4], "big") == len(received) - 4
+        return json.loads(received[4:])
+    finally:
+        os.close(parent_fd)
+
+
+@pytest.mark.parametrize("corrupt_cleanup", [False, True])
+def test_fixed_cli_authenticated_stop_uses_existing_cleanup_not_worker_launch(
+    tmp_path, monkeypatch, corrupt_cleanup,
+):
+    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
+
+    spec, values = _fixed_web_spec(tmp_path, monkeypatch)
+
+    def forbidden_worker_launch(_owner, _path):
+        raise AssertionError("cancelled Worker must not be launched")
+
+    composition = ProductionBatchComposition(
+        spec, resource_probe=_FixedWebProbe(), claim_root=tmp_path / "claims",
+        worker_launcher=forbidden_worker_launch,
+    )
+    run_entered = False
+    try:
+        path = Path(values["SO101_FIXED_CONTROL_SOCKET"])
+        assert path.is_socket()
+        assert all(key not in os.environ for key in values)
+        assert values["SO101_FIXED_CONTROL_TOKEN"] not in composition.worker_specs[0].read_text()
+        if corrupt_cleanup:
+            orphan = composition.resource_manifest.workers[0].worker_root / "owned-runtime-processes.json"
+            orphan.write_text(json.dumps({"schema_version": 1, "processes": [{"invalid": "identity"}]}))
+            orphan.chmod(0o600)
+        wait = composition._wait_broker_ready
+
+        def observe_cancel_before_workers():
+            ack = _cancel_fixed_cli(values, spec.request.batch_id)
+            assert ack["state"] == "STOPPING" and ack["batch_cleanup_complete"] is False
+            assert ack["owned_descendants_gone"] is False
+            assert ack["assigned_ros_domains_clear"] is False
+            assert ack["cleanup_receipt_sha256"] is None
+            return wait()
+
+        monkeypatch.setattr(composition, "_wait_broker_ready", observe_cancel_before_workers)
+        run_entered = True
+        summary = composition.run()
+        assert composition.coordinator.snapshot().terminal_reason == "WEB_CANCEL_REQUESTED"
+        assert summary.point_statuses == {"task_start": PointStatus.UNRUN}
+        assert summary.qualification_passed is False
+        assert summary.batch_cleanup_complete is (not corrupt_cleanup)
+        gates = json.loads((spec.request.evidence_root / "cleanup-gates.json").read_text())
+        assert set(gates["actions"]) == {"stop_leases", "cancel_goal", "confirm_goal_cancelled", "request_recovery"}
+        assert gates["cleanup_gates_passed"] is (not corrupt_cleanup)
+        assert not path.exists()
+    finally:
+        if not run_entered:
+            composition._release_partial()
+            composition._release_runtime_ipc_root()
+
+
+@pytest.mark.parametrize("key,value,reason", [
+    ("SO101_FIXED_CONTROL_TOKEN", None, "FIXED_CONTROL_ENV_INCOMPLETE"),
+    ("SO101_FIXED_CONTROL_TOKEN", "predictable", "FIXED_CONTROL_TOKEN_INVALID"),
+    ("SO101_FIXED_CONTROL_CAMPAIGN_ID", "bad/campaign", "FIXED_CONTROL_CAMPAIGN_INVALID"),
+    ("SO101_FIXED_CONTROL_EPOCH", "0", "FIXED_CONTROL_EPOCH_INVALID"),
+    ("SO101_FIXED_CONTROL_SOCKET", "/tmp/unbound-control.sock", "FIXED_CONTROL_SOCKET_INVALID"),
+])
+def test_fixed_cli_rejects_unbound_credentials_before_allocation(tmp_path, monkeypatch, key, value, reason):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, ProductionBatchComposition
+
+    spec, values = _fixed_web_spec(tmp_path, monkeypatch)
+    if value is None:
+        monkeypatch.delenv(key)
+    else:
+        monkeypatch.setenv(key, value)
+    composition = None
+    try:
+        with pytest.raises(CliError, match=reason):
+            composition = ProductionBatchComposition(
+                spec, resource_probe=_FixedWebProbe(), claim_root=tmp_path / "claims",
+            )
+        assert not spec.request.evidence_root.exists()
+        assert all(name not in os.environ for name in values)
+    finally:
+        if composition is not None:
+            composition._release_partial()
+            composition._release_runtime_ipc_root()
+
+
+def test_fixed_cli_epoch_matches_real_journal_before_endpoint_or_worker_setup(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from so101_demo.cli.mujoco_parallel_batch import CliError, ProductionBatchComposition
+
+    spec, values = _fixed_web_spec(tmp_path, monkeypatch)
+    # A short source-test root needs no external IPC. Retain its allocated
+    # evidence and partial cleanup record; do not delete durable scratch.
+    monkeypatch.delenv("SO101_PARALLEL_IPC_BASE")
+    root = Path(os.environ["TMPDIR"]).parent / "qe"
+    spec = replace(spec, request=replace(spec.request, evidence_root=root))
+    monkeypatch.setenv("SO101_FIXED_CONTROL_SOCKET", str(root / "control/control.sock"))
+    monkeypatch.setenv("SO101_FIXED_CONTROL_EPOCH", "2")
+    with pytest.raises(CliError, match="FIXED_CONTROL_COORDINATOR_EPOCH_MISMATCH") as rejected:
+        ProductionBatchComposition(spec, resource_probe=_FixedWebProbe(), claim_root=tmp_path / "claims")
+    assert rejected.value.partial_cleanup["journal"]["succeeded"] is True
+    assert rejected.value.partial_cleanup["worker_servers"] == []
+    assert not (root / "control/control.sock").exists()
+    assert all(key not in os.environ for key in values)
+
+
+def test_fixed_cli_credentials_cannot_open_an_adaptive_pool_endpoint(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from so101_demo.cli.mujoco_parallel_batch import CliError, ProductionBatchComposition
+    from so101_demo.parallel_batch.adaptive_contracts import _new_pool_request_for_production_factory
+
+    spec, values = _fixed_web_spec(tmp_path, monkeypatch)
+    pool = _new_pool_request_for_production_factory(
+        batch_id=spec.request.batch_id, run_mode=spec.request.run_mode,
+        selected_point_ids=spec.request.selected_point_ids, worker_count=1,
+        max_points_per_worker=1, evidence_root=spec.request.evidence_root,
+    )
+    with pytest.raises(CliError, match="FIXED_CONTROL_REQUEST_REQUIRED"):
+        ProductionBatchComposition(replace(spec, request=pool), resource_probe=_FixedWebProbe())
+    assert not spec.request.evidence_root.exists()
+    assert all(key not in os.environ for key in values)
+
+
+def test_fixed_cli_checks_authenticated_stop_during_broker_ready_loop(tmp_path, monkeypatch):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, ProductionBatchComposition
+
+    spec, values = _fixed_web_spec(tmp_path, monkeypatch, run_mode="plan_only")
+    composition = ProductionBatchComposition(
+        spec, resource_probe=_FixedWebProbe(), claim_root=tmp_path / "claims",
+        broker_command_builder=lambda _owner: ("unused-broker",),
+    )
+    slept = []
+
+    def observe_stop_at_first_sleep(delay):
+        slept.append(delay)
+        ack = _cancel_fixed_cli(values, spec.request.batch_id)
+        assert ack["state"] == "STOPPING" and ack["batch_cleanup_complete"] is False
+
+    composition._start_servers()
+    try:
+        monkeypatch.setattr(composition, "_sleep", observe_stop_at_first_sleep)
+        with pytest.raises(CliError, match="WEB_CANCEL_REQUESTED"):
+            composition._wait_broker_ready()
+        assert slept == [0.01]
+        assert composition.supervisor.processes == ()
+    finally:
+        composition._stop_servers()
+        composition.journal.close()
+        composition.allocator.close()
+        composition._release_runtime_ipc_root()
+
+
+def test_runtime_package_root_uses_installed_share_for_copied_module(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import _runtime_package_root
+
+    module_path = (
+        tmp_path
+        / "install/so101_demo_py/lib/python3.12/site-packages/so101_demo/cli"
+        / "mujoco_parallel_batch.py"
+    )
+    module_path.parent.mkdir(parents=True)
+    module_path.write_text("# installed module\n", encoding="utf-8")
+    share = tmp_path / "install/so101_demo_py/share/so101_demo_py"
+    policy = share / "config/policies/dynamic_cup_pick/v1/mujoco.yaml"
+    policy.parent.mkdir(parents=True)
+    policy.write_text("schema_version: 1\n", encoding="utf-8")
+
+    assert _runtime_package_root(
+        module_path=module_path,
+        share_directory_provider=lambda _package: str(share),
+    ) == share
+
+
 def test_shutdown_signal_handler_is_idempotent_while_cleanup_unwinds(monkeypatch):
     import signal
 
@@ -648,8 +880,76 @@ def test_physical_composition_prepares_and_supervises_one_external_broker(
     assert supervisor.started == [
         ("broker", ("docker", "run", str(composition.broker_spec_path)))
     ]
-    composition.journal.close()
-    composition.allocator.close()
+    composition._release_partial()
+
+
+def test_physical_broker_receives_validated_external_ipc_root(tmp_path, monkeypatch):
+    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, prepare_batch
+    from so101_demo.parallel_batch.resources import ResourceSnapshot
+    import so101_demo.cli.parallel_perception_broker as broker_cli
+
+    class Probe:
+        def snapshot(self):
+            return ResourceSnapshot(32, 64.0, 16.0)
+
+        def ros_domain_in_use(self, _domain):
+            return False
+
+        def socket_in_use(self, _path):
+            return False
+
+    class Supervisor:
+        def __init__(self):
+            self.started = []
+
+        def start(self, role, command):
+            self.started.append((role, tuple(command)))
+            return SimpleNamespace(role=role)
+
+    batch_id = 't23-broker-call'
+    runtime_base = Path(f'/run/user/{os.getuid()}')
+    monkeypatch.setenv('SO101_PARALLEL_IPC_BASE', str(runtime_base))
+    record = {
+        **verified({}),
+        'image_id': 'sha256:' + 'b' * 64,
+    }
+    spec = prepare_batch(
+        argv(
+            tmp_path / 'batch',
+            batch_id=batch_id,
+            worker_count='1',
+            max_points_per_worker='1',
+            point_id=('task_start',),
+            run_mode='plan_only',
+        ),
+        provenance_verifier=lambda _value: record,
+    )
+    supervisor = Supervisor()
+    captured = {}
+    monkeypatch.setattr(broker_cli, 'image_record', lambda _image: {
+        'image_id': record['image_id'],
+    })
+    monkeypatch.setattr(broker_cli, 'gpu_groups', lambda: [44])
+
+    def command_builder(batch_root, **kwargs):
+        captured.update(batch_root=batch_root, **kwargs)
+        return ('docker', 'run', 'broker')
+
+    monkeypatch.setattr(broker_cli, 'container_run_argv', command_builder)
+    composition = ProductionBatchComposition(
+        spec,
+        resource_probe=Probe(),
+        claim_root=tmp_path / 'claims',
+        supervisor=supervisor,
+    )
+    try:
+        composition._start_broker()
+        assert captured['runtime_ipc_root'] == runtime_base / f'so101-{batch_id}'
+        assert captured['runtime_root'] == captured['runtime_ipc_root'] / 'broker'
+        assert supervisor.started == [('broker', ('docker', 'run', 'broker'))]
+    finally:
+        composition._release_partial()
+        assert composition._release_runtime_ipc_root() is True
 
 
 def test_physical_worker_launches_receive_exact_isolated_environments(tmp_path):
@@ -698,8 +998,7 @@ def test_physical_worker_launches_receive_exact_isolated_environments(tmp_path):
         item.session_id for item in resources
     ]
     assert len(set(env["ROS_DOMAIN_ID"] for env in environments)) == 2
-    composition.journal.close()
-    composition.allocator.close()
+    composition._release_partial()
 
 
 def test_broker_start_rejects_missing_image_id_and_mutable_tag_drift(tmp_path, monkeypatch):
@@ -728,8 +1027,7 @@ def test_broker_start_rejects_missing_image_id_and_mutable_tag_drift(tmp_path, m
     )
     with pytest.raises(CliError, match="IMAGE_ID_REQUIRED"):
         missing._start_broker()
-    missing.journal.close()
-    missing.allocator.close()
+    missing._release_partial()
 
     bound = prepare_batch(
         argv(scratch / "id", worker_count="1", max_points_per_worker="1",
@@ -747,8 +1045,7 @@ def test_broker_start_rejects_missing_image_id_and_mutable_tag_drift(tmp_path, m
     })
     with pytest.raises(CliError, match="TAG_DRIFT"):
         drift._start_broker()
-    drift.journal.close()
-    drift.allocator.close()
+    drift._release_partial()
 
 
 def test_workers_cannot_start_until_broker_socket_and_ready_receipt_exist(tmp_path):
@@ -2348,6 +2645,180 @@ def test_provenance_rejects_mixed_source_install_overlay_before_snapshot(tmp_pat
     foreign.write_text("mixed", encoding="utf-8")
     with pytest.raises(CliError, match="MIXED_OVERLAY"):
         _validate_provenance_overlay(repository, module, foreign, config, points)
+
+
+def _external_overlay_fixture(tmp_path):
+    repository = tmp_path / "checkout"
+    source = repository / "src/so101_demo_py/src"
+    module_source = source / "cli/mujoco_parallel_batch.py"
+    module_source.parent.mkdir(parents=True)
+    module_source.write_text("approved = True\n", encoding="utf-8")
+    build_root = tmp_path / "candidate/build"
+    build_package = build_root / "so101_demo_py"
+    build_package.mkdir(parents=True)
+    metadata = build_package / "so101_demo_py.egg-info/entry_points.txt"
+    metadata.parent.mkdir(parents=True)
+    metadata.write_text(
+        "[console_scripts]\n"
+        "so101_parallel_batch = so101_demo.cli.mujoco_parallel_batch:main\n",
+        encoding="utf-8",
+    )
+    install_root = tmp_path / "candidate/install"
+    package_prefix = install_root / "so101_demo_py"
+    module_import = (
+        package_prefix
+        / "lib/python3.12/site-packages/so101_demo/cli/mujoco_parallel_batch.py"
+    )
+    module_import.parent.mkdir(parents=True)
+    module_import.write_bytes(module_source.read_bytes())
+    console = package_prefix / "lib/so101_demo_py/so101_parallel_batch"
+    console.parent.mkdir(parents=True)
+    console.write_text(
+        _canonical_console_wrapper().replace(
+            "so101-demo-py'", "so101-demo-py==0.1.0'"
+        ),
+        encoding="utf-8",
+    )
+    support_prefix = install_root / "so101_mujoco_support"
+    support_prefix.mkdir(parents=True)
+    share = package_prefix / "share/so101_demo_py/config/mujoco"
+    share.mkdir(parents=True)
+    config = share / "parallel_batch_v1.yaml"
+    points = share / "moveit_expert_validation_points_v1.yaml"
+    config.write_text("schema_version: 1\n", encoding="utf-8")
+    points.write_text("schema_version: 1\n", encoding="utf-8")
+    binding = tmp_path / "candidate/provenance-binding.json"
+    binding.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "source_root": str(repository.resolve()),
+                "source_commit": "a" * 40,
+                "build_root": str(build_root.resolve()),
+                "install_root": str(install_root.resolve()),
+                "package_prefixes": {
+                    "so101_demo_py": str(package_prefix.resolve()),
+                    "so101_mujoco_support": str(support_prefix.resolve()),
+                },
+                "artifacts": {
+                    "coordinator_console": {
+                        "path": str(console.resolve()),
+                        "sha256": hashlib.sha256(console.read_bytes()).hexdigest(),
+                    },
+                    "coordinator_module": {
+                        "path": str(module_import.absolute()),
+                        "sha256": hashlib.sha256(module_import.read_bytes()).hexdigest(),
+                    },
+                    "entry_points": {
+                        "path": str(metadata.resolve()),
+                        "sha256": hashlib.sha256(metadata.read_bytes()).hexdigest(),
+                    },
+                    "parallel_config": {
+                        "path": str(config.resolve()),
+                        "sha256": hashlib.sha256(config.read_bytes()).hexdigest(),
+                    },
+                    "point_catalog": {
+                        "path": str(points.resolve()),
+                        "sha256": hashlib.sha256(points.read_bytes()).hexdigest(),
+                    },
+                },
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    return {
+        "repository": repository,
+        "module_source": module_source,
+        "module_import": module_import,
+        "console": console,
+        "config": config,
+        "points": points,
+        "binding": binding,
+        "package_prefix": package_prefix,
+    }
+
+
+def test_explicit_external_overlay_binding_accepts_exact_candidate(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import _validate_provenance_overlay
+
+    fixture = _external_overlay_fixture(tmp_path)
+    identity = _validate_provenance_overlay(
+        fixture["repository"],
+        fixture["module_import"],
+        fixture["console"],
+        fixture["config"],
+        fixture["points"],
+        module_import_path=fixture["module_import"],
+        source_commit="a" * 40,
+        external_binding=fixture["binding"],
+    )
+
+    assert identity["external_overlay_bound"] is True
+    assert identity["package_prefixes"]["so101_demo_py"] == str(
+        fixture["package_prefix"].resolve()
+    )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "error"),
+    [
+        ("commit", "SOURCE_COMMIT"),
+        ("package_prefix", "PACKAGE_PREFIX"),
+        ("console", "ARTIFACT_IDENTITY"),
+        ("config", "ARTIFACT_IDENTITY"),
+    ],
+)
+def test_external_overlay_binding_rejects_identity_mismatch(tmp_path, mutation, error):
+    from so101_demo.cli.mujoco_parallel_batch import (
+        CliError,
+        _validate_provenance_overlay,
+    )
+
+    fixture = _external_overlay_fixture(tmp_path)
+    document = json.loads(fixture["binding"].read_text(encoding="utf-8"))
+    if mutation == "commit":
+        document["source_commit"] = "b" * 40
+    elif mutation == "package_prefix":
+        document["package_prefixes"]["so101_demo_py"] = str(
+            (tmp_path / "foreign-prefix").resolve()
+        )
+    elif mutation == "console":
+        document["artifacts"]["coordinator_console"]["sha256"] = "0" * 64
+    else:
+        document["artifacts"]["parallel_config"]["sha256"] = "0" * 64
+    fixture["binding"].write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(CliError, match=error):
+        _validate_provenance_overlay(
+            fixture["repository"],
+            fixture["module_import"],
+            fixture["console"],
+            fixture["config"],
+            fixture["points"],
+            module_import_path=fixture["module_import"],
+            source_commit="a" * 40,
+            external_binding=fixture["binding"],
+        )
+
+
+def test_external_overlay_remains_rejected_when_not_explicitly_bound(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import (
+        CliError,
+        _validate_provenance_overlay,
+    )
+
+    fixture = _external_overlay_fixture(tmp_path)
+    with pytest.raises(CliError, match="MIXED_OVERLAY"):
+        _validate_provenance_overlay(
+            fixture["repository"],
+            fixture["module_source"],
+            fixture["console"],
+            fixture["config"],
+            fixture["points"],
+            module_import_path=fixture["module_import"],
+            source_commit="a" * 40,
+        )
 
 
 def test_installed_provenance_binds_exact_editable_tree_and_rejects_stale_target(tmp_path):

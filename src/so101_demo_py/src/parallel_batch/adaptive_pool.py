@@ -24,6 +24,7 @@ from .adaptive_contracts import (
 )
 from .adaptive_queue import AdaptivePointSelector
 from .contracts import AttemptStatus, BatchSummary, PointStatus, RunMode
+from .resources import configured_runtime_ipc_root
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,13 +138,15 @@ _POOL_ID = re.compile(
 _UNIX_SOCKET_PATH_MAX_BYTES = 107
 
 
-def adaptive_socket_paths(pool_root: Path, worker_count: int) -> tuple[Path, ...]:
+def adaptive_socket_paths(
+    pool_root: Path, worker_count: int, *, ipc_root: Path | None = None
+) -> tuple[Path, ...]:
     """Enumerate every AF_UNIX endpoint created by one adaptive pool."""
 
     root = Path(pool_root)
     if not root.is_absolute() or type(worker_count) is not int or worker_count <= 0:
         raise ValueError("ADAPTIVE_SOCKET_PATHS")
-    ipc = root / "ipc"
+    ipc = root / "ipc" if ipc_root is None else Path(ipc_root)
     paths = [
         *(ipc / str(index) / "s" for index in range(1, worker_count + 1)),
         *(ipc / f"worker-{index:02d}.sock" for index in range(1, worker_count + 1)),
@@ -157,8 +160,10 @@ def adaptive_socket_paths(pool_root: Path, worker_count: int) -> tuple[Path, ...
     return tuple(paths)
 
 
-def _preflight_adaptive_socket_paths(pool_root: Path, worker_count: int) -> None:
-    for path in adaptive_socket_paths(pool_root, worker_count):
+def _preflight_adaptive_socket_paths(
+    pool_root: Path, worker_count: int, *, ipc_root: Path | None = None
+) -> None:
+    for path in adaptive_socket_paths(pool_root, worker_count, ipc_root=ipc_root):
         if len(os.fsencode(path)) > _UNIX_SOCKET_PATH_MAX_BYTES:
             raise ValueError(f"UNIX_SOCKET_PATH_TOO_LONG: {path}")
 
@@ -432,7 +437,11 @@ class ProductionAdaptivePoolFactory:
             / f"p/g{generation:02d}w{request.worker_count:02d}"
         ):
             raise ValueError("POOL_REQUEST_IDENTITY")
-        _preflight_adaptive_socket_paths(request.evidence_root, request.worker_count)
+        _preflight_adaptive_socket_paths(
+            request.evidence_root,
+            request.worker_count,
+            ipc_root=configured_runtime_ipc_root(request.batch_id),
+        )
         options = replace(
             self.adaptive_request.options,
             worker_count=request.worker_count,

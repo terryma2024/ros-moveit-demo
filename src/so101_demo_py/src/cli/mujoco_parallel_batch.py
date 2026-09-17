@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import configparser
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 import hashlib
 import json
@@ -68,6 +68,7 @@ from so101_demo.parallel_batch.contracts import (
     load_parallel_runtime_config,
 )
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
+from so101_demo.parallel_batch.web_control import FixedCoordinatorControlServer
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.parallel_batch.resources import (
     AllocationPolicy,
@@ -80,6 +81,7 @@ from so101_demo.parallel_batch.resources import (
     Task14LiveHeadroomVerifier,
     WorkerResourceAllocator,
     WorkerResources,
+    configured_runtime_ipc_root,
 )
 from so101_demo.parallel_batch.worker import (
     LeaseGrantPaused,
@@ -95,7 +97,7 @@ from so101_demo.runtime.parallel_ipc import (
     _inference_request,
     _snapshot,
 )
-from so101_demo.runtime.parallel_processes import ProcessSupervisor
+from so101_demo.runtime.parallel_processes import ProcessSupervisor, SupervisorError
 from so101_demo.runtime.parallel_ros_runtime import (
     ParallelRosRuntimePorts as _ConcreteRosWorkerRuntimePorts,
 )
@@ -115,10 +117,54 @@ _CURRENT_PROVENANCE_FILES = {
     "container_sha256": "container_sha256.json",
     "catalog_sha256": "catalog_sha256.json",
 }
+_DYNAMIC_MUJOCO_POLICY = Path(
+    "config/policies/dynamic_cup_pick/v1/mujoco.yaml"
+)
 
 
 class CliError(RuntimeError):
     """Startup or batch composition failed closed."""
+
+
+class _FixedWebStopRequested(CliError):
+    """An authenticated durable stop must enter the existing cleanup path."""
+
+
+@dataclass(frozen=True, slots=True)
+class _FixedWebControl:
+    campaign_id: str
+    path: Path
+    coordinator_epoch: int
+    token: str = field(repr=False)
+
+
+def _take_fixed_web_control(spec: PreparedBatch) -> _FixedWebControl | None:
+    keys = (
+        "SO101_FIXED_CONTROL_TOKEN", "SO101_FIXED_CONTROL_CAMPAIGN_ID",
+        "SO101_FIXED_CONTROL_EPOCH", "SO101_FIXED_CONTROL_SOCKET",
+    )
+    if not any(key in os.environ for key in keys):
+        return None
+    # Consume all credentials before validation and before any child launch.
+    values = {key: os.environ.pop(key) for key in keys if key in os.environ}
+    if len(values) != len(keys):
+        raise CliError("FIXED_CONTROL_ENV_INCOMPLETE")
+    if not isinstance(spec.request, BatchRequest):
+        raise CliError("FIXED_CONTROL_REQUEST_REQUIRED")
+    token, campaign, epoch, socket_path = (values[key] for key in keys)
+    if re.fullmatch(r"[0-9a-f]{64}", token) is None:
+        raise CliError("FIXED_CONTROL_TOKEN_INVALID")
+    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", campaign) is None:
+        raise CliError("FIXED_CONTROL_CAMPAIGN_INVALID")
+    if re.fullmatch(r"[1-9][0-9]{0,19}", epoch) is None:
+        raise CliError("FIXED_CONTROL_EPOCH_INVALID")
+    path = Path(socket_path)
+    if (
+        not path.is_absolute() or path != path.resolve(strict=False)
+        or not path.is_relative_to(spec.request.evidence_root)
+    ):
+        raise CliError("FIXED_CONTROL_SOCKET_INVALID")
+    return _FixedWebControl(campaign, path, int(epoch), token)
 
 
 class _Parser(argparse.ArgumentParser):
@@ -154,6 +200,35 @@ class PreparedBatch:
     resume: bool
 
 
+def _runtime_package_root(
+    *,
+    module_path: Path | None = None,
+    share_directory_provider: Callable[[str], str] | None = None,
+) -> Path:
+    """Locate packaged policy data in either a source tree or a copied install."""
+
+    module = (module_path or Path(__file__)).resolve()
+    source_root = module.parents[2]
+    source_policy = source_root / _DYNAMIC_MUJOCO_POLICY
+    if source_policy.is_file() and not source_policy.is_symlink():
+        return source_root
+    if share_directory_provider is None:
+        from ament_index_python.packages import get_package_share_directory
+
+        share_directory_provider = get_package_share_directory
+    share_root = Path(share_directory_provider("so101_demo_py"))
+    share_policy = share_root / _DYNAMIC_MUJOCO_POLICY
+    if (
+        not share_root.is_absolute()
+        or not share_root.is_dir()
+        or share_root.is_symlink()
+        or not share_policy.is_file()
+        or share_policy.is_symlink()
+    ):
+        raise CliError("RUNTIME_POLICY_ROOT_INVALID")
+    return share_root
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = _Parser(prog="so101_parallel_batch")
     parser.add_argument("--points", type=Path, required=True)
@@ -179,6 +254,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--live-headroom-evidence", type=Path)
     parser.add_argument("--live-headroom-acceptance", type=Path)
     parser.add_argument("--live-headroom-current-provenance-root", type=Path)
+    parser.add_argument("--provenance-binding", type=Path)
     parser.add_argument("--resume", action="store_true")
     return parser
 
@@ -287,6 +363,34 @@ def _absolute(name: str, path: Path) -> Path:
     if not path.is_absolute() or "\0" in raw or any(part in {".", ".."} for part in raw.split("/")):
         raise CliError(f"ABSOLUTE_PATH_REQUIRED: {name}")
     return path
+
+
+def _external_binding_source_root(binding_path: Path) -> Path:
+    """Read only the candidate source root needed to locate Git authority."""
+
+    binding_path = Path(binding_path)
+    if (
+        not binding_path.is_absolute()
+        or binding_path.is_symlink()
+        or not binding_path.is_file()
+    ):
+        raise CliError("PROVENANCE_EXTERNAL_BINDING_PATH")
+    try:
+        if binding_path.stat().st_size > 1024 * 1024:
+            raise CliError("PROVENANCE_EXTERNAL_BINDING_DOCUMENT")
+        document = json.loads(binding_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise CliError("PROVENANCE_EXTERNAL_BINDING_DOCUMENT") from error
+    value = document.get("source_root") if type(document) is dict else None
+    source_root = Path(value) if isinstance(value, str) else Path()
+    if (
+        not isinstance(value, str)
+        or not source_root.is_absolute()
+        or source_root.is_symlink()
+        or not source_root.is_dir()
+    ):
+        raise CliError("PROVENANCE_EXTERNAL_SOURCE_ROOT")
+    return source_root.resolve()
 
 
 def _live_headroom_verifier(
@@ -419,14 +523,19 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
         raise CliError("PROVENANCE_BROKER_IMAGE")
     module_import_path = Path(__file__).absolute()
     module_path = module_import_path.resolve()
+    external_binding = spec.get("provenance_binding")
     try:
-        repository_root = Path(subprocess.run(
-            ["git", "-C", str(module_path.parent), "rev-parse", "--show-toplevel"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=5.0,
-        ).stdout.strip()).resolve()
+        repository_root = (
+            _external_binding_source_root(Path(external_binding))
+            if external_binding is not None
+            else Path(subprocess.run(
+                ["git", "-C", str(module_path.parent), "rev-parse", "--show-toplevel"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=5.0,
+            ).stdout.strip()).resolve()
+        )
         source_commit = subprocess.run(
             ["git", "-C", str(repository_root), "rev-parse", "HEAD"],
             check=True, capture_output=True, text=True, timeout=5.0,
@@ -447,11 +556,29 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
     if console is None:
         raise CliError("PROVENANCE_CONSOLE_MISSING")
     console_path = Path(console).resolve()
-    config_path = Path(spec["config"]).resolve()
-    points_path = Path(spec["points"]).resolve()
-    _validate_provenance_overlay(
-        repository_root, module_path, console_path, config_path, points_path
+    config_path = Path(spec["config"]).absolute()
+    points_path = Path(spec["points"]).absolute()
+    overlay_identity = _validate_provenance_overlay(
+        repository_root,
+        module_path,
+        console_path,
+        config_path,
+        points_path,
+        module_import_path=module_import_path,
+        source_commit=source_commit,
+        external_binding=external_binding,
     )
+    if overlay_identity["external_overlay_bound"]:
+        try:
+            from ament_index_python.packages import get_package_prefix
+
+            for package, expected_prefix in overlay_identity["package_prefixes"].items():
+                if Path(get_package_prefix(package)).resolve() != Path(expected_prefix):
+                    raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX")
+        except CliError:
+            raise
+        except Exception as error:
+            raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX") from error
     policy_path = package_root / "config/mujoco/headless_execution.yaml"
     scene_config = package_root / "config/mujoco/task_scene.yaml"
     scene_model = package_root / "assets/mujoco/scene.xml"
@@ -461,9 +588,21 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
     )):
         raise CliError("PROVENANCE_INSTALLED_INPUT_MISSING")
     from so101_demo.cli.parallel_perception_broker import source_hash
-    installed_identity = _installed_overlay_identity(
-        repository_root, module_import_path, console_path, source_hash=source_hash
-    )
+    if overlay_identity["external_overlay_bound"]:
+        source_tree = source_hash(package_root / "src")
+        build_tree_path = Path(overlay_identity["installed_module_tree_path"])
+        build_tree = source_hash(build_tree_path.resolve())
+        if build_tree != source_tree:
+            raise CliError("PROVENANCE_INSTALLED_BYTES")
+        installed_identity = {
+            **overlay_identity,
+            "source_module_tree_sha256": source_tree,
+            "installed_module_tree_sha256": build_tree,
+        }
+    else:
+        installed_identity = _installed_overlay_identity(
+            repository_root, module_import_path, console_path, source_hash=source_hash
+        )
     try:
         from so101_demo.cli.parallel_perception_broker import image_record
 
@@ -497,7 +636,11 @@ def _validate_provenance_overlay(
     console_path: Path,
     config_path: Path,
     points_path: Path,
-) -> None:
+    *,
+    module_import_path: Path | None = None,
+    source_commit: str | None = None,
+    external_binding: Path | str | None = None,
+) -> Mapping[str, object]:
     """Reject a source/import/console/config selection spanning checkouts."""
 
     repository_root = Path(repository_root).resolve()
@@ -508,17 +651,206 @@ def _validate_provenance_overlay(
     expected_console_root = (
         repository_root / "install/so101_demo_py/lib/so101_demo_py"
     ).resolve()
-    try:
-        Path(config_path).resolve().relative_to(package_root.resolve())
-        Path(points_path).resolve().relative_to(package_root.resolve())
-    except ValueError as error:
-        raise CliError("PROVENANCE_MIXED_OVERLAY") from error
-    if (
+    local_overlay = (
         Path(module_path).resolve() != expected_module
         or Path(console_path).resolve()
         != (expected_console_root / "so101_parallel_batch").resolve()
-    ):
+    )
+    try:
+        Path(config_path).resolve().relative_to(package_root.resolve())
+        Path(points_path).resolve().relative_to(package_root.resolve())
+    except ValueError:
+        local_overlay = True
+    if not local_overlay:
+        return {"external_overlay_bound": False}
+    if external_binding is None:
         raise CliError("PROVENANCE_MIXED_OVERLAY")
+    if module_import_path is None or source_commit is None:
+        raise CliError("PROVENANCE_EXTERNAL_BINDING_CONTEXT")
+    return _validate_external_overlay_binding(
+        Path(external_binding),
+        repository_root=repository_root,
+        source_commit=source_commit,
+        module_path=Path(module_path),
+        module_import_path=Path(module_import_path),
+        console_path=Path(console_path),
+        config_path=Path(config_path),
+        points_path=Path(points_path),
+    )
+
+
+def _validate_external_overlay_binding(
+    binding_path: Path,
+    *,
+    repository_root: Path,
+    source_commit: str,
+    module_path: Path,
+    module_import_path: Path,
+    console_path: Path,
+    config_path: Path,
+    points_path: Path,
+) -> Mapping[str, object]:
+    """Validate a closed, content-bound external build/install overlay."""
+
+    binding_path = Path(binding_path)
+    if not binding_path.is_absolute() or binding_path.is_symlink() or not binding_path.is_file():
+        raise CliError("PROVENANCE_EXTERNAL_BINDING_PATH")
+    try:
+        document = json.loads(binding_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise CliError("PROVENANCE_EXTERNAL_BINDING_DOCUMENT") from error
+    expected_keys = {
+        "schema_version",
+        "source_root",
+        "source_commit",
+        "build_root",
+        "install_root",
+        "package_prefixes",
+        "artifacts",
+    }
+    if type(document) is not dict or set(document) != expected_keys or document["schema_version"] != 1:
+        raise CliError("PROVENANCE_EXTERNAL_BINDING_SCHEMA")
+
+    def absolute_directory(name: str) -> Path:
+        value = document.get(name)
+        if not isinstance(value, str):
+            raise CliError("PROVENANCE_EXTERNAL_BINDING_SCHEMA")
+        path = Path(value)
+        if not path.is_absolute() or path.is_symlink() or not path.is_dir():
+            raise CliError("PROVENANCE_EXTERNAL_BINDING_PATH")
+        return path.resolve()
+
+    source_root = absolute_directory("source_root")
+    build_root = absolute_directory("build_root")
+    install_root = absolute_directory("install_root")
+    if source_root != repository_root.resolve():
+        raise CliError("PROVENANCE_EXTERNAL_SOURCE_ROOT")
+    if document["source_commit"] != source_commit:
+        raise CliError("PROVENANCE_EXTERNAL_SOURCE_COMMIT")
+    expected_source_module = (
+        source_root / "src/so101_demo_py/src/cli/mujoco_parallel_batch.py"
+    ).resolve()
+    if (
+        not expected_source_module.is_file()
+        or expected_source_module.is_symlink()
+        or module_path.resolve() != module_import_path.resolve()
+    ):
+        raise CliError("PROVENANCE_EXTERNAL_SOURCE_ROOT")
+
+    package_prefixes = document["package_prefixes"]
+    if type(package_prefixes) is not dict or set(package_prefixes) != {
+        "so101_demo_py",
+        "so101_mujoco_support",
+    }:
+        raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX")
+    prefixes: dict[str, Path] = {}
+    for package, value in package_prefixes.items():
+        if not isinstance(value, str):
+            raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX")
+        prefix = Path(value)
+        if not prefix.is_absolute() or prefix.is_symlink() or not prefix.is_dir():
+            raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX")
+        prefix = prefix.resolve()
+        try:
+            prefix.relative_to(install_root)
+        except ValueError as error:
+            raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX") from error
+        prefixes[package] = prefix
+
+    demo_prefix = prefixes["so101_demo_py"]
+    expected_console = demo_prefix / "lib/so101_demo_py/so101_parallel_batch"
+    expected_config = demo_prefix / "share/so101_demo_py/config/mujoco/parallel_batch_v1.yaml"
+    expected_points = (
+        demo_prefix
+        / "share/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml"
+    )
+    if (
+        console_path.absolute() != expected_console.absolute()
+        or config_path.absolute() != expected_config.absolute()
+        or points_path.absolute() != expected_points.absolute()
+    ):
+        raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX")
+    try:
+        module_import_path.absolute().relative_to(demo_prefix)
+    except ValueError as error:
+        raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX") from error
+
+    artifacts = document["artifacts"]
+    artifact_paths = {
+        "coordinator_console": console_path.absolute(),
+        "coordinator_module": module_import_path.absolute(),
+        "parallel_config": config_path.absolute(),
+        "point_catalog": points_path.absolute(),
+    }
+    if type(artifacts) is not dict or set(artifacts) != {
+        *artifact_paths,
+        "entry_points",
+    }:
+        raise CliError("PROVENANCE_EXTERNAL_BINDING_SCHEMA")
+    verified_artifacts: dict[str, str] = {}
+    for name, expected_path in artifact_paths.items():
+        entry = artifacts[name]
+        if type(entry) is not dict or set(entry) != {"path", "sha256"}:
+            raise CliError("PROVENANCE_EXTERNAL_BINDING_SCHEMA")
+        path = Path(entry["path"])
+        if (
+            not path.is_absolute()
+            or path.absolute() != expected_path
+            or path.is_symlink()
+            or not path.is_file()
+            or entry["sha256"] != _sha256(path)
+        ):
+            raise CliError("PROVENANCE_EXTERNAL_ARTIFACT_IDENTITY")
+        verified_artifacts[name] = str(path)
+
+    entry_points_entry = artifacts["entry_points"]
+    if type(entry_points_entry) is not dict or set(entry_points_entry) != {"path", "sha256"}:
+        raise CliError("PROVENANCE_EXTERNAL_BINDING_SCHEMA")
+    entry_points = Path(entry_points_entry["path"])
+    try:
+        entry_points.absolute().relative_to(build_root)
+    except ValueError as error:
+        raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX") from error
+    if (
+        not entry_points.is_absolute()
+        or entry_points.is_symlink()
+        or not entry_points.is_file()
+        or entry_points_entry["sha256"] != _sha256(entry_points)
+    ):
+        raise CliError("PROVENANCE_EXTERNAL_ARTIFACT_IDENTITY")
+    parser = configparser.ConfigParser(interpolation=None, strict=True)
+    try:
+        parser.read_string(entry_points.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, configparser.Error) as error:
+        raise CliError("PROVENANCE_EXTERNAL_ARTIFACT_IDENTITY") from error
+    if (
+        "console_scripts" not in parser
+        or parser["console_scripts"].get("so101_parallel_batch")
+        != "so101_demo.cli.mujoco_parallel_batch:main"
+        or console_path.read_bytes() not in {
+            _expected_console_wrapper(),
+            _expected_console_wrapper().replace(
+                b"so101-demo-py'", b"so101-demo-py==0.1.0'"
+            ),
+        }
+    ):
+        raise CliError("PROVENANCE_EXTERNAL_ARTIFACT_IDENTITY")
+    module_tree = module_import_path.absolute().parents[1]
+    return {
+        "external_overlay_bound": True,
+        "external_overlay_binding_path": str(binding_path),
+        "external_overlay_binding_sha256": _sha256(binding_path),
+        "package_prefixes": {
+            package: str(prefix) for package, prefix in sorted(prefixes.items())
+        },
+        "module_import_path": str(module_import_path.absolute()),
+        "module_import_sha256": _sha256(module_import_path),
+        "installed_module_tree_path": str(module_tree),
+        "installed_egg_link_path": None,
+        "installed_egg_link_sha256": None,
+        "installed_entry_points_path": str(entry_points),
+        "installed_entry_points_sha256": _sha256(entry_points),
+    }
 
 
 def _installed_overlay_identity(
@@ -779,6 +1111,10 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         "grounded_root": options.grounded_root,
         "grounded_manifest_sha256": options.grounded_manifest_sha256,
     }
+    if options.provenance_binding is not None:
+        inputs["provenance_binding"] = _absolute(
+            "provenance_binding", options.provenance_binding
+        )
     if adaptive_config_path is not None:
         inputs["adaptive_config"] = adaptive_config_path
     try:
@@ -793,7 +1129,7 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         from so101_demo.core.dynamic_pick import compose_pose, inverse_pose
         from so101_demo.core.dynamic_pick_policy import load_dynamic_policy_variant
 
-        package_root = Path(__file__).resolve().parents[2]
+        package_root = _runtime_package_root()
         loaded_policy = load_dynamic_policy_variant(package_root, backend="mujoco")
         expected_final_cup_pose_world = compose_pose(
             loaded_policy.template.place_tcp_world,
@@ -1966,6 +2302,7 @@ def _run_worker_spec(path, *, runtime_side_effects=None):
     control_authority = WorkerTokenAuthority(
         control_path.parent.parent,
         coordinator_epoch=document["coordinator_epoch"],
+        ipc_root=control_path.parent,
     )
     control_authority.load_token(
         control_id, resources.generation, Path(document["control_token_path"])
@@ -2083,6 +2420,7 @@ class ProductionBatchComposition:
         **kwargs,
     ):
         self.worker_servers = []
+        self.fixed_control_server = None
         self._server_threads = []
         self.allocator = None
         self.journal = None
@@ -2119,6 +2457,7 @@ class ProductionBatchComposition:
         pool_running_recorder=None,
     ):
         self._startup_stage = "validate_context"
+        self._fixed_web_control = _take_fixed_web_control(spec)
         if spec.request is None:
             raise CliError("POOL_REQUEST_REQUIRED")
         if adaptive_context is not None:
@@ -2129,6 +2468,9 @@ class ProductionBatchComposition:
             ):
                 raise CliError("ADAPTIVE_POOL_CONTEXT")
         self.spec = spec
+        self.runtime_ipc_root = configured_runtime_ipc_root(
+            spec.request.batch_id
+        )
         self.adaptive_context = adaptive_context
         self._pool_running_recorder = pool_running_recorder
         self.worker_exit_codes = ()
@@ -2188,6 +2530,7 @@ class ProductionBatchComposition:
                     persistent_cleanup_claims=True,
                 )
             ),
+            ipc_root=self.runtime_ipc_root,
         )
         self._startup_stage = "resource_allocation"
         if spec.resume:
@@ -2235,6 +2578,16 @@ class ProductionBatchComposition:
                 None if adaptive_context is None else adaptive_context.selector.choose
             ),
         )
+        if self._fixed_web_control is not None:
+            binding = self._fixed_web_control
+            if binding.coordinator_epoch != self.journal.coordinator_epoch:
+                raise CliError("FIXED_CONTROL_COORDINATOR_EPOCH_MISMATCH")
+            self._startup_stage = "fixed_web_control"
+            binding.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            self.fixed_control_server = FixedCoordinatorControlServer(
+                coordinator=self.coordinator, campaign_id=binding.campaign_id,
+                control_token=binding.token, path=binding.path,
+            )
         self.results = _ArtifactResults(worker_roots, spec.request.run_mode)
         self._recovered_worker_ids = None
         if spec.resume:
@@ -2247,6 +2600,7 @@ class ProductionBatchComposition:
         self.authority = WorkerTokenAuthority(
             spec.request.evidence_root,
             coordinator_epoch=self.journal.coordinator_epoch,
+            ipc_root=self.runtime_ipc_root,
         )
         self._broker_command_builder = broker_command_builder
         self._broker_health_client_factory = broker_health_client_factory
@@ -2349,7 +2703,7 @@ class ProductionBatchComposition:
 
     def _remove_stale_worker_sockets(self):
         """Remove only prior generation sockets after exact process fencing."""
-        ipc_root = self.spec.request.evidence_root / "ipc"
+        ipc_root = self.allocator.ipc_root
         for worker in self.resource_manifest.workers:
             for name in (f"{worker.worker_id}.sock", f"{worker.worker_id}-control.sock"):
                 path = ipc_root / name
@@ -2429,7 +2783,7 @@ class ProductionBatchComposition:
         if self.spec.request.run_mode is RunMode.DRY_RUN:
             return 0
         generations = []
-        ipc_root = self.spec.request.evidence_root / "ipc"
+        ipc_root = self.authority.ipc_root
         for path in ipc_root.glob("broker*/broker-spec.json"):
             document = _read_existing_json(path, label="BROKER_SPEC")
             generation = document.get("broker_generation")
@@ -2505,6 +2859,14 @@ class ProductionBatchComposition:
 
     def _release_partial(self):
         outcomes = {"worker_servers": []}
+        if getattr(self, "fixed_control_server", None) is not None:
+            try:
+                self.fixed_control_server.close()
+                outcomes["fixed_control_server"] = {"succeeded": True}
+            except Exception as error:
+                outcomes["fixed_control_server"] = {
+                    "succeeded": False, "error_type": type(error).__name__,
+                }
         for server in getattr(self, "worker_servers", ()):
             try:
                 server.close()
@@ -2559,6 +2921,7 @@ class ProductionBatchComposition:
         return outcomes
 
     def _start_broker(self):
+        self._check_fixed_web_stop()
         if self.broker_spec_path is None:
             return None
         try:
@@ -2593,6 +2956,7 @@ class ProductionBatchComposition:
             command = container_run_argv(
                 self.spec.request.evidence_root,
                 runtime_root=self.broker_runtime_root,
+                runtime_ipc_root=self.runtime_ipc_root,
                 input_root=self.broker_input_root,
                 image_id=image_id,
                 yolo_weights=self.spec.yolo_weights.resolve(),
@@ -2713,6 +3077,7 @@ class ProductionBatchComposition:
         return True
 
     def _wait_broker_ready(self, *, deadline_monotonic_s=None):
+        self._check_fixed_web_stop()
         if self.broker_spec_path is None:
             return True
         deadline = (
@@ -2722,6 +3087,7 @@ class ProductionBatchComposition:
         )
         ready = self.broker_runtime_root / "ready.json"
         while self._clock() < deadline:
+            self._check_fixed_web_stop()
             self.supervisor.assert_healthy()
             try:
                 socket_info = self.broker_socket_path.lstat()
@@ -2807,6 +3173,7 @@ class ProductionBatchComposition:
         raise CliError("BROKER_READY_TIMEOUT")
 
     def _recover_broker(self, expected, _exit_code):
+        self._check_fixed_web_stop()
         snapshot = self.coordinator.mark_broker_health(False)
         deadline = snapshot.broker_recovery_deadline_monotonic_s
         if deadline is None:
@@ -2827,6 +3194,8 @@ class ProductionBatchComposition:
             self._wait_broker_ready(deadline_monotonic_s=deadline)
             self.coordinator.mark_broker_health(True)
             return True
+        except _FixedWebStopRequested:
+            raise
         except Exception:
             if replacement is not None:
                 try:
@@ -2834,6 +3203,7 @@ class ProductionBatchComposition:
                 except Exception:
                     pass
             while self._clock() < deadline:
+                self._check_fixed_web_stop()
                 self._sleep(min(0.01, max(0.0, deadline - self._clock())))
             self.coordinator.tick()
             return False
@@ -2888,10 +3258,12 @@ class ProductionBatchComposition:
         return self._worker_control("recover")
 
     def _start_workers(self):
+        self._check_fixed_web_stop()
         adaptive_processes = {}
         for path, resources in zip(
             self.worker_specs, self.resource_manifest.workers, strict=True
         ):
+            self._check_fixed_web_stop()
             command = (
                 sys.executable, "-m", "so101_demo.cli.mujoco_parallel_batch",
                 "--internal-worker", str(path),
@@ -2909,6 +3281,7 @@ class ProductionBatchComposition:
             return
         deadline = time.monotonic() + self.spec.config.heartbeat_timeout_s
         while time.monotonic() < deadline:
+            self._check_fixed_web_stop()
             self.supervisor.assert_healthy()
             if all(
                 control.socket_path.is_socket()
@@ -3123,6 +3496,8 @@ class ProductionBatchComposition:
         raise CliError("RPC_UNKNOWN_OPERATION")
 
     def _start_servers(self):
+        if self.fixed_control_server is not None:
+            self.fixed_control_server.start()
         for server in self.worker_servers:
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
@@ -3133,6 +3508,19 @@ class ProductionBatchComposition:
             server.close()
         for thread in self._server_threads:
             thread.join(timeout=1.0)
+        if self.fixed_control_server is not None:
+            self.fixed_control_server.close()
+
+    def _fixed_web_stop_requested(self):
+        server = getattr(self, "fixed_control_server", None)
+        if server is None:
+            return False
+        server.check_health()
+        return self.coordinator.snapshot().terminal_reason == "WEB_CANCEL_REQUESTED"
+
+    def _check_fixed_web_stop(self):
+        if self._fixed_web_stop_requested():
+            raise _FixedWebStopRequested("WEB_CANCEL_REQUESTED")
 
     def _run_worker_local(self, path):
         resources = _resource_from_dict(json.loads(Path(path).read_text())["resources"])
@@ -3295,6 +3683,7 @@ class ProductionBatchComposition:
             for path in adaptive_socket_paths(
                 self.spec.request.evidence_root,
                 self.spec.request.worker_count,
+                ipc_root=self.authority.ipc_root,
             ):
                 try:
                     identity = path.lstat()
@@ -3311,6 +3700,21 @@ class ProductionBatchComposition:
                 f"CLEANUP:{type(error).__name__}:{error}"
             )
             return False
+
+    def _release_runtime_ipc_root(self):
+        if self.runtime_ipc_root is None:
+            return True
+        expected = configured_runtime_ipc_root(self.spec.request.batch_id)
+        if expected != self.runtime_ipc_root or self.runtime_ipc_root.is_symlink():
+            raise CliError("RUNTIME_IPC_CLEANUP_IDENTITY")
+        try:
+            info = self.runtime_ipc_root.lstat()
+        except FileNotFoundError:
+            return True
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+            raise CliError("RUNTIME_IPC_CLEANUP_IDENTITY")
+        shutil.rmtree(self.runtime_ipc_root)
+        return not self.runtime_ipc_root.exists()
 
     def run(self) -> BatchSummary:
         failure = False
@@ -3342,7 +3746,10 @@ class ProductionBatchComposition:
             self._start_broker()
             self._wait_broker_ready()
             if self._worker_launcher is not None:
-                codes = [self._worker_launcher(self, path) for path in self.worker_specs]
+                codes = []
+                for path in self.worker_specs:
+                    self._check_fixed_web_stop()
+                    codes.append(self._worker_launcher(self, path))
             else:
                 self._start_workers()
                 wait_kwargs = {
@@ -3358,6 +3765,8 @@ class ProductionBatchComposition:
                         self.coordinator.snapshot().broker_healthy
                     ),
                 }
+                if self.fixed_control_server is not None:
+                    wait_kwargs["stop_requested"] = self._fixed_web_stop_requested
                 if self.adaptive_context is not None:
                     wait_kwargs.update(
                         stop_on_nonzero=True,
@@ -3371,6 +3780,17 @@ class ProductionBatchComposition:
             failure = any(code != 0 for code in codes)
             self._settle_shared_dependency_failure()
             snapshot = self.coordinator.snapshot()
+        except _FixedWebStopRequested:
+            # No new execution/result path: finally performs the same verified
+            # Worker/controller/Broker cleanup and public completion below.
+            pass
+        except SupervisorError as error:
+            if not (
+                self._fixed_web_stop_requested()
+                and (str(error) == "COOPERATIVE_STOP_REQUESTED"
+                     or isinstance(error.__cause__, _FixedWebStopRequested))
+            ):
+                raise
         finally:
             try:
                 process_error = None
@@ -3481,6 +3901,8 @@ class ProductionBatchComposition:
                 )
                 self.journal.close()
                 self.allocator.close()
+                if self._release_runtime_ipc_root() is not True:
+                    raise CliError("RUNTIME_IPC_CLEANUP_INCOMPLETE")
         return snapshot.summary
 
 

@@ -42,6 +42,7 @@ def broker_argv():
 def container_run_argv(batch_root, *, image_id, yolo_weights, grounded_root,
                        gpu_groups, uid, gid, batch_id, broker_generation,
                        runtime_root=None,
+                       runtime_ipc_root=None,
                        input_root=None, path_checker=checked_path):
     if type(uid) is not int or uid <= 0 or uid != os.getuid() or gid != os.getgid():
         raise ValueError('HOST_NONROOT_IDENTITY_REQUIRED')
@@ -62,8 +63,23 @@ def container_run_argv(batch_root, *, image_id, yolo_weights, grounded_root,
     if runtime_root is None and not ipc.exists() and not ipc.is_symlink():
         ipc.mkdir(mode=0o700)
     path_checker(ipc, owner=(uid, gid), mode=0o700, directory=True)
-    if ipc.parent != root / 'ipc' and ipc != root / 'ipc':
-        raise ValueError('RUNTIME_ROOT_OUTSIDE_BATCH_IPC')
+    if runtime_ipc_root is None:
+        if ipc.parent != root / 'ipc' and ipc != root / 'ipc':
+            raise ValueError('RUNTIME_ROOT_OUTSIDE_BATCH_IPC')
+    else:
+        batch_ipc = path_checker(
+            runtime_ipc_root, owner=(uid, gid), mode=0o700, directory=True,
+        )
+        expected_batch_ipc = Path(f'/run/user/{uid}/so101-{batch_id}')
+        expected_runtime_name = (
+            'broker' if broker_generation == 1 else f'broker-g{broker_generation}'
+        )
+        if (
+            batch_ipc != expected_batch_ipc
+            or ipc.parent != batch_ipc
+            or ipc.name != expected_runtime_name
+        ):
+            raise ValueError('RUNTIME_ROOT_OUTSIDE_BATCH_IPC')
     for name in ('ready.json', 'perception.sock', 'container.cid'):
         if (ipc / name).exists() or (ipc / name).is_symlink():
             raise ValueError('EXISTING_RUNTIME_ENDPOINT')

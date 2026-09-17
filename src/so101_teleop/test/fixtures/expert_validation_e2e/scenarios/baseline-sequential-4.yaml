@@ -1,0 +1,72 @@
+schema_version: 1
+scenario_id: baseline-sequential-4
+description: Four-point sequential happy path; every state is declared, none is derived.
+lease_duration_s: 30
+capabilities:
+  available: true
+  execution_modes: [SEQUENTIAL, PARALLEL, ADAPTIVE]
+  default_execution_mode: SEQUENTIAL
+  minimum_points: 4
+  maximum_points: 20
+  fixed_worker_counts: [1, 2, 3]
+  fixed_max_points_per_worker: 20
+  adaptive_default_ladder: [8, 6, 4, 2, 1]
+expected_commands:
+  - acquire_lease
+  - create_manifest
+  - preflight
+  - start_campaign
+event_script:
+  - sequence: 2
+    hint: WORKER_PROGRESS
+    patch:
+      status: RUNNING
+      points:
+        task_start:
+          status: RUNNING
+          active_worker_id: worker-01
+      workers:
+        worker-01:
+          generation: 1
+          state: EXECUTING
+          current_point_id: task_start
+          lease_count: 1
+  - sequence: 3
+    hint: POINT_RESULT
+    patch:
+      points:
+        task_start:
+          status: PASSED
+          active_worker_id: null
+      valid_succeeded: 1
+      evaluated: 1
+      execution_started: 1
+  - sequence: 4
+    hint: CAMPAIGN_TERMINAL
+    patch:
+      status: COMPLETED
+      points:
+        cup_test_forward_5cm:
+          status: PASSED
+        cup_test_left_5cm:
+          status: PASSED
+        cup_test_right_5cm:
+          status: PASSED
+      requested: 4
+      evaluated: 4
+      execution_started: 4
+      valid_succeeded: 4
+      evaluation_coverage: 1.0
+      execution_coverage: 1.0
+      qualified_success_rate: 1.0
+      coverage_complete: true
+      execution_complete: true
+      batch_cleanup_complete: true
+      qualification_passed: true
+      workers:
+        worker-01:
+          generation: 1
+          state: STOPPED
+          current_point_id: null
+          lease_count: 4
+terminal_campaign: COMPLETED

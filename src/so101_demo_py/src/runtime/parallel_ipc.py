@@ -430,13 +430,15 @@ class WorkerTokenAuthority:
         self.root = Path(evidence_root)
         self.coordinator_epoch = _positive_int("EPOCH", coordinator_epoch)
         self.ipc_root = self.root / "ipc" if ipc_root is None else Path(ipc_root)
-        try:
-            self.ipc_root.relative_to(self.root / "ipc")
-        except ValueError as error:
-            raise IpcError("IPC_ROOT_OUTSIDE_EVIDENCE") from error
+        if (
+            not self.ipc_root.is_absolute()
+            or self.ipc_root != self.ipc_root.absolute()
+            or self.ipc_root.is_symlink()
+        ):
+            raise IpcError("IPC_ROOT_INVALID")
         if self.ipc_root.exists():
             info = self.ipc_root.lstat()
-            if not stat.S_ISDIR(info.st_mode) or self.ipc_root.is_symlink():
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
                 raise IpcError("IPC_DIRECTORY_TYPE")
             os.chmod(self.ipc_root, 0o700)
         else:

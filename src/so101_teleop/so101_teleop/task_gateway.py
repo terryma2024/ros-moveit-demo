@@ -62,8 +62,6 @@ class TaskHandle:
 class _OwnedTask:
     handle: TaskHandle
     process: object
-    stdout: object
-    stderr: object
     evidence_root: Path
 
 
@@ -161,20 +159,11 @@ class CliTaskGateway:
             raise TaskGatewayError("TASK_POINTS_INVALID")
         return value
 
-    @staticmethod
-    def _close(task: _OwnedTask) -> None:
-        for stream in (task.stdout, task.stderr):
-            try:
-                stream.close()
-            except (AttributeError, OSError):
-                pass
-
     async def start_batch(self, request: TaskOwnerRequest) -> TaskHandle:
         async with self._lock:
             if self._active is not None and self._active.process.poll() is None:
                 raise TaskGatewayBusy("TASK_BATCH_ACTIVE")
             if self._active is not None:
-                self._close(self._active)
                 self._active = None
             if not isinstance(request, TaskOwnerRequest):
                 raise TaskGatewayError("TASK_REQUEST_INVALID")
@@ -255,12 +244,16 @@ class CliTaskGateway:
                 stdout.close()
                 stderr.close()
                 raise TaskGatewayError(f"TASK_OWNER_START_FAILED: {error}") from error
-            if pgid <= 0:
+            else:
+                # Popen duplicates these descriptors into the child. The owner must
+                # close its copies immediately instead of retaining them for the
+                # lifetime of a potentially long-running task.
                 stdout.close()
                 stderr.close()
+            if pgid <= 0:
                 raise TaskGatewayError("TASK_OWNER_PGID_INVALID")
             handle = TaskHandle(run_id, process.pid, pgid, manifest)
-            owned = _OwnedTask(handle, process, stdout, stderr, root)
+            owned = _OwnedTask(handle, process, root)
             self._runs[run_id] = owned
             self._active = owned
             return handle
@@ -301,7 +294,6 @@ class CliTaskGateway:
                         "status": "RUNNING",
                         "pid": task.handle.pid,
                     }
-                self._close(task)
                 if self._active is task:
                     self._active = None
                 return {
@@ -318,7 +310,6 @@ class CliTaskGateway:
             payload["run_id"] = run_id
             payload["owner_running"] = task.process.poll() is None
             if payload["status"] != "RUNNING":
-                self._close(task)
                 if self._active is task and not payload["owner_running"]:
                     self._active = None
             return payload
@@ -344,7 +335,6 @@ class CliTaskGateway:
                 self._killpg(task.handle.pgid, signal.SIGTERM)
                 stopped = await self._wait_stopped(task.process)
             if stopped:
-                self._close(task)
                 self._active = None
             return {
                 "run_id": run_id,

@@ -59,7 +59,7 @@ class WorkflowGateway:
                               operator_confirmation=operator_confirmation, confirmed_at=time.time())
         advanced = await self._runner.step(run_id, override=True)
         self._override_consumed = True
-        self._snapshot = advanced.copy(update={"override_audit": [*advanced.override_audit, audit]})
+        self._snapshot = advanced.model_copy(update={"override_audit": [*advanced.override_audit, audit]})
         return self._snapshot
 
     def _require_run(self, run_id: str) -> None:

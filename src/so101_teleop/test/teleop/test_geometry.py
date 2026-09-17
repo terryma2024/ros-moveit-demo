@@ -28,7 +28,7 @@ def test_world_y_step_is_exactly_one_millimetre():
 
 def test_tool_x_step_uses_current_tcp_orientation():
     """Replacing tool composition with world axes would move this yawed TCP along X."""
-    yaw90 = BASE.copy(update={"yaw_rad": math.pi / 2})
+    yaw90 = BASE.model_copy(update={"yaw_rad": math.pi / 2})
     actual = apply_translation_step(yaw90, "x", 0.001, StepFrame.TOOL)
 
     assert actual.y_m == pytest.approx(yaw90.y_m + 0.001, abs=1e-12)
@@ -37,7 +37,7 @@ def test_tool_x_step_uses_current_tcp_orientation():
 
 def test_tool_rotation_composes_after_current_orientation():
     """Swapping tool and world multiplication changes the yaw of this non-commuting rotation."""
-    pitched = BASE.copy(update={"pitch_rad": math.pi / 2})
+    pitched = BASE.model_copy(update={"pitch_rad": math.pi / 2})
     actual = apply_rotation_step(pitched, "x", math.pi / 2, StepFrame.TOOL)
 
     assert actual.roll_rad == pytest.approx(math.pi / 2, abs=1e-12)
