@@ -223,6 +223,7 @@ export const liveSimTest = base.extend<{ liveServer: LiveServer }>({
       env: {
         ...process.env,
         ...QUALIFICATION_ENV,
+        SO101_DISABLE_KIMI_EDITABLE_FINDER: "1",
         PYTHONNOUSERSITE: "1",
         PYTHONPATH: [...sitePackages, "/opt/ros/jazzy/lib/python3.12/site-packages"].join(":"),
         AMENT_PREFIX_PATH: [...prefixes, "/opt/ros/jazzy"].join(":"),
