@@ -106,3 +106,33 @@ evidence:
 decision: KEEP
 next_experiment: EXP-K03 (L3 preflight/evidence adapters)
 ```
+```yaml
+experiment_id: EXP-K03
+status: IN_PROGRESS
+lifecycle: ISOLATED_STACK
+single_variable: L3 live MuJoCo acceptance bring-up
+provenance:
+  source_commit: moving (currently 3a8b320e2+)
+  install_overlay: install-runtime copied prefix; rich overlay binding generated per commit
+  runtime_executable: production so101_expert_validation_server + real so101_parallel_batch
+  ros_domain_id: 179 (server shell); workers claim 181-183 per batch config
+  gz_partition: not_applicable
+commands:
+  - command: SO101_ENABLE_LIVE_SIM_E2E=1 bun run test:e2e:live-sim -- live-sim/01-sequential.spec.ts
+observed:
+  - Fail-closed gate proven: SO101_ENABLE_LIVE_SIM_E2E=0 -> exit 1 LIVE_SIM_OPT_IN_REQUIRED, zero spawns.
+  - R01 attempt failures, each diagnosed and fixed: (1) editable finder leaked source-tree so101_demo
+    into the live server -> SO101_DISABLE_KIMI_EDITABLE_FINDER=1; (2) live fixture lacked baseURL
+    binding; (3) libmujoco_ros2_control.so symbol lookup failed without overlay LD_LIBRARY_PATH;
+    (4) 3-key web binding rejected by upstream coordinator (PROVENANCE_EXTERNAL_BINDING_SCHEMA) ->
+    rich content-bound binding generator (generate-overlay-binding.py) verified via verify_provenance
+    probe; (5) real coordinator journal uses BATCH_CLEANUP_COMPLETE, helper uses BATCH_FINISHED.
+  - R01 robot-side result on attempt 4: 4/4 points PASSED, batch cleanup complete, broker container
+    ran, sealed attempts for all points; test-side assertion failed only on the event name.
+disproven_routes:
+  - "3-key web provenance binding is accepted by the upstream coordinator" (it needs the full
+    content-bound overlay schema with build_root/install_root/package_prefixes/artifacts).
+open_risks:
+  - R01 gate receipt still pending a green rerun; R02/R03 specs written but unrun.
+next_experiment: R01 rerun after event-name fix
+```
