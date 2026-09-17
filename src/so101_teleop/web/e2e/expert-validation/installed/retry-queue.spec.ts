@@ -355,27 +355,49 @@ test("S15 spawn-intent-to-ack window stays fenced spec:slow", async ({ installed
   await installedServer.start();
 
   const leaseB = await acquireLease(client, session);
+  // The kill raced the INTENT->ACK window: if the ACK landed, the helper
+  // provably completed on its own (the pgrep drain above) and reconciliation
+  // may advance its journal exactly once; if not, the unknown outcome stays
+  // fenced forever.  Read the durable record to know which branch the kill hit.
+  const retryOwner = query(
+    installedServer.serverRoot,
+    "SELECT state FROM owned_execution WHERE batch_id='retry-001'",
+  )[0];
   const resumed = await client.post(
     `/expert-validation/campaigns/${campaignId}/full-restart-retries`,
     retryBody(leaseB, session, "s15w3-retry-resume", pointIds),
   );
-  expect(resumed.status).toBe(409);
-  expect(resumed.body.code).toBe("COMMAND_OUTCOME_UNKNOWN");
+  if (retryOwner.state === "INTENT") {
+    expect(resumed.status).toBe(409);
+    expect(resumed.body.code).toBe("COMMAND_OUTCOME_UNKNOWN");
 
-  // The unacknowledged intent fences new campaigns too.
-  const manifestB = await createManifest(client, 4);
-  const configB = fixedConfig(leaseB, session, manifestB.manifest_id);
-  const blocked = await client.post("/expert-validation/campaigns/preflight", configB);
-  expect(blocked.status).toBe(409);
-  expect(blocked.body.code).toBe("VALIDATION_RECOVERY_REQUIRED");
+    // The unacknowledged intent fences new campaigns too.
+    const manifestB = await createManifest(client, 4);
+    const configB = fixedConfig(leaseB, session, manifestB.manifest_id);
+    const blocked = await client.post("/expert-validation/campaigns/preflight", configB);
+    expect(blocked.status).toBe(409);
+    expect(blocked.body.code).toBe("VALIDATION_RECOVERY_REQUIRED");
 
-  // Nothing advanced and nothing re-executed.
-  const owners = query(installedServer.serverRoot, "SELECT batch_id, state FROM owned_execution");
-  expect(owners).toHaveLength(2);
-  const queue = query(
-    installedServer.serverRoot,
-    `SELECT ordinal, state FROM retry_queue WHERE campaign_id='${campaignId}' ORDER BY ordinal`,
-  );
-  expect(queue.map((row) => row.state)).toEqual(["RUNNING"]);
-  expect(terminal.batch_id).not.toBe("retry-001");
+    // Nothing advanced and nothing re-executed.
+    const owners = query(installedServer.serverRoot, "SELECT batch_id, state FROM owned_execution");
+    expect(owners).toHaveLength(2);
+    const queue = query(
+      installedServer.serverRoot,
+      `SELECT ordinal, state FROM retry_queue WHERE campaign_id='${campaignId}' ORDER BY ordinal`,
+    );
+    expect(queue.map((row) => row.state)).toEqual(["RUNNING"]);
+    expect(terminal.batch_id).not.toBe("retry-001");
+  } else {
+    // ACK landed before the kill: the completed journal is the only source of
+    // truth, so exactly one advance and never a second execution.
+    expect(retryOwner.state).toBe("RUNNING");
+    expect(resumed.status).toBe(200);
+    const owners = query(installedServer.serverRoot, "SELECT batch_id, state FROM owned_execution");
+    expect(owners).toHaveLength(2);
+    const queue = query(
+      installedServer.serverRoot,
+      `SELECT ordinal, state, batch_id FROM retry_queue WHERE campaign_id='${campaignId}' ORDER BY ordinal`,
+    );
+    expect(queue.map((row) => [row.state, row.batch_id])).toEqual([["COMPLETE", "retry-001"]]);
+  }
 });
