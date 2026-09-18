@@ -922,3 +922,16 @@ def test_overlay_binding_refuses_a_missing_input(tmp_path):
             console=files["console"], module=files["module"], entry_points=files["entry_points"],
             parallel_config=files["config"], point_catalog=files["points"],
             source_commit="a" * 40)
+
+
+def test_private_batch_root_is_created_and_tightened(tmp_path):
+    """The launcher refuses a measurement evidence root that is not private, so the
+    harness must create it 0700 even when a parent already exists with looser bits."""
+
+    from so101_demo.cli.measure_parallel_resources import ensure_private_batch_root
+
+    parent = tmp_path / "batches"; parent.mkdir(mode=0o775)
+    root = ensure_private_batch_root(parent / "batch-a")
+    assert (root.stat().st_mode & 0o777) == 0o700
+    loose = parent / "batch-b"; loose.mkdir(mode=0o775)
+    assert (ensure_private_batch_root(loose).stat().st_mode & 0o777) == 0o700

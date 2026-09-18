@@ -165,6 +165,20 @@ def _file_sha256(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def ensure_private_batch_root(batch_root) -> Path:
+    """Create the sealed batch root private; the launcher refuses anything looser.
+
+    Writing the overlay binding first would create the root as an intermediate directory
+    with the umask default, which the launcher then rejects as
+    MEASUREMENT_EVIDENCE_ROOT_INVALID.
+    """
+
+    root = Path(batch_root)
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    root.chmod(0o700)
+    return root
+
+
 def write_overlay_provenance_binding(
     *, target: Path, source_root: Path, build_root: Path, install_root: Path,
     package_prefix: Path, console: Path, module: Path, entry_points: Path,
@@ -224,7 +238,7 @@ def production_runner_factory(plan, *, child_runner=None, image_inspector=None):
     tag = verify_broker_image(tag=_BROKER_IMAGE, digest=plan.bindings.broker_image_id,
                               inspector=image_inspector)
     overlay = write_overlay_provenance_binding(
-        target=Path(plan.batch_root) / "raw/overlay-provenance-binding.json",
+        target=ensure_private_batch_root(plan.batch_root) / "raw/overlay-provenance-binding.json",
         source_root=Path(str(binding.get("source_root", "")) or Path.cwd()),
         build_root=_installed_module_root(), install_root=_installed_module_root(),
         package_prefix=_installed_package_prefix(),
