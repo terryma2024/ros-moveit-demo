@@ -3214,3 +3214,43 @@ The repair is to bound the start rather than the steady state: treat the interva
 grid deadline) and latch only if the first sample misses it, with a test that fails closed if the
 sampler never produces one. Because the runtime source participates in R, that change requires a
 new sealed revision before the next run. N1 stays `NOT_MEASURED`.
+
+## CP-UQ48 — Stage C: the first real workload run, and four latent defects it exposed
+
+Runs: `stage-c/batches/n1-calibration-20260918-run{5,6,7,8}/`, `scratch/stageC-fix{5,6,7,8}.*/`,
+`scratch/stageC-auth.S2WPqrz0/measure1{1,2,3,4}.log`.
+
+The opening-sample grace (`e5b79b620`, RED `2 failed` -> `14 passed`) let the batch reach the
+workload for the first time: run5 recorded 72 samples and then failed at the launcher. Each
+subsequent fix exposed the next latent defect, all of them in code that had never executed
+because no measurement had ever got this far:
+
+1. `f2d70e4e0` -- `DUPLICATE_BATCH_EVIDENCE_ROOT`. The harness creates the sealed batch root
+   before it spawns the launcher (`run_candidate_batch`), and `verify_measurement_arguments` pins
+   that root to the authorization, so the launcher cannot also demand exclusive creation. A
+   measurement run now validates a pre-existing root instead (real 0700 directory, owned by this
+   user, batch not already finalized); non-measurement runs keep the strict rule. Four tests.
+2. `c79d14c38` -- `NameError: ParallelRuntimeConfigV2` inside the launcher's measurement gate. The
+   gate had never run. Fixed by importing the class, with a static guard test that walks the
+   entry point's `LOAD_GLOBAL` instructions (nested code objects included) and fails if any name
+   resolves to neither the module nor builtins; RED proven by stashing the import.
+3. `f637dc870` -- `RUNTIME_FINGERPRINT_MISMATCH` raised *inside the launcher*. R covered the
+   observer's ambient placement, and the authorizing parent (in the delegated scope) and the
+   launcher it owns (inside the measurement cgroup) sit in different cgroups with different
+   quotas and throttling counters by design. `_AMBIENT_RUNTIME_FACTS` (`cgroup`, `cpuset`,
+   `cpu_quota_core_equivalent`, `nr_throttled`) is now carried in the document for observation but
+   excluded from the digest; tests prove placement no longer changes R while cpu model, GPU,
+   thread environment and install facts still do. 25 passed in the file, 1019 passed across the
+   parallel-batch and measurement suites.
+4. run8 then refused with `BROKER_IMAGE_MISMATCH`: the authorization binds the placeholder
+   `sha256:bbbb...` broker image from the first draft, while the launcher requires the real
+   constant, and it likewise compares the yolo and grounded bindings against the frozen config's
+   own declared hashes. The next step is therefore to seal a revision whose runtime bindings are
+   read from the frozen config and the real broker constant rather than hand-written.
+
+Because the digest changed, r1-r9 are historical revisions; r10
+(`authorizations/n1-calibration-20260918-r10.json`, sha256 `ad2b7ae583c29e38...`) is the current
+one. Two side observations: `stageC-fix8` also shows one failure in the combined parallel run
+(`test_oversized_cmdline_process_is_classified_not_refused`) that passes in isolation -- a
+test-isolation issue to investigate, unrelated to the identity change. No budget is claimed:
+N1 stays `NOT_MEASURED` and nothing is extrapolated to another N.
