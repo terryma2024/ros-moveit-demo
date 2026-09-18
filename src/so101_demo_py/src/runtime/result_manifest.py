@@ -21,7 +21,7 @@ class RunResultManifest:
     backend: str
     session_id: str
     reset_epoch: int
-    source_commit: str
+    source_commit: str | None
     installed_prefix: str
     policy_sha256: str
     bundle_sha256: str
@@ -33,8 +33,10 @@ class RunResultManifest:
     def __post_init__(self) -> None:
         if not self.backend or not self.session_id or self.reset_epoch < 0:
             raise ValueError("run identity is invalid")
-        if not _GIT_COMMIT.fullmatch(self.source_commit):
-            raise ValueError("source commit must be a complete 40-character Git object ID")
+        # The source commit is optional DEBUG metadata: a copied install without Git
+        # is a valid deployment, so no commit value can refuse a run result.
+        if self.source_commit is not None and not isinstance(self.source_commit, str):
+            raise ValueError("source commit metadata must be a string or None")
         if not self.installed_prefix or not Path(self.installed_prefix).is_absolute():
             raise ValueError("installed prefix must be an absolute path")
         if not _SHA256.fullmatch(self.policy_sha256) or not _SHA256.fullmatch(
@@ -48,7 +50,7 @@ def classify_run(
     backend: str,
     session_id: str,
     reset_epoch: int,
-    source_commit: str,
+    source_commit: str | None,
     installed_prefix: str,
     policy_sha256: str,
     bundle_sha256: str,

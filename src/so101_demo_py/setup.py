@@ -1,6 +1,39 @@
+import os
+import sys
 from pathlib import Path
 
 from setuptools import find_packages, setup
+from setuptools.command.install import install as _install
+
+
+class DebugProvenanceInstall(_install):
+    """Emit the DEBUG-only install manifest after the final installation step.
+
+    The manifest is diagnostic metadata: it is never a runtime prerequisite, and a
+    failure to write it must never fail an installation. A build without Git records
+    a null commit honestly instead of fabricating one.
+    """
+
+    def run(self) -> None:
+        super().run()
+        try:
+            prefix = Path(os.path.commonpath([
+                str(Path(self.install_lib).resolve()),
+                str(Path(self.install_data).resolve()),
+            ])).resolve()
+            sys.dont_write_bytecode = True
+            source = str(Path(__file__).resolve().parent / "src")
+            if source not in sys.path:
+                sys.path.insert(0, source)
+            from so101_demo.runtime.debug_provenance import write_debug_manifest
+
+            target = write_debug_manifest(prefix, source_root=Path(__file__).resolve().parent)
+            print(f"so101 debug provenance manifest: {target}", file=sys.stderr)
+        except Exception as error:  # noqa: BLE001 - DEBUG metadata never fails an install
+            print(
+                f"so101 debug provenance manifest skipped: {type(error).__name__}: {error}",
+                file=sys.stderr,
+            )
 
 package_name = "so101_demo_py"
 python_package = "so101_demo"
@@ -41,6 +74,7 @@ setup(
         ),
     ]
     + installed_resources(),
+    cmdclass={"install": DebugProvenanceInstall},
     install_requires=["PyYAML==6.0.2", "setuptools", "typing_extensions"],
     zip_safe=True,
     maintainer="SO-101 maintainers",
@@ -55,6 +89,7 @@ setup(
             "so101_demo.cli.parallel_batch_cleanup:main",
             "so101_parallel_perception_broker = so101_demo.cli.parallel_perception_broker:main",
             "so101_measure_parallel_resources = so101_demo.cli.measure_parallel_resources:main",
+            "so101_debug_provenance = so101_demo.cli.debug_provenance:main",
             "fixed_cup_pick_place = so101_demo.cli.fixed_cup_pick_place:main",
             "dynamic_cup_pick_place = so101_demo.cli.dynamic_cup_pick_place:main",
             "run_qualification = so101_demo.cli.qualification:main",

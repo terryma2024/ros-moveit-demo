@@ -25,8 +25,15 @@ class QualificationBundle:
 
 @dataclass(frozen=True, slots=True)
 class InstalledExecutionIdentity:
-    source_commit: str
+    """The installed location plus one best-effort DEBUG source observation.
+
+    ``source_commit`` is nullable and is never runtime authority: a deployment may be
+    a pure copied install with no Git checkout at all.
+    """
+
+    source_commit: str | None
     package_prefix: str
+    source_commit_source: str = "UNKNOWN"
 
 
 class ExecutionProvenanceError(ValueError):
@@ -35,7 +42,7 @@ class ExecutionProvenanceError(ValueError):
         self.code = code
 
 
-_FULL_COMMIT = re.compile(r"[0-9a-fA-F]{40}\Z")
+SOURCE_COMMIT_SOURCES = ("OBSERVED", "DECLARED", "UNKNOWN")
 
 
 def _sha256(path: Path) -> str:
@@ -56,51 +63,65 @@ def _verified_artifact(path: Path) -> VerifiedArtifact | None:
     return VerifiedArtifact(str(canonical), _sha256(canonical))
 
 
-def _resolved_source_commit(module_path: Path) -> str:
+def observed_source_commit(source_root: Path | None) -> str | None:
+    """Best-effort Git observation for DEBUG data. It never raises and never gates.
+
+    ``SO101_SOURCE_COMMIT`` takes precedence so a no-Git deployment can still record
+    what the builder observed. The value is returned verbatim (stripped); callers must
+    treat it as an observation, not as a validated runtime identity.
+    """
+
+    configured = os.environ.get("SO101_SOURCE_COMMIT")
+    if configured is not None:
+        value = configured.strip()
+        return value or None
+    if source_root is None:
+        return None
     try:
         completed = subprocess.run(
-            ["git", "-C", str(module_path.parent), "rev-parse", "HEAD"],
+            ["git", "-C", str(source_root), "rev-parse", "HEAD"],
             check=True,
             capture_output=True,
             text=True,
         )
-    except (OSError, subprocess.CalledProcessError):
-        raise ExecutionProvenanceError("EXECUTION_SOURCE_PROVENANCE_UNAVAILABLE") from None
-    commit = completed.stdout.strip().lower()
-    if re.fullmatch(r"[0-9a-f]{40}", commit) is None:
-        raise ExecutionProvenanceError("EXECUTION_SOURCE_PROVENANCE_UNAVAILABLE")
-    return commit
+    except (OSError, subprocess.SubprocessError):
+        return None
+    value = completed.stdout.strip()
+    return value or None
 
 
 def resolve_installed_execution_identity() -> InstalledExecutionIdentity:
-    from ament_index_python.packages import get_package_prefix
-    from ..application import text_agent as runtime_module
+    """Resolve the installed location; the source commit is an optional observation."""
 
-    try:
-        module_path = Path(runtime_module.__file__).resolve(strict=True)
-    except (OSError, RuntimeError, TypeError):
-        raise ExecutionProvenanceError("EXECUTION_SOURCE_PROVENANCE_UNAVAILABLE") from None
+    from ament_index_python.packages import get_package_prefix
+
     try:
         package_prefix = Path(get_package_prefix("so101_demo_py")).resolve(strict=True)
     except (LookupError, OSError, RuntimeError):
         raise ExecutionProvenanceError("EXECUTION_PACKAGE_PREFIX_UNAVAILABLE") from None
+    observed = observed_source_commit(package_prefix)
     return InstalledExecutionIdentity(
-        source_commit=_resolved_source_commit(module_path),
+        source_commit=observed,
         package_prefix=str(package_prefix),
+        source_commit_source="OBSERVED" if observed is not None else "UNKNOWN",
     )
 
 
 def verify_execution_provenance(
     *,
-    declared_source_commit: str,
+    declared_source_commit: str | None,
     declared_installed_prefix: str,
     session_id: str,
     expected_reset_epoch: int,
     evidence_root: Path,
 ) -> ExecutionProvenance:
-    if _FULL_COMMIT.fullmatch(declared_source_commit) is None:
-        raise ExecutionProvenanceError("EXECUTION_SOURCE_COMMIT_INVALID")
-    normalized_commit = declared_source_commit.lower()
+    """Verify the INSTALLED LOCATION and byte artifacts; never a source commit.
+
+    A declared commit (any value, including missing, malformed or mismatched) is
+    recorded as DEBUG metadata only: no Git command runs here and no commit value can
+    refuse execution.
+    """
+
     try:
         declared_prefix = Path(declared_installed_prefix).resolve(strict=True)
     except (OSError, RuntimeError):
@@ -116,10 +137,7 @@ def verify_execution_provenance(
     try:
         module_path = Path(runtime_module.__file__).resolve(strict=True)
     except (OSError, RuntimeError, TypeError):
-        raise ExecutionProvenanceError("EXECUTION_SOURCE_PROVENANCE_UNAVAILABLE") from None
-    resolved_commit = identity.source_commit
-    if normalized_commit != resolved_commit:
-        raise ExecutionProvenanceError("EXECUTION_SOURCE_COMMIT_MISMATCH")
+        module_path = None
 
     try:
         canonical_evidence_root = evidence_root.resolve(strict=True)
@@ -128,13 +146,20 @@ def verify_execution_provenance(
     if not canonical_evidence_root.is_dir():
         raise ExecutionProvenanceError("EXECUTION_EVIDENCE_ROOT_INVALID")
 
+    if identity.source_commit is not None:
+        commit, commit_source = identity.source_commit, "OBSERVED"
+    elif declared_source_commit is not None:
+        commit, commit_source = str(declared_source_commit).strip() or None, "DECLARED"
+    else:
+        commit, commit_source = None, "UNKNOWN"
     return ExecutionProvenance(
-        source_commit=resolved_commit,
+        source_commit=commit,
+        source_commit_source=commit_source,
         installed_prefix=str(package_prefix),
         entrypoint=_verified_artifact(
             package_prefix / "lib/so101_demo_py/text_pick_agent"
         ),
-        module=_verified_artifact(module_path),
+        module=None if module_path is None else _verified_artifact(module_path),
         executable=_verified_artifact(Path(sys.executable)),
         session_id=session_id,
         expected_reset_epoch=expected_reset_epoch,
@@ -185,17 +210,13 @@ def build_bundle_manifest(inputs: Mapping[str, object]) -> QualificationBundle:
     )
 
 
-def _source_commit() -> str:
-    configured = os.environ.get("SO101_SOURCE_COMMIT")
-    if configured:
-        return configured
-    completed = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return completed.stdout.strip()
+def _source_commit() -> str | None:
+    """DEBUG-only bundle input: a no-Git build records null instead of failing."""
+
+    try:
+        return observed_source_commit(Path.cwd())
+    except Exception:  # noqa: BLE001 - an observation may never break the bundle
+        return None
 
 
 def installed_bundle() -> QualificationBundle:

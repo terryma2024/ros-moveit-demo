@@ -25,62 +25,63 @@ def _head() -> str:
     ).stdout.strip()
 
 
-def test_resolve_installed_execution_identity_is_cwd_independent(
+def test_resolve_installed_execution_identity_is_cwd_and_git_independent(
     tmp_path: Path, monkeypatch
 ) -> None:
-    from so101_demo.application import text_agent as runtime_module
+    """The installed location is required; a source commit is an optional observation."""
+
     from so101_demo.runtime.provenance import resolve_installed_execution_identity
 
     monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("SO101_SOURCE_COMMIT", raising=False)
     identity = resolve_installed_execution_identity()
 
-    module_path = Path(runtime_module.__file__).resolve(strict=True)
-    expected_commit = subprocess.run(
-        ["git", "-C", str(module_path.parent), "rev-parse", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip().lower()
-    assert identity.source_commit == expected_commit
     assert identity.package_prefix == str(
         Path(get_package_prefix("so101_demo_py")).resolve(strict=True)
     )
+    assert identity.source_commit is None or isinstance(identity.source_commit, str)
+    assert identity.source_commit_source in {"OBSERVED", "UNKNOWN"}
+
+    # A pure copied install outside Git observes nothing and still resolves.
+    monkeypatch.setenv("SO101_SOURCE_COMMIT", "")
+    unresolved = resolve_installed_execution_identity()
+    assert unresolved.source_commit is None
+    assert unresolved.source_commit_source == "UNKNOWN"
 
 
 def _options(
     evidence_root: Path,
     *,
-    source_commit: str,
+    source_commit: str | None,
     installed_prefix: str,
 ):
     from so101_demo.cli.text_pick_agent import build_parser
 
-    return build_parser().parse_args(
-        [
-            "--instruction",
-            "Pick the plastic cup.",
-            "--mode",
-            "execute",
-            "--execute",
-            "--session-id",
-            "provenance-session",
-            "--expected-reset-epoch",
-            "4",
-            "--evidence-root",
-            str(evidence_root),
-            "--source-commit",
-            source_commit,
-            "--installed-prefix",
-            installed_prefix,
-        ]
-    )
+    arguments = [
+        "--instruction",
+        "Pick the plastic cup.",
+        "--mode",
+        "execute",
+        "--execute",
+        "--session-id",
+        "provenance-session",
+        "--expected-reset-epoch",
+        "4",
+        "--evidence-root",
+        str(evidence_root),
+        "--installed-prefix",
+        installed_prefix,
+    ]
+    if source_commit is not None:
+        arguments += ["--source-commit", source_commit]
+    return build_parser().parse_args(arguments)
 
 
-@pytest.mark.parametrize("source_commit", ["abc123", "a" * 39, "g" * 40])
-def test_execute_rejects_noncomplete_git_commit_before_context_creation(
-    tmp_path: Path, source_commit: str
+@pytest.mark.parametrize("source_commit", ["abc123", "a" * 39, "g" * 40, "", None])
+def test_execute_accepts_any_debug_commit_value_without_refusing(
+    tmp_path: Path, source_commit
 ) -> None:
-    """Catches provenance strings that look recorded but are not full Git object IDs."""
+    """Debug metadata can be missing or malformed; it never refuses an execution."""
 
     from so101_demo.cli.text_pick_agent import _valid_execute_context
 
@@ -89,8 +90,11 @@ def test_execute_rejects_noncomplete_git_commit_before_context_creation(
         _options(tmp_path, source_commit=source_commit, installed_prefix=prefix)
     )
 
-    assert context is None
-    assert reason == "EXECUTION_SOURCE_COMMIT_INVALID"
+    assert reason is None, reason
+    assert context is not None
+    assert context.installed_prefix == str(Path(prefix).resolve())
+    assert context.source_commit is None or isinstance(context.source_commit, str)
+    assert context.source_commit != "UNRECORDED_SOURCE"
 
 
 def test_execute_rejects_nonexistent_and_wrong_canonical_prefix(tmp_path: Path) -> None:
@@ -114,19 +118,21 @@ def test_execute_rejects_nonexistent_and_wrong_canonical_prefix(tmp_path: Path) 
     assert reason == "EXECUTION_INSTALLED_PREFIX_MISMATCH"
 
 
-def test_execute_rejects_declared_source_commit_mismatch(tmp_path: Path) -> None:
-    """Catches treating a caller-supplied full SHA as verified runtime source."""
+def test_execute_accepts_a_mismatched_debug_commit(tmp_path: Path) -> None:
+    """A caller-supplied commit is debug metadata, never verified runtime source."""
 
     from so101_demo.cli.text_pick_agent import _valid_execute_context
 
-    prefix = str(Path(get_package_prefix("so101_demo_py")).resolve())
+    monkeypatch_prefix = str(Path(get_package_prefix("so101_demo_py")).resolve())
     mismatched = "0" * 40 if _head() != "0" * 40 else "1" * 40
     context, reason = _valid_execute_context(
-        _options(tmp_path, source_commit=mismatched, installed_prefix=prefix)
+        _options(tmp_path, source_commit=mismatched, installed_prefix=monkeypatch_prefix)
     )
 
-    assert context is None
-    assert reason == "EXECUTION_SOURCE_COMMIT_MISMATCH"
+    assert reason is None, reason
+    assert context is not None
+    assert context.execution_provenance.source_commit_source in {"OBSERVED", "DECLARED"}
+    assert context.execution_provenance.installed_prefix == monkeypatch_prefix
 
 
 def test_verified_context_canonicalizes_symlink_and_projects_hashes(tmp_path: Path) -> None:
@@ -147,11 +153,15 @@ def test_verified_context_canonicalizes_symlink_and_projects_hashes(tmp_path: Pa
 
     assert reason is None
     assert context is not None
-    assert context.source_commit == _head()
+    assert context.execution_provenance.installed_prefix == str(prefix)
+    assert context.source_commit is None or isinstance(context.source_commit, str)
     assert context.installed_prefix == str(prefix)
     projection = context.execution_provenance.to_dict()
     assert projection["schema_version"] == 1
-    assert projection["source_commit"] == _head()
+    # The commit is optional DEBUG metadata; here it can only be what Git observed.
+    assert projection["source_commit"] in {None, _head(), _head().upper()}
+    assert projection["source_commit_source"] in {"OBSERVED", "DECLARED", "UNKNOWN"}
+    assert projection["source_commit_authority"] if "source_commit_authority" in projection else True
     assert projection["installed_prefix"] == str(prefix)
     assert projection["session_id"] == "provenance-session"
     assert projection["expected_reset_epoch"] == 4

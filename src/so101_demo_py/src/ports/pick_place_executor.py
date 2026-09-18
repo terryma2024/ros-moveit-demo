@@ -37,7 +37,7 @@ class VerifiedArtifact:
 
 @dataclass(frozen=True, slots=True)
 class ExecutionProvenance:
-    source_commit: str
+    source_commit: str | None
     installed_prefix: str
     entrypoint: VerifiedArtifact | None
     module: VerifiedArtifact | None
@@ -45,11 +45,13 @@ class ExecutionProvenance:
     session_id: str
     expected_reset_epoch: int
     evidence_root: str
+    source_commit_source: str = "UNKNOWN"
 
     def to_dict(self) -> dict[str, object]:
         result: dict[str, object] = {
             "schema_version": 1,
             "source_commit": self.source_commit,
+            "source_commit_source": self.source_commit_source,
             "installed_prefix": self.installed_prefix,
             "session_id": self.session_id,
             "expected_reset_epoch": self.expected_reset_epoch,

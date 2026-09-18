@@ -24,7 +24,7 @@ class DynamicRuntimeContext:
     session_id: str
     expected_reset_epoch: int
     evidence_root: Path
-    source_commit: str
+    source_commit: str | None
     installed_prefix: str
     execution_provenance: ExecutionProvenance
     profiler: SemanticProfiler | None = None
@@ -171,13 +171,11 @@ class DynamicCupPickPlaceExecutor:
             and context.expected_reset_epoch >= 0
             and isinstance(context.evidence_root, Path)
             and context.evidence_root.is_absolute()
-            and type(context.source_commit) is str
-            and re.fullmatch(r"[0-9a-f]{40}", context.source_commit) is not None
+            and (context.source_commit is None or type(context.source_commit) is str)
             and type(context.installed_prefix) is str
             and bool(context.installed_prefix)
             and Path(context.installed_prefix).is_absolute()
             and isinstance(context.execution_provenance, ExecutionProvenance)
-            and context.execution_provenance.source_commit == context.source_commit
             and context.execution_provenance.installed_prefix
             == context.installed_prefix
             and context.execution_provenance.session_id == context.session_id
