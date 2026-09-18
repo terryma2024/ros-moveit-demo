@@ -130,6 +130,9 @@ class HermeticDevice:
     def used_bytes(self) -> int:
         return self._used
 
+    def refresh(self) -> dict:
+        return {"total_bytes": self._total, "used_bytes": self._used}
+
     @property
     def consumers(self) -> tuple[int, ...]:
         return (os.getpid(),)
@@ -680,6 +683,9 @@ class _FakeDevice:
     total_bytes = 8 * 1024 ** 3
     used_bytes = 0
 
+    def refresh(self):
+        return {"total_bytes": self.total_bytes, "used_bytes": self.used_bytes}
+
 
 def test_sample_resources_measures_cpu_over_a_full_quota_period(monkeypatch):
     """A cgroup may spend a whole quota inside one period, so a shorter window can
@@ -1056,3 +1062,29 @@ def test_sample_resources_requires_the_cgroup_swap_counter():
     with pytest.raises(ContractError, match="MEASUREMENT_CAPABILITY_MISSING"):
         rm.sample_resources(owned_inventory=(), cgroup=NoSwap(), device=_FakeDevice(),
                             sequence=1, state={})
+
+
+def test_sample_resources_reads_the_device_once_per_pass():
+    """The pass called device.used_bytes twice and total_bytes once, and every access is a
+    fresh NVML read, so a 50 ms sampling grid paid for three of them."""
+
+    import so101_demo.parallel_batch.resource_measurement as rm
+
+    class CountingDevice:
+        total_bytes = 8 * 1024 ** 3
+        used_bytes = 0
+
+        def __init__(self):
+            self.reads = 0
+
+        def refresh(self):
+            self.reads += 1
+            return {"total_bytes": 8 * 1024 ** 3, "used_bytes": 1024}
+
+    device = CountingDevice()
+    cgroup = _FakeCgroup([0, 0], swap=[0, 0])
+    state = {}
+    for sequence in (1, 2):
+        rm.sample_resources(owned_inventory=(), cgroup=cgroup, device=device,
+                            sequence=sequence, state=state)
+    assert device.reads == 2, device.reads

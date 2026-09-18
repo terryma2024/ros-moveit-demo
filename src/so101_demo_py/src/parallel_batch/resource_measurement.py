@@ -284,6 +284,11 @@ def sample_resources(
     if not hasattr(device, "total_bytes") or not hasattr(device, "used_bytes"):
         raise ContractError("MEASUREMENT_CAPABILITY_MISSING")
     memory = _read_meminfo()
+    # One device read per pass: every NVML access is a fresh query and the pass
+    # used three of them inside a 50 ms grid.
+    device_facts = device.refresh()
+    device_facts_gpu_total = float(device_facts.get("total_bytes", 0))
+    device_facts_gpu_used = float(device_facts.get("used_bytes", 0))
     host_swap_total, psi_total = _read_swap_and_psi()
     swap_used = int(cgroup.memory_swap_current())
     monotonic_s = time.monotonic()
@@ -322,17 +327,17 @@ def sample_resources(
         monotonic_s=monotonic_s,
         capacity={
             "ram_bytes": float(memory["MemTotal"]),
-            "gpu_bytes": float(device.total_bytes),
+            "gpu_bytes": device_facts_gpu_total,
             "cpu_core_equivalent": cpu_capacity,
         },
         observed={
             "ram_bytes": float(cgroup.memory_current()),
-            "gpu_bytes": float(device.used_bytes),
+            "gpu_bytes": device_facts_gpu_used,
             "cpu_core_equivalent": cpu_delta,
         },
         background={
             "ram_bytes": float(memory["MemTotal"] - memory["MemAvailable"]),
-            "gpu_bytes": float(device.used_bytes),
+            "gpu_bytes": device_facts_gpu_used,
             "cpu_core_equivalent": 0.0,
         },
         tool_overhead={key: 0.0 for key in DIMENSIONS},
