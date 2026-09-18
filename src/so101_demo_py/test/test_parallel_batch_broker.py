@@ -610,3 +610,22 @@ def test_polling_is_local_and_does_not_call_remote_authority():
     assert broker.poll_response(request) is None
 
     assert calls == []
+
+
+def test_broker_accepts_the_v2_runtime_config():
+    """The broker consumes only fields both schemas carry, but its constructor type-checked
+    for the v1 class alone, so a v2 measurement's broker died with RUNTIME_CONFIG_REQUIRED
+    -- the last failure standing in run65."""
+
+    from so101_demo.parallel_batch.broker import PerceptionBroker
+    from so101_demo.parallel_batch.contracts import (
+        ParallelRuntimeConfigV2, load_parallel_runtime_config_v2)
+
+    package = Path(__file__).resolve().parents[1]
+    config = load_parallel_runtime_config_v2(package / 'config/mujoco/parallel_batch_v2.yaml')
+    assert isinstance(config, ParallelRuntimeConfigV2)
+    broker = PerceptionBroker(config, grounded_model_id=GROUNDED, clock=lambda: 100.0)
+    broker.set_model_ready(YOLO, True)
+    broker.set_model_ready(GROUNDED, True)
+    submission = broker.submit(req())
+    assert submission.accepted is True
