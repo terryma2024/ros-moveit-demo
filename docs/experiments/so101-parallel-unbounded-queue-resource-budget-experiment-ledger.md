@@ -1286,3 +1286,108 @@ next_command: >
   FixedAdmissionGate mandatory for fixed production admission, remove the N>3/N3-special blocks and the
   4N/6+4N/GPU8 formulas, and migrate the retained CLI/teleop fixtures to the v2 config path; then re-run
   the demo + teleop full gates and add the adopt_existing v2 recheck regression.
+
+## EXP-UQ14 — Task 10 part 2: version-two consumers, formula removal, mandatory gate
+
+```yaml
+experiment_id: EXP-UQ14
+status: VALID
+prior_experiment: EXP-UQ13
+hypothesis: New execution can run entirely on the version-two carrier with one shared exact-N gate:
+  the CLI, resources CLI, allocator, worker and teleop preflight/supervisor stop using the v1 quota and
+  formula fields, and a fixed production run without an approved profile fails closed.
+prediction: CLI/resource/teleop suites need fixture migration but no product assertion is weakened; the
+  full demo and teleop gates pass with zero failures.
+single_variable: v2 config/request/manifest carrier + gate-mandatory fixed allocation
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Task 10 part 1 committed; clean baselines (demo 3217, teleop 521).
+success_criteria:
+  - prepare_batch loads only schema 2 (v1 -> LEGACY_CONTRACT_EXECUTION_FORBIDDEN), builds BatchRequestV2
+    with no quota field, and writes a schema-2 manifest carrying batch_kind.
+  - The parser no longer declares --max-points-per-worker; a user argv with it still raises
+    LEGACY_MAX_POINTS_PER_WORKER_UNSUPPORTED.
+  - Allocator allocate/adopt_existing, worker, resources CLI and teleop preflight/supervisor carry no
+    lifetime quota; legacy live-headroom evidence is refused loudly on the v2 path; a v1 manifest never
+    starts a v2 restore; a missing/refusing gate refuses with its own code.
+  - Retained fixtures migrate to the v2 carrier and the synthetic offline gate; no --ignore/xfail.
+failure_criteria:
+  - Any consumer silently ignoring a retired authority, or a fixed allocation admitted without a gate.
+invalid_criteria:
+  - Counting fixture-only failures caused by the retired argv/fields as product regressions.
+provenance:
+  source_commit: 803a7d1e6 (Task 10 part 1) with this task's changes
+  install_overlay: $TASK_ROOT/dev-install (symlinks) + $TASK_ROOT/venv
+  runtime_executable: $TASK_ROOT/venv/bin/python
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: so101_pytest cli-v2h -> teleop-k8 ... (iterative RED/GREEN per suite)
+    exit_code: 0
+  - command: so101_pytest adopt-v2b test_parallel_batch_resources.py::test_v2_adopt_existing_rechecks_budget_and_provenance -q
+    exit_code: 0
+  - command: so101_pytest teleop-k8 src/so101_teleop/test -q
+    exit_code: 0
+  - command: so101_pytest task10p2-demo2 src/so101_demo_py/test -q
+    exit_code: 0
+  - command: so101_pytest task10p2-teleop src/so101_teleop/test -q
+    exit_code: 0
+observed:
+  - CLI: `_load_runtime_config` refuses v1 for new execution; parser arg replaced by --contract-version /
+    --batch-kind; BatchRequestV2(FIRST_PASS) built; manifest schema 2 with batch_kind and no quota;
+    provenance expects the v2 carrier; gate thread through PreparedBatch into the allocator; the CLI
+    live-headroom path is gate-only for v2 and refuses legacy evidence with
+    LIVE_HEADROOM_EVIDENCE_UNEXPECTED (missing gate -> BUDGET_PROFILE_UNAVAILABLE).
+  - resources.py: allocate and adopt_existing use the gate for v2 (no v1 formula fields), manifests carry
+    schema 2, v1 manifests are refused with LEGACY_CONTRACT_EXECUTION_FORBIDDEN, recorded profile drift
+    raises RUNTIME_FINGERPRINT_MISMATCH; the resources CLI loads only schema 2 and refuses legacy
+    headroom evidence.
+  - worker.py accepts ParallelRuntimeConfigV2; teleop preflight FixedExecutionConfig is mode+exact N with
+    receipt capacity = shared selection size; the supervisor child argv no longer carries
+    --max-points-per-worker and the manual retry stays an independent single-point N1 batch;
+    CoordinatorStartRequest keeps the quota optional for historical rows only.
+  - Offline test entry: an autouse synthetic gate fixture in the CLI and resources test modules (and a
+    module-level _DEFAULT_RESOURCE_GATE in both CLIs) keeps production fail-closed while unit tests
+    exercise composition; the new adopt_existing regression passes.
+  - Migrated retained tests: CLI argv/manifest/topology/resume/overlay fixtures, resources headroom
+    evidence tests (now asserting the gate authority), preflight capacity tests (now asserting the shared
+    selection capacity and legacy-quota refusal), supervisor timeline markers.
+inferred:
+  - The three duplicated consumers now share one parser/provider path for new execution; the retained v1
+    formula code is reachable only through historical v1 configs in unit fixtures.
+conclusion: VALID pending the recorded full-gate confirmation below.
+evidence:
+  - scratch/cli-v2*, scratch/res-v2*, scratch/teleop-k*, scratch/adopt-v2*, scratch/task10p2-demo.*
+decision: KEEP
+
+
+### EXP-UQ14 confirmation
+
+- `task10p2-demo2` exit 0: **3217 passed, 1 skipped, 0 failed** (full demo suite).
+- `task10p2-teleop` exit 0: **525 passed, 0 failed** (full teleop suite).
+- The only full-gate failure during the migration was the retained guard
+  `test_adaptive_cli_has_no_parallel_v2_config_route`, which asserted the CLI source must never mention
+  the v2 carrier. That guard is superseded by this task (the fixed path now requires the v2 carrier), so
+  it was replaced with a behavioural check that the adaptive route still loads
+  `parallel_adaptive_workers_v1.yaml` and keeps its own options — not deleted or weakened.
+
+```yaml
+checkpoint_id: CP-UQ14
+last_valid_experiment: EXP-UQ14
+current_hypothesis: Task 11 (OpenAPI + Web no-K UI + contract/installed tests) is the next Stage A unit.
+working_tree_status: Task 10 part 2 files committed after this entry
+owned_processes: NONE
+preserved_processes: NONE from this task family
+confirmed_conclusions:
+  - New fixed execution runs only on the v2 carrier with the shared exact-N gate; demo 3217 and teleop 525
+    pass with zero failures (EXP-UQ14).
+disproven_routes:
+  - Any fixed allocation admitted by a v1 formula, or a v1 manifest starting a v2 restore.
+open_risks:
+  - Web/TypeScript surfaces still expose the retired quota input until Task 11; the OpenAPI export and
+    generated types must be regenerated from the FastAPI schema in Task 11.
+  - The adaptive-specific `max_points_per_worker` compatibility property in teleop adaptive.py remains a
+    read-only projection; verify it does not re-enter an execution request in Task 11.
+next_command: run the OpenAPI export and Web tests for Task 11 (no-K UI, availability, contract/installed
+  specs) after updating web/src and e2e fixtures
+```
