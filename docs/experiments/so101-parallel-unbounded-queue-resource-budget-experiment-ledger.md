@@ -3940,3 +3940,25 @@ What the packets deliberately do **not** contain is the point of them:
 So Stage D now has prepared inputs with object-bound slots and no fabricated content: submission
 waits on real operator approval objects, which is exactly what the stage requires and what this
 task cannot supply for itself. N1 remains `NOT_MEASURED` and nothing is extrapolated to another N.
+
+## CP-UQ76 — Stage C/E: two more attempts, the readiness packet, and the honest status
+
+Attempts `run42` (114 samples, maximum gap 71.7 ms) and `run43` (108 samples, 75.5 ms): both
+reached a healthy sampler with `abort_reason` `None` and both ended on the launcher's
+`{"message": "SWAP_PRESSURE", "status": "ERROR"}`. That is the **fifth** round of genuine attempts
+(CP-UQ67's run25-27, CP-UQ70's run38-39, CP-UQ71's run41, and now these two) with the identical
+signature: the harness works, the host condition refuses the workload. The swap belongs to other
+sessions (CP-UQ68) and clearing it is outside this task's authority.
+
+The Task 16 readiness packet was written from the evidence rather than from intent
+(`stageD-prep.R4oZxf5B/task16-readiness-packet.json` and `.md`): Stage A complete; Stage B
+complete with the owned service PID 1993965, URL, byte-identical served UI, fresh store and the
+lease/fence lifecycle; Stage C **partial** -- harness complete and verified, N1 `NOT_MEASURED` with
+the host condition as the recorded blocker, N2..N8 `NOT_PREPARED`; Stage D `PREPARED` (eight
+packets, approvals empty, not submitted); Stage E `NOT_STARTED`, because live Chrome acceptance
+needs a qualified exact-N candidate. Every exact-N budget is `NOT_MEASURED`.
+
+Two gates remain, and neither is the task's to open: the host's swap pressure (concrete, measured,
+five rounds of evidence) and the real operator approval objects that Stage D submission and Stage E
+acceptance require. Everything inside the authorized scope that does not depend on those two is
+done and evidenced. N1 remains `NOT_MEASURED`; nothing is extrapolated to another N.
