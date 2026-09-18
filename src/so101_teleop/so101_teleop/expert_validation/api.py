@@ -5,11 +5,12 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager, suppress
 import inspect
+import json
 import logging
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_validator
@@ -37,13 +38,13 @@ class ManifestCreateRequest(ClosedModel):
 
 
 class CampaignConfiguration(ClosedModel):
+    contract_version: Literal[2]
     service_session_id: str = Field(min_length=1)
     lease_id: str = Field(min_length=1)
     lease_generation: int = Field(ge=1)
     manifest_id: str = Field(min_length=1)
     execution_mode: Literal["SEQUENTIAL", "PARALLEL", "ADAPTIVE"]
     worker_count: int | None = Field(default=None, ge=1, le=FIXED_WORKER_COUNTS[-1])
-    max_points_per_worker: int | None = Field(default=None, ge=1, le=20)
     preferred_worker_count: int | None = Field(default=None, ge=1, le=16)
     fallback_worker_counts: tuple[int, ...] | None = None
     initial_points_per_worker: int | None = Field(default=None, ge=1, le=20)
@@ -53,7 +54,7 @@ class CampaignConfiguration(ClosedModel):
 
     @model_validator(mode="after")
     def validate_mode(self):
-        fixed = (self.worker_count, self.max_points_per_worker)
+        fixed = (self.worker_count,)
         adaptive = (
             self.preferred_worker_count,
             self.fallback_worker_counts,
@@ -99,6 +100,27 @@ class RetryRequest(CampaignCancelRequest):
     confirmation: str
 
 
+class WorkerCountAvailability(ClosedModel):
+    worker_count: int = Field(ge=2, le=FIXED_WORKER_COUNTS[-1])
+    selectable: bool
+    status: str = Field(min_length=1)
+    reason_codes: tuple[str, ...] = ()
+    profile_sha256: str | None = None
+    qualification_sha256: str | None = None
+
+
+def default_worker_count_availability() -> tuple[WorkerCountAvailability, ...]:
+    """Without an approved profile no fixed N is selectable; never fake a status."""
+
+    return tuple(
+        WorkerCountAvailability(
+            worker_count=count, selectable=False, status="NOT_MEASURED",
+            reason_codes=("BUDGET_PROFILE_UNAVAILABLE",),
+        )
+        for count in FIXED_WORKER_COUNTS[1:]
+    )
+
+
 class CapabilitiesResponse(ClosedModel):
     available: bool
     execution_modes: tuple[Literal["SEQUENTIAL", "PARALLEL", "ADAPTIVE"], ...] = ()
@@ -106,7 +128,8 @@ class CapabilitiesResponse(ClosedModel):
     minimum_points: int = 4
     maximum_points: int = 20
     fixed_worker_counts: tuple[int, ...] = FIXED_WORKER_COUNTS
-    fixed_max_points_per_worker: int = 20
+    worker_count_availability: tuple[WorkerCountAvailability, ...] = Field(
+        default_factory=default_worker_count_availability)
     adaptive_default_ladder: tuple[int, ...] = (8, 6, 4, 2, 1)
     lease_duration_s: float = 30.0
     lease_renewal_margin_s: float = 10.0
@@ -319,6 +342,38 @@ def _error(error: Exception, *, default_status: int = 409) -> JSONResponse:
     return JSONResponse(status_code=default_status, content={"code": code})
 
 
+_LEGACY_EXECUTION_KEY = "max_points_per_worker"
+
+
+async def _reject_legacy_execution_contract(request: Request) -> None:
+    """Refuse legacy quota keys and non-v2 new execution before body validation."""
+
+    if request.method not in {"POST", "PUT", "PATCH"}:
+        return
+    try:
+        raw = await request.body()
+    except Exception:  # pragma: no cover - the body is always readable here
+        return
+    if not raw:
+        return
+    try:
+        payload = json.loads(raw)
+    except (UnicodeError, ValueError):
+        return
+    if not isinstance(payload, dict):
+        return
+    if _LEGACY_EXECUTION_KEY in payload:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "LEGACY_MAX_POINTS_PER_WORKER_UNSUPPORTED"},
+        )
+    version = payload.get("contract_version")
+    if type(version) is not int or version != 2:
+        raise HTTPException(
+            status_code=422, detail={"code": "LEGACY_CONTRACT_EXECUTION_FORBIDDEN"}
+        )
+
+
 def create_expert_validation_app(
     service,
     static_dir: str | Path | None = None,
@@ -418,14 +473,22 @@ def create_expert_validation_app(
         except Exception as error:
             return _error(error, default_status=404)
 
-    @app.post("/expert-validation/campaigns/preflight", response_model=PreflightResponse)
+    @app.post(
+        "/expert-validation/campaigns/preflight",
+        response_model=PreflightResponse,
+        dependencies=[Depends(_reject_legacy_execution_contract)],
+    )
     async def preflight(body: CampaignConfiguration):
         try:
             return await _invoke(service.preflight_api, body.model_dump(exclude_none=True))
         except Exception as error:
             return _error(error)
 
-    @app.post("/expert-validation/campaigns", response_model=CampaignProjectionResponse)
+    @app.post(
+        "/expert-validation/campaigns",
+        response_model=CampaignProjectionResponse,
+        dependencies=[Depends(_reject_legacy_execution_contract)],
+    )
     async def start_campaign(body: CampaignStartRequest):
         try:
             return await _invoke(service.start_campaign_api, body.model_dump(exclude_none=True))

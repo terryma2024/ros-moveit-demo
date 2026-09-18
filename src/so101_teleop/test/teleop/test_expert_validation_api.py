@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from so101_teleop.expert_validation.api import create_expert_validation_app
 from so101_teleop.expert_validation.lease import ValidationLeaseService
 from so101_teleop.expert_validation.store import SupervisorStore
+import pytest
 
 
 def test_idle_event_socket_disconnect_unsubscribes_without_waiting_for_an_event():
@@ -279,21 +280,22 @@ def test_retry_requires_lease_command_and_confirmation(tmp_path):
 def test_parallel_start_requires_matching_preflight_and_capacity(tmp_path):
     client = _client(tmp_path)
     body = {
+        "contract_version": 2,
         "service_session_id": "browser-a",
         "lease_id": "lease-a",
         "lease_generation": 1,
         "manifest_id": "manifest-20",
         "execution_mode": "PARALLEL",
         "worker_count": 2,
-        "max_points_per_worker": 10,
     }
     receipt = client.post("/expert-validation/campaigns/preflight", json=body).json()
+    # Version two has no lifetime quota, so the mismatching variable is the exact N.
     response = client.post(
         "/expert-validation/campaigns",
         json={
             **body,
             "command_id": "start-1",
-            "max_points_per_worker": 9,
+            "worker_count": 3,
             "preflight_receipt_id": receipt["receipt_id"],
         },
     )
@@ -358,8 +360,8 @@ def test_manifest_response_exposes_declared_point_source(tmp_path):
 def test_fixed_capability_range_and_api_boundaries(tmp_path):
     client = _client(tmp_path)
     assert client.get("/expert-validation/capabilities").json()["fixed_worker_counts"] == [1, 2, 3, 4, 5, 6, 7, 8]
-    base = dict(service_session_id="s", lease_id="l", lease_generation=1,
-                manifest_id="m", max_points_per_worker=3)
+    base = dict(contract_version=2, service_session_id="s", lease_id="l",
+                lease_generation=1, manifest_id="m")
     for mode, workers, expected in (("SEQUENTIAL", 1, 200), ("SEQUENTIAL", 2, 422),
                                      ("PARALLEL", 1, 422), ("PARALLEL", 2, 200),
                                      ("PARALLEL", 8, 200), ("PARALLEL", 9, 422)):
@@ -388,3 +390,47 @@ def test_installed_asset_symlink_chain_is_served_without_shadowing_artifacts(tmp
     assert client.get("/assets/missing.js").status_code == 404
     assert client.get("/expert-validation/artifacts/missing").status_code == 404
     assert client.get("/expert-validation/results").text == (web / "index.html").read_text()
+
+
+@pytest.mark.parametrize('legacy_value', [1, 20, None])
+def test_new_request_rejects_legacy_key(tmp_path, legacy_value):
+    """The lifetime quota is refused by presence, before any service call."""
+
+    client = _client(tmp_path)
+    body = {
+        'contract_version': 2, 'service_session_id': 'browser-a',
+        'lease_id': 'lease-a', 'lease_generation': 1, 'manifest_id': 'manifest-20',
+        'execution_mode': 'PARALLEL', 'worker_count': 2, 'command_id': 'start-a',
+        'preflight_receipt_id': 'receipt-a',
+        'max_points_per_worker': legacy_value,
+    }
+    response = client.post('/expert-validation/campaigns', json=body)
+    assert response.status_code == 422
+    assert response.json()['detail']['code'] == 'LEGACY_MAX_POINTS_PER_WORKER_UNSUPPORTED'
+
+
+@pytest.mark.parametrize('version', [None, 1, 3])
+def test_new_request_requires_contract_version_two(tmp_path, version):
+    client = _client(tmp_path)
+    body = {
+        'service_session_id': 'browser-a', 'lease_id': 'lease-a', 'lease_generation': 1,
+        'manifest_id': 'manifest-20', 'execution_mode': 'SEQUENTIAL', 'worker_count': 1,
+        'command_id': 'start-a', 'preflight_receipt_id': 'receipt-a',
+    }
+    if version is not None:
+        body['contract_version'] = version
+    response = client.post('/expert-validation/campaigns', json=body)
+    assert response.status_code == 422
+    assert response.json()['detail']['code'] == 'LEGACY_CONTRACT_EXECUTION_FORBIDDEN'
+
+
+def test_capabilities_expose_exact_n_availability_without_quota(tmp_path):
+    client = _client(tmp_path)
+    capabilities = client.get('/expert-validation/capabilities').json()
+    assert 'fixed_max_points_per_worker' not in capabilities
+    availability = capabilities['worker_count_availability']
+    assert [item['worker_count'] for item in availability] == [2, 3, 4, 5, 6, 7, 8]
+    for item in availability:
+        assert item['selectable'] is False
+        assert 'BUDGET_PROFILE_UNAVAILABLE' in item['reason_codes']
+        assert item['profile_sha256'] is None and item['qualification_sha256'] is None
