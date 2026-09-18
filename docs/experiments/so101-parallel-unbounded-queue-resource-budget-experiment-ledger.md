@@ -5894,3 +5894,38 @@ Nothing above is claimed as done. The service it will run against is live and ve
 (CP-UQ129), and the guard suites, lane gates and copied-prefix gates are green.
 
 _Ledger HEAD when written: `0d1f5722d`._
+
+
+## CP-UQ131 — Task 11: the live-sim project collects again, and the budget spec is gone
+
+Commit `513425a4b`. Three findings, one of them a blocker that had nothing to do with the guard:
+
+- **The whole live-sim project was uncollectable**: `01-sequential.spec.ts` declared
+  `const identity` twice in the same scope (the runtime-identity document at line 91 and the
+  campaign receipt at line 110), so Playwright failed the project with
+  `SyntaxError: Identifier 'identity' has already been declared` and listed **zero tests**. The
+  second declaration is now `receiptIdentity`. This is exactly the kind of thing an acceptance
+  task is supposed to surface, and it would have made every later "browser acceptance" claim
+  hollow.
+- **`04-resource-budget.spec.ts` is replaced by `04-start-guard.spec.ts`** (85 budget-era lines
+  → 45 guard lines): every configured fixed N must be `selectable` with status `CONFIGURED` and
+  no reason codes, the profile/qualification fields must be null, the response must carry the
+  enforced `start_guard_policy` (`timeout_s 2.0`, `ram_minimum_bytes`/`gpu_minimum_bytes`
+  1 GiB, `ram_minimum_fraction 0.05`, `cpu_busy_warn_fraction 0.9`), and the payload must not
+  contain `BUDGET_PROFILE_UNAVAILABLE`. The Playwright project's `testMatch` was pointing at the
+  old filename and now points at the new one.
+- **The fixture's `QUALIFICATION_ENV` is gone** (renamed to `MODEL_ENV`): the retired acceptance
+  and fault-injection aggregate paths are no longer passed to the spawned service, while the
+  functional model/config locations stay.
+
+Verified by collection, which is the gate that was broken: `SO101_ENABLE_LIVE_SIM_E2E=1
+npx playwright test --config playwright.live-sim.config.ts --list` → **6 tests in 5 files**,
+including `04-start-guard.spec.ts`. `tsc --noEmit` is clean.
+
+Still to do in Task 11: the `functional-manifest.ts` builder and `prepare:functional-manifest`
+script (one case per supported worker option, built from the deployed service's real
+capabilities and read at collection time), the actual acceptance run against
+`http://127.0.0.1:8010` with per-case evidence, and the five-consecutive-valid physical-batch
+stability record.
+
+_Ledger HEAD when written: `513425a4b`._
