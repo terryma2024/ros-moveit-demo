@@ -5015,3 +5015,48 @@ So option 1 is still open, but now with a precise target: make the launch stack'
 smaller or serialised rather than trying to bound a process that does not exist between samples. That
 is engineering, and it is the next step; the policy change the operator chose is already in place and
 doing exactly what it says.
+
+## CP-UQ113 — Operator decision: N1 is uncalibratable, Stage C stops here
+
+Presented with run76's own numbers, the operator chose option C: keep the envelope and the
+sustained-throttling rule as they are, record N1 as uncalibratable, and stop Stage C. Recorded as
+`stage-c/stageC-halt-20260918.json` in the evidence root (sha256 of `samples.jsonl`
+`fc54763dc7bb8302c33a326e335bbffdde1adf62ea392c278b27bfd7a76595e9`, of `cleanup-receipt.json`
+`4c5aad6c3e3f7c93cfca031bcb743dca7658d4ac53e23c9c584fb2b34db149e4`, of `resource_manifest.json`
+`7c2bf7b39845c20ef789c20dc43787bfd7b9f5de05499c23211d96515febb15b`, of r53
+`ee93afbc7d27089a8b3f9d8809f73992909b2b1f06aaa56c5b42f09e583ffd3c`).
+
+What is being recorded as the fact, precisely: with `capacity_fraction 0.8`,
+`minimum_free_fraction 0.20` and a 5-consecutive-sample throttling streak left untouched, the N1
+attempt measured 202 samples over 10.69 s at a mean of 1.13 cores against a 19.1-core quota, and was
+disqualified by a 0.19 s excursion at the tail of launch-stack start-up (samples 198-202 at 5.47 /
+16.95 / 21.14 / 4.10 / 3.30 cores; breach latched at 1569934.182767854, abort sent at
+1569934.182819165 -- one millisecond later, so the excursion preceded the interrupt rather than being
+caused by it). Note for accuracy: CP-UQ112 called the burst "short-lived launch children"; the event
+timeline now says the burst is the tail of start-up itself -- `move_group` printed "You can start
+planning now!" at the end of the window, and the abort's teardown escalations all happen after it.
+
+The batch reached none of its nine points (`execution_complete false`, every point `UNRUN`): the run
+never got past start-up, which is exactly why the operator's ruling is "uncalibratable" rather than a
+measured level. No further N1 attempt is made; r53/run76 is the final one.
+
+Consequences, stated plainly:
+
+- **Stage C halted.** N2..N8 calibrations and qualifications are not attempted, so no sealed B/Q pair
+  for any N exists and no candidate P exists.
+- **Stage D unreachable.** Per-N packets cannot be submitted against operator approval objects that do
+  not exist, and nothing is promoted or deployed.
+- **Stage E unreachable.** Owned live Chrome acceptance for N1/Nx is not attempted.
+- **Budgets.** Every exact-N budget stays `NOT_MEASURED`, with no cross-N extrapolation. The 1.13-core
+  figure above is one disqualified run's mean, not a budget.
+- **Policy.** `capacity_fraction`, `minimum_free_fraction` and the throttling rule are unchanged by
+  this decision; the swap/PSI removal and the single-period-throttling rule from round 69 stand as
+  directed.
+- **Retention.** Nothing was deleted, rewritten or re-run: r1..r53 and run1..run76 remain in place,
+  and the frozen plan file is untouched.
+
+This is where the dispatch's objective stops being achievable as written. Stages A and B are complete
+and the metering machinery works -- it measured a full stack start-up, a 60.2 s baseline of 318
+persisted 50 ms samples and a 25 ms peak-alias cross-check -- and its refusal here is the rule working
+as specified, not an instrumentation failure. What it cannot do under an unchanged envelope is certify
+an N=1 deployment whose start-up momentarily wants the whole machine.
