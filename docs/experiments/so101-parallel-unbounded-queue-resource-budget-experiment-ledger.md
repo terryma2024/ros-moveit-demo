@@ -6506,3 +6506,23 @@ This is the same class of ownership bug the plan's Task 4 addressed for the prob
 the product's own spawn path.
 
 _Ledger HEAD when written: `7bc303e47`._
+
+## CP-UQ153 — Task 11: what the record actually says, and the one question left
+
+Reading the writer (`store.py:372-376`) explains half of CP-UQ152's oddity: the execution record
+stores `expected_executable=executable` and derives `install_prefix=Path(executable).parent`. So
+`install_prefix=/usr/bin` is a **recording artefact** of the executable being `/usr/bin/python3`,
+not an independent claim about the deployment. That correction matters because it rules out one
+hypothesis (a wrong prefix recorded separately) and leaves the real question: **who resolved
+`/usr/bin/python3` as the coordinator's `expected_executable`**, when the deployed service runs
+from the copied prefix whose console entry is
+`copy-install-final.mcoFwDqP/so101_demo_py/lib/so101_demo_py/so101_parallel_batch`.
+
+Two candidates for the next round to settle, in order: the spawn path that passes the executable
+into the store (the process owner / supervisor start call), and `installed_executable`'s resolution
+when the service's own `PATH` does not include the copied prefix's `lib/so101_demo_py` (a
+`shutil.which` fallback would land on the system python exactly like this). Either way the zombie
+follows: a coordinator launched with the wrong command dies immediately, and the supervisor's
+`RUNNING` state then hides it.
+
+_Ledger HEAD when written: `bb0541595`._
