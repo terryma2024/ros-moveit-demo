@@ -17,15 +17,51 @@ export type PointStatus =
  * when the test itself failed half-way.  The console has no release control, and a suite that
  * acquires an exclusive lease without returning it can run exactly one spec per lease lifetime:
  * the next spec then sees `409 Conflict` on acquire.
+ *
+ * Release and renew both carry the *current* generation, and every renewal increments it, so the
+ * console's own renew responses are what keep this record current.
  */
-const acquiredLeases = new Map<string, string>();
+type LeaseMutation = { service_session_id: string; generation: number };
+const acquiredLeases = new Map<string, LeaseMutation>();
+
+/** Record every successful lease mutation the console performs, including its background renewals. */
+export function trackConsoleLeases(page: Page): void {
+  page.on("response", (response) => {
+    const request = response.request();
+    if (
+      !response.url().includes("/expert-validation/lease") ||
+      !["POST", "PUT"].includes(request.method()) ||
+      response.status() !== 200
+    ) {
+      return;
+    }
+    void response
+      .json()
+      .then((payload: { lease_id?: string; service_session_id?: string; generation?: number }) => {
+        if (!payload?.lease_id || !payload.service_session_id || !payload.generation) return;
+        acquiredLeases.set(payload.lease_id, {
+          service_session_id: payload.service_session_id,
+          generation: payload.generation,
+        });
+      })
+      .catch(() => undefined);
+  });
+}
 
 export async function releaseAcquiredLeases(request: APIRequestContext): Promise<void> {
-  for (const [leaseId, body] of [...acquiredLeases]) {
+  for (const [leaseId, mutation] of [...acquiredLeases]) {
     const response = await request.delete(`/expert-validation/lease/${leaseId}`, {
-      data: JSON.parse(body) as Record<string, unknown>,
+      data: mutation as unknown as Record<string, unknown>,
     });
-    expect(response.ok(), `release lease failed: ${response.status()}`).toBe(true);
+    // A lease the service already dropped is not a leak: only a refusal that leaves it held is.
+    if (response.status() === 404) {
+      acquiredLeases.delete(leaseId);
+      continue;
+    }
+    expect(
+      response.ok(),
+      `release lease failed: ${response.status()} ${await response.text()}`,
+    ).toBe(true);
     acquiredLeases.delete(leaseId);
   }
 }
@@ -49,6 +85,7 @@ export class ExpertValidationPage {
   }
 
   async acquireLease(): Promise<void> {
+    trackConsoleLeases(this.page);
     const [response] = await Promise.all([
       this.page.waitForResponse(
         (candidate) =>
@@ -69,15 +106,10 @@ export class ExpertValidationPage {
       service_session_id: string;
       generation: number;
     };
-    // Release and renew take `{service_session_id, generation}` while acquire takes only the
-    // session, so the mutation body is built from the response, not from the request.
-    acquiredLeases.set(
-      payload.lease_id,
-      JSON.stringify({
-        service_session_id: payload.service_session_id,
-        generation: payload.generation,
-      }),
-    );
+    acquiredLeases.set(payload.lease_id, {
+      service_session_id: payload.service_session_id,
+      generation: payload.generation,
+    });
     await expect(this.page.getByRole("button", { name: "Acquire lease" })).toBeDisabled();
   }
 
