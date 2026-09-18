@@ -12,6 +12,35 @@ const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../
 const LAUNCHER = join(PACKAGE_ROOT, "test/e2e/installed_test_launcher.py");
 const HELPER_SPECS = join(PACKAGE_ROOT, "test/fixtures/expert_validation_e2e/helper-specs");
 
+/** Product packages come from the task overlay; every other package from the audited
+ *  verified dependency underlay. A missing prefix fails closed instead of filtering. */
+export const OVERLAY_PACKAGES = ["so101_demo_py", "so101_teleop"] as const;
+export const VERIFIED_DEPENDENCY_PACKAGES = [
+  "mujoco_3d_lidar",
+  "mujoco_ros2_control_msgs",
+  "mujoco_ros2_control_plugins",
+  "mujoco_ros2_control",
+  "so101_mujoco_support",
+] as const;
+
+export function resolvePackagePrefixes(
+  overlayPrefix: string,
+  verifiedDependencyPrefix: string,
+): string[] {
+  const resolved: string[] = [];
+  for (const name of [...OVERLAY_PACKAGES, ...VERIFIED_DEPENDENCY_PACKAGES]) {
+    const base = (OVERLAY_PACKAGES as readonly string[]).includes(name)
+      ? overlayPrefix
+      : verifiedDependencyPrefix;
+    const candidate = join(base, name);
+    if (!existsSync(candidate)) {
+      throw new Error(`PACKAGE_PREFIX_MISSING: ${candidate}`);
+    }
+    resolved.push(candidate);
+  }
+  return resolved;
+}
+
 export function installPrefix(): string {
   const value = process.env.SO101_E2E_INSTALL_PREFIX;
   if (!value || !existsSync(join(value, "so101_teleop"))) {

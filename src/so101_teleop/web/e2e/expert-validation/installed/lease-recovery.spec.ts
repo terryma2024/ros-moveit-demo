@@ -51,12 +51,12 @@ async function createManifest(client: Api, totalPoints: number) {
 function fixedConfig(lease: { lease_id: string; generation: number }, session: string, manifestId: string) {
   return {
     service_session_id: session,
+    contract_version: 2,
     lease_id: lease.lease_id,
     lease_generation: lease.generation,
     manifest_id: manifestId,
     execution_mode: "SEQUENTIAL",
     worker_count: 1,
-    max_points_per_worker: 4,
   };
 }
 
@@ -195,7 +195,7 @@ test("S06 start and retry command ids are idempotent spec:default", async ({ ins
   // The same command id with different content is a conflict.
   const conflict = await client.post("/expert-validation/campaigns", {
     ...body,
-    max_points_per_worker: 2,
+    worker_count: 2,
   });
   expect(conflict.status).toBe(409);
   expect(conflict.body.code).toBe("COMMAND_ID_REUSED");
