@@ -130,11 +130,13 @@ def _valid_execute_context(options) -> tuple[DynamicRuntimeContext | None, str |
         if isinstance(options.source_commit, str) and options.source_commit.strip()
         else None
     )
-    if not isinstance(options.installed_prefix, str) or not options.installed_prefix.strip():
-        return None, "EXECUTION_INSTALLED_PREFIX_INVALID"
-    installed_prefix = options.installed_prefix.strip()
-    if not Path(installed_prefix).is_absolute():
-        return None, "EXECUTION_INSTALLED_PREFIX_INVALID"
+    # Optional DEBUG metadata: absence, a relative value or a vanished path is recorded
+    # as an observation and can never refuse the execution.
+    installed_prefix = (
+        options.installed_prefix.strip()
+        if isinstance(options.installed_prefix, str) and options.installed_prefix.strip()
+        else None
+    )
     from ..runtime.provenance import (
         ExecutionProvenanceError,
         verify_execution_provenance,

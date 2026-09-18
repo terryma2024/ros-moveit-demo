@@ -25,7 +25,7 @@ class DynamicRuntimeContext:
     expected_reset_epoch: int
     evidence_root: Path
     source_commit: str | None
-    installed_prefix: str
+    installed_prefix: str | None
     execution_provenance: ExecutionProvenance
     profiler: SemanticProfiler | None = None
     workflow_id: str | None = None
@@ -172,12 +172,14 @@ class DynamicCupPickPlaceExecutor:
             and isinstance(context.evidence_root, Path)
             and context.evidence_root.is_absolute()
             and (context.source_commit is None or type(context.source_commit) is str)
-            and type(context.installed_prefix) is str
-            and bool(context.installed_prefix)
-            and Path(context.installed_prefix).is_absolute()
+            # The installed prefix is optional DEBUG metadata: its presence, shape or
+            # agreement is never an admission rule. Real resources are validated where
+            # they are actually used.
+            and (
+                context.installed_prefix is None
+                or type(context.installed_prefix) is str
+            )
             and isinstance(context.execution_provenance, ExecutionProvenance)
-            and context.execution_provenance.installed_prefix
-            == context.installed_prefix
             and context.execution_provenance.session_id == context.session_id
             and context.execution_provenance.expected_reset_epoch
             == context.expected_reset_epoch

@@ -27,7 +27,7 @@ class CompositionRequest:
     policy_version: str
     share_dir: Path
     source_commit: str
-    installed_prefix: Path
+    installed_prefix: Path | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,7 +98,9 @@ def compose_backend(
     bundle = build_bundle_manifest(
         {
             "backend": request.backend,
-            "installed_prefix": str(request.installed_prefix),
+            "installed_prefix": (
+                None if request.installed_prefix is None else str(request.installed_prefix)
+            ),
             "policy": policy.path,
             "policy_manifest": policy.path.parent / "manifest.yaml",
             "source_commit": request.source_commit,

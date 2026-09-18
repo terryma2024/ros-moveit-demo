@@ -61,6 +61,13 @@ def _materialize(monkeypatch, tmp_path: Path, **overrides):
             package_prefix="/tmp/so101-text-agent-install",
         ),
     )
+    # The executable is resolved functionally at use time; this test owns launch argv
+    # composition, so it pins the resolved path (discovery has its own coverage).
+    monkeypatch.setattr(
+        launch_composition,
+        "installed_executable",
+        lambda name: Path("/tmp/so101-text-agent-install/lib/so101_demo_py") / name,
+    )
     exit_status = launch_composition.PerceptionLaunchExitStatus()
     description = _builder()(exit_status)
     declared = _declared(description)

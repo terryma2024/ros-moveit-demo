@@ -43,7 +43,7 @@ def write_dynamic_plan_manifest(
     *,
     backend: str,
     source_commit: str,
-    installed_prefix: str,
+    installed_prefix: str | None,
     policy_path: Path,
     policy_sha256: str,
     qualification_status: str,
