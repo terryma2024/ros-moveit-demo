@@ -1269,7 +1269,19 @@ def prepare_batch(
             "worker_count": worker_count,
             "evidence_root": str(evidence_root),
             "provenance": dict(provenance),
-            "start_guard": None if guard_summary is None else dict(guard_summary),
+            "start_guard": None if guard_summary is None else {
+                # Deterministic facts only: a resume must reproduce this manifest byte for
+                # byte, so observations, timestamps and busy ratios stay in the guard
+                # evidence instead of the frozen batch plan.
+                "status": guard_summary["status"],
+                "cleanup_state": guard_summary["cleanup_state"],
+                "gpu_uuid": guard_summary["gpu_uuid"],
+                "checks": {
+                    name: {"status": check["status"], "reason": check["reason"],
+                           "cutoff": check["cutoff"], "unit": check["unit"]}
+                    for name, check in sorted(guard_summary["checks"].items())
+                },
+            },
         }
     if options.resume:
         existing = _read_existing_json(

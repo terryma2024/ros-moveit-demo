@@ -1393,6 +1393,11 @@ class WorkerResourceAllocator:
         document = {
             'status': result.status,
             'reason': admission.reason,
+            'checks': {
+                name: {'status': check.status, 'reason': check.reason,
+                       'cutoff': check.cutoff, 'unit': check.unit}
+                for name, check in sorted(result.checks.items())
+            },
             'checked_monotonic_s': result.completed_monotonic_s,
             'cleanup_state': result.cleanup_state,
             'gpu_uuid': admission.gpu_uuid,

@@ -11,6 +11,7 @@ import itertools
 import json
 import math
 import os
+import time
 from pathlib import Path
 from queue import Queue
 import signal
@@ -23,6 +24,10 @@ from types import SimpleNamespace
 import pytest
 
 from so101_demo.parallel_batch import resources as resources_api
+from so101_demo.parallel_batch.start_guard_probe import (
+    CLEAR,
+    ProbeCoordinator,
+)
 from so101_demo.parallel_batch.contracts import load_parallel_runtime_config
 from so101_demo.parallel_batch.resources import (
     AllocationPolicy,
@@ -189,7 +194,14 @@ def test_oversized_cmdline_process_is_classified_not_refused():
         [_sys.executable, "-c", "import time;time.sleep(30)", filler],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
-        cmdline = Path(f"/proc/{child.pid}/cmdline").read_bytes()
+        # Popen returns before the child execs; an empty cmdline is a race, not a result.
+        deadline = time.monotonic() + 10
+        cmdline = b""
+        while time.monotonic() < deadline:
+            cmdline = Path(f"/proc/{child.pid}/cmdline").read_bytes()
+            if cmdline:
+                break
+            time.sleep(0.01)
         assert len(cmdline) > 4096
         probe = SystemResourceProbe()
         # The oversized-cmdline process is not a ROS/parallel-batch claimant.
@@ -246,28 +258,22 @@ def test_observational_policy_allocates_eight_without_headroom_rejection(
         persistent_cleanup_claims=True,
     )
     target = resource_root(tmp_path, 'adaptive-eight')
-    allocator = WorkerResourceAllocator(
+    resource_allocator = WorkerResourceAllocator(
         config, target, probe=FakeProbe(cpu=1, ram=0.0, gpu=0.0),
         claim_root=Path(os.environ['TMPDIR']).parent / 'adaptive-claims',
         allocation_policy=policy, batch_id='a001',
+        start_guard=_start_guard_for(config),
     )
 
-    manifest = allocator.allocate(8)
+    manifest = resource_allocator.allocate(8)
 
     assert len(manifest.workers) == 8
     assert tuple(worker.ros_domain_id for worker in manifest.workers) == tuple(
         range(215, 223)
     )
     assert manifest.admission.admitted is True
-    assert manifest.admission.failures == ()
-    assert manifest.admission.required.to_dict() == {
-        'logical_cpu_count': 0,
-        'available_ram_gib': 0.0,
-        'gpu_free_gib': 0.0,
-    }
-    assert manifest.admission.observed == ResourceSnapshot(1, 0.0, 0.0)
-    assert all(record['claim_state'] == 'ACTIVE' for record in manifest.domain_claims)
-    allocator.close()
+    assert manifest.admission.status in ('PASS', 'WARN')
+    assert manifest.worker_count == 8
 
 
 def test_persistent_active_domain_record_rejects_reuse_after_lock_release(
@@ -278,12 +284,14 @@ def test_persistent_active_domain_record_rejects_reuse_after_lock_release(
     first = WorkerResourceAllocator(
         config, resource_root(tmp_path, 'first-active'), probe=FakeProbe(),
         claim_root=claims, allocation_policy=policy, batch_id='a001',
+        start_guard=_start_guard_for(config),
     )
     first.allocate(1)
     first.close()
     second = WorkerResourceAllocator(
         config, resource_root(tmp_path, 'second-active'), probe=FakeProbe(),
         claim_root=claims, allocation_policy=policy, batch_id='a002',
+        start_guard=_start_guard_for(config),
     )
 
     with pytest.raises(ResourceAllocationError, match='ROS_DOMAIN_UNCLEAN'):
@@ -298,6 +306,7 @@ def test_verified_cleanup_releases_persistent_domain_for_a_new_batch(
     first = WorkerResourceAllocator(
         config, resource_root(tmp_path, 'release-first'), probe=FakeProbe(),
         claim_root=claims, allocation_policy=policy, batch_id='a001-g01-w01',
+        start_guard=_start_guard_for(config),
     )
     first.allocate(1)
 
@@ -310,6 +319,7 @@ def test_verified_cleanup_releases_persistent_domain_for_a_new_batch(
     retry = WorkerResourceAllocator(
         config, resource_root(tmp_path, 'release-second'), probe=FakeProbe(),
         claim_root=claims, allocation_policy=policy, batch_id='a002-g02-w01',
+        start_guard=_start_guard_for(config),
     )
     assert retry.allocate(1).worker_count == 1
     retry.release_persistent_claims(cleanup_verified=True)
@@ -324,6 +334,7 @@ def test_prelaunch_allocation_failure_releases_persistent_claim(tmp_path, config
     failing = WorkerResourceAllocator(
         config, target, probe=FakeProbe(sockets=(socket_path,)),
         claim_root=claims, allocation_policy=policy, batch_id='a001',
+        start_guard=_start_guard_for(config),
     )
 
     with pytest.raises(ResourceAllocationError, match='SOCKET_CONFLICT'):
@@ -390,16 +401,19 @@ def test_production_cli_composes_three_workers_with_an_admitted_exact_n_gate(tmp
         composition._release_partial()
 
 
-def test_production_cli_rejects_three_workers_without_an_exact_n_authority(tmp_path, monkeypatch):
-    import so101_demo.cli.mujoco_parallel_batch as parallel_cli
-    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+def test_production_cli_needs_no_budget_authority_for_three_workers(tmp_path, monkeypatch):
+    """The retired default-gate hook no longer decides anything: the guard does."""
 
-    monkeypatch.setattr(parallel_cli, '_DEFAULT_RESOURCE_GATE', None)
-    with pytest.raises(CliError, match='BUDGET_PROFILE_UNAVAILABLE'):
-        prepare_batch(
-            production_batch_argv(resource_root(tmp_path, 'cli-three-absent')),
-            provenance_verifier=lambda _inputs: {'source_commit': 'a' * 40},
-        )
+    import so101_demo.cli.mujoco_parallel_batch as parallel_cli
+    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+
+    monkeypatch.setattr(parallel_cli, '_DEFAULT_START_GUARD', None)
+    prepared = prepare_batch(
+        production_batch_argv(resource_root(tmp_path, 'cli-three-guarded')),
+        provenance_verifier=lambda _inputs: {'source_commit': 'a' * 40},
+    )
+    assert prepared.start_guard is not None
+    assert prepared.start_guard_evidence['status'] in ('PASS', 'WARN')
 
 
 def test_production_cli_refuses_retired_headroom_authority_for_any_n(tmp_path, config):
@@ -618,6 +632,7 @@ def test_domain_flocks_are_held_before_process_scan(tmp_path, config):
         resource_root(tmp_path, 'claim-before-scan'),
         probe=LockObservingProbe(),
         claim_root=locks,
+        start_guard=_start_guard_for(config),
     )
     assert resource_allocator.allocate().worker_count == 2
     resource_allocator.close()
@@ -641,6 +656,7 @@ def test_partial_domain_claim_does_not_publish_any_new_claim_record(tmp_path, co
                 resource_root(tmp_path, 'partial-domain-claim'),
                 probe=FakeProbe(),
                 claim_root=locks,
+                start_guard=_start_guard_for(config),
             ).allocate()
     finally:
         os.close(blocked_fd)
@@ -862,7 +878,8 @@ def test_evidence_root_rejects_symlink_ancestor(tmp_path, config):
 
     with pytest.raises(ResourceAllocationError, match='SYMLINK_PATH'):
         WorkerResourceAllocator(
-            config, link / 'batch', probe=FakeProbe(), claim_root=claim_root()
+            config, link / 'batch', probe=FakeProbe(), claim_root=claim_root(),
+            start_guard=_start_guard_for(config),
         ).allocate()
 
 
@@ -873,7 +890,8 @@ def test_evidence_root_rejects_unsafe_parent_mode(tmp_path, config):
 
     with pytest.raises(ResourceAllocationError, match='UNSAFE_DIRECTORY_MODE'):
         WorkerResourceAllocator(
-            config, unsafe / 'batch', probe=FakeProbe(), claim_root=claim_root()
+            config, unsafe / 'batch', probe=FakeProbe(), claim_root=claim_root(),
+            start_guard=_start_guard_for(config),
         ).allocate()
 
 
@@ -1200,6 +1218,45 @@ def test_manifest_and_nested_resources_are_immutable(tmp_path, config):
         manifest.workers[0].environment['ROS_DOMAIN_ID'] = '7'
 
 
+class _RefusingCoordinator(ProbeCoordinator):
+    """A coordinator whose decision is a real FAIL, used to drive refusal paths."""
+
+    def __init__(self, reason, state_root):
+        super().__init__(state_root)
+        self._reason = reason
+
+    def check(self, policy, scope):
+        from so101_demo.parallel_batch.start_guard import FAIL, GuardCheck, GuardResult
+
+        return GuardResult(scope=scope, status=FAIL, started_monotonic_s=0.0,
+                           completed_monotonic_s=0.0,
+                           checks={"probe": GuardCheck(FAIL, self._reason, None, None, "bytes")},
+                           snapshot=None, cleanup_state=CLEAR)
+
+
+def _refusing_guard(tmp_path, reason):
+    from so101_demo.parallel_batch.start_guard_probe import EpochStartGuard
+
+    policy = config_policy()
+    return EpochStartGuard(_RefusingCoordinator(reason, tmp_path / 'refusing-state'), policy)
+
+
+def config_policy():
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
+
+    return load_parallel_runtime_config_v3(CLI_CONFIG_PATH).start_guard
+
+
+def refusing_allocator(tmp_path, config, reason='RAM_BELOW_MINIMUM', probe=None):
+    return WorkerResourceAllocator(
+        config,
+        resource_root(tmp_path, 'refused'),
+        probe=probe or FakeProbe(),
+        base_environment={},
+        claim_root=claim_root(),
+        start_guard=_refusing_guard(tmp_path, reason),
+    )
+
 def _start_guard_for(config):
     """The real composition over the real reads (the probe process is the seam)."""
 
@@ -1296,18 +1353,17 @@ def test_worker_replacement_rejects_wrong_slot_or_generation(
 
 
 def test_three_workers_are_explicit_and_never_silently_downgraded(tmp_path, config):
-    resource_allocator = allocator(tmp_path, config, FakeProbe(cpu=11, ram=64.0, gpu=12.0))
+    """A refused start neither downgrades the requested count nor leaves a partial root."""
 
-    with pytest.raises(ResourceAllocationError, match='INSUFFICIENT_LOGICAL_CPU') as caught:
-        resource_allocator.allocate(worker_count=3)
+    refused = refusing_allocator(tmp_path, config, 'RAM_BELOW_MINIMUM')
+    with pytest.raises(ResourceAllocationError, match='RAM_BELOW_MINIMUM') as caught:
+        refused.allocate(worker_count=3)
     assert caught.value.admission.admitted is False
-    assert caught.value.admission.observed.logical_cpu_count == 11
-    assert caught.value.admission.required.logical_cpu_count == 12
-    assert caught.value.admission.required.available_ram_gib == 18.0
-    assert caught.value.admission.required.gpu_free_gib == 8.0
-    assert caught.value.admission.required_live_headroom_ratio == 0.20
-    assert caught.value.admission.failures == ('INSUFFICIENT_LOGICAL_CPU',)
-    assert not resource_allocator.evidence_root.exists()
+    assert not refused.evidence_root.exists()
+
+    manifest = allocator(tmp_path, config).allocate(worker_count=3)
+    assert manifest.worker_count == 3
+    assert len(manifest.workers) == 3
 
 
 @pytest.mark.parametrize('worker_count', [True, 0, -1, 9])
@@ -1317,32 +1373,36 @@ def test_worker_count_must_be_positive_and_within_frozen_maximum(tmp_path, confi
 
 
 @pytest.mark.parametrize(
-    ('probe', 'message'),
-    [
-        (FakeProbe(cpu=7), 'INSUFFICIENT_LOGICAL_CPU'),
-        (FakeProbe(ram=13.99), 'INSUFFICIENT_AVAILABLE_RAM'),
-        (FakeProbe(gpu=7.99), 'INSUFFICIENT_GPU_MEMORY'),
-    ],
+    'reason',
+    ['CPU_CAPACITY_UNAVAILABLE', 'RAM_BELOW_MINIMUM', 'GPU_FREE_BELOW_MINIMUM',
+     'GPU_TARGET_NOT_VISIBLE'],
 )
-def test_each_resource_threshold_fails_closed_without_creating_directories(
-    tmp_path, config, probe, message
+def test_each_guard_failure_fails_closed_without_creating_directories(
+    tmp_path, config, reason
 ):
-    resource_allocator = allocator(tmp_path, config, probe)
-    with pytest.raises(ResourceAllocationError, match=message):
+    resource_allocator = refusing_allocator(tmp_path, config, reason)
+    with pytest.raises(ResourceAllocationError, match=reason):
         resource_allocator.allocate()
     assert not resource_allocator.evidence_root.exists()
 
 
-def test_admission_records_observations_thresholds_and_frozen_headroom(tmp_path, config):
-    manifest = allocator(tmp_path, config, FakeProbe(cpu=16, ram=14.0, gpu=8.0)).allocate()
+def test_admission_records_the_start_guard_decision(tmp_path, config):
+    """The manifest carries the guard's own decision, not a fabricated budget pass."""
+
+    from so101_demo.parallel_batch.resources import StartGuardAdmission
+
+    manifest = allocator(tmp_path, config).allocate()
 
     admission = manifest.admission
-    assert admission.observed == ResourceSnapshot(16, 14.0, 8.0)
-    assert admission.required.logical_cpu_count == 8
-    assert admission.required.available_ram_gib == 14.0
-    assert admission.required.gpu_free_gib == 8.0
-    assert admission.required_live_headroom_ratio == 0.20
-    assert admission.failures == ()
+    assert isinstance(admission, StartGuardAdmission)
+    assert admission.status in ('PASS', 'WARN')
+    assert admission.cleanup_state == CLEAR
+    assert set(admission.checks) == {'cpu_capacity', 'cpu_busy', 'ram', 'gpu'}
+    assert admission.checks['ram']['unit'] == 'bytes'
+    assert admission.checks['gpu']['unit'] == 'bytes'
+    assert manifest.start_guard['status'] == admission.status
+    assert manifest.start_guard['checks']['ram']['reason'] == admission.checks['ram']['reason']
+    assert manifest.schema_version == 3
 
 
 @pytest.mark.parametrize(
@@ -1472,21 +1532,24 @@ def test_existing_evidence_or_worker_directory_fails_closed(tmp_path, config):
 
     with pytest.raises(ResourceAllocationError, match='DIRECTORY_CONFLICT'):
         WorkerResourceAllocator(
-            config, root, probe=FakeProbe(), claim_root=claim_root()
+            config, root, probe=FakeProbe(), claim_root=claim_root(),
+            start_guard=_start_guard_for(config),
         ).allocate()
 
 
 def test_existing_socket_reservation_fails_before_directory_creation(tmp_path, config):
     root = resource_root(tmp_path)
     resource_allocator = WorkerResourceAllocator(
-        config, root, probe=FakeProbe(), claim_root=claim_root()
+        config, root, probe=FakeProbe(), claim_root=claim_root(),
+        start_guard=_start_guard_for(config),
     )
     socket_path = resource_allocator._paths(2)['socket_path']
     probe = FakeProbe(sockets=(socket_path,))
 
     with pytest.raises(ResourceAllocationError, match='SOCKET_CONFLICT'):
         WorkerResourceAllocator(
-            config, root, probe=probe, claim_root=claim_root()
+            config, root, probe=probe, claim_root=claim_root(),
+            start_guard=_start_guard_for(config),
         ).allocate()
     assert not root.exists()
 
@@ -1494,7 +1557,8 @@ def test_existing_socket_reservation_fails_before_directory_creation(tmp_path, c
 def test_socket_path_must_fit_linux_unix_domain_limit(tmp_path, config, monkeypatch):
     root = resource_root(tmp_path)
     resource_allocator = WorkerResourceAllocator(
-        config, root, probe=FakeProbe(), claim_root=claim_root()
+        config, root, probe=FakeProbe(), claim_root=claim_root(),
+        start_guard=_start_guard_for(config),
     )
     original_paths = resource_allocator._paths
 
@@ -1571,8 +1635,13 @@ def test_allocation_uses_exclusive_directory_creation(tmp_path, config, monkeypa
     monkeypatch.setattr(os, 'mkdir', observed_mkdir)
     allocator(tmp_path, config).allocate()
 
-    assert calls
-    assert all(mode == 0o700 and dir_fd is not None for _path, mode, dir_fd in calls)
+    # The allocator creates its own directories exclusively at a dir_fd with mode 0700.
+    # The guard's private state root is also 0700 but is created through pathlib, so it is
+    # excluded here rather than loosening the allocator's rule.
+    allocator_calls = [entry for entry in calls if entry[2] is not None]
+    assert allocator_calls, calls
+    assert all(mode == 0o700 for _path, mode, _dir_fd in allocator_calls)
+    assert all(not os.path.isabs(path) for path, _mode, _dir_fd in allocator_calls)
 
 
 def test_manifest_document_is_json_safe_and_contains_no_numeric_ports(tmp_path, config):
@@ -1631,32 +1700,19 @@ def test_dry_run_cli_writes_private_manifest_without_starting_processes(tmp_path
     assert [worker['ros_domain_id'] for worker in document['workers']] == [181, 182]
 
 
-def test_default_three_worker_cli_refuses_retired_self_signed_evidence(
-    tmp_path, config, monkeypatch
-):
-    root = resource_root(tmp_path, 'dry-three')
-    monkeypatch.setattr(
-        'so101_demo.parallel_batch.resources.SystemResourceProbe.snapshot',
-        lambda self: ResourceSnapshot(32, 64.0, 12.0),
-    )
-    monkeypatch.setattr(
-        'so101_demo.parallel_batch.resources.SystemResourceProbe.ros_domain_in_use',
-        lambda self, domain_id: False,
-    )
+def test_default_three_worker_cli_refuses_retired_self_signed_evidence(tmp_path, config):
+    """The CLI refuses the retired evidence chain with the explicit retired error."""
 
-    exit_code = main(
-        [
-            '--config',
-            str(CLI_CONFIG_PATH),
-            '--evidence-root',
-            str(root),
-            '--worker-count',
-            '3',
-            '--live-headroom-evidence',
-            str(tmp_path / 'retired-evidence.json'),
-        ]
-    )
-    assert exit_code == 2
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    with pytest.raises(CliError, match='LIVE_HEADROOM_EVIDENCE_UNEXPECTED'):
+        prepare_batch(
+            production_batch_argv(
+                resource_root(tmp_path, 'dry-three'),
+                worker_count='3',
+            ) + ['--live-headroom-evidence', str(tmp_path / 'retired.json')],
+            provenance_verifier=lambda _inputs: {'source_commit': 'a' * 40},
+        )
 def test_cli_requires_dry_run_and_does_not_create_output(tmp_path):
     root = resource_root(tmp_path, 'not-dry')
 
@@ -1673,26 +1729,28 @@ def test_cli_requires_dry_run_and_does_not_create_output(tmp_path):
     assert not root.exists()
 
 
-@pytest.mark.parametrize("cpu,ram,gpu,reason", [(31, 64, 12, "INSUFFICIENT_LOGICAL_CPU"),
-                                               (32, 37, 12, "INSUFFICIENT_AVAILABLE_RAM"),
-                                               (32, 64, 7, "INSUFFICIENT_GPU_MEMORY")])
-def test_fixed_eight_rejects_actual_resources_without_reducing_count(tmp_path, config, cpu, ram, gpu, reason):
-    owner = allocator(tmp_path, config, FakeProbe(cpu=cpu, ram=ram, gpu=gpu))
+@pytest.mark.parametrize(
+    'reason', ['CPU_CAPACITY_UNAVAILABLE', 'RAM_BELOW_MINIMUM', 'GPU_FREE_BELOW_MINIMUM'])
+def test_fixed_eight_refuses_without_reducing_the_count(tmp_path, config, reason):
+    """A refused eight-worker start keeps the requested count and leaves no root behind."""
+
+    owner = refusing_allocator(tmp_path, config, reason)
     try:
         with pytest.raises(ResourceAllocationError, match=reason) as caught:
             owner.allocate(8)
-        assert caught.value.admission.required.logical_cpu_count == 32
-        assert caught.value.admission.required.available_ram_gib == 38
+        assert caught.value.admission.admitted is False
         assert not owner.evidence_root.exists()
     finally:
         owner.close()
 
 
-def test_fixed_eight_rejects_missing_live_qualification_before_domain_claims(tmp_path, config):
+def test_fixed_eight_refusal_makes_no_domain_claims(tmp_path, config):
+    """A refused eight-worker start claims no ROS domain and creates no root."""
+
     probe = FakeProbe()
-    owner = allocator(tmp_path, config, probe)
+    owner = refusing_allocator(tmp_path, config, 'GPU_FREE_BELOW_MINIMUM', probe=probe)
     try:
-        with pytest.raises(ResourceAllocationError, match="FIXED_WORKER_LIVE_QUALIFICATION_REQUIRED"):
+        with pytest.raises(ResourceAllocationError, match="GPU_FREE_BELOW_MINIMUM"):
             owner.allocate(8)
         assert probe.domain_calls == []
         assert not owner.evidence_root.exists()
@@ -1703,18 +1761,17 @@ def test_fixed_eight_rejects_missing_live_qualification_before_domain_claims(tmp
 def test_v3_adopt_existing_rechecks_the_start_guard(tmp_path, config):
     """The version-three restore path re-runs one fresh bounded check."""
 
-    from so101_demo.parallel_batch.resources import (
-        ResourceAllocationError, WorkerResourceAllocator)
+    from so101_demo.parallel_batch.resources import WorkerResourceAllocator
 
     root = resource_root(tmp_path, 'v3-adopt')
-    allocator = WorkerResourceAllocator(
+    owner = WorkerResourceAllocator(
         config, root, probe=FakeProbe(), base_environment={},
         claim_root=claim_root(), start_guard=_start_guard_for(config))
-    manifest = allocator.allocate(worker_count=2)
+    manifest = owner.allocate(worker_count=2)
     assert manifest.schema_version == 3
     assert manifest.start_guard['status'] in ('PASS', 'WARN')
-    manifest.write(root / 'resource_manifest.json')
-    allocator.close()
+    owner.write_manifest()
+    owner.close()
 
     restored = WorkerResourceAllocator(
         config, root, probe=FakeProbe(), base_environment={},

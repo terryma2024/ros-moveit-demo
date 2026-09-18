@@ -2065,7 +2065,7 @@ def test_frozen_worker_topology_defaults_to_two_by_ten(tmp_path):
     assert prepared.request.worker_count == 2
     assert not hasattr(prepared.request, "max_points_per_worker")
     assert prepared.manifest["worker_count"] == 2
-    assert prepared.manifest["schema_version"] == 2
+    assert prepared.manifest["schema_version"] == 3
     assert "max_points_per_worker" not in prepared.manifest
 
 
@@ -3475,7 +3475,7 @@ def test_existing_worker_fetches_current_broker_before_each_request_and_recovery
             return {"payload": {
                 "request_id": "attempt-1-plastic-cup-yolo11n-seg-v1",
                 "model_id": "plastic-cup-yolo11n-seg-v1",
-                "model_version": load_parallel_runtime_config_v2(
+                "model_version": load_parallel_runtime_config_v3(
                     CONFIG
                 ).yolo_weights_sha256,
                 "broker_generation": 2,
