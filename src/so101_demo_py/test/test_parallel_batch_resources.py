@@ -2767,8 +2767,10 @@ def test_socket_path_must_fit_linux_unix_domain_limit(tmp_path, config, monkeypa
 
     def paths_with_long_socket(slot_index):
         paths = original_paths(slot_index)
+        # The kernel limit applies to the short dirfd sockaddr, so the true oversized
+        # boundary is an overlong basename, not a long durable canonical ancestor.
         paths['socket_namespace'] = tmp_path / ('x' * 100)
-        paths['socket_path'] = paths['socket_namespace'] / 'control.sock'
+        paths['socket_path'] = paths['socket_namespace'] / ('control-' + 'y' * 120 + '.sock')
         return paths
 
     monkeypatch.setattr(resource_allocator, '_paths', paths_with_long_socket)
