@@ -603,11 +603,17 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
     if external_binding is not None:
         repository_root = _external_binding_source_root(Path(external_binding))
     else:
-        repository_root = module_path.parents[3]
-        if not (repository_root / "src/so101_demo_py").is_dir():
-            raise CliError("PROVENANCE_SOURCE_ROOT")
-    repository_root = Path(repository_root).resolve()
-    source_commit = observed_source_commit(repository_root)
+        candidate = module_path.parents[3]
+        # A copied install has no source checkout next to its modules. The source root only
+        # feeds a debug observation, so a missing one records "unknown" instead of refusing
+        # the run -- this was the gate that killed the coordinator of the live campaign
+        # (PROVENANCE_SOURCE_ROOT) and it is exactly the runtime admission the lightweight
+        # start guard removed.
+        repository_root = candidate if (candidate / "src/so101_demo_py").is_dir() else None
+    source_commit = (
+        observed_source_commit(Path(repository_root).resolve())
+        if repository_root is not None else None
+    )
     source_dirty = _observed_source_dirty(repository_root)
     package_root = repository_root / "src/so101_demo_py"
     console = shutil.which("so101_parallel_batch")
