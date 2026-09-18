@@ -400,8 +400,48 @@ class MeasurementSession:
             "limits": dict(self.limits),
         }
         self._bind_control()
+        self.baseline["samples"] = self._run_baseline()
         self._record("BASELINE_END")
         return dict(self.baseline)
+
+    def _run_baseline(self) -> int:
+        """Persist a genuine pre-workload baseline and return its sample count.
+
+        Policy amendment 74d6b781: the baseline is at least ``baseline_minimum_s`` of real
+        CPU/RAM/GPU samples at ``resource_sample_interval_s``, persisted as they are taken,
+        with the stop capability able to interrupt it. A single endpoint reading is not a
+        replacement, and a cold-start peak must not be hidden by preloading the workload.
+        """
+
+        interval = max(float(self.sampling.resource_sample_interval_s), 0.001)
+        minimum = float(self.sampling.baseline_minimum_s)
+        path = self.batch_root / "raw/baseline-samples.jsonl"
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        deadline = float(self.clock()) + minimum
+        sequence = 0
+        while not self._stopped.is_set():
+            now = float(self.clock())
+            if sequence and now >= deadline:
+                break
+            sequence += 1
+            sample = self._observe()
+            record = {
+                "sequence": sequence,
+                "monotonic_s": now,
+                "capacity": dict(sample.capacity),
+                "observed": dict(sample.observed),
+                "background": dict(sample.background),
+                "tool_overhead": dict(sample.tool_overhead),
+                "attribution_complete": bool(sample.attribution_complete),
+                "throttled": bool(sample.throttled),
+            }
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(record, sort_keys=True) + "\n")
+            if not self._stopped.wait(interval):
+                continue
+            break
+        path.chmod(0o600)
+        return sequence
 
     def _observe(self):
         if self._observation_source is not None:
