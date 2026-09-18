@@ -3541,3 +3541,23 @@ walk) and move whatever dominates off the primary grid -- the NVML and PSS walks
 suspects, and the opening pass pays any one-time library or cache cost that later passes do not.
 Widening the gap allowance stays off the table; it is policy. N1 remains `NOT_MEASURED` and nothing
 is extrapolated to another N.
+
+## CP-UQ60 — Correction to CP-UQ59: no recorded gap breaches the allowance
+
+CP-UQ59 was written in the same command that measured the numbers, and its framing is wrong. The
+measured values are: `SAMPLING_START` to the first sample **21.3 ms**, steady gaps 51.2, 49.4,
+53.0, 68.4, 79.2 ms (max 79.2 ms). Every one of them is inside the 100 ms allowance, so the
+opening pass did not cost 190 ms and no sample gap explains the `SAMPLER_GAP` latch at 0.50 s. The
+sentence in CP-UQ59 that read "the first sampling pass cost ${FIRST_GAP} ms, nearly twice it" is
+withdrawn, as is the profiling conclusion built on it.
+
+What the evidence does say is narrower and more useful: the latch was raised even though the
+sampler was sampling on time, so the next step is to record the control's own view -- `t_last_sample`,
+`t_breach`, `t_detect`, `t_abort_latch` -- in the cleanup receipt instead of inferring it from the
+session's lifecycle events. CP-UQ59's own text already noted that the receipt carries no
+`t_last_sample`, which is exactly the gap in the evidence that made inference necessary. Two
+candidate causes remain open and are cheap to separate once those four timestamps are recorded:
+the `_last_sample_s is None` branch firing before the sampler published (the run4 race, if
+`mark_sampling_start` is not reached because the control is bound after `SAMPLING_START`), or a
+health check called with a `now` far from the sampler's clock. N1 remains `NOT_MEASURED`; nothing is
+extrapolated to another N.
