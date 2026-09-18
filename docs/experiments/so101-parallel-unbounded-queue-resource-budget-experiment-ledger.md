@@ -41,9 +41,13 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ31 (see the tail of this file; CP-UQ32 appended there for the current unit)
-next_experiment: EXP-UQ32 Task12 freeze completion, real ament_python 8-worker package gate, Stages B-E
-  within the latest user authorization
+latest_checkpoint: CP-UQ114 (tail of this file)
+superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
+superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
+  SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
+superseding_design: docs/superpowers/specs/2026-09-19-so101-parallel-validation-lightweight-start-guard-design.md
+  SHA-256 73cc295ce6fba187c85e38081c458112b448357e844c7afa9e3a06ed3f2bfdb5
+next_experiment: Task 2 - shared start_guard decision model and cheap CPU/RAM/GPU reads
 ```
 
 ## Approvals (four independent authorities; plan lines 13-25, 36-40, 144, 193)
@@ -5060,3 +5064,91 @@ and the metering machinery works -- it measured a full stack start-up, a 60.2 s 
 persisted 50 ms samples and a 25 ms peak-alias cross-check -- and its refusal here is the rule working
 as specified, not an instrumentation failure. What it cannot do under an unchanged envelope is certify
 an N=1 deployment whose start-up momentarily wants the whole machine.
+
+
+## CP-UQ114 — New approved dispatch: the budget chain is deleted, a lightweight start guard replaces it
+
+**Task 1 of the approved 12-task plan (retire, classify, and record).** Dispatch
+`b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b`, user instruction "把上面的计划发布给dst。给它设定goal模式 budget
+100轮。" The handoff supersedes the earlier DESIGN_ONLY/PLAN_ONLY conditions and the Stage C halt: the
+retired per-N budget goal is replaced by the lightweight start guard, and the old **C/D budget stages
+are recorded as `NOT_APPLICABLE_SUPERSEDED`** (not PASS, not DONE).
+
+Approved artifacts, all four read in full and hash-verified against the handoff before any edit:
+
+| Artifact | SHA-256 | Verdict |
+| --- | --- | --- |
+| design `.../specs/2026-09-19-...-lightweight-start-guard-design.md` | `73cc295ce6fba187c85e38081c458112b448357e844c7afa9e3a06ed3f2bfdb5` | Astra/High PASS |
+| plan `.../plans/2026-09-19-...-lightweight-start-guard-implementation.md` | `d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141` | Astra/High PASS |
+| design review `.../reviews/2026-09-19-...-design-review.md` | `dda84f76c3855864545c958fd1b475b437a6fd4ecd4841caf2630f38d5eaab91` | PASS |
+| plan review `.../reviews/2026-09-19-...-plan-review.md` | `810c876587fa74af4c5d1e03cd34eabd6161217bad1b4a865d8b935fc42fa26a` | PASS |
+
+The four documents live in the package directory
+`followups/lightweight-start-guard-b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b/docs/superpowers/...`; that
+is where the hashes match. The same relative paths under the worktree still hold only the 2026-09-18
+documents.
+
+**Receipt, probe, goal.** First action was an `O_EXCL` create of `executor.receipt` holding exactly
+`b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b` + LF (37 bytes, sha256
+`faa3c4afd5c64224c8ce6605ed9e708527f319d17dfb70b71e2f9006c62fa29a`, never rewritten). The startup
+probe (`startup-probe.log`, `startup-probe-result.json`) collected real facts, not hardcoded ones:
+host `AI-STATION-001`, branch `codex/so101-unbounded-queue-resource-budget`, HEAD
+`a87f77dbe374bf741d745a6f34120ec38e2fb31d` with a clean tree, pane `%68`/launcher PID 1345571,
+ledger 340288 bytes, and all four document hashes with `documents_all_match: true`. Two commands
+exited non-zero and are recorded as such: `git rev-parse @{u}` (128, the branch has no upstream) and a
+bare `import so101_demo` (1, expected without the task environment).
+
+The orchestrator's `/goal clear` was verified rather than assumed: `get_goal` returned
+`{"goal": null}`. The fresh goal was then created with the handoff's exact objective and budget:
+`goal-e568087d-20f9-4203-8ca6-2a14d59fff8e`, revision 1, `maxGoalRounds 100`, `roundsStarted 0`,
+active/armed, saved in `goal-created.json`. The previous goal
+`goal-d30193b8-a2e5-495d-b6c7-6879782448ac` (blocked, 69/140) was cleared, not resumed and not marked
+complete.
+
+**Source drift checked before trusting the plan.** The reviewed plan names remote HEAD `207828d5` as
+its source reference. That commit is an ancestor of the current HEAD and **12 commits behind it**, so
+every path the plan names is re-verified against `a87f77db` before editing rather than assumed.
+
+**Retirement map** (new unique migration dir
+`migration-light.lS2WzrsrZ/`, `retirement-map.json` + `retirement-map.md` +
+`analysis/symbol-references.json`). The honest headline is that the budget chain is a closed island:
+the four budget modules have exactly four non-test importers, all of them either the retired
+measurement CLI or a product call site this migration re-wires.
+
+| Module | Lines | Verdict | Non-test importers |
+| --- | --- | --- | --- |
+| `parallel_batch/resource_budget.py` | 2232 | delete | measure CLI, `cli/mujoco_parallel_batch.py`, `adaptive_pool.py`, `owned_resources.py`, `resource_measurement.py`, `resources.py`, teleop `production.py` |
+| `parallel_batch/resource_measurement.py` | 1410 | delete | measure CLI, `cli/mujoco_parallel_batch.py`, `owned_resources.py`, `resources.py` |
+| `parallel_batch/measurement_control.py` | 347 | delete | measure CLI, `owned_resources.py`, `resource_measurement.py` |
+| `parallel_batch/owned_resources.py` | 889 | delete | measure CLI only |
+
+151 externally named symbols were classified, each with its callers, and the classification is
+deliberately conservative in one place: nine names (`_SHA256`, `_IDENTIFIER`, `_require_sha256`,
+`_CGROUP_ROOT`, `_EVENT_NAMES`, `_write_private`, …) are *name collisions* with unrelated modules, so
+they are recorded as collisions rather than counted as real dependencies. The four product call sites
+to re-wire are `cli/mujoco_parallel_batch.py` (L454/497/1101), `resources.py` (L1357/2608/2628),
+`adaptive_pool.py` (L451) and teleop `production.py` (L279/456/1222), of which
+`worker_count_availability` is the one symbol that must be *replaced by real functional capability*
+rather than simply dropped.
+
+Retired with the modules: the `so101_measure_parallel_resources` console script, the eleven
+`_AUTHORITY_ENV` names, the config `measurement`/`safety`/`deployment` sections, and the seven
+demo plus two teleop budget-only test files. Kept and explicitly out of scope: `runtime/
+parallel_processes.py` ownership, lease/fence/session/reset, cancel/cleanup/deadline, physical
+qualification and statistics, the ACT extension, and the ROS domain/port contracts.
+
+**Inventory (Task 1's other half).** No owned measurement is in flight: no owned container is running,
+no `so101*` unit is active (the `so101-n1cal-*` units are inactive/failed remnants of the retired
+Stage C and their evidence stays untouched), and no owned ROS process exists. One genuine leftover was
+found and retired: PID 1899712, an orphaned `descendant_helper.py` fixture from an L2
+orphan/cleanup-window test (PPID 1, parent long gone, idle sleep loop, started 20:22:56 the previous
+evening). It was terminated with `SIGTERM` and confirmed gone within the bounded wait, with
+PID/starttime/cgroup/cmdline recorded before and after in `inventory.json`. The owned Stage B Web
+service (PID 1993965, serving `freeze-install` on 127.0.0.1:8010) stays up; Task 10 replaces it in an
+ordered stop/start.
+
+**What this checkpoint does not claim.** No runtime code has been deleted yet, no guard exists, no
+test has been written. Task 1 is classification and preservation only. All old evidence — r1..r53,
+run1..run76, the Stage C halt record, sealed files, failed runs — remains exactly where it was.
+
+Next: **Task 2**, the shared `start_guard.py` decision model with genuine RED before implementation.
