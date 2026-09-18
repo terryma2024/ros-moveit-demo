@@ -2600,3 +2600,58 @@ evidence: freeze-build, freeze-install, bindings/freeze-project-provenance.json,
 decision: KEEP
 next_experiment: EXP-UQ31 remaining authorized offline units / approval-gated live stages
 ```
+
+```yaml
+checkpoint_id: CP-UQ31
+last_valid_experiment: EXP-UQ31
+current_hypothesis: Queued correction consumed - no blind waits, every run artefact inside the
+  registered root, exact-nodeid serial isolation, and continued Task12 freeze verification.
+dispatch: accf0ca1-4649-4d46-b0f8-bc984b29141b (queued correction continuing 9d418aae; exclusive
+  O_EXCL receipt plus a probe with shell date -Iseconds 2026-09-18T20:22:08+08:00, HEAD
+  1235a6592ca1f56111599445915f6c43f1a1acf5 clean, CP-UQ30A, pane %68/PID 1345571, handoff SHA256
+  52fb8109759944d4c9e82c2f9f5848190da14da65367fe6d503b21eb8fd7cd64). The prior long sleep was not
+  interrupted; it completed naturally before this correction was consumed.
+corrections:
+  - "Waiting policy: no further blind multi-minute sleep. Every subsequent wait is a bounded condition
+    check (10 s interval, single wait <= 60 s) against a run-log completion marker with the observed
+    progress reported; the teleop and web gates below were polled that way."
+  - "Log locations: all new run logs, argv, JUnit, TMP and per-exact-interpreter/worker proofs live in
+    their run directory under the registered TASK_ROOT. The one pre-existing /tmp run log
+    (/tmp/xdist8-demo2.log) was copied byte-identically into its own run root
+    (scratch/xdist8-demo2.V70OphOR/mirrored-tmp-xdist8-demo2.log) with a hash/mtime provenance file
+    (mirror-provenance.txt); the original was retained, not overwritten."
+  - "Exact-nodeid serial isolation replaces module-level over-serialisation: measured evidence is
+    test_expert_validation_e2e_installed_port.py::test_adaptive_helper_handshake_and_sigint_cleanup
+    timing out after 10 s under 8 workers (subprocess.TimeoutExpired on the adaptive helper handshake).
+    tools/serial-nodeids.txt lists it and the runner deselects exactly that manifest nodeid from the
+    parallel phase using the manifest's own path form."
+gates:
+  - "scratch/freeze-teleop3.j5DEsMAD: coverage_exact true, manifest 532 = serial 1 + parallel 531,
+    intersection 0, serial 1 passed, parallel 531 passed, workers 8 (0.38 s serial, 18.60 s parallel)."
+  - "scratch/freeze-teleop-installed.Qfvj1KMK: 7 passed at 8 workers against the Task12 freeze copy
+    (the teleop installed-budget suite now points at freeze-install)."
+  - "browser/freeze-web-unit.*: web unit gate exit 0, polled with bounded condition waits."
+  - "scratch/xdist8-demo4.cafOc9zm (previous unit): audited 8-worker demo coverage exact,
+    3277 = serial 319 + parallel 2958."
+task12:
+  - "freeze-install verified against the frozen clean tree: six modules, eight launch files, entrypoint
+    (#!/usr/bin/python3) and config/asset carriers byte-match; the debug manifest records that HEAD with
+    source_dirty false; bindings/freeze-project-provenance.json registers the freeze and its core file
+    hashes. The copied acceptance gate is re-pointed to the freeze: 8 passed."
+real_approval_gates:
+  - Owned recovery/apply and Web refresh/deployment window (Stage B); Stage C sealed candidate
+    authorization (require_measurement_capabilities refuses here: the delegated cgroup exposes no cpu
+    controller); exact-N profile-SHA operator promotion and deployment (Stage D); owned live Chrome
+    window (Stage E). Each needs its own explicit approval object; offline preparation only.
+inferred:
+  - The scheduling corrections are in place with genuine evidence and the remaining offline sweep
+    continues against the Task12 freeze; the external Sol/Astra reviews are the orchestrator's, not a
+    DST wait condition.
+conclusion: OFFLINE MAINLINE CONTINUES; live stages require their explicit approval objects.
+evidence: scratch/freeze-teleop3.*, scratch/freeze-teleop-installed.*, browser/freeze-web-unit.*,
+  scratch/xdist8-demo2.V70OphOR/mirror-provenance.txt, tools/serial-nodeids.txt,
+  followups/mainline-wait-correction-accf0ca1-.../{executor.receipt,receipt-probe01.log,
+  receipt-probe01.result.json}
+decision: KEEP
+next_experiment: EXP-UQ32 remaining Stage A offline sweep and Web/Bun/installed gates on freeze-install
+```

@@ -144,10 +144,10 @@ def synthetic_authority(tmp_path: Path, worker_count: int = 4, identity: str | N
 
 
 # Copied install built from the repaired source (the earlier offline/production copies
-# remain immutable frozen artifacts of the previous unit).
+# The current Task 12 freeze copy (progress-install and older prefixes stay immutable).
 OFFLINE_INSTALL = Path(
     "/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main"
-    "/unbounded-queue-resource-budget/progress-install")
+    "/unbounded-queue-resource-budget/freeze-install")
 OFFLINE_SHARE = OFFLINE_INSTALL / "so101_demo_py/share/so101_demo_py/config/mujoco"
 OFFLINE_LIB = OFFLINE_INSTALL / "so101_demo_py/lib/so101_demo_py"
 def _write_test_binding(directory: Path) -> Path:
