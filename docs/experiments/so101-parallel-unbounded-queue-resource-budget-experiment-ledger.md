@@ -6048,3 +6048,37 @@ after this long; per the correction handoff they are left alone, and their event
 stdout/result files are preserved wherever they land, including a failed coverage verdict.
 
 _Ledger HEAD when written: `9ee6f8fce`._
+
+
+## CP-UQ135 — Correction f1308af3, part 4: the deployed service now tells the truth about modes
+
+The rebuilt copy finished and was verified before it was used: `executor_registry.py`, `api.py`,
+`production.py` and `start_guard.py` in the new copy (`copy-install-final.mcoFwDqP`) are
+byte-identical to the tree, so the reuse rule from the handoff ("a verified existing copy is
+reusable only while the runtime is unchanged") is satisfied honestly rather than assumed.
+
+The task-owned service was then replaced in order — old process (PID `2211563`)
+signed and confirmed exited first — and restarted from that copy with `SO101_TASK_ROOT` set. Read
+back from the running process, not from a test harness:
+
+| Fact | Value |
+| --- | --- |
+| `/health` | `{"ok": true, "service": "expert-validation"}` |
+| `execution_modes` | `["SEQUENTIAL", "PARALLEL", "ADAPTIVE"]` |
+| `default_execution_mode` | `SEQUENTIAL` |
+| fixed counts | `[[2, true, "CONFIGURED"], [3, true, "CONFIGURED"], [4, true, "CONFIGURED"], [5, true, "CONFIGURED"]] …` |
+| `start_guard_policy` | present with the enforced 2 s timeout and 1 GiB RAM/GPU floors |
+| served index vs installed copy | `served_matches_installed = True` |
+| new PID / install | `2223149` from `copy-install-final.mcoFwDqP` |
+
+The `execution_modes=[SEQUENTIAL]` mismatch is therefore closed end to end: the capability
+derivation is functional (CP-UQ133), the deployed bytes contain that derivation (this checkpoint),
+and the live service advertises **SEQUENTIAL, PARALLEL and ADAPTIVE** while every fixed count
+1..8 remains selectable. The functional manifest can now be generated from real capabilities
+without filtering away the modes the plan requires.
+
+Record: `/tmp/so101-debug-startup-probe-b82d10b8/deploy-final.json` (preservation of the
+correction's working evidence into the task root already covers this directory's contents; new
+files there will be copied the same way when the correction closes).
+
+_Ledger HEAD when written: `ddb14b5df`._
