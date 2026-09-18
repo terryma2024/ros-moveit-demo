@@ -1356,3 +1356,43 @@ def test_sample_resources_records_where_the_cpu_counter_came_from():
     assert "session_cgroup" in diagnostics
     assert diagnostics["scope_cpu_usage_us"] is None or isinstance(
         diagnostics["scope_cpu_usage_us"], int)
+
+
+def test_cpu_rate_over_several_periods_separates_bursts_from_sustained_load(monkeypatch):
+    """A cgroup may spend its whole cpu.max quota inside one period, so a one-period window
+    reads the quota itself as the rate and the envelope rule fires on a legitimate burst
+    (run74: average 0.81 cores, max rate 20.66). Over several periods a burst averages out
+    while sustained load still registers."""
+
+    import types
+    import so101_demo.parallel_batch.resource_measurement as rm
+
+    clock = [0.0]
+    monkeypatch.setattr(rm, "time", types.SimpleNamespace(monotonic=lambda: clock[0]))
+    window = 5 * 0.1  # five cgroup periods
+
+    # A single quota burst in the first period, then idle.
+    burst_usage = iter([0, 1_860_000] + [1_860_000] * 20)
+    state = {"cpu_window_s": window}
+    burst_cgroup = _FakeCgroup([next(burst_usage) for _ in range(22)], swap=[0] * 22,
+                               pressure=[0] * 22)
+    rates = []
+    for moment in [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]:
+        clock[0] = moment
+        sample = rm.sample_resources(owned_inventory=(), cgroup=burst_cgroup,
+                                     device=_FakeDevice(), sequence=len(rates) + 1, state=state)
+        rates.append(sample.observation.observed["cpu_core_equivalent"])
+    assert max(rates) <= 1_860_000 / 1e6 / window + 0.01, rates
+
+    # The same total usage delivered every period is sustained load and must show up.
+    clock[0] = 10.0
+    sustained = _FakeCgroup([int(1_860_000 * i) for i in range(12)], swap=[0] * 12,
+                            pressure=[0] * 12)
+    state = {"cpu_window_s": window}
+    sustained_rates = []
+    for index in range(6):
+        clock[0] = 10.0 + index * 0.1
+        sample = rm.sample_resources(owned_inventory=(), cgroup=sustained, device=_FakeDevice(),
+                                     sequence=index + 1, state=state)
+        sustained_rates.append(sample.observation.observed["cpu_core_equivalent"])
+    assert max(sustained_rates) > 10.0, sustained_rates
