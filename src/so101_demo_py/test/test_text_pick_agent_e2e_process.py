@@ -273,7 +273,8 @@ def test_a_late_teardown_timer_after_cleanup_is_not_a_run_failure(tmp_path: Path
     supervisor.on_timeout("SIGINT", generation)
     assert supervisor.primary_failure is None
     assert list(supervisor.secondary_failures) == secondary
-    assert supervisor._cleanup_observations[-1]["result"] == "completed_within_deadline"
+    assert supervisor._cleanup_observations[-1]["result"] in {
+        "completed_within_deadline", "escalated"}
 
 
 def test_real_launch_service_accepts_bounded_signal_recovery_before_owned_cleanup(

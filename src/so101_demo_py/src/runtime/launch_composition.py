@@ -416,28 +416,36 @@ class E2ESupervisor:
                 owned.label for owned in self._owned.values()
                 if owned.started and not owned.exited
             ]
+            # Escalation is a mechanism, not a verdict: on a loaded host the first
+            # signals can be delivered late, so only processes that survive the whole
+            # escalation chain are a cleanup failure.
+            self._cleanup_observations.append({
+                "phase": phase,
+                "result": "completed_within_deadline" if not remaining else "escalated",
+                "remaining": remaining,
+                "timestamp_ns": self._clock_ns(),
+            })
             if not remaining:
-                # The escalation timer fired after the owned processes had already
-                # exited: a loaded host delayed the callback, but cleanup did complete,
-                # so this is a diagnostic observation and not a run failure.
-                self._cleanup_observations.append({
-                    "phase": phase,
-                    "result": "completed_within_deadline",
-                    "remaining": [],
-                    "timestamp_ns": self._clock_ns(),
-                })
                 return self._finish_cleanup()
-            self._record_failure(
-                component="supervisor",
-                code="OWNED_PROCESS_CLEANUP_TIMEOUT",
-                message=f"owned processes did not exit after {phase}",
-            )
+            if phase == "SIGTERM":
+                # Reaching SIGKILL means the tree did not exit cooperatively, which is a
+                # real cleanup failure even though the kill itself will succeed.
+                self._record_failure(
+                    component="supervisor",
+                    code="OWNED_PROCESS_CLEANUP_TIMEOUT",
+                    message="owned processes survived SIGTERM",
+                )
             if next_signal is not None:
                 signal_number, next_phase, seconds = next_signal
                 return [
                     *self._signal_actions(signal_number),
                     self.arm_timeout(next_phase, seconds),
                 ]
+            self._record_failure(
+                component="supervisor",
+                code="OWNED_PROCESS_CLEANUP_TIMEOUT",
+                message=f"owned processes survived {phase}",
+            )
             try:
                 self._write_result(cleanup_complete=False)
             except OSError:
