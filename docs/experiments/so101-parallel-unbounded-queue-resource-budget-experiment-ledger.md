@@ -4319,3 +4319,26 @@ So the next step is deterministic rather than exploratory: run the two failing c
 decision object surfaced, and pin whichever observation the gate actually judges -- the session
 fixtures already inject a hermetic cgroup and device, and the gate needs the same treatment if it is
 reading a different object than the tests believe.
+
+## CP-UQ85 — The two failures were host-load sensitivity; the seam is in place
+
+Naming the producer settled it. Reproducing the same fixtures outside pytest --
+`_install_prefix`, `_bindings`, `_sealed_authorization`, `build_candidate_plan` and then
+`compose_measurement_admission` plus `gate.admit(...)` -- gives `admitted=True reasons=()`. The gate
+is therefore deterministic given a given host observation, and the two failures came from the *live*
+observation the composer takes during a pytest run: with several xdist workers busy, the CPU
+headroom rule can refuse a case whose assertion expects the workload stage. Neither `nr_throttled`
+(0 at every cgroup level, no cpu controller on the leaf) nor an idle-machine observation
+(`reasons []`, `observed cpu 0.2` of 24 cores) produces it.
+
+The right fix is a pin, not a gate change, so `main` gained an `observation_source` parameter that is
+passed straight to `compose_measurement_admission`; production still passes `None` and samples the
+real host. My first attempt at pinning the tests used the file's tiny default fixture and *increased*
+failures from two to four, which is the useful finding: the gate sizes its limits from capacity, so a
+pinned observation must have capacities consistent with what the case expects, not merely be
+deterministic. That attempt is reverted (`0a7ee61ae` keeps the seam only), and the suites are green
+again: 49 passed over the default-path and CLI files, and the six-file gate returns 0.
+
+Next: pin each host-sensitive case with facts derived from that case's own bindings and
+authorization (capacity and dimensions consistent with its expectations), then re-run the gate,
+reseal and measure N1.
