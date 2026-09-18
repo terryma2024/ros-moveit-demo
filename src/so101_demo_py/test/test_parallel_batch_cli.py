@@ -20,7 +20,7 @@ from so101_demo.parallel_batch.contracts import (
 
 PACKAGE = Path(__file__).resolve().parents[1]
 POINTS = PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml"
-CONFIG = PACKAGE / "config/mujoco/parallel_batch_v2.yaml"
+CONFIG = PACKAGE / "config/mujoco/parallel_batch_v3.yaml"
 ADAPTIVE_CONFIG = PACKAGE / "config/mujoco/parallel_adaptive_workers_v1.yaml"
 YOLO_SHA = "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781"
 GROUNDED_SHA = "0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775"
@@ -53,14 +53,42 @@ def _refusing_gate(code):
     return SyntheticAdmissionGate(code=code)
 
 
-@pytest.fixture(autouse=True)
-def synthetic_resource_gate(monkeypatch):
-    """Supply the offline exact-N gate; production never sets this hook."""
+def _local_guard_check(self, policy, scope):
+    """Run the real guard decision against real host reads, without spawning a helper.
 
-    import so101_demo.cli.mujoco_parallel_batch as parallel_cli
-    gate = SyntheticAdmissionGate()
-    monkeypatch.setattr(parallel_cli, "_DEFAULT_RESOURCE_GATE", gate)
-    return gate
+    Only the probe *process* boundary is replaced. The snapshot still comes from the real
+    cgroup/meminfo/NVML reads through ``probe_snapshot`` and the decision is still the real
+    ``evaluate_snapshot``; the helper process itself is proven in
+    ``test_parallel_start_guard_probe.py`` and in the CLI-level composition test.
+    """
+
+    import dataclasses as _dataclasses
+    import time as _time
+
+    from so101_demo.parallel_batch import start_guard as _guard
+
+    started = _time.monotonic()
+    ports = _dataclasses.replace(_guard.host_ports(), busy_window_s=0.0)
+    try:
+        snapshot = _guard.probe_snapshot(policy, scope, started + policy.timeout_s, ports=ports)
+        return _guard.evaluate_snapshot(snapshot, policy, scope, started_monotonic_s=started,
+                                        completed_monotonic_s=_time.monotonic())
+    except _guard.ProbeError as error:
+        return _guard.GuardResult(
+            scope=scope, status=_guard.FAIL, started_monotonic_s=started,
+            completed_monotonic_s=_time.monotonic(),
+            checks={"probe": _guard.GuardCheck(_guard.FAIL, error.reason, None, None, "state")},
+            snapshot=None, cleanup_state="CLEAR")
+
+
+@pytest.fixture(autouse=True)
+def local_start_guard(monkeypatch, tmp_path_factory):
+    """Offline seam: real reads and the real decision, no helper process per test."""
+
+    from so101_demo.parallel_batch.start_guard_probe import ProbeCoordinator
+
+    monkeypatch.setenv("SO101_TASK_ROOT", str(tmp_path_factory.mktemp("guard-root")))
+    monkeypatch.setattr(ProbeCoordinator, "check", _local_guard_check)
 
 
 def argv(root: Path, **changes):
@@ -517,7 +545,7 @@ def test_relative_catalog_and_config_paths_are_supported(tmp_path, monkeypatch):
         argv(
             tmp_path / "batch",
             points="config/mujoco/moveit_expert_validation_points_v1.yaml",
-            config="config/mujoco/parallel_batch_v2.yaml",
+            config="config/mujoco/parallel_batch_v3.yaml",
         ),
         provenance_verifier=verified,
     )
@@ -1975,6 +2003,7 @@ def test_worker_broker_proxy_rejects_unexpected_generation_before_return(tmp_pat
     from so101_demo.parallel_batch.contracts import (
         ExecutionKind,
         load_parallel_runtime_config,
+        load_parallel_runtime_config_v3,
     )
     from so101_demo.runtime.parallel_worker_runtime import InferenceSnapshotReceipt
 
@@ -1995,13 +2024,13 @@ def test_worker_broker_proxy_rejects_unexpected_generation_before_return(tmp_pat
         ),
         tmp_path / "perception.sock",
         SimpleNamespace(worker_root=worker_root),
-        load_parallel_runtime_config_v2(CONFIG),
+        load_parallel_runtime_config_v3(CONFIG),
         broker_generation=1,
     )
     proxy._call = lambda _message: {
         "request_id": "attempt-1-plastic-cup-yolo11n-seg-v1",
         "model_id": "plastic-cup-yolo11n-seg-v1",
-        "model_version": load_parallel_runtime_config_v2(CONFIG).yolo_weights_sha256,
+        "model_version": load_parallel_runtime_config_v3(CONFIG).yolo_weights_sha256,
         "broker_generation": 1,
         "outcome": "NORMAL_REJECTION",
         "candidate": None,
@@ -2239,20 +2268,47 @@ def test_adaptive_cli_rejects_missing_config_and_legacy_modes(
         )
 
 
-def test_fixed_w4_remains_rejected_without_an_approved_profile(tmp_path):
-    """Without a promoted exact-N profile the fixed version-two path refuses N=4."""
+def test_fixed_w4_starts_without_any_budget_authority(tmp_path):
+    """The plain v3 default path needs no profile, no promotion and no budget environment."""
+
+    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+    from so101_demo.parallel_batch.contracts import ParallelRuntimeConfigV3
+
+    prepared = prepare_batch(argv(tmp_path / "w4", worker_count="4"),
+                             provenance_verifier=verified)
+    assert isinstance(prepared.config, ParallelRuntimeConfigV3)
+    assert prepared.start_guard is not None
+    assert prepared.start_guard_evidence["status"] in ("PASS", "WARN")
+    assert prepared.start_guard_evidence["cleanup_state"] == "CLEAR"
+    assert prepared.start_guard_evidence["checks"]["ram"]["unit"] == "bytes"
+    assert prepared.request.worker_count == 4
+    assert prepared.manifest["schema_version"] == 3
+    assert prepared.manifest["start_guard"]["status"] == prepared.start_guard_evidence["status"]
+    assert "live_headroom" not in prepared.manifest
+
+
+def test_a_failing_guard_refuses_the_start_instead_of_allocating(tmp_path):
+    """A FAIL from the real decision must surface as a CLI error, never a partial batch."""
 
     from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
-    import so101_demo.cli.mujoco_parallel_batch as parallel_cli
+    from so101_demo.parallel_batch import start_guard_probe as probe_module
+    from so101_demo.parallel_batch.start_guard import GuardCheck, GuardResult
 
-    # The offline fixture gate is bypassed here to exercise the production default.
-    with pytest.raises(CliError, match="BUDGET_PROFILE_UNAVAILABLE"):
-        prepare_batch(
-            argv(tmp_path / "w4", worker_count="4"),
-            provenance_verifier=verified,
-            resource_gate=_refusing_gate("BUDGET_PROFILE_UNAVAILABLE"),
-        )
-    assert parallel_cli._DEFAULT_RESOURCE_GATE is not None
+    def refusing_check(self, policy, scope):
+        return GuardResult(scope=scope, status="FAIL", started_monotonic_s=0.0,
+                           completed_monotonic_s=0.0,
+                           checks={"probe": GuardCheck("FAIL", "GPU_TARGET_NOT_VISIBLE",
+                                                       None, None, "state")},
+                           snapshot=None, cleanup_state="CLEAR")
+
+    original = probe_module.ProbeCoordinator.check
+    probe_module.ProbeCoordinator.check = refusing_check
+    try:
+        with pytest.raises(CliError, match="GPU_TARGET_NOT_VISIBLE"):
+            prepare_batch(argv(tmp_path / "w4-refused", worker_count="4"),
+                          provenance_verifier=verified)
+    finally:
+        probe_module.ProbeCoordinator.check = original
 
 
 def test_production_adaptive_factory_builds_an_internal_w8_pool(tmp_path):
@@ -3382,6 +3438,7 @@ def test_existing_worker_fetches_current_broker_before_each_request_and_recovery
     from so101_demo.parallel_batch.contracts import (
         ExecutionKind,
         load_parallel_runtime_config,
+        load_parallel_runtime_config_v3,
     )
     from so101_demo.runtime.parallel_worker_runtime import InferenceSnapshotReceipt
 
@@ -3451,7 +3508,7 @@ def test_existing_worker_fetches_current_broker_before_each_request_and_recovery
         Coordinator(),
         tmp_path / "broker-g1.sock",
         SimpleNamespace(worker_root=worker_root),
-        load_parallel_runtime_config_v2(CONFIG),
+        load_parallel_runtime_config_v3(CONFIG),
         broker_generation=1,
         broker_generation_consumer=generation_bindings.append,
         perception_runner=perception_runner,

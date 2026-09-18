@@ -32,7 +32,7 @@ from so101_demo.parallel_batch.artifacts import (
 from so101_demo.parallel_batch.contracts import (
     BatchKindV2,
     BatchRequestV2,
-    load_parallel_runtime_config_v2,
+    load_parallel_runtime_config_v3,
 )
 from so101_demo.parallel_batch.adaptive_contracts import (
     AdaptiveBatchRequest,
@@ -78,13 +78,8 @@ from so101_demo.parallel_batch.web_control import FixedCoordinatorControlServer
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.parallel_batch.resources import (
     AllocationPolicy,
-    CurrentRuntimeProvenanceProbe,
-    ResourceAdmission,
     ResourceManifest,
-    ResourceSnapshot,
-    ResourceThresholds,
-    Task14AcceptanceProvider,
-    Task14LiveHeadroomVerifier,
+    StartGuardAdmission,
     WorkerResourceAllocator,
     WorkerResources,
     configured_runtime_ipc_root,
@@ -180,8 +175,8 @@ class _Parser(argparse.ArgumentParser):
 
 @dataclass(frozen=True, slots=True)
 class PreparedBatch:
-    resource_gate: object | None
-    request: BatchRequest | BatchRequestV2 | PoolRequest | None
+    start_guard: object | None
+    request: BatchRequest | BatchRequestV2 | BatchRequestV3 | PoolRequest | None
     adaptive_request: AdaptiveBatchRequest | None
     config: ParallelRuntimeConfig
     config_path: Path
@@ -200,10 +195,7 @@ class PreparedBatch:
     manifest: Mapping[str, object]
     provenance_inputs: Mapping[str, object]
     provenance_verifier: Callable[[Mapping[str, object]], Mapping[str, object]]
-    live_headroom_evidence: Path | None
-    live_headroom_acceptance: Path | None
-    live_headroom_current_provenance: Mapping[str, Path]
-    live_headroom_verification: Mapping[str, object] | None
+    start_guard_evidence: Mapping[str, object] | None
     resume: bool
 
 
@@ -406,20 +398,6 @@ def _external_binding_source_root(binding_path: Path) -> Path:
     return source_root.resolve()
 
 
-def _live_headroom_verifier(
-    acceptance_path: Path,
-    current_provenance: Mapping[str, Path],
-) -> Task14LiveHeadroomVerifier:
-    return Task14LiveHeadroomVerifier(
-        acceptance_provider=Task14AcceptanceProvider(
-            acceptance_path=acceptance_path,
-        ),
-        provenance_probe=CurrentRuntimeProvenanceProbe(
-            current_paths=current_provenance,
-        ),
-    )
-
-
 def _batch_evidence_root_state(*, evidence_root: Path, measurement: bool) -> None:
     """Apply the launcher's evidence-root rule for this run.
 
@@ -448,103 +426,69 @@ def _batch_evidence_root_state(*, evidence_root: Path, measurement: bool) -> Non
         raise CliError("DUPLICATE_BATCH_EVIDENCE_ROOT")
 
 
-def _compose_measurement_gate(options, config, worker_count, evidence_root):
-    """Bind the sealed measurement authority this batch was started with."""
+def guard_scope(batch_id, worker_count, *, epoch=1, gpu_selector=None, device_selector=None):
+    """The real owner/epoch scope for one start-guard check."""
 
-    from so101_demo.parallel_batch.resource_measurement import (
-        compose_measurement_admission, verify_measurement_arguments)
+    selector = gpu_selector or device_selector
+    if not selector:
+        raise CliError("START_GUARD_DEVICE_SELECTOR_REQUIRED")
+    from so101_demo.parallel_batch.start_guard import GuardScope
+    from so101_demo.parallel_batch.start_guard_probe import read_process_identity
 
-    if not isinstance(config, ParallelRuntimeConfigV2):
-        raise CliError('LEGACY_CONTRACT_EXECUTION_FORBIDDEN')
-    if config.deployment.approved_profile_path is not None:
-        raise CliError('CANDIDATE_CONFIG_MUST_HAVE_NULL_DEPLOYMENT')
-    try:
-        authorization, gate = compose_measurement_admission(
-            authorization_path=Path(options.measurement_authorization),
-            authorization_sha256=options.measurement_authorization_sha256,
-            config_path=Path(options.config))
-        verify_measurement_arguments(
-            authorization=authorization, batch_id=options.batch_id,
-            worker_count=worker_count, evidence_root=evidence_root,
-            points_path=Path(options.points),
-            points_sha256=hashlib.sha256(Path(options.points).read_bytes()).hexdigest(),
-            yolo_weights_path=Path(options.yolo_weights),
-            yolo_weights_sha256=options.yolo_weights_sha256,
-            grounded_root=Path(options.grounded_root),
-            grounded_manifest_sha256=options.grounded_manifest_sha256,
-            broker_image=options.broker_image_id or options.broker_image,
-            config_path=Path(options.config))
-    except ContractError as error:
-        raise CliError(error.code) from error
-    return gate
-
-
-def _prepare_live_headroom(options, config, worker_count, *, resource_gate=None):
-    supplied = (
-        options.live_headroom_evidence,
-        options.live_headroom_acceptance,
-        options.live_headroom_current_provenance_root,
+    identity = read_process_identity(os.getpid())
+    return GuardScope(
+        batch_id=batch_id,
+        epoch=epoch,
+        owner_pid=os.getpid(),
+        owner_starttime_ticks=identity.start_time_ticks if identity is not None else 0,
+        gpu_selector=selector,
+        worker_count=worker_count,
     )
-    if not isinstance(config, ParallelRuntimeConfig):
-        # Version two replaced the historical three-worker evidence chain with the exact-N
-        # gate; presenting the retired authority must fail loudly, never be ignored, and a
-        # missing gate is a missing approved profile rather than a legacy evidence error.
-        if any(value is not None for value in supplied):
-            raise CliError('LIVE_HEADROOM_EVIDENCE_UNEXPECTED')
-        if resource_gate is None:
-            raise CliError('BUDGET_PROFILE_UNAVAILABLE')
-    if resource_gate is not None:
-        from so101_demo.parallel_batch.resource_budget import FixedAdmissionRequest
-        identity = resource_gate.execution_identity_sha256
-        if identity is None:
-            raise CliError('RESOURCE_PROBE_FAILED')
-        try:
-            decision = resource_gate.admit(FixedAdmissionRequest(
-                worker_count=worker_count,
-                batch_id=getattr(options, 'batch_id', None) or 'cli',
-                epoch=1, execution_identity_sha256=identity,
-                request_kind=getattr(resource_gate, 'request_kind', 'FIXED_PRODUCTION')))
-        except ContractError as error:
-            raise CliError(error.code) from error
-        if not decision.admitted:
-            raise CliError(decision.reason_codes[0])
-        summary = {
-            'worker_count': worker_count,
-            'profile_sha256': decision.profile_sha256,
-            'qualification_sha256': decision.qualification_sha256,
-            'observation_monotonic_s': decision.observation_monotonic_s,
-        }
-        return None, None, {}, summary
-    supplied = (
-        options.live_headroom_evidence,
-        options.live_headroom_acceptance,
-        options.live_headroom_current_provenance_root,
-    )
-    if worker_count > 3:
-        raise CliError("FIXED_WORKER_LIVE_QUALIFICATION_REQUIRED")
-    if worker_count != 3:
-        if any(value is not None for value in supplied):
+
+
+def device_selector_for(config) -> str:
+    """``UUID:<uuid>`` or ``INDEX:<n>`` from the active v3 config; never a host default."""
+
+    selector = getattr(config, "gpu_device", None)
+    if selector is None:
+        raise CliError("CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION")
+    return f"{selector.selector_kind}:{selector.selector}"
+
+
+def _prepare_start_guard(options, config, *, batch_id, worker_count, start_guard=None,
+                         epoch=1):
+    """One bounded CPU/RAM/GPU check before this epoch spawns anything.
+
+    No budget environment, profile or approval is consulted, and a FAIL refuses the start
+    instead of allocating a partial batch.
+    """
+
+    for name in ("live_headroom_evidence", "live_headroom_acceptance",
+                 "live_headroom_current_provenance_root"):
+        if getattr(options, name, None) is not None:
             raise CliError("LIVE_HEADROOM_EVIDENCE_UNEXPECTED")
-        return None, None, {}, None
-    if any(value is None for value in supplied):
-        raise CliError("THREE_WORKER_LIVE_EVIDENCE_REQUIRED")
-    evidence = _absolute("live_headroom_evidence", supplied[0])
-    acceptance = _absolute("live_headroom_acceptance", supplied[1])
-    current_root = _absolute(
-        "live_headroom_current_provenance_root", supplied[2]
-    )
-    current_provenance = {
-        name: current_root / filename
-        for name, filename in _CURRENT_PROVENANCE_FILES.items()
-    }
-    verifier = _live_headroom_verifier(acceptance, current_provenance)
+    guard = start_guard or compose_default_start_guard(config.start_guard)
+    scope = guard_scope(batch_id, worker_count, epoch=epoch,
+                        device_selector=device_selector_for(config))
     try:
-        verified = verifier.verify(evidence, config=config)
+        result = guard.require_startable(scope)
     except Exception as error:
-        raise CliError("THREE_WORKER_LIVE_EVIDENCE_INVALID") from error
-    if not isinstance(verified, Mapping):
-        raise CliError("THREE_WORKER_LIVE_EVIDENCE_INVALID")
-    return evidence, acceptance, current_provenance, dict(verified)
+        reason = getattr(error, "reason", None) or "START_GUARD_REFUSED"
+        raise CliError(reason) from error
+    return guard, {
+        "status": result.status,
+        "checked_monotonic_s": result.completed_monotonic_s,
+        "cleanup_state": result.cleanup_state,
+        "checks": {
+            name: {"status": check.status, "reason": check.reason, "observed": check.observed,
+                   "cutoff": check.cutoff, "unit": check.unit}
+            for name, check in sorted(result.checks.items())
+        },
+        "gpu_uuid": None if result.snapshot is None else result.snapshot.gpu_uuid,
+        "effective_cpu_cores": None if result.snapshot is None else result.snapshot.effective_cpu_cores,
+        "ram_available_bytes": None if result.snapshot is None else result.snapshot.ram_available_bytes,
+        "gpu_free_bytes": None if result.snapshot is None else result.snapshot.gpu_free_bytes,
+    }
 
 
 def _read_existing_json(path: Path, *, label: str) -> Mapping[str, object]:
@@ -1087,36 +1031,28 @@ _LEGACY_QUOTA_FLAG = '--max-points-per-worker'
 # Offline test entry point only: production callers leave this None so the fixed path
 # stays fail-closed until an approved exact-N profile exists. Tests set it through the
 # autouse fixture in their own module; no production code assigns it.
-_DEFAULT_RESOURCE_GATE = None
+_DEFAULT_START_GUARD = None
 
 
-def _compose_default_resource_gate(config_path=None):
-    """Installed composition of the shared exact-N gate; None when no authority exists.
+def compose_default_start_guard(policy):
+    """Installed composition: one shared task-level state root and lock."""
 
-    The composer derives and verifies the current runtime identity from the task's
-    v2 config plus the installed/source inventory bytes, and refreshes it before
-    every admission; this call site supplies the config the batch actually loads.
-    """
+    from so101_demo.parallel_batch.start_guard_probe import compose_default_start_guard as compose
 
-    from so101_demo.parallel_batch.resource_budget import (
-        LiveObservationSource, compose_production_admission)
-
-    return compose_production_admission(
-        environment=dict(os.environ), config_path=config_path,
-        observation_source=LiveObservationSource())
+    return compose(policy)
 
 
 def _load_runtime_config(path: Path):
-    """New execution loads the closed v2 document; a v1 document is refused."""
+    """New execution loads the closed v3 document; v1 and v2 are history only."""
 
     try:
         document = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as error:
         raise ContractError(f"CONFIG_READ_FAILED: {path}") from error
     version = document.get("schema_version") if isinstance(document, dict) else None
-    if type(version) is not int or version != 2:
-        raise ContractError("LEGACY_CONTRACT_EXECUTION_FORBIDDEN")
-    return load_parallel_runtime_config_v2(Path(path))
+    if type(version) is not int or version != 3:
+        raise ContractError("CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION")
+    return load_parallel_runtime_config_v3(Path(path))
 
 
 def _reject_legacy_quota_flag(argv) -> None:
@@ -1129,16 +1065,14 @@ def _reject_legacy_quota_flag(argv) -> None:
 
 
 def prepare_batch(
-    argv=None, *, provenance_verifier=verify_provenance, resource_gate=None
+    argv=None, *, provenance_verifier=verify_provenance, start_guard=None
 ) -> PreparedBatch:
     _reject_legacy_quota_flag(argv)
     options = build_parser().parse_args(argv)
-    if (options.measurement_authorization is None) != (
-        options.measurement_authorization_sha256 is None
+    if options.measurement_authorization is not None or (
+        options.measurement_authorization_sha256 is not None
     ):
-        raise CliError("MEASUREMENT_AUTHORIZATION_INCOMPLETE")
-    if resource_gate is None and options.measurement_authorization is None:
-        resource_gate = _compose_default_resource_gate(options.config) or _DEFAULT_RESOURCE_GATE
+        raise CliError("MEASUREMENT_AUTHORIZATION_RETIRED")
     adaptive_only = (
         options.adaptive_config,
         options.fallback_worker_counts,
@@ -1196,9 +1130,7 @@ def prepare_batch(
             ):
                 raise CliError("ADAPTIVE_EVIDENCE_ROOT_INVALID")
     else:
-        _batch_evidence_root_state(
-            evidence_root=evidence_root,
-            measurement=options.measurement_authorization is not None)
+        _batch_evidence_root_state(evidence_root=evidence_root, measurement=False)
     try:
         mode = RunMode(options.run_mode)
     except ValueError as error:
@@ -1215,24 +1147,12 @@ def prepare_batch(
     selection_sha = hashlib.sha256(selection_payload).hexdigest()
     config_path = options.config.resolve()
     config = _load_runtime_config(config_path)
-    if options.adaptive_workers:
-        live_headroom_evidence = None
-        live_headroom_acceptance = None
-        live_headroom_current_provenance = {}
-        live_headroom_verification = None
-    else:
-        if options.measurement_authorization is not None:
-            resource_gate = _compose_measurement_gate(
-                options, config, worker_count, evidence_root)
-        (
-            live_headroom_evidence,
-            live_headroom_acceptance,
-            live_headroom_current_provenance,
-            live_headroom_verification,
-        ) = _prepare_live_headroom(
-            options, config, worker_count,
-            resource_gate=(None if isinstance(config, ParallelRuntimeConfig) else resource_gate),
-        )
+    start_guard = None
+    guard_summary = None
+    if not options.adaptive_workers:
+        start_guard, guard_summary = _prepare_start_guard(
+            options, config, batch_id=options.batch_id or "cli", worker_count=worker_count,
+            start_guard=start_guard)
     if options.yolo_weights_sha256 != config.yolo_weights_sha256:
         raise CliError("YOLO_HASH_MISMATCH")
     if options.grounded_manifest_sha256 != config.grounded_sam_manifest_sha256:
@@ -1338,7 +1258,7 @@ def prepare_batch(
         }
     else:
         manifest = {
-            "schema_version": 2,
+            "schema_version": 3,
             "batch_kind": request.batch_kind.value,
             "batch_id": request.batch_id,
             "run_mode": request.run_mode.value,
@@ -1349,21 +1269,7 @@ def prepare_batch(
             "worker_count": worker_count,
             "evidence_root": str(evidence_root),
             "provenance": dict(provenance),
-            "live_headroom": (
-                None
-                if live_headroom_verification is None
-                else {
-                    "evidence_path": str(live_headroom_evidence),
-                    "acceptance_path": str(live_headroom_acceptance),
-                    "current_provenance_paths": {
-                        name: str(path)
-                        for name, path in sorted(
-                            live_headroom_current_provenance.items()
-                        )
-                    },
-                    "verification": dict(live_headroom_verification),
-                }
-            ),
+            "start_guard": None if guard_summary is None else dict(guard_summary),
         }
     if options.resume:
         existing = _read_existing_json(
@@ -1372,7 +1278,7 @@ def prepare_batch(
         if existing != manifest:
             raise CliError("RECOVERY_BATCH_MANIFEST_MISMATCH")
     return PreparedBatch(
-        resource_gate=resource_gate,
+        start_guard=start_guard,
         request=request,
         adaptive_request=adaptive_request,
         config=config,
@@ -1392,10 +1298,7 @@ def prepare_batch(
         manifest=manifest,
         provenance_inputs=dict(inputs),
         provenance_verifier=provenance_verifier,
-        live_headroom_evidence=live_headroom_evidence,
-        live_headroom_acceptance=live_headroom_acceptance,
-        live_headroom_current_provenance=dict(live_headroom_current_provenance),
-        live_headroom_verification=live_headroom_verification,
+        start_guard_evidence=guard_summary,
         resume=options.resume,
     )
 
@@ -2077,24 +1980,23 @@ def _resource_manifest_from_dict(value):
         "schema_version", "mode", "backend", "evidence_root",
         "requested_worker_count", "worker_count", "admission",
         "domain_claim_scope", "domain_claims", "process_scan",
-        "live_headroom_evidence", "workers",
+        "start_guard", "workers",
     }
     if type(value) is not dict or set(value) != fields:
         raise CliError("RECOVERY_RESOURCE_MANIFEST_SCHEMA")
     admission = value["admission"]
     if type(admission) is not dict or set(admission) != {
-        "admitted", "observed", "required", "required_live_headroom_ratio", "failures",
+        "status", "reason", "checks", "observed_monotonic_s", "gpu_uuid", "cleanup_state",
     }:
         raise CliError("RECOVERY_RESOURCE_MANIFEST_SCHEMA")
     try:
-        observed = ResourceSnapshot(**admission["observed"])
-        required = ResourceThresholds(**admission["required"])
-        restored_admission = ResourceAdmission(
-            admission["admitted"],
-            observed,
-            required,
-            admission["required_live_headroom_ratio"],
-            tuple(admission["failures"]),
+        restored_admission = StartGuardAdmission(
+            status=admission["status"],
+            reason=admission["reason"],
+            checks=dict(admission["checks"]),
+            observed_monotonic_s=float(admission["observed_monotonic_s"]),
+            gpu_uuid=admission["gpu_uuid"],
+            cleanup_state=admission["cleanup_state"],
         )
         return ResourceManifest(
             schema_version=value["schema_version"],
@@ -2107,7 +2009,7 @@ def _resource_manifest_from_dict(value):
             domain_claim_scope=value["domain_claim_scope"],
             domain_claims=tuple(value["domain_claims"]),
             process_scan=value["process_scan"],
-            live_headroom_evidence=value["live_headroom_evidence"],
+            start_guard=value["start_guard"],
             workers=tuple(_resource_from_dict(item) for item in value["workers"]),
         )
     except (KeyError, TypeError, ValueError) as error:
@@ -2659,39 +2561,13 @@ class ProductionBatchComposition:
         self._container_runner = container_runner
         self._uses_production_broker_container = broker_command_builder is None
         self.journal = None
-        live_headroom_verifier = None
-        if (
-            spec.request.worker_count == 3
-            and isinstance(spec.config, ParallelRuntimeConfig)
-        ):
-            if (
-                spec.live_headroom_evidence is None
-                or spec.live_headroom_acceptance is None
-                or spec.live_headroom_verification is None
-            ):
-                raise CliError("THREE_WORKER_LIVE_EVIDENCE_REQUIRED")
-            live_headroom_verifier = _live_headroom_verifier(
-                spec.live_headroom_acceptance,
-                spec.live_headroom_current_provenance,
-            )
-            try:
-                current_headroom = live_headroom_verifier.verify(
-                    spec.live_headroom_evidence,
-                    config=spec.config,
-                )
-            except Exception as error:
-                raise CliError("THREE_WORKER_LIVE_EVIDENCE_INVALID") from error
-            if dict(current_headroom) != dict(spec.live_headroom_verification):
-                raise CliError("THREE_WORKER_LIVE_EVIDENCE_CHANGED")
         self._startup_stage = "allocator_create"
         self.allocator = WorkerResourceAllocator(
             spec.config,
             spec.request.evidence_root,
             probe=resource_probe,
             claim_root=claim_root,
-            resource_gate=getattr(spec, 'resource_gate', None),
-            live_headroom_evidence=spec.live_headroom_evidence,
-            live_headroom_verifier=live_headroom_verifier,
+            start_guard=getattr(spec, 'start_guard', None),
             batch_id=spec.request.batch_id,
             allocation_policy=(
                 allocation_policy
