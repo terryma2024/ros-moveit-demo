@@ -27,7 +27,33 @@ from so101_demo.parallel_batch.resource_measurement import (
 
 PACKAGE = Path(__file__).resolve().parents[1]
 WORKTREE = Path(__file__).resolve().parents[3]
-V2_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v2.yaml"
+
+
+def _candidate_config() -> Path:
+    """The authoritative config with only the pre-workload baseline shortened for tests.
+
+    Policy amendment 74d6b781 requires a genuine >=60 s baseline in a real run; a test that
+    starts a session at that value spends a minute per case. Every use in this module --
+    identity, plan and the CLI argv -- reads this one copy, so they stay consistent with
+    each other, the authoritative document is untouched and there is no bypass flag.
+    """
+
+    import os
+    import tempfile
+
+    import yaml
+
+    source = PACKAGE / "config/mujoco/parallel_batch_v2.yaml"
+    document = yaml.safe_load(source.read_text())
+    document["execution"]["sampling"]["baseline_minimum_s"] = 0.2
+    directory = Path(os.environ.get("TMPDIR", tempfile.gettempdir())) / "default-path-test-config"
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    target = directory / "parallel_batch_v2.test.yaml"
+    target.write_text(yaml.safe_dump(document, sort_keys=False))
+    return target
+
+
+V2_CONFIG = _candidate_config()
 DIMENSIONS = ("ram_bytes", "gpu_bytes", "cpu_core_equivalent")
 INSTALLED_PATTERN = "so101_demo_py/lib/python3.12/site-packages/so101_demo/parallel_batch"
 
