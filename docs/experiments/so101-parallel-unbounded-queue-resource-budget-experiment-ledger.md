@@ -4617,3 +4617,29 @@ rather than fixed clocks: the attach rebaseline, the opening-sample grace, the g
 The next unit implements it, with the receipt recording both `t_cold_start_grace` and the anchor that
 closed the window, and the RED tests covering: a gap inside the cold start does not latch, the first
 gap after readiness does, and the window cannot reopen.
+
+## CP-UQ97 — The measurement itself is clean; the workload's broker is the remaining failure
+
+Run65 (r44, image rebuilt) is the first attempt where **the measurement latched nothing**: the
+receipt says `abort_reason` `None` with 330 samples, a 317-sample baseline, and
+`t_cold_start_gaps = 2` -- the cold-start window excused exactly the two early gaps that had been
+latching runs 59-64, and the timeline runs cleanly to the end:
+
+    BASELINE_END 60.19 -> SAMPLING_START 60.21 -> WORKLOAD_SPAWN 60.21 -> WORKLOAD_EXIT 72.51
+    -> CLEANUP_START 72.51 -> QUIET_END 77.51 -> SAMPLING_STOP 77.52 -> CLEANUP_END 77.52
+
+So the amended policy, the baseline, the peak alias, the sampler and the cleanup are all working
+together, and the single remaining failure is the workload's own: the launcher reports
+`SupervisorError: EARLY_EXIT: broker: 1`, i.e. the broker exited with code 1 for a reason that is
+*not* the config schema (fixed) and *not* the file permissions (fixed). Its own error line is above
+the supervisor message in `run65-session/raw/workload-stderr.log` and is the next thing to read.
+
+Two honest notes to carry forward:
+
+- the window semantics changed while chasing this: a *time-bounded* window that excuses every gap
+  inside it (counted in `t_cold_start_gaps`) replaced the one-shot version, because run64 spent its
+  single allowance on a 106 ms excursion at 1.6 s and then latched the 172 ms one at 3.4 s that the
+  window existed for;
+- the control test `test_cold_start_grace_covers_the_workloads_own_startup_once` still fails after
+  being rewritten for the new semantics; it needs one look at what `t_cold_start_gaps` reports in
+  that fixture before the gate is called green again.
