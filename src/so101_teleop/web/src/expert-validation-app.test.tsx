@@ -45,7 +45,15 @@ function fakeApi(overrides: Partial<ExpertValidationApi> = {}): ExpertValidation
         minimum_points: 4,
         maximum_points: 20,
         fixed_worker_counts: [1, 2, 3],
-        fixed_max_points_per_worker: 20,
+        worker_count_availability: [
+          { worker_count: 2, selectable: true, status: "APPROVED", reason_codes: [] },
+          { worker_count: 3, selectable: false, status: "NOT_MEASURED", reason_codes: ["BUDGET_PROFILE_UNAVAILABLE"] },
+          { worker_count: 4, selectable: false, status: "NOT_MEASURED", reason_codes: ["BUDGET_PROFILE_UNAVAILABLE"] },
+          { worker_count: 5, selectable: false, status: "NOT_MEASURED", reason_codes: ["BUDGET_PROFILE_UNAVAILABLE"] },
+          { worker_count: 6, selectable: false, status: "NOT_MEASURED", reason_codes: ["BUDGET_PROFILE_UNAVAILABLE"] },
+          { worker_count: 7, selectable: false, status: "NOT_MEASURED", reason_codes: ["BUDGET_PROFILE_UNAVAILABLE"] },
+          { worker_count: 8, selectable: false, status: "NOT_MEASURED", reason_codes: ["BUDGET_PROFILE_UNAVAILABLE"] },
+        ],
         adaptive_default_ladder: [8, 6, 4, 2, 1],
         lease_duration_s: 30,
         lease_renewal_margin_s: 10,
@@ -287,7 +295,9 @@ describe("ExpertValidationApp", () => {
     render(<ExpertValidationApp api={fakeApi({ restoreCampaign: async () => campaign })} />);
     await user.selectOptions(await screen.findByLabelText("Execution mode"), "PARALLEL");
     await user.selectOptions(screen.getByLabelText("Worker count"), "2");
-    expect(screen.getByText("Capacity 20 / 20")).toBeTruthy();
+    expect(screen.queryByLabelText("Max points per worker")).toBeNull();
+    expect(screen.queryByText(/^Capacity/)).toBeNull();
+    expect(screen.getByText("共享队列 · 每 worker 一次一任务")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Acquire lease" }));
     await user.click(screen.getByRole("button", { name: "Generate points" }));
     await user.click(screen.getByRole("button", { name: "Check resources" }));
@@ -371,14 +381,13 @@ test("server capability supplies all eight options and exact twenty-point N8 K3 
   expect(workers.options[0].disabled).toBe(true);
   expect(workers.options[0].text).toMatch(/SEQUENTIAL/);
   fireEvent.change(screen.getByRole("spinbutton", { name: "Final point count" }), { target: { value: "20" } });
-  expect(screen.getByText("Capacity 20 / 20")).toBeTruthy();
+  expect(screen.queryByText(/^Capacity/)).toBeNull();
   await user.selectOptions(workers, "8");
-  fireEvent.change(screen.getByRole("spinbutton", { name: "Max points per worker" }), { target: { value: "3" } });
-  expect(screen.getByText("Capacity 24 / 20")).toBeTruthy();
+  expect(screen.getByText("NOT_MEASURED · BUDGET_PROFILE_UNAVAILABLE")).toBeTruthy();
   await user.click(screen.getByRole("button", { name: "Acquire lease" }));
   await user.click(screen.getByRole("button", { name: "Generate points" }));
   await user.click(screen.getByRole("button", { name: "Check resources" }));
-  expect(preflight).toHaveBeenCalledWith(expect.objectContaining({ execution_mode: "PARALLEL", worker_count: 8, max_points_per_worker: 3 }), expect.objectContaining({ lease_id: "lease-a", lease_generation: 1 }));
+  expect(preflight).toHaveBeenCalledWith(expect.objectContaining({ contract_version: 2, execution_mode: "PARALLEL", worker_count: 8 }), expect.objectContaining({ lease_id: "lease-a", lease_generation: 1 }));
 });
 
 test("worker choices follow a narrower server capability without invented counts", async () => {

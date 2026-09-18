@@ -85,14 +85,34 @@ class _ClosedModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class _WorkerCountAvailabilityModel(_ClosedModel):
+    worker_count: int
+    selectable: bool
+    status: str
+    reason_codes: tuple[str, ...] = ()
+    profile_sha256: str | None = None
+    qualification_sha256: str | None = None
+
+
 class _CapabilitiesModel(_ClosedModel):
     available: bool = True
     execution_modes: tuple[str, ...] = ("SEQUENTIAL", "PARALLEL", "ADAPTIVE")
     default_execution_mode: str = "SEQUENTIAL"
     minimum_points: int = 4
     maximum_points: int = 20
-    fixed_worker_counts: tuple[int, ...] = (1, 2, 3)
-    fixed_max_points_per_worker: int = 20
+    fixed_worker_counts: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8)
+    worker_count_availability: tuple[_WorkerCountAvailabilityModel, ...] = (
+        _WorkerCountAvailabilityModel(
+            worker_count=2, selectable=True, status="APPROVED"),
+        _WorkerCountAvailabilityModel(
+            worker_count=3, selectable=True, status="APPROVED"),
+        *(
+            _WorkerCountAvailabilityModel(
+                worker_count=count, selectable=False, status="NOT_MEASURED",
+                reason_codes=("BUDGET_PROFILE_UNAVAILABLE",))
+            for count in range(4, 9)
+        ),
+    )
     adaptive_default_ladder: tuple[int, ...] = (8, 6, 4, 2, 1)
 
 

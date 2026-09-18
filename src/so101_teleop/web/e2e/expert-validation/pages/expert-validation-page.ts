@@ -50,10 +50,9 @@ export class ExpertValidationPage {
     await this.page.getByLabel("Execution mode").selectOption("SEQUENTIAL");
   }
 
-  async configureParallel(workerCount: number, maxPointsPerWorker: number): Promise<void> {
+  async configureParallel(workerCount: number): Promise<void> {
     await this.page.getByLabel("Execution mode").selectOption("PARALLEL");
     await this.page.getByLabel("Worker count").selectOption(String(workerCount));
-    await this.page.getByLabel("Max points per worker").fill(String(maxPointsPerWorker));
   }
 
   async configureAdaptive(): Promise<void> {

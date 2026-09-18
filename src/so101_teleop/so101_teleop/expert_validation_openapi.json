@@ -233,6 +233,11 @@
       "CampaignConfiguration": {
         "additionalProperties": false,
         "properties": {
+          "contract_version": {
+            "const": 2,
+            "title": "Contract Version",
+            "type": "integer"
+          },
           "execution_mode": {
             "enum": [
               "SEQUENTIAL",
@@ -296,19 +301,6 @@
             ],
             "title": "Max Infra Attempts Per Point"
           },
-          "max_points_per_worker": {
-            "anyOf": [
-              {
-                "maximum": 20.0,
-                "minimum": 1.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Max Points Per Worker"
-          },
           "preferred_worker_count": {
             "anyOf": [
               {
@@ -370,6 +362,7 @@
           }
         },
         "required": [
+          "contract_version",
           "service_session_id",
           "lease_id",
           "lease_generation",
@@ -629,6 +622,11 @@
             "title": "Command Id",
             "type": "string"
           },
+          "contract_version": {
+            "const": 2,
+            "title": "Contract Version",
+            "type": "integer"
+          },
           "execution_mode": {
             "enum": [
               "SEQUENTIAL",
@@ -691,19 +689,6 @@
               }
             ],
             "title": "Max Infra Attempts Per Point"
-          },
-          "max_points_per_worker": {
-            "anyOf": [
-              {
-                "maximum": 20.0,
-                "minimum": 1.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Max Points Per Worker"
           },
           "preferred_worker_count": {
             "anyOf": [
@@ -771,6 +756,7 @@
           }
         },
         "required": [
+          "contract_version",
           "service_session_id",
           "lease_id",
           "lease_generation",
@@ -826,11 +812,6 @@
             "title": "Execution Modes",
             "type": "array"
           },
-          "fixed_max_points_per_worker": {
-            "default": 20,
-            "title": "Fixed Max Points Per Worker",
-            "type": "integer"
-          },
           "fixed_worker_counts": {
             "default": [
               1,
@@ -867,6 +848,13 @@
             "default": 4,
             "title": "Minimum Points",
             "type": "integer"
+          },
+          "worker_count_availability": {
+            "items": {
+              "$ref": "#/components/schemas/WorkerCountAvailability"
+            },
+            "title": "Worker Count Availability",
+            "type": "array"
           }
         },
         "required": [
@@ -1814,6 +1802,63 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "WorkerCountAvailability": {
+        "additionalProperties": false,
+        "properties": {
+          "profile_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Sha256"
+          },
+          "qualification_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qualification Sha256"
+          },
+          "reason_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "selectable": {
+            "title": "Selectable",
+            "type": "boolean"
+          },
+          "status": {
+            "minLength": 1,
+            "title": "Status",
+            "type": "string"
+          },
+          "worker_count": {
+            "maximum": 8.0,
+            "minimum": 2.0,
+            "title": "Worker Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "worker_count",
+          "selectable",
+          "status"
+        ],
+        "title": "WorkerCountAvailability",
         "type": "object"
       },
       "WorkerProjectionResponse": {

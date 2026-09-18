@@ -23,7 +23,21 @@
         "minimum_points": {"type": "integer"},
         "maximum_points": {"type": "integer"},
         "fixed_worker_counts": {"type": "array", "items": {"type": "integer"}},
-        "fixed_max_points_per_worker": {"type": "integer"},
+        "worker_count_availability": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["worker_count", "selectable", "status"],
+            "properties": {
+              "worker_count": {"type": "integer"},
+              "selectable": {"type": "boolean"},
+              "status": {"type": "string"},
+              "reason_codes": {"type": "array", "items": {"type": "string"}},
+              "profile_sha256": {"type": ["string", "null"]},
+              "qualification_sha256": {"type": ["string", "null"]}
+            }
+          }
+        },
         "adaptive_default_ladder": {"type": "array", "items": {"type": "integer"}}
       }
     },

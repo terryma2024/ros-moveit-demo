@@ -300,6 +300,11 @@ export interface components {
         /** CampaignConfiguration */
         CampaignConfiguration: {
             /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: 2;
+            /**
              * Execution Mode
              * @enum {string}
              */
@@ -316,8 +321,6 @@ export interface components {
             manifest_id: string;
             /** Max Infra Attempts Per Point */
             max_infra_attempts_per_point?: number | null;
-            /** Max Points Per Worker */
-            max_points_per_worker?: number | null;
             /** Preferred Worker Count */
             preferred_worker_count?: number | null;
             /** Service Session Id */
@@ -446,6 +449,11 @@ export interface components {
             /** Command Id */
             command_id: string;
             /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: 2;
+            /**
              * Execution Mode
              * @enum {string}
              */
@@ -462,8 +470,6 @@ export interface components {
             manifest_id: string;
             /** Max Infra Attempts Per Point */
             max_infra_attempts_per_point?: number | null;
-            /** Max Points Per Worker */
-            max_points_per_worker?: number | null;
             /** Preferred Worker Count */
             preferred_worker_count?: number | null;
             /** Preflight Receipt Id */
@@ -504,11 +510,6 @@ export interface components {
              */
             execution_modes: ("SEQUENTIAL" | "PARALLEL" | "ADAPTIVE")[];
             /**
-             * Fixed Max Points Per Worker
-             * @default 20
-             */
-            fixed_max_points_per_worker: number;
-            /**
              * Fixed Worker Counts
              * @default [
              *       1,
@@ -542,6 +543,8 @@ export interface components {
              * @default 4
              */
             minimum_points: number;
+            /** Worker Count Availability */
+            worker_count_availability?: components["schemas"]["WorkerCountAvailability"][];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -866,6 +869,24 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** WorkerCountAvailability */
+        WorkerCountAvailability: {
+            /** Profile Sha256 */
+            profile_sha256?: string | null;
+            /** Qualification Sha256 */
+            qualification_sha256?: string | null;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            /** Selectable */
+            selectable: boolean;
+            /** Status */
+            status: string;
+            /** Worker Count */
+            worker_count: number;
         };
         /** WorkerProjectionResponse */
         WorkerProjectionResponse: {

@@ -83,7 +83,7 @@ test("C04 config changes invalidate credentials precisely", async ({ page, scrip
   expect(manifestB.manifest_id).not.toBe(manifestA.manifest_id);
   await expect(page.locator("[data-point-id]")).toHaveCount(5);
 
-  await app.configureParallel(2, 3);
+  await app.configureParallel(2);
   await expect(page.locator("[data-point-id]")).toHaveCount(5);
 
   await app.runPreflight();
@@ -125,13 +125,12 @@ test("C06 fixed parallel admission is explicit scenario:parallel-unavailable", a
   await app.acquireLease();
   await app.generateManifest(20);
 
-  await app.configureParallel(2, 2);
-  await expect(app.notice("Capacity 4 / 20")).toBeVisible();
+  await app.configureParallel(2);
+  await expect(page.getByText("共享队列 · 每 worker 一次一任务")).toBeVisible();
+  await expect(page.getByText(/NOT_MEASURED · BUDGET_PROFILE_UNAVAILABLE/)).toBeVisible();
   await expect(app.startButton()).toBeDisabled();
-
-  await app.configureParallel(2, 10);
-  await expect(app.notice("Capacity 20 / 20")).toBeVisible();
-  await expect(app.startButton()).toBeEnabled();
+  await expect(page.getByLabel("Max points per worker")).toHaveCount(0);
+  await expect(page.getByText(/^Capacity/)).toHaveCount(0);
 
   await app.runPreflight();
   await expect(app.notice("PARALLEL_NOT_QUALIFIED")).toBeVisible();
@@ -153,6 +152,7 @@ test("C07 adaptive request shape and defaults", async ({ page, scriptedServer })
   await app.startValidation();
   const commands = await scriptedServer.control.commands();
   const preflight = commands.find((command) => command.operation === "preflight");
+  expect(preflight.body.contract_version).toBe(2);
   expect(preflight.body.execution_mode).toBe("ADAPTIVE");
   expect(preflight.body.preferred_worker_count).toBe(8);
   expect(preflight.body.fallback_worker_counts).toEqual([6, 4, 2, 1]);
@@ -173,12 +173,12 @@ test("C08 lease and preflight gates block start scenario:preflight-rejected", as
   const unauthenticated = await page.request.post("/expert-validation/campaigns/preflight", {
     data: {
       service_session_id: "forged",
+      contract_version: 2,
       lease_id: "lease-forged",
       lease_generation: 1,
       manifest_id: "manifest-none",
       execution_mode: "SEQUENTIAL",
       worker_count: 1,
-      max_points_per_worker: 4,
     },
   });
   expect(unauthenticated.status()).toBe(409);
@@ -193,13 +193,14 @@ test("C08 lease and preflight gates block start scenario:preflight-rejected", as
   const forgedStart = await page.request.post("/expert-validation/campaigns", {
     data: {
       service_session_id: "forged",
+      contract_version: 2,
       lease_id: "lease-forged",
       lease_generation: 1,
       command_id: "forged-start",
       manifest_id: "manifest-none",
+      contract_version: 2,
       execution_mode: "SEQUENTIAL",
       worker_count: 1,
-      max_points_per_worker: 4,
       preflight_receipt_id: "receipt-forged",
     },
   });
@@ -235,13 +236,13 @@ test("C22 renewed lease invalidates the preflight receipt scenario:short-lease",
   const stale = await page.request.post("/expert-validation/campaigns", {
     data: {
       service_session_id: "stale-session",
+      contract_version: 2,
       lease_id: "lease-stale",
       lease_generation: 1,
       command_id: "stale-start",
       manifest_id: manifest.manifest_id,
       execution_mode: "SEQUENTIAL",
       worker_count: 1,
-      max_points_per_worker: 4,
       preflight_receipt_id: receipt.receipt_id,
     },
   });
@@ -271,10 +272,10 @@ test("N8 exact twenty-point fixed preview and rejected admission scenario:parall
     .toEqual(["1", "2", "3", "4", "5", "6", "7", "8"]);
   await expect(options.first()).toHaveJSProperty("disabled", true);
   await expect(options.first()).toHaveText("1 (SEQUENTIAL only)");
-  await expect(app.notice("Capacity 20 / 20")).toBeVisible();
+  await expect(page.getByText("共享队列 · 每 worker 一次一任务")).toBeVisible();
   await page.getByLabel("Worker count").selectOption("8");
-  await page.getByLabel("Max points per worker").fill("3");
-  await expect(app.notice("Capacity 24 / 20")).toBeVisible();
+  await expect(page.getByText(/NOT_MEASURED · BUDGET_PROFILE_UNAVAILABLE/)).toBeVisible();
+  await expect(page.getByLabel("Max points per worker")).toHaveCount(0);
   const responsePromise = page.waitForResponse(response =>
     response.url().endsWith("/expert-validation/campaigns/preflight")
       && response.request().method() === "POST");
@@ -284,7 +285,8 @@ test("N8 exact twenty-point fixed preview and rejected admission scenario:parall
   expect(response.status()).toBe(409);
   expect(await response.json()).toEqual({ code: "PARALLEL_NOT_QUALIFIED" });
   const request = response.request().postDataJSON();
-  expect(request).toMatchObject({ execution_mode: "PARALLEL", worker_count: 8, max_points_per_worker: 3 });
+  expect(request).toMatchObject({ contract_version: 2, execution_mode: "PARALLEL", worker_count: 8 });
+  expect(request).not.toHaveProperty("max_points_per_worker");
   expect(request).not.toHaveProperty("preferred_worker_count");
   const commands = await scriptedServer.control.commands();
   expect(commands.filter(command => command.operation === "start_campaign")).toEqual([]);

@@ -5,7 +5,6 @@ export type SetupState = {
   pointCount: number;
   executionMode: ExecutionMode;
   workerCount: number;
-  maxPointsPerWorker: number;
 };
 
 type Props = {
@@ -36,11 +35,15 @@ export function CampaignSetup({
   onStart,
 }: Props) {
   const validCount = state.pointCount >= 4 && state.pointCount <= 20;
-  const capacity = state.workerCount * state.maxPointsPerWorker;
   const adaptive = state.executionMode === "ADAPTIVE";
+  const availability = (capabilities?.worker_count_availability ?? []).find(
+    (entry) => entry.worker_count === state.workerCount,
+  );
   const fixedWorkerCounts = capabilities?.fixed_worker_counts ?? [];
   const validFixedWorkers = fixedWorkerCounts.includes(state.workerCount)
     && (state.executionMode === "SEQUENTIAL" ? state.workerCount === 1 : state.workerCount >= 2);
+  const exactNSelectable = state.executionMode === "SEQUENTIAL"
+    || (availability?.selectable ?? false);
   return (
     <section aria-label="Campaign setup" className="space-y-3 rounded-lg border border-slate-700 bg-slate-900 p-4">
       <h2 className="text-lg font-semibold">Campaign setup</h2>
@@ -68,7 +71,6 @@ export function CampaignSetup({
               ...state,
               executionMode,
               workerCount: executionMode === "SEQUENTIAL" ? 1 : executionMode === "PARALLEL" ? 2 : 8,
-              maxPointsPerWorker: executionMode === "SEQUENTIAL" ? state.pointCount : 10,
             }, "executionMode");
           }}
           className="ml-2 bg-slate-800 px-2"
@@ -95,16 +97,12 @@ export function CampaignSetup({
               ))}
             </select>
           </label>
-          <label className="block">Max points per worker
-            <input
-              aria-label="Max points per worker"
-              type="number"
-              value={state.maxPointsPerWorker}
-              onChange={(event) => onChange({ ...state, maxPointsPerWorker: Number(event.target.value) }, "maxPointsPerWorker")}
-              className="ml-2 w-20 bg-slate-800 px-2"
-            />
-          </label>
-          <p>Capacity {capacity} / {state.pointCount}</p>
+          <p>共享队列 · 每 worker 一次一任务</p>
+          <p aria-live="polite">
+            {availability
+              ? `${availability.status}${availability.selectable ? "" : ` · ${(availability.reason_codes ?? []).join(", ") || "EXACT_N_UNQUALIFIED"}`}`
+              : "EXACT_N_UNQUALIFIED · BUDGET_PROFILE_UNAVAILABLE"}
+          </p>
         </>
       ) : (
         <div className="space-y-1">
@@ -118,7 +116,7 @@ export function CampaignSetup({
         <Button onClick={onAcquireLease} disabled={leaseHeld || leaseRenewing}>Acquire lease</Button>
         <Button onClick={onGenerate} disabled={!validCount}>Generate points</Button>
         <Button onClick={onPreflight} disabled={!leaseHeld || leaseRenewing || !manifestReady || !adaptive && !validFixedWorkers}>Check resources</Button>
-        <Button onClick={onStart} disabled={!leaseHeld || leaseRenewing || !manifestReady || !adaptive && !validFixedWorkers || capacity < state.pointCount && !adaptive}>Start validation</Button>
+        <Button onClick={onStart} disabled={!leaseHeld || leaseRenewing || !manifestReady || (!adaptive && (!validFixedWorkers || !exactNSelectable))}>Start validation</Button>
       </div>
     </section>
   );
