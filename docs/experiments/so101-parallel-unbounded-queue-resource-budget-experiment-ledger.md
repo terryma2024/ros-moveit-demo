@@ -4963,3 +4963,34 @@ the operator's to choose:
 3. treat single-period throttling as non-disqualifying (`throttling_disqualifies_run`), also policy.
 
 I have not touched 2 or 3, and I will not without the operator's word.
+
+## CP-UQ111 — There is no consumer to bound: the demand is transient, and the average is under a core
+
+The ranking from run75 closes option 1 of CP-UQ110, and it closes it with a number rather than a
+theory:
+
+    total cgroup cpu-s over the run = 8.91
+    sum of the 15 members' deltas   = 0.86
+    top members: 0.860 cpu-s for so101_parallel_ (the launcher), 0.000 for each of the ROS 2 nodes
+
+Eight of the nine CPU-seconds in that cgroup belong to processes that were **not** in `cgroup.procs`
+when any sample was taken -- short-lived children of the launch stack that run and exit between
+samples, while their usage stays in the cgroup's hierarchical counter. So the workload's demand is
+real, transient and small on average (0.85 cores over 10.5 s), and there is no single consumer to
+bound: option 1 has nothing to grip.
+
+That leaves the picture complete and the decision squarely where it belongs:
+
+- the instrument reports CPU correctly at every level (period-scale rate, per-process and per-subtree
+  attribution, counter provenance) and no longer produces the period-scale artefact (peak 9.17 cores
+  against a 19.2-core envelope line, average 0.85);
+- the only remaining refusal is a **single throttling event** in ~190 samples, which the kernel
+  produced because the cgroup momentarily wanted more than its 18.9-core quota inside one `cpu.max`
+  period, and which `throttling_disqualifies_run` makes disqualifying by policy;
+- changing that rule, or widening `safety.capacity_fraction`, are the operator's calls and I have
+  touched neither.
+
+For the record this stretch also produced eleven ledger entries whose hypotheses were refuted by
+their own measurements (thread pools, container child cgroups, a named heavy consumer). Each is
+written down with the refutation, and the pattern is consistent: this workload is light on average and
+bursty at the quota boundary, and the harness now says so with evidence.
