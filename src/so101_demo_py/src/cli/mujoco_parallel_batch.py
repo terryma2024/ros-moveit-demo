@@ -254,6 +254,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--yolo-executor-count")
     parser.add_argument("--evidence-root", type=Path, required=True)
     parser.add_argument("--broker-image", required=True)
+    # The sealed authority commits to an image digest; the tag above is what the local
+    # runtime knows, so a measurement run carries both and each check reads its own.
+    parser.add_argument("--broker-image-id")
     parser.add_argument("--yolo-weights", type=Path, required=True)
     parser.add_argument("--yolo-weights-sha256", required=True)
     parser.add_argument("--grounded-root", type=Path, required=True)
@@ -469,7 +472,8 @@ def _compose_measurement_gate(options, config, worker_count, evidence_root):
             yolo_weights_sha256=options.yolo_weights_sha256,
             grounded_root=Path(options.grounded_root),
             grounded_manifest_sha256=options.grounded_manifest_sha256,
-            broker_image=options.broker_image, config_path=Path(options.config))
+            broker_image=options.broker_image_id or options.broker_image,
+            config_path=Path(options.config))
     except ContractError as error:
         raise CliError(error.code) from error
     return gate
