@@ -3382,3 +3382,32 @@ that check. The next step is to generate the overlay binding (schema 1, the exac
 each `{path, sha256}`) from this real layout, pass it to the launcher as its
 `--provenance-binding`, keep the sealed frozen binding as the identity input, and reseal and
 rerun. N1 remains `NOT_MEASURED`; nothing is extrapolated to another N.
+
+## CP-UQ54 — Stage C: the overlay binding is generated and read, and the prefix check is next
+
+Runs: `stage-c/batches/n1-calibration-20260918-run1{3,4,5}/`, `scratch/stageC-fix11.*/`,
+`scratch/stageC-auth.S2WPqrz0/measure{19,20,21}.log`. Commits `7a5b261aa`, `0de7871db`,
+`34c14fc97`.
+
+The runner now writes the launcher's own overlay provenance document
+(`raw/overlay-provenance-binding.json`, schema 1, the seven exact keys, artifact hashes computed
+from the bytes) and passes it as `--provenance-binding`, while the sealed frozen binding keeps
+feeding the runtime identity. Two harness defects surfaced while making that real, both fixed with
+tests (33 passed in the file):
+
+- `0de7871db` -- `MEASUREMENT_EVIDENCE_ROOT_INVALID`. Writing the overlay first created the batch
+  root as an *intermediate* directory with the umask default (0775), and the launcher refuses a
+  non-private measurement root. `ensure_private_batch_root` now creates and tightens it to 0700.
+- `34c14fc97` -- `PROVENANCE_EXTERNAL_PACKAGE_PREFIX`. The overlay's `package_prefixes` must be the
+  AMENT prefixes the launcher re-queries, not the import paths: they resolve to
+  `dev-install/so101_demo_py` and `dev-install/so101_mujoco_support` (a third prefix beside
+  `dev-build` and `freeze-install`), and the document now declares exactly those, with
+  `install_root`/`build_root` at `dev-install`.
+
+The run still refuses with `PROVENANCE_EXTERNAL_PACKAGE_PREFIX` even though the document's values
+are byte-equal to what AMENT answers for both packages in the harness process, and the child
+inherits `AMENT_PREFIX_PATH` (`_AUTHORITY_ENV` covers only `SO101_*` names). So the open question
+is narrow and testable: which mapping the validator actually iterates, and what the *child*
+answers -- print `overlay_identity["package_prefixes"]` as the launcher derives it alongside the
+child's own `get_package_prefix` results, and compare. N1 remains `NOT_MEASURED`; nothing is
+extrapolated to another N.
