@@ -6334,3 +6334,28 @@ physical stability record; plus correction item 2's bounded positive delegated r
 behind the pre-fix `lg-demo-full`.
 
 _Ledger HEAD when written: `d0c19b5b2`._
+
+
+## CP-UQ146 — Task 11: the acceptance run stops in global setup, and that is the next fix
+
+The manifest-driven acceptance was launched with Bun (`so101_bun lg-live-functional run
+test:e2e:live-sim`, service `http://127.0.0.1:8010`, the CP-UQ144 manifest, the copied prefix and
+`SO101_TASK_ROOT`). It exits 1 within half a second, in
+`fixtures/live-sim.ts:99` inside `validateLiveSimPreconditions`, called from
+`live-sim-global-setup.ts:9`: the global precondition check runs **before** any playwright project
+and refuses the run.
+
+That is the same class of leftover the correction named in item 1 ("live-sim fixture 删除 budget
+provenance binding"): the precondition validator still expects the retired source/installation
+binding instead of the real Chrome/install/simulation/controller/owner preconditions. So the next
+action is concrete and located — read `validateLiveSimPreconditions` (live-sim.ts around line 90)
+and replace the retired requirement with the functional ones, keeping the Chrome proof and the
+install-file checks that already exist. Nothing about the manifest, the deployment or the guard is
+implicated: the run never reached a test.
+
+Record: `browser/lg-live-functional.pPJqad3a/` (stdout/stderr/result.json), and the launch script
+`/tmp/so101-debug-startup-probe-b82d10b8/live_accept.sh` for the next attempt. Also noted for the
+record: my first launch guard matched its own command line and skipped the launch; the relaunch used
+a self-match-proof pattern and is the run reported here.
+
+_Ledger HEAD when written: `eabae80da`._
