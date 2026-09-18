@@ -175,6 +175,92 @@ def test_verified_context_canonicalizes_symlink_and_projects_hashes(tmp_path: Pa
         assert FULL_SHA.fullmatch(projection[artifact]["sha256"])
 
 
+def _forbid_git(monkeypatch):
+    """Any Git subprocess on a runtime path is a failure; other subprocesses pass."""
+
+    import subprocess as subprocess_module
+
+    calls: list[list[str]] = []
+    mode = {"strict": True}
+
+    def recorder(argv, *args, **kwargs):
+        recorded = [str(item) for item in argv] if isinstance(argv, (list, tuple)) else [str(argv)]
+        calls.append(recorded)
+        if mode["strict"] and recorded and recorded[0].endswith("git"):
+            raise AssertionError(f"runtime Git subprocess: {recorded}")
+        return real_run(argv, *args, **kwargs)
+
+    real_run = subprocess_module.run
+    monkeypatch.setattr(subprocess_module, "run", recorder)
+    return calls, mode
+
+
+def test_runtime_execution_chain_never_runs_git(tmp_path: Path, monkeypatch) -> None:
+    """Runtime commit metadata is declared/unknown; Git is build-manifest only."""
+
+    from ament_index_python.packages import get_package_prefix
+
+    from so101_demo.cli.text_pick_agent import _valid_execute_context
+    from so101_demo.runtime.provenance import (
+        installed_bundle, resolve_installed_execution_identity)
+
+    calls, mode = _forbid_git(monkeypatch)
+    prefix = str(Path(get_package_prefix("so101_demo_py")).resolve())
+    context, reason = _valid_execute_context(
+        _options(tmp_path, source_commit="0" * 40, installed_prefix=prefix))
+
+    assert reason is None, reason
+    assert context is not None
+    assert context.execution_provenance.source_commit in {None, "0" * 40}
+    identity = resolve_installed_execution_identity()
+    assert identity.source_commit in {None, None} or isinstance(identity.source_commit, str)
+    bundle = installed_bundle()
+    assert bundle.bundle_sha256
+    assert not [call for call in calls if call and call[0].endswith("git")]
+
+    # The build/install manifest generator is the one place Git may be observed.
+    from so101_demo.runtime.debug_provenance import build_debug_manifest
+
+    mode["strict"] = False
+    copied = tmp_path / "copied"
+    (copied / "share/so101_demo_py").mkdir(parents=True)
+    (copied / "share/so101_demo_py/note.txt").write_text("bytes\n")
+    document = build_debug_manifest(copied, source_root=Path(__file__).resolve().parents[3])
+    assert document["kind"] == "DEBUG_INSTALL_PROVENANCE"
+    assert [call for call in calls if call and call[0].endswith("git")]
+
+
+def test_debug_artifact_read_failures_are_nonblocking(tmp_path: Path, monkeypatch) -> None:
+    """Permission, race and malformed metadata failures stay diagnostics."""
+
+    from ament_index_python.packages import get_package_prefix
+
+    from so101_demo.cli.text_pick_agent import _valid_execute_context
+    from so101_demo.runtime import provenance
+
+    prefix = str(Path(get_package_prefix("so101_demo_py")).resolve())
+    for error in (PermissionError("denied"), FileNotFoundError("vanished"),
+                  OSError("io"), ValueError("bad path")):
+        def failing(_path, _error=error):
+            raise _error
+
+        monkeypatch.setattr(provenance, "_sha256", failing)
+        context, reason = _valid_execute_context(
+            _options(tmp_path, source_commit=_head(), installed_prefix=prefix))
+        assert reason is None, (error, reason)
+        assert context is not None
+        assert context.execution_provenance.entrypoint is None
+        assert context.execution_provenance.module is None
+    monkeypatch.undo()
+
+    # Malformed/unresolvable declared metadata is unknown, not a refusal.
+    for declared in ("\u0000bad", "/proc/self/nonexistent/../prefix", ""):
+        context, reason = _valid_execute_context(
+            _options(tmp_path, source_commit=_head(), installed_prefix=declared))
+        assert reason is None, (declared, reason)
+        assert context is not None
+
+
 class RecordingAgent:
     def __init__(self) -> None:
         self.requests: list[object] = []

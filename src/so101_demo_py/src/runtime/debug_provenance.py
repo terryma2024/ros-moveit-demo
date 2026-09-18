@@ -25,7 +25,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
@@ -115,19 +114,13 @@ def collect_debug_artifacts(
 
 
 def _observed_commit(source_root: Path | None) -> tuple[str | None, bool | None]:
-    if source_root is None:
-        return None, None
-    from .provenance import observed_source_commit
+    """Build/install-only Git observation (the runtime never reaches this)."""
 
-    commit = observed_source_commit(Path(source_root))
-    try:
-        completed = subprocess.run(
-            ["git", "-C", str(source_root), "status", "--porcelain", "--untracked-files=no"],
-            check=True, capture_output=True, text=True, timeout=10,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return commit, None
-    return commit, bool(completed.stdout.strip())
+    from .provenance import (
+        observed_source_commit_from_git, observed_source_dirty_from_git)
+
+    commit = observed_source_commit_from_git(source_root)
+    return commit, observed_source_dirty_from_git(source_root)
 
 
 def build_debug_manifest(
