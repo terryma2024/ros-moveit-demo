@@ -454,10 +454,26 @@ class ProductionExpertValidationService(ExpertValidationService):
             "available": bool(available_modes),
             "execution_modes": available_modes,
             "fixed_worker_counts": FIXED_WORKER_COUNTS,
+            "worker_count_availability": self._worker_count_availability(),
             "default_execution_mode": capability.default_execution_mode,
             "lease_duration_s": lease.duration_s,
             "lease_renewal_margin_s": lease.renewal_margin_s,
         }
+
+    def _worker_count_availability(self):
+        """Exact-N availability; without an approved profile every N stays unselectable."""
+
+        return tuple(
+            {
+                "worker_count": count,
+                "selectable": False,
+                "status": "NOT_MEASURED",
+                "reason_codes": ["BUDGET_PROFILE_UNAVAILABLE"],
+                "profile_sha256": None,
+                "qualification_sha256": None,
+            }
+            for count in FIXED_WORKER_COUNTS[1:]
+        )
 
     def acquire_lease(self, body):
         return asdict(self.lease_service.acquire(body["service_session_id"]))
@@ -560,7 +576,8 @@ class ProductionExpertValidationService(ExpertValidationService):
                 if adaptive
                 else body.get("worker_count", 1)
             ),
-            max_points_per_worker=body.get("max_points_per_worker"),
+            # Version two carries no lifetime quota; the field stays None for new runs.
+            max_points_per_worker=None,
             fallback_worker_counts=tuple(body.get("fallback_worker_counts", (6, 4, 2, 1))),
             initial_points_per_worker=body.get("initial_points_per_worker", 3),
             worker_start_timeout_s=body.get("worker_start_timeout_s", 120.0),

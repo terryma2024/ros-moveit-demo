@@ -75,7 +75,9 @@ class CampaignBinding:
             raise ValueError("EXECUTION_MODE")
         if not isinstance(self.execution_config, Mapping):
             raise ValueError("EXECUTION_CONFIG_MAPPING")
-        fixed_fields = {"worker_count", "max_points_per_worker"}
+        # Version two fixed execution has no lifetime quota; retained v1 rows may still
+        # carry the historical key and must keep validating for read-only projection.
+        fixed_fields = {"worker_count"}
         adaptive_fields = {
             "preferred_worker_count",
             "fallback_worker_counts",
