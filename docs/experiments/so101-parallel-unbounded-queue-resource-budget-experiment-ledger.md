@@ -4719,3 +4719,29 @@ a larger envelope or a policy decision about single-event throttling during star
 decisions, not harness fixes. What is already established is that the instrument is no longer the
 obstacle: the entire chain runs, and every remaining refusal is a policy judgement about the
 candidate.
+
+## CP-UQ101 — Not a burst: the workload sits on its quota, and the math is not the broker's
+
+The last five samples of run67 settle the question CP-UQ100 left open, and the answer is the opposite
+of a teardown blip. The owned cgroup's own counter climbs about one CPU-second per 50 ms sample:
+
+    t=10.71 cpu_us=6042408 rate=18.16
+    t=10.76 cpu_us=6267406 rate=18.16
+    t=10.82 cpu_us=7279240 rate= 9.58
+    t=10.86 cpu_us=8270536 rate= 9.58
+    t=10.92 cpu_us=9210366 rate=18.88 throttled=True
+
+against `limits {'cpu_quota_us': 1910050, 'cpu_period_us': 100000}` = **19.1 cores**. So the workload
+holds ~19 cores in the final second, lands exactly on the quota, and the zero-tolerance rule
+disqualifies it. Real consumption, real quota, real policy.
+
+That also means forwarding the thread bounds into the **broker** container did not bound the work that
+matters: something else inside the measured cgroup is opening ~19 threads/processes -- the worker side
+of the composition, which is launched separately from the broker -- so the same forwarding has to be
+applied wherever that math actually runs. The next step is to find that launch path (the worker's
+container or process) and pass the bounds there, exactly as was done for the broker and with the same
+kind of test; the broker-side fix stays regardless, since it is correct on its own.
+
+Nothing here is an instrument defect any more: the harness measures the workload's CPU correctly and
+the policy draws the line. What is still missing is whether the candidate's demand can be brought
+under 19.1 cores at N1 by bounding the right process, and that is what the next run will answer.
