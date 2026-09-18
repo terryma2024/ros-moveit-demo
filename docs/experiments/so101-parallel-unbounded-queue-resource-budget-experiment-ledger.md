@@ -5606,3 +5606,56 @@ with the audited nodeid manifest, teleop CTest, Bun/OpenAPI, then the real copie
 console/launch gates).
 
 _Ledger HEAD when written: `aa5016deb`._
+
+
+## CP-UQ124 — Task 9 in progress: the split gate exists, the immutable copy is building
+
+Commit for the tooling half. What is done and verified:
+
+- **The collection plugin and the split CLI are real.** `tools/so101_pytest_gate.py` gained
+  `pytest_collection_finish`, which writes the complete sorted node-ID list to
+  `$SO101_TEST_NODEID_MANIFEST` during a collection run without executing a test, and
+  `--emit-colcon-split COLLECTION.json OUTPUT_DIR`, which produces
+  `parallel-nodeids.json`, `serial-nodeids.txt`, `deselect-args.txt` and
+  `multiset-coverage.json`. It refuses a missing/empty collection, a foreign node ID (outside
+  `test/`), a duplicate node ID, and a lane overlap or loss, instead of silently swallowing
+  identity.
+- **It was exercised on the real collection, not a fixture**:
+  `SO101_TEST_NODEID_MANIFEST=... pytest --collect-only -q -p tools.so101_pytest_gate
+  src/so101_demo_py/test` collected **3236 nodes**, and the split reported
+  `collection_count 3236, parallel 2965, serial 271, union 3236, intersection 0,
+  exact true`, with `test_parallel_start_guard_launch.py` correctly in the serial lane. The
+  run directory is `colcon-split-light.*` under the task root.
+- **Unit tests for the fail-closed paths** were added to `test_pytest_full_gate_runner.py`
+  (empty/missing, foreign, duplicate, nested-and-parametrised identity preserved, exact
+  union). They exposed a stale fixture: `test_serial_lane_is_ordered_and_excluded_from_parallel_shards`
+  listed the serial modules by hand and broke the moment a new module was registered, so it
+  now derives them from `SERIAL_MODULES`. Gate `lg-t9-split2`: **41 passed**.
+- **The new teleop case is registered** in `src/so101_teleop/CMakeLists.txt`
+  (`so101_add_pytest_test(test_expert_validation_start_guard ...)`) and in the package-layout
+  expectation list; `lg-t9-cmake` **6 passed**, including the two cases that really configure
+  CMake to read the generated registry.
+- **The copied-install test now honours `SO101_E2E_INSTALL_PREFIX`** (the historical
+  `freeze-install` path remains only as its default), which is what lets the new immutable
+  copy be tested without touching the old prefix.
+- Guard regression re-run while the build occupied the machine: `lg-t9-guards` **77 passed**.
+
+**In flight when this was written**: the immutable copy build (no symlink-install) into fresh
+directories, with the candidate/freeze prefixes removed from `AMENT_PREFIX_PATH` so colcon
+resolves the real dependency closure:
+
+- build base: `/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main/unbounded-queue-resource-budget/copy-build-light.EenHG5ii`
+- install base: `/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main/unbounded-queue-resource-budget/copy-install-light.uJr9RhIc`
+
+colcon was still running (`so101_demo_py` had installed its `setup.*`; `so101_teleop` was
+building). The next round finishes it, verifies the copy (no Git, entry/module/launch/config/
+asset and dependency origins and SHAs against the final code, accurate debug manifest), and
+runs `SO101_E2E_INSTALL_PREFIX=<install base> so101_pytest lg-copy-final
+src/so101_demo_py/test/test_copied_installed_entrypoint.py
+src/so101_demo_py/test/test_parallel_start_guard_launch.py`. Still outstanding for Task 9
+after that: the two full lane gates (`lg-demo-package-parallel` with the deselect set and
+`lg-demo-package-serial` with the exact node IDs, plus `lg-teleop-package` with CTest `-j 1`),
+`lg-demo-full`, `lg-teleop-full`, the Bun/OpenAPI gates, and the source freeze from the final
+clean HEAD.
+
+_Ledger HEAD when written: `521896564`._
