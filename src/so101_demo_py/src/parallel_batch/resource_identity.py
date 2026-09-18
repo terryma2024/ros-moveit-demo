@@ -323,6 +323,46 @@ class FullByteAudit:
                 raise ContractError("AUDIT_ORIGINS")
         object.__setattr__(self, "origins", MappingProxyType(dict(self.origins)))
 
+    _FIELDS = ("schema_version", "source_commit", "source_clean", "prefix", "files", "origins")
+
+    @classmethod
+    def from_document(cls, document: object) -> "FullByteAudit":
+        """Closed load: an audit produced anywhere must carry exactly these bytes' fields."""
+
+        if not isinstance(document, Mapping):
+            raise ContractError("AUDIT_MAPPING")
+        unknown = set(document) - set(cls._FIELDS)
+        missing = set(cls._FIELDS) - set(document)
+        if unknown:
+            raise ContractError(f"AUDIT_UNKNOWN_FIELD: {sorted(unknown)!r}")
+        if missing:
+            raise ContractError(f"AUDIT_MISSING_FIELD: {sorted(missing)!r}")
+        raw_files = document["files"]
+        if not isinstance(raw_files, (list, tuple)):
+            raise ContractError("AUDIT_FILES")
+        entries = []
+        for payload in raw_files:
+            if not isinstance(payload, Mapping):
+                raise ContractError("AUDIT_FILE_MAPPING")
+            unknown_file = set(payload) - {"logical_path", "raw_sha256", "semantic_sha256"}
+            if unknown_file or "logical_path" not in payload or "raw_sha256" not in payload:
+                raise ContractError("AUDIT_FILE_FIELDS")
+            entries.append(InventoryEntry(
+                logical_path=str(payload["logical_path"]),
+                raw_sha256=payload["raw_sha256"],
+                semantic_sha256=payload.get("semantic_sha256")))
+        origins = document["origins"]
+        if not isinstance(origins, Mapping):
+            raise ContractError("AUDIT_ORIGINS")
+        return cls(
+            schema_version=document["schema_version"],
+            source_commit=document["source_commit"],
+            source_clean=document["source_clean"],
+            prefix=document["prefix"],
+            files=tuple(entries),
+            origins={str(name): str(origin) for name, origin in origins.items()},
+        )
+
     def as_document(self) -> dict[str, object]:
         return {
             "schema_version": self.schema_version,
@@ -336,6 +376,19 @@ class FullByteAudit:
     @property
     def sha256(self) -> str:
         return canonical_sha256(self.as_document())
+
+
+def verify_runtime_identity(fingerprint: RuntimeFingerprint, declared: str | None) -> str:
+    """R is derived from real bytes; a declared identity must equal that digest."""
+
+    if isinstance(fingerprint, str) or not isinstance(fingerprint, RuntimeFingerprint):
+        raise ContractError("RUNTIME_FINGERPRINT")
+    if declared is None:
+        return fingerprint.sha256
+    _require_sha256("declared_identity", declared)
+    if fingerprint.sha256 != declared:
+        raise ContractError("RUNTIME_FINGERPRINT_MISMATCH")
+    return declared
 
 
 def verify_deployment_equivalence(

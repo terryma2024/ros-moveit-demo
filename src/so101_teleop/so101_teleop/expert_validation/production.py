@@ -324,7 +324,8 @@ class _HostResourceProbe:
                         batch_id=getattr(config, "batch_id", "web") or "web",
                         epoch=1,
                         execution_identity_sha256=identity,
-                        request_kind="FIXED_PRODUCTION",
+                        request_kind=getattr(
+                            self._resource_gate, "request_kind", "FIXED_PRODUCTION"),
                     ))
                     reasons.extend(decision.reason_codes)
                 return not reasons, tuple(reasons), observations
@@ -1247,21 +1248,21 @@ class ProductionExpertValidationService(ExpertValidationService):
         self._subscribers.discard(queue)
 
 
-def default_admission_factory(environment: Mapping[str, str]):
-    """Compose the installed shared gate from verified P/Q/M/D authority (or None)."""
+def default_admission_factory(environment: Mapping[str, str], *, config_path=None):
+    """Compose the installed shared gate from the full verified P/Q/M/D authority.
+
+    The identity is derived from the discovered v2 config, the installed and source
+    inventory bytes and real hardware facts, then verified against the declared
+    execution identity; an unreadable or mismatching authority raises instead of
+    degrading to a permissive gate.
+    """
 
     from so101_demo.parallel_batch.resource_budget import (
-        build_live_observation, build_runtime_fingerprint_from_environment,
-        compose_production_admission)
+        LiveObservationSource, compose_production_admission)
 
-    identity = environment.get("SO101_VALIDATION_EXECUTION_IDENTITY")
-    current = (
-        build_runtime_fingerprint_from_environment(environment, identity=identity)
-        if identity else None
-    )
     return compose_production_admission(
-        environment=environment, current=current,
-        observation_source=build_live_observation)
+        environment=environment, config_path=config_path,
+        observation_source=LiveObservationSource())
 
 
 def create_production_service(
@@ -1285,8 +1286,11 @@ def create_production_service(
     store = SupervisorStore.open(state_root)
     try:
         owner = ExecutionProcessOwner(store=store)
-        factory = admission_factory or default_admission_factory
-        resource_gate = factory(environment)
+        if admission_factory is None:
+            resource_gate = default_admission_factory(
+                environment, config_path=layout.parallel_config_path)
+        else:
+            resource_gate = admission_factory(environment)
         preflight = PreflightEngine(
             _HostResourceProbe(resource_gate=resource_gate),
             singleton_probe=lambda: not owner.has_active_execution(),
