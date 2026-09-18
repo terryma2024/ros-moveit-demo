@@ -1670,3 +1670,69 @@ retained:
 archived: none
 deletion_candidates: $TASK_ROOT/scratch/* and superseded colcon run logs (classification only; nothing deleted)
 next_command: NONE authorized; awaiting the operator decisions listed above.
+
+## Correction to CP-UQ18 (review F1–F3) and EXP-UQ19 — F1 candidate runtime composition
+
+Correction (appended, not rewriting history): CP-UQ18's "authorized offline work complete" was an
+overclaim. The Sol/High execution review (`followups/repair-review-3c00fb20-.../execution-review.md`,
+SHA256 `bbedfc5dc999086c34506a2252765b661291972583c1508d390b46d6eba1c603`, decision CHANGES_REQUIRED)
+found three P1 integration gaps that the package-green gates did not cover: the candidate CLI had no
+successful runtime path (F1), installed production factories did not compose the shared budget gate (F2),
+and the promotion/deployment producers could not be consumed by the context issuer (F3). Tasks 0–11 plus
+the offline halves of 13/14/15 stand as recorded; the "offline complete" claim does not.
+
+```yaml
+experiment_id: EXP-UQ19
+status: VALID
+prior_experiment: EXP-UQ18
+hypothesis: The candidate entry can compose a real, sealed measurement lifecycle from closed sealed
+  runtime bindings, with a typed bounded fake workload boundary offline and fail-closed refusals.
+prediction: RED at the missing runtime_bindings/plan/lifecycle; GREEN with a positive sealed lifecycle,
+  binding tamper/containment refusals and specific workload/seal/abort codes.
+single_variable: measurement runtime bindings + candidate plan/lifecycle + CLI runner composition
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Review read completely and hash-verified; receipt written exclusively; startup probe matched the
+    handoff (HEAD dacbdbd8, clean, CP-UQ18, pane %68, task venv origins).
+success_criteria:
+  - MeasurementAuthorization requires the closed MeasurementRuntimeBindings (plan Task 6 line 418).
+  - build_candidate_plan derives EXECUTE/v2/FIRST_PASS argv from the bindings, verifies exact bytes,
+    containment and the catalog binding, and re-verifies at use time.
+  - run_candidate_batch composes sampler -> authorized workload -> seal with
+    MEASUREMENT_WORKLOAD_FAILED / MEASUREMENT_SEAL_FAILED / latch propagation, and a valid run emits a
+    sealed candidate document with no profile reference.
+  - The CLI reaches the composition (positive exit 0 with a typed fake runner/capability boundary) and
+    still refuses missing capability, expired/wrong authority and tampered bindings.
+failure_criteria:
+  - Any unconditional success path, production-profile borrowing, arbirary env override, or fake pass.
+invalid_criteria:
+  - Capability absence on this host counted as a product failure (the typed probe boundary is explicit).
+provenance:
+  source_commit: dacbdbd8dc143387191353fd6e1ff5e9c55bfb3d
+  install_overlay: $TASK_ROOT/dev-install + $TASK_ROOT/venv
+  runtime_executable: $TASK_ROOT/venv/bin/python
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: so101_pytest f1-red src/so101_demo_py/test/test_parallel_measurement_runtime.py -q
+    exit_code: 1
+  - command: so101_pytest f1-green5 test_parallel_measurement_runtime.py test_parallel_measurement_cli.py test_parallel_resource_measurement.py -q
+    exit_code: 0
+observed:
+  - RED: 5 failed at the missing runtime_bindings/build_candidate_plan/run_candidate_batch/runner_factory.
+  - GREEN: 16 passed. Positive lifecycle returns status SEALED with the authorization hash and intent and
+    no profile/promotion/deployment keys; the fake runner receives the exact plan argv (EXECUTE/v2,
+    FIRST_PASS, no --max-points-per-worker).
+  - Refusals proven: unknown/missing binding fields, non-absolute declared path (BINDING_PATH at parse),
+    missing declared file and tampered weight bytes (BINDING_HASH_MISMATCH), catalog mismatch,
+    workload exception (MEASUREMENT_WORKLOAD_FAILED), latched abort propagation, sealing failure
+    (MEASUREMENT_SEAL_FAILED), and the production runner factory refusing without an installed launcher.
+  - The real factory drives the frozen copied install's so101_parallel_batch with the binding-derived
+    argv; no environment override and no profile authority is read. Nothing was executed live.
+inferred:
+  - Actual measurement still requires the separate sealed window; this repair only supplies the path.
+conclusion: VALID for F1. F2 and F3 remain.
+evidence:
+  - scratch/f1-red.*, scratch/f1-green*.*, followups/repair-review-3c00fb20-.../startup-probe01.*
+decision: KEEP
+next_experiment: EXP-UQ20 (F2 production composition)
