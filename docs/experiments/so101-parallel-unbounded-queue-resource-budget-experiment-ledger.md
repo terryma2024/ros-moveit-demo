@@ -6432,3 +6432,26 @@ CP-UQ148 hypothesis) and how many of the 17 manifest cases pass once its gate is
 made about the result yet.
 
 _Ledger HEAD when written: `4de2f436c`._
+
+## CP-UQ150 — Task 11: R01's campaign really starts now (CP-UQ148 confirmed)
+
+Reading the deployed service while the acceptance run is still executing test 3 shows the
+campaign is live, not stuck:
+
+```
+GET /expert-validation/campaigns/campaign-03ca660cb8e241579d4025093ec6adee  200 OK (polled)
+PUT /expert-validation/lease/lease-42622b13ee9847febe2b4d380bdbcf4a          200 OK (renewed)
+```
+
+The run had passed both preflight cases and is now driving a real campaign through the browser,
+with the lease kept alive, and **zero failures listed** so far. That confirms the CP-UQ148
+diagnosis end to end: with the functional model configuration present, the sequential live smoke
+gets past the start button, which is exactly what the missing
+`SO101_VALIDATION_YOLO_WEIGHTS`/`GROUNDED_ROOT`/`BROKER_IMAGE` had prevented.
+
+No conclusion is drawn about R01's final verdict or the 17 manifest cases: the service state
+directory (`service-light.Lcv5AXDU/state/validation-service/`) is being written and no batch
+container has appeared yet, so the campaign is in its early phase and the run continues. The next
+round reads `browser/lg-live-functional.g8SrEpVn/{result.json,reports/}` once it settles.
+
+_Ledger HEAD when written: `b24b4e403`._
