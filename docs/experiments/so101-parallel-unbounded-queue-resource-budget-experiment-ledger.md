@@ -4815,3 +4815,22 @@ That is the next unit: add the per-process breakdown to the sampler's diagnostic
 then run once with it and read which owned process holds the cores. The policy question from CP-UQ103
 -- whether a single-period excursion should disqualify -- remains the operator's, and is not touched
 by this diagnostic.
+
+## CP-UQ105 — Attribution works, and it names the wrong set of processes
+
+Run71 (r48 sealed *inside* the run's own scope, which matters: r47 had been sealed in a different
+unit and the runtime identity includes the cgroup path, so it was correctly refused with
+`RUNTIME_FINGERPRINT_MISMATCH`) reproduced `CPU_THROTTLED`: 204 samples, one throttled, the whole
+chain intact. The new `per_process_cpu` diagnostics worked exactly as designed -- and produced
+`pids=1`: the only "owned" process is the measurement CLI itself (4.4 s of its own CPU), because
+`owned_inventory=(self.owner,)` is the session's identity, not the workload's.
+
+So the mechanism is right and the set is wrong. The sampler already has the cgroup object, and
+`OwnedCgroupV2.pids()` enumerates the processes actually inside the measurement cgroup -- which is
+where the ~19-core demand lives. Recording CPU per *cgroup* pid (a handful of entries, same cheap
+`/proc` reads) is the next change, with the same kind of test, and it will name the consumer on the
+next run.
+
+Nothing else moved: the run's refusal is the frozen throttling rule, the instrument behaved, and the
+policy question from CP-UQ103 (single-period excursion versus `throttling_disqualifies_run`) remains
+the operator's.
