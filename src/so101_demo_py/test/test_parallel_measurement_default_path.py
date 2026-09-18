@@ -1396,3 +1396,45 @@ def test_cpu_rate_over_several_periods_separates_bursts_from_sustained_load(monk
                                      sequence=index + 1, state=state)
         sustained_rates.append(sample.observation.observed["cpu_core_equivalent"])
     assert max(sustained_rates) > 10.0, sustained_rates
+
+
+def _breach_session():
+    import types
+    from so101_demo.parallel_batch.owned_resources import MeasurementSession
+
+    session = object.__new__(MeasurementSession)
+    session.safety = types.SimpleNamespace(
+        minimum_free_fraction=0.2, abort_on_psi_full_stall=True,
+        throttling_disqualifies_run=True, capacity_fraction=0.8)
+    session.cgroup = None
+    session._throttle_streak = 0
+    capacity = {"cpu_core_equivalent": 10.0, "ram_bytes": 1000.0, "gpu_bytes": 100.0}
+    observation = types.SimpleNamespace(
+        attribution_complete=True, swap_delta=None, psi_full_delta=None, throttled=False,
+        capacity=capacity,
+        observed={"cpu_core_equivalent": 1.0, "ram_bytes": 100.0, "gpu_bytes": 1.0},
+        background={"cpu_core_equivalent": 0.1, "ram_bytes": 10.0, "gpu_bytes": 1.0})
+    return session, observation
+
+
+def test_a_single_throttled_sample_does_not_disqualify_the_run():
+    """Operator decision (round 69): a cgroup may want more than its quota inside one period
+    without the run being thrown away -- the workload averaged 0.85 cores yet was refused for
+    one such event. Throttling stays reported; only sustained throttling disqualifies."""
+
+    session, observation = _breach_session()
+    observation.throttled = True
+    assert session._breach(type("S", (), {"observation": observation})()) is None
+
+
+def test_sustained_throttling_still_disqualifies_and_a_clean_sample_resets_it():
+    session, observation = _breach_session()
+    observation.throttled = True
+    sample = type("S", (), {"observation": observation})()
+    breaches = [session._breach(sample) for _ in range(6)]
+    assert "CPU_THROTTLED" not in breaches[:4], breaches
+    assert breaches[-1] == "CPU_THROTTLED", breaches
+    observation.throttled = False
+    assert session._breach(sample) is None
+    observation.throttled = True
+    assert session._breach(sample) is None
