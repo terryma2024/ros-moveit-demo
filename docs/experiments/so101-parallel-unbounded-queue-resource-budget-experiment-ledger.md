@@ -3309,3 +3309,31 @@ already settled that a source commit or prefix observation at runtime is never a
 next decision is which side to change: give the child an install prefix whose `bin` carries the
 console, or stop requiring a runtime console on the provenance path that a sealed binding already
 covers. N1 remains `NOT_MEASURED`; nothing is extrapolated to another N.
+
+## CP-UQ51 — Stage C: the console gap is closed, the launcher wants a different binding document
+
+Runs: `stage-c/batches/n1-calibration-20260918-run12/`, `scratch/stageC-fix10.*/`,
+`scratch/stageC-auth.S2WPqrz0/measure18.log`. Commit `e5c24829f`.
+
+`PROVENANCE_CONSOLE_MISSING` was a PATH gap, not a missing artifact: a copied install ships its
+console beside the module it runs
+(`<prefix>/so101_demo_py/lib/so101_demo_py/so101_parallel_batch`) and no `bin` entry, so the
+launcher's provenance check could not find `so101_parallel_batch` on the inherited PATH. The
+runner now builds the child environment through `child_environment_for_launcher`, which keeps the
+authority-stripping rule and puts that directory first on the child's PATH; two tests (console
+discoverable, no inherited PATH) and 30 passed in the file. run12 reached the launcher with 78
+samples and refused with `PROVENANCE_EXTERNAL_BINDING_SCHEMA`.
+
+The launcher's `verify_provenance` requires the `--provenance-binding` document to be an *external
+overlay binding* with exactly `{schema_version: 1, source_root, source_commit, build_root,
+install_root, package_prefixes, artifacts}`. None of the nine `bindings/*.json` in the evidence
+root has that key set: the document this task seals is a `PRODUCTION_FROZEN_BINDING`
+(`install_prefix`, `module_origins`, `a0_path`, `a0_sha256`, `inventory_files`), and the offline
+preparations wrote `OFFLINE_COPIED_BINDING` shapes. Only the test suite constructs the required
+document inline (`test_parallel_batch_cli.py`, around its `artifacts` literal); `src/` has no
+generator for it. So the sealed measurement binding and the launcher's provenance input are, once
+again, two different artifacts wearing one argument -- the same shape as the broker digest/tag
+problem, and it is the next decision: generate the external overlay binding for the frozen copy
+(source root, build root, install root, package prefixes, artifact hashes) and seal *its* digest
+as a separate input, or point the launcher at the frozen binding it already understands. N1
+remains `NOT_MEASURED`; nothing is extrapolated to another N.
