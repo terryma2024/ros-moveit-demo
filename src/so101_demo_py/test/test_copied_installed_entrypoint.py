@@ -28,7 +28,7 @@ import pytest
 TASK_ROOT = Path(
     "/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main"
     "/unbounded-queue-resource-budget")
-COPIED_PREFIX = TASK_ROOT / "progress-install"
+COPIED_PREFIX = TASK_ROOT / "freeze-install"
 DEMO_PREFIX = COPIED_PREFIX / "so101_demo_py"
 ENTRYPOINT = DEMO_PREFIX / "lib/so101_demo_py/text_pick_agent"
 WORKTREE = Path(__file__).resolve().parents[3]
@@ -101,7 +101,7 @@ def test_runtime_bytes_of_the_copied_prefix_match_the_frozen_source() -> None:
         ["git", "-C", str(WORKTREE), "rev-parse", "HEAD"],
         capture_output=True, text=True, check=True).stdout.strip()
     changed = subprocess.run(
-        ["git", "-C", str(WORKTREE), "diff", "--name-only", "ff8a1479f", head, "--",
+        ["git", "-C", str(WORKTREE), "diff", "--name-only", "6e68d0f51", head, "--",
          "src/so101_demo_py/src", "src/so101_teleop/so101_teleop", "src/so101_demo_py/setup.py"],
         capture_output=True, text=True, check=True).stdout.split()
     assert changed == [], f"runtime code changed since the copied install: {changed}"
