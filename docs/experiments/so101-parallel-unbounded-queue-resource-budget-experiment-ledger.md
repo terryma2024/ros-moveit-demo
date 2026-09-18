@@ -2954,3 +2954,44 @@ evidence: scratch/stageB-webstart2.zMVk9xRa/{lease-store.log,endpoints.log,readb
 decision: KEEP
 next_experiment: EXP-UQ39 Stage C delegated-unit capability attempt and sealed N1 preparation
 ```
+
+```yaml
+checkpoint_id: CP-UQ39
+last_valid_experiment: EXP-UQ39
+current_hypothesis: Stage C's cgroup-enforced memory cap cannot be established in this environment by
+  any sudo-free mechanism; the boundary is an object-bound capability/decision and everything not
+  blocked by it is prepared offline.
+goal: goal-d30193b8-a2e5-495d-b6c7-6879782448ac (round 6)
+capability_attempts_total:
+  - "1 in-scope enable (scratch/capability-probe.plqC8Jzn): +cpu ENOENT, +memory EBUSY, +pids OK."
+  - "2 Delegate=yes scope (scratch/delegated-scope.XUBGMk1U): +cpu OK (cpu.max writable), +memory FAILED."
+  - "3 Delegate=yes scope + accounting (scratch/delegated-scope2.RM6ue8q4): controllers [cpu memory pids],
+    +memory still FAILED."
+  - "4 Delegate=\"cpu memory pids\" transient service (scratch/stageC-delegate.ydk0oe4m): unit
+    controllers [cpu memory pids] but subtree_control=[]; child [] and neither cpu.max nor memory.max
+    writable."
+capability_object:
+  - "OwnedCgroupV2.require_delegated(cpu, memory) correctly refuses; Stage C cannot run under the
+    design's cgroup-enforced memory cap here. Path (a) orchestration/operator provisions a user unit (or
+    session) whose cgroup.subtree_control is enabled before the payload starts; path (b) an explicit
+    decision to enforce cpu quota from a delegated [cpu] child (repeatedly achieved) while memory stays
+    the whole-host guard (>=20% MemAvailable + abort thresholds). Both are object-bound; path (b) changes
+    the enforcement mode and is not self-authorized."
+prepared_offline:
+  - "Stage C inputs that are not blocked: the finite per-N authorization parameter matrix (worker_count,
+    maximum_batches, batch_deadline_s 5400, safety envelope 0.8/0.2, lifecycle FULL_RESTART, intent
+    CALIBRATION_ONLY then QUALIFICATION, expiry, dispatch/root/seed/catalog bindings) and the sealed
+    authorization document template derived from the real MeasurementAuthorization field set."
+  - "Already offline-proven and reusable: measurement default-path tests (authorization transport,
+    owned cgroup caps readback, sampler/latch/deadline, cleanup receipt, seal preserving the original
+    authorization) and the copied provider positive + fail-closed contract cases."
+inferred:
+  - Stage B is closed; Stage C is blocked only by the capability/decision object, with all preparatory
+    artifacts produced; Stage D/E remain object-bound as recorded.
+conclusion: GOAL ROUND 6 - capability boundary proven across four mechanisms; preparation continues.
+evidence: scratch/stageC-delegate.ydk0oe4m/delegate-probe.log, scratch/{capability-probe,delegated-scope,
+  delegated-scope2}.*, scratch/xdist8-cgprobe-green.*
+decision: KEEP
+next_experiment: EXP-UQ40 Stage C authorization matrix preview + capability request packet; Stage D/E
+  object preparation
+```
