@@ -5552,3 +5552,57 @@ launch, plus the missing/malformed debug-manifest and session/reset/evidence/con
 negative cases).
 
 _Ledger HEAD when written: `04c22828e`._
+
+
+## CP-UQ123 — Task 8: the real installed entry runs the guard, and three defects fell out
+
+Commit `aa5016deb` (`test: cover default entry and safety boundaries`). The new
+`test_parallel_start_guard_launch.py` does what the plan asked and refuses the shortcut it
+warns about: it discovers the installed console script through the functional lookup
+(`installed_executable`, ament/share/PATH, no Git), runs the **real allocator entry**
+(`python -m so101_demo.parallel_batch.resources`) as a subprocess against the packaged v3
+config, and asserts the composition it actually wrote: `schema_version: 3`, two workers, an
+admission whose `status` is PASS/WARN with a CLEAR cleanup state and the four checks with
+their units, and `resource_manifest.json` on disk matching. The TextAgent launch resource is
+verified separately with `ros2 launch ... --show-args` (discovery only, explicitly not
+physical success), and the retired measurement console script is checked to report
+`MEASUREMENT_ENTRY_RETIRED` with `authorizes_execution: false`.
+
+Writing it found four real things, which is the point of the task:
+
+1. **The guard's shared state root is a runtime requirement, and it was implicit.** The
+   allocator entry died with `PROBE_STATE_ROOT_UNSET` because nothing exported
+   `SO101_TASK_ROOT`. That is the design's own rule (one task-owned directory shared by CLI
+   and Web, `$TASK_ROOT/start-guard-state`), so the tests now set it explicitly and a
+   dedicated test asserts the entry **fails closed** rather than inventing a lock location.
+   Task 10's service deployment must export it too — noted before that work starts.
+2. **A budget-era test file had escaped the deletion**: `test_parallel_default_authority_paths.py`
+   (482 lines) still imported `resource_budget`, which broke `--collect-only` for the whole
+   demo tree with exit 2 — the two nested-collection tests caught it. It is retired with the
+   rest, archived in the migration directory. Demo collection is clean again:
+   **3236 tests collected, 0 errors**.
+3. **The batch manifest was still host-dependent.** It embedded the guard's `status` and
+   per-check results, so a replay could legitimately see WARN where the first run saw PASS and
+   the resume refused with `RECOVERY_BATCH_MANIFEST_MISMATCH` (it appeared intermittently
+   depending on host load). The manifest now records only what the plan will *enforce* — the
+   policy and the cleanup state — and the observation stays in the guard evidence and the
+   receipts.
+4. **The allocator claims the frozen ROS domain locks**, so the new file must be in the
+   audited serial set; it is now registered in `tools/so101_pytest_gate.py` with that reason.
+
+Gates: `lg-t8-green` (new file alone, serial) **7 passed**; `lg-t8-wide4`
+(cli + resources + composition + the new file) **221 passed, 0 failed**, with
+`serial_override=test_parallel_start_guard_launch.py` visible in the run's `workers.txt`.
+
+One expected red remains and it belongs to Task 9:
+`test_runtime_bytes_of_the_copied_prefix_match_the_frozen_source` fails because the
+`freeze-install` prefix was built before this plan and the runtime has legitimately changed.
+Task 9 produces the new immutable copy and switches that test (and the copied-entry helper) to
+`SO101_E2E_INSTALL_PREFIX`, which is exactly what the plan schedules there.
+
+State: **Tasks 1-8 of 12 complete** (chain `e4d4d22be` ... `aa5016deb`). Next: **Task 9**, the
+full source/package/Web gates and the new immutable copied install (colcon split collection
+with the audited nodeid manifest, teleop CTest, Bun/OpenAPI, then the real copied default
+console/launch gates).
+
+_Ledger HEAD when written: `aa5016deb`._
