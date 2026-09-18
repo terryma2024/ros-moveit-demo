@@ -80,6 +80,7 @@ def _run_graph(
     patch_supervisor=None,
     acceptance_document: dict[str, object] | None = None,
     fast_cleanup_timeouts: bool = False,
+    scene_delay_s: float = 0.03,
 ) -> tuple[int, E2ESupervisor]:
     workflow_id = "process-workflow"
     run_root = tmp_path / "run"
@@ -92,7 +93,7 @@ def _run_graph(
             encoding="utf-8",
         )
     scene = ExecuteProcess(
-        cmd=[sys.executable, "-c", "import time;time.sleep(0.03)"],
+        cmd=[sys.executable, "-c", f"import time;time.sleep({scene_delay_s})"],
         output="both",
     )
     supervisor = E2ESupervisor(

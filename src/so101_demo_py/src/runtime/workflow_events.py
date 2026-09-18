@@ -22,7 +22,13 @@ EVENT_FIELDS = frozenset(
         "payload",
     }
 )
-MAX_EVENT_AGE_NS = 5_000_000_000
+# A child's stdout can be delivered late on a loaded host; a slow read is not a
+# protocol violation. Run membership is enforced separately by the decoder's
+# not-before floor (the supervisor's own start clock) plus workflow/component/sequence
+# binding, so this bound only rejects an implausibly old record.
+MAX_EVENT_DELIVERY_DELAY_NS = 120_000_000_000
+# Historical name kept for compatibility; it is no longer the acceptance window.
+MAX_EVENT_AGE_NS = MAX_EVENT_DELIVERY_DELAY_NS
 _IDENTIFIER_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\Z")
 _EVENT_COMPONENT = {
     "STACK_READY": "supervisor",
@@ -272,6 +278,7 @@ def _validate_document(
     workflow_id: str,
     allowed_components: frozenset[str],
     now_ns: int,
+    not_before_ns: int | None = None,
 ) -> WorkflowEvent:
     if type(document) is not dict or frozenset(document) != EVENT_FIELDS:
         raise _invalid("event must contain the exact schema fields")
@@ -287,8 +294,10 @@ def _validate_document(
     if type(timestamp_ns) is not int or timestamp_ns < 0:
         raise _invalid("timestamp_ns must be a non-negative integer")
     age_ns = now_ns - timestamp_ns
-    if age_ns < 0 or age_ns > MAX_EVENT_AGE_NS:
+    if age_ns < 0 or age_ns > MAX_EVENT_DELIVERY_DELAY_NS:
         raise _invalid("event timestamp is outside the acceptance window")
+    if not_before_ns is not None and timestamp_ns < not_before_ns:
+        raise _invalid("event timestamp predates this run")
 
     record_workflow_id = document["workflow_id"]
     component = document["component"]
@@ -496,7 +505,10 @@ class WorkflowState:
 class EventDecoder:
     """Decode newline-delimited workflow events from one child process."""
 
-    def __init__(self, workflow_id: str, allowed_components: frozenset[str]) -> None:
+    def __init__(
+        self, workflow_id: str, allowed_components: frozenset[str], *,
+        not_before_ns: int | None = None,
+    ) -> None:
         if (
             type(workflow_id) is not str
             or _IDENTIFIER_PATTERN.fullmatch(workflow_id) is None
@@ -505,8 +517,11 @@ class EventDecoder:
             or not allowed_components.issubset(frozenset(_EVENT_COMPONENT.values()))
         ):
             raise ValueError("invalid event decoder binding")
+        if not_before_ns is not None and (type(not_before_ns) is not int or not_before_ns < 0):
+            raise ValueError("invalid event decoder floor")
         self._workflow_id = workflow_id
         self._allowed_components = allowed_components
+        self._not_before_ns = not_before_ns
         self._buffer = bytearray()
         self._sequences = {component: 0 for component in allowed_components}
 
@@ -518,6 +533,7 @@ class EventDecoder:
                 workflow_id=self._workflow_id,
                 allowed_components=self._allowed_components,
                 now_ns=now_ns,
+                not_before_ns=self._not_before_ns,
             )
         except WorkflowProtocolError:
             raise
