@@ -7459,3 +7459,39 @@ run directories are retained for audit — `lg-live-functional.fJ0U4Bhg` (20/3),
 deleted.
 
 _Ledger HEAD when written: `1bd233236`._
+
+## CP-UQ182 — The adaptive guard is wired, test-first, and the correction receipt is in
+
+Correction `34e87b6f-0962-4323-a482-7979e2db1dd4` was read in full
+(`handoff.md` sha256 `697ff0127154a47c42fb67248899c0e64ae0ece61fa190f9fb1b5d659df57e42`) and answered
+first, before any other work: `followups/wait-correction-34e87b6f-…/executor.receipt` written with
+`os.open(O_CREAT|O_EXCL|O_WRONLY)` and containing exactly the correction id plus LF (37 bytes,
+sha256 `502289a684b820fcdac739f46353349859b1e0fef93e050ebd46194c0ca3c8a7`), with
+`receipt-facts.json` recording the shell clock at write time (`2026-09-19 04:10:38 +0800` /
+`2026-09-18T20:10:38Z`), HEAD `38e1977c1`, `dirty_entries: 0`, branch, the handoff hash and the goal
+state (goal `goal-e568087d-…`, revision 1, phase active, rounds 56/100, armed). Nothing was
+interrupted to do it: the foreground tool finished on its own before this work started.
+
+Defect 1 of CP-UQ181 is fixed, test-first and in the plan's own surface:
+
+- **RED**: two new cases in `test_parallel_adaptive_runner.py` — every generation request the
+  runner builds must carry the guard the run prepared, and the pool-request factory must thread it
+  (`2 failed, 12 deselected in 0.09s`, both on `unexpected keyword argument 'start_guard'`).
+- **GREEN**: `mujoco_parallel_batch.prepare_batch` prepares the guard in adaptive mode too, for the
+  initial worker count (`adaptive_worker_options.worker_count`), through the same
+  `_prepare_start_guard` the fixed-N path uses; `AdaptiveBatchRequest` and `PoolRequest` carry it,
+  and `adaptive_runner` passes `start_guard` into each generation request. The frozen-shape contract
+  test now names `start_guard` and also checks the threaded value.
+- **Suite**: the five adaptive test files — `1 failed, 89 passed` first (the frozen shape), then
+  **`ADAPTIVE_SUITE_RC=0`** after that test was updated. All waits in this round used 10–20 s checks
+  with a finite deadline and none blocked longer than 60 s.
+
+Committed as the guard-wiring commit above. **Still open, in order**: (a) defect 2 of CP-UQ181 —
+`parallel_batch_cleanup.py:344-347` refuses with `POOL_ROOT` when a pool failed before its directory
+existed, which is what left the R03 campaign stuck in `CLEANING_UP`; a failure marker without a pool
+directory means nothing was allocated and must clean as a no-op, with a test; (b) rebuild the copy
+install from this commit, redeploy, and re-run R03 plus the remaining acceptance (final-runtime
+package/CTest gates, executed-nodeid multiset coverage, final-copy bytes, all-N and physical
+stability). No admission was restored and no goal budget was expanded.
+
+_Ledger HEAD when written: `3434cc80a`._
