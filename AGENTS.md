@@ -69,3 +69,18 @@
   configuration, adapters, reports, or tests, or while selecting/comparing perception models. Use
   `colcon test --packages-select so101_demo_py --pytest-args benchmark_test` for that explicit gate.
   Ordinary feature work outside those scopes must not run the benchmark suite.
+
+## Task model selection
+
+| Task | Required model or tool |
+| --- | --- |
+| Discuss approaches; write designs, implementation plans, and guides | GPT-5.6 Sol / High (`gpt-5.6-sol`, reasoning effort `high`) |
+| Independently review approaches, designs, implementation plans, and guides | GPT-6 Astra / High (`gpt-6-astra`, reasoning effort `high`) |
+| Execute implementation plans | DeepSeek Harness TUI, launched with `dst` in a `tmux` session |
+| Monitor execution and review execution results | GPT-5.6 Sol / High (`gpt-5.6-sol`, reasoning effort `high`) |
+| Other tasks (default) | GPT-5.6 Sol / High (`gpt-5.6-sol`, reasoning effort `high`) |
+
+- Use an independent GPT-6 Astra / High reviewer for the review tasks listed above.
+- If a required model or tool is unavailable, report the limitation explicitly. Do not silently
+  substitute another model or tool or automatically switch to a lower-capability model.
+- These task rules do not authorize changes to global default model configuration.
