@@ -499,6 +499,8 @@ class MeasurementSession:
             raise ContractError("MEASUREMENT_SESSION")
         self._stopped.clear()
         self._record("SAMPLING_START")
+        if self.control is not None:
+            self.control.mark_sampling_start(self.clock())
         self._thread = threading.Thread(target=self._sample_loop, name="measurement-sampler",
                                         daemon=True)
         self._thread.start()
