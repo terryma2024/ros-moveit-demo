@@ -106,8 +106,12 @@ spawn (run59 and run60 both did exactly this), so a single bounded window after 
 starts does not count as a sampler gap. It is consumed at most once per batch and is recorded,
 so it cannot hide a later stall, and maximum_sample_gap_s itself is unchanged.
 """
-# A hard ceiling on the cold-start window; readiness normally closes it much earlier.
-_COLD_START_GRACE_S = 30.0
+# Ceiling on the cold-start window. It is sized from measurement, not taste: the sampler's
+# starvation landed 3.02 s (run59), 3.5 s (run60) and 3.2 s (run61) after the spawn, so a
+# six-second bound covers the observed cold start with margin while keeping the hole in
+# the gap rule small, bounded and recorded. Readiness (mark_workload_active) can close it
+# earlier.
+_COLD_START_GRACE_S = 6.0
 
 
 class MeasurementControl:
