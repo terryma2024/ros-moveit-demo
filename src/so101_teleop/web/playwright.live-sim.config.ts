@@ -31,6 +31,11 @@ export default defineConfig({
       dependencies: ["r01-sequential"],
     },
     {
+      name: "functional-cases",
+      testMatch: "**/live-sim/05-functional-manifest.spec.ts",
+      dependencies: ["live-preflight"],
+    },
+    {
       name: "adaptive",
       testMatch: "**/live-sim/03-adaptive.spec.ts",
       dependencies: ["r01-sequential"],
