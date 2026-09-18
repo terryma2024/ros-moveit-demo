@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import os
 import sys
 import time
@@ -75,7 +76,32 @@ def require_measurement_capabilities(
     }
 
 
-def production_runner_factory(plan, *, child_runner=None):
+def verify_broker_image(*, tag: str, digest: str, inspector=None) -> str:
+    """Return the tag once it is proven to still carry the sealed image digest.
+
+    The sealed runtime binding is content-addressed (an image digest) because that is what
+    the authorization can commit to, while the launcher only knows the local tag. The tag
+    is therefore resolved here and refused if it now points at a different image.
+    """
+
+    run = inspector or _default_image_inspector
+    try:
+        observed = str(run(tag)).strip()
+    except (OSError, subprocess.SubprocessError) as error:
+        raise MeasurementCliError("MEASUREMENT_BROKER_IMAGE_UNAVAILABLE") from error
+    if observed != digest:
+        raise MeasurementCliError("MEASUREMENT_BROKER_IMAGE_MISMATCH")
+    return tag
+
+
+def _default_image_inspector(tag: str) -> str:
+    completed = subprocess.run(
+        ["docker", "image", "inspect", tag, "--format", "{{.Id}}"],
+        capture_output=True, text=True, timeout=30, check=True)
+    return completed.stdout
+
+
+def production_runner_factory(plan, *, child_runner=None, image_inspector=None):
     """Real composition runner: the frozen copied install's fixed batch entry."""
 
     binding = json.loads(Path(plan.bindings.provenance_binding_path).read_bytes())
@@ -86,7 +112,11 @@ def production_runner_factory(plan, *, child_runner=None):
     if not launcher.is_file():
         raise MeasurementCliError("MEASUREMENT_RUNTIME_UNAVAILABLE: launcher")
     environment = measurement_child_environment(dict(os.environ))
-    argv = (str(launcher), *plan.runner_argv())
+    from so101_demo.cli.mujoco_parallel_batch import _BROKER_IMAGE
+
+    tag = verify_broker_image(tag=_BROKER_IMAGE, digest=plan.bindings.broker_image_id,
+                              inspector=image_inspector)
+    argv = (str(launcher), *plan.runner_argv(broker_image=tag))
 
     def runner(candidate_plan, session):
         if child_runner is not None:
@@ -108,7 +138,8 @@ def production_runner_factory(plan, *, child_runner=None):
     return runner
 
 
-def main(argv=None, *, runner_factory=None, capability_probe=None, session_factory=None) -> int:
+def main(argv=None, *, runner_factory=None, capability_probe=None, session_factory=None,
+         image_inspector=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--authorization", type=Path, required=True)
     parser.add_argument("--authorization-sha256", required=True)
@@ -177,7 +208,8 @@ def main(argv=None, *, runner_factory=None, capability_probe=None, session_facto
             batch_id=plan.batch_id, sampling=config.measurement.sampling,
             safety=config.measurement.safety, owner=_local_identity(),
             cgroup_parent=options.cgroup_parent, device_index=options.device_index)
-        factory = runner_factory or production_runner_factory
+        factory = runner_factory or (
+            lambda plan: production_runner_factory(plan, image_inspector=image_inspector))
         summary = run_candidate_batch(plan=plan, runner=factory(plan), session=session)
         summary["capability"] = capability
         print(json.dumps(summary, sort_keys=True))

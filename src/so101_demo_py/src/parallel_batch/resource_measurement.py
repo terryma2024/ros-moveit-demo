@@ -1014,8 +1014,12 @@ class CandidateRunPlan:
     def intent(self) -> str:
         return self.authorization.intent
 
-    def runner_argv(self) -> tuple[str, ...]:
-        """Existing composition argv plus the sealed measurement authority."""
+    def runner_argv(self, *, broker_image: str | None = None) -> tuple[str, ...]:
+        """Existing composition argv plus the sealed measurement authority.
+
+        The sealed binding is the image digest; the launcher compares the local tag it
+        knows, so a caller that has verified the tag against that digest passes it here.
+        """
 
         return (
             "--points", self.bindings.points_path,
@@ -1023,7 +1027,8 @@ class CandidateRunPlan:
             "--batch-id", self.batch_id,
             "--worker-count", str(self.worker_count),
             "--evidence-root", str(self.batch_root),
-            "--broker-image", self.bindings.broker_image_id,
+            "--broker-image",
+            self.bindings.broker_image_id if broker_image is None else broker_image,
             "--yolo-weights", self.bindings.yolo_weights_path,
             "--yolo-weights-sha256", self.bindings.yolo_weights_sha256,
             "--grounded-root", self.bindings.grounded_root,
