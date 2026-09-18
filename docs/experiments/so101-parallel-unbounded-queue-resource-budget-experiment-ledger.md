@@ -6359,3 +6359,32 @@ record: my first launch guard matched its own command line and skipped the launc
 a self-match-proof pattern and is the run reported here.
 
 _Ledger HEAD when written: `eabae80da`._
+
+
+## CP-UQ147 — Task 11: the acceptance enters the browser phase, and the precondition chain is repaired
+
+The CP-UQ146 blocker is gone, and fixing it took three precise steps, each located by the next
+failure rather than guessed:
+
+1. **The retired provenance binding is removed** from `validateLiveSimPreconditions`. A binding
+   file, a source commit and an ament prefix are debug/deployment evidence, never admission; the
+   fixture now keeps the real functional preconditions (owned evidence root, installed prefix, no
+   foreign stack).
+2. **The source root became optional debug info.** Resolving it from `import.meta.dir` is
+   unreliable under Playwright's transpiler (it reported a path that does not exist), and it was
+   never a functional requirement, so it is taken from `SO101_VALIDATION_SOURCE_ROOT` when set and
+   otherwise recorded as unknown.
+3. **A reused task-owned service is not a conflicting stack.** With
+   `SO101_LIVE_SERVICE_BASE_URL` set, the acceptance runs *against* the deployed service by
+   design, so the foreign-stack scan is skipped in exactly that mode; without the variable the
+   original conflict check stays in force.
+
+Result of the next Bun run (`browser/lg-live-functional.*`): global setup passes, the projects
+execute, and the run reports **2 passed / 3 did not run** with the whole `functional-cases`
+project listed — the first time this acceptance has reached the browser phase at all. The
+non-zero exit comes from those three dependent projects not running, which is the next thing to
+read (their stdout says why; the likely cause is that the sequential/parallel/adaptive specs need
+their own live inputs such as the model paths and a manifest/lease flow rather than the
+configuration-level assertions the manifest cases make).
+
+_Ledger HEAD when written: `8399fdc81`._
