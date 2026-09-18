@@ -343,7 +343,22 @@ def cleanup_runtime(runtime_root: Path) -> dict[str, object]:
     pool_batch_id = f"{root.name}-g{generation:02d}-w{worker_count:02d}"
     pool_root = root / f"p/g{generation:02d}w{worker_count:02d}"
     if not pool_root.is_dir() or pool_root.is_symlink():
-        raise CleanupError("POOL_ROOT")
+        # A pool that failed before it allocated anything wrote only its failure marker.  There is
+        # nothing to retire, and refusing here (the old POOL_ROOT error) left the campaign stuck in
+        # CLEANING_UP forever because cleanup never produced a receipt.  The marker stays on disk.
+        if not (root / f"p/g{generation:02d}w{worker_count:02d}-failure.json").is_file():
+            raise CleanupError("POOL_ROOT")
+        receipt = {
+            "schema_version": 1,
+            "runtime_root": str(root),
+            "active_generation": generation,
+            "worker_count": 0,
+            "released_domain_ids": [],
+            "cleanup_complete": True,
+            "pool_failure": f"p/g{generation:02d}w{worker_count:02d}-failure.json",
+        }
+        _write_receipt(receipt_path, receipt)
+        return receipt
     _retire_processes(pool_root, pool_batch_id)
     _retire_container(pool_root, pool_batch_id)
     _remove_sockets(pool_root, worker_count)
