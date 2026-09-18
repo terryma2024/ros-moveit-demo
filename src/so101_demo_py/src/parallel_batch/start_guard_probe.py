@@ -1,0 +1,585 @@
+"""Bounded, single-flight startup probe: the owner coordinates, a helper does the reads.
+
+Task 4 of the lightweight start guard plan. The design requires that every potentially
+blocking read (``/proc``, cgroup, NVML) happens in a short-lived helper process, that the
+whole request is bounded by the policy deadline, that concurrent requests share one
+task-level lock across processes, and that a helper which cannot be reaped becomes a durable
+``PROBE_CLEANUP_BLOCKED`` state that forbids new probes, retries and spawns until ownership
+aware cleanup resolves it.
+
+The owner never reads the resource files itself and never blocks without a deadline: state
+and lock I/O also run under the deadline.
+"""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import json
+import os
+import select
+import signal
+import socket
+import subprocess
+import sys
+import threading
+import time
+from dataclasses import dataclass
+from pathlib import Path
+
+from .start_guard import (
+    FAIL,
+    GuardCheck,
+    GuardResult,
+    GuardScope,
+    ProbeError,
+    ResourceSnapshot,
+    StartGuardPolicy,
+    evaluate_snapshot,
+    probe_snapshot,
+)
+
+CLEAR = "CLEAR"
+PROBE_CLEANUP_BLOCKED = "PROBE_CLEANUP_BLOCKED"
+
+STATE_FILENAME = "cleanup-state.json"
+LOCK_FILENAME = "start-guard.lock"
+HELPER_MODULE = "so101_demo.parallel_batch.start_guard_probe"
+
+#: Bounded reserve for terminate -> kill -> reap after the request deadline.
+TERMINATE_GRACE_S = 0.20
+KILL_GRACE_S = 0.20
+#: Cap on a single blocking filesystem call issued by the owner.
+STATE_IO_BUDGET_S = 0.50
+LOCK_POLL_S = 0.02
+
+
+class CoordinatorError(RuntimeError):
+    """The coordinator itself is misconfigured; the caller cannot treat this as a PASS."""
+
+
+@dataclass(frozen=True)
+class ProcessIdentityRecord:
+    pid: int
+    start_time_ticks: int
+
+
+@dataclass(frozen=True)
+class CleanupState:
+    cleanup_state: str = CLEAR
+    pid: int | None = None
+    start_time_ticks: int | None = None
+    recorded_monotonic_s: float | None = None
+    detail: str = ""
+
+
+def read_process_identity(pid: int) -> ProcessIdentityRecord | None:
+    """Exact process identity from ``/proc/<pid>/stat`` field 22, or None when gone.
+
+    A zombie keeps its ``/proc`` entry until it is reaped, but it is not a running owner:
+    reporting it as gone is what lets the caller clear a stale cleanup record instead of
+    signalling a process that can no longer receive a signal.
+    """
+
+    if type(pid) is not int or pid <= 0:
+        return None
+    try:
+        document = (Path("/proc") / str(pid) / "stat").read_text()
+    except (OSError, UnicodeError):
+        return None
+    close = document.rfind(")")
+    if close < 0:
+        return None
+    fields = document[close + 1:].split()
+    if not fields or fields[0] == "Z":
+        return None
+    try:
+        from ..runtime.parallel_processes import _parse_proc_stat_start_time
+
+        ticks = _parse_proc_stat_start_time(document)
+    except (ImportError, ValueError):
+        return None
+    return ProcessIdentityRecord(pid=pid, start_time_ticks=ticks)
+
+
+def default_state_root() -> Path:
+    root = os.environ.get("SO101_TASK_ROOT")
+    if not root:
+        raise CoordinatorError("PROBE_STATE_ROOT_UNSET: SO101_TASK_ROOT")
+    return Path(root) / "start-guard-state"
+
+
+def coordination_key(task_root: Path) -> str:
+    """hostname + operator uid + task root, so INDEX/UUID aliases share one lock."""
+
+    import hashlib
+
+    material = f"{socket.gethostname()}\0{os.getuid()}\0{Path(task_root)}".encode()
+    return hashlib.sha256(material).hexdigest()
+
+
+class _BoundedIO:
+    """Run a blocking filesystem call off the owner thread with a bounded wait."""
+
+    def call(self, operation, remaining_s: float):
+        box: list = []
+
+        def run() -> None:
+            try:
+                box.append((True, operation()))
+            except BaseException as error:  # noqa: BLE001 - reported to the caller
+                box.append((False, error))
+
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+        thread.join(max(0.0, remaining_s))
+        if thread.is_alive():
+            return False, None
+        ok, value = box[0]
+        if not ok:
+            raise value
+        return True, value
+
+
+@dataclass
+class _ResultPort:
+    """The child side of one request; the owner only polls and reaps it."""
+
+    process: object
+    identity: ProcessIdentityRecord | None
+
+
+class ProbeCoordinator:
+    """Owner-side coordinator. One task-level lock, one helper per request, bounded waits."""
+
+    def __init__(self, state_root: Path | None = None, *, clock=time.monotonic,
+                 popen=None, python: str | None = None,
+                 terminate_grace_s: float = TERMINATE_GRACE_S,
+                 kill_grace_s: float = KILL_GRACE_S) -> None:
+        self._state_root = Path(state_root) if state_root is not None else default_state_root()
+        self._state_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self._lock_path = self._state_root / LOCK_FILENAME
+        self._state_path = self._state_root / STATE_FILENAME
+        self._clock = clock
+        self._popen = popen or subprocess.Popen
+        self._python = python or sys.executable
+        self._terminate_grace_s = terminate_grace_s
+        self._kill_grace_s = kill_grace_s
+        self._io = _BoundedIO()
+
+    # -- state -------------------------------------------------------------------------
+
+    @property
+    def state_path(self) -> Path:
+        return self._state_path
+
+    @property
+    def lock_path(self) -> Path:
+        return self._lock_path
+
+    def _read_state_sync(self) -> CleanupState:
+        try:
+            document = json.loads(self._state_path.read_text())
+        except FileNotFoundError:
+            return CleanupState()
+        except (OSError, ValueError) as error:
+            raise CoordinatorError(f"PROBE_STATE_UNREADABLE: {error}") from error
+        if not isinstance(document, dict):
+            raise CoordinatorError("PROBE_STATE_CORRUPT")
+        state = document.get("cleanup_state")
+        if state not in (CLEAR, PROBE_CLEANUP_BLOCKED):
+            raise CoordinatorError("PROBE_STATE_CORRUPT")
+        for name in ("pid", "start_time_ticks"):
+            value = document.get(name)
+            if value is not None and (type(value) is not int or value <= 0):
+                raise CoordinatorError("PROBE_STATE_CORRUPT")
+        return CleanupState(
+            cleanup_state=state,
+            pid=document.get("pid"),
+            start_time_ticks=document.get("start_time_ticks"),
+            recorded_monotonic_s=document.get("recorded_monotonic_s"),
+            detail=str(document.get("detail") or ""),
+        )
+
+    def _write_state_sync(self, state: CleanupState) -> None:
+        payload = {
+            "cleanup_state": state.cleanup_state,
+            "pid": state.pid,
+            "start_time_ticks": state.start_time_ticks,
+            "recorded_monotonic_s": (state.recorded_monotonic_s if state.recorded_monotonic_s
+                                     is not None else self._clock()),
+            "detail": state.detail,
+        }
+        temporary = self._state_path.with_suffix(".tmp")
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.write(descriptor, json.dumps(payload, sort_keys=True).encode())
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        os.replace(temporary, self._state_path)
+
+    def cleanup_state(self) -> str:
+        """Best-effort read of the durable state; corrupt state fails closed."""
+
+        try:
+            return self._read_state_sync().cleanup_state
+        except CoordinatorError:
+            return PROBE_CLEANUP_BLOCKED
+
+    # -- lock --------------------------------------------------------------------------
+
+    def _acquire_lock(self, deadline: float):
+        descriptor = os.open(self._lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+        while True:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return descriptor
+            except OSError:
+                if self._clock() >= deadline:
+                    os.close(descriptor)
+                    return None
+                time.sleep(min(LOCK_POLL_S, max(0.0, deadline - self._clock())))
+
+    @staticmethod
+    def _release_lock(descriptor) -> None:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
+
+    # -- cleanup recovery --------------------------------------------------------------
+
+    def _terminate_exact(self, pid: int, start_time_ticks: int) -> bool:
+        """Signal only the exact owned process; a reused PID is never signalled."""
+
+        def matches() -> bool:
+            identity = read_process_identity(pid)
+            return identity is not None and identity.start_time_ticks == start_time_ticks
+
+        if not matches():
+            return True
+        for signal_number, grace in ((signal.SIGTERM, self._terminate_grace_s),
+                                     (signal.SIGKILL, self._kill_grace_s)):
+            try:
+                os.kill(pid, signal_number)
+            except ProcessLookupError:
+                return True
+            except PermissionError:
+                return False
+            moment = self._clock()
+            while self._clock() - moment < grace:
+                if not matches():
+                    return True
+                time.sleep(0.02)
+        return not matches()
+
+    def recover_owned_cleanup(self) -> str:
+        """Verify a persisted cleanup record against the exact process identity."""
+
+        state = self._read_state_sync()
+        if state.cleanup_state == CLEAR:
+            return CLEAR
+        if state.pid is None or state.start_time_ticks is None:
+            self._write_state_sync(CleanupState(detail="no owned identity recorded"))
+            return CLEAR
+        identity = read_process_identity(state.pid)
+        if identity is None or identity.start_time_ticks != state.start_time_ticks:
+            self._write_state_sync(CleanupState(
+                detail=f"owned pid {state.pid} is gone or its identity was reused"))
+            return CLEAR
+        if self._terminate_exact(state.pid, state.start_time_ticks):
+            self._write_state_sync(CleanupState(
+                detail=f"recovered owned helper pid {state.pid}"))
+            return CLEAR
+        return PROBE_CLEANUP_BLOCKED
+
+    # -- request -----------------------------------------------------------------------
+
+    def _fail(self, scope: GuardScope, started: float, reason: str, detail: str,
+              cleanup_state: str) -> GuardResult:
+        completed = self._clock()
+        return GuardResult(
+            scope=scope, status=FAIL, started_monotonic_s=started,
+            completed_monotonic_s=max(started, completed),
+            checks={"probe": GuardCheck(FAIL, reason, None, None, "state")},
+            snapshot=None, cleanup_state=cleanup_state)
+
+    def _spawn(self, request: bytes, deadline: float):
+        request_read, request_write = os.pipe()
+        result_read, result_write = os.pipe()
+        # The child inherits the read end of the request pipe and the write end of the
+        # result pipe; the owner keeps the opposite ends and never passes a path.
+        argv = [self._python, "-m", HELPER_MODULE,
+                "--request-fd", str(request_read), "--result-fd", str(result_write)]
+        try:
+            process = self._popen(argv, pass_fds=(request_read, result_write),
+                                  close_fds=True, stdin=subprocess.DEVNULL)
+        except OSError as error:
+            for descriptor in (request_read, request_write, result_read, result_write):
+                os.close(descriptor)
+            raise CoordinatorError(f"PROBE_SPAWN_FAILED: {error}") from error
+        os.close(request_read)
+        os.close(result_write)
+        identity = read_process_identity(int(process.pid))
+        try:
+            os.write(request_write, request)
+        except (BrokenPipeError, OSError):
+            pass
+        finally:
+            os.close(request_write)
+        return _ResultPort(process=process, identity=identity), result_read
+
+    def _collect_result(self, descriptor, process, deadline: float) -> bytes | None:
+        chunks: list[bytes] = []
+        while True:
+            remaining = deadline - self._clock()
+            if remaining <= 0:
+                os.close(descriptor)
+                return None
+            ready, _, _ = select.select([descriptor], [], [], min(remaining, 0.05))
+            if not ready:
+                if process.poll() is not None:
+                    continue
+                continue
+            data = os.read(descriptor, 65536)
+            if not data:
+                os.close(descriptor)
+                return b"".join(chunks)
+            chunks.append(data)
+
+    def _reap(self, process, deadline: float) -> bool:
+        remaining = deadline - self._clock()
+        if remaining > 0:
+            try:
+                process.wait(timeout=remaining)
+                return True
+            except subprocess.TimeoutExpired:
+                pass
+        for action, grace in ((process.terminate, self._terminate_grace_s),
+                              (process.kill, self._kill_grace_s)):
+            try:
+                action()
+            except (ProcessLookupError, OSError):
+                return True
+            try:
+                process.wait(timeout=grace)
+                return True
+            except subprocess.TimeoutExpired:
+                continue
+        return False
+
+    def _read_state_bounded(self, remaining_s: float):
+        """Returns (kind, payload): 'ok' with the state, or 'timeout'/'corrupt'."""
+
+        try:
+            ok, state = self._io.call(self._read_state_sync, min(STATE_IO_BUDGET_S, remaining_s))
+        except CoordinatorError as error:
+            return "corrupt", str(error)
+        if not ok:
+            return "timeout", "cleanup state read"
+        return "ok", state
+
+    def check(self, policy: StartGuardPolicy, scope: GuardScope) -> GuardResult:
+        """One bounded request. Never raises for a resource problem; always returns a result."""
+
+        if not isinstance(policy, StartGuardPolicy) or not isinstance(scope, GuardScope):
+            raise ValueError("policy and scope must be the closed models")
+        started = self._clock()
+        deadline = started + policy.timeout_s
+
+        kind, state = self._read_state_bounded(policy.timeout_s)
+        if kind == "corrupt":
+            return self._fail(scope, started, "PROBE_STATE_CORRUPT", str(state),
+                              PROBE_CLEANUP_BLOCKED)
+        if kind == "timeout":
+            return self._fail(scope, started, "PROBE_STATE_IO_TIMEOUT", "cleanup state read",
+                              PROBE_CLEANUP_BLOCKED)
+        if state.cleanup_state != CLEAR:
+            return self._fail(scope, started, PROBE_CLEANUP_BLOCKED, state.detail,
+                              PROBE_CLEANUP_BLOCKED)
+
+        lock = self._acquire_lock(deadline)
+        if lock is None:
+            return self._fail(scope, started, "PROBE_BUSY",
+                              "another guarded request holds the task lock", CLEAR)
+        try:
+            kind, state = self._read_state_bounded(max(0.0, deadline - self._clock()))
+            if kind == "corrupt":
+                return self._fail(scope, started, "PROBE_STATE_CORRUPT", str(state),
+                                  PROBE_CLEANUP_BLOCKED)
+            if kind == "timeout":
+                return self._fail(scope, started, "PROBE_STATE_IO_TIMEOUT", "cleanup state read",
+                                  PROBE_CLEANUP_BLOCKED)
+            if state.cleanup_state != CLEAR:
+                return self._fail(scope, started, PROBE_CLEANUP_BLOCKED, state.detail,
+                                  PROBE_CLEANUP_BLOCKED)
+
+            request = json.dumps({
+                "policy": {
+                    "timeout_s": policy.timeout_s,
+                    "cpu_busy_warn_fraction": policy.cpu_busy_warn_fraction,
+                    "ram_minimum_bytes": policy.ram_minimum_bytes,
+                    "ram_minimum_fraction": policy.ram_minimum_fraction,
+                    "gpu_minimum_bytes": policy.gpu_minimum_bytes,
+                },
+                "scope": {
+                    "batch_id": scope.batch_id,
+                    "epoch": scope.epoch,
+                    "owner_pid": scope.owner_pid,
+                    "owner_starttime_ticks": scope.owner_starttime_ticks,
+                    "gpu_selector": scope.gpu_selector,
+                    "worker_count": scope.worker_count,
+                },
+                "request_started_monotonic_s": started,
+                "deadline_monotonic_s": deadline,
+            }).encode()
+
+            port, descriptor = self._spawn(request, deadline)
+            payload = self._collect_result(descriptor, port.process, deadline)
+            reaped = self._reap(port.process, deadline)
+            if not reaped:
+                identity = port.identity
+                self._io.call(lambda: self._write_state_sync(CleanupState(
+                    cleanup_state=PROBE_CLEANUP_BLOCKED,
+                    pid=identity.pid if identity else None,
+                    start_time_ticks=identity.start_time_ticks if identity else None,
+                    detail="helper could not be reaped within the bounded grace")),
+                    STATE_IO_BUDGET_S)
+                return self._fail(scope, started, PROBE_CLEANUP_BLOCKED,
+                                  "helper not reaped", PROBE_CLEANUP_BLOCKED)
+            if payload is None:
+                return self._fail(scope, started, "PROBE_TIMEOUT",
+                                  "helper produced no result before the deadline", CLEAR)
+            try:
+                document = json.loads(payload.decode())
+            except (UnicodeDecodeError, ValueError) as error:
+                return self._fail(scope, started, "PROBE_RESULT_INVALID", str(error), CLEAR)
+            return _result_from_document(document, scope)
+        finally:
+            self._release_lock(lock)
+
+
+# --------------------------------------------------------------------------------------
+# result transport
+# --------------------------------------------------------------------------------------
+
+
+def _result_to_document(result: GuardResult) -> dict:
+    return {
+        "status": result.status,
+        "started_monotonic_s": result.started_monotonic_s,
+        "completed_monotonic_s": result.completed_monotonic_s,
+        "cleanup_state": result.cleanup_state,
+        "checks": {
+            name: {"status": check.status, "reason": check.reason, "observed": check.observed,
+                   "cutoff": check.cutoff, "unit": check.unit}
+            for name, check in result.checks.items()
+        },
+        "snapshot": None if result.snapshot is None else {
+            "observed_monotonic_s": result.snapshot.observed_monotonic_s,
+            "effective_cpuset": list(result.snapshot.effective_cpuset),
+            "effective_cpu_cores": result.snapshot.effective_cpu_cores,
+            "cpu_busy_fraction": result.snapshot.cpu_busy_fraction,
+            "ram_capacity_bytes": result.snapshot.ram_capacity_bytes,
+            "ram_available_bytes": result.snapshot.ram_available_bytes,
+            "gpu_uuid": result.snapshot.gpu_uuid,
+            "gpu_total_bytes": result.snapshot.gpu_total_bytes,
+            "gpu_free_bytes": result.snapshot.gpu_free_bytes,
+            "limit_sources": list(result.snapshot.limit_sources),
+        },
+    }
+
+
+def _result_from_document(document: object, scope: GuardScope) -> GuardResult:
+    if not isinstance(document, dict):
+        raise CoordinatorError("PROBE_RESULT_INVALID")
+    checks = {}
+    for name, payload in dict(document.get("checks") or {}).items():
+        checks[str(name)] = GuardCheck(
+            status=payload["status"], reason=payload["reason"], observed=payload.get("observed"),
+            cutoff=payload.get("cutoff"), unit=payload["unit"])
+    raw_snapshot = document.get("snapshot")
+    snapshot = None
+    if raw_snapshot is not None:
+        snapshot = ResourceSnapshot(
+            observed_monotonic_s=raw_snapshot["observed_monotonic_s"],
+            effective_cpuset=tuple(raw_snapshot["effective_cpuset"]),
+            effective_cpu_cores=raw_snapshot["effective_cpu_cores"],
+            cpu_busy_fraction=raw_snapshot["cpu_busy_fraction"],
+            ram_capacity_bytes=raw_snapshot["ram_capacity_bytes"],
+            ram_available_bytes=raw_snapshot["ram_available_bytes"],
+            gpu_uuid=raw_snapshot["gpu_uuid"],
+            gpu_total_bytes=raw_snapshot["gpu_total_bytes"],
+            gpu_free_bytes=raw_snapshot["gpu_free_bytes"],
+            limit_sources=tuple(raw_snapshot["limit_sources"]),
+        )
+    return GuardResult(
+        scope=scope, status=document["status"],
+        started_monotonic_s=document["started_monotonic_s"],
+        completed_monotonic_s=document["completed_monotonic_s"],
+        checks=checks, snapshot=snapshot, cleanup_state=document["cleanup_state"])
+
+
+# --------------------------------------------------------------------------------------
+# helper entry point
+# --------------------------------------------------------------------------------------
+
+
+def _read_all(descriptor: int) -> bytes:
+    chunks = []
+    while True:
+        data = os.read(descriptor, 65536)
+        if not data:
+            return b"".join(chunks)
+        chunks.append(data)
+
+
+def _write_all(descriptor: int, payload: bytes) -> None:
+    offset = 0
+    while offset < len(payload):
+        offset += os.write(descriptor, payload[offset:])
+
+
+def run_helper(request_fd: int, result_fd: int) -> int:
+    """Helper side: read one closed request, do every read, write one result."""
+
+    try:
+        request = json.loads(_read_all(request_fd).decode())
+        policy = StartGuardPolicy(**request["policy"])
+        scope = GuardScope(**request["scope"])
+        deadline = float(request["deadline_monotonic_s"])
+        request_started = float(request["request_started_monotonic_s"])
+    except (KeyError, TypeError, ValueError) as error:
+        payload = {"error": f"PROBE_REQUEST_INVALID: {error}"}
+        _write_all(result_fd, json.dumps(payload).encode())
+        return 2
+    try:
+        snapshot = probe_snapshot(policy, scope, deadline)
+        result = evaluate_snapshot(snapshot, policy, scope, started_monotonic_s=request_started,
+                                   completed_monotonic_s=time.monotonic())
+    except ProbeError as error:
+        completed = time.monotonic()
+        result = GuardResult(
+            scope=scope, status=FAIL, started_monotonic_s=request_started,
+            completed_monotonic_s=max(request_started, completed),
+            checks={"probe": GuardCheck(FAIL, error.reason, None, None, "state")},
+            snapshot=None, cleanup_state=CLEAR)
+    _write_all(result_fd, json.dumps(_result_to_document(result)).encode())
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="so101-start-guard-probe", add_help=True)
+    parser.add_argument("--request-fd", type=int, required=True)
+    parser.add_argument("--result-fd", type=int, required=True)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    arguments = build_parser().parse_args(argv)
+    return run_helper(arguments.request_fd, arguments.result_fd)
+
+
+if __name__ == "__main__":  # pragma: no cover - exercised through the module entry point
+    sys.exit(main())
