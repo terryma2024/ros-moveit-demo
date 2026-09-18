@@ -6309,3 +6309,28 @@ five-batch physical stability record; and correction item 2's bounded positive d
 which is queued behind the still-running pre-fix `lg-demo-full`.
 
 _Ledger HEAD when written: `cf5c337ec`._
+
+
+## CP-UQ145 — Task 11: the manifest drives collection, and the collection refuses to be empty
+
+Commit for this checkpoint. `live-sim/05-functional-manifest.spec.ts` reads
+`SO101_FUNCTIONAL_MANIFEST` at **collection** time and registers one case per manifest entry, and
+its guards run before any test: a missing path, unreadable JSON, an empty `cases` array or a
+malformed entry each abort collection with a named error, so an acceptance run can no longer
+silently execute one case instead of the seventeen it should. The new `functional-cases`
+Playwright project depends on `live-preflight`, and the per-case assertion is a real check against
+the deployed service — the mode is advertised, the worker count is selectable, the guard policy is
+present, and the case's own point/attempt/timeout fields are sane. That is configuration
+acceptance; it is deliberately **not** a physical-success claim.
+
+Verified by collection with the live service and the manifest built in CP-UQ144:
+`bun x playwright test --config playwright.live-sim.config.ts --list` → **23 tests in 6 files**
+(previously 6 in 5), including all 17 manifest cases. Web tooling stayed on Bun as the correction
+requires.
+
+Remaining for Task 11: the actual acceptance run per case with per-case evidence (JUnit,
+screenshots, actual domains/worker slots), the control/cancel/recovery cases, and the five-batch
+physical stability record; plus correction item 2's bounded positive delegated run, still queued
+behind the pre-fix `lg-demo-full`.
+
+_Ledger HEAD when written: `d0c19b5b2`._
