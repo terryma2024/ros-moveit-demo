@@ -3496,3 +3496,31 @@ one of the other checks that share that code. The next diagnostic is one line ra
 run the launcher's provenance path in-process with `CliError.__init__` wrapped to print the raising
 stack frame (or call the validator directly with the same inputs), so the failing branch is named
 instead of inferred. N1 remains `NOT_MEASURED`; nothing is extrapolated to another N.
+
+## CP-UQ58 — Stage C: the provenance barrier is cleared; the sampler's own cost is the latch
+
+Run: `stage-c/batches/n1-calibration-20260918-run18/`, `scratch/stageC-fix14.*/`,
+`scratch/stageC-auth.S2WPqrz0/measure24.log`. Commit `4884db1a8` (36 passed).
+
+The traced call named the failing branch instead of leaving it to inference:
+`_validate_external_overlay_binding` requires `package_prefixes` to be exactly
+`{so101_demo_py, so101_mujoco_support}` **and** each prefix to sit inside `install_root`
+(its `prefix.relative_to(install_root)`), then uses `demo_prefix/lib/so101_demo_py/...` and
+`demo_prefix/share/...` as the expected console, config and point catalog. Declaring AMENT's
+`dev-install/...` answers could never satisfy that, however truthful they were about the AMENT
+index. So the harness now declares the install tree's own prefixes
+(`overlay_package_prefixes(install_root)`), the child's `AMENT_PREFIX_PATH` is set to the same
+prefixes so the launcher's own AMENT re-query agrees, and `so101_mujoco_support` was built into
+`candidate-install` alongside `so101_demo_py` (`colcon_rc=0`, both prefixes present).
+`bindings/candidate-install-binding.json` therefore describes a candidate install whose console,
+metadata, package tree, config and catalog all live under one root that equals the source.
+
+With r20 (`a5451ae0109e9570...`) the launcher's stderr is **empty**: it passed provenance, started,
+and the measurement advanced on its own for the first time. The run then latched
+`SAMPLER_GAP` with six samples, which is now a statement about the sampler's own cost rather than
+about placement: the grid keeps the period at `max(interval, work)`, so a sampling pass that costs
+more than `maximum_sample_gap_s` becomes the period and breaches. The next step is to price that
+pass -- the sample rows carry `diagnostics` and the expensive sub-read is the PSS walk of a
+freshly started torch process -- and move the costly channel off the primary grid (or bound it)
+rather than widening the gap allowance, which is policy. N1 remains `NOT_MEASURED`; nothing is
+extrapolated to another N.
