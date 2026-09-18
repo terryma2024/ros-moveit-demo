@@ -6415,3 +6415,20 @@ about the run is suspect — global setup, the browser, the deployed capabilitie
 manifest-driven collection are all confirmed working.
 
 _Ledger HEAD when written: `df9856c26`._
+
+## CP-UQ149 — Task 11: the service now carries its model configuration, and the rerun is in flight
+
+Acting on CP-UQ148: the task-owned service was redeployed with the functional model configuration
+(`SO101_VALIDATION_YOLO_WEIGHTS`, `SO101_VALIDATION_GROUNDED_ROOT`,
+`SO101_VALIDATION_BROKER_IMAGE`) alongside the evidence root, web root, v3 config and
+`SO101_TASK_ROOT`. The ordered stop/start was verified again (old PID `2223149` confirmed exited,
+`/health` ok, served bytes still match the installed copy, `execution_modes` and
+`start_guard_policy` unchanged).
+
+The acceptance was relaunched (Bun, same manifest and base URL). Its run directory
+`browser/lg-live-functional.g8SrEpVn` shows **no failures listed so far** and had not finished when
+this was written, so the next round reads its outcome: whether R01 now starts a campaign (the
+CP-UQ148 hypothesis) and how many of the 17 manifest cases pass once its gate is open. No claim is
+made about the result yet.
+
+_Ledger HEAD when written: `4de2f436c`._
