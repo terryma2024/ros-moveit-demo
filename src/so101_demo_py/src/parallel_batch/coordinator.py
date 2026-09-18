@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Callable, Protocol
 
 from .contracts import (
+    ParallelRuntimeConfigV2,
     AttemptStatus, BatchSummary, LeaseIdentity, ParallelRuntimeConfig,
     PointStatus, RunMode, ValidationStatus, WorkerState,
 )
@@ -127,7 +128,7 @@ class BatchCoordinator:
         if point_selector is not None and not callable(point_selector):
             raise ValueError('POINT_SELECTOR_CALLABLE')
         self._point_selector = point_selector
-        if not isinstance(config, ParallelRuntimeConfig):
+        if not isinstance(config, (ParallelRuntimeConfig, ParallelRuntimeConfigV2)):
             raise ValueError('FROZEN_CONFIG_REQUIRED')
         self.config = config
         self._state = {'workers': {}, 'points': {}}
@@ -613,9 +614,9 @@ class BatchCoordinator:
                 ],
             }
         worker = self._worker(worker_id, generation)
-        if (worker['state'] != 'AVAILABLE'
-                or (self._point_selector is None
-                    and worker['lease_count'] >= self.request.max_points_per_worker)):
+        # No lifetime quota: a READY/AVAILABLE worker without an active lease always wins
+        # the next ordered pending point. lease_count is cumulative statistics only.
+        if worker['state'] != 'AVAILABLE':
             return {
                 'lease': None,
                 'lease_grant_paused': False,
@@ -924,22 +925,18 @@ class BatchCoordinator:
             workers = self._state['workers']
             if any(w['lease'] for w in workers.values()):
                 return
-            if self._point_selector is None:
-                capacity = len(self._state['workers']) < self.request.worker_count or any(
-                    w['state'] in ('AVAILABLE', 'RECOVERING')
-                    and w['lease_count'] < self.request.max_points_per_worker
-                    for w in workers.values())
-            else:
-                capacity = len(self._state['workers']) < self.request.worker_count or any(
-                    w['state'] in ('AVAILABLE', 'RECOVERING')
-                    for w in workers.values())
+            # A slot that can still be registered or is recovering keeps its original
+            # deadline; only a batch with no recoverable slot and pending points stops.
+            recoverable = len(self._state['workers']) < self.request.worker_count or any(
+                w['state'] in ('AVAILABLE', 'RECOVERING', 'INITIALIZING')
+                for w in workers.values())
             runnable = any(
                 not p['terminal'] and (
                     not p['blocked_by'] or workers[p['blocked_by']]['state'] == 'RECOVERING')
                 for p in self._state['points'].values())
-            if capacity and runnable:
+            if recoverable and runnable:
                 return
-            reason = 'CAPACITY_EXHAUSTED'
+            reason = 'NO_RECOVERABLE_WORKERS'
         self._emit('BATCH_STOPPING', {'terminal_reason': reason})
 
     @_locked
