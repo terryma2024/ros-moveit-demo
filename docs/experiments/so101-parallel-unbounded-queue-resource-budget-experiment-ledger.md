@@ -4392,3 +4392,33 @@ since the image digest is part of the sealed authority.
 This is the first blocker in this task that belongs to the *workload's* composition rather than to
 the harness's dialogue with the allocator, and it is only reachable because the preceding units
 fixed the root/cwd chain: launcher, broker and worker 1 all start now.
+
+## CP-UQ88 — Why the broker cannot read what it is given, and the two honest fixes
+
+The mismatch is now located in code, on both sides of the container boundary:
+
+- `mujoco_parallel_batch.py` (~line 2991) writes the broker's runtime document by copying the
+  launcher's own config bytes verbatim into `<ipc>/broker/runtime-config.yaml` and then points the
+  spec at it with `"config_path": "/runtime/runtime-config.yaml"`. For a v2 measurement that copy is
+  the v2 document, with `execution:` and `deployment:`.
+- `runtime/parallel_ipc.py::build_broker_transport` (~line 1374) loads that path with
+  `load_parallel_runtime_config`, the **v1** parser, which by design refuses unknown fields
+  (`UNKNOWN_CONFIG_FIELD: ['deployment', 'execution']`). The broker CLI is not at fault; the
+  transport builder picks the v1 loader unconditionally.
+
+Two fixes follow, and they differ in blast radius:
+
+1. **Version-select the loader** in `build_broker_transport` (v1 document -> v1 parser, v2 document ->
+   `load_parallel_runtime_config_v2`), mirroring how the launcher already chooses. This is the correct
+   interface fix in this tree, and it is the one that would let a v2-capable broker read a v2 config.
+2. **Derive a broker-schema document** when writing the spec, so the broker receives exactly the v1
+   fields it understands (image, hashes, frame bytes, deadlines) rather than the whole v2 file. This
+   is harness-side and works even against an image whose package predates v2.
+
+The deciding fact is which package actually runs inside the container: the traceback resolves to
+`/opt/venv/lib/python3.12/site-packages/so101_demo/...`, i.e. the **image's own** copy, not anything
+mounted from this worktree. So fix 1 only helps once the image carries a v2-capable package, while
+fix 2 works with the image exactly as sealed -- and the image digest is part of the sealed
+authorization, so fix 2 is the one that does not require re-sealing authority. Both are recorded here;
+the next unit implements fix 2 (and may add fix 1 for the in-tree paths that do run from this
+worktree).
