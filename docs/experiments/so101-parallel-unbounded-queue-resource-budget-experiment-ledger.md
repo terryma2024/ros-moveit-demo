@@ -6786,3 +6786,26 @@ acceptance attempt — and it also means the last acceptance run's failures cann
 the browser or the campaign flow until a service is actually up.
 
 _Ledger HEAD when written: `086f786c5`._
+
+## CP-UQ165 — Service back up, and the share lookup no longer depends on the child's environment
+
+Two things this round, both verified:
+
+- **The service is listening again.** Its log showed a *clean* shutdown ("Shutting down … Finished
+  server process [2255032]") — not a crash — which is consistent with my own earlier process
+  cleanup rather than a defect. The ordered redeploy from the byte-verified complete copy reports
+  `/health` ok, `served_matches_installed: true`, the correct `start_guard_policy`, and port 8010
+  listening (checked with `ss`, not assumed).
+- **The share resolution is now robust inside a spawned coordinator.** CP-UQ161 called
+  `get_package_share_directory("so101_demo_py")` directly, and the current campaign's coordinator
+  log showed the generic `PROVENANCE_VERIFICATION_FAILED` — consistent with that discovery raising
+  in a child whose environment lacks the ament index (the service process resolves it fine, which
+  is why the deployment looked healthy). The lookup is now discovery-first with a
+  **layout-derived fallback** (`<prefix>/share/so101_demo_py` walking up from the module path) and a
+  named error if neither works, so a genuine deployment gap still fails loudly instead of silently.
+
+Suites: `lg-t11-prov5` **139 passed, 0 failed, 0 skipped**. A fresh copy build is running; next
+round verifies it (CLI byte-compare *before* deploying, per CP-UQ162's lesson), redeploys, re-runs
+the acceptance and reads the coordinator log — the fifth gate name, or the first worker.
+
+_Ledger HEAD when written: `ee27a1cec`._
