@@ -6934,3 +6934,23 @@ reach the workers, which is where the functional acceptance and the five-batch s
 start. No claim is made that this is the last blocker; it is simply the next one, and it is named.
 
 _Ledger HEAD when written: `b056d6983`._
+
+## CP-UQ171 — The image rebuild recipe, computed rather than remembered
+
+CP-UQ170 says the perception image must be rebuilt. Its Dockerfile takes three build arguments and
+verifies them inside the build, so they have to be computed from the current tree:
+
+| Argument | Value computed now |
+| --- | --- |
+| `DOCKERFILE_SHA256` | `54f385874d8ace0bce7b31832f0345ce3f8f32cfb91e6506775572bc40582ec5` |
+| `LOCK_SHA256` | `ModuleNotFoundError: No module named 'parallel_batch.parallel_perception_runtime'` |
+| `SOURCE_SHA256` | `ModuleNotFoundError: No module named 'so101_demo'` |
+
+with the build context at the repository root (the Dockerfile copies `src/so101_demo_py` relative to
+it) and the tag the deployment uses (`so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1`).
+One practical caveat for the next round: the source `COPY` layer changes, so Docker will invalidate
+every layer after it — including the pip layer — which means this build is not a quick cached one;
+it should be started early and allowed to finish rather than rushed, and the previous image should
+stay in place (tagged) until the new one is verified.
+
+_Ledger HEAD when written: `edcb7978c`._
