@@ -5929,3 +5929,53 @@ capabilities and read at collection time), the actual acceptance run against
 stability record.
 
 _Ledger HEAD when written: `513425a4b`._
+
+
+## CP-UQ132 — Correction f1308af3, part 1: the delegated root reached pytest twice
+
+Receipt `executor.receipt` was created exclusively (`O_EXCL`, 37 bytes = UUID + LF, sha256
+`8e2fb70c286e950794da904321e61e7eed0f1aad7c2df92bbfeb23a7a975d265`) with the real time, HEAD
+`ffb275f0d`, owner and handoff sha256
+`fe2e942cf84caa17f46a72b7ba1f983d542b80aa3a6c4a390b4f147cb22d9a9d` recorded beside it in
+`receipt-facts.json`. No goal was reset and the running gates and deployed service were left
+untouched.
+
+The reported defect is real and is now fixed in `tools/test-gate.zsh`. The delegation called
+`pytest-parallel.zsh <name> <root> "$@"` while `"$@"` still contained that same root, so the
+helper saw it as an extra argument: the collection and the parallel phase each received the root
+twice, and the **serial phase received every audited serial module *and then the whole package***,
+which re-ran the entire ordinary suite and could execute foreign cases. The helper's coverage
+assertion cannot catch that because it compares node IDs, not what was invoked.
+
+The delegation now forwards *options* exactly once and positional directory arguments not at
+all (the root is passed explicitly as the runner's first argument). Arguments that take a value
+(`-p/--plugin`, `-n/--numprocesses`, `-k`, `-m`, `--timeout`, `--junitxml`, `--rootdir`,
+`--ignore`, `--deselect`) keep their value, so a legitimate option is never silently dropped,
+and two distinct directory targets are refused with
+`SO101_PYTEST_MULTIPLE_DIRECTORIES_UNSUPPORTED` instead of being guessed at.
+
+Evidence, from a delegating probe root (`scratch/lg-delegation-probe.RIB54ito`, two trivial
+modules, no serial modules present):
+
+| argv file | occurrences of the root |
+| --- | --- |
+| `collect.argv.txt` | **1** (was 2) |
+| `parallel.argv.txt` | **1** (was 2) |
+| `serial.argv.txt` | **0** — the serial phase receives no whole-root argument |
+
+The probe exits non-zero on `COVERAGE_RC` because its two synthetic tests cannot match the
+package manifest, which is the expected outcome for a synthetic root and is exactly why the
+argv files, not the exit code, are the evidence here. `zsh -n` passes on the edited wrapper.
+
+**Still open from the handoff** (recorded, not claimed): the genuine RED→GREEN against the real
+package root with the serial phase executing only the audited conflicts and the executed
+multiset equal to that run's own collection; the teleop `coverage_exact=false`/`extra: 5` repair
+rather than treating the direct gate as optional; reconciling CP-UQ128's 3236 collection with
+2967+271=3238 by fresh collection of the final code; the runtime-byte readback against the
+deployed immutable copy after the last runtime edit; copying the critical `/tmp/…-b82d10b8/`
+evidence (including `deploy.json` and `retired_task14_tests.py`) into new immutable paths inside
+the task root with sizes and sha256; and the honest capabilities diagnosis for
+`execution_modes=[SEQUENTIAL]` alongside selectable counts 1..8 and an adaptive ladder, before
+the functional manifest is generated from it.
+
+_Ledger HEAD when written: `ffb275f0d`._
