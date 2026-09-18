@@ -4768,3 +4768,30 @@ render path honours it), then measure the demand again. If it stays at ~19 cores
 is per-process CPU inside the owned cgroup during a run, which names the consumer instead of
 inferring it from a total. Either way the instrument remains correct: it reports the workload's CPU
 against the policy's line, and the remaining work is making the candidate fit under 19.1 cores at N1.
+
+## CP-UQ103 — Bounding MuJoCo lowers the peak; one throttling event survives
+
+Run68 added `MUJOCO_NUM_THREADS=1` to the bounds already exported, and the numbers moved: with the
+same 60 s baseline and the same chain, the peak sampled rate fell from run67's 18.88 cores to
+**13.60**, median 0.02, over 197 samples -- and yet the run still latched `CPU_THROTTLED`, on a single
+sample out of 197. So the throttle is not the *average* demand crossing 19.1 cores (the sampled peak is
+now well under the quota); it is an instantaneous excursion inside one `cpu.max` period, which the
+zero-tolerance rule (`throttling_disqualifies_run` plus any `nr_throttled` delta) disqualifies
+regardless of size.
+
+Two honest notes about the attempt itself:
+
+- my per-process watcher reported `total tracked cpu-s: 0.00` and told us nothing, because I globbed
+  `$C/payload/so101-measurement-*` while the session creates its cgroup under the parent I passed
+  (`$C`), not under `payload/`. That is a diagnostic error of mine, not a finding, and the watcher
+  should glob the parent itself next time.
+- the amendment to the measurement policy is not implicated: the instrument sampled, attributed and
+  reported correctly, and the abort is the frozen rule doing what it says.
+
+What remains is therefore a decision rather than a defect, and it is worth stating plainly for the
+operator: at N1 the candidate's *peak* CPU demand still touches the 19.1-core quota inside a single
+period even with every thread bound we can set (OMP, MKL, OPENBLAS, TORCH, NUMEXPR, MUJOCO). The
+options are to find and bound that last consumer, to widen the envelope (a policy change to
+`capacity_fraction`/`safety`), or to accept single-period throttling as non-disqualifying during a
+cold start (a policy change to `throttling_disqualifies_run`). The first is engineering; the other two
+are the operator's.
