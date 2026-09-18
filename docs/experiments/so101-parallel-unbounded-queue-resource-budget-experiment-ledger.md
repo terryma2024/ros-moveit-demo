@@ -7699,3 +7699,23 @@ evidence files sit under `browser/lg-exec-*/runtime/*/execution-fixed-n*-p4.json
 The next batch (N=6, 7 and 8, four points each) was launched immediately in the same driver.
 
 _Ledger HEAD when written: `badd63714`._
+
+## CP-UQ189 — N=6 is on its first batch, and my sense of elapsed time is not evidence
+
+The question left open in round 76 is answered by enumeration, not by my impressions: the N=6
+campaign `…772bf9ce` has exactly **one** batch directory, `bd299`, created `2026-09-19 04:26:14`,
+with a single journal (`BATCH_STARTED 1`, `WORKER_REGISTERED 6`, `LEASE_GRANTED 4`,
+`ATTEMPT_STARTED 4`, `LEASE_RENEWED 277`). There is no retry batch and no second attempt at this
+case. The directory I had found suspicious was the same one, matched by my own glob and showing a
+*modification* time rather than its creation time.
+
+That also corrects the framing of the last two rounds: the batch was about a minute old when I
+described it as long-running and slow. This is the second time I have mistaken my own polling gap
+for a property of the run (the first was the N=3 timing claim corrected in `e954c5ef1`). The rule
+this ledger now follows: a case's duration is quoted only from its own Playwright timing line or
+from the batch directory's creation time, never from how long the case *felt* while I polled.
+Everything else about N=6 stands as verified: six registered slots, four attempts executing, one
+batch, `evaluated: 0` because no point has committed yet, and no evidence file — so no outcome is
+claimed for it.
+
+_Ledger HEAD when written: `187681374`._
