@@ -5744,3 +5744,42 @@ and completes the rest of Task 9 (the `lg-demo-full` / `lg-teleop-full` wrapper 
 Bun/OpenAPI gates, and the source freeze from the final clean HEAD).
 
 _Ledger HEAD when written: `3a5ed8107`._
+
+
+## CP-UQ127 — The four lane leftovers are fixed, and the parallel lane is down to one check
+
+Commits `05c61a785` and this one. Each of the four failures from CP-UQ126 was a test carrying a
+superseded expectation, and each fix says why in the file:
+
+1. **`test_installed_provenance`** required `so101_mujoco_support` to sit in the *demo* prefix's
+   sibling directory. A partial immutable copy only carries `so101_demo_py` and `so101_teleop`,
+   so the plugin legitimately resolves from the dependency closure. The check now prefers a
+   declared prefix (`SO101_DEMO_EXPECTED_PREFIX`), then the sibling, and requires only
+   functional presence when neither provides the package — which is exactly what the plugin
+   assertions below it verify. (The first attempt patched the wrong function and was caught by
+   running the file; the repair targets the function by AST name rather than by text.)
+2. **`test_copied_installed_entrypoint`** had two problems: the byte comparison was anchored to
+   the superseded `freeze-install` prefix, and in overlay mode it ran the historical
+   `git diff 6e68d0f51 HEAD` check that can never pass again. `_resolve_prefixes()` now resolves
+   the prefix actually under test (explicit copy or active overlay) and the byte comparison is
+   prefix-agnostic and strictly stronger than the commit diff; the five prefix-specific cases
+   declare `requires_copied_prefix` instead of silently testing an old build. The explicit-copy
+   gate still passes: **15 passed, 0 skipped**.
+3. **`test_parallel_adaptive_contracts`** retired
+   `test_adaptive_factory_issues_typed_context_only_for_its_own_pool` — it imported the deleted
+   `resource_budget` allocation context, a mechanism this plan removed.
+4. **`test_parallel_resource_identity`** dropped the `("safety", "abort_on_swap_activity", False)`
+   drift case: that field is accepted as deprecated and never consulted (the CPU/RAM/GPU-only
+   amendment), so asserting that changing it raises was asserting the pre-amendment policy.
+
+Combined run of the four files: **52 passed, 0 failed**. The parallel lane was then re-run end to
+end against the copy build with the same 271 deselects: **exit 0**, `PARALLEL_RESULT_RC=1` with
+**2967 tests, 1 failure** — down from 4, and the single remaining failure is the *pre-fix*
+`test_installed_provenance` case that the run started before the repair landed (the file passes
+5/5 on its own now). Evidence: `/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main/unbounded-queue-resource-budget/package-parallel-results.KAqpJIca`.
+
+Next round re-runs the parallel lane to confirm 0 failures and closes the rest of Task 9 (the
+`lg-demo-full` / `lg-teleop-full` wrapper runs, the Bun/OpenAPI gates, the source freeze from the
+final clean HEAD).
+
+_Ledger HEAD when written: `06bf044c6`._
