@@ -2331,3 +2331,99 @@ evidence: scratch/prefix*, colcon/prefix*, prefix-build, prefix-install,
 decision: KEEP
 next_experiment: NONE-AUTHORIZED (await Sol review)
 ```
+
+```yaml
+checkpoint_id: CP-UQ28
+last_valid_experiment: EXP-UQ28
+current_hypothesis: The four findings of the scoped Sol execution-result review (CHANGES_REQUIRED) are
+  repaired offline and the final copied install matches the final runtime code bytes.
+dispatch: 84e8376a-c21a-4a53-bd74-883635102594 (exclusive O_EXCL receipt first, then a read-only probe
+  with shell date -Iseconds 2026-09-18T17:51:41+08:00, HEAD cd61339fb05f63eb1cf993f34d9f844ea1058268,
+  clean, CP-UQ27, pane %68/PID 1345571; handoff SHA256
+  25f65a59e5188eb4ed363a54b1ebb85eb70a9da68da9c18994e5f695103b5ac1 and review SHA256
+  c99732ff58535881689a5e18b2980a564dd7c80fd9cb57a15fbe47dd80ae05e6 = the required value)
+corrections:
+  - CP-UQ27's claim that source and copied install were byte-equal was FALSE at that HEAD: the copied
+    provenance.py was built before commit 8ef4cfbcb changed it. The four-case installed run
+    (scratch/prefix-installed.EWr8oAVG) therefore did not qualify the final source. Retained as history;
+    superseded by the fresh copy below.
+  - CP-UQ27's aggregate count 3847 was wrong; the actual colcon test-result aggregate for that build base
+    was 3839 (0 errors, 0 failures, 1 skipped).
+  - The earlier 7f437570 probe JSON said 16:00 while its receipt/probe file metadata is ~16:30; that
+    self-filled timestamp was not independently verified wall time. This unit's probe takes its time
+    from a real `date -Iseconds` inside the probe log and records it verbatim.
+  - Progress correction: the 7f437570 patch had accidentally removed nine independent CLI regression
+    cases while trimming the prefix negatives; they are restored unchanged (see repairs).
+repairs:
+  - "P1 runtime Git removed: observed_source_commit() is declared-metadata-only and runs no subprocess;
+    the Git observation moved to observed_source_commit_from_git/observed_source_dirty_from_git, used
+    only by the build/install debug-manifest generator. The bundle input _source_commit() is
+    declared/unknown only. Regression: test_runtime_execution_chain_never_runs_git patches
+    subprocess.run to fail on any git argv across the CLI context, the identity resolver, the installed
+    bundle and the debug manifest generator (the only place a git call is then allowed and observed)."
+  - "P2 debug inspection nonblocking: _verified_artifact wraps resolve/stat/open/read in one guarded
+    block, and the declared-prefix fallback guards resolve; permission, race, malformed or unresolvable
+    metadata yields None/unknown instead of propagating. Regression:
+    test_debug_artifact_read_failures_are_nonblocking covers PermissionError/FileNotFoundError/OSError/
+    ValueError plus malformed and unresolvable prefix values while session/reset/evidence stay valid."
+  - "P2 nine independent CLI cases restored from 089a081b0 (2 partial-execute, 3 workflow-config,
+    1 workflow stdout/stderr, 2 confirmation-bypass, 1 wrong-backend); the legitimate old prefix
+    negatives were replaced by nonblocking cases rather than deleted, and the mapping is recorded in the
+    test file's parametrized prefix test."
+  - "Copied-provider contract coverage: test_copied_default_provider_is_positive_and_fail_closed runs the
+    copied install's own default composer through a hermetic low-level host port and proves both an
+    admitted N4 (profile/qualification match) and fail-closed refusals (BACKGROUND_ENVELOPE_EXCEEDED,
+    RAM_HEADROOM); no admission factory, resolver or global gate is mocked."
+  - "Final copy: progress-install built from runtime-code HEAD ff8a1479fe5eeb000445f6a3f9d8f945723dd8a4
+    (new unique immutable prefix; prefix-install and all older prefixes/A0/auth/evidence untouched, no
+    symlink). Verified byte equality of provenance.py, debug_provenance.py, launch_composition.py,
+    text_pick_agent.py, the pick_place adapter and teleop production.py plus every installed launch file,
+    and the debug manifest records that commit with source_dirty false. Later commits are test-only:
+    `git diff --stat ff8a1479f..HEAD -- src/so101_demo_py/src src/so101_teleop/so101_teleop
+    src/so101_demo_py/setup.py` is empty, so the installed runtime bytes still equal HEAD."
+red_green:
+  - RED: with the previous provenance.py restored, test_runtime_execution_chain_never_runs_git fails with
+    "runtime Git subprocess: ['git','-C',<prefix>,'rev-parse','HEAD']" and
+    test_debug_artifact_read_failures_are_nonblocking fails with PermissionError.
+  - GREEN: scratch/progress-green2.CgmfhjOy 89 passed; scratch/progress-restore1.8O7voGBT 60 passed
+    after the nine restorations; scratch/progress-installed.gJOfu2pI 4 passed;
+    scratch/progress-provider.GVuXFm7p 7 passed.
+gates:
+  - scratch/progress-teleop-full.5WPSKs2J: 532 passed (529 + 3 copied-provider contract cases).
+  - colcon/progress-teleop-ctest.*: 100% tests passed, 0 failed out of 55.
+  - colcon/progress-demo-colcon.ckovTci1 (exit 1) retained: the runtime bundle no longer probes Git while
+    test_installed_provenance still expected a Git HEAD; fixed in the following test-only commit.
+  - colcon/progress2-demo-colcon.*: final ordinary demo gate, see the readback appended below.
+inferred:
+  - Runtime no longer depends on Git or on prefix metadata; debug inspection is diagnostic-only while
+    functional discovery and the independent gates stay fail-closed.
+conclusion: VALID offline pending the final gate readback. Stop for Sol re-review.
+evidence: scratch/progress-*, colcon/progress-*, progress-build, progress-install,
+  followups/repair-debug-progress-84e8376a-.../{executor.receipt,startup-probe01.log,
+  startup-probe01.result.json}
+decision: KEEP
+next_experiment: NONE-AUTHORIZED (await Sol review)
+```
+
+```yaml
+checkpoint_id: CP-UQ28A
+last_valid_experiment: EXP-UQ28
+current_hypothesis: Final gate readback for the four-finding repair unit.
+readback:
+  - colcon/progress2-demo-colcon.VD8SYoJT: exit 0 in 550.3s, 3266 passed, 1 skipped - the final
+    ordinary demo gate on the repaired runtime code (3255 + 9 restored independent cases + 2 new
+    metadata/Git regressions).
+  - colcon test-result --test-result-base <TASK_ROOT>/dev-build --all: 3853 tests, 0 errors,
+    0 failures, 1 skipped.
+  - scratch/progress-teleop-full.5WPSKs2J: 532 passed; colcon/progress-teleop-ctest.* 0 failed of 55.
+  - progress-install (runtime-code HEAD ff8a1479fe5eeb000445f6a3f9d8f945723dd8a4): all checked module
+    bytes and all eight installed launch files byte-match the frozen source; the debug manifest records
+    that commit; later commits are test-only and leave the installed runtime bytes identical
+    (empty diff over src/so101_demo_py/src, src/so101_teleop/so101_teleop and setup.py).
+  - Runtime-code HEAD to cite: ff8a1479fe5eeb000445f6a3f9d8f945723dd8a4; documentation/ledger HEAD is
+    recorded by this commit.
+conclusion: VALID offline. Stop for Sol re-review, no self-approval.
+evidence: colcon/progress2-demo-colcon.*, scratch/progress-*, progress-install
+decision: KEEP
+next_experiment: NONE-AUTHORIZED (await Sol review)
+```
