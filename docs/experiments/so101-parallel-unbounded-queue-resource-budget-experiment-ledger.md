@@ -5201,3 +5201,49 @@ bounded 2 s probe helper with cross-process single-flight and the durable
 cleanup-blocked contract.
 
 _Ledger HEAD when written: `70df7c6c8`._
+
+
+## CP-UQ116 — Task 4: the probe helper is bounded, single-flight and durable
+
+RED first, and it was worth it: `test_parallel_start_guard_probe.py` was written against the
+real helper process (only the lowest-level process port is replaced), and the first GREEN
+attempt failed 5 of 12 tests for two genuine implementation defects, both now fixed:
+
+- the request pipe was wired backwards -- the child was handed the write end and the owner
+  wrote into the read end, so every real helper died with `EBADF`;
+- a **zombie** keeps its `/proc/<pid>/stat` entry until it is reaped, so
+  `recover_owned_cleanup` saw an already-exited test child as "still alive" and refused to
+  clear the state. `read_process_identity` now reports a `Z` state as gone, which is what
+  makes the recovery branch honest instead of permanently stuck.
+
+GREEN (`lg-t4-green3`): **12 passed**, exit 0, `-n 8`, scratch and JUnit recorded, and no
+helper process is left behind. What the tests actually prove:
+
+- `test_all_reads_are_helper_owned` monkeypatches `start_guard.probe_snapshot` **in the
+  owner** to raise `AssertionError`; the real helper runs in a fresh interpreter and the
+  request still returns PASS/WARN with a real snapshot, so the owner cannot be doing the
+  reads.
+- `test_native_timeout_is_bounded` drives the unreapable branch with a process port that
+  never reaps, and asserts the check returns FAIL `PROBE_CLEANUP_BLOCKED` inside
+  `timeout + terminate grace + kill grace + margin`, with the exact PID/starttime persisted.
+- `test_unreapable_blocks_retry_and_spawn` then asserts a second request is refused
+  *without spawning anything* (the popen port is never called).
+- `test_singleflight_wait_counts_against_deadline` holds the cross-process `flock` and
+  asserts the waiter fails `PROBE_BUSY` inside its own deadline rather than queueing.
+- `test_restart_recovers_exact_pid_starttime` covers all three recovery branches: a gone
+  helper clears the state with the disappearance recorded, a live PID with a **mismatched**
+  start time is never signalled (the test asserts its own process is untouched), and an exact
+  owned match is terminated through the bounded exact-identity path.
+- `test_persistent_state_corruption_fails_closed` writes junk into the durable state and
+  asserts a FAIL with no spawn, and the helper entry point is exercised as a real
+  `python -m so101_demo.parallel_batch.start_guard_probe` (help exits 0; missing FDs exit 2).
+
+Commit `6216fe029`. State root is `$TASK_ROOT/start-guard-state`, the coordination key is
+hostname+uid+task root so INDEX and UUID aliases share one lock, and the lock, IPC and state
+I/O all run under the deadline (state reads go through a bounded off-thread call).
+
+Progress: Tasks 1-4 of 12 are complete, each with its own commit
+(`e4d4d22be`, `795e29679`, `70df7c6c8`, `6216fe029` plus ledger commits). Next: **Task 5**,
+wiring `EpochStartGuard` into the real CLI/allocator/restore composition.
+
+_Ledger HEAD when written: `6216fe029`._
