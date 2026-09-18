@@ -94,24 +94,25 @@ def test_mujoco_support_plugin_comes_from_the_candidate_project_overlay() -> Non
     support_prefix = Path(get_package_prefix("so101_mujoco_support")).resolve()
     expected = os.environ.get("SO101_DEMO_EXPECTED_PREFIX")
     library_suffix = ".dylib" if platform.system() == "Darwin" else ".so"
-    if expected is None:
-        expected_support_prefix = demo_prefix.parent / "so101_mujoco_support"
-    else:
-        # An explicitly named prefix is the *demo* prefix under test. A partial immutable
-        # copy only carries so101_demo_py and so101_teleop, so the plugin legitimately
-        # resolves from the dependency closure; when the named prefix does provide
-        # so101_mujoco_support, that is what must be used.
-        candidate = Path(expected).resolve()
-        expected_support_prefix = (
-            candidate
-            if (candidate / "share/so101_mujoco_support").is_dir()
-            else None
-        )
-
-    if expected_support_prefix is not None:
-        assert support_prefix == expected_support_prefix
+    # Prefer a declared prefix; otherwise the demo prefix's sibling. A partial immutable copy
+    # only carries so101_demo_py and so101_teleop, so when neither candidate provides
+    # so101_mujoco_support the plugin legitimately comes from the dependency closure and only
+    # its functional presence is required.
+    candidates = []
+    if expected is not None:
+        candidates.append(Path(expected).resolve())
+    candidates.append(demo_prefix.parent / "so101_mujoco_support")
+    candidates.append(demo_prefix)
+    declared = next(
+        (candidate for candidate in candidates
+         if (candidate / "share/so101_mujoco_support").is_dir()),
+        None,
+    )
+    if declared is not None:
+        assert support_prefix == declared, (support_prefix, declared)
     else:
         assert support_prefix.is_dir(), support_prefix
+
     assert (
         support_prefix
         / "share/so101_mujoco_support/so101_mujoco_plugins.xml"
