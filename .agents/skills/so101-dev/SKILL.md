@@ -20,7 +20,7 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
    - 远程命令、tmux、GUI、截图或 CUA：[`references/ai-station-access.md`](references/ai-station-access.md)
    - 查找源码、launch、安装产物或运行边界：[`references/so101-system-map.md`](references/so101-system-map.md)
    - 定位根因和区分证据层：[`references/debug-evidence.md`](references/debug-evidence.md)
-   - 修改代码、运行测试或声明完成：[`references/test-and-acceptance.md`](references/test-and-acceptance.md)
+   - 修改代码、运行测试或声明完成：[`references/test-and-acceptance.md`](references/test-and-acceptance.md)；ai-station 大规模普通 pytest 的 `-n 8` 加速、NVMe scratch 与串行冲突分组见其中“ai-station 大规模 pytest 加速”章节。
    - 多轮实验、生命周期比较、上下文压缩或 agent 交接：[`references/experiment-ledger.md`](references/experiment-ledger.md)
    - 安装 Python 依赖、选择 uv 索引或让镜像域名绕过代理：[`references/python-dependency-install.md`](references/python-dependency-install.md)
 3. 从当前 orchestrator 和 ai-station 分别记录 `pwd`、commit、branch、submodule 和 `git status --short`；已经位于 ai-station 的 coding agent 直接在本机取证，不再 SSH 自身。已有改动均视为用户工作，不能覆盖、清理或夹带。
