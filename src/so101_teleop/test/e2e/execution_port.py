@@ -85,7 +85,6 @@ class HelperExecutionPort:
             "--batch-root", str(request.batch_root),
             "--spec", str(self._spec_path),
             "--worker-count", str(request.worker_count),
-            "--max-points-per-worker", str(request.max_points_per_worker),
         ]
         for point_id in request.selected_point_ids:
             argv.extend(("--point-id", point_id))

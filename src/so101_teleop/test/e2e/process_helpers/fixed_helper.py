@@ -28,7 +28,12 @@ for _entry in os.environ.get("AMENT_PREFIX_PATH", "").split(os.pathsep):
         sys.path.insert(0, str(_site))
 
 from so101_demo.parallel_batch.artifacts import verify_attempt
-from so101_demo.parallel_batch.contracts import AttemptIdentity, BatchRequest, RunMode
+from so101_demo.parallel_batch.contracts import (
+    AttemptIdentity,
+    BatchKindV2,
+    BatchRequestV2,
+    RunMode,
+)
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.parallel_batch.web_control import FixedCoordinatorControlServer
 
@@ -61,7 +66,7 @@ def _atomic_write(path: Path, data: bytes) -> None:
 class _HelperCoordinator:
     """Minimal in-process coordinator state owned by the control endpoint."""
 
-    def __init__(self, request: BatchRequest, journal: CoordinatorJournal) -> None:
+    def __init__(self, request: BatchRequestV2, journal: CoordinatorJournal) -> None:
         self.request = request
         self.journal = journal
         self.terminal_reason: str | None = None
@@ -182,7 +187,6 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--batch-root", required=True, type=Path)
     parser.add_argument("--spec", required=True, type=Path)
     parser.add_argument("--worker-count", required=True, type=int)
-    parser.add_argument("--max-points-per-worker", required=True, type=int)
     parser.add_argument("--point-id", action="append", default=[])
     return parser.parse_args(argv)
 
@@ -195,13 +199,13 @@ def main(argv: list[str]) -> int:
 
     journal = CoordinatorJournal.create(batch_root / "coordinator", args.batch_id)
     coordinator = _HelperCoordinator(
-        BatchRequest(
+        BatchRequestV2(
             batch_id=args.batch_id,
             run_mode=RunMode.EXECUTE,
             selected_point_ids=tuple(args.point_id),
             worker_count=args.worker_count,
-            max_points_per_worker=args.max_points_per_worker,
             evidence_root=batch_root,
+            batch_kind=BatchKindV2.FIRST_PASS,
         ),
         journal,
     )
@@ -239,7 +243,6 @@ def main(argv: list[str]) -> int:
                 "batch_id": args.batch_id,
                 "campaign_id": args.campaign_id,
                 "worker_count": args.worker_count,
-                "max_points_per_worker": args.max_points_per_worker,
                 "point_ids": points,
                 "run_mode": "execute",
                 "qualification": _MARKER,
