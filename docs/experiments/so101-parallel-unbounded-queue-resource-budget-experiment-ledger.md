@@ -7495,3 +7495,61 @@ package/CTest gates, executed-nodeid multiset coverage, final-copy bytes, all-N 
 stability). No admission was restored and no goal budget was expanded.
 
 _Ledger HEAD when written: `3434cc80a`._
+
+## CP-UQ183 — Task 11 correction accepted: capability checks are not all-N acceptance
+
+Correction `58936fb6-a0ea-4f2b-a3a9-1d6c1574fc52` (handoff.md 19 lines, sha256
+`52924af4fdf19ae662182ac045d039f687c3d5bdb31a070a269b3531aa659abf`) was answered before any code
+change: `followups/task11-functional-correction-58936fb6-…/executor.receipt` written with
+`os.open(O_CREAT|O_EXCL|O_WRONLY)` — exactly the correction id plus LF, 37 bytes, sha256
+`e73ff41accc4d561fb12a020bda7b0964930820b8beba70eb980118e6666501a` — and `receipt-facts.json`
+recording shell time `2026-09-19 04:14:01 +0800`, HEAD `e5bc046b5`, `dirty_entries: 0`, the handoff
+hash and the unchanged goal (revision 1, active, 56/100, armed). This correction is distinct from
+the waiting correction `34e87b6f…`, which was answered in CP-UQ182; the goal was not reset, no
+second executor exists, and no running tool was interrupted.
+
+**The finding I accept.** The sixteen `R05 …accepted by the deployed service` cases in
+`05-functional-manifest.spec.ts:54-77` only `GET /expert-validation/capabilities` and compare mode
+names, selectable counts, the guard timeout and manifest metadata. They prove the *service
+advertises* every configured option; they do **not** execute any of the workloads those options
+describe. Registering them as all-N acceptance was wrong, and CP-UQ178/CP-UQ180 recorded them as
+green without that distinction. The labels and the claims are being separated: the capability smoke
+checks stay, truthfully named, and every actual configured worker option's 4-point **and** 20-point
+campaign runs separately through the real deployed UI/API chain.
+
+**Where the correction's observed defects already stand** (it was drafted at 03:15, before runs 5
+and 6):
+
+| Correction item | State |
+| --- | --- |
+| R02 fails acquiring the lease, button stays enabled | fixed and superseded: the lease is released with its live generation and R02 completed a real two-worker campaign in run 6 (3.0 m, `R02.passed.json`) |
+| R05 N1 retry wrongly needs `PARALLEL` selectable `[2..8]` | fixed: the N1 retry case and the stability record are `SEQUENTIAL`/1, checked by `contract/functional-manifest.spec.ts`; no fake selectable N1 was added |
+| R03 then reports `R02_GATE_REQUIRED` | gate sequencing is genuine and now satisfied; R03's own blocker was the missing adaptive guard, fixed in CP-UQ182 |
+| A `zsh … | tail` pipeline can mask a failing run | already the rule here: every wrapper records `result.json` with the real exit code, and this ledger quotes those codes, never the pipeline's |
+
+**What this correction adds, and the order it will be done in:**
+
+1. `05-functional-manifest.spec.ts`: keep the capability checks under a truthful name, and add a
+   real execution case for **every** supported configured N — 4-point and 20-point campaigns for
+   each of `N=2..8`, plus the sequential 4-point and adaptive 20-point cases — through the deployed
+   default UI/API chain, asserting exact requested vs actual N, all N slots created even when
+   points < N, per-point progress/colour/statistics, terminal status and full cleanup. Each 20-point
+   campaign includes the same fixed four anchors as its 4-point sibling.
+2. Per-campaign evidence beyond the aggregate: terminal outcome, controller feedback, fresh
+   current-epoch simulation pose/contact and MoveIt-shadow evidence, and a screenshot, with a finite
+   per-case attempt/deadline manifest. Genuine failures are kept and diagnosed.
+3. The single-point failure retry runs through the real `SEQUENTIAL` N1 `FULL_RESTART_RETRY`
+   workflow with an independent fresh batch and its own statistics — not a `PARALLEL` N1 admission.
+4. Auditing the R01/R02/R03 and legacy resource-receipt consumers: only superseded
+   budget/calibration receipt requirements may go, replaced by actual functional receipts; no
+   receipt is fabricated or deleted to pass a gate, and no budget/profile/source-commit/prefix
+   admission returns.
+5. The five-consecutive-valid physical record stays a separate block at **one** N/commit/params/
+   lifecycle — not mixed N, not twenty points counted as five batches.
+6. Final-runtime package/CTest gates, the executed-nodeid multiset and the final copy bytes remain
+   required.
+
+The immediate next action inside item 1 is the RED step: a functional case that starts its own
+campaign and fails on today's spec, which never starts one.
+
+_Ledger HEAD when written: `e5bc046b5`._
