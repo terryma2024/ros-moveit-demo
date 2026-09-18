@@ -4910,3 +4910,27 @@ The way to tell them apart is to record, in the same sample, the *path* the CPU 
 and the *paths* the process list came from, so the two line up or visibly do not. That is a small
 diagnostic addition to the existing diagnostics block, not a behaviour change; the next round adds it
 and reads the answer.
+
+## CP-UQ109 — The averages are ~1 core; the refusals are rate spikes at the quota boundary
+
+Run74 (r51) recorded the counter provenance and, with it, the numbers that reframe everything:
+
+    cgroup_path    = .../so101-n1cal-75.service/so101-measurement-9d418aae-...-run74
+    session_cgroup = .../so101-n1cal-75.service/payload
+    owned counter delta = 8.98 cpu-s   scope counter delta = 13.57 cpu-s   wall span = 11.03 s
+    abort = CPU_ENVELOPE (204 samples)
+
+So over the whole workload window the owned cgroup consumed **0.81 cores on average** (8.98 cpu-s in
+11 s) and the scope **1.23** -- nothing like the 19 cores that the instantaneous rate readings implied.
+Every refusal in this series has been a *rate spike* on one or two samples, and the spike is exactly
+what a cgroup consuming its own quota inside one `cpu.max` period looks like: 18.9 cores x 0.1 s of
+quota in a 0.1 s window is 18.9 cores by construction, against an envelope line of 0.8 x 24 = 19.2.
+
+That is a measurement-semantics question, not a workload-behaviour one, and it is the most useful
+finding of this stretch: the rate window (`max(sample_interval, cgroup_cpu_period)`) is the same size
+as the period in which the kernel may legitimately hand out the whole quota, so a workload that uses
+its allowance in bursts reads as "at the envelope" even though its average is one core. The honest
+next step is to compare like with like -- either measure the rate over a window several periods long,
+or compare per-period *quota consumption* against the envelope rather than an instantaneous rate --
+and to fix that in the harness with the evidence above, not by moving the envelope
+(`capacity_fraction`) or the throttling rule, both of which stay the operator's to change.
