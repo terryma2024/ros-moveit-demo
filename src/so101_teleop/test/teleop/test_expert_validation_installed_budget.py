@@ -108,7 +108,7 @@ def _write_test_binding(directory: Path) -> Path:
 
     import subprocess
 
-    worktree = Path(__file__).resolve().parents[3]
+    worktree = Path(__file__).resolve().parents[4]
     head = subprocess.run(["git", "-C", str(worktree), "rev-parse", "HEAD"],
                           capture_output=True, text=True, check=True).stdout.strip()
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
