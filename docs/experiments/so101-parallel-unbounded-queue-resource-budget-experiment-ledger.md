@@ -1939,6 +1939,119 @@ next_experiment: NONE-AUTHORIZED (await Sol/High re-review)
 ```
 
 ```yaml
+checkpoint_id: CP-UQ23
+last_valid_experiment: EXP-UQ23
+current_hypothesis: R1-R4 of the Sol/High execution re-review (CHANGES_REQUIRED) are repaired at the
+  real default consumer boundaries and offline-proven; the remaining plan work still needs the
+  external authority stages and independent reviews.
+dispatch: 4d4468ef-5403-4103-b95a-2243c9211b49 (repair unit; receipt written O_EXCL first, then a
+  read-only startup probe with HEAD f3a6aa22, clean tree, CP-UQ22, tmux pane %68)
+review_input: followups/repair-rereview-4d4468ef-.../execution-rereview.md
+  SHA256 84303c2a939927059e0e2ca5202344e06a816afbb4d906fff8bffa2b99714ced
+repairs:
+  - R1 candidate entry: the sealed authorization path + raw hash and the provenance binding now travel
+    in CandidateRunPlan.runner_argv(); the installed launcher re-reads the same bytes, the measurement
+    composer refuses any inherited production authority (MEASUREMENT_AUTHORITY_ENV_CONFLICT), verifies
+    the batch/worker/points/yolo/grounded/broker/config arguments against the sealed bindings
+    (MEASUREMENT_ARGUMENT_MISMATCH) and admits only through a MEASUREMENT-kind context.
+  - R2 lifecycle: MeasurementSession owns a delegated cgroup whose memory/cpu caps are written and read
+    back (MEASUREMENT_LIMIT_UNENFORCEABLE otherwise), a real sampler thread over the owned cgroup plus
+    NVML, a real AF_UNIX control endpoint inside the batch root, a latch that signals the owned process
+    group, the authorized deadline, and a containment-verified removal plus cleanup receipt. Sealing now
+    uses the ORIGINAL immutable authorization (plan_authorization_view deleted) and lands inside the
+    authorized per-batch root; raw_files carry the real samples/events/streams/receipt.
+  - R3 observation/identity: probe_host_facts reads effective cpuset/quota CPU, MemTotal/MemAvailable,
+    swap/PSI/throttle counters and whole-device NVML (ctypes libnvidia-ml, no new dependency);
+    attribution_complete is derived from what the probe could attribute; admit_production applies the
+    profile's exact-N stage demand/uncertainty; the runtime fingerprint is recomputed from the v2 config,
+    source/installed inventory bytes and hardware facts, verified against the declared identity, and
+    refreshed before every admission (fingerprint_source); the control binding is the verified
+    deployment location binding, not a literal.
+  - R4 authority chain: publish_promotion re-reads operator approval and both independent reviews through
+    the PromotionAuthority root, requires reviewer/target/profile/A0 bindings, records the authority
+    document names, and M is validated with a closed field set; issue_production_context now requires the
+    trusted A1 audit, the current R identity, the current location binding and equality with D's
+    installed_audit_sha256/execution_identity_sha256/location_binding before minting a context.
+  - Audit gaps: test_expert_validation_installed_budget.py is registered in
+    src/so101_teleop/CMakeLists.txt (55 CTest registrations) and in the teleop layout expectation; the
+    gate wrappers now persist argv.txt for direct pytest runs and write labelled interpreter records
+    (role=..., interpreter=..., resolved=..., prefix=..., tempdir=...).
+tests:
+  - New: src/so101_demo_py/test/test_parallel_default_authority_paths.py (10 passed) proves the real
+    default probe attribution/effective capacity, the derived-and-verified identity, per-admission
+    refresh, profile-stage demand admission/refusal, and the closed M/D chain negatives (deleted field,
+    foreign audit, identity drift, location/control mismatch, unknown field, substituted review).
+  - New: src/so101_demo_py/test/test_parallel_measurement_default_path.py (8 passed) runs the installed
+    CLI, the default runner factory and the real session with hermetic low-level host/workload ports:
+    launcher argv transport, seal preserving the original authorization, cgroup cap readback, real
+    sampler samples, latch on a memory-event breach, authorized deadline, verified cleanup, refusal of a
+    non-zero workload and of an inherited production authority.
+  - Migrated: test_parallel_budget_promotion.py, test_parallel_resource_budget.py,
+    test_parallel_measurement_runtime.py, test_parallel_measurement_cli.py, and the teleop
+    installed_budget suite now build authority only through the real producers; the child process test
+    uses the DEFAULT admission factory with the real host probe (no admission_factory injection).
+gates:
+  - scratch/rereview-full-demo.wGZ173ak: exit 1, 3250 passed, 1 skipped, 1 failed
+    (test_parallel_adaptive_integration.py::test_external_cleanup_retires_only_owned_worker_and_releases_claim,
+    CleanupError PROCESS_RETIREMENT_FAILED under full-suite load); scratch/rereview-cleanup-retry passes
+    that test in isolation (exit 0) - recorded as an intermittent ordering/load flake, not a silent pass.
+  - scratch/rereview-full-teleop2.*: 528 passed + the 4 installed-budget tests after the layout commit
+    (scratch/rereview-teleop-budget4.*, 4 passed) = 529; colcon/colcon/... see below.
+  - browser/rereview-web-unit3.SUsUZB9t: exit 0, 29 files / 119 passed.
+  - colcon: rereview-d-colcon.jJj6dEhO build exit 0 (real cmake re-run, 17s);
+    rereview-e-colcon.kOYZxX00 test -> see the result appended by this unit's readback.
+  - Command-level: every pytest/colcon/web run above resolved its executable through the task venv plus
+    registered /usr/bin/python3 with labelled proofs and an argv.txt.
+install:
+  - New immutable copied install for this unit: rereview-build/rereview-install (built from the repaired
+    HEAD, module origins inside the prefix). It is NOT a production A0 or full inventory/dependency
+    audit; the stale repair-offline-install/repair-final-install copies and old A0/binding remain
+    historical and are not reused as proof of the repaired execution.
+inferred:
+  - R1-R4 close the default-path authority, safety, sampling, sealing and closed-chain defects at their
+    real consumers; production still cannot admit anything on this host because no approved profile,
+    promotion, deployment receipt or qualification exists.
+conclusion: VALID offline. Stop for Sol/High re-review per the dispatch.
+evidence:
+  - scratch/rereview-*, colcon/rereview-*, browser/rereview-*, rereview-build, rereview-install,
+    followups/repair-rereview-4d4468ef-*/{executor.receipt,startup-probe01.log,startup-probe01.result.json}
+decision: KEEP
+next_experiment: NONE-AUTHORIZED (await Sol/High re-review)
+```
+
+```yaml
+checkpoint_id: CP-UQ24
+last_valid_experiment: EXP-UQ23
+current_hypothesis: NONE (repair unit complete; awaiting independent re-review)
+working_tree_status: clean after the code/test commits plus this ledger commit
+owned_processes: NONE
+preserved_processes: NONE from this task family
+confirmed_conclusions:
+  - The measurement default path carries only the sealed authorization and runs under a real owned
+    cgroup, sampler, latch, deadline and verified cleanup (EXP-UQ23).
+  - Production admission now derives effective attributed host facts, the exact-N stage demand from the
+    approved profile and a freshly derived runtime identity, and the M/D chain is re-read through the
+    independent authority before any context is minted (EXP-UQ23).
+unresolved_independent_reviews:
+  - GPT-5.6 Sol/High re-review of R1-R4 (this checkpoint stops for it); the execution review stays
+    CHANGES_REQUIRED until it passes.
+  - GPT-6 Astra/High: Task 1-4 identity/inventory/closed-context boundaries, Task 11 API/installed
+    closure, Task 16 guide (none performed).
+unperformed_live_stages:
+  - Stage B owned recovery/Web refresh; Stage C candidate measurement (no sealed authorization; the
+    default runner is implemented and offline-proven but has never been invoked live); Stage D operator
+    promotion/deployment (no approval); Stage E live Chrome acceptance.
+  - All exact-N budgets remain NOT_MEASURED; none is qualified or selectable in reality.
+retained:
+  - Every run, log, binding, copied install and scratch from this and earlier units, including the
+    intermittent full-suite failure and its isolated passing re-run.
+archived: none
+deletion_candidates: $TASK_ROOT/scratch/*, superseded colcon run logs and the stale
+  repair-offline-build/repair-offline-install copies after readback (classification only)
+next_command: NONE authorized; await Sol/High re-review and the separate Astra/High and operator gates.
+```
+
+```yaml
 checkpoint_id: CP-UQ22
 last_valid_experiment: EXP-UQ22
 current_hypothesis: NONE (authorized repair unit complete; awaiting independent re-review)
