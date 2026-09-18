@@ -3891,3 +3891,29 @@ Remaining Stage B item: the lease/fence capture through the documented verbs (`P
 /expert-validation/lease`, `DELETE|PUT /expert-validation/lease/{lease_id}`) against this running
 owned service, which is now possible because the page and API share one live instance. N1 remains
 `NOT_MEASURED`; nothing is extrapolated to another N.
+
+## CP-UQ74 — Stage B residual: the lease/fence verbs, captured against the live owned service
+
+All requests went to the owned instance started in CP-UQ73 (`http://127.0.0.1:8010`, PID 1993965),
+and every response below is a real one:
+
+- `POST /expert-validation/lease` `{"service_session_id": "..."}` -> `{"lease_id":
+  "lease-d9510b0cd44d4636800c416efc75fe88", "generation": 1, "expires_monotonic_ns":
+  1560620532572338}` -- the acquire carries both a lease id and a monotonic **generation**, which is
+  the fencing token.
+- A second acquire from a different session -> `{"code": "LEASE_ALREADY_HELD"}`: the fence holds
+  while a lease is live.
+- `PUT /expert-validation/lease/{id}` with `{"service_session_id", "generation"}` (both required by
+  the `LeaseMutationRequest` schema) renewed at generation 1 and returned `"generation": 2` with a
+  later expiry -- renewals advance the token rather than repeating it.
+- `DELETE /expert-validation/lease/{id}` with the same two fields returned `{"released": true}`,
+  and an immediate re-acquire returned a fresh lease at **generation 3**, so the fence clears on
+  release and generations never repeat.
+- Validation is real too: an empty `service_session_id` is rejected by the schema
+  (`string_too_short`, minLength 1), and a mutation without `generation` is rejected as missing.
+
+The probe leases were released (including the final acquire/release pair), so the owned store is
+left without a held lease. With this, Stage B's residual list is complete: owned recovery apply
+(captured earlier), owned Web refresh/start on the frozen install with fresh PID/URL/store and
+byte-identical served UI (CP-UQ73), and the lease/fence interface (this entry). N1 remains
+`NOT_MEASURED`; nothing is extrapolated to another N.
