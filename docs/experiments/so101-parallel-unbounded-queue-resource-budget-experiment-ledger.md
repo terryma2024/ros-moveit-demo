@@ -2125,3 +2125,59 @@ archived: none
 deletion_candidates: $TASK_ROOT/scratch/*, superseded colcon run logs, the outdated
   repair-offline-build/repair-offline-install copies after readback (classification only; nothing deleted)
 next_command: NONE authorized; await Sol/High re-review and the separate Astra/High and operator gates.
+
+```yaml
+checkpoint_id: CP-UQ25
+last_valid_experiment: EXP-UQ23
+current_hypothesis: The pytest-parallelism guidance notice is acknowledged and its narrow skill delta is
+  applied; R1-R4 repair stays the primary line and remains stopped for Sol re-review.
+notice:
+  dispatch: 2a146e37-cffb-4443-8939-947180cd75d9
+  handoff: followups/pytest-xdist8-2a146e37-cffb-4443-8939-947180cd75d9/handoff.md
+    SHA256 e7ea16fa075fb35348a2ffc523fc4bdb6c9fa901a140967a1abc2eba074fb70f
+  receipt: followups/pytest-xdist8-.../executor.receipt (exclusive O_EXCL, UUID+newline)
+  probe: followups/pytest-xdist8-.../startup-probe01.log + .result.json (read-only, exit 0, no tests):
+    HEAD 8a2b6c59400866b7ff3babec3316f0c4b959988a, branch codex/so101-unbounded-queue-resource-budget,
+    dirty 0, tmux dst-unbounded-queue pane %68 pid 1345571, TEST_PYTHON task venv 3.12.3,
+    pytest 7.4.4, xdist/execnet absent at probe time (as the notification preflight found).
+skill_delta:
+  applied: git apply followups/pytest-xdist8-.../skill-delta.patch -> exactly two files, then verified
+    byte-identical to the transfer copies (SKILL.md and references/test-and-acceptance.md).
+  scope: only the test-and-acceptance pointer bullet plus the new "ai-station 大规模 pytest 加速" TOC
+    entry/section; no other tracked skill content replaced, no unrelated work touched.
+  note: CP-UQ23/CP-UQ23A were inserted above the older CP-UQ22 block in this ledger, so a plain
+    `tail -1` checkpoint read still shows CP-UQ22; this entry is appended at the end.
+dependency:
+  resolved_in_task_owned_env: pytest-xdist 3.8.0 (origin venv/lib/python3.12/site-packages/xdist/__init__.py),
+    execnet 2.1.2 (origin venv/lib/python3.12/site-packages/execnet/__init__.py), installed with
+    $TEST_PYTHON -m pip install --no-cache-dir pytest-xdist==3.8.0 from the registered TUNA index.
+  unchanged: pytest 7.4.4, setuptools 68.1.2, every other venv package, COLCON_TEST_PYTHONS
+    ("$TEST_PYTHON" /usr/bin/python3) and all registered roots/overlays. No global or shared
+    interpreter was modified.
+  not_done: no suite was run to demonstrate speed, and no already-green suite was rerun; per the
+    guidance the 8 pytest processes are a feedback tool only and are unrelated to product
+    WorkerCount/exact-N authority.
+parallel_vs_serial_plan_for_future_large_runs:
+  - Shared-resource groups to isolate or run serially with a complete nodeid manifest:
+    test_parallel_adaptive_integration.py (real worker processes, claims, cleanup),
+    test_parallel_batch_resources.py (claim/domain preflight), test_parallel_processes.py and
+    test_parallel_batch_web_control.py (sockets/ROS_DOMAIN_ID), test_text_pick_agent_e2e_process.py
+    and the other text-agent launch tests (real launch/service), and this unit's
+    test_parallel_measurement_default_path.py (owned cgroup subtree plus an AF_UNIX control endpoint,
+    each created under a run-unique scratch root and removed on cleanup).
+  - Everything else may run with -n 8 under a fresh TASK_ROOT NVMe scratch with labelled per-worker
+    tempfile proofs; parallel plus serial JUnit/exit/elapsed must cover every original nodeid exactly
+    once, and failures stay retained.
+  - colcon: only ament_python pytest forwarding may take -n 8 after reading the real child argv; the
+    ament_cmake CTest registrations (55 teleop cases) keep their own interpreter and are not
+    oversubscribed. Direct pytest still does not replace the CTest/build/copied-install/provenance gates.
+inferred:
+  - The notice adds a testing reference only; it changes no product, plan, design or live boundary.
+conclusion: NOTICE ACKNOWLEDGED, SKILL DELTA APPLIED. R1-R4 remain the primary line and stay stopped for
+  Sol review.
+evidence: followups/pytest-xdist8-2a146e37-.../{executor.receipt,startup-probe01.log,
+  startup-probe01.result.json,skill-delta.patch,so101-dev-SKILL.md,test-and-acceptance.md},
+  .agents/skills/so101-dev/{SKILL.md,references/test-and-acceptance.md}
+decision: KEEP
+next_experiment: NONE-AUTHORIZED (await Sol/High re-review of R1-R4)
+```
