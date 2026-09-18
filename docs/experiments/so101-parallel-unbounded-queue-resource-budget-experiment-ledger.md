@@ -6849,3 +6849,32 @@ the deployed service carries it; next round deploys and reads the coordinator lo
 line, which is the fastest route to the actual defect after four rounds of one-line clues.
 
 _Ledger HEAD when written: `6ff20a757`._
+
+## CP-UQ168 — The traceback paid off immediately: a second None consumer
+
+CP-UQ167's diagnostic did its job on the first run. The coordinator log now carries the real
+failure:
+
+```
+PROVENANCE_VERIFICATION_DETAIL: TypeError: argument should be a str or an os.PathLike object
+  where __fspath__ returns a str, not 'NoneType'
+  … verify_provenance line 707 → _installed_overlay_identity line 969
+     repository_root = Path(repository_root).resolve()
+```
+
+So it was **my own CP-UQ155 change again**, in a second place: making `repository_root` optional
+left `_installed_overlay_identity` calling `Path(None)`. That single TypeError is what every
+`PROVENANCE_VERIFICATION_FAILED` since CP-UQ157 has been. Fixed properly: when there is no source
+tree, the identity is the installed one (`source_module_tree_sha256: None`,
+`installed_module_tree_sha256` from the module's own tree), which is the honest answer for a copied
+install and keeps the checkout path unchanged. `lg-t11-prov7`: **139 passed, 0 failed, 0 skipped**.
+
+Worth stating plainly: the last four rounds of one-line clues were chasing a defect I introduced,
+and the fix was two lines of None-handling. The lesson recorded for the remaining work is the one
+CP-UQ167 acted on — make the failure legible before theorising about it.
+
+A fresh copy build is running; next round verifies it, redeploys, re-runs the acceptance and reads
+the coordinator log. If the provenance chain is finally satisfied, the next entry should be about
+workers rather than about provenance.
+
+_Ledger HEAD when written: `08dad1f80`._
