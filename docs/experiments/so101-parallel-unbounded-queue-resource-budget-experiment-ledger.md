@@ -4002,3 +4002,21 @@ remove the `HostFacts`/R `swap_total_bytes` binding so a SwapTotal difference ca
 the genuine >=60 s persisted 50 ms baseline with the independent 25 ms peak-alias cross-check,
 followed by freeze/rebuild/A0 and fresh finite sealed authorizations for N1..8. N1 remains
 `NOT_MEASURED`; nothing is extrapolated to another N.
+
+### CP-UQ77 addendum — Unit 3 (RED -> GREEN): no active swap/PSI sampling
+
+`sample_resources` no longer requires or reads swap/PSI interfaces: the capability check keeps only
+`cpu_usage_us`/`memory_current` (plus the device), the `_read_swap_and_psi`/`memory_pressure_full`/
+`memory_swap_current` reads are gone, and the diagnostics no longer carry `swap_total`,
+`swap_used_bytes` or `psi_full_host_us`. `LiveResourceObservation.swap_delta`/`psi_full_delta`
+became optional and absent by default (`int | None = None`, `float | None = None`) with validation
+that still rejects a malformed supplied value, so absence is explicit rather than a fabricated
+measured zero, while an old compatibility document carrying them still parses.
+
+RED: the new test failed with `MEASUREMENT_CAPABILITY_MISSING` at the sampler's capability check,
+and the superseded sampler tests (`..._takes_swap_from_the_owned_cgroup`,
+`..._takes_pressure_from_the_owned_cgroup`, `..._requires_the_cgroup_swap_counter`) were replaced
+rather than kept, because they asserted the policy this amendment removes. GREEN: 68 passed across
+the measurement default-path and resource-budget files, including a new test that a cgroup whose
+swap counter raises `OSError` and whose pressure file returns garbage samples normally and leaves
+both deprecated fields `None`.
