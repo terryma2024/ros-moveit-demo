@@ -1265,6 +1265,12 @@ def prepare_batch(
     except CliError:
         raise
     except Exception as error:
+        # Keep the stable code, but put the underlying failure in the log: the generic wrapper
+        # hid a real exception for several rounds because only its message was recorded.
+        import traceback
+
+        print(f"PROVENANCE_VERIFICATION_DETAIL: {type(error).__name__}: {error}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
         raise CliError("PROVENANCE_VERIFICATION_FAILED") from error
     if not isinstance(provenance, Mapping) or not provenance:
         raise CliError("PROVENANCE_VERIFICATION_FAILED")
