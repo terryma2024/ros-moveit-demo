@@ -436,7 +436,7 @@ def _hermetic_facts(**overrides):
 
     values = {
         "mem_total_bytes": 1_000_000_000, "mem_available_bytes": 800_000_000,
-        "swap_total_bytes": 0, "swap_pages": 0, "psi_full_s": 0.0,
+
         "cpu_capacity": 8.0, "cpu_host_cores": 24, "cpu_set_used_core_equivalent": 0.1,
         "cpu_host_used_core_equivalent": 0.1, "cpu_quota_core_equivalent": 8.0,
         "cpuset": "0-7", "nr_throttled": 0, "gpu_index": 0, "gpu_name": "hermetic",

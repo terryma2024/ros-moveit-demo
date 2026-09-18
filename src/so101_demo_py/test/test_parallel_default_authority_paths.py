@@ -47,7 +47,6 @@ def _host_facts(*, total=1000.0, used=170.0, cpu_capacity=8.0, own_rss=10.0,
 
     values = {
         "mem_total_bytes": int(total), "mem_available_bytes": int(total - used),
-        "swap_total_bytes": 0, "swap_pages": 0, "psi_full_s": 0.0,
         "cpu_capacity": cpu_capacity, "cpu_host_cores": int(cpu_capacity) * 3,
         "cpu_set_used_core_equivalent": 0.1, "cpu_host_used_core_equivalent": 0.1,
         "cpu_quota_core_equivalent": cpu_capacity, "cpuset": "0-7", "nr_throttled": 0,
@@ -94,20 +93,37 @@ def test_default_observation_marks_incomplete_attribution_as_a_refusal():
     assert "BACKGROUND_ENVELOPE_EXCEEDED" in _live_reasons(observation, now_monotonic_s=None)
 
 
-def test_default_observation_reports_real_swap_and_throttle_deltas():
-    state = {"swap": 0, "psi": 0.0, "throttled": 0}
+def test_default_observation_ignores_swap_and_reports_only_throttling():
+    """CPU/RAM/GPU-only amendment (74d6b781): the default observation does not carry swap
+    or PSI as dimensions, so movement in those deprecated counters changes nothing while
+    CPU throttling is still reported."""
+
+    state = {"throttled": 0}
 
     def probe():
-        return _host_facts(swap_pages=state["swap"], psi_full_s=state["psi"],
-                           nr_throttled=state["throttled"])
+        return _host_facts(nr_throttled=state["throttled"])
 
     source = LiveObservationSource(host_probe=probe)
     first = source()
-    assert (first.swap_delta, first.psi_full_delta, first.throttled) == (0, 0.0, False)
-    state.update(swap=4, psi=0.5, throttled=2)
+    assert (first.swap_delta, first.psi_full_delta, first.throttled) == (None, None, False)
+    state.update(throttled=2)
     second = source()
-    assert second.swap_delta == 4 and second.psi_full_delta == pytest.approx(0.5)
+    assert second.swap_delta is None and second.psi_full_delta is None
     assert second.throttled is True
+
+
+def test_default_probe_exposes_no_swap_or_psi_facts():
+    """A SwapTotal difference cannot drift R because the default probe publishes no swap
+    or PSI keys at all."""
+
+    from so101_demo.parallel_batch.resource_budget import probe_host_facts
+
+    facts = probe_host_facts()
+    document = dict(facts.facts)
+    for name in ("swap_total_bytes", "swap_pages", "psi_full_s", "swap_used_bytes",
+                 "psi_full_host_us"):
+        assert name not in document, name
+        assert not hasattr(facts, name), name
 
 
 # --- R3: the installed composer derives identity and applies the qualified demand ----
