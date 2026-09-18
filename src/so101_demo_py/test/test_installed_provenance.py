@@ -62,7 +62,11 @@ def test_manifest_matches_selected_installed_prefix_and_source() -> None:
     )
     manifest = installed_bundle().manifest["inputs"]
     assert Path(manifest["package_prefix"]).resolve() == prefix
-    assert manifest["source_commit"] == os.environ.get("SO101_SOURCE_COMMIT", _git_head())
+    # The runtime bundle records DECLARED metadata only and must never probe Git: the
+    # build/install debug manifest is where a repository observation may appear.
+    declared = os.environ.get("SO101_SOURCE_COMMIT")
+    assert manifest["source_commit"] in {None, declared}
+    assert manifest["source_commit"] != _git_head() or declared == _git_head()
     dependency = manifest["mujoco_ros2_control"]
     assert dependency["prefix"] != "/opt/ros/jazzy"
     assert dependency["executable"]["sha256"]
