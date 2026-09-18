@@ -3148,3 +3148,36 @@ run's second sample). The quota is enforced from attach onward; what the envelop
 pre-attach burst. The next repair is therefore to account CPU from the attach point (reset the
 sampling baseline at attach, or attribute only post-attach usage) with a test, and then re-run N1.
 No budget is claimed: N1 stays `NOT_MEASURED`, and nothing is extrapolated to any other N.
+
+## CP-UQ45 — Stage C: the CPU artifact is gone, and the workload's thread demand is the next lever
+
+Run: `scratch/stageC-fix4.*/`, `stage-c/batches/n1-calibration-20260918-run3/`,
+`scratch/stageC-auth.S2WPqrz0/measure9.log`. Commit `1b7d282de`.
+
+Two fixes, both RED first (2 failed) and GREEN after (18 passed in the file):
+
+1. `sample_resources` computed the CPU rate over whatever gap separated two samples, but a
+   cgroup may spend a whole `cpu.max` quota inside one period, so a window shorter than the
+   period can read up to twice the enforced cap. That is exactly what produced the 22.43 cores
+   against an 18.6-core quota. The rate is now measured over at least
+   `max(sample_interval, cgroup_cpu_period)` and held between window boundaries.
+2. `spawn` attaches the child only after `Popen`, and a migrated task carries its CPU usage with
+   it, so the burst a workload burned before joining the cgroup arrived as a jump in the
+   cgroup's `cpu.stat`. The session now re-baselines the sampler at the attach point
+   (`_request_sampling_rebaseline`).
+
+With r5 (`authorizations/n1-calibration-20260918-r5.json`, sha256 `decd6ea22a6463ad…`) the
+measurement advanced past both artefacts: four samples with rates `[0, 0, 0, 15.81]` against the
+applied `cpu_quota_us 1860284 / 100000` (18.6 cores) and no `CPU_ENVELOPE`. It then latched
+`MEASUREMENT_ABORT_LATCHED: CPU_THROTTLED`: the last sample reports `throttled true`, and the
+frozen safety policy sets `throttling_disqualifies_run: true`, so the abort is the policy working
+as designed rather than a harness fault.
+
+The lever the design itself provides is thread bounds: `probe_host_facts` records
+`thread_environment` (`OMP_NUM_THREADS`, `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS`,
+`TORCH_NUM_THREADS`, `NUMEXPR_NUM_THREADS`) as an identity input, so those variables are meant to
+be chosen before sealing and inherited by the workload. The single-worker N1 workload currently
+runs with no thread bound, saturates all 24 cores during import, and is throttled by its own
+18.6-core quota. Next: export the thread bound for the candidate, seal a new revision (R changes
+with it), and run N1 in that same environment to a completed sealed batch. N1 remains
+`NOT_MEASURED`; nothing is extrapolated to another N.
