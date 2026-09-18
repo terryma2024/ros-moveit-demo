@@ -5400,3 +5400,62 @@ entry and the retired env contract), which is also where the user's "clear out t
 budget-measurement code" lands.
 
 _Ledger HEAD when written: `371e41a7a`._
+
+
+## CP-UQ120 — Task 6: the certified budget runtime is deleted, not bypassed
+
+Commit `3cfe45c4f` (`refactor: retire certified budget runtime`): **9232 lines removed
+across 21 files**. This is the step the user asked for when they said the old budget
+measurement code also has to go, and it is a deletion rather than a disconnection:
+
+- **Source modules deleted**: `parallel_batch/resource_budget.py` (2232),
+  `resource_measurement.py` (1410), `measurement_control.py` (347), `owned_resources.py`
+  (889) — 4878 lines. The last copy of each is archived read-only at
+  `migration-light.lS2WzrsrZ/retired-sources/` with sha256 and line counts in
+  `task6-retirement-record.json`.
+- **Nine budget-only test files deleted** (9016 archived lines in total including the four
+  modules): the sampler-control, measurement-runtime, default-measurement-path,
+  resource-budget, resource-measurement, budget-promotion and exact-N-qualification suites,
+  plus the teleop resource-budget and installed-budget suites. Their CTest registrations and
+  the package-layout lists were updated in the same commit.
+- **The console entry is explicitly retired, not removed**: `so101_measure_parallel_resources`
+  now prints `MEASUREMENT_ENTRY_RETIRED` (with `authorizes_execution: false` and a pointer to
+  `so101_parallel_batch`) and exits 2. An operator who still types the old command gets a real
+  explanation instead of "command not found" or a silent different mode.
+- **The teleop service no longer consults a budget authority**: `_HostResourceProbe` admits
+  through the shared start guard, reports the guard's own FAIL reasons, and
+  `_worker_count_availability` now lists the *configured* fixed counts (status `CONFIGURED`,
+  reason `DOMAIN_OR_PORT_UNAVAILABLE` when a count is not configured) instead of a budget
+  decision. The guard composition is lazy (`_LazyStartGuard`), so constructing the service
+  performs no config I/O — which is also what kept
+  `test_production_factory_wires_durable_authorities_and_releases_lock` honest rather than
+  requiring a fixture rewrite.
+- **The CLI keeps only the retirement error** for the old measurement flags and its
+  `_stop_requested` predicate no longer has a measurement latch.
+
+The decisive evidence is not a text search: `test_no_active_path_imports_the_retired_budget_chain`
+and `test_retired_console_script_is_still_registered_but_imports_no_budget_module` install a
+`sys.meta_path` trap that raises if any of the four modules is imported, then import the CLI,
+the allocator, the adaptive pool, contracts and the guard composition and run a real
+composition. RED before the deletion: 12 collected, **4 failed, 0 collection errors**;
+GREEN after: 134 passed in the Task 6 gate.
+
+Gates (task wrapper, `-n 8`, JUnit and scratch recorded):
+
+| Gate | Result |
+| --- | --- |
+| `lg-t6-green2` guard/probe/composition/contracts/history/measurement-cli | 134 passed |
+| `lg-t6-wide` cli/resources/adaptive/broker/coordinator/worker | 537 passed |
+| `lg-t6-teleop6` whole teleop suite (parallel phase) | 523 passed, 0 failed |
+| `lg-t6-final` all of the above plus teleop preflight/main/api/production | **733 passed, 0 failed, 0 errors** |
+
+One honest note about the teleop directory run: `so101_pytest src/so101_teleop/test` reports a
+non-zero exit from the *audited split runner's coverage check* (`coverage_exact: false`,
+`extra: 5` demo node-ids) while the parallel phase itself is 523 passed / 0 failed. That runner
+is built for the demo package's split; the teleop suite's real gate is the CTest path in
+Task 9, and the per-file runs above are green.
+
+State: **Tasks 1-6 of 12 complete**. Next: **Task 7**, the Web/API/preflight capability and
+`start_guard` projection, then Task 8's installed-entry/negative-gate coverage.
+
+_Ledger HEAD when written: `3cfe45c4f`._
