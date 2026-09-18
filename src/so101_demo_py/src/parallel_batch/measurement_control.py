@@ -21,7 +21,7 @@ _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 _SOCKET_PATH_MAX_BYTES = 107
 _EVENT_NAMES = (
     "t_breach", "t_detect", "t_abort_latch", "t_send", "t_durable_stop_ack",
-    "t_last_goal_cancelled", "t_owned_groups_gone", "t_domains_clear", "t_cleanup_receipt", "t_cold_start_grace", "t_cold_start_closed")
+    "t_last_goal_cancelled", "t_owned_groups_gone", "t_domains_clear", "t_cleanup_receipt", "t_cold_start_grace", "t_cold_start_closed", "t_cold_start_gaps")
 _STOP_STATUSES = ("STOPPING", "STOPPED")
 
 
@@ -177,8 +177,8 @@ class MeasurementControl:
         # latched. This call holds both timestamps and rules on the gap itself.
         if (previous is not None
                 and sample_time - previous > self._maximum_sample_gap_s):
-            if self._in_cold_start(previous) and self._events.get("t_cold_start_grace") is None:
-                self._events["t_cold_start_grace"] = self._clock()
+            if self._in_cold_start(previous):
+                self._record_cold_start_gap()
             else:
                 self._latch("SAMPLER_GAP", self._clock())
 
@@ -192,6 +192,18 @@ class MeasurementControl:
         moment = _require_finite_time("now", now)
         if self._workload_started_s is None:
             self._workload_started_s = moment
+
+    def _record_cold_start_gap(self) -> None:
+        """Count a gap the cold-start window excused, so the receipt shows how many it hid.
+
+        The window is bounded by its ceiling (and may be closed at readiness); it is not
+        one-shot, because run64 spent its single allowance on a 106 ms excursion at 1.6 s and
+        then latched the 172 ms one at 3.4 s that the window existed for.
+        """
+
+        self._events["t_cold_start_grace"] = self._clock()
+        count = self._events.get("t_cold_start_gaps") or 0.0
+        self._events["t_cold_start_gaps"] = count + 1.0
 
     def mark_workload_active(self, now: float) -> None:
         """Close the cold-start window at observed readiness rather than a guessed duration."""
@@ -248,9 +260,8 @@ class MeasurementControl:
         if moment - self._last_sample_s > self._maximum_sample_gap_s:
             # The same cold-start window applies here: a check that lands inside the
             # workload's startup must not latch what observe_sample is allowed to excuse.
-            if self._in_cold_start(self._last_sample_s) and (
-                    self._events.get("t_cold_start_grace") is None):
-                self._events["t_cold_start_grace"] = moment
+            if self._in_cold_start(self._last_sample_s):
+                self._record_cold_start_gap()
                 return
             self._latch("SAMPLER_GAP", moment)
 
