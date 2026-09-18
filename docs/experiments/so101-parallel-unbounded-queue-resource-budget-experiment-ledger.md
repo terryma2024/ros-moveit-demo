@@ -2278,3 +2278,56 @@ evidence: colcon/amend-demo-colcon.*, colcon/amend-teleop-colcon.*, scratch/amen
 decision: KEEP
 next_experiment: NONE-AUTHORIZED (await Sol review)
 ```
+
+```yaml
+checkpoint_id: CP-UQ27
+last_valid_experiment: EXP-UQ27
+current_hypothesis: The second authorized amendment (prefix metadata is DEBUG-only) is implemented and
+  offline-green on the full source and copied-install gates.
+dispatch: 7f437570-8003-4c5b-825b-f56b0db546e5 (receipt written O_EXCL first, then a read-only probe:
+  HEAD 089a081b0 clean, CP-UQ26A, pane %68/PID 1345571, handoff SHA256
+  028e0e33b99bc9559f148788d048485430f6802264972c7dc21bf909480c0293; the draft-time HEAD f2a358a33 was a
+  legitimate advance reconciled from this ledger, not a reset)
+amendment:
+  document: docs/superpowers/specs/2026-09-18-so101-prefix-metadata-debug-only-addendum.md (new dated
+    addendum; sealed design/plan/review bytes and hashes unchanged)
+  removed_metadata_gates: provenance strict resolve + EXECUTION_INSTALLED_PREFIX_INVALID/MISMATCH and
+    EXECUTION_PACKAGE_PREFIX_UNAVAILABLE; CLI parse-time prefix gate; adapter context prefix
+    presence/absolute/agreement; result-manifest prefix requirement; launch/bundle prefix mandatory
+    arguments
+  retained_functional: new installed_executable() resolves the real console script through the ament
+    prefix, the share layout and PATH and raises only for a genuinely unavailable executable;
+    get_package_share_directory keeps supplying policies, scenes and assets; the debug install
+    manifest stays build-time only
+  retained_independent: session/reset/evidence, control/lease/owned-scope, budget/execution identity,
+    qualified content hashes, cleanup rules, fixed-profile/qualification authority and the
+    expert-validation deployment location binding
+tests:
+  - RED->GREEN: with the previous prefix gates restored, the optional-prefix cases fail (7 failed);
+    with the amendment they pass (111 in the focused suite): missing/relative/foreign/absent prefix
+    metadata never refuses, ament-unavailable metadata does not block, a wrong prefix is recorded not
+    enforced, and installed_executable still raises for a genuinely unavailable executable.
+  - Launch argv tests pin the functional resolver; the copied-install child gate now accepts either a
+    provider-approved N4 or a genuine resource refusal reason (the live observation is real, so host
+    swap pressure legitimately refuses under load) while every other N stays EXACT_N_UNQUALIFIED.
+gates:
+  - colcon/prefix2-demo-colcon.*: exit 0, 3255 passed, 1 skipped (whole-directory serial run covering
+    every original case).
+  - scratch/prefix2-teleop-full.W5tnBOxH: 529 passed. colcon/prefix2-teleop-ctest.*: 0 failed out of 55.
+  - colcon test-result --all (dev build base): 3847 tests, 0 errors, 0 failures, 1 skipped.
+  - copied install prefix-install built from the amended HEAD: provenance.py, launch_composition.py,
+    pick_place_executor.py (adapter), result_manifest.py and text_pick_agent.py byte-match source and
+    the debug manifest records that exact HEAD; scratch/prefix-installed.* 4 passed.
+  - colcon/prefix-demo-colcon.5POazG5u (exit 1, one bundle-shape failure in test_installed_provenance)
+    is retained: the mujoco dependency executable must keep its canonical Path shape; fixed in
+    8ef4cfbcb and superseded by the fresh prefix2 run.
+inferred:
+  - Prefix metadata no longer admits or refuses anything; functional discovery and the independent
+    gates are intact.
+conclusion: VALID offline. Stop for Sol re-review.
+evidence: scratch/prefix*, colcon/prefix*, prefix-build, prefix-install,
+  followups/debug-prefix-admission-7f437570-.../{executor.receipt,startup-probe01.log,
+  startup-probe01.result.json}
+decision: KEEP
+next_experiment: NONE-AUTHORIZED (await Sol review)
+```
