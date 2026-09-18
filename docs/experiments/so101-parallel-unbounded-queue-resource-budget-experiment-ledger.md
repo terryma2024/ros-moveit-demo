@@ -5459,3 +5459,49 @@ State: **Tasks 1-6 of 12 complete**. Next: **Task 7**, the Web/API/preflight cap
 `start_guard` projection, then Task 8's installed-entry/negative-gate coverage.
 
 _Ledger HEAD when written: `3cfe45c4f`._
+
+
+## CP-UQ121 — Task 7 (server side): the guard is in the API, and the Web half is what is left
+
+Commit `23cbbf486`. The API now carries the guard the design specifies, verified against the
+**real** production service over ASGI (not a fake service object):
+
+- `StartGuardStatus` / `StartGuardCheck` / `StartGuardPolicyResponse` DTOs mirror the guard
+  result: per-check `status`/`reason`/`observed`/`cutoff`/`unit`, the overall status, the
+  cleanup state, the GPU UUID and the observation time; `CapabilitiesResponse` also exposes
+  the enforced policy so a client can display the cutoffs it was judged against.
+- `PreflightResponse.start_guard` is the server's own decision; `resource_observations`
+  carries the same document for audit. `capabilities` reports `start_guard_policy` from the
+  composed guard.
+- The new-execution gate now requires `contract_version: 3` and answers
+  `CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION` for anything else (it previously demanded 2).
+- `default_worker_count_availability()` no longer says "BUDGET_PROFILE_UNAVAILABLE": the
+  static DTO default is `UNKNOWN`/`CAPABILITIES_NOT_LOADED`, and the real service reports
+  `CONFIGURED` counts (Task 6's change), so a resource state never marks a count unqualified.
+
+RED (`lg-t7-red6`): 7 collected, **7 failed** for the intended reasons — the response had no
+`start_guard`, capabilities had no policy, and version 3 was refused with the old code.
+GREEN (`lg-t7-green6`): **7 passed**. The tests prove, on the real service: the preview
+carries units/cutoffs/time; a missing GPU is an explicit `GPU_TARGET_UNAVAILABLE` FAIL;
+busy CPU is a WARN that still starts (`admitted: true`, empty reason codes); a client that
+posts its own `start_guard`/`resource_observations`/`admitted` is rejected as extra input and
+cannot override a failing server check; history/capability reads run **zero** probes; and
+legacy contract versions are refused with the new code. Then the affected teleop suites
+(`lg-t7-wide2`, including api/preflight/main/supervisor/package-layout): **67 passed**.
+
+Two fixture notes worth keeping: the manifest identity is computed from real installed bytes,
+and the dev prefix is a `--symlink-install`, so the test builds a *copied* share directory
+(the production `_read_inputs` rightly refuses symlinked inputs); and the real store's sqlite
+connection is thread-bound, so the tests drive the ASGI app with `httpx.ASGITransport` inside
+the test thread instead of `TestClient`'s portal thread.
+
+**What is left of Task 7 is the Web half**, and it is deliberate rather than hidden: the TS
+client still sends `contract_version: 2`
+(`src/expert-validation-app.tsx:240,251`, `expert-validation-client.test.ts`,
+`expert-validation-app.test.tsx:390`, and the generated `expert-validation-schema.d.ts`),
+the panel does not yet render the guard status/units/time, and
+`expert_validation_openapi.json` plus the generated schema have to be regenerated before
+`so101_bun lg-api-generate/lg-web-unit/lg-web-build` can be green. That is the first work of
+the next round, followed by Task 8's installed-entry and negative-gate coverage.
+
+_Ledger HEAD when written: `23cbbf486`._
