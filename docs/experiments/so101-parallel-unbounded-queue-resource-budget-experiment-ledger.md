@@ -7657,3 +7657,23 @@ each and cleanup true. The next case is already running: `947a6146` (N=4) with f
 created and `evaluated: 0` at the time of writing.
 
 _Ledger HEAD when written: `618725508`._
+
+## CP-UQ187 — Three fixed-N options executed for real (N=2, 3, 4), each with its own evidence file
+
+| Case | Slots | Leases per worker | Points | Artifacts | Terminal | Cleanup | Spec timing |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `fixed-n2-p4` | `worker-01`, `worker-02` | 1 each | 4/4 `PASSED` | 13 each | `COMPLETED` | true | 3.0 m |
+| `fixed-n3-p4` | `worker-01..03` | 1, 2, 1 | 4/4 `PASSED` | 13 each | `COMPLETED` | true | 3.0 m |
+| `fixed-n4-p4` | `worker-01..04` | 1 each, all `STOPPED` | 4/4 `PASSED` | 13 each | `COMPLETED` | true | 1.8 m |
+
+Every row is a real campaign through the deployed console — lease, generated manifest, mode and
+exact N, preflight, start, then terminal state and cleanup — with `requested == evaluated`, all N
+worker slots (including `N = points` and `N > points` in the earlier N=3 case), per-point artifact
+counts, and its own `execution-<case>.json` under the run's evidence directory. The N=5 case is
+already queued in the same job, which continues to walk the manifest without replay.
+
+The N=4 case is the fastest of the three (1.8 m), so the earlier "four sims contend" note is not a
+cost claim I can support: what the evidence shows is three passing cases at 3.0, 3.0 and 1.8 minutes,
+and the per-case deadline remains the manifest's `batch_timeout_s`.
+
+_Ledger HEAD when written: `e954c5ef1`._
