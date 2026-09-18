@@ -40,5 +40,12 @@ export default defineConfig({
       testMatch: "**/live-sim/03-adaptive.spec.ts",
       dependencies: ["r01-sequential"],
     },
+    {
+      // One real campaign per supported configured option; declared last because it is the long
+      // project, and gated only on preflight so it can also be run on its own.
+      name: "fixed-n-execution",
+      testMatch: "**/live-sim/06-fixed-n-execution.spec.ts",
+      dependencies: ["live-preflight"],
+    },
   ],
 });
