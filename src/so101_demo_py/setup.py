@@ -54,6 +54,7 @@ setup(
             "so101_parallel_batch_cleanup = "
             "so101_demo.cli.parallel_batch_cleanup:main",
             "so101_parallel_perception_broker = so101_demo.cli.parallel_perception_broker:main",
+            "so101_measure_parallel_resources = so101_demo.cli.measure_parallel_resources:main",
             "fixed_cup_pick_place = so101_demo.cli.fixed_cup_pick_place:main",
             "dynamic_cup_pick_place = so101_demo.cli.dynamic_cup_pick_place:main",
             "run_qualification = so101_demo.cli.qualification:main",
