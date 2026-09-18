@@ -784,3 +784,33 @@ def test_measurement_gate_entrypoint_has_no_undefined_globals():
         name for name in loaded_globals(launcher._compose_measurement_gate)
         if not hasattr(launcher, name) and not hasattr(builtins, name))
     assert missing == []
+
+
+def _fingerprint(**facts):
+    from so101_demo.parallel_batch.resource_identity import RuntimeFingerprint
+
+    base = {"cpu_model": "test-cpu", "cpu_host_cores": 24, "gpu_name": "test-gpu",
+            "install_prefix": "/tmp/install", "source_commit": "a" * 40}
+    return RuntimeFingerprint(
+        schema_version=2, facts={**base, **facts}, normalization_sha256="b" * 64,
+        semantic_config_sha256="c" * 64, execution_inventory_sha256="d" * 64,
+        installed_inventory_sha256="e" * 64)
+
+
+def test_runtime_identity_ignores_the_observers_ambient_placement():
+    """The authorizing parent sits in the delegated scope while the launcher it owns runs
+    inside the measurement cgroup it created: same artifact, different cgroup, different
+    quota and throttling counters. R must not change with the observer's placement."""
+
+    parent = _fingerprint(cgroup="/sys/fs/cgroup/user.slice/so101-n1cal.scope/payload",
+                          cpuset="0-23", cpu_quota_core_equivalent=18.6, nr_throttled=0)
+    worker = _fingerprint(
+        cgroup="/sys/fs/cgroup/user.slice/so101-n1cal.scope/payload/so101-measurement-x",
+        cpuset="0-23", cpu_quota_core_equivalent=18.6, nr_throttled=3)
+    assert parent.sha256 == worker.sha256
+
+
+def test_runtime_identity_still_covers_the_artifact_and_host():
+    assert _fingerprint(cgroup="/a").sha256 != _fingerprint(cgroup="/a", cpu_model="other")
+    assert _fingerprint(cgroup="/a").sha256 != _fingerprint(cgroup="/a", gpu_name="other")
+    assert _fingerprint(cgroup="/a").sha256 != _fingerprint(cgroup="/a", thread_environment={"OMP_NUM_THREADS": "1"})
