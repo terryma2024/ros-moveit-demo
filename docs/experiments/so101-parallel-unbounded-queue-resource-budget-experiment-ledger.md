@@ -3612,3 +3612,27 @@ That names the branch instead of inferring it, which is the lesson of this round
 empty log as success and CP-UQ61's trace read a stale document as evidence.
 
 N1 remains `NOT_MEASURED`; nothing is extrapolated to another N.
+
+## CP-UQ63 — Stage C: the candidate is rebuilt and the refusal moved, so the environments differ
+
+Run: `stage-c/batches/n1-calibration-20260918-run20/`, commits to date, r22
+(`586d63a2824c92a1...`).
+
+The trace against run19's *own* overlay document named a different branch from the stale one:
+`verify_provenance:702`, `PROVENANCE_INSTALLED_BYTES` -- the source-versus-installed tree
+comparison. That is the correct behaviour of the rule and it was pointing at something true: the
+candidate install had been built before the provenance repairs, so its package tree no longer
+equalled `src/so101_demo_py/src`. The candidate was therefore rebuilt from the current source
+(`colcon_rc=0`, both packages), and `bindings/candidate-install-binding-r2.json` records the new
+tree (1128 files, source root and commit) so the earlier binding stays untouched. r22 was sealed
+against it and run20 recorded 108 samples with a clean control (`t_last_sample` present,
+`abort_reason` `None`).
+
+The refusal is nevertheless still `PROVENANCE_EXTERNAL_PACKAGE_PREFIX`, and run20's overlay is
+correct -- `install_root` is the candidate install and both declared prefixes are its own
+directories. In the same environment that document passes the key-set, containment and prefix
+checks and only fails later at 702, so the *child's* environment must differ from the harness's in
+the way the AMENT re-query resolves. That is the next diagnostic, and it is now precise: build the
+environment with `child_environment_for_launcher` itself (as the runner does, including whatever
+`so101_env_dev` sets) rather than by hand, then trace. N1 remains `NOT_MEASURED`; nothing is
+extrapolated to another N.
