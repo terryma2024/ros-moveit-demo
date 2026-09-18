@@ -3743,3 +3743,29 @@ measurement needs a window in which the host is not swapping. Retries are cheap 
 scripted (same sealed r27, fresh batch ids, verified cleanup each time), so the next rounds should
 re-attempt across time rather than change anything. N1 remains `NOT_MEASURED`; nothing is
 extrapolated to another N.
+
+## CP-UQ68 — Stage C: the retry scaffolding was empty, and the swappers are not ours
+
+Two corrections, both about not counting things that did not happen.
+
+**The burst retries were not attempts.** The six runs written as `run29`..`run34` executed a
+zero-byte script: the base `scope_run28.zsh` in the run directory is empty (0 bytes), so the
+`sed` that derives each attempt wrote an empty file and `systemd-run` started a scope that did
+nothing. They left no batch directories, so they are **not** six failures and must not be counted
+as evidence of anything. The last intact scope script in the run directory is scope_run27.zsh (1317 bytes); any
+further retry must be derived from an intact script (or written fresh) and its size checked before
+use -- the same check that would have caught this immediately.
+
+**The swap belongs to other sessions.** Read-only accounting of `/proc/*/status` shows which
+processes hold swapped pages: `gnome-shell` 416 MB, `codex` 143 MB, `update-manager` 81 MB,
+two `node` processes 54 and 52 MB, `dockerd` 43 MB, `mutter-x11-framebuffer` 25 MB,
+`snapd-desktop-integration` 23 MB. None of them is a task process, and the host still holds
+3.9 GB of its 8.2 GB swap in use overall. The product's `SWAP_PRESSURE` rule fires on *host*
+swap movement, so its trigger is these sessions waking and faulting pages, not the candidate.
+
+That is the precise reason Stage C cannot complete right now, and it is outside the authorized
+scope to change: freeing that swap would mean touching other sessions' memory or global settings.
+The measurement-side work is done and verified (CP-UQ67); the next rounds should re-attempt with
+intact scaffolding across time, and use the remaining capacity on the Stage B/D/E items that the
+host's swap state does not gate. N1 remains `NOT_MEASURED` and nothing is extrapolated to another
+N.
