@@ -165,6 +165,22 @@ def _file_sha256(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def _ament_package_prefixes() -> dict[str, Path]:
+    """The prefixes the launcher's overlay check compares against AMENT, not import paths."""
+
+    from ament_index_python.packages import get_package_prefix
+
+    prefixes: dict[str, Path] = {}
+    for name in ("so101_demo_py", "so101_mujoco_support"):
+        try:
+            prefixes[name] = Path(get_package_prefix(name)).resolve()
+        except Exception:  # noqa: BLE001 - an unavailable package is simply not declared
+            continue
+    if "so101_demo_py" not in prefixes:
+        raise MeasurementCliError("MEASUREMENT_OVERLAY_INPUT_MISSING: package_prefix")
+    return prefixes
+
+
 def ensure_private_batch_root(batch_root) -> Path:
     """Create the sealed batch root private; the launcher refuses anything looser.
 
@@ -182,6 +198,7 @@ def ensure_private_batch_root(batch_root) -> Path:
 def write_overlay_provenance_binding(
     *, target: Path, source_root: Path, build_root: Path, install_root: Path,
     package_prefix: Path, console: Path, module: Path, entry_points: Path,
+    package_prefixes=None,
     parallel_config: Path, point_catalog: Path, source_commit: str,
 ) -> Path:
     """Write the external overlay binding the launcher verifies before creating a root.
@@ -209,7 +226,11 @@ def write_overlay_provenance_binding(
         "source_commit": str(source_commit),
         "build_root": str(Path(build_root).resolve()),
         "install_root": str(Path(install_root).resolve()),
-        "package_prefixes": {"so101_demo_py": str(Path(package_prefix).resolve())},
+        "package_prefixes": (
+            {name: str(Path(prefix).resolve())
+             for name, prefix in dict(package_prefixes).items()}
+            if package_prefixes else
+            {"so101_demo_py": str(Path(package_prefix).resolve())}),
         "artifacts": {
             name: {"path": str(path.resolve()), "sha256": _file_sha256(path)}
             for name, path in inputs.items()
@@ -240,8 +261,10 @@ def production_runner_factory(plan, *, child_runner=None, image_inspector=None):
     overlay = write_overlay_provenance_binding(
         target=ensure_private_batch_root(plan.batch_root) / "raw/overlay-provenance-binding.json",
         source_root=Path(str(binding.get("source_root", "")) or Path.cwd()),
-        build_root=_installed_module_root(), install_root=_installed_module_root(),
-        package_prefix=_installed_package_prefix(),
+        build_root=_ament_package_prefixes()["so101_demo_py"].parent,
+        install_root=_ament_package_prefixes()["so101_demo_py"].parent,
+        package_prefix=_ament_package_prefixes()["so101_demo_py"],
+        package_prefixes=_ament_package_prefixes(),
         console=launcher, module=_installed_launcher_module(),
         entry_points=_installed_entry_points(),
         parallel_config=Path(plan.config_path),
