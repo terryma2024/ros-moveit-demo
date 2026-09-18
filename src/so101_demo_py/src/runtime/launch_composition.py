@@ -213,15 +213,19 @@ class E2ESupervisor:
         self._events: list[WorkflowEvent] = []
         self._owned: dict[int, _OwnedE2EProcess] = {}
         self._deadline_generations: dict[str, int] = {}
+        # Events may be delivered late on a loaded host; the floor binds them to this
+        # run instead of rejecting a slow read as a protocol violation.
+        self._run_started_ns = self._clock_ns()
         self._decoders = {
             id(text_agent_action): EventDecoder(
-                workflow_id, frozenset({"text_agent", "dynamic_runtime"})
+                workflow_id, frozenset({"text_agent", "dynamic_runtime"}),
+                not_before_ns=self._run_started_ns,
             ),
             id(perception_action): EventDecoder(
-                workflow_id, frozenset({"perception"})
+                workflow_id, frozenset({"perception"}), not_before_ns=self._run_started_ns,
             ),
             id(validator_action): EventDecoder(
-                workflow_id, frozenset({"e2e_validator"})
+                workflow_id, frozenset({"e2e_validator"}), not_before_ns=self._run_started_ns,
             ),
         }
         self.register_owned(

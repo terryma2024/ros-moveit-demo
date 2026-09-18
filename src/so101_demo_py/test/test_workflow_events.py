@@ -45,6 +45,63 @@ def _document_line(document: dict[str, object]) -> bytes:
     ).encode()
 
 
+def _late_event_document(workflow_id: str, *, timestamp_ns: int) -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "workflow_id": workflow_id,
+        "sequence": 1,
+        "component": "text_agent",
+        "event": "DISPATCH_PREVIEW",
+        "status": "OK",
+        "timestamp_ns": timestamp_ns,
+        "failure_code": None,
+        "payload": {"request_id": "request-1"},
+    }
+
+
+def test_decoder_accepts_an_in_run_event_delivered_late() -> None:
+    """A saturated host delays stdout; the read delay is not a protocol violation."""
+
+    from so101_demo.runtime.workflow_events import (
+        EVENT_PREFIX,
+        MAX_EVENT_DELIVERY_DELAY_NS,
+        EventDecoder,
+    )
+
+    run_started_ns = 1_000_000_000_000
+    written_ns = run_started_ns + 1_000_000_000
+    read_ns = written_ns + 6_000_000_000
+    decoder = EventDecoder(
+        "process-workflow", frozenset({"text_agent"}), not_before_ns=run_started_ns)
+    chunk = EVENT_PREFIX + json.dumps(
+        _late_event_document("process-workflow", timestamp_ns=written_ns)
+    ).encode() + b"\n"
+    events = decoder.feed(chunk, now_ns=read_ns)
+    assert [event.event for event in events] == ["DISPATCH_PREVIEW"]
+
+    # An event written before this run started is still rejected, and so is one that is
+    # older than any plausible delivery delay.
+    stale = EventDecoder(
+        "process-workflow", frozenset({"text_agent"}), not_before_ns=run_started_ns)
+    with pytest.raises(WorkflowProtocolError):
+        stale.feed(
+            EVENT_PREFIX + json.dumps(
+                _late_event_document("process-workflow", timestamp_ns=run_started_ns - 1)
+            ).encode() + b"\n",
+            now_ns=read_ns,
+        )
+    ancient = EventDecoder(
+        "process-workflow", frozenset({"text_agent"}), not_before_ns=0)
+    with pytest.raises(WorkflowProtocolError):
+        ancient.feed(
+            EVENT_PREFIX + json.dumps(_late_event_document(
+                "process-workflow",
+                timestamp_ns=read_ns - MAX_EVENT_DELIVERY_DELAY_NS - 1,
+            )).encode() + b"\n",
+            now_ns=read_ns,
+        )
+
+
 def test_event_can_be_split_at_every_byte() -> None:
     line = _line(payload={"model": "杯子模型"})
 
@@ -90,7 +147,7 @@ def test_finish_rejects_prefixed_partial_line_but_ignores_ordinary_tail() -> Non
         ({"failure_code": "COMMAND_INVALID"}, 100),
         ({"timestamp_ns": True}, 100),
         ({"timestamp_ns": 101}, 100),
-        ({"timestamp_ns": 0}, 5_000_000_001),
+        ({"timestamp_ns": 0}, 120_000_000_001),
         ({"timestamp_ns": float("nan")}, 100),
         ({"payload": []}, 100),
         ({"payload": {"unknown": "value"}}, 100),
