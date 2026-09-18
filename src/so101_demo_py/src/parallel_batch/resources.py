@@ -21,7 +21,11 @@ from typing import Mapping
 import uuid
 
 from ..runtime.parallel_ipc import IpcError, require_transport_basename
-from .contracts import load_parallel_runtime_config, ParallelRuntimeConfig
+from .contracts import (
+    ParallelRuntimeConfig,
+    ParallelRuntimeConfigV2,
+    load_parallel_runtime_config,
+)
 
 
 _DEFAULT_WORKER_COUNT = 2
@@ -917,8 +921,9 @@ class WorkerResourceAllocator:
         batch_id: str | None = None,
         allocation_policy: AllocationPolicy | None = None,
         ipc_root: Path | None = None,
+        resource_gate=None,
     ) -> None:
-        if not isinstance(config, ParallelRuntimeConfig):
+        if not isinstance(config, (ParallelRuntimeConfig, ParallelRuntimeConfigV2)):
             raise ResourceAllocationError('CONFIG')
         raw_root = str(evidence_root)
         root = Path(evidence_root)
@@ -942,6 +947,7 @@ class WorkerResourceAllocator:
         if not isinstance(selected_batch_id, str) or _BATCH_ID.fullmatch(selected_batch_id) is None:
             raise ResourceAllocationError('BATCH_ID')
         self.batch_id = selected_batch_id
+        self._resource_gate = resource_gate
         self.allocation_policy = (
             AllocationPolicy(config.max_worker_count, config.ros_domain_ids)
             if allocation_policy is None
@@ -1294,6 +1300,27 @@ class WorkerResourceAllocator:
         return replacement
 
     def _live_headroom(self, worker_count: int) -> Mapping[str, object] | None:
+        if self._resource_gate is not None:
+            from .resource_budget import FixedAdmissionRequest
+            identity = self._resource_gate.execution_identity_sha256
+            if identity is None:
+                # No runtime fingerprint means no admission evidence; fail closed.
+                raise ResourceAllocationError('RESOURCE_PROBE_FAILED')
+            decision = self._resource_gate.admit(FixedAdmissionRequest(
+                worker_count=worker_count,
+                batch_id=self.batch_id,
+                epoch=1,
+                execution_identity_sha256=identity,
+                request_kind='FIXED_PRODUCTION',
+            ))
+            if not decision.admitted:
+                raise ResourceAllocationError(decision.reason_codes[0])
+            return {
+                'worker_count': worker_count,
+                'profile_sha256': decision.profile_sha256,
+                'qualification_sha256': decision.qualification_sha256,
+                'observation_monotonic_s': decision.observation_monotonic_s,
+            }
         if worker_count > 3:
             # Adaptive W8 evidence does not qualify fixed-mode execution.
             raise ResourceAllocationError('FIXED_WORKER_LIVE_QUALIFICATION_REQUIRED')

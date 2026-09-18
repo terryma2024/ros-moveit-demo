@@ -890,3 +890,83 @@ def _issue_adaptive_context(
         pool_generation=pool_generation,
         _issuer=_ISSUER,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class FixedAdmissionRequest:
+    """One exact-N admission question asked by any consumer adapter."""
+
+    worker_count: int
+    batch_id: str
+    epoch: int
+    execution_identity_sha256: str
+    request_kind: str
+
+    def __post_init__(self) -> None:
+        if type(self.worker_count) is not int or not 1 <= self.worker_count <= 8:
+            raise ContractError("WORKER_COUNT")
+        if not isinstance(self.batch_id, str) or not self.batch_id:
+            raise ContractError("BATCH_ID")
+        if type(self.epoch) is not int or self.epoch < 1:
+            raise ContractError("EPOCH")
+        _require_sha256("execution_identity_sha256", self.execution_identity_sha256)
+        if self.request_kind not in _ALLOCATION_KINDS:
+            raise ContractError("REQUEST_KIND")
+
+
+class FixedAdmissionGate:
+    """The single provider seam shared by the Web probe, CLI prepare and the allocator."""
+
+    def __init__(
+        self,
+        provider: ResourceBudgetProvider,
+        *,
+        context: FixedProductionContext | MeasurementContext | None = None,
+        current: RuntimeFingerprint | None = None,
+        live: LiveResourceObservation | None = None,
+        now_monotonic_s: float | None = None,
+    ) -> None:
+        if not isinstance(provider, ResourceBudgetProvider):
+            raise ContractError("ALLOCATION_CONTEXT_MISMATCH")
+        if context is not None and not isinstance(
+            context, (FixedProductionContext, MeasurementContext)
+        ):
+            raise ContractError("ALLOCATION_CONTEXT_MISMATCH")
+        self.provider = provider
+        self.context = context
+        self.current = current
+        self.live = live
+        self.now_monotonic_s = now_monotonic_s
+
+    @property
+    def execution_identity_sha256(self) -> str | None:
+        return None if self.current is None else self.current.sha256
+
+    def admit(self, request: FixedAdmissionRequest) -> ResourceBudgetAdmission:
+        """Answer one admission question; a missing probe is never a pass."""
+
+        if self.current is None or self.live is None:
+            return ResourceBudgetAdmission(
+                admitted=False,
+                reason_codes=("RESOURCE_PROBE_FAILED",),
+                worker_count=request.worker_count,
+                profile_sha256=self.provider.profile_sha256,
+                qualification_sha256=None,
+                execution_identity_sha256=request.execution_identity_sha256,
+                observation_monotonic_s=0.0,
+            )
+        if request.request_kind == "MEASUREMENT":
+            if not isinstance(self.context, MeasurementContext):
+                raise ContractError("ALLOCATION_CONTEXT_MISMATCH")
+            if self.context.scope.worker_count != request.worker_count:
+                raise ContractError("ALLOCATION_CONTEXT_MISMATCH")
+            return self.provider.admit_measurement(
+                context=self.context, current=self.current, live=self.live,
+                now_monotonic_s=self.now_monotonic_s)
+        if not isinstance(self.context, FixedProductionContext):
+            raise ContractError("ALLOCATION_CONTEXT_MISMATCH")
+        if self.context.scope.worker_count != request.worker_count:
+            raise ContractError("ALLOCATION_CONTEXT_MISMATCH")
+        return self.provider.admit_production(
+            context=self.context, current=self.current, live=self.live,
+            now_monotonic_s=self.now_monotonic_s)

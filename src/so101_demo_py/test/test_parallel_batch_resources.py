@@ -673,7 +673,6 @@ def production_batch_argv(
         '--config', str(CONFIG_PATH),
         '--batch-id', 'three-worker-headroom-test',
         '--worker-count', worker_count,
-        '--max-points-per-worker', '7',
         '--evidence-root', str(root),
         '--broker-image', 'so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1',
         '--yolo-weights', '/models/yolo.pt',

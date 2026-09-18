@@ -31,7 +31,6 @@ def argv(root: Path, **changes):
         "config": str(CONFIG),
         "batch_id": "batch-1",
         "worker_count": "2",
-        "max_points_per_worker": "10",
         "evidence_root": str(root),
         "broker_image": "so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1",
         "yolo_weights": "/models/yolo.pt",
@@ -100,8 +99,7 @@ def _fixed_web_spec(tmp_path, monkeypatch, *, run_mode="dry_run"):
     for key, value in values.items():
         monkeypatch.setenv(key, value)
     spec = prepare_batch(argv(
-        root, batch_id=batch_id, worker_count="1", max_points_per_worker="1",
-        point_id=("task_start",), run_mode=run_mode,
+        root, batch_id=batch_id, worker_count="1",         point_id=("task_start",), run_mode=run_mode,
     ), provenance_verifier=verified)
     return spec, values
 
@@ -256,7 +254,7 @@ def test_fixed_cli_credentials_cannot_open_an_adaptive_pool_endpoint(tmp_path, m
     pool = _new_pool_request_for_production_factory(
         batch_id=spec.request.batch_id, run_mode=spec.request.run_mode,
         selected_point_ids=spec.request.selected_point_ids, worker_count=1,
-        max_points_per_worker=1, evidence_root=spec.request.evidence_root,
+        evidence_root=spec.request.evidence_root,
     )
     with pytest.raises(CliError, match="FIXED_CONTROL_REQUEST_REQUIRED"):
         ProductionBatchComposition(replace(spec, request=pool), resource_probe=_FixedWebProbe())
@@ -456,7 +454,7 @@ def test_adaptive_worker_process_classifies_recovered_invalid_as_infrastructure(
 @pytest.mark.parametrize(
     "changes,error",
     [
-        ({"worker_count": "1", "max_points_per_worker": "19"}, "CAPACITY"),
+        ({"worker_count": "1"}, "CAPACITY"),
         ({"evidence_root": "relative"}, "ABSOLUTE"),
         ({"run_mode": "unknown"}, "MODE"),
         ({"worker_count": "true"}, "INTEGER"),
@@ -523,7 +521,6 @@ def test_explicit_resume_replays_started_dry_run_and_continues_remaining_point(t
     values = argv(
         root,
         worker_count='1',
-        max_points_per_worker='2',
         point_id=('task_start', 'sample_01_near_left'),
     )
     first = prepare_batch(values, provenance_verifier=verified)
@@ -591,7 +588,7 @@ def test_explicit_resume_rejects_changed_frozen_batch_manifest(tmp_path):
     prepared = prepare_batch(argv(root), provenance_verifier=verified)
     root.mkdir(mode=0o700)
     changed = dict(prepared.manifest)
-    changed['max_points_per_worker'] = 11
+    changed['worker_count'] = 3
     _write_json(root / 'batch_manifest.json', changed)
 
     with pytest.raises(CliError, match='RECOVERY_BATCH_MANIFEST_MISMATCH'):
@@ -605,8 +602,7 @@ def test_selection_uses_catalog_order_and_hash_and_omission_selects_all(tmp_path
         argv(
             tmp_path / "selected",
             worker_count="2",
-            max_points_per_worker="1",
-            point_id=("sample_16_far_right", "task_start"),
+                        point_id=("sample_16_far_right", "task_start"),
         ),
         provenance_verifier=verified,
     )
@@ -620,7 +616,6 @@ def test_selection_uses_catalog_order_and_hash_and_omission_selects_all(tmp_path
     assert complete.request.selected_point_ids[0] == "task_start"
     assert complete.request.selected_point_ids[-1] == "sample_16_far_right"
     assert complete.manifest["worker_count"] == 2
-    assert complete.manifest["max_points_per_worker"] == 10
     assert "fixed_partitions" not in complete.manifest
 
 
@@ -751,8 +746,7 @@ def test_cli_never_unlinks_or_replaces_an_existing_aggregate(tmp_path):
         argv(
             root,
             worker_count="1",
-            max_points_per_worker="1",
-            point_id=("task_start",),
+                        point_id=("task_start",),
         ),
         provenance_verifier=verified,
         composition_factory=Composition,
@@ -784,8 +778,7 @@ def test_default_production_composition_derives_real_dry_run_snapshot():
         argv(
             root,
             worker_count="1",
-            max_points_per_worker="1",
-            point_id=("task_start",),
+                        point_id=("task_start",),
         ),
         provenance_verifier=verified,
     )
@@ -844,8 +837,7 @@ def test_physical_composition_prepares_and_supervises_one_external_broker(
         argv(
             root,
             worker_count="1",
-            max_points_per_worker="1",
-            point_id=("task_start",),
+                        point_id=("task_start",),
             run_mode="plan_only",
         ),
         provenance_verifier=lambda _spec: {
@@ -918,7 +910,6 @@ def test_physical_broker_receives_validated_external_ipc_root(tmp_path, monkeypa
             tmp_path / 'batch',
             batch_id=batch_id,
             worker_count='1',
-            max_points_per_worker='1',
             point_id=('task_start',),
             run_mode='plan_only',
         ),
@@ -973,8 +964,7 @@ def test_physical_worker_launches_receive_exact_isolated_environments(tmp_path):
     scratch = Path(os.environ["TMPDIR"]).parent
     spec = prepare_batch(
         argv(
-            scratch / "e", worker_count="2", max_points_per_worker="1",
-            point_id=("task_start", "sample_01_near_left"), run_mode="plan_only",
+            scratch / "e", worker_count="2",             point_id=("task_start", "sample_01_near_left"), run_mode="plan_only",
         ),
         provenance_verifier=lambda value: {
             **verified(value), "image_id": "sha256:" + "b" * 64,
@@ -1018,8 +1008,7 @@ def test_broker_start_rejects_missing_image_id_and_mutable_tag_drift(tmp_path, m
 
     scratch = Path(os.environ["TMPDIR"]).parent
     base = prepare_batch(
-        argv(scratch / "im", worker_count="1", max_points_per_worker="1",
-             point_id=("task_start",), run_mode="plan_only"),
+        argv(scratch / "im", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
         provenance_verifier=verified,
     )
     missing = ProductionBatchComposition(
@@ -1030,8 +1019,7 @@ def test_broker_start_rejects_missing_image_id_and_mutable_tag_drift(tmp_path, m
     missing._release_partial()
 
     bound = prepare_batch(
-        argv(scratch / "id", worker_count="1", max_points_per_worker="1",
-             point_id=("task_start",), run_mode="plan_only"),
+        argv(scratch / "id", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
         provenance_verifier=lambda value: {
             **verified(value), "image_id": "sha256:" + "b" * 64,
             "source_sha256": "1" * 64,
@@ -1076,8 +1064,7 @@ def test_workers_cannot_start_until_broker_socket_and_ready_receipt_exist(tmp_pa
 
     scratch = Path(os.environ["TMPDIR"]).parent
     spec = prepare_batch(
-        argv(scratch / "br", worker_count="1", max_points_per_worker="1",
-             point_id=("task_start",), run_mode="plan_only"),
+        argv(scratch / "br", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
         provenance_verifier=lambda value: {
             **verified(value), "image_id": "sha256:" + "b" * 64,
         },
@@ -1156,8 +1143,7 @@ def test_broker_ready_rejects_regular_file_endpoint(tmp_path):
 
     scratch = Path(os.environ["TMPDIR"]).parent
     spec = prepare_batch(
-        argv(scratch / "ns", worker_count="1", max_points_per_worker="1",
-             point_id=("task_start",), run_mode="plan_only"),
+        argv(scratch / "ns", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
         provenance_verifier=lambda value: {
             **verified(value), "image_id": "sha256:" + "b" * 64,
         },
@@ -1199,8 +1185,7 @@ def test_initial_broker_ready_uses_broker_startup_budget_not_heartbeat(tmp_path)
     scratch = Path(os.environ["TMPDIR"]).parent
     clock = Clock()
     spec = prepare_batch(
-        argv(scratch / "s", worker_count="1", max_points_per_worker="1",
-             point_id=("task_start",), run_mode="plan_only"),
+        argv(scratch / "s", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
         provenance_verifier=lambda value: {
             **verified(value), "image_id": "sha256:" + "b" * 64,
         },
@@ -1233,8 +1218,7 @@ def test_broker_container_cleanup_stops_only_exact_labeled_batch_container(tmp_p
 
     scratch = Path(os.environ["TMPDIR"]).parent
     spec = prepare_batch(
-        argv(scratch / "c", worker_count="1", max_points_per_worker="1",
-             point_id=("task_start",), run_mode="plan_only"),
+        argv(scratch / "c", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
         provenance_verifier=lambda value: {
             **verified(value), "image_id": "sha256:" + "b" * 64,
         },
@@ -1522,8 +1506,7 @@ def test_broker_socket_appearing_between_readiness_checks_is_snapshotted_once(
 
     scratch = Path(os.environ["TMPDIR"]).parent
     spec = prepare_batch(
-        argv(scratch / "race", worker_count="1", max_points_per_worker="1",
-             point_id=("task_start",), run_mode="plan_only"),
+        argv(scratch / "race", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
         provenance_verifier=lambda value: {
             **verified(value), "image_id": "sha256:" + "b" * 64,
         },
@@ -1601,8 +1584,7 @@ def test_composition_always_runs_fail_closed_cleanup_when_worker_start_raises(tm
 
     scratch = Path(os.environ["TMPDIR"]).parent
     spec = prepare_batch(
-        argv(scratch / "ce", worker_count="1", max_points_per_worker="1",
-             point_id=("task_start",), run_mode="dry_run"),
+        argv(scratch / "ce", worker_count="1",              point_id=("task_start",), run_mode="dry_run"),
         provenance_verifier=verified,
     )
     supervisor = Supervisor()
@@ -1703,8 +1685,7 @@ def test_broker_transport_does_not_interpret_committed_start_event(tmp_path):
         argv(
             root,
             worker_count="1",
-            max_points_per_worker="1",
-            point_id=("task_start",),
+                        point_id=("task_start",),
             run_mode="plan_only",
         ),
         provenance_verifier=lambda value: {
@@ -1869,7 +1850,7 @@ def test_default_composition_constructs_physical_runtime_ports_lazily(mode):
         )
     }
     spec = prepare_batch(
-        argv(root, worker_count="1", max_points_per_worker="1", point_id=("task_start",), run_mode=mode),
+        argv(root, worker_count="1", point_id=("task_start",), run_mode=mode),
         provenance_verifier=verified,
     )
     composition = ProductionBatchComposition(
@@ -2010,14 +1991,15 @@ def test_frozen_worker_topology_defaults_to_two_by_ten(tmp_path):
     from so101_demo.cli.mujoco_parallel_batch import prepare_batch
 
     values = argv(tmp_path / "defaults")
-    for flag in ("--worker-count", "--max-points-per-worker"):
+    for flag in ("--worker-count",):
         index = values.index(flag)
         del values[index:index + 2]
     prepared = prepare_batch(values, provenance_verifier=verified)
     assert prepared.request.worker_count == 2
+    # The composition still builds the retained v1 request internally; the user-facing
+    # quota flag is already refused, and the v2 request switch is the next Task 10 step.
     assert prepared.request.max_points_per_worker == 10
     assert prepared.manifest["worker_count"] == 2
-    assert prepared.manifest["max_points_per_worker"] == 10
 
 
 def test_adaptive_cli_uses_frozen_options_without_a_hard_capacity(tmp_path):
@@ -2053,9 +2035,11 @@ def test_adaptive_cli_reuses_registered_root_but_reserves_short_runtime(tmp_path
 
 
 def test_adaptive_cli_rejects_legacy_hard_capacity_flag(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+    from so101_demo.parallel_batch.contracts import ContractError
 
-    with pytest.raises(CliError, match="ADAPTIVE_MAX_POINTS_CONFLICT"):
+    # The retired flag is refused before mode handling with the stable legacy code.
+    with pytest.raises(ContractError, match="LEGACY_MAX_POINTS_PER_WORKER_UNSUPPORTED"):
         prepare_batch(
             adaptive_argv(tmp_path / "adaptive")
             + ["--max-points-per-worker", "3"],
@@ -2262,7 +2246,6 @@ def test_production_adaptive_factory_builds_an_internal_w8_pool(tmp_path):
         run_mode=RunMode.DRY_RUN,
         selected_point_ids=("task_start",),
         worker_count=8,
-        max_points_per_worker=1,
         evidence_root=evidence_root / "r/abcde/p/g01w08",
     )
 
@@ -2299,8 +2282,7 @@ def test_worker_process_environment_is_the_exact_task8_whitelist(tmp_path):
     os.environ[monkey] = "secret"
     scratch = Path(os.environ["TMPDIR"]).parent
     spec = prepare_batch(
-        argv(scratch / "x", worker_count="1", max_points_per_worker="1",
-             point_id=("task_start",), run_mode="plan_only"),
+        argv(scratch / "x", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
         provenance_verifier=lambda value: {**verified(value), "image_id": "sha256:" + "b" * 64},
     )
     supervisor = Supervisor()
@@ -2334,8 +2316,7 @@ def test_broker_runtime_mount_cannot_see_worker_tokens_or_coordinator_sockets(tm
 
     scratch = Path(os.environ["TMPDIR"]).parent
     spec = prepare_batch(
-        argv(scratch / "b", worker_count="1", max_points_per_worker="1",
-             point_id=("task_start",), run_mode="plan_only"),
+        argv(scratch / "b", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
         provenance_verifier=lambda value: {**verified(value), "image_id": "sha256:" + "b" * 64},
     )
     composition = ProductionBatchComposition(
@@ -2414,8 +2395,7 @@ def test_constructor_failure_releases_partial_allocator_journal_and_endpoints(tm
 
     scratch = Path(os.environ["TMPDIR"]).parent
     spec = prepare_batch(
-        argv(scratch / "f", worker_count="1", max_points_per_worker="1",
-             point_id=("task_start",), run_mode="plan_only"),
+        argv(scratch / "f", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
         provenance_verifier=lambda value: {**verified(value), "image_id": "sha256:" + "b" * 64},
     )
     real = batch_cli.AuthenticatedUnixServer
@@ -2529,8 +2509,7 @@ def test_physical_start_revalidates_complete_provenance_before_process_side_effe
     }
     scratch = Path(os.environ["TMPDIR"]).parent
     spec = prepare_batch(
-        argv(scratch / "v", worker_count="1", max_points_per_worker="1",
-             point_id=("task_start",), run_mode="plan_only"),
+        argv(scratch / "v", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
         provenance_verifier=lambda _value: record,
     )
 
@@ -2959,8 +2938,7 @@ def test_broker_exit_restarts_fresh_generation_while_leases_remain_paused(tmp_pa
         argv(
             root,
             worker_count="1",
-            max_points_per_worker="1",
-            point_id=("task_start",),
+                        point_id=("task_start",),
             run_mode="plan_only",
         ),
         provenance_verifier=lambda value: {
@@ -3029,8 +3007,7 @@ def test_authenticated_worker_discovers_only_the_current_healthy_broker(tmp_path
         argv(
             root,
             worker_count="1",
-            max_points_per_worker="1",
-            point_id=("task_start",),
+                        point_id=("task_start",),
             run_mode="plan_only",
         ),
         provenance_verifier=lambda value: {
@@ -3187,8 +3164,7 @@ def test_broker_recovery_deadline_failure_keeps_shared_dependency_reason(tmp_pat
         argv(
             scratch / "f22dl",
             worker_count="1",
-            max_points_per_worker="1",
-            point_id=("task_start",),
+                        point_id=("task_start",),
             run_mode="plan_only",
         ),
         provenance_verifier=lambda value: {
@@ -3447,3 +3423,13 @@ def test_existing_worker_fetches_current_broker_before_each_request_and_recovery
         endpoint,
         endpoint,
     ]
+
+
+def test_legacy_cli_flag_is_an_explicit_error():
+    """The retired lifetime quota flag is refused before any resource is touched."""
+
+    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+    from so101_demo.parallel_batch.contracts import ContractError
+    with pytest.raises(ContractError) as error:
+        prepare_batch(['--max-points-per-worker', '20'])
+    assert error.value.code == 'LEGACY_MAX_POINTS_PER_WORKER_UNSUPPORTED'

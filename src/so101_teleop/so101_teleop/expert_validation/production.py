@@ -289,6 +289,9 @@ class ProductionRuntimeLayout:
 class _HostResourceProbe:
     """Fixed mode admits only after the same host facts required by the upstream config."""
 
+    def __init__(self, resource_gate=None) -> None:
+        self._resource_gate = resource_gate
+
     def probe(self, _request, config):
         observations: dict[str, object] = {"logical_cpu_count": os.cpu_count() or 0}
         reasons: list[str] = []
@@ -302,6 +305,21 @@ class _HostResourceProbe:
             )
             workers = getattr(config, "worker_count", 1)
             observations["requested_worker_count"] = workers
+            if self._resource_gate is not None:
+                from so101_demo.parallel_batch.resource_budget import FixedAdmissionRequest
+                identity = self._resource_gate.execution_identity_sha256
+                if identity is None:
+                    reasons.append("RESOURCE_PROBE_FAILED")
+                else:
+                    decision = self._resource_gate.admit(FixedAdmissionRequest(
+                        worker_count=workers,
+                        batch_id=getattr(config, "batch_id", "web") or "web",
+                        epoch=1,
+                        execution_identity_sha256=identity,
+                        request_kind="FIXED_PRODUCTION",
+                    ))
+                    reasons.extend(decision.reason_codes)
+                return not reasons, tuple(reasons), observations
             if workers > 3:
                 reasons.append("FIXED_WORKER_LIVE_QUALIFICATION_REQUIRED")
             if snapshot.logical_cpu_count < 4 * workers:
