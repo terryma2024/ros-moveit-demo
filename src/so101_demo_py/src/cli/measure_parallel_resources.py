@@ -326,8 +326,11 @@ def production_runner_factory(plan, *, child_runner=None, image_inspector=None):
 
     tag = verify_broker_image(tag=_BROKER_IMAGE, digest=plan.bindings.broker_image_id,
                               inspector=image_inspector)
+    # The overlay binding travels to the launcher as an argument, so it lives beside the
+    # session's artifacts: the launcher's own evidence root must stay absent for the
+    # allocator to create it (DIRECTORY_CONFLICT otherwise).
     overlay = write_overlay_provenance_binding(
-        target=ensure_private_batch_root(plan.batch_root) / "raw/overlay-provenance-binding.json",
+        target=ensure_private_batch_root(session_batch_root(plan)) / "raw/overlay-provenance-binding.json",
         source_root=Path(str(binding.get("source_root", "")) or Path.cwd()),
         build_root=install_prefix, install_root=install_prefix,
         package_prefix=overlay_package_prefixes(install_prefix)["so101_demo_py"],
