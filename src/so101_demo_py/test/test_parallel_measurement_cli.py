@@ -22,17 +22,51 @@ def config_path():
             / "config/mujoco/parallel_batch_v2.yaml")
 
 
+
+
+def runtime_bindings(tmp_path):
+    """Closed, plan-conforming runtime bindings for the retained authorization fixtures."""
+
+    def write(path, data):
+        import hashlib
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        path.write_bytes(data)
+        path.chmod(0o600)
+        return hashlib.sha256(data).hexdigest()
+
+    points = tmp_path / "models/points.yaml"
+    points_sha = write(points, b"points: [p1]\n")
+    weights = tmp_path / "models/yolo.pt"
+    weights_sha = write(weights, b"weights")
+    grounded = tmp_path / "models/grounded"
+    grounded.mkdir(mode=0o700, parents=True, exist_ok=True)
+    manifest_sha = write(grounded / "manifest.json", b'{"models": []}\n')
+    provenance = tmp_path / "bindings/provenance.json"
+    provenance_sha = write(provenance, b'{"schema_version": 1, "install_prefix": "/tmp/i"}\n')
+    return {
+        "points_path": str(points), "points_sha256": points_sha,
+        "yolo_weights_path": str(weights), "yolo_weights_sha256": weights_sha,
+        "grounded_root": str(grounded), "grounded_manifest_sha256": manifest_sha,
+        "broker_image_id": "sha256:" + "b" * 64,
+        "provenance_binding_path": str(provenance),
+        "provenance_binding_sha256": provenance_sha,
+    }
+
+
 def authorization_document(tmp_path, **changes):
+    bindings = runtime_bindings(tmp_path)
     document = {
         "schema_version": 2, "operator_uid": __import__("os").getuid(),
         "dispatch_id": "dispatch-a", "task_id": "task-a", "source_commit": "a" * 40,
         "execution_identity_sha256": "b" * 64, "worker_count": 2,
-        "catalog_sha256": "c" * 64, "seed": 7, "lifecycle": "FULL_RESTART",
+        "catalog_sha256": bindings["points_sha256"], "seed": 7,
+        "lifecycle": "FULL_RESTART",
         "maximum_batches": 1, "batch_deadline_s": 5400.0,
         "expires_at_ns": time.time_ns() + 3_600_000_000_000,
         "batch_root": str(tmp_path / "batches"), "owned_scope_sha256": "d" * 64,
         "safety_policy_sha256": "e" * 64, "intent": "CALIBRATION_ONLY",
         "calibration_sha256": None,
+        "runtime_bindings": bindings,
     }
     document.update(changes)
     return document
@@ -95,6 +129,8 @@ def test_cli_refuses_batch_root_outside_evidence_root(tmp_path, capsys):
 def test_cli_fails_closed_without_the_owned_runtime(tmp_path, capsys):
     path = tmp_path / "private/authorization.json"
     digest = write(path, authorization_document(tmp_path))
-    assert main(argv(tmp_path, digest)) == 1
+    # With the typed capability boundary satisfied, the real runner factory must still
+    # refuse because this host has no frozen installed launcher behind the binding.
+    assert main(argv(tmp_path, digest), capability_probe=lambda: None) == 1
     stderr = capsys.readouterr().err
-    assert "MEASUREMENT_CAPABILITY_MISSING" in stderr or "MEASUREMENT_RUNTIME_UNAVAILABLE" in stderr
+    assert "MEASUREMENT_RUNTIME_UNAVAILABLE" in stderr

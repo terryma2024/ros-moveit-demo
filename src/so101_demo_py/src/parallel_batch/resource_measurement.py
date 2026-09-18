@@ -39,6 +39,12 @@ _INTENTS = ("CALIBRATION_ONLY", "QUALIFICATION")
 _BATCH_DEADLINE_S = 5400.0
 
 
+def _require_identifier(name: str, value: object) -> str:
+    if not isinstance(value, str) or _IDENTIFIER.fullmatch(value) is None:
+        raise ContractError(f"IDENTIFIER: {name}")
+    return value
+
+
 def _require_sha256(name: str, value: object) -> str:
     if not isinstance(value, str) or _SHA256.fullmatch(value) is None:
         raise ContractError(f"SHA256: {name}")
@@ -335,8 +341,57 @@ _AUTHORIZATION_FIELDS = (
     "schema_version", "operator_uid", "dispatch_id", "task_id", "source_commit",
     "execution_identity_sha256", "worker_count", "catalog_sha256", "seed", "lifecycle",
     "maximum_batches", "batch_deadline_s", "expires_at_ns", "batch_root", "owned_scope_sha256",
-    "safety_policy_sha256", "intent", "calibration_sha256",
+    "safety_policy_sha256", "intent", "calibration_sha256", "runtime_bindings",
 )
+
+_RUNTIME_BINDING_FIELDS = (
+    "points_path", "points_sha256", "yolo_weights_path", "yolo_weights_sha256",
+    "grounded_root", "grounded_manifest_sha256", "broker_image_id",
+    "provenance_binding_path", "provenance_binding_sha256",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class MeasurementRuntimeBindings:
+    """Closed runtime bindings a sealed candidate authorization must carry."""
+
+    points_path: str
+    points_sha256: str
+    yolo_weights_path: str
+    yolo_weights_sha256: str
+    grounded_root: str
+    grounded_manifest_sha256: str
+    broker_image_id: str
+    provenance_binding_path: str
+    provenance_binding_sha256: str
+
+    def __post_init__(self) -> None:
+        for name in ("points_path", "yolo_weights_path", "grounded_root",
+                     "provenance_binding_path"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not Path(value).is_absolute():
+                raise ContractError(f"BINDING_PATH: {name}")
+        for name in ("points_sha256", "yolo_weights_sha256", "grounded_manifest_sha256",
+                     "provenance_binding_sha256"):
+            _require_sha256(name, getattr(self, name))
+        broker = self.broker_image_id
+        if not isinstance(broker, str) or not broker.startswith("sha256:") or len(broker) != 71:
+            raise ContractError("BROKER_IMAGE_ID")
+
+    @classmethod
+    def from_document(cls, document: object) -> "MeasurementRuntimeBindings":
+        if not isinstance(document, Mapping):
+            raise ContractError("RUNTIME_BINDINGS_MAPPING")
+        unknown = set(document) - set(_RUNTIME_BINDING_FIELDS)
+        missing = set(_RUNTIME_BINDING_FIELDS) - set(document)
+        if unknown:
+            raise ContractError(f"RUNTIME_BINDINGS_UNKNOWN_FIELD: {sorted(unknown)!r}")
+        if missing:
+            raise ContractError(f"RUNTIME_BINDINGS_MISSING_FIELD: {sorted(missing)!r}")
+        return cls(**{name: document[name] for name in _RUNTIME_BINDING_FIELDS})
+
+    def as_document(self) -> dict[str, str]:
+        return {name: getattr(self, name) for name in _RUNTIME_BINDING_FIELDS}
 
 
 @dataclass(frozen=True, slots=True)
@@ -359,6 +414,7 @@ class MeasurementAuthorization:
     safety_policy_sha256: str
     intent: str
     calibration_sha256: str | None
+    runtime_bindings: MeasurementRuntimeBindings
     raw_sha256: str
 
     @classmethod
@@ -415,6 +471,8 @@ class MeasurementAuthorization:
             raise ContractError("CALIBRATION_HASH_FORBIDDEN")
         return cls(
             schema_version=2,
+            runtime_bindings=MeasurementRuntimeBindings.from_document(
+                document["runtime_bindings"]),
             operator_uid=document["operator_uid"],
             dispatch_id=document["dispatch_id"],
             task_id=document["task_id"],
@@ -850,4 +908,199 @@ def build_candidate_profile(
                 "execution_identity_sha256": execution_identity_sha256,
             }
         ),
+    )
+
+
+# --- Candidate runtime composition (F1) ---------------------------------------------
+
+
+def _hash_file(path: Path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateRunPlan:
+    """Everything one authorized candidate batch needs, derived from sealed bindings."""
+
+    authorization_sha256: str
+    batch_id: str
+    worker_count: int
+    execution_identity_sha256: str
+    seed: int
+    catalog_sha256: str
+    intent: str
+    batch_root: Path
+    evidence_root: Path
+    config_path: Path
+    bindings: MeasurementRuntimeBindings
+    schema_version: int = 2
+    run_mode: str = "execute"
+    batch_kind: str = "FIRST_PASS"
+
+    def runner_argv(self) -> tuple[str, ...]:
+        """Existing composition argv derived only from the sealed bindings."""
+
+        return (
+            "--points", self.bindings.points_path,
+            "--config", str(self.config_path),
+            "--batch-id", self.batch_id,
+            "--worker-count", str(self.worker_count),
+            "--evidence-root", str(self.batch_root),
+            "--broker-image", self.bindings.broker_image_id,
+            "--yolo-weights", self.bindings.yolo_weights_path,
+            "--yolo-weights-sha256", self.bindings.yolo_weights_sha256,
+            "--grounded-root", self.bindings.grounded_root,
+            "--grounded-manifest-sha256", self.bindings.grounded_manifest_sha256,
+            "--run-mode", "execute",
+        )
+
+    def verify_bindings(self) -> None:
+        """Re-verify every binding byte and identity at use time (TOCTOU closed)."""
+
+        checks = (
+            ("points", self.bindings.points_path, self.bindings.points_sha256),
+            ("yolo_weights", self.bindings.yolo_weights_path,
+             self.bindings.yolo_weights_sha256),
+            ("provenance_binding", self.bindings.provenance_binding_path,
+             self.bindings.provenance_binding_sha256),
+        )
+        for name, raw_path, expected in checks:
+            path = Path(raw_path)
+            if not path.is_absolute() or not path.is_file():
+                raise ContractError(f"BINDING_PATH: {name}")
+            if _hash_file(path) != expected:
+                raise ContractError(f"BINDING_HASH_MISMATCH: {name}")
+        grounded = Path(self.bindings.grounded_root)
+        manifest = grounded / "manifest.json"
+        if not grounded.is_dir() or not manifest.is_file():
+            raise ContractError("BINDING_PATH: grounded_root")
+        if _hash_file(manifest) != self.bindings.grounded_manifest_sha256:
+            raise ContractError("BINDING_HASH_MISMATCH: grounded_manifest")
+        if self.bindings.points_sha256 != self.catalog_sha256:
+            raise ContractError("BINDING_HASH_MISMATCH: catalog")
+        if not Path(self.config_path).is_file():
+            raise ContractError("BINDING_PATH: config")
+
+
+def build_candidate_plan(
+    *,
+    authorization: MeasurementAuthorization,
+    config_path: Path,
+    evidence_root: Path,
+    batch_id: str,
+) -> CandidateRunPlan:
+    """Derive the composition plan from the sealed authorization and verify it now."""
+
+    if not isinstance(authorization, MeasurementAuthorization):
+        raise ContractError("AUTHORIZATION")
+    _require_identifier("batch_id", batch_id)
+    evidence_root = Path(evidence_root).resolve()
+    if not evidence_root.is_dir():
+        raise ContractError("EVIDENCE_ROOT_UNAVAILABLE")
+    if not authorization.batch_root.is_relative_to(evidence_root):
+        raise ContractError("BATCH_ROOT_OUTSIDE_EVIDENCE_ROOT")
+    batch_root = authorization.batch_root / batch_id
+    plan = CandidateRunPlan(
+        authorization_sha256=authorization.raw_sha256,
+        batch_id=batch_id,
+        worker_count=authorization.worker_count,
+        execution_identity_sha256=authorization.execution_identity_sha256,
+        seed=authorization.seed,
+        catalog_sha256=authorization.catalog_sha256,
+        intent=authorization.intent,
+        batch_root=batch_root,
+        evidence_root=evidence_root,
+        config_path=Path(config_path),
+        bindings=authorization.runtime_bindings,
+    )
+    plan.verify_bindings()
+    return plan
+
+
+def run_candidate_batch(
+    *,
+    plan: CandidateRunPlan,
+    runner,
+    sampler=None,
+    control=None,
+    sealer=None,
+) -> dict:
+    """Compose sampler -> authorized workload -> seal; every failure has its own code."""
+
+    if not isinstance(plan, CandidateRunPlan):
+        raise ContractError("CANDIDATE_PLAN")
+    if not callable(runner):
+        raise ContractError("CANDIDATE_RUNNER")
+    if sealer is None:
+        sealer = seal_measurement
+    plan.batch_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if control is not None:
+        # The abort latch is checked before any side effect, including sampling.
+        control.permit_side_effect()
+    plan.verify_bindings()
+    if sampler is not None:
+        sampler(1)
+    if control is not None:
+        control.permit_side_effect()
+    try:
+        outcome = runner(plan)
+    except ContractError:
+        raise
+    except Exception as error:  # noqa: BLE001 - any workload failure is fenced
+        raise ContractError(f"MEASUREMENT_WORKLOAD_FAILED: {type(error).__name__}") from error
+    if not isinstance(outcome, Mapping):
+        raise ContractError("MEASUREMENT_WORKLOAD_RESULT")
+    if control is not None:
+        control.permit_side_effect()
+    if sampler is not None:
+        sampler(2)
+    raw_files = tuple(Path(item) for item in outcome.get("raw_files", ()))
+    coverage_events = Path(outcome["coverage_events"])
+    plan.verify_bindings()
+    try:
+        sealed = sealer(
+            authorization=plan_authorization_view(plan),
+            execution_identity_sha256=plan.execution_identity_sha256,
+            raw_files=raw_files,
+            coverage_events=coverage_events,
+            result=dict(outcome.get("result", {})),
+        )
+    except ContractError:
+        raise
+    except Exception as error:  # noqa: BLE001 - sealing failures keep their own code
+        raise ContractError(f"MEASUREMENT_SEAL_FAILED: {type(error).__name__}") from error
+    return {
+        "status": "SEALED",
+        "sealed_path": str(sealed),
+        "authorization_sha256": plan.authorization_sha256,
+        "batch_id": plan.batch_id,
+        "worker_count": plan.worker_count,
+        "execution_identity_sha256": plan.execution_identity_sha256,
+    }
+
+
+def plan_authorization_view(plan: CandidateRunPlan) -> MeasurementAuthorization:
+    """The sealed authorization fields seal_measurement needs, without re-reading files."""
+
+    return MeasurementAuthorization(
+        schema_version=2,
+        operator_uid=os.getuid(),
+        dispatch_id="sealed",
+        task_id="sealed",
+        source_commit="0" * 40,
+        execution_identity_sha256=plan.execution_identity_sha256,
+        worker_count=plan.worker_count,
+        catalog_sha256=plan.catalog_sha256,
+        seed=plan.seed,
+        lifecycle="FULL_RESTART",
+        maximum_batches=1,
+        batch_deadline_s=_BATCH_DEADLINE_S,
+        expires_at_ns=1,
+        batch_root=plan.evidence_root,
+        owned_scope_sha256="0" * 64,
+        safety_policy_sha256="0" * 64,
+        intent=plan.intent,
+        calibration_sha256=None,
+        runtime_bindings=plan.bindings,
+        raw_sha256=plan.authorization_sha256,
     )
