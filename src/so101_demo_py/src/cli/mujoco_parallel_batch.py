@@ -658,9 +658,18 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
             raise
         except Exception as error:
             raise CliError("PROVENANCE_EXTERNAL_PACKAGE_PREFIX") from error
-    policy_path = package_root / "config/mujoco/headless_execution.yaml"
-    scene_config = package_root / "config/mujoco/task_scene.yaml"
-    scene_model = package_root / "assets/mujoco/scene.xml"
+    if repository_root is None:
+        # A copied install keeps these inputs in its share directory, not in a source tree.
+        # They are functional files the run really reads, so this is a real requirement --
+        # only the place they are looked for changes.
+        from ament_index_python.packages import get_package_share_directory
+
+        installed_root = Path(get_package_share_directory("so101_demo_py")).resolve()
+    else:
+        installed_root = package_root
+    policy_path = installed_root / "config/mujoco/headless_execution.yaml"
+    scene_config = installed_root / "config/mujoco/task_scene.yaml"
+    scene_model = installed_root / "assets/mujoco/scene.xml"
     if any(not value.is_file() or value.is_symlink() for value in (
         console_path, module_path, config_path, points_path,
         policy_path, scene_config, scene_model,
