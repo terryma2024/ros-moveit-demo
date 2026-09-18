@@ -6154,3 +6154,13 @@ comparing against an empty manifest. Until that is done the teleop directory ver
 not-yet-explained, and no Task 9 completion is claimed on top of it.
 
 _Ledger HEAD when written: `b88c57728`._
+
+**CP-UQ138, confirmed in the same round** — `scratch/lg-t6-teleop.QKplwqZ8/collect.raw` has 55
+lines and they are **module counts, not node ids** (`test/backends/test_cli_adapter.py: 14`,
+`test/backends/test_mujoco_profile.py: 11`). `grep '::'` therefore found nothing and
+`manifest.txt` is empty: the teleop collection reports a summary format under the forwarded
+arguments, and the helper's manifest extraction silently degrades to an empty expectation instead
+of failing closed. That is the whole cause of `coverage_exact=false` / `extra: 5` — an artefact of
+manifest extraction, not evidence about the 523 executed tests — and the fix is to derive the
+expected node ids from a genuinely node-id-based collection (or refuse to run when none are
+produced).
