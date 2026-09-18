@@ -989,3 +989,20 @@ def test_overlay_package_prefixes_live_under_the_install_root(tmp_path):
                         "so101_mujoco_support": tmp_path / "so101_mujoco_support"}
     with pytest.raises(MeasurementCliError, match="MEASUREMENT_OVERLAY_INPUT_MISSING"):
         overlay_package_prefixes(tmp_path / "absent")
+
+
+def test_child_ament_path_carries_absolute_prefixes(tmp_path):
+    """The prefixes arrive as a mapping; iterating it as a sequence put bare package
+    names on AMENT_PREFIX_PATH, so the launcher's own AMENT re-query fell through to
+    whatever prefix the parent inherited and refused the overlay."""
+
+    from so101_demo.cli.measure_parallel_resources import child_environment_for_launcher
+
+    console_dir = tmp_path / "lib"; console_dir.mkdir()
+    prefixes = {"so101_demo_py": tmp_path / "install/so101_demo_py",
+                "so101_mujoco_support": tmp_path / "install/so101_mujoco_support"}
+    environment = child_environment_for_launcher(
+        {"AMENT_PREFIX_PATH": "/inherited"}, console_dir, prefixes=prefixes)
+    entries = environment["AMENT_PREFIX_PATH"].split(":")
+    assert entries[:2] == [str(prefixes["so101_demo_py"]), str(prefixes["so101_mujoco_support"])]
+    assert entries[2] == "/inherited"
