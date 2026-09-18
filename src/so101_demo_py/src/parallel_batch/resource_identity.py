@@ -218,6 +218,10 @@ def _validated_inventory(entries: Sequence[InventoryEntry], name: str) -> tuple[
     return values
 
 
+_AMBIENT_RUNTIME_FACTS = (
+    "cgroup", "cpuset", "cpu_quota_core_equivalent", "nr_throttled")
+
+
 @dataclass(frozen=True, slots=True)
 class RuntimeFingerprint:
     schema_version: int
@@ -254,7 +258,19 @@ class RuntimeFingerprint:
 
     @property
     def sha256(self) -> str:
-        return canonical_sha256(self.as_document())
+        """R identifies the artifact, not the process asking about it.
+
+        The ambient placement of the observing process -- its cgroup, cpuset and that
+        cgroup's quota and throttling counters -- differs by design between the
+        authorizing parent, the launcher it owns and the workers under it, so it is
+        carried in the document for observation and excluded from the digest.
+        """
+
+        document = self.as_document()
+        document["facts"] = {
+            name: value for name, value in self.facts.items()
+            if name not in _AMBIENT_RUNTIME_FACTS}
+        return canonical_sha256(document)
 
 
 def build_runtime_fingerprint(
