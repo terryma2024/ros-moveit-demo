@@ -6238,3 +6238,29 @@ so the bounded positive run for correction item 2 should be started once this pa
 than competing with it for the same package, ROS domains and ports.
 
 _Ledger HEAD when written: `3784009e9`._
+
+
+## CP-UQ142 — The corrected positive run is queued behind the in-flight gate
+
+The pre-fix `lg-demo-full` has been running for **12 minutes** at this point, which is the direct
+consequence captured in CP-UQ141: its serial lane re-executes the whole ordinary package
+serially. Per the correction handoff it is left undisturbed, so the corrected positive delegated
+run cannot start yet — competing with it would double-load the same package, ROS domains and
+ports.
+
+Rather than idle, a bounded watcher was started (up to 60 minutes, 20 s checks): when the
+`lg-demo-full` process disappears it launches
+
+```
+SO101_PYTEST_WORKERS=8 so101_pytest lg-corr-demo-positive src/so101_demo_py/test -q
+```
+
+which is the corrected path — collection with the plugin (root passed once), parallel lane at
+`-n 8` with the audited deselect set, serial lane at `-n 0` with only the six audited modules, and
+a coverage verdict computed against the run's own node-id manifest. Its log is
+`/tmp/so101-debug-startup-probe-b82d10b8/queue_positive.out` and the run's own scratch directory
+will hold `collect.argv.txt` / `parallel.argv.txt` / `serial.argv.txt` / `manifest.txt` /
+`coverage.json` for the next round to read. Timeout or any non-zero collection fails closed and is
+recorded.
+
+_Ledger HEAD when written: `4d54c2133`._
