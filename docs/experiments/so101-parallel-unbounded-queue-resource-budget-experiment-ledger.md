@@ -5703,3 +5703,44 @@ manifest). The split inputs those gates need are already produced and verified (
 2965 parallel / 271 serial, exact union).
 
 _Ledger HEAD when written: `37e141318`._
+
+
+## CP-UQ126 — Task 9 lanes: both gates run, and the parallel lane names four real leftovers
+
+The plan's lane commands were executed against the copy build and the verified split:
+
+| Lane | Command | Result |
+| --- | --- | --- |
+| demo parallel | `so101_colcon lg-demo-parallel test --pytest-args test -n 8 <271 deselect>` | exit 0; **2968 tests, 4 failures** per the result XML |
+| demo serial | `so101_colcon lg-demo-serial test --pytest-args <271 node IDs> -n 0` | exit 0; result summary exit 0 (**no failures**) |
+| teleop CTest | `so101_colcon lg-teleop-package test --ctest-args -j 1` | exit 0; result summary exit 0 |
+| result summaries | `test-result --verbose` for the serial and teleop bases | exit 0 |
+
+Evidence directories: parallel `/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main/unbounded-queue-resource-budget/package-parallel-results.1l0FlsZF`, serial `/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main/unbounded-queue-resource-budget/package-serial-results.LhPPTz9m`, teleop
+`<copy-build>/so101_teleop`. The split inputs were the round-7 ones (collection 3236;
+parallel 2965 / serial 271; exact union, empty intersection).
+
+The four parallel-lane failures are not flaky and each is a concrete remaining item:
+
+1. `test_installed_provenance.py::test_mujoco_support_plugin_comes_from_the_candidate_prefix`
+   (name truncated in the XML) — it asserts the historical `candidate-install` prefix. The
+   active overlay/copy is now the reference, so this expectation has to be re-pointed.
+2. `test_copied_installed_entrypoint.py::test_runtime_bytes_of_the_copied_prefix_match_the_frozen_source`
+   — in *overlay* mode (no `SO101_E2E_INSTALL_PREFIX`) it still runs the historical
+   `git diff 6e68d0f51 HEAD` comparison against the superseded `freeze-install` prefix, which
+   can never pass again. The honest fix is to require the explicit prefix (and say so) rather
+   than keep a check that silently tests a stale copy; the explicit-prefix branch added in
+   CP-UQ125 already passes (15/15).
+3. `test_parallel_adaptive_contracts.py::test_adaptive_factory_issues_typed_context_only_for...`
+   — `ModuleNotFoundError: so101_demo.parallel_batch.resource_budget`: another budget-era test
+   that escaped Task 6's sweep. It must be retired or rewritten onto the guard.
+4. `test_parallel_resource_identity.py::test_frozen_execution_rules_cannot_drift_and_freeze...`
+   — `DID NOT RAISE ContractError`: it asserts a v2 execution-rule drift is refused, and the
+   active contract is v3 now, so the expectation belongs to the v2 decoder's own tests.
+
+Nothing was committed for these yet: they are diagnosis plus evidence, and the next round fixes
+them one by one (each is small and each has its test name here), then re-runs the parallel lane
+and completes the rest of Task 9 (the `lg-demo-full` / `lg-teleop-full` wrapper runs, the
+Bun/OpenAPI gates, and the source freeze from the final clean HEAD).
+
+_Ledger HEAD when written: `3a5ed8107`._
