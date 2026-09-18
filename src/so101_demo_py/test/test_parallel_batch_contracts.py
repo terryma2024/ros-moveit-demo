@@ -538,3 +538,127 @@ def test_fixed_batch_nine_is_outside_supported_range(tmp_path):
     from so101_demo.parallel_batch.contracts import BatchRequest, RunMode, ContractError
     with pytest.raises(ContractError, match="MAX_WORKER_COUNT"):
         BatchRequest("nine", RunMode.EXECUTE, ("p1",), 9, 1, tmp_path)
+
+
+V2_CONFIG_PATH = PACKAGE / "config/mujoco/parallel_batch_v2.yaml"
+
+
+def test_v1_can_be_read_but_not_executed(tmp_path):
+    from so101_demo.parallel_batch.contracts import ContractError, require_v2_execution
+    with pytest.raises(ContractError) as error:
+        require_v2_execution(1, 1)
+    assert error.value.code == 'LEGACY_CONTRACT_EXECUTION_FORBIDDEN'
+    with pytest.raises(ContractError):
+        require_v2_execution(3, 2)
+    assert require_v2_execution(2, 2) is None
+
+
+def test_v1_yaml_bytes_and_hash_are_frozen():
+    """v1 stays byte-identical; the new contract must never migrate it in place."""
+
+    assert hashlib.sha256(CONFIG_PATH.read_bytes()).hexdigest() == (
+        "aadcac01da5342bd81cc560d12dd77e526a8b29751832f3bdd1f7e6f528a93a3"
+    )
+
+
+def test_historical_contract_view_is_readonly_and_byte_stable():
+    from so101_demo.parallel_batch.contracts import read_historical_contract
+    first = read_historical_contract(CONFIG_PATH)
+    second = read_historical_contract(CONFIG_PATH)
+    assert first.version == 1
+    assert first.raw_sha256 == hashlib.sha256(CONFIG_PATH.read_bytes()).hexdigest()
+    assert first.raw_sha256 == second.raw_sha256
+    assert dict(first.payload) == dict(second.payload) == yaml.safe_load(CONFIG_PATH.read_text())
+    assert first.readonly is True
+    with pytest.raises(TypeError):
+        first.payload["schema_version"] = 2
+    with pytest.raises((TypeError, AttributeError)):
+        first.raw_sha256 = "b" * 64
+
+
+def test_historical_contract_rejects_unknown_versions(tmp_path):
+    from so101_demo.parallel_batch.contracts import ContractError, read_historical_contract
+    document = tmp_path / "future.yaml"
+    document.write_text("schema_version: 3\n")
+    with pytest.raises(ContractError) as error:
+        read_historical_contract(document)
+    assert error.value.code == "UNKNOWN_SCHEMA_VERSION"
+
+
+def test_v2_config_is_closed_and_carries_no_quota_fields():
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v2
+    config = load_parallel_runtime_config_v2(V2_CONFIG_PATH)
+    assert config.schema_version == 2
+    for removed in ("max_points_per_worker", "max_points_per_worker_upper_bound",
+                    "min_logical_cpu_per_worker", "available_ram_base_gib",
+                    "available_ram_per_worker_gib", "min_available_gpu_gib",
+                    "required_live_headroom_ratio"):
+        assert not hasattr(config, removed), removed
+    assert config.heartbeat_timeout_s == 5.0
+    assert config.batch_hard_timeout_s == 5400.0
+    assert config.ros_domain_ids == (181, 182, 183, 184, 185, 186, 187, 188)
+    assert config.max_worker_count == 8
+    assert config.deployment.approved_profile_path is None
+    assert config.deployment.approved_profile_sha256 is None
+    assert config.deployment.promotion_record_path is None
+
+
+def test_v2_config_rejects_unknown_duplicate_and_nonfinite_fields(tmp_path):
+    from so101_demo.parallel_batch.contracts import (
+        ContractError, load_parallel_runtime_config_v2)
+    document = yaml.safe_load(V2_CONFIG_PATH.read_text())
+    unknown = tmp_path / "unknown.yaml"
+    document["execution"]["max_points_per_worker"] = 20
+    unknown.write_text(yaml.safe_dump(document, sort_keys=False))
+    with pytest.raises(ContractError) as error:
+        load_parallel_runtime_config_v2(unknown)
+    assert error.value.code.startswith("UNKNOWN_EXECUTION_FIELD")
+    duplicate = tmp_path / "duplicate.yaml"
+    duplicate.write_text(V2_CONFIG_PATH.read_text() + "\nschema_version: 2\n")
+    with pytest.raises(ContractError) as error:
+        load_parallel_runtime_config_v2(duplicate)
+    assert error.value.code == "DUPLICATE_KEY"
+    nonfinite = tmp_path / "nonfinite.yaml"
+    document = yaml.safe_load(V2_CONFIG_PATH.read_text())
+    document["execution"]["heartbeat_timeout_s"] = float("nan")
+    nonfinite.write_text(yaml.safe_dump(document, sort_keys=False))
+    with pytest.raises(ContractError) as error:
+        load_parallel_runtime_config_v2(nonfinite)
+    assert error.value.code.startswith("NONFINITE")
+
+
+def test_v2_fixed_execution_config_is_mode_and_count_only():
+    from so101_demo.parallel_batch.contracts import ContractError, FixedExecutionConfigV2
+    assert FixedExecutionConfigV2(2, "SEQUENTIAL", 1).worker_count == 1
+    assert FixedExecutionConfigV2(2, "PARALLEL", 8).execution_mode == "PARALLEL"
+    with pytest.raises(ContractError):
+        FixedExecutionConfigV2(1, "PARALLEL", 2)
+    with pytest.raises(ContractError):
+        FixedExecutionConfigV2(2, "ADAPTIVE", 2)
+    with pytest.raises(ContractError):
+        FixedExecutionConfigV2(2, "SEQUENTIAL", 2)
+    with pytest.raises(ContractError):
+        FixedExecutionConfigV2(2, "PARALLEL", 1)
+    with pytest.raises(ContractError):
+        FixedExecutionConfigV2(2, "PARALLEL", 9)
+
+
+def test_v2_request_has_no_lifetime_quota_and_keeps_retry_single_point(tmp_path):
+    from so101_demo.parallel_batch.contracts import (
+        BatchKindV2, BatchRequestV2, ContractError, RunMode)
+    request = BatchRequestV2("batch-a", RunMode.EXECUTE, tuple(f"p{i}" for i in range(20)),
+                             2, tmp_path, BatchKindV2.FIRST_PASS)
+    assert request.schema_version == 2
+    assert not hasattr(request, "max_points_per_worker")
+    retry = BatchRequestV2("batch-retry", RunMode.EXECUTE, ("p1",), 1, tmp_path,
+                           BatchKindV2.FULL_RESTART_RETRY)
+    assert retry.selected_point_ids == ("p1",)
+    with pytest.raises(ContractError):
+        BatchRequestV2("batch-retry", RunMode.EXECUTE, ("p1", "p2"), 1, tmp_path,
+                       BatchKindV2.FULL_RESTART_RETRY)
+    with pytest.raises(ContractError):
+        BatchRequestV2("batch-retry", RunMode.EXECUTE, ("p1",), 2, tmp_path,
+                       BatchKindV2.FULL_RESTART_RETRY)
+    with pytest.raises(ContractError):
+        BatchRequestV2("batch-nine", RunMode.EXECUTE, ("p1",), 9, tmp_path,
+                       BatchKindV2.FIRST_PASS)
