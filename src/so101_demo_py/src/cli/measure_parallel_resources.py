@@ -345,11 +345,14 @@ def production_runner_factory(plan, *, child_runner=None, image_inspector=None):
             *plan.runner_argv(broker_image=tag, provenance_binding=overlay))
 
     def runner(candidate_plan, session):
+        # Spawn from the batch parent: the launcher's own root must stay absent for its
+        # allocator, while Popen needs a cwd that exists.
+        workdir = Path(candidate_plan.batch_root).parent
         if child_runner is not None:
-            child = child_runner(session=session, argv=argv, cwd=candidate_plan.batch_root,
+            child = child_runner(session=session, argv=argv, cwd=workdir,
                                  environment=environment)
         else:
-            child = session.spawn(argv=argv, cwd=candidate_plan.batch_root,
+            child = session.spawn(argv=argv, cwd=workdir,
                                   environment=environment)
         code = session.supervise(child)
         if int(code) != 0:
