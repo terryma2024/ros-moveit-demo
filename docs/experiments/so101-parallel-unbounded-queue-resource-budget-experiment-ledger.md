@@ -7741,3 +7741,25 @@ full cleanup; the idle slots are the plan's "fewer points than N still starts N 
 observed rather than asserted. The batch continues with N=7 and N=8 in the same job.
 
 _Ledger HEAD when written: `8436ae914`._
+
+## CP-UQ191 — Six fixed-N options executed; N=7 keeps three idle slots
+
+`fixed-n7-p4` passed for real: `COMPLETED`, `requested 4`, `evaluated 4`, **seven** worker slots with
+`worker-02`, `-04` and `-05` holding **zero** leases while still existing as slots, 4/4 points
+`PASSED` with 13 artifacts each, cleanup true, 2.3 m by its own spec line.
+
+| Case | Slots (leases) | Timing |
+| --- | --- | --- |
+| `fixed-n2-p4` | 2 (1, 1) | 3.0 m |
+| `fixed-n3-p4` | 3 (1, 2, 1) | 3.0 m |
+| `fixed-n4-p4` | 4 (1, 1, 1, 1) | 1.8 m |
+| `fixed-n5-p4` | 5 (1, 1, 0, 1, 1) | 2.0 m |
+| `fixed-n6-p4` | 6 (1, 0, 1, 1, 0, 1) | 2.1 m |
+| `fixed-n7-p4` | 7 (1, 0, 1, 0, 0, 1, 1) | 2.3 m |
+
+Six of the seven configured fixed-N options have now executed for real through the deployed console,
+each with its own `execution-fixed-n*-p4.json`, all N slots in the projection, `requested ==
+evaluated == 4`, per-point artifacts and full cleanup. The idle slots are the plan's rule observed,
+not inferred. `fixed-n8-p4` is the last of this batch and is already in the same job.
+
+_Ledger HEAD when written: `d1e2a2e33`._
