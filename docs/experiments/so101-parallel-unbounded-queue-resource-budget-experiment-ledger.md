@@ -6954,3 +6954,61 @@ it should be started early and allowed to finish rather than rushed, and the pre
 stay in place (tagged) until the new one is verified.
 
 _Ledger HEAD when written: `edcb7978c`._
+
+## CP-UQ172 — The image is rebuilt from this tree, and the v3 parse is proven inside it
+
+The rebuild CP-UQ170 asked for is done, and its provenance is checked by the image's own verifier
+rather than by my arithmetic. The canonical entry (`scripts/parallel-perception-container.sh`) is a
+thin wrapper around `… parallel_perception_broker container --repository-root ROOT`, and the module's
+`container` operation computes the three hashes, builds, then **reads the image back**: it creates a
+throwaway container, copies `/opt/parallel-provenance.json` out, and compares it byte-for-byte with
+the build arguments, so a mismatch would have failed rather than been reported by me. It exited `0`
+with the record kept at `image-build-final.json`:
+
+| Field | Value |
+| --- | --- |
+| `image_id` | `sha256:0b893cb1528e9b6f3cfc0c5e4f9f555bb471b9e88d03ed3803c97d6188d75c15` |
+| `dockerfile_sha256` | `54f385874d8ace0bce7b31832f0345ce3f8f32cfb91e6506775572bc40582ec5` |
+| `lock_sha256` | `90f7f5983d806e4f78f50eb45c411b0a1a0e62201aca6b1f3afade962604fa5f` |
+| `source_sha256` | `f164540f5aa94fdefc84565274bbf04858086eed796640ee96ac1221ac5e2130` |
+| `verified_source_sha256` | `f164540f5aa94fdefc84565274bbf04858086eed796640ee96ac1221ac5e2130` (equal, i.e. the in-image file matched) |
+
+Built from worktree HEAD `3734e9f2f` with a clean tree, so the hashed source is a committed source.
+
+**The decisive check is inside the image, not in the build log.** The failure was
+`load_runtime_config_any_schema` refusing `schema_version: 3`, so I mounted the active v3 config
+read-only into the new image and parsed it with the image's own code:
+
+```
+V3_PARSE_OK ParallelRuntimeConfigV3 3
+```
+
+That is the exact line that raised `ContractError: SCHEMA_VERSION: 3` in the superseded image, now
+passing against the real deployed config file
+(`copy-install-final.5EPRaqiL/…/share/so101_demo_py/config/mujoco/parallel_batch_v3.yaml`).
+
+**A correction to CP-UQ171, which I wrote last round.** It warned that changing the source would
+invalidate the pip layer and make the rebuild slow. That was wrong: the Dockerfile installs
+torch/torchvision/ultralytics *before* `COPY src/so101_demo_py`, so a source change only invalidates
+the layers from that `COPY` onward. Buildkit reused the heavy layer and the whole build finished in
+about a minute (`#12 DONE 7.2s` for the package install). I am recording the correction because the
+next reader would otherwise plan around a cost that does not exist.
+
+Two further facts, one of them a small loss:
+
+- **No service restart is needed for the image itself.** The service only ever holds the *tag*
+  (`production.py:245`, `SO101_VALIDATION_BROKER_IMAGE`), and the tag is resolved to an immutable
+  image id inside the coordinator the service spawns (`mujoco_parallel_batch.py:723`,
+  `image_record`). The tag string is unchanged, so newly spawned batches pick up the new image.
+- **The superseded image is gone from the local daemon.** I tried to keep it as a rollback tag, but
+  `c8b5c5ae…` no longer exists (no dangling image either); the only retained rollback image is
+  `so101-parallel-perception:pre-74d6b781` (`4fb57abe…`). The source that produced it is in Git, so
+  this is not a lost artifact, but it is not a rollback I can run either.
+
+Next: the acceptance needs a service whose campaign list starts empty — the `01-sequential` spec
+asserts exactly one campaign, and the current service root (`service-light.eXmsNQ70`) already holds
+one terminal campaign — so the next round redeploys the same byte-verified copy with a fresh state
+root, then runs the cheapest real campaign (preflight + `r01-sequential`) to see the coordinator get
+past `_wait_broker_ready` and reach the workers.
+
+_Ledger HEAD when written: `3734e9f2f`._
