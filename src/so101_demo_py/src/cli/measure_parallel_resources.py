@@ -76,6 +76,21 @@ def require_measurement_capabilities(
     }
 
 
+def child_environment_for_launcher(environment, console_dir) -> dict[str, str]:
+    """The child environment: no inherited authority, and the install's own console.
+
+    A copied install ships its console beside the module it runs
+    (``<prefix>/so101_demo_py/lib/so101_demo_py/so101_parallel_batch``) and no ``bin`` entry,
+    so the launcher's provenance check cannot find it on the inherited PATH.
+    """
+
+    values = measurement_child_environment(dict(environment))
+    inherited = values.get("PATH", "")
+    values["PATH"] = os.pathsep.join(
+        part for part in (str(console_dir), inherited) if part)
+    return values
+
+
 def verify_broker_image(*, tag: str, digest: str, inspector=None) -> str:
     """Return the tag once it is proven to still carry the sealed image digest.
 
@@ -111,7 +126,7 @@ def production_runner_factory(plan, *, child_runner=None, image_inspector=None):
     launcher = install_prefix / "so101_demo_py/lib/so101_demo_py/so101_parallel_batch"
     if not launcher.is_file():
         raise MeasurementCliError("MEASUREMENT_RUNTIME_UNAVAILABLE: launcher")
-    environment = measurement_child_environment(dict(os.environ))
+    environment = child_environment_for_launcher(dict(os.environ), launcher.parent)
     from so101_demo.cli.mujoco_parallel_batch import _BROKER_IMAGE
 
     tag = verify_broker_image(tag=_BROKER_IMAGE, digest=plan.bindings.broker_image_id,
