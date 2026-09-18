@@ -4,10 +4,11 @@
 task_id: so101-unified-webapp-design-20260918
 goal: Design and plan one Teleop and expert-validation Web service with shadcn preset b311momZs0
 success_contract: User-approved written design and independently reviewed implementation plan before execution
-worktree: /Users/matianyi/.codex/worktrees/587b/moveit-demo
-branch: codex/teleop-adaptive-worker-pool-docs
-base_commit: 303c2cb9e2b1faea55a6d82dac2197da7512be96
-current_commit: 6afd834f02ea537dcad8d65e282a8491f6c6e830
+worktree: /private/tmp/so101-doc-publication.R3yXD0aj/repo
+branch: codex/so101-unified-webapp-doc-publication-20260918
+base_commit: 84620fc0529779a27c6985f8717d78f0386e0135
+current_commit: 415dc325708a025db006b15dff8a3d0dae5bb3d6
+planning_worktree: /Users/matianyi/.codex/worktrees/587b/moveit-demo
 source_inspection_worktree: /private/tmp/so101-doc-publication.R3yXD0aj/repo
 source_inspection_commit: 84620fc0529779a27c6985f8717d78f0386e0135
 evidence_root: /tmp/so101-debug-unified-webapp-design-20260918
@@ -24,7 +25,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Consolidate two application lifecycles into one Web process while preserving runtime ownership boundaries
-latest_checkpoint: CP-20
+latest_checkpoint: CP-21
 next_experiment: NONE
 ```
 
@@ -217,3 +218,11 @@ Fresh fetch of origin and github succeeded. Both main refs are 84620fc0529779a27
 Publish only eight unified task files: approved design, two design reports, implementation plan, three plan reports and this ledger. First scoped-commit the plan/reports/ledger on the original documentation branch, then transplant only local design commit 6afd834f and that new scoped commit onto fresh remote main in the existing clean publication worktree /private/tmp/so101-doc-publication.R3yXD0aj/repo. Keep prior publication branch intact; use a new codex/so101-unified-webapp-doc-publication-20260918 branch. Do not merge the old source tree or unrelated unpublished branches. Use explicit Git metadata for both linked worktrees; no reset/clean/force/gh.
 
 Recheck fresh refs before ordinary fast-forward pushes to origin/main and github/main; if they move, preserve intervening commits and revalidate. Exact published commit, SHA/ancestry readbacks and clean publication status are recorded after push in main-publication-readback.md under the one registered evidence root. Only documentation static gates apply; no product tests, build, ROS/GUI/remote-runtime operation or agent dispatch. Retained: all prior evidence and publication receipts; archived: none; deletion candidates unchanged, nothing deleted. Next runtime experiment: NONE.
+
+## CP-21: Scoped integration verified in publication worktree
+
+Original scoped plan commit: fe37dbdb on the preserved documentation branch. On the fresh 84620 remote-main baseline, design commit 6afd834f was transplanted as 160f58c4 and scoped plan commit as 415dc325708a025db006b15dff8a3d0dae5bb3d6. All intervening published source commits remain ancestors; the eight-file diff is documentation only. Publication worktree was clean after both cherry-picks. Approved spec, plan and final-report hashes match CP-19 exactly; Markdown links/fences and Git whitespace checks passed. No product tests or implementation claim.
+
+The header current_commit records the verified integration parent before this ledger-only audit commit; the final audit/published SHA is recorded in main-publication-readback.md after commit and remote verification. The original planning worktree, local main's unrelated unpublished commits, other branches and all runtime processes remain preserved. No clean/reset, worktree/branch deletion, force push or agent dispatch.
+
+Next Git step: fresh fetch of both remotes, preserve drift if any, then ordinary push of this reviewed documentation integration to their main refs and independent SHA/ancestry readback. Registered evidence root remains /tmp/so101-debug-unified-webapp-design-20260918. Retained: persistent docs and publication readbacks; archived: none; deletion candidates unchanged and not deleted. Next runtime experiment: NONE; implementation requires separate user authorization.
