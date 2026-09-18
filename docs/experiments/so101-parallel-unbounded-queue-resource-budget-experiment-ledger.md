@@ -3524,3 +3524,20 @@ pass -- the sample rows carry `diagnostics` and the expensive sub-read is the PS
 freshly started torch process -- and move the costly channel off the primary grid (or bound it)
 rather than widening the gap allowance, which is policy. N1 remains `NOT_MEASURED`; nothing is
 extrapolated to another N.
+
+## CP-UQ59 — Stage C: the opening pass is what breaches, and by how much
+
+Run: `stage-c/batches/n1-calibration-20260918-run18/`. Measured from the recorded clocks rather
+than inferred: `SAMPLING_START` to the first sample is **21.3 ms**, and the steady-state
+gaps are 51.2, 49.4, 53.0, 68.4 and 79.2 ms (max 79.2 ms) -- all inside the 100 ms allowance.
+So the latch is the opening pass only: the grace window introduced for exactly this case is
+`maximum_sample_gap_s = 100 ms`, and the first sampling pass cost 21.3 ms, nearly twice it.
+Six samples were then written before the sampler noticed the latch, which is why the abort appears
+at 0.50 s with samples already on disk.
+
+That converts the remaining work from a policy question into a profiling question: price the
+sub-reads of one pass (cgroup files, /proc/meminfo, PSI, NVML usage, owned-process inventory, PSS
+walk) and move whatever dominates off the primary grid -- the NVML and PSS walks are the standing
+suspects, and the opening pass pays any one-time library or cache cost that later passes do not.
+Widening the gap allowance stays off the table; it is policy. N1 remains `NOT_MEASURED` and nothing
+is extrapolated to another N.
