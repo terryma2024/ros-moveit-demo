@@ -3470,3 +3470,29 @@ under one root and the tree equals the source exactly, then bind the measurement
 (its own provenance binding), generate the overlay from it, seal, and measure. That is a build
 step, not a probe, and it runs next. N1 remains `NOT_MEASURED`; nothing is extrapolated to another
 N.
+
+## CP-UQ57 — Stage C: the candidate install exists; the prefix check needs the raising line
+
+Runs: `colcon/candidate-build.*/`, `stage-c/batches/n1-calibration-20260918-run17/`,
+`scratch/stageC-auth.S2WPqrz0/measure23.log`. Commit `698ed8304` (35 passed).
+
+The rebuild decided in CP-UQ56 is done and it is real evidence, not a plan:
+`colcon build --packages-select so101_demo_py --build-base candidate-build --install-base
+candidate-install` ran to completion (`colcon_rc=0`) through the task's own `so101_colcon`
+wrapper, and the new prefix carries everything under one root --
+`candidate-install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch` (console),
+`lib/python3.12/site-packages/so101_demo/` (package copy of the current source) and
+`lib/python3.12/site-packages/so101_demo_py-0.1.0-py3.12.egg-info` (metadata), plus `share/`.
+`bindings/candidate-install-binding.json` records it (868 files with hashes, source root and
+commit, kind `CANDIDATE_COPIED_BINDING`), the runner spawns the child against that prefix and puts
+its site-packages ahead of the inherited PYTHONPATH so the child imports the copy the overlay
+declares, and r19 (`5a8c0bb0cc6aa192...`) was sealed against the candidate binding with the
+candidate's own config and point catalog.
+
+The run still refuses with `PROVENANCE_EXTERNAL_PACKAGE_PREFIX` (61 samples, clean containment).
+Every declared artifact is now under the single build root, and the declared `package_prefixes`
+are byte-equal to what `get_package_prefix` answers for both packages, so the error must come from
+one of the other checks that share that code. The next diagnostic is one line rather than a guess:
+run the launcher's provenance path in-process with `CliError.__init__` wrapped to print the raising
+stack frame (or call the validator directly with the same inputs), so the failing branch is named
+instead of inferred. N1 remains `NOT_MEASURED`; nothing is extrapolated to another N.
