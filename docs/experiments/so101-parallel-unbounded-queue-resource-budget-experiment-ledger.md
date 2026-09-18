@@ -598,3 +598,75 @@ open_risks:
   - Candidate CLI cannot yet start the owned workload; Stage C cannot begin until that hook is built and
     an authorized measurement window exists.
 next_command: implement Task 7 RED (one worker consumes twenty without a lifetime quota)
+
+## EXP-UQ07 — Task 7 no-quota shared queue and finite recovery convergence
+
+```yaml
+experiment_id: EXP-UQ07
+status: VALID
+prior_experiment: EXP-UQ06
+hypothesis: Removing the lifetime debit lets one worker consume the whole shared queue while all
+  existing lease/ACK/generation/epoch/cleanup boundaries stay intact, and a stuck batch now stops as
+  NO_RECOVERABLE_WORKERS instead of a quota exhaustion.
+prediction: RED shows the quota blocking the 20th point or the fixture unable to use the v2 contract;
+  GREEN passes the coordinator and fault-injection suites with the new terminal reason.
+single_variable: coordinator quota removal plus v2 request fixture migration
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Task 6 committed; fake clock/results; no ROS or service start.
+success_criteria:
+  - One worker with 19 legitimate same-slot recoveries consumes 20 points, lease_count 20,
+    generations 1..20, final state RECOVERING, terminal POINTS_COMPLETE.
+  - Duplicate request keys, concurrency, ACK/phase timeouts, fences and cleanup semantics unchanged.
+failure_criteria:
+  - Removing quota by weakening a lease/recovery/cleanup guard or by re-labelling a fixture failure.
+invalid_criteria:
+  - Counting the FROZEN_CONFIG_REQUIRED constructor guard as a product RED (it was migrated, not hidden).
+provenance:
+  source_commit: da37bd96b (Task 6 checkpoint; this task's parent commit)
+  install_overlay: $TASK_ROOT/dev-build + dev-install (symlink-install dev overlay)
+  runtime_executable: the exact shared TEST_PYTHON above
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: so101_pytest queue-red src/so101_demo_py/test/test_parallel_batch_coordinator.py::test_one_worker_consumes_twenty_without_lifetime_quota -q
+    exit_code: 1
+  - command: so101_pytest queue-green src/so101_demo_py/test/test_parallel_batch_coordinator.py src/so101_demo_py/test/test_parallel_batch_fault_injection.py -q
+    exit_code: 0
+observed:
+  - RED: 1 failed with the coordinator's FROZEN_CONFIG_REQUIRED guard rejecting the v2 config; the guard
+    was extended to accept ParallelRuntimeConfigV2 (a real gate change, not a test workaround).
+  - GREEN scratch/queue-green.*: 146 passed, 0 failed, including the plan's 20-point no-quota regression.
+  - Coordinator changes: grant_lease no longer compares lease_count with any quota; _evaluate treats a
+    still-registerable or AVAILABLE/RECOVERING/INITIALIZING slot as recoverable and otherwise terminates
+    as NO_RECOVERABLE_WORKERS. Historical CAPACITY_EXHAUSTED remains readable in old journals.
+  - Two retained tests asserted the old quota-exhaustion reason for the "all slots terminated, points
+    pending" scenario; they now assert NO_RECOVERABLE_WORKERS (same scenario, design-renamed reason).
+  - The obsolete v1 hard-K selector test was replaced by an equivalent no-quota assertion that a released
+    worker wins the next point and lease_count reaches 2; the fixture's adaptive branch keeps its
+    retained K parameter until Task 8 migrates the adaptive contract.
+inferred:
+  - The coordinator accepts both the frozen v1 config and the v2 config; new production runs must still
+    pass require_v2_execution at the composition boundary (Task 10).
+conclusion: VALID at unit level.
+evidence:
+  - scratch/queue-red.*, scratch/queue-green.*
+decision: KEEP
+next_experiment: EXP-UQ08
+```
+
+```yaml
+checkpoint_id: CP-UQ07
+last_valid_experiment: EXP-UQ07
+current_hypothesis: Remaining Stage A tasks (8-11, 13-15 offline) can proceed the same way.
+working_tree_status: Task 7 files committed
+owned_processes: NONE
+preserved_processes: NONE from this task family
+confirmed_conclusions:
+  - New execution paths no longer contain a lifetime point quota; v1 stays readable (EXP-UQ07).
+disproven_routes:
+  - Preserving CAPACITY_EXHAUSTED as a v2 terminal reason.
+open_risks:
+  - Consumers (CLI/Web/allocator) still reference max_points_per_worker and the N>3 hardcode until
+    Tasks 9-11; those paths remain un-migrated and must not be used for new production runs.
+next_command: implement Task 8 RED (test_pool_contract_has_no_lifetime_quota)
