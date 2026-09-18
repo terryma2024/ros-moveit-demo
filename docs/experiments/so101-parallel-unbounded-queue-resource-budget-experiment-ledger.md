@@ -6832,3 +6832,20 @@ the spawn request from the supervisor's store, then reproduce that exact invocat
 same technique that just proved the direct path is sound.
 
 _Ledger HEAD when written: `a7622b9e9`._
+
+## CP-UQ167 — Stop guessing: the wrapper now logs what actually failed
+
+CP-UQ166 narrowed the provenance failure to the service-spawned coordinator, but every diagnosis
+since then has had to reason from a single generic code, because the wrap site replaced the real
+exception with `CliError("PROVENANCE_VERIFICATION_FAILED")` and nothing recorded the original. That
+is a diagnosability defect in its own right, and it is now fixed: the caller prints
+`PROVENANCE_VERIFICATION_DETAIL: <Type>: <message>` plus a traceback to stderr **before** raising
+the stable code, so the coordinator log (which is where stderr goes) will name the real cause on the
+next run instead of inviting another hypothesis.
+
+The stable error codes are untouched — tests that assert them still pass (`lg-t11-prov6`: 132
+passed), and the change is additive output on a failure path only. A fresh copy build is running so
+the deployed service carries it; next round deploys and reads the coordinator log for the detail
+line, which is the fastest route to the actual defect after four rounds of one-line clues.
+
+_Ledger HEAD when written: `6ff20a757`._
