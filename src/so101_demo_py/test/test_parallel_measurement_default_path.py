@@ -851,3 +851,28 @@ def test_broker_image_verification_fails_closed_without_an_inspector():
 
     with pytest.raises(MeasurementCliError, match="MEASUREMENT_BROKER_IMAGE_UNAVAILABLE"):
         verify_broker_image(tag="img:v1", digest="sha256:" + "a" * 64, inspector=broken)
+
+
+def test_child_environment_exposes_the_installs_own_console(tmp_path):
+    """A copied install ships its console beside the module it runs, with no bin entry,
+    so the launcher's provenance check cannot find it on the inherited PATH."""
+
+    import shutil
+    from so101_demo.cli.measure_parallel_resources import child_environment_for_launcher
+
+    console_dir = tmp_path / "lib"; console_dir.mkdir()
+    console = console_dir / "so101_parallel_batch"
+    console.write_text("#!/bin/sh\n"); console.chmod(0o755)
+    environment = child_environment_for_launcher(
+        {"PATH": "/usr/bin", "SO101_VALIDATION_BUDGET_PROFILE": "inherited"}, console_dir)
+    assert environment["PATH"].split(":")[0] == str(console_dir)
+    assert shutil.which("so101_parallel_batch", path=environment["PATH"]) == str(console)
+    assert "SO101_VALIDATION_BUDGET_PROFILE" not in environment
+
+
+def test_child_environment_works_without_an_inherited_path(tmp_path):
+    from so101_demo.cli.measure_parallel_resources import child_environment_for_launcher
+
+    console_dir = tmp_path / "lib"; console_dir.mkdir()
+    environment = child_environment_for_launcher({}, console_dir)
+    assert environment["PATH"] == str(console_dir)
