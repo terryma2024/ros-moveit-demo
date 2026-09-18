@@ -2773,7 +2773,6 @@ def test_explicit_external_overlay_binding_accepts_exact_candidate(tmp_path):
         fixture["config"],
         fixture["points"],
         module_import_path=fixture["module_import"],
-        source_commit="a" * 40,
         external_binding=fixture["binding"],
     )
 
@@ -2786,7 +2785,6 @@ def test_explicit_external_overlay_binding_accepts_exact_candidate(tmp_path):
 @pytest.mark.parametrize(
     ("mutation", "error"),
     [
-        ("commit", "SOURCE_COMMIT"),
         ("package_prefix", "PACKAGE_PREFIX"),
         ("console", "ARTIFACT_IDENTITY"),
         ("config", "ARTIFACT_IDENTITY"),
@@ -2800,9 +2798,7 @@ def test_external_overlay_binding_rejects_identity_mismatch(tmp_path, mutation, 
 
     fixture = _external_overlay_fixture(tmp_path)
     document = json.loads(fixture["binding"].read_text(encoding="utf-8"))
-    if mutation == "commit":
-        document["source_commit"] = "b" * 40
-    elif mutation == "package_prefix":
+    if mutation == "package_prefix":
         document["package_prefixes"]["so101_demo_py"] = str(
             (tmp_path / "foreign-prefix").resolve()
         )
@@ -2820,9 +2816,30 @@ def test_external_overlay_binding_rejects_identity_mismatch(tmp_path, mutation, 
             fixture["config"],
             fixture["points"],
             module_import_path=fixture["module_import"],
-            source_commit="a" * 40,
             external_binding=fixture["binding"],
         )
+
+
+def test_external_overlay_binding_accepts_any_debug_commit_value(tmp_path):
+    """The binding's commit is compatibility metadata; byte artifacts still bind it."""
+
+    from so101_demo.cli.mujoco_parallel_batch import _validate_provenance_overlay
+
+    fixture = _external_overlay_fixture(tmp_path)
+    document = json.loads(fixture["binding"].read_text(encoding="utf-8"))
+    for value in ("b" * 40, "UNRECORDED_SOURCE", None):
+        document["source_commit"] = value
+        fixture["binding"].write_text(json.dumps(document), encoding="utf-8")
+        identity = _validate_provenance_overlay(
+            fixture["repository"],
+            fixture["module_import"],
+            fixture["console"],
+            fixture["config"],
+            fixture["points"],
+            module_import_path=fixture["module_import"],
+            external_binding=fixture["binding"],
+        )
+        assert identity["external_overlay_bound"] is True
 
 
 def test_external_overlay_remains_rejected_when_not_explicitly_bound(tmp_path):
@@ -2840,7 +2857,6 @@ def test_external_overlay_remains_rejected_when_not_explicitly_bound(tmp_path):
             fixture["config"],
             fixture["points"],
             module_import_path=fixture["module_import"],
-            source_commit="a" * 40,
         )
 
 
