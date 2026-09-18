@@ -304,3 +304,75 @@ disproven_routes:
 open_risks:
   - Later consumers must call require_v2_execution before any spawn; not yet wired (Tasks 7-10).
 next_command: implement Task 3 RED (test_first_promotion_changes_audit_not_semantic_identity)
+
+## EXP-UQ03 — Task 3 acyclic semantic identity and full-byte audits
+
+```yaml
+experiment_id: EXP-UQ03
+status: VALID
+prior_experiment: EXP-UQ02
+hypothesis: L/S/E/I/R plus full-byte audits can separate execution semantics from deployment bytes so
+  the first null-to-approved promotion needs no remeasurement and no self-referential digest.
+prediction: RED fails with the identity module absent; GREEN proves the promotion-invariance property,
+  free-rule tracking, frozen-rule rejection and carrier-only byte drift.
+single_variable: resource_identity module plus public v2 field aliases
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Task 2 committed; v2 config parsed by the closed parser.
+success_criteria:
+  - Candidate vs first-promoted config share S but differ in raw bytes.
+  - Frozen execution/safety/coverage rule changes are rejected; free sampling/clock rule changes alter S.
+  - Non-carrier byte drift changes I and is rejected by verify_deployment_equivalence; carrier ref change
+    plus registered prefix move is accepted; runtime fact drift is rejected.
+failure_criteria:
+  - Any self-referential digest, deployment-key tolerance, or byte-equivalence bypass.
+invalid_criteria:
+  - Pre-existing environment failures being counted as task failures without attribution.
+provenance:
+  source_commit: 573120b28 (Task 2 checkpoint; this task's parent commit)
+  install_overlay: $TASK_ROOT/dev-build + dev-install (symlink-install dev overlay)
+  runtime_executable: the exact shared TEST_PYTHON above
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: so101_pytest identity-red src/so101_demo_py/test/test_parallel_resource_identity.py -q
+    exit_code: 1
+  - command: so101_pytest identity-green src/so101_demo_py/test/test_parallel_resource_identity.py src/so101_demo_py/test/test_parallel_batch_resources.py -q
+    exit_code: 1
+observed:
+  - RED scratch/identity-red.*: 8 failed, all ModuleNotFoundError for
+    so101_demo.parallel_batch.resource_identity (intended missing module).
+  - GREEN scratch/identity-green.*: 116 passed, 36 failed. All 8 identity tests pass. 35 of the failures
+    are in test_parallel_batch_resources.py and are byte-identical to the pre-task baseline failure set
+    (baseline-demo-rest.APiSNyVF), dominated by ResourceAllocationError UNIX_SOCKET_PATH_TOO_LONG from the
+    deep mandated scratch; 0 newly failing and 0 no-longer-failing test IDs. The 36th was a defect in my
+    own new test (wrong mutation target), fixed and re-run.
+  - After the fix: identity tests 8/8 pass; the same 35 pre-existing resources failures remain, none new.
+  - L binds algorithm DEPLOYMENT_REFERENCE_SUBSTITUTION_V2, the exact execution/sampling/clock/safety/
+    coverage field lists, the two declared carriers and the raw-byte rule for every non-carrier.
+inferred:
+  - The 20% safety constants and frozen execution values make unsafe rule drift impossible before any
+    measurement exists, matching design 434-488.
+conclusion: VALID. Identity layer implemented; deployment audits/exclusions are Stage B work.
+evidence:
+  - scratch/identity-red.*, scratch/identity-green.*
+decision: KEEP
+next_experiment: EXP-UQ04
+```
+
+```yaml
+checkpoint_id: CP-UQ03
+last_valid_experiment: EXP-UQ03
+current_hypothesis: Closed typed allocation contexts can be issued only by private authorities and shared
+  by all three production consumers.
+working_tree_status: Task 3 files committed
+owned_processes: NONE
+preserved_processes: NONE from this task family
+confirmed_conclusions:
+  - S ignores deployment reference values; R contains no B/Q/P/M/D reference (EXP-UQ03).
+disproven_routes:
+  - Using canonical whole-document hashing for qualification identity.
+open_risks:
+  - PENDING INDEPENDENT REVIEW (Astra/High, not available in this session): L algorithm and the
+    inventory exclusion/inclusion table (plan Task 3) must be reviewed before Stage B freeze.
+next_command: implement Task 4 RED (synthetic 20% arithmetic table and typed contexts)
