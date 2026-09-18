@@ -1803,3 +1803,65 @@ evidence:
   - scratch/f2-red.*, scratch/f2-green*.*, scratch/f2-regression.*, colcon/repair-offline-build*.*
 decision: KEEP
 next_experiment: EXP-UQ21 (F3 producer/reader round-trip)
+
+## EXP-UQ21 — F3 unified promotion/deployment round-trip
+
+```yaml
+experiment_id: EXP-UQ21
+status: VALID
+prior_experiment: EXP-UQ20
+hypothesis: One closed schema2 validation shared by the promotion producer, the verifier and the context
+  issuer makes the actual producer outputs consumable, without weakening reviews/operator/profile/N/location
+  checks.
+prediction: RED shows the actual publish_promotion output refused by the issuer (PROMOTION_SCHEMA_VERSION);
+  after unification the actual round-trip reaches the issuer and every altered artifact is refused.
+single_variable: promotion/deployment schema unification + shared validation
+lifecycle: ISOLATED_STACK
+preconditions:
+  - F2 committed; synthetic private task-owned authority fixtures only; no real approval/promotion written.
+success_criteria:
+  - publish_promotion writes schema2 with structured sol/astra review references plus the shared hash
+    fields; build_deployment_receipt writes schema2 with kind; verify_promotion and
+    issue_production_context share one closed validation.
+  - Actual producer -> actual issuer round-trip succeeds; altered review result, review list, profile
+    hash, exact N and deployment receipt are refused with their specific codes.
+failure_criteria:
+  - Any weakening of review/operator/hash/exact-N/location validation to make fixtures pass.
+invalid_criteria:
+  - Retained fixtures still written in the superseded shape counted as regressions (migrated).
+provenance:
+  source_commit: c3396fb2c plus the F3 commits
+  install_overlay: dev overlay + task venv (copied install rebuilt separately for the e2e gate)
+  runtime_executable: $TASK_ROOT/venv/bin/python
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: so101_pytest f3-red src/so101_demo_py/test/test_parallel_budget_promotion.py -q
+    exit_code: 1
+  - command: so101_pytest f3-green3 test_expert_validation_installed_budget.py test_parallel_budget_promotion.py -q
+    exit_code: 0
+  - command: so101_pytest repair-full-demo src/so101_demo_py/test -q
+    exit_code: 0
+  - command: so101_pytest repair-full-teleop src/so101_teleop/test -q
+    exit_code: 0
+observed:
+  - RED: the real publish_promotion output was refused with PROMOTION_SCHEMA_VERSION (the reviewer's static
+    deduction reproduced as an executed failing assertion).
+  - GREEN: 10 passed for the F2+F3 files; 37 passed for promotion+budget+measurement runtime.
+  - Full gates: repair-full-demo exit 0 (see counts below), repair-full-teleop exit 0.
+  - Round-trip: publish_promotion -> verify_promotion -> build_deployment_receipt -> issue_production_context
+    produced a FixedProductionContext bound to the profile and qualification hashes; refusals proven for a
+    CHANGES_REQUIRED Astra review (INDEPENDENT_REVIEW_REQUIRED), altered profile hash
+    (PROMOTION_PROFILE_MISMATCH), missing review list (PROMOTION_REVIEWS), a different exact N
+    (EXACT_N_UNQUALIFIED) and a tampered deployment receipt
+    (DEPLOYMENT_RECEIPT_PROMOTION_MISMATCH).
+  - Retained fixtures written in the superseded shape (Task 4 synthetic chain, F2 installed fixture) were
+    migrated to the unified schema; no assertion was weakened.
+inferred:
+  - Producer and consumer now agree; the independent Sol/Astra review gates and the operator promotion
+    remain external and are still pending.
+conclusion: VALID for F3.
+evidence:
+  - scratch/f3-red.*, scratch/f3-green*.*, scratch/f3-regression.*, scratch/repair-full-*.*
+decision: KEEP
+next_experiment: EXP-UQ22 (repaired copied install and installed gate)
