@@ -4035,3 +4035,20 @@ updating the two fixtures that still constructed `HostFacts` with the removed ke
 (`test_parallel_measurement_default_path.py`, `test_expert_validation_installed_budget.py`):
 87 passed across default-authority-paths, measurement default-path, resource-budget, measurement
 runtime and CLI.
+
+### CP-UQ77 addendum — Unit 5 and a procedural correction worth keeping
+
+Unit 5: the two cgroup ports that existed only for the removed sampling (`memory_swap_current`,
+`memory_pressure_full`) are gone from `OwnedCgroupV2`; nothing reads `memory.swap.current` or
+`memory.pressure` any more, and the per-sample JSON keeps the two deprecated keys with `null`
+values, which is the documented explicit-absence form rather than a fabricated zero.
+
+Procedural correction: the first combined run of this unit reported 36-47 failures, and the cause
+was mine, not the code -- every phase in this span reused one scratch directory
+(`scratch/policy74d6b781.gxCxlkzF/tmp`), so the allocator's fixed `rrc` evidence root already
+existed and `DIRECTORY_CONFLICT` refused it by design. Re-running the same file with a previously
+nonexistent scratch directory (`scratch/policy74d6b781-phase.JrLxiqoO/tmp`) gave **145 passed**,
+and the six-file verification above (default-path, runtime, control, batch-resources,
+resource-budget, default-authority-paths) passes with fresh scratch. The rule was already in the
+handoff -- a unique, previously nonexistent NVMe scratch per pytest phase, with `TMPDIR`/`TMP`/
+`TEMP` and an exact-interpreter proof -- and the failure was the gate enforcing it.
