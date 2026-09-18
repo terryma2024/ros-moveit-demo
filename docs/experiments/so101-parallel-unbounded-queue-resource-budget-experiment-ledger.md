@@ -2494,3 +2494,74 @@ evidence: scratch/xdist8-*, colcon/xdist8-*, tools/{test-gate.zsh,pytest-paralle
 decision: KEEP
 next_experiment: NONE-AUTHORIZED (await Sol review)
 ```
+
+```yaml
+checkpoint_id: CP-UQ30
+last_valid_experiment: EXP-UQ30
+current_hypothesis: Mainline continuation after CP-UQ29 - runner scheduling repair, allocator cmdline
+  robustness, Task 6 capability-probe selection, and the Task12 freeze copy.
+dispatch: 9d418aae-8e1e-430c-bb07-1f26070fd8ee (exclusive O_EXCL receipt, then a read-only probe with
+  shell date -Iseconds 2026-09-18T20:01:49+08:00, HEAD 376b24b66891cfb6b0055f0ca412dda85dc1bd7e clean,
+  CP-UQ29, pane %68/PID 1345571; handoff SHA256
+  bfe525358e817172f9db8cfab5afa83bb5c48af4fe692c207e8f283114a75da1; 24 cores / 26.5 GiB / load 0.14)
+planning:
+  - The plan's 17 tasks Task0-Task16 are restored as the working matrix (Stage A = 0-11 plus 13/14/15
+    offline; Stage B = 12; Stage C = 13; Stage D = 14; Stage E = 15 plus the Task16 handoff). Per-task
+    status/next/approval is carried in this checkpoint; a receipt or a source-GREEN run is never whole-
+    task or live completion.
+  - Experiments are recorded PLANNED before bounded work and closed with observed results; external
+    Sol/Astra reviews are the orchestrator's responsibility, are not a DST task and are not a waiting
+    condition for the remaining authorized offline work.
+runner_repair:
+  - "RED: the task wrapper treated ANY `-p` as an xdist disable, so `-p no:cacheprovider` silently ran
+    one worker and an explicit `-n 4` was recorded as actual_workers=1. GREEN: only an explicit
+    xdist-disable/collect-only or a real worker argument suppresses the default; `-p no:cacheprovider`
+    now runs 8 workers (scratch/xdist8-policy-p.*: actual_workers=8, 8 worker proofs) and `-n 4`
+    records actual_workers=4 without adding a second -n."
+  - "Shared-resource modules are the minimum exact serial set (from tools/so101_pytest_gate.py
+    SERIAL_MODULES): measured evidence is 25 failures in test_parallel_batch_resources.py at -n 8
+    (claim/ROS-domain probes); the wrapper now pins exactly those nodeids to one worker with
+    serial_override recorded (scratch/xdist8-serialmod.EekF4gcm: 145 passed at actual_workers=1) and
+    delegates whole-directory targets to the audited split runner instead of serialising the package."
+  - "tools/pytest-parallel.zsh hardened: mktemp-created and run-index-registered run dir, per-phase
+    labelled exact-interpreter tempfile proofs, real argv/result/exit/elapsed per phase, collect
+    pipeline exit checked, extra args forwarded, and nodeid identity preserved (package-root relative
+    dotted module path, no stem collapse)."
+allocator_and_task6:
+  - "Allocator: a same-UID process with an oversized (>4 KiB) cmdline made the ROS-domain probe fail
+    closed (PROC_METADATA_UNVERIFIABLE), flaking test_external_cleanup_retires_only_owned_worker_;
+    the identity is still stat/comm verified and the high-recall classifier keeps its conservative
+    candidate path plus environ inspection, so the cmdline is classified instead of refused.
+    RED->GREEN: scratch/xdist8-cmdline-red.* (ValueError: proc cmdline too large) ->
+    scratch/xdist8-cmdline-green2.* (module green)."
+  - "Task 6 narrow fix: the measurement CLI's default capability probe now receives the same
+    --cgroup-parent/--device-index selection the MeasurementSession owns; RED (probe called with {})
+    -> GREEN (scratch/xdist8-cgprobe-green.tce7GOyp.*: 9 passed). No real GPU/ROS measurement started."
+gates:
+  - "scratch/xdist8-demo3.*: serial group 319 passed; parallel group 2956 passed / 1 skipped with one
+    intended failure - test_runtime_bytes_of_the_copied_prefix_match_the_frozen_source, which correctly
+    refuses because runtime code changed after the ff8a1479f copy. That is the Task12 trigger, not a
+    regression."
+  - "colcon/xdist8-demo-serial.8ftQI8MP remains the last full serial package gate (3274 passed); the
+    package-level 8-worker gate is provided by the audited split runner above."
+next_commands:
+  - "Task12 freeze: build the new unique immutable production copied install (freeze-build/freeze-install,
+    started), verify six modules/eight launch bytes/entrypoint shebang/config carriers/assets/dependency
+    origins against the frozen clean code HEAD, emit the debug manifest, and register the versioned
+    audit/binding."
+  - "Then rerun the affected source/package/Web/copied gates against that freeze and continue the
+    remaining Stage A offline units before any live boundary."
+real_approval_gates:
+  - Owned recovery/apply/Web refresh/deployment window; Stage C sealed candidate authorization; exact-N
+    profile-SHA operator promotion; owned live Chrome window. Each needs its own explicit approval and
+    the exact objects/IDs/hashes are reported at that gate; offline previews only.
+inferred:
+  - Scheduling, allocator robustness and the Task 6 probe are repaired with genuine RED->GREEN; the
+    remaining work is the Task12 freeze copy and the unperformed live boundaries.
+conclusion: OFFLINE WORK CONTINUES (no wait on external review).
+evidence: scratch/xdist8-*, colcon/xdist8-*, tools/{test-gate.zsh,pytest-parallel.zsh},
+  followups/mainline-continuation-9d418aae-.../{executor.receipt,startup-probe01.log,
+  startup-probe01.result.json}
+decision: KEEP
+next_experiment: EXP-UQ31 Task12 freeze copy verification
+```
