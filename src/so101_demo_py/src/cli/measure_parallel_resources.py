@@ -368,7 +368,7 @@ def production_runner_factory(plan, *, child_runner=None, image_inspector=None):
 
 
 def main(argv=None, *, runner_factory=None, capability_probe=None, session_factory=None,
-         image_inspector=None) -> int:
+         image_inspector=None, observation_source=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--authorization", type=Path, required=True)
     parser.add_argument("--authorization-sha256", required=True)
@@ -407,7 +407,11 @@ def main(argv=None, *, runner_factory=None, capability_probe=None, session_facto
         authorization, gate = compose_measurement_admission(
             authorization_path=options.authorization,
             authorization_sha256=options.authorization_sha256,
-            config_path=options.config)
+            config_path=options.config,
+            # Production leaves this None and the composer samples the real host; a test
+            # may pin a deterministic observation so admission does not depend on how busy
+            # the machine happens to be while the suite runs.
+            observation_source=observation_source)
         plan = build_candidate_plan(
             authorization=authorization, authorization_path=options.authorization,
             config_path=options.config, evidence_root=evidence_root,
