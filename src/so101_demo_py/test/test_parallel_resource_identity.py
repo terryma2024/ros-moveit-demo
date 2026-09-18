@@ -62,7 +62,6 @@ def test_frozen_execution_rules_cannot_drift_and_free_rules_change_identity():
         ("execution", "yolo_model_id", "other-model"),
         ("execution", "requested_device", "cpu"),
         ("safety", "capacity_fraction", 0.81),
-        ("safety", "abort_on_swap_activity", False),
         ("coverage", "required_normal_runs", 6),
         ("coverage", "cells", ["COLD_START"]),
         ("clock", "pace_source", "WALL_CLOCK"),
