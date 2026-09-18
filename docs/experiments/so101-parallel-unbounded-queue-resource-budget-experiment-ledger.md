@@ -6264,3 +6264,21 @@ will hold `collect.argv.txt` / `parallel.argv.txt` / `serial.argv.txt` / `manife
 recorded.
 
 _Ledger HEAD when written: `4d54c2133`._
+
+
+## CP-UQ143 — Still waiting on the pre-fix gate; nothing else is blocked
+
+Status at this checkpoint, unchanged and verified: the pre-fix `lg-demo-full` process is alive, so
+the queued corrected positive run has not started (its log is still empty, exactly as the watcher
+is designed to behave) and no demo-root work is competing with it. Everything else the correction
+asked for is already in place and verified (CP-UQ132-CP-UQ141), and the teleop half of the runner
+is green on its own terms (`manifest 530 / parallel 529 / serial 1 / intersection 0 /
+coverage_exact true`, exit 0).
+
+The next useful action is therefore still "read the finished gate's result", not a new
+implementation: the CP-UQ128 runs are expected to end with a *failed* coverage verdict for the
+demo root, because they are executing the pre-fix delegation whose serial lane ran the whole
+package — that verdict is evidence of the old defect, not of the current code, and the corrected
+run queued behind them is what will produce the honest positive result.
+
+_Ledger HEAD when written: `1877d35a8`._
