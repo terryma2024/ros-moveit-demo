@@ -6082,3 +6082,28 @@ correction's working evidence into the task root already covers this directory's
 files there will be copied the same way when the correction closes).
 
 _Ledger HEAD when written: `ddb14b5df`._
+
+
+## CP-UQ136 — Correction f1308af3, part 5: 3236 vs 3238 is reconciled by fresh collection
+
+The handoff flagged CP-UQ128's arithmetic honestly: 3236 collected against 2967 parallel + 271
+serial = 3238 executed. A fresh `--collect-only` over the **current** code, through the
+collection plugin, followed by the split gives:
+
+| Quantity | Value |
+| --- | --- |
+| collection | **3238** |
+| parallel lane | **2967** |
+| serial lane | **271** |
+| union | 3238 (exact: `true`) |
+| intersection | 0 |
+
+So the current collection is 3238 and the lanes executed 2967 + 271 = 3238 of it: the executed
+multiset **equals** the current collection exactly, with an empty intersection and no lost
+identity. The earlier 3236 was simply a collection taken *before* the code and test edits that
+followed it (the new guard/launch/split cases added since), which is precisely why the handoff
+insisted on re-collecting instead of adding historical counts. Evidence:
+`/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main/unbounded-queue-resource-budget/colcon-split-final.JVKTPHqC/collection.json`, `coverage.json`, `parallel-nodeids.json`, `serial-nodeids.txt`,
+`deselect-args.txt`, with the six audited serial modules derived from **this** run's manifest.
+
+_Ledger HEAD when written: `37ac1167a`._
