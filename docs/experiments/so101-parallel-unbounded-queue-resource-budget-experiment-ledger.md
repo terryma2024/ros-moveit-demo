@@ -5344,3 +5344,59 @@ expectations together with the code they describe in Task 6, and only then run t
 The guard, contract, history and probe suites remain green (`lg-guard-combined`, 129 passed).
 
 _Ledger HEAD when written: `954cad708`._
+
+
+## CP-UQ119 — Task 5 complete: the real entry points run on the guard, and the suites are green
+
+Commit `371e41a7a` (`feat: wire real epoch startup guard`). The 29 red tests from CP-UQ118
+are resolved — **not** by deleting them all, and the split is worth recording:
+
+- **Product rules were rewritten onto the guard, not dropped.** "Never silently downgrade"
+  is now `test_three_workers_are_explicit_and_never_silently_downgraded` and
+  `test_fixed_eight_refuses_without_reducing_the_count` (a refused start keeps the requested
+  count and creates no evidence root); "fail closed without side effects" is
+  `test_each_guard_failure_fails_closed_without_creating_directories` parametrised over
+  `CPU_CAPACITY_UNAVAILABLE`/`RAM_BELOW_MINIMUM`/`GPU_FREE_BELOW_MINIMUM`/`GPU_TARGET_NOT_VISIBLE`;
+  "no domain claims before admission" is `test_fixed_eight_refusal_makes_no_domain_claims`;
+  the admission record test now asserts a real `StartGuardAdmission` (status, cleanup state,
+  the four checks and their units) instead of the retired threshold record.
+- **Retired budget expectations were retired with their code**, which Task 6 deletes:
+  the v1 formula-threshold assertions (`INSUFFICIENT_LOGICAL_CPU` and friends), the
+  three-worker "live qualification" refusal, and the `BUDGET_PROFILE_UNAVAILABLE` /
+  `_DEFAULT_RESOURCE_GATE` hook expectations. `test_production_cli_needs_no_budget_authority_for_three_workers`
+  replaces the last of them and asserts the opposite: with the retired hook set to `None`,
+  a three-worker production CLI start still prepares normally on the guard.
+- **Three real defects were found by the failures rather than argued away.**
+  1. The batch manifest was *volatile*: it carried the guard's observation timestamp and
+     observed values, so a resume compared a different manifest and refused with
+     `RECOVERY_BATCH_MANIFEST_MISMATCH`. The manifest now records only deterministic facts
+     (status, cleanup state, GPU UUID and each check's status/reason/cutoff/unit); the
+     observations stay in the guard evidence.
+  2. `test_oversized_cmdline_process_is_classified_not_refused` was racing `Popen`: it read
+     `/proc/<pid>/cmdline` before the child exec'd and saw an empty file. It now waits,
+     bounded, for the exec.
+  3. `test_external_cleanup_retires_only_owned_worker_and_releases_claim` used a fixed
+     runtime root (`<scratch>/a001`) that collided with other tests sharing one scratch tree
+     under `-n 8`. It now keeps the batch-id leaf (which `cleanup_runtime` validates) under a
+     per-test parent.
+
+Gates, all with the task wrapper, JUnit and scratch recorded:
+
+| Gate | Result |
+| --- | --- |
+| `lg-t5-wire16` cli + resources + adaptive integration | **220 passed, 0 failed, 0 errors**, 8.0 s |
+| `lg-t5-wide` guard/probe/composition/contracts/history/broker/coordinator/worker | **446 passed, 0 failed, 0 errors** |
+
+Also fixed on the source side: the allocator's `start_guard` document now carries the
+per-check status/reason/cutoff/unit (so a restored manifest can be audited), and `worker.py`,
+`coordinator.py` and `broker.py` accept `ParallelRuntimeConfigV3` instead of refusing it with
+`FROZEN_CONFIG_REQUIRED`.
+
+State: **Tasks 1-5 of 12 complete** (commits `e4d4d22be`, `795e29679`, `70df7c6c8`,
+`6216fe029`, `05b9990d2`, `954cad708`, `371e41a7a`). The budget modules are still present but
+nothing active reaches them; **Task 6 deletes them** (`resource_budget.py`,
+`resource_measurement.py`, `measurement_control.py`, `owned_resources.py`, the measurement CLI
+entry and the retired env contract), which is also where the user's "clear out the old
+budget-measurement code" lands.
+
+_Ledger HEAD when written: `371e41a7a`._
