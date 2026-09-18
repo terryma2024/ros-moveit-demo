@@ -264,6 +264,12 @@ def _argv(tmp_path, bindings, path, digest, *, intent="CALIBRATION_ONLY"):
 
 # --- R1: the default CLI runs the default launcher with measurement authority -------
 
+
+def _image_inspector(_tag):
+    """Local image stub: reports the digest the fixtures seal in their authorizations."""
+
+    return "sha256:" + "b" * 64
+
 def test_default_cli_runs_the_installed_launcher_with_sealed_authority(tmp_path, capsys):
     prefix = _install_prefix(tmp_path)
     bindings = _bindings(tmp_path, prefix)
@@ -276,7 +282,7 @@ def test_default_cli_runs_the_installed_launcher_with_sealed_authority(tmp_path,
         code = main(
             _argv(tmp_path, bindings, path, digest), capability_probe=lambda: {
                 "cgroup_parent": str(tmp_path / "cgroup"), "controllers": ["cpu", "memory"]},
-            session_factory=_session_factory(tmp_path, cgroup_holder=holders))
+            image_inspector=_image_inspector, session_factory=_session_factory(tmp_path, cgroup_holder=holders))
     finally:
         if previous is None:
             os.environ.pop("SO101_TEST_ARGV_FILE", None)
@@ -324,7 +330,7 @@ def test_default_cli_refuses_a_non_zero_workload_and_leaks_no_cgroup(tmp_path, c
     os.environ["SO101_TEST_ARGV_FILE"] = str(tmp_path / "argv.txt")
     try:
         code = main(_argv(tmp_path, bindings, path, digest),
-                    capability_probe=lambda: {}, session_factory=_session_factory(
+                    capability_probe=lambda: {}, image_inspector=_image_inspector, session_factory=_session_factory(
                         tmp_path, cgroup_holder=holders))
     finally:
         os.environ.pop("SO101_TEST_ARGV_FILE", None)
@@ -341,7 +347,7 @@ def test_default_cli_refuses_an_inherited_production_authority(tmp_path, capsys,
     _, path, digest = _sealed_authorization(tmp_path, bindings)
     monkeypatch.setenv("SO101_VALIDATION_BUDGET_PROFILE", "/sealed/profile.json")
     code = main(_argv(tmp_path, bindings, path, digest), capability_probe=lambda: {},
-                session_factory=_session_factory(tmp_path))
+                image_inspector=_image_inspector, session_factory=_session_factory(tmp_path))
     assert code == 1
     assert "MEASUREMENT_AUTHORITY_ENV_CONFLICT" in capsys.readouterr().err
 
@@ -353,7 +359,7 @@ def test_default_cli_refuses_a_swapped_composition_argument(tmp_path, capsys):
     argv = _argv(tmp_path, bindings, path, digest)
     argv[argv.index("--batch-id") + 1] = "batch-b"
     # The plan is derived from the sealed document, so a caller cannot rename the batch.
-    code = main(argv, capability_probe=lambda: {}, session_factory=_session_factory(tmp_path))
+    code = main(argv, capability_probe=lambda: {}, image_inspector=_image_inspector, session_factory=_session_factory(tmp_path))
     assert code == 0, capsys.readouterr().err
     summary = json.loads(capsys.readouterr().out)
     assert summary["batch_id"] == "batch-b"
@@ -392,7 +398,7 @@ def test_real_session_latches_on_a_safety_breach_and_refuses(tmp_path):
                       safety=config.measurement.safety, owner=_identity())
     started = time.monotonic()
     with pytest.raises(ContractError) as error:
-        run_candidate_batch(plan=plan, runner=production_runner_factory(plan), session=session)
+        run_candidate_batch(plan=plan, runner=production_runner_factory(plan, image_inspector=_image_inspector), session=session)
     assert "MEASUREMENT_ABORT_LATCHED" in str(error.value)
     assert "CGROUP_MEMORY_OOM_KILL" in str(error.value)
     assert time.monotonic() - started < 20
@@ -430,7 +436,7 @@ def test_real_session_enforces_the_authorized_deadline(tmp_path):
     session.deadline_s = 0.2
     with pytest.raises(ContractError) as error:
         run_candidate_batch(
-            plan=plan, runner=production_runner_factory(plan), session=session)
+            plan=plan, runner=production_runner_factory(plan, image_inspector=_image_inspector), session=session)
     assert "MEASUREMENT_DEADLINE_EXCEEDED" in str(error.value)
     assert cgroup.path.exists() is False
 
@@ -454,7 +460,7 @@ def test_default_capability_probe_verifies_the_session_selection(tmp_path, monke
     monkeypatch.setattr(cli, "require_measurement_capabilities", fake_probe)
     main(_argv(tmp_path, bindings, path, digest) + [
         "--cgroup-parent", str(requested), "--device-index", "1"],
-        session_factory=_session_factory(tmp_path))
+        image_inspector=_image_inspector, session_factory=_session_factory(tmp_path))
     assert seen == [{
         "cgroup_parent": requested, "device_index": 1,
     }], seen
@@ -501,14 +507,14 @@ def test_launcher_permissions_and_identity_drift_are_refused(tmp_path, capsys):
     launcher.chmod(0o600)
     assert stat.S_IMODE(launcher.stat().st_mode) == 0o600
     assert main(_argv(tmp_path, bindings, path, digest), capability_probe=lambda: {},
-                session_factory=_session_factory(tmp_path)) == 1
+                image_inspector=_image_inspector, session_factory=_session_factory(tmp_path)) == 1
     assert "MEASUREMENT_WORKLOAD" in capsys.readouterr().err
 
     # A drifted identity can no longer be derived, so the sealed bytes are refused.
     launcher.chmod(0o700)
     _write(prefix / INSTALLED_PATTERN / "resource_measurement.py", b"# drifted bytes\n")
     assert main(_argv(tmp_path, bindings, path, digest), capability_probe=lambda: {},
-                session_factory=_session_factory(tmp_path)) == 1
+                image_inspector=_image_inspector, session_factory=_session_factory(tmp_path)) == 1
     assert "RUNTIME_FINGERPRINT_MISMATCH" in capsys.readouterr().err
 
 
@@ -814,3 +820,34 @@ def test_runtime_identity_still_covers_the_artifact_and_host():
     assert _fingerprint(cgroup="/a").sha256 != _fingerprint(cgroup="/a", cpu_model="other")
     assert _fingerprint(cgroup="/a").sha256 != _fingerprint(cgroup="/a", gpu_name="other")
     assert _fingerprint(cgroup="/a").sha256 != _fingerprint(cgroup="/a", thread_environment={"OMP_NUM_THREADS": "1"})
+
+
+def test_broker_image_verification_accepts_the_tag_carrying_the_sealed_digest():
+    """The sealed binding is a digest, the launcher compares its tag, so the runner
+    resolves the tag and proves it still points at the sealed image before spawning."""
+
+    from so101_demo.cli.measure_parallel_resources import verify_broker_image
+
+    digest = "sha256:" + "a" * 64
+    assert verify_broker_image(tag="img:v1", digest=digest,
+                               inspector=lambda tag: digest + "\n") == "img:v1"
+
+
+def test_broker_image_verification_refuses_a_replaced_image():
+    from so101_demo.cli.measure_parallel_resources import (
+        MeasurementCliError, verify_broker_image)
+
+    with pytest.raises(MeasurementCliError, match="MEASUREMENT_BROKER_IMAGE_MISMATCH"):
+        verify_broker_image(tag="img:v1", digest="sha256:" + "a" * 64,
+                            inspector=lambda tag: "sha256:" + "b" * 64)
+
+
+def test_broker_image_verification_fails_closed_without_an_inspector():
+    from so101_demo.cli.measure_parallel_resources import (
+        MeasurementCliError, verify_broker_image)
+
+    def broken(tag):
+        raise OSError("no docker")
+
+    with pytest.raises(MeasurementCliError, match="MEASUREMENT_BROKER_IMAGE_UNAVAILABLE"):
+        verify_broker_image(tag="img:v1", digest="sha256:" + "a" * 64, inspector=broken)
