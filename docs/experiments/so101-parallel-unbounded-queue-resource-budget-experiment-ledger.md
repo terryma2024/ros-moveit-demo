@@ -6763,3 +6763,26 @@ pass the installed share path explicitly in the coordinator's environment rather
 ament discovery inside the spawned process — a real deployment input, not a policy change.
 
 _Ledger HEAD when written: `cb2e505b7`._
+
+## CP-UQ164 — Case 2 confirmed: the spawned coordinator raises, and the service is down
+
+The disambiguation is settled by identity, not by guessing: the only campaign in the current
+service directory (`service-light.bQMVAHAL`) is `campaign-3d8e1f0896c64f63aa93234c3ad389e9`, and
+its coordinator log is the one carrying `PROVENANCE_VERIFICATION_FAILED`. So the log belongs to the
+**recovered** deployment, not to the half-built-copy attempt, and something in the provenance
+verification raises a non-`CliError` exception inside the coordinator the service spawns.
+
+The most likely candidate remains my CP-UQ161 change: it calls
+`get_package_share_directory("so101_demo_py")` inside the spawned process, and if ament discovery
+is not available in the environment the service hands the coordinator, that raises — while the
+service process itself resolves the share directory fine, which is exactly why the deployment
+looked healthy. The fix, if so, is to pass the installed share path explicitly in the coordinator's
+environment instead of relying on discovery inside the child.
+
+One more fact, recorded rather than glossed: `curl http://127.0.0.1:8010/...` now fails with
+connection refused and no `so101_expert_validation_server` process is visible, so the service I
+deployed is **not listening** at this moment. That must be re-established before any further
+acceptance attempt — and it also means the last acceptance run's failures cannot be attributed to
+the browser or the campaign flow until a service is actually up.
+
+_Ledger HEAD when written: `086f786c5`._
