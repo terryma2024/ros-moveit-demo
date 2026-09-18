@@ -85,10 +85,18 @@ def synthetic_chain(tmp_path, worker_count=2, profile=None):
     profile_sha = write_private(profile_path, profile or profile_document(worker_count))
     promotion_path = tmp_path / "authority/promotion.json"
     promotion_sha = write_private(promotion_path, {
-        "schema_version": 2, "profile_sha256": profile_sha, "operator_approval_uid": 1000,
-        "exact_worker_count": worker_count, "reviews": ["sol:results", "astra:profile"]})
+        "schema_version": 2, "kind": "PROMOTION", "profile_sha256": profile_sha,
+        "operator_approval_uid": 1000, "exact_worker_count": worker_count,
+        "reviews": [
+            {"reviewer": "sol", "result": "PASS", "sha256": "1" * 64},
+            {"reviewer": "astra", "result": "PASS", "sha256": "2" * 64},
+        ],
+        "sol_result_review_sha256": "1" * 64,
+        "astra_profile_review_sha256": "2" * 64,
+        "operator_approval_sha256": "3" * 64})
     receipt_path = tmp_path / "deployments/receipt.json"
-    write_private(receipt_path, {"schema_version": 2, "profile_sha256": profile_sha,
+    write_private(receipt_path, {"schema_version": 2, "kind": "DEPLOYMENT_RECEIPT",
+                                 "profile_sha256": profile_sha,
                                  "promotion_sha256": promotion_sha})
     return profile_path, profile_sha, promotion_path, receipt_path
 

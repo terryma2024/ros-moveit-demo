@@ -136,3 +136,191 @@ def test_deployment_receipt_binds_promotion_profile_and_location(tmp_path, candi
     assert document["profile_sha256"] == candidate_profile.raw_sha256
     assert document["installed_audit_sha256"] == audit.sha256
     assert document["location_binding"]["prefix"] == "/tmp/uq-install"
+
+
+def _approved_profile(tmp_path):
+    """A schema2 profile whose exact N4 entry is APPROVED with a visible qualification."""
+
+    from so101_demo.parallel_batch.resource_budget import ApprovedBudgetProfile
+    qualification = {
+        "schema_version": 2, "execution_identity_sha256": SHA, "worker_count": 4,
+        "coverage_policy_sha256": "b" * 64, "sealed_manifest_sha256s": ["d" * 64],
+        "normal_valid_runs": 5, "normal_required_runs": 5, "coverage_complete": True,
+        "cleanup_verified": True, "independent_physics_verified": True,
+        "resource_contract_verified": True,
+    }
+    qualification_path = tmp_path / "trusted-authority/qualification.json"
+    qualification_sha = _write(qualification_path, qualification)
+    cells = ("COLD_START", "STEADY_YOLO", "STEADY_GROUNDED_SAM", "STEADY_MIXED",
+             "MOTION_RELEASE", "BROKER_RELOAD_WITH_N_RESIDENT",
+             "WORKER_RECOVERY_WITH_N_RESIDENT", "FINALIZATION_CLEANUP")
+    document = {
+        "schema_version": 2, "execution_identity_sha256": SHA,
+        "coverage_policy_sha256": "b" * 64,
+        "entries": {"4": {
+            "worker_count": 4, "status": "APPROVED",
+            "qualification_sha256": qualification_sha, "raw_manifest_sha256s": ["d" * 64],
+            "coverage": {cell: ["observed"] for cell in cells},
+            "stages": {name: _stage() for name in
+                       ("startup", "steady", "recovery", "finalization")},
+            "review_reference": "astra:round-trip",
+        }},
+    }
+    profile_path = tmp_path / "sealed/profile.json"
+    profile_sha = _write(profile_path, document)
+    profile = ApprovedBudgetProfile.from_document(document, raw_sha256=profile_sha)
+    return profile, profile_path, profile_sha, qualification_path, qualification_sha
+
+
+def test_actual_producer_outputs_round_trip_into_the_context_issuer(tmp_path):
+    """publish_promotion/build_deployment_receipt output must feed issue_production_context."""
+
+    from so101_demo.parallel_batch.resource_budget import (
+        AllocationScope, ExactNQualification, ResourceBudgetProvider,
+        build_deployment_receipt, issue_production_context, publish_promotion,
+        verify_promotion)
+    from so101_demo.parallel_batch.resource_identity import FullByteAudit, InventoryEntry
+
+    profile, profile_path, profile_sha, qualification_path, qualification_sha = _approved_profile(tmp_path)
+    trusted_root = tmp_path / "trusted-authority"
+    trusted_root.mkdir(mode=0o700, exist_ok=True)
+    from so101_demo.parallel_batch.resource_budget import PromotionAuthority
+    authority = PromotionAuthority(trusted_root)
+
+    approval = trusted_root / "operator-approval.json"
+    _write(approval, {"schema_version": 1, "operator_uid": 1000, "decision": "APPROVED",
+                      "exact_worker_count": 4, "profile_sha256": profile_sha})
+    sol = trusted_root / "sol-review.json"
+    _write(sol, {"schema_version": 1, "reviewer": "sol", "result": "PASS"})
+    astra = trusted_root / "astra-review.json"
+    _write(astra, {"schema_version": 1, "reviewer": "astra", "result": "PASS"})
+    promotion_path = publish_promotion(
+        profile_path=profile_path, profile_sha256=profile_sha,
+        operator_approval=approval, sol_result_review=sol, astra_profile_review=astra,
+        measurement_audit={"kind": "A0", "sha256": "f" * 64},
+        destination=trusted_root / "promotion.json")
+    audit = FullByteAudit(
+        schema_version=2, source_commit="1" * 40, source_clean=True,
+        prefix=str(tmp_path / "install"), files=(InventoryEntry("a.py", "2" * 64),),
+        origins={"so101_demo_py": str(tmp_path / "install")})
+    receipt_path = build_deployment_receipt(
+        promotion_path=promotion_path, profile_sha256=profile_sha, installed_audit=audit,
+        execution_identity_sha256=SHA, location_binding={"prefix": str(tmp_path / "install")})
+
+    verify_promotion(profile=profile, promotion_path=promotion_path, authority=authority)
+
+    provider = ResourceBudgetProvider()
+    provider.load(profile_path, expected_sha256=profile_sha)
+    qualification_document = json.loads(qualification_path.read_bytes())
+    provider.record_qualification(ExactNQualification.from_document(
+        qualification_document, raw_sha256=qualification_sha))
+    scope = AllocationScope("batch-a", 1, 4, "FIXED_PRODUCTION", SHA)
+    context = issue_production_context(
+        provider=provider, scope=scope, profile_path=profile_path,
+        expected_profile_sha256=profile_sha, promotion_path=promotion_path,
+        deployment_receipt_path=receipt_path, control_binding={"lease": "round-trip"})
+    assert context.profile_sha256 == profile_sha
+    assert context.qualification_sha256 == qualification_sha
+    assert context.scope.worker_count == 4
+
+
+def test_round_trip_refuses_altered_reviews_profile_n_and_location(tmp_path):
+    from so101_demo.parallel_batch.contracts import ContractError
+    from so101_demo.parallel_batch.resource_budget import (
+        AllocationScope, ExactNQualification, PromotionAuthority, ResourceBudgetProvider,
+        build_deployment_receipt, issue_production_context, publish_promotion)
+
+    profile, profile_path, profile_sha, qualification_path, qualification_sha = _approved_profile(tmp_path)
+    trusted_root = tmp_path / "trusted-authority"
+    trusted_root.mkdir(mode=0o700, exist_ok=True)
+    authority = PromotionAuthority(trusted_root)
+    approval = trusted_root / "operator-approval.json"
+    _write(approval, {"schema_version": 1, "operator_uid": 1000, "decision": "APPROVED",
+                      "exact_worker_count": 4, "profile_sha256": profile_sha})
+    sol = trusted_root / "sol-review.json"
+    _write(sol, {"schema_version": 1, "reviewer": "sol", "result": "PASS"})
+    astra = trusted_root / "astra-review.json"
+    _write(astra, {"schema_version": 1, "reviewer": "astra", "result": "PASS"})
+
+    # An independent review that did not pass can never produce a promotion.
+    failing_astra = trusted_root / "astra-failing.json"
+    _write(failing_astra, {"schema_version": 1, "reviewer": "astra", "result": "CHANGES_REQUIRED"})
+    with pytest.raises(ContractError) as error:
+        publish_promotion(
+            profile_path=profile_path, profile_sha256=profile_sha,
+            operator_approval=approval, sol_result_review=sol, astra_profile_review=failing_astra,
+            measurement_audit={"kind": "A0", "sha256": "f" * 64},
+            destination=trusted_root / "rejected-promotion.json")
+    assert "INDEPENDENT_REVIEW_REQUIRED" in str(error.value)
+
+    promotion_path = publish_promotion(
+        profile_path=profile_path, profile_sha256=profile_sha,
+        operator_approval=approval, sol_result_review=sol, astra_profile_review=astra,
+        measurement_audit={"kind": "A0", "sha256": "f" * 64},
+        destination=trusted_root / "promotion.json")
+
+    def provider_for():
+        provider = ResourceBudgetProvider()
+        provider.load(profile_path, expected_sha256=profile_sha)
+        provider.record_qualification(ExactNQualification.from_document(
+            json.loads(qualification_path.read_bytes()), raw_sha256=qualification_sha))
+        return provider
+
+    scope = AllocationScope("batch-a", 1, 4, "FIXED_PRODUCTION", SHA)
+
+    # Altered promotion: a different profile hash inside the record.
+    altered = json.loads(Path(promotion_path).read_bytes())
+    altered["profile_sha256"] = "9" * 64
+    altered_path = trusted_root / "altered-promotion.json"
+    _write(altered_path, altered)
+    with pytest.raises(ContractError) as error:
+        issue_production_context(
+            provider=provider_for(), scope=scope, profile_path=profile_path,
+            expected_profile_sha256=profile_sha, promotion_path=altered_path,
+            deployment_receipt_path=trusted_root / "missing.json",
+            control_binding={"lease": "x"})
+    assert "PROMOTION_PROFILE_MISMATCH" in str(error.value)
+
+    # A promotion without the independent review references is invalid.
+    without_reviews = dict(altered)
+    without_reviews["profile_sha256"] = profile_sha
+    without_reviews.pop("reviews", None)
+    no_review_path = trusted_root / "no-reviews.json"
+    _write(no_review_path, without_reviews)
+    with pytest.raises(ContractError) as error:
+        issue_production_context(
+            provider=provider_for(), scope=scope, profile_path=profile_path,
+            expected_profile_sha256=profile_sha, promotion_path=no_review_path,
+            deployment_receipt_path=trusted_root / "missing.json",
+            control_binding={"lease": "x"})
+    assert "PROMOTION_REVIEWS" in str(error.value)
+
+    # The same command cannot be replayed for a different exact N.
+    other_scope = AllocationScope("batch-a", 1, 2, "FIXED_PRODUCTION", SHA)
+    with pytest.raises(ContractError) as error:
+        issue_production_context(
+            provider=provider_for(), scope=other_scope, profile_path=profile_path,
+            expected_profile_sha256=profile_sha, promotion_path=promotion_path,
+            deployment_receipt_path=trusted_root / "missing.json",
+            control_binding={"lease": "x"})
+    assert "EXACT_N_UNQUALIFIED" in str(error.value)
+
+    # A tampered deployment receipt (wrong promotion hash) is refused.
+    from so101_demo.parallel_batch.resource_identity import FullByteAudit, InventoryEntry
+    audit = FullByteAudit(
+        schema_version=2, source_commit="1" * 40, source_clean=True,
+        prefix=str(tmp_path / "install"), files=(InventoryEntry("a.py", "2" * 64),),
+        origins={"so101_demo_py": str(tmp_path / "install")})
+    receipt_path = build_deployment_receipt(
+        promotion_path=promotion_path, profile_sha256=profile_sha, installed_audit=audit,
+        execution_identity_sha256=SHA, location_binding={"prefix": str(tmp_path / "install")})
+    tampered = json.loads(Path(receipt_path).read_bytes())
+    tampered["promotion_sha256"] = "8" * 64
+    tampered_path = trusted_root / "tampered-receipt.json"
+    _write(tampered_path, tampered)
+    with pytest.raises(ContractError) as error:
+        issue_production_context(
+            provider=provider_for(), scope=scope, profile_path=profile_path,
+            expected_profile_sha256=profile_sha, promotion_path=promotion_path,
+            deployment_receipt_path=tampered_path, control_binding={"lease": "x"})
+    assert "DEPLOYMENT_RECEIPT_PROMOTION_MISMATCH" in str(error.value)
