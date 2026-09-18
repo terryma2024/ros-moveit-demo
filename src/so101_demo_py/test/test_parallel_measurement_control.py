@@ -180,3 +180,17 @@ def test_health_check_before_sampling_starts_still_fails_closed(make_control):
     control, calls = make_control()
     control.check_health(1.05, sampler_alive=True, endpoint_healthy=True, breach=None)
     assert control.stop_requested()
+
+
+def test_control_event_times_show_what_the_control_saw(make_control):
+    """The receipt must carry the control's own view: without t_last_sample and t_breach a
+    SAMPLER_GAP latch cannot be told apart from a health check that ran too early."""
+
+    control, calls = make_control()
+    control.mark_sampling_start(1.0)
+    control.observe_sample(1, 1.02)
+    control.check_health(1.5, sampler_alive=True, endpoint_healthy=True, breach=None)
+    times = control.event_times()
+    assert times["t_last_sample"] == 1.02
+    assert times["t_breach"] == 1.5
+    assert times["t_abort_latch"] is not None

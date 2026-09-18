@@ -711,6 +711,8 @@ class MeasurementSession:
             "limits": dict(self.limits or {}),
             "samples": self.samples,
             "events": self.event_times(),
+            "control_events": (
+                {} if self.control is None else self.control.event_times()),
             "exited_monotonic_s": exited,
             "abort_reason": self.abort_reason,
             "deadline_exceeded": self.deadline_exceeded,
