@@ -82,7 +82,7 @@ describe("ExpertValidationClient", () => {
     ]);
     const client = new ExpertValidationClient(transport.fetcher, () => "command-1");
     const config = {
-      contract_version: 2 as const,
+      contract_version: 3 as const,
       manifest_id: "manifest-20",
       execution_mode: "PARALLEL" as const,
       worker_count: 2,
@@ -91,7 +91,7 @@ describe("ExpertValidationClient", () => {
     await client.startCampaign({ ...config, preflight_receipt_id: receipt.receipt_id }, lease);
 
     expect(transport.calls[1].body).toMatchObject({
-      contract_version: 2,
+      contract_version: 3,
       execution_mode: "PARALLEL",
       worker_count: 2,
       command_id: "command-1",
@@ -105,7 +105,7 @@ describe("ExpertValidationClient", () => {
     ]);
     const client = new ExpertValidationClient(transport.fetcher, () => "command-2");
     const request = {
-      contract_version: 2 as const,
+      contract_version: 3 as const,
       manifest_id: "manifest-20",
       execution_mode: "ADAPTIVE" as const,
       preferred_worker_count: 8,

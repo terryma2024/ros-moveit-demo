@@ -14,6 +14,7 @@ import type {
 } from "@/api/expert-validation-types";
 import { CampaignProgress, type CampaignView } from "@/components/expert-validation/campaign-progress";
 import { CampaignSetup, type SetupState } from "@/components/expert-validation/campaign-setup";
+import { describeStartGuard } from "./components/expert-validation/start-guard-summary";
 import { PointEvidence } from "@/components/expert-validation/point-evidence";
 import { RetryPanel } from "@/components/expert-validation/retry-panel";
 import { TopViewMap, type MapPointState } from "@/components/expert-validation/top-view-map";
@@ -237,7 +238,7 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
 
   const preflightInput = (): PreflightInput => setup.executionMode === "ADAPTIVE"
     ? {
-      contract_version: 2,
+      contract_version: 3,
       manifest_id: manifest!.manifest_id,
       execution_mode: "ADAPTIVE",
       preferred_worker_count: 8,
@@ -248,7 +249,7 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
       yolo_executor_count: 2,
     }
     : {
-      contract_version: 2,
+      contract_version: 3,
       manifest_id: manifest!.manifest_id,
       execution_mode: setup.executionMode,
       worker_count: setup.workerCount,
@@ -327,6 +328,9 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
         leaseRenewing={leaseRenewing}
         manifestReady={Boolean(manifest)}
         preflightMessage={notice}
+        startGuardSummary={receipt
+          ? describeStartGuard(receipt.start_guard, capabilities?.start_guard_policy)
+          : undefined}
         onChange={changeSetup}
         onAcquireLease={() => { void api.acquireLease(sessionId).then(replaceLease).catch(reportError); }}
         onGenerate={() => { void generateManifest().catch(reportError); }}

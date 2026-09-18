@@ -303,7 +303,7 @@ export interface components {
              * Contract Version
              * @constant
              */
-            contract_version: 2;
+            contract_version: 3;
             /**
              * Execution Mode
              * @enum {string}
@@ -452,7 +452,7 @@ export interface components {
              * Contract Version
              * @constant
              */
-            contract_version: 2;
+            contract_version: 3;
             /**
              * Execution Mode
              * @enum {string}
@@ -543,6 +543,8 @@ export interface components {
              * @default 4
              */
             minimum_points: number;
+            start_guard?: components["schemas"]["StartGuardStatus"] | null;
+            start_guard_policy?: components["schemas"]["StartGuardPolicyResponse"] | null;
             /** Worker Count Availability */
             worker_count_availability?: components["schemas"]["WorkerCountAvailability"][];
         };
@@ -845,6 +847,7 @@ export interface components {
             resource_observations: {
                 [key: string]: unknown;
             };
+            start_guard?: components["schemas"]["StartGuardStatus"] | null;
         };
         /** RetryRequest */
         RetryRequest: {
@@ -860,6 +863,69 @@ export interface components {
             point_ids: string[];
             /** Service Session Id */
             service_session_id: string;
+        };
+        /**
+         * StartGuardCheck
+         * @description One check of the shared startup guard, in the units the decision used.
+         */
+        StartGuardCheck: {
+            /** Cutoff */
+            cutoff?: number | null;
+            /** Observed */
+            observed?: number | string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "PASS" | "WARN" | "FAIL";
+            /** Unit */
+            unit: string;
+        };
+        /**
+         * StartGuardPolicyResponse
+         * @description The enforced policy, so a client can display the cutoffs it was judged against.
+         */
+        StartGuardPolicyResponse: {
+            /** Cpu Busy Warn Fraction */
+            cpu_busy_warn_fraction: number;
+            /** Gpu Minimum Bytes */
+            gpu_minimum_bytes: number;
+            /** Ram Minimum Bytes */
+            ram_minimum_bytes: number;
+            /** Ram Minimum Fraction */
+            ram_minimum_fraction: number;
+            /** Timeout S */
+            timeout_s: number;
+        };
+        /**
+         * StartGuardStatus
+         * @description The server's own decision. A client cannot supply or overwrite it.
+         */
+        StartGuardStatus: {
+            /**
+             * Checks
+             * @default {}
+             */
+            checks: {
+                [key: string]: components["schemas"]["StartGuardCheck"];
+            };
+            /**
+             * Cleanup State
+             * @default CLEAR
+             * @enum {string}
+             */
+            cleanup_state: "CLEAR" | "PROBE_CLEANUP_BLOCKED";
+            /** Gpu Uuid */
+            gpu_uuid?: string | null;
+            /** Observed Monotonic S */
+            observed_monotonic_s?: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "PASS" | "WARN" | "FAIL";
         };
         /** ValidationError */
         ValidationError: {
