@@ -4834,3 +4834,27 @@ next run.
 Nothing else moved: the run's refusal is the frozen throttling rule, the instrument behaved, and the
 policy question from CP-UQ103 (single-period excursion versus `throttling_disqualifies_run`) remains
 the operator's.
+
+## CP-UQ106 — The cgroup attribution works, and it shows a ROS 2 stack, not BLAS
+
+Run72 (r49, candidate rebuilt, seal performed inside the run's own scope) produced the attribution
+that the last three rounds were trying to get, and it is not what any of the thread-bound theories
+predicted. The measurement cgroup holds **15 processes**, and they are the workload's ROS 2 stack:
+
+    ros2, spawner (x2), scene_setup, graceful_shutdown, ros2_control_node,
+    static_transform_publisher (x2), robot_state_publisher, docker, ...
+
+The quota recorded in the same receipt is `18.90` cores. The per-process deltas visible in the journal
+tail are small (0.0-0.1 s each over the window I printed), but my `journalctl -n 14` cut the top of the
+table, so the dominant consumer is not yet named -- only the shape is: it is the launch stack the
+workload brings up, not the BLAS/torch threads that the OMP/MKL/MUJOCO bounds address.
+
+Two things follow, and they are cheap:
+
+1. print the whole attribution table (or the top rows), which names the consumer outright;
+2. re-read the bounds question in that light: `OMP_NUM_THREADS` and friends bound libraries, while
+   `ros2 launch` brings up nodes that each do their own thing -- and a MuJoCo/Gazebo bridge or a
+   renderer among them is a much better candidate for ~19 cores than any BLAS pool.
+
+The instrument is now doing exactly what this stage needs: it attributes demand to processes instead
+of inferring it, and the next run's table answers the question CP-UQ103 left to the operator.
