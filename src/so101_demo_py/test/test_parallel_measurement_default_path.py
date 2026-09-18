@@ -510,3 +510,43 @@ def test_launcher_permissions_and_identity_drift_are_refused(tmp_path, capsys):
     assert main(_argv(tmp_path, bindings, path, digest), capability_probe=lambda: {},
                 session_factory=_session_factory(tmp_path)) == 1
     assert "RUNTIME_FINGERPRINT_MISMATCH" in capsys.readouterr().err
+
+
+def _delegated_tree(root, *, stat_mode=0o444):
+    (root / "cgroup.controllers").write_text("cpu memory\n")
+    for name in ("cgroup.procs", "cpu.max", "memory.max"):
+        (root / name).write_text("\n")
+    (root / "cpu.stat").write_text("usage_usec 0\n")
+    (root / "cpu.stat").chmod(stat_mode)
+    return root
+
+
+def test_owned_cgroup_accepts_read_only_cpu_stat(tmp_path):
+    """cgroup v2 exposes cpu.stat as mode 0444 even inside a delegated subtree."""
+
+    from so101_demo.parallel_batch.owned_resources import OwnedCgroupV2
+
+    node = tmp_path / "owned"
+    node.mkdir()
+    _delegated_tree(node)
+    OwnedCgroupV2(path=node).require_delegated()
+
+
+def test_owned_cgroup_rejects_missing_cpu_stat(tmp_path):
+    from so101_demo.parallel_batch.contracts import ContractError
+    from so101_demo.parallel_batch.owned_resources import OwnedCgroupV2
+
+    node = tmp_path / "owned"; node.mkdir(); _delegated_tree(node)
+    (node / "cpu.stat").unlink()
+    with pytest.raises(ContractError, match="cpu.stat"):
+        OwnedCgroupV2(path=node).require_delegated()
+
+
+def test_owned_cgroup_rejects_unwritable_control_file(tmp_path):
+    from so101_demo.parallel_batch.contracts import ContractError
+    from so101_demo.parallel_batch.owned_resources import OwnedCgroupV2
+
+    node = tmp_path / "owned"; node.mkdir(); _delegated_tree(node)
+    (node / "cpu.max").chmod(0o444)
+    with pytest.raises(ContractError, match="cpu.max"):
+        OwnedCgroupV2(path=node).require_delegated()

@@ -3030,3 +3030,34 @@ delegated scope that actually grants the controllers the safety policy requires 
 `memory`, or (b) an explicit operator decision to measure with a cpu-only quota plus the
 whole-host memory guard. No measurement ran; every exact-N budget stays `NOT_MEASURED`, no N is
 downgraded, and no cross-N value is extrapolated.
+
+## CP-UQ41 — Stage C capability unblocked: delegated user scope, and a real cgroup defect fixed
+
+Runs: `scratch/stageC-auth.S2WPqrz0/` (scopes, probes), `scratch/stageC-fix.*/` (RED/GREEN, probe).
+
+The Stage C blocker was not host policy, it was an unsatisfiable check plus a scope that had to be
+prepared correctly. Both are now settled, without sudo and without any global or shared change:
+
+1. A transient user scope created with `systemd-run --user --scope -p Delegate=yes` reports
+   `cgroup.controllers = cpu memory pids`. Enabling `+memory` in its `cgroup.subtree_control`
+   fails while the scope still holds processes; after moving the invoking shell into a child
+   cgroup (the cgroup-v2 no-internal-process rule) both `+cpu` and `+memory` are accepted and
+   `cgroup.subtree_control = cpu memory`. A child created afterwards is `cgroup.type=domain`
+   with `cpu.stat`, `memory.stat`, and `cpu.max` present and `controllers = cpu memory`.
+2. `OwnedCgroupV2.require_delegated` required `os.access(..., W_OK)` on `cpu.stat`. cgroup v2
+   exposes that accounting file as mode `0444` even inside a delegated subtree
+   (`cpu.stat NOT_WRITABLE` next to `cpu.max W_OK`), so this check could never pass for an
+   unprivileged user on any host — every measurement path was blocked by it, not by the
+   controller delegation alone.
+3. Fixed in `owned_resources.py` by requiring write access only on the control files the
+   measurement writes (`cgroup.procs`, `cpu.max`, `memory.max`) and presence plus readability for
+   `cpu.stat`. Three tests were added to
+   `test/test_parallel_measurement_default_path.py`: read-only `cpu.stat` accepted, missing
+   `cpu.stat` refused, unwritable `cpu.max` refused. RED before the change
+   (`1 failed, 11 deselected`), GREEN after (`3 passed`), and the whole file is `12 passed`.
+
+With the fix, the real capability probe returns a real object inside a prepared scope:
+`controllers ["cpu", "memory"]`, `gpu "NVIDIA GeForce RTX 5080"`, `gpu_total_bytes 17094934528`,
+`cpu_core_equivalent 24.0`. Stage C's N1 calibration is therefore runnable; the results and the
+sealed per-N budgets are recorded separately, and until then every exact-N budget stays
+`NOT_MEASURED`.
