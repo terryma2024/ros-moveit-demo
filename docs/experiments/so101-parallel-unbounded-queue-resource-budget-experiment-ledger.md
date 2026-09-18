@@ -7365,3 +7365,34 @@ Full run 5 (`lg-live-functional5`, service `service-light.RwPNAFml`, fresh root)
 the first one where R02 can actually reach its own parallel batch and R03 can inherit a real R02 gate.
 
 _Ledger HEAD when written: `0b7ab6bfa`._
+
+## CP-UQ180 — A real two-worker parallel campaign completes, four points passed on two workers
+
+Run 5 (`browser/lg-live-functional5.dnnam54V`) is the first run where R02 reached its **own**
+campaign, and the parallel runtime did the job:
+
+| Campaign | Mode | Status | Cleanup | Points | Workers |
+| --- | --- | --- | --- | --- | --- |
+| `campaign-24ae725e…dd7210e040` | SEQUENTIAL | `COMPLETED` | true | 4 × `PASSED` | `worker-01` (lease_count 4) |
+| `campaign-0393144d…f7606925f0` | **PARALLEL** | `COMPLETED` | true | 4 × `PASSED` | `worker-01` + `worker-02`, lease_count 2 each |
+
+Both campaigns also report `coverage_complete: true`, `execution_coverage: 1`,
+`evaluation_coverage: 1`, `qualified_success_rate: 1`, `broker.available: true`, and no infra
+attempts — i.e. the exact-N two-worker run with the rebuilt broker image and the rebuilt control
+library finished with real per-point evidence (13 artifacts per point earlier, same shape here).
+The mid-run Chrome reload also happened this time (`reloaded` was the run-4 failure, not this one),
+which is what the corrected campaign id bought.
+
+R02 still failed, for a third and different reason: its closing assertion
+`expect(campaignsAfter).toHaveLength(1)` assumed a service that has only ever run one campaign.
+The list legitimately holds R01's campaign as well, and the run-4 lesson repeats here in a new
+place — an assertion about *the service's history* was standing in for an assertion about *this
+run*. It now checks that this campaign appears exactly once with the terminal status and that no
+other campaign is left `RUNNING`/`STARTING`/`CANCELLING`. Committed as `3611bc303`.
+
+R03 could not run in any of these three runs (`R02_GATE_REQUIRED`): it depends on the R02 gate, so
+the adaptive path — the last unexercised execution mode — is still unproven. Full run 6
+(`lg-live-functional6`, service `service-light.s2jytgW3`, fresh root) started immediately after this
+fix and is the first one in which R03 can inherit a real R02 receipt.
+
+_Ledger HEAD when written: `3611bc303`._
