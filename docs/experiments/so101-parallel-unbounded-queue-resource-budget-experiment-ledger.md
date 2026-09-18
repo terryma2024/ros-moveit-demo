@@ -6132,3 +6132,25 @@ executed multiset equal to that run's own collection, remains open, along with t
 `coverage_exact=false` repair and the functional-manifest acceptance.
 
 _Ledger HEAD when written: `5559851bc`._
+
+
+## CP-UQ138 — Correction f1308af3, part 7: why the teleop verdict was coverage_exact=false
+
+The handoff forbids closing Task 9 while the whole-teleop run is "knowingly accepted with
+`coverage_exact=false`". Reading the helper's check (tools/pytest-parallel.zsh:131-166) pins the
+mechanism: `expected` is built from `manifest.txt`, which is `grep '::' collect.raw | sort`, while
+`combined` is the set of node ids the lanes actually executed. The teleop run reported
+`manifest: 0` alongside `parallel: 523`, so `manifest.txt` was **empty** and the comparison was
+made against nothing — hence `extra: 523` (truncated to five in the summary), `intersection: 0`
+and `coverage_exact: false`. The verdict is therefore an artefact of the collection side of that
+run, not evidence that 523 tests were foreign or extra.
+
+The next step is mechanical and has its evidence preserved: inspect
+`scratch/lg-t6-teleop.*/collect.raw` (its line count and first lines say whether the collection
+produced node ids at all, and whether the forwarded arguments changed the report format), then
+make the helper derive the expected set from the *run's own* collection output for whatever root
+it was handed — or fail closed when the collection produced no node ids — instead of silently
+comparing against an empty manifest. Until that is done the teleop directory verdict stands as
+not-yet-explained, and no Task 9 completion is claimed on top of it.
+
+_Ledger HEAD when written: `b88c57728`._
