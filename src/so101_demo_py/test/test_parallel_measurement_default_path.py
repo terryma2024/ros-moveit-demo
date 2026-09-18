@@ -1268,3 +1268,24 @@ def test_baseline_writes_an_independent_peak_alias_cross_check(tmp_path):
         rows, {"peaks": {name: 0.0 for name in alias["peaks"]}})
     assert disagreeing["consistent"] is False, disagreeing
     session.finish()
+
+
+def test_sample_resources_records_per_owned_process_cpu():
+    """The throttle question needs to name the consumer. The sampler already knows the owned
+    process identity, so it can record each owned process's CPU and command name as raw
+    evidence inside the same pass that produces the decision (no external watcher)."""
+
+    import os
+    import so101_demo.parallel_batch.resource_measurement as rm
+    from so101_demo.parallel_batch.measurement_control import ProcessIdentity
+
+    stat = Path(f"/proc/{os.getpid()}/stat").read_text().rsplit(")", 1)[1].split()
+    owner = ProcessIdentity(os.getpid(), int(stat[19]), os.getuid(), os.getpgrp())
+    sample = rm.sample_resources(owned_inventory=(owner,), cgroup=_FakeCgroup([0, 0]),
+                                 device=_FakeDevice(), sequence=1, state={})
+    entries = sample.diagnostics["per_process_cpu"]
+    assert isinstance(entries, list) and entries, entries
+    entry = entries[0]
+    assert entry["pid"] == os.getpid()
+    assert entry["cpu_s"] >= 0.0
+    assert entry["comm"]
