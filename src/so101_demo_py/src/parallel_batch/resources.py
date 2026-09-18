@@ -24,6 +24,7 @@ import yaml
 
 from ..runtime.parallel_ipc import IpcError, require_transport_basename
 from .contracts import (
+    ParallelRuntimeConfigV3,
     ParallelRuntimeConfig,
     ParallelRuntimeConfigV2,
     load_parallel_runtime_config,
@@ -265,6 +266,39 @@ class WorkerResources:
 
 
 @dataclass(frozen=True, slots=True)
+class StartGuardAdmission:
+    """The allocator's record of the one bounded startup check it actually ran."""
+
+    status: str
+    reason: str
+    checks: Mapping[str, object]
+    observed_monotonic_s: float
+    gpu_uuid: str | None
+    cleanup_state: str
+
+    def __post_init__(self) -> None:
+        if self.status not in ('PASS', 'WARN', 'FAIL'):
+            raise ValueError('START_GUARD_STATUS')
+        if self.cleanup_state not in ('CLEAR', 'PROBE_CLEANUP_BLOCKED'):
+            raise ValueError('START_GUARD_CLEANUP_STATE')
+        object.__setattr__(self, 'checks', _freeze_json(dict(self.checks)))
+
+    @property
+    def admitted(self) -> bool:
+        return self.status != 'FAIL' and self.cleanup_state == 'CLEAR'
+
+    def to_dict(self) -> dict:
+        return {
+            'status': self.status,
+            'reason': self.reason,
+            'checks': _thaw_json(self.checks),
+            'observed_monotonic_s': self.observed_monotonic_s,
+            'gpu_uuid': self.gpu_uuid,
+            'cleanup_state': self.cleanup_state,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class ResourceManifest:
     """Exact admitted Worker count and all resulting isolated resources."""
 
@@ -274,11 +308,11 @@ class ResourceManifest:
     evidence_root: Path
     requested_worker_count: int
     worker_count: int
-    admission: ResourceAdmission
+    admission: StartGuardAdmission
     domain_claim_scope: str
     domain_claims: tuple[Mapping[str, object], ...]
     process_scan: Mapping[str, object]
-    live_headroom_evidence: Mapping[str, object] | None
+    start_guard: Mapping[str, object] | None
     workers: tuple[WorkerResources, ...]
 
     def __post_init__(self) -> None:
@@ -286,9 +320,9 @@ class ResourceManifest:
             self, 'domain_claims', tuple(_freeze_json(value) for value in self.domain_claims)
         )
         object.__setattr__(self, 'process_scan', _freeze_json(self.process_scan))
-        if self.live_headroom_evidence is not None:
+        if self.start_guard is not None:
             object.__setattr__(
-                self, 'live_headroom_evidence', _freeze_json(self.live_headroom_evidence)
+                self, 'start_guard', _freeze_json(self.start_guard)
             )
 
     def to_dict(self) -> dict[str, object]:
@@ -304,7 +338,7 @@ class ResourceManifest:
             'domain_claim_scope': self.domain_claim_scope,
             'domain_claims': [_thaw_json(value) for value in self.domain_claims],
             'process_scan': _thaw_json(self.process_scan),
-            'live_headroom_evidence': _thaw_json(self.live_headroom_evidence),
+            'start_guard': _thaw_json(self.start_guard),
             'workers': [worker.to_dict() for worker in self.workers],
         }
 
@@ -918,14 +952,13 @@ class WorkerResourceAllocator:
         probe=None,
         base_environment: Mapping[str, str] | None = None,
         claim_root: Path | None = None,
-        live_headroom_evidence: Path | None = None,
-        live_headroom_verifier=None,
         batch_id: str | None = None,
         allocation_policy: AllocationPolicy | None = None,
         ipc_root: Path | None = None,
-        resource_gate=None,
+        start_guard=None,
     ) -> None:
-        if not isinstance(config, (ParallelRuntimeConfig, ParallelRuntimeConfigV2)):
+        if not isinstance(config, (ParallelRuntimeConfig, ParallelRuntimeConfigV2,
+                                    ParallelRuntimeConfigV3)):
             raise ResourceAllocationError('CONFIG')
         raw_root = str(evidence_root)
         root = Path(evidence_root)
@@ -949,7 +982,7 @@ class WorkerResourceAllocator:
         if not isinstance(selected_batch_id, str) or _BATCH_ID.fullmatch(selected_batch_id) is None:
             raise ResourceAllocationError('BATCH_ID')
         self.batch_id = selected_batch_id
-        self._resource_gate = resource_gate
+        self._start_guard = start_guard
         self.allocation_policy = (
             AllocationPolicy(config.max_worker_count, config.ros_domain_ids)
             if allocation_policy is None
@@ -969,14 +1002,7 @@ class WorkerResourceAllocator:
         )
         if not self.claim_root.is_absolute():
             raise ResourceAllocationError('CLAIM_ROOT')
-        self.live_headroom_evidence = (
-            None if live_headroom_evidence is None else Path(live_headroom_evidence)
-        )
-        self._live_headroom_verifier = (
-            Task14LiveHeadroomVerifier()
-            if live_headroom_verifier is None
-            else live_headroom_verifier
-        )
+
         self._manifest: ResourceManifest | None = None
         self._workers: dict[str, WorkerResources] = {}
         self._claim_fds: dict[int, int] = {}
@@ -1008,15 +1034,13 @@ class WorkerResourceAllocator:
         if len(self.allocation_policy.ros_domain_ids) < requested:
             raise ResourceAllocationError('ROS_DOMAIN_IDS')
         observed = self._probe_snapshot()
-        version_two = isinstance(self.config, ParallelRuntimeConfigV2)
-        if version_two:
-            # Version two has no formula budget: fixed production admits only through the
-            # shared exact-N gate with an approved profile and live observation.
-            if self._resource_gate is None:
-                raise ResourceAllocationError('BUDGET_PROFILE_UNAVAILABLE')
-            decision = self._live_headroom_decision(requested)
-            if not decision.admitted:
-                raise ResourceAllocationError(decision.reason_codes[0])
+        version_three = isinstance(self.config, ParallelRuntimeConfigV3)
+        if version_three:
+            # Version three has no formula budget: the one bounded startup check decides.
+            admission, guard_document = self._start_guard_check(requested)
+            if not admission.admitted:
+                raise ResourceAllocationError(admission.reason, admission=admission)
+            live_headroom = guard_document
             required = ResourceThresholds(0, 0.0, 0.0)
             failures = ()
             headroom_ratio = 0.0
@@ -1035,20 +1059,21 @@ class WorkerResourceAllocator:
             required = ResourceThresholds(0, 0.0, 0.0)
             failures = ()
             headroom_ratio = 0.0
-        admission = ResourceAdmission(
-            admitted=not failures,
-            observed=observed,
-            required=required,
-            required_live_headroom_ratio=headroom_ratio,
-            failures=failures,
-        )
-        if failures:
-            raise ResourceAllocationError(', '.join(failures), admission=admission)
-        live_headroom = (
-            self._live_headroom(requested)
-            if version_two or self.allocation_policy.enforce_resource_thresholds
-            else None
-        )
+        if not version_three:
+            admission = ResourceAdmission(
+                admitted=not failures,
+                observed=observed,
+                required=required,
+                required_live_headroom_ratio=headroom_ratio,
+                failures=failures,
+            )
+            if failures:
+                raise ResourceAllocationError(', '.join(failures), admission=admission)
+            live_headroom = (
+                self._live_headroom(requested)
+                if self.allocation_policy.enforce_resource_thresholds
+                else None
+            )
 
         paths = tuple(self._paths(slot + 1) for slot in range(requested))
         parent_fd = None
@@ -1074,9 +1099,7 @@ class WorkerResourceAllocator:
                 os.close(parent_fd)
         self._workers = {worker.worker_id: worker for worker in workers}
         self._manifest = ResourceManifest(
-            schema_version=(
-                2 if isinstance(self.config, ParallelRuntimeConfigV2) else 1
-            ),
+            schema_version=3 if version_three else 1,
             mode='dry_run',
             backend=self.config.backend,
             evidence_root=self.evidence_root,
@@ -1086,7 +1109,7 @@ class WorkerResourceAllocator:
             domain_claim_scope=_DOMAIN_CLAIM_SCOPE,
             domain_claims=self._domain_claims,
             process_scan=self._process_scan,
-            live_headroom_evidence=live_headroom,
+            start_guard=live_headroom,
             workers=workers,
         )
         return self._manifest
@@ -1096,10 +1119,11 @@ class WorkerResourceAllocator:
         if self._closed or self._manifest is not None:
             raise ResourceAllocationError('ALLOCATOR_NOT_ACTIVE')
         expected_schema = (
-            2 if isinstance(self.config, ParallelRuntimeConfigV2) else 1
+            3 if isinstance(self.config, ParallelRuntimeConfigV3)
+            else 2 if isinstance(self.config, ParallelRuntimeConfigV2) else 1
         )
         if (
-            isinstance(self.config, ParallelRuntimeConfigV2)
+            isinstance(self.config, (ParallelRuntimeConfigV2, ParallelRuntimeConfigV3))
             and isinstance(manifest, ResourceManifest)
             and manifest.schema_version == 1
         ):
@@ -1179,31 +1203,13 @@ class WorkerResourceAllocator:
             if dict(environment) != expected_environment:
                 raise ResourceAllocationError('RECOVERY_RESOURCE_ENVIRONMENT')
         observed = self._probe_snapshot()
-        if isinstance(self.config, ParallelRuntimeConfigV2):
-            # Restore re-checks the same promoted profile and exact-N record as allocate;
-            # a v1 formula must never admit a version-two restore.
-            if self._resource_gate is None:
-                raise ResourceAllocationError('BUDGET_PROFILE_UNAVAILABLE')
-            decision = self._live_headroom_decision(manifest.worker_count)
-            if not decision.admitted:
-                raise ResourceAllocationError(decision.reason_codes[0])
-            recorded = manifest.live_headroom_evidence or {}
-            recorded_profile = recorded.get('profile_sha256')
-            if (
-                recorded_profile is not None
-                and decision.profile_sha256 is not None
-                and recorded_profile != decision.profile_sha256
-            ):
-                raise ResourceAllocationError('RUNTIME_FINGERPRINT_MISMATCH')
-            required = ResourceThresholds(0, 0.0, 0.0)
-            failures = ()
-            admission = ResourceAdmission(
-                admitted=True,
-                observed=observed,
-                required=required,
-                required_live_headroom_ratio=0.0,
-                failures=(),
-            )
+        if isinstance(self.config, ParallelRuntimeConfigV3):
+            # Restore re-runs one fresh bounded check; the recorded guard document is kept
+            # as evidence, and ownership/domain checks below are unchanged.
+            admission, guard_document = self._start_guard_check(manifest.worker_count)
+            if not admission.admitted:
+                raise ResourceAllocationError(admission.reason, admission=admission)
+            manifest = replace(manifest, admission=admission, start_guard=guard_document)
         else:
             required = ResourceThresholds(
                 logical_cpu_count=self.config.min_logical_cpu_per_worker * manifest.worker_count,
@@ -1351,48 +1357,52 @@ class WorkerResourceAllocator:
             self._manifest = replace(self._manifest, workers=ordered)
         return replacement
 
-    def _live_headroom_decision(self, worker_count: int):
-        """Ask the shared gate for one exact-N admission; never fabricate a pass."""
+    def _start_guard_check(self, worker_count: int):
+        """One bounded CPU/RAM/GPU check through the shared guard; never fabricate a pass."""
 
-        from .resource_budget import FixedAdmissionRequest
-        identity = self._resource_gate.execution_identity_sha256
-        if identity is None:
-            raise ResourceAllocationError('RESOURCE_PROBE_FAILED')
-        return self._resource_gate.admit(FixedAdmissionRequest(
-            worker_count=worker_count,
+        if self._start_guard is None:
+            raise ResourceAllocationError('START_GUARD_UNAVAILABLE')
+        device = getattr(self.config, 'gpu_device', None)
+        if device is None:
+            raise ResourceAllocationError('CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION')
+        from .start_guard import GuardScope
+        from .start_guard_probe import read_process_identity
+
+        identity = read_process_identity(os.getpid())
+        scope = GuardScope(
             batch_id=self.batch_id,
             epoch=1,
-            execution_identity_sha256=identity,
-            request_kind=getattr(self._resource_gate, 'request_kind', 'FIXED_PRODUCTION'),
-        ))
-
-    def _live_headroom(self, worker_count: int) -> Mapping[str, object] | None:
-        if self._resource_gate is not None:
-            decision = self._live_headroom_decision(worker_count)
-            if not decision.admitted:
-                raise ResourceAllocationError(decision.reason_codes[0])
-            return {
-                'worker_count': worker_count,
-                'profile_sha256': decision.profile_sha256,
-                'qualification_sha256': decision.qualification_sha256,
-                'observation_monotonic_s': decision.observation_monotonic_s,
-            }
-        if worker_count > 3:
-            # Adaptive W8 evidence does not qualify fixed-mode execution.
-            raise ResourceAllocationError('FIXED_WORKER_LIVE_QUALIFICATION_REQUIRED')
-        if worker_count != 3:
-            return None
-        if self.live_headroom_evidence is None:
-            raise ResourceAllocationError('THREE_WORKER_LIVE_EVIDENCE_REQUIRED')
-        try:
-            verified = self._live_headroom_verifier.verify(
-                self.live_headroom_evidence, config=self.config
-            )
-            if not isinstance(verified, Mapping):
-                raise TypeError('verifier result')
-            return dict(verified)
-        except Exception as error:
-            raise ResourceAllocationError('THREE_WORKER_LIVE_EVIDENCE_INVALID') from error
+            owner_pid=os.getpid(),
+            owner_starttime_ticks=identity.start_time_ticks if identity is not None else 0,
+            gpu_selector=f'{device.selector_kind}:{device.selector}',
+            worker_count=worker_count,
+        )
+        result = self._start_guard.require_before_spawn(scope)
+        admission = StartGuardAdmission(
+            status=result.status,
+            reason=(result.checks.get('probe').reason if 'probe' in result.checks
+                    else 'START_GUARD_REFUSED'),
+            checks={name: check.__dict__ if hasattr(check, '__dict__') else {
+                'status': check.status, 'reason': check.reason, 'observed': check.observed,
+                'cutoff': check.cutoff, 'unit': check.unit}
+                for name, check in result.checks.items()},
+            observed_monotonic_s=result.completed_monotonic_s,
+            gpu_uuid=None if result.snapshot is None else result.snapshot.gpu_uuid,
+            cleanup_state=result.cleanup_state,
+        )
+        document = {
+            'status': result.status,
+            'reason': admission.reason,
+            'checked_monotonic_s': result.completed_monotonic_s,
+            'cleanup_state': result.cleanup_state,
+            'gpu_uuid': admission.gpu_uuid,
+            'effective_cpu_cores': None if result.snapshot is None
+            else result.snapshot.effective_cpu_cores,
+            'ram_available_bytes': None if result.snapshot is None
+            else result.snapshot.ram_available_bytes,
+            'gpu_free_bytes': None if result.snapshot is None else result.snapshot.gpu_free_bytes,
+        }
+        return admission, document
 
     def _claim_domains(self, domains: tuple[int, ...]) -> None:
         claim_parent_fd = _open_trusted_parent(self.claim_root)
@@ -2596,24 +2606,22 @@ def _load_cli_config(path):
     except (OSError, yaml.YAMLError) as error:
         raise ResourceAllocationError(f'CONFIG_READ_FAILED: {path}') from error
     version = document.get('schema_version') if isinstance(document, dict) else None
-    if type(version) is not int or version != 2:
-        raise ResourceAllocationError('LEGACY_CONTRACT_EXECUTION_FORBIDDEN')
-    from .contracts import load_parallel_runtime_config_v2
-    return load_parallel_runtime_config_v2(Path(path))
+    if type(version) is not int or version != 3:
+        raise ResourceAllocationError('CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION')
+    from .contracts import load_parallel_runtime_config_v3
+    return load_parallel_runtime_config_v3(Path(path))
 
 
-def _compose_default_resource_gate(environment: Mapping[str, str], *, config_path=None):
-    """Installed composition of the shared gate; the test seam is only a fallback."""
+def _compose_default_start_guard(config):
+    """Installed composition used when the caller does not supply a guard."""
 
-    from .resource_budget import LiveObservationSource, compose_production_admission
+    from .start_guard_probe import compose_default_start_guard
 
-    return compose_production_admission(
-        environment=environment, config_path=config_path,
-        observation_source=LiveObservationSource())
+    return compose_default_start_guard(config.start_guard)
 
 
 def main(
-    argv=None, *, claim_root: Path | None = None, resource_gate=None,
+    argv=None, *, claim_root: Path | None = None, start_guard=None,
     environment: Mapping[str, str] | None = None,
 ) -> int:
     """Write a resource manifest without starting ROS, MuJoCo or Broker."""
@@ -2621,48 +2629,17 @@ def main(
     allocator = None
     try:
         config = _load_cli_config(arguments.config)
-        measurement_authorization = None
-        if arguments.measurement_authorization is not None:
-            if arguments.measurement_authorization_sha256 is None:
-                raise ResourceAllocationError('MEASUREMENT_AUTHORIZATION_INCOMPLETE')
-            from .resource_measurement import compose_measurement_admission
-
-            try:
-                measurement_authorization, measurement_gate = compose_measurement_admission(
-                    authorization_path=arguments.measurement_authorization,
-                    authorization_sha256=arguments.measurement_authorization_sha256,
-                    config_path=arguments.config)
-            except ContractError as error:
-                raise ResourceAllocationError(error.code) from error
-            if Path(arguments.evidence_root).resolve() != (
-                measurement_authorization.batch_root / measurement_authorization.dispatch_id
-            ).resolve():
-                # The allocator writes into the batch the authorization names; a caller
-                # cannot point it at a different root while presenting the same bytes.
-                if not Path(arguments.evidence_root).resolve().is_relative_to(
-                    measurement_authorization.batch_root.resolve()
-                ):
-                    raise ResourceAllocationError('MEASUREMENT_ARGUMENT_MISMATCH: EVIDENCE_ROOT')
-        if (
-            not isinstance(config, ParallelRuntimeConfig)
-            and arguments.live_headroom_evidence is not None
+        if arguments.measurement_authorization is not None or (
+            arguments.measurement_authorization_sha256 is not None
         ):
+            raise ResourceAllocationError('MEASUREMENT_AUTHORIZATION_RETIRED')
+        if arguments.live_headroom_evidence is not None:
             raise ResourceAllocationError('LIVE_HEADROOM_EVIDENCE_UNEXPECTED')
         allocator = WorkerResourceAllocator(
             config,
             arguments.evidence_root,
             claim_root=claim_root,
-            live_headroom_evidence=arguments.live_headroom_evidence,
-            resource_gate=(
-                measurement_gate
-                if arguments.measurement_authorization is not None
-                else resource_gate
-                if resource_gate is not None
-                else _compose_default_resource_gate(
-                    dict(os.environ if environment is None else environment),
-                    config_path=arguments.config)
-                or _DEFAULT_RESOURCE_GATE
-            ),
+            start_guard=start_guard or _compose_default_start_guard(config),
         )
         manifest = allocator.allocate(arguments.worker_count)
         document = manifest.to_dict()
