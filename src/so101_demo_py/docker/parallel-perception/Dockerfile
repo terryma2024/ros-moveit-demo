@@ -34,10 +34,9 @@ RUN mkdir /opt/so101-bootstrap && ln -s /opt/so101_demo_py/src /opt/so101-bootst
     && PYTHONPATH=/opt/so101-bootstrap DOCKERFILE_SHA256=$DOCKERFILE_SHA256 LOCK_SHA256=$LOCK_SHA256 SOURCE_SHA256=$SOURCE_SHA256 \
     python -c 'import os; from pathlib import Path; from so101_demo.cli.parallel_perception_broker import verify_source, canonical_json; actual=verify_source(Path("/opt/so101_demo_py"), {n:os.environ[n.upper()] for n in ("dockerfile_sha256","lock_sha256","source_sha256")}); Path("/opt/parallel-provenance.json").write_bytes(canonical_json(actual))' \
     && chmod -R a-w /opt/so101_demo_py /opt/parallel-provenance.json
-# The packaged tree must stay writable by nobody and readable by everybody: the
-# configs arrive from the host with owner-only read, and the broker runs as a
-# non-root user inside the image.
-    && chmod -R a+rX /opt/so101_demo_py /opt/parallel-provenance.json
+# The packaged tree must stay writable by nobody and readable by everybody: the configs
+# arrive from the host with owner-only read and the broker runs as a non-root user.
+RUN chmod -R a+rX /opt/so101_demo_py /opt/parallel-provenance.json
 RUN --mount=type=tmpfs,target=/tmp/so101-install \
     cp -a /opt/so101_demo_py/. /tmp/so101-install/ \
     && chmod -R u+w /tmp/so101-install \
