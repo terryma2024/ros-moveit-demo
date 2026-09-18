@@ -1029,6 +1029,7 @@ class CandidateRunPlan:
             "--evidence-root", str(self.batch_root),
             "--broker-image",
             self.bindings.broker_image_id if broker_image is None else broker_image,
+            "--broker-image-id", self.bindings.broker_image_id,
             "--yolo-weights", self.bindings.yolo_weights_path,
             "--yolo-weights-sha256", self.bindings.yolo_weights_sha256,
             "--grounded-root", self.bindings.grounded_root,
