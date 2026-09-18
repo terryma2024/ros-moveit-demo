@@ -4496,3 +4496,27 @@ Its next failure is a different and narrower one, recorded verbatim from
 The broker's provenance self-check reads that packaged config inside the image and cannot, so the
 next round inspects the in-image modes and the container's user/mounts (a read-only tree should still
 be readable, so the mode or the user is the suspect, not the content).
+
+## CP-UQ92 — The 60 s baseline, the workload, and a sampler gap three seconds in
+
+Run `n1-calibration-20260918-run59`, image digest
+`sha256:8e1572f4adf9dd1774f55661a7dc25cc7de4e24a6bb0a88452d5bc3d161237b9` (rebuilt after the
+Dockerfile learned to copy `scripts/` and to grant read bits), r38 sealed against it. The session's
+own receipt tells the story without inference:
+
+    BASELINE_START 0.00 -> LIMITS_APPLIED 0.14 -> BASELINE_END 60.17 -> SAMPLING_START 60.19
+    WORKLOAD_SPAWN 60.19 -> ABORT_LATCHED 63.70 -> CLEANUP_START 64.07 -> QUIET_END 69.07
+
+So: the genuine **60-second baseline ran** with 308 persisted samples and the peak alias beside it;
+the workload was spawned at 60.19 s; and the broker's `{"message": "SHUTDOWN_SIGNAL:SIGTERM"}` is the
+*consequence* of the measurement's own cancel path, not a launch failure -- the broker was alive long
+enough to be stopped by the harness. That is the first run in this task where every stage of the
+chain did its job and the refusal came from a measurement rule.
+
+The rule that fired is `SAMPLER_GAP` at 63.70 s (53 samples, observed CPU 0.02, not throttled), i.e.
+a sample interval longer than the 100 ms allowance while the broker and worker were starting. The
+next diagnostic is arithmetic rather than exploratory: list the per-sample timestamps from
+`raw/samples.jsonl` around the abort and compare the offending gap with the grid period, then decide
+between making the sampler robust under that load and giving the workload-start window the same
+documented, bounded treatment the attach point already has -- never widening the allowance itself,
+which is policy.
