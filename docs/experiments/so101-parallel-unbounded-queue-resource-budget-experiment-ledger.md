@@ -17,7 +17,8 @@ success_contract: Stage A offline implementation gates; Stage B full gates and f
 worktree: /data/work/so101-worktrees/unbounded-queue-resource-budget
 branch: codex/so101-unbounded-queue-resource-budget
 base_commit: 84620fc0529779a27c6985f8717d78f0386e0135
-current_commit: PENDING_AFTER_COMMIT (continuation dispatch 2e37ac85; last probe HEAD ccdb0119140ee3095144b948f57d8dd592502db8)
+current_commit: 93fc681aa4021a80b3964e7639c81d2d99a2a6b4 (HEAD when this header was refreshed; later
+  runtime commits and the live HEAD are recorded per checkpoint below)
 evidence_root: /data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main
 task_root: /data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main/unbounded-queue-resource-budget
 dispatch: /data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main/unbounded-queue-resource-budget/dispatch-20260918-84620fc0
@@ -37,8 +38,12 @@ disproven_routes:
 open_hypotheses:
   - Whether the operator approves a short-path scratch relocation for the socket-based demo gate in
     Stage B, or accepts those pre-existing failures as documented environment blockers.
-latest_checkpoint: CP-UQ08
-next_experiment: EXP-UQ09 (Task 8 adaptive no-K)
+  - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
+    moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
+    history and is no longer an open question.
+latest_checkpoint: CP-UQ31 (see the tail of this file; CP-UQ32 appended there for the current unit)
+next_experiment: EXP-UQ32 Task12 freeze completion, real ament_python 8-worker package gate, Stages B-E
+  within the latest user authorization
 ```
 
 ## Approvals (four independent authorities; plan lines 13-25, 36-40, 144, 193)
