@@ -40,12 +40,9 @@ def _copied_install(tmp_path: Path) -> Path:
     site = _site_packages(destination)
     site.mkdir(parents=True)
     shutil.copytree(PACKAGE_ROOT / "src", site / "so101_demo")
-    binaries = destination / "lib/so101_demo_py"
-    binaries.mkdir(parents=True)
-    for name in ("text_pick_agent", "so101_parallel_batch"):
-        target = binaries / name
-        target.write_text("#!/bin/sh\nexit 1\n")
-        target.chmod(0o755)
+    # No fake entrypoint is written: this module proves MODULE admission only. The real
+    # copied console/default-composition acceptance lives in
+    # test_copied_installed_entrypoint.py against an immutable copied prefix.
     share = destination / "share/ament_index/resource_index/packages"
     share.mkdir(parents=True)
     (share / "so101_demo_py").write_text("")
@@ -123,7 +120,11 @@ def _run_cli(prefix: Path, evidence_root: Path, *extra: str, installed_prefix=No
     ("--source-commit", "0" * 40),
 ])
 def test_copied_install_outside_git_runs_the_default_cli(tmp_path: Path, extra) -> None:
-    """RED before the amendment: any commit value refused a pure copied install."""
+    """Module admission: any commit value used to refuse a pure copied install.
+
+    This is NOT the copied console/default-composition acceptance - see
+    test_copied_installed_entrypoint.py for that.
+    """
 
     prefix = _copied_install(tmp_path)
     assert not (prefix / ".git").exists()
@@ -142,7 +143,8 @@ def test_copied_install_outside_git_runs_the_default_cli(tmp_path: Path, extra) 
     assert provenance["source_commit"] in {None, expected_commit}
     assert provenance["source_commit_source"] in {"OBSERVED", "DECLARED", "UNKNOWN"}
     assert provenance["module"]["sha256"]
-    assert provenance["entrypoint"]["sha256"]
+    # The entrypoint artifact is absent here by design (no fake stub is fabricated).
+    assert provenance.get("entrypoint") is None
 
 
 def test_copied_install_accepts_arbitrary_prefix_metadata(tmp_path: Path) -> None:
@@ -222,7 +224,7 @@ def test_debug_manifest_covers_installed_artifacts_and_detects_byte_change(tmp_p
     paths = {item["path"] for item in document["artifacts"]}
     relative_module = _site_packages(Path(".")).relative_to(".").as_posix()
     assert f"{relative_module}/so101_demo/cli/text_pick_agent.py" in paths
-    assert "lib/so101_demo_py/text_pick_agent" in paths
+    assert "lib/python3.12/site-packages/so101_demo/cli/text_pick_agent.py" in paths
     assert any(path.startswith("share/so101_demo_py/") for path in paths)
     assert MANIFEST_RELATIVE_PATH not in paths
     assert not any("__pycache__" in path or path.endswith(".pyc") for path in paths)
