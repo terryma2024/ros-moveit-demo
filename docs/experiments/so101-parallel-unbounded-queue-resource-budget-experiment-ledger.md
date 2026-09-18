@@ -6878,3 +6878,34 @@ the coordinator log. If the provenance chain is finally satisfied, the next entr
 workers rather than about provenance.
 
 _Ledger HEAD when written: `08dad1f80`._
+
+## CP-UQ169 — The coordinator now runs: provenance is satisfied, and the broker exits 1
+
+After redeploying from a **verified** copy (`copy-install-final.5EPRaqiL`, selected by scanning all
+candidates for a CLI that byte-matches the tree rather than by "is a build running"), the campaign
+gets dramatically further. The coordinator log is no longer a provenance error at all:
+
+```
+File ".../so101_demo/cli/mujoco_parallel_batch.py", line 3879, in run
+    self._wait_broker_ready()
+File ".../so101_demo/runtime/parallel_processes.py", line 346, in assert_healthy
+    raise SupervisorError(f"EARLY_EXIT: {expected.role}: {code}")
+so101_demo.runtime.parallel_processes.SupervisorError: EARLY_EXIT: broker: 1
+```
+
+So: provenance passes, the batch composition is built, the coordinator spawns the **broker
+container**, and the broker exits with code 1 — its own stderr is at the head of the same log (the
+`/opt/venv/bin/so101_parallel_perception_broker` traceback). That is the next defect and it is a
+product-side one, in the container's broker entry with the v3 config, not in the guard or in
+provenance.
+
+Also recorded, twice over: deploying while a build was in flight raced the build again this round
+(the deploy "succeeded" with `/health` returning `{}`), and the recovery was again a scan for a
+verified copy. The process rule stands: **verify immediately before deploying**, and never treat
+"no build running" as evidence that a directory is complete.
+
+Next round: read the broker's traceback at the head of the coordinator log (or the container's log)
+and fix that; then the campaign should finally reach workers, which is where the functional
+acceptance and the five-batch stability record begin.
+
+_Ledger HEAD when written: `5983893b2`._
