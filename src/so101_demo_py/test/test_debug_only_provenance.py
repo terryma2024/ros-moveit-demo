@@ -145,8 +145,8 @@ def test_copied_install_outside_git_runs_the_default_cli(tmp_path: Path, extra) 
     assert provenance["entrypoint"]["sha256"]
 
 
-def test_copied_install_refuses_only_a_wrong_installed_prefix(tmp_path: Path) -> None:
-    """The installed location stays a real gate; only the commit criterion is gone."""
+def test_copied_install_accepts_arbitrary_prefix_metadata(tmp_path: Path) -> None:
+    """Prefix metadata is optional debug data; the functional chain still runs."""
 
     prefix = _copied_install(tmp_path)
     elsewhere = tmp_path / "elsewhere"
@@ -154,8 +154,33 @@ def test_copied_install_refuses_only_a_wrong_installed_prefix(tmp_path: Path) ->
     completed = _run_cli(
         prefix, tmp_path / "evidence", "--source-commit", "0" * 40,
         installed_prefix=elsewhere)
-    assert completed.returncode != 0
-    assert "EXECUTION_INSTALLED_PREFIX_MISMATCH" in completed.stdout + completed.stderr
+    assert completed.returncode == 0, completed.stderr[-1500:]
+    assert json.loads(completed.stdout.strip().splitlines()[-1])["exit"] == 0
+    persisted = list((tmp_path / "evidence/text-agent-provenance").glob("*.json"))
+    assert persisted
+    provenance = json.loads(persisted[0].read_text())["execution_provenance"]
+    # The mismatch is not an admission rule: the value is recorded, never enforced.
+    assert provenance["installed_prefix"] in {None, str(elsewhere), str(prefix)}
+
+
+def test_functional_executable_discovery_is_preserved(tmp_path: Path, monkeypatch) -> None:
+    """Removing metadata admission must not remove real resource discovery."""
+
+    from so101_demo.runtime.launch_composition import installed_executable
+
+    found = installed_executable("text_pick_agent")
+    assert found.is_file()
+
+    import so101_demo.runtime.launch_composition as module
+
+    def unavailable(*_args, **_kwargs):
+        raise LookupError("no ament index")
+
+    monkeypatch.setattr(module, "get_package_prefix", unavailable)
+    monkeypatch.setattr(module, "get_package_share_directory", unavailable)
+    monkeypatch.setattr(module.shutil, "which", lambda _name: None)
+    with pytest.raises(RuntimeError, match="installed executable is unavailable"):
+        installed_executable("text_pick_agent")
 
 
 def test_runtime_never_reads_a_debug_manifest(tmp_path: Path) -> None:

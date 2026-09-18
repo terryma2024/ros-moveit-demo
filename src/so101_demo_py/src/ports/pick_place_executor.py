@@ -38,7 +38,7 @@ class VerifiedArtifact:
 @dataclass(frozen=True, slots=True)
 class ExecutionProvenance:
     source_commit: str | None
-    installed_prefix: str
+    installed_prefix: str | None
     entrypoint: VerifiedArtifact | None
     module: VerifiedArtifact | None
     executable: VerifiedArtifact | None

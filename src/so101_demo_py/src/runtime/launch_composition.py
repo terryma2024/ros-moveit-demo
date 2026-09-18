@@ -6,6 +6,7 @@ import json
 import os
 import platform
 import re
+import shutil
 import signal
 import stat
 import sys
@@ -173,7 +174,7 @@ class E2ESupervisor:
         session_id: str,
         backend: str,
         source_commit: str | None,
-        installed_prefix: str,
+        installed_prefix: str | None,
         run_root: Path,
         result_file: Path,
         text_agent_action: ExecuteProcess,
@@ -1151,12 +1152,7 @@ def _mujoco_text_pick_agent_execute_actions(
     )
     workflow = ExecuteProcess(
         cmd=[
-            str(
-                Path(execution_identity.package_prefix)
-                / "lib"
-                / "so101_demo_py"
-                / "text_pick_agent"
-            ),
+            str(installed_executable("text_pick_agent")),
             "--instruction",
             instruction,
             "--mode",
@@ -1178,8 +1174,11 @@ def _mujoco_text_pick_agent_execute_actions(
                 if execution_identity.source_commit is not None
                 else ()
             ),
-            "--installed-prefix",
-            execution_identity.package_prefix,
+            *(
+                ("--installed-prefix", execution_identity.package_prefix)
+                if execution_identity.package_prefix is not None
+                else ()
+            ),
             *profiling_arguments,
         ],
         output="both",
@@ -1344,8 +1343,11 @@ def _gazebo_execute_actions(
                 if bundle.manifest["inputs"].get("source_commit") is not None
                 else ()
             ),
-            "--installed-prefix",
-            str(bundle.manifest["inputs"]["package_prefix"]),
+            *(
+                ("--installed-prefix", str(bundle.manifest["inputs"]["package_prefix"]))
+                if bundle.manifest["inputs"].get("package_prefix") is not None
+                else ()
+            ),
             "--policy-sha256",
             policy.policy_sha256,
             "--bundle-sha256",
@@ -1412,7 +1414,12 @@ def _configured_actions(context, *, backend: str, pick_place: bool):
     if not session_id:
         raise RuntimeError("session_id must be non-empty")
     share = Path(get_package_share_directory("so101_demo_py"))
-    prefix = Path(get_package_prefix("so101_demo_py"))
+    try:
+        prefix = Path(get_package_prefix("so101_demo_py"))
+    except (LookupError, OSError, RuntimeError):
+        # DEBUG metadata only: a missing ament index must not block an otherwise
+        # functional launch that already resolved its share directory.
+        prefix = None
     policy = load_policy_variant(
         LaunchConfiguration("policy_id").perform(context),
         LaunchConfiguration("policy_version").perform(context),
@@ -1939,6 +1946,32 @@ def _e2e_model_provenance(options: PerceptionLaunchOptions) -> dict[str, object]
     return document
 
 
+def installed_executable(name: str) -> Path:
+    """Functional discovery of one installed console script; metadata cannot block it.
+
+    Ament's index is consulted first, then the share directory layout, then PATH. Only
+    a genuinely unavailable executable raises here.
+    """
+
+    candidates: list[Path] = []
+    try:
+        candidates.append(Path(get_package_prefix("so101_demo_py")) / "lib/so101_demo_py" / name)
+    except (LookupError, OSError, RuntimeError):
+        pass
+    try:
+        share = Path(get_package_share_directory("so101_demo_py"))
+        candidates.append(share.parents[1] / "lib/so101_demo_py" / name)
+    except (LookupError, OSError, RuntimeError):
+        pass
+    located = shutil.which(name)
+    if located:
+        candidates.append(Path(located))
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise RuntimeError(f"installed executable is unavailable: {name}")
+
+
 def _e2e_process_handlers(
     supervisor: E2ESupervisor,
     *,
@@ -2035,10 +2068,7 @@ def _configured_text_pick_agent_e2e_actions(context):
     camera_transforms = tuple(camera_static_transform_nodes())
 
     executable = (
-        Path(execution_identity.package_prefix)
-        / "lib"
-        / "so101_demo_py"
-        / "text_pick_agent"
+        installed_executable("text_pick_agent")
     )
     text_agent = ExecuteProcess(
         cmd=[
@@ -2066,8 +2096,11 @@ def _configured_text_pick_agent_e2e_actions(context):
                 if execution_identity.source_commit is not None
                 else ()
             ),
-            "--installed-prefix",
-            execution_identity.package_prefix,
+            *(
+                ("--installed-prefix", execution_identity.package_prefix)
+                if execution_identity.package_prefix is not None
+                else ()
+            ),
             "--emit-workflow-events",
             "--workflow-id",
             workflow_id,

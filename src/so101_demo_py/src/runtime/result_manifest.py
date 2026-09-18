@@ -22,7 +22,7 @@ class RunResultManifest:
     session_id: str
     reset_epoch: int
     source_commit: str | None
-    installed_prefix: str
+    installed_prefix: str | None
     policy_sha256: str
     bundle_sha256: str
     first_failed_phase: str | None
@@ -37,8 +37,9 @@ class RunResultManifest:
         # is a valid deployment, so no commit value can refuse a run result.
         if self.source_commit is not None and not isinstance(self.source_commit, str):
             raise ValueError("source commit metadata must be a string or None")
-        if not self.installed_prefix or not Path(self.installed_prefix).is_absolute():
-            raise ValueError("installed prefix must be an absolute path")
+        # The installed prefix is optional DEBUG metadata, never a validity rule.
+        if self.installed_prefix is not None and type(self.installed_prefix) is not str:
+            raise ValueError("installed prefix metadata must be a string or None")
         if not _SHA256.fullmatch(self.policy_sha256) or not _SHA256.fullmatch(
             self.bundle_sha256
         ):
@@ -51,7 +52,7 @@ def classify_run(
     session_id: str,
     reset_epoch: int,
     source_commit: str | None,
-    installed_prefix: str,
+    installed_prefix: str | None,
     policy_sha256: str,
     bundle_sha256: str,
     error_code: str | None,

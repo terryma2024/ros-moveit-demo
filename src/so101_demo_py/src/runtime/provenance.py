@@ -32,7 +32,7 @@ class InstalledExecutionIdentity:
     """
 
     source_commit: str | None
-    package_prefix: str
+    package_prefix: str | None
     source_commit_source: str = "UNKNOWN"
 
 
@@ -91,18 +91,26 @@ def observed_source_commit(source_root: Path | None) -> str | None:
 
 
 def resolve_installed_execution_identity() -> InstalledExecutionIdentity:
-    """Resolve the installed location; the source commit is an optional observation."""
+    """Best-effort DEBUG identity: both fields are optional observations.
 
-    from ament_index_python.packages import get_package_prefix
+    A missing ament index, a relative or vanished prefix, or a package that only exists
+    as a direct import path are not runtime failures; callers that genuinely need an
+    executable or share resource discover and validate it functionally at use time.
+    """
 
+    package_prefix: Path | None = None
     try:
-        package_prefix = Path(get_package_prefix("so101_demo_py")).resolve(strict=True)
-    except (LookupError, OSError, RuntimeError):
-        raise ExecutionProvenanceError("EXECUTION_PACKAGE_PREFIX_UNAVAILABLE") from None
+        from ament_index_python.packages import get_package_prefix
+
+        candidate = Path(get_package_prefix("so101_demo_py"))
+        if candidate.is_absolute() and candidate.is_dir():
+            package_prefix = candidate.resolve()
+    except (ImportError, LookupError, OSError, RuntimeError):
+        package_prefix = None
     observed = observed_source_commit(package_prefix)
     return InstalledExecutionIdentity(
         source_commit=observed,
-        package_prefix=str(package_prefix),
+        package_prefix=None if package_prefix is None else str(package_prefix),
         source_commit_source="OBSERVED" if observed is not None else "UNKNOWN",
     )
 
@@ -110,28 +118,19 @@ def resolve_installed_execution_identity() -> InstalledExecutionIdentity:
 def verify_execution_provenance(
     *,
     declared_source_commit: str | None,
-    declared_installed_prefix: str,
+    declared_installed_prefix: str | None,
     session_id: str,
     expected_reset_epoch: int,
     evidence_root: Path,
 ) -> ExecutionProvenance:
-    """Verify the INSTALLED LOCATION and byte artifacts; never a source commit.
+    """Verify session/evidence; source commit and prefix are DEBUG metadata only.
 
-    A declared commit (any value, including missing, malformed or mismatched) is
-    recorded as DEBUG metadata only: no Git command runs here and no commit value can
-    refuse execution.
+    A declared commit or prefix (any value, including missing, relative, nonexistent or
+    mismatched) is recorded as an observation: no Git command runs here, no ament
+    lookup is required and no metadata value can refuse execution.
     """
 
-    try:
-        declared_prefix = Path(declared_installed_prefix).resolve(strict=True)
-    except (OSError, RuntimeError):
-        raise ExecutionProvenanceError("EXECUTION_INSTALLED_PREFIX_INVALID") from None
-
     identity = resolve_installed_execution_identity()
-    package_prefix = Path(identity.package_prefix)
-    if declared_prefix != package_prefix:
-        raise ExecutionProvenanceError("EXECUTION_INSTALLED_PREFIX_MISMATCH")
-
     from ..application import text_agent as runtime_module
 
     try:
@@ -152,12 +151,18 @@ def verify_execution_provenance(
         commit, commit_source = str(declared_source_commit).strip() or None, "DECLARED"
     else:
         commit, commit_source = None, "UNKNOWN"
+    prefix = Path(identity.package_prefix) if identity.package_prefix else None
+    if prefix is None and declared_installed_prefix:
+        candidate = Path(str(declared_installed_prefix))
+        if candidate.is_absolute() and candidate.is_dir():
+            prefix = candidate.resolve()
     return ExecutionProvenance(
         source_commit=commit,
         source_commit_source=commit_source,
-        installed_prefix=str(package_prefix),
-        entrypoint=_verified_artifact(
-            package_prefix / "lib/so101_demo_py/text_pick_agent"
+        installed_prefix=None if prefix is None else str(prefix),
+        entrypoint=(
+            None if prefix is None
+            else _verified_artifact(prefix / "lib/so101_demo_py/text_pick_agent")
         ),
         module=None if module_path is None else _verified_artifact(module_path),
         executable=_verified_artifact(Path(sys.executable)),
@@ -223,18 +228,30 @@ def installed_bundle() -> QualificationBundle:
     from ament_index_python.packages import get_package_prefix, get_package_share_directory
 
     share = Path(get_package_share_directory("so101_demo_py"))
-    prefix = Path(get_package_prefix("so101_demo_py"))
-    mujoco_prefix = Path(get_package_prefix("mujoco_ros2_control"))
+
+    def optional_prefix(package: str) -> str | None:
+        try:
+            candidate = Path(get_package_prefix(package))
+        except (LookupError, OSError, RuntimeError):
+            return None
+        return str(candidate) if candidate.is_absolute() and candidate.is_dir() else None
+
+    prefix = optional_prefix("so101_demo_py")
+    mujoco_prefix = optional_prefix("mujoco_ros2_control")
     return build_bundle_manifest(
         {
             "source_commit": _source_commit(),
-            "package_prefix": str(prefix),
+            "package_prefix": prefix,
             "policy_registry": share / "config" / "policies",
             "geometry_assets": share / "assets",
             "mujoco_ros2_control": {
-                "prefix": str(mujoco_prefix),
+                "prefix": mujoco_prefix,
                 "executable": (
-                    mujoco_prefix / "lib/mujoco_ros2_control/ros2_control_node"
+                    None if mujoco_prefix is None
+                    else str(
+                        Path(mujoco_prefix)
+                        / "lib/mujoco_ros2_control/ros2_control_node"
+                    )
                 ),
             },
             "runner_version": "fusion-v1",

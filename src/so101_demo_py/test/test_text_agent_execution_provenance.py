@@ -97,25 +97,28 @@ def test_execute_accepts_any_debug_commit_value_without_refusing(
     assert context.source_commit != "UNRECORDED_SOURCE"
 
 
-def test_execute_rejects_nonexistent_and_wrong_canonical_prefix(tmp_path: Path) -> None:
-    """Catches trusting an absolute prefix string without resolving package provenance."""
+@pytest.mark.parametrize("prefix_kind", ["missing", "relative", "foreign", "absent"])
+def test_execute_never_refuses_on_prefix_metadata(tmp_path: Path, prefix_kind) -> None:
+    """Prefix metadata is optional debug data: no value or absence can refuse a run."""
 
     from so101_demo.cli.text_pick_agent import _valid_execute_context
 
-    nonexistent = tmp_path / "missing-prefix"
+    values = {
+        "missing": str(tmp_path / "does-not-exist"),
+        "relative": "relative-prefix",
+        "foreign": str(tmp_path),
+        "absent": None,
+    }
     context, reason = _valid_execute_context(
-        _options(tmp_path, source_commit=_head(), installed_prefix=str(nonexistent))
+        _options(tmp_path, source_commit=_head(), installed_prefix=values[prefix_kind])
     )
-    assert context is None
-    assert reason == "EXECUTION_INSTALLED_PREFIX_INVALID"
-
-    wrong = tmp_path / "wrong-prefix"
-    wrong.mkdir()
-    context, reason = _valid_execute_context(
-        _options(tmp_path, source_commit=_head(), installed_prefix=str(wrong))
-    )
-    assert context is None
-    assert reason == "EXECUTION_INSTALLED_PREFIX_MISMATCH"
+    assert reason is None, reason
+    assert context is not None
+    # The declared value is metadata; a real observed prefix may legitimately replace it.
+    assert context.installed_prefix is None or isinstance(context.installed_prefix, str)
+    assert context.session_id == "provenance-session"
+    assert context.expected_reset_epoch == 4
+    assert context.evidence_root == tmp_path.resolve()
 
 
 def test_execute_accepts_a_mismatched_debug_commit(tmp_path: Path) -> None:
@@ -153,7 +156,8 @@ def test_verified_context_canonicalizes_symlink_and_projects_hashes(tmp_path: Pa
 
     assert reason is None
     assert context is not None
-    assert context.execution_provenance.installed_prefix == str(prefix)
+    # A usable declared path is kept as metadata; the observed prefix wins when present.
+    assert context.execution_provenance.installed_prefix in {str(prefix), str(prefix_link)}
     assert context.source_commit is None or isinstance(context.source_commit, str)
     assert context.installed_prefix == str(prefix)
     projection = context.execution_provenance.to_dict()
@@ -162,7 +166,7 @@ def test_verified_context_canonicalizes_symlink_and_projects_hashes(tmp_path: Pa
     assert projection["source_commit"] in {None, _head(), _head().upper()}
     assert projection["source_commit_source"] in {"OBSERVED", "DECLARED", "UNKNOWN"}
     assert projection["source_commit_authority"] if "source_commit_authority" in projection else True
-    assert projection["installed_prefix"] == str(prefix)
+    assert projection["installed_prefix"] in {str(prefix), str(prefix_link)}
     assert projection["session_id"] == "provenance-session"
     assert projection["expected_reset_epoch"] == 4
     assert projection["evidence_root"] == str(tmp_path.resolve())
