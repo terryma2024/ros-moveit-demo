@@ -194,3 +194,26 @@ def test_control_event_times_show_what_the_control_saw(make_control):
     assert times["t_last_sample"] == 1.02
     assert times["t_breach"] == 1.5
     assert times["t_abort_latch"] is not None
+
+
+def test_a_gap_between_two_samples_latches_even_without_a_mid_gap_check(make_control):
+    """run39 took a 142.9 ms sample gap and never latched: the health check only ever
+    compares now with the *latest* sample, so a gap that opens and closes between two
+    checks is invisible. observe_sample sees both timestamps and must rule on them."""
+
+    control, calls = make_control()
+    control.mark_sampling_start(1.0)
+    control.observe_sample(1, 1.01)
+    control.observe_sample(2, 1.1529)
+    assert control.stop_requested()
+    assert control.latch_reason == "SAMPLER_GAP"
+    assert calls and calls[0][1] == "SAMPLER_GAP"
+
+
+def test_two_consecutive_samples_inside_the_allowance_do_not_latch(make_control):
+    control, calls = make_control()
+    control.mark_sampling_start(1.0)
+    control.observe_sample(1, 1.01)
+    control.observe_sample(2, 1.0909)
+    assert not control.stop_requested()
+    assert calls == []
