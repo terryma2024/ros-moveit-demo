@@ -4694,3 +4694,28 @@ library, so the consuming side is elsewhere in the composition), or accept that 
 calibratable under this envelope on this host and record that as the measured fact. Either way this
 is the first run in the task whose outcome is a statement about the candidate rather than about the
 instrument.
+
+## CP-UQ100 — Thread bounds reach the container, and one throttled sample still disqualifies
+
+Run67 (r46, thread bounds forwarded into the container, 26 container tests green) reproduces run66's
+outcome: `abort=CPU_THROTTLED`, 200 samples, 317-sample baseline, the workload running from 60.32 s to
+71.24 s and cleaning up. The difference worth noting is *how small* the trigger was: exactly **one**
+sample out of 200 reports `throttled`, and the CPU rate over the run is small -- so this is not a
+sustained overload but a single brief excursion past the cgroup's `cpu.max` quota (0.8 x 24 cores
+minus background, ~18.6 cores). The frozen policy is zero-tolerance here
+(`throttling_disqualifies_run: true` and any `nr_throttled` delta latches), and the amendment
+deliberately preserved throttling as a policy dimension, so the abort itself is the rule working.
+
+Two things need separating next, and they are cheap to separate:
+
+1. whether the bounds actually arrived inside the container (the argv is built host-side and was
+   rebuilt; the container is gone with `--rm`, so the evidence to check is the launcher's own record
+   of the argv it ran, not a live container), and
+2. what the workload's peak demand really is against the quota -- one excursion in 200 samples at a
+   ~10 s run suggests a startup burst rather than a resource-hungry steady state.
+
+If (1) holds and (2) is a startup burst, the honest conclusion may be that this workload needs either
+a larger envelope or a policy decision about single-event throttling during startup -- both operator
+decisions, not harness fixes. What is already established is that the instrument is no longer the
+obstacle: the entire chain runs, and every remaining refusal is a policy judgement about the
+candidate.
