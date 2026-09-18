@@ -1865,3 +1865,108 @@ evidence:
   - scratch/f3-red.*, scratch/f3-green*.*, scratch/f3-regression.*, scratch/repair-full-*.*
 decision: KEEP
 next_experiment: EXP-UQ22 (repaired copied install and installed gate)
+
+## EXP-UQ22 — repaired copied install and post-repair gate matrix
+
+```yaml
+experiment_id: EXP-UQ22
+status: VALID
+prior_experiment: EXP-UQ21
+hypothesis: After F1-F3 the frozen repaired source can be copied into a new immutable install and every
+  required offline gate passes against it.
+prediction: The final copied install builds exit 0; the demo/teleop/colcon/OpenAPI/Web/contract/installed
+  gates all pass with the repaired code.
+single_variable: repair-final copied install + gate matrix
+lifecycle: ISOLATED_STACK
+preconditions:
+  - F1-F3 committed and the tree clean; earlier frozen copies and bindings untouched.
+success_criteria:
+  - repair-final-install built from the repaired HEAD with module origins inside the prefix.
+  - All required gates exit 0 with real collected counts.
+failure_criteria:
+  - Any exclusion, stale overlay or overwritten prior artifact.
+invalid_criteria:
+  - A missing test-mode environment counted as a product failure (re-run with NODE_ENV=test).
+provenance:
+  source_commit: a2373a6b29f7023d48b45978186aff657c8ac98e
+  install_overlay: $TASK_ROOT/repair-final-install (copied, repaired source)
+  runtime_executable: $TASK_ROOT/venv/bin/python + /usr/bin/python3 (CTest) + bun 1.3.14
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: so101_colcon repair-final-build build --packages-select so101_demo_py so101_teleop so101_mujoco_support --build-base $TASK_ROOT/repair-final-build --install-base $TASK_ROOT/repair-final-install
+    exit_code: 0
+  - command: so101_pytest repair-full-demo src/so101_demo_py/test -q
+    exit_code: 0
+  - command: so101_pytest repair-full-teleop src/so101_teleop/test -q
+    exit_code: 0
+  - command: so101_colcon repair-demo-colcon test ... --pytest-args test
+    exit_code: 0
+  - command: so101_colcon repair-teleop-colcon test ...
+    exit_code: 0
+  - command: so101_colcon repair-test-result test-result --test-result-base $TASK_ROOT/dev-build --verbose
+    exit_code: 0
+  - command: so101_pytest repair-openapi src/so101_teleop/test/teleop/test_openapi_export.py -q
+    exit_code: 0
+  - command: so101_bun repair-web-unit2 run test
+    exit_code: 0
+  - command: so101_bun repair-web-build run build
+    exit_code: 0
+  - command: so101_bun repair-contract-gate run test:e2e e2e/expert-validation/contract/setup.spec.ts e2e/expert-validation/contract/live-preflight.spec.ts
+    exit_code: 0
+  - command: so101_bun repair-installed-gate run test:e2e:installed <four installed specs>
+    exit_code: 0
+observed:
+  - repair-full-demo: 3235 passed, 1 skipped, exit 0 (354.58 s).
+  - repair-full-teleop: 529 passed, exit 0 (40.55 s) — includes the F2 installed-composition suite.
+  - colcon: demo exit 0 (339.68 s), teleop exit 0 (70.61 s), test-result summary
+    3814 tests, 0 errors, 0 failures, 1 skipped.
+  - OpenAPI: 5 passed.
+  - Web unit: 119 passed / 29 files (exit 0) after NODE_ENV=test; build exit 0 (2.56 s).
+  - Contract e2e: 17 passed (exit 0). Installed e2e against repair-final-install: 15 passed (exit 0).
+  - bindings/repair-final-provenance.json binds commit a2373a6b29f7023d48b45978186aff657c8ac98e, clean
+    tree, install_prefix repair-final-install, with both product module origins inside the prefix.
+inferred:
+  - The three review findings are repaired at their real consumer boundaries; the remaining plan work needs
+    the external authority stages and reviews that this unit is not authorized to perform.
+conclusion: VALID. Stop for Sol/High re-review per the dispatch.
+evidence:
+  - colcon/repair-final-build.*, scratch/repair-full-*.*, colcon/repair-*colcon.*, colcon/repair-test-result.*,
+    browser/repair-web-unit2.*, browser/repair-web-build.*, browser/repair-contract-gate.*,
+    browser/repair-installed-gate.*, bindings/repair-final-provenance.json
+decision: KEEP
+next_experiment: NONE-AUTHORIZED (await Sol/High re-review)
+```
+
+```yaml
+checkpoint_id: CP-UQ22
+last_valid_experiment: EXP-UQ22
+current_hypothesis: NONE (authorized repair unit complete; awaiting independent re-review)
+working_tree_status: clean at the final docs commit
+owned_processes: NONE
+preserved_processes: NONE from this task family
+confirmed_conclusions:
+  - F1 candidate lifecycle composes and seals from closed sealed bindings, offline-proven (EXP-UQ19).
+  - F2 installed factory/CLIs/allocator compose one provider; capabilities derive from decisions; copied
+    install child proves N4-only selectability (EXP-UQ20).
+  - F3 producer/verifier/issuer share one closed schema2 promotion/deployment contract with a real
+    round-trip (EXP-UQ21).
+  - Post-repair gate matrix green: demo 3235, teleop 529, colcon 3814/0/0/1 skipped, OpenAPI 5, Web 119,
+    contract 17, installed 15 (EXP-UQ22).
+unresolved_independent_reviews:
+  - GPT-6 Astra/High: Task 1-4 identity/inventory/closed-context boundaries, Task 11 API/installed
+    closure, Task 16 guide (none performed).
+  - GPT-5.6 Sol/High re-review of these F1-F3 repairs (this checkpoint stops for it)
+  - The earlier Sol/High execution review remains CHANGES_REQUIRED until that re-review passes.
+unperformed_live_stages:
+  - Stage B owned recovery/Web refresh (no owned window); Stage C candidate measurement (no sealed
+    authorization; the runner hook is now implemented but has never been invoked live); Stage D operator
+    promotion/deployment (no approval; no real promotion record exists); Stage E live Chrome acceptance.
+  - All exact-N budgets remain NOT_MEASURED; none is qualified or selectable in reality.
+retained:
+  - Every run, log, binding, copied install and scratch from this and earlier units, including the failed
+    intermediate attempts (f2-green1..13, f3-red, repair-web-unit.5RMhplZE).
+archived: none
+deletion_candidates: $TASK_ROOT/scratch/*, superseded colcon run logs, the outdated
+  repair-offline-build/repair-offline-install copies after readback (classification only; nothing deleted)
+next_command: NONE authorized; await Sol/High re-review and the separate Astra/High and operator gates.
