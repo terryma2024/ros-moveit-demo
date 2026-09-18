@@ -2423,6 +2423,7 @@ class ProductionBatchComposition:
     ):
         self.worker_servers = []
         self.fixed_control_server = None
+        self.measurement_control = None
         self._server_threads = []
         self.allocator = None
         self.journal = None
@@ -3520,8 +3521,16 @@ class ProductionBatchComposition:
         server.check_health()
         return self.coordinator.snapshot().terminal_reason == "WEB_CANCEL_REQUESTED"
 
+    def _stop_requested(self):
+        """One stop predicate: an owned measurement abort latches before Web state."""
+
+        measurement_control = getattr(self, "measurement_control", None)
+        if measurement_control is not None and measurement_control.stop_requested():
+            return True
+        return self._fixed_web_stop_requested()
+
     def _check_fixed_web_stop(self):
-        if self._fixed_web_stop_requested():
+        if self._stop_requested():
             raise _FixedWebStopRequested("WEB_CANCEL_REQUESTED")
 
     def _run_worker_local(self, path):
@@ -3767,8 +3776,9 @@ class ProductionBatchComposition:
                         self.coordinator.snapshot().broker_healthy
                     ),
                 }
-                if self.fixed_control_server is not None:
-                    wait_kwargs["stop_requested"] = self._fixed_web_stop_requested
+                # Unconditional: an owned measurement owner must be able to stop child
+                # waits even when no production Web control server exists.
+                wait_kwargs["stop_requested"] = self._stop_requested
                 if self.adaptive_context is not None:
                     wait_kwargs.update(
                         stop_on_nonzero=True,
