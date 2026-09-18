@@ -4795,3 +4795,23 @@ options are to find and bound that last consumer, to widen the envelope (a polic
 `capacity_fraction`/`safety`), or to accept single-period throttling as non-disqualifying during a
 cold start (a policy change to `throttling_disqualifies_run`). The first is engineering; the other two
 are the operator's.
+
+## CP-UQ104 — The external watcher failed twice; take the measurement from inside instead
+
+Run69 reproduced `CPU_THROTTLED`, and my corrected watcher again produced an empty table ("peak
+cores (top 8)" with no rows). That is the second instrumentation failure of mine in a row on this
+question -- first the wrong glob, now a watcher that finds no processes even though it globs the
+parent the session is given -- and two failed diagnostics in a row is a signal to stop reaching into
+the run from outside and use what the harness already has.
+
+The harness has it: `sample_resources` is handed `owned_inventory=(self.owner,)`, i.e. the identity of
+the process the session owns, and it already reads the cgroup's aggregate counters each pass. A
+per-owned-process CPU reading recorded into the sample's `diagnostics` (raw evidence, not a policy
+dimension) would name the consumer from inside the same loop that produces the throttle decision,
+with no external process, no glob, and no timing race -- and it can be tested with the existing
+fakes the way the other sampler fields are.
+
+That is the next unit: add the per-process breakdown to the sampler's diagnostics with a RED test,
+then run once with it and read which owned process holds the cores. The policy question from CP-UQ103
+-- whether a single-period excursion should disqualify -- remains the operator's, and is not touched
+by this diagnostic.
