@@ -435,6 +435,31 @@ def test_real_session_enforces_the_authorized_deadline(tmp_path):
     assert cgroup.path.exists() is False
 
 
+def test_default_capability_probe_verifies_the_session_selection(tmp_path, monkeypatch):
+    """The default probe must check the exact cgroup parent/device the session owns."""
+
+    from so101_demo.cli import measure_parallel_resources as cli
+
+    prefix = _install_prefix(tmp_path)
+    bindings = _bindings(tmp_path, prefix)
+    _, path, digest = _sealed_authorization(tmp_path, bindings)
+    requested = tmp_path / "delegated-cgroup"
+    requested.mkdir()
+    seen: list[dict[str, object]] = []
+
+    def fake_probe(**kwargs):
+        seen.append(kwargs)
+        return {}
+
+    monkeypatch.setattr(cli, "require_measurement_capabilities", fake_probe)
+    main(_argv(tmp_path, bindings, path, digest) + [
+        "--cgroup-parent", str(requested), "--device-index", "1"],
+        session_factory=_session_factory(tmp_path))
+    assert seen == [{
+        "cgroup_parent": requested, "device_index": 1,
+    }], seen
+
+
 def test_measurement_arguments_must_match_the_sealed_authorization(tmp_path):
     from so101_demo.parallel_batch.resource_measurement import (
         verify_measurement_arguments)
