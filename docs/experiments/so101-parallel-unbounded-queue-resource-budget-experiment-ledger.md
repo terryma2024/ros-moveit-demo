@@ -7325,3 +7325,43 @@ and its outcome decides whether the remaining failures are real or were only eve
 these two.
 
 _Ledger HEAD when written: `d951907c6`._
+
+## CP-UQ179 — The lease now goes back (twice over), and R01/R05 are green; R02 failed on a stale id
+
+Run 4 (`browser/lg-live-functional4.l5f7iWXz`) reached **21 passed, 2 failed (5.6m)**. R01 passed *with*
+the lease teardown, the 17 R05 cases passed, and R04 (start guard) passed. The remaining failures were
+one real bug in my teardown and one race in the specs.
+
+**The lease release needed two corrections, each found by the service refusing it.**
+
+| Attempt | Result | What it taught |
+| --- | --- | --- |
+| replay the acquire body | `422` | acquire takes `{service_session_id}`, release takes `{service_session_id, generation}` and forbids extras |
+| use the generation captured at acquire | `409 STALE_LEASE_GENERATION` | every renewal increments the generation: a direct probe showed acquire `18`, renews `19, 20, 21`, release with `20` → `409`, with `21` → `200 released: true` |
+| track the console's own renew responses | `200` | the page object now records every successful `POST`/`PUT` on the lease from the response stream, so the teardown always has the current generation |
+
+This corrects CP-UQ178, which said the fix "records the lease id" — the id was never the problem.
+A `404` is treated as "already gone" rather than a leak; an `ACTIVE_CAMPAIGN` refusal is still
+reported, because that one means a lease really is being held.
+
+**The R02 failure was a race in the spec, not the parallel runtime.** It failed in 1.7 s on
+`expect(reloaded).toBe(true)` — the mid-run Chrome reload it never performed — because it took its
+campaign id from `campaigns[0]` *after* clicking Start. The console shows the campaign heading from
+its own state, so the click can return before the `POST` lands, and the list still held R01's
+finished campaign: the spec then polled `campaign-e93…`/`65faf29e…` (R01's), saw `COMPLETED` with
+`batch_cleanup_complete: true`, broke out of the loop immediately and failed. Meanwhile its *own*
+parallel campaign (`1896373e…`, batch `b043a`) started both workers, registered both, granted both
+leases, started two attempts (`task_start` on worker-01, `cup_test_forward_5cm` on worker-02) and
+was then stopped (`BATCH_STOPPING`, `Got request to cancel goal`) with no result committed and
+`cleanup_gates_passed: false`. The service log contains no cancel request, which is consistent with
+the stop being a *consequence* of the test tearing down the browser while its campaign ran — I am
+recording that as an inference, not a finding.
+
+`startValidation()` now waits for this spec's own `POST /expert-validation/campaigns`, fails loudly
+if it is refused, returns the `campaign_id` from the response and asserts the exact campaign heading;
+all three specs use it and none of them reads `campaigns[0]` any more. Committed as `0b7ab6bfa`.
+
+Full run 5 (`lg-live-functional5`, service `service-light.RwPNAFml`, fresh root) is in flight; it is
+the first one where R02 can actually reach its own parallel batch and R03 can inherit a real R02 gate.
+
+_Ledger HEAD when written: `0b7ab6bfa`._
