@@ -154,3 +154,29 @@ def test_binding_validates_socket_budget_and_identity():
             Path('/tmp/events.jsonl'))
     with pytest.raises(ContractError):
         ProcessIdentity(0, 2, 3, 4)
+
+
+def test_first_sample_inside_the_grace_window_does_not_latch(make_control):
+    """run4 aborted 60 ms after the spawn with exactly one sample: the main thread's
+    first health check saw no sample yet and called it a gap. Sampling has to be given
+    the same bound for its opening sample that it gets in the steady state."""
+
+    control, calls = make_control()
+    control.mark_sampling_start(1.0)
+    control.check_health(1.05, sampler_alive=True, endpoint_healthy=True, breach=None)
+    assert not control.stop_requested()
+    assert calls == []
+
+
+def test_first_sample_missing_past_the_grace_window_latches(make_control):
+    control, calls = make_control()
+    control.mark_sampling_start(1.0)
+    control.check_health(1.101, sampler_alive=True, endpoint_healthy=True, breach=None)
+    assert control.stop_requested()
+    assert control.latch_reason == "SAMPLER_GAP"
+
+
+def test_health_check_before_sampling_starts_still_fails_closed(make_control):
+    control, calls = make_control()
+    control.check_health(1.05, sampler_alive=True, endpoint_healthy=True, breach=None)
+    assert control.stop_requested()

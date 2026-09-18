@@ -135,6 +135,7 @@ class MeasurementControl:
         self._operator_recovery_required = False
         self._last_sequence = 0
         self._last_sample_s: float | None = None
+        self._sampling_started_s: float | None = None
         self._events: dict[str, float | None] = {name: None for name in _EVENT_NAMES}
         self._events["t_last_sample"] = None
         self._cancel_error: str | None = None
@@ -154,6 +155,11 @@ class MeasurementControl:
         self._last_sequence = sequence
         self._last_sample_s = sample_time
         self._events["t_last_sample"] = sample_time
+
+    def mark_sampling_start(self, now: float) -> None:
+        """Anchor the grace window for the opening sample."""
+
+        self._sampling_started_s = _require_finite_time("now", now)
 
     def check_health(
         self,
@@ -178,7 +184,11 @@ class MeasurementControl:
             self._latch("CONTROL_ENDPOINT_UNHEALTHY", moment)
             return
         if self._last_sample_s is None:
-            self._latch("SAMPLER_GAP", moment)
+            # Sampling has only just started: its first pass is not a gap. Once the
+            # grace window closes, a sampler that never produced a sample still latches.
+            started = self._sampling_started_s
+            if started is None or moment - started > self._maximum_sample_gap_s:
+                self._latch("SAMPLER_GAP", moment)
             return
         if moment - self._last_sample_s > self._maximum_sample_gap_s:
             self._latch("SAMPLER_GAP", moment)
