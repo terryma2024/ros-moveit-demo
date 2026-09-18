@@ -114,7 +114,7 @@ class FakePools:
 
 def make_runner(
     tmp_path, pools, *, points=None, max_infra_attempts=None,
-    fallback_worker_counts=None,
+    fallback_worker_counts=None, start_guard=None,
 ):
     from so101_demo.parallel_batch.adaptive_runner import AdaptiveBatchRunner
 
@@ -134,6 +134,7 @@ def make_runner(
         tuple(points or ("p01", "p09", "p18")),
         options,
         tmp_path,
+        start_guard=start_guard,
     )
     return AdaptiveBatchRunner(request, pools), request
 
@@ -338,3 +339,54 @@ def test_replay_preserves_results_attempts_and_fallback_without_auto_resume(tmp_
     assert report.status is BatchTerminalStatus.INFRA_FAILED
     assert replacement_pools.requests == []
     restored.close()
+
+
+class _SentinelGuard:
+    """Stands in for the composed start guard; identity is all this contract needs."""
+
+
+def test_each_pool_request_carries_the_prepared_start_guard(tmp_path):
+    """The adaptive pool allocates through the same guard as the fixed-N path.
+
+    An adaptive run prepared no guard at all -- `mujoco_parallel_batch` composed one only when
+    `options.adaptive_workers` was false -- and nothing carried one into the pool request, so the
+    allocator refused every level by design (`START_GUARD_UNAVAILABLE`, the pool failure recorded
+    as `stage: resource_allocation`).  The guard the run prepared has to reach every pool request.
+    """
+
+    guard = _SentinelGuard()
+    pools = FakePools(startup_failure_levels={8})
+    runner, _ = make_runner(tmp_path, pools, start_guard=guard)
+
+    runner.run()
+
+    assert pools.requests, "no pool was ever asked to start"
+    assert [request.start_guard for request in pools.requests] == [guard] * len(pools.requests)
+
+
+def test_pool_request_factory_threads_the_start_guard(tmp_path):
+    """The pool-request factory is the single place a generation request is built."""
+
+    from so101_demo.parallel_batch.adaptive_contracts import (
+        _new_pool_request_for_production_factory,
+    )
+
+    guard = _SentinelGuard()
+    with_guard = _new_pool_request_for_production_factory(
+        batch_id="a001-g01-w02",
+        run_mode=RunMode.EXECUTE,
+        selected_point_ids=("p01",),
+        worker_count=2,
+        evidence_root=tmp_path,
+        start_guard=guard,
+    )
+    assert with_guard.start_guard is guard
+
+    without_guard = _new_pool_request_for_production_factory(
+        batch_id="a001-g02-w01",
+        run_mode=RunMode.EXECUTE,
+        selected_point_ids=("p01",),
+        worker_count=1,
+        evidence_root=tmp_path,
+    )
+    assert without_guard.start_guard is None
