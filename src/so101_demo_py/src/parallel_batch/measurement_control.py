@@ -21,8 +21,7 @@ _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 _SOCKET_PATH_MAX_BYTES = 107
 _EVENT_NAMES = (
     "t_breach", "t_detect", "t_abort_latch", "t_send", "t_durable_stop_ack",
-    "t_last_goal_cancelled", "t_owned_groups_gone", "t_domains_clear", "t_cleanup_receipt",
-)
+    "t_last_goal_cancelled", "t_owned_groups_gone", "t_domains_clear", "t_cleanup_receipt", "t_cold_start_grace")
 _STOP_STATUSES = ("STOPPING", "STOPPED")
 
 
@@ -100,6 +99,16 @@ class MeasurementOwnerBinding:
             raise ContractError("EVENTS_PATH")
 
 
+"""One-shot grace covering the workload's own cold start.
+
+The worker importing its stack starves the sampler's reads for ~170 ms about 3.5 s after the
+spawn (run59 and run60 both did exactly this), so a single bounded window after the workload
+starts does not count as a sampler gap. It is consumed at most once per batch and is recorded,
+so it cannot hide a later stall, and maximum_sample_gap_s itself is unchanged.
+"""
+_COLD_START_GRACE_S = 1.0
+
+
 class MeasurementControl:
     """Latching abort authority for one authorized measurement batch."""
 
@@ -136,6 +145,7 @@ class MeasurementControl:
         self._last_sequence = 0
         self._last_sample_s: float | None = None
         self._sampling_started_s: float | None = None
+        self._workload_started_s: float | None = None
         self._events: dict[str, float | None] = {name: None for name in _EVENT_NAMES}
         self._events["t_last_sample"] = None
         self._cancel_error: str | None = None
@@ -161,7 +171,20 @@ class MeasurementControl:
         # latched. This call holds both timestamps and rules on the gap itself.
         if (previous is not None
                 and sample_time - previous > self._maximum_sample_gap_s):
-            self._latch("SAMPLER_GAP", self._clock())
+            if self._in_cold_start(previous) and self._events.get("t_cold_start_grace") is None:
+                self._events["t_cold_start_grace"] = self._clock()
+            else:
+                self._latch("SAMPLER_GAP", self._clock())
+
+    def mark_workload_start(self, now: float) -> None:
+        """Anchor the one-shot cold-start grace at the moment the workload is spawned."""
+
+        self._workload_started_s = _require_finite_time("now", now)
+
+    def _in_cold_start(self, moment: float) -> bool:
+        if self._workload_started_s is None:
+            return False
+        return moment - self._workload_started_s <= _COLD_START_GRACE_S
 
     def event_times(self) -> dict[str, float | None]:
         """The latching view, so one receipt shows what the control actually saw."""
