@@ -3,12 +3,21 @@ import { join } from "node:path";
 
 import { liveSimTest as test, expect, recordGate, requireGate, requireGateDetail } from "../fixtures/live-sim";
 import { readJournalEvents } from "../assertions/journal";
-import { ExpertValidationPage } from "../pages/expert-validation-page";
+import {
+  ExpertValidationPage,
+  releaseAcquiredLeases,
+} from "../pages/expert-validation-page";
 
 /**
  * R02: four-point PARALLEL exact N=2 live run; R04 (mid-run Chrome reload) is
  * embedded.  Requires the R01 gate receipt.
  */
+
+// The exclusive lease belongs to the deployed service, not to this spec: hand it back
+// even when the test fails, or the next spec is refused with 409 Conflict.
+test.afterEach(async ({ request }) => {
+  await releaseAcquiredLeases(request);
+});
 
 test("R02 parallel two-worker live run with mid-run reload @live-sim", async ({ page, liveServer }) => {
   test.setTimeout(1_800_000);

@@ -74,7 +74,9 @@ cases.push({
 });
 cases.push({
   id: "n1-full-restart-single-point",
-  mode: "PARALLEL",
+  // One worker is the sequential mode in the execution contract: PARALLEL is fixed to 2..8, and
+  // a retry batch is exactly one point on a freshly restarted single-worker stack.
+  mode: "SEQUENTIAL",
   worker_count: 1,
   point_count: 1,
   lifecycle: "FULL_RESTART_RETRY",
@@ -89,7 +91,9 @@ const manifest = {
   start_guard_timeout_s: capabilities.start_guard_policy.timeout_s,
   cases,
   stability: {
-    mode: "PARALLEL",
+    // The stability record the plan froze: five consecutive twenty-point full-restart batches at
+    // N1, which is the sequential mode.
+    mode: "SEQUENTIAL",
     worker_count: 1,
     point_count: 20,
     lifecycle: "FULL_RESTART_RETRY",
