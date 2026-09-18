@@ -302,8 +302,11 @@ def test_external_cleanup_retires_only_owned_worker_and_releases_claim(tmp_path)
     from so101_demo.parallel_batch.journal import CoordinatorJournal
     from so101_demo.runtime.parallel_processes import ProcessSupervisor
 
-    runtime_root = Path(os.environ["TMPDIR"]).parent / "a001"
-    runtime_root.mkdir(mode=0o700)
+    # The leaf must stay the batch id (cleanup_runtime validates it), so isolation comes
+    # from a per-test parent: the previous fixed path collided with other tests that share
+    # one scratch tree when the suite runs in parallel.
+    runtime_root = Path(os.environ["TMPDIR"]).parent / f"rt-{tmp_path.name}" / "a001"
+    runtime_root.mkdir(parents=True, mode=0o700)
     pool_root = runtime_root / "p/g01w01"
     pool_root.mkdir(parents=True, mode=0o700)
     pool_batch_id = "a001-g01-w01"
