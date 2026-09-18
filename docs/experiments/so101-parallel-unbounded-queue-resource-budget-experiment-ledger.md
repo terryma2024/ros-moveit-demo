@@ -6718,3 +6718,26 @@ running so the deployed service can carry the fix; next round verifies, redeploy
 acceptance and reads the coordinator log for the fifth gate (or for the first worker).
 
 _Ledger HEAD when written: `0ad0dac22`._
+
+## CP-UQ162 — I deployed a half-built copy, caught it, and recovered
+
+Honest record of a mistake in this round: I checked `pgrep colcon` for "building" and, when it
+still said building, deployed anyway against the newest `copy-install-final.*` directory — which
+was **incomplete** at that moment. The deploy "succeeded" in the worst way: `/health` answered but
+`start_guard_policy` came back **None**, because the copied config was not there yet, and the
+acceptance would have run against a service that could not have worked. A byte comparison of the
+copy's CLI against the tree is what exposed it (`cli copy ok: False`).
+
+Recovery, in order: stopped the acceptance run I had started against the broken service, waited
+for the build (it finished moments later), selected the newest copy **by verification rather than
+by timestamp** (the CLI byte-compare against the tree), pointed the deployment record at it, and
+redeployed. The second attempt reports `/health` ok, `served_matches_installed: true` and the
+correct `start_guard_policy` (2 s timeout, 1 GiB floors) — i.e. a complete prefix.
+
+Lesson worth keeping for the remaining rounds: "the newest directory" is not "a usable copy"; the
+byte verification is what makes a copy usable, and it must run *before* the deploy, not after.
+
+The acceptance is running again against the recovered service; the coordinator log for the new
+campaign is what the next round reads — it will name the fifth gate or show the first worker.
+
+_Ledger HEAD when written: `4bc914fd6`._
