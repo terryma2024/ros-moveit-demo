@@ -7677,3 +7677,25 @@ cost claim I can support: what the evidence shows is three passing cases at 3.0,
 and the per-case deadline remains the manifest's `batch_timeout_s`.
 
 _Ledger HEAD when written: `e954c5ef1`._
+
+## CP-UQ188 — Four fixed-N options executed for real; the idle slot is on the record
+
+The four-point case batch finished with `EXEC_N345P4_RC=0` (the run's own `result.json` code, not a
+pipeline status). Four fixed-N options have now been executed through the deployed console, each
+with its own evidence file, exact N slots and full cleanup:
+
+| Case | Slots (leases) | Points | Artifacts | Terminal | Cleanup | Spec timing |
+| --- | --- | --- | --- | --- | --- | --- |
+| `fixed-n2-p4` | 2 (1, 1) | 4/4 `PASSED` | 13 each | `COMPLETED` | true | 3.0 m |
+| `fixed-n3-p4` | 3 (1, 2, 1) | 4/4 `PASSED` | 13 each | `COMPLETED` | true | 3.0 m |
+| `fixed-n4-p4` | 4 (1, 1, 1, 1) | 4/4 `PASSED` | 13 each | `COMPLETED` | true | 1.8 m |
+| `fixed-n5-p4` | 5 (1, 1, **0**, 1, 1) | 4/4 `PASSED` | 13 each | `COMPLETED` | true | 2.0 m |
+
+The N=5 row is the one the correction asked to be able to see: five worker slots were created for a
+four-point campaign, `worker-03` holds **zero** leases and still exists as a slot, and the campaign
+never downgraded N to the point count. `requested == evaluated == 4` in every row, and all four
+evidence files sit under `browser/lg-exec-*/runtime/*/execution-fixed-n*-p4.json`.
+
+The next batch (N=6, 7 and 8, four points each) was launched immediately in the same driver.
+
+_Ledger HEAD when written: `badd63714`._
