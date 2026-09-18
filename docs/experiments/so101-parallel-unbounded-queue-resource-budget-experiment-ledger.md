@@ -4643,3 +4643,24 @@ Two honest notes to carry forward:
 - the control test `test_cold_start_grace_covers_the_workloads_own_startup_once` still fails after
   being rewritten for the new semantics; it needs one look at what `t_cold_start_gaps` reports in
   that fixture before the gate is called green again.
+
+## CP-UQ98 — The broker is v1 by construction, and a botched edit reverted
+
+Two things established this round, one of them about my own work.
+
+**The broker type-checks for the v1 class**: `broker.py` raises `BrokerError('RUNTIME_CONFIG_REQUIRED')`
+when `type(config) is not ParallelRuntimeConfig`, so the loader selection from CP-UQ90 cannot be
+enough on its own -- the v2 document loads fine and is then refused by type. What the broker actually
+consumes from its config is small and schema-independent (yolo/grounded model ids, the four queue and
+inference timeouts, `broker_queue_capacity_per_model`), and every one of those exists in the v2
+`execution` mapping, so accepting both classes is a legitimate, small fix -- but the attempt is not in
+the tree yet (below).
+
+**My test edit was wrong and I reverted it.** I appended a test asserting the broker accepts a v2
+config, then renamed the class in it twice (first to a class that does not exist, then to a name whose
+import I failed to add), and the file ended up with 45 failures where 25 passed. Rather than iterate
+on a file I had already damaged, I restored both it and `broker.py` from the last verified commit
+(`git checkout --`), which is where the tree stands now: clean, with the gate at 73 passed from
+CP-UQ97's addendum and the broker untouched. The next attempt at this fix should modify the test file
+by hand (read it, edit the import block, add the case) rather than by string substitution, which is
+the same lesson the retry-scripting rounds already taught.
