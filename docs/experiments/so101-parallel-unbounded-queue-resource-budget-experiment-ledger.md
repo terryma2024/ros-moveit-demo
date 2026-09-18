@@ -3337,3 +3337,24 @@ problem, and it is the next decision: generate the external overlay binding for 
 (source root, build root, install root, package prefixes, artifact hashes) and seal *its* digest
 as a separate input, or point the launcher at the frozen binding it already understands. N1
 remains `NOT_MEASURED`; nothing is extrapolated to another N.
+
+## CP-UQ52 — Stage C: which install is being measured, and what its binding must say
+
+The external overlay binding the launcher demands has an exact shape, read from the only place in
+the repository that constructs a valid one (`test_parallel_batch_cli.py`):
+`{schema_version: 1, source_root, source_commit, build_root, install_root, package_prefixes,
+artifacts}` with `artifacts` = `coordinator_console`, `coordinator_module`, `entry_points`,
+`parallel_config`, `point_catalog`, each `{path, sha256}`. The launcher then compares the source
+tree against the installed module tree and refuses `PROVENANCE_INSTALLED_BYTES` when they differ.
+
+That comparison decides the open question of *which* install a measurement is measuring, and the
+observed bytes answer it: the launcher script is spawned from the frozen copy
+(`freeze-install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch`), while the module it
+imports resolves through the task environment to `dev-build` -- and the frozen copy predates the
+runtime repairs made during this stage. Running the frozen copy with a stale module tree would
+either be refused by that very check or measure code that no longer matches the source. The
+candidate therefore has to be rebuilt from the current source before it can be measured: rebuild
+the frozen candidate copy (the repairs included), regenerate its A0 audit and binding, generate
+the external overlay binding that describes the rebuilt install, and only then reseal and rerun.
+That is the next step; it is a rebuild, not a probe. N1 remains `NOT_MEASURED` and nothing is
+extrapolated to another N.
