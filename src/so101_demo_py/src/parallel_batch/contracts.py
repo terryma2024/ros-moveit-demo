@@ -1189,6 +1189,32 @@ def parse_parallel_runtime_config_v2(document: object) -> ParallelRuntimeConfigV
     )
 
 
+def load_runtime_config_any_schema(path: Path):
+    """Load a v1 or v2 runtime document, choosing the parser by its declared schema.
+
+    The broker and its transport are shared by both generations: a v2 measurement hands them a
+    v2 document, and the v1 parser refuses it by design (`UNKNOWN_CONFIG_FIELD`), so the
+    selection has to be explicit here rather than assumed.
+    """
+
+    import yaml
+
+    try:
+        document = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    except OSError as error:
+        raise ContractError(f"CONFIG_READ_FAILED: {path}") from error
+    except yaml.YAMLError as error:
+        raise ContractError(f"CONFIG_YAML_INVALID: {path}") from error
+    if not isinstance(document, dict):
+        raise ContractError("CONFIG_MAPPING")
+    version = document.get("schema_version")
+    if version == 2:
+        return load_parallel_runtime_config_v2(Path(path))
+    if version == 1:
+        return load_parallel_runtime_config(Path(path))
+    raise ContractError(f"SCHEMA_VERSION: {version!r}")
+
+
 def load_parallel_runtime_config_v2(path: Path) -> ParallelRuntimeConfigV2:
     """Load the closed version-two YAML document; reject any drift or legacy quota."""
 

@@ -662,3 +662,19 @@ def test_v2_request_has_no_lifetime_quota_and_keeps_retry_single_point(tmp_path)
     with pytest.raises(ContractError):
         BatchRequestV2("batch-nine", RunMode.EXECUTE, ("p1",), 9, tmp_path,
                        BatchKindV2.FIRST_PASS)
+
+
+def test_runtime_config_loader_selects_the_parser_by_schema(tmp_path):
+    """The broker transport loads a config shared by both generations, and the v1 parser
+    refuses a v2 document (`UNKNOWN_CONFIG_FIELD: ['deployment', 'execution']`), which is
+    exactly how the broker died at startup in run56. The loader must choose by schema."""
+
+    from so101_demo.parallel_batch.contracts import (
+        ContractError, load_runtime_config_any_schema)
+
+    loaded = load_runtime_config_any_schema(V2_CONFIG_PATH)
+    assert getattr(loaded, "schema_version", None) == 2
+    unknown = tmp_path / "v9.yaml"
+    unknown.write_text("schema_version: 9\n")
+    with pytest.raises(ContractError, match="SCHEMA_VERSION"):
+        load_runtime_config_any_schema(unknown)
