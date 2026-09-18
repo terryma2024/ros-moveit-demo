@@ -2,11 +2,12 @@
 
 ```yaml
 task_id: so101-unified-webapp-design-20260918
-goal: Design one Teleop and expert-validation Web service with shadcn preset b311momZs0
-success_contract: User-approved design, independently reviewed before implementation planning
+goal: Design and plan one Teleop and expert-validation Web service with shadcn preset b311momZs0
+success_contract: User-approved written design and independently reviewed implementation plan before execution
 worktree: /Users/matianyi/.codex/worktrees/587b/moveit-demo
 branch: codex/teleop-adaptive-worker-pool-docs
 base_commit: 303c2cb9e2b1faea55a6d82dac2197da7512be96
+current_commit: 6afd834f02ea537dcad8d65e282a8491f6c6e830
 source_inspection_worktree: /private/tmp/so101-doc-publication.R3yXD0aj/repo
 source_inspection_commit: 84620fc0529779a27c6985f8717d78f0386e0135
 evidence_root: /tmp/so101-debug-unified-webapp-design-20260918
@@ -17,11 +18,13 @@ confirmed_conclusions:
   - User approved single-Web plus non-Web ROS subprocess architecture and default global mutation exclusion during validation
   - User approved the v2 interactive two-page layout direction
   - User approved final state, migration and acceptance section; all discussion sections approved
-  - Independent Astra/High rereview passed the corrected exact-hash static design; written-spec user approval remains pending
+  - Independent Astra/High rereview passed the corrected exact-hash static design
+  - User approved the written spec and authorized implementation-plan writing; implementation remains unauthorized
+  - Independent Astra/High final review passed the corrected exact-hash static implementation plan
 disproven_routes: []
 open_hypotheses:
   - Consolidate two application lifecycles into one Web process while preserving runtime ownership boundaries
-latest_checkpoint: CP-12
+latest_checkpoint: CP-20
 next_experiment: NONE
 ```
 
@@ -140,3 +143,77 @@ The brainstorming workflow calls for a local design commit. Stage only this ledg
 Only documentation and temporary design artifacts were produced. No product tests, ROS/Chrome product acceptance, runtime measurement, service changes, dst interruption or ai-station operation. The user must review the written spec before implementation planning; no plan was written this turn.
 
 Retained runs: design inspection/CLI, v1/v2 sketches, sketch-only browser checks and static review records under the registered root. Archived runs: none. Deletion candidates: task-local CLI cache, provisional sketch server/state and superseded captures; no deletion performed or authorized. Persistent design/spec/review/ledger retained in the repository. Next experiment/command: NONE pending written-spec user approval.
+
+## CP-13: Written spec approved; implementation planning
+
+User response `ok` approves the written design after the exact-hash Astra/High PASS. Begin implementation-plan writing, not implementation or deployment. Trusted checkpoint is CP-12: design SHA256 4e11f3a385e8d078523ee3c3b3b11d2ec372215188cfbdabdea824c35dd54fa1, local design commit 6afd834f02ea537dcad8d65e282a8491f6c6e830. No disproven implementation experiment or runtime qualification exists for this feature.
+
+Sol/High drafts docs/superpowers/plans/2026-09-18-so101-unified-webapp-shadcn-implementation.md using writing-plans, humanizer-zh, shadcn and so101-dev. The main agent verifies source boundaries and static spec coverage; Astra/High independently reviews the frozen plan. Preserve all existing unrelated dirty/untracked files. Read current source only from the inspected publication baseline, not the older original worktree source. Fresh source/runtime provenance is an execution preflight gate, not a planning-time runtime claim.
+
+Only local documentation work this turn. No remote process inventory, ROS graph, GUI operation or runtime start is needed or authorized for planning; those checks are explicit execution prerequisites. Debug-evidence and Python installation references are unrelated to this documentation-only turn; no diagnosis, package installation or product test. Parent/root rules, system map, ledger and acceptance references were read. The independently dispatched budget dst task is preserved and not inspected or changed.
+
+One existing registered evidence root continues. Root is sole ledger writer. Retained: prior evidence and planning checks; archived: none; deletion candidates unchanged and not deleted. Next experiment/command: NONE until plan approval.
+
+## CP-14: Implementation plan frozen; independent review started
+
+Sol/High completed the 13-task implementation plan, 933 lines, SHA256 d1fe79740faafa3494bb1b91e9c2dd5271e6cc79c1f06506ff5da56afc08eab4. Root independently read back this hash. Approved design remains SHA256 4e11f3a385e8d078523ee3c3b3b11d2ec372215188cfbdabdea824c35dd54fa1; frozen budget plan remains cd1b606fd8a40d7bb6e576f6f59a6ef5abcb45a8bee7e2a669c7b7a40bfc8789.
+
+Root read the initial full plan and checked revisions to task ordering, cross-store lease/controller fencing, normal renewal, exact goal cancellation, real UI types and installed composition. Explicit Git diff --check exited 0. The untracked-plan no-index --check emitted no whitespace diagnostics and exited 1 because the file differs from /dev/null; this is not a product test or a claimed test PASS. Final review will include a fresh complete readback of the frozen artifact.
+
+Astra/High prepared by inspecting the approved design and actual publication-source boundaries, then received the frozen plan hash for full independent review. Expected new report: docs/superpowers/reviews/2026-09-18-so101-unified-webapp-shadcn-plan-review.md. Author must not edit while review is active. No source implementation, product tests, build, runtime qualification, remote operation, commit or push this turn.
+
+Retained: frozen plan, planning-cli-readback.md, implementation-plan-review-checklist.md and all previous registered evidence. Archived: none. Deletion candidates unchanged; nothing deleted. Next experiment/command: NONE pending independent review and user implementation approval.
+
+## CP-15: First plan review requires six corrections
+
+Astra/High full independent review: CHANGES_REQUIRED, report SHA256 f5bf485c0ce65030c5c14fb80fd78f66f5407323391c0bf2a78430598b3654d9, bound to plan d1fe79740faafa3494bb1b91e9c2dd5271e6cc79c1f06506ff5da56afc08eab4. Root read the complete report and independently checked its hash. PR1/P1: cross-channel pending-child cancellation and actual submission need a defined linearization protocol. PR2/P1: identify the pure production Teleop implementation and place installed helper substitution below application/parent/admission/safety layers. PR3/P2: isolated normal_lock does not exercise production cancellation contention. PR4/P2: Task9 still imports Task10's future qualification view. PR5/P2: Tasks artifacts use open, not Validation resolve_opaque_id. PR6/P2: ai-station-specific NVMe policy must not apply to every Linux host.
+
+Root checked actual source api.py:219 (Tasks artifacts.open) and expert_validation/api.py:474 (Validation resolve_opaque_id). These are static source facts, not fault reproduction. receiving-code-review was read completely. Sol/High is revising only the plan, with files/interfaces/staging/tests aligned; preserve the first report and approved design unchanged. Also clarify the complete installed dependency closure rather than treating a Teleop-only development overlay as the full copied install.
+
+Root complete-read checks of the first frozen plan: 13 tasks, 933 lines, 60 code fences, no missing relative links and no TODO/TBD/FIXME literals. These checks do not override independent review findings or qualify execution. No product tests or ai-station operations. Next: new plan hash and full independent rereview. Retained: first report and prior task evidence; archived: none; deletion candidates unchanged, no deletions. Next experiment/command: NONE pending review and implementation approval.
+
+## CP-16: Six corrections frozen; independent full plan rereview
+
+Sol/High revised only the plan to 1100 lines, SHA256 471785ae65b0a183b026627c6b9fcf88cb12a76cae175abc4b36dcc77eb45e28. Root independently read back this hash and read the complete frozen artifact. The first plan-review report remains f5bf485c0ce65030c5c14fb80fd78f66f5407323391c0bf2a78430598b3654d9.
+
+PR1 now specifies stable pending-child keys, durable revocation revisions, child-local tombstones/short submission transitions, independent two-channel barriers and an irreversible Web-death latch. PR2 defines the pure production Teleop implementation/shared composition and substitutes only the leaf ActionDriver in installed tests. PR3 separates the isolated lane unit from production coordinator/queue contention tests, creating the latter after the real factory exists in Task6. PR4 delivers backend view/schema in Task6 and frontend UNKNOWN view in Task7 before Task9. PR5 uses the real Tasks open/OpenedArtifact API and unchanged Validation resolver. PR6 uses a verified host-specific policy instead of an OS-wide NVMe rule. Files/staging and sixteen CTest registrations are aligned; copied install requires the complete source dependency closure.
+
+Main-agent fresh static checks: thirteen tasks, 1100 lines, seventy-two closed code fences, no missing relative links and no TODO/TBD/FIXME literals. These are documentation checks only. Astra/High received the new exact hash for complete independent rereview of corrections and regressions. New report path: docs/superpowers/reviews/2026-09-18-so101-unified-webapp-shadcn-plan-rereview.md. No author edits while review is active; no implementation, product tests, remote operation, commit or push.
+
+Retained: corrected plan, immutable first report and all registered evidence. Archived: none. Deletion candidates unchanged; nothing deleted. Next experiment/command: NONE pending rereview and user implementation approval.
+
+## CP-17: Full plan rereview narrows remaining correction to one parameter chain
+
+Astra/High full rereview: CHANGES_REQUIRED, report SHA256 f171db5ee0dcac6edb75b47a4619bfd296f4f7f7c7f4a09cdd56885cbd864935, bound to plan 471785ae65b0a183b026627c6b9fcf88cb12a76cae175abc4b36dcc77eb45e28. Root read the complete report. PR1 and PR3–PR6 are closed at the static-plan level; PR2's production/lower-level Teleop composition is specified, but PR2-R/P2 remains: the shared composition signature omits the existing Validation execution_port seam passed by the installed launcher.
+
+Root checked baseline production.py:1209/1213/1235, which explicitly receives and forwards execution_port. Request the minimal explicit shared-composition parameter chain, production-default/no helper selection, preserved test-source Validation HelperExecutionPort and same-object/owned-process evidence assertions. Teleop still substitutes only its leaf ActionDriver. Do not replace a high-level application service or start actual simulation to make L2 pass. First review and rereview stay immutable; approved spec and budget documents unchanged.
+
+Sol/High is revising only the plan; final independent review must bind the next exact hash. No implementation, product tests, remote operation, commit or push. Retained: both plan reports and prior evidence; archived: none; deletion candidates unchanged, no deletions. Next experiment/command: NONE pending final review and user approval.
+
+## CP-18: Minimal composition correction frozen; final independent review
+
+Sol/High completed the PR2-R-only plan revision, 1105 lines, SHA256 71648ebbce07388af016e125c6e168b80fd3752305d62e71b412f64fdb6ae039. Root read back the hash and read all changed passages. Shared composition now explicitly forwards validation_execution_port to the existing production factory; production fixes the default real port and provides no helper selector. Test-source composition preserves the exact existing Validation leaf port object, alongside Teleop's leaf ActionDriver, and verifies same-object/owned-argv evidence through real routes in source and copied install. Root checked the real factory signature at production.py:1209–1235.
+
+Astra/High final independent review is bound to this new exact hash and complete-plan consistency. New report path: docs/superpowers/reviews/2026-09-18-so101-unified-webapp-shadcn-plan-final-review.md. Keep both previous plan reports immutable and approved design/budget documents unchanged. No author edits during review. No implementation, product tests, runtime operations, commit or push.
+
+Retained: all three plan revisions' audit references and both existing reports under the registered planning task. Archived: none. Deletion candidates unchanged; nothing deleted. Next experiment/command: NONE pending final review and user approval.
+
+## CP-19: Static implementation plan PASS; documentation handoff
+
+Astra/High final independent review: PASS for plan SHA256 71648ebbce07388af016e125c6e168b80fd3752305d62e71b412f64fdb6ae039, 1105 lines/thirteen tasks. Final report SHA256 d5f0fd935636f0d032a325776e721c6a667d6074e4a3b65eeb9f641f615e0eae. Root read the full report and independently verified the plan/report hashes. PR1–PR6 and PR2-R closed in the static plan, with no remaining plan-level blocking finding. First review f5bf485c0ce65030c5c14fb80fd78f66f5407323391c0bf2a78430598b3654d9 and rereview f171db5ee0dcac6edb75b47a4619bfd296f4f7f7c7f4a09cdd56885cbd864935 remain unchanged.
+
+Approved unified design remains 4e11f3a385e8d078523ee3c3b3b11d2ec372215188cfbdabdea824c35dd54fa1. Frozen budget spec remains 5e085f98e9926591fbefd3d6e16c16b33bfc9956df9221c46f383b310553657b and budget plan remains cd1b606fd8a40d7bb6e576f6f59a6ef5abcb45a8bee7e2a669c7b7a40bfc8789. Preserve unrelated AGENTS/recovery-guide/fixed-eight-proposal/budget files and all remote tasks. No staging, commit or push this planning turn.
+
+User implementation approval is still required. Fixed future executor is dst TUI/tmux inline in a new independently registered worktree/task; do not offer or silently substitute Codex subagent implementation. Final upstream budget interface, registry/compiler/dependency lock, actual ROS UUID support and all RED/GREEN/install/runtime qualification gates remain future checks. Static PASS does not authorize measuring/promoting a new profile, replacing existing services, live/hardware execution or deleting evidence.
+
+Only local plan, three immutable independent plan reports, ledger checkpoints and temporary planning audit records were produced. No product tests, code edits, ROS/Chrome acceptance, service changes, ai-station operation or remote-budget-task inspection. Retained runs: all design/planning inspection, CLI, sketch-only captures and review evidence under the registered root, plus persistent repository docs. Archived runs: none. Deletion candidates: task-local CLI cache/provisional sketches/server state and superseded captures; no deletion authorized or performed. Final static check/readback receipt: planning-final-readback.md under the registered root. Next experiment/command: NONE pending user review/approval.
+
+## CP-20: User authorizes scoped main publication
+
+User request: merge to main, then push. This authorizes Git integration/publication of the reviewed unified-Web design/plan and their audit records, not code implementation, dst dispatch, service changes, qualification or evidence deletion. Last trusted checkpoint: CP-19 exact-hash static plan PASS; there are no disproven runtime experiments to repeat.
+
+Fresh fetch of origin and github succeeded. Both main refs are 84620fc0529779a27c6985f8717d78f0386e0135 with divergence 0/0. Local main 4a5f83fd330aa72d0283539b911af44aacf6d515 has three unrelated unpublished W8/ACT documentation commits; keep them and their checkout unchanged, do not silently publish them. Original docs branch has older source/history and preserved dirty/untracked AGENTS, recovery guide, fixed-eight proposal and budget files.
+
+Publish only eight unified task files: approved design, two design reports, implementation plan, three plan reports and this ledger. First scoped-commit the plan/reports/ledger on the original documentation branch, then transplant only local design commit 6afd834f and that new scoped commit onto fresh remote main in the existing clean publication worktree /private/tmp/so101-doc-publication.R3yXD0aj/repo. Keep prior publication branch intact; use a new codex/so101-unified-webapp-doc-publication-20260918 branch. Do not merge the old source tree or unrelated unpublished branches. Use explicit Git metadata for both linked worktrees; no reset/clean/force/gh.
+
+Recheck fresh refs before ordinary fast-forward pushes to origin/main and github/main; if they move, preserve intervening commits and revalidate. Exact published commit, SHA/ancestry readbacks and clean publication status are recorded after push in main-publication-readback.md under the one registered evidence root. Only documentation static gates apply; no product tests, build, ROS/GUI/remote-runtime operation or agent dispatch. Retained: all prior evidence and publication receipts; archived: none; deletion candidates unchanged, nothing deleted. Next runtime experiment: NONE.
