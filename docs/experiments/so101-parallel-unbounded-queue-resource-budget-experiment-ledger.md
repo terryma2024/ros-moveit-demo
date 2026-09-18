@@ -2811,3 +2811,33 @@ decision: KEEP
 next_experiment: EXP-UQ35 Stage B owned Web refresh on the production freeze; Stage C delegated-unit
   measurement; Stage D approval packets
 ```
+
+```yaml
+checkpoint_id: CP-UQ35
+last_valid_experiment: EXP-UQ35
+current_hypothesis: Stage B ownership inventory is clean; the owned Web refresh can start on the
+  production freeze without pausing any service.
+goal: goal-d30193b8-a2e5-495d-b6c7-6879782448ac (user /goal 完成 B-E; round 1)
+ownership_probe:
+  - "scratch/stageB-ownership.80PNvl8p/ownership.log (shell date 2026-09-18T21:16:02+08:00): no listeners
+    on 8000/8001/11434, no task-owned uvicorn/expert-validation process, no task-owned Chrome, tmux has
+    only the unrelated codex session plus our dst-unbounded-queue session. Nothing needs pausing and no
+    foreign stack is running that could compete with the owned window."
+  - "ProductionRuntimeLayout.discover() under the plain dev-overlay environment refuses at _required_file
+    (the points/executables are supplied by the task SO101_VALIDATION_* environment), which is the
+    expected discovery contract: Stage B must discover the layout with the registered task env pointed at
+    the production freeze prefix, not the dev overlay."
+next_commands:
+  - "Stage B: export the SO101_VALIDATION_* layout variables against freeze-install (points, parallel v2
+    config, coordinator/cleanup executables, provenance binding, yolo/grounded paths, broker image),
+    confirm ProductionRuntimeLayout.discover succeeds, then start the owned Web (copied launcher + audited
+    Web dist) and read back PID/domain/store/fence/lease/URL/served bytes before marking it online."
+  - "Stage C: re-run the capability probe inside a manager-delegated unit (or take the documented cpu-only
+    quota + whole-host memory guard decision), then the sealed N1 calibration."
+inferred:
+  - Stage B has a clean owned window; the remaining steps are object-bound as recorded in CP-UQ33/34.
+conclusion: GOAL ROUND 1 - ownership inventory complete, Stage B start commands prepared.
+evidence: scratch/stageB-ownership.80PNvl8p/ownership.log
+decision: KEEP
+next_experiment: EXP-UQ36 Stage B layout discovery + owned Web start on the production freeze
+```
