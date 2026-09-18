@@ -7719,3 +7719,25 @@ batch, `evaluated: 0` because no point has committed yet, and no evidence file �
 claimed for it.
 
 _Ledger HEAD when written: `187681374`._
+
+## CP-UQ190 — Five fixed-N options executed; two idle slots at N=6
+
+`fixed-n6-p4` passed for real: `COMPLETED`, `requested 4`, `evaluated 4`, **six** worker slots with
+`worker-02` and `worker-05` holding **zero** leases and still present as slots, 4/4 points `PASSED`
+with 13 artifacts each, cleanup true, 2.1 m by its own spec line
+(`R06 fixed-n6-p4 executes 6×4 for real`).
+
+| Case | Slots (leases) | Timing |
+| --- | --- | --- |
+| `fixed-n2-p4` | 2 (1, 1) | 3.0 m |
+| `fixed-n3-p4` | 3 (1, 2, 1) | 3.0 m |
+| `fixed-n4-p4` | 4 (1, 1, 1, 1) | 1.8 m |
+| `fixed-n5-p4` | 5 (1, 1, **0**, 1, 1) | 2.0 m |
+| `fixed-n6-p4` | 6 (1, **0**, 1, 1, **0**, 1) | 2.1 m |
+
+Every row is a genuine campaign through the deployed console with its own
+`execution-fixed-n*-p4.json`, all N slots present in the projection, `requested == evaluated`, and
+full cleanup; the idle slots are the plan's "fewer points than N still starts N runtimes" rule
+observed rather than asserted. The batch continues with N=7 and N=8 in the same job.
+
+_Ledger HEAD when written: `8436ae914`._
