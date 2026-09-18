@@ -16,6 +16,7 @@ import time
 from .contracts import (
     _require_finite, _require_id, _require_positive_int, InferenceRequest,
     ModelOutcome, NormalizedInferenceResponseIdentity, ParallelRuntimeConfig,
+    ParallelRuntimeConfigV2,
 )
 
 
@@ -84,7 +85,10 @@ class PerceptionBroker:
         queue_capacity_per_model=None,
     ):
         """Bind frozen model limits and local scheduling resources."""
-        if type(config) is not ParallelRuntimeConfig:
+        # Both generations carry the fields this broker consumes (model ids, queue and
+        # inference timeouts, per-model queue capacity), so refusing the v2 class only made a
+        # v2 measurement's broker die with RUNTIME_CONFIG_REQUIRED.
+        if type(config) not in (ParallelRuntimeConfig, ParallelRuntimeConfigV2):
             raise BrokerError('RUNTIME_CONFIG_REQUIRED')
         _require_id('grounded_model_id', grounded_model_id)
         if grounded_model_id == config.yolo_model_id:
