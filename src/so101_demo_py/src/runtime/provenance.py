@@ -54,27 +54,41 @@ def _sha256(path: Path) -> str:
 
 
 def _verified_artifact(path: Path) -> VerifiedArtifact | None:
+    """Best-effort DEBUG artifact: stat/resolve/open/read failures are diagnostics.
+
+    A permission error, a race that removes the file between resolve and read, or an
+    unreadable path must never block an otherwise valid execution.
+    """
+
     try:
         canonical = path.resolve(strict=True)
-    except (OSError, RuntimeError):
+        if not canonical.is_file():
+            return None
+        digest = _sha256(canonical)
+    except (OSError, RuntimeError, ValueError):
         return None
-    if not canonical.is_file():
-        return None
-    return VerifiedArtifact(str(canonical), _sha256(canonical))
+    return VerifiedArtifact(str(canonical), digest)
 
 
 def observed_source_commit(source_root: Path | None) -> str | None:
-    """Best-effort Git observation for DEBUG data. It never raises and never gates.
+    """Runtime DEBUG observation: the declared value only, never a Git subprocess.
 
-    ``SO101_SOURCE_COMMIT`` takes precedence so a no-Git deployment can still record
-    what the builder observed. The value is returned verbatim (stripped); callers must
-    treat it as an observation, not as a validated runtime identity.
+    Runtime execution paths must not depend on Git at all (a deployment may be a pure
+    copied install). Only the build/install debug-manifest generator may inspect a
+    repository; it calls :func:`observed_source_commit_from_git` explicitly.
     """
 
+    del source_root
     configured = os.environ.get("SO101_SOURCE_COMMIT")
-    if configured is not None:
-        value = configured.strip()
-        return value or None
+    if configured is None:
+        return None
+    value = configured.strip()
+    return value or None
+
+
+def observed_source_commit_from_git(source_root: Path | None) -> str | None:
+    """Build/install-only Git observation for the DEBUG manifest; never raises."""
+
     if source_root is None:
         return None
     try:
@@ -83,11 +97,27 @@ def observed_source_commit(source_root: Path | None) -> str | None:
             check=True,
             capture_output=True,
             text=True,
+            timeout=10,
         )
     except (OSError, subprocess.SubprocessError):
         return None
     value = completed.stdout.strip()
     return value or None
+
+
+def observed_source_dirty_from_git(source_root: Path | None) -> bool | None:
+    """Build/install-only dirty observation; never raises."""
+
+    if source_root is None:
+        return None
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(source_root), "status", "--porcelain", "--untracked-files=no"],
+            check=True, capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return bool(completed.stdout.strip())
 
 
 def resolve_installed_execution_identity() -> InstalledExecutionIdentity:
@@ -153,9 +183,13 @@ def verify_execution_provenance(
         commit, commit_source = None, "UNKNOWN"
     prefix = Path(identity.package_prefix) if identity.package_prefix else None
     if prefix is None and declared_installed_prefix:
-        candidate = Path(str(declared_installed_prefix))
-        if candidate.is_absolute() and candidate.is_dir():
-            prefix = candidate.resolve()
+        try:
+            candidate = Path(str(declared_installed_prefix))
+            if candidate.is_absolute() and candidate.is_dir():
+                prefix = candidate.resolve()
+        except (OSError, RuntimeError, ValueError):
+            # Malformed or unresolvable DEBUG metadata stays unknown, never blocking.
+            prefix = None
     return ExecutionProvenance(
         source_commit=commit,
         source_commit_source=commit_source,
@@ -216,10 +250,10 @@ def build_bundle_manifest(inputs: Mapping[str, object]) -> QualificationBundle:
 
 
 def _source_commit() -> str | None:
-    """DEBUG-only bundle input: a no-Git build records null instead of failing."""
+    """DEBUG-only bundle input: declared metadata or null, with no Git subprocess."""
 
     try:
-        return observed_source_commit(Path.cwd())
+        return observed_source_commit(None)
     except Exception:  # noqa: BLE001 - an observation may never break the bundle
         return None
 

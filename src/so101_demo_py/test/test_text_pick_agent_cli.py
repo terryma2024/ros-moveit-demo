@@ -79,6 +79,127 @@ def test_cli_defaults_to_preview_and_prints_one_json_document(capsys) -> None:
 @pytest.mark.parametrize(
     ("arguments", "reason_code"),
     [
+        (["--mode", "execute"], "PARTIAL_EXECUTE_AUTHORIZATION"),
+        (["--execute"], "PARTIAL_EXECUTE_AUTHORIZATION"),
+    ],
+)
+def test_cli_rejects_partial_execute_before_agent_or_ros(
+    capsys, arguments: list[str], reason_code: str
+) -> None:
+    from so101_demo.cli import text_pick_agent
+
+    agent = StubAgent(result())
+
+    assert text_pick_agent.main(
+        ["--instruction", "帮我拿杯子", *arguments], _agent=agent
+    ) == 1
+
+    assert agent.requests == []
+    assert output(capsys) == {
+        "dispatch": False,
+        "reason_code": reason_code,
+        "request_id": ANY,
+        "state_trace": ["DISPATCH_REJECTED"],
+        "status": "DISPATCH_REJECTED",
+    }
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["--emit-workflow-events"],
+        ["--workflow-id", "w1"],
+        ["--emit-workflow-events", "--workflow-id", "bad workflow"],
+    ],
+)
+def test_cli_rejects_unpaired_or_invalid_workflow_event_configuration(
+    capsys, arguments: list[str]
+) -> None:
+    from so101_demo.cli import text_pick_agent
+
+    agent = StubAgent(result())
+
+    assert text_pick_agent.main(
+        ["--instruction", "帮我拿杯子", *arguments], _agent=agent
+    ) == 1
+
+    assert agent.requests == []
+    assert output(capsys)["reason_code"] == "WORKFLOW_EVENT_CONFIGURATION_INVALID"
+
+
+def test_enabled_workflow_mode_keeps_ordinary_result_off_stdout(capsys) -> None:
+    from so101_demo.cli import text_pick_agent
+
+    agent = StubAgent(result())
+
+    assert text_pick_agent.main(
+        [
+            "--instruction",
+            "帮我拿杯子",
+            "--emit-workflow-events",
+            "--workflow-id",
+            "w1",
+        ],
+        _agent=agent,
+    ) == 0
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert json.loads(captured.err)["status"] == "DISPATCH_PREVIEW"
+
+
+@pytest.mark.parametrize(
+    ("arguments", "reason_code"),
+    [
+        (["--skip-confirmation"], "CONFIRMATION_BYPASS_REQUIRES_EXECUTE"),
+        (
+            [
+                "--mode",
+                "execute",
+                "--execute",
+                "--skip-confirmation",
+                "--confirmation-digest",
+                "sha256:v1:" + "0" * 64,
+            ],
+            "CONFIRMATION_MODE_CONFLICT",
+        ),
+    ],
+)
+def test_cli_rejects_invalid_confirmation_bypass_before_provenance_or_agent(
+    capsys,
+    arguments: list[str],
+    reason_code: str,
+) -> None:
+    """Catches an invalid bypass reaching runtime provenance or the provider."""
+
+    from so101_demo.cli import text_pick_agent
+
+    agent = StubAgent(result())
+
+    assert text_pick_agent.main(
+        ["--instruction", "帮我拿杯子", *arguments], _agent=agent
+    ) == 1
+
+    assert agent.requests == []
+    assert output(capsys)["reason_code"] == reason_code
+
+
+def test_cli_rejects_wrong_backend_before_agent(capsys) -> None:
+    from so101_demo.cli import text_pick_agent
+
+    agent = StubAgent(result())
+
+    assert text_pick_agent.main(
+        ["--instruction", "帮我拿杯子", "--backend", "gazebo"], _agent=agent
+    ) == 1
+
+    assert agent.requests == []
+    assert output(capsys)["reason_code"] == "BACKEND_NOT_QUALIFIED"
+
+
+@pytest.mark.parametrize(
+    ("arguments", "reason_code"),
+    [
         ([], "EXECUTION_SESSION_ID_REQUIRED"),
         (["--session-id", "  "], "EXECUTION_SESSION_ID_REQUIRED"),
         (["--session-id", "session-1"], "EXECUTION_RESET_EPOCH_INVALID"),
