@@ -38,7 +38,7 @@ class ManifestCreateRequest(ClosedModel):
 
 
 class CampaignConfiguration(ClosedModel):
-    contract_version: Literal[2]
+    contract_version: Literal[3]
     service_session_id: str = Field(min_length=1)
     lease_id: str = Field(min_length=1)
     lease_generation: int = Field(ge=1)
@@ -100,6 +100,36 @@ class RetryRequest(CampaignCancelRequest):
     confirmation: str
 
 
+class StartGuardCheck(ClosedModel):
+    """One check of the shared startup guard, in the units the decision used."""
+
+    status: Literal["PASS", "WARN", "FAIL"]
+    reason: str = Field(min_length=1)
+    observed: float | int | str | None = None
+    cutoff: float | int | None = None
+    unit: str = Field(min_length=1)
+
+
+class StartGuardPolicyResponse(ClosedModel):
+    """The enforced policy, so a client can display the cutoffs it was judged against."""
+
+    timeout_s: float
+    cpu_busy_warn_fraction: float
+    ram_minimum_bytes: int
+    ram_minimum_fraction: float
+    gpu_minimum_bytes: int
+
+
+class StartGuardStatus(ClosedModel):
+    """The server's own decision. A client cannot supply or overwrite it."""
+
+    status: Literal["PASS", "WARN", "FAIL"]
+    cleanup_state: Literal["CLEAR", "PROBE_CLEANUP_BLOCKED"] = "CLEAR"
+    checks: dict[str, StartGuardCheck] = {}
+    gpu_uuid: str | None = None
+    observed_monotonic_s: float | None = None
+
+
 class WorkerCountAvailability(ClosedModel):
     worker_count: int = Field(ge=2, le=FIXED_WORKER_COUNTS[-1])
     selectable: bool
@@ -110,12 +140,12 @@ class WorkerCountAvailability(ClosedModel):
 
 
 def default_worker_count_availability() -> tuple[WorkerCountAvailability, ...]:
-    """Without an approved profile no fixed N is selectable; never fake a status."""
+    """Unknown until the real executor reports; never fake a qualification."""
 
     return tuple(
         WorkerCountAvailability(
-            worker_count=count, selectable=False, status="NOT_MEASURED",
-            reason_codes=("BUDGET_PROFILE_UNAVAILABLE",),
+            worker_count=count, selectable=False, status="UNKNOWN",
+            reason_codes=("CAPABILITIES_NOT_LOADED",),
         )
         for count in FIXED_WORKER_COUNTS[1:]
     )
@@ -131,6 +161,8 @@ class CapabilitiesResponse(ClosedModel):
     worker_count_availability: tuple[WorkerCountAvailability, ...] = Field(
         default_factory=default_worker_count_availability)
     adaptive_default_ladder: tuple[int, ...] = (8, 6, 4, 2, 1)
+    start_guard_policy: StartGuardPolicyResponse | None = None
+    start_guard: StartGuardStatus | None = None
     lease_duration_s: float = 30.0
     lease_renewal_margin_s: float = 10.0
 
@@ -242,6 +274,7 @@ class PreflightResponse(ClosedModel):
     execution_mode: Literal["SEQUENTIAL", "PARALLEL", "ADAPTIVE"] | None = None
     execution_config: dict[str, object] = {}
     resource_observations: dict[str, object] = {}
+    start_guard: StartGuardStatus | None = None
     reason_codes: tuple[str, ...] = ()
     expires_at_monotonic_ns: int | None = None
 
@@ -368,9 +401,10 @@ async def _reject_legacy_execution_contract(request: Request) -> None:
             detail={"code": "LEGACY_MAX_POINTS_PER_WORKER_UNSUPPORTED"},
         )
     version = payload.get("contract_version")
-    if type(version) is not int or version != 2:
+    if type(version) is not int or version != 3:
         raise HTTPException(
-            status_code=422, detail={"code": "LEGACY_CONTRACT_EXECUTION_FORBIDDEN"}
+            status_code=422,
+            detail={"code": "CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"},
         )
 
 

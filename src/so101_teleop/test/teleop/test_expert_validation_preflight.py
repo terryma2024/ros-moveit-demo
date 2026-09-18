@@ -220,8 +220,10 @@ def test_host_fixed_eight_admits_through_the_real_guard(monkeypatch, tmp_path):
     assert admitted, reasons
     assert observations["requested_worker_count"] == 8
     assert observations["start_guard_status"] in ("PASS", "WARN")
-    assert set(observations["start_guard_checks"]) == {
-        "cpu_capacity", "cpu_busy", "ram", "gpu"}
+    guard = observations["start_guard"]
+    assert guard["status"] in ("PASS", "WARN")
+    assert set(guard["checks"]) == {"cpu_capacity", "cpu_busy", "ram", "gpu"}
+    assert guard["checks"]["ram"]["unit"] == "bytes"
 
 
 def test_host_probe_reports_a_failing_guard_reason(monkeypatch, tmp_path):
@@ -250,4 +252,4 @@ def test_host_probe_reports_a_failing_guard_reason(monkeypatch, tmp_path):
 
     assert not admitted
     assert reasons == ("GPU_FREE_BELOW_MINIMUM",)
-    assert observations["start_guard_checks"]["gpu"] == "FAIL"
+    assert observations["start_guard"]["checks"]["gpu"]["status"] == "FAIL"
