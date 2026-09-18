@@ -741,6 +741,10 @@ _DEPLOYMENT_REFERENCE_FIELDS = (
     "promotion_record_path",
 )
 
+# Public field lists bound by the normalization rule L (resource_identity).
+V2_EXECUTION_SCALAR_FIELDS = _V2_EXECUTION_SCALARS
+V2_DEPLOYMENT_REFERENCE_FIELDS = _DEPLOYMENT_REFERENCE_FIELDS
+
 
 class _ClosedSafeLoader(yaml.SafeLoader):
     """SafeLoader that rejects duplicate mapping keys instead of last-one-wins."""
@@ -1132,10 +1136,9 @@ _FROZEN_RUNTIME_VALUES_V2 = {
 }
 
 
-def load_parallel_runtime_config_v2(path: Path) -> ParallelRuntimeConfigV2:
-    """Load the closed version-two YAML document; reject any drift or legacy quota."""
+def parse_parallel_runtime_config_v2(document: object) -> ParallelRuntimeConfigV2:
+    """Validate an already-parsed version-two document against the closed schema."""
 
-    document = _load_closed_yaml(path)
     top = _closed_mapping_fields("CONFIG", document, {"schema_version", "execution", "deployment"})
     if type(top["schema_version"]) is not int or top["schema_version"] != 2:
         raise ContractError("SCHEMA_VERSION")
@@ -1168,6 +1171,12 @@ def load_parallel_runtime_config_v2(path: Path) -> ParallelRuntimeConfigV2:
         deployment=DeploymentReferencesV2(**deployment),
         **execution,
     )
+
+
+def load_parallel_runtime_config_v2(path: Path) -> ParallelRuntimeConfigV2:
+    """Load the closed version-two YAML document; reject any drift or legacy quota."""
+
+    return parse_parallel_runtime_config_v2(_load_closed_yaml(path))
 
 
 @dataclass(frozen=True, slots=True)
