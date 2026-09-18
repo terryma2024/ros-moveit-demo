@@ -121,7 +121,15 @@ def measurement_source_commit() -> str:
     return str(observed or os.environ.get("SO101_MEASUREMENT_SOURCE_COMMIT", ""))
 
 
-def child_environment_for_launcher(environment, console_dir) -> dict[str, str]:
+def launcher_module_for_install(site_packages: Path) -> Path:
+    """The launcher module inside the install, or this interpreter's when it has none."""
+
+    candidate = Path(site_packages) / "so101_demo/cli/mujoco_parallel_batch.py"
+    return candidate if candidate.is_file() else _installed_launcher_module()
+
+
+def child_environment_for_launcher(environment, console_dir,
+                                   site_packages=None) -> dict[str, str]:
     """The child environment: no inherited authority, and the install's own console.
 
     A copied install ships its console beside the module it runs
@@ -133,6 +141,10 @@ def child_environment_for_launcher(environment, console_dir) -> dict[str, str]:
     inherited = values.get("PATH", "")
     values["PATH"] = os.pathsep.join(
         part for part in (str(console_dir), inherited) if part)
+    if site_packages is not None:
+        inherited_path = values.get("PYTHONPATH", "")
+        values["PYTHONPATH"] = os.pathsep.join(
+            part for part in (str(site_packages), inherited_path) if part)
     return values
 
 
@@ -274,7 +286,9 @@ def production_runner_factory(plan, *, child_runner=None, image_inspector=None):
     launcher = install_prefix / "so101_demo_py/lib/so101_demo_py/so101_parallel_batch"
     if not launcher.is_file():
         raise MeasurementCliError("MEASUREMENT_RUNTIME_UNAVAILABLE: launcher")
-    environment = child_environment_for_launcher(dict(os.environ), launcher.parent)
+    site_packages = install_prefix / "so101_demo_py/lib/python3.12/site-packages"
+    environment = child_environment_for_launcher(
+        dict(os.environ), launcher.parent, site_packages=site_packages)
     from so101_demo.cli.mujoco_parallel_batch import _BROKER_IMAGE
 
     tag = verify_broker_image(tag=_BROKER_IMAGE, digest=plan.bindings.broker_image_id,
@@ -285,7 +299,8 @@ def production_runner_factory(plan, *, child_runner=None, image_inspector=None):
         build_root=install_prefix, install_root=install_prefix,
         package_prefix=_ament_package_prefixes()["so101_demo_py"],
         package_prefixes=_ament_package_prefixes(),
-        console=launcher, module=_installed_launcher_module(),
+        console=launcher,
+        module=launcher_module_for_install(site_packages),
         entry_points=entry_points_for_install(install_prefix),
         parallel_config=Path(plan.config_path),
         point_catalog=Path(plan.bindings.points_path),

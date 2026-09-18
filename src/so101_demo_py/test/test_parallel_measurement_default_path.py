@@ -951,3 +951,19 @@ def test_entry_points_come_from_the_sealed_install_prefix(tmp_path):
     assert install_prefix_entry_points(tmp_path) == egg / "entry_points.txt"
     with pytest.raises(MeasurementCliError, match="MEASUREMENT_OVERLAY_INPUT_MISSING"):
         install_prefix_entry_points(tmp_path / "absent")
+
+
+def test_child_environment_prefers_the_candidate_site_packages(tmp_path):
+    """The launcher child must import the package its overlay declares, so the install's
+    own site-packages goes ahead of whatever the parent had on PYTHONPATH."""
+
+    from so101_demo.cli.measure_parallel_resources import child_environment_for_launcher
+
+    console_dir = tmp_path / "lib"; console_dir.mkdir()
+    site = tmp_path / "site-packages"; site.mkdir()
+    environment = child_environment_for_launcher(
+        {"PATH": "/usr/bin", "PYTHONPATH": "/somewhere/else"}, console_dir, site_packages=site)
+    assert environment["PYTHONPATH"].split(":")[0] == str(site)
+    assert environment["PYTHONPATH"].split(":")[1] == "/somewhere/else"
+    bare = child_environment_for_launcher({}, console_dir, site_packages=site)
+    assert bare["PYTHONPATH"] == str(site)
