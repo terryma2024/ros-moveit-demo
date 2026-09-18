@@ -6698,3 +6698,23 @@ coordinator dies before it can spawn workers, so the acceptance's failures are c
 provenance chain rather than of the start guard or the resource policy.
 
 _Ledger HEAD when written: `ae2d29f18`._
+
+## CP-UQ161 — The fourth gate wanted the installed inputs, which the copy really has
+
+`PROVENANCE_INSTALLED_INPUT_MISSING` came from three files derived from `package_root`:
+`config/mujoco/headless_execution.yaml`, `config/mujoco/task_scene.yaml`,
+`assets/mujoco/scene.xml`. With the None-safe fallback from CP-UQ158, `package_root` in a copied
+install points at `.../site-packages/src/so101_demo_py`, where they do not exist — but they **do**
+exist in the install's share directory, and this is a genuine functional requirement (the run reads
+them), not a source-tree assumption. The resolution differs, the requirement does not:
+
+- checkout: `package_root` as before;
+- copied install: `get_package_share_directory("so101_demo_py")`.
+
+All three files are present in the current copy (`share/so101_demo_py/{config/mujoco/
+headless_execution.yaml, config/mujoco/task_scene.yaml, assets/mujoco/scene.xml}`), verified before
+relying on them. Suites: `lg-t11-prov4` **139 passed, 0 failed, 0 skipped**. A fresh copy build is
+running so the deployed service can carry the fix; next round verifies, redeploys, re-runs the
+acceptance and reads the coordinator log for the fifth gate (or for the first worker).
+
+_Ledger HEAD when written: `0ad0dac22`._
