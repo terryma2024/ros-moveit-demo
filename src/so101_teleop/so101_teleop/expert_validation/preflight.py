@@ -28,9 +28,10 @@ class PreflightRejected(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class FixedExecutionConfig:
+    """Version-two fixed execution: mode and exact N, never a lifetime quota."""
+
     execution_mode: str
     worker_count: int
-    max_points_per_worker: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,7 +149,6 @@ def canonical_start_request_sha256(request: CampaignStartRequest) -> str:
         "selection_sha256": request.selection.selection_sha256,
         "execution_mode": request.execution_mode,
         "worker_count": request.worker_count,
-        "max_points_per_worker": request.max_points_per_worker,
         "fallback_worker_counts": request.fallback_worker_counts,
         "initial_points_per_worker": request.initial_points_per_worker,
         "worker_start_timeout_s": request.worker_start_timeout_s,
@@ -185,18 +185,13 @@ class PreflightEngine:
                 reasons.append("SEQUENTIAL_WORKER_COUNT")
             if request.execution_mode == "PARALLEL" and request.worker_count not in FIXED_WORKER_COUNTS[1:]:
                 reasons.append("PARALLEL_WORKER_COUNT")
-            maximum = request.max_points_per_worker
-            if maximum is None and request.worker_count > 0:
-                maximum = math.ceil(point_count / request.worker_count)
-            if maximum is None or maximum <= 0:
-                maximum = 1
-                reasons.append("MAX_POINTS_PER_WORKER")
-            capacity = request.worker_count * maximum
-            if capacity < point_count:
-                reasons.append("INSUFFICIENT_CAPACITY")
-            config = FixedExecutionConfig(
-                request.execution_mode, request.worker_count, maximum
-            )
+            if request.max_points_per_worker is not None:
+                # The legacy lifetime quota is never part of a version-two request.
+                reasons.append("LEGACY_MAX_POINTS_PER_WORKER_UNSUPPORTED")
+            config = FixedExecutionConfig(request.execution_mode, request.worker_count)
+            # The shared queue can lease every selected point, so capacity is the
+            # selection size; it is no longer a per-worker quota product.
+            capacity = point_count
             resource_admitted, resource_reasons, observations = self._resources.probe(
                 request, config
             )

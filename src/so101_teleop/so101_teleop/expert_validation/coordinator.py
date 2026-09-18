@@ -26,7 +26,6 @@ class CoordinatorStartRequest:
     batch_id: str
     execution_mode: str
     worker_count: int
-    max_points_per_worker: int
     argv: tuple[str, ...]
     environment: Mapping[str, str] = field(repr=False)
     batch_root: Path
@@ -34,6 +33,8 @@ class CoordinatorStartRequest:
     control_token_sha256: str
     coordinator_epoch: int = 1
     selected_point_ids: tuple[str, ...] = ()
+    # Retained only so historical v1 rows keep deserialising; new v2 runs omit it.
+    max_points_per_worker: int | None = None
 
     def __post_init__(self) -> None:
         for name in ("campaign_id", "batch_id"):
@@ -42,10 +43,16 @@ class CoordinatorStartRequest:
                 raise ValueError(f"{name.upper()}_INVALID")
         if self.execution_mode not in {"SEQUENTIAL", "PARALLEL"}:
             raise ValueError("FIXED_EXECUTION_MODE")
-        for name in ("worker_count", "max_points_per_worker", "coordinator_epoch"):
+        for name in ("worker_count", "coordinator_epoch"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                 raise ValueError(f"{name.upper()}_POSITIVE")
+        if self.max_points_per_worker is not None and (
+            isinstance(self.max_points_per_worker, bool)
+            or not isinstance(self.max_points_per_worker, int)
+            or self.max_points_per_worker <= 0
+        ):
+            raise ValueError("MAX_POINTS_PER_WORKER_POSITIVE")
         if self.execution_mode == "SEQUENTIAL" and self.worker_count != 1:
             raise ValueError("SEQUENTIAL_WORKER_COUNT")
         argv = tuple(self.argv)

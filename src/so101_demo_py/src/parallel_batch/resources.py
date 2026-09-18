@@ -20,6 +20,8 @@ from types import MappingProxyType
 from typing import Mapping
 import uuid
 
+import yaml
+
 from ..runtime.parallel_ipc import IpcError, require_transport_basename
 from .contracts import (
     ParallelRuntimeConfig,
@@ -1006,7 +1008,19 @@ class WorkerResourceAllocator:
         if len(self.allocation_policy.ros_domain_ids) < requested:
             raise ResourceAllocationError('ROS_DOMAIN_IDS')
         observed = self._probe_snapshot()
-        if self.allocation_policy.enforce_resource_thresholds:
+        version_two = isinstance(self.config, ParallelRuntimeConfigV2)
+        if version_two:
+            # Version two has no formula budget: fixed production admits only through the
+            # shared exact-N gate with an approved profile and live observation.
+            if self._resource_gate is None:
+                raise ResourceAllocationError('BUDGET_PROFILE_UNAVAILABLE')
+            decision = self._live_headroom_decision(requested)
+            if not decision.admitted:
+                raise ResourceAllocationError(decision.reason_codes[0])
+            required = ResourceThresholds(0, 0.0, 0.0)
+            failures = ()
+            headroom_ratio = 0.0
+        elif self.allocation_policy.enforce_resource_thresholds:
             required = ResourceThresholds(
                 logical_cpu_count=self.config.min_logical_cpu_per_worker * requested,
                 available_ram_gib=float(
@@ -1032,7 +1046,7 @@ class WorkerResourceAllocator:
             raise ResourceAllocationError(', '.join(failures), admission=admission)
         live_headroom = (
             self._live_headroom(requested)
-            if self.allocation_policy.enforce_resource_thresholds
+            if version_two or self.allocation_policy.enforce_resource_thresholds
             else None
         )
 
@@ -1060,7 +1074,9 @@ class WorkerResourceAllocator:
                 os.close(parent_fd)
         self._workers = {worker.worker_id: worker for worker in workers}
         self._manifest = ResourceManifest(
-            schema_version=1,
+            schema_version=(
+                2 if isinstance(self.config, ParallelRuntimeConfigV2) else 1
+            ),
             mode='dry_run',
             backend=self.config.backend,
             evidence_root=self.evidence_root,
@@ -1079,9 +1095,19 @@ class WorkerResourceAllocator:
         """Reclaim an exact crashed batch root without recreating its allocation."""
         if self._closed or self._manifest is not None:
             raise ResourceAllocationError('ALLOCATOR_NOT_ACTIVE')
+        expected_schema = (
+            2 if isinstance(self.config, ParallelRuntimeConfigV2) else 1
+        )
+        if (
+            isinstance(self.config, ParallelRuntimeConfigV2)
+            and isinstance(manifest, ResourceManifest)
+            and manifest.schema_version == 1
+        ):
+            # A retained version-one manifest never starts a version-two restore.
+            raise ResourceAllocationError('LEGACY_CONTRACT_EXECUTION_FORBIDDEN')
         if (
             not isinstance(manifest, ResourceManifest)
-            or manifest.schema_version != 1
+            or manifest.schema_version != expected_schema
             or manifest.evidence_root != self.evidence_root
             or manifest.backend != self.config.backend
             or manifest.worker_count != manifest.requested_worker_count
@@ -1153,24 +1179,50 @@ class WorkerResourceAllocator:
             if dict(environment) != expected_environment:
                 raise ResourceAllocationError('RECOVERY_RESOURCE_ENVIRONMENT')
         observed = self._probe_snapshot()
-        required = ResourceThresholds(
-            logical_cpu_count=self.config.min_logical_cpu_per_worker * manifest.worker_count,
-            available_ram_gib=float(
-                self.config.available_ram_base_gib
-                + self.config.available_ram_per_worker_gib * manifest.worker_count
-            ),
-            gpu_free_gib=float(self.config.min_available_gpu_gib),
-        )
-        failures = _resource_failures(observed, required)
-        admission = ResourceAdmission(
-            admitted=not failures,
-            observed=observed,
-            required=required,
-            required_live_headroom_ratio=self.config.required_live_headroom_ratio,
-            failures=failures,
-        )
-        if failures:
-            raise ResourceAllocationError(', '.join(failures), admission=admission)
+        if isinstance(self.config, ParallelRuntimeConfigV2):
+            # Restore re-checks the same promoted profile and exact-N record as allocate;
+            # a v1 formula must never admit a version-two restore.
+            if self._resource_gate is None:
+                raise ResourceAllocationError('BUDGET_PROFILE_UNAVAILABLE')
+            decision = self._live_headroom_decision(manifest.worker_count)
+            if not decision.admitted:
+                raise ResourceAllocationError(decision.reason_codes[0])
+            recorded = manifest.live_headroom_evidence or {}
+            recorded_profile = recorded.get('profile_sha256')
+            if (
+                recorded_profile is not None
+                and decision.profile_sha256 is not None
+                and recorded_profile != decision.profile_sha256
+            ):
+                raise ResourceAllocationError('RUNTIME_FINGERPRINT_MISMATCH')
+            required = ResourceThresholds(0, 0.0, 0.0)
+            failures = ()
+            admission = ResourceAdmission(
+                admitted=True,
+                observed=observed,
+                required=required,
+                required_live_headroom_ratio=0.0,
+                failures=(),
+            )
+        else:
+            required = ResourceThresholds(
+                logical_cpu_count=self.config.min_logical_cpu_per_worker * manifest.worker_count,
+                available_ram_gib=float(
+                    self.config.available_ram_base_gib
+                    + self.config.available_ram_per_worker_gib * manifest.worker_count
+                ),
+                gpu_free_gib=float(self.config.min_available_gpu_gib),
+            )
+            failures = _resource_failures(observed, required)
+            admission = ResourceAdmission(
+                admitted=not failures,
+                observed=observed,
+                required=required,
+                required_live_headroom_ratio=self.config.required_live_headroom_ratio,
+                failures=failures,
+            )
+            if failures:
+                raise ResourceAllocationError(', '.join(failures), admission=admission)
         parent_fd = _open_trusted_parent(self.evidence_root)
         root_fd = None
         try:
@@ -1299,20 +1351,24 @@ class WorkerResourceAllocator:
             self._manifest = replace(self._manifest, workers=ordered)
         return replacement
 
+    def _live_headroom_decision(self, worker_count: int):
+        """Ask the shared gate for one exact-N admission; never fabricate a pass."""
+
+        from .resource_budget import FixedAdmissionRequest
+        identity = self._resource_gate.execution_identity_sha256
+        if identity is None:
+            raise ResourceAllocationError('RESOURCE_PROBE_FAILED')
+        return self._resource_gate.admit(FixedAdmissionRequest(
+            worker_count=worker_count,
+            batch_id=self.batch_id,
+            epoch=1,
+            execution_identity_sha256=identity,
+            request_kind='FIXED_PRODUCTION',
+        ))
+
     def _live_headroom(self, worker_count: int) -> Mapping[str, object] | None:
         if self._resource_gate is not None:
-            from .resource_budget import FixedAdmissionRequest
-            identity = self._resource_gate.execution_identity_sha256
-            if identity is None:
-                # No runtime fingerprint means no admission evidence; fail closed.
-                raise ResourceAllocationError('RESOURCE_PROBE_FAILED')
-            decision = self._resource_gate.admit(FixedAdmissionRequest(
-                worker_count=worker_count,
-                batch_id=self.batch_id,
-                epoch=1,
-                execution_identity_sha256=identity,
-                request_kind='FIXED_PRODUCTION',
-            ))
+            decision = self._live_headroom_decision(worker_count)
             if not decision.admitted:
                 raise ResourceAllocationError(decision.reason_codes[0])
             return {
@@ -2520,17 +2576,44 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv=None, *, claim_root: Path | None = None) -> int:
+# Offline test entry point only; production leaves this None so a version-two config
+# without a promoted exact-N profile fails closed instead of using a v1 formula.
+_DEFAULT_RESOURCE_GATE = None
+
+
+def _load_cli_config(path):
+    """Version two is the only new-execution carrier; v1 stays read-only."""
+
+    try:
+        document = yaml.safe_load(Path(path).read_text(encoding='utf-8'))
+    except (OSError, yaml.YAMLError) as error:
+        raise ResourceAllocationError(f'CONFIG_READ_FAILED: {path}') from error
+    version = document.get('schema_version') if isinstance(document, dict) else None
+    if type(version) is not int or version != 2:
+        raise ResourceAllocationError('LEGACY_CONTRACT_EXECUTION_FORBIDDEN')
+    from .contracts import load_parallel_runtime_config_v2
+    return load_parallel_runtime_config_v2(Path(path))
+
+
+def main(argv=None, *, claim_root: Path | None = None, resource_gate=None) -> int:
     """Write a resource manifest without starting ROS, MuJoCo or Broker."""
     arguments = _parser().parse_args(argv)
     allocator = None
     try:
-        config = load_parallel_runtime_config(arguments.config)
+        config = _load_cli_config(arguments.config)
+        if (
+            not isinstance(config, ParallelRuntimeConfig)
+            and arguments.live_headroom_evidence is not None
+        ):
+            raise ResourceAllocationError('LIVE_HEADROOM_EVIDENCE_UNEXPECTED')
         allocator = WorkerResourceAllocator(
             config,
             arguments.evidence_root,
             claim_root=claim_root,
             live_headroom_evidence=arguments.live_headroom_evidence,
+            resource_gate=(
+                resource_gate if resource_gate is not None else _DEFAULT_RESOURCE_GATE
+            ),
         )
         manifest = allocator.allocate(arguments.worker_count)
         document = manifest.to_dict()

@@ -10,6 +10,11 @@ import threading
 import time
 from types import SimpleNamespace
 
+PACKAGE = Path(__file__).resolve().parents[1]
+POINTS = PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml"
+CONFIG = PACKAGE / "config/mujoco/parallel_batch_v2.yaml"
+ADAPTIVE_CONFIG = PACKAGE / "config/mujoco/parallel_adaptive_workers_v1.yaml"
+
 import pytest
 
 
@@ -482,6 +487,7 @@ def test_adaptive_module_imports_exclude_abandoned_heavy_stack():
 import importlib
 import json
 import sys
+
 for name in (
     'so101_demo.parallel_batch.adaptive_contracts',
     'so101_demo.parallel_batch.adaptive_queue',
@@ -511,9 +517,23 @@ print(json.dumps([name for name in forbidden if name in sys.modules]))
     assert json.loads(completed.stdout) == []
 
 
-def test_adaptive_cli_has_no_parallel_v2_config_route():
+def test_adaptive_cli_keeps_its_own_config_route(tmp_path):
+    """The adaptive route loads its own contract; fixed v2 is never substituted for it."""
+
     from so101_demo.cli import mujoco_parallel_batch as cli
 
-    assert "parallel_batch_v2.yaml" not in Path(cli.__file__).read_text(
-        encoding="utf-8"
-    )
+    parser = cli.build_parser()
+    options = parser.parse_args([
+        "--points", str(POINTS), "--config", str(CONFIG), "--batch-id", "b1",
+        "--evidence-root", str(tmp_path), "--adaptive-workers",
+        "--adaptive-config", str(ADAPTIVE_CONFIG), "--broker-image", "image:tag",
+        "--yolo-weights", "/models/yolo.pt", "--yolo-weights-sha256", "a" * 64,
+        "--grounded-root", "/models/grounded",
+        "--grounded-manifest-sha256", "b" * 64, "--run-mode", "dry_run",
+    ])
+    worker_options, adaptive_path = cli._adaptive_options(options)
+    assert Path(adaptive_path).name == "parallel_adaptive_workers_v1.yaml"
+    assert worker_options.worker_count >= 1
+    source = Path(cli.__file__).read_text(encoding="utf-8")
+    assert "parallel_batch_v2.yaml" in source
+    assert "_adaptive_options" in source

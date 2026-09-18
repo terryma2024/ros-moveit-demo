@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from so101_demo.parallel_batch.contracts import (
+    load_parallel_runtime_config_v2,
     BatchSummary,
     PointStatus,
     RunMode,
@@ -19,10 +20,47 @@ from so101_demo.parallel_batch.contracts import (
 
 PACKAGE = Path(__file__).resolve().parents[1]
 POINTS = PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml"
-CONFIG = PACKAGE / "config/mujoco/parallel_batch_v1.yaml"
+CONFIG = PACKAGE / "config/mujoco/parallel_batch_v2.yaml"
 ADAPTIVE_CONFIG = PACKAGE / "config/mujoco/parallel_adaptive_workers_v1.yaml"
 YOLO_SHA = "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781"
 GROUNDED_SHA = "0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775"
+
+
+class SyntheticAdmissionGate:
+    """Offline test entry: admit every exact N without a real promoted profile."""
+
+    execution_identity_sha256 = "a" * 64
+
+    def __init__(self, code=None):
+        self.code = code
+        self.requests = []
+
+    def admit(self, request):
+        from so101_demo.parallel_batch.resource_budget import ResourceBudgetAdmission
+        self.requests.append(request)
+        admitted = self.code is None
+        return ResourceBudgetAdmission(
+            admitted=admitted,
+            reason_codes=() if admitted else (self.code,),
+            worker_count=request.worker_count,
+            profile_sha256="b" * 64,
+            qualification_sha256="c" * 64,
+            execution_identity_sha256=request.execution_identity_sha256,
+            observation_monotonic_s=1.0)
+
+
+def _refusing_gate(code):
+    return SyntheticAdmissionGate(code=code)
+
+
+@pytest.fixture(autouse=True)
+def synthetic_resource_gate(monkeypatch):
+    """Supply the offline exact-N gate; production never sets this hook."""
+
+    import so101_demo.cli.mujoco_parallel_batch as parallel_cli
+    gate = SyntheticAdmissionGate()
+    monkeypatch.setattr(parallel_cli, "_DEFAULT_RESOURCE_GATE", gate)
+    return gate
 
 
 def argv(root: Path, **changes):
@@ -454,7 +492,7 @@ def test_adaptive_worker_process_classifies_recovered_invalid_as_infrastructure(
 @pytest.mark.parametrize(
     "changes,error",
     [
-        ({"worker_count": "1"}, "CAPACITY"),
+        ({"worker_count": "9"}, "WORKER_COUNT"),
         ({"evidence_root": "relative"}, "ABSOLUTE"),
         ({"run_mode": "unknown"}, "MODE"),
         ({"worker_count": "true"}, "INTEGER"),
@@ -479,7 +517,7 @@ def test_relative_catalog_and_config_paths_are_supported(tmp_path, monkeypatch):
         argv(
             tmp_path / "batch",
             points="config/mujoco/moveit_expert_validation_points_v1.yaml",
-            config="config/mujoco/parallel_batch_v1.yaml",
+            config="config/mujoco/parallel_batch_v2.yaml",
         ),
         provenance_verifier=verified,
     )
@@ -1957,13 +1995,13 @@ def test_worker_broker_proxy_rejects_unexpected_generation_before_return(tmp_pat
         ),
         tmp_path / "perception.sock",
         SimpleNamespace(worker_root=worker_root),
-        load_parallel_runtime_config(CONFIG),
+        load_parallel_runtime_config_v2(CONFIG),
         broker_generation=1,
     )
     proxy._call = lambda _message: {
         "request_id": "attempt-1-plastic-cup-yolo11n-seg-v1",
         "model_id": "plastic-cup-yolo11n-seg-v1",
-        "model_version": load_parallel_runtime_config(CONFIG).yolo_weights_sha256,
+        "model_version": load_parallel_runtime_config_v2(CONFIG).yolo_weights_sha256,
         "broker_generation": 1,
         "outcome": "NORMAL_REJECTION",
         "candidate": None,
@@ -1996,10 +2034,10 @@ def test_frozen_worker_topology_defaults_to_two_by_ten(tmp_path):
         del values[index:index + 2]
     prepared = prepare_batch(values, provenance_verifier=verified)
     assert prepared.request.worker_count == 2
-    # The composition still builds the retained v1 request internally; the user-facing
-    # quota flag is already refused, and the v2 request switch is the next Task 10 step.
-    assert prepared.request.max_points_per_worker == 10
+    assert not hasattr(prepared.request, "max_points_per_worker")
     assert prepared.manifest["worker_count"] == 2
+    assert prepared.manifest["schema_version"] == 2
+    assert "max_points_per_worker" not in prepared.manifest
 
 
 def test_adaptive_cli_uses_frozen_options_without_a_hard_capacity(tmp_path):
@@ -2201,14 +2239,20 @@ def test_adaptive_cli_rejects_missing_config_and_legacy_modes(
         )
 
 
-def test_fixed_w4_remains_rejected_without_live_qualification(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+def test_fixed_w4_remains_rejected_without_an_approved_profile(tmp_path):
+    """Without a promoted exact-N profile the fixed version-two path refuses N=4."""
 
-    with pytest.raises(CliError, match="FIXED_WORKER_LIVE_QUALIFICATION_REQUIRED"):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+    import so101_demo.cli.mujoco_parallel_batch as parallel_cli
+
+    # The offline fixture gate is bypassed here to exercise the production default.
+    with pytest.raises(CliError, match="BUDGET_PROFILE_UNAVAILABLE"):
         prepare_batch(
-            argv(tmp_path / "legacy", worker_count="4"),
+            argv(tmp_path / "w4", worker_count="4"),
             provenance_verifier=verified,
+            resource_gate=_refusing_gate("BUDGET_PROFILE_UNAVAILABLE"),
         )
+    assert parallel_cli._DEFAULT_RESOURCE_GATE is not None
 
 
 def test_production_adaptive_factory_builds_an_internal_w8_pool(tmp_path):
@@ -2612,7 +2656,7 @@ def test_provenance_rejects_mixed_source_install_overlay_before_snapshot(tmp_pat
     repository = tmp_path / "checkout"
     module = repository / "src/so101_demo_py/src/cli/mujoco_parallel_batch.py"
     console = repository / "install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch"
-    config = repository / "src/so101_demo_py/config/mujoco/parallel_batch_v1.yaml"
+    config = repository / "src/so101_demo_py/config/mujoco/parallel_batch_v2.yaml"
     points = repository / "src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml"
     for path in (module, console, config, points):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -2662,9 +2706,9 @@ def _external_overlay_fixture(tmp_path):
     support_prefix.mkdir(parents=True)
     share = package_prefix / "share/so101_demo_py/config/mujoco"
     share.mkdir(parents=True)
-    config = share / "parallel_batch_v1.yaml"
+    config = share / "parallel_batch_v2.yaml"
     points = share / "moveit_expert_validation_points_v1.yaml"
-    config.write_text("schema_version: 1\n", encoding="utf-8")
+    config.write_text("schema_version: 2\n", encoding="utf-8")
     points.write_text("schema_version: 1\n", encoding="utf-8")
     binding = tmp_path / "candidate/provenance-binding.json"
     binding.write_text(
@@ -3358,7 +3402,7 @@ def test_existing_worker_fetches_current_broker_before_each_request_and_recovery
             return {"payload": {
                 "request_id": "attempt-1-plastic-cup-yolo11n-seg-v1",
                 "model_id": "plastic-cup-yolo11n-seg-v1",
-                "model_version": load_parallel_runtime_config(
+                "model_version": load_parallel_runtime_config_v2(
                     CONFIG
                 ).yolo_weights_sha256,
                 "broker_generation": 2,
@@ -3391,7 +3435,7 @@ def test_existing_worker_fetches_current_broker_before_each_request_and_recovery
         Coordinator(),
         tmp_path / "broker-g1.sock",
         SimpleNamespace(worker_root=worker_root),
-        load_parallel_runtime_config(CONFIG),
+        load_parallel_runtime_config_v2(CONFIG),
         broker_generation=1,
         broker_generation_consumer=generation_bindings.append,
         perception_runner=perception_runner,

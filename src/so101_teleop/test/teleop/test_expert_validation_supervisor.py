@@ -32,7 +32,7 @@ class Owner:
         point = getattr(request, "selected_point_ids", ("first-pass",))[0]
         self.timeline.append(
             f"start-{request.batch_id}-{point}-n{getattr(request, 'worker_count', 'adaptive')}-"
-            f"k{getattr(request, 'max_points_per_worker', 'none')}"
+            "k" + str(getattr(request, 'max_points_per_worker', None))
         )
         self.timeline.append(f"cleanup-{request.batch_id}-{point}")
         return {"cleanup_complete": True, "receipt_sha256": "d" * 64}
@@ -287,7 +287,6 @@ def test_sequential_and_parallel_use_same_coordinator_path(tmp_path):
                     batch_id="b002",
                     manifest_id="manifest-2",
                     worker_count=2,
-                    max_points_per_worker=2,
                 )
             )
         )
@@ -298,7 +297,11 @@ def test_sequential_and_parallel_use_same_coordinator_path(tmp_path):
         assert [
             (request.worker_count, request.max_points_per_worker)
             for request in owner.requests
-        ] == [(1, 4), (2, 2)]
+        ] == [(1, None), (2, None)]
+        assert [request.selected_point_ids for request in owner.requests] == [
+            tuple(f"point_{index}" for index in range(1, 5)),
+            tuple(f"point_{index}" for index in range(1, 5)),
+        ]
     finally:
         store.close()
 
@@ -353,7 +356,7 @@ def test_adaptive_uses_one_wrapper_request_without_k(tmp_path):
         store.close()
 
 
-def test_each_retry_is_a_new_n1_k1_batch_after_prior_cleanup(tmp_path):
+def test_each_retry_is_a_new_n1_single_point_batch_after_prior_cleanup(tmp_path):
     supervisor, owner, store = _supervisor(tmp_path)
     try:
         request = _request(tmp_path, "SEQUENTIAL", campaign_id="campaign-retry")
@@ -361,9 +364,9 @@ def test_each_retry_is_a_new_n1_k1_batch_after_prior_cleanup(tmp_path):
         owner.timeline.clear()
         asyncio.run(supervisor.start_retries("campaign-retry", ("point_1", "point_2")))
         assert owner.timeline == [
-            "start-retry-001-point_1-n1-k1",
+            "start-retry-001-point_1-n1-kNone",
             "cleanup-retry-001-point_1",
-            "start-retry-002-point_2-n1-k1",
+            "start-retry-002-point_2-n1-kNone",
             "cleanup-retry-002-point_2",
         ]
         assert store.next_retry("campaign-retry") is None

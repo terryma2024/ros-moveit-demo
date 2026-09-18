@@ -29,6 +29,11 @@ from so101_demo.parallel_batch.artifacts import (
     ValidationWorkspace,
     write_recovery_receipt,
 )
+from so101_demo.parallel_batch.contracts import (
+    BatchKindV2,
+    BatchRequestV2,
+    load_parallel_runtime_config_v2,
+)
 from so101_demo.parallel_batch.adaptive_contracts import (
     AdaptiveBatchRequest,
     AdaptiveBatchSummary,
@@ -149,7 +154,7 @@ def _take_fixed_web_control(spec: PreparedBatch) -> _FixedWebControl | None:
     values = {key: os.environ.pop(key) for key in keys if key in os.environ}
     if len(values) != len(keys):
         raise CliError("FIXED_CONTROL_ENV_INCOMPLETE")
-    if not isinstance(spec.request, BatchRequest):
+    if not isinstance(spec.request, (BatchRequest, BatchRequestV2)):
         raise CliError("FIXED_CONTROL_REQUEST_REQUIRED")
     token, campaign, epoch, socket_path = (values[key] for key in keys)
     if re.fullmatch(r"[0-9a-f]{64}", token) is None:
@@ -174,7 +179,8 @@ class _Parser(argparse.ArgumentParser):
 
 @dataclass(frozen=True, slots=True)
 class PreparedBatch:
-    request: BatchRequest | PoolRequest | None
+    resource_gate: object | None
+    request: BatchRequest | BatchRequestV2 | PoolRequest | None
     adaptive_request: AdaptiveBatchRequest | None
     config: ParallelRuntimeConfig
     config_path: Path
@@ -236,7 +242,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--batch-id", required=True)
     parser.add_argument("--worker-count")
-    parser.add_argument("--max-points-per-worker")
+    parser.add_argument("--contract-version", default="2")
+    parser.add_argument("--batch-kind", default="FIRST_PASS")
     parser.add_argument("--adaptive-workers", action="store_true")
     parser.add_argument("--adaptive-config", type=Path)
     parser.add_argument("--fallback-worker-counts")
@@ -408,23 +415,41 @@ def _live_headroom_verifier(
 
 
 def _prepare_live_headroom(options, config, worker_count, *, resource_gate=None):
+    supplied = (
+        options.live_headroom_evidence,
+        options.live_headroom_acceptance,
+        options.live_headroom_current_provenance_root,
+    )
+    if not isinstance(config, ParallelRuntimeConfig):
+        # Version two replaced the historical three-worker evidence chain with the exact-N
+        # gate; presenting the retired authority must fail loudly, never be ignored, and a
+        # missing gate is a missing approved profile rather than a legacy evidence error.
+        if any(value is not None for value in supplied):
+            raise CliError('LIVE_HEADROOM_EVIDENCE_UNEXPECTED')
+        if resource_gate is None:
+            raise CliError('BUDGET_PROFILE_UNAVAILABLE')
     if resource_gate is not None:
         from so101_demo.parallel_batch.resource_budget import FixedAdmissionRequest
         identity = resource_gate.execution_identity_sha256
         if identity is None:
             raise CliError('RESOURCE_PROBE_FAILED')
-        decision = resource_gate.admit(FixedAdmissionRequest(
-            worker_count=worker_count, batch_id=getattr(options, 'batch_id', None) or 'cli',
-            epoch=1, execution_identity_sha256=identity,
-            request_kind='FIXED_PRODUCTION'))
+        try:
+            decision = resource_gate.admit(FixedAdmissionRequest(
+                worker_count=worker_count,
+                batch_id=getattr(options, 'batch_id', None) or 'cli',
+                epoch=1, execution_identity_sha256=identity,
+                request_kind='FIXED_PRODUCTION'))
+        except ContractError as error:
+            raise CliError(error.code) from error
         if not decision.admitted:
             raise CliError(decision.reason_codes[0])
-        return {
+        summary = {
             'worker_count': worker_count,
             'profile_sha256': decision.profile_sha256,
             'qualification_sha256': decision.qualification_sha256,
             'observation_monotonic_s': decision.observation_monotonic_s,
-        }, None, {}, None
+        }
+        return None, None, {}, summary
     supplied = (
         options.live_headroom_evidence,
         options.live_headroom_acceptance,
@@ -778,7 +803,7 @@ def _validate_external_overlay_binding(
 
     demo_prefix = prefixes["so101_demo_py"]
     expected_console = demo_prefix / "lib/so101_demo_py/so101_parallel_batch"
-    expected_config = demo_prefix / "share/so101_demo_py/config/mujoco/parallel_batch_v1.yaml"
+    expected_config = demo_prefix / "share/so101_demo_py/config/mujoco/parallel_batch_v2.yaml"
     expected_points = (
         demo_prefix
         / "share/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml"
@@ -997,6 +1022,24 @@ if __name__ == '__main__':
 
 _LEGACY_QUOTA_FLAG = '--max-points-per-worker'
 
+# Offline test entry point only: production callers leave this None so the fixed path
+# stays fail-closed until an approved exact-N profile exists. Tests set it through the
+# autouse fixture in their own module; no production code assigns it.
+_DEFAULT_RESOURCE_GATE = None
+
+
+def _load_runtime_config(path: Path):
+    """New execution loads the closed v2 document; a v1 document is refused."""
+
+    try:
+        document = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as error:
+        raise ContractError(f"CONFIG_READ_FAILED: {path}") from error
+    version = document.get("schema_version") if isinstance(document, dict) else None
+    if type(version) is not int or version != 2:
+        raise ContractError("LEGACY_CONTRACT_EXECUTION_FORBIDDEN")
+    return load_parallel_runtime_config_v2(Path(path))
+
 
 def _reject_legacy_quota_flag(argv) -> None:
     """Refuse the retired lifetime quota flag before argparse or any resource work."""
@@ -1007,8 +1050,12 @@ def _reject_legacy_quota_flag(argv) -> None:
             raise ContractError('LEGACY_MAX_POINTS_PER_WORKER_UNSUPPORTED')
 
 
-def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> PreparedBatch:
+def prepare_batch(
+    argv=None, *, provenance_verifier=verify_provenance, resource_gate=None
+) -> PreparedBatch:
     _reject_legacy_quota_flag(argv)
+    if resource_gate is None:
+        resource_gate = _DEFAULT_RESOURCE_GATE
     options = build_parser().parse_args(argv)
     adaptive_only = (
         options.adaptive_config,
@@ -1021,8 +1068,6 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
     if options.adaptive_workers:
         if options.resume:
             raise CliError("ADAPTIVE_RESUME_CONFLICT")
-        if options.max_points_per_worker is not None:
-            raise CliError("ADAPTIVE_MAX_POINTS_CONFLICT")
         if any(
             value is not None
             for value in (
@@ -1034,16 +1079,12 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
             raise CliError("ADAPTIVE_LIVE_HEADROOM_CONFLICT")
         adaptive_worker_options, adaptive_config_path = _adaptive_options(options)
         worker_count = adaptive_worker_options.worker_count
-        max_points = None
     else:
         if any(value is not None for value in adaptive_only):
             raise CliError("ADAPTIVE_OPTIONS_REQUIRE_FLAG")
         adaptive_worker_options = None
         adaptive_config_path = None
         worker_count = _integer("worker_count", options.worker_count or "2")
-        max_points = _integer(
-            "max_points_per_worker", options.max_points_per_worker or "10"
-        )
     evidence_root = _absolute("evidence_root", options.evidence_root)
     if options.resume:
         try:
@@ -1089,7 +1130,7 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
     selection_payload = json.dumps(list(selected), separators=(",", ":")).encode("utf-8")
     selection_sha = hashlib.sha256(selection_payload).hexdigest()
     config_path = options.config.resolve()
-    config = load_parallel_runtime_config(config_path)
+    config = _load_runtime_config(config_path)
     if options.adaptive_workers:
         live_headroom_evidence = None
         live_headroom_acceptance = None
@@ -1101,7 +1142,10 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
             live_headroom_acceptance,
             live_headroom_current_provenance,
             live_headroom_verification,
-        ) = _prepare_live_headroom(options, config, worker_count)
+        ) = _prepare_live_headroom(
+            options, config, worker_count,
+            resource_gate=(None if isinstance(config, ParallelRuntimeConfig) else resource_gate),
+        )
     if options.yolo_weights_sha256 != config.yolo_weights_sha256:
         raise CliError("YOLO_HASH_MISMATCH")
     if options.grounded_manifest_sha256 != config.grounded_sam_manifest_sha256:
@@ -1119,13 +1163,19 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
                 evidence_root,
             )
         else:
-            request = BatchRequest(
+            contract_version = _integer(
+                "contract_version", options.contract_version or "2"
+            )
+            if contract_version != 2:
+                raise ContractError("LEGACY_CONTRACT_EXECUTION_FORBIDDEN")
+            batch_kind = BatchKindV2(options.batch_kind or "FIRST_PASS")
+            request = BatchRequestV2(
                 options.batch_id,
                 mode,
                 selected,
                 worker_count,
-                max_points,
                 evidence_root,
+                batch_kind,
             )
             adaptive_request = None
     except ContractError as error:
@@ -1201,7 +1251,8 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         }
     else:
         manifest = {
-            "schema_version": 1,
+            "schema_version": 2,
+            "batch_kind": request.batch_kind.value,
             "batch_id": request.batch_id,
             "run_mode": request.run_mode.value,
             "selected_point_ids": list(selected),
@@ -1209,7 +1260,6 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
             "catalog_sha256": catalog_sha,
             "expected_final_cup_pose_world": list(expected_final_cup_pose_world),
             "worker_count": worker_count,
-            "max_points_per_worker": max_points,
             "evidence_root": str(evidence_root),
             "provenance": dict(provenance),
             "live_headroom": (
@@ -1235,6 +1285,7 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         if existing != manifest:
             raise CliError("RECOVERY_BATCH_MANIFEST_MISMATCH")
     return PreparedBatch(
+        resource_gate=resource_gate,
         request=request,
         adaptive_request=adaptive_request,
         config=config,
@@ -2222,7 +2273,7 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
         raise CliError("WORKER_SPEC_BROKER_GENERATION")
     resources = _resource_from_dict(document["resources"])
     mode = RunMode(document["run_mode"])
-    config = load_parallel_runtime_config(Path(document["config_path"]))
+    config = _load_runtime_config(Path(document["config_path"]))
     coordinator = _CoordinatorRpcProxy(
         document["socket_path"],
         document["token_path"],
@@ -2522,7 +2573,10 @@ class ProductionBatchComposition:
         self._uses_production_broker_container = broker_command_builder is None
         self.journal = None
         live_headroom_verifier = None
-        if spec.request.worker_count == 3:
+        if (
+            spec.request.worker_count == 3
+            and isinstance(spec.config, ParallelRuntimeConfig)
+        ):
             if (
                 spec.live_headroom_evidence is None
                 or spec.live_headroom_acceptance is None
@@ -2548,6 +2602,7 @@ class ProductionBatchComposition:
             spec.request.evidence_root,
             probe=resource_probe,
             claim_root=claim_root,
+            resource_gate=getattr(spec, 'resource_gate', None),
             live_headroom_evidence=spec.live_headroom_evidence,
             live_headroom_verifier=live_headroom_verifier,
             batch_id=spec.request.batch_id,
