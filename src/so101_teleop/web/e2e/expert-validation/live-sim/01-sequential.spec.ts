@@ -107,10 +107,10 @@ test("R01 four-point sequential live smoke @live-sim", async ({ page, liveServer
 
   // Only a fully clean run opens the R02 gate, and the receipt binds the run identity
   // that later suites must re-check instead of trusting the filename.
-  const identity = await (
+  const receiptIdentity = await (
     await fetch(`${liveServer.baseURL}/expert-validation/campaigns/${campaignId}`)
   ).json();
-  const batch = identity.batches?.[0] ?? {};
+  const batch = receiptIdentity.batches?.[0] ?? {};
   recordGate(process.env.SO101_E2E_EVIDENCE_ROOT!, "R01", {
     campaign_id: campaignId,
     status: projection.status,
