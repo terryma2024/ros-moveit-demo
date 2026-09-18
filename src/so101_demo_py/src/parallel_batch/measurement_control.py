@@ -177,7 +177,9 @@ class MeasurementControl:
         # latched. This call holds both timestamps and rules on the gap itself.
         if (previous is not None
                 and sample_time - previous > self._maximum_sample_gap_s):
-            if self._in_cold_start(previous):
+            # Both endpoints must lie inside the window: a gap that *starts* inside it and
+            # runs past the ceiling is a stalled sampler, not a cold start.
+            if self._in_cold_start(previous) and self._in_cold_start(sample_time):
                 self._record_cold_start_gap()
             else:
                 self._latch("SAMPLER_GAP", self._clock())
@@ -260,7 +262,7 @@ class MeasurementControl:
         if moment - self._last_sample_s > self._maximum_sample_gap_s:
             # The same cold-start window applies here: a check that lands inside the
             # workload's startup must not latch what observe_sample is allowed to excuse.
-            if self._in_cold_start(self._last_sample_s):
+            if self._in_cold_start(self._last_sample_s) and self._in_cold_start(moment):
                 self._record_cold_start_gap()
                 return
             self._latch("SAMPLER_GAP", moment)
