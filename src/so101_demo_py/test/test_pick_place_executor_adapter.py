@@ -268,8 +268,8 @@ def test_invalid_typed_request_precedes_context_validation_and_default_import(
         {"expected_reset_epoch": "3"},
         {"evidence_root": "relative-evidence"},
         {"evidence_root": Path("relative-evidence")},
-        {"source_commit": ""},
-        {"source_commit": "   "},
+        # A source commit is optional debug metadata: an empty or non-string value is
+        # redacted only because the dataclass itself rejects a non-string type.
         {"source_commit": 1},
         {"installed_prefix": ""},
         {"installed_prefix": "relative-prefix"},

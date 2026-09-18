@@ -255,6 +255,27 @@ def test_real_launch_service_accepts_only_after_owned_cleanup(tmp_path: Path) ->
     assert result["primary_failure"] is None
 
 
+def test_a_late_teardown_timer_after_cleanup_is_not_a_run_failure(tmp_path: Path) -> None:
+    """A delayed escalation callback on a loaded host is a diagnostic, not a failure."""
+
+    text, perception, validator = _success_processes()
+    returncode, supervisor = _run_graph(
+        tmp_path,
+        text=text,
+        perception=perception,
+        validator=validator,
+        required=_sleep_process(),
+    )
+    assert returncode == 0
+    assert supervisor.primary_failure is None
+    secondary = list(supervisor.secondary_failures)
+    generation = supervisor._deadline_generations.get("SIGINT", 1)
+    supervisor.on_timeout("SIGINT", generation)
+    assert supervisor.primary_failure is None
+    assert list(supervisor.secondary_failures) == secondary
+    assert supervisor._cleanup_observations[-1]["result"] == "completed_within_deadline"
+
+
 def test_real_launch_service_accepts_bounded_signal_recovery_before_owned_cleanup(
     tmp_path: Path,
 ) -> None:
