@@ -193,9 +193,10 @@ test("S06 start and retry command ids are idempotent spec:default", async ({ ins
   expect(list.body).toHaveLength(1);
 
   // The same command id with different content is a conflict.
+  const otherManifest = await createManifest(client, 4);
   const conflict = await client.post("/expert-validation/campaigns", {
     ...body,
-    worker_count: 2,
+    manifest_id: otherManifest.manifest_id,
   });
   expect(conflict.status).toBe(409);
   expect(conflict.body.code).toBe("COMMAND_ID_REUSED");

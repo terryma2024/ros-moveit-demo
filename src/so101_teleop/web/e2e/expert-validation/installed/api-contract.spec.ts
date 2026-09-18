@@ -74,9 +74,10 @@ test("API command ids: replay, conflict reuse, outcome unknown @api-contract spe
   expect(replay.status).toBe(200);
   expect(replay.body.campaign_id).toBe(first.body.campaign_id);
 
+  const otherManifest = await createManifest(client, 4);
   const conflict = await client.post("/expert-validation/campaigns", {
     ...startBody,
-    worker_count: 2,
+    manifest_id: otherManifest.manifest_id,
   });
   expect(conflict.status).toBe(409);
   expect(conflict.body.code).toBe("COMMAND_ID_REUSED");
