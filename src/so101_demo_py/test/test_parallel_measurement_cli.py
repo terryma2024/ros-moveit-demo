@@ -18,8 +18,28 @@ def write(path: Path, document) -> str:
 
 
 def config_path():
-    return (Path(__file__).resolve().parents[1]
-            / "config/mujoco/parallel_batch_v2.yaml")
+    """The authoritative config, with only the baseline shortened for tests.
+
+    Policy amendment 74d6b781 requires a genuine >=60 s pre-workload baseline in a real
+    run; an end-to-end test that started a session at that value would spend a minute per
+    case. The candidate copy declares its own short baseline explicitly -- there is no
+    bypass flag and the authoritative document is untouched.
+    """
+
+    import os
+    import tempfile
+
+    import yaml
+
+    source = (Path(__file__).resolve().parents[1]
+              / "config/mujoco/parallel_batch_v2.yaml")
+    document = yaml.safe_load(source.read_text())
+    document["execution"]["sampling"]["baseline_minimum_s"] = 0.2
+    directory = Path(os.environ.get("TMPDIR", tempfile.gettempdir())) / "cli-test-config"
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    target = directory / "parallel_batch_v2.test.yaml"
+    target.write_text(yaml.safe_dump(document, sort_keys=False))
+    return target
 
 
 
