@@ -250,6 +250,21 @@ export const liveSimTest = base.extend<{ liveServer: LiveServer }>({
     const entry = join(
       preconditions.installPrefix, "so101_teleop/lib/so101_teleop/so101_expert_validation_server.py",
     );
+    // A deployed service wins: the acceptance must not start a second stack while the
+    // task-owned service is already running (the plan's SO101_LIVE_SERVICE_BASE_URL).
+    const deployed = process.env.SO101_LIVE_SERVICE_BASE_URL;
+    if (deployed) {
+      await use({
+        port: 0,
+        baseURL: deployed,
+        caseDir,
+        stateDir,
+        preconditions,
+        stop: async () => {},
+        reusedDeployedService: true,
+      });
+      return;
+    }
     if (!existsSync(entry)) throw new Error(`INSTALLED_ENTRY_MISSING: ${entry}`);
     const python = process.env.SO101_E2E_PYTHON;
     if (!python || !existsSync(python)) throw new Error("SO101_E2E_PYTHON_REQUIRED");
@@ -271,6 +286,10 @@ export const liveSimTest = base.extend<{ liveServer: LiveServer }>({
         ROS_LOG_DIR: join(stateDir, "ros-home", "log"),
         ROS_DOMAIN_ID: process.env.SO101_LIVE_ROS_DOMAIN_ID ?? "179",
         SO101_VALIDATION_EVIDENCE_ROOT: stateDir,
+        // The lightweight start guard keeps its lock and cleanup state in one task-owned
+        // directory; without it the guard fails closed (PROBE_STATE_ROOT_UNSET).
+        SO101_TASK_ROOT:
+          process.env.SO101_TASK_ROOT ?? "/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main/unbounded-queue-resource-budget",
         SO101_VALIDATION_PORT: String(port),
         SO101_VALIDATION_WEB_ROOT: join(
           preconditions.installPrefix, "so101_teleop/share/so101_teleop/web",
