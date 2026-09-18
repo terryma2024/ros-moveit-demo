@@ -625,15 +625,101 @@ def test_sample_loop_schedules_samples_on_a_fixed_grid(tmp_path, monkeypatch):
 
     monkeypatch.setattr(rm, "sample_resources", fake_sample_resources)
     session = object.__new__(MeasurementSession)
-    session._stopped = threading.Event()
+    session._stopped = threading.Event(); session._rebaseline = threading.Event()
     session.cgroup = None; session.device = None; session.owner = ()
     session._lock = threading.Lock(); session.samples = 0
     session.samples_path = tmp_path / "samples.jsonl"
     session.control = None; session._control_socket = None; session.abort_reason = None
     session._interval_s = 0.05; session.clock = time.monotonic
+    session.sampling = types.SimpleNamespace(cgroup_cpu_period_us=100000)
 
     thread = threading.Thread(target=session._sample_loop, daemon=True)
     thread.start(); time.sleep(0.6); session._stopped.set(); thread.join(timeout=3)
     gaps = [later - earlier for earlier, later in zip(stamps, stamps[1:])]
     assert len(gaps) >= 3, gaps
     assert max(gaps) < 0.10, gaps
+
+
+class _FakeCgroup:
+    """A cgroup reporting a scripted cpu.stat, without touching the real one."""
+
+    attribution_complete = True
+    throttled = False
+    cpu_capacity_core_equivalent = 24.0
+
+    def __init__(self, usage_us):
+        self._usage = list(usage_us)
+
+    def cpu_usage_us(self):
+        return self._usage.pop(0)
+
+    def memory_current(self):
+        return 1024 * 1024
+
+
+class _FakeDevice:
+    total_bytes = 8 * 1024 ** 3
+    used_bytes = 0
+
+
+def test_sample_resources_measures_cpu_over_a_full_quota_period(monkeypatch):
+    """A cgroup may spend a whole quota inside one period, so a shorter window can
+    read up to twice the enforced cap -- the 22.43 cores seen against an 18.6-core
+    quota were that artifact, and they latched CPU_ENVELOPE on the first N1 run."""
+
+    import types
+    import so101_demo.parallel_batch.resource_measurement as rm
+
+    clock = [100.0]
+    monkeypatch.setattr(rm, "time", types.SimpleNamespace(monotonic=lambda: clock[0]))
+    cgroup = _FakeCgroup([0, 1860000, 1860000])
+    state = {"cpu_window_s": 0.1}
+    rates = []
+    for sequence, moment in enumerate((100.0, 100.05, 100.10), start=1):
+        clock[0] = moment
+        sample = rm.sample_resources(owned_inventory=(), cgroup=cgroup, device=_FakeDevice(),
+                                     sequence=sequence, state=state)
+        rates.append(sample.observation.observed["cpu_core_equivalent"])
+    assert rates[0] == 0.0, rates
+    assert rates[1] == 0.0, rates
+    assert abs(rates[2] - 18.6) < 0.05, rates
+
+
+def test_sample_loop_rebaselines_when_asked(tmp_path, monkeypatch):
+    """CPU a task burned before it joined the cgroup migrates with it, so the sampled
+    rate must restart from the attach point instead of counting that burst."""
+
+    import threading, time, types
+    import so101_demo.parallel_batch.resource_measurement as rm
+    from so101_demo.parallel_batch.owned_resources import MeasurementSession
+
+    seen: list[dict] = []
+
+    def fake_sample_resources(**kwargs):
+        seen.append(dict(kwargs["state"]))
+        kwargs["state"]["monotonic_s"] = time.monotonic()   # mimic the real carry-over
+        time.sleep(0.03)
+        observation = types.SimpleNamespace(
+            capacity={}, observed={}, background={}, remaining={}, error={},
+            attribution_complete=True, swap_delta=0, psi_full_delta=0, throttled=False)
+        return types.SimpleNamespace(sequence=len(seen), monotonic_s=time.monotonic(),
+                                     observation=observation, diagnostics={})
+
+    monkeypatch.setattr(rm, "sample_resources", fake_sample_resources)
+    session = object.__new__(MeasurementSession)
+    session._stopped = threading.Event(); session._rebaseline = threading.Event()
+    session.cgroup = None; session.device = None; session.owner = ()
+    session._lock = threading.Lock(); session.samples = 0
+    session.samples_path = tmp_path / "samples.jsonl"
+    session.control = None; session._control_socket = None; session.abort_reason = None
+    session._interval_s = 0.01; session.clock = time.monotonic
+    session.sampling = types.SimpleNamespace(cgroup_cpu_period_us=100000)
+
+    thread = threading.Thread(target=session._sample_loop, daemon=True)
+    thread.start(); time.sleep(0.15)
+    session._request_sampling_rebaseline(); time.sleep(0.15)
+    session._stopped.set(); thread.join(timeout=3)
+    assert len(seen) >= 4, seen
+    dropped = [i for i in range(1, len(seen))
+               if "monotonic_s" not in seen[i] and "monotonic_s" in seen[i - 1]]
+    assert dropped, seen
