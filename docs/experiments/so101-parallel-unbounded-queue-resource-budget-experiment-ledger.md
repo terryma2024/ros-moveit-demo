@@ -4209,3 +4209,20 @@ the one consistent with this task's standing rule of not weakening gates that un
 on, and it is the next implementation unit. Nothing about the amendment is in question here -- the
 run in CP-UQ78 completed a 309-sample baseline with `abort_reason` `None`, and this refusal is the
 allocator asking for an empty directory the harness is currently filling.
+
+## CP-UQ80 — The session gets its own root; the gate is green and the allocator is satisfied
+
+Option 1 from CP-UQ79 is implemented: `measure_parallel_resources.session_batch_root(plan)` returns
+`<authorization.batch_root>/<batch_id>-session`, and the measurement CLI constructs its session
+against that root while the launcher keeps `<authorization.batch_root>/<batch_id>`, empty as the
+allocator requires. The sealed manifest still records the launcher's root
+(`sealed["batch_root"] == <authorization.batch_root>/batch-a`), and the session's receipt, samples,
+baseline, peak alias and workload logs now live in `batch-a-session/`. Three test expectations moved
+with it (two direct session constructions and the receipt path), and the sanctioned gate is
+**green: 106 passed in 2.83 s** across the six measurement, budget and authority-path files
+(`so101_pytest policy74d6b781-gate6`, exit 0).
+
+This is the seam that produced `DIRECTORY_CONFLICT` in CP-UQ78, closed on the harness side without
+touching the product allocator that ordinary parallel batches also pass through. r31 is sealed from
+r30 against the unchanged valid binding r9 and N1 runs at `n1-calibration-20260918-run52` with the
+60 s baseline, inside a delegated scope.
