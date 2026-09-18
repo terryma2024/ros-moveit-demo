@@ -7620,3 +7620,29 @@ registered **three** worker slots and ran three attempts concurrently (`WORKER_R
 campaign in this task.
 
 _Ledger HEAD when written: `e54f1b2e3`._
+
+## CP-UQ186 — Two fixed-N options executed for real, with per-point evidence on disk
+
+The per-option driver (CP-UQ184) has now executed two fixed-N campaigns through the deployed
+console, each with its own evidence record, `requested == evaluated`, all N worker slots and full
+cleanup — not capability checks and not aggregates alone:
+
+| Case | N slots (from the projection) | Points | Artifacts | Attempts | Terminal | Cleanup |
+| --- | --- | --- | --- | --- | --- | --- |
+| `fixed-n2-p4` | `worker-01`, `worker-02` | P01–P04 all `PASSED` | 13 each | 1 each | `COMPLETED` | true |
+| `fixed-n3-p4` | `worker-01` (1 lease), `worker-02` (2), `worker-03` (1) — all `STOPPED` | P01–P04 all `PASSED` | 13 each | 1 each | `COMPLETED` | true |
+
+The N=3 case is the first `N > 2` fixed-mode campaign in this task and the first where the worker
+count exceeds nothing but the pool itself: three sims, three ROS domains and the broker ran
+concurrently, its journal recorded `WORKER_REGISTERED: 6` with `WORKER_RECOVERED: 3`,
+`RESULT_COMMITTED: 4` and one `ATTEMPT_STARTED` per point. That recovery pattern is why it took far
+longer than the N=2 case (3.0 min): each point costs a worker/sim cycle, and the driver's per-case
+deadline is the manifest's own `batch_timeout_s`.
+
+The run continued on its own into the next case while this was written — `947a6146` (N=4) is
+`RUNNING` — so the driver walks the manifest without a replay step. Recorded here rather than in a
+summary: the N=2 and N=3 evidence files live under
+`browser/lg-exec-n2p4.jGouw4Ny/runtime/*/execution-fixed-n2-p4.json` and
+`browser/lg-exec-n345p4.M06abryN/runtime/*/execution-fixed-n3-p4.json`.
+
+_Ledger HEAD when written: `52290b866`._
