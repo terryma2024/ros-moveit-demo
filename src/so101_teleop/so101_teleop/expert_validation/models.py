@@ -127,7 +127,7 @@ class ExecutionOwnerIntent:
     expected_executable: str
     argv_sha256: str
     environment_sha256: str
-    source_commit: str
+    source_commit: str | None
     install_prefix: Path
     runtime_sha256: str
     control_socket: Path | None = None
@@ -141,7 +141,9 @@ class ExecutionOwnerIntent:
             raise ValueError("EXPECTED_EXECUTABLE")
         for name in ("argv_sha256", "environment_sha256", "runtime_sha256"):
             _sha(name, getattr(self, name))
-        if not re.fullmatch(r"[0-9a-f]{40}", self.source_commit) and self.source_commit != "UNKNOWN":
+        # Debug metadata only: any string (including an unknown marker) or None is
+        # acceptable, so a deployment without Git can still record its ownership intent.
+        if self.source_commit is not None and type(self.source_commit) is not str:
             raise ValueError("SOURCE_COMMIT")
         object.__setattr__(self, "install_prefix", Path(self.install_prefix))
         if self.control_socket is not None:
@@ -159,7 +161,7 @@ class OwnedExecutionRecord:
     expected_executable: str
     argv_sha256: str
     environment_sha256: str
-    source_commit: str
+    source_commit: str | None
     install_prefix: Path
     runtime_sha256: str
     pid: int | None

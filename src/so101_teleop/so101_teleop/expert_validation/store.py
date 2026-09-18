@@ -393,7 +393,9 @@ class SupervisorStore:
                         intent.expected_executable,
                         intent.argv_sha256,
                         intent.environment_sha256,
-                        intent.source_commit,
+                        # Debug metadata column: a no-Git deployment records UNKNOWN
+                        # rather than a fabricated commit, and never refuses.
+                        intent.source_commit or "UNKNOWN",
                         str(intent.install_prefix),
                         intent.runtime_sha256,
                         str(intent.control_socket) if intent.control_socket else None,

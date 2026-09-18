@@ -170,7 +170,7 @@ class E2ESupervisor:
         request_id: str,
         session_id: str,
         backend: str,
-        source_commit: str,
+        source_commit: str | None,
         installed_prefix: str,
         run_root: Path,
         result_file: Path,
@@ -347,6 +347,7 @@ class E2ESupervisor:
             "request_id": self.request_id,
             "simulation_session_id": self.session_id,
             "source_commit": self.source_commit,
+            "source_commit_authority": "DEBUG_METADATA_ONLY",
             "installed_prefix": self.installed_prefix,
             "perception_backend": self.backend,
             "model_provenance": self.model_provenance,
@@ -1141,8 +1142,11 @@ def _mujoco_text_pick_agent_execute_actions(
             "0",
             "--evidence-root",
             str(evidence_paths.dynamic),
-            "--source-commit",
-            execution_identity.source_commit,
+            *(
+                ("--source-commit", execution_identity.source_commit)
+                if execution_identity.source_commit is not None
+                else ()
+            ),
             "--installed-prefix",
             execution_identity.package_prefix,
             *profiling_arguments,
@@ -1304,8 +1308,11 @@ def _gazebo_execute_actions(
             str(policy.path),
             "--result",
             evidence_file,
-            "--source-commit",
-            str(bundle.manifest["inputs"]["source_commit"]),
+            *(
+                ("--source-commit", str(bundle.manifest["inputs"]["source_commit"]))
+                if bundle.manifest["inputs"].get("source_commit") is not None
+                else ()
+            ),
             "--installed-prefix",
             str(bundle.manifest["inputs"]["package_prefix"]),
             "--policy-sha256",
@@ -1384,10 +1391,11 @@ def _configured_actions(context, *, backend: str, pick_place: bool):
     bundle = installed_bundle()
     capabilities = backend_capabilities(backend)
     base_capabilities = CapabilityRequirements.base_execute().validate(capabilities)
-    source_commit = str(bundle.manifest["inputs"]["source_commit"])
+    source_commit = bundle.manifest["inputs"].get("source_commit") or "unknown"
     messages = [
         LogInfo(msg=f"so101 backend={backend}"),
         LogInfo(msg=f"so101 source_commit={source_commit}"),
+        LogInfo(msg="so101 source_commit_authority=DEBUG_METADATA_ONLY"),
         LogInfo(msg=f"so101 installed_prefix={prefix}"),
         LogInfo(msg=f"so101 policy_sha256={policy.policy_sha256}"),
         LogInfo(msg=f"so101 bundle_sha256={bundle.bundle_sha256}"),
@@ -2022,8 +2030,11 @@ def _configured_text_pick_agent_e2e_actions(context):
             "0",
             "--evidence-root",
             str(run_root / "dynamic"),
-            "--source-commit",
-            execution_identity.source_commit,
+            *(
+                ("--source-commit", execution_identity.source_commit)
+                if execution_identity.source_commit is not None
+                else ()
+            ),
             "--installed-prefix",
             execution_identity.package_prefix,
             "--emit-workflow-events",

@@ -65,7 +65,7 @@ class CampaignStartRequest:
     yolo_executor_count: int
     service_session_id: str
     lease_generation: int
-    source_commit: str
+    source_commit: str | None
     install_prefix: str
     coordinator_executable_sha256: str
     adaptive_runner_module_sha256: str | None
@@ -118,7 +118,7 @@ class CampaignPreflightReceipt:
     execution_config: FixedExecutionConfig | AdaptiveExecutionConfig
     point_count: int
     capacity: int
-    source_commit: str
+    source_commit: str | None
     install_prefix: str
     coordinator_executable_sha256: str
     adaptive_runner_module_sha256: str | None

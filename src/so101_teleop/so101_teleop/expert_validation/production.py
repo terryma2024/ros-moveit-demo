@@ -80,92 +80,53 @@ def _optional_file(environment: Mapping[str, str], name: str) -> Path | None:
 
 
 def _source_identity(
-    *,
-    module_path: Path,
-    provenance_binding: Path | None,
+    *, module_path: Path, provenance_binding: Path | None = None,
     subprocess_runner=subprocess.run,
-) -> tuple[Path, str]:
-    """Read source authority from Git or an explicit copied-overlay binding."""
+) -> tuple[Path, str | None]:
+    """Resolve the installed source root; the commit is an optional DEBUG observation.
 
-    bound_commit = None
+    A deployment may be a pure copied install with no Git checkout, so this function
+    runs no Git command, requires no commit and never refuses on commit content.
+    """
+
+    del subprocess_runner
     if provenance_binding is not None:
+        binding_path = Path(provenance_binding)
         if (
-            not provenance_binding.is_absolute()
-            or provenance_binding.is_symlink()
-            or not provenance_binding.is_file()
-            or provenance_binding.stat().st_size > 1024 * 1024
+            not binding_path.is_absolute()
+            or binding_path.is_symlink()
+            or not binding_path.is_file()
         ):
             raise RuntimeError("SO101_VALIDATION_PROVENANCE_BINDING_INVALID")
         try:
-            document = json.loads(provenance_binding.read_text(encoding="utf-8"))
-            source_root = Path(document["source_root"])
-            bound_commit = document["source_commit"]
-        except (OSError, KeyError, TypeError, ValueError) as error:
+            document = json.loads(binding_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
             raise RuntimeError("SO101_VALIDATION_PROVENANCE_BINDING_INVALID") from error
+        source_root = document.get("source_root")
         if (
-            document.get("schema_version") != 1
-            or not source_root.is_absolute()
-            or source_root.is_symlink()
-            or not source_root.is_dir()
-            or not isinstance(bound_commit, str)
+            not isinstance(source_root, str)
+            or not Path(source_root).is_absolute()
+            or Path(source_root).is_symlink()
+            or not Path(source_root).is_dir()
         ):
             raise RuntimeError("SO101_VALIDATION_PROVENANCE_BINDING_INVALID")
-        source_root = source_root.resolve()
-    else:
-        try:
-            source_root = Path(
-                subprocess_runner(
-                    ["git", "-C", str(module_path.parent), "rev-parse", "--show-toplevel"],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                ).stdout.strip()
-            ).resolve()
-        except (OSError, subprocess.SubprocessError) as error:
-            raise RuntimeError("SO101_VALIDATION_SOURCE_IDENTITY") from error
-    try:
-        git_root = Path(
-            subprocess_runner(
-                ["git", "-C", str(source_root), "rev-parse", "--show-toplevel"],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=5,
-            ).stdout.strip()
-        ).resolve()
-        source_commit = subprocess_runner(
-            ["git", "-C", str(source_root), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        ).stdout.strip()
-        dirty = subprocess_runner(
-            ["git", "-C", str(source_root), "status", "--porcelain", "--untracked-files=no"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        ).stdout
-    except (OSError, subprocess.SubprocessError) as error:
-        raise RuntimeError("SO101_VALIDATION_SOURCE_IDENTITY") from error
-    if (
-        git_root != source_root
-        or len(source_commit) != 40
-        or any(character not in "0123456789abcdef" for character in source_commit)
-        or dirty
-    ):
-        raise RuntimeError("SO101_VALIDATION_SOURCE_IDENTITY")
-    if bound_commit is not None and bound_commit != source_commit:
-        raise RuntimeError("SO101_VALIDATION_SOURCE_COMMIT_MISMATCH")
-    return source_root, source_commit
+        source_root = Path(source_root).resolve()
+        declared_commit = document.get("source_commit")
+        if declared_commit is not None and not isinstance(declared_commit, str):
+            raise RuntimeError("SO101_VALIDATION_PROVENANCE_BINDING_INVALID")
+        observed = declared_commit.strip() or None if declared_commit else None
+        return source_root, observed
+    candidate = Path(module_path).resolve().parent
+    for parent in (candidate, *candidate.parents):
+        if (parent / "src/so101_demo_py").is_dir():
+            return parent, None
+    return candidate, None
 
 
 @dataclass(frozen=True, slots=True)
 class ProductionRuntimeLayout:
     source_root: Path
-    source_commit: str
+    source_commit: str | None
     demo_prefix: Path
     points_path: Path
     parallel_config_path: Path
@@ -237,9 +198,10 @@ class ProductionRuntimeLayout:
         configured_source = environment.get("SO101_VALIDATION_SOURCE_ROOT")
         if configured_source and Path(configured_source).resolve() != source_root:
             raise RuntimeError("SO101_VALIDATION_SOURCE_ROOT_MISMATCH")
+        # A configured commit is DEBUG metadata only: it can never refuse a layout.
         configured_commit = environment.get("SO101_VALIDATION_SOURCE_COMMIT")
-        if configured_commit and configured_commit != source_commit:
-            raise RuntimeError("SO101_VALIDATION_SOURCE_COMMIT_MISMATCH")
+        if configured_commit and source_commit is None:
+            source_commit = str(configured_commit).strip() or None
         yolo = environment.get("SO101_VALIDATION_YOLO_WEIGHTS")
         yolo_path = Path(yolo).resolve() if yolo else None
         if yolo_path is not None and (not yolo_path.is_file() or yolo_path.is_symlink()):

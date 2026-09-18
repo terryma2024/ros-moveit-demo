@@ -74,7 +74,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--session-id")
     parser.add_argument("--expected-reset-epoch")
     parser.add_argument("--evidence-root")
-    parser.add_argument("--source-commit", default="UNRECORDED_SOURCE")
+    # Optional DEBUG metadata only: missing, malformed or mismatched values must never
+    # refuse execution, and no value is ever resolved from Git at runtime.
+    parser.add_argument("--source-commit")
     parser.add_argument("--installed-prefix")
     parser.add_argument(
         "--profiling",
@@ -123,11 +125,11 @@ def _valid_execute_context(options) -> tuple[DynamicRuntimeContext | None, str |
     evidence_root = Path(options.evidence_root)
     if not evidence_root.is_absolute():
         return None, "EXECUTION_EVIDENCE_ROOT_INVALID"
-    if not isinstance(options.source_commit, str):
-        return None, "EXECUTION_SOURCE_COMMIT_INVALID"
-    source_commit = options.source_commit.strip()
-    if re.fullmatch(r"[0-9a-fA-F]{40}", source_commit) is None:
-        return None, "EXECUTION_SOURCE_COMMIT_INVALID"
+    source_commit = (
+        options.source_commit.strip()
+        if isinstance(options.source_commit, str) and options.source_commit.strip()
+        else None
+    )
     if not isinstance(options.installed_prefix, str) or not options.installed_prefix.strip():
         return None, "EXECUTION_INSTALLED_PREFIX_INVALID"
     installed_prefix = options.installed_prefix.strip()

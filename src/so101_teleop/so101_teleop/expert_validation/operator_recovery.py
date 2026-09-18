@@ -110,8 +110,10 @@ def recover(*, store, campaign_id, command_id, parallel_config, inspector=None,
             source_commit, apply=False):
     _identifier("campaign_id", campaign_id)
     _identifier("command_id", command_id)
-    if not re.fullmatch(r"[0-9a-f]{40}", source_commit):
+    # The commit is DEBUG metadata on the recovery receipt; it can never refuse one.
+    if source_commit is not None and type(source_commit) is not str:
         raise RecoveryError("RECOVERY_SOURCE_COMMIT_INVALID")
+    source_commit = (source_commit or "UNKNOWN").strip() or "UNKNOWN"
     context = store.operator_recovery_context(campaign_id)
     if context["campaign"]["execution_mode"] not in {"SEQUENTIAL", "PARALLEL"}:
         raise RecoveryError("RECOVERY_MODE_UNSUPPORTED")

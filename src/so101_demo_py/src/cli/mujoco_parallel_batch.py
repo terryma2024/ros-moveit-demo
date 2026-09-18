@@ -578,6 +578,19 @@ def _catalog(path: Path) -> tuple[dict[str, Mapping[str, object]], str]:
     return catalog, digest
 
 
+def _observed_source_dirty(source_root: Path) -> bool | None:
+    """DEBUG observation only; a no-Git tree records None and never refuses."""
+
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(source_root), "status", "--porcelain", "--untracked-files=no"],
+            check=True, capture_output=True, text=True, timeout=5.0,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return bool(completed.stdout.strip())
+
+
 def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
     """Verify exact local model and image inputs before creating the batch root."""
 
@@ -600,33 +613,18 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
     module_import_path = Path(__file__).absolute()
     module_path = module_import_path.resolve()
     external_binding = spec.get("provenance_binding")
-    try:
-        repository_root = (
-            _external_binding_source_root(Path(external_binding))
-            if external_binding is not None
-            else Path(subprocess.run(
-                ["git", "-C", str(module_path.parent), "rev-parse", "--show-toplevel"],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=5.0,
-            ).stdout.strip()).resolve()
-        )
-        source_commit = subprocess.run(
-            ["git", "-C", str(repository_root), "rev-parse", "HEAD"],
-            check=True, capture_output=True, text=True, timeout=5.0,
-        ).stdout.strip()
-        dirty = subprocess.run(
-            ["git", "-C", str(repository_root), "status", "--porcelain",
-             "--untracked-files=no"],
-            check=True, capture_output=True, text=True, timeout=5.0,
-        ).stdout
-    except (OSError, subprocess.SubprocessError) as error:
-        raise CliError("PROVENANCE_SOURCE_COMMIT") from error
-    if len(source_commit) != 40 or any(character not in "0123456789abcdef" for character in source_commit):
-        raise CliError("PROVENANCE_SOURCE_COMMIT")
-    if dirty:
-        raise CliError("PROVENANCE_SOURCE_DIRTY")
+    # The source commit is an optional DEBUG observation only: this deployment may be
+    # a pure copied install with no Git checkout, and no commit value can refuse a run.
+    from so101_demo.runtime.provenance import observed_source_commit
+    if external_binding is not None:
+        repository_root = _external_binding_source_root(Path(external_binding))
+    else:
+        repository_root = module_path.parents[3]
+        if not (repository_root / "src/so101_demo_py").is_dir():
+            raise CliError("PROVENANCE_SOURCE_ROOT")
+    repository_root = Path(repository_root).resolve()
+    source_commit = observed_source_commit(repository_root)
+    source_dirty = _observed_source_dirty(repository_root)
     package_root = repository_root / "src/so101_demo_py"
     console = shutil.which("so101_parallel_batch")
     if console is None:
@@ -641,7 +639,6 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
         config_path,
         points_path,
         module_import_path=module_import_path,
-        source_commit=source_commit,
         external_binding=external_binding,
     )
     if overlay_identity["external_overlay_bound"]:
@@ -687,7 +684,8 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
         raise CliError("PROVENANCE_BROKER_IMAGE_READBACK") from error
     return {
         "source_commit": source_commit,
-        "source_dirty": False,
+        "source_commit_authority": "DEBUG_METADATA_ONLY",
+        "source_dirty": source_dirty,
         "source_tree_sha256": source_hash(package_root),
         "installed_console_path": str(console_path),
         "installed_console_sha256": _sha256(console_path),
@@ -714,7 +712,6 @@ def _validate_provenance_overlay(
     points_path: Path,
     *,
     module_import_path: Path | None = None,
-    source_commit: str | None = None,
     external_binding: Path | str | None = None,
 ) -> Mapping[str, object]:
     """Reject a source/import/console/config selection spanning checkouts."""
@@ -741,12 +738,11 @@ def _validate_provenance_overlay(
         return {"external_overlay_bound": False}
     if external_binding is None:
         raise CliError("PROVENANCE_MIXED_OVERLAY")
-    if module_import_path is None or source_commit is None:
+    if module_import_path is None:
         raise CliError("PROVENANCE_EXTERNAL_BINDING_CONTEXT")
     return _validate_external_overlay_binding(
         Path(external_binding),
         repository_root=repository_root,
-        source_commit=source_commit,
         module_path=Path(module_path),
         module_import_path=Path(module_import_path),
         console_path=Path(console_path),
@@ -759,7 +755,6 @@ def _validate_external_overlay_binding(
     binding_path: Path,
     *,
     repository_root: Path,
-    source_commit: str,
     module_path: Path,
     module_import_path: Path,
     console_path: Path,
@@ -801,8 +796,10 @@ def _validate_external_overlay_binding(
     install_root = absolute_directory("install_root")
     if source_root != repository_root.resolve():
         raise CliError("PROVENANCE_EXTERNAL_SOURCE_ROOT")
-    if document["source_commit"] != source_commit:
-        raise CliError("PROVENANCE_EXTERNAL_SOURCE_COMMIT")
+    # The binding's declared commit is compatibility metadata; the overlay is bound by
+    # its roots, prefixes and byte artifacts below, never by a commit equality.
+    if document["source_commit"] is not None and not isinstance(document["source_commit"], str):
+        raise CliError("PROVENANCE_EXTERNAL_BINDING_SCHEMA")
     expected_source_module = (
         source_root / "src/so101_demo_py/src/cli/mujoco_parallel_batch.py"
     ).resolve()
