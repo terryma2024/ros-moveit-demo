@@ -7396,3 +7396,55 @@ the adaptive path — the last unexercised execution mode — is still unproven.
 fix and is the first one in which R03 can inherit a real R02 receipt.
 
 _Ledger HEAD when written: `3611bc303`._
+
+## CP-UQ181 — R01 and R02 are green with gates; the adaptive mode was never wired to the start guard
+
+Run 6 (`browser/lg-live-functional6.SMhlJhQ1`) is the first run with **R01 and R02 both passing** and
+both gate receipts on disk:
+
+| Gate | Result |
+| --- | --- |
+| `R01` | four-point SEQUENTIAL, `COMPLETED`, cleanup true, 4 × `PASSED` (`R01.passed.json`) |
+| `R02` | four-point **PARALLEL N=2**, `COMPLETED`, cleanup true, 4 × `PASSED`, two workers, mid-run Chrome reload observed — and it ran in **3.0 m**, so the corrected campaign id did not just fix the assertion, it let the spec actually watch its own batch (`R02.passed.json`) |
+| `R04` | start guard: every configured fixed N selectable without any budget profile — passed |
+
+**R03 (adaptive) fails, and the reason is a wiring gap, not a resource refusal.** The wrapper exits
+in 33 ms with `{"message": "POOL_ROOT", "status": "ERROR"}`, all twenty points
+`INFRA_INTERRUPTED`, `evaluated: 0`, `levels_used: [8]`. Behind that there are two distinct defects:
+
+1. **The guard is never prepared in adaptive mode.** `mujoco_parallel_batch.py:1214-1220` reads
+   ```python
+   start_guard = None
+   guard_summary = None
+   if not options.adaptive_workers:
+       start_guard, guard_summary = _prepare_start_guard(...)
+   ```
+   so an adaptive run carries `start_guard=None`, the per-level pool request has no guard either
+   (`adaptive_runner.py:369` builds the level request with `_new_pool_request_for_production_factory`
+   and nothing threads a guard through), and the allocator refuses by design:
+   `parallel_batch/resources.py:1364 raise ResourceAllocationError('START_GUARD_UNAVAILABLE')`,
+   reached from `adaptive_pool.py:352 → ProductionBatchComposition.__init__ →
+   mujoco_parallel_batch.py:2578`. This is the pool-failure record on disk:
+   `r/a8daa/p/g01w08-failure.json` — `stage: resource_allocation`, `message:
+   START_GUARD_UNAVAILABLE`. The fixed-N path is wired (`_prepare_start_guard` → `PreparedBatch.
+   start_guard`); the adaptive path was simply left out.
+2. **A pool that fails before its directory exists cannot be cleaned up, so the campaign never
+   terminates.** The pool never created `p/g01w08/`, and the cleanup CLI
+   (`parallel_batch_cleanup.py:344-347`) requires
+   `pool_root.is_dir()` and otherwise raises `CleanupError("POOL_ROOT")`. The campaign therefore
+   sits in `CLEANING_UP` with `batch_cleanup_complete: false` forever, and the spec polls until its
+   own timeout. A failure marker without a pool directory is a *clean* state — nothing was ever
+   allocated there — so the cleanup path needs to accept it instead of refusing.
+
+Both are recorded as the next work item rather than papered over: the adaptive mode is one of the
+three advertised execution modes, so the all-mode acceptance cannot be called done while it fails at
+allocation. The next round is: (a) prepare the guard in adaptive mode with the initial worker count
+and thread it into the per-level pool request (single source of truth: the same
+`_prepare_start_guard`/`compose_default_start_guard`), with a test that fails on the current wiring;
+(b) make the cleanup accept a failure marker with no pool directory, with a test; then rebuild the
+copy install, redeploy and re-run R03 plus the stability record.
+
+Also noted for the next round: run 6's R03 spec was still polling when this was written, so the run
+was stopped rather than left to time out against a campaign that can never become terminal.
+
+_Ledger HEAD when written: `5bb830d3b`._
