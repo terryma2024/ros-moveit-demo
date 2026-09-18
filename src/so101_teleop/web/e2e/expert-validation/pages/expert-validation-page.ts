@@ -64,8 +64,20 @@ export class ExpertValidationPage {
       response.status(),
       `acquire lease refused: ${response.status()} ${await response.text()}`,
     ).toBe(200);
-    const payload = (await response.json()) as { lease_id: string };
-    acquiredLeases.set(payload.lease_id, response.request().postData() ?? "{}");
+    const payload = (await response.json()) as {
+      lease_id: string;
+      service_session_id: string;
+      generation: number;
+    };
+    // Release and renew take `{service_session_id, generation}` while acquire takes only the
+    // session, so the mutation body is built from the response, not from the request.
+    acquiredLeases.set(
+      payload.lease_id,
+      JSON.stringify({
+        service_session_id: payload.service_session_id,
+        generation: payload.generation,
+      }),
+    );
     await expect(this.page.getByRole("button", { name: "Acquire lease" })).toBeDisabled();
   }
 
