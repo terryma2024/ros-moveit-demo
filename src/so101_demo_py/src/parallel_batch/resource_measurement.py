@@ -345,9 +345,29 @@ def sample_resources(
         psi_full_delta=psi_delta,
         throttled=bool(getattr(cgroup, "throttled", False)),
     )
+    # Raw evidence: each owned process's accumulated CPU and command name, so a throttle or a
+    # spike can be attributed to a consumer from inside this pass instead of by an external
+    # watcher (two such watchers failed to see the run at all).
+    per_process = []
+    for identity in owned_inventory:
+        pid = getattr(identity, "pid", None)
+        if not isinstance(pid, int):
+            continue
+        try:
+            fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+            comm = Path(f"/proc/{pid}/comm").read_text().strip()
+        except (OSError, IndexError, ValueError):
+            continue
+        ticks = os.sysconf("SC_CLK_TCK")
+        per_process.append({
+            "pid": pid,
+            "cpu_s": (int(fields[11]) + int(fields[12])) / ticks,
+            "comm": comm,
+        })
     diagnostics = {
         "mem_available_bytes": memory["MemAvailable"],
         "cpu_usage_us": cpu_usage_us,
+        "per_process_cpu": per_process,
     }
     sample = ResourceSample(
         sequence=sequence, monotonic_s=monotonic_s, observation=observation,
