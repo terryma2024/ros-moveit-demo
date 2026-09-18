@@ -837,3 +837,85 @@ open_risks:
     submodule uninitialized; a task-owned isolated interpreter may be required and adds provenance work.
 next_command: classify remaining baseline nonpasses, initialize the pinned submodule in this worktree,
   then build the task-owned isolated environment per so101-dev python-dependency-install reference
+
+## EXP-UQ09 — Priority 2 environment classification (partial; repair not yet implemented)
+
+```yaml
+experiment_id: EXP-UQ09
+status: VALID
+prior_experiment: EXP-UQ08
+hypothesis: After the transport repair, every remaining baseline nonpass is an environment/bootstrap
+  issue (mujoco, torch, pinned submodule, support overlay mapping), not a product regression.
+prediction: The non-torch remainder reports only ModuleNotFoundError for mujoco plus the support-prefix
+  assertion, with no new product-level failures.
+single_variable: pinned submodule initialization (authorized)
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Priority 1 committed; no service/measurement started; original baseline JUnit kept immutable.
+success_criteria:
+  - Classify every remaining baseline nonpass by actual trace, not by the grouped summary.
+failure_criteria:
+  - Treating a bootstrap failure as product behaviour, or excluding modules to fake a clean gate.
+invalid_criteria:
+  - Counting a collection-interrupted invocation (torch) as a full classification.
+provenance:
+  source_commit: d188b248e
+  install_overlay: $TASK_ROOT/dev-build + dev-install (symlink-install dev overlay)
+  runtime_executable: the exact shared TEST_PYTHON above
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: git submodule update --init third_party/mujoco_ros2_control
+    exit_code: 0
+  - command: so101_pytest p2-classify <7 previously failing modules incl. grounding_dino> -q
+    exit_code: 2
+  - command: so101_pytest p2-classify2 <6 modules without grounding_dino> -q
+    exit_code: 1
+observed:
+  - Submodule third_party/mujoco_ros2_control initialized at the pinned e4c0241aee52a40727681bd5872c09bf814e941a
+    (was "-e4c0241a"); worktree tracked state remains clean.
+  - p2-classify was interrupted at collection by ModuleNotFoundError: torch
+    (test_grounding_dino_domain_retention.py), so it cannot classify the rest by itself.
+  - p2-classify2 scratch/p2-classify2.*: 9 failed, 43 passed, 2 skipped, 40 errors. Trace classes:
+    45 x ModuleNotFoundError: No module named 'mujoco' (40 setup errors + 5 failures),
+    1 x ModuleNotFoundError: No module named 'torch' (test_sam_decoder_runtime.py),
+    1 x support-prefix AssertionError on '/data/work/ws_moveit/i...' (installed provenance expects the
+    task candidate overlay), plus 1 further AssertionError.
+  - The 33 socket-length failures and the two Task 3 derived failures are gone (EXP-UQ08).
+inferred:
+  - Remaining repair = task-owned isolated interpreter with mujoco/torch/pydantic2/pytest, plus the
+    installed-support overlay mapping fix. Neither was attempted in this context window.
+conclusion: VALID classification only; repair is the next work unit.
+evidence:
+  - scratch/p2-classify.*, scratch/p2-classify2.*, probe-01.md
+decision: PENDING
+next_experiment: EXP-UQ10
+```
+
+```yaml
+checkpoint_id: CP-UQ09
+last_valid_experiment: EXP-UQ09
+current_hypothesis: A task-owned isolated venv (TUNA index, per-command NO_PROXY append, artifacts inside
+  TASK_ROOT) plus the support-overlay mapping fix removes the remaining baseline nonpasses.
+working_tree_status: clean after this ledger commit; Priority 1 committed at 7affd31f4
+owned_processes: NONE
+preserved_processes: NONE from this task family
+confirmed_conclusions:
+  - AF_UNIX boundary repaired; 152/152 Task 3 tests pass; source clean (EXP-UQ08).
+  - Remaining nonpasses are exclusively mujoco(45)/torch(2 modules)/support-prefix(1-2) (EXP-UQ09).
+disproven_routes:
+  - Treating the remaining 45 mujoco and torch failures as product regressions.
+open_risks:
+  - Building the isolated env is the next unit; provenance must register the new exact interpreter and
+    dependency closure in tools/task-env.zsh, tools/test-gate.zsh and this ledger.
+retained:
+  - Priority 1 commit 7affd31f4 + docs d188b248e; submodule initialized in this worktree (no source bytes changed).
+  - All earlier scratches, baselines and JUnit unchanged; nothing archived or deleted.
+deletion_candidates: unchanged from CP-UQ07b (scratch trees only, no deletion authorized)
+next_command: >
+  source $TASK_ROOT/tools/task-env.zsh && read .agents/skills/so101-dev/references/python-dependency-install.md,
+  then create $TASK_ROOT/venv (python3.12 -m venv), install pinned pydantic2/pytest/mujoco/torch with the
+  TUNA index via per-command NO_PROXY/no_proxy append and PIP_CACHE_DIR/PIP_BUILD_DIR/TMPDIR inside
+  $TASK_ROOT, verify import origins and ABI, register TEST_PYTHON/TEST_SITE in task-env.zsh and
+  test-gate.zsh, prove tempfile.gettempdir() for every interpreter, then re-run the full demo gate
+  (no --ignore) and fix the installed-support overlay mapping.
