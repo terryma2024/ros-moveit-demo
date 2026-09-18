@@ -4342,3 +4342,26 @@ again: 49 passed over the default-path and CLI files, and the six-file gate retu
 Next: pin each host-sensitive case with facts derived from that case's own bindings and
 authorization (capacity and dimensions consistent with its expectations), then re-run the gate,
 reseal and measure N1.
+
+## CP-UQ86 — The measurement starts its workload: launcher, broker and worker 1 all run
+
+Run `n1-calibration-20260918-run56` (r35) is the first attempt in this task where the chain beyond the
+launcher is real. The launcher allocated its own evidence root (the root is no longer pre-created by
+the harness), and inside it are `ipc/broker`, `ipc/worker-01-g1.token`, `ipc/worker-01-control-g1.token`
+and `workers/worker-01` -- the parallel batch's broker and first worker were spawned. The session
+recorded its usual healthy side (baseline 309 samples reported in the previous runs; `abort_reason`
+None again here).
+
+It fails inside the broker CLI: `/opt/venv/bin/so101_parallel_perception_broker` raises a traceback in
+`so101_demo/cli/parallel_...` (the tail is captured in
+`n1-calibration-20260918-run56-session/raw/workload-stderr.log`). That is the container-side entry, so
+the next unit is to read that traceback in full and fix what it names -- the first failure that is
+about the workload rather than about the harness's dialogue with the allocator.
+
+One caveat recorded honestly: the rebuild ran green (`colcon_rc=0`) with `candidate-install` removed
+from `AMENT_PREFIX_PATH`/`CMAKE_PREFIX_PATH`, yet a direct byte comparison of three installed modules
+against their sources still reports DIFFER, while the launcher's own source-versus-installed tree
+comparison accepted the install (it is past `PROVENANCE_INSTALLED_BYTES` and running). Those two
+statements cannot both be about the same files, so my comparison is the suspect -- most likely it
+reads a different installed path than the one the launcher hashes -- and it should be reconciled
+before trusting it as a freshness check.
