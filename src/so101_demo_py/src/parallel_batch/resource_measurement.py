@@ -501,6 +501,31 @@ class MeasurementAuthorization:
     def is_expired(self, *, now_ns: int) -> bool:
         return int(now_ns) > self.expires_at_ns
 
+    def as_document(self) -> dict[str, object]:
+        """The exact sealed document, for byte comparison during re-verification."""
+
+        return {
+            "schema_version": self.schema_version,
+            "operator_uid": self.operator_uid,
+            "dispatch_id": self.dispatch_id,
+            "task_id": self.task_id,
+            "source_commit": self.source_commit,
+            "execution_identity_sha256": self.execution_identity_sha256,
+            "worker_count": self.worker_count,
+            "catalog_sha256": self.catalog_sha256,
+            "seed": self.seed,
+            "lifecycle": self.lifecycle,
+            "maximum_batches": self.maximum_batches,
+            "batch_deadline_s": self.batch_deadline_s,
+            "expires_at_ns": self.expires_at_ns,
+            "batch_root": str(self.batch_root),
+            "owned_scope_sha256": self.owned_scope_sha256,
+            "safety_policy_sha256": self.safety_policy_sha256,
+            "intent": self.intent,
+            "calibration_sha256": self.calibration_sha256,
+            "runtime_bindings": self.runtime_bindings.as_document(),
+        }
+
 
 def _write_private(path: Path, data: bytes) -> str:
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
@@ -524,12 +549,18 @@ def seal_measurement(
     raw_files: Sequence[Path],
     coverage_events: Path,
     result: Mapping[str, object],
+    batch_root: Path | None = None,
 ) -> Path:
-    """Seal one raw measurement batch (B). It cannot reference a future profile."""
+    """Seal one raw measurement batch (B) inside the authorized per-batch root."""
 
     if not isinstance(authorization, MeasurementAuthorization):
         raise ContractError("AUTHORIZATION")
     _require_sha256("execution_identity_sha256", execution_identity_sha256)
+    if execution_identity_sha256 != authorization.execution_identity_sha256:
+        raise ContractError("RUNTIME_FINGERPRINT_MISMATCH")
+    sealed_at_root = Path(authorization.batch_root) if batch_root is None else Path(batch_root)
+    if not sealed_at_root.resolve().is_relative_to(Path(authorization.batch_root).resolve()):
+        raise ContractError("BATCH_ROOT_OUTSIDE_AUTHORIZATION")
     files = []
     for path in raw_files:
         data = Path(path).read_bytes()
@@ -554,9 +585,11 @@ def seal_measurement(
         "coverage_events_sha256": hashlib.sha256(coverage_bytes).hexdigest(),
         "raw_files": files,
         "result": dict(result),
+        "batch_id": sealed_at_root.name,
+        "batch_root": str(sealed_at_root),
     }
     encoded = json.dumps(document, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    sealed_root = Path(authorization.batch_root) / "sealed"
+    sealed_root = sealed_at_root / "sealed"
     sealed_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     target = sealed_root / f"sealed-{authorization.dispatch_id}-{len(files)}-{document['sealed_at_ns']}.json"
     _write_private(target, encoded)
@@ -920,15 +953,16 @@ def _hash_file(path: Path) -> str:
 
 @dataclass(frozen=True, slots=True)
 class CandidateRunPlan:
-    """Everything one authorized candidate batch needs, derived from sealed bindings."""
+    """Everything one authorized candidate batch needs, derived from sealed bindings.
 
-    authorization_sha256: str
+    The original immutable authorization is carried, never a reconstruction: the child
+    re-reads the same sealed bytes and the seal records the original dispatch, task,
+    source commit, safety policy, owned scope, calibration and lifecycle values.
+    """
+
+    authorization: MeasurementAuthorization
+    authorization_path: Path
     batch_id: str
-    worker_count: int
-    execution_identity_sha256: str
-    seed: int
-    catalog_sha256: str
-    intent: str
     batch_root: Path
     evidence_root: Path
     config_path: Path
@@ -937,8 +971,32 @@ class CandidateRunPlan:
     run_mode: str = "execute"
     batch_kind: str = "FIRST_PASS"
 
+    @property
+    def authorization_sha256(self) -> str:
+        return self.authorization.raw_sha256
+
+    @property
+    def worker_count(self) -> int:
+        return self.authorization.worker_count
+
+    @property
+    def execution_identity_sha256(self) -> str:
+        return self.authorization.execution_identity_sha256
+
+    @property
+    def seed(self) -> int:
+        return self.authorization.seed
+
+    @property
+    def catalog_sha256(self) -> str:
+        return self.authorization.catalog_sha256
+
+    @property
+    def intent(self) -> str:
+        return self.authorization.intent
+
     def runner_argv(self) -> tuple[str, ...]:
-        """Existing composition argv derived only from the sealed bindings."""
+        """Existing composition argv plus the sealed measurement authority."""
 
         return (
             "--points", self.bindings.points_path,
@@ -952,11 +1010,25 @@ class CandidateRunPlan:
             "--grounded-root", self.bindings.grounded_root,
             "--grounded-manifest-sha256", self.bindings.grounded_manifest_sha256,
             "--run-mode", "execute",
+            "--contract-version", "2",
+            "--batch-kind", self.batch_kind,
+            "--measurement-authorization", str(self.authorization_path),
+            "--measurement-authorization-sha256", self.authorization.raw_sha256,
+            "--provenance-binding", self.bindings.provenance_binding_path,
         )
 
     def verify_bindings(self) -> None:
-        """Re-verify every binding byte and identity at use time (TOCTOU closed)."""
+        """Re-verify every binding byte and the sealed authority at use time."""
 
+        document, digest = read_private_document(
+            Path(self.authorization_path), expected_sha256=self.authorization.raw_sha256)
+        if digest != self.authorization.raw_sha256:
+            raise ContractError("AUTHORIZATION_HASH_MISMATCH")
+        reloaded = MeasurementAuthorization.from_document(document, raw_sha256=digest)
+        if reloaded.as_document() != self.authorization.as_document():
+            raise ContractError("AUTHORIZATION_HASH_MISMATCH")
+        if self.batch_root != reloaded.batch_root / self.batch_id:
+            raise ContractError("BATCH_ROOT_OUTSIDE_AUTHORIZATION")
         checks = (
             ("points", self.bindings.points_path, self.bindings.points_sha256),
             ("yolo_weights", self.bindings.yolo_weights_path,
@@ -985,6 +1057,7 @@ class CandidateRunPlan:
 def build_candidate_plan(
     *,
     authorization: MeasurementAuthorization,
+    authorization_path: Path,
     config_path: Path,
     evidence_root: Path,
     batch_id: str,
@@ -1001,13 +1074,9 @@ def build_candidate_plan(
         raise ContractError("BATCH_ROOT_OUTSIDE_EVIDENCE_ROOT")
     batch_root = authorization.batch_root / batch_id
     plan = CandidateRunPlan(
-        authorization_sha256=authorization.raw_sha256,
+        authorization=authorization,
+        authorization_path=Path(authorization_path),
         batch_id=batch_id,
-        worker_count=authorization.worker_count,
-        execution_identity_sha256=authorization.execution_identity_sha256,
-        seed=authorization.seed,
-        catalog_sha256=authorization.catalog_sha256,
-        intent=authorization.intent,
         batch_root=batch_root,
         evidence_root=evidence_root,
         config_path=Path(config_path),
@@ -1021,49 +1090,69 @@ def run_candidate_batch(
     *,
     plan: CandidateRunPlan,
     runner,
-    sampler=None,
-    control=None,
+    session,
     sealer=None,
 ) -> dict:
-    """Compose sampler -> authorized workload -> seal; every failure has its own code."""
+    """Compose owned limits -> sampler -> authorized workload -> seal.
+
+    The session owns the delegated cgroup, the real sampler thread, the abort latch,
+    the batch deadline and the verified cleanup; the runner only starts the workload
+    through that session. Every failure keeps its own code and no seal is written.
+    """
 
     if not isinstance(plan, CandidateRunPlan):
         raise ContractError("CANDIDATE_PLAN")
     if not callable(runner):
         raise ContractError("CANDIDATE_RUNNER")
+    if session is None:
+        raise ContractError("CANDIDATE_SESSION")
     if sealer is None:
         sealer = seal_measurement
     plan.batch_root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    if control is not None:
-        # The abort latch is checked before any side effect, including sampling.
-        control.permit_side_effect()
-    plan.verify_bindings()
-    if sampler is not None:
-        sampler(1)
-    if control is not None:
-        control.permit_side_effect()
+    session.begin()
+    receipt: Mapping[str, object] | None = None
     try:
-        outcome = runner(plan)
-    except ContractError:
-        raise
-    except Exception as error:  # noqa: BLE001 - any workload failure is fenced
-        raise ContractError(f"MEASUREMENT_WORKLOAD_FAILED: {type(error).__name__}") from error
+        session.permit_side_effect()
+        plan.verify_bindings()
+        session.start_sampling()
+        try:
+            outcome = runner(plan, session)
+        except ContractError as error:
+            # A latched abort or an expired deadline is the real reason, not the
+            # signal the workload received because of it.
+            if session.deadline_exceeded:
+                raise ContractError("MEASUREMENT_DEADLINE_EXCEEDED") from error
+            if session.abort_reason:
+                raise ContractError(
+                    f"MEASUREMENT_ABORT_LATCHED: {session.abort_reason}") from error
+            raise
+        except Exception as error:  # noqa: BLE001 - any workload failure is fenced
+            raise ContractError(
+                f"MEASUREMENT_WORKLOAD_FAILED: {type(error).__name__}") from error
+    finally:
+        receipt = session.finish()
+    if session.deadline_exceeded:
+        raise ContractError("MEASUREMENT_DEADLINE_EXCEEDED")
+    if session.abort_reason:
+        raise ContractError(f"MEASUREMENT_ABORT_LATCHED: {session.abort_reason}")
     if not isinstance(outcome, Mapping):
         raise ContractError("MEASUREMENT_WORKLOAD_RESULT")
-    if control is not None:
-        control.permit_side_effect()
-    if sampler is not None:
-        sampler(2)
     raw_files = tuple(Path(item) for item in outcome.get("raw_files", ()))
+    if session.receipt_path.is_file() and session.receipt_path not in raw_files:
+        # The verified cleanup receipt is part of this batch's raw stream set.
+        raw_files = (*raw_files, session.receipt_path)
     coverage_events = Path(outcome["coverage_events"])
     plan.verify_bindings()
+    result = dict(outcome.get("result", {}))
+    result["cleanup_receipt"] = dict(receipt)
     try:
         sealed = sealer(
-            authorization=plan_authorization_view(plan),
+            authorization=plan.authorization,
+            batch_root=plan.batch_root,
             execution_identity_sha256=plan.execution_identity_sha256,
             raw_files=raw_files,
             coverage_events=coverage_events,
-            result=dict(outcome.get("result", {})),
+            result=result,
         )
     except ContractError:
         raise
@@ -1076,31 +1165,130 @@ def run_candidate_batch(
         "batch_id": plan.batch_id,
         "worker_count": plan.worker_count,
         "execution_identity_sha256": plan.execution_identity_sha256,
+        "limits": dict(session.limits or {}),
+        "samples": session.samples,
     }
 
 
-def plan_authorization_view(plan: CandidateRunPlan) -> MeasurementAuthorization:
-    """The sealed authorization fields seal_measurement needs, without re-reading files."""
+def measurement_child_environment(environment: Mapping[str, str]) -> dict[str, str]:
+    """Drop every production authority name: measurement grants nothing by inheritance."""
 
-    return MeasurementAuthorization(
-        schema_version=2,
-        operator_uid=os.getuid(),
-        dispatch_id="sealed",
-        task_id="sealed",
-        source_commit="0" * 40,
-        execution_identity_sha256=plan.execution_identity_sha256,
-        worker_count=plan.worker_count,
-        catalog_sha256=plan.catalog_sha256,
-        seed=plan.seed,
-        lifecycle="FULL_RESTART",
-        maximum_batches=1,
-        batch_deadline_s=_BATCH_DEADLINE_S,
-        expires_at_ns=1,
-        batch_root=plan.evidence_root,
-        owned_scope_sha256="0" * 64,
-        safety_policy_sha256="0" * 64,
-        intent=plan.intent,
-        calibration_sha256=None,
-        runtime_bindings=plan.bindings,
-        raw_sha256=plan.authorization_sha256,
+    from .resource_budget import _AUTHORITY_ENV
+
+    values = dict(environment)
+    for name in _AUTHORITY_ENV.values():
+        values.pop(name, None)
+    return values
+
+
+def verify_measurement_arguments(
+    *,
+    authorization: MeasurementAuthorization,
+    batch_id: str,
+    worker_count: int,
+    evidence_root: Path,
+    points_path: Path,
+    points_sha256: str,
+    yolo_weights_path: Path,
+    yolo_weights_sha256: str,
+    grounded_root: Path,
+    grounded_manifest_sha256: str,
+    broker_image: str,
+    config_path: Path,
+) -> None:
+    """A measurement child may only run the exact composition the operator sealed."""
+
+    bindings = authorization.runtime_bindings
+    checks = (
+        ("BATCH_ID", batch_id == Path(evidence_root).name),
+        ("EVIDENCE_ROOT", Path(evidence_root).resolve()
+         == (authorization.batch_root / batch_id).resolve()),
+        ("WORKER_COUNT", int(worker_count) == authorization.worker_count),
+        ("POINTS", str(points_path) == bindings.points_path
+         and points_sha256 == authorization.catalog_sha256),
+        ("YOLO_WEIGHTS", str(yolo_weights_path) == bindings.yolo_weights_path
+         and yolo_weights_sha256 == bindings.yolo_weights_sha256),
+        ("GROUNDED_ROOT", str(grounded_root) == bindings.grounded_root
+         and grounded_manifest_sha256 == bindings.grounded_manifest_sha256),
+        ("BROKER_IMAGE", broker_image == bindings.broker_image_id),
+        ("CONFIG", Path(config_path).is_file()),
     )
+    for code, ok in checks:
+        if not ok:
+            raise ContractError(f"MEASUREMENT_ARGUMENT_MISMATCH: {code}")
+
+
+def compose_measurement_admission(
+    *, authorization_path: Path, authorization_sha256: str,
+    environment: Mapping[str, str] | None = None, config_path: Path | None = None,
+    source_root: Path | None = None, install_prefix: Path | None = None,
+    observation_source=None, fingerprint_source=None, host_probe=None,
+    inventory_reader=None,
+):
+    """Issue the one-shot measurement context and its MEASUREMENT-kind gate.
+
+    The sealed authorization is re-read from its own bytes, an inherited production
+    authority is refused instead of granting anything, and the runtime identity is
+    derived from real config/inventory/hardware bytes and checked against the sealed
+    identity before any admission.
+    """
+
+    from .contracts import ContractError as _ContractError
+    from .resource_budget import (
+        AllocationScope, FixedAdmissionGate, LiveObservationSource,
+        ResourceBudgetProvider, build_runtime_fingerprint_from_environment,
+        issue_measurement_context)
+
+    del _ContractError
+    authorization = MeasurementAuthorization.load(
+        Path(authorization_path), expected_sha256=authorization_sha256)
+    values = dict(os.environ if environment is None else environment)
+    conflicts = sorted(
+        name for name in _PRODUCTION_AUTHORITY_ENV.values() if values.get(name))
+    if conflicts:
+        raise ContractError(f"MEASUREMENT_AUTHORITY_ENV_CONFLICT: {conflicts}")
+    bindings = authorization.runtime_bindings
+    values["SO101_VALIDATION_PROVENANCE_BINDING"] = bindings.provenance_binding_path
+    if config_path is not None:
+        values["SO101_PARALLEL_RUNTIME_CONFIG"] = str(config_path)
+    provider = ResourceBudgetProvider()
+
+    def derive():
+        return build_runtime_fingerprint_from_environment(
+            values, identity=authorization.execution_identity_sha256,
+            config_path=config_path, source_root=source_root,
+            install_prefix=install_prefix, host_probe=host_probe,
+            inventory_reader=inventory_reader)
+
+    current = derive()
+
+    def context_factory(request):
+        if request.request_kind != "MEASUREMENT":
+            raise ContractError("ALLOCATION_CONTEXT_MISMATCH")
+        scope = AllocationScope(
+            batch_id=request.batch_id, epoch=request.epoch,
+            worker_count=request.worker_count, request_kind="MEASUREMENT",
+            execution_identity_sha256=request.execution_identity_sha256)
+        return issue_measurement_context(
+            provider=provider, scope=scope, authorization_path=Path(authorization_path),
+            owner_binding={
+                "authorization_sha256": authorization.raw_sha256,
+                "owned_scope_sha256": authorization.owned_scope_sha256,
+            })
+
+    source = observation_source or LiveObservationSource(
+        environment=values, host_probe=host_probe)
+    gate = FixedAdmissionGate(
+        provider, context_factory=context_factory, current=current, live=None,
+        observation_source=source, fingerprint_source=fingerprint_source or derive,
+        request_kind="MEASUREMENT")
+    return authorization, gate
+
+
+_PRODUCTION_AUTHORITY_ENV = {
+    "profile": "SO101_VALIDATION_BUDGET_PROFILE",
+    "promotion": "SO101_VALIDATION_PROMOTION_RECORD",
+    "deployment_receipt": "SO101_VALIDATION_DEPLOYMENT_RECEIPT",
+    "installed_audit": "SO101_VALIDATION_INSTALLED_AUDIT",
+    "location_binding": "SO101_VALIDATION_LOCATION_BINDING",
+}

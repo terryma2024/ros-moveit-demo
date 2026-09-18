@@ -38,10 +38,36 @@ def fingerprint():
         normalization_sha256(), "c" * 64, "d" * 64, "e" * 64)
 
 
-def synthetic_authority(tmp_path: Path, worker_count: int = 4, identity: str | None = None):
-    """Task-owned synthetic P/Q/M/D authority confined to this fixture."""
+def derived_identity(environment) -> str:
+    """The identity the DEFAULT composer derives from the same real bytes."""
 
-    identity = identity or fingerprint().sha256
+    from so101_demo.parallel_batch.resource_budget import (
+        build_runtime_fingerprint_from_environment)
+
+    return build_runtime_fingerprint_from_environment(
+        environment, identity=None,
+        config_path=Path(environment["SO101_PARALLEL_RUNTIME_CONFIG"])).sha256
+
+
+def synthetic_authority(tmp_path: Path, worker_count: int = 4, identity: str | None = None):
+    """Task-owned P/Q/M/D authority produced by the real M/D producers.
+
+    The declared execution identity defaults to the fingerprint the installed
+    composer itself derives for this fixture's real config/inventory/hardware bytes,
+    so the default admission factory verifies it instead of being handed one.
+    """
+
+    from so101_demo.parallel_batch.resource_budget import (
+        PromotionAuthority, build_deployment_receipt, publish_promotion)
+    from so101_demo.parallel_batch.resource_identity import FullByteAudit, InventoryEntry
+
+    if identity is None:
+        environment = installed_environment(tmp_path / "binding")
+        environment["SO101_PARALLEL_RUNTIME_CONFIG"] = str(
+            OFFLINE_SHARE / "parallel_batch_v2.yaml")
+        identity = derived_identity(environment)
+    root = tmp_path / "authority"
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
     qualification = {
         "schema_version": 2, "execution_identity_sha256": identity,
         "worker_count": worker_count, "coverage_policy_sha256": "b" * 64,
@@ -49,7 +75,7 @@ def synthetic_authority(tmp_path: Path, worker_count: int = 4, identity: str | N
         "normal_required_runs": 5, "coverage_complete": True, "cleanup_verified": True,
         "independent_physics_verified": True, "resource_contract_verified": True,
     }
-    qualification_path = tmp_path / "authority/qualification.json"
+    qualification_path = root / "qualification.json"
     qualification_sha = _write(qualification_path, qualification)
     profile = {
         "schema_version": 2, "execution_identity_sha256": identity,
@@ -71,42 +97,57 @@ def synthetic_authority(tmp_path: Path, worker_count: int = 4, identity: str | N
     }
     profile_path = tmp_path / "sealed/profile.json"
     profile_sha = _write(profile_path, profile)
-    promotion_path = tmp_path / "authority/promotion.json"
-    promotion_sha = _write(promotion_path, {
-        "schema_version": 2, "kind": "PROMOTION", "profile_sha256": profile_sha,
-        "exact_worker_count": worker_count, "operator_approval_uid": os.getuid(),
-        "reviews": [
-            {"reviewer": "sol", "result": "PASS", "sha256": "1" * 64},
-            {"reviewer": "astra", "result": "PASS", "sha256": "2" * 64},
-        ],
-        "sol_result_review_sha256": "1" * 64,
-        "astra_profile_review_sha256": "2" * 64,
-        "operator_approval_sha256": "3" * 64,
-    })
-    receipt_path = tmp_path / "authority/deployment.json"
-    _write(receipt_path, {
-        "schema_version": 2, "kind": "DEPLOYMENT_RECEIPT", "profile_sha256": profile_sha,
-        "promotion_sha256": promotion_sha, "location_binding": {"prefix": str(tmp_path)},
-    })
+    audit = FullByteAudit(
+        schema_version=2, source_commit="1" * 40, source_clean=True,
+        prefix=str(OFFLINE_INSTALL),
+        files=(InventoryEntry("site-packages/so101_demo/__init__.py", "2" * 64),),
+        origins={"so101_demo_py": str(OFFLINE_INSTALL)})
+    approval = root / "operator-approval.json"
+    _write(approval, {
+        "schema_version": 2, "kind": "OPERATOR_APPROVAL", "operator_uid": os.getuid(),
+        "decision": "APPROVED", "target": "EXACT_N_PRODUCTION",
+        "exact_worker_count": worker_count, "profile_sha256": profile_sha,
+        "measurement_audit_sha256": audit.sha256})
+    sol = root / "sol-result-review.json"
+    _write(sol, {
+        "schema_version": 2, "kind": "INDEPENDENT_REVIEW", "reviewer": "sol",
+        "result": "PASS", "target": "EXECUTION_RESULT", "profile_sha256": profile_sha,
+        "measurement_audit_sha256": audit.sha256})
+    astra = root / "astra-profile-review.json"
+    _write(astra, {
+        "schema_version": 2, "kind": "INDEPENDENT_REVIEW", "reviewer": "astra",
+        "result": "PASS", "target": "PROFILE", "profile_sha256": profile_sha,
+        "measurement_audit_sha256": audit.sha256})
+    authority = PromotionAuthority(root)
+    promotion_path = publish_promotion(
+        profile_path=profile_path, profile_sha256=profile_sha, operator_approval=approval,
+        sol_result_review=sol, astra_profile_review=astra, measurement_audit=audit,
+        destination=root / "promotion.json", authority=authority)
+    location = {"prefix": str(OFFLINE_INSTALL), "host": "ai-station"}
+    receipt_path = build_deployment_receipt(
+        promotion_path=promotion_path, profile_sha256=profile_sha, installed_audit=audit,
+        execution_identity_sha256=identity, location_binding=location)
+    audit_path = root / "installed-audit.json"
+    _write(audit_path, audit.as_document())
+    location_path = root / "location.json"
+    _write(location_path, location)
     return {
         "profile_path": str(profile_path), "profile_sha256": profile_sha,
-        "promotion_path": str(promotion_path),
+        "promotion_path": str(promotion_path), "promotion_root": str(root),
         "deployment_receipt_path": str(receipt_path),
+        "installed_audit_path": str(audit_path),
+        "location_binding_path": str(location_path), "location": location,
         "qualification_paths": {str(worker_count): str(qualification_path)},
-        "execution_identity_sha256": identity,
-        "worker_count": worker_count,
-        "profile_sha": profile_sha,
-        "qualification_sha": qualification_sha,
+        "execution_identity_sha256": identity, "worker_count": worker_count,
+        "profile_sha": profile_sha, "qualification_sha": qualification_sha,
     }
-
-
 
 
 # Copied install built from the repaired source (the earlier offline/production copies
 # remain immutable frozen artifacts of the previous unit).
 OFFLINE_INSTALL = Path(
     "/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main"
-    "/unbounded-queue-resource-budget/repair-offline-install")
+    "/unbounded-queue-resource-budget/rereview-install")
 OFFLINE_SHARE = OFFLINE_INSTALL / "so101_demo_py/share/so101_demo_py/config/mujoco"
 OFFLINE_LIB = OFFLINE_INSTALL / "so101_demo_py/lib/so101_demo_py"
 def _write_test_binding(directory: Path) -> Path:
@@ -164,10 +205,16 @@ def _environment(authority, tmp_path):
         "SO101_VALIDATION_BUDGET_PROFILE": authority["profile_path"],
         "SO101_VALIDATION_BUDGET_PROFILE_SHA256": authority["profile_sha256"],
         "SO101_VALIDATION_PROMOTION_RECORD": authority["promotion_path"],
+        "SO101_VALIDATION_PROMOTION_ROOT": authority["promotion_root"],
         "SO101_VALIDATION_DEPLOYMENT_RECEIPT": authority["deployment_receipt_path"],
+        "SO101_VALIDATION_INSTALLED_AUDIT": authority["installed_audit_path"],
+        "SO101_VALIDATION_LOCATION_BINDING": authority["location_binding_path"],
         "SO101_VALIDATION_QUALIFICATION_PATHS": json.dumps(
             authority["qualification_paths"], sort_keys=True),
         "SO101_VALIDATION_EXECUTION_IDENTITY": authority["execution_identity_sha256"],
+        "SO101_VALIDATION_PROVENANCE_BINDING": str(
+            _write_test_binding(tmp_path / "budget-binding")),
+        "SO101_PARALLEL_RUNTIME_CONFIG": str(OFFLINE_SHARE / "parallel_batch_v2.yaml"),
         "SO101_VALIDATION_EVIDENCE_ROOT": str(tmp_path / "evidence"),
     }
 
@@ -190,11 +237,10 @@ def test_installed_production_composes_the_shared_gate(tmp_path):
         FixedAdmissionRequest, compose_production_admission)
     from so101_demo.parallel_batch.resource_identity import RuntimeFingerprint
 
-    current = fingerprint()
-    authority = synthetic_authority(tmp_path, 4, current.sha256)
+    authority = synthetic_authority(tmp_path, 4)
     environment = _environment(authority, tmp_path)
     gate = compose_production_admission(
-        environment=environment, live_observation=_live(), current=current)
+        environment=environment, live_observation=_live())
     assert gate is not None
     admitted = gate.admit(FixedAdmissionRequest(
         worker_count=4, batch_id="batch-a", epoch=1,
@@ -221,11 +267,10 @@ def test_three_consumers_agree_through_the_composed_gate(tmp_path):
         FixedExecutionConfigV2, load_parallel_runtime_config_v2)
     import so101_demo
 
-    current = fingerprint()
-    authority = synthetic_authority(tmp_path, 4, current.sha256)
+    authority = synthetic_authority(tmp_path, 4)
     environment = _environment(authority, tmp_path)
     gate = compose_production_admission(
-        environment=environment, live_observation=_live(), current=current)
+        environment=environment, live_observation=_live())
 
     # 1. Web probe through the installed factory.
     admitted, reasons, _ = _HostResourceProbe(resource_gate=gate).probe(
@@ -272,20 +317,18 @@ def test_missing_or_tampered_authority_refuses_without_downgrade(tmp_path):
 
     assert compose_production_admission(environment={}) is None
 
-    current = fingerprint()
-    authority = synthetic_authority(tmp_path, 4, current.sha256)
+    authority = synthetic_authority(tmp_path, 4)
     environment = _environment(authority, tmp_path)
     Path(authority["profile_path"]).write_bytes(b'{"tampered": true}')
     with pytest.raises(Exception) as error:
-        compose_production_admission(
-            environment=environment, live_observation=_live(), current=current)
+        compose_production_admission(environment=environment, live_observation=_live())
     assert "HASH_MISMATCH" in str(error.value)
 
     # Current-resource drift refuses the requested N instead of downgrading to another.
-    authority = synthetic_authority(tmp_path / "drift", 4, current.sha256)
+    authority = synthetic_authority(tmp_path / "drift", 4)
     environment = _environment(authority, tmp_path / "drift")
     gate = compose_production_admission(
-        environment=environment, live_observation=_live(admitted=False), current=current)
+        environment=environment, live_observation=_live(admitted=False))
     from so101_demo.parallel_batch.resource_budget import FixedAdmissionRequest
     decision = gate.admit(FixedAdmissionRequest(
         worker_count=4, batch_id="batch-a", epoch=1,
@@ -338,12 +381,7 @@ from pathlib import Path
 
 EVIDENCE = Path(os.environ["SO101_VALIDATION_EVIDENCE_ROOT"])
 AUTHORITY = Path(os.environ["TEST_AUTHORITY_DIR"])
-LIVE_DOCUMENT = json.loads(Path(os.environ["TEST_LIVE_OBSERVATION"]).read_text())
-CURRENT_DOCUMENT = json.loads(Path(os.environ["TEST_FINGERPRINT"]).read_text())
 
-from so101_demo.parallel_batch.resource_budget import (
-    LiveResourceObservation, compose_production_admission)
-from so101_demo.parallel_batch.resource_identity import RuntimeFingerprint
 from so101_teleop.expert_validation.production import create_production_service
 
 
@@ -352,31 +390,13 @@ class Port:
         raise AssertionError("offline child must not launch a workload")
 
 
-current = RuntimeFingerprint(
-    schema_version=CURRENT_DOCUMENT["schema_version"], facts=CURRENT_DOCUMENT["facts"],
-    normalization_sha256=CURRENT_DOCUMENT["normalization_sha256"],
-    semantic_config_sha256=CURRENT_DOCUMENT["semantic_config_sha256"],
-    execution_inventory_sha256=CURRENT_DOCUMENT["execution_inventory_sha256"],
-    installed_inventory_sha256=CURRENT_DOCUMENT["installed_inventory_sha256"])
-live = LiveResourceObservation(**{
-    **LIVE_DOCUMENT,
-    "capacity": LIVE_DOCUMENT["capacity"], "observed": LIVE_DOCUMENT["observed"],
-    "background": LIVE_DOCUMENT["background"],
-    "tool_overhead": LIVE_DOCUMENT["tool_overhead"],
-    "remaining": LIVE_DOCUMENT["remaining"], "error": LIVE_DOCUMENT["error"]})
-
 environment = dict(os.environ)
 environment.update(json.loads(Path(os.environ["TEST_AUTHORITY_ENV"]).read_text()))
 
-
-def admission_factory(env):
-    return compose_production_admission(
-        environment=env, live_observation=live, current=current)
-
-
+# The DEFAULT admission factory: real host probe, real config/inventory bytes and the
+# real verified authority chain. Only the workload port is refused offline.
 service = create_production_service(
-    EVIDENCE / "service", environment=environment, execution_port=Port(),
-    admission_factory=admission_factory)
+    EVIDENCE / "service", environment=environment, execution_port=Port())
 try:
     capabilities = service.capabilities()
 finally:
@@ -392,38 +412,22 @@ def test_installed_factory_child_reports_provider_derived_capabilities(tmp_path)
     import subprocess
     import sys
 
-    current = fingerprint()
-    authority = synthetic_authority(tmp_path, 4, current.sha256)
+    authority = synthetic_authority(tmp_path, 4)
     evidence = tmp_path / "evidence"
     evidence.mkdir(mode=0o700, parents=True)
-    environment = installed_environment(tmp_path / 'binding', **_environment(authority, tmp_path))
+    environment = installed_environment(
+        tmp_path / 'binding', **_environment(authority, tmp_path))
     environment["SO101_VALIDATION_EVIDENCE_ROOT"] = str(evidence)
     scratch = tmp_path / "tmp"
     scratch.mkdir(mode=0o700, exist_ok=True)
 
     authority_env = tmp_path / "authority-env.json"
     authority_env.write_text(_json.dumps(environment, sort_keys=True))
-    live_path = tmp_path / "live.json"
-    live = _live()
-    live_path.write_text(_json.dumps({
-        "monotonic_s": live.monotonic_s,
-        "capacity": dict(live.capacity), "observed": dict(live.observed),
-        "background": dict(live.background), "tool_overhead": dict(live.tool_overhead),
-        "remaining": dict(live.remaining), "error": dict(live.error),
-        "attribution_complete": live.attribution_complete,
-        "swap_delta": live.swap_delta, "psi_full_delta": live.psi_full_delta,
-        "throttled": live.throttled,
-    }, sort_keys=True))
-    fingerprint_path = tmp_path / "fingerprint.json"
-    fingerprint_path.write_text(_json.dumps(current.as_document(), sort_keys=True))
-
     child = _installed_child_environment({
         **environment,
         "_TMPDIR": str(scratch),
         "TEST_AUTHORITY_DIR": str(tmp_path / "authority"),
         "TEST_AUTHORITY_ENV": str(authority_env),
-        "TEST_LIVE_OBSERVATION": str(live_path),
-        "TEST_FINGERPRINT": str(fingerprint_path),
     })
     completed = subprocess.run(
         [sys.executable, "-c", _CHILD_PROGRAM], capture_output=True, text=True,

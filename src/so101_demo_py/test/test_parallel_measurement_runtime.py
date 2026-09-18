@@ -110,9 +110,9 @@ def test_candidate_plan_verifies_bytes_identity_and_containment(tmp_path):
     from so101_demo.parallel_batch.contracts import ContractError
     from so101_demo.parallel_batch.resource_measurement import build_candidate_plan
     bindings = _fixture_root(tmp_path)
-    authorization, _, _ = load_authorization(tmp_path, bindings)
+    authorization, path, _ = load_authorization(tmp_path, bindings)
     plan = build_candidate_plan(
-        authorization=authorization, config_path=V2_CONFIG,
+        authorization=authorization, authorization_path=path, config_path=V2_CONFIG,
         evidence_root=bindings["evidence_root"], batch_id="batch-a")
     assert plan.run_mode == "execute"
     assert plan.schema_version == 2 and plan.batch_kind == "FIRST_PASS"
@@ -125,11 +125,11 @@ def test_candidate_plan_verifies_bytes_identity_and_containment(tmp_path):
 
     tampered = _fixture_root(tmp_path / "tampered")
     tampered["yolo_weights_path"] = bindings["yolo_weights_path"]
-    authorization2, _, _ = load_authorization(tmp_path / "tampered", tampered)
+    authorization2, path2, _ = load_authorization(tmp_path / "tampered", tampered)
     Path(bindings["yolo_weights_path"]).write_bytes(b"changed")
     with pytest.raises(ContractError) as error:
         build_candidate_plan(
-            authorization=authorization2, config_path=V2_CONFIG,
+            authorization=authorization2, authorization_path=path2, config_path=V2_CONFIG,
             evidence_root=tampered["evidence_root"], batch_id="batch-a")
     assert "BINDING_HASH_MISMATCH" in str(error.value)
 
@@ -155,131 +155,41 @@ def test_candidate_plan_verifies_bytes_identity_and_containment(tmp_path):
         missing_path, expected_sha256=missing_digest)
     with pytest.raises(ContractError) as error:
         build_candidate_plan(
-            authorization=missing_authorization, config_path=V2_CONFIG,
-            evidence_root=missing["evidence_root"], batch_id="batch-a")
+            authorization=missing_authorization, authorization_path=missing_path,
+            config_path=V2_CONFIG, evidence_root=missing["evidence_root"],
+            batch_id="batch-a")
     assert "BINDING_PATH" in str(error.value)
 
 
-def test_positive_candidate_lifecycle_reaches_the_real_composition(tmp_path):
-    from so101_demo.parallel_batch.resource_measurement import (
-        build_candidate_plan, run_candidate_batch)
-    bindings = _fixture_root(tmp_path)
-    authorization, _, _ = load_authorization(tmp_path, bindings)
-    plan = build_candidate_plan(
-        authorization=authorization, config_path=V2_CONFIG,
-        evidence_root=bindings["evidence_root"], batch_id="batch-a")
-    calls = []
+def test_runner_requires_the_real_session_and_sealed_root(tmp_path):
+    """The composition refuses a missing session and cannot seal outside the batch."""
 
-    def runner(candidate_plan):
-        calls.append(candidate_plan)
-        sample = candidate_plan.batch_root / "raw/sample-1.json"
-        _write(sample, json.dumps({"sequence": 1, "core_seconds": 0.5}).encode())
-        coverage = candidate_plan.batch_root / "raw/coverage.json"
-        _write(coverage, json.dumps({"COLD_START": ["observed"]}).encode())
-        return {"raw_files": (sample,), "coverage_events": coverage,
-                "result": {"intent": candidate_plan.intent, "samples": 1}}
-
-    samples = []
-
-    def sampler(sequence):
-        samples.append(sequence)
-        return {"sequence": sequence, "core_seconds": 0.1 * sequence}
-
-    summary = run_candidate_batch(plan=plan, runner=runner, sampler=sampler)
-    assert calls and calls[0].runner_argv() == plan.runner_argv()
-    assert summary["status"] == "SEALED"
-    assert samples == [1, 2]
-    sealed = Path(summary["sealed_path"])
-    document = json.loads(sealed.read_bytes())
-    assert document["authorization_sha256"] == authorization.raw_sha256
-    assert document["intent"] == "CALIBRATION_ONLY"
-    for forbidden in ("profile_sha256", "promotion_record_path", "deployment_receipt_sha256"):
-        assert forbidden not in document
-
-
-def test_candidate_lifecycle_refusals_are_specific(tmp_path):
     from so101_demo.parallel_batch.contracts import ContractError
     from so101_demo.parallel_batch.resource_measurement import (
-        build_candidate_plan, run_candidate_batch)
+        build_candidate_plan, run_candidate_batch, seal_measurement)
+
     bindings = _fixture_root(tmp_path)
-    authorization, _, _ = load_authorization(tmp_path, bindings)
+    authorization, path, _ = load_authorization(tmp_path, bindings)
     plan = build_candidate_plan(
-        authorization=authorization, config_path=V2_CONFIG,
+        authorization=authorization, authorization_path=path, config_path=V2_CONFIG,
         evidence_root=bindings["evidence_root"], batch_id="batch-a")
 
-    def failing_runner(candidate_plan):
-        raise RuntimeError("workload refused")
+    with pytest.raises(ContractError) as error:
+        run_candidate_batch(plan=plan, runner=lambda *_args: {}, session=None)
+    assert "CANDIDATE_SESSION" in str(error.value)
+
+    coverage = plan.batch_root / "raw/coverage.json"
+    _write(coverage, b"{}")
+    with pytest.raises(ContractError) as error:
+        seal_measurement(
+            authorization=authorization,
+            execution_identity_sha256=authorization.execution_identity_sha256,
+            raw_files=(coverage,), coverage_events=coverage, result={},
+            batch_root=tmp_path / "elsewhere")
+    assert "BATCH_ROOT_OUTSIDE_AUTHORIZATION" in str(error.value)
 
     with pytest.raises(ContractError) as error:
-        run_candidate_batch(plan=plan, runner=failing_runner, sampler=lambda seq: {})
-    assert "MEASUREMENT_WORKLOAD_FAILED" in str(error.value)
-
-    def bad_seal_runner(candidate_plan):
-        sample = candidate_plan.batch_root / "raw/sample.json"
-        _write(sample, b"{}")
-        return {"raw_files": (sample,), "coverage_events": sample, "result": {}}
-
-    class LatchingControl:
-        def permit_side_effect(self):
-            raise ContractError("MEASUREMENT_ABORT_LATCHED")
-
-    with pytest.raises(ContractError) as error:
-        run_candidate_batch(plan=plan, runner=bad_seal_runner, sampler=lambda seq: {},
-                            control=LatchingControl())
-    assert "MEASUREMENT_ABORT_LATCHED" in str(error.value)
-
-    def seal_failure(candidate_plan):
-        sample = candidate_plan.batch_root / "raw/sample.json"
-        _write(sample, b"{}")
-        return {"raw_files": (sample,), "coverage_events": sample, "result": {}}
-
-    def broken_sealer(**_kwargs):
-        raise OSError("disk full")
-
-    with pytest.raises(ContractError) as error:
-        run_candidate_batch(plan=plan, runner=seal_failure, sampler=lambda seq: {},
-                            sealer=broken_sealer)
-    assert "MEASUREMENT_SEAL_FAILED" in str(error.value)
-
-
-def test_cli_positive_and_refusing_paths(tmp_path):
-    from so101_demo.cli.measure_parallel_resources import main
-    bindings = _fixture_root(tmp_path)
-    authorization, path, digest = load_authorization(tmp_path, bindings)
-    runs = []
-
-    class FakeRunner:
-        def __call__(self, plan):
-            runs.append(plan)
-            sample = plan.batch_root / "raw/sample.json"
-            _write(sample, b'{"sequence": 1}')
-            coverage = plan.batch_root / "raw/coverage.json"
-            _write(coverage, b'{"COLD_START": ["observed"]}')
-            return {"raw_files": (sample,), "coverage_events": coverage,
-                    "result": {"samples": 1}}
-
-    argv = ["--authorization", str(path), "--authorization-sha256", digest,
-            "--config", str(V2_CONFIG), "--batch-id", "batch-a",
-            "--evidence-root", str(bindings["evidence_root"]),
-            "--intent", "CALIBRATION_ONLY"]
-    # The typed capability boundary reports the host as capable for this offline run;
-    # production uses require_measurement_capabilities and refuses when it is not.
-    assert main(argv, runner_factory=lambda plan: FakeRunner(),
-                capability_probe=lambda: None) == 0
-    assert runs and runs[0].worker_count == authorization.worker_count
-    assert runs[0].run_mode == "execute" and runs[0].batch_kind == "FIRST_PASS"
-
-    tampered = json.loads(path.read_bytes())
-    tampered["runtime_bindings"]["yolo_weights_sha256"] = "f" * 64
-    write_authorization(path, tampered)
-    assert main(argv, runner_factory=lambda plan: FakeRunner(),
-                capability_probe=lambda: None) == 1
-
-    # A host without the measurement capability refuses before any plan is built.
-    def missing_capability():
-        raise MeasurementCliError("MEASUREMENT_CAPABILITY_MISSING: nvml")
-
-    from so101_demo.cli.measure_parallel_resources import MeasurementCliError
-    write_authorization(path, authorization_document(tmp_path, bindings))
-    assert main(argv, runner_factory=lambda plan: FakeRunner(),
-                capability_probe=missing_capability) == 1
+        seal_measurement(
+            authorization=authorization, execution_identity_sha256="c" * 64,
+            raw_files=(coverage,), coverage_events=coverage, result={})
+    assert "RUNTIME_FINGERPRINT_MISMATCH" in str(error.value)

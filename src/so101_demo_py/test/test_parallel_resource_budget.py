@@ -80,25 +80,63 @@ def write_private(path: Path, document) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def synthetic_chain(tmp_path, worker_count=2, profile=None):
+def real_chain(tmp_path, worker_count=2, profile=None):
+    """One complete chain produced by the actual M/D producers, not hand-written JSON."""
+
+    from types import SimpleNamespace
+
+    from so101_demo.parallel_batch.resource_budget import (
+        PromotionAuthority, build_deployment_receipt, publish_promotion)
+    from so101_demo.parallel_batch.resource_identity import FullByteAudit, InventoryEntry
+
+    root = tmp_path / "trusted-authority"
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
     profile_path = tmp_path / "sealed/profile.json"
     profile_sha = write_private(profile_path, profile or profile_document(worker_count))
-    promotion_path = tmp_path / "authority/promotion.json"
-    promotion_sha = write_private(promotion_path, {
-        "schema_version": 2, "kind": "PROMOTION", "profile_sha256": profile_sha,
-        "operator_approval_uid": 1000, "exact_worker_count": worker_count,
-        "reviews": [
-            {"reviewer": "sol", "result": "PASS", "sha256": "1" * 64},
-            {"reviewer": "astra", "result": "PASS", "sha256": "2" * 64},
-        ],
-        "sol_result_review_sha256": "1" * 64,
-        "astra_profile_review_sha256": "2" * 64,
-        "operator_approval_sha256": "3" * 64})
-    receipt_path = tmp_path / "deployments/receipt.json"
-    write_private(receipt_path, {"schema_version": 2, "kind": "DEPLOYMENT_RECEIPT",
-                                 "profile_sha256": profile_sha,
-                                 "promotion_sha256": promotion_sha})
-    return profile_path, profile_sha, promotion_path, receipt_path
+    audit = FullByteAudit(
+        schema_version=2, source_commit="7" * 40, source_clean=True,
+        prefix=str(tmp_path / "install"),
+        files=(InventoryEntry("site-packages/so101_demo/__init__.py", "8" * 64),),
+        origins={"so101_demo_py": str(tmp_path / "install")})
+    approval = root / "operator-approval.json"
+    write_private(approval, {
+        "schema_version": 2, "kind": "OPERATOR_APPROVAL", "operator_uid": 1000,
+        "decision": "APPROVED", "target": "EXACT_N_PRODUCTION",
+        "exact_worker_count": worker_count, "profile_sha256": profile_sha,
+        "measurement_audit_sha256": audit.sha256})
+    sol = root / "sol-result-review.json"
+    write_private(sol, {
+        "schema_version": 2, "kind": "INDEPENDENT_REVIEW", "reviewer": "sol",
+        "result": "PASS", "target": "EXECUTION_RESULT", "profile_sha256": profile_sha,
+        "measurement_audit_sha256": audit.sha256})
+    astra = root / "astra-profile-review.json"
+    write_private(astra, {
+        "schema_version": 2, "kind": "INDEPENDENT_REVIEW", "reviewer": "astra",
+        "result": "PASS", "target": "PROFILE", "profile_sha256": profile_sha,
+        "measurement_audit_sha256": audit.sha256})
+    authority = PromotionAuthority(root)
+    promotion_path = publish_promotion(
+        profile_path=profile_path, profile_sha256=profile_sha, operator_approval=approval,
+        sol_result_review=sol, astra_profile_review=astra, measurement_audit=audit,
+        destination=root / "promotion.json", authority=authority)
+    location = {"prefix": str(tmp_path / "install"), "host": "fixture-host"}
+    receipt_path = build_deployment_receipt(
+        promotion_path=promotion_path, profile_sha256=profile_sha, installed_audit=audit,
+        execution_identity_sha256=IDENTITY, location_binding=location)
+    return SimpleNamespace(
+        profile_path=profile_path, profile_sha=profile_sha, promotion_path=promotion_path,
+        receipt_path=receipt_path, authority=authority, audit=audit, location=location)
+
+
+def issue(provider, chain, worker_count=2):
+    from so101_demo.parallel_batch.resource_budget import issue_production_context
+    return issue_production_context(
+        provider=provider, scope=scope(worker_count), profile_path=chain.profile_path,
+        expected_profile_sha256=chain.profile_sha, promotion_path=chain.promotion_path,
+        deployment_receipt_path=chain.receipt_path,
+        control_binding=dict(chain.location), authority=chain.authority,
+        installed_audit=chain.audit, current_identity_sha256=IDENTITY,
+        location_binding=dict(chain.location))
 
 
 def scope(worker_count=2, kind="FIXED_PRODUCTION"):
@@ -173,11 +211,15 @@ def test_candidate_profile_cannot_issue_production_context(tmp_path):
     from so101_demo.parallel_batch.contracts import ContractError
     from so101_demo.parallel_batch.resource_budget import (
         ResourceBudgetProvider, issue_production_context)
+    chain = real_chain(tmp_path)
     provider = ResourceBudgetProvider()
     with pytest.raises(ContractError) as error:
-        issue_production_context(provider=provider, scope=scope(), profile_path=None,
-                                 expected_profile_sha256=None, promotion_path=None,
-                                 deployment_receipt_path=None, control_binding={"lease_id": "l"})
+        issue_production_context(
+            provider=provider, scope=scope(), profile_path=None,
+            expected_profile_sha256=None, promotion_path=None,
+            deployment_receipt_path=None, control_binding=dict(chain.location),
+            authority=chain.authority, installed_audit=chain.audit,
+            current_identity_sha256=IDENTITY, location_binding=dict(chain.location))
     assert error.value.code == "BUDGET_PROFILE_UNAVAILABLE"
 
 
@@ -186,14 +228,11 @@ def test_production_admission_requires_approved_exact_n_and_live_headroom(tmp_pa
     from so101_demo.parallel_batch.resource_budget import (
         ResourceBudgetProvider, ExactNQualification, issue_production_context)
     provider = ResourceBudgetProvider()
-    profile_path, profile_sha, promotion_path, receipt_path = synthetic_chain(tmp_path, 2)
-    provider.load(profile_path, expected_sha256=profile_sha)
+    chain = real_chain(tmp_path, 2)
+    provider.load(chain.profile_path, expected_sha256=chain.profile_sha)
     provider.record_qualification(ExactNQualification.from_document(
         qualification_document(2), raw_sha256=IDENTITY))
-    context = issue_production_context(
-        provider=provider, scope=scope(2), profile_path=profile_path,
-        expected_profile_sha256=profile_sha, promotion_path=promotion_path,
-        deployment_receipt_path=receipt_path, control_binding={"lease_id": "lease-a"})
+    context = issue(provider, chain, 2)
     healthy = provider.admit_production(context=context, current=current_identity(),
                                         live=observation(length=1), now_monotonic_s=1.1)
     assert healthy.admitted is True, healthy.reason_codes
@@ -232,15 +271,12 @@ def test_missing_exact_n_entry_and_n8_substitution_are_rejected(tmp_path):
     from so101_demo.parallel_batch.resource_budget import (
         ResourceBudgetProvider, ExactNQualification, issue_production_context)
     provider = ResourceBudgetProvider()
-    profile_path, profile_sha, promotion_path, receipt_path = synthetic_chain(tmp_path, 4)
-    provider.load(profile_path, expected_sha256=profile_sha)
+    chain = real_chain(tmp_path, 4)
+    provider.load(chain.profile_path, expected_sha256=chain.profile_sha)
     provider.record_qualification(ExactNQualification.from_document(
         qualification_document(4), raw_sha256=IDENTITY))
     with pytest.raises(ContractError) as error:
-        issue_production_context(
-            provider=provider, scope=scope(8), profile_path=profile_path,
-            expected_profile_sha256=profile_sha, promotion_path=promotion_path,
-            deployment_receipt_path=receipt_path, control_binding={"lease_id": "lease-a"})
+        issue(provider, chain, 8)
     assert error.value.code == "EXACT_N_UNQUALIFIED"
     unknown = profile_document(4)
     unknown["entries"]["8"] = {
@@ -252,11 +288,9 @@ def test_missing_exact_n_entry_and_n8_substitution_are_rejected(tmp_path):
     provider2.load(profile_path2, expected_sha256=profile_sha2)
     provider2.record_qualification(ExactNQualification.from_document(
         qualification_document(4), raw_sha256=IDENTITY))
+    chain8 = real_chain(tmp_path / "unknown-chain", 4, profile=unknown)
     with pytest.raises(ContractError) as error:
-        issue_production_context(
-            provider=provider2, scope=scope(8), profile_path=profile_path2,
-            expected_profile_sha256=profile_sha2, promotion_path=promotion_path,
-            deployment_receipt_path=receipt_path, control_binding={"lease_id": "lease-a"})
+        issue(provider2, chain8, 8)
     assert error.value.code == "EXACT_N_UNQUALIFIED"
 
 

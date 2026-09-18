@@ -126,11 +126,23 @@ def test_cli_refuses_batch_root_outside_evidence_root(tmp_path, capsys):
     assert "BATCH_ROOT_OUTSIDE_EVIDENCE_ROOT" in capsys.readouterr().err
 
 
-def test_cli_fails_closed_without_the_owned_runtime(tmp_path, capsys):
+def test_cli_fails_closed_without_a_derivable_installation(tmp_path, capsys):
     path = tmp_path / "private/authorization.json"
-    digest = write(path, authorization_document(tmp_path))
-    # With the typed capability boundary satisfied, the real runner factory must still
-    # refuse because this host has no frozen installed launcher behind the binding.
+    document = authorization_document(tmp_path)
+    # The declared binding has no source root and no installed inventory behind it, so
+    # the runtime identity cannot be derived and the sealed bytes are refused.
+    prefix = tmp_path / "install"
+    prefix.mkdir(mode=0o700, exist_ok=True)
+    document["runtime_bindings"]["provenance_binding_path"] = str(
+        tmp_path / "bindings/provenance.json")
+    binding = tmp_path / "bindings/provenance.json"
+    binding.write_text(json.dumps({"schema_version": 1, "install_prefix": str(prefix)}))
+    binding.chmod(0o600)
+    import hashlib
+    document["runtime_bindings"]["provenance_binding_sha256"] = hashlib.sha256(
+        binding.read_bytes()).hexdigest()
+    digest = write(path, document)
     assert main(argv(tmp_path, digest), capability_probe=lambda: None) == 1
     stderr = capsys.readouterr().err
-    assert "MEASUREMENT_RUNTIME_UNAVAILABLE" in stderr
+    assert "REFUSED" in stderr and (
+        "SEMANTIC_CONFIG_IDENTITY_REQUIRED" in stderr or "INVENTORY_UNAVAILABLE" in stderr)

@@ -1363,7 +1363,7 @@ class WorkerResourceAllocator:
             batch_id=self.batch_id,
             epoch=1,
             execution_identity_sha256=identity,
-            request_kind='FIXED_PRODUCTION',
+            request_kind=getattr(self._resource_gate, 'request_kind', 'FIXED_PRODUCTION'),
         ))
 
     def _live_headroom(self, worker_count: int) -> Mapping[str, object] | None:
@@ -2571,6 +2571,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument('--config', type=Path, required=True)
     parser.add_argument('--worker-count', type=int, default=_DEFAULT_WORKER_COUNT)
     parser.add_argument('--live-headroom-evidence', type=Path)
+    parser.add_argument('--measurement-authorization', type=Path)
+    parser.add_argument('--measurement-authorization-sha256')
     parser.add_argument('--evidence-root', type=Path, required=True)
     parser.add_argument('--dry-run', action='store_true', required=True)
     return parser
@@ -2595,21 +2597,14 @@ def _load_cli_config(path):
     return load_parallel_runtime_config_v2(Path(path))
 
 
-def _compose_default_resource_gate(environment: Mapping[str, str]):
+def _compose_default_resource_gate(environment: Mapping[str, str], *, config_path=None):
     """Installed composition of the shared gate; the test seam is only a fallback."""
 
-    from .resource_budget import (
-        build_live_observation, build_runtime_fingerprint_from_environment,
-        compose_production_admission)
+    from .resource_budget import LiveObservationSource, compose_production_admission
 
-    identity = environment.get("SO101_VALIDATION_EXECUTION_IDENTITY")
-    current = (
-        build_runtime_fingerprint_from_environment(environment, identity=identity)
-        if identity else None
-    )
     return compose_production_admission(
-        environment=environment, current=current,
-        observation_source=build_live_observation)
+        environment=environment, config_path=config_path,
+        observation_source=LiveObservationSource())
 
 
 def main(
@@ -2621,6 +2616,28 @@ def main(
     allocator = None
     try:
         config = _load_cli_config(arguments.config)
+        measurement_authorization = None
+        if arguments.measurement_authorization is not None:
+            if arguments.measurement_authorization_sha256 is None:
+                raise ResourceAllocationError('MEASUREMENT_AUTHORIZATION_INCOMPLETE')
+            from .resource_measurement import compose_measurement_admission
+
+            try:
+                measurement_authorization, measurement_gate = compose_measurement_admission(
+                    authorization_path=arguments.measurement_authorization,
+                    authorization_sha256=arguments.measurement_authorization_sha256,
+                    config_path=arguments.config)
+            except ContractError as error:
+                raise ResourceAllocationError(error.code) from error
+            if Path(arguments.evidence_root).resolve() != (
+                measurement_authorization.batch_root / measurement_authorization.dispatch_id
+            ).resolve():
+                # The allocator writes into the batch the authorization names; a caller
+                # cannot point it at a different root while presenting the same bytes.
+                if not Path(arguments.evidence_root).resolve().is_relative_to(
+                    measurement_authorization.batch_root.resolve()
+                ):
+                    raise ResourceAllocationError('MEASUREMENT_ARGUMENT_MISMATCH: EVIDENCE_ROOT')
         if (
             not isinstance(config, ParallelRuntimeConfig)
             and arguments.live_headroom_evidence is not None
@@ -2632,10 +2649,13 @@ def main(
             claim_root=claim_root,
             live_headroom_evidence=arguments.live_headroom_evidence,
             resource_gate=(
-                resource_gate
+                measurement_gate
+                if arguments.measurement_authorization is not None
+                else resource_gate
                 if resource_gate is not None
                 else _compose_default_resource_gate(
-                    dict(os.environ if environment is None else environment))
+                    dict(os.environ if environment is None else environment),
+                    config_path=arguments.config)
                 or _DEFAULT_RESOURCE_GATE
             ),
         )

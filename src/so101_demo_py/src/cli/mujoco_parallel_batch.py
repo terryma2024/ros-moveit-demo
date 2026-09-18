@@ -262,6 +262,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--live-headroom-acceptance", type=Path)
     parser.add_argument("--live-headroom-current-provenance-root", type=Path)
     parser.add_argument("--provenance-binding", type=Path)
+    parser.add_argument("--measurement-authorization", type=Path)
+    parser.add_argument("--measurement-authorization-sha256")
     parser.add_argument("--resume", action="store_true")
     return parser
 
@@ -414,6 +416,36 @@ def _live_headroom_verifier(
     )
 
 
+def _compose_measurement_gate(options, config, worker_count, evidence_root):
+    """Bind the sealed measurement authority this batch was started with."""
+
+    from so101_demo.parallel_batch.resource_measurement import (
+        compose_measurement_admission, verify_measurement_arguments)
+
+    if not isinstance(config, ParallelRuntimeConfigV2):
+        raise CliError('LEGACY_CONTRACT_EXECUTION_FORBIDDEN')
+    if config.deployment.approved_profile_path is not None:
+        raise CliError('CANDIDATE_CONFIG_MUST_HAVE_NULL_DEPLOYMENT')
+    try:
+        authorization, gate = compose_measurement_admission(
+            authorization_path=Path(options.measurement_authorization),
+            authorization_sha256=options.measurement_authorization_sha256,
+            config_path=Path(options.config))
+        verify_measurement_arguments(
+            authorization=authorization, batch_id=options.batch_id,
+            worker_count=worker_count, evidence_root=evidence_root,
+            points_path=Path(options.points),
+            points_sha256=hashlib.sha256(Path(options.points).read_bytes()).hexdigest(),
+            yolo_weights_path=Path(options.yolo_weights),
+            yolo_weights_sha256=options.yolo_weights_sha256,
+            grounded_root=Path(options.grounded_root),
+            grounded_manifest_sha256=options.grounded_manifest_sha256,
+            broker_image=options.broker_image, config_path=Path(options.config))
+    except ContractError as error:
+        raise CliError(error.code) from error
+    return gate
+
+
 def _prepare_live_headroom(options, config, worker_count, *, resource_gate=None):
     supplied = (
         options.live_headroom_evidence,
@@ -438,7 +470,7 @@ def _prepare_live_headroom(options, config, worker_count, *, resource_gate=None)
                 worker_count=worker_count,
                 batch_id=getattr(options, 'batch_id', None) or 'cli',
                 epoch=1, execution_identity_sha256=identity,
-                request_kind='FIXED_PRODUCTION'))
+                request_kind=getattr(resource_gate, 'request_kind', 'FIXED_PRODUCTION')))
         except ContractError as error:
             raise CliError(error.code) from error
         if not decision.admitted:
@@ -1028,22 +1060,20 @@ _LEGACY_QUOTA_FLAG = '--max-points-per-worker'
 _DEFAULT_RESOURCE_GATE = None
 
 
-def _compose_default_resource_gate():
-    """Installed composition of the shared exact-N gate; None when no authority exists."""
+def _compose_default_resource_gate(config_path=None):
+    """Installed composition of the shared exact-N gate; None when no authority exists.
+
+    The composer derives and verifies the current runtime identity from the task's
+    v2 config plus the installed/source inventory bytes, and refreshes it before
+    every admission; this call site supplies the config the batch actually loads.
+    """
 
     from so101_demo.parallel_batch.resource_budget import (
-        build_live_observation, build_runtime_fingerprint_from_environment,
-        compose_production_admission)
+        LiveObservationSource, compose_production_admission)
 
-    environment = dict(os.environ)
-    identity = environment.get("SO101_VALIDATION_EXECUTION_IDENTITY")
-    current = (
-        build_runtime_fingerprint_from_environment(environment, identity=identity)
-        if identity else None
-    )
     return compose_production_admission(
-        environment=environment, current=current,
-        observation_source=build_live_observation)
+        environment=dict(os.environ), config_path=config_path,
+        observation_source=LiveObservationSource())
 
 
 def _load_runtime_config(path: Path):
@@ -1072,9 +1102,13 @@ def prepare_batch(
     argv=None, *, provenance_verifier=verify_provenance, resource_gate=None
 ) -> PreparedBatch:
     _reject_legacy_quota_flag(argv)
-    if resource_gate is None:
-        resource_gate = _compose_default_resource_gate() or _DEFAULT_RESOURCE_GATE
     options = build_parser().parse_args(argv)
+    if (options.measurement_authorization is None) != (
+        options.measurement_authorization_sha256 is None
+    ):
+        raise CliError("MEASUREMENT_AUTHORIZATION_INCOMPLETE")
+    if resource_gate is None and options.measurement_authorization is None:
+        resource_gate = _compose_default_resource_gate(options.config) or _DEFAULT_RESOURCE_GATE
     adaptive_only = (
         options.adaptive_config,
         options.fallback_worker_counts,
@@ -1155,6 +1189,9 @@ def prepare_batch(
         live_headroom_current_provenance = {}
         live_headroom_verification = None
     else:
+        if options.measurement_authorization is not None:
+            resource_gate = _compose_measurement_gate(
+                options, config, worker_count, evidence_root)
         (
             live_headroom_evidence,
             live_headroom_acceptance,
