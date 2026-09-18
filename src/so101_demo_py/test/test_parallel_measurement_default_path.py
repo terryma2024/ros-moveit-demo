@@ -365,7 +365,7 @@ def test_default_cli_runs_the_installed_launcher_with_sealed_authority(tmp_path,
     names = {entry["name"] for entry in sealed["raw_files"]}
     assert {"samples.jsonl", "coverage-events.json", "cleanup-receipt.json",
             "workload-stdout.log", "workload-stderr.log"} <= names
-    receipt = json.loads((authorization.batch_root / "batch-a/cleanup-receipt.json")
+    receipt = json.loads((authorization.batch_root / "batch-a-session/cleanup-receipt.json")
                          .read_bytes())
     assert receipt["containment_cleared"] is True
     assert receipt["samples"] >= 1
