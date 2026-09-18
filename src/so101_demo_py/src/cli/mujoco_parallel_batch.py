@@ -62,6 +62,7 @@ from so101_demo.parallel_batch.contracts import (
     ContractError,
     LeaseIdentity,
     ParallelRuntimeConfig,
+    ParallelRuntimeConfigV2,
     RunMode,
     ValidationStatus,
     ValidationIdentity,
