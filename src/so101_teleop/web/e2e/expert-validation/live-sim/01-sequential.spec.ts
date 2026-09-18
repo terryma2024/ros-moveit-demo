@@ -105,10 +105,23 @@ test("R01 four-point sequential live smoke @live-sim", async ({ page, liveServer
   );
   await page.screenshot({ path: join(liveServer.caseDir, "final.png") });
 
-  // Only a fully clean run opens the R02 gate.
+  // Only a fully clean run opens the R02 gate, and the receipt binds the run identity
+  // that later suites must re-check instead of trusting the filename.
+  const identity = await (
+    await fetch(`${liveServer.baseURL}/expert-validation/campaigns/${campaignId}`)
+  ).json();
+  const batch = identity.batches?.[0] ?? {};
   recordGate(process.env.SO101_E2E_EVIDENCE_ROOT!, "R01", {
     campaign_id: campaignId,
     status: projection.status,
     points: perPoint,
+    producer: "producer01",
+    evidence_root: process.env.SO101_E2E_EVIDENCE_ROOT,
+    execution_identity_sha256: batch.execution_identity_sha256 ?? null,
+    profile_sha256: batch.profile_sha256 ?? null,
+    qualification_sha256: batch.qualification_sha256 ?? null,
+    manifest_sha256: batch.manifest_sha256 ?? null,
+    cleanup_complete: projection.batch_cleanup_complete === true,
+    run_id: `${campaignId}:${batch.batch_id ?? ""}`,
   });
 });

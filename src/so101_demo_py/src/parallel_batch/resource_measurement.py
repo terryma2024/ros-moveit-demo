@@ -14,6 +14,7 @@ import os
 import re
 import time
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
 from typing import Mapping, Sequence
@@ -22,6 +23,8 @@ from .contracts import ContractError
 from .measurement_control import ProcessIdentity
 from .resource_budget import (
     DIMENSIONS,
+    ApprovedBudgetProfile,
+    ExactNQualification,
     LiveResourceObservation,
     QualificationDecision,
     read_private_document,
@@ -500,3 +503,351 @@ def seal_measurement(
     target = sealed_root / f"sealed-{authorization.dispatch_id}-{len(files)}-{document['sealed_at_ns']}.json"
     _write_private(target, encoded)
     return target
+
+
+# --- Exact-N qualification aggregation (Task 13, offline) ---------------------------
+
+
+class CoverageCell(StrEnum):
+    COLD_START = "COLD_START"
+    STEADY_YOLO = "STEADY_YOLO"
+    STEADY_GROUNDED_SAM = "STEADY_GROUNDED_SAM"
+    STEADY_MIXED = "STEADY_MIXED"
+    MOTION_RELEASE = "MOTION_RELEASE"
+    BROKER_RELOAD_WITH_N_RESIDENT = "BROKER_RELOAD_WITH_N_RESIDENT"
+    WORKER_RECOVERY_WITH_N_RESIDENT = "WORKER_RECOVERY_WITH_N_RESIDENT"
+    FINALIZATION_CLEANUP = "FINALIZATION_CLEANUP"
+
+
+_REQUIRED_NORMAL_RUNS = 5
+_REQUIRED_POINT_COUNT = 20
+_REQUIRED_CELL_RUNS = 2
+_VALIDITY_STATES = ("VALID", "INVALID", "UNKNOWN", "INDETERMINATE")
+_OUTCOMES = ("PASSED", "FAILED", "INFRA_FAILURE")
+
+
+@dataclass(frozen=True, slots=True)
+class RunEvidence:
+    """One sealed candidate run; never a substitute for independent physics evidence."""
+
+    batch_id: str
+    worker_count: int
+    execution_identity_sha256: str
+    validity: str
+    outcome: str
+    full_restart: bool
+    point_count: int
+    actual_worker_identities: tuple[ProcessIdentity, ...]
+    concurrent_window: tuple[float, float] | None
+    coverage: Mapping[str, tuple[str, ...]]
+    sealed_manifest_sha256: str
+    independent_physics_verified: bool
+    resource_contract_verified: bool
+    cleanup_verified: bool
+    point_evidence: tuple[Mapping[str, object], ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.batch_id, str) or not self.batch_id:
+            raise ContractError("BATCH_ID")
+        if type(self.worker_count) is not int or not 1 <= self.worker_count <= 8:
+            raise ContractError("WORKER_COUNT")
+        _require_sha256("execution_identity_sha256", self.execution_identity_sha256)
+        if self.validity not in _VALIDITY_STATES:
+            raise ContractError("VALIDITY")
+        if self.outcome not in _OUTCOMES:
+            raise ContractError("OUTCOME")
+        for name in ("full_restart", "independent_physics_verified",
+                     "resource_contract_verified", "cleanup_verified"):
+            if not isinstance(getattr(self, name), bool):
+                raise ContractError(f"BOOLEAN: {name}")
+        if type(self.point_count) is not int or self.point_count < 0:
+            raise ContractError("POINT_COUNT")
+        identities = tuple(self.actual_worker_identities)
+        for identity in identities:
+            if not isinstance(identity, ProcessIdentity):
+                raise ContractError("PROCESS_IDENTITY")
+        object.__setattr__(self, "actual_worker_identities", identities)
+        window = self.concurrent_window
+        if window is not None:
+            if (
+                not isinstance(window, (list, tuple)) or len(window) != 2
+                or any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in window)
+                or float(window[1]) <= float(window[0])
+            ):
+                raise ContractError("CONCURRENT_WINDOW")
+            object.__setattr__(self, "concurrent_window", (float(window[0]), float(window[1])))
+        cells: dict[str, tuple[str, ...]] = {}
+        if not isinstance(self.coverage, Mapping):
+            raise ContractError("COVERAGE")
+        for cell, outcomes in self.coverage.items():
+            if cell not in tuple(item.value for item in CoverageCell):
+                raise ContractError(f"COVERAGE_CELL: {cell}")
+            if not isinstance(outcomes, (list, tuple)) or not outcomes:
+                raise ContractError(f"COVERAGE_OUTCOMES: {cell}")
+            cells[cell] = tuple(str(outcome) for outcome in outcomes)
+        object.__setattr__(self, "coverage", MappingProxyType(cells))
+        _require_sha256("sealed_manifest_sha256", self.sealed_manifest_sha256)
+        evidence = tuple(dict(item) for item in self.point_evidence)
+        object.__setattr__(self, "point_evidence", evidence)
+
+    @property
+    def is_valid(self) -> bool:
+        return self.validity == "VALID"
+
+    @property
+    def establishes_exact_n(self) -> bool:
+        return (
+            self.is_valid
+            and len(self.actual_worker_identities) == self.worker_count
+            and self.concurrent_window is not None
+        )
+
+    @property
+    def complete_point_evidence(self) -> bool:
+        return (
+            self.independent_physics_verified
+            and self.resource_contract_verified
+            and self.cleanup_verified
+        )
+
+
+class QualificationAccumulator:
+    """Counts normal, coverage and fault evidence for one exact N and identity."""
+
+    def __init__(
+        self, worker_count: int, execution_identity_sha256: str, coverage_policy_sha256: str
+    ) -> None:
+        if type(worker_count) is not int or not 1 <= worker_count <= 8:
+            raise ContractError("WORKER_COUNT")
+        self.worker_count = worker_count
+        self.execution_identity_sha256 = _require_sha256(
+            "execution_identity_sha256", execution_identity_sha256)
+        self.coverage_policy_sha256 = _require_sha256(
+            "coverage_policy_sha256", coverage_policy_sha256)
+        self._normal: list[RunEvidence] = []
+        self._fault: list[RunEvidence] = []
+        self._rejected: list[RunEvidence] = []
+        self._coverage: dict[str, list[tuple[RunEvidence, bool]]] = {}
+
+    # -- evidence intake ------------------------------------------------------
+    def _require_own_identity(self, run: RunEvidence, reason: str) -> bool:
+        """Different worker count is retained as rejected evidence, never consumed."""
+
+        if run.worker_count != self.worker_count:
+            self._rejected.append(run)
+            return False
+        if run.execution_identity_sha256 != self.execution_identity_sha256:
+            self._rejected.append(run)
+            return False
+        return True
+
+    def add_normal(self, run: RunEvidence) -> None:
+        """A normal run counts only when it is VALID, full-restart and exact-N."""
+
+        if not isinstance(run, RunEvidence):
+            raise ContractError("RUN_EVIDENCE")
+        if not self._require_own_identity(run, "normal"):
+            return
+        if run.is_valid and not self._counts_as_normal(run):
+            # A structurally incomplete run is retained as untrusted evidence.
+            self._fault.append(run)
+            return
+        self._normal.append(run)
+        for cell in run.coverage:
+            self._coverage.setdefault(cell, []).append((run, False))
+
+    @staticmethod
+    def _counts_as_normal(run: RunEvidence) -> bool:
+        return (
+            run.full_restart
+            and run.point_count >= _REQUIRED_POINT_COUNT
+            and run.actual_worker_identities
+            and len(run.actual_worker_identities) == run.worker_count
+            and run.concurrent_window is not None
+        )
+
+    def add_coverage(self, run: RunEvidence, *, fast_channel: bool) -> None:
+        if not isinstance(run, RunEvidence):
+            raise ContractError("RUN_EVIDENCE")
+        if not isinstance(fast_channel, bool):
+            raise ContractError("FAST_CHANNEL")
+        if not self._require_own_identity(run, "coverage"):
+            return
+        if not run.is_valid:
+            return
+        for cell in run.coverage:
+            self._coverage.setdefault(cell, []).append((run, fast_channel))
+
+    def add_fault(self, run: RunEvidence) -> None:
+        """Fault pressure informs the envelope; it never enters a success sequence."""
+
+        if not isinstance(run, RunEvidence):
+            raise ContractError("RUN_EVIDENCE")
+        if not self._require_own_identity(run, "fault"):
+            return
+        self._fault.append(run)
+
+    # -- views ----------------------------------------------------------------
+    @property
+    def normal_run_count(self) -> int:
+        return self._valid_normal_streak()
+
+    @property
+    def product_success_count(self) -> int:
+        return self._valid_normal_streak(require_passed=True)
+
+    @property
+    def fault_run_count(self) -> int:
+        return len(self._fault)
+
+    def coverage_counts(self) -> dict[str, int]:
+        return {
+            cell: len(
+                [run for run, _ in self._coverage.get(cell, [])
+                 if run.establishes_exact_n and run.independent_physics_verified]
+            )
+            for cell in (item.value for item in CoverageCell)
+        }
+
+    def _valid_normal_streak(self, *, require_passed: bool = False) -> int:
+        """Consecutive VALID complete runs; an infra failure or invalid run stops it."""
+
+        streak = 0
+        for run in self._normal:
+            if (
+                run.is_valid
+                and run.complete_point_evidence
+                and self._counts_as_normal(run)
+                and run.outcome != "INFRA_FAILURE"
+                and (not require_passed or run.outcome == "PASSED")
+            ):
+                streak += 1
+                continue
+            streak = 0
+        return streak
+
+    @property
+    def sequence_terminated(self) -> bool:
+        """An invalid or infrastructure-failed run ends this qualification sequence."""
+
+        return any(
+            run.outcome == "INFRA_FAILURE" or not run.is_valid for run in self._normal
+        )
+
+    def decision(self) -> QualificationDecision:
+        reasons: list[str] = []
+        if self.sequence_terminated:
+            reasons.append("SEQUENCE_TERMINATED")
+        if self._valid_normal_streak() < _REQUIRED_NORMAL_RUNS:
+            reasons.append("NORMAL_RUNS_INSUFFICIENT")
+        counts = self.coverage_counts()
+        missing = [
+            cell for cell in (item.value for item in CoverageCell)
+            if counts.get(cell, 0) < _REQUIRED_CELL_RUNS
+        ]
+        if missing:
+            reasons.append("COVERAGE_INCOMPLETE")
+        if not self._normal or self._rejected:
+            reasons.append("EXACT_N_UNQUALIFIED")
+        return QualificationDecision(not reasons, tuple(reasons))
+
+    def seal_index(self) -> "ExactNQualification":
+        """Seal Q: it references sealed B manifests and can never reference P/M/D."""
+
+        decision = self.decision()
+        manifests = []
+        for run in [*self._normal, *(run for run, _ in
+                                 (item for group in self._coverage.values() for item in group)),
+                    *self._fault]:
+            if run.sealed_manifest_sha256 not in manifests:
+                manifests.append(run.sealed_manifest_sha256)
+        record = ExactNQualification(
+            schema_version=2,
+            execution_identity_sha256=self.execution_identity_sha256,
+            worker_count=self.worker_count,
+            coverage_policy_sha256=self.coverage_policy_sha256,
+            sealed_manifest_sha256s=tuple(manifests or ['0' * 64]),
+            normal_valid_runs=self._valid_normal_streak(),
+            normal_required_runs=_REQUIRED_NORMAL_RUNS,
+            coverage_complete=decision.qualified,
+            cleanup_verified=all(
+                run.cleanup_verified for run in self._normal if run.is_valid
+            ) if self._normal else False,
+            independent_physics_verified=all(
+                run.independent_physics_verified for run in self._normal if run.is_valid
+            ) if self._normal else False,
+            resource_contract_verified=all(
+                run.resource_contract_verified for run in self._normal if run.is_valid
+            ) if self._normal else False,
+            raw_sha256=canonical_sha256(
+                {
+                    "worker_count": self.worker_count,
+                    "execution_identity_sha256": self.execution_identity_sha256,
+                    "manifest_sha256s": manifests,
+                    "normal_runs": self._valid_normal_streak(),
+                    "coverage": {cell: counts for cell, counts in self.coverage_counts().items()},
+                }
+            ),
+        )
+        return record
+
+
+def build_candidate_profile(
+    *,
+    execution_identity_sha256: str,
+    coverage_policy_sha256: str,
+    qualifications: Sequence[ExactNQualification],
+    covered_demands: Mapping[int, Mapping[str, Mapping[str, float]]],
+    uncertainty: Mapping[int, Mapping[str, Mapping[str, float]]],
+    baseline: Mapping[int, Mapping[str, float]],
+    audits: Mapping[str, object],
+) -> ApprovedBudgetProfile:
+    """Build a CANDIDATE profile; only an operator promotion may approve it."""
+
+    from .resource_budget import (
+        ExactNProfileEntry,
+        StageEnvelope,
+    )
+
+    entries: dict[int, ExactNProfileEntry] = {}
+    manifests = tuple(str(item) for item in audits.get("raw_manifest_sha256s", ()))
+    for worker_count, stages in covered_demands.items():
+        stage_documents = {}
+        for stage, demand in stages.items():
+            zeros = {key: 0.0 for key in demand}
+            stage_documents[stage] = StageEnvelope.from_document(
+                stage,
+                {
+                    "demand": dict(demand),
+                    "uncertainty": dict(uncertainty.get(worker_count, {}).get(stage, zeros)),
+                    "background": dict(baseline.get(worker_count, zeros)),
+                    "tool_overhead": dict(zeros),
+                    "available_headroom": dict(zeros),
+                },
+            )
+        entries[worker_count] = ExactNProfileEntry(
+            worker_count=worker_count,
+            status="CANDIDATE",
+            qualification_sha256=next(
+                (record.raw_sha256 for record in qualifications
+                 if record.worker_count == worker_count), None),
+            raw_manifest_sha256s=manifests,
+            coverage=MappingProxyType({}),
+            stages=MappingProxyType(stage_documents),
+            review_reference=None,
+        )
+    return ApprovedBudgetProfile(
+        schema_version=2,
+        execution_identity_sha256=_require_sha256(
+            "execution_identity_sha256", execution_identity_sha256),
+        coverage_policy_sha256=_require_sha256(
+            "coverage_policy_sha256", coverage_policy_sha256),
+        entries=MappingProxyType(entries),
+        raw_sha256=canonical_sha256(
+            {
+                "kind": "CANDIDATE_PROFILE",
+                "entries": sorted(entries),
+                "execution_identity_sha256": execution_identity_sha256,
+            }
+        ),
+    )

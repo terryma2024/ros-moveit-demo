@@ -1,24 +1,29 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { liveSimTest as test, expect, recordGate, requireGate } from "../fixtures/live-sim";
+import { liveSimTest as test, expect, recordGate, requireGate, requireGateDetail } from "../fixtures/live-sim";
 import { readJournalEvents } from "../assertions/journal";
 import { ExpertValidationPage } from "../pages/expert-validation-page";
 
 /**
- * R02: four-point PARALLEL N=2/K=2 live run; R04 (mid-run Chrome reload) is
+ * R02: four-point PARALLEL exact N=2 live run; R04 (mid-run Chrome reload) is
  * embedded.  Requires the R01 gate receipt.
  */
 
 test("R02 parallel two-worker live run with mid-run reload @live-sim", async ({ page, liveServer }) => {
   test.setTimeout(1_800_000);
-  requireGate(process.env.SO101_E2E_EVIDENCE_ROOT!, "R01");
+  const producer = requireGateDetail(process.env.SO101_E2E_EVIDENCE_ROOT!, "R01", {
+    evidenceRoot: process.env.SO101_E2E_EVIDENCE_ROOT,
+  });
+  expect(producer.producer).toBe("producer01");
+  expect(producer.cleanup_complete).toBe(true);
 
+  void requireGate;
   const app = new ExpertValidationPage(page);
   await app.goto();
   await app.acquireLease();
   await app.generateManifest(4);
-  await app.configureParallel(2, 2);
+  await app.configureParallel(2);
   await app.runPreflight();
   await app.startValidation();
 

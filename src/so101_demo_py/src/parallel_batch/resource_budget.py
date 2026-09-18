@@ -13,6 +13,7 @@ import math
 import os
 import re
 import stat
+import time
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from types import MappingProxyType
@@ -518,11 +519,11 @@ class ExactNProfileEntry:
         if self.status in ("CANDIDATE", "APPROVED"):
             if not self.raw_manifest_sha256s or not self.stages:
                 raise ContractError("ENTRY_MISSING_MEASUREMENTS")
-            if set(self.stages) != set(_STAGES):
-                raise ContractError("ENTRY_STAGE_COVERAGE")
         if self.status == "APPROVED":
             if self.qualification_sha256 is None or self.review_reference is None:
                 raise ContractError("APPROVED_ENTRY_INCOMPLETE")
+            if set(self.stages) != set(_STAGES):
+                raise ContractError("APPROVED_ENTRY_STAGE_COVERAGE")
             if set(self.coverage) != set(_COVERAGE_CELLS):
                 raise ContractError("APPROVED_ENTRY_COVERAGE")
 
@@ -970,3 +971,160 @@ class FixedAdmissionGate:
         return self.provider.admit_production(
             context=self.context, current=self.current, live=self.live,
             now_monotonic_s=self.now_monotonic_s)
+
+
+# --- Independent promotion and deployment receipts (Task 14, offline) ---------------
+
+
+def _write_private(path: Path, data: bytes) -> str:
+    """Create one immutable private file and fsync it and its directory."""
+
+    descriptor = os.open(Path(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    try:
+        os.write(descriptor, data)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    directory = os.open(Path(path).parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+    return hashlib.sha256(data).hexdigest()
+
+
+class PromotionAuthority:
+    """Reads approvals only from an independent trusted directory, never a candidate tree."""
+
+    def __init__(self, root: Path) -> None:
+        root = Path(root)
+        if not root.is_absolute() or root.is_symlink() or not root.is_dir():
+            raise ContractError("PROMOTION_AUTHORITY_INVALID")
+        metadata = root.stat()
+        if metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o700:
+            raise ContractError("PROMOTION_AUTHORITY_INVALID")
+        self.root = root.resolve()
+
+    def contains(self, path: Path) -> bool:
+        try:
+            return Path(path).resolve().is_relative_to(self.root)
+        except OSError:
+            return False
+
+    def read_document(self, path: Path) -> tuple[dict, str]:
+        if not self.contains(path):
+            raise ContractError("PROMOTION_AUTHORITY_INVALID")
+        return read_private_document(path)
+
+
+def _inside(directory: Path, path: Path) -> bool:
+    try:
+        return Path(path).resolve().is_relative_to(Path(directory).resolve())
+    except OSError:
+        return False
+
+
+def publish_promotion(
+    *,
+    profile_path: Path,
+    profile_sha256: str,
+    operator_approval: Path,
+    sol_result_review: Path,
+    astra_profile_review: Path,
+    measurement_audit: Mapping[str, object],
+    destination: Path,
+) -> Path:
+    """Append-only promotion record M: P + A0 + independent reviews + operator approval."""
+
+    _require_sha256("profile_sha256", profile_sha256)
+    candidate_tree = Path(profile_path).parent
+    for name, path in (
+        ("operator_approval", operator_approval),
+        ("sol_result_review", sol_result_review),
+        ("astra_profile_review", astra_profile_review),
+    ):
+        if _inside(candidate_tree, path):
+            raise ContractError("PROMOTION_AUTHORITY_INVALID")
+        del name
+    approval, approval_sha = read_private_document(operator_approval)
+    sol, sol_sha = read_private_document(sol_result_review)
+    astra, astra_sha = read_private_document(astra_profile_review)
+    if approval.get("decision") != "APPROVED":
+        raise ContractError("OPERATOR_APPROVAL_REQUIRED")
+    if approval.get("profile_sha256") != profile_sha256:
+        raise ContractError("OPERATOR_APPROVAL_PROFILE_MISMATCH")
+    operator_uid = approval.get("operator_uid")
+    exact_n = approval.get("exact_worker_count")
+    if type(operator_uid) is not int or type(exact_n) is not int:
+        raise ContractError("OPERATOR_APPROVAL_INCOMPLETE")
+    if sol.get("result") != "PASS" or astra.get("result") != "PASS":
+        raise ContractError("INDEPENDENT_REVIEW_REQUIRED")
+    document = {
+        "schema_version": 1,
+        "kind": "PROMOTION",
+        "profile_sha256": profile_sha256,
+        "exact_worker_count": exact_n,
+        "operator_approval_uid": operator_uid,
+        "operator_approval_sha256": approval_sha,
+        "sol_result_review_sha256": sol_sha,
+        "astra_profile_review_sha256": astra_sha,
+        "measurement_audit": dict(measurement_audit),
+        "created_at_ns": time.time_ns(),
+    }
+    encoded = json.dumps(document, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    target = Path(destination)
+    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _write_private(target, encoded)
+    return target
+
+
+def verify_promotion(
+    *, profile: ApprovedBudgetProfile, promotion_path: Path | None, authority: PromotionAuthority
+) -> None:
+    """Verify M through the independent authority; a path alone is never approval."""
+
+    if promotion_path is None:
+        raise ContractError("BUDGET_PROFILE_UNAVAILABLE")
+    if not isinstance(authority, PromotionAuthority):
+        raise ContractError("PROMOTION_AUTHORITY_INVALID")
+    document, _ = authority.read_document(Path(promotion_path))
+    if document.get("kind") != "PROMOTION" or document.get("schema_version") != 1:
+        raise ContractError("PROMOTION_INVALID")
+    if document.get("profile_sha256") != profile.raw_sha256:
+        raise ContractError("PROMOTION_PROFILE_MISMATCH")
+    if type(document.get("operator_approval_uid")) is not int:
+        raise ContractError("OPERATOR_APPROVAL_REQUIRED")
+    for name in ("sol_result_review_sha256", "astra_profile_review_sha256",
+                 "operator_approval_sha256"):
+        _require_sha256(name, document.get(name))
+
+
+def build_deployment_receipt(
+    *,
+    promotion_path: Path,
+    profile_sha256: str,
+    installed_audit,
+    execution_identity_sha256: str,
+    location_binding: Mapping[str, object],
+) -> Path:
+    """Deployment receipt D binds M/P/A1/location; M itself never references D."""
+
+    _require_sha256("profile_sha256", profile_sha256)
+    _require_sha256("execution_identity_sha256", execution_identity_sha256)
+    if not isinstance(location_binding, Mapping) or not location_binding:
+        raise ContractError("LOCATION_BINDING")
+    _, promotion_sha = read_private_document(Path(promotion_path), expected_sha256=None)
+    document = {
+        "schema_version": 1,
+        "kind": "DEPLOYMENT_RECEIPT",
+        "profile_sha256": profile_sha256,
+        "promotion_sha256": promotion_sha,
+        "installed_audit_sha256": installed_audit.sha256,
+        "execution_identity_sha256": execution_identity_sha256,
+        "location_binding": dict(location_binding),
+        "created_at_ns": time.time_ns(),
+    }
+    encoded = json.dumps(document, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    target = Path(promotion_path).parent / "deployment-receipt.json"
+    _write_private(target, encoded)
+    return target
