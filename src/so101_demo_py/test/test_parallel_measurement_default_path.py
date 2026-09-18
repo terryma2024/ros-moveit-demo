@@ -1115,3 +1115,39 @@ def test_sample_resources_takes_pressure_from_the_owned_cgroup(monkeypatch):
                                      sequence=sequence, state=state)
     assert sample.observation.psi_full_delta == 5000
     assert sample.diagnostics["psi_full_host_us"] == 3.0
+
+
+def test_session_breach_ignores_swap_and_psi_activity():
+    """CPU/RAM/GPU-only amendment (74d6b781): swap and PSI are not breach dimensions, so a
+    healthy sample with swap or full-stall movement must not latch an abort."""
+
+    import types
+    from so101_demo.parallel_batch.owned_resources import MeasurementSession
+
+    session = object.__new__(MeasurementSession)
+    session.safety = types.SimpleNamespace(
+        minimum_free_fraction=0.2, abort_on_psi_full_stall=True,
+        throttling_disqualifies_run=True, capacity_fraction=0.8)
+    session.cgroup = None
+    capacity = {"cpu_core_equivalent": 10.0, "ram_bytes": 1000.0, "gpu_bytes": 100.0}
+    observation = types.SimpleNamespace(
+        attribution_complete=True, swap_delta=4096, psi_full_delta=0.5, throttled=False,
+        capacity=capacity,
+        observed={"cpu_core_equivalent": 1.0, "ram_bytes": 100.0, "gpu_bytes": 1.0},
+        background={"cpu_core_equivalent": 0.1, "ram_bytes": 10.0, "gpu_bytes": 1.0})
+    assert session._breach(types.SimpleNamespace(observation=observation)) is None
+
+
+def test_safety_rules_no_longer_require_the_swap_or_psi_keys():
+    """The authoritative policy drops both keys; documents that still carry them are
+    deprecated compatibility data and must not be able to gate anything."""
+
+    from so101_demo.parallel_batch.contracts import SafetyRulesV2
+
+    rules = SafetyRulesV2(capacity_fraction=0.8, minimum_free_fraction=0.2, gpu_device_index=0,
+                          throttling_disqualifies_run=True, require_complete_attribution=True)
+    deprecated = SafetyRulesV2(capacity_fraction=0.8, minimum_free_fraction=0.2,
+                               gpu_device_index=0, throttling_disqualifies_run=True,
+                               require_complete_attribution=True,
+                               abort_on_swap_activity=False, abort_on_psi_full_stall=False)
+    assert rules.capacity_fraction == deprecated.capacity_fraction == 0.8

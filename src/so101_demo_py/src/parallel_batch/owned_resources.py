@@ -592,10 +592,9 @@ class MeasurementSession:
         minimum_free = float(self.safety.minimum_free_fraction)
         if not observation.attribution_complete:
             return "UNATTRIBUTED_CONSUMER"
-        if observation.swap_delta > 0:
-            return "SWAP_ACTIVITY"
-        if self.safety.abort_on_psi_full_stall and observation.psi_full_delta > 0:
-            return "PSI_FULL_STALL"
+        # CPU/RAM/GPU-only amendment (74d6b781): swap and PSI activity are not breach
+        # dimensions. The deprecated observation fields may still carry values and must not
+        # be able to latch an abort here.
         if self.safety.throttling_disqualifies_run and observation.throttled:
             return "CPU_THROTTLED"
         capacity = observation.capacity

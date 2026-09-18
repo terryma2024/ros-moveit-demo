@@ -639,8 +639,9 @@ def _live_reasons(
         age = float(now_monotonic_s) - live.monotonic_s
         if not math.isfinite(age) or age < 0 or age > _MAXIMUM_OBSERVATION_AGE_S:
             reasons.append("RESOURCE_PROBE_FAILED")
-    if live.swap_delta > 0 or live.psi_full_delta > 0:
-        reasons.append("SWAP_PRESSURE")
+    # CPU/RAM/GPU-only policy amendment (dispatch 74d6b781-840d-474b-b997-f2dc24907792):
+    # swap and PSI are not admission dimensions. The deprecated swap_delta/psi_full_delta
+    # fields may still arrive on compatibility documents and cannot gate anything here.
     if live.throttled:
         reasons.append("CPU_HEADROOM")
     if any(value <= 0 for value in live.capacity.values()):

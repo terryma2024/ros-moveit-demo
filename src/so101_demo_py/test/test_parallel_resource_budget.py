@@ -247,10 +247,18 @@ def test_production_admission_requires_approved_exact_n_and_live_headroom(tmp_pa
         live=observation(length=1, attribution_complete=False), now_monotonic_s=1.1)
     assert unattributed.admitted is False
     assert "BACKGROUND_ENVELOPE_EXCEEDED" in unattributed.reason_codes
+    # CPU/RAM/GPU-only policy amendment (dispatch 74d6b781-840d-474b-b997-f2dc24907792):
+    # host swap movement and PSI stalls are no longer admission dimensions at all.
     swapped = provider.admit_production(
         context=context, current=current_identity(),
         live=observation(length=1, swap_delta=4096), now_monotonic_s=1.1)
-    assert swapped.admitted is False and "SWAP_PRESSURE" in swapped.reason_codes
+    assert swapped.admitted is True, swapped.reason_codes
+    assert "SWAP_PRESSURE" not in swapped.reason_codes
+    stalled = provider.admit_production(
+        context=context, current=current_identity(),
+        live=observation(length=1, psi_full_delta=0.5), now_monotonic_s=1.1)
+    assert stalled.admitted is True, stalled.reason_codes
+    assert "SWAP_PRESSURE" not in stalled.reason_codes
     stale = provider.admit_production(context=context, current=current_identity(),
                                       live=observation(length=1), now_monotonic_s=99.0)
     assert stale.admitted is False and "RESOURCE_PROBE_FAILED" in stale.reason_codes

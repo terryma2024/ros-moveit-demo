@@ -793,11 +793,25 @@ def _load_closed_yaml(path: Path) -> object:
     return document
 
 
-def _closed_mapping_fields(name: str, document: object, expected: set[str]) -> dict:
+# Fields removed from the authoritative policy by the CPU/RAM/GPU-only amendment
+# (dispatch 74d6b781-840d-474b-b997-f2dc24907792). Accepted when present as
+# deprecated compatibility data, never required and never consulted.
+_DEPRECATED_SAFETY_FIELDS = frozenset({"abort_on_swap_activity", "abort_on_psi_full_stall"})
+
+
+def _closed_mapping_fields(name: str, document: object, expected: set[str],
+                           deprecated: set[str] | None = None) -> dict:
+    """Validate a closed mapping, allowing named deprecated keys to be absent.
+
+    A deprecated key is accepted when present (old documents still parse) and is not
+    required (the CPU/RAM/GPU-only amendment drops it from the authoritative policy).
+    """
+
+    optional = set(deprecated or ())
     if not isinstance(document, Mapping):
         raise ContractError(f"{name}_MAPPING")
     unknown = set(document) - expected
-    missing = expected - set(document)
+    missing = (expected - optional) - set(document)
     if unknown:
         raise ContractError(f"UNKNOWN_{name}_FIELD: {sorted(unknown)!r}")
     if missing:
@@ -906,10 +920,13 @@ class SafetyRulesV2:
     capacity_fraction: float
     minimum_free_fraction: float
     gpu_device_index: int
-    abort_on_swap_activity: bool
-    abort_on_psi_full_stall: bool
     throttling_disqualifies_run: bool
     require_complete_attribution: bool
+    # Deprecated compatibility fields from the pre-amendment policy (dispatch
+    # 74d6b781-840d-474b-b997-f2dc24907792). Documents that still carry them parse, but
+    # they are never consulted: swap and PSI are not policy dimensions any more.
+    abort_on_swap_activity: bool | None = None
+    abort_on_psi_full_stall: bool | None = None
 
     def __post_init__(self) -> None:
         for name in ("capacity_fraction", "minimum_free_fraction"):
@@ -919,8 +936,6 @@ class SafetyRulesV2:
         if self.capacity_fraction != 0.8 or self.minimum_free_fraction != 0.2:
             raise ContractError("SAFETY_ENVELOPE")
         for name in (
-            "abort_on_swap_activity",
-            "abort_on_psi_full_stall",
             "throttling_disqualifies_run",
             "require_complete_attribution",
         ):
@@ -1155,7 +1170,8 @@ def parse_parallel_runtime_config_v2(document: object) -> ParallelRuntimeConfigV
         "CLOCK", execution.pop("clock"), {item.name for item in fields(ClockRulesV2)}
     )
     safety = _closed_mapping_fields(
-        "SAFETY", execution.pop("safety"), {item.name for item in fields(SafetyRulesV2)}
+        "SAFETY", execution.pop("safety"), {item.name for item in fields(SafetyRulesV2)},
+        deprecated=_DEPRECATED_SAFETY_FIELDS,
     )
     coverage = _closed_mapping_fields(
         "COVERAGE", execution.pop("coverage"), {item.name for item in fields(CoverageRulesV2)}
