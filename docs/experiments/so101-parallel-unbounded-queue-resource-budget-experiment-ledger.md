@@ -2721,3 +2721,52 @@ decision: KEEP
 next_experiment: EXP-UQ33 Stage C measurement inside a fresh delegated scope; Stage B freeze/production
   binding; Stage D per-N approval packets; Stage E owned Chrome once N1/Nx are signed
 ```
+
+```yaml
+checkpoint_id: CP-UQ33
+last_valid_experiment: EXP-UQ33
+current_hypothesis: Stage C cgroup delegation is attempted through three sudo-free mechanisms; the
+  boundary is now precisely traced and the remaining offline mainline work continues.
+capability_attempts:
+  - "1. In-scope enablement (scratch/capability-probe.plqC8Jzn/raw-probe.log, 21:12:48+08:00): our own
+    dsh scope has controllers [memory pids]; +cpu -> ENOENT, +memory -> EBUSY (member processes),
+    +pids -> OK; child exposes [pids] only."
+  - "2. Fresh delegated scope (scratch/delegated-scope.XUBGMk1U, scratch/delegated-scope2.RM6ue8q4):
+    systemd-run --user --scope -p Delegate=yes [-p MemoryAccounting/CPUAccounting/TasksAccounting]
+    gives controllers [cpu memory pids]; +cpu -> OK (child cpu.max=100000 100000 read back) but +memory
+    -> FAILED, so the child exposes [cpu pids] with no memory.max."
+  - "3. Transient user service (scratch/delegated-service.eRRg1feJ, scratch/delegated-service2.*):
+    systemd-run --user --pipe --wait --collect --unit=... -p Delegate=yes -p MemoryAccounting=yes ...
+    leaves the unit's cgroup.subtree_control EMPTY; the child cgroup gets [] and even cpu.max is not
+    writable."
+finding:
+  - "Parent->child cpu+memory delegation cannot be established from inside a running unit in this
+    environment: enabling memory in subtree_control is blocked while the unit has member processes, and
+    a transient unit's subtree_control is not pre-enabled by the user manager. The measurement
+    session's OwnedCgroupV2.require_delegated(cpu, memory) therefore refuses correctly
+    (MEASUREMENT_CAPABILITY_MISSING: cgroup_controllers) - this is a real capability gate, not a code
+    defect. NVML whole-device read works (gpu_total 17094934528, used 1019609088, free 16075325440)."
+  - "Handling path (no fake proof, no sudo, no global change): either (a) the orchestrator/operator
+    provisions a user unit whose cgroup.subtree_control is enabled by the manager before the payload
+    starts (or a session scope with controllers pre-enabled), or (b) Stage C is run with an explicit
+    decision to treat memory as a whole-host guard (the design already requires whole-host MemAvailable
+    >= 20% and abort thresholds) while cpu quota alone is cgroup-enforced from the delegated [cpu]
+    controller. Both are approval/capability objects; the measurement authorization cannot be
+    self-signed and the existing sealed mechanism is unchanged."
+continued_work:
+  - "Stage B offline preparation is in place: freeze-install + bindings/freeze-project-provenance.json;
+    the versioned production copy/A0/audit/binding for the frozen HEAD is the next artifact, followed by
+    the owned recovery/Web refresh window with fresh PID/domain/store/fence/lease readback."
+  - "Stages B-E windows are GRANTED IN SCOPE by the latest user authorization; each product content gate
+    (exact-N/profile-SHA operator approval, Stage C sealed authorization, Stage E N1/Nx signature)
+    remains object-bound and is requested through the existing issuer interfaces, never fabricated."
+inferred:
+  - The scheduling/package/ledger P2s are closed; Stage C's mechanical blocker is precisely identified
+    with three raw traces, and all other authorized offline work continues without waiting for review.
+conclusion: AUTHORIZED MAINLINE CONTINUES; Stage C needs the delegated-unit/capability object.
+evidence: scratch/capability-probe.plqC8Jzn, scratch/delegated-scope.*, scratch/delegated-service*,
+  scratch/pkg8demo2.G7s3ZfXT, bindings/freeze-project-provenance.json, freeze-install
+decision: KEEP
+next_experiment: EXP-UQ34 Stage B production copy/A0/binding and owned Web refresh; Stage C under a
+  manager-delegated unit once provisioned; Stage D per-N approval packets
+```
