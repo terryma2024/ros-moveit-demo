@@ -164,6 +164,38 @@ def claim_root():
     return Path(os.environ['TMPDIR']).parent / f'claims-{suffix}'
 
 
+def test_oversized_cmdline_process_is_classified_not_refused():
+    """A same-UID process with a huge argv must not make the whole probe fail closed.
+
+    RED before the repair: SystemResourceProbe.ros_domain_in_use raised
+    ResourceAllocationError(PROC_METADATA_UNVERIFIABLE) because /proc/<pid>/cmdline
+    exceeded the 4 KiB read bound, which any inline-program or long pytest payload
+    triggers on this host.
+    """
+
+    import subprocess
+    import sys as _sys
+
+    from so101_demo.parallel_batch.resources import ResourceAllocationError, SystemResourceProbe
+
+    filler = "x" * 6000
+    child = subprocess.Popen(
+        [_sys.executable, "-c", "import time;time.sleep(30)", filler],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        cmdline = Path(f"/proc/{child.pid}/cmdline").read_bytes()
+        assert len(cmdline) > 4096
+        probe = SystemResourceProbe()
+        # The oversized-cmdline process is not a ROS/parallel-batch claimant.
+        assert probe.ros_domain_in_use(213) is False
+        report = probe.process_scan_report()
+        assert report["unclassified_unreadable_policy"] == "fail_closed"
+        del ResourceAllocationError
+    finally:
+        child.terminate()
+        child.wait(timeout=10)
+
+
 def test_claim_root_is_stable_per_test_and_isolated_between_tests(monkeypatch):
     monkeypatch.setenv('PYTEST_CURRENT_TEST', 'test/module.py::test_a (call)')
     first = claim_root()

@@ -2088,7 +2088,12 @@ def _read_process_identity(
         raise ValueError('invalid proc comm')
     raw_cmdline = (process / 'cmdline').read_bytes()
     if len(raw_cmdline) > 4096:
-        raise ValueError('proc cmdline too large')
+        # A same-UID process may legitimately carry a very large argv (an inline
+        # program, a long pytest payload). Its identity is still verifiable from
+        # stat+comm, and the high-recall classifier keeps the conservative candidate
+        # path and inspects the process environment for ownership markers, so an
+        # oversized cmdline must not refuse the whole allocation.
+        return (pid, starttime, fields[0]), comm, ()
     argv = tuple(
         item.decode('utf-8')
         for item in raw_cmdline.split(b'\0')

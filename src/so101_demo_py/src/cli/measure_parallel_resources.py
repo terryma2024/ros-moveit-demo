@@ -134,7 +134,14 @@ def main(argv=None, *, runner_factory=None, capability_probe=None, session_facto
         config = load_parallel_runtime_config_v2(options.config)
         if config.deployment.approved_profile_path is not None:
             raise MeasurementCliError("CANDIDATE_CONFIG_MUST_HAVE_NULL_DEPLOYMENT")
-        capability = (capability_probe or require_measurement_capabilities)()
+        if capability_probe is not None:
+            capability = capability_probe()
+        else:
+            # The capability probe must verify the same cgroup/device selection the
+            # session will own; validating a different object would not prove the
+            # delegated capability the measurement actually relies on.
+            capability = require_measurement_capabilities(
+                cgroup_parent=options.cgroup_parent, device_index=options.device_index)
         # The composition is determined by the sealed authorization alone: an inherited
         # production authority is refused inside the composer, not accepted as a grant.
         authorization, gate = compose_measurement_admission(
