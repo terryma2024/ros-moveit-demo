@@ -4520,3 +4520,25 @@ next diagnostic is arithmetic rather than exploratory: list the per-sample times
 between making the sampler robust under that load and giving the workload-start window the same
 documented, bounded treatment the attach point already has -- never widening the allowance itself,
 which is policy.
+
+## CP-UQ93 — The gap arithmetic, and where the cost is
+
+Measured from `n1-calibration-20260918-run59-session/raw/samples.jsonl` rather than inferred: 53
+samples over 3.51 s, with typical intervals of 60-80 ms and exactly **one 190.3 ms interval**, between
+the 51st and 52nd sample. Around the abort the sample times are 3.13, 3.19, 3.26, 3.32, 3.39, 3.58 s
+from `SAMPLING_START`, so the offending interval is the last one and the latch follows it. Diagnostics
+in those samples are ordinary (`cpu_usage_us` rising, `mem_available_bytes` ~27.1 GB), so nothing
+about the workload stands out in the data -- the pass itself took 190 ms while the broker and worker
+were starting.
+
+That shape points at what each pass costs, not at the allowance: every pass re-derives *capacity*
+(`/proc/meminfo`, the cgroup ancestor walk for cpuset/quota, and an NVML device refresh) even though
+those are stable for the whole batch, and under the startup load that work is what stretches the
+interval. Caching the capacity portion for the session -- while `observed`, `background`, `remaining`
+and `error` keep updating every sample -- shrinks the pass without touching any policy value, and the
+safety rules read the per-sample dimensions rather than capacity drift.
+
+That is the chosen direction, recorded before implementing it: measure the pass cost with the cache
+in place, and if a single pass still exceeds the allowance under load, give the workload-start window
+the same documented, bounded treatment the attach point already has rather than widening
+`maximum_sample_gap_s`, which is policy.
