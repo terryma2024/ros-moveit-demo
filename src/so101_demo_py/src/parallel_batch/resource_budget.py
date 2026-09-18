@@ -1627,7 +1627,7 @@ _RUNTIME_FACT_FIELDS = (
     "cpu_quota_core_equivalent", "cuda_visible_devices", "gpu_index", "gpu_name",
     "gpu_total_bytes", "gpu_uuid", "install_kind", "install_prefix", "kernel",
     "mem_total_bytes", "mujoco_gl", "provenance_binding_sha256", "python",
-    "ros_domain_id", "source_commit", "swap_total_bytes", "thread_environment",
+    "ros_domain_id", "source_commit", "thread_environment",
 )
 
 
@@ -1642,9 +1642,8 @@ class HostFacts:
 
     mem_total_bytes: int
     mem_available_bytes: int
-    swap_total_bytes: int
-    swap_pages: int
-    psi_full_s: float
+    # CPU/RAM/GPU-only amendment (74d6b781): no swap or PSI facts exist here, so a
+    # SwapTotal difference cannot reach R or any admission decision.
     cpu_capacity: float
     cpu_host_cores: int
     cpu_set_used_core_equivalent: float
@@ -1665,14 +1664,14 @@ class HostFacts:
     facts: Mapping[str, object]
 
     def __post_init__(self) -> None:
-        for name in ("mem_total_bytes", "mem_available_bytes", "swap_total_bytes",
+        for name in ("mem_total_bytes", "mem_available_bytes",
                      "cpu_host_cores", "nr_throttled", "own_tree_rss_bytes"):
             value = getattr(self, name)
             if type(value) is not int or value < 0:
                 raise ContractError(f"HOST_FACT_INTEGER: {name}")
         if self.mem_total_bytes <= 0:
             raise ContractError("HOST_FACT_INTEGER: mem_total_bytes")
-        for name in ("psi_full_s", "cpu_capacity", "cpu_set_used_core_equivalent",
+        for name in ("cpu_capacity", "cpu_set_used_core_equivalent",
                      "cpu_host_used_core_equivalent", "gpu_total_bytes", "gpu_used_bytes",
                      "own_tree_gpu_bytes"):
             value = getattr(self, name)
@@ -1697,27 +1696,6 @@ def _read_meminfo_values() -> dict[str, int]:
     if "MemTotal" not in values or "MemAvailable" not in values:
         raise ContractError("RESOURCE_PROBE_FAILED")
     return values
-
-
-def _read_swap_pages() -> int:
-    total = 0
-    for line in Path("/proc/vmstat").read_text().splitlines():
-        name, _, value = line.partition(" ")
-        if name in ("pswpin", "pswpout"):
-            total += int(value)
-    return total
-
-
-def _read_psi_full_s() -> float:
-    try:
-        for line in Path("/proc/pressure/memory").read_text().splitlines():
-            if line.startswith("full "):
-                for token in line.split()[1:]:
-                    if token.startswith("total="):
-                        return float(token.split("=", 1)[1]) / 1_000_000.0
-    except OSError:
-        return 0.0
-    return 0.0
 
 
 def _cgroup_ancestors() -> tuple[Path, ...]:
@@ -1957,8 +1935,6 @@ def probe_host_facts(
     try:
         memory = _read_meminfo_values()
         ancestors = _cgroup_ancestors()
-        swap_pages = _read_swap_pages()
-        psi_full_s = _read_psi_full_s()
         cpuset = _effective_cpuset(ancestors)
         quota = _quota_core_equivalent(ancestors)
         usage_usec, nr_throttled = _cgroup_counters(ancestors)
@@ -1995,7 +1971,6 @@ def probe_host_facts(
         "python": platform.python_version(),
         "ros_domain_id": environment.get("ROS_DOMAIN_ID", ""),
         "source_commit": "",
-        "swap_total_bytes": int(memory.get("SwapTotal", 0)),
         "thread_environment": {
             name: environment.get(name, "")
             for name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
@@ -2005,9 +1980,6 @@ def probe_host_facts(
     return HostFacts(
         mem_total_bytes=int(memory["MemTotal"]),
         mem_available_bytes=int(memory["MemAvailable"]),
-        swap_total_bytes=int(memory.get("SwapTotal", 0)),
-        swap_pages=int(swap_pages),
-        psi_full_s=float(psi_full_s),
         cpu_capacity=cpu_capacity,
         cpu_host_cores=int(facts["cpu_host_cores"]),
         cpu_set_used_core_equivalent=round(float(set_used), 6),
@@ -2091,14 +2063,15 @@ class LiveObservationSource:
     def __call__(self) -> LiveResourceObservation:
         facts = self._facts()
         previous = self._previous
-        counters = (facts.swap_pages, facts.psi_full_s, facts.nr_throttled)
+        # CPU/RAM/GPU-only amendment (74d6b781): only throttling is carried across
+        # samples; swap and PSI are not observed at all and stay explicitly absent.
+        counters = (facts.nr_throttled,)
         self._previous = counters
+        swap_delta, psi_delta = None, None
         if previous is None:
-            swap_delta, psi_delta, throttle_delta = 0, 0.0, 0
+            throttle_delta = 0
         else:
-            swap_delta = max(0, facts.swap_pages - previous[0])
-            psi_delta = max(0.0, facts.psi_full_s - previous[1])
-            throttle_delta = max(0, facts.nr_throttled - previous[2])
+            throttle_delta = max(0, facts.nr_throttled - previous[0])
         background = {
             "ram_bytes": float(facts.mem_total_bytes - facts.mem_available_bytes),
             "gpu_bytes": float(facts.gpu_used_bytes),
@@ -2128,8 +2101,8 @@ class LiveObservationSource:
             remaining={name: 0.0 for name in DIMENSIONS},
             error={name: 0.0 for name in DIMENSIONS},
             attribution_complete=bool(facts.attributed),
-            swap_delta=int(swap_delta),
-            psi_full_delta=float(psi_delta),
+            swap_delta=swap_delta,
+            psi_full_delta=psi_delta,
             throttled=bool(throttle_delta > 0),
         )
 

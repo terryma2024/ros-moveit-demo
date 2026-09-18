@@ -147,8 +147,8 @@ class HermeticDevice:
 
 def _host_facts(**overrides) -> HostFacts:
     values = {
-        "mem_total_bytes": 1000, "mem_available_bytes": 820, "swap_total_bytes": 0,
-        "swap_pages": 0, "psi_full_s": 0.0, "cpu_capacity": 8.0, "cpu_host_cores": 24,
+        "mem_total_bytes": 1000, "mem_available_bytes": 820,
+        "cpu_capacity": 8.0, "cpu_host_cores": 24,
         "cpu_set_used_core_equivalent": 0.1, "cpu_host_used_core_equivalent": 0.1,
         "cpu_quota_core_equivalent": 8.0, "cpuset": "0-7", "nr_throttled": 0,
         "gpu_index": 0, "gpu_name": "hermetic-gpu", "gpu_uuid": "GPU-hermetic",
