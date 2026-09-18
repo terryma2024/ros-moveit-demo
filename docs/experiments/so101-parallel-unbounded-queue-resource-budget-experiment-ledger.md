@@ -5152,3 +5152,52 @@ test has been written. Task 1 is classification and preservation only. All old e
 run1..run76, the Stage C halt record, sealed files, failed runs — remains exactly where it was.
 
 Next: **Task 2**, the shared `start_guard.py` decision model with genuine RED before implementation.
+
+
+## CP-UQ115 — Tasks 2 and 3: the guard decides, and the active contract is v3
+
+Both tasks ran RED before GREEN, with the RED failure being the intended behaviour rather
+than a collection error.
+
+**Task 2 — `parallel_batch/start_guard.py` + `test/test_parallel_start_guard.py`.** RED
+(`lg-t2-red`): 43 collected, **41 failed, 0 errors**, including the intended
+`test_equal_floor_passes` (the stub returned FAIL where the design says an equal floor
+passes). GREEN (`lg-t2-green2`): **44 passed**, exit 0, `-n 8`, JUnit and scratch recorded.
+The module implements the closed `StartGuardPolicy`/`GuardScope`/`ResourceSnapshot`/
+`GuardCheck`/`GuardResult` models, a pure `evaluate_snapshot`, and `probe_snapshot` behind
+injectable low-level ports. Two real defects were found and fixed by the tests rather than
+argued away: NVML needs `nvmlInit_v2()` before any call (without it `nvmlDeviceGetCount_v2`
+failed on this host), and an empty device list must report `GPU_TARGET_UNAVAILABLE`
+(missing device) rather than `GPU_TARGET_NOT_VISIBLE` (wrong device). A forbidden-read
+fixture raises `AssertionError` on any paging/stall file read or Git invocation and the
+suite still passes; a real-host test proves the real cgroup/meminfo/NVML path works
+(0.119 s, 24 cores, 26.09 GiB available, GPU `GPU-0b7689c1-…`, status PASS).
+
+**Task 3 — closed v3 contract, pure history reader.** RED (`lg-t3-red`, with the v3 block
+temporarily removed): 66 collected, **11 failed, 0 errors**, i.e. the v3 contract genuinely
+did not exist. That RED also caught a real bug in my own history reader:
+`test_history_projection_is_read_only` failed with "DID NOT RAISE", because the returned
+mapping was a plain dict. GREEN (`lg-t3-green4`): **98 passed**, exit 0, across
+`test_parallel_batch_contracts.py`, `test_parallel_history.py` and
+`test_parallel_adaptive_contracts.py`.
+
+What v3 is: top level exactly `{schema_version, execution, start_guard}`; `execution` is
+exactly the 38 reviewed fields with `sampling`/`safety`/`coverage` gone and the GPU selector
+moved to `execution.gpu_device` (`selector_kind` + `selector`, no implicit host 0);
+`start_guard` is exactly the five policy fields; the whole `deployment` section is deleted.
+`BatchRequestV3`, `batch_request_to_document` and `batch_request_from_document` are in
+place, and `require_v3_execution` refuses every version but 3 with
+`CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION`; `batch_request_from_document(..., for_execution=
+False)` returns a plain read-only mapping for v1/v2 rather than converting it into an active
+request. `history.py` imports nothing from the retired chain: a subprocess test asserts that
+loading a retained document leaves `resource_budget`, `resource_measurement`,
+`measurement_control`, `owned_resources`, `start_guard_probe` and `start_guard` out of
+`sys.modules`, that the sealed bytes and directory listing are unchanged, and that the
+returned view refuses mutation. `parallel_batch_v3.yaml` mirrors the v2 functional values
+and is picked up by the existing config glob at install time.
+
+Commits: `795e29679` (Task 2), this checkpoint's commit (Task 3). Next: **Task 4**, the
+bounded 2 s probe helper with cross-process single-flight and the durable
+cleanup-blocked contract.
+
+_Ledger HEAD when written: `70df7c6c8`._
