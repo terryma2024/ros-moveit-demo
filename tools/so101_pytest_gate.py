@@ -27,6 +27,9 @@ SERIAL_MODULE_REASONS = {
     "test_parallel_batch_resources.py": (
         "preserves the established first-module ordering for process/resource probes"
     ),
+    "test_parallel_start_guard_launch.py": (
+        "runs the real installed allocator entry, which claims the frozen ROS domain locks"
+    ),
     "test_text_pick_agent_e2e_process.py": (
         "owns real launch child process trees and preserves the established second-module ordering"
     ),
