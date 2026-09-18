@@ -3283,3 +3283,29 @@ expects, and verify before spawning that the tag's current image id equals the s
 refusing with its own code otherwise -- the digest stays meaningful and the launcher's check is
 satisfied. That fix, a re-seal (r12) and the re-run are the next step. N1 remains
 `NOT_MEASURED`; nothing is extrapolated to another N.
+
+## CP-UQ50 — Stage C: the digest/tag split is closed, and the launcher wants a console on PATH
+
+Runs: `stage-c/batches/n1-calibration-20260918-run{10,11}/`,
+`scratch/stageC-fix9.*/`, `scratch/stageC-auth.S2WPqrz0/measure1{6,7}.log`.
+
+Committed `b3afaad2e` and `0cdea3f2d` close the broker-binding contradiction recorded in CP-UQ49
+by giving the two concepts two arguments instead of one value: the runner proves the local tag
+still carries the sealed digest (`verify_broker_image`, injectable inspector, three tests) and
+spawns the launcher with `--broker-image <tag>` plus the new `--broker-image-id <sealed digest>`;
+the launcher's own constant check reads the tag, and the measurement-argument check reads the
+digest when it is supplied. r12 (`4b7dc13ac1c2dbf7…`) sealed the digest as *observed*, read with
+`docker image inspect --format {{.Id}}` rather than transcribed, and r13 (`dbf8d1df4e714b30…`)
+resealed after the argv change. 28 tests pass in the measurement default-path file.
+
+run10 then failed with `MEASUREMENT_ARGUMENT_MISMATCH: BROKER_IMAGE` (the launcher's own argument
+check still receiving the tag) and run11 with `PROVENANCE_CONSOLE_MISSING`. The latter is the new
+barrier and it is not about the broker: the launcher's provenance composition calls
+`shutil.which("so101_parallel_batch")` and refuses when the console is not on `PATH`, but neither
+the frozen install nor the dev-build prefix ships a `bin/` console and the task environment does
+not expose one either (`command -v so101_parallel_batch` -> not found). A measurement run reaches
+its provenance through the sealed `--provenance-binding`, and the user's debug-only amendment
+already settled that a source commit or prefix observation at runtime is never authority, so the
+next decision is which side to change: give the child an install prefix whose `bin` carries the
+console, or stop requiring a runtime console on the provenance path that a sealed binding already
+covers. N1 remains `NOT_MEASURED`; nothing is extrapolated to another N.
