@@ -6388,3 +6388,30 @@ their own live inputs such as the model paths and a manifest/lease flow rather t
 configuration-level assertions the manifest cases make).
 
 _Ledger HEAD when written: `8399fdc81`._
+
+
+## CP-UQ148 — Task 11: R01 fails because the deployed service has no model configuration
+
+The acceptance run's own log gives the exact failure, and it is not about the guard: R01
+(sequential live smoke) clicked Start and timed out after 5 s waiting for the
+`Campaign campaign-…` heading (`pages/expert-validation-page.ts:72`), i.e. the campaign never
+started. Because R01 opens the gate every other live case depends on, its failure cascades: the 17
+`functional-cases` entries each fail in ~35 ms on the missing `R01` receipt, which is the fixture's
+gate chain working as designed.
+
+The likely cause is a gap in **my deployment**, not in the fixture: `deploy.sh` started the service
+with the evidence root, web root, the v3 parallel config and `SO101_TASK_ROOT`, but **without the
+functional model configuration** (`SO101_VALIDATION_YOLO_WEIGHTS`,
+`SO101_VALIDATION_GROUNDED_ROOT`, `SO101_VALIDATION_BROKER_IMAGE`) that a campaign start requires —
+the preflight refuses with `VALIDATION_MODELS_NOT_CONFIGURED` when they are absent, which is
+exactly a silent "nothing happens" in the browser. The live-sim fixture only applies those
+variables to a service it *spawns*; in reuse mode (`SO101_LIVE_SERVICE_BASE_URL`) the deployed
+process must carry them itself.
+
+Next action, precise: redeploy the task-owned service with those three variables set to the real
+paths (the values already listed in the fixture's `MODEL_ENV`), then re-run the acceptance; R01
+should start a campaign and the manifest cases should stop being blocked on its gate. Nothing else
+about the run is suspect — global setup, the browser, the deployed capabilities and the
+manifest-driven collection are all confirmed working.
+
+_Ledger HEAD when written: `df9856c26`._
