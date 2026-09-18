@@ -3411,3 +3411,34 @@ is narrow and testable: which mapping the validator actually iterates, and what 
 answers -- print `overlay_identity["package_prefixes"]` as the launcher derives it alongside the
 child's own `get_package_prefix` results, and compare. N1 remains `NOT_MEASURED`; nothing is
 extrapolated to another N.
+
+## CP-UQ55 — Stage C: three installs, and the measured module must be the child's
+
+Commits `ba6a84037`, `168b86a5e` (34 passed). Run: `stage-c/batches/n1-calibration-20260918-run16/`.
+
+The overlay binding is now internally coherent and complete -- `build_root`/`install_root` at the
+sealed `freeze-install`, console and metadata and config and catalog all under it, hashes computed
+from the bytes (see `raw/overlay-provenance-binding.json`). It still refuses with
+`PROVENANCE_EXTERNAL_PACKAGE_PREFIX`, and the recorded paths show why the remaining candidate is
+real: `coordinator_module` points into the worktree source
+(`src/so101_demo_py/src/cli/mujoco_parallel_batch.py`) because the harness process imports
+`so101_demo` from the source tree, while the launcher child's own tracebacks show it importing from
+`dev-build`. The launcher compares the module it is running against the declared artifact, so the
+overlay has to declare the module the *child* will import, not the one the harness imported.
+
+Two corrections to earlier entries, both from reading the layouts properly this time:
+
+- CP-UQ53 said the frozen copy carries no package tree. That is wrong: it has one at
+  `freeze-install/so101_demo_py/lib/python3.12/site-packages/so101_demo/`, with
+  `so101_demo_py-0.1.0-py3.12.egg-info` beside it. What it lacks is `bin/`; the console lives at
+  `lib/so101_demo_py/so101_parallel_batch`.
+- Three installs are in play, not two: `freeze-install` (console, metadata, package copy, share),
+  `dev-build` (package tree that equals the source, metadata, no `lib/`, no console) and
+  `dev-install` (what AMENT answers for, `dev-install/so101_demo_py`).
+
+That makes the decision concrete rather than exploratory. Either the child is pinned to import the
+frozen copy -- in which case that copy must first be rebuilt from the current source, because the
+launcher's tree comparison is exact and the frozen package predates this stage's repairs -- or the
+measurement is declared to run the build tree, in which case `dev-build` needs the console and the
+declared trees must say so. Both are rebuild-shaped decisions; neither is a probe. N1 remains
+`NOT_MEASURED` and nothing is extrapolated to another N.
