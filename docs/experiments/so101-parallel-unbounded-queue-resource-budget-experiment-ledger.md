@@ -5817,3 +5817,40 @@ the normal task-owned deployment, which must export `SO101_TASK_ROOT` (the guard
 root, see CP-UQ123) alongside the service's existing environment, then read back served bytes.
 
 _Ledger HEAD when written: `b57e544e3`._
+
+
+## CP-UQ129 — Task 10: the service now runs from the copied install, and the served bytes are read back
+
+The normal task-owned deployment was executed in order, from the immutable copy produced in
+Task 9, with the record kept at `/tmp/so101-debug-startup-probe-b82d10b8/deploy.json`:
+
+- **Ordered stop of the old owned service**: the process holding `127.0.0.1:8010` (PID
+  `1993965`, starttime `156057171`, started
+  2026-09-18 22:09:39 from the superseded `freeze-install` prefix) received `SIGTERM` and was
+  confirmed gone (`exited: true`) before anything new started — no
+  double stack, no port stealing, and no foreign object was touched.
+- **Start from the copy**: `/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main/unbounded-queue-resource-budget/copy-install-light.uJr9RhIc/so101_teleop/lib/so101_teleop/so101_expert_validation_server.py` with the copied prefixes on the environment, the
+  installed web root `/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main/unbounded-queue-resource-budget/copy-install-light.uJr9RhIc/so101_teleop/share/so101_teleop/web`, the **v3** config
+  `.../config/mujoco/parallel_batch_v3.yaml`, a fresh service state root
+  (`/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main/unbounded-queue-resource-budget/service-light.L1lHLiTz/state`) and — this is the requirement found in CP-UQ123 — the shared
+  guard root `SO101_TASK_ROOT=/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main/unbounded-queue-resource-budget`. Without it the guard fails closed by design.
+- **Readback**: `/health` → `{"ok": true, "service": "expert-validation"}`; the served
+  `/expert-validation` page hashes to `c09fc43a38261065` and the **installed** copy's
+  `index.html` hashes to `c09fc43a38261065`, i.e. `served_matches_installed =
+  True` — the browser is being given the deployed bytes, not a
+  worktree asset.
+- **Capabilities are live and guard-shaped**: the response now carries
+  `start_guard_policy = {"cpu_busy_warn_fraction": 0.9, "gpu_minimum_bytes": 1073741824, "ram_minimum_bytes": 1073741824, "ram_minimum_fraction": 0.05, "timeout_s": 2.0}`
+  alongside the functional `worker_count_availability`, which is the Task 7 projection working
+  against a real process rather than a test harness.
+
+This is the deployment the acceptance work needs: same port, same task-owned window, new
+prefix, guard enforced, bytes verified.
+
+**Still running**: the two `so101_pytest` directory runs from CP-UQ128. Next round collects their
+exit codes and then moves to **Task 11** — the browser/API acceptance across every supported
+worker option (4-point and 20-point batches per fixed N, the adaptive ladder, control/cancel/
+recovery, the N1 FULL_RESTART single-point retry) plus the five consecutive valid physical
+batches — using the service just deployed.
+
+_Ledger HEAD when written: `68a4bd6c9`._
