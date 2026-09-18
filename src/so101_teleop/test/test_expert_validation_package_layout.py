@@ -20,6 +20,7 @@ EXPERT_VALIDATION_TESTS = {
     "test_expert_validation_e2e_installed_port",
     "test_expert_validation_executor_registry",
     "test_expert_validation_frozen_manifest",
+    "test_expert_validation_installed_budget",
     "test_expert_validation_lease",
     "test_expert_validation_main",
     "test_expert_validation_operator_recovery",
