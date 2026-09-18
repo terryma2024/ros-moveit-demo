@@ -935,3 +935,19 @@ def test_private_batch_root_is_created_and_tightened(tmp_path):
     assert (root.stat().st_mode & 0o777) == 0o700
     loose = parent / "batch-b"; loose.mkdir(mode=0o775)
     assert (ensure_private_batch_root(loose).stat().st_mode & 0o777) == 0o700
+
+
+def test_entry_points_come_from_the_sealed_install_prefix(tmp_path):
+    """The launcher requires the metadata file to live under its build root, so it is
+    taken from the sealed install prefix rather than from this interpreter's metadata."""
+
+    from so101_demo.cli.measure_parallel_resources import (
+        MeasurementCliError, install_prefix_entry_points)
+
+    site = tmp_path / "so101_demo_py/lib/python3.12/site-packages"
+    egg = site / "so101_demo_py-0.1.0-py3.12.egg-info"
+    egg.mkdir(parents=True)
+    (egg / "entry_points.txt").write_text("[console_scripts]\n")
+    assert install_prefix_entry_points(tmp_path) == egg / "entry_points.txt"
+    with pytest.raises(MeasurementCliError, match="MEASUREMENT_OVERLAY_INPUT_MISSING"):
+        install_prefix_entry_points(tmp_path / "absent")
