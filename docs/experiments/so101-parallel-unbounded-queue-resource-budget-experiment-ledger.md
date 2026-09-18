@@ -1391,3 +1391,70 @@ open_risks:
 next_command: run the OpenAPI export and Web tests for Task 11 (no-K UI, availability, contract/installed
   specs) after updating web/src and e2e fixtures
 ```
+
+## EXP-UQ15 — Task 11 Web/OpenAPI no-quota surface and contract e2e
+
+```yaml
+experiment_id: EXP-UQ15
+status: VALID
+prior_experiment: EXP-UQ14
+hypothesis: Regenerating the OpenAPI/types and rewriting the setup UI removes the quota input and
+  capacity display while exposing exact-N availability, and the contract e2e specs can assert the new
+  request/availability contract end to end in Chrome.
+prediction: Web unit tests and the contract specs pass with the v2 bodies; the built app no longer
+  renders the quota input.
+single_variable: OpenAPI schema + Web UI + contract/installed fixtures
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Task 10 committed; clean HEAD; bun 1.3.14 with the existing lock; no service started.
+success_criteria:
+  - OpenAPI export carries contract_version and worker_count_availability and no
+    fixed_max_points_per_worker; generated TS types regenerated from it.
+  - Setup UI shows the shared-queue copy and exact-N status/reasons, has no quota input and no Capacity
+    text, and blocks Start unless the exact N is selectable.
+  - Contract specs (setup + live-preflight) pass in real Chrome; Web unit suite and build pass.
+failure_criteria:
+  - Any residual quota input, capacity claim, or unversioned request body.
+invalid_criteria:
+  - A dirty worktree invalidating the provenance binding counted as a product failure (the binding was
+    regenerated for the clean commit, which is the designed metadata boundary rule).
+provenance:
+  source_commit: f19efb21233812f695bf6204f7d98301397c54ae
+  install_overlay: $TASK_ROOT/dev-install for the Stage-A contract gate
+  runtime_executable: $TASK_ROOT/venv/bin/python + bun 1.3.14
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: $TEST_PYTHON -m so101_teleop.openapi_export --validation src/so101_teleop/so101_teleop/expert_validation_openapi.json
+    exit_code: 0
+  - command: so101_bun api-types run generate:api:validation
+    exit_code: 0
+  - command: so101_bun web-unit-final run test
+    exit_code: 0
+  - command: so101_bun web-build-v2e run build
+    exit_code: 0
+  - command: so101_bun contract-setup-v2h run test:e2e e2e/expert-validation/contract/setup.spec.ts e2e/expert-validation/contract/live-preflight.spec.ts
+    exit_code: 0
+observed:
+  - OpenAPI: CapabilitiesResponse exposes worker_count_availability and no fixed_max_points_per_worker;
+    the only remaining max_points_per_worker is the historical WorkerProjectionResponse field, which the
+    plan allows for history projection.
+  - Web unit suite 114 passed / 28 files; web build exit 0 (built in 2.7 s).
+  - Contract e2e: 17 passed / 0 failed in real Chrome against the scripted server, including C06
+    availability refusal, C07 versioned adaptive body, C08/C22 forged-body lease errors and the N8
+    availability preview. The gate initially failed twice for real reasons: the scripted capability model
+    needed keyword construction (pydantic BaseModel), and the live-sim provenance binding rejects a dirty
+    tracked tree, so the binding was regenerated for the clean commit.
+  - Fixture migration: setup/installed/live-sim page objects and specs, support.ts fixed/adaptive configs,
+    the two scenario YAMLs and scenario.schema.json now carry contract_version 2 and
+    worker_count_availability; resolvePackagePrefixes() was added to fixtures/installed.ts and reused by
+    live-sim so both gates audit the same overlay/underlay origins.
+  - Environment finding: vitest needs NODE_ENV=test (the inherited NODE_ENV=production breaks
+    @testing-library/react act()); recorded as so101_web_test_env in the task env helper.
+inferred:
+  - The installed gate must run from the copied offline overlay (Stage B), not the dev symlink overlay.
+conclusion: VALID for the Stage A Web/contract surface.
+evidence:
+  - browser/web-unit-final.*, browser/web-build-v2e.*, browser/contract-setup-v2h.*, bindings/dev-contract-binding.json
+decision: KEEP
+next_experiment: EXP-UQ16 (offline copied install + installed gate)
