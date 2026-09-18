@@ -7802,3 +7802,24 @@ evidence file exists until the case terminates with cleanup, so no outcome is cl
 follows in the same job.
 
 _Ledger HEAD when written: `7df9387e5`._
+
+## CP-UQ194 — Two twenty-point campaigns executed for real, twenty points each, no failures
+
+The 20-point batch finished with its own code, `EXEC_N23P20_RC=0` and `4 passed (24.3m)`:
+
+| Case | Slots (leases) | Points | Failed | Terminal | Cleanup | Timing |
+| --- | --- | --- | --- | --- | --- | --- |
+| `fixed-n2-p20` | 2 (10, 10) | 20/20 `PASSED` | none | `COMPLETED` | true | 14.1 m |
+| `fixed-n3-p20` | 3 (7, 7, 6) | 20/20 `PASSED` | none | `COMPLETED` | true | 10.2 m |
+
+Both were driven through the deployed console with `requested == evaluated == 20`, and the lease
+distribution is itself the evidence for the fixed-N contract: at N=2 each slot carried exactly ten
+points, at N=3 the twenty points split 7/7/6, and the campaign closed with a terminal status and a
+complete cleanup rather than being truncated at a maximum N or downgraded. Their records are
+`execution-fixed-n2-p20.json` and `execution-fixed-n3-p20.json` under the run's evidence directory
+(`browser/lg-exec-n23p20.V1Lr9zo7/runtime/*/`).
+
+With CP-UQ192 this makes nine of the fourteen fixed-N campaigns (seven four-point, two twenty-point)
+executed for real; the remaining twenty-point options are N=4..8, then the sequential four-point case.
+
+_Ledger HEAD when written: `2964a9a88`._
