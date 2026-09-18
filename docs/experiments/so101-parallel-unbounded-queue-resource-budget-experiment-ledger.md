@@ -6212,3 +6212,29 @@ that can wait for it (the CP-UQ128 runs are still occupying that path and are be
 undisturbed as instructed). Task 11's functional manifest and acceptance remain after that.
 
 _Ledger HEAD when written: `5b9416795`._
+
+
+## CP-UQ141 — The pre-fix defect caught in the act by the long-running gate
+
+The `lg-demo-full` run started in CP-UQ128 (still running, undisturbed as instructed) is
+executing the **old** delegation, and its live process tree is the clearest possible evidence
+for the correction's observation 01:58:
+
+```
+zsh tools/pytest-parallel.zsh lg-demo-full src/so101_demo_py/test src/so101_demo_py/test -q
+  └─ pytest <six audited serial modules> src/so101_demo_py/test -q -q -p no:cacheprovider
+       --junitxml=scratch/lg-demo-full.f1fYAWaF/serial.xml
+```
+
+The helper received the root **twice** (its own `$1` plus a forwarded copy), and the serial phase
+therefore runs the whole ordinary package *after* the six serial modules — the exact duplication
+and foreign-case risk described. Its argv was copied into the preserved evidence as
+`live-prefix-serial.argv.txt` before the run finishes.
+
+This also explains why those runs have been slow: the serial lane is re-executing the entire
+suite serially. They are left to finish (their results, including any failed coverage verdict,
+stay as evidence), and the corrected delegation is already in place for every subsequent run —
+so the bounded positive run for correction item 2 should be started once this path is free rather
+than competing with it for the same package, ROS domains and ports.
+
+_Ledger HEAD when written: `3784009e9`._
