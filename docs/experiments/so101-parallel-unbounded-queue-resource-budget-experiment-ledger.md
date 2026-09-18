@@ -7209,3 +7209,67 @@ Next: replay the deployment environment with that prefix prepended (the same
 acceptance — first the cheap `preflight + r01-sequential` probe, then the full manifest.
 
 _Ledger HEAD when written: `d896b9eb6`._
+
+## CP-UQ177 — The deployment is repaired and the first real four-point campaign passes
+
+With the rebuilt prefix in the deployment (the stale shared fork library is not used any more; the
+service env is the live `/proc/<pid>/environ` replay with only the task-owned prefix's five path
+variables prepended, and `DISPLAY`/`XAUTHORITY`/`XDG_RUNTIME_DIR` dropped again since CP-UQ174
+showed they change nothing), the R01 probe finally runs real work:
+
+| Fact | Value |
+| --- | --- |
+| Campaign | `campaign-e93f0a7d1b6b4e51b2829c0c839f0467` (batch `b4f0f`) |
+| Points | `P01 task_start`, `P02 cup_test_forward_5cm`, `P03 cup_test_left_5cm`, `P04 cup_test_right_5cm` — **all four `PASSED`**, 13 artifacts each |
+| Terminal state | `COMPLETED`, `batch_cleanup_complete: true` |
+| Sim | `Simulation paused.` repeatedly with **zero** segfaults, controllers `active`, `READY` evidence present |
+| Broker | container from the rebuilt image (`0b893cb1528e`), then cleanly gone |
+
+Two of my own mistakes on the way there are worth keeping, because both were caught by fail-closed
+behaviour rather than by luck:
+
+- **Replacing the prefix variables instead of prepending them** made the service resolve
+  `so101_demo_py` to the symlink-installed `dev-install` share, and `_required_file` rejects
+  symlinks, so it died with `SO101_VALIDATION_POINTS_INVALID`. The fix is to prepend only the new
+  prefix's own package entries; the log of that failed start is kept in
+  `service-light.TOt1EevE/server.log`.
+- **A delta computation that looked equivalent was not.** Deriving "what the new prefix adds" by
+  diffing two shells also swept in three `dev-install` entries, reproducing the same failure
+  (`service-light.eNHRKApC/server.log`). Explicit entry lists are used instead.
+
+**The campaign passed while the spec failed, and that is the important finding.** The R01 spec's
+first assertion after the flow checks is the journal:
+
+```
+expect(events.filter((event) => event.type === "BATCH_STARTED")).toHaveLength(1);
+Received array: []
+```
+
+The journal file on disk is fine and full — 510 KB, framed records, containing `BATCH_STARTED`,
+four `RESULT_COMMITTED`, `BATCH_CLEANUP_COMPLETE`, 362 `LEASE_RENEWED` and so on. The reader found
+nothing because the fixture had pointed `stateDir` at `join(caseDir, "state")` — a directory under
+the *browser run* — which is correct only when the fixture spawns its own service. In the reuse mode
+the plan introduced, the deployed service keeps its own root, so `readJournalEvents` saw no `events`
+directory and returned `[]` **silently**. Every journal assertion in the live specs was therefore
+vacuous in reuse mode.
+
+That is fixed test-first, and the fix is in the plan's own surface:
+
+- **RED**: the contract spec gains "live gate requires the deployed service state root when a
+  service is reused" (missing → `LIVE_SIM_SERVICE_STATE_ROOT_REQUIRED`; `/tmp/...` →
+  `LIVE_SIM_SERVICE_STATE_ROOT_INVALID`; owned path → returned as `serviceStateRoot`). Run against
+  the untouched fixture: `2 failed, 6 passed`, with the new test failing on the missing behaviour.
+  The stale provenance-binding test (retired authority, still asserting
+  `LIVE_SIM_PROVENANCE_INVALID`) is replaced in the same edit.
+- **GREEN**: `validateLiveSimPreconditions` now requires `SO101_LIVE_SERVICE_STATE_ROOT` whenever
+  `SO101_LIVE_SERVICE_BASE_URL` is set, fails closed unless it is an existing owned
+  `/data/work/so101-evidence/…` directory, and returns it as `serviceStateRoot`; the fixture uses
+  it as `stateDir` and only creates a fresh root when it owns the service. Contract spec:
+  **`8 passed`**, `CONTRACT_RC=0`
+  (`browser/lg-contract-live-preflight.VNYIIEWz`). Committed as `a0cfbdb59`.
+
+The first reuse-mode probe that ran *with* the declared root is in flight
+(`lg-r01-probe4`, service `service-light.5OsAfpFe`, campaign
+`campaign-51cb982bee32481ba5c62b0134f88f96`).
+
+_Ledger HEAD when written: `a0cfbdb59`._
