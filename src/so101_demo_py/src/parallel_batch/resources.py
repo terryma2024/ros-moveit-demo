@@ -20,12 +20,14 @@ from types import MappingProxyType
 from typing import Mapping
 import uuid
 
+from ..runtime.parallel_ipc import IpcError, require_transport_basename
 from .contracts import load_parallel_runtime_config, ParallelRuntimeConfig
 
 
 _DEFAULT_WORKER_COUNT = 2
 _NOT_APPLICABLE = 'not_applicable'
-_UNIX_SOCKET_PATH_MAX_BYTES = 107
+_UNIX_SOCKET_PATH_MAX_BYTES = 107  # retained name; the kernel budget lives in the transport
+_UNIX_SOCKADDR_CAPACITY_BYTES = 108
 _MEM_AVAILABLE = re.compile(r'^MemAvailable:[ \t]+([0-9]+)[ \t]+kB$')
 _SHA256 = re.compile(r'^[0-9a-f]{64}$')
 _SHA1 = re.compile(r'^[0-9a-f]{40}$')
@@ -1510,8 +1512,12 @@ class WorkerResourceAllocator:
         for item in paths:
             socket_path = item['socket_path']
             assert isinstance(socket_path, Path)
-            if len(os.fsencode(socket_path)) > _UNIX_SOCKET_PATH_MAX_BYTES:
-                raise ResourceAllocationError(f'UNIX_SOCKET_PATH_TOO_LONG: {socket_path}')
+            # The durable canonical path may exceed 107 bytes; only the exact kernel
+            # sockaddr built from the owned parent descriptor must fit sun_path.
+            try:
+                require_transport_basename(socket_path)
+            except IpcError as error:
+                raise ResourceAllocationError(str(error)) from error
         self._probe_namespace_collisions(
             paths, domains
         )

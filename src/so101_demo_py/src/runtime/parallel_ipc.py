@@ -22,6 +22,52 @@ class IpcError(RuntimeError):
     """A frame, identity, authentication, or transport contract failed."""
 
 
+# Linux sun_path capacity in bytes, including the terminating NUL. The kernel sees the
+# sockaddr string, not the durable canonical path, so the dirfd transport below keeps
+# the kernel address short while manifests/audits keep the absolute durable path.
+UNIX_SOCKADDR_CAPACITY_BYTES = 108
+_PROC_FD_ROOT = Path("/proc/self/fd")
+_TRANSPORT_PREFIX = "/proc/self/fd/"
+_MAX_FD_DIGITS = 10
+
+
+def require_proc_fd_transport(proc_root: Path | None = None) -> None:
+    """Fail closed when the Linux dirfd transport is unavailable."""
+
+    target = _PROC_FD_ROOT if proc_root is None else Path(proc_root)
+    try:
+        metadata = target.stat()
+    except OSError as error:
+        raise IpcError("UNIX_TRANSPORT_UNAVAILABLE") from error
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise IpcError("UNIX_TRANSPORT_UNAVAILABLE")
+
+
+def require_transport_basename(path: object) -> None:
+    """Preflight without touching the parent: the basename must fit the kernel budget."""
+
+    require_proc_fd_transport()
+    name = Path(path).name
+    encoded = os.fsencode(name)
+    if not encoded or name in {".", ".."} or b"\x00" in encoded:
+        raise IpcError(f"UNIX_SOCKET_BASENAME_INVALID: {path}")
+    # Conservative reservation: unknown fd digits, the separator and the terminating NUL.
+    reserved = len(_TRANSPORT_PREFIX.encode("ascii")) + _MAX_FD_DIGITS + 1 + 1
+    if reserved + len(encoded) > UNIX_SOCKADDR_CAPACITY_BYTES:
+        raise IpcError(f"UNIX_SOCKET_PATH_TOO_LONG: {path}")
+
+
+def transport_address(path: object, parent_fd: int) -> str:
+    """Exact short kernel address; rechecked once the owned parent descriptor exists."""
+
+    if type(parent_fd) is not int or parent_fd < 0:
+        raise IpcError("UNIX_TRANSPORT_DESCRIPTOR")
+    address = f"{_TRANSPORT_PREFIX}{parent_fd}/{Path(path).name}"
+    if len(os.fsencode(address)) + 1 > UNIX_SOCKADDR_CAPACITY_BYTES:
+        raise IpcError(f"UNIX_SOCKET_PATH_TOO_LONG: {path}")
+    return address
+
+
 _REQUEST_FIELDS = {
     "schema_version",
     "kind",
@@ -688,7 +734,7 @@ class AuthenticatedUnixServer:
         self._handlers_condition = threading.Condition()
         self._socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._parent_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        self._address = f"/proc/self/fd/{self._parent_fd}/{self.path.name}"
+        self._address = transport_address(self.path, self._parent_fd)
         try:
             self._socket.bind(self._address)
         except BaseException:
@@ -871,7 +917,7 @@ class UnixRpcClient:
             connection.settimeout(self.deadline_s)
             parent_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
             try:
-                connection.connect(f"/proc/self/fd/{parent_fd}/{self.path.name}")
+                connection.connect(transport_address(self.path, parent_fd))
             finally:
                 os.close(parent_fd)
             connection.sendall(encode_frame(message, max_frame_bytes=self.max_frame_bytes))

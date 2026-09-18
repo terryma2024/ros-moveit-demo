@@ -14,6 +14,7 @@ import time
 import traceback
 from typing import Callable
 
+from ..runtime.parallel_ipc import IpcError, require_transport_basename
 from .adaptive_contracts import (
     AdaptiveWorkerOptions,
     CommittedPointResult,
@@ -135,7 +136,7 @@ _POOL_ID = re.compile(
     r"^(?P<batch>[A-Za-z0-9][A-Za-z0-9_-]*)-"
     r"g(?P<generation>[0-9]{2})-w(?P<count>[0-9]{2})$"
 )
-_UNIX_SOCKET_PATH_MAX_BYTES = 107
+_UNIX_SOCKET_PATH_MAX_BYTES = 107  # retained name; see runtime.parallel_ipc transport
 
 
 def adaptive_socket_paths(
@@ -164,8 +165,10 @@ def _preflight_adaptive_socket_paths(
     pool_root: Path, worker_count: int, *, ipc_root: Path | None = None
 ) -> None:
     for path in adaptive_socket_paths(pool_root, worker_count, ipc_root=ipc_root):
-        if len(os.fsencode(path)) > _UNIX_SOCKET_PATH_MAX_BYTES:
-            raise ValueError(f"UNIX_SOCKET_PATH_TOO_LONG: {path}")
+        try:
+            require_transport_basename(path)
+        except IpcError as error:
+            raise ValueError(str(error)) from error
 
 
 class ProductionAdaptivePool:

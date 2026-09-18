@@ -841,8 +841,13 @@ def test_client_rejects_wrong_response_schema_and_union(tmp_path):
         {"schema_version": 1, "kind": "response", "request_id": "request-1", "idempotency_key": "same-operation-1", "ok": True, "payload": {}, "error": "also-error"},
     ]
     for reply in replies:
+        from so101_demo.runtime.parallel_ipc import transport_address
         listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        listener.bind(str(path))
+        parent_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            listener.bind(transport_address(path, parent_fd))
+        finally:
+            os.close(parent_fd)
         listener.listen(1)
         def serve():
             connection, _ = listener.accept()
