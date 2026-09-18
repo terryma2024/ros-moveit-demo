@@ -4422,3 +4422,27 @@ fix 2 works with the image exactly as sealed -- and the image digest is part of 
 authorization, so fix 2 is the one that does not require re-sealing authority. Both are recorded here;
 the next unit implements fix 2 (and may add fix 1 for the in-tree paths that do run from this
 worktree).
+
+## CP-UQ89 — What fix 2 would need, and the question that decides between the fixes
+
+Comparing the two schemas directly: the v2 document keeps its fields under `execution:` and shares
+almost every name with the v1 schema, but the v1 parser requires six fields that v2 does not carry
+there -- `max_points_per_worker_upper_bound`, `min_logical_cpu_per_worker`, `available_ram_base_gib`,
+`available_ram_per_worker_gib`, `min_available_gpu_gib`, `required_live_headroom_ratio`. A derived
+broker document therefore has to fill those from somewhere legitimate; inventing them from unrelated
+v2 sections would fabricate semantics, which the standing rules forbid. So fix 2 is not a pure
+translation: it needs a real source for those six quantities (the v2 measurement/coverage sections if
+they define the same things, or the sealed authorization), and that has to be established before the
+code is written.
+
+That leaves a question that decides between the two fixes and that I could not close inside this
+round's budget: **how is the broker actually spawned?** The traceback resolves to
+`/opt/venv/lib/python3.12/site-packages/so101_demo/...`, the image's own copy, but there is no
+`docker`/mount code in the launcher CLI or in `runtime/parallel_processes.py`, and no in-tree
+reference to `so101_parallel_perception_broker` outside its own CLI module. If the broker runs from a
+host-mounted tree, fix 1 (version-select the loader in `build_broker_transport`) is enough and
+needs no image change; if it runs from the image's own site-packages, only fix 2 -- with a legitimate
+source for those six fields -- can work against the sealed image digest.
+
+Nothing was changed this round beyond the ledger; the tree is clean and the launcher/broker/worker-1
+chain reached in CP-UQ86 stands.
