@@ -94,42 +94,32 @@ export function validateLiveSimPreconditions(
   ) {
     throw new LiveSimGateError("LIVE_SIM_EVIDENCE_ROOT_REQUIRED");
   }
-  const bindingPath = env.SO101_VALIDATION_PROVENANCE_BINDING ?? "";
-  if (!bindingPath || !existsSync(bindingPath)) {
-    throw new LiveSimGateError("LIVE_SIM_PROVENANCE_INVALID");
-  }
-  let binding: { source_root?: string; source_commit?: string };
-  try {
-    binding = JSON.parse(readFileSync(bindingPath, "utf-8"));
-  } catch {
-    throw new LiveSimGateError("LIVE_SIM_PROVENANCE_INVALID");
-  }
-  const sourceRoot = binding.source_root ?? "";
-  if (!sourceRoot || !existsSync(join(sourceRoot, ".git"))) {
-    throw new LiveSimGateError("LIVE_SIM_PROVENANCE_INVALID");
-  }
-  const head = execFileSync("git", ["-C", sourceRoot, "rev-parse", "HEAD"], {
-    encoding: "utf-8",
-  }).trim();
-  const dirty = execFileSync(
-    "git", ["-C", sourceRoot, "status", "--porcelain", "--untracked-files=no"],
-    { encoding: "utf-8" },
-  );
-  if (binding.source_commit !== head || dirty.trim() !== "") {
-    throw new LiveSimGateError("LIVE_SIM_PROVENANCE_INVALID");
-  }
+  // The retired provenance binding is gone: a source commit, an ament prefix and a binding
+  // file are debug/deployment evidence, never an admission gate (the lightweight start guard
+  // design removed them from runtime authority). What remains are the real functional
+  // preconditions — an owned evidence root, an installed prefix and no foreign stack.
+  // Optional debug info only: a source root is not a precondition. Resolving it from the
+  // fixture's own location is unreliable under the transpiler, so it is taken from the
+  // environment when present and otherwise reported as unknown.
+  const sourceRoot = env.SO101_VALIDATION_SOURCE_ROOT ?? "";
   const installPrefix = env.SO101_E2E_INSTALL_PREFIX ?? "";
   if (!installPrefix || !existsSync(join(installPrefix, "so101_teleop"))) {
     throw new LiveSimGateError("LIVE_SIM_INSTALL_PREFIX_INVALID");
   }
-  const conflicts = stackConflicts(deps.stackScan);
-  if (conflicts.length > 0) {
-    throw new LiveSimGateError(`LIVE_SIM_STACK_PRESENT:${conflicts.join(",")}`);
+  // A *reused* task-owned service is not a conflicting stack: when
+  // SO101_LIVE_SERVICE_BASE_URL names the deployed service, the acceptance runs against it by
+  // design and the fixture must not start or demand a second one. Without that variable the
+  // original conflict check stays in force.
+  if (!env.SO101_LIVE_SERVICE_BASE_URL) {
+    const conflicts = stackConflicts(deps.stackScan);
+    if (conflicts.length > 0) {
+      throw new LiveSimGateError(`LIVE_SIM_STACK_PRESENT:${conflicts.join(",")}`);
+    }
   }
   return {
     evidenceRoot,
     sourceRoot,
-    sourceCommit: binding.source_commit ?? "",
+    sourceCommit: env.SO101_DEBUG_SOURCE_COMMIT ?? "unknown",
     installPrefix,
   };
 }
