@@ -1007,3 +1007,74 @@ open_risks:
   - Task 12's --cmake-clean-cache reconfigure depends on the setuptools<80 pin being on colcon's path.
 next_command: implement Task 8 RED (test_pool_contract_has_no_lifetime_quota) in
   src/so101_demo_py/test/test_parallel_adaptive_contracts.py
+
+## EXP-UQ11 — Task 8 adaptive no-K contract and typed allocation authority
+
+```yaml
+experiment_id: EXP-UQ11
+status: VALID
+prior_experiment: EXP-UQ10
+hypothesis: The adaptive pool contract can drop the lifetime quota while keeping affinity, fallback
+  tiers, readiness, cleanup and infra-attempt authority, and only the owning factory can mint the
+  typed adaptive allocation context.
+prediction: RED (missing parameter / missing issuer) then GREEN across the four adaptive suites with the
+  retained affinity/fallback tests unchanged.
+single_variable: adaptive PoolRequest/runner/pool quota removal + factory-issued typed context
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Task-owned clean baseline (EXP-UQ10); no service or measurement started.
+success_criteria:
+  - Pool request has no max_points_per_worker and the plan's RED passes.
+  - Only the factory instance can issue AdaptiveAllocationContext; wrong token, wrong generation, altered
+    frozen options and a fixed-path scope are refused.
+failure_criteria:
+  - Any generic bypass, fixed profile use in the adaptive path, or changed fallback/affinity behaviour.
+invalid_criteria:
+  - Retained tests failing only because their fixture still passed the removed argument being counted as
+    product regressions (they were migrated, not weakened).
+provenance:
+  source_commit: af7e6ab44
+  install_overlay: $TASK_ROOT/dev-install (three packages) + $TASK_ROOT/venv
+  runtime_executable: $TASK_ROOT/venv/bin/python
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: so101_pytest adaptive-red test_parallel_adaptive_contracts.py::test_pool_contract_has_no_lifetime_quota ::test_adaptive_factory_issues_typed_context_only_for_its_own_pool -q
+    exit_code: 1
+  - command: so101_pytest adaptive-green <four adaptive suites> -q
+    exit_code: 0
+observed:
+  - RED: TypeError for the removed argument and NameError for the missing issuer.
+  - GREEN scratch/adaptive-green.*: 86 passed, 0 failed.
+  - Changes: PoolRequest/factory lose max_points_per_worker; runner no longer passes max(1, len(selected));
+    the pool identity check drops the quota comparison; the factory gains a per-instance secret,
+    pool_token_for(generation) and issue_allocation_context(...) which re-derives the frozen options and
+    scope, checks the token with hmac.compare_digest and issues through resource_budget's private
+    adaptive issuer. Affinity/fallback/readiness/cleanup/infra-attempt behaviour untouched.
+  - Retained callers in two adaptive test files that still passed the removed argument were migrated to
+    the no-K contract; all four suites pass with no exclusions.
+inferred:
+  - The allocator/CLI still accept the generic enforce_resource_thresholds flag; that migration is Task 10
+    as the plan assigns it, and no adaptive path can reach a fixed profile today.
+conclusion: VALID.
+evidence:
+  - scratch/adaptive-red.*, scratch/adaptive-green.*
+decision: KEEP
+next_experiment: EXP-UQ12 (Task 9 teleop v2 API)
+```
+
+```yaml
+checkpoint_id: CP-UQ11
+last_valid_experiment: EXP-UQ11
+current_hypothesis: The teleop v2 API/preflight/store layer can reject legacy quota keys and expose
+  exact-N availability without changing retained history.
+working_tree_status: Task 8 files committed
+owned_processes: NONE
+preserved_processes: NONE from this task family
+confirmed_conclusions:
+  - Adaptive contract is quota-free with factory-private typed authority (EXP-UQ11).
+disproven_routes:
+  - Any caller-minted adaptive context or generic resource bypass on the adaptive path.
+open_risks:
+  - resources.AllocationPolicy still has the generic enforce_resource_thresholds flag until Task 10.
+next_command: implement Task 9 RED (test_new_request_rejects_legacy_key) in src/so101_teleop/test/teleop/test_expert_validation_api.py
