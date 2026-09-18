@@ -2020,6 +2020,48 @@ next_experiment: NONE-AUTHORIZED (await Sol/High re-review)
 ```
 
 ```yaml
+checkpoint_id: CP-UQ23A
+last_valid_experiment: EXP-UQ23
+current_hypothesis: Readback correction and completion of the CP-UQ23 gate matrix.
+readback:
+  - colcon/rereview-e-colcon.kOYZxX00 (test against the COPIED rereview-install base, exit 1):
+    so101_teleop 55/55 CTest registrations passed, including the newly registered
+    test_expert_validation_installed_budget (Start 41, run with /usr/bin/python3 from
+    dev-build/so101_teleop/CTestTestfile.cmake). so101_demo_py had 10 failures in
+    test_text_agent_execution_provenance.py, test_text_pick_agent_cli.py and
+    test_text_pick_agent_e2e_process.py with EXECUTION_SOURCE_PROVENANCE_UNAVAILABLE: the copied
+    (non-symlink) install resolves so101_demo.application.text_agent outside any git repository.
+    Those were 3241 passed there and only 1 failed under the direct dev-overlay pytest run, so this
+    is an artifact of pointing CTest at the copied prefix, not a source regression. CTest is
+    therefore run against the dev overlay bases exactly as before.
+  - colcon/rereview-g-colcon.tJ6liTYr (build into dev-build/dev-install): exit 0, real cmake
+    re-configure, so dev-build/so101_teleop/CTestTestfile.cmake now carries the new registration.
+  - colcon/rereview-h-colcon.8cRVknD1 (test against dev-build/dev-install, exit 1):
+    so101_teleop 100% passed, 0 failed out of 55; so101_demo_py 3250 passed, 1 skipped,
+    1 failed = test_text_pick_agent_e2e_process.py::test_real_launch_service_accepts_only_after_owned_cleanup
+    (a real-launch E2E process test that passes under the direct pytest run of the same tree).
+    This one failure is recorded OPEN and is not claimed as green; it is unrelated to the
+    parallel-batch modules changed by this unit (no shared code path, and its direct run is green).
+  - scratch/rereview-full-demo.wGZ173ak (direct): 3250 passed / 1 skipped / 1 failed
+    (test_parallel_adaptive_integration.py::test_external_cleanup_retires_only_owned_worker_and_releases_claim);
+    scratch/rereview-cleanup-retry.Nj82zL4F re-ran that exact test alone and it passed (exit 0).
+  - browser/rereview-web-unit3.SUsUZB9t: exit 0, 29 files / 119 passed.
+  - scratch/rereview-teleop-budget4.DV9aUuQq: 4 passed (installed budget suite against the copied
+    rereview-install prefix with the DEFAULT admission factory and the real host probe).
+wrapper_change:
+  - $TASK_ROOT/tools/test-gate.zsh (task-owned gate tooling, not part of the worktree commit): direct
+    pytest runs now persist argv.txt and every pytest/colcon interpreter check writes a labelled
+    record (role=..., interpreter=..., resolved=..., prefix=..., tempdir=...) instead of bare paths.
+inferred:
+  - The repair unit's code/tests are offline-proven; two environment-sensitive E2E tests remain open in
+    the colcon context and are recorded rather than explained away.
+conclusion: VALID offline with two OPEN E2E observations. Stop for Sol/High re-review.
+evidence: colcon/rereview-{e,g,h}-colcon.*, scratch/rereview-*, browser/rereview-web-unit3.*
+decision: KEEP
+next_experiment: NONE-AUTHORIZED (await Sol/High re-review)
+```
+
+```yaml
 checkpoint_id: CP-UQ24
 last_valid_experiment: EXP-UQ23
 current_hypothesis: NONE (repair unit complete; awaiting independent re-review)
