@@ -2181,3 +2181,100 @@ evidence: followups/pytest-xdist8-2a146e37-.../{executor.receipt,startup-probe01
 decision: KEEP
 next_experiment: NONE-AUTHORIZED (await Sol/High re-review of R1-R4)
 ```
+
+```yaml
+checkpoint_id: CP-UQ26
+last_valid_experiment: EXP-UQ26
+current_hypothesis: The user-authorized debug-only provenance amendment is implemented, the separate
+  owned-cleanup E2E defect is repaired at its real cause, and the remaining offline gates are settled.
+dispatch: 41326eaf-39da-45d1-a9e8-0352d304dff5 (receipt written O_EXCL first, then a read-only startup
+  probe with HEAD 2654ef261433aa35927547e7ddbe0acbdea82c70, clean tree, CP-UQ25, pane %68/PID 1345571)
+amendment:
+  document: docs/superpowers/specs/2026-09-18-so101-source-commit-debug-only-amendment.md (new dated
+    addendum; frozen design/plan/review bytes and hashes unchanged and re-listed inside it)
+  superseded: runtime Git resolution and commit format/equality/cleanliness refusals in
+    runtime/provenance.py, cli/text_pick_agent.py, ports+adapters/pick_place_executor.py,
+    runtime/result_manifest.py, runtime/launch_composition.py, cli/mujoco_parallel_batch.py
+    (PROVENANCE_SOURCE_COMMIT/DIRTY/EXTERNAL_SOURCE_COMMIT),
+    so101_teleop/expert_validation/production.py (SO101_VALIDATION_SOURCE_IDENTITY,
+    SO101_VALIDATION_SOURCE_COMMIT_MISMATCH), models.py SOURCE_COMMIT, operator_recovery
+    RECOVERY_SOURCE_COMMIT_INVALID
+  preserved: installed prefix/location equality, content inventories and byte hashes, the resource
+    execution identity and exact-N budget/qualification/authority/control/lease/session/reset/cleanup
+    chains, the measurement authorization chain
+  debug_manifest: emitted by the setup.py final-install hook as
+    share/so101_demo_py/debug-provenance-manifest.json (schema 1, kind DEBUG_INSTALL_PROVENANCE,
+    authority DEBUG_ONLY_NOT_RUNTIME_AUTHORITY, install-relative paths, real byte SHA256, nullable
+    commit/dirty, no timestamp/self-hash/absolute prefix); the only reader is the explicitly requested
+    console script so101_debug_provenance. No runtime path reads it.
+tests:
+  - RED->GREEN: the new test_debug_only_provenance.py fails (4 cases, exit 1 refusals) with the
+    pre-amendment commit gates stashed, and passes (10) with the amendment: a pure copied install
+    outside Git runs the actual default TextPickAgent CLI bootstrap with missing/malformed/mismatched
+    commit metadata, while a wrong installed prefix is still refused.
+  - test_workflow_events.py: an in-run event read 6 s late is accepted; a pre-run timestamp and an
+    older-than-delivery-bound record are still rejected.
+  - Migrated: test_text_agent_execution_provenance.py, test_text_pick_agent_cli.py,
+    test_pick_place_executor_adapter.py, test_parallel_batch_cli.py overlay cases.
+owned_cleanup_defect:
+  root_cause: E2ESupervisor recorded OWNED_PROCESS_CLEANUP_TIMEOUT as a primary failure as soon as a
+    teardown escalation deadline fired, even when acceptance had succeeded and every owned process had
+    already exited (loaded-host late callback) or exited during the SIGTERM window. Evidence: the
+    failing run's own result document showed machine_accepted=true, owned_process_cleanup.complete=true,
+    remaining=[], with primary_failure=OWNED_PROCESS_CLEANUP_TIMEOUT.
+  repair: escalation is diagnostic; only processes that survive the SIGTERM window (i.e. need SIGKILL)
+    are a cleanup failure; teardown budgets grew to 20/10/10 s; the result document carries
+    cleanup_observations. RED->GREEN captured for both the late-timer case and the existing
+    ignore-SIGTERM case.
+gates:
+  - scratch/amend-focused3.*: 222 passed (provenance, debug-only, workflow events, both E2E launch
+    suites, CLI, result classification).
+  - scratch/amend-adapter.*: 116 passed. scratch/amend-overlay.*: test_parallel_batch_cli.py 115 passed.
+  - scratch/amend-teleop-full.RQeAKOoT: 529 passed.
+  - scratch/amend-demo-shard2.1690507 (8 workers with the runner's serial-module isolation):
+    manifest 3264 = serial 318 + parallel 2946, union exactly equal, no duplicates - the coverage
+    requirement is met; failures in that run were the then-unmigrated cases listed above.
+  - scratch/amend-installed-budget.6scbRkWz: 4 passed against the fresh copied install amend-install.
+  - amend-install (built from the amended HEAD af9252675): the debug manifest covers 573 artifacts
+    including modules, console scripts and share/config, and excludes itself.
+  - colcon/amend-demo-colcon.*: see the readback appended by this unit.
+inferred:
+  - The amendment removes source-commit authority without weakening location, byte, resource or
+    control checks; the E2E failure was an independent teardown-accounting defect.
+conclusion: VALID offline. Stop for Sol review.
+evidence: scratch/amend-*, colcon/amend-*, amend-build, amend-install,
+  followups/debug-only-provenance-41326eaf-.../{executor.receipt,startup-probe01.log,
+  startup-probe01.result.json}
+decision: KEEP
+next_experiment: NONE-AUTHORIZED (await Sol review)
+```
+
+```yaml
+checkpoint_id: CP-UQ26A
+last_valid_experiment: EXP-UQ26
+current_hypothesis: Readback of the amendment gates; the retained colcon failures are replaced by fresh
+  successful runs.
+readback:
+  - colcon/amend-demo-colcon.M5nQabKc: exit 0 in 552.2s, 3263 passed, 1 skipped (the whole-directory
+    ament_python gate that previously failed with the owned-cleanup E2E rejection).
+  - colcon/amend-teleop-colcon.*: exit 0, 100% tests passed, 0 failed out of 55 CTest registrations.
+  - colcon test-result --test-result-base <TASK_ROOT>/dev-build --all: 3847 tests, 0 errors,
+    0 failures, 1 skipped.
+  - scratch/amend2-installed.gdbePB81: 14 passed (4 teleop installed-budget against amend2-install plus
+    10 debug-only provenance).
+  - amend2-install built from the clean amended HEAD 8a049b3840e99fcab4b28abeed0cdb872da4c1ed:
+    provenance.py, debug_provenance.py, launch_composition.py, workflow_events.py, text_pick_agent.py
+    and teleop production.py byte-match their source files, and the emitted debug manifest records that
+    exact HEAD with source_dirty false.
+  - colcon/rereview-f-colcon.6YKAlwzj (exit 1, 10 provenance-context failures from a dirty tree during
+    that run) and colcon/rereview-h-colcon.8cRVknD1 (exit 1, 1 owned-cleanup E2E failure) remain
+    retained as historical failures; they are superseded by the fresh amend-demo-colcon run above.
+inferred:
+  - The amendment and the teardown repair are offline-complete; no live, measurement, promotion or
+    approval boundary was touched.
+conclusion: VALID offline. Stop for Sol review.
+evidence: colcon/amend-demo-colcon.*, colcon/amend-teleop-colcon.*, scratch/amend2-installed.*,
+  amend2-build, amend2-install
+decision: KEEP
+next_experiment: NONE-AUTHORIZED (await Sol review)
+```
