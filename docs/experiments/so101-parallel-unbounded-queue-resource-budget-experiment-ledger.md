@@ -4934,3 +4934,32 @@ next step is to compare like with like -- either measure the rate over a window 
 or compare per-period *quota consumption* against the envelope rather than an instantaneous rate --
 and to fix that in the harness with the evidence above, not by moving the envelope
 (`capacity_fraction`) or the throttling rule, both of which stay the operator's to change.
+
+## CP-UQ110 — The rate artifact is gone; only the policy's throttling rule remains
+
+Run75 (r52, CPU measured over five quota periods instead of one, commit `09cc2d8f8`):
+
+    rate median=0.02  p95=4.44  max=9.17      (was: median 0.02, p95 1.99, max 20.66)
+    owned cpu-s=8.91 over span=10.52 s        (0.85 cores average)
+    abort=CPU_THROTTLED, 194 samples, 1 throttled
+
+The envelope artefact is fixed: the maximum reported rate fell from 20.66 to **9.17** cores against a
+19.2-core envelope line, so `CPU_ENVELOPE` can no longer fire on a period-scale burst, while the test
+that ships with the change proves a genuinely sustained 18.6-core load still registers. The
+measurement now reports CPU honestly at every level: the rate over periods, the per-process and
+per-subtree attribution, and the counter provenance.
+
+What is left is exactly one rule and it is not a measurement artefact: the kernel throttled the
+measurement cgroup on **one** sample out of 194 (the workload using its quota inside a `cpu.max`
+period), and `throttling_disqualifies_run` makes any throttling disqualifying. The instrument is
+correct; the policy draws a line that this workload crosses at least once per run.
+
+That leaves three options, all now backed by measured numbers rather than theories, and all of them
+the operator's to choose:
+
+1. bound the offending consumer below the quota -- the attribution is in place (per-process and
+   per-subtree CPU, plus counter provenance) and one run with it printed ranks the consumers;
+2. widen the envelope (`safety.capacity_fraction`), which is a policy change;
+3. treat single-period throttling as non-disqualifying (`throttling_disqualifies_run`), also policy.
+
+I have not touched 2 or 3, and I will not without the operator's word.
