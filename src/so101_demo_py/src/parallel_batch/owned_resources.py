@@ -92,6 +92,10 @@ def cross_check_peak_alias(primary_samples, alias) -> dict[str, object]:
             "dimensions": sorted(peaks)}
 
 
+# Consecutive throttled samples that count as an overload rather than a boundary burst.
+_SUSTAINED_THROTTLE_SAMPLES = 5
+
+
 class OwnedCgroupV2:
     """One measurement-owned cgroup with verified limits and a verified empty cleanup."""
 
@@ -713,8 +717,16 @@ class MeasurementSession:
         # CPU/RAM/GPU-only amendment (74d6b781): swap and PSI activity are not breach
         # dimensions. The deprecated observation fields may still carry values and must not
         # be able to latch an abort here.
+        # Operator decision (round 69): a cgroup may want more than its quota inside one
+        # period without the run being thrown away, because the workload's average demand can
+        # be a fraction of a core (run75: 0.85) while the kernel still throttles once. Single
+        # events stay reported in the samples; only sustained throttling disqualifies.
         if self.safety.throttling_disqualifies_run and observation.throttled:
-            return "CPU_THROTTLED"
+            self._throttle_streak = getattr(self, "_throttle_streak", 0) + 1
+            if self._throttle_streak >= _SUSTAINED_THROTTLE_SAMPLES:
+                return "CPU_THROTTLED"
+        else:
+            self._throttle_streak = 0
         capacity = observation.capacity
         if capacity["ram_bytes"] - observation.background["ram_bytes"] < (
             minimum_free * capacity["ram_bytes"]
