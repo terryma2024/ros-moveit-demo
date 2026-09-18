@@ -3962,3 +3962,43 @@ Two gates remain, and neither is the task's to open: the host's swap pressure (c
 five rounds of evidence) and the real operator approval objects that Stage D submission and Stage E
 acceptance require. Everything inside the authorized scope that does not depend on those two is
 done and evidenced. N1 remains `NOT_MEASURED`; nothing is extrapolated to another N.
+
+## CP-UQ77 — Policy amendment 74d6b781 accepted: swap/PSI removed from admission and aborts
+
+Reference and startup facts (recorded before any edit): approved dispatch
+`74d6b781-840d-474b-b997-f2dc24907792`; handoff
+`followups/cpu-mem-gpu-policy-74d6b781-.../handoff.md` sha256
+`991620957ace8846b7a1a64791b433cabf0135b35031bf5bec91abaacb8c1729` (matches the SHA Astra reviewed,
+verdict PASS, review sha256 `7f66f15a1cc2cbb2d35463bcbff170d6649988d4b02ee1587d927274bb5b9392`);
+O_EXCL receipt written with the exact UUID + LF (sha256 `6b85d065ac0604a9...`); startup probe under
+`scratch/policy74d6b781.gxCxlkzF/startup-probe.log` with realtime `2026-09-18T22:39:52+08:00`,
+HEAD `7be219af2115151d83b221d679ce4cf67241dd31` (clean, 0 dirty), owner `lenovo:1000:1000`,
+worktree and TASK_ROOT as registered, venv and task-env present, probe exit 0.
+
+Policy now: measurement and budget dimensions are CPU, RAM and GPU only. Swap and PSI leave
+admission, session aborts, qualification, capability, attribution-completeness and mandatory-probe
+conditions, including the deprecated policy keys, which remain parseable but are never consulted.
+No OS swap configuration, cache clearing, foreign-process action, sudo, global change, evidence
+deletion, push or merge was performed, and nothing swap/PSI-shaped is fabricated as a measured
+zero: the fields stay as compatibility data only.
+
+**Unit 1 (RED -> GREEN)** — `resource_budget._live_reasons` no longer appends `SWAP_PRESSURE`; the
+provider-level test now asserts that an otherwise healthy observation with `swap_delta=4096` *and*
+one with `psi_full_delta=0.5` are **admitted** with no `SWAP_PRESSURE` reason (RED:
+`AssertionError: ('SWAP_PRESSURE',)`; GREEN 26 passed in the file). This is the exact rule that
+refused N1 with `{"message": "SWAP_PRESSURE"}` in five rounds of attempts.
+
+**Unit 2 (RED -> GREEN)** — `owned_resources.MeasurementSession._breach` no longer returns
+`SWAP_ACTIVITY` or `PSI_FULL_STALL`; `SafetyRulesV2` makes `abort_on_swap_activity` and
+`abort_on_psi_full_stall` optional deprecated fields (never validated, never read);
+`_closed_mapping_fields` gained a `deprecated` argument backed by `_DEPRECATED_SAFETY_FIELDS`, so a
+document may carry them or omit them; the authoritative worktree config dropped both keys. RED: two
+new tests failed; GREEN: 94 passed across the budget, default-path, runtime, CLI and control
+suites.
+
+Remaining units from the handoff, in order: remove active swap/PSI sampling and the capability
+requirements it introduced (`resource_measurement.sample_resources`, the cgroup ports, diagnostics),
+remove the `HostFacts`/R `swap_total_bytes` binding so a SwapTotal difference cannot drift R, then
+the genuine >=60 s persisted 50 ms baseline with the independent 25 ms peak-alias cross-check,
+followed by freeze/rebuild/A0 and fresh finite sealed authorizations for N1..8. N1 remains
+`NOT_MEASURED`; nothing is extrapolated to another N.
