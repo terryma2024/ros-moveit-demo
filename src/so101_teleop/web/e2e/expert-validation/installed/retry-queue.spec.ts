@@ -97,7 +97,7 @@ test("S14 two failed points retry as serial N=1/K=1 batches spec:slow", async ({
     expect(started).toHaveLength(1);
     const config = started[0].payload.batch as Record<string, any>;
     expect(config.worker_count).toBe(1);
-    expect(config.max_points_per_worker).toBe(1);
+    expect(config).not.toHaveProperty("max_points_per_worker");
     expect(config.point_ids).toHaveLength(1);
   }
 

@@ -3,14 +3,10 @@ import { createServer } from "node:net";
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { installedTest as test, expect, installPrefix, pythonExecutable, QUALIFICATION_ENV } from "../fixtures/installed";
+import { installedTest as test, expect, installPrefix, pythonExecutable, QUALIFICATION_ENV, resolvePackagePrefixes } from "../fixtures/installed";
 import { readJournalEvents, storeQuery } from "../assertions/journal";
 import { ExpertValidationPage } from "../pages/expert-validation-page";
 
-const PACKAGE_PREFIXES = [
-  "mujoco_3d_lidar", "mujoco_ros2_control_msgs", "mujoco_ros2_control_plugins",
-  "mujoco_ros2_control", "so101_mujoco_support", "so101_demo_py", "so101_teleop",
-];
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePromise, rejectPromise) => {
@@ -31,7 +27,9 @@ type EntryHandle = { stop: () => Promise<number | null> };
 
 async function startProductionEntry(evidenceRoot: string, port: number, logPath: string): Promise<EntryHandle> {
   const prefix = installPrefix();
-  const prefixes = PACKAGE_PREFIXES.map((name) => join(prefix, name)).filter(existsSync);
+  const prefixes = resolvePackagePrefixes(
+    prefix, process.env.SO101_E2E_DEPENDENCY_PREFIX ?? "/data/work/ws_moveit/install",
+  );
   const sitePackages = prefixes.map((entry) => join(entry, "lib/python3.12/site-packages"));
   const entry = join(prefix, "so101_teleop/lib/so101_teleop/so101_expert_validation_server.py");
   if (!existsSync(entry)) throw new Error(`INSTALLED_ENTRY_MISSING: ${entry}`);
@@ -53,6 +51,10 @@ async function startProductionEntry(evidenceRoot: string, port: number, logPath:
       SO101_VALIDATION_PORT: String(port),
       SO101_VALIDATION_WEB_ROOT: join(prefix, "so101_teleop/share/so101_teleop/web"),
       SO101_VALIDATION_PROVENANCE_BINDING: binding,
+      SO101_VALIDATION_PARALLEL_CONFIG: join(
+        prefix,
+        "so101_demo_py/share/so101_demo_py/config/mujoco/parallel_batch_v2.yaml",
+      ),
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -180,7 +182,7 @@ test("S02 Chrome campaign flow matches the durable helper journal spec:default",
   expect(batch.batch_id).toBe(terminal.batch_id);
   expect(batch.campaign_id).toBe(campaignId);
   expect(batch.worker_count).toBe(1);
-  expect(batch.max_points_per_worker).toBe(4);
+  expect(batch).not.toHaveProperty("max_points_per_worker");
   expect(batch.run_mode).toBe("execute");
   expect([...(batch.point_ids as string[])].sort()).toEqual(manifestPointIds);
   expect(events.filter((event) => event.type === "RESULT_COMMITTED")).toHaveLength(4);
@@ -216,9 +218,9 @@ test("S03 a second Chrome context stays fenced out spec:default", async ({ page,
         lease_id: "lease-b",
         lease_generation: 1,
         manifest_id: "manifest-b",
+        contract_version: 2,
         execution_mode: "SEQUENTIAL",
         worker_count: 1,
-        max_points_per_worker: 4,
       },
     });
     expect(forged.status()).toBe(409);

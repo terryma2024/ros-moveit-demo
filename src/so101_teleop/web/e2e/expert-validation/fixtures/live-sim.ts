@@ -152,10 +152,8 @@ export function recordGate(evidenceRoot: string, gate: string, detail: object): 
 }
 
 
-const PACKAGE_PREFIXES = [
-  "mujoco_3d_lidar", "mujoco_ros2_control_msgs", "mujoco_ros2_control_plugins",
-  "mujoco_ros2_control", "so101_mujoco_support", "so101_demo_py", "so101_teleop",
-];
+// Prefix resolution is shared with the installed fixtures so both gates audit the same
+// overlay/underlay origins; see resolvePackagePrefixes in fixtures/installed.ts.
 
 const QUALIFICATION_ENV: Record<string, string> = {
   SO101_VALIDATION_YOLO_WEIGHTS:
@@ -211,8 +209,10 @@ export const liveSimTest = base.extend<{ liveServer: LiveServer }>({
     mkdirSync(stateDir, { recursive: true });
     proveChrome(caseDir);
 
-    const prefixes = PACKAGE_PREFIXES.map((name) => join(preconditions.installPrefix, name))
-      .filter((path) => existsSync(path));
+    const prefixes = resolvePackagePrefixes(
+      preconditions.installPrefix,
+      process.env.SO101_E2E_DEPENDENCY_PREFIX ?? "/data/work/ws_moveit/install",
+    );
     const sitePackages = prefixes.map((entry) => join(entry, "lib/python3.12/site-packages"));
     const libraryPaths = prefixes.map((entry) => join(entry, "lib"));
     const entry = join(

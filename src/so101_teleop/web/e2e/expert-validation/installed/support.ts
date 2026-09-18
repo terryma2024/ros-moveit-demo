@@ -48,22 +48,21 @@ export async function createManifest(client: Api, totalPoints: number) {
   return response.body as { manifest_id: string; points: Array<{ id: string }> };
 }
 
-export function fixedConfig(
-  lease: Lease, session: string, manifestId: string, maxPointsPerWorker = 4,
-) {
+export function fixedConfig(lease: Lease, session: string, manifestId: string) {
   return {
+    contract_version: 2 as const,
     service_session_id: session,
     lease_id: lease.lease_id,
     lease_generation: lease.generation,
     manifest_id: manifestId,
-    execution_mode: "SEQUENTIAL",
+    execution_mode: "SEQUENTIAL" as const,
     worker_count: 1,
-    max_points_per_worker: maxPointsPerWorker,
   };
 }
 
 export function adaptiveConfig(lease: Lease, session: string, manifestId: string) {
   return {
+    contract_version: 2 as const,
     service_session_id: session,
     lease_id: lease.lease_id,
     lease_generation: lease.generation,
