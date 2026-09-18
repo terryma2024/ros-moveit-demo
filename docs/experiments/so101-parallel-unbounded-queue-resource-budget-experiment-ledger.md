@@ -7063,7 +7063,7 @@ worker's MuJoCo stack launched, controllers reached `active`, `scene_setup` read
 
 ```
 {"evidence": {"actions": {...all true...}, "controllers": {"arm_controller": "active", ...},
- "services": {"/apply_planetary_scene": true, ...}}, "failure_code": null, "phase": "READY", "ready": true}
+ "services": {"/apply_planning_scene": true, ...}}, "failure_code": null, "phase": "READY", "ready": true}
 ```
 
 So the campaign now fails **later and for a different reason**, and it fails with a real stack trace
