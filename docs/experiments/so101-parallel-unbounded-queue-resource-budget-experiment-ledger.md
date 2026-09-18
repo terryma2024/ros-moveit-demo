@@ -4664,3 +4664,33 @@ on a file I had already damaged, I restored both it and `broker.py` from the las
 CP-UQ97's addendum and the broker untouched. The next attempt at this fix should modify the test file
 by hand (read it, edit the import block, add the case) rather than by string substitution, which is
 the same lesson the retry-scripting rounds already taught.
+
+## CP-UQ99 — The whole chain runs, and the policy stops it for CPU throttling
+
+Run66 (r45, candidate rebuilt, image rebuilt to `sha256:c8b5c5aeced22633...`): gate **135 passed**,
+commit `5851df1fb` fixing the broker's v1-only type check now that it is known to consume only fields
+both schemas carry.
+
+For the first time the entire chain ran without a harness defect in the way:
+
+    BASELINE_START 0.00 -> LIMITS_APPLIED 0.15 -> BASELINE_END 60.28 -> SAMPLING_START 60.29
+    WORKLOAD_SPAWN 60.29 -> ABORT_LATCHED 71.00 -> CLEANUP_START 81.03 -> QUIET_END 86.45
+    -> SAMPLING_STOP 86.45 -> CLEANUP_END 86.46
+
+That is a 60.28 s baseline (317 persisted samples), a broker that accepted the v2 document and got
+past its provenance check, a worker that ran for **10.7 s**, and a verified cleanup -- with 200
+samples taken and `abort_reason` **CPU_THROTTLED**.
+
+That abort is policy, not a defect: `_breach` returns `CPU_THROTTLED` when
+`throttling_disqualifies_run` and the sample reports throttling, i.e. the workload hit its own
+cgroup's `cpu.max` quota. The quota derives from the safety envelope (0.8 x 24 cores minus background
+and tool overhead, ~18.6 cores), so the honest reading is: at N1 the frozen workload's demand
+(broker + worker + import) exceeds what the envelope allows it, and the measurement correctly refuses
+to qualify a throttled run.
+
+What that leaves is a calibration decision rather than a harness fix, and the options are the ones
+the plan anticipates: bound the workload's CPU demand (thread/process limits are already 1 per
+library, so the consuming side is elsewhere in the composition), or accept that N1 is not
+calibratable under this envelope on this host and record that as the measured fact. Either way this
+is the first run in the task whose outcome is a statement about the candidate rather than about the
+instrument.
