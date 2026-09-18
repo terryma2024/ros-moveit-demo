@@ -162,6 +162,16 @@ def _host_facts(**overrides) -> HostFacts:
     return HostFacts(**values)
 
 
+def _short_baseline(sampling):
+    """Real sessions in tests must configure the baseline explicitly: the production value
+    is 60 s of persisted samples (policy amendment 74d6b781), which is correct in a run and
+    far too slow for a unit test."""
+
+    import dataclasses
+
+    return dataclasses.replace(sampling, baseline_minimum_s=0.2)
+
+
 def _session_factory(tmp_path, *, cgroup_holder=None, device=None, quiet_s=0.02):
     def factory(**kwargs):
         cgroup = HermeticCgroup.create(
@@ -409,14 +419,16 @@ def test_real_session_latches_on_a_safety_breach_and_refuses(tmp_path):
 
     config = load_parallel_runtime_config_v2(V2_CONFIG)
     session = factory(authorization=authorization, batch_root=plan.batch_root,
-                      batch_id=plan.batch_id, sampling=config.measurement.sampling,
+                      batch_id=plan.batch_id, sampling=_short_baseline(config.measurement.sampling),
                       safety=config.measurement.safety, owner=_identity())
     started = time.monotonic()
     with pytest.raises(ContractError) as error:
         run_candidate_batch(plan=plan, runner=production_runner_factory(plan, image_inspector=_image_inspector), session=session)
     assert "MEASUREMENT_ABORT_LATCHED" in str(error.value)
     assert "CGROUP_MEMORY_OOM_KILL" in str(error.value)
-    assert time.monotonic() - started < 20
+    # The baseline now runs for the configured minimum before the workload starts, so
+    # the fast-abort assertion is measured against that plus a generous margin.
+    assert time.monotonic() - started < 20 + float(session.sampling.baseline_minimum_s)
     assert breached and breached[0].path.exists() is False
 
 
@@ -433,7 +445,7 @@ def test_real_session_enforces_the_authorized_deadline(tmp_path):
     cgroup = HermeticCgroup.create(parent=tmp_path / "cgroup", name="deadline")
     session = MeasurementSession(
         authorization=authorization, batch_root=plan.batch_root, batch_id=plan.batch_id,
-        sampling=config.measurement.sampling, safety=config.measurement.safety,
+        sampling=_short_baseline(config.measurement.sampling), safety=config.measurement.safety,
         owner=_identity(), cgroup_parent=tmp_path / "cgroup",
         cgroup_factory=lambda: cgroup, device_factory=HermeticDevice,
         observation_source=LiveObservationSource(host_probe=lambda: _host_facts()),
@@ -444,7 +456,7 @@ def test_real_session_enforces_the_authorized_deadline(tmp_path):
     with pytest.raises(ContractError) as error:
         MeasurementSession(
             authorization=authorization, batch_root=plan.batch_root, batch_id=plan.batch_id,
-            sampling=config.measurement.sampling, safety=config.measurement.safety,
+            sampling=_short_baseline(config.measurement.sampling), safety=config.measurement.safety,
             owner=_identity(), cgroup_factory=lambda: cgroup,
             deadline_s=authorization.batch_deadline_s + 1)
     assert "MEASUREMENT_DEADLINE_INVALID" in str(error.value)
@@ -1146,3 +1158,40 @@ def test_sample_resources_tolerates_absent_or_broken_swap_interfaces():
     assert sample.observation.swap_delta is None
     assert sample.observation.psi_full_delta is None
     assert sample.observation.attribution_complete is True
+
+
+def test_baseline_runs_for_the_configured_minimum_and_persists_samples(tmp_path):
+    """Policy amendment 74d6b781 keeps a genuine pre-workload baseline: run43's lasted
+    0.143 s, and a single endpoint reading is not a replacement for >=60 s of persisted
+    CPU/RAM/GPU samples at the configured interval."""
+
+    import dataclasses
+    import json as _json
+    import time as _time
+
+    prefix = _install_prefix(tmp_path)
+    bindings = _bindings(tmp_path, prefix)
+    authorization, path, digest = _sealed_authorization(tmp_path, bindings)
+    plan = build_candidate_plan(
+        authorization=authorization, authorization_path=path, config_path=V2_CONFIG,
+        evidence_root=bindings["evidence_root"], batch_id="batch-baseline")
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v2
+
+    config = load_parallel_runtime_config_v2(V2_CONFIG)
+    sampling = dataclasses.replace(config.measurement.sampling, baseline_minimum_s=0.3)
+    session = _session_factory(tmp_path)(
+        authorization=authorization, batch_root=plan.batch_root, batch_id=plan.batch_id,
+        sampling=sampling, safety=config.measurement.safety, owner=_identity())
+    started = _time.monotonic()
+    session.begin()
+    elapsed = _time.monotonic() - started
+    assert elapsed >= 0.3, elapsed
+    samples_path = plan.batch_root / "raw/baseline-samples.jsonl"
+    assert samples_path.is_file(), samples_path
+    rows = [_json.loads(line) for line in samples_path.read_text().splitlines() if line.strip()]
+    assert len(rows) >= 4, len(rows)
+    for row in rows:
+        for dimension in ("cpu_core_equivalent", "ram_bytes", "gpu_bytes"):
+            assert row["capacity"][dimension] > 0, (row["sequence"], dimension)
+        assert row["attribution_complete"] is True
+    session.finish()
