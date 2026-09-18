@@ -5296,3 +5296,51 @@ No runtime budget code has been deleted yet; Task 6 does that, and this round de
 did not start the 400-line wiring edit with too little context left to finish and verify it.
 
 _Ledger HEAD when written: `c728b75d8`._
+
+
+## CP-UQ118 — Task 5b in progress: the real entry points are off the budget gate
+
+Committed as work-in-progress (`954cad708`) because the migration is large and the honest
+state is more useful than an uncommitted tree. What is already true:
+
+- The default CLI path loads **v3 only** (`CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION` for v1/v2),
+  runs one bounded guard check before the epoch spawns (`_prepare_start_guard`), refuses
+  outright when the guard reports FAIL or `PROBE_CLEANUP_BLOCKED`, and records the guard
+  summary in the batch manifest (`schema_version: 3`, no `live_headroom` block).
+- `_compose_measurement_gate`, `_compose_default_resource_gate`, the task14 verifier factory,
+  the profile-drift comparison in restore, the v1 `>3` refusal and the `!=3 → None` fallback
+  and the retired evidence options are all gone; presenting the old evidence or a
+  measurement authorization is now an explicit error (`LIVE_HEADROOM_EVIDENCE_UNEXPECTED`,
+  `MEASUREMENT_AUTHORIZATION_RETIRED`).
+- `resources.py` gained `StartGuardAdmission`, admits v3 allocations and restores through one
+  fresh check, and no longer compares a recorded profile. `adaptive_pool.py` lost its dead
+  budget context issuer. `worker.py`, `coordinator.py` and `broker.py` accept v3 instead of
+  refusing it with `FROZEN_CONFIG_REQUIRED`.
+- The test seam changed shape on purpose: the autouse `synthetic_resource_gate` fixtures (a
+  fake admission returning APPROVED-ish decisions) are replaced by a seam that runs the
+  **real** `probe_snapshot` over the **real** host reads and the **real** `evaluate_snapshot`
+  decision, substituting only the probe process boundary. Injecting a fake admission as
+  positive proof is exactly what the reviewed plan forbids. The 880-line task14 three-worker
+  evidence cluster is retired, with the removed text kept at
+  `/tmp/so101-debug-startup-probe-b82d10b8/retired_task14_tests.py`.
+
+Honest red state, measured with the task wrapper at `-n 8`: **219 collected, 29 failed, 0
+errors** (from 260 setup errors at the start of the wiring). The remainder is retired-budget
+expectation, not new behaviour:
+
+- 8 `DID NOT RAISE` — tests asserting the v1 formula thresholds refuse (`INSUFFICIENT_LOGICAL_CPU`
+  and friends) and the observation/threshold admission record; that formula is dead under v3.
+- 7 regex mismatches — old codes (`BUDGET_PROFILE_UNAVAILABLE`,
+  `FIXED_WORKER_LIVE_QUALIFICATION_REQUIRED`, `THREE_WORKER_LIVE_EVIDENCE_*`).
+- 4 `START_GUARD_UNAVAILABLE` — allocator constructions the mechanical pass did not reach.
+- 5 individual: a resume manifest mismatch, a directory-conflict fixture, the frozen-topology
+  count, an oversized-cmdline probe assertion, and one lingering module-level monkeypatch.
+- 1 `AttributeError: 'StartGuardAdmission' object has no attribute 'observed'` — a test still
+  reading the retired admission record.
+
+Plan for the next round, in order: fix the 4+5 individual/product cases (they are real
+regressions to verify, not expectations to delete), then retire the 15 retired-budget
+expectations together with the code they describe in Task 6, and only then run the wider gate.
+The guard, contract, history and probe suites remain green (`lg-guard-combined`, 129 passed).
+
+_Ledger HEAD when written: `954cad708`._
