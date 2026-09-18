@@ -6673,3 +6673,28 @@ about provenance evidence rather than about spawning). The copy rebuild for the 
 in flight; the round after this one verifies it, redeploys, and re-runs the acceptance.
 
 _Ledger HEAD when written: `f423ea37e`._
+
+## CP-UQ160 — Fourth gate: PROVENANCE_INSTALLED_INPUT_MISSING
+
+The rebuilt copy was verified (`mujoco_parallel_batch.py` byte-identical to the tree), the service
+was redeployed from it in order, and the acceptance re-run. The coordinator now clears
+`PROVENANCE_VERIFICATION_FAILED` and dies at the next requirement:
+
+```json
+{"message": "PROVENANCE_INSTALLED_INPUT_MISSING", "status": "ERROR"}
+```
+
+So the pattern of this whole stretch continues — each fix moves the coordinator exactly one gate
+further, and the coordinator log names the next one in a single line. This gate is about an
+installed input the verifier expects to find under the deployed prefix; the search string is
+`PROVENANCE_INSTALLED_INPUT_MISSING` in `cli/mujoco_parallel_batch.py`, and the question to answer
+next is whether that input is genuinely missing from the copied install (in which case the
+*deployment* needs it, or the install rules need fixing) or whether the check is another
+source/checkout assumption that a copied install cannot satisfy.
+
+Both remain true from the previous checkpoints: the campaign start path works up to this point
+(records written, campaign BOUND and polled), and the guard itself is not implicated — the
+coordinator dies before it can spawn workers, so the acceptance's failures are consequences of this
+provenance chain rather than of the start guard or the resource policy.
+
+_Ledger HEAD when written: `ae2d29f18`._
