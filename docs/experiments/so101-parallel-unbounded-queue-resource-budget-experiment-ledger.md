@@ -4052,3 +4052,28 @@ and the six-file verification above (default-path, runtime, control, batch-resou
 resource-budget, default-authority-paths) passes with fresh scratch. The rule was already in the
 handoff -- a unique, previously nonexistent NVMe scratch per pytest phase, with `TMPDIR`/`TMP`/
 `TEMP` and an exact-interpreter proof -- and the failure was the gate enforcing it.
+
+### CP-UQ77 addendum — Unit 6 (RED -> GREEN): a genuine persisted baseline
+
+`MeasurementSession.begin` now runs `_run_baseline` after the caps are applied and the control is
+bound: it takes real CPU/RAM/GPU observations at `resource_sample_interval_s`, persists each one to
+`raw/baseline-samples.jsonl` as it is taken, and continues until
+`sampling.baseline_minimum_s` has elapsed, with the session's stop event able to interrupt it and
+the sample count returned into the baseline record. Nothing preloads or warms the workload, so a
+cold-start peak cannot be hidden.
+
+RED carried the exact defect the handoff named: the new test failed with
+`AssertionError: 0.000478...` -- a baseline of 0.48 ms against a configured 0.3 s, and run43's real
+baseline was 0.143 s against the policy's 60 s. GREEN: the test asserts the elapsed minimum, a
+persisted file with at least four samples, positive capacity in all three dimensions and complete
+attribution.
+
+Consequence recorded honestly: with the authoritative `baseline_minimum_s` at 60 s, end-to-end
+tests that start real sessions now cost 60 s each, and the four-file measurement suite took 5-7
+minutes instead of seconds. The three direct session constructions were given an explicit short
+baseline (`_short_baseline`, 0.2 s) and the fast-abort assertion now measures against
+baseline-plus-margin; the remaining cost is in the CLI-level tests, which still load the
+authoritative config, and the fix for them is a candidate copy of that config with a short
+baseline (never a hidden bypass), which is the next small unit. Still outstanding from the
+handoff: the independent 25 ms peak-alias cross-check, the wider gates (pytest -n 8, colcon,
+Bun/OpenAPI/Web), then the freeze/A0/fresh-authorization sequence.
