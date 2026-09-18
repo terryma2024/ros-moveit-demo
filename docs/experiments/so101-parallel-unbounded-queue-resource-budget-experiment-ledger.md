@@ -6479,3 +6479,30 @@ composition resolves. Whatever it is, it is a real deployment/composition defect
 to paper over: R01's spec timeout is the symptom, not the fault.
 
 _Ledger HEAD when written: `5cce310d6`._
+
+## CP-UQ152 — Task 11: the coordinator spawns and dies as a zombie, and nobody notices
+
+Following CP-UQ151 into the service's own state gives the root cause of R01's stall:
+
+- `owned_execution` records the batch `b06ec`, owner `COORDINATOR`, **state `RUNNING`**, PID
+  `2240896`, `expected_executable=/usr/bin/python3`, `install_prefix=/usr/bin`.
+- `campaign_batches` is `BOUND`, epoch 1; `fixed_control_bindings` has a control socket and token —
+  so the start path ran and wrote its records.
+- The process itself: `2240896 … [python3] <defunct>` — a **zombie**. It died and was never reaped,
+  so the store still says RUNNING, no worker was ever spawned, no point was attempted, and the
+  campaign stays in STARTED while the browser polls.
+
+Two things are wrong and both are real: the coordinator's resolved executable is the *system*
+python with `install_prefix=/usr/bin` rather than the copied install's console entry
+(`copy-install-final.mcoFwDqP/so101_demo_py/lib/so101_demo_py/so101_parallel_batch`), and the
+supervisor treats a dead-and-unreaped child as a live owner instead of failing the batch. The
+first means the coordinator very likely never had a runnable command; the second means the failure
+was silent.
+
+Next round: capture the zombie's exit status before anything reaps it (or the equivalent from the
+supervisor's journal), then fix the two defects — resolve the coordinator from the deployed
+prefix, and make an exited/unreapable child fail the batch loudly instead of leaving `RUNNING`.
+This is the same class of ownership bug the plan's Task 4 addressed for the probe helper, now in
+the product's own spawn path.
+
+_Ledger HEAD when written: `7bc303e47`._
