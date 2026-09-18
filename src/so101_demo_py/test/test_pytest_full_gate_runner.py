@@ -91,14 +91,9 @@ def test_historical_junit_durations_are_summed_by_whole_module(tmp_path: Path) -
 
 
 def test_serial_lane_is_ordered_and_excluded_from_parallel_shards() -> None:
-    modules = (
-        Path("test/test_other.py"),
-        Path("test/test_text_pick_agent_e2e_process.py"),
-        Path("test/test_parallel_adaptive_integration.py"),
-        Path("test/test_parallel_batch_resources.py"),
-        Path("test/test_parallel_batch_worker.py"),
-        Path("test/test_inject_so101_parallel_fault.py"),
-    )
+    # Derived from the single source of truth so adding a serial module cannot make this
+    # fixture silently incomplete (it did when the start-guard launch test was registered).
+    modules = (Path("test/test_other.py"), *(Path("test") / name for name in SERIAL_MODULES))
 
     serial, parallel = split_lanes(modules)
 
@@ -327,3 +322,64 @@ def test_broad_dirty_override_is_diagnostic_only() -> None:
 
 def test_porcelain_status_preserves_the_leading_index_column() -> None:
     assert preserve_porcelain_status(" M docs/ledger.md\n") == " M docs/ledger.md"
+
+
+# --------------------------------------------------------------------------------------
+# Task 9: the colcon split of a recorded collection
+# --------------------------------------------------------------------------------------
+
+
+def _write_collection(tmp_path, node_ids):
+    import json
+
+    path = tmp_path / "collection.json"
+    path.write_text(json.dumps(node_ids), encoding="utf-8")
+    return path
+
+
+def test_emit_colcon_split_refuses_a_missing_or_empty_collection(tmp_path):
+    from tools.so101_pytest_gate import SplitError, emit_colcon_split
+
+    with pytest.raises((SplitError, OSError)):
+        emit_colcon_split(tmp_path / "missing.json", tmp_path / "out")
+    empty = _write_collection(tmp_path, [])
+    with pytest.raises(SplitError, match="COLLECTION_EMPTY"):
+        emit_colcon_split(empty, tmp_path / "out")
+
+
+def test_emit_colcon_split_refuses_foreign_and_duplicate_identity(tmp_path):
+    from tools.so101_pytest_gate import SplitError, emit_colcon_split
+
+    foreign = _write_collection(
+        tmp_path, ["benchmark_test/test_x.py::test_a", "test/test_y.py::test_b"])
+    with pytest.raises(SplitError, match="COLLECTION_FOREIGN_NODEID"):
+        emit_colcon_split(foreign, tmp_path / "foreign-out")
+
+    duplicate = _write_collection(
+        tmp_path, ["test/test_y.py::test_b", "test/test_y.py::test_b"])
+    with pytest.raises(SplitError, match="COLLECTION_DUPLICATE_NODEID"):
+        emit_colcon_split(duplicate, tmp_path / "duplicate-out")
+
+
+def test_emit_colcon_split_keeps_nested_and_parametrised_identity(tmp_path):
+    import json
+
+    from tools.so101_pytest_gate import SERIAL_MODULES, emit_colcon_split
+
+    serial_module = SERIAL_MODULES[0]
+    node_ids = [
+        f"test/{serial_module}::TestNested::test_case[param-1]",
+        "test/test_parallel_start_guard.py::test_equal_floor_passes",
+    ]
+    coverage = emit_colcon_split(_write_collection(tmp_path, node_ids), tmp_path / "out")
+
+    assert coverage["exact"] is True
+    assert coverage["intersection_count"] == 0
+    assert coverage["union_count"] == len(node_ids)
+    serial_lines = (tmp_path / "out/serial-nodeids.txt").read_text().splitlines()
+    assert serial_lines == [node_ids[0]]
+    deselect = (tmp_path / "out/deselect-args.txt").read_text().splitlines()
+    assert deselect == [f"--deselect={node_ids[0]}"]
+    parallel = json.loads((tmp_path / "out/parallel-nodeids.json").read_text())
+    assert parallel == [node_ids[1]]
+    assert serial_module in coverage["serial_modules"]

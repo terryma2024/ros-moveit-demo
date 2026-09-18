@@ -593,6 +593,87 @@ def _run_pytest_process(
     )
 
 
+NODEID_MANIFEST_ENV = "SO101_TEST_NODEID_MANIFEST"
+
+
+def pytest_collection_finish(session) -> None:
+    """Record the complete collection when SO101_TEST_NODEID_MANIFEST is set.
+
+    The colcon harness needs the *complete* node ID list before it runs anything, so the
+    plugin writes it during the collection phase and runs no test itself.
+    """
+
+    import os
+
+    target = os.environ.get(NODEID_MANIFEST_ENV)
+    if not target:
+        return
+    node_ids = sorted(item.nodeid for item in session.items)
+    path = Path(target)
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path.write_text(json.dumps(node_ids, indent=2) + "\n", encoding="utf-8")
+
+
+class SplitError(RuntimeError):
+    """The recorded collection cannot be split without losing or duplicating identity."""
+
+
+def emit_colcon_split(collection_path: Path, output_dir: Path) -> dict[str, object]:
+    """Split a recorded collection into the colcon parallel/serial lanes.
+
+    ``SERIAL_MODULES`` is the single source of truth for known shared-resource modules; a
+    node ID whose module is unknown, foreign (outside ``test/``), or duplicated in the
+    collection is refused instead of being silently swallowed.
+    """
+
+    document = json.loads(Path(collection_path).read_text(encoding="utf-8"))
+    if not isinstance(document, list) or not document:
+        raise SplitError("COLLECTION_EMPTY")
+    node_ids = [str(node_id) for node_id in document]
+    if len(set(node_ids)) != len(node_ids):
+        raise SplitError("COLLECTION_DUPLICATE_NODEID")
+    files: dict[str, str] = {}
+    counts: dict[str, int] = {}
+    for node_id in node_ids:
+        module = node_id.split("::", 1)[0]
+        name = module.rsplit("/", 1)[-1]
+        if not module.startswith("test/") or not name.endswith(".py"):
+            raise SplitError(f"COLLECTION_FOREIGN_NODEID: {node_id}")
+        files[node_id] = name
+        counts[name] = counts.get(name, 0) + 1
+    serial_names = set(SERIAL_MODULES)
+    unknown = sorted(name for name in counts if name not in serial_names and counts[name])
+    serial_nodeids = [node_id for node_id in node_ids if files[node_id] in serial_names]
+    parallel_nodeids = [node_id for node_id in node_ids if files[node_id] not in serial_names]
+    if set(serial_nodeids) & set(parallel_nodeids):
+        raise SplitError("COLLECTION_LANE_OVERLAP")
+    if len(serial_nodeids) + len(parallel_nodeids) != len(node_ids):
+        raise SplitError("COLLECTION_LANE_LOSS")
+    output = Path(output_dir)
+    output.mkdir(mode=0o700, parents=True, exist_ok=True)
+    (output / "parallel-nodeids.json").write_text(
+        json.dumps(parallel_nodeids, indent=2) + "\n", encoding="utf-8")
+    (output / "serial-nodeids.txt").write_text(
+        "".join(f"{node_id}\n" for node_id in serial_nodeids), encoding="utf-8")
+    (output / "deselect-args.txt").write_text(
+        "".join(f"--deselect={node_id}\n" for node_id in serial_nodeids), encoding="utf-8")
+    coverage = {
+        "collection_count": len(node_ids),
+        "parallel_count": len(parallel_nodeids),
+        "serial_count": len(serial_nodeids),
+        "union_count": len(set(serial_nodeids) | set(parallel_nodeids)),
+        "intersection_count": len(set(serial_nodeids) & set(parallel_nodeids)),
+        "exact": len(set(serial_nodeids) | set(parallel_nodeids)) == len(node_ids)
+        and not (set(serial_nodeids) & set(parallel_nodeids)),
+        "serial_modules": sorted(name for name in counts if name in serial_names),
+        "parallel_modules": sorted(name for name in counts if name not in serial_names),
+        "module_counts": dict(sorted(counts.items())),
+    }
+    (output / "multiset-coverage.json").write_text(
+        json.dumps(coverage, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return coverage
+
+
 def _git(repo_root: Path, *arguments: str) -> str:
     return subprocess.run(
         ["git", *arguments],
@@ -847,6 +928,19 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    if argv[:1] == ["--emit-colcon-split"]:
+        if len(argv) != 3:
+            print("usage: --emit-colcon-split COLLECTION.json OUTPUT_DIR", file=sys.stderr)
+            return 2
+        try:
+            coverage = emit_colcon_split(Path(argv[1]), Path(argv[2]))
+        except (SplitError, OSError, ValueError) as error:
+            print(f"SO101_COLCON_SPLIT_ERROR: {error}", file=sys.stderr)
+            return 1
+        print(json.dumps(coverage, sort_keys=True))
+        return 0
     arguments = _parser().parse_args(argv)
     try:
         summary = run_gate(arguments)
