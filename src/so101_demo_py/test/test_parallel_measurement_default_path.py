@@ -1289,3 +1289,22 @@ def test_sample_resources_records_per_owned_process_cpu():
     assert entry["pid"] == os.getpid()
     assert entry["cpu_s"] >= 0.0
     assert entry["comm"]
+
+
+def test_sample_resources_attributes_cpu_to_the_cgroups_processes():
+    """The owned identity is only the session, so the consumer of the quota has to come from
+    the cgroup's own process list (run71's attribution found exactly one pid)."""
+
+    import os
+    import so101_demo.parallel_batch.resource_measurement as rm
+
+    class CgroupWithPids(_FakeCgroup):
+        def pids(self):
+            return [os.getpid()]
+
+    cgroup = CgroupWithPids([0, 0], swap=[0, 0], pressure=[0, 0])
+    sample = rm.sample_resources(owned_inventory=(), cgroup=cgroup, device=_FakeDevice(),
+                                 sequence=1, state={})
+    entries = sample.diagnostics["cgroup_process_cpu"]
+    assert any(entry["pid"] == os.getpid() for entry in entries), entries
+    assert all({"pid", "cpu_s", "comm"} <= set(entry) for entry in entries)

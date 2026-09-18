@@ -348,6 +348,7 @@ def sample_resources(
     # Raw evidence: each owned process's accumulated CPU and command name, so a throttle or a
     # spike can be attributed to a consumer from inside this pass instead of by an external
     # watcher (two such watchers failed to see the run at all).
+    ticks = os.sysconf("SC_CLK_TCK")
     per_process = []
     for identity in owned_inventory:
         pid = getattr(identity, "pid", None)
@@ -358,16 +359,36 @@ def sample_resources(
             comm = Path(f"/proc/{pid}/comm").read_text().strip()
         except (OSError, IndexError, ValueError):
             continue
-        ticks = os.sysconf("SC_CLK_TCK")
         per_process.append({
             "pid": pid,
             "cpu_s": (int(fields[11]) + int(fields[12])) / ticks,
             "comm": comm,
         })
+    # The measurement cgroup's own processes are where the demand actually lives; the owned
+    # identity above is only the session, which is why run71 attributed 19 cores to one pid.
+    cgroup_processes = []
+    lister = getattr(cgroup, "pids", None)
+    if callable(lister):
+        try:
+            pids = sorted(set(int(pid) for pid in lister()))
+        except (OSError, TypeError, ValueError):
+            pids = []
+        for pid in pids:
+            try:
+                fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+                comm = Path(f"/proc/{pid}/comm").read_text().strip()
+            except (OSError, IndexError, ValueError):
+                continue
+            cgroup_processes.append({
+                "pid": pid,
+                "cpu_s": (int(fields[11]) + int(fields[12])) / ticks,
+                "comm": comm,
+            })
     diagnostics = {
         "mem_available_bytes": memory["MemAvailable"],
         "cpu_usage_us": cpu_usage_us,
         "per_process_cpu": per_process,
+        "cgroup_process_cpu": cgroup_processes,
     }
     sample = ResourceSample(
         sequence=sequence, monotonic_s=monotonic_s, observation=observation,
