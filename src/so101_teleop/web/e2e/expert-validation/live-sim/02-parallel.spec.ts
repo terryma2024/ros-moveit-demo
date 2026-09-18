@@ -89,12 +89,20 @@ test("R02 parallel two-worker live run with mid-run reload @live-sim", async ({ 
   expect(events.filter((event) => event.type === "RESULT_COMMITTED")).toHaveLength(4);
   expect(events.some((event) => event.type === "BATCH_CLEANUP_COMPLETE")).toBe(true);
 
-  // The reload neither interrupted nor duplicated the campaign.
-  const campaignsAfter = await (
+  // The reload neither interrupted nor duplicated this campaign, and it left no other campaign
+  // running.  The list also holds the campaigns of the specs that ran before this one, so the
+  // check is on this spec's own id rather than on the size of the list.
+  const campaignsAfter: Array<{ campaign_id: string; status: string }> = await (
     await fetch(`${liveServer.baseURL}/expert-validation/campaigns`)
   ).json();
-  expect(campaignsAfter).toHaveLength(1);
-  expect(campaignsAfter[0].campaign_id).toBe(campaignId);
+  const mine = campaignsAfter.filter((entry) => entry.campaign_id === campaignId);
+  expect(mine).toHaveLength(1);
+  expect(mine[0].status).toBe(projection.status);
+  expect(
+    campaignsAfter.filter((entry) =>
+      ["RUNNING", "STARTING", "CANCELLING"].includes(entry.status),
+    ),
+  ).toHaveLength(0);
 
   await page.screenshot({ path: join(liveServer.caseDir, "final.png") });
   recordGate(process.env.SO101_E2E_EVIDENCE_ROOT!, "R02", {
