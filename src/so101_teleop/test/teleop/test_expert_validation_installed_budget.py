@@ -268,65 +268,139 @@ def test_missing_or_tampered_authority_refuses_without_downgrade(tmp_path):
     assert "BACKGROUND_ENVELOPE_EXCEEDED" in decision.reason_codes
 
 
-class _FakeExecutionPort:
-    """Typed bounded execution boundary: no workload is started offline."""
+def _installed_child_environment(extra: dict) -> dict:
+    """PYTHONPATH where both product modules resolve from the copied offline prefix."""
 
-    def __init__(self):
-        self.launches = []
+    import sys
+    demo = OFFLINE_INSTALL / "so101_demo_py/lib/python3.12/site-packages"
+    teleop = OFFLINE_INSTALL / "so101_teleop/lib/python3.12/site-packages"
+    support = OFFLINE_INSTALL / "so101_mujoco_support/lib/python3.12/site-packages"
+    underlay = [
+        "/data/work/ws_mujoco_ros2_control_fork/install/lib/python3.12/site-packages",
+        "/data/work/ws_moveit/install/mujoco_ros2_control_msgs/lib/python3.12/site-packages",
+        "/opt/ros/jazzy/lib/python3.12/site-packages",
+    ]
+    test_site = str(Path(sys.executable).resolve().parent.parent / "lib/python3.12/site-packages")
+    environment = dict(os.environ)
+    environment.update(extra)
+    environment["SO101_DISABLE_KIMI_EDITABLE_FINDER"] = "1"
+    environment["PYTHONNOUSERSITE"] = "1"
+    environment["SO101_E2E_EVIDENCE_ROOT"] = extra.get(
+        "SO101_VALIDATION_EVIDENCE_ROOT", str(Path(extra["SO101_VALIDATION_POINTS"]).parent))
+    environment["PYTHONPATH"] = ":".join(
+        [str(demo), str(teleop), str(support), *underlay, test_site])
+    environment["TMPDIR"] = extra["_TMPDIR"]
+    environment["TMP"] = extra["_TMPDIR"]
+    environment["TEMP"] = extra["_TMPDIR"]
+    return environment
 
-    def start(self, *args, **kwargs):  # pragma: no cover - never reached offline
-        self.launches.append((args, kwargs))
-        raise AssertionError("offline test must not launch a workload")
+
+_CHILD_PROGRAM = r"""
+import hashlib, json, os, sys, tempfile
+from pathlib import Path
+
+EVIDENCE = Path(os.environ["SO101_VALIDATION_EVIDENCE_ROOT"])
+AUTHORITY = Path(os.environ["TEST_AUTHORITY_DIR"])
+LIVE_DOCUMENT = json.loads(Path(os.environ["TEST_LIVE_OBSERVATION"]).read_text())
+CURRENT_DOCUMENT = json.loads(Path(os.environ["TEST_FINGERPRINT"]).read_text())
+
+from so101_demo.parallel_batch.resource_budget import (
+    LiveResourceObservation, compose_production_admission)
+from so101_demo.parallel_batch.resource_identity import RuntimeFingerprint
+from so101_teleop.expert_validation.production import create_production_service
 
 
-def test_installed_factory_service_derives_capabilities_from_the_gate(tmp_path):
-    """The actual installed factory composes the gate and reports provider decisions."""
+class Port:
+    def start(self, *args, **kwargs):  # pragma: no cover - never launched
+        raise AssertionError("offline child must not launch a workload")
 
-    from so101_teleop.expert_validation.production import create_production_service
-    from so101_demo.parallel_batch.resource_budget import compose_production_admission
+
+current = RuntimeFingerprint(
+    schema_version=CURRENT_DOCUMENT["schema_version"], facts=CURRENT_DOCUMENT["facts"],
+    normalization_sha256=CURRENT_DOCUMENT["normalization_sha256"],
+    semantic_config_sha256=CURRENT_DOCUMENT["semantic_config_sha256"],
+    execution_inventory_sha256=CURRENT_DOCUMENT["execution_inventory_sha256"],
+    installed_inventory_sha256=CURRENT_DOCUMENT["installed_inventory_sha256"])
+live = LiveResourceObservation(**{
+    **LIVE_DOCUMENT,
+    "capacity": LIVE_DOCUMENT["capacity"], "observed": LIVE_DOCUMENT["observed"],
+    "background": LIVE_DOCUMENT["background"],
+    "tool_overhead": LIVE_DOCUMENT["tool_overhead"],
+    "remaining": LIVE_DOCUMENT["remaining"], "error": LIVE_DOCUMENT["error"]})
+
+environment = dict(os.environ)
+environment.update(json.loads(Path(os.environ["TEST_AUTHORITY_ENV"]).read_text()))
+
+
+def admission_factory(env):
+    return compose_production_admission(
+        environment=env, live_observation=live, current=current)
+
+
+service = create_production_service(
+    EVIDENCE / "service", environment=environment, execution_port=Port(),
+    admission_factory=admission_factory)
+try:
+    capabilities = service.capabilities()
+finally:
+    service.store.close()
+print(json.dumps({"capabilities": capabilities, "tempdir": tempfile.gettempdir()}))
+"""
+
+
+def test_installed_factory_child_reports_provider_derived_capabilities(tmp_path):
+    """The actual installed factory, imported from the copied prefix, derives N4."""
+
+    import json as _json
+    import subprocess
+    import sys
 
     current = fingerprint()
     authority = synthetic_authority(tmp_path, 4, current.sha256)
+    evidence = tmp_path / "evidence"
+    evidence.mkdir(mode=0o700, parents=True)
     environment = installed_environment(**_environment(authority, tmp_path))
+    environment["SO101_VALIDATION_EVIDENCE_ROOT"] = str(evidence)
+    scratch = tmp_path / "tmp"
+    scratch.mkdir(mode=0o700, exist_ok=True)
 
-    def admission_factory(env):
-        return compose_production_admission(
-            environment=env, live_observation=_live(), current=current)
+    authority_env = tmp_path / "authority-env.json"
+    authority_env.write_text(_json.dumps(environment, sort_keys=True))
+    live_path = tmp_path / "live.json"
+    live = _live()
+    live_path.write_text(_json.dumps({
+        "monotonic_s": live.monotonic_s,
+        "capacity": dict(live.capacity), "observed": dict(live.observed),
+        "background": dict(live.background), "tool_overhead": dict(live.tool_overhead),
+        "remaining": dict(live.remaining), "error": dict(live.error),
+        "attribution_complete": live.attribution_complete,
+        "swap_delta": live.swap_delta, "psi_full_delta": live.psi_full_delta,
+        "throttled": live.throttled,
+    }, sort_keys=True))
+    fingerprint_path = tmp_path / "fingerprint.json"
+    fingerprint_path.write_text(_json.dumps(current.as_document(), sort_keys=True))
 
-    service = create_production_service(
-        tmp_path / "evidence/service", environment=environment,
-        execution_port=_FakeExecutionPort(), admission_factory=admission_factory)
-    try:
-        capabilities = service.capabilities()
-        by_count = {
-            entry["worker_count"]: entry
-            for entry in capabilities["worker_count_availability"]
-        }
-        assert by_count[4]["selectable"] is True, by_count[4]
-        assert by_count[4]["status"] == "APPROVED"
-        assert by_count[4]["profile_sha256"] == authority["profile_sha"]
-        assert by_count[4]["qualification_sha256"] == authority["qualification_sha"]
-        for count in (2, 3, 5, 6, 7, 8):
-            assert by_count[count]["selectable"] is False, count
-            assert "EXACT_N_UNQUALIFIED" in by_count[count]["reason_codes"], count
-        # No downgrade: the qualified count stays the only selectable one.
-        assert [c for c, entry in by_count.items() if entry["selectable"]] == [4]
-    finally:
-        service.store.close()
-
-
-def test_installed_factory_without_authority_reports_unmeasured(tmp_path):
-    from so101_teleop.expert_validation.production import create_production_service
-
-    environment = installed_environment()
-    service = create_production_service(
-        tmp_path / "evidence/no-authority", environment=environment,
-        execution_port=_FakeExecutionPort())
-    try:
-        capabilities = service.capabilities()
-        for entry in capabilities["worker_count_availability"]:
-            assert entry["selectable"] is False
-            assert entry["status"] == "NOT_MEASURED"
-            assert "BUDGET_PROFILE_UNAVAILABLE" in entry["reason_codes"]
-    finally:
-        service.store.close()
+    child = _installed_child_environment({
+        **environment,
+        "_TMPDIR": str(scratch),
+        "TEST_AUTHORITY_DIR": str(tmp_path / "authority"),
+        "TEST_AUTHORITY_ENV": str(authority_env),
+        "TEST_LIVE_OBSERVATION": str(live_path),
+        "TEST_FINGERPRINT": str(fingerprint_path),
+    })
+    completed = subprocess.run(
+        [sys.executable, "-c", _CHILD_PROGRAM], capture_output=True, text=True,
+        env=child, cwd=str(tmp_path))
+    assert completed.returncode == 0, completed.stderr[-2000:]
+    document = _json.loads(completed.stdout.strip().splitlines()[-1])
+    assert document["tempdir"].startswith(str(scratch))
+    by_count = {
+        entry["worker_count"]: entry
+        for entry in document["capabilities"]["worker_count_availability"]
+    }
+    assert by_count[4]["selectable"] is True, by_count[4]
+    assert by_count[4]["profile_sha256"] == authority["profile_sha"]
+    assert by_count[4]["qualification_sha256"] == authority["qualification_sha"]
+    assert [count for count, entry in by_count.items() if entry["selectable"]] == [4]
+    for count in (2, 3, 5, 6, 7, 8):
+        assert "EXACT_N_UNQUALIFIED" in by_count[count]["reason_codes"], count
