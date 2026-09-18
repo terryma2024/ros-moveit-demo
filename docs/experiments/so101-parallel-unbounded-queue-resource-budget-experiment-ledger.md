@@ -3197,3 +3197,20 @@ what remains is the cost of one sampling pass: the grid keeps the period at
 the pass itself. The next question is therefore what a single pass spends its time on (PSS is on
 its own slower channel) and whether that work can be kept inside the gap budget on a host running
 a torch workload. N1 stays `NOT_MEASURED`; nothing is extrapolated to another N.
+
+## CP-UQ47 — Correction to CP-UQ46: the latch is a first-sample race, not sampling cost
+
+Reading run4's evidence rather than its abort code changes the conclusion. The batch contains
+exactly **one** sample, and the timeline is `SAMPLING_START@0.16`, `WORKLOAD_SPAWN@0.16`,
+`ABORT_LATCHED@0.22`: the abort arrives 60 ms after the spawn, far too early for a period to have
+elapsed at all. The latch is therefore the `_last_sample_s is None` branch of
+`MeasurementControl.check_health` -- the main thread's first health check runs before the sampler
+thread has published its opening sample, so "no sample yet" is treated as "the sampler is
+gapped". run3 happened to win that race; run4 lost it. CP-UQ46's closing sentence about the cost
+of a sampling pass was wrong and is withdrawn.
+
+The repair is to bound the start rather than the steady state: treat the interval between
+`SAMPLING_START` and the first sample as a grace window (one interval plus slack, or the same
+grid deadline) and latch only if the first sample misses it, with a test that fails closed if the
+sampler never produces one. Because the runtime source participates in R, that change requires a
+new sealed revision before the next run. N1 stays `NOT_MEASURED`.
