@@ -4858,3 +4858,30 @@ Two things follow, and they are cheap:
 
 The instrument is now doing exactly what this stage needs: it attributes demand to processes instead
 of inferring it, and the next run's table answers the question CP-UQ103 left to the operator.
+
+## CP-UQ107 — The members are idle because the CPU is in the container's child cgroup
+
+Ranking run72's attribution answers the question, and the answer is a contradiction that resolves
+cleanly. Over 197 samples the cgroup's own `cpu.stat` grows by about one CPU-second per 50 ms pass
+(~19 cores), while the direct members of that cgroup show almost nothing:
+
+    whole-run CPU per cgroup process: 0.86 cpu-s for so101_parallel_ (the launcher), ~0.00 for the
+    other fourteen (spawner, scene_setup, ros2_control_node, robot_state_publisher, ...)
+    across the throttled interval: 0.31 cpu-s for motion_stack_re, 0.06 and below for the rest
+
+Both readings are correct, because `cgroup.procs` lists only a cgroup's **direct** members while
+`cpu.stat` is hierarchical: the container the launcher starts gets its own **child** cgroup (that is
+how the container runtime puts it there), so the perception work inside it -- torch, ultralytics,
+grounded SAM, the broker's loops -- burns the ~19 cores in a *descendant*, and the sampler never saw
+those processes because it enumerated only the parent's own list.
+
+That also finishes the earlier threads: the OMP/MKL/OPENBLAS/TORCH/MUJOCO bounds apply inside the
+container and did lower the peak (18.9 -> 13.6 cores), but the demand is the container's inference
+work, not a library pool the launcher can bound from outside. The next change to the sampler is
+therefore to walk descendant cgroups when attributing (`cgroup.controllers`/children enumeration, or
+reading the child cgroups' own `cpu.stat`), so the attribution covers the subtree whose usage the
+parent's `cpu.stat` is already summing.
+
+The policy question stays where CP-UQ103 left it: with the workload's real demand now located (the
+container's perception work at ~19 cores against a 19.1-core quota), the operator's choices are to
+bound that work, to widen the envelope, or to accept single-period throttling.
