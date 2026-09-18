@@ -248,10 +248,8 @@ def installed_bundle() -> QualificationBundle:
                 "prefix": mujoco_prefix,
                 "executable": (
                     None if mujoco_prefix is None
-                    else str(
-                        Path(mujoco_prefix)
-                        / "lib/mujoco_ros2_control/ros2_control_node"
-                    )
+                    else Path(mujoco_prefix)
+                    / "lib/mujoco_ros2_control/ros2_control_node"
                 ),
             },
             "runner_version": "fusion-v1",
