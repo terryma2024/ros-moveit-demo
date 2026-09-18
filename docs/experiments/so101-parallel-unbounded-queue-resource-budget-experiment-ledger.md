@@ -4094,3 +4094,16 @@ rather than hidden:
   same shape for `test_oversized_cmdline_process_is_classified_not_refused`), so the isolation
   investigation is now a named task rather than an aside: run the failing pair with per-test state
   inspection rather than assuming the assertion is wrong.
+
+### CP-UQ77 addendum — the 60 s baseline was the confounder, and the suite is fast again
+
+The default-path module now derives one candidate config (authoritative document with
+`baseline_minimum_s: 0.2`) and uses it for identity, plan and CLI argv alike, so all three stay
+consistent while the authoritative file keeps its 60 s. With that, the four-file measurement suite
+runs **68 passed in 7.40 s** instead of 306 s, and the combination-only failure of
+`test_real_session_latches_on_a_safety_breach_and_refuses` no longer reproduces in the pairs that
+previously showed it (default-path with batch-resources, runtime and control). The honest reading is
+that the earlier combination failure was the long baseline colliding with that test's elapsed-time
+bound rather than a cross-file state leak -- the timing assertion now measures baseline-plus-margin,
+and the code assertion is unaffected. The isolation task from the previous addendum stays open but
+is downgraded from "suspected state leak" to "verify with the fast config in the full gate".
