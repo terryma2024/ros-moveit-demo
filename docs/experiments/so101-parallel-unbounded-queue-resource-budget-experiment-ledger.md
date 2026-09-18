@@ -7012,3 +7012,44 @@ root, then runs the cheapest real campaign (preflight + `r01-sequential`) to see
 past `_wait_broker_ready` and reach the workers.
 
 _Ledger HEAD when written: `3734e9f2f`._
+
+## CP-UQ173 — Redeployed on a fresh state root, with the new image behind the same tag
+
+The acceptance cannot run against the service root left over from the failed attempts: the
+`01-sequential` spec asserts the service reports **exactly one** campaign, and
+`service-light.eXmsNQ70` already held one terminal campaign, so a new run would have latched onto
+the old campaign id and failed for a reason that has nothing to do with the defect under test. So
+the deployment was redone, stop-first, and nothing was started before the old process was gone:
+
+| Fact | Value |
+| --- | --- |
+| Superseded service | PID `2264509`, started `Sat Sep 19 02:32:20 2026` |
+| Stop | `SIGTERM`, process gone, `ss` showed **0** listeners on `:8010` before the new start |
+| New service | PID `2269241`, entry `so101_expert_validation_server.py` from `copy-install-final.5EPRaqiL` |
+| Fresh state root | `service-light.XnvG8npN/state` |
+| Log / record | `service-light.XnvG8npN/server.log`, `service-light.XnvG8npN/deploy.json` |
+| Health | `{"ok": true, "service": "expert-validation"}` |
+| Port | `LISTEN 127.0.0.1:8010` owned by PID `2269241` (checked with `ss`, not assumed) |
+| Served bytes | page hash `c09fc43a38261065` == installed `index.html`, `served_matches_installed = true` |
+
+The environment was not retyped from memory: it is the superseded process's own
+`/proc/<pid>/environ`, replayed with **one** change — `SO101_VALIDATION_EVIDENCE_ROOT` pointing at
+the fresh root. Everything else (broker image tag, v3 config, model weights, grounded root, task
+root, ROS/ament prefixes) is byte-identical to the deployment that was already serving.
+
+The live projection is guard-shaped and functional: `execution_modes = ["SEQUENTIAL", "PARALLEL",
+"ADAPTIVE"]`, all seven fixed counts `CONFIGURED` and `selectable`, and
+`start_guard_policy = {"cpu_busy_warn_fraction": 0.9, "gpu_minimum_bytes": 1073741824,
+"ram_minimum_bytes": 1073741824, "ram_minimum_fraction": 0.05, "timeout_s": 2.0}`.
+
+One probe error of mine, recorded so it is not mistaken for a service gap: my deploy probe asked
+for `contract_version` in the capabilities response and got `null`. That key does not exist there —
+`CapabilitiesResponse` (api.py:154) has no `contract_version` field; it is on the preflight
+response. The probe was wrong, the service is not.
+
+Next: the decisive probe run (`lg-r01-probe`, preflight + `r01-sequential`, the cheapest real
+campaign) is in flight against this service. Its purpose is narrow and stated: get past
+`_wait_broker_ready` and reach real workers. The full manifest acceptance follows only once that
+happens.
+
+_Ledger HEAD when written: `01e920ca0`._
