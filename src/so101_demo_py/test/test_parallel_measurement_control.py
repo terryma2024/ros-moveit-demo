@@ -217,3 +217,29 @@ def test_two_consecutive_samples_inside_the_allowance_do_not_latch(make_control)
     control.observe_sample(2, 1.0909)
     assert not control.stop_requested()
     assert calls == []
+
+
+def test_cold_start_grace_covers_the_workloads_own_startup_once(make_control):
+    """run59 and run60 both took a single ~170 ms interval about 3.5 s after the spawn: the
+    worker importing torch starves the sampler's own reads. One bounded, one-shot grace
+    covers that window; an identical gap outside it still latches."""
+
+    control, calls = make_control()
+    control.mark_sampling_start(1.0)
+    control.observe_sample(1, 1.02)
+    control.mark_workload_start(1.05)
+    control.observe_sample(2, 1.22)          # 200 ms inside the cold-start window
+    assert not control.stop_requested()
+    control.observe_sample(3, 1.42)          # 200 ms later: grace already used
+    assert control.stop_requested()
+    assert control.latch_reason == "SAMPLER_GAP"
+    assert calls and calls[0][1] == "SAMPLER_GAP"
+
+
+def test_cold_start_grace_does_not_apply_without_a_workload(make_control):
+    control, calls = make_control()
+    control.mark_sampling_start(1.0)
+    control.observe_sample(1, 1.02)
+    control.observe_sample(2, 1.22)
+    assert control.stop_requested()
+    assert calls and calls[0][1] == "SAMPLER_GAP"

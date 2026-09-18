@@ -744,6 +744,9 @@ class MeasurementSession:
         child = OwnedChild(process=process, streams=(stdout, stderr))
         self.child = child
         self._record("WORKLOAD_SPAWN")
+        if self.control is not None:
+            # One-shot cold-start grace: the workload's own startup starves the sampler.
+            self.control.mark_workload_start(self.clock())
         try:
             self.cgroup.attach(process.pid)
             self._request_sampling_rebaseline()
