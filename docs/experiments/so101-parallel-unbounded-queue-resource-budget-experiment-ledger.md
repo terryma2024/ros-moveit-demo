@@ -5505,3 +5505,50 @@ the panel does not yet render the guard status/units/time, and
 the next round, followed by Task 8's installed-entry and negative-gate coverage.
 
 _Ledger HEAD when written: `23cbbf486`._
+
+
+## CP-UQ122 — Task 7 complete: the guard reaches the browser, and the client is on v3
+
+Commit `04c22828e` (`feat: expose lightweight startup status`) closes the Web half that
+CP-UQ121 left open.
+
+- **The export is regenerated, not hand-edited**: `$TEST_PYTHON -m so101_teleop.openapi_export
+  --validation src/so101_teleop/so101_teleop/expert_validation_openapi.json` (exit 0). The
+  diff is exactly what the DTO change implies: `contract_version` `const` 2 -> 3 in both
+  request schemas, plus `StartGuardStatus`/`StartGuardCheck`/`StartGuardPolicyResponse` and
+  the new `start_guard`/`start_guard_policy` response properties (191 added lines). The
+  generated TypeScript schema followed through
+  `so101_bun lg-api-generate run generate:api:validation` (68 added lines), and
+  `expert-validation-types.ts` now exports the three guard types.
+- **The client speaks v3**: `contract_version: 2` is gone from
+  `expert-validation-app.tsx` (both the fixed and adaptive preflight inputs), the client test
+  and the app test. That matters because the server gate from CP-UQ121 refuses anything else
+  with `CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION`.
+- **The panel shows the server's decision instead of a bare pass/fail**:
+  `start-guard-summary.ts` formats the status, every check with its unit and cutoff
+  (`RAM free 30.0 GiB vs floor 1.0 GiB`, `CPU busy 95.0% vs 90.0%`), the observation time,
+  the policy timeout and a blocked cleanup state; a FAIL keeps its own reasons; a missing
+  result reads `Start guard: unknown (not checked yet)` rather than green. It is rendered as
+  its own `aria-label="Start guard"` line in the setup panel, so the existing
+  "Parallel admission passed" notice and its tests stay meaningful, and a WARN is displayed
+  as a warning — never as a qualification.
+- The first build attempt failed with four `TS2345` errors because `StartGuardCheck.observed`
+  can be a string as well as a number; the formatters now accept
+  `number | string | null | undefined` and only format finite numbers. Worth recording
+  because it is exactly the kind of thing a "generated schema" change is supposed to surface.
+
+Gates, all through the task wrapper with their run directories recorded:
+
+| Gate | Result |
+| --- | --- |
+| `lg-web-unit4` `so101_bun run test` | **126 passed** (30 files) |
+| `lg-web-build2` `so101_bun run build` (`tsc -b && vite build`) | exit 0, `dist/` written |
+| `lg-t7-export` openapi_export test + the guard API tests | **12 passed** |
+
+State: **Tasks 1-7 of 12 complete** (commit chain `e4d4d22be` ... `04c22828e`). Next: **Task 8**,
+the launch/wrapper/default installed entry points and the product negative gates (real copied
+`so101_parallel_batch` entry, `ros2 launch ... --show-args` for the installed TextAgent
+launch, plus the missing/malformed debug-manifest and session/reset/evidence/content/control
+negative cases).
+
+_Ledger HEAD when written: `04c22828e`._
