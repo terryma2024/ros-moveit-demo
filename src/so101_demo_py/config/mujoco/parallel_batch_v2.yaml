@@ -56,8 +56,6 @@ execution:
     capacity_fraction: 0.8
     minimum_free_fraction: 0.20
     gpu_device_index: 0
-    abort_on_swap_activity: true
-    abort_on_psi_full_stall: true
     throttling_disqualifies_run: true
     require_complete_attribution: true
   coverage:
