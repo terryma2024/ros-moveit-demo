@@ -4568,3 +4568,27 @@ still independent readings on its own clock -- rather than re-deriving host fact
 capacity-style facts it needs can be read once. Then measure the pass cost again, and only if a pass
 still exceeds the allowance consider the bounded workload-start window; the allowance itself stays
 policy.
+
+## CP-UQ95 — The gap is not the spawn instant: it is the worker's cold start
+
+The alias fix worked as intended -- run60's baseline is 318 samples and the cheap channel no longer
+starves anything -- but the primary sampler still took one long interval, and its position is the
+finding: **169.9 ms from 3.38 s to 3.55 s after `SAMPLING_START`**, with the abort at 3.52 s. That is
+not the spawn instant (which is 0.00 s) but ~3.5 s into the run, and run59's gap sat in the same
+place (3.39 s to 3.58 s). The worker's first heavy step -- importing torch inside the container --
+lands there, saturating CPU and disk, and the sampler's own `/proc` and cgroup reads block behind it.
+So the measurement is being starved by the workload it is measuring, at a deterministic offset.
+
+That makes the honest options narrow and specific:
+
+1. a **documented, bounded allowance** for the sampler gap during the workload's cold start -- one
+   shot, anchored at `WORKLOAD_SPAWN`, recorded in the receipt as used or unused, so it cannot hide a
+   later stall. This is the same shape as the two graces already accepted in this harness (the
+   opening sample and the attach rebaseline), and it does not change `maximum_sample_gap_s`, which
+   stays policy;
+2. making the sampler's reads resilient to IO contention, which is where the stall actually is, and
+   is a much larger change for a rule whose purpose is to notice exactly this.
+
+Two data points at the same offset justify (1) as the next unit, with a RED test that a gap inside
+the cold-start window does not latch while an identical gap outside it still does, and a receipt
+field that shows which case applied.
