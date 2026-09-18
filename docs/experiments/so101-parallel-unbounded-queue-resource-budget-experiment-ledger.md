@@ -3917,3 +3917,26 @@ left without a held lease. With this, Stage B's residual list is complete: owned
 (captured earlier), owned Web refresh/start on the frozen install with fresh PID/URL/store and
 byte-identical served UI (CP-UQ73), and the lease/fence interface (this entry). N1 remains
 `NOT_MEASURED`; nothing is extrapolated to another N.
+
+## CP-UQ75 — Stage D preparation: eight honest candidate packets, none of them a claim
+
+Run directory `stageD-prep.R4oZxf5B/packets/n1..n8/candidate-packet.json`, generated from the
+sealed artifacts rather than written by hand: the N1 packet binds authorization r28 (its real
+sha256, intent and deadline read from the document) and the observed runtime identity plus the
+candidate provenance binding r7 with its sha; the location slot records the evidence root and the
+owned Web URL from CP-UQ73.
+
+What the packets deliberately do **not** contain is the point of them:
+
+- `status` is `INCOMPLETE_NO_MEASUREMENT` on every one of the eight, never `APPROVED`;
+- `qualification` and `batch` are `NOT_MEASURED` with their reasons recorded -- for `batch`, the
+  concrete one from CP-UQ67/CP-UQ70: the harness is complete and the launcher refuses while the
+  host carries swap pressure from other sessions;
+- `candidate_plan` is `SEALED` only for N1 (r28) and `NOT_PREPARED` for N2..N8, because no
+  authorization has been sealed for those worker counts;
+- `approvals` is empty and `submitted_to_operator` is false, and a grep for `APPROVED` across the
+  packet returns nothing.
+
+So Stage D now has prepared inputs with object-bound slots and no fabricated content: submission
+waits on real operator approval objects, which is exactly what the stage requires and what this
+task cannot supply for itself. N1 remains `NOT_MEASURED` and nothing is extrapolated to another N.
