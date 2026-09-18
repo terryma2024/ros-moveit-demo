@@ -4885,3 +4885,28 @@ parent's `cpu.stat` is already summing.
 The policy question stays where CP-UQ103 left it: with the workload's real demand now located (the
 container's perception work at ~19 cores against a 19.1-core quota), the operator's choices are to
 bound that work, to widen the envelope, or to accept single-period throttling.
+
+## CP-UQ108 — No children at all: the counter growth is not explained by the members
+
+The subtree walk shipped (47 tests green, commit `2330ecfed`) and answered by finding nothing: every
+process run73 attributed sits in `cgroup=.` -- the measurement cgroup's own list -- and **no child
+cgroup appears at all**. So CP-UQ107's explanation (the container's work in a descendant) is wrong, and
+the contradiction it was meant to resolve is still standing, now sharper:
+
+- the cgroup's `cpu_usage_us` grows by about a CPU-second per 50 ms sample (~19 cores), and
+- every process inside that cgroup is idle over the same window (0.90 cpu-s total for the launcher,
+  ~0.00 for the fourteen ROS 2 nodes), with no children to hold the difference.
+
+Two candidate explanations remain, and they are both checkable in one step:
+
+1. the sampler's `cpu_usage_us()` is read from a **different cgroup than the one whose processes it
+   lists** (the port may resolve through an ancestor), which would make the "observed" CPU belong to
+   the scope rather than to the owned measurement cgroup; or
+2. the container's processes live **outside** the measurement cgroup entirely (docker's own placement
+   under its slice), in which case the quota never bounded the perception work and the throttling the
+   policy sees is the ancestor's -- a materially different finding from everything assumed so far.
+
+The way to tell them apart is to record, in the same sample, the *path* the CPU counter was read from
+and the *paths* the process list came from, so the two line up or visibly do not. That is a small
+diagnostic addition to the existing diagnostics block, not a behaviour change; the next round adds it
+and reads the answer.
