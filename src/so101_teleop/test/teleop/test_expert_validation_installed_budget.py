@@ -75,7 +75,13 @@ def synthetic_authority(tmp_path: Path, worker_count: int = 4, identity: str | N
     promotion_sha = _write(promotion_path, {
         "schema_version": 2, "kind": "PROMOTION", "profile_sha256": profile_sha,
         "exact_worker_count": worker_count, "operator_approval_uid": os.getuid(),
-        "reviews": ["sol:synthetic", "astra:synthetic"],
+        "reviews": [
+            {"reviewer": "sol", "result": "PASS", "sha256": "1" * 64},
+            {"reviewer": "astra", "result": "PASS", "sha256": "2" * 64},
+        ],
+        "sol_result_review_sha256": "1" * 64,
+        "astra_profile_review_sha256": "2" * 64,
+        "operator_approval_sha256": "3" * 64,
     })
     receipt_path = tmp_path / "authority/deployment.json"
     _write(receipt_path, {

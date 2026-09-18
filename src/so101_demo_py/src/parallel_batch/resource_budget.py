@@ -802,19 +802,13 @@ def issue_production_context(
     if promotion_path.resolve().is_relative_to(Path(profile_path).resolve().parent):
         raise ContractError("PROMOTION_NOT_INDEPENDENT")
     promotion, promotion_sha = read_private_document(promotion_path)
-    if promotion.get("schema_version") != 2:
-        raise ContractError("PROMOTION_SCHEMA_VERSION")
+    _require_closed_promotion(promotion)
     if promotion.get("profile_sha256") != expected_profile_sha256:
         raise ContractError("PROMOTION_PROFILE_MISMATCH")
     if promotion.get("exact_worker_count") != scope.worker_count:
         raise ContractError("PROMOTION_EXACT_N_MISMATCH")
-    if type(promotion.get("operator_approval_uid")) is not int:
-        raise ContractError("PROMOTION_OPERATOR_APPROVAL")
-    reviews = promotion.get("reviews")
-    if not isinstance(reviews, (list, tuple)) or not reviews:
-        raise ContractError("PROMOTION_REVIEWS")
     receipt, receipt_sha = read_private_document(deployment_receipt_path)
-    if receipt.get("schema_version") != 2:
+    if receipt.get("schema_version") != 2 or receipt.get("kind") not in (None, "DEPLOYMENT_RECEIPT"):
         raise ContractError("DEPLOYMENT_RECEIPT_SCHEMA_VERSION")
     if receipt.get("profile_sha256") != expected_profile_sha256:
         raise ContractError("DEPLOYMENT_RECEIPT_PROFILE_MISMATCH")
@@ -1085,12 +1079,18 @@ def publish_promotion(
     if sol.get("result") != "PASS" or astra.get("result") != "PASS":
         raise ContractError("INDEPENDENT_REVIEW_REQUIRED")
     document = {
-        "schema_version": 1,
+        "schema_version": 2,
         "kind": "PROMOTION",
         "profile_sha256": profile_sha256,
         "exact_worker_count": exact_n,
         "operator_approval_uid": operator_uid,
         "operator_approval_sha256": approval_sha,
+        "reviews": [
+            {"reviewer": str(sol.get("reviewer", "sol")), "result": str(sol["result"]),
+             "sha256": sol_sha},
+            {"reviewer": str(astra.get("reviewer", "astra")), "result": str(astra["result"]),
+             "sha256": astra_sha},
+        ],
         "sol_result_review_sha256": sol_sha,
         "astra_profile_review_sha256": astra_sha,
         "measurement_audit": dict(measurement_audit),
@@ -1103,6 +1103,36 @@ def publish_promotion(
     return target
 
 
+def _require_closed_promotion(document: Mapping[str, object]) -> None:
+    """One closed schema2 validation shared by the verifier and the context issuer."""
+
+    if not isinstance(document, Mapping):
+        raise ContractError("PROMOTION_INVALID")
+    if document.get("kind") != "PROMOTION":
+        raise ContractError("PROMOTION_INVALID")
+    if document.get("schema_version") != 2:
+        raise ContractError("PROMOTION_SCHEMA_VERSION")
+    if type(document.get("operator_approval_uid")) is not int:
+        raise ContractError("OPERATOR_APPROVAL_REQUIRED")
+    reviews = document.get("reviews")
+    if not isinstance(reviews, (list, tuple)) or not reviews:
+        raise ContractError("PROMOTION_REVIEWS")
+    reviewers = set()
+    for review in reviews:
+        if not isinstance(review, Mapping) or review.get("result") != "PASS":
+            raise ContractError("INDEPENDENT_REVIEW_REQUIRED")
+        _require_sha256("review_sha256", review.get("sha256"))
+        reviewer = str(review.get("reviewer", ""))
+        if not reviewer:
+            raise ContractError("PROMOTION_REVIEWS")
+        reviewers.add(reviewer)
+    if not {"sol", "astra"} <= reviewers:
+        raise ContractError("PROMOTION_REVIEWS")
+    for name in ("sol_result_review_sha256", "astra_profile_review_sha256",
+                 "operator_approval_sha256"):
+        _require_sha256(name, document.get(name))
+
+
 def verify_promotion(
     *, profile: ApprovedBudgetProfile, promotion_path: Path | None, authority: PromotionAuthority
 ) -> None:
@@ -1113,15 +1143,9 @@ def verify_promotion(
     if not isinstance(authority, PromotionAuthority):
         raise ContractError("PROMOTION_AUTHORITY_INVALID")
     document, _ = authority.read_document(Path(promotion_path))
-    if document.get("kind") != "PROMOTION" or document.get("schema_version") != 1:
-        raise ContractError("PROMOTION_INVALID")
+    _require_closed_promotion(document)
     if document.get("profile_sha256") != profile.raw_sha256:
         raise ContractError("PROMOTION_PROFILE_MISMATCH")
-    if type(document.get("operator_approval_uid")) is not int:
-        raise ContractError("OPERATOR_APPROVAL_REQUIRED")
-    for name in ("sol_result_review_sha256", "astra_profile_review_sha256",
-                 "operator_approval_sha256"):
-        _require_sha256(name, document.get(name))
 
 
 def build_deployment_receipt(
@@ -1140,7 +1164,7 @@ def build_deployment_receipt(
         raise ContractError("LOCATION_BINDING")
     _, promotion_sha = read_private_document(Path(promotion_path), expected_sha256=None)
     document = {
-        "schema_version": 1,
+        "schema_version": 2,
         "kind": "DEPLOYMENT_RECEIPT",
         "profile_sha256": profile_sha256,
         "promotion_sha256": promotion_sha,
