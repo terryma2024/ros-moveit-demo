@@ -583,3 +583,98 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover - exercised through the module entry point
     sys.exit(main())
+
+# --------------------------------------------------------------------------------------
+# epoch composition
+# --------------------------------------------------------------------------------------
+
+
+class StartGuardRefused(RuntimeError):
+    """A refused start. The caller must not allocate, spawn or create a partial batch."""
+
+    def __init__(self, result: GuardResult) -> None:
+        self.result = result
+        self.reason = (result.checks.get("probe").reason if "probe" in result.checks
+                       else "START_GUARD_REFUSED")
+        super().__init__(self.reason)
+
+
+def _scope_key(scope: GuardScope) -> tuple:
+    return (scope.batch_id, scope.epoch, scope.owner_pid, scope.owner_starttime_ticks,
+            scope.gpu_selector, scope.worker_count)
+
+
+class EpochStartGuard:
+    """One fresh probe covers the spawns that immediately follow it in the same epoch.
+
+    The result is never accepted from outside this object, is only reused while the scope is
+    unchanged and the observation is still inside the policy deadline, and a FAIL is refused
+    rather than downgraded.
+    """
+
+    def __init__(self, coordinator: ProbeCoordinator, policy: StartGuardPolicy, *,
+                 clock=time.monotonic) -> None:
+        if not isinstance(coordinator, ProbeCoordinator):
+            raise ValueError("coordinator must be a ProbeCoordinator")
+        if not isinstance(policy, StartGuardPolicy):
+            raise ValueError("policy must be a StartGuardPolicy")
+        self._coordinator = coordinator
+        self._policy = policy
+        self._clock = clock
+        self._key: tuple | None = None
+        self._result: GuardResult | None = None
+        self._probes = 0
+
+    @property
+    def policy(self) -> StartGuardPolicy:
+        return self._policy
+
+    @property
+    def probe_count(self) -> int:
+        """How many fresh probes this guard has run; evidence that epochs are not re-probed."""
+
+        return self._probes
+
+    @property
+    def last_result(self) -> GuardResult | None:
+        return self._result
+
+    def begin_epoch(self, scope: GuardScope) -> GuardResult:
+        """Always take one fresh observation for the new epoch."""
+
+        self._result = self._coordinator.check(self._policy, scope)
+        self._key = _scope_key(scope)
+        self._probes += 1
+        return self._result
+
+    def require_before_spawn(self, scope: GuardScope) -> GuardResult:
+        """Reuse the epoch result only while it is still valid; otherwise probe again."""
+
+        if not isinstance(scope, GuardScope):
+            raise ValueError("scope must be a GuardScope")
+        reusable = (
+            self._result is not None
+            and self._key == _scope_key(scope)
+            and self._result.status != FAIL
+            and self._result.cleanup_state == CLEAR
+            and (self._clock() - self._result.completed_monotonic_s) <= self._policy.timeout_s
+        )
+        if not reusable:
+            return self.begin_epoch(scope)
+        return self._result
+
+    def require_startable(self, scope: GuardScope) -> GuardResult:
+        """The fail-closed form every allocator/spawn path should use."""
+
+        result = self.require_before_spawn(scope)
+        if result.status == FAIL or result.cleanup_state != CLEAR:
+            raise StartGuardRefused(result)
+        return result
+
+
+def compose_default_start_guard(policy: StartGuardPolicy, *,
+                                state_root: Path | None = None) -> EpochStartGuard:
+    """The installed composition: one task-level state root, one shared lock."""
+
+    return EpochStartGuard(ProbeCoordinator(state_root), policy)
+
