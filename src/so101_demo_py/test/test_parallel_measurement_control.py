@@ -243,3 +243,31 @@ def test_cold_start_grace_does_not_apply_without_a_workload(make_control):
     control.observe_sample(2, 1.22)
     assert control.stop_requested()
     assert calls and calls[0][1] == "SAMPLER_GAP"
+
+
+def test_cold_start_window_closes_when_the_workload_activates(make_control):
+    """The window must end at readiness, not after a guessed duration: run61's stall came
+    3.2 s after the spawn, far outside a fixed one-second grace."""
+
+    control, calls = make_control()
+    control.mark_sampling_start(1.0)
+    control.observe_sample(1, 1.02)
+    control.mark_workload_start(1.05)
+    control.observe_sample(2, 1.30)          # 280 ms while the cold start is still open
+    assert not control.stop_requested()
+    control.mark_workload_active(1.31)       # readiness observed: the window closes
+    control.observe_sample(3, 1.55)          # 240 ms after readiness must latch
+    assert control.stop_requested()
+    assert control.latch_reason == "SAMPLER_GAP"
+
+
+def test_cold_start_window_has_a_ceiling_and_cannot_reopen(make_control):
+    control, calls = make_control()
+    control.mark_sampling_start(1.0)
+    control.observe_sample(1, 1.02)
+    control.mark_workload_start(1.05)
+    control.mark_workload_active(1.06)
+    control.mark_workload_start(1.10)        # reopening would hide a later stall
+    control.observe_sample(2, 1.35)
+    assert control.stop_requested()
+    assert calls and calls[0][1] == "SAMPLER_GAP"

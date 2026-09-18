@@ -21,7 +21,7 @@ _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 _SOCKET_PATH_MAX_BYTES = 107
 _EVENT_NAMES = (
     "t_breach", "t_detect", "t_abort_latch", "t_send", "t_durable_stop_ack",
-    "t_last_goal_cancelled", "t_owned_groups_gone", "t_domains_clear", "t_cleanup_receipt", "t_cold_start_grace")
+    "t_last_goal_cancelled", "t_owned_groups_gone", "t_domains_clear", "t_cleanup_receipt", "t_cold_start_grace", "t_cold_start_closed")
 _STOP_STATUSES = ("STOPPING", "STOPPED")
 
 
@@ -106,7 +106,8 @@ spawn (run59 and run60 both did exactly this), so a single bounded window after 
 starts does not count as a sampler gap. It is consumed at most once per batch and is recorded,
 so it cannot hide a later stall, and maximum_sample_gap_s itself is unchanged.
 """
-_COLD_START_GRACE_S = 1.0
+# A hard ceiling on the cold-start window; readiness normally closes it much earlier.
+_COLD_START_GRACE_S = 30.0
 
 
 class MeasurementControl:
@@ -146,6 +147,7 @@ class MeasurementControl:
         self._last_sample_s: float | None = None
         self._sampling_started_s: float | None = None
         self._workload_started_s: float | None = None
+        self._cold_start_closed_s: float | None = None
         self._events: dict[str, float | None] = {name: None for name in _EVENT_NAMES}
         self._events["t_last_sample"] = None
         self._cancel_error: str | None = None
@@ -177,12 +179,26 @@ class MeasurementControl:
                 self._latch("SAMPLER_GAP", self._clock())
 
     def mark_workload_start(self, now: float) -> None:
-        """Anchor the one-shot cold-start grace at the moment the workload is spawned."""
+        """Anchor the one-shot cold-start window at the moment the workload is spawned.
 
-        self._workload_started_s = _require_finite_time("now", now)
+        A second call cannot reopen a window that has already closed, because reopening is
+        exactly how a later stall would hide itself.
+        """
+
+        moment = _require_finite_time("now", now)
+        if self._workload_started_s is None:
+            self._workload_started_s = moment
+
+    def mark_workload_active(self, now: float) -> None:
+        """Close the cold-start window at observed readiness rather than a guessed duration."""
+
+        moment = _require_finite_time("now", now)
+        if self._workload_started_s is not None and self._cold_start_closed_s is None:
+            self._cold_start_closed_s = moment
+            self._events["t_cold_start_closed"] = moment
 
     def _in_cold_start(self, moment: float) -> bool:
-        if self._workload_started_s is None:
+        if self._workload_started_s is None or self._cold_start_closed_s is not None:
             return False
         return moment - self._workload_started_s <= _COLD_START_GRACE_S
 
