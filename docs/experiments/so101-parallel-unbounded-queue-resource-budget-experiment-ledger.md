@@ -3358,3 +3358,27 @@ the frozen candidate copy (the repairs included), regenerate its A0 audit and bi
 the external overlay binding that describes the rebuilt install, and only then reseal and rerun.
 That is the next step; it is a rebuild, not a probe. N1 remains `NOT_MEASURED` and nothing is
 extrapolated to another N.
+
+## CP-UQ53 — Correction to CP-UQ52: the frozen copy is split, not stale
+
+CP-UQ52 assumed the frozen copy carries a package tree that predates this stage's repairs, and
+concluded a rebuild was required. The bytes say otherwise, and the conclusion is withdrawn:
+
+- `freeze-install/so101_demo_py/` holds only `lib/` (the console scripts, including
+  `lib/so101_demo_py/so101_parallel_batch`, 1002 bytes, executable) and `share/` (configs and
+  assets). There is no `so101_demo` package tree in it at any depth checked
+  (`so101_demo_py/so101_demo/...` and `so101_demo_py/lib/so101_demo_py/so101_demo/...` are both
+  absent), and the binding's `module_origins` is what records where each module really comes
+  from.
+- `dev-build/so101_demo_py/so101_demo/parallel_batch/owned_resources.py` hashes exactly to the
+  worktree source (`f5bd1b0c679e074e`), which is also why every repair made during this stage took
+  effect in the launches and why the runtime identity moved when the source changed.
+
+So the runtime is a split install -- scripts and shared assets from the frozen copy, package from
+the build tree -- and the launcher's source-versus-installed tree comparison will pass for an
+overlay binding that names the tree that actually holds the modules. Nothing needs rebuilding for
+that check. The next step is to generate the overlay binding (schema 1, the exact seven keys, with
+`coordinator_console`, `coordinator_module`, `entry_points`, `parallel_config` and `point_catalog`
+each `{path, sha256}`) from this real layout, pass it to the launcher as its
+`--provenance-binding`, keep the sealed frozen binding as the identity input, and reseal and
+rerun. N1 remains `NOT_MEASURED`; nothing is extrapolated to another N.
