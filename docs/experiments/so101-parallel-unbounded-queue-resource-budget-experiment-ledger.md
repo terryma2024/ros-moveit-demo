@@ -4297,3 +4297,25 @@ This is recorded as the open item, with the change committed (`ce6105449` plus t
 clean. The measurement path itself is otherwise complete under the amended policy: a 311-sample
 baseline, the 25 ms peak alias, and a 95-sample window with `abort_reason` None. All exact-N budgets
 remain `NOT_MEASURED`; nothing was pushed, merged, deleted or fabricated.
+
+## CP-UQ84 — The CPU_HEADROOM refusal is not the host, and there are two producers to separate
+
+CP-UQ83 left two candidate explanations for the `CPU_HEADROOM` refusal in the two remaining gate
+failures. Both are now narrowed by measurement:
+
+- The ambient hypothesis is **eliminated**. Walking the whole cgroup chain shows `nr_throttled 0` at
+  every level and no cpu controller on the leaf scope, and building the real live observation twice
+  in this environment yields
+  `capacity {cpu 24.0, ram 33365602304, gpu 17094934528}`, `observed {cpu 0.2, ram 5423902720, gpu 1019609088}`,
+  `throttled False`, `attribution_complete True`, and `_live_reasons(...) == []`. The host is not
+  producing that reason, so it originates inside the tests' own fixtures or the injected paths.
+- The reason also has **two producers** in `resource_budget.py`: the throttle flag
+  (`if live.throttled: reasons.append("CPU_HEADROOM")`, line 653) and the per-dimension headroom map
+  (`"cpu_core_equivalent": "CPU_HEADROOM"`, line 29) used by the envelope loop. The tests must print
+  the gate's `decision.reason_codes` (and, if needed, the observation it judged) to say which one
+  fires; reading the CLI's printed code cannot distinguish them.
+
+So the next step is deterministic rather than exploratory: run the two failing cases with the gate's
+decision object surfaced, and pin whichever observation the gate actually judges -- the session
+fixtures already inject a hermetic cgroup and device, and the gate needs the same treatment if it is
+reading a different object than the tests believe.
