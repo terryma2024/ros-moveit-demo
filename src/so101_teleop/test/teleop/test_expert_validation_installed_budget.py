@@ -94,6 +94,43 @@ def synthetic_authority(tmp_path: Path, worker_count: int = 4, identity: str | N
     }
 
 
+
+
+OFFLINE_INSTALL = Path(
+    "/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main"
+    "/unbounded-queue-resource-budget/offline-install")
+OFFLINE_SHARE = OFFLINE_INSTALL / "so101_demo_py/share/so101_demo_py/config/mujoco"
+OFFLINE_LIB = OFFLINE_INSTALL / "so101_demo_py/lib/so101_demo_py"
+OFFLINE_BINDING = Path(
+    "/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main"
+    "/unbounded-queue-resource-budget/bindings/offline-provenance.json")
+
+
+def installed_environment(**overrides):
+    """The installed layout environment, pointed at copied (non-symlink) artifacts."""
+
+    environment = {
+        "SO101_VALIDATION_POINTS": str(
+            OFFLINE_SHARE / "moveit_expert_validation_points_v1.yaml"),
+        "SO101_VALIDATION_PARALLEL_CONFIG": str(OFFLINE_SHARE / "parallel_batch_v2.yaml"),
+        "SO101_VALIDATION_ADAPTIVE_CONFIG": str(
+            OFFLINE_SHARE / "parallel_adaptive_workers_v1.yaml"),
+        "SO101_VALIDATION_COORDINATOR_EXECUTABLE": str(OFFLINE_LIB / "so101_parallel_batch"),
+        "SO101_VALIDATION_CLEANUP_EXECUTABLE": str(
+            OFFLINE_LIB / "so101_parallel_batch_cleanup"),
+        "SO101_VALIDATION_ADAPTIVE_WRAPPER": str(OFFLINE_LIB / "run_so101_adaptive_batch.zsh"),
+        "SO101_VALIDATION_PROVENANCE_BINDING": str(OFFLINE_BINDING),
+        "SO101_VALIDATION_YOLO_WEIGHTS":
+            "/data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/"
+            "optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt",
+        "SO101_VALIDATION_GROUNDED_ROOT": "/data/work/so101-models/grounded-sam-v2-scipy-lock",
+        "SO101_VALIDATION_BROKER_IMAGE":
+            "so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1",
+    }
+    environment.update(overrides)
+    return environment
+
+
 def _environment(authority, tmp_path):
     return {
         "SO101_VALIDATION_BUDGET_PROFILE": authority["profile_path"],
@@ -245,16 +282,12 @@ class _FakeExecutionPort:
 def test_installed_factory_service_derives_capabilities_from_the_gate(tmp_path):
     """The actual installed factory composes the gate and reports provider decisions."""
 
-    import so101_demo
     from so101_teleop.expert_validation.production import create_production_service
     from so101_demo.parallel_batch.resource_budget import compose_production_admission
 
     current = fingerprint()
     authority = synthetic_authority(tmp_path, 4, current.sha256)
-    environment = _environment(authority, tmp_path)
-    environment["SO101_VALIDATION_PARALLEL_CONFIG"] = str(
-        Path(so101_demo.__file__).resolve().parents[1]
-        / "config/mujoco/parallel_batch_v2.yaml")
+    environment = installed_environment(**_environment(authority, tmp_path))
 
     def admission_factory(env):
         return compose_production_admission(
@@ -283,14 +316,9 @@ def test_installed_factory_service_derives_capabilities_from_the_gate(tmp_path):
 
 
 def test_installed_factory_without_authority_reports_unmeasured(tmp_path):
-    import so101_demo
     from so101_teleop.expert_validation.production import create_production_service
 
-    environment = {
-        "SO101_VALIDATION_PARALLEL_CONFIG": str(
-            Path(so101_demo.__file__).resolve().parents[1]
-            / "config/mujoco/parallel_batch_v2.yaml"),
-    }
+    environment = installed_environment()
     service = create_production_service(
         tmp_path / "evidence/no-authority", environment=environment,
         execution_port=_FakeExecutionPort())
