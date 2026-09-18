@@ -3769,3 +3769,25 @@ The measurement-side work is done and verified (CP-UQ67); the next rounds should
 intact scaffolding across time, and use the remaining capacity on the Stage B/D/E items that the
 host's swap state does not gate. N1 remains `NOT_MEASURED` and nothing is extrapolated to another
 N.
+
+## CP-UQ69 — Stage C: the retry harness must be written, not derived by substitution
+
+Round 29 ran three attempts with scaffolding that was verified non-empty (1317 bytes each), and all
+three reported `MEASUREMENT_WORKLOAD_FAILED: launcher_exit 1`. But no `run35`, `run36` or `run37`
+batch directory exists, so the substitution that was supposed to give each attempt its own batch id
+did not take effect and the runs reused an existing batch id. Those three attempts therefore carry
+**no** new evidence -- like round 28's six, they are not attempts, and the only genuine evidence of
+the host condition remains round 27's three runs (124/109/126 samples, clean sampler, launcher
+reporting `SWAP_PRESSURE`).
+
+The lesson is the same one twice in a row, so it is worth stating as a rule for this task: a retry
+is not the previous command with a string substituted. The next attempt should be a freshly written
+script that takes the batch id as an argument and passes it through to the measurement CLI, with a
+one-line check that the directory it claims to create actually exists afterwards -- the check that
+would have caught both rounds' silently reused ids.
+
+Stage C's measurement-side work is complete and verified (CP-UQ67); its remaining condition is a
+host window without swap movement, which belongs to other sessions and is outside the authorized
+scope to change. Rounds 28 and 29 produced no evidence for or against that condition, so it has
+been observed in exactly **one** round with real attempts, not three -- the accounting matters and
+is recorded here deliberately. N1 remains `NOT_MEASURED`; nothing is extrapolated to another N.
