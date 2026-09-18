@@ -229,8 +229,10 @@ def test_cold_start_grace_covers_the_workloads_own_startup_once(make_control):
     control.observe_sample(1, 1.02)
     control.mark_workload_start(1.05)
     control.observe_sample(2, 1.22)          # 200 ms inside the cold-start window
-    assert not control.stop_requested()
-    control.observe_sample(3, 1.42)          # 200 ms later: grace already used
+    control.observe_sample(3, 1.42)          # another 200 ms, still inside: run64 spent a
+    assert not control.stop_requested()      # single allowance on the first and then latched
+    assert control.event_times()["t_cold_start_gaps"] == 2.0
+    control.observe_sample(4, 8.0)           # past the window's ceiling: this one latches
     assert control.stop_requested()
     assert control.latch_reason == "SAMPLER_GAP"
     assert calls and calls[0][1] == "SAMPLER_GAP"
