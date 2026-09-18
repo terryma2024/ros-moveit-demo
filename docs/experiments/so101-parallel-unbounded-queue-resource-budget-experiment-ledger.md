@@ -4994,3 +4994,24 @@ For the record this stretch also produced eleven ledger entries whose hypotheses
 their own measurements (thread pools, container child cgroups, a named heavy consumer). Each is
 written down with the refutation, and the pattern is consistent: this workload is light on average and
 bursty at the quota boundary, and the harness now says so with evidence.
+
+## CP-UQ112 — The operator's rule is in, and it shows the burst is sustained, not single
+
+Implemented as directed in round 69 (commit `09bf9ca38`, gate 51 passed): a single throttled sample no
+longer disqualifies a run -- throttling stays reported in every sample -- while **sustained**
+throttling still does (`_SUSTAINED_THROTTLE_SAMPLES = 5` consecutive throttled samples ≈ 0.25 s). The
+envelope and the 20 % headroom are untouched, and the tests cover both directions: one event excused,
+five in a row disqualifying, a clean sample resetting the streak.
+
+Run76 (r53) then answered the follow-up with its own counter: `abort=CPU_THROTTLED`, 202 samples,
+**5 throttled**, baseline 318. Five throttled samples is exactly the new threshold, and the streak rule
+only counts *consecutive* ones -- so this run is not a boundary blip at all: the cgroup wanted its
+full ~19-core quota for about a quarter of a second continuously. That is consistent with the totals
+measured earlier (8.9 cpu-s in the run, of which ~4.8 would be that burst) and explains why every
+single-consumer theory failed: the demand is a short, hard *burst* by the launch stack's short-lived
+children, not a resident consumer.
+
+So option 1 is still open, but now with a precise target: make the launch stack's start-up burst
+smaller or serialised rather than trying to bound a process that does not exist between samples. That
+is engineering, and it is the next step; the policy change the operator chose is already in place and
+doing exactly what it says.
