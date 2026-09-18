@@ -110,11 +110,21 @@ class OwnedCgroupV2:
         if len(applied) != 2:
             raise ContractError("MEASUREMENT_LIMIT_UNENFORCEABLE")
         quota, applied_period = applied
-        if (applied_memory != str(int(memory_max_bytes)) or quota != str(int(cpu_quota_us))
-                or int(applied_period) != int(period_us)):
+        # cgroup v2 rounds memory.max down to the page size, so the applied cap may be a
+        # few bytes below the requested one. Anything above the request, or below it by a
+        # whole page or more, means the cap the measurement relies on was not applied.
+        try:
+            applied_memory_bytes = int(applied_memory)
+        except ValueError as error:
+            raise ContractError("MEASUREMENT_LIMIT_UNENFORCEABLE") from error
+        page = int(os.sysconf("SC_PAGE_SIZE"))
+        within_one_page = 0 < int(memory_max_bytes) - applied_memory_bytes < page
+        if (not within_one_page and applied_memory_bytes != int(memory_max_bytes)):
+            raise ContractError("MEASUREMENT_LIMIT_UNENFORCEABLE")
+        if quota != str(int(cpu_quota_us)) or int(applied_period) != int(period_us):
             raise ContractError("MEASUREMENT_LIMIT_UNENFORCEABLE")
         self.limits = {
-            "memory_max_bytes": int(applied_memory),
+            "memory_max_bytes": applied_memory_bytes,
             "cpu_quota_us": int(quota),
             "cpu_period_us": int(applied_period),
         }
