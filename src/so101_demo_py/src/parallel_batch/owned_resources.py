@@ -426,6 +426,12 @@ class MeasurementSession:
         self._record("BASELINE_END")
         return dict(self.baseline)
 
+    def _cpu_window_s(self) -> float:
+        """The window the CPU rate is measured over: several quota periods, never one."""
+
+        period_s = float(self.sampling.cgroup_cpu_period_us) / 1e6
+        return max(float(self._interval_s), 5.0 * period_s)
+
     def _run_baseline(self) -> int:
         """Persist a genuine pre-workload baseline and return its sample count.
 
@@ -634,16 +640,18 @@ class MeasurementSession:
     def _sample_loop(self) -> None:
         from .resource_measurement import sample_resources
 
-        state: dict = {"cpu_window_s": max(float(self._interval_s),
-                                           float(self.sampling.cgroup_cpu_period_us) / 1e6)}
+        # Several periods, not one: the kernel may hand out the whole cpu.max quota inside a
+        # single period, so a one-period window reads the quota itself as the rate and the
+        # envelope rule fires on a legitimate burst (run74 averaged 0.81 cores yet peaked at
+        # 20.66). Five periods still catch sustained load.
+        state: dict = {"cpu_window_s": self._cpu_window_s()}
         sequence = 0
         deadline = self.clock()
         while not self._stopped.is_set():
             if self._rebaseline.is_set():
                 # Only usage accumulated from the attach point is the workload's own.
                 self._rebaseline.clear()
-                state = {"cpu_window_s": max(float(self._interval_s),
-                                             float(self.sampling.cgroup_cpu_period_us) / 1e6)}
+                state = {"cpu_window_s": self._cpu_window_s()}
             sequence += 1
             try:
                 sample = sample_resources(
