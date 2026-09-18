@@ -28,10 +28,12 @@ EXPERT_VALIDATION_TESTS = {
     "test_expert_validation_process_owner_integration",
     "test_expert_validation_production_projection",
     "test_expert_validation_projection",
+    "test_expert_validation_resource_budget",
     "test_expert_validation_service",
     "test_expert_validation_statistics",
     "test_expert_validation_store",
     "test_expert_validation_supervisor",
+    "test_expert_validation_v2_contract",
 }
 
 

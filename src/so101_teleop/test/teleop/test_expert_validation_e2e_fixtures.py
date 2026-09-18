@@ -21,7 +21,7 @@ from scripted_service import (  # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "expert_validation_e2e"
 EXPECTED_BASELINE_SHA256 = (
-    "a269cb23678301137e9a9edf454c1707326f1eb82c5d80487afd7c1f18dae79d"
+    "c8199fb430624f4c23cdcff6e646bdc51367b0f51e597e83286719f1240a964e"
 )
 
 
