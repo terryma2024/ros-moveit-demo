@@ -1,4 +1,5 @@
 import hashlib
+from dataclasses import fields
 from pathlib import Path
 
 import pytest
@@ -678,3 +679,188 @@ def test_runtime_config_loader_selects_the_parser_by_schema(tmp_path):
     unknown.write_text("schema_version: 9\n")
     with pytest.raises(ContractError, match="SCHEMA_VERSION"):
         load_runtime_config_any_schema(unknown)
+
+
+# --------------------------------------------------------------------------------------
+# Version 3: the active budget-free runtime contract (lightweight start guard plan, Task 3)
+# --------------------------------------------------------------------------------------
+
+V3_CONFIG_PATH = PACKAGE / "config/mujoco/parallel_batch_v3.yaml"
+
+
+def _v3_document() -> dict:
+    import yaml
+
+    return yaml.safe_load(V3_CONFIG_PATH.read_text())
+
+
+def test_v3_config_is_closed_budget_free_and_carries_the_guard():
+    """The active document keeps the functional fields, adds the guard, and has no
+    measurement, safety, coverage or deployment section left to consult."""
+
+    import so101_demo.parallel_batch.contracts as contracts
+
+    config = contracts.load_parallel_runtime_config_v3(V3_CONFIG_PATH)
+    assert config.schema_version == 3
+    assert config.max_worker_count == 8
+    assert config.gpu_device.selector_kind == "INDEX"
+    assert config.gpu_device.selector == "0"
+    assert config.start_guard.timeout_s == 2.0
+    assert config.start_guard.ram_minimum_bytes == 1 << 30
+    document = _v3_document()
+    assert set(document) == {"schema_version", "execution", "start_guard"}
+    for retired in ("sampling", "safety", "coverage", "deployment", "measurement"):
+        assert retired not in document
+        assert retired not in document["execution"]
+    field_names = {item.name for item in fields(contracts.ParallelRuntimeConfigV3)}
+    for retired in ("measurement", "deployment", "profile_sha256", "qualification_sha256",
+                    "execution_identity_sha256", "capacity_fraction"):
+        assert retired not in field_names
+
+
+def test_v3_execution_field_set_is_exactly_the_closed_list():
+    import so101_demo.parallel_batch.contracts as contracts
+
+    assert set(contracts.EXECUTION_V3_FIELDS) == set(
+        item.name for item in fields(contracts.ParallelRuntimeConfigV3)
+    ) - {"schema_version", "start_guard"}
+    assert len(contracts.EXECUTION_V3_FIELDS) == 38
+    assert contracts.START_GUARD_FIELDS == {
+        "timeout_s", "cpu_busy_warn_fraction", "ram_minimum_bytes", "ram_minimum_fraction",
+        "gpu_minimum_bytes"}
+
+
+def test_v3_config_rejects_unknown_duplicate_and_legacy_sections(tmp_path):
+    import yaml
+
+    from so101_demo.parallel_batch.contracts import (
+        ContractError, load_parallel_runtime_config_v3)
+
+    document = _v3_document()
+
+    extra_top = dict(document)
+    extra_top["deployment"] = {"approved_profile_path": None}
+    path = tmp_path / "extra-top.yaml"
+    path.write_text(yaml.safe_dump(extra_top))
+    with pytest.raises(ContractError, match="UNKNOWN_CONFIG_FIELD"):
+        load_parallel_runtime_config_v3(path)
+
+    extra_guard = _v3_document()
+    extra_guard["start_guard"]["capacity_fraction"] = 0.8
+    path = tmp_path / "extra-guard.yaml"
+    path.write_text(yaml.safe_dump(extra_guard))
+    with pytest.raises(ContractError, match="UNKNOWN_START_GUARD_FIELD"):
+        load_parallel_runtime_config_v3(path)
+
+    legacy_execution = _v3_document()
+    legacy_execution["execution"]["safety"] = {"capacity_fraction": 0.8}
+    path = tmp_path / "legacy-execution.yaml"
+    path.write_text(yaml.safe_dump(legacy_execution))
+    with pytest.raises(ContractError, match="UNKNOWN_EXECUTION_FIELD"):
+        load_parallel_runtime_config_v3(path)
+
+    missing_selector = _v3_document()
+    missing_selector["execution"].pop("gpu_device")
+    path = tmp_path / "missing-selector.yaml"
+    path.write_text(yaml.safe_dump(missing_selector))
+    with pytest.raises(ContractError, match="MISSING_EXECUTION_FIELD"):
+        load_parallel_runtime_config_v3(path)
+
+    bad_guard = _v3_document()
+    bad_guard["start_guard"]["timeout_s"] = 60
+    path = tmp_path / "bad-guard.yaml"
+    path.write_text(yaml.safe_dump(bad_guard))
+    with pytest.raises(ContractError, match="START_GUARD_INVALID"):
+        load_parallel_runtime_config_v3(path)
+
+    missing_guard = _v3_document()
+    missing_guard.pop("start_guard")
+    path = tmp_path / "missing-guard.yaml"
+    path.write_text(yaml.safe_dump(missing_guard))
+    with pytest.raises(ContractError, match="MISSING_CONFIG_FIELD"):
+        load_parallel_runtime_config_v3(path)
+
+
+def test_require_v3_execution_refuses_every_legacy_version():
+    import so101_demo.parallel_batch.contracts as contracts
+
+    contracts.require_v3_execution(3, 3)
+    for request_version, config_version in ((1, 1), (2, 2), (3, 2), (2, 3), (True, 3)):
+        with pytest.raises(contracts.ContractError,
+                           match="CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"):
+            contracts.require_v3_execution(request_version, config_version)
+
+
+def test_v3_request_round_trips_and_history_reads_never_become_active(tmp_path):
+    import so101_demo.parallel_batch.contracts as contracts
+
+    request = contracts.BatchRequestV3(
+        batch_id="v3-batch", run_mode=contracts.RunMode.EXECUTE, selected_point_ids=("p1", "p2"),
+        worker_count=4, evidence_root=tmp_path, batch_kind=contracts.BatchKindV3.FIRST_PASS)
+    document = contracts.batch_request_to_document(request)
+    assert document["schema_version"] == 3
+    assert set(document) == set(contracts.REQUEST_V3_FIELDS)
+    restored = contracts.batch_request_from_document(document, for_execution=True)
+    assert restored == request
+
+    legacy = {"schema_version": 2, "batch_id": "old", "run_mode": "EXECUTE",
+              "selected_point_ids": ["p1"], "worker_count": 1,
+              "evidence_root": str(tmp_path), "batch_kind": "FIRST_PASS",
+              "profile_sha256": "0" * 64}
+    with pytest.raises(contracts.ContractError,
+                       match="CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"):
+        contracts.batch_request_from_document(legacy, for_execution=True)
+    history_view = contracts.batch_request_from_document(legacy, for_execution=False)
+    assert isinstance(history_view, dict) and not isinstance(history_view, contracts.BatchRequestV3)
+    assert history_view["profile_sha256"] == "0" * 64
+
+
+def test_v3_request_keeps_retry_single_point_n1(tmp_path):
+    import so101_demo.parallel_batch.contracts as contracts
+
+    contracts.BatchRequestV3(
+        batch_id="retry-one", run_mode=contracts.RunMode.EXECUTE, selected_point_ids=("p1",),
+        worker_count=1, evidence_root=tmp_path,
+        batch_kind=contracts.BatchKindV3.FULL_RESTART_RETRY)
+    for point_ids, workers in ((("p1", "p2"), 1), (("p1",), 2)):
+        with pytest.raises(contracts.ContractError, match="RETRY_SINGLE_POINT_N1"):
+            contracts.BatchRequestV3(
+                batch_id="retry-bad", run_mode=contracts.RunMode.EXECUTE, selected_point_ids=point_ids,
+                worker_count=workers, evidence_root=tmp_path,
+                batch_kind=contracts.BatchKindV3.FULL_RESTART_RETRY)
+
+
+def test_gpu_selector_requires_an_explicit_well_formed_choice():
+    import so101_demo.parallel_batch.contracts as contracts
+
+    assert contracts.GpuDeviceSelector("UUID", "GPU-abc").selector == "GPU-abc"
+    assert contracts.GpuDeviceSelector("INDEX", "0").selector_kind == "INDEX"
+    for kind, selector in (("HOST", "0"), ("INDEX", "zero"), ("INDEX", ""),
+                           ("UUID", "0"), ("INDEX", "0.0")):
+        with pytest.raises(contracts.ContractError):
+            contracts.GpuDeviceSelector(kind, selector)
+
+
+def test_runtime_config_loader_selects_v3_parser(tmp_path):
+    import so101_demo.parallel_batch.contracts as contracts
+
+    loaded = contracts.load_runtime_config_any_schema(V3_CONFIG_PATH)
+    assert isinstance(loaded, contracts.ParallelRuntimeConfigV3)
+    assert loaded.schema_version == 3
+    assert isinstance(contracts.load_runtime_config_any_schema(V2_CONFIG_PATH),
+                      contracts.ParallelRuntimeConfigV2)
+
+
+def test_budget_environment_does_not_change_v3_loading(monkeypatch):
+    """The retired authority environment must not influence the active contract."""
+
+    import so101_demo.parallel_batch.contracts as contracts
+
+    baseline = contracts.load_parallel_runtime_config_v3(V3_CONFIG_PATH)
+    for name in ("SO101_VALIDATION_BUDGET_PROFILE", "SO101_VALIDATION_BUDGET_PROFILE_SHA256",
+                 "SO101_VALIDATION_PROMOTION_RECORD", "SO101_VALIDATION_QUALIFICATION_PATHS",
+                 "SO101_VALIDATION_EXECUTION_IDENTITY", "SO101_PARALLEL_RUNTIME_CONFIG",
+                 "SO101_VALIDATION_PROVENANCE_BINDING"):
+        monkeypatch.setenv(name, "/nonexistent/retired")
+    monkeypatch.setenv("SO101_VALIDATION_LOCATION_BINDING", "/nonexistent/location.json")
+    assert contracts.load_parallel_runtime_config_v3(V3_CONFIG_PATH) == baseline

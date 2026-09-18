@@ -14,6 +14,8 @@ from typing import ClassVar, Mapping
 
 import yaml
 
+from .start_guard import StartGuardPolicy
+
 
 class ContractError(ValueError):
     """A closed parallel-validation contract was violated."""
@@ -1208,6 +1210,8 @@ def load_runtime_config_any_schema(path: Path):
     if not isinstance(document, dict):
         raise ContractError("CONFIG_MAPPING")
     version = document.get("schema_version")
+    if version == 3:
+        return load_parallel_runtime_config_v3(Path(path))
     if version == 2:
         return load_parallel_runtime_config_v2(Path(path))
     if version == 1:
@@ -1289,3 +1293,351 @@ class BatchRequestV2:
             len(point_ids) != 1 or self.worker_count != 1
         ):
             raise ContractError("RETRY_SINGLE_POINT_N1")
+
+# --------------------------------------------------------------------------------------
+# Version 3: the active budget-free contract
+#
+# New execution uses exactly this closed document. Version 1 and version 2 stay readable for
+# history, audit and recovery only, and every new execution entry point must call
+# require_v3_execution so a legacy document can never silently carry the new semantics.
+# --------------------------------------------------------------------------------------
+
+#: The closed set of ``execution`` fields for v3. Sampling, safety and coverage are gone;
+#: the GPU selector moved next to the other device settings and the clock rules stay because
+#: they describe functional simulation timing, not a resource budget.
+EXECUTION_V3_FIELDS = frozenset({
+    "backend", "max_worker_count", "ros_domain_ids", "heartbeat_interval_s",
+    "heartbeat_timeout_s", "lease_duration_s", "lease_ack_timeout_s",
+    "attempt_start_ack_timeout_s", "result_ack_timeout_s",
+    "initializing_hard_timeout_s", "executing_hard_timeout_s",
+    "finalizing_hard_timeout_s", "batch_hard_timeout_s",
+    "worker_recovery_timeout_s", "broker_recovery_timeout_s",
+    "broker_max_frame_bytes", "broker_queue_capacity_per_model",
+    "broker_inflight_per_worker_per_model", "yolo_queue_timeout_s",
+    "yolo_inference_timeout_s", "grounded_sam_queue_timeout_s",
+    "grounded_sam_inference_timeout_s", "max_frame_age_s", "max_rgbd_skew_s",
+    "max_tf_skew_s", "yolo_model_id", "yolo_imgsz", "requested_device",
+    "allow_cpu_fallback", "grounding_box_threshold", "grounding_text_threshold",
+    "grounding_duplicate_iou", "grounding_max_candidates",
+    "sam_mask_quality_threshold", "sam_min_mask_pixels",
+    "sam_max_mask_area_ratio", "clock", "gpu_device",
+})
+
+_GPU_SELECTOR_KINDS = ("UUID", "INDEX")
+
+
+@dataclass(frozen=True, slots=True)
+class GpuDeviceSelector:
+    """The explicitly chosen target device; there is no implicit host index 0."""
+
+    selector_kind: str
+    selector: str
+
+    def __post_init__(self) -> None:
+        if self.selector_kind not in _GPU_SELECTOR_KINDS:
+            raise ContractError("GPU_SELECTOR_KIND")
+        if not isinstance(self.selector, str) or not self.selector:
+            raise ContractError("GPU_SELECTOR")
+        if self.selector_kind == "INDEX":
+            if not self.selector.isdigit():
+                raise ContractError("GPU_SELECTOR_INDEX")
+        elif not self.selector.startswith("GPU-"):
+            raise ContractError("GPU_SELECTOR_UUID")
+
+
+@dataclass(frozen=True, slots=True)
+class ClockRulesV3:
+    """Functional simulation-clock rules; still only used for real RTF/frame evidence."""
+
+    window_s: float
+    stride_s: float
+    minimum_consecutive_steady_windows: int
+    maximum_clock_age_s: float
+    pace_source: str
+
+    def __post_init__(self) -> None:
+        for name in ("window_s", "stride_s", "maximum_clock_age_s"):
+            object.__setattr__(
+                self, name, _require_finite(name, getattr(self, name), minimum=0.000001)
+            )
+        object.__setattr__(
+            self,
+            "minimum_consecutive_steady_windows",
+            _require_positive_int(
+                "minimum_consecutive_steady_windows",
+                self.minimum_consecutive_steady_windows,
+            ),
+        )
+        if self.pace_source != "FROZEN_SIM_SETTING":
+            raise ContractError("CLOCK_PACE_SOURCE")
+
+
+@dataclass(frozen=True, slots=True)
+class ParallelRuntimeConfigV3:
+    schema_version: int
+    backend: str
+    max_worker_count: int
+    ros_domain_ids: tuple[int, ...]
+    heartbeat_interval_s: float
+    heartbeat_timeout_s: float
+    lease_duration_s: float
+    lease_ack_timeout_s: float
+    attempt_start_ack_timeout_s: float
+    result_ack_timeout_s: float
+    initializing_hard_timeout_s: float
+    executing_hard_timeout_s: float
+    finalizing_hard_timeout_s: float
+    batch_hard_timeout_s: float
+    worker_recovery_timeout_s: float
+    broker_recovery_timeout_s: float
+    broker_max_frame_bytes: int
+    broker_queue_capacity_per_model: int
+    broker_inflight_per_worker_per_model: int
+    yolo_queue_timeout_s: float
+    yolo_inference_timeout_s: float
+    grounded_sam_queue_timeout_s: float
+    grounded_sam_inference_timeout_s: float
+    max_frame_age_s: float
+    max_rgbd_skew_s: float
+    max_tf_skew_s: float
+    yolo_model_id: str
+    yolo_imgsz: int
+    requested_device: str
+    allow_cpu_fallback: bool
+    grounding_box_threshold: float
+    grounding_text_threshold: float
+    grounding_duplicate_iou: float
+    grounding_max_candidates: int
+    sam_mask_quality_threshold: float
+    sam_min_mask_pixels: int
+    sam_max_mask_area_ratio: float
+    clock: ClockRulesV3
+    gpu_device: GpuDeviceSelector
+    start_guard: "StartGuardPolicy"
+
+    FROZEN_YOLO_WEIGHTS_SHA256: ClassVar[str] = _FROZEN_YOLO_WEIGHTS_SHA256
+    FROZEN_GROUNDED_SAM_MANIFEST_SHA256: ClassVar[str] = (
+        _FROZEN_GROUNDED_SAM_MANIFEST_SHA256
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.schema_version) is not int or self.schema_version != 3:
+            raise ContractError("SCHEMA_VERSION")
+        if self.backend != "mujoco":
+            raise ContractError("BACKEND")
+        for name in (
+            "max_worker_count",
+            "broker_max_frame_bytes",
+            "broker_queue_capacity_per_model",
+            "broker_inflight_per_worker_per_model",
+            "yolo_imgsz",
+            "grounding_max_candidates",
+            "sam_min_mask_pixels",
+        ):
+            object.__setattr__(self, name, _require_positive_int(name, getattr(self, name)))
+        if not isinstance(self.ros_domain_ids, (list, tuple)):
+            raise ContractError("ROS_DOMAIN_IDS")
+        domains = tuple(self.ros_domain_ids)
+        for domain_id in domains:
+            _require_positive_int("ros_domain_id", domain_id)
+        object.__setattr__(self, "ros_domain_ids", domains)
+        for name in (
+            "heartbeat_interval_s", "heartbeat_timeout_s", "lease_duration_s",
+            "lease_ack_timeout_s", "attempt_start_ack_timeout_s", "result_ack_timeout_s",
+            "initializing_hard_timeout_s", "executing_hard_timeout_s",
+            "finalizing_hard_timeout_s", "batch_hard_timeout_s", "worker_recovery_timeout_s",
+            "broker_recovery_timeout_s", "yolo_queue_timeout_s", "yolo_inference_timeout_s",
+            "grounded_sam_queue_timeout_s", "grounded_sam_inference_timeout_s",
+        ):
+            object.__setattr__(
+                self, name, _require_finite(name, getattr(self, name), minimum=0.000001)
+            )
+        for name in ("max_frame_age_s", "max_rgbd_skew_s", "max_tf_skew_s"):
+            object.__setattr__(self, name, _require_finite(name, getattr(self, name)))
+        for name in (
+            "grounding_box_threshold", "grounding_text_threshold",
+            "grounding_duplicate_iou", "sam_mask_quality_threshold",
+            "sam_max_mask_area_ratio",
+        ):
+            object.__setattr__(self, name, _require_probability(name, getattr(self, name)))
+        object.__setattr__(self, "yolo_model_id", _require_id("yolo_model_id", self.yolo_model_id))
+        if self.requested_device != "cuda":
+            raise ContractError("REQUESTED_DEVICE")
+        if not isinstance(self.allow_cpu_fallback, bool) or self.allow_cpu_fallback:
+            raise ContractError("ALLOW_CPU_FALLBACK")
+        if not isinstance(self.clock, ClockRulesV3):
+            raise ContractError("CLOCK_RULES")
+        if not isinstance(self.gpu_device, GpuDeviceSelector):
+            raise ContractError("GPU_DEVICE_SELECTOR")
+        if not isinstance(self.start_guard, StartGuardPolicy):
+            raise ContractError("START_GUARD_POLICY")
+        for name, expected in _FROZEN_RUNTIME_VALUES_V3.items():
+            if getattr(self, name) != expected:
+                raise ContractError(f"FROZEN_RUNTIME_VALUE: {name}")
+        if len(domains) != self.max_worker_count or len(set(domains)) != len(domains):
+            raise ContractError("ROS_DOMAIN_IDS")
+
+    @property
+    def yolo_weights_sha256(self) -> str:
+        return self.FROZEN_YOLO_WEIGHTS_SHA256
+
+    @property
+    def grounded_sam_manifest_sha256(self) -> str:
+        return self.FROZEN_GROUNDED_SAM_MANIFEST_SHA256
+
+
+_FROZEN_RUNTIME_VALUES_V3 = {
+    **{
+        name: value for name, value in _FROZEN_RUNTIME_VALUES.items()
+        if name not in _V2_REMOVED_V1_FIELDS
+    },
+    "schema_version": 3,
+}
+
+START_GUARD_FIELDS = frozenset({"timeout_s", "cpu_busy_warn_fraction", "ram_minimum_bytes",
+                                "ram_minimum_fraction", "gpu_minimum_bytes"})
+
+
+def parse_parallel_runtime_config_v3(document: object) -> ParallelRuntimeConfigV3:
+    """Validate a version-three document against the closed, budget-free schema."""
+
+    top = _closed_mapping_fields("CONFIG", document, {"schema_version", "execution", "start_guard"})
+    if type(top["schema_version"]) is not int or top["schema_version"] != 3:
+        raise ContractError("SCHEMA_VERSION")
+    execution = _closed_mapping_fields("EXECUTION", top["execution"], set(EXECUTION_V3_FIELDS))
+    guard = _closed_mapping_fields("START_GUARD", top["start_guard"], set(START_GUARD_FIELDS))
+    clock = _closed_mapping_fields(
+        "CLOCK", execution.pop("clock"), {item.name for item in fields(ClockRulesV3)}
+    )
+    gpu_device = _closed_mapping_fields(
+        "GPU_DEVICE", execution.pop("gpu_device"), {"selector_kind", "selector"}
+    )
+    try:
+        guard_policy = StartGuardPolicy(**guard)
+        selector = GpuDeviceSelector(**gpu_device)
+    except ValueError as error:
+        raise ContractError(f"START_GUARD_INVALID: {error}") from error
+    return ParallelRuntimeConfigV3(
+        schema_version=3,
+        clock=ClockRulesV3(**clock),
+        gpu_device=selector,
+        start_guard=guard_policy,
+        **execution,
+    )
+
+
+def load_parallel_runtime_config_v3(path: Path) -> ParallelRuntimeConfigV3:
+    """Load the closed version-three YAML document; any drift or legacy key is refused."""
+
+    return parse_parallel_runtime_config_v3(_load_closed_yaml(path))
+
+
+def require_v3_execution(request_version: int, config_version: int) -> None:
+    """Refuse new execution for any contract version other than the active one."""
+
+    if type(request_version) is not int or type(config_version) is not int:
+        raise ContractError("CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION")
+    if request_version != 3 or config_version != 3:
+        raise ContractError("CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION")
+
+
+#: Version three keeps the functional batch-kind semantics of version two.
+BatchKindV3 = BatchKindV2
+
+
+@dataclass(frozen=True, slots=True)
+class BatchRequestV3:
+    """A new execution request. It carries no budget hash, profile or approval reference."""
+
+    batch_id: str
+    run_mode: RunMode
+    selected_point_ids: tuple[str, ...]
+    worker_count: int
+    evidence_root: Path
+    batch_kind: BatchKindV3
+    schema_version: int = 3
+
+    def __post_init__(self) -> None:
+        if type(self.schema_version) is not int or self.schema_version != 3:
+            raise ContractError("SCHEMA_VERSION")
+        object.__setattr__(self, "batch_id", _require_id("batch_id", self.batch_id))
+        _require_enum("run_mode", self.run_mode, RunMode)
+        _require_enum("batch_kind", self.batch_kind, BatchKindV2)
+        if not isinstance(self.selected_point_ids, (list, tuple)):
+            raise ContractError("POINT_ID_SEQUENCE")
+        point_ids = tuple(
+            _require_id("point_id", point_id) for point_id in self.selected_point_ids
+        )
+        if not point_ids or len(point_ids) != len(set(point_ids)):
+            raise ContractError("UNIQUE_POINT_IDS")
+        object.__setattr__(self, "selected_point_ids", point_ids)
+        object.__setattr__(
+            self, "worker_count", _require_positive_int("worker_count", self.worker_count)
+        )
+        if self.worker_count > _FROZEN_MAX_WORKER_COUNT:
+            raise ContractError("MAX_WORKER_COUNT")
+        object.__setattr__(
+            self,
+            "evidence_root",
+            _require_absolute_path("evidence_root", self.evidence_root),
+        )
+        if self.batch_kind is BatchKindV2.FULL_RESTART_RETRY and (
+            len(point_ids) != 1 or self.worker_count != 1
+        ):
+            raise ContractError("RETRY_SINGLE_POINT_N1")
+
+
+REQUEST_V3_FIELDS = ("schema_version", "batch_id", "run_mode", "selected_point_ids",
+                     "worker_count", "evidence_root", "batch_kind")
+
+
+def batch_request_to_document(request: BatchRequestV3) -> dict:
+    """Serialize an active request for the CLI/Web producer and the allocator consumer."""
+
+    if not isinstance(request, BatchRequestV3):
+        raise ContractError("REQUEST_TYPE")
+    return {
+        "schema_version": 3,
+        "batch_id": request.batch_id,
+        "run_mode": str(request.run_mode),
+        "selected_point_ids": list(request.selected_point_ids),
+        "worker_count": request.worker_count,
+        "evidence_root": str(request.evidence_root),
+        "batch_kind": str(request.batch_kind),
+    }
+
+
+def batch_request_from_document(document: object, *, for_execution: bool
+                                ) -> "BatchRequestV3 | dict":
+    """Read a request record.
+
+    ``for_execution=True`` accepts only the active version and is the only path that can
+    produce something the allocator will run. ``for_execution=False`` is the history reader:
+    version 1 and 2 documents are returned as plain read-only mappings and are never
+    converted into an active request.
+    """
+
+    if not isinstance(document, Mapping):
+        raise ContractError("REQUEST_MAPPING")
+    version = document.get("schema_version")
+    if not for_execution:
+        if version in (1, 2):
+            return dict(document)
+        if version != 3:
+            raise ContractError(f"UNKNOWN_SCHEMA_VERSION: {version!r}")
+    elif version != 3:
+        raise ContractError("CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION")
+    unknown = set(document) - set(REQUEST_V3_FIELDS)
+    missing = set(REQUEST_V3_FIELDS) - set(document)
+    if unknown:
+        raise ContractError(f"UNKNOWN_REQUEST_FIELD: {sorted(unknown)!r}")
+    if missing:
+        raise ContractError(f"MISSING_REQUEST_FIELD: {sorted(missing)!r}")
+    return BatchRequestV3(
+        batch_id=document["batch_id"],
+        run_mode=RunMode(document["run_mode"]),
+        selected_point_ids=tuple(document["selected_point_ids"]),
+        worker_count=document["worker_count"],
+        evidence_root=Path(document["evidence_root"]),
+        batch_kind=BatchKindV3(document["batch_kind"]),
+    )
