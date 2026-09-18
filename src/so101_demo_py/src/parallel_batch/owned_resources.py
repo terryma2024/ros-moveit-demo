@@ -193,6 +193,15 @@ class OwnedCgroupV2:
     def memory_peak(self) -> int:
         return int(self._read("memory.peak", "0") or 0)
 
+    def memory_swap_current(self) -> int:
+        """The owned cgroup's own swap, so a policy breach describes the workload.
+
+        Host-wide swap moves for reasons that have nothing to do with the batch, and a
+        zero-tolerance rule on it aborts every measurement on this host.
+        """
+
+        return int(self._read("memory.swap.current"))
+
     def memory_events(self) -> dict[str, int]:
         events = {}
         for line in self._read("memory.events", "").splitlines():

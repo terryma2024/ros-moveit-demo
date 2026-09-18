@@ -278,12 +278,14 @@ def sample_resources(
 
     if cgroup is None or device is None:
         raise ContractError("MEASUREMENT_CAPABILITY_MISSING")
-    if not hasattr(cgroup, "cpu_usage_us") or not hasattr(cgroup, "memory_current"):
+    if (not hasattr(cgroup, "cpu_usage_us") or not hasattr(cgroup, "memory_current")
+            or not hasattr(cgroup, "memory_swap_current")):
         raise ContractError("MEASUREMENT_CAPABILITY_MISSING")
     if not hasattr(device, "total_bytes") or not hasattr(device, "used_bytes"):
         raise ContractError("MEASUREMENT_CAPABILITY_MISSING")
     memory = _read_meminfo()
-    swap_total, psi_total = _read_swap_and_psi()
+    host_swap_total, psi_total = _read_swap_and_psi()
+    swap_used = int(cgroup.memory_swap_current())
     monotonic_s = time.monotonic()
     cpu_usage_us = int(cgroup.cpu_usage_us())
     cpu_capacity = float(getattr(cgroup, "cpu_capacity_core_equivalent", os.cpu_count() or 1))
@@ -292,7 +294,7 @@ def sample_resources(
         swap_delta = 0
         psi_delta = 0.0
     else:
-        swap_delta = max(0, swap_total - state.get("swap_total", swap_total))
+        swap_delta = max(0, swap_used - state.get("swap_used", swap_used))
         psi_delta = max(0.0, psi_total - state.get("psi_total", psi_total))
         # A cgroup may spend a whole cpu.max quota inside a single period, so a rate
         # measured over less than a period can read up to twice the enforced cap: the
@@ -344,14 +346,16 @@ def sample_resources(
     diagnostics = {
         "mem_available_bytes": memory["MemAvailable"],
         "cpu_usage_us": cpu_usage_us,
-        "swap_total": swap_total,
+        "swap_total": host_swap_total,
+        "swap_used_bytes": swap_used,
     }
     sample = ResourceSample(
         sequence=sequence, monotonic_s=monotonic_s, observation=observation,
         process_inventory=tuple(owned_inventory), diagnostics=diagnostics)
     if state is not None:
         state.update(
-            monotonic_s=monotonic_s, cpu_usage_us=cpu_usage_us, swap_total=swap_total,
+            monotonic_s=monotonic_s, cpu_usage_us=cpu_usage_us,
+            swap_used=swap_used, swap_total=host_swap_total,
             psi_total=psi_total)
     return sample
 
