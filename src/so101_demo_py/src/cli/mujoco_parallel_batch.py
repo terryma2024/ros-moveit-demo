@@ -661,10 +661,26 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
     if repository_root is None:
         # A copied install keeps these inputs in its share directory, not in a source tree.
         # They are functional files the run really reads, so this is a real requirement --
-        # only the place they are looked for changes.
-        from ament_index_python.packages import get_package_share_directory
+        # only the place they are looked for changes. Discovery is attempted first, with a
+        # layout-derived fallback because this code also runs inside a spawned coordinator
+        # whose environment may not carry the ament index.
+        installed_root = None
+        try:
+            from ament_index_python.packages import get_package_share_directory
 
-        installed_root = Path(get_package_share_directory("so101_demo_py")).resolve()
+            candidate = Path(get_package_share_directory("so101_demo_py")).resolve()
+            if candidate.is_dir():
+                installed_root = candidate
+        except Exception:
+            installed_root = None
+        if installed_root is None:
+            for parent in module_path.parents:
+                candidate = parent / "share/so101_demo_py"
+                if candidate.is_dir():
+                    installed_root = candidate
+                    break
+        if installed_root is None:
+            raise CliError("PROVENANCE_INSTALLED_SHARE_MISSING")
     else:
         installed_root = package_root
     policy_path = installed_root / "config/mujoco/headless_execution.yaml"
