@@ -153,6 +153,9 @@ class AdaptiveBatchRequest:
     selected_point_ids: tuple[str, ...]
     options: AdaptiveWorkerOptions
     evidence_root: Path
+    # The start guard this run prepared.  The adaptive pool allocates through the same guard as
+    # the fixed-N path: without it every level is refused by design (START_GUARD_UNAVAILABLE).
+    start_guard: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "batch_id", _require_short_batch_id(self.batch_id))
@@ -182,6 +185,7 @@ class PoolRequest:
     selected_point_ids: tuple[str, ...]
     worker_count: int
     evidence_root: Path
+    start_guard: object | None
 
     def __init__(
         self,
@@ -190,6 +194,7 @@ class PoolRequest:
         selected_point_ids: tuple[str, ...],
         worker_count: int,
         evidence_root: Path,
+        start_guard: object | None = None,
         *,
         _factory_token: object,
     ) -> None:
@@ -206,6 +211,7 @@ class PoolRequest:
         object.__setattr__(
             self, "evidence_root", _require_absolute_path("evidence_root", evidence_root)
         )
+        object.__setattr__(self, "start_guard", start_guard)
 
 
 def _new_pool_request_for_production_factory(
@@ -215,6 +221,7 @@ def _new_pool_request_for_production_factory(
     selected_point_ids: tuple[str, ...],
     worker_count: int,
     evidence_root: Path,
+    start_guard: object | None = None,
 ) -> PoolRequest:
     """Construct a pool request for ``ProductionAdaptivePoolFactory`` only.
 
@@ -228,6 +235,7 @@ def _new_pool_request_for_production_factory(
         selected_point_ids,
         worker_count,
         evidence_root,
+        start_guard,
         _factory_token=_POOL_REQUEST_FACTORY_TOKEN,
     )
 

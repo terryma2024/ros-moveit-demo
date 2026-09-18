@@ -1213,7 +1213,15 @@ def prepare_batch(
     config = _load_runtime_config(config_path)
     start_guard = None
     guard_summary = None
-    if not options.adaptive_workers:
+    if options.adaptive_workers:
+        # The adaptive pool allocates through the same guard as the fixed-N path, one check per
+        # level; the run prepares it once, for the initial worker count.  Composing it here and
+        # threading it into the pool request is what keeps `START_GUARD_UNAVAILABLE` from being
+        # raised for every level by an adaptive run that simply never prepared a guard.
+        start_guard, _guard_summary = _prepare_start_guard(
+            options, config, batch_id=options.batch_id or "cli",
+            worker_count=adaptive_worker_options.worker_count, start_guard=start_guard)
+    else:
         start_guard, guard_summary = _prepare_start_guard(
             options, config, batch_id=options.batch_id or "cli", worker_count=worker_count,
             start_guard=start_guard)
@@ -1232,6 +1240,7 @@ def prepare_batch(
                 selected,
                 adaptive_worker_options,
                 evidence_root,
+                start_guard=start_guard,
             )
         else:
             contract_version = _integer(

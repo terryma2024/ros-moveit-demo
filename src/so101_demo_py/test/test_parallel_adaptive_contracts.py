@@ -277,7 +277,21 @@ def test_pool_request_accepts_the_generation_scoped_internal_batch_id(tmp_path):
         "selected_point_ids": ("p01",),
         "worker_count": 8,
         "evidence_root": tmp_path,
+        # The generation request carries the guard this run prepared; without it the allocator
+        # refuses every level (START_GUARD_UNAVAILABLE).
+        "start_guard": None,
     }
+
+    guard = object()
+    guarded = _new_pool_request_for_production_factory(
+        batch_id="abcde-g02-w06",
+        run_mode=RunMode.EXECUTE,
+        selected_point_ids=("p01",),
+        worker_count=6,
+        evidence_root=tmp_path,
+        start_guard=guard,
+    )
+    assert guarded.start_guard is guard
 
 
 def test_pool_contract_has_no_lifetime_quota(tmp_path):

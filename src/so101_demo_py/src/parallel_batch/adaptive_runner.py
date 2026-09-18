@@ -372,6 +372,7 @@ class AdaptiveBatchRunner:
                 selected_point_ids=selected,
                 worker_count=worker_count,
                 evidence_root=pool_root,
+                start_guard=getattr(self.request, "start_guard", None),
             )
             pool = self.pool_factory(pool_request)
             binder = getattr(pool, "bind_pool_running_recorder", None)
