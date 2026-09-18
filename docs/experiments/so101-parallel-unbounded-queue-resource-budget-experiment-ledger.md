@@ -6282,3 +6282,30 @@ package — that verdict is evidence of the old defect, not of the current code,
 run queued behind them is what will produce the honest positive result.
 
 _Ledger HEAD when written: `1877d35a8`._
+
+
+## CP-UQ144 — Task 11: the functional manifest is built from the deployed service
+
+Commit `cf5c337ec`. `src/so101_teleop/web/e2e/expert-validation/fixtures/build-functional-manifest.ts`
+(with the `prepare:functional-manifest` Bun script) fetches the **deployed** service's
+capabilities and writes the closed manifest Playwright registers cases from:
+
+| Field | Value from the live service |
+| --- | --- |
+| `worker_counts` | `[2, 3, 4, 5, 6, 7, 8]` — every selectable option, not a maximum-N shortcut |
+| `execution_modes` | `[SEQUENTIAL, PARALLEL, ADAPTIVE]` (the CP-UQ135 fix, read back live) |
+| `start_guard_timeout_s` | `2` — the manifest is guard-aware and carries no budget field |
+| cases | **17**: 7 worker counts × {4, 20} points, plus sequential, adaptive ladder and the N1 `FULL_RESTART_RETRY` single-point retry |
+| stability | N1 / 20 points / `FULL_RESTART` / **5 consecutive batches** / 5400 s each |
+
+It fails closed when the base URL or output path is unset, the service is unreachable, no worker
+option is selectable, a required mode is not advertised, or the guard policy is missing — so an
+acceptance run cannot silently proceed against a service that does not describe itself. Run
+record: `functional-manifest.gfpWtGRM/manifest.json`, script exit 0.
+
+Still open for Task 11: the Playwright specs reading `SO101_FUNCTIONAL_MANIFEST` at collection
+time, the acceptance run itself against `http://127.0.0.1:8010` with per-case evidence, and the
+five-batch physical stability record; and correction item 2's bounded positive delegated run,
+which is queued behind the still-running pre-fix `lg-demo-full`.
+
+_Ledger HEAD when written: `cf5c337ec`._
