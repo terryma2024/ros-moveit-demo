@@ -1001,8 +1001,9 @@ def test_child_ament_path_carries_absolute_prefixes(tmp_path):
     console_dir = tmp_path / "lib"; console_dir.mkdir()
     prefixes = {"so101_demo_py": tmp_path / "install/so101_demo_py",
                 "so101_mujoco_support": tmp_path / "install/so101_mujoco_support"}
+    site = tmp_path / "site"; site.mkdir()
     environment = child_environment_for_launcher(
-        {"AMENT_PREFIX_PATH": "/inherited"}, console_dir, prefixes=prefixes)
+        {"AMENT_PREFIX_PATH": "/inherited"}, console_dir, site_packages=site, prefixes=prefixes)
     entries = environment["AMENT_PREFIX_PATH"].split(":")
     assert entries[:2] == [str(prefixes["so101_demo_py"]), str(prefixes["so101_mujoco_support"])]
     assert entries[2] == "/inherited"
