@@ -3791,3 +3791,27 @@ host window without swap movement, which belongs to other sessions and is outsid
 scope to change. Rounds 28 and 29 produced no evidence for or against that condition, so it has
 been observed in exactly **one** round with real attempts, not three -- the accounting matters and
 is recorded here deliberately. N1 remains `NOT_MEASURED`; nothing is extrapolated to another N.
+
+## CP-UQ70 — Stage C: two genuine attempts, same host condition, and one anomaly to chase
+
+A freshly written attempt script (22 lines, explicit, batch id as an argument, run directory
+`scratch/stageC-retry.*/`) replaced the string-substitution approach, and both attempts really ran:
+
+- `run38`: 104 samples, maximum gap 78.8 ms, no measurement latch, launcher
+  `{"message": "SWAP_PRESSURE", "status": "ERROR"}`.
+- `run39`: 123 samples, no measurement latch, the same launcher message.
+
+So the host condition holds across a second round of genuine attempts (round 27 and now this one),
+and the launcher's product rule -- which reads host swap movement -- is the only thing standing
+between the sealed authorization and a completed N1 batch. That is two rounds of real evidence, not
+the three the blocker policy asks for, and there is unblocked work elsewhere in the objective, so
+the goal stays active and the next rounds will retry this while advancing Stage B/D/E items.
+
+One anomaly is worth recording rather than smoothing over: `run39`'s maximum sample gap is
+**142.9 ms**, above the 100 ms allowance, yet no `SAMPLER_GAP` latch was raised. Either a health
+check did not run across that window or the window spans the rebaseline at attach. It is a real
+inconsistency in the control and should be chased with the `control_events` timestamps already
+recorded in the receipt -- particularly `t_breach`, which was `None` here -- before trusting the
+gap rule as a complete account of sampler health.
+
+N1 remains `NOT_MEASURED`; nothing is extrapolated to another N.
