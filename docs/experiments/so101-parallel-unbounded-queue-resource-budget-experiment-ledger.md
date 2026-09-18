@@ -4176,3 +4176,36 @@ integration seam as the earlier duplicate-root and private-root findings, with t
 new occupant. The fix is either to keep the session's baseline artifacts outside the root the
 launcher allocates or to teach that allocator about them; it is the next unit, and the measurement
 harness up to the workload launch is otherwise complete under the amended policy.
+
+## CP-UQ79 — The allocator's exclusivity rule, and the two honest ways out
+
+The conflict is structural, not incidental, and the code says so plainly:
+`resources.py::_preflight` stats its `evidence_root` and raises
+`DIRECTORY_CONFLICT: <evidence_root>` whenever the directory exists at all (only a symlink gets its
+own code). The measurement harness, meanwhile, must own that same directory before the launcher
+starts: `run_candidate_batch` creates it, the session writes `raw/samples.jsonl`,
+`raw/overlay-provenance-binding.json` and the two workload logs into it, and since this round it also
+writes `raw/baseline-samples.jsonl` and `raw/peak-alias.json`. Earlier rounds fixed the launcher
+CLI's own root check (`_batch_evidence_root_state`, which now tolerates a private 0700 root for a
+sealed measurement) but not the allocator's, so the run reaches the launcher and is refused one
+layer deeper.
+
+Two ways out, and they are not equivalent:
+
+1. **Harness-side (preferred)**: give the session its own root, for example
+   `<authorization.batch_root>/<batch_id>-session`, and let the launcher allocate
+   `<authorization.batch_root>/<batch_id>` itself, empty as it requires. This keeps the product
+   allocator strict for every ordinary parallel batch and moves only the measurement harness. The
+   constraints to respect are that `verify_measurement_arguments` pins the *launcher's* root to
+   `authorization.batch_root/<batch_id>`, and that `seal_measurement` requires the sealed root to
+   live inside `authorization.batch_root`, which a sibling satisfies.
+2. **Allocator-side**: accept a pre-existing root when the caller proves ownership (private 0700,
+   same uid, batch not finalized), mirroring what the launcher CLI already does. This is a wider
+   change to a gate that ordinary batches also pass through, so it needs its own justification and
+   tests rather than being folded into a measurement fix.
+
+I am recording the decision rather than guessing at it inside the last round's budget: option 1 is
+the one consistent with this task's standing rule of not weakening gates that unrelated runs depend
+on, and it is the next implementation unit. Nothing about the amendment is in question here -- the
+run in CP-UQ78 completed a 309-sample baseline with `abort_reason` `None`, and this refusal is the
+allocator asking for an empty directory the harness is currently filling.
