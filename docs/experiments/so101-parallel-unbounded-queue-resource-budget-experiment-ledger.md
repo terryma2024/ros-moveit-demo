@@ -6909,3 +6909,28 @@ and fix that; then the campaign should finally reach workers, which is where the
 acceptance and the five-batch stability record begin.
 
 _Ledger HEAD when written: `5983893b2`._
+
+## CP-UQ170 — The broker fails on v3 because its image predates v3
+
+The broker's traceback ends with `so101_demo.parallel_batch.contracts.ContractError: SCHEMA_VERSION: 3`
+raised from `build_broker_transport` (`runtime/parallel_ipc.py:1374`). The host code calls
+`load_runtime_config_any_schema`, which has handled version 3 since Task 3 — but the broker does not
+run host code: it runs inside the perception container image
+`so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1` (digest `c8b5c5ae…`), which was built
+during Stage C, **before** this plan introduced the v3 contract. The image's own
+`load_runtime_config_any_schema` therefore still refuses a v3 document, which is exactly the
+`SCHEMA_VERSION: 3` we see.
+
+This is a genuine deployment consequence of the plan, not a guard or provenance defect: the active
+runtime contract changed, so the container image that consumes it has to be rebuilt from the current
+source. The plan anticipated image rebuilds (it is why the image digest is part of the authorization
+surface), and the build inputs are the ones recorded earlier in this ledger: `DOCKERFILE_SHA256`,
+`LOCK_SHA256` (sha256 of the newline-joined `PINS` from `parallel_perception_runtime`), and
+`SOURCE_SHA256` (the source hash of `src/so101_demo_py`), computed in-process.
+
+Next round: rebuild the image from the current tree, confirm the new digest, redeploy (the service
+carries the image tag), and re-run — the coordinator should then get past `_wait_broker_ready` and
+reach the workers, which is where the functional acceptance and the five-batch stability record
+start. No claim is made that this is the last blocker; it is simply the next one, and it is named.
+
+_Ledger HEAD when written: `b056d6983`._
