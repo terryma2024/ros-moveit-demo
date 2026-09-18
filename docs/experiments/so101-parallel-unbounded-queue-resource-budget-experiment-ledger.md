@@ -6547,3 +6547,31 @@ Recording my own refuted hypothesis rather than leaving CP-UQ152 standing: two r
 prefix is wrong" would have sent the next fix in the wrong place.
 
 _Ledger HEAD when written: `fc28cca58`._
+
+## CP-UQ155 — Found it: the coordinator died on the source-root admission gate
+
+The batch's own coordinator log holds one line, and it is the whole story:
+
+```json
+{"message": "PROVENANCE_SOURCE_ROOT", "status": "ERROR"}
+```
+
+`cli/mujoco_parallel_batch.py:608` refused the run because it derived a repository root from its
+own module path and demanded `src/so101_demo_py` next to it. In a **copied install** that
+directory does not exist, so every campaign the deployed service started died instantly — the
+zombie of CP-UQ152, the campaign stuck in STARTED, R01 waiting for a heading that could never
+appear, and the 17 manifest cases blocked behind its gate all trace to this one line. It is
+precisely the runtime admission the lightweight start guard design removed: a source checkout is
+debug/provenance evidence, never a precondition.
+
+Fix (commit for this checkpoint): the source root is now an **optional debug observation** — when
+the candidate directory is not a source checkout, no commit is recorded and the run proceeds. The
+comment above the code already claimed the commit was "an optional DEBUG observation only", so the
+code now matches its own contract. Verified by the provenance and CLI suites (`lg-t11-provenance`):
+**132 passed, 0 failed**, with no test asserting the old refusal.
+
+The deployed copy still contains the old CLI, so a fresh copy build was started into a new
+directory; the next round verifies it byte-for-byte, redeploys the service from it, and re-runs the
+acceptance — this time the coordinator should live long enough to spawn its workers.
+
+_Ledger HEAD when written: `9e130398e`._
