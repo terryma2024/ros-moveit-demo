@@ -550,3 +550,51 @@ def test_owned_cgroup_rejects_unwritable_control_file(tmp_path):
     (node / "cpu.max").chmod(0o444)
     with pytest.raises(ContractError, match="cpu.max"):
         OwnedCgroupV2(path=node).require_delegated()
+
+
+def _page_rounding_cgroup(tmp_path, *, mode="round"):
+    from so101_demo.parallel_batch.owned_resources import OwnedCgroupV2
+
+    node = tmp_path / "owned"; node.mkdir(); _delegated_tree(node)
+    page = os.sysconf("SC_PAGE_SIZE")
+
+    class Cgroup(OwnedCgroupV2):
+        def _read(self, name, default=None):
+            raw = super()._read(name, default)
+            if name == "memory.max":
+                if mode == "round":
+                    return str(int(raw) // page * page)
+                if mode == "inflate":
+                    return str(int(raw) + page)
+                if mode == "zero":
+                    return "0"
+            return raw
+
+    return Cgroup(path=node)
+
+
+def test_set_limits_accepts_kernel_page_rounding(tmp_path):
+    """cgroup v2 rounds memory.max down to the page size; that is not a failure."""
+
+    requested = 4096 * 3 + 123
+    limits = _page_rounding_cgroup(tmp_path).set_limits(
+        memory_max_bytes=requested, cpu_quota_us=1910053, period_us=100000)
+    page = os.sysconf("SC_PAGE_SIZE")
+    assert limits == {"memory_max_bytes": requested // page * page,
+                      "cpu_quota_us": 1910053, "cpu_period_us": 100000}
+
+
+def test_set_limits_refuses_inflated_memory_cap(tmp_path):
+    from so101_demo.parallel_batch.contracts import ContractError
+
+    with pytest.raises(ContractError, match="MEASUREMENT_LIMIT_UNENFORCEABLE"):
+        _page_rounding_cgroup(tmp_path, mode="inflate").set_limits(
+            memory_max_bytes=4096 * 3 + 123, cpu_quota_us=1910053, period_us=100000)
+
+
+def test_set_limits_refuses_zero_memory_cap(tmp_path):
+    from so101_demo.parallel_batch.contracts import ContractError
+
+    with pytest.raises(ContractError, match="MEASUREMENT_LIMIT_UNENFORCEABLE"):
+        _page_rounding_cgroup(tmp_path, mode="zero").set_limits(
+            memory_max_bytes=4096 * 3 + 123, cpu_quota_us=1910053, period_us=100000)

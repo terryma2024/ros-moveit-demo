@@ -3061,3 +3061,30 @@ With the fix, the real capability probe returns a real object inside a prepared 
 `cpu_core_equivalent 24.0`. Stage C's N1 calibration is therefore runnable; the results and the
 sealed per-N budgets are recorded separately, and until then every exact-N budget stays
 `NOT_MEASURED`.
+
+## CP-UQ42 — Stage C: observed runtime identity, and a second real defect in the limit path
+
+Runs: `scratch/stageC-auth.S2WPqrz0/measure{3,4,5}.log`, `scratch/stageC-fix2.*/`.
+
+Two refusals were root-caused with real runs, and neither was a host-policy problem:
+
+1. `RUNTIME_FINGERPRINT_MISMATCH` — the r1 authorization declared an identity computed from a
+   synthetic environment, while the gate derives the identity from the environment it actually
+   runs in and re-verifies it (`resource_identity.verify_runtime_identity`). The observed value is
+   `cc61a7bb3523b39c…`; revision r2
+   (`authorizations/n1-calibration-20260918-r2.json`, sha256 `ae2eece8e1b4582e…`) declares it,
+   with the derivation recorded in its note and r1 left unchanged. The r2 run passed the
+   fingerprint gate.
+2. `MEASUREMENT_LIMIT_UNENFORCEABLE` — `set_limits` demanded byte-exact read-back, but cgroup v2
+   rounds `memory.max` down to the page size: a request of `21659284275` reads back
+   `21659283456` (a full page lower), so no measurement could ever apply its caps. Fixed in
+   `owned_resources.py`: the applied cap must be at most the request and below it by less than one
+   page, with `cpu.max` still exact. Three tests added to
+   `test/test_parallel_measurement_default_path.py` (page rounding accepted, inflated cap refused,
+   zero cap refused): RED `1 failed`, GREEN `15 passed`.
+
+Live capacity observation in the prepared scope, recorded because it is what the 0.8 envelope is
+computed from: `capacity {cpu_core_equivalent 24.0, ram_bytes 33365602304, gpu_bytes 17094934528}`,
+`background {cpu 0.099469, ram 4990173184, gpu 1019609088}`, `tool_overhead {ram 43024384}`,
+`attribution_complete true`. Every exact-N budget remains `NOT_MEASURED` until a sealed batch
+exists; nothing here is extrapolated to another N.
