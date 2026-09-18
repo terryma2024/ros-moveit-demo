@@ -919,3 +919,91 @@ next_command: >
   $TASK_ROOT, verify import origins and ABI, register TEST_PYTHON/TEST_SITE in task-env.zsh and
   test-gate.zsh, prove tempfile.gettempdir() for every interpreter, then re-run the full demo gate
   (no --ignore) and fix the installed-support overlay mapping.
+
+## EXP-UQ10 — task-owned isolated environment and clean baseline (Priority 2 complete)
+
+```yaml
+experiment_id: EXP-UQ10
+status: VALID
+prior_experiment: EXP-UQ09
+hypothesis: A task-owned isolated interpreter with the pinned dependency closure plus a truthful support
+  overlay build removes every remaining baseline nonpass without touching shared environments.
+prediction: After registering the new interpreter and rebuilding the dev overlay with so101_mujoco_support,
+  the full demo and teleop suites collect and pass with zero failures/errors.
+single_variable: task-owned venv + interpreter registration + support package in the dev overlay
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Priority 1 committed; no service/measurement started; shared Kimi venv untouched (read-only reference).
+success_criteria:
+  - Exact new interpreter and dependency origins verified; no shared/global environment modified.
+  - Support package prefix comes from the task candidate overlay; product modules stay from this worktree.
+  - Full demo + teleop suites: zero failures/errors, no --ignore/xfail/exclusions.
+failure_criteria:
+  - Faking a prefix, broad PYTHONPATH injection, or accepting baseline failures as passing.
+invalid_criteria:
+  - Build failures caused by my own toolchain shadowing counted as product regressions.
+provenance:
+  source_commit: 93bffbe6dab8ff17afb1ee37599811abecea39f5
+  install_overlay: $TASK_ROOT/dev-install (symlink-install, 3 packages); venv $TASK_ROOT/venv
+  runtime_executable: $TASK_ROOT/venv/bin/python (Python 3.12.3, --system-site-packages)
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: $TASK_ROOT/tools/build-task-venv.zsh (uv venv + uv pip install pydantic==2.13.4 pytest==7.4.4 torch==2.13.0 mujoco==3.12.0)
+    exit_code: 0
+  - command: uv pip install --python $TASK_ROOT/venv/bin/python setuptools==68.1.2 (TUNA index)
+    exit_code: 0
+  - command: so101_colcon dev-build-3c build --packages-select so101_demo_py so101_teleop so101_mujoco_support --allow-overriding ... --symlink-install
+    exit_code: 0
+  - command: so101_pytest env-baseline-demo src/so101_demo_py/test -q
+    exit_code: 0
+  - command: so101_pytest env-baseline-teleop src/so101_teleop/test -q
+    exit_code: 0
+observed:
+  - venv-build/20260918T032409Z: elapsed 349 s, exit 0. $TEST_ROOT/venv/bin/python = 3.12.3;
+    pydantic 2.13.4 (venv site-packages), pytest 7.4.4, torch 2.13.0+cu130, mujoco 3.12.0 — all imported
+    from the task venv, not from shared/global paths. venv 4.7G; task-owned uv cache used.
+  - First build attempt failed with `setup.py develop --uninstall` "option --uninstall not recognized":
+    the venv's setuptools 84.0.0 shadowed system setuptools 68.1.2 on colcon's PYTHONPATH (setuptools >= 80
+    removed the develop command). Pinned setuptools==68.1.2 into the task venv; recorded in
+    venv-build/setuptools-pin-*/. NOTE FOR TASK 12: the planned --cmake-clean-cache reconfigure must run
+    with this pinned setuptools on the path.
+  - Wrapper repair: COLCON_TEST_PYTHONS was declared with `typeset -a` inside a sourced file; because
+    task-env sources test-gate from inside a function, the array became function-local and empty, so
+    `so101_colcon test` would have refused (or executed an empty interpreter). Changed to `typeset -ga`
+    (global) plus a global declaration in task-env.zsh; verified array contents.
+  - Dev overlay rebuilt with three packages (so101_demo_py, so101_teleop, so101_mujoco_support) and
+    verified origins: so101_demo from dev-build (this worktree), so101_teleop from dev-install,
+    get_package_prefix('so101_mujoco_support') = $TASK_ROOT/dev-install/so101_mujoco_support.
+  - CLEAN BASELINE: scratch/env-baseline-demo.02pCV9vv exit 0 — 3214 passed, 1 skipped, 0 failures,
+    0 errors in 358 s (previously 71 failed / 40 errors). scratch/env-baseline-teleop.yfweBFIr exit 0 —
+    511 passed, 0 failures in 40 s (was 489 before Tasks 1-7 added 22 tests).
+  - Shared Kimi venv, system installs, other worktrees and drivers were not modified; the Kimi venv remains
+    a read-only provenance reference. No dependency was installed outside TASK_ROOT.
+inferred:
+  - All previously "environmental" failures were bootstrap issues as classified; no product regression was
+    hidden by them, and the 22 new teleop tests pass in the repaired environment.
+conclusion: VALID. Priority 2 complete with a clean, exclusion-free baseline.
+evidence:
+  - $TASK_ROOT/venv-build/*, $TASK_ROOT/colcon/dev-build-3c.*, scratch/env-baseline-demo.02pCV9vv,
+    scratch/env-baseline-teleop.yfweBFIr, run-index.txt
+decision: KEEP
+next_experiment: EXP-UQ11 (Task 8 adaptive no-K)
+```
+
+```yaml
+checkpoint_id: CP-UQ10
+last_valid_experiment: EXP-UQ10
+current_hypothesis: Task 8 can remove the adaptive lifetime quota and introduce the typed adaptive context.
+working_tree_status: wrapper + ledger changes staged for this commit
+owned_processes: NONE
+preserved_processes: NONE from this task family
+confirmed_conclusions:
+  - Task-owned venv registered; clean demo (3214 passed) and teleop (511 passed) baselines (EXP-UQ10).
+disproven_routes:
+  - Assuming remaining baseline failures were product regressions; assuming the shared venv could not be
+    replaced without touching it (a task-owned venv solved it).
+open_risks:
+  - Task 12's --cmake-clean-cache reconfigure depends on the setuptools<80 pin being on colcon's path.
+next_command: implement Task 8 RED (test_pool_contract_has_no_lifetime_quota) in
+  src/so101_demo_py/test/test_parallel_adaptive_contracts.py
