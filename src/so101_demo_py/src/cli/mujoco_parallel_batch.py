@@ -615,7 +615,11 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
         if repository_root is not None else None
     )
     source_dirty = _observed_source_dirty(repository_root)
-    package_root = repository_root / "src/so101_demo_py"
+    # The patch that made the source root optional left this path unconditional, which turned
+    # "no checkout" into a TypeError and therefore into PROVENANCE_VERIFICATION_FAILED. The
+    # package root is debug/overlay evidence; without a checkout it simply does not exist.
+    package_root = (repository_root if repository_root is not None
+                    else module_path.parents[3]) / "src/so101_demo_py"
     console = shutil.which("so101_parallel_batch")
     if console is None:
         raise CliError("PROVENANCE_CONSOLE_MISSING")
