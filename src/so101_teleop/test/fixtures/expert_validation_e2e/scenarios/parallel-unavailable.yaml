@@ -3,6 +3,14 @@ scenario_id: parallel-unavailable
 description: Fixed parallel mode is not qualified on this host; the server rejects with a reason.
 capabilities:
   fixed_worker_counts: [1, 2, 3, 4, 5, 6, 7, 8]
+  worker_count_availability:
+    - {worker_count: 2, selectable: false, status: NOT_MEASURED, reason_codes: [BUDGET_PROFILE_UNAVAILABLE]}
+    - {worker_count: 3, selectable: false, status: NOT_MEASURED, reason_codes: [BUDGET_PROFILE_UNAVAILABLE]}
+    - {worker_count: 4, selectable: false, status: NOT_MEASURED, reason_codes: [BUDGET_PROFILE_UNAVAILABLE]}
+    - {worker_count: 5, selectable: false, status: NOT_MEASURED, reason_codes: [BUDGET_PROFILE_UNAVAILABLE]}
+    - {worker_count: 6, selectable: false, status: NOT_MEASURED, reason_codes: [BUDGET_PROFILE_UNAVAILABLE]}
+    - {worker_count: 7, selectable: false, status: NOT_MEASURED, reason_codes: [BUDGET_PROFILE_UNAVAILABLE]}
+    - {worker_count: 8, selectable: false, status: NOT_MEASURED, reason_codes: [BUDGET_PROFILE_UNAVAILABLE]}
 mode_availability:
   PARALLEL: PARALLEL_NOT_QUALIFIED
 terminal_campaign: null

@@ -112,7 +112,6 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
     pointCount: 20,
     executionMode: "SEQUENTIAL",
     workerCount: 1,
-    maxPointsPerWorker: 20,
   });
   const sessionId = useMemo(stableSessionId, []);
 
@@ -238,6 +237,7 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
 
   const preflightInput = (): PreflightInput => setup.executionMode === "ADAPTIVE"
     ? {
+      contract_version: 2,
       manifest_id: manifest!.manifest_id,
       execution_mode: "ADAPTIVE",
       preferred_worker_count: 8,
@@ -248,10 +248,10 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
       yolo_executor_count: 2,
     }
     : {
+      contract_version: 2,
       manifest_id: manifest!.manifest_id,
       execution_mode: setup.executionMode,
       worker_count: setup.workerCount,
-      max_points_per_worker: setup.maxPointsPerWorker,
     };
 
   const runPreflight = async () => {
