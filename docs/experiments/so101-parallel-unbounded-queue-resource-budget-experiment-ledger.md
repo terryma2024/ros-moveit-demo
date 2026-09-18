@@ -1158,3 +1158,66 @@ open_risks:
     replace them with the provider and keep every retained gate green.
 next_command: implement Task 10 RED (legacy CLI flag error + three-consumer shared provider) and wire
   resources.AllocationPolicy to the typed contexts
+
+## EXP-UQ13 — Task 10 (part 1) legacy CLI flag refusal and the shared admission gate
+
+```yaml
+experiment_id: EXP-UQ13
+status: VALID
+prior_experiment: EXP-UQ12
+hypothesis: The CLI can refuse the retired quota flag before any resource work, and the Web probe, CLI
+  prepare and worker allocator can share one exact-N admission gate that fails closed without a probe.
+prediction: RED shows the flag accepted and the gate absent; GREEN passes the plan's CLI case plus a spy
+  gate proving identical requests from all three consumers.
+single_variable: legacy-flag guard + FixedAdmissionGate seams
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Task 9 part 1 committed; teleop 521 passed; demo baseline clean (EXP-UQ10).
+success_criteria:
+  - prepare_batch(['--max-points-per-worker', '20']) raises ContractError with
+    LEGACY_MAX_POINTS_PER_WORKER_UNSUPPORTED before argparse or allocation.
+  - All three consumers accept a gate, ask the same FixedAdmissionRequest (N + kind + R) and report the
+    gate's reason code; a gate without a runtime fingerprint/probe refuses instead of passing.
+failure_criteria:
+  - Any consumer keeping its own formula/hardcode on the gate path, or a gate that passes silently.
+invalid_criteria:
+  - Retained tests failing only because their argv still carried the retired flag counted as regressions.
+provenance:
+  source_commit: 18f2b9ee2
+  install_overlay: $TASK_ROOT/dev-install (symlinks) + $TASK_ROOT/venv
+  runtime_executable: $TASK_ROOT/venv/bin/python
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: so101_pytest adapters-red test_parallel_batch_cli.py::test_legacy_cli_flag_is_an_explicit_error -q
+    exit_code: 1
+  - command: so101_pytest adapters-green <legacy flag> <test_expert_validation_resource_budget.py> -q
+    exit_code: 0
+  - command: so101_pytest task10-regression4 test_parallel_batch_cli.py test_parallel_batch_resources.py src/so101_teleop/test -q
+    exit_code: 0
+observed:
+  - RED: the flag was accepted and parsed; GREEN: 5 passed on the adapters gate.
+  - resource_budget.py gains FixedAdmissionRequest and FixedAdmissionGate; the gate refuses with
+    RESOURCE_PROBE_FAILED when no current fingerprint/live observation is attached, and otherwise
+    delegates to admit_production/admit_measurement with the exact-N context.
+  - resources.WorkerResourceAllocator accepts resource_gate= and, for the gate path, raises
+    ResourceAllocationError with the gate's first reason code and records its decision; the allocator now
+    also accepts ParallelRuntimeConfigV2.
+  - production._HostResourceProbe accepts resource_gate= and returns the gate's reasons instead of its own
+    hardcoded N>3 block when a gate is supplied; cli._prepare_live_headroom accepts resource_gate= and
+    raises CliError with the same code.
+  - Retained test helpers that still built argv with --max-points-per-worker were migrated (CLI + resources
+    fixtures); the adaptive legacy-flag case now expects the stable legacy code; the CLI capacity case uses
+    the internally derived quota of the retained path.
+  - Suites: adapters 5 passed; task10-regression4 (CLI + resources + full teleop) 784 passed / 0 failed.
+inferred:
+  - The composition still builds the retained v1 BatchRequest internally and the parser still declares the
+    flag for that internal pass-through; switching the composition to BatchRequestV2, deleting the parser
+    argument and the coordinator argv entry, and making the gate mandatory for fixed production are the
+    remaining Task 10 steps, recorded as the next unit.
+conclusion: VALID for the guard and the shared seam; the formula/hardcode removal and mandatory gate are
+  the remaining Task 10 work.
+evidence:
+  - scratch/adapters-red.*, scratch/adapters-green.*, scratch/task10-regression*. *
+decision: KEEP
+next_experiment: EXP-UQ14
