@@ -165,6 +165,18 @@ def _file_sha256(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def install_prefix_entry_points(install_prefix: Path) -> Path:
+    """The distribution metadata inside the sealed install, not this interpreter's."""
+
+    root = Path(install_prefix) / "so101_demo_py/lib"
+    for pattern in ("python*/site-packages/*.egg-info/entry_points.txt",
+                    "python*/site-packages/*.dist-info/entry_points.txt"):
+        matches = sorted(root.glob(pattern))
+        if len(matches) == 1:
+            return matches[0]
+    raise MeasurementCliError("MEASUREMENT_OVERLAY_INPUT_MISSING: entry_points")
+
+
 def _ament_package_prefixes() -> dict[str, Path]:
     """The prefixes the launcher's overlay check compares against AMENT, not import paths."""
 
@@ -261,12 +273,11 @@ def production_runner_factory(plan, *, child_runner=None, image_inspector=None):
     overlay = write_overlay_provenance_binding(
         target=ensure_private_batch_root(plan.batch_root) / "raw/overlay-provenance-binding.json",
         source_root=Path(str(binding.get("source_root", "")) or Path.cwd()),
-        build_root=_ament_package_prefixes()["so101_demo_py"].parent,
-        install_root=_ament_package_prefixes()["so101_demo_py"].parent,
+        build_root=install_prefix, install_root=install_prefix,
         package_prefix=_ament_package_prefixes()["so101_demo_py"],
         package_prefixes=_ament_package_prefixes(),
         console=launcher, module=_installed_launcher_module(),
-        entry_points=_installed_entry_points(),
+        entry_points=install_prefix_entry_points(install_prefix),
         parallel_config=Path(plan.config_path),
         point_catalog=Path(plan.bindings.points_path),
         source_commit=measurement_source_commit())
