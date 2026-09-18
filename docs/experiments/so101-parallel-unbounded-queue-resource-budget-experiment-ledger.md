@@ -7448,3 +7448,14 @@ Also noted for the next round: run 6's R03 spec was still polling when this was 
 was stopped rather than left to time out against a campaign that can never become terminal.
 
 _Ledger HEAD when written: `5bb830d3b`._
+
+**Addendum to CP-UQ181 (same round).** The stopped run was cleaned up rather than abandoned:
+the Playwright driver and its Chrome contexts are gone, no `ros2_control_node`, no
+`so101_parallel_batch` and no broker container remain, and the deployed service is still up on the
+last verified deployment (`service-light.s2jytgW3`, rebuilt control prefix). The eight full-suite
+run directories are retained for audit — `lg-live-functional.fJ0U4Bhg` (20/3),
+`.dnnam54V` → `lg-live-functional5.dnnam54V` (21/2, first two-worker parallel completion),
+`lg-live-functional6.SMhlJhQ1` (R01+R02 green, stopped during R03), plus the probes — nothing was
+deleted.
+
+_Ledger HEAD when written: `1bd233236`._
