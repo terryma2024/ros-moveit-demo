@@ -142,9 +142,13 @@ def child_environment_for_launcher(environment, console_dir, site_packages=None,
     values["PATH"] = os.pathsep.join(
         part for part in (str(console_dir), inherited) if part)
     if site_packages is not None:
+        # The prefixes arrive as a mapping of package name to prefix; iterating the
+        # mapping itself would put bare names on the path and let the launcher's AMENT
+        # re-query fall through to an inherited prefix.
+        entries = list(prefixes.values()) if isinstance(prefixes, dict) else list(prefixes or ())
+        inherited_ament = values.get("AMENT_PREFIX_PATH", "")
         values["AMENT_PREFIX_PATH"] = os.pathsep.join(
-            str(path) for path in prefixes or ()) + (
-            os.pathsep + values["AMENT_PREFIX_PATH"] if values.get("AMENT_PREFIX_PATH") else "")
+            [str(path) for path in entries] + ([inherited_ament] if inherited_ament else []))
         inherited_path = values.get("PYTHONPATH", "")
         values["PYTHONPATH"] = os.pathsep.join(
             part for part in (str(site_packages), inherited_path) if part)
