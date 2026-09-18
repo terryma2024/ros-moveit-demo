@@ -1,168 +1,72 @@
-"""The candidate CLI refuses unsafe or unsupported measurement starts."""
+"""The retired measurement entry point: it reports retirement and measures nothing.
+
+Task 6 of the lightweight start guard plan. The certified measurement runtime is deleted;
+the console entry stays registered so an operator who still types it gets an explicit
+retirement error instead of a silently different mode.
+"""
 
 import json
-import time
+import os
+import subprocess
+import sys
 from pathlib import Path
 
-import pytest
+RETIRED_MODULES = (
+    "so101_demo.parallel_batch.resource_budget",
+    "so101_demo.parallel_batch.resource_measurement",
+    "so101_demo.parallel_batch.measurement_control",
+    "so101_demo.parallel_batch.owned_resources",
+)
 
-from so101_demo.cli.measure_parallel_resources import main
-
-
-def write(path: Path, document) -> str:
-    import hashlib
-    path.parent.mkdir(mode=0o700, exist_ok=True)
-    path.write_text(json.dumps(document, sort_keys=True))
-    path.chmod(0o600)
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+PACKAGE = Path(__file__).resolve().parents[1]
+SOURCE = PACKAGE / "src"
 
 
-def config_path():
-    """The authoritative config, with only the baseline shortened for tests.
-
-    Policy amendment 74d6b781 requires a genuine >=60 s pre-workload baseline in a real
-    run; an end-to-end test that started a session at that value would spend a minute per
-    case. The candidate copy declares its own short baseline explicitly -- there is no
-    bypass flag and the authoritative document is untouched.
-    """
-
-    import os
-    import tempfile
-
-    import yaml
-
-    source = (Path(__file__).resolve().parents[1]
-              / "config/mujoco/parallel_batch_v2.yaml")
-    document = yaml.safe_load(source.read_text())
-    document["execution"]["sampling"]["baseline_minimum_s"] = 0.2
-    directory = Path(os.environ.get("TMPDIR", tempfile.gettempdir())) / "cli-test-config"
-    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-    target = directory / "parallel_batch_v2.test.yaml"
-    target.write_text(yaml.safe_dump(document, sort_keys=False))
-    return target
+def test_the_measurement_runtime_is_deleted_from_the_tree():
+    for module in RETIRED_MODULES:
+        relative = Path(*module.split(".")[1:]).with_suffix(".py")
+        assert not (SOURCE / relative).exists(), module
 
 
+def test_measurement_entry_is_retired():
+    from so101_demo.cli import measure_parallel_resources as entry
+
+    exit_code = entry.main(["--config", "/nonexistent/config.yaml", "--batch-id", "x"])
+    assert exit_code == 2
+    assert os.environ.get("SO101_MEASUREMENT_RETIRED_REASON") is None
 
 
-def runtime_bindings(tmp_path):
-    """Closed, plan-conforming runtime bindings for the retained authorization fixtures."""
+def test_measurement_entry_reports_retirement_and_never_measures(capsys):
+    from so101_demo.cli import measure_parallel_resources as entry
 
-    def write(path, data):
-        import hashlib
-        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        path.write_bytes(data)
-        path.chmod(0o600)
-        return hashlib.sha256(data).hexdigest()
-
-    points = tmp_path / "models/points.yaml"
-    points_sha = write(points, b"points: [p1]\n")
-    weights = tmp_path / "models/yolo.pt"
-    weights_sha = write(weights, b"weights")
-    grounded = tmp_path / "models/grounded"
-    grounded.mkdir(mode=0o700, parents=True, exist_ok=True)
-    manifest_sha = write(grounded / "manifest.json", b'{"models": []}\n')
-    provenance = tmp_path / "bindings/provenance.json"
-    provenance_sha = write(provenance, b'{"schema_version": 1, "install_prefix": "/tmp/i"}\n')
-    return {
-        "points_path": str(points), "points_sha256": points_sha,
-        "yolo_weights_path": str(weights), "yolo_weights_sha256": weights_sha,
-        "grounded_root": str(grounded), "grounded_manifest_sha256": manifest_sha,
-        "broker_image_id": "sha256:" + "b" * 64,
-        "provenance_binding_path": str(provenance),
-        "provenance_binding_sha256": provenance_sha,
-    }
+    exit_code = entry.main(["--help"]) if False else entry.main([])
+    captured = capsys.readouterr()
+    payload = json.loads((captured.out + captured.err).strip().splitlines()[-1])
+    assert exit_code == 2
+    assert payload["error"] == "MEASUREMENT_ENTRY_RETIRED"
+    assert payload["authorizes_execution"] is False
 
 
-def authorization_document(tmp_path, **changes):
-    bindings = runtime_bindings(tmp_path)
-    document = {
-        "schema_version": 2, "operator_uid": __import__("os").getuid(),
-        "dispatch_id": "dispatch-a", "task_id": "task-a", "source_commit": "a" * 40,
-        "execution_identity_sha256": "b" * 64, "worker_count": 2,
-        "catalog_sha256": bindings["points_sha256"], "seed": 7,
-        "lifecycle": "FULL_RESTART",
-        "maximum_batches": 1, "batch_deadline_s": 5400.0,
-        "expires_at_ns": time.time_ns() + 3_600_000_000_000,
-        "batch_root": str(tmp_path / "batches"), "owned_scope_sha256": "d" * 64,
-        "safety_policy_sha256": "e" * 64, "intent": "CALIBRATION_ONLY",
-        "calibration_sha256": None,
-        "runtime_bindings": bindings,
-    }
-    document.update(changes)
-    return document
+def test_retired_console_script_is_still_registered_but_imports_no_budget_module():
+    setup_py = (PACKAGE / "setup.py").read_text()
+    assert "so101_measure_parallel_resources" in setup_py
 
-
-def argv(tmp_path, digest, *, intent="CALIBRATION_ONLY", evidence_root=None):
-    return ["--authorization", str(tmp_path / "private/authorization.json"),
-            "--authorization-sha256", digest, "--config", str(config_path()),
-            "--batch-id", "batch-a", "--evidence-root", str(evidence_root or tmp_path),
-            "--intent", intent]
-
-
-def test_cli_refuses_wrong_hash_and_missing_authorization(tmp_path, capsys):
-    assert main(["--authorization", str(tmp_path / "missing.json"),
-                 "--authorization-sha256", "f" * 64, "--config", str(config_path()),
-                 "--batch-id", "batch-a", "--evidence-root", str(tmp_path),
-                 "--intent", "CALIBRATION_ONLY"]) == 1
-    assert "REFUSED" in capsys.readouterr().err
-    path = tmp_path / "private/authorization.json"
-    write(path, authorization_document(tmp_path))
-    assert main(argv(tmp_path, "f" * 64)) == 1
-
-
-def test_cli_refuses_intent_mismatch_and_expiry(tmp_path, capsys):
-    path = tmp_path / "private/authorization.json"
-    digest = write(path, authorization_document(tmp_path))
-    assert main(argv(tmp_path, digest, intent="QUALIFICATION")) == 1
-    assert "AUTHORIZATION_INTENT_MISMATCH" in capsys.readouterr().err
-    expired = write(path, authorization_document(tmp_path, expires_at_ns=1))
-    assert main(argv(tmp_path, expired)) == 1
-    assert "AUTHORIZATION_EXPIRED" in capsys.readouterr().err
-
-
-def test_cli_refuses_candidate_config_with_deployment_refs(tmp_path, capsys):
-    document = authorization_document(tmp_path)
-    path = tmp_path / "private/authorization.json"
-    digest = write(path, document)
-    tampered = tmp_path / "config/tampered.yaml"
-    tampered.parent.mkdir(mode=0o700, exist_ok=True)
-    text = (config_path().read_text()
-            .replace("approved_profile_path: null", "approved_profile_path: /sealed/profile.json")
-            .replace("approved_profile_sha256: null",
-                     "approved_profile_sha256: " + "a" * 64)
-            .replace("promotion_record_path: null",
-                     "promotion_record_path: /sealed/promotion.json"))
-    tampered.write_text(text)
-    assert main(["--authorization", str(path), "--authorization-sha256", digest,
-                 "--config", str(tampered), "--batch-id", "batch-a",
-                 "--evidence-root", str(tmp_path), "--intent", "CALIBRATION_ONLY"]) == 1
-    assert "CANDIDATE_CONFIG_MUST_HAVE_NULL_DEPLOYMENT" in capsys.readouterr().err
-
-
-def test_cli_refuses_batch_root_outside_evidence_root(tmp_path, capsys):
-    path = tmp_path / "private/authorization.json"
-    digest = write(path, authorization_document(tmp_path, batch_root="/data/elsewhere"))
-    assert main(argv(tmp_path, digest)) == 1
-    assert "BATCH_ROOT_OUTSIDE_EVIDENCE_ROOT" in capsys.readouterr().err
-
-
-def test_cli_fails_closed_without_a_derivable_installation(tmp_path, capsys):
-    path = tmp_path / "private/authorization.json"
-    document = authorization_document(tmp_path)
-    # The declared binding has no source root and no installed inventory behind it, so
-    # the runtime identity cannot be derived and the sealed bytes are refused.
-    prefix = tmp_path / "install"
-    prefix.mkdir(mode=0o700, exist_ok=True)
-    document["runtime_bindings"]["provenance_binding_path"] = str(
-        tmp_path / "bindings/provenance.json")
-    binding = tmp_path / "bindings/provenance.json"
-    binding.write_text(json.dumps({"schema_version": 1, "install_prefix": str(prefix)}))
-    binding.chmod(0o600)
-    import hashlib
-    document["runtime_bindings"]["provenance_binding_sha256"] = hashlib.sha256(
-        binding.read_bytes()).hexdigest()
-    digest = write(path, document)
-    assert main(argv(tmp_path, digest), capability_probe=lambda: None) == 1
-    stderr = capsys.readouterr().err
-    assert "REFUSED" in stderr and (
-        "SEMANTIC_CONFIG_IDENTITY_REQUIRED" in stderr or "INVENTORY_UNAVAILABLE" in stderr)
+    script = (
+        "import json, sys\n"
+        "RETIRED = " + repr(RETIRED_MODULES) + "\n"
+        "class Trap:\n"
+        "    def find_spec(self, name, path=None, target=None):\n"
+        "        if name in RETIRED:\n"
+        "            raise AssertionError('retired module imported: ' + name)\n"
+        "        return None\n"
+        "sys.meta_path.insert(0, Trap())\n"
+        "from so101_demo.cli import measure_parallel_resources as entry\n"
+        "entry.main([])\n"
+        "print(json.dumps(sorted(n for n in sys.modules if 'parallel_batch' in n)))\n"
+    )
+    completed = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True,
+                               env=dict(os.environ))
+    assert completed.returncode == 0, completed.stderr
+    modules = json.loads(completed.stdout.strip().splitlines()[-1])
+    for retired in RETIRED_MODULES:
+        assert retired not in modules, modules
