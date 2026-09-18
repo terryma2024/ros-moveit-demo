@@ -1221,3 +1221,68 @@ evidence:
   - scratch/adapters-red.*, scratch/adapters-green.*, scratch/task10-regression*. *
 decision: KEEP
 next_experiment: EXP-UQ14
+
+## EXP-UQ13 confirmation and CP-UQ13 checkpoint
+
+Full-gate confirmation after the Task 10 slice and the adaptive-fixture migration:
+
+- `so101_pytest task10-demo-full2 src/so101_demo_py/test -q` exit 1: 3216 passed, 1 skipped,
+  1 failed — `test_parallel_adaptive_integration.py::test_external_cleanup_retires_only_owned_worker_and_releases_claim`
+  failed with `CleanupError: PROCESS_RETIREMENT_FAILED`. The same file re-run alone in a fresh scratch
+  (`adaptive-integration-retry`) passed 14/14, so this is an order/retirement flake, NOT accepted as a pass
+  and NOT hidden; it stays an open risk.
+- `so101_pytest task10-demo-full3 src/so101_demo_py/test -q` exit 0: **3217 passed, 1 skipped, 0 failed,
+  0 errors** in 355 s (scratch/task10-demo-full3.iimdppws, JUnit 3218 cases, zero bad). This is the clean
+  full-demo confirmation.
+- Teleop package: `task10-regression4` (CLI + resources + full teleop) 784 passed / 0 failed; the teleop
+  package alone is 521 passed.
+
+```yaml
+checkpoint_id: CP-UQ13
+last_valid_experiment: EXP-UQ13
+current_hypothesis: The remaining Task 10 unit is the composition switch to BatchRequestV2 plus removal of
+  the legacy formulas/hardcodes and the internal parser flag.
+working_tree_status: clean at 803a7d1e6 (code) + this docs commit
+owned_processes: NONE
+preserved_processes: NONE from this task family (canonical install, shared venv, other worktrees untouched)
+confirmed_conclusions:
+  - AF_UNIX boundary repaired on the dirfd transport; 152/152 Task 3 tests pass (EXP-UQ08).
+  - Task-owned venv Python 3.12.3 with pydantic 2.13.4 / pytest 7.4.4 / torch 2.13.0+cu130 /
+    mujoco 3.12.0 and pinned setuptools 68.1.2; support package built into the dev overlay; clean
+    baselines (demo 3217 passed, teleop 521 passed) (EXP-UQ10, CP-UQ13).
+  - Adaptive contract is quota-free with factory-private typed authority (EXP-UQ11).
+  - Teleop v2 request contract: legacy key refused by presence, contract_version 2 enforced, honest
+    N2..8 availability (EXP-UQ12).
+  - Legacy CLI flag refused pre-argparse; Web probe, CLI prepare and allocator share FixedAdmissionGate
+    and fail closed without a probe (EXP-UQ13).
+disproven_routes:
+  - Treating the deep-scratch socket failures, missing mujoco/torch, or the support-prefix assertion as
+    product regressions.
+open_risks:
+  - One flaky adaptive-integration process-retirement run (recorded above); needs monitoring in later full gates.
+  - CLI composition still builds the retained v1 BatchRequest and internally passes --max-points-per-worker
+    to the coordinator; parser argument, manifest field, coordinator argv entry and the three legacy
+    formula/N>3 blocks are still present on the compatibility path.
+  - resources.AllocationPolicy still carries the generic enforce_resource_thresholds flag; the typed-context
+    migration (plan Task 10) is pending.
+  - Remaining Stage A work: Task 10 part 2, Task 11, Task 13/14/15 offline code; then the plan's full
+    offline/frozen gates with CTest registration readback.
+retained:
+  - Commits on codex/so101-unbounded-queue-resource-budget through 803a7d1e6 plus this docs commit.
+  - $TASK_ROOT: tools/ (test-gate, task-env, build-task-venv), venv/ + venv-build/*, uv-cache/, dev-build/,
+    dev-install/, bindings/v1-contract-baseline.json, run-index.txt, scratch/* (env-baseline-*,
+    socket-fix-green, task10-demo-full3, p2-classify*, adaptive-*, adapters-*, teleop-*), colcon/*.
+  - Dispatch records: dispatch-20260918-84620fc0/executor-receipt.md,
+    followup-20260918T110443-2e37ac85/{executor-receipt.md,probe-01.md},
+    followup-20260918T112151-5abbdb70/{executor-receipt.md,probe-01.md}.
+archived: none
+deletion_candidates: $TASK_ROOT/scratch/* (test scratches) and superseded colcon run logs; no deletion
+  authorized or performed; /tmp/uq-ctl-* socket dirs from the Task 5 fixture are removed by the fixture itself.
+next_command: >
+  Implement Task 10 part 2 in src/so101_demo_py/src/cli/mujoco_parallel_batch.py + resources.py +
+  src/so101_teleop/so101_teleop/expert_validation/{preflight,supervisor}.py: load
+  config/mujoco/parallel_batch_v2.yaml for new execution, build BatchRequestV2 (FIRST_PASS) with no quota
+  field, delete the parser --max-points-per-worker argument and the coordinator argv entry, make
+  FixedAdmissionGate mandatory for fixed production admission, remove the N>3/N3-special blocks and the
+  4N/6+4N/GPU8 formulas, and migrate the retained CLI/teleop fixtures to the v2 config path; then re-run
+  the demo + teleop full gates and add the adopt_existing v2 recheck regression.
