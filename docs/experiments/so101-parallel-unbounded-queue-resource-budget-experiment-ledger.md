@@ -6809,3 +6809,26 @@ round verifies it (CLI byte-compare *before* deploying, per CP-UQ162's lesson), 
 the acceptance and reads the coordinator log — the fifth gate name, or the first worker.
 
 _Ledger HEAD when written: `ee27a1cec`._
+
+## CP-UQ166 — Direct copied-install run passes provenance; the failure is specific to the spawn
+
+Decisive experiment: running the **copied** console entry by hand with the copy's site-packages and
+prefixes on the environment, the same model paths the deployment uses, and a deliberately fake YOLO
+hash, gets **past** `verify_provenance` and stops at `YOLO_HASH_MISMATCH` — a later, functional
+check that my fake hash was always going to trip. In other words the copied-install provenance path
+(no checkout, share-based inputs, layout fallback) **works**, and the CP-UQ155/158/159/161/165 fixes
+are doing their job when the CLI is invoked the way I invoked it.
+
+The service-spawned coordinator still dies with the generic
+`PROVENANCE_VERIFICATION_FAILED`, so the difference must be in what the service passes rather than
+in the verification logic: its arguments (a provenance binding the layout carries, or a config/points
+path it rewrites) and its child environment. The next step is therefore to read the **spawn itself** —
+the supervisor records the request and the batch root, and a `--provenance-binding` argument that
+points at a file which does not exist would raise exactly this generic error through
+`_external_binding_source_root`.
+
+Cheapest way to see it: log the coordinator's argv (or a traceback) into the coordinator log, or read
+the spawn request from the supervisor's store, then reproduce that exact invocation by hand — the
+same technique that just proved the direct path is sound.
+
+_Ledger HEAD when written: `a7622b9e9`._
