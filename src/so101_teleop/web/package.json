@@ -14,7 +14,8 @@
     "test": "vitest run",
     "test:e2e": "playwright test --config playwright.config.ts",
     "test:e2e:installed": "playwright test --config playwright.installed.config.ts",
-    "test:e2e:live-sim": "playwright test --config playwright.live-sim.config.ts"
+    "test:e2e:live-sim": "playwright test --config playwright.live-sim.config.ts",
+    "prepare:functional-manifest": "bun e2e/expert-validation/fixtures/build-functional-manifest.ts"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "1.1.6",
