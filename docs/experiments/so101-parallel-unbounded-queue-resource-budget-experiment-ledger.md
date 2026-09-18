@@ -2919,3 +2919,38 @@ evidence: scratch/stageB-webstart2.zMVk9xRa/{server.log,readback.log,routes.log,
 decision: KEEP
 next_experiment: EXP-UQ38 Stage B UI/lease/recovery readback, then Stage C delegated-measurement path
 ```
+
+```yaml
+checkpoint_id: CP-UQ38
+last_valid_experiment: EXP-UQ38
+current_hypothesis: Stage B is complete in the honest sense available today - owned Web refreshed and
+  read back on the production freeze, and owned recovery verified as a no-op on the fresh store.
+goal: goal-d30193b8-a2e5-495d-b6c7-6879782448ac (round 5)
+readback:
+  - "scratch/stageB-webstart2.zMVk9xRa/lease-store.log (shell date 2026-09-18T21:20:12+08:00)."
+  - "Route methods from the live OpenAPI: POST /expert-validation/lease (body), GET|POST
+    /expert-validation/campaigns, POST /expert-validation/manifests, POST
+    /expert-validation/campaigns/preflight; GET on /lease and /manifests are 405 by design."
+  - "GET /expert-validation/campaigns -> [] : the owned service created a FRESH store at
+    scratch/stageB-webstart2.zMVk9xRa/evidence/validation-service/supervisor.sqlite3 (+ -wal, -shm,
+    supervisor.lock) with no campaigns, so there is no lease/fence to inherit and nothing to recover."
+  - "Owned recovery interface (frozen entry so101_expert_validation_recover.py):
+    --store-root --campaign-id --command-id --parallel-config --source-commit [--apply]; it documents
+    itself as observing runtime and never killing or claiming success. With an empty campaign set the
+    Stage B recovery step is a verified NO-OP; the interface is recorded for use once Stage C creates a
+    campaign."
+  - "UI route bytes: GET /expert-validation returned a server-composed shell
+    (sha256 7ed0950a4f37a48eee55c8c1e0b29b1eae88565a43d20ae2b76b680cd0a7d8c7) while the audited dist
+    file is 8e1cb7ee86b74c220e211eb9003bf2ecbb4557593af88e5f279aeea6ede3d3d3 - recorded as an
+    observation, not a defect."
+inferred:
+  - Stage B's authorized window is satisfied: owned Web up on 127.0.0.1:8010 (PID 1945387) against the
+    versioned production freeze, all endpoints honest about unmeasured budgets, no foreign object
+    touched and no success claimed without evidence.
+conclusion: GOAL ROUND 5 - Stage B complete (Web refreshed/started; recovery not needed on the fresh
+  store).
+evidence: scratch/stageB-webstart2.zMVk9xRa/{lease-store.log,endpoints.log,readback.log,routes.log,
+  server.log}, scratch/stageB-ownership.80PNvl8p/ownership.log
+decision: KEEP
+next_experiment: EXP-UQ39 Stage C delegated-unit capability attempt and sealed N1 preparation
+```
