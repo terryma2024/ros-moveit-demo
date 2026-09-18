@@ -6741,3 +6741,25 @@ The acceptance is running again against the recovered service; the coordinator l
 campaign is what the next round reads — it will name the fifth gate or show the first worker.
 
 _Ledger HEAD when written: `4bc914fd6`._
+
+## CP-UQ163 — The newest coordinator log says PROVENANCE_VERIFICATION_FAILED again
+
+After the recovery deploy, the newest campaign's coordinator log reads
+`{"message": "PROVENANCE_VERIFICATION_FAILED", "status": "ERROR"}` — i.e. not the fourth gate this
+time but the *generic* wrapper, which is what the caller produces when the verifier raises any
+non-`CliError` exception. Two readings are possible and the next round must separate them by
+timestamp instead of guessing:
+
+1. the log belongs to the campaign started against the **half-built copy** (CP-UQ162), in which
+   case the recovered service's campaign has not produced its own line yet; or
+2. it is the recovered service's campaign, and my CP-UQ161 change raises inside the *spawned*
+   coordinator — most plausibly because `get_package_share_directory("so101_demo_py")` cannot see
+   the copy's share directory from the environment the service gives the coordinator (the service
+   process itself resolves it for its own config, which is why the deploy looked healthy).
+
+The check that decides it is cheap: the log's mtime versus the deploy time, and whether the
+campaign id matches the one the current acceptance is polling. If it is reading 2, the fix is to
+pass the installed share path explicitly in the coordinator's environment rather than relying on
+ament discovery inside the spawned process — a real deployment input, not a policy change.
+
+_Ledger HEAD when written: `cb2e505b7`._
