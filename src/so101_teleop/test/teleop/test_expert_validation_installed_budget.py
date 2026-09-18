@@ -147,7 +147,7 @@ def synthetic_authority(tmp_path: Path, worker_count: int = 4, identity: str | N
 # remain immutable frozen artifacts of the previous unit).
 OFFLINE_INSTALL = Path(
     "/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main"
-    "/unbounded-queue-resource-budget/prefix-install")
+    "/unbounded-queue-resource-budget/progress-install")
 OFFLINE_SHARE = OFFLINE_INSTALL / "so101_demo_py/share/so101_demo_py/config/mujoco"
 OFFLINE_LIB = OFFLINE_INSTALL / "so101_demo_py/lib/so101_demo_py"
 def _write_test_binding(directory: Path) -> Path:
@@ -403,6 +403,93 @@ finally:
     service.store.close()
 print(json.dumps({"capabilities": capabilities, "tempdir": tempfile.gettempdir()}))
 """
+
+
+_PROVIDER_PROGRAM = r"""
+import json, os
+from pathlib import Path
+
+from so101_demo.parallel_batch.resource_budget import (
+    FixedAdmissionRequest, HostFacts, LiveObservationSource, compose_production_admission)
+
+payload = json.loads(os.environ["TEST_HOST_FACTS"])
+facts = {**payload, "facts": {"cpu_model": "hermetic", "kernel": "hermetic",
+                              "python": "3.12.3", "container_marker": "none",
+                              "install_kind": "offline_copied", "gpu_uuid": "GPU-hermetic"}}
+gate = compose_production_admission(
+    environment=dict(os.environ),
+    observation_source=LiveObservationSource(host_probe=lambda environment=None: HostFacts(**facts)),
+    config_path=Path(os.environ["SO101_PARALLEL_RUNTIME_CONFIG"]))
+assert gate is not None
+decision = gate.admit(FixedAdmissionRequest(
+    worker_count=4, batch_id="batch-a", epoch=1,
+    execution_identity_sha256=os.environ["SO101_VALIDATION_EXECUTION_IDENTITY"],
+    request_kind="FIXED_PRODUCTION"))
+print(json.dumps({"admitted": decision.admitted, "reason_codes": list(decision.reason_codes),
+                  "profile_sha256": decision.profile_sha256,
+                  "module": __import__("so101_demo.parallel_batch.resource_budget", fromlist=["x"]).__file__}))
+"""
+
+
+def _hermetic_facts(**overrides):
+    """Typed low-level host port payload: this is the only hermetic input."""
+
+    values = {
+        "mem_total_bytes": 1_000_000_000, "mem_available_bytes": 800_000_000,
+        "swap_total_bytes": 0, "swap_pages": 0, "psi_full_s": 0.0,
+        "cpu_capacity": 8.0, "cpu_host_cores": 24, "cpu_set_used_core_equivalent": 0.1,
+        "cpu_host_used_core_equivalent": 0.1, "cpu_quota_core_equivalent": 8.0,
+        "cpuset": "0-7", "nr_throttled": 0, "gpu_index": 0, "gpu_name": "hermetic",
+        "gpu_uuid": "GPU-hermetic", "gpu_total_bytes": 1_000_000_000.0,
+        "gpu_used_bytes": 100_000_000.0, "gpu_consumers": [], "same_uid_pids": [],
+        "own_tree_rss_bytes": 1_000_000, "own_tree_gpu_bytes": 0.0, "attributed": True,
+    }
+    values.update(overrides)
+    return values
+
+
+@pytest.mark.parametrize(
+    ("facts", "expect_admitted", "expected_reason"),
+    [
+        (_hermetic_facts(), True, None),
+        (_hermetic_facts(attributed=False), False, "BACKGROUND_ENVELOPE_EXCEEDED"),
+        (_hermetic_facts(mem_available_bytes=100_000_000), False, "RAM_HEADROOM"),
+    ],
+)
+def test_copied_default_provider_is_positive_and_fail_closed(
+    tmp_path, facts, expect_admitted, expected_reason
+) -> None:
+    """The copied install's DEFAULT composer admits on a healthy envelope and refuses
+    a breached one, using only a hermetic low-level host port."""
+
+    import json as _json
+    import subprocess
+    import sys
+
+    authority = synthetic_authority(tmp_path, 4)
+    evidence = tmp_path / "evidence"
+    evidence.mkdir(mode=0o700, parents=True)
+    environment = installed_environment(
+        tmp_path / "binding", **_environment(authority, tmp_path))
+    environment["SO101_VALIDATION_EVIDENCE_ROOT"] = str(evidence)
+    scratch = tmp_path / "tmp"
+    scratch.mkdir(mode=0o700, exist_ok=True)
+    child = _installed_child_environment({
+        **environment,
+        "_TMPDIR": str(scratch),
+        "TEST_HOST_FACTS": _json.dumps(facts),
+    })
+    completed = subprocess.run(
+        [sys.executable, "-c", _PROVIDER_PROGRAM], capture_output=True, text=True,
+        env=child, cwd=str(tmp_path))
+    assert completed.returncode == 0, completed.stderr[-1500:]
+    document = _json.loads(completed.stdout.strip().splitlines()[-1])
+    assert document["module"].startswith(str(OFFLINE_INSTALL)), document["module"]
+    assert document["admitted"] is expect_admitted, document
+    if expected_reason is not None:
+        assert expected_reason in document["reason_codes"], document
+    if expect_admitted:
+        assert document["profile_sha256"] == authority["profile_sha"]
 
 
 def test_installed_factory_child_reports_provider_derived_capabilities(tmp_path):
