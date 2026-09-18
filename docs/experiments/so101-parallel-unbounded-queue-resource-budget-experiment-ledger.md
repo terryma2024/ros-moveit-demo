@@ -6526,3 +6526,24 @@ follows: a coordinator launched with the wrong command dies immediately, and the
 `RUNNING` state then hides it.
 
 _Ledger HEAD when written: `bb0541595`._
+
+## CP-UQ154 — Correction to CP-UQ152/153: the executable was right, the field is misleading
+
+The writer's first line settles it: `executable = request.argv[0]`. The process owner spawns the
+coordinator as an *interpreter plus argv*, so `expected_executable=/usr/bin/python3` is correct by
+design and **not** evidence of a wrong resolution — my CP-UQ152 hypothesis ("the coordinator was
+resolved to the system python instead of the copied entry") is refuted by the code.
+`install_prefix=Path(executable).parent` is then simply a misleading derived field (`/usr/bin` for
+any interpreter-based spawn); it says nothing about the deployment and should not be read as one.
+
+So the zombie's cause is neither of the two things CP-UQ152 named. What remains, and what the next
+round reads first, is the coordinator's **own output**: the spawn captured argv and environment
+hashes in the execution record, and the batch's `journal_root` (under the service state directory)
+plus the supervisor's journal should hold the coordinator's stderr or its exit status. The second
+half of CP-UQ152 does stand: a dead-and-unreaped child left the batch in `RUNNING` with no worker,
+so the supervisor's liveness handling is worth fixing regardless of why the coordinator died.
+
+Recording my own refuted hypothesis rather than leaving CP-UQ152 standing: two rounds of "the
+prefix is wrong" would have sent the next fix in the wrong place.
+
+_Ledger HEAD when written: `fc28cca58`._
