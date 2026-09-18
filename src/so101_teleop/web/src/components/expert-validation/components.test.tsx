@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, test, vi } from "vitest";
 
 import { CampaignProgress } from "./campaign-progress";
+import { CampaignSetup } from "./campaign-setup";
 import { PointEvidence } from "./point-evidence";
 import { RetryPanel } from "./retry-panel";
 
@@ -90,5 +91,36 @@ describe("expert validation campaign components", () => {
     }] }} artifacts={[]} />);
     expect(screen.getByText("First-pass attempt 1: PASSED")).toBeTruthy();
     expect(screen.queryByText(/FULL_RESTART attempt/)).toBeNull();
+  });
+
+
+
+});
+
+describe("campaign setup start guard", () => {
+  const props = {
+    state: { pointCount: 4, executionMode: "PARALLEL" as const, workerCount: 4 },
+    leaseHeld: true,
+    manifestReady: true,
+    onChange: vi.fn(),
+    onAcquireLease: vi.fn(),
+    onGenerate: vi.fn(),
+    onPreflight: vi.fn(),
+    onStart: vi.fn(),
+  };
+
+  test("renders the server start-guard line, including an unknown state", () => {
+    const { rerender } = render(
+      <CampaignSetup {...props} startGuardSummary="Start guard: WARN (CPU busy 95.0% vs 90.0%)" />,
+    );
+    expect(screen.getByLabelText("Start guard").textContent).toContain("Start guard: WARN");
+
+    rerender(<CampaignSetup {...props} startGuardSummary="Start guard: unknown (not checked yet)" />);
+    expect(screen.getByLabelText("Start guard").textContent).toContain("unknown");
+  });
+
+  test("shows nothing rather than a green state before the server checks", () => {
+    render(<CampaignSetup {...props} />);
+    expect(screen.queryByLabelText("Start guard")).toBeNull();
   });
 });

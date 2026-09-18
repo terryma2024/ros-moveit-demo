@@ -14,6 +14,7 @@ type Props = {
   leaseRenewing?: boolean;
   manifestReady: boolean;
   preflightMessage?: string;
+  startGuardSummary?: string;
   onChange: (state: SetupState, field: keyof SetupState) => void;
   onAcquireLease: () => void;
   onGenerate: () => void;
@@ -28,6 +29,7 @@ export function CampaignSetup({
   leaseRenewing = false,
   manifestReady,
   preflightMessage,
+  startGuardSummary,
   onChange,
   onAcquireLease,
   onGenerate,
@@ -112,6 +114,9 @@ export function CampaignSetup({
         </div>
       )}
       {preflightMessage ? <p aria-live="polite">{preflightMessage}</p> : null}
+      {startGuardSummary
+        ? <p aria-live="polite" aria-label="Start guard">{startGuardSummary}</p>
+        : null}
       <div className="flex flex-wrap gap-2">
         <Button onClick={onAcquireLease} disabled={leaseHeld || leaseRenewing}>Acquire lease</Button>
         <Button onClick={onGenerate} disabled={!validCount}>Generate points</Button>

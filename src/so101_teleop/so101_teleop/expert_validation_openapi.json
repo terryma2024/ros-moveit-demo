@@ -234,7 +234,7 @@
         "additionalProperties": false,
         "properties": {
           "contract_version": {
-            "const": 2,
+            "const": 3,
             "title": "Contract Version",
             "type": "integer"
           },
@@ -623,7 +623,7 @@
             "type": "string"
           },
           "contract_version": {
-            "const": 2,
+            "const": 3,
             "title": "Contract Version",
             "type": "integer"
           },
@@ -848,6 +848,26 @@
             "default": 4,
             "title": "Minimum Points",
             "type": "integer"
+          },
+          "start_guard": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StartGuardStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "start_guard_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StartGuardPolicyResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "worker_count_availability": {
             "items": {
@@ -1715,6 +1735,16 @@
             "default": {},
             "title": "Resource Observations",
             "type": "object"
+          },
+          "start_guard": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StartGuardStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -1769,6 +1799,163 @@
           "confirmation"
         ],
         "title": "RetryRequest",
+        "type": "object"
+      },
+      "StartGuardCheck": {
+        "additionalProperties": false,
+        "description": "One check of the shared startup guard, in the units the decision used.",
+        "properties": {
+          "cutoff": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cutoff"
+          },
+          "observed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed"
+          },
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "PASS",
+              "WARN",
+              "FAIL"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "unit": {
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "reason",
+          "unit"
+        ],
+        "title": "StartGuardCheck",
+        "type": "object"
+      },
+      "StartGuardPolicyResponse": {
+        "additionalProperties": false,
+        "description": "The enforced policy, so a client can display the cutoffs it was judged against.",
+        "properties": {
+          "cpu_busy_warn_fraction": {
+            "title": "Cpu Busy Warn Fraction",
+            "type": "number"
+          },
+          "gpu_minimum_bytes": {
+            "title": "Gpu Minimum Bytes",
+            "type": "integer"
+          },
+          "ram_minimum_bytes": {
+            "title": "Ram Minimum Bytes",
+            "type": "integer"
+          },
+          "ram_minimum_fraction": {
+            "title": "Ram Minimum Fraction",
+            "type": "number"
+          },
+          "timeout_s": {
+            "title": "Timeout S",
+            "type": "number"
+          }
+        },
+        "required": [
+          "timeout_s",
+          "cpu_busy_warn_fraction",
+          "ram_minimum_bytes",
+          "ram_minimum_fraction",
+          "gpu_minimum_bytes"
+        ],
+        "title": "StartGuardPolicyResponse",
+        "type": "object"
+      },
+      "StartGuardStatus": {
+        "additionalProperties": false,
+        "description": "The server's own decision. A client cannot supply or overwrite it.",
+        "properties": {
+          "checks": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/StartGuardCheck"
+            },
+            "default": {},
+            "title": "Checks",
+            "type": "object"
+          },
+          "cleanup_state": {
+            "default": "CLEAR",
+            "enum": [
+              "CLEAR",
+              "PROBE_CLEANUP_BLOCKED"
+            ],
+            "title": "Cleanup State",
+            "type": "string"
+          },
+          "gpu_uuid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gpu Uuid"
+          },
+          "observed_monotonic_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Monotonic S"
+          },
+          "status": {
+            "enum": [
+              "PASS",
+              "WARN",
+              "FAIL"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "StartGuardStatus",
         "type": "object"
       },
       "ValidationError": {

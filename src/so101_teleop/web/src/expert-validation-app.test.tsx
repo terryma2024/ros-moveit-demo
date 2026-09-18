@@ -387,7 +387,7 @@ test("server capability supplies all eight options and exact twenty-point N8 K3 
   await user.click(screen.getByRole("button", { name: "Acquire lease" }));
   await user.click(screen.getByRole("button", { name: "Generate points" }));
   await user.click(screen.getByRole("button", { name: "Check resources" }));
-  expect(preflight).toHaveBeenCalledWith(expect.objectContaining({ contract_version: 2, execution_mode: "PARALLEL", worker_count: 8 }), expect.objectContaining({ lease_id: "lease-a", lease_generation: 1 }));
+  expect(preflight).toHaveBeenCalledWith(expect.objectContaining({ contract_version: 3, execution_mode: "PARALLEL", worker_count: 8 }), expect.objectContaining({ lease_id: "lease-a", lease_generation: 1 }));
 });
 
 test("worker choices follow a narrower server capability without invented counts", async () => {
