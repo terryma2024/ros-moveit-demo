@@ -416,6 +416,34 @@ def _live_headroom_verifier(
     )
 
 
+def _batch_evidence_root_state(*, evidence_root: Path, measurement: bool) -> None:
+    """Apply the launcher's evidence-root rule for this run.
+
+    A sealed measurement may arrive with its root already created: the measurement harness
+    creates the sealed batch root before it spawns this CLI, and
+    verify_measurement_arguments pins that root to the authorization's batch root, so
+    exclusive creation cannot be required. What is still refused is a root that is not a
+    private 0700 directory owned by this user, and one whose batch is already finalized.
+    """
+
+    if not measurement:
+        if evidence_root.exists() or evidence_root.is_symlink():
+            raise CliError("DUPLICATE_BATCH_EVIDENCE_ROOT")
+        return
+    if not evidence_root.exists():
+        return
+    root_info = evidence_root.lstat()
+    if (
+        evidence_root.is_symlink()
+        or not stat.S_ISDIR(root_info.st_mode)
+        or root_info.st_uid != os.getuid()
+        or stat.S_IMODE(root_info.st_mode) != 0o700
+    ):
+        raise CliError("MEASUREMENT_EVIDENCE_ROOT_INVALID")
+    if (evidence_root / "aggregate_results.json").exists():
+        raise CliError("DUPLICATE_BATCH_EVIDENCE_ROOT")
+
+
 def _compose_measurement_gate(options, config, worker_count, evidence_root):
     """Bind the sealed measurement authority this batch was started with."""
 
@@ -1162,8 +1190,10 @@ def prepare_batch(
                 or stat.S_IMODE(root_info.st_mode) != 0o700
             ):
                 raise CliError("ADAPTIVE_EVIDENCE_ROOT_INVALID")
-    elif evidence_root.exists() or evidence_root.is_symlink():
-        raise CliError("DUPLICATE_BATCH_EVIDENCE_ROOT")
+    else:
+        _batch_evidence_root_state(
+            evidence_root=evidence_root,
+            measurement=options.measurement_authorization is not None)
     try:
         mode = RunMode(options.run_mode)
     except ValueError as error:
