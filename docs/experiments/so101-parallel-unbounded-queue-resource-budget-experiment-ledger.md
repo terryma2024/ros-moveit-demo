@@ -2995,3 +2995,38 @@ decision: KEEP
 next_experiment: EXP-UQ40 Stage C authorization matrix preview + capability request packet; Stage D/E
   object preparation
 ```
+
+## CP-UQ40 — Stage C: sealed N1 calibration authorization and the exact capability boundary
+
+Run artifacts: `scratch/stageC-auth.S2WPqrz0/` (generator, gate probe, two real CLI dry-runs).
+
+Recorded a real N1 authorization object at
+`authorizations/n1-calibration-20260918.json` (mode 0600, sha256
+`f8aa263e5996f4ea7fa6d6a08665d094a0487077f4e2844708b166833baa849e`), with the truthful
+recording note in `authorizations/n1-calibration-20260918.note.md`: the executor recorded the
+object from the user's real authorization ("发送修复指令。并要求dst继续完成B-E。授权机制执行。",
+dispatch `23541f5a-3c38-433d-85c2-3b0001bd535a`, goal round `9d418aae-…`). It is
+`intent = CALIBRATION_ONLY` with no profile reference, so it neither fabricates an approval nor
+confers promotion/deployment authority.
+
+Facts verified with the real parser and the real CLI, not by inspection:
+
+- `MeasurementAuthorization.load(path, expected_sha256=<full digest>)` accepts the document;
+  `intent=CALIBRATION_ONLY`, `worker_count=1`, `maximum_batches=2`, `batch_deadline_s=5400.0`,
+  not expired.
+- `execution_identity_sha256` was derived, not invented: it is
+  `build_runtime_fingerprint_from_environment` over the frozen install bytes and the frozen
+  provenance binding (`bindings/production-freeze-binding.json`).
+- The measurement CLI run against this authorization passes authorization load, intent match,
+  expiry, evidence-root existence, batch-root containment, and the candidate-config rule (the
+  frozen config carries a null deployment profile), and then stops at the capability gate:
+  `{"code": "MEASUREMENT_CAPABILITY_MISSING: cgroup_controllers ['cpu', 'memory']", "status": "REFUSED"}`.
+  One earlier attempt with a truncated 16-hex `--authorization-sha256` was refused as
+  `HASH_MISMATCH`; the digest check is exact-length, as intended.
+
+The remaining Stage C blocker is therefore a single external object, unchanged in kind: a
+delegated scope that actually grants the controllers the safety policy requires — either
+(a) a manager-provisioned user unit whose `cgroup.subtree_control` already enables `cpu` and
+`memory`, or (b) an explicit operator decision to measure with a cpu-only quota plus the
+whole-host memory guard. No measurement ran; every exact-N budget stays `NOT_MEASURED`, no N is
+downgraded, and no cross-N value is extrapolated.
