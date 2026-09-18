@@ -2841,3 +2841,40 @@ evidence: scratch/stageB-ownership.80PNvl8p/ownership.log
 decision: KEEP
 next_experiment: EXP-UQ36 Stage B layout discovery + owned Web start on the production freeze
 ```
+
+```yaml
+checkpoint_id: CP-UQ36
+last_valid_experiment: EXP-UQ36
+current_hypothesis: The production-freeze layout discovers correctly with copied module origins; the
+  owned Web start is the next action.
+goal: goal-d30193b8-a2e5-495d-b6c7-6879782448ac (round 2)
+layout_discovery:
+  - "scratch/stageB-layout.wXew44Ra/layout.log: first attempt under the dev overlay refused with
+    SO101_VALIDATION_INSTALLED_MODULE_INVALID because the running so101_teleop resolved from the dev
+    build tree, not from the freeze prefix - the discovery contract requires copied module origins."
+  - "scratch/stageB-layout2.U0OFWcl6/layout.log: with PYTHONPATH + AMENT_PREFIX_PATH pointed at
+    freeze-install and SO101_DISABLE_KIMI_EDITABLE_FINDER=1, discover() succeeds (DISCOVERY_RC=0):
+    module origins are freeze-install/.../site-packages/so101_teleop and .../so101_demo;
+    source_root=<worktree>; source_commit=62cc630c3f181bbc25d59160cc3d0c8fadc7b648 (the A0/binding
+    commit); demo_prefix/points_path/parallel_config_path/coordinator_executable/cleanup_executable all
+    resolve inside freeze-install."
+  - "Reusable Stage B env block (also used for the installed gates): PYTHONPATH and AMENT_PREFIX_PATH
+    prefixed with freeze-install's three site-packages/prefixes; SO101_VALIDATION_POINTS/PARALLEL_CONFIG/
+    ADAPTIVE_CONFIG/COORDINATOR_EXECUTABLE/CLEANUP_EXECUTABLE/ADAPTIVE_WRAPPER from the freeze share/lib
+    directories; SO101_VALIDATION_PROVENANCE_BINDING=bindings/production-freeze-binding.json;
+    SO101_VALIDATION_YOLO_WEIGHTS / GROUNDED_ROOT / BROKER_IMAGE as registered."
+next_commands:
+  - "Stage B: start the owned Web on this freeze (copied launcher + audited Web dist) with the block
+    above, then read back served URL, PID start, domain, store/fence and control-lease state; only then
+    mark online. No service was running before, so no pause step is needed."
+  - "Stage C: capability probe inside a manager-delegated unit, then sealed N1 calibration."
+  - "Stage D/E: per-N approval packets, then owned Chrome for the signed N1/Nx."
+inferred:
+  - Stage B is unblocked and verified at the discovery boundary; the Web start is a task-owned action
+    with no conflicting service.
+conclusion: GOAL ROUND 2 - production freeze layout verified.
+evidence: scratch/stageB-layout2.U0OFWcl6/layout.log, scratch/stageB-layout.wXew44Ra/layout.log,
+  bindings/production-freeze-binding.json, freeze-install
+decision: KEEP
+next_experiment: EXP-UQ37 Stage B owned Web start and readback on the production freeze
+```
