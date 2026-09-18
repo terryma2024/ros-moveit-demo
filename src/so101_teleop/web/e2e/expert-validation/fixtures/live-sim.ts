@@ -4,6 +4,8 @@ import { existsSync, createWriteStream, mkdirSync, readFileSync, writeFileSync }
 import os from "node:os";
 import { dirname, join } from "node:path";
 
+import { resolvePackagePrefixes } from "./installed";
+
 import { test as base, expect } from "@playwright/test";
 
 import { proveChrome } from "./chrome";
@@ -140,6 +142,36 @@ export function requireGate(evidenceRoot: string, gate: string): void {
   if (!existsSync(gateReceiptPath(evidenceRoot, gate))) {
     throw new LiveSimGateError(`${gate}_GATE_REQUIRED`);
   }
+}
+
+/** A downstream suite re-checks the producing run instead of trusting the receipt file. */
+export function requireGateDetail(
+  evidenceRoot: string,
+  gate: string,
+  expected: {
+    evidenceRoot?: string;
+    executionIdentitySha256?: string | null;
+    profileSha256?: string | null;
+    qualificationSha256?: string | null;
+    manifestSha256?: string | null;
+  },
+): Record<string, any> {
+  const path = gateReceiptPath(evidenceRoot, gate);
+  if (!existsSync(path)) throw new LiveSimGateError(`${gate}_GATE_REQUIRED`);
+  const receipt = JSON.parse(readFileSync(path, "utf-8"));
+  const matches = (actual: unknown, wanted: unknown) =>
+    wanted === undefined || wanted === null || actual === wanted;
+  if (
+    receipt.cleanup_complete !== true
+    || (expected.evidenceRoot !== undefined && receipt.evidence_root !== expected.evidenceRoot)
+    || !matches(receipt.execution_identity_sha256, expected.executionIdentitySha256)
+    || !matches(receipt.profile_sha256, expected.profileSha256)
+    || !matches(receipt.qualification_sha256, expected.qualificationSha256)
+    || !matches(receipt.manifest_sha256, expected.manifestSha256)
+  ) {
+    throw new LiveSimGateError(`${gate}_GATE_STALE`);
+  }
+  return receipt;
 }
 
 export function recordGate(evidenceRoot: string, gate: string, detail: object): void {
