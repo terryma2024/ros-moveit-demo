@@ -98,6 +98,9 @@ class HermeticCgroup(OwnedCgroupV2):
     def memory_current(self) -> int:
         return self.charged_bytes
 
+    def memory_swap_current(self) -> int:
+        return 0
+
     def memory_peak(self) -> int:
         return self.charged_bytes + 1024
 
@@ -659,8 +662,12 @@ class _FakeCgroup:
     throttled = False
     cpu_capacity_core_equivalent = 24.0
 
-    def __init__(self, usage_us):
+    def __init__(self, usage_us, swap=None):
         self._usage = list(usage_us)
+        self._swap = list(swap or [0] * len(self._usage))
+
+    def memory_swap_current(self):
+        return self._swap.pop(0)
 
     def cpu_usage_us(self):
         return self._usage.pop(0)
@@ -1007,3 +1014,45 @@ def test_child_ament_path_carries_absolute_prefixes(tmp_path):
     entries = environment["AMENT_PREFIX_PATH"].split(":")
     assert entries[:2] == [str(prefixes["so101_demo_py"]), str(prefixes["so101_mujoco_support"])]
     assert entries[2] == "/inherited"
+
+
+def test_sample_resources_takes_swap_from_the_owned_cgroup(monkeypatch):
+    """Host-wide swap moves on its own -- one kilobyte of unrelated activity latched
+    SWAP_ACTIVITY on run22 -- so the workload's swap is the owned cgroup's."""
+
+    import types
+    import so101_demo.parallel_batch.resource_measurement as rm
+
+    clock = [500.0]
+    monkeypatch.setattr(rm, "time", types.SimpleNamespace(monotonic=lambda: clock[0]))
+    host_swap = [1_000_000]
+    monkeypatch.setattr(rm, "_read_swap_and_psi", lambda: (host_swap[0], 0.0))
+    cgroup = _FakeCgroup([0, 0], swap=[0, 4096])
+    state = {}
+    for sequence, moment in enumerate((500.0, 500.05), start=1):
+        clock[0] = moment
+        host_swap[0] -= 1
+        sample = rm.sample_resources(owned_inventory=(), cgroup=cgroup, device=_FakeDevice(),
+                                     sequence=sequence, state=state)
+    assert sample.observation.swap_delta == 4096
+    assert sample.diagnostics["swap_total"] == 999_998
+
+
+def test_sample_resources_requires_the_cgroup_swap_counter():
+    import so101_demo.parallel_batch.resource_measurement as rm
+    from so101_demo.parallel_batch.contracts import ContractError
+
+    class NoSwap:
+        attribution_complete = True
+        throttled = False
+        cpu_capacity_core_equivalent = 24.0
+
+        def cpu_usage_us(self):
+            return 0
+
+        def memory_current(self):
+            return 0
+
+    with pytest.raises(ContractError, match="MEASUREMENT_CAPABILITY_MISSING"):
+        rm.sample_resources(owned_inventory=(), cgroup=NoSwap(), device=_FakeDevice(),
+                            sequence=1, state={})
