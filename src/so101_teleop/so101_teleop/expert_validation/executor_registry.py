@@ -76,13 +76,18 @@ class ExecutorRegistry:
 
     @classmethod
     def v1(cls, probes: QualificationProbes) -> "ExecutorRegistry":
+        # Availability is a statement about the *deployed* composition, not about a retired
+        # per-N budget: what a mode needs is the executor, the shared queue, the broker and
+        # the adaptive runner files actually being installed. The removed acceptance
+        # aggregates and performance tiers were budget qualifications; requiring them made a
+        # correctly deployed service advertise only SEQUENTIAL while fixed counts 1..8 were
+        # selectable, which is exactly the mismatch this correction reports.
         fixed = probes.fixed_upstream and probes.parallel_config
         parallel = all(
             (
                 fixed,
                 probes.broker_image,
                 probes.resource_probe,
-                probes.two_worker_live_acceptance is not None,
             )
         )
         adaptive = all(
@@ -92,9 +97,6 @@ class ExecutorRegistry:
                 probes.adaptive_wrapper,
                 probes.adaptive_cleanup,
                 probes.adaptive_config,
-                probes.adaptive_fault_injection,
-                probes.adaptive_twenty_point_acceptance is not None,
-                {1, 2, 4, 6, 8}.issubset(probes.adaptive_performance_evidence),
             )
         )
         modes = MappingProxyType(
@@ -103,10 +105,10 @@ class ExecutorRegistry:
                     fixed, None if fixed else "FIXED_NOT_QUALIFIED"
                 ),
                 "PARALLEL": ModeAvailability(
-                    parallel, None if parallel else "PARALLEL_NOT_QUALIFIED"
+                    parallel, None if parallel else "PARALLEL_COMPOSITION_UNAVAILABLE"
                 ),
                 "ADAPTIVE": ModeAvailability(
-                    adaptive, None if adaptive else "ADAPTIVE_NOT_QUALIFIED"
+                    adaptive, None if adaptive else "ADAPTIVE_COMPOSITION_UNAVAILABLE"
                 ),
             }
         )
