@@ -540,3 +540,54 @@ def test_adaptive_cli_keeps_its_own_config_route(tmp_path):
     source = Path(cli.__file__).read_text(encoding="utf-8")
     assert "parallel_batch_v2.yaml" in source
     assert "_adaptive_options" in source
+
+
+def test_cleanup_of_a_pool_that_failed_before_allocating_is_a_no_op(tmp_path):
+    """A pool that failed before its directory existed left nothing to clean up.
+
+    This is exactly what the adaptive wrapper hit: the journal records POOL_STARTING, the
+    allocation is refused (START_GUARD_UNAVAILABLE), only `p/gNNwMM-failure.json` is written --
+    and cleanup then raised POOL_ROOT, so the campaign never reached a terminal state and sat in
+    CLEANING_UP with `batch_cleanup_complete: false` forever.  A failure marker without a pool
+    directory means nothing was allocated, so cleanup completes without retiring anything, and the
+    marker itself stays on disk as evidence.
+    """
+
+    from so101_demo.cli.parallel_batch_cleanup import cleanup_runtime
+    from so101_demo.parallel_batch.journal import CoordinatorJournal
+
+    runtime_root = Path(os.environ["TMPDIR"]).parent / f"rt-{tmp_path.name}" / "a001"
+    runtime_root.mkdir(parents=True, mode=0o700)
+    pool_parent = runtime_root / "p"
+    pool_parent.mkdir(mode=0o700)
+    failure_path = pool_parent / "g01w08-failure.json"
+    failure_path.write_text(
+        json.dumps(
+            {
+                "batch_id": "a001-g01-w08",
+                "generation": 1,
+                "kind": "so101_adaptive_pool_failure",
+                "stage": "resource_allocation",
+                "pool_running": False,
+                "cleanup_complete": False,
+                "exception_chain": [
+                    {"type": "ResourceAllocationError", "message": "START_GUARD_UNAVAILABLE"}
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    journal = CoordinatorJournal.create(runtime_root / "journal", "a001")
+    journal.append("POOL_STARTING", "pool-starting-01", {"generation": 1, "worker_count": 8})
+    journal.close()
+
+    receipt = cleanup_runtime(runtime_root)
+
+    assert receipt["cleanup_complete"] is True
+    assert receipt["active_generation"] == 1
+    assert receipt["worker_count"] == 0
+    assert receipt["released_domain_ids"] == []
+    assert failure_path.is_file(), "the failure marker is evidence and must survive cleanup"
+
