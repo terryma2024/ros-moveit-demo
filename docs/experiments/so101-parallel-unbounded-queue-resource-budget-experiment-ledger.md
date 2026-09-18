@@ -3181,3 +3181,19 @@ runs with no thread bound, saturates all 24 cores during import, and is throttle
 18.6-core quota. Next: export the thread bound for the candidate, seal a new revision (R changes
 with it), and run N1 in that same environment to a completed sealed batch. N1 remains
 `NOT_MEASURED`; nothing is extrapolated to another N.
+
+## CP-UQ46 — Stage C: thread bounds work, and the sampling pass is the next limit
+
+Run: `stage-c/batches/n1-calibration-20260918-run4/`, `scratch/stageC-auth.S2WPqrz0/measure10.log`.
+
+r6 (`authorizations/n1-calibration-20260918-r6.json`, sha256 `c93db4990ab5d2…`) was sealed with
+`OMP_NUM_THREADS=MKL_NUM_THREADS=OPENBLAS_NUM_THREADS=TORCH_NUM_THREADS=NUMEXPR_NUM_THREADS=1`
+in the environment, so the thread bound is part of the runtime identity and reaches the workload
+through the child environment. The run no longer latches `CPU_THROTTLED`: the workload fits its
+quota, which confirms both the diagnosis and that the design's thread-environment input is the
+intended lever. The next latch is `SAMPLER_GAP` again, now with the grid scheduling in place, so
+what remains is the cost of one sampling pass: the grid keeps the period at
+`max(interval, work)`, and when a pass costs more than `maximum_sample_gap_s = 0.10` the period is
+the pass itself. The next question is therefore what a single pass spends its time on (PSS is on
+its own slower channel) and whether that work can be kept inside the gap budget on a host running
+a torch workload. N1 stays `NOT_MEASURED`; nothing is extrapolated to another N.
