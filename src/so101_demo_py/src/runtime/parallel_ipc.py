@@ -1288,7 +1288,7 @@ class BrokerTransport:
 def build_broker_transport(runtime_spec):
     """Load the mounted stateless Broker runtime/config contract."""
 
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config
+    from so101_demo.parallel_batch.contracts import load_runtime_config_any_schema
 
     runtime_spec = Path(runtime_spec)
     try:
@@ -1371,7 +1371,7 @@ def build_broker_transport(runtime_spec):
     if not config_path.is_absolute():
         raise IpcError("BROKER_SPEC_PATH")
     ipc_root = config_path.parent
-    config = load_parallel_runtime_config(config_path)
+    config = load_runtime_config_any_schema(config_path)
     if (
         document["yolo_weights_sha256"] != config.yolo_weights_sha256
         or document["grounded_manifest_sha256"]
