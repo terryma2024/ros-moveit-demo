@@ -3112,3 +3112,39 @@ open Stage C question: whether the sampling interval is too tight for this host,
 sampler starves while the caps are applied, or whether the interval is misconfigured for a
 single-worker batch. No budget is claimed from this run: N1 remains `NOT_MEASURED` until a batch
 completes and seals, and nothing is extrapolated to any other N.
+
+## CP-UQ44 — Stage C: sampler cadence fixed, and the identity is bound to the installed inventory
+
+Runs: `scratch/stageC-fix3.*/`, `scratch/stageC-auth.S2WPqrz0/measure{6,7,8}.log`,
+`stage-c/batches/n1-calibration-20260918{,-run2}/`.
+
+The first run latched `SAMPLER_GAP` because the loop waited the sampling interval *after* each
+sample, so the period was the sum of the sampling work and the interval: a ~70 ms sample under the
+50 ms interval produced the 122 ms gap that breached `maximum_sample_gap_s = 0.10`. The loop now
+advances a drift-free grid (`_advance_sampling_grid`), so the period stays at the interval while
+the work fits inside it and degrades to the work itself when it does not -- a genuinely starved
+sampler still breaches and still latches. Test `test_sample_loop_schedules_samples_on_a_fixed_grid`
+drives the real loop with a 70 ms fake sample: RED before (`1 failed`), GREEN after
+(`16 passed` in the file). The next run sampled four times in the spawn window with no gap latch.
+
+Sealing surfaced a second property of R: after the cadence patch, the r3 revision was refused with
+`RUNTIME_FINGERPRINT_MISMATCH` even inside the same fixed-name scope, and the identity document
+shows why -- it carries `installed_inventory_sha256`, `execution_inventory_sha256`,
+`semantic_config_sha256` and `normalization_sha256`, so editing the runtime source changes R. That
+is correct behaviour, and it fixes the order of operations: all code changes first, then seal the
+authorization, then measure without touching the runtime. r4
+(`authorizations/n1-calibration-20260918-r4.json`, sha256 `b3b60969823e654d…`) was sealed on the
+final code and was accepted by every gate. r1-r3 remain unchanged.
+
+The r4 run then latched `MEASUREMENT_ABORT_LATCHED: CPU_ENVELOPE` after 190 ms. Recorded facts:
+applied limits `cpu_quota_us 1860230 / period 100000` (18.6 cores) and
+`memory_max_bytes 21619757056`; the breaching sample observed `cpu_core_equivalent 22.43` against
+the `0.8 x 24.0 = 19.2` envelope, with `attribution_complete true` and `throttled false`. The
+observation is inconsistent with the applied quota, and `spawn` explains it: `Popen` starts the
+child and only then attaches it to the owned cgroup, so the workload's import burst runs
+unconstrained and its accumulated `cpu.stat` usage lands in the cgroup's first sampled interval
+(~1.03 CPU-seconds in one 50 ms window, matching the `cpu_usage_us 1026818` seen in the earlier
+run's second sample). The quota is enforced from attach onward; what the envelope rule saw was the
+pre-attach burst. The next repair is therefore to account CPU from the attach point (reset the
+sampling baseline at attach, or attribute only post-attach usage) with a test, and then re-run N1.
+No budget is claimed: N1 stays `NOT_MEASURED`, and nothing is extrapolated to any other N.

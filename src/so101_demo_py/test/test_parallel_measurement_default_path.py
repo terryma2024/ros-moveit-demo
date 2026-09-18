@@ -598,3 +598,42 @@ def test_set_limits_refuses_zero_memory_cap(tmp_path):
     with pytest.raises(ContractError, match="MEASUREMENT_LIMIT_UNENFORCEABLE"):
         _page_rounding_cgroup(tmp_path, mode="zero").set_limits(
             memory_max_bytes=4096 * 3 + 123, cpu_quota_us=1910053, period_us=100000)
+
+
+def test_sample_loop_schedules_samples_on_a_fixed_grid(tmp_path, monkeypatch):
+    """A slow sample must not add its own duration to the sampling period.
+
+    The session loop used to wait the interval *after* each sample, so a 70 ms sample under
+    a 50 ms interval produced a 120 ms period -- past the 100 ms maximum gap, which is how
+    the first real N1 run latched SAMPLER_GAP right after the workload spawn.
+    """
+
+    import threading, time, types
+    import so101_demo.parallel_batch.resource_measurement as rm
+    from so101_demo.parallel_batch.owned_resources import MeasurementSession
+
+    stamps: list[float] = []
+
+    def fake_sample_resources(**_kwargs):
+        time.sleep(0.07)
+        stamps.append(time.monotonic())
+        observation = types.SimpleNamespace(
+            capacity={}, observed={}, background={}, remaining={}, error={},
+            attribution_complete=True, swap_delta=0, psi_full_delta=0, throttled=False)
+        return types.SimpleNamespace(sequence=len(stamps), monotonic_s=stamps[-1],
+                                     observation=observation, diagnostics={})
+
+    monkeypatch.setattr(rm, "sample_resources", fake_sample_resources)
+    session = object.__new__(MeasurementSession)
+    session._stopped = threading.Event()
+    session.cgroup = None; session.device = None; session.owner = ()
+    session._lock = threading.Lock(); session.samples = 0
+    session.samples_path = tmp_path / "samples.jsonl"
+    session.control = None; session._control_socket = None; session.abort_reason = None
+    session._interval_s = 0.05; session.clock = time.monotonic
+
+    thread = threading.Thread(target=session._sample_loop, daemon=True)
+    thread.start(); time.sleep(0.6); session._stopped.set(); thread.join(timeout=3)
+    gaps = [later - earlier for earlier, later in zip(stamps, stamps[1:])]
+    assert len(gaps) >= 3, gaps
+    assert max(gaps) < 0.10, gaps
