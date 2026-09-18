@@ -570,8 +570,8 @@ class ScriptedValidationService:
                 for key, value in body.items()
                 if key
                 in {
+                    "contract_version",
                     "worker_count",
-                    "max_points_per_worker",
                     "preferred_worker_count",
                     "fallback_worker_counts",
                     "initial_points_per_worker",
