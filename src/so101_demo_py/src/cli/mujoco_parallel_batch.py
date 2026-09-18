@@ -626,15 +626,27 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
     console_path = Path(console).resolve()
     config_path = Path(spec["config"]).absolute()
     points_path = Path(spec["points"]).absolute()
-    overlay_identity = _validate_provenance_overlay(
-        repository_root,
-        module_path,
-        console_path,
-        config_path,
-        points_path,
-        module_import_path=module_import_path,
-        external_binding=external_binding,
-    )
+    if repository_root is None and external_binding is None:
+        # A pure copied install has neither a checkout to compare against nor an external
+        # overlay binding, so the cross-checkout identity question cannot be asked. This is
+        # deployment provenance, not admission: the functional checks above (model files and
+        # hashes, broker image) have already run, and the copied bytes are read back by the
+        # deployment gates. Recording "not bound" is the honest answer.
+        overlay_identity: Mapping[str, object] = {
+            "external_overlay_bound": False,
+            "package_prefixes": {},
+            "overlay_kind": "COPIED_INSTALL",
+        }
+    else:
+        overlay_identity = _validate_provenance_overlay(
+            repository_root if repository_root is not None else module_path.parents[3],
+            module_path,
+            console_path,
+            config_path,
+            points_path,
+            module_import_path=module_import_path,
+            external_binding=external_binding,
+        )
     if overlay_identity["external_overlay_bound"]:
         try:
             from ament_index_python.packages import get_package_prefix
