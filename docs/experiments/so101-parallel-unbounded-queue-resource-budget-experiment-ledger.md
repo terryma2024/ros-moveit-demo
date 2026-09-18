@@ -4247,3 +4247,31 @@ State at the end of round 40: amendment 74d6b781 implemented and gated (units 1-
 106 passed in 2.83 s), the allocator seam closed on the harness side, a real 308-sample baseline and
 a 95-sample measurement window with no policy latch, and one harness artifact left to move. All
 exact-N budgets remain `NOT_MEASURED`; nothing was pushed, merged, deleted or fabricated.
+
+## CP-UQ82 — The root split, and the one contradiction left to resolve
+
+Three harness changes this round, each removing an occupant of the root the launcher's allocator
+insists on creating itself, plus the rebuild fix:
+
+1. the overlay provenance binding is written into the session root (`5f1c7c51c`);
+2. `measure_parallel_resources.session_batch_root(plan)` gives the session
+   `<authorization.batch_root>/<batch_id>-session`, with the three affected test expectations moved
+   (`147d14d20`, gate green: 106 passed);
+3. `run_candidate_batch` no longer creates `plan.batch_root` itself (`ce6105449`), and the candidate
+   install was rebuilt successfully once `candidate-install` was kept off `AMENT_PREFIX_PATH`
+   during the build (`colcon_rc=0`), after which the installed `measure_parallel_resources.py`
+   hashes identically to the source (`9d944c11516dc51adeda`), which is what `PROVENANCE_INSTALLED_BYTES`
+   had been reporting.
+
+Removing (3) exposed the real shape of the problem and left the gate red on three cases with
+`MEASUREMENT_WORKLOAD_UNAVAILABLE: workload`: the session spawns the launcher with
+`cwd=<the launcher's root>`, so that directory must exist for `Popen`, while the allocator inside the
+launcher requires it to be absent. Those two demands cannot both be met in the launcher's root, and
+the resolution is small and clear: spawn in the session's root (or the batch parent) instead of the
+launcher's root, leaving the launcher's root genuinely absent until the launcher allocates it. That
+is the next change, followed by re-gating, resealing and the N1 run.
+
+State: the 60 s baseline, the 25 ms peak alias and a 95-sample measurement window with
+`abort_reason` None are all reproduced under the amended policy (run53: baseline 311 samples); the
+only thing standing between this task and a launcher that actually starts its workload is that cwd.
+All exact-N budgets remain `NOT_MEASURED`; nothing was pushed, merged, deleted or fabricated.
