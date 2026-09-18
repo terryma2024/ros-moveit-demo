@@ -3866,3 +3866,28 @@ next Stage B step is concrete and verifiable: restart the *owned* service with t
 `static_dir`, then read back the served bytes and compare their hash with the dist file -- the
 "served-bytes readback" the stage asks for -- and take the lease/fence capture from the documented
 verbs above. N1 remains `NOT_MEASURED`; nothing is extrapolated to another N.
+
+## CP-UQ73 — Stage B residual: the owned Web service now serves its UI, with byte-level readback
+
+Run directory: `stageB-web2.sMXSWkWI` (captured environment, service log, served `index.html`).
+
+The 503 was exactly what CP-UQ72 predicted, and one environment variable fixes it:
+`SO101_VALIDATION_WEB_ROOT` (read in `expert_validation/main.py`) selects the SPA directory, and the
+running instance had none. Verified sequence, not asserted:
+
+- the frozen install ships **no** web assets at all
+  (`freeze-install/so101_teleop/web/dist` absent), so the served UI necessarily comes from the
+  worktree build at `src/so101_teleop/web/dist` -- recorded as a real property of the freeze;
+- the previous owned service (PID 1945387) was terminated and confirmed gone
+  (`old_service_exited=True`), releasing port 8010;
+- the replacement was started detached with the old environment plus the assets root, and reached
+  `GET /health` 200 within one second: **new PID 1993965**, URL `http://127.0.0.1:8010`,
+  evidence root unchanged (`scratch/stageB-webstart2.zMVk9xRa/evidence`, the Stage B fresh store);
+- `GET /expert-validation` now returns **200 with 168 bytes**, and the sha256 of the bytes actually
+  served equals the sha256 of the dist file on disk (`8e1cb7ee86b74c22` both sides) -- the
+  served-bytes readback this stage asks for, and the UI asset-versus-dist observation with it.
+
+Remaining Stage B item: the lease/fence capture through the documented verbs (`POST
+/expert-validation/lease`, `DELETE|PUT /expert-validation/lease/{lease_id}`) against this running
+owned service, which is now possible because the page and API share one live instance. N1 remains
+`NOT_MEASURED`; nothing is extrapolated to another N.
