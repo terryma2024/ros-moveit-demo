@@ -227,9 +227,13 @@ class LiveResourceObservation:
     remaining: Mapping[str, float]
     error: Mapping[str, float]
     attribution_complete: bool
-    swap_delta: int
-    psi_full_delta: float
-    throttled: bool
+    # Deprecated compatibility fields (CPU/RAM/GPU-only amendment, dispatch
+    # 74d6b781-840d-474b-b997-f2dc24907792). They are never sampled, never consulted and
+    # absent unless an old compatibility document supplies them; absence is explicit None
+    # rather than a fabricated measured zero.
+    swap_delta: int | None = None
+    psi_full_delta: float | None = None
+    throttled: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -243,11 +247,14 @@ class LiveResourceObservation:
             raise ContractError("CAPACITY")
         if not isinstance(self.attribution_complete, bool):
             raise ContractError("ATTRIBUTION")
-        if type(self.swap_delta) is not int or self.swap_delta < 0:
+        if self.swap_delta is not None and (
+                type(self.swap_delta) is not int or self.swap_delta < 0):
             raise ContractError("SWAP_DELTA")
-        object.__setattr__(
-            self, "psi_full_delta", _require_nonnegative_finite("psi_full_delta", self.psi_full_delta)
-        )
+        if self.psi_full_delta is not None:
+            object.__setattr__(
+                self, "psi_full_delta",
+                _require_nonnegative_finite("psi_full_delta", self.psi_full_delta)
+            )
         if not isinstance(self.throttled, bool):
             raise ContractError("THROTTLED")
 

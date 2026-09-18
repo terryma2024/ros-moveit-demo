@@ -1029,48 +1029,6 @@ def test_child_ament_path_carries_absolute_prefixes(tmp_path):
     assert entries[2] == "/inherited"
 
 
-def test_sample_resources_takes_swap_from_the_owned_cgroup(monkeypatch):
-    """Host-wide swap moves on its own -- one kilobyte of unrelated activity latched
-    SWAP_ACTIVITY on run22 -- so the workload's swap is the owned cgroup's."""
-
-    import types
-    import so101_demo.parallel_batch.resource_measurement as rm
-
-    clock = [500.0]
-    monkeypatch.setattr(rm, "time", types.SimpleNamespace(monotonic=lambda: clock[0]))
-    host_swap = [1_000_000]
-    monkeypatch.setattr(rm, "_read_swap_and_psi", lambda: (host_swap[0], 0.0))
-    cgroup = _FakeCgroup([0, 0], swap=[0, 4096])
-    state = {}
-    for sequence, moment in enumerate((500.0, 500.05), start=1):
-        clock[0] = moment
-        host_swap[0] -= 1
-        sample = rm.sample_resources(owned_inventory=(), cgroup=cgroup, device=_FakeDevice(),
-                                     sequence=sequence, state=state)
-    assert sample.observation.swap_delta == 4096
-    assert sample.diagnostics["swap_total"] == 999_998
-
-
-def test_sample_resources_requires_the_cgroup_swap_counter():
-    import so101_demo.parallel_batch.resource_measurement as rm
-    from so101_demo.parallel_batch.contracts import ContractError
-
-    class NoSwap:
-        attribution_complete = True
-        throttled = False
-        cpu_capacity_core_equivalent = 24.0
-
-        def cpu_usage_us(self):
-            return 0
-
-        def memory_current(self):
-            return 0
-
-    with pytest.raises(ContractError, match="MEASUREMENT_CAPABILITY_MISSING"):
-        rm.sample_resources(owned_inventory=(), cgroup=NoSwap(), device=_FakeDevice(),
-                            sequence=1, state={})
-
-
 def test_sample_resources_reads_the_device_once_per_pass():
     """The pass called device.used_bytes twice and total_bytes once, and every access is a
     fresh NVML read, so a 50 ms sampling grid paid for three of them."""
@@ -1095,26 +1053,6 @@ def test_sample_resources_reads_the_device_once_per_pass():
         rm.sample_resources(owned_inventory=(), cgroup=cgroup, device=device,
                             sequence=sequence, state=state)
     assert device.reads == 2, device.reads
-
-
-def test_sample_resources_takes_pressure_from_the_owned_cgroup(monkeypatch):
-    """Host memory pressure moves for unrelated reasons (run24 latched PSI_FULL_STALL on
-    0.0068 s of host-wide stall), so the policy reads the owned cgroup's pressure."""
-
-    import types
-    import so101_demo.parallel_batch.resource_measurement as rm
-
-    monkeypatch.setattr(rm, "time", types.SimpleNamespace(monotonic=lambda: 900.0))
-    host_psi = [0.0]
-    monkeypatch.setattr(rm, "_read_swap_and_psi", lambda: (0, host_psi[0]))
-    cgroup = _FakeCgroup([0, 0], swap=[0, 0], pressure=[1000, 6000])
-    state = {}
-    for sequence in (1, 2):
-        host_psi[0] += 1.5
-        sample = rm.sample_resources(owned_inventory=(), cgroup=cgroup, device=_FakeDevice(),
-                                     sequence=sequence, state=state)
-    assert sample.observation.psi_full_delta == 5000
-    assert sample.diagnostics["psi_full_host_us"] == 3.0
 
 
 def test_session_breach_ignores_swap_and_psi_activity():
@@ -1151,3 +1089,60 @@ def test_safety_rules_no_longer_require_the_swap_or_psi_keys():
                                require_complete_attribution=True,
                                abort_on_swap_activity=False, abort_on_psi_full_stall=False)
     assert rules.capacity_fraction == deprecated.capacity_fraction == 0.8
+
+
+def test_sample_resources_ignores_swap_and_pressure_interfaces():
+    """CPU/RAM/GPU-only amendment (74d6b781): the sampler neither requires nor reads swap
+    or PSI interfaces, and the deprecated observation fields stay explicitly absent
+    instead of being filled with a fabricated measured zero."""
+
+    import so101_demo.parallel_batch.resource_measurement as rm
+
+    class CgroupWithoutSwap:
+        attribution_complete = True
+        throttled = False
+        cpu_capacity_core_equivalent = 24.0
+
+        def cpu_usage_us(self):
+            return 0
+
+        def memory_current(self):
+            return 1024
+
+    sample = rm.sample_resources(owned_inventory=(), cgroup=CgroupWithoutSwap(),
+                                 device=_FakeDevice(), sequence=1, state={})
+    assert sample.observation.swap_delta is None
+    assert sample.observation.psi_full_delta is None
+    assert "swap_total" not in sample.diagnostics
+    assert "psi_full_host_us" not in sample.diagnostics
+    assert sample.observation.observed["cpu_core_equivalent"] == 0.0
+
+
+def test_sample_resources_tolerates_absent_or_broken_swap_interfaces():
+    """Deprecated swap/PSI interfaces cannot gate sampling: absent, raising or malformed
+    they must leave the outcome unchanged (CPU/RAM/GPU-only amendment 74d6b781)."""
+
+    import so101_demo.parallel_batch.resource_measurement as rm
+
+    class BrokenSwap:
+        attribution_complete = True
+        throttled = False
+        cpu_capacity_core_equivalent = 24.0
+
+        def cpu_usage_us(self):
+            return 1000
+
+        def memory_current(self):
+            return 1024
+
+        def memory_swap_current(self):
+            raise OSError("swap interface gone")
+
+        def memory_pressure_full(self):
+            return "not-a-number"
+
+    sample = rm.sample_resources(owned_inventory=(), cgroup=BrokenSwap(), device=_FakeDevice(),
+                                 sequence=1, state={})
+    assert sample.observation.swap_delta is None
+    assert sample.observation.psi_full_delta is None
+    assert sample.observation.attribution_complete is True
