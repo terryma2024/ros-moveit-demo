@@ -3442,3 +3442,31 @@ launcher's tree comparison is exact and the frozen package predates this stage's
 measurement is declared to run the build tree, in which case `dev-build` needs the console and the
 declared trees must say so. Both are rebuild-shaped decisions; neither is a probe. N1 remains
 `NOT_MEASURED` and nothing is extrapolated to another N.
+
+## CP-UQ56 — Stage C: no existing install passes all the containment checks at once
+
+Measurements in this round, from the bytes rather than from paths:
+
+- `dev-install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch` exists (981 bytes, executable)
+  -- a console, but not the 1002-byte frozen variant.
+- `dev-install/so101_demo_py/lib/python3.12/site-packages/` holds exactly one entry,
+  `so101-demo-py.egg-link`: the AMENT install is an *editable* install that points at the source,
+  so its package tree is the current source by construction and it carries no package copy and no
+  metadata directory of its own.
+- The frozen package copy is stale, as CP-UQ55 concluded:
+  `freeze-install/.../site-packages/so101_demo/parallel_batch/owned_resources.py` hashes
+  `7925f7aafd3d5cb8` while the build tree (and therefore the source) hashes `f5bd1b0c679e074e`.
+
+So each existing root satisfies some of the launcher's requirements and none satisfies all of
+them: the frozen copy has console plus metadata plus a package tree but the tree is stale; the
+build tree has the current tree and metadata but no console; the AMENT install has the console and
+a live link to the current tree but no metadata under its own root. The containment checks
+(`entry_points` must be under the build root, the module the child imports must match the declared
+artifact) cannot be satisfied by mixing them.
+
+The decision this forces is the one the stage has been circling: build a **non-editable candidate
+install** from the current source into a fresh prefix, so console, metadata and package tree live
+under one root and the tree equals the source exactly, then bind the measurement to that prefix
+(its own provenance binding), generate the overlay from it, seal, and measure. That is a build
+step, not a probe, and it runs next. N1 remains `NOT_MEASURED`; nothing is extrapolated to another
+N.
