@@ -4226,3 +4226,24 @@ This is the seam that produced `DIRECTORY_CONFLICT` in CP-UQ78, closed on the ha
 touching the product allocator that ordinary parallel batches also pass through. r31 is sealed from
 r30 against the unchanged valid binding r9 and N1 runs at `n1-calibration-20260918-run52` with the
 60 s baseline, inside a delegated scope.
+
+## CP-UQ81 — The last occupant of the launcher's root, and where round 40 leaves the task
+
+Run `n1-calibration-20260918-run52` (r31, `cafd396783dd7033...`): the session completed under the
+amended policy -- `abort_reason` **None**, 95 measurement samples, **308** persisted baseline
+samples, `peak-alias.json` present -- and the launcher's root contains exactly one entry, the
+harness's own `raw/overlay-provenance-binding.json`. So the session-root change removed the
+baseline and alias occupants, and one harness artifact remains: the overlay binding is still written
+to `plan.batch_root/raw/` before the launcher allocates. The allocator wants that root absent, so the
+same fix applies to it -- write the overlay next to the session's artifacts (its path is passed to
+the launcher as an argument, so it does not need to live inside the launcher's root at all).
+
+That is a one-line change in `production_runner_factory` (`target=...`) and it is the last known
+blocker between this task and a launcher that allocates its own root and starts the workload. The
+launcher's stderr in this run is empty and its exit code is 1; with the root occupied, the allocator
+is the consistent explanation, and the fix above is testable by inspecting that root after a run.
+
+State at the end of round 40: amendment 74d6b781 implemented and gated (units 1-7, gate6 green at
+106 passed in 2.83 s), the allocator seam closed on the harness side, a real 308-sample baseline and
+a 95-sample measurement window with no policy latch, and one harness artifact left to move. All
+exact-N budgets remain `NOT_MEASURED`; nothing was pushed, merged, deleted or fabricated.
