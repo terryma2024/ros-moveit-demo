@@ -4542,3 +4542,29 @@ That is the chosen direction, recorded before implementing it: measure the pass 
 in place, and if a single pass still exceeds the allowance under load, give the workload-start window
 the same documented, bounded treatment the attach point already has rather than widening
 `maximum_sample_gap_s`, which is policy.
+
+## CP-UQ94 — The 190 ms is `probe_host_facts`, and my own fast channel is what pays it
+
+Timed in a delegated scope, 25 iterations each:
+
+    meminfo          median 0.0 ms   max 0.1 ms
+    nvml refresh     median 10.7 ms  max 21.8 ms
+    probe_host_facts median 143.4 ms max 153.1 ms
+
+So the pass is not expensive because of memory or NVML: the host-facts probe -- the cgroup ancestor
+walk plus counters plus facts assembly -- costs ~143 ms on this machine, and everything else is
+rounding error beside it.
+
+That also identifies the culprit for run59's single 190 ms interval, and it is mine: the independent
+peak-alias channel added in CP-UQ77's unit 7 calls `self._observe()` every 25 ms, and `_observe()`
+runs `LiveObservationSource`, i.e. `probe_host_facts`, i.e. ~143 ms of work per call. A "25 ms"
+channel therefore cannot meet its cadence and, worse, holds the interpreter while it works, starving
+the primary sampler -- which is exactly the 190 ms interval observed. The peak alias is not slow
+because the machine is loaded; it is slow because it asks for the full host-facts probe on every tick.
+
+The fix is small and honest: the alias channel should read the cheap per-sample quantities directly
+(the cgroup counters, `memory_current`, one NVML refresh, meminfo available) at its own cadence --
+still independent readings on its own clock -- rather than re-deriving host facts each tick. The
+capacity-style facts it needs can be read once. Then measure the pass cost again, and only if a pass
+still exceeds the allowance consider the bounded workload-start window; the allowance itself stays
+policy.
