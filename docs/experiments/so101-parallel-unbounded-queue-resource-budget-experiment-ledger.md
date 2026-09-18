@@ -2565,3 +2565,38 @@ evidence: scratch/xdist8-*, colcon/xdist8-*, tools/{test-gate.zsh,pytest-paralle
 decision: KEEP
 next_experiment: EXP-UQ31 Task12 freeze copy verification
 ```
+
+```yaml
+checkpoint_id: CP-UQ30A
+last_valid_experiment: EXP-UQ30
+current_hypothesis: Task12 freeze copy built, byte-verified and bound; audited demo gate re-run on it.
+readback:
+  - Freeze copy freeze-install built from clean runtime code HEAD 6e68d0f51be4e6bf10b6f838c8f1cbd41b267240
+    (new unique immutable prefix; progress-install and all older prefixes/A0/bindings untouched, no
+    symlink). Verified: six module bytes match source, all eight installed launch files match, the
+    console entrypoint exists with shebang #!/usr/bin/python3, config carrier
+    (config/mujoco/parallel_batch_v2.yaml) and asset (assets/mujoco/scene.xml) present, and the debug
+    manifest records the frozen HEAD with source_dirty false and 573 artifacts.
+  - bindings/freeze-project-provenance.json registers that freeze (source commit, install prefix, module
+    origins, six core file SHA256 values, entrypoint SHA, debug manifest path/commit, DEBUG_ONLY
+    authority). This is not a qualification record.
+  - Copied acceptance gate re-pointed to the freeze: scratch/freeze-installed-gates2.4MZkbEDW 8 passed
+    at 8 workers (the pre-freeze run correctly failed the byte guard, which is why the freeze was built).
+  - The historical production A0/binding (a812...) is not reused; runtime bytes changed with the runner,
+    allocator and Task 6 repairs, so a future production freeze/qualification must be new.
+task_matrix:
+  - "Stage A (offline): Task0-11 and 13/14/15 implemented with green offline evidence; Task12 copy is
+    now the new freeze above; Task16 handoff facts are the packet described in this checkpoint."
+  - "Stage B (own recovery/Web refresh) / Stage C (measurement) / Stage D (promotion, deployment) /
+    Stage E (live Chrome): unperformed and unauthorized. Every actual exact-N budget remains
+    NOT_MEASURED; N without a measured qualification stays disabled with a reason, no N downgrade and no
+    cross-N extrapolation."
+inferred:
+  - Offline mainline work is complete for this unit; the remaining steps are the explicit live/approval
+    boundaries listed in CP-UQ30, each with its own exact authorization.
+conclusion: OFFLINE WORK CONTINUES; live boundaries require explicit approval objects.
+evidence: freeze-build, freeze-install, bindings/freeze-project-provenance.json,
+  scratch/freeze-installed-gates2.*, scratch/xdist8-demo4.*
+decision: KEEP
+next_experiment: EXP-UQ31 remaining authorized offline units / approval-gated live stages
+```
