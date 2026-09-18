@@ -7587,3 +7587,36 @@ audit, and the five-consecutive single-N physical record. The adaptive path need
 rebuilt from the CP-UQ182 guard wiring before its case can run.
 
 _Ledger HEAD when written: `08da9d084`._
+
+## CP-UQ185 — Cleanup of a never-allocated pool is a no-op, so a failed adaptive run can end
+
+Correction `58936fb6-…` defect 2 is fixed test-first, in the plan's own runtime surface.
+
+**RED**: `test_cleanup_of_a_pool_that_failed_before_allocating_is_a_no_op` builds the exact state the
+adaptive wrapper produced — a top journal with `POOL_STARTING` (generation 1, worker_count 8) and
+only `p/g01w08-failure.json` on disk, no pool directory, the allocation having been refused with
+`START_GUARD_UNAVAILABLE`: `1 failed` with `so101_demo.cli.parallel_batch_cleanup.CleanupError:
+POOL_ROOT` raised at `parallel_batch_cleanup.py:346`.
+
+**GREEN**: cleanup now recognises that state as "nothing was ever allocated", writes the receipt
+(`cleanup_complete: true`, `active_generation: 1`, `worker_count: 0`, `released_domain_ids: []`, and
+the marker path in `pool_failure`) and leaves the failure marker on disk as evidence. A missing pool
+directory *without* a failure marker still raises `POOL_ROOT` — the fail-closed behaviour is kept for
+a genuinely inconsistent root.
+
+**Regression**: `test_parallel_adaptive_integration.py`, `test_parallel_adaptive_runner.py` and
+`test_parallel_adaptive_pool.py` → `CLEANUP_SUITE_RC=0`, so nothing else in the adaptive lifecycle
+moved. Committed with the fix.
+
+With this, the R03 chain has both of its blockers addressed in code: the guard is wired (CP-UQ182)
+and a failed pool can now reach a terminal, cleaned-up state. The stale `ADAPTIVE` campaign
+(`campaign-…4b03fbf341`) still visible in the deployed service's state root is the pre-fix artefact;
+it clears on the next service restart, which the copy-install rebuild for the adaptive run needs
+anyway.
+
+In parallel, the real execution driver keeps gathering genuine results: the N=3 four-point case
+registered **three** worker slots and ran three attempts concurrently (`WORKER_REGISTERED: 3`,
+`ATTEMPT_STARTED: 3`, controller action goals accepted), which is the first `N > 2` fixed-mode
+campaign in this task.
+
+_Ledger HEAD when written: `e54f1b2e3`._
