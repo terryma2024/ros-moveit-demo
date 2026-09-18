@@ -64,10 +64,11 @@ def make(tmp_path):
             from so101_demo.parallel_batch.adaptive_contracts import (
                 _new_pool_request_for_production_factory,
             )
+            # `k` remains accepted by this fixture for call-site compatibility but the
+            # adaptive pool contract no longer carries a lifetime quota.
             request = _new_pool_request_for_production_factory(
                 batch_id='batch-a', run_mode=mode, selected_point_ids=points,
-                worker_count=workers, max_points_per_worker=k,
-                evidence_root=root,
+                worker_count=workers, evidence_root=root,
             )
         else:
             # Fixed execution migrated to the version-two no-quota contract; the retained

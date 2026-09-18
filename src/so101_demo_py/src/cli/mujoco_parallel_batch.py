@@ -407,7 +407,24 @@ def _live_headroom_verifier(
     )
 
 
-def _prepare_live_headroom(options, config, worker_count):
+def _prepare_live_headroom(options, config, worker_count, *, resource_gate=None):
+    if resource_gate is not None:
+        from so101_demo.parallel_batch.resource_budget import FixedAdmissionRequest
+        identity = resource_gate.execution_identity_sha256
+        if identity is None:
+            raise CliError('RESOURCE_PROBE_FAILED')
+        decision = resource_gate.admit(FixedAdmissionRequest(
+            worker_count=worker_count, batch_id=getattr(options, 'batch_id', None) or 'cli',
+            epoch=1, execution_identity_sha256=identity,
+            request_kind='FIXED_PRODUCTION'))
+        if not decision.admitted:
+            raise CliError(decision.reason_codes[0])
+        return {
+            'worker_count': worker_count,
+            'profile_sha256': decision.profile_sha256,
+            'qualification_sha256': decision.qualification_sha256,
+            'observation_monotonic_s': decision.observation_monotonic_s,
+        }, None, {}, None
     supplied = (
         options.live_headroom_evidence,
         options.live_headroom_acceptance,
@@ -978,7 +995,20 @@ if __name__ == '__main__':
 """
 
 
+_LEGACY_QUOTA_FLAG = '--max-points-per-worker'
+
+
+def _reject_legacy_quota_flag(argv) -> None:
+    """Refuse the retired lifetime quota flag before argparse or any resource work."""
+
+    arguments = tuple(sys.argv[1:] if argv is None else argv)
+    for argument in arguments:
+        if argument == _LEGACY_QUOTA_FLAG or argument.startswith(f'{_LEGACY_QUOTA_FLAG}='):
+            raise ContractError('LEGACY_MAX_POINTS_PER_WORKER_UNSUPPORTED')
+
+
 def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> PreparedBatch:
+    _reject_legacy_quota_flag(argv)
     options = build_parser().parse_args(argv)
     adaptive_only = (
         options.adaptive_config,
