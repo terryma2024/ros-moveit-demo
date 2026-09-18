@@ -1078,3 +1078,83 @@ disproven_routes:
 open_risks:
   - resources.AllocationPolicy still has the generic enforce_resource_thresholds flag until Task 10.
 next_command: implement Task 9 RED (test_new_request_rejects_legacy_key) in src/so101_teleop/test/teleop/test_expert_validation_api.py
+
+## EXP-UQ12 — Task 9 (part 1) teleop v2 request contract and exact-N availability
+
+```yaml
+experiment_id: EXP-UQ12
+status: VALID
+prior_experiment: EXP-UQ11
+hypothesis: The teleop HTTP contract can require contract_version 2, refuse the legacy quota key by
+  presence before Pydantic parsing, and expose honest exact-N availability without changing retained
+  history or the rest of the service.
+prediction: RED shows the legacy key accepted and the availability field absent; GREEN passes the plan's
+  API gate plus the full teleop suite.
+single_variable: api request contract + capabilities availability + production v2 request shape
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Task 8 committed; clean teleop baseline 511 passed (EXP-UQ10).
+success_criteria:
+  - max_points_per_worker present in any start/preflight body (including null) -> 422
+    LEGACY_MAX_POINTS_PER_WORKER_UNSUPPORTED; missing/non-2 contract_version -> 422
+    LEGACY_CONTRACT_EXECUTION_FORBIDDEN.
+  - Capabilities expose N2..8 availability with selectable=false and BUDGET_PROFILE_UNAVAILABLE until an
+    approved profile exists, and no fixed_max_points_per_worker field.
+failure_criteria:
+  - Accepting a legacy key or claiming any N is selectable/qualified without evidence.
+invalid_criteria:
+  - Retained fixtures failing only because they still sent the removed key counted as regressions.
+provenance:
+  source_commit: 3b0a68a95
+  install_overlay: $TASK_ROOT/dev-install (symlinks to this worktree) + $TASK_ROOT/venv
+  runtime_executable: $TASK_ROOT/venv/bin/python
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: so101_pytest teleop-v2-red test_expert_validation_api.py::test_new_request_rejects_legacy_key test_expert_validation_v2_contract.py -q
+    exit_code: 1
+  - command: so101_pytest teleop-v2-green <7 plan-listed teleop suites> -q
+    exit_code: 0
+  - command: so101_pytest teleop-full-after-v2 src/so101_teleop/test -q
+    exit_code: 0
+observed:
+  - RED: collection error for the missing WorkerCountAvailability plus failing legacy-key/version cases.
+  - GREEN scratch/teleop-v2-green.*: 99 passed; scratch/teleop-full-after-v2.*: 521 passed / 0 failed.
+  - api.py: CampaignConfiguration carries contract_version: Literal[2] and no quota field; a FastAPI
+    dependency inspects the raw body first and returns the two stable codes; WorkerCountAvailability +
+    default_worker_count_availability give every capability response the honest N2..8 list.
+  - production.py: capabilities add worker_count_availability (NOT_MEASURED/BUDGET_PROFILE_UNAVAILABLE,
+    no profile/qualification hashes); new campaign requests set max_points_per_worker=None.
+  - models.py: v2 fixed execution_config requires only worker_count; retained v1 rows still validate for
+    read-only projection.
+  - Retained fixtures migrated to the v2 body shape: two api tests dropped the quota key, added
+    contract_version, and the preflight-mismatch case now mismatches on exact N (same intent).
+inferred:
+  - Preflight still derives an internal per-worker maximum via ceil(point_count/N) for the retained v1
+    probe/argv path; with the user-supplied quota gone the derived value can never fail capacity, and the
+    true removal of FixedExecutionConfig.max_points_per_worker belongs with the Task 10 provider wiring.
+conclusion: VALID for the HTTP contract; remaining Task 9 work (preflight/store/supervisor quota removal,
+  N1 retry v2 config) is interlocked with Task 10 and recorded there.
+evidence:
+  - scratch/teleop-v2-red.*, scratch/teleop-v2-green.*, scratch/teleop-full-after-v2.*
+decision: KEEP
+next_experiment: EXP-UQ13 (Task 10 consumers + provider wiring)
+```
+
+```yaml
+checkpoint_id: CP-UQ12
+last_valid_experiment: EXP-UQ12
+current_hypothesis: One provider-backed gate can replace the three duplicated consumers and the N>3
+  hardcode without weakening the retained safety boundaries.
+working_tree_status: Task 9 part-1 files committed
+owned_processes: NONE
+preserved_processes: NONE from this task family
+confirmed_conclusions:
+  - v2 request contract + honest availability implemented; teleop suite 521 passed (EXP-UQ12).
+disproven_routes:
+  - Claiming any N selectable before a promoted profile exists.
+open_risks:
+  - production.py/cli/resources.py still compute the legacy formulas and the N>3 hardcode; Task 10 must
+    replace them with the provider and keep every retained gate green.
+next_command: implement Task 10 RED (legacy CLI flag error + three-consumer shared provider) and wire
+  resources.AllocationPolicy to the typed contexts
