@@ -1458,3 +1458,70 @@ evidence:
   - browser/web-unit-final.*, browser/web-build-v2e.*, browser/contract-setup-v2h.*, bindings/dev-contract-binding.json
 decision: KEEP
 next_experiment: EXP-UQ16 (offline copied install + installed gate)
+
+## EXP-UQ16 — Tasks 13/14/15 offline code (qualification, promotion, live verifier)
+
+```yaml
+experiment_id: EXP-UQ16
+status: VALID
+prior_experiment: EXP-UQ15
+hypothesis: The offline halves of Tasks 13-15 can be implemented and unit-verified without any live
+  measurement, promotion or browser window: the exact-N accumulator, the independent promotion parser,
+  and the live-evidence verifier all fail closed on synthetic tampered evidence.
+prediction: RED for each unit (missing module/function) then GREEN with the plan's named cases.
+single_variable: qualification/promotion/verifier offline modules and suites
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Tasks 10/11 committed; clean teleop/demo baselines; no live window, no promotion.
+success_criteria:
+  - Five valid business failures do not fill motion coverage; five normal runs plus two experiments per
+    cell qualify; invalid/infra runs terminate the sequence; fault pressure never extends normal/product
+    counts; a wrong exact N is refused as EXACT_N_UNQUALIFIED.
+  - Candidate profile stays CANDIDATE with no review reference; Q contains no P/M/D reference.
+  - A candidate tree can never approve itself; M binds P/A0/reviews/operator and never A1/D; D binds
+    M/P/A1/location.
+  - verifyV2LiveEvidence accepts complete evidence and refuses tampered hashes, a missing runtime slot,
+    policy DONE without independent physics and any identity/profile mismatch.
+failure_criteria:
+  - Any silent acceptance of partial evidence or self-approval.
+invalid_criteria:
+  - Fixture wiring mistakes counted as product failures (two such defects were fixed: missing pytest
+    fixture decorators and a missing private writer helper).
+provenance:
+  source_commit: dc81fb2faa (installed-gate helpers) plus this unit's changes
+  install_overlay: $TASK_ROOT/dev-install + $TASK_ROOT/venv
+  runtime_executable: $TASK_ROOT/venv/bin/python and bun 1.3.14
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: so101_pytest qualification-red src/so101_demo_py/test/test_parallel_exact_n_qualification.py -q
+    exit_code: 1
+  - command: so101_pytest qualification-green3 test_parallel_exact_n_qualification.py test_parallel_resource_measurement.py test_parallel_resource_budget.py -q
+    exit_code: 0
+  - command: so101_pytest promotion-red src/so101_demo_py/test/test_parallel_budget_promotion.py -q
+    exit_code: 1
+  - command: so101_pytest promotion-green3 test_parallel_budget_promotion.py test_parallel_resource_identity.py test_parallel_resource_budget.py -q
+    exit_code: 0
+  - command: so101_bun live-evidence-green run test src/api/live-evidence.test.ts
+    exit_code: 0
+observed:
+  - qualification-green3: 39 passed (7 qualification + 6 measurement + 26 budget).
+  - promotion-green3: 38 passed. PromotionAuthority requires an independent 0700 owned root; M binds
+    P/A0/Sol/Astra/operator and refuses A1/D keys; a different authority root cannot verify another
+    root's promotion; a candidate-tree approval raises PROMOTION_AUTHORITY_INVALID.
+  - live-evidence-green: 5 passed (complete root accepted; tampered artifact hash, missing runtime slot,
+    policy DONE without physics, and profile/identity mismatch all refused).
+  - Task 15 Stage A suite code: 04-resource-budget.spec.ts (N2..8 availability and qualified exact-N
+    preservation), 02-parallel migrated to exact N and the detailed R01 gate, R01 now records producer/
+    identity/profile/qualification/manifest/cleanup in its gate receipt, requireGateDetail re-checks them,
+    resolvePackagePrefixes is shared, and playwright.live-sim.config.ts declares the
+    preflight -> r01 -> 02/04 project dependencies. `tsc --noEmit` over the new specs is clean and the
+    web build passes.
+inferred:
+  - Nothing here claims a measured budget, a qualified N, a promotion or a live acceptance; those remain
+    NOT_MEASURED / unauthorized.
+conclusion: VALID for the offline halves of Tasks 13-15.
+evidence:
+  - scratch/qualification-*, scratch/promotion-*, browser/live-evidence-green.*, browser/live-suite-build.*
+decision: KEEP
+next_experiment: EXP-UQ17 (Task 12 unified offline gates)
