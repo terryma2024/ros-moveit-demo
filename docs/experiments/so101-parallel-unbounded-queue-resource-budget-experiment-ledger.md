@@ -6575,3 +6575,20 @@ directory; the next round verifies it byte-for-byte, redeploys the service from 
 acceptance — this time the coordinator should live long enough to spawn its workers.
 
 _Ledger HEAD when written: `9e130398e`._
+
+## CP-UQ156 — Waiting on the copy rebuild that carries the CP-UQ155 fix
+
+Nothing new to decide; the state is precise. The CP-UQ155 fix (the source root is a debug
+observation, not a runtime gate) is committed and green (`lg-t11-provenance`: 132 passed). The
+deployed copy still contains the old CLI, so a fresh build is running into
+`/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main/unbounded-queue-resource-budget/copy-install-final.A1z99CS9`; at this moment it has only produced its install skeleton (`COLCON_IGNORE`,
+`setup.*`), so the fixed `mujoco_parallel_batch.py` is not yet in place and the byte comparison
+correctly reports it as absent rather than pretending otherwise.
+
+Two things must not be lost between rounds: the acceptance's blocking defect is identified and
+fixed (**PROVENANCE_SOURCE_ROOT**), and the verification sequence after the build is fixed too —
+byte-compare the copy against the tree, redeploy the task-owned service from it (ordered stop,
+`/health`, served-byte hash, `SO101_TASK_ROOT`, model configuration), then re-run the live
+acceptance and read whether the coordinator now survives long enough to spawn its workers.
+
+_Ledger HEAD when written: `16336f2ed`._
