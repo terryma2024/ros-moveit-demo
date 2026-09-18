@@ -703,6 +703,16 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
             "source_module_tree_sha256": source_tree,
             "installed_module_tree_sha256": build_tree,
         }
+    elif repository_root is None:
+        # A pure copied install has no source module tree to compare against; the identity is
+        # the installed one. This branch exists because `_installed_overlay_identity` starts
+        # with `Path(repository_root)` and would raise on None -- the TypeError that surfaced as
+        # the generic PROVENANCE_VERIFICATION_FAILED in the coordinator log.
+        installed_identity = {
+            **overlay_identity,
+            "source_module_tree_sha256": None,
+            "installed_module_tree_sha256": source_hash(module_path.parent),
+        }
     else:
         installed_identity = _installed_overlay_identity(
             repository_root, module_import_path, console_path, source_hash=source_hash
