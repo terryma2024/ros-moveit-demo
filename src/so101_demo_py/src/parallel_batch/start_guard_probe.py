@@ -677,4 +677,3 @@ def compose_default_start_guard(policy: StartGuardPolicy, *,
     """The installed composition: one task-level state root, one shared lock."""
 
     return EpochStartGuard(ProbeCoordinator(state_root), policy)
-
