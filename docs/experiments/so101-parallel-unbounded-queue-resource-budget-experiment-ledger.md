@@ -4745,3 +4745,26 @@ kind of test; the broker-side fix stays regardless, since it is correct on its o
 Nothing here is an instrument defect any more: the harness measures the workload's CPU correctly and
 the policy draws the line. What is still missing is whether the candidate's demand can be brought
 under 19.1 cores at N1 by bounding the right process, and that is what the next run will answer.
+
+## CP-UQ102 — The worker is in-process, nothing sets thread counts, and MuJoCo is the suspect
+
+Three facts narrow the 19-core question from CP-UQ101, all read from the tree rather than inferred:
+
+- the **worker is not a container**: `mujoco_parallel_batch` builds it in-process
+  (`_build_worker_from_spec`, `worker_servers`), writing only a `worker-spec.json` into
+  `<batch>/workers/worker-01/`. So the math that holds ~19 cores runs in the *launcher* process
+  tree on the host, not behind the container boundary -- which is why forwarding bounds into the
+  broker container did not change the demand.
+- **nothing in the launcher sets a thread count**: no `set_num_threads`, no thread keys in the
+  launcher, and the v2 config's execution section has none either (`max_worker_count`,
+  `broker_inflight_per_worker_per_model`, `allow_cpu_fallback` are the nearest neighbours).
+- the five library variables we forward (`OMP`, `MKL`, `OPENBLAS`, `TORCH`, `NUMEXPR`) bound BLAS and
+  torch but **not MuJoCo**, whose thread pool is controlled by `MUJOCO_NUM_THREADS`; the batch root
+  also carries a `render/` directory per worker, and rendering is exactly the kind of thing that
+  opens one thread per core.
+
+So the next unit is narrow: forward `MUJOCO_NUM_THREADS` alongside the others (and check whether the
+render path honours it), then measure the demand again. If it stays at ~19 cores, the next diagnostic
+is per-process CPU inside the owned cgroup during a run, which names the consumer instead of
+inferring it from a total. Either way the instrument remains correct: it reports the workload's CPU
+against the policy's line, and the remaining work is making the candidate fit under 19.1 cores at N1.
