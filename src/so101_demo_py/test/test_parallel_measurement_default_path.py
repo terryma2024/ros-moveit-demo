@@ -723,3 +723,40 @@ def test_sample_loop_rebaselines_when_asked(tmp_path, monkeypatch):
     dropped = [i for i in range(1, len(seen))
                if "monotonic_s" not in seen[i] and "monotonic_s" in seen[i - 1]]
     assert dropped, seen
+
+
+def test_launcher_refuses_an_existing_root_without_a_measurement(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, _batch_evidence_root_state
+
+    root = tmp_path / "b"; root.mkdir(mode=0o700)
+    with pytest.raises(CliError, match="DUPLICATE_BATCH_EVIDENCE_ROOT"):
+        _batch_evidence_root_state(evidence_root=root, measurement=False)
+
+
+def test_launcher_accepts_the_sealed_measurement_root(tmp_path):
+    """The measurement harness creates the sealed batch root before it spawns the
+    launcher (run_candidate_batch), and verify_measurement_arguments pins that root to
+    the authorization, so the launcher cannot demand exclusive creation there."""
+
+    from so101_demo.cli.mujoco_parallel_batch import _batch_evidence_root_state
+
+    root = tmp_path / "b"; root.mkdir(mode=0o700)
+    (root / "raw").mkdir(); (root / "coverage-events.json").write_text("{}\n")
+    _batch_evidence_root_state(evidence_root=root, measurement=True)
+
+
+def test_launcher_rejects_a_loose_measurement_root(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, _batch_evidence_root_state
+
+    root = tmp_path / "b"; root.mkdir(mode=0o755)
+    with pytest.raises(CliError, match="MEASUREMENT_EVIDENCE_ROOT_INVALID"):
+        _batch_evidence_root_state(evidence_root=root, measurement=True)
+
+
+def test_launcher_rejects_a_finalized_measurement_root(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, _batch_evidence_root_state
+
+    root = tmp_path / "b"; root.mkdir(mode=0o700)
+    (root / "aggregate_results.json").write_text("{}\n")
+    with pytest.raises(CliError, match="DUPLICATE_BATCH_EVIDENCE_ROOT"):
+        _batch_evidence_root_state(evidence_root=root, measurement=True)
