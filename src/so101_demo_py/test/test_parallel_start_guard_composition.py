@@ -151,3 +151,46 @@ def test_fixed_request_keeps_every_slot_when_points_are_fewer(tmp_path):
                                       "batch_kind": str(request.batch_kind)}))
     from so101_demo.parallel_batch.contracts import batch_request_from_document
     assert batch_request_from_document(document, for_execution=True) == request
+
+
+def test_no_active_path_imports_the_retired_budget_chain():
+    """The active entry points must not be able to import the deleted modules.
+
+    A meta-path trap makes any residual import chain fail loudly instead of relying on a
+    text search, and the real composition is then driven end to end.
+    """
+
+    script = (
+        "import json, sys\n"
+        "RETIRED = ('so101_demo.parallel_batch.resource_budget',\n"
+        "           'so101_demo.parallel_batch.resource_measurement',\n"
+        "           'so101_demo.parallel_batch.measurement_control',\n"
+        "           'so101_demo.parallel_batch.owned_resources')\n"
+        "class Trap:\n"
+        "    def find_module(self, name, path=None):\n"
+        "        return self if name in RETIRED else None\n"
+        "    def load_module(self, name):\n"
+        "        raise AssertionError('retired module imported: ' + name)\n"
+        "    def find_spec(self, name, path=None, target=None):\n"
+        "        if name in RETIRED:\n"
+        "            raise AssertionError('retired module imported: ' + name)\n"
+        "        return None\n"
+        "sys.meta_path.insert(0, Trap())\n"
+        "import so101_demo.cli.mujoco_parallel_batch as cli\n"
+        "import so101_demo.parallel_batch.resources as resources\n"
+        "import so101_demo.parallel_batch.adaptive_pool as adaptive\n"
+        "import so101_demo.parallel_batch.contracts as contracts\n"
+        "from so101_demo.parallel_batch.start_guard_probe import compose_default_start_guard\n"
+        "config = contracts.load_parallel_runtime_config_v3(__import__('pathlib').Path(%r))\n"
+        "guard = compose_default_start_guard(config.start_guard)\n"
+        "print(json.dumps({'imported': sorted(n for n in sys.modules if 'parallel_batch' in n)}))\n"
+    ) % str(V3_CONFIG)
+    env = dict(os.environ)
+    env["SO101_TASK_ROOT"] = "/tmp/so101-retired-chain-trap"
+    completed = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True,
+                               env=env)
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(completed.stdout.strip().splitlines()[-1])
+    for retired in ("resource_budget", "resource_measurement", "measurement_control",
+                    "owned_resources"):
+        assert not any(retired in name for name in payload["imported"]), payload["imported"]

@@ -252,57 +252,107 @@ class ProductionRuntimeLayout:
         )
 
 
-class _HostResourceProbe:
-    """Fixed mode admits only after the same host facts required by the upstream config."""
+class _LazyStartGuard:
+    """Compose the shared guard on first use; constructing the service does no config I/O."""
 
-    def __init__(self, resource_gate=None) -> None:
-        self._resource_gate = resource_gate
+    def __init__(self, environment: Mapping[str, str], config_path=None) -> None:
+        self._environment = dict(environment)
+        self._config_path = config_path
+        self._guard = None
+        self._policy = None
+        self._selector = None
+
+    def _compose(self):
+        if self._guard is None:
+            from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
+            from so101_demo.parallel_batch.start_guard_probe import (
+                compose_default_start_guard)
+
+            discovered = (self._config_path
+                          or self._environment.get("SO101_VALIDATION_PARALLEL_CONFIG"))
+            if not discovered:
+                raise ValueError("START_GUARD_CONFIG_REQUIRED")
+            config = load_parallel_runtime_config_v3(Path(discovered))
+            self._guard = compose_default_start_guard(config.start_guard)
+            self._policy = config.start_guard
+            self._selector = (
+                f"{config.gpu_device.selector_kind}:{config.gpu_device.selector}")
+        return self._guard
+
+    @property
+    def policy(self):
+        self._compose()
+        return self._policy
+
+    @property
+    def gpu_selector(self):
+        self._compose()
+        return self._selector
+
+    def begin_epoch(self, scope):
+        return self._compose().begin_epoch(scope)
+
+    def require_before_spawn(self, scope):
+        return self._compose().require_before_spawn(scope)
+
+
+class _HostResourceProbe:
+    """Fixed mode admits through the shared start guard; no budget authority is consulted."""
+
+    def __init__(self, start_guard=None, gpu_selector=None) -> None:
+        self._start_guard = start_guard
+        self._gpu_selector = gpu_selector
 
     def probe(self, _request, config):
         observations: dict[str, object] = {"logical_cpu_count": os.cpu_count() or 0}
         reasons: list[str] = []
+        workers = max(1, int(getattr(config, "worker_count", 1)))
+        observations["requested_worker_count"] = workers
+        if self._start_guard is None:
+            reasons.append("START_GUARD_UNAVAILABLE")
+            return not reasons, tuple(reasons), observations
+        selector = getattr(config, "gpu_device", None)
+        if selector is not None:
+            gpu_selector = f"{selector.selector_kind}:{selector.selector}"
+        else:
+            gpu_selector = self._gpu_selector or getattr(
+                self._start_guard, "gpu_selector", None)
+        if not gpu_selector:
+            reasons.append("CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION")
+            return not reasons, tuple(reasons), observations
         try:
-            from so101_demo.parallel_batch.resources import SystemResourceProbe
+            from so101_demo.parallel_batch.start_guard import GuardScope
 
-            snapshot = SystemResourceProbe().snapshot()
-            observations.update(
-                available_ram_gib=snapshot.available_ram_gib,
-                gpu_free_gib=snapshot.gpu_free_gib,
+            scope = GuardScope(
+                batch_id="web-preflight",
+                epoch=1,
+                owner_pid=os.getpid(),
+                owner_starttime_ticks=1,
+                gpu_selector=gpu_selector,
+                worker_count=workers,
             )
-            workers = getattr(config, "worker_count", 1)
-            observations["requested_worker_count"] = workers
-            version_two = not isinstance(config, FixedExecutionConfig)
-            if version_two and self._resource_gate is None:
-                reasons.append("BUDGET_PROFILE_UNAVAILABLE")
-                return not reasons, tuple(reasons), observations
-            if self._resource_gate is not None:
-                from so101_demo.parallel_batch.resource_budget import FixedAdmissionRequest
-                identity = self._resource_gate.execution_identity_sha256
-                if identity is None:
-                    reasons.append("RESOURCE_PROBE_FAILED")
-                else:
-                    decision = self._resource_gate.admit(FixedAdmissionRequest(
-                        worker_count=workers,
-                        batch_id=getattr(config, "batch_id", "web") or "web",
-                        epoch=1,
-                        execution_identity_sha256=identity,
-                        request_kind=getattr(
-                            self._resource_gate, "request_kind", "FIXED_PRODUCTION"),
-                    ))
-                    reasons.extend(decision.reason_codes)
-                return not reasons, tuple(reasons), observations
-            # Retained version-one interpretation only; v2 never reaches this block.
-            if workers > 3:
-                reasons.append("FIXED_WORKER_LIVE_QUALIFICATION_REQUIRED")
-            if snapshot.logical_cpu_count < 4 * workers:
-                reasons.append("CPU_HEADROOM")
-            if snapshot.available_ram_gib < 6 + 4 * workers:
-                reasons.append("RAM_HEADROOM")
-            if snapshot.gpu_free_gib < 8:
-                reasons.append("GPU_HEADROOM")
+            result = self._start_guard.require_before_spawn(scope)
         except Exception as error:
             observations["probe_error"] = type(error).__name__
             reasons.append("RESOURCE_PROBE_FAILED")
+            return not reasons, tuple(reasons), observations
+        observations["start_guard_status"] = result.status
+        observations["start_guard_checks"] = {
+            name: check.status for name, check in sorted(result.checks.items())
+        }
+        if result.snapshot is not None:
+            observations.update(
+                effective_cpu_cores=result.snapshot.effective_cpu_cores,
+                ram_available_bytes=result.snapshot.ram_available_bytes,
+                gpu_free_bytes=result.snapshot.gpu_free_bytes,
+                gpu_uuid=result.snapshot.gpu_uuid,
+            )
+        if result.status == "FAIL":
+            for name, check in sorted(result.checks.items()):
+                if check.status == "FAIL":
+                    reasons.append(check.reason)
+        if result.cleanup_state != "CLEAR":
+            reasons.append(result.cleanup_state)
         return not reasons, tuple(reasons), observations
 
 
@@ -453,14 +503,21 @@ class ProductionExpertValidationService(ExpertValidationService):
     def _worker_count_availability(self):
         """Exact-N availability derived from the shared provider's decisions."""
 
-        from so101_demo.parallel_batch.resource_budget import worker_count_availability
-
-        engine = getattr(getattr(self, "supervisor", None), "preflight_engine", None)
-        gate = getattr(engine, "resource_gate", None)
-        identity = getattr(gate, "execution_identity_sha256", None) if gate else None
-        return worker_count_availability(
-            gate, worker_counts=FIXED_WORKER_COUNTS[1:], batch_id="capabilities",
-            execution_identity_sha256=identity or "0" * 64)
+        configured = getattr(self, "configured_worker_counts", None)
+        if configured is None:
+            configured = tuple(range(2, FIXED_WORKER_COUNTS[-1] + 1))
+        available = set(configured)
+        return tuple(
+            WorkerCountAvailability(
+                worker_count=count,
+                selectable=count in available,
+                status="CONFIGURED" if count in available else "NOT_CONFIGURED",
+                reason_codes=() if count in available else ("DOMAIN_OR_PORT_UNAVAILABLE",),
+                profile_sha256=None,
+                qualification_sha256=None,
+            )
+            for count in FIXED_WORKER_COUNTS[1:]
+        )
 
     def acquire_lease(self, body):
         return asdict(self.lease_service.acquire(body["service_session_id"]))
@@ -1219,12 +1276,7 @@ def default_admission_factory(environment: Mapping[str, str], *, config_path=Non
     degrading to a permissive gate.
     """
 
-    from so101_demo.parallel_batch.resource_budget import (
-        LiveObservationSource, compose_production_admission)
-
-    return compose_production_admission(
-        environment=environment, config_path=config_path,
-        observation_source=LiveObservationSource())
+    return _LazyStartGuard(environment, config_path)
 
 
 def create_production_service(
@@ -1242,6 +1294,8 @@ def create_production_service(
     targets the installed upstream executables.
     """
 
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
+
     environment = dict(os.environ if environment is None else environment)
     layout = ProductionRuntimeLayout.discover(environment)
     state_root = (Path(evidence_root) / "validation-service").resolve()
@@ -1249,12 +1303,12 @@ def create_production_service(
     try:
         owner = ExecutionProcessOwner(store=store)
         if admission_factory is None:
-            resource_gate = default_admission_factory(
+            start_guard = default_admission_factory(
                 environment, config_path=layout.parallel_config_path)
         else:
-            resource_gate = admission_factory(environment)
+            start_guard = admission_factory(environment)
         preflight = PreflightEngine(
-            _HostResourceProbe(resource_gate=resource_gate),
+            _HostResourceProbe(start_guard=start_guard),
             singleton_probe=lambda: not owner.has_active_execution(),
         )
         supervisor = ExpertValidationSupervisor(

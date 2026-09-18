@@ -163,13 +163,91 @@ def test_eight_worker_resource_rejection_keeps_supported_count(tmp_path):
     assert receipt.execution_config.worker_count == 8
 
 
-def test_host_fixed_eight_requires_the_exact_n_gate(monkeypatch):
-    from so101_demo.parallel_batch.resources import ResourceSnapshot, SystemResourceProbe
+def test_host_fixed_eight_without_a_guard_is_refused():
+    """No composed guard means no admission; the probe never fabricates a pass."""
+
     from so101_teleop.expert_validation.production import _HostResourceProbe
     from so101_teleop.expert_validation.preflight import FixedExecutionConfig
-    monkeypatch.setattr(SystemResourceProbe, "snapshot", lambda self: ResourceSnapshot(32, 64, 12))
+
     admitted, reasons, observations = _HostResourceProbe().probe(
         None, FixedExecutionConfig("PARALLEL", 8))
     assert not admitted
-    assert reasons == ("FIXED_WORKER_LIVE_QUALIFICATION_REQUIRED",)
+    assert reasons == ("START_GUARD_UNAVAILABLE",)
     assert observations["requested_worker_count"] == 8
+
+
+def _local_check(self, policy, scope):
+    """Real reads, real decision; only the probe process boundary is replaced."""
+
+    import dataclasses
+    import time
+
+    from so101_demo.parallel_batch import start_guard
+
+    started = time.monotonic()
+    ports = dataclasses.replace(start_guard.host_ports(), busy_window_s=0.0)
+    try:
+        snapshot = start_guard.probe_snapshot(policy, scope, started + policy.timeout_s,
+                                              ports=ports)
+        return start_guard.evaluate_snapshot(snapshot, policy, scope,
+                                             started_monotonic_s=started,
+                                             completed_monotonic_s=time.monotonic())
+    except start_guard.ProbeError as error:
+        return start_guard.GuardResult(
+            scope=scope, status=start_guard.FAIL, started_monotonic_s=started,
+            completed_monotonic_s=time.monotonic(),
+            checks={"probe": start_guard.GuardCheck(start_guard.FAIL, error.reason, None, None,
+                                                   "state")},
+            snapshot=None, cleanup_state="CLEAR")
+
+
+def test_host_fixed_eight_admits_through_the_real_guard(monkeypatch, tmp_path):
+    from so101_demo.parallel_batch.start_guard import StartGuardPolicy
+    from so101_demo.parallel_batch.start_guard_probe import (
+        ProbeCoordinator, compose_default_start_guard)
+    from so101_teleop.expert_validation.production import _HostResourceProbe
+    from so101_teleop.expert_validation.preflight import FixedExecutionConfig
+
+    monkeypatch.setenv("SO101_TASK_ROOT", str(tmp_path))
+    monkeypatch.setattr(ProbeCoordinator, "check", _local_check)
+    policy = StartGuardPolicy()
+    guard = compose_default_start_guard(policy)
+
+    admitted, reasons, observations = _HostResourceProbe(
+        start_guard=guard, gpu_selector="INDEX:0").probe(
+            None, FixedExecutionConfig("PARALLEL", 8))
+
+    assert admitted, reasons
+    assert observations["requested_worker_count"] == 8
+    assert observations["start_guard_status"] in ("PASS", "WARN")
+    assert set(observations["start_guard_checks"]) == {
+        "cpu_capacity", "cpu_busy", "ram", "gpu"}
+
+
+def test_host_probe_reports_a_failing_guard_reason(monkeypatch, tmp_path):
+    """A FAIL from the guard becomes the preflight reason, unchanged."""
+
+    from so101_demo.parallel_batch.start_guard import (
+        FAIL, GuardCheck, GuardResult, StartGuardPolicy)
+    from so101_demo.parallel_batch.start_guard_probe import (
+        EpochStartGuard, ProbeCoordinator)
+    from so101_teleop.expert_validation.production import _HostResourceProbe
+    from so101_teleop.expert_validation.preflight import FixedExecutionConfig
+
+    class RefusingCoordinator(ProbeCoordinator):
+        def check(self, policy, scope):
+            return GuardResult(scope=scope, status=FAIL, started_monotonic_s=0.0,
+                               completed_monotonic_s=0.0,
+                               checks={"gpu": GuardCheck(FAIL, "GPU_FREE_BELOW_MINIMUM",
+                                                         1, 1 << 30, "bytes")},
+                               snapshot=None, cleanup_state="CLEAR")
+
+    policy = StartGuardPolicy()
+    guard = EpochStartGuard(RefusingCoordinator(tmp_path / "state"), policy)
+    admitted, reasons, observations = _HostResourceProbe(
+        start_guard=guard, gpu_selector="INDEX:0").probe(
+            None, FixedExecutionConfig("PARALLEL", 8))
+
+    assert not admitted
+    assert reasons == ("GPU_FREE_BELOW_MINIMUM",)
+    assert observations["start_guard_checks"]["gpu"] == "FAIL"

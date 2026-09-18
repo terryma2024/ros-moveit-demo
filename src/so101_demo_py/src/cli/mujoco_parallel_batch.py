@@ -2505,7 +2505,6 @@ class ProductionBatchComposition:
     ):
         self.worker_servers = []
         self.fixed_control_server = None
-        self.measurement_control = None
         self._server_threads = []
         self.allocator = None
         self.journal = None
@@ -3582,11 +3581,8 @@ class ProductionBatchComposition:
         return self.coordinator.snapshot().terminal_reason == "WEB_CANCEL_REQUESTED"
 
     def _stop_requested(self):
-        """One stop predicate: an owned measurement abort latches before Web state."""
+        """One stop predicate: the owned Web cancel state, and nothing else."""
 
-        measurement_control = getattr(self, "measurement_control", None)
-        if measurement_control is not None and measurement_control.stop_requested():
-            return True
         return self._fixed_web_stop_requested()
 
     def _check_fixed_web_stop(self):
