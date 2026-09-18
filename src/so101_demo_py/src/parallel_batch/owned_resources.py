@@ -495,13 +495,39 @@ class MeasurementSession:
         peaks: dict[str, float] = {}
         samples = 0
         while not self._stopped.is_set() and float(self.clock()) < deadline:
-            observation = self._observe()
             samples += 1
-            for name, value in observation.observed.items():
+            # Cheap host-scale readings on this channel's own clock, comparable with the
+            # primary samples: the full host facts probe costs ~143 ms per tick and starved
+            # the primary sampler (the single 190 ms gap that latched run59).
+            for name, value in self._cheap_peaks().items():
                 peaks[name] = max(peaks.get(name, 0.0), float(value))
             if self._stopped.wait(interval):
                 break
         return {"samples": samples, "interval_s": interval, "peaks": peaks}
+
+    def _cheap_peaks(self) -> dict[str, float]:
+        """Host-scale RAM/GPU/CPU readings that cost milliseconds, not the facts probe."""
+
+        from .resource_measurement import _read_meminfo
+
+        memory = _read_meminfo()
+        device = self.device if self.device is not None else NvmlDevicePort(
+            device_index=self.device_index)
+        facts = device.refresh()
+        used_cores = 0.0
+        try:
+            fields = Path("/proc/stat").read_text().splitlines()[0].split()[1:]
+            busy = sum(int(value) for value in fields[:8]) - int(fields[3])
+            total = sum(int(value) for value in fields[:8])
+            if total > 0:
+                used_cores = (busy / total) * float(os.cpu_count() or 1)
+        except (OSError, IndexError, ValueError):
+            used_cores = 0.0
+        return {
+            "ram_bytes": float(memory["MemTotal"] - memory["MemAvailable"]),
+            "gpu_bytes": float(facts.get("used_bytes", 0)),
+            "cpu_core_equivalent": used_cores,
+        }
 
     def _observe(self):
         if self._observation_source is not None:
