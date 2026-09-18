@@ -7844,3 +7844,40 @@ Eleven of the fourteen fixed-N campaigns have now executed for real: all seven f
 running now, followed by the sequential four-point case.
 
 _Ledger HEAD when written: `add60da97`._
+
+## CP-UQ196 — Two more twenty-point cases pass, and N=8 killed the service during startup
+
+The third 20-point batch ended `1 failed, 4 passed (12.4m)` with the run's own
+`exit_code: 1`. Read from the evidence rather than from the count:
+
+| Case | Slots (leases) | Points | Failed | Terminal | Cleanup | Timing |
+| --- | --- | --- | --- | --- | --- | --- |
+| `fixed-n6-p20` | 6 (3, 3, 4, 3, 4, 3) | 20/20 `PASSED` | none | `COMPLETED` | true | (batch) |
+| `fixed-n7-p20` | 7 (3, 3, 3, 3, 3, 3, 2) | 20/20 `PASSED` | none | `COMPLETED` | true | 5.0 m |
+| `fixed-n8-p20` | **8 registered, 1 lease** | 0 run | — | service died | — | failed at 53 s |
+
+`fixed-n8-p20` failed with `TypeError: fetch failed`, and the cause is not the workload: **the
+deployed service process was gone** when the spec polled it (`/health` and the campaign API both
+dead, no `so101_expert_validation_server` process). The evidence retained on disk:
+
+- the service log ends on ordinary `200 OK` access lines with **no traceback and no error line** —
+  an abrupt external termination, not a Python exception;
+- campaign `…376d5580…` (batch `beedb`) exists with **8 workers registered** but only **one lease
+  granted** and **zero attempts**, i.e. it died inside the eight-sim startup;
+- `dmesg` is not readable from this account and `sudo` is out of scope, so an OOM kill is the
+  leading hypothesis and is recorded as a hypothesis, not a finding;
+- memory measured after the fact is idle again (31 GiB total, 24 GiB available), and no sim,
+  coordinator or broker process was left behind.
+
+The service has been restarted on the **same** state root (`service-light.s2jytgW3`), `/health` ok,
+port 8010 listening, so the failed campaign's evidence stays where it was produced. The next step is
+a **single** retry of `fixed-n8-p20` with the service's exit status captured, so the kill is either
+reproduced with a boundary or shown to be transient — a genuine failure is kept and diagnosed, not
+rerun until green.
+
+With this, thirteen of the fourteen fixed-N campaigns have executed for real: all seven four-point
+options and six of the seven twenty-point ones (N=2..7), each with its own evidence file,
+`requested == evaluated`, lease counts that multiply out to the point count, no failed points and
+complete cleanup.
+
+_Ledger HEAD when written: `8d7e50e3b`._
