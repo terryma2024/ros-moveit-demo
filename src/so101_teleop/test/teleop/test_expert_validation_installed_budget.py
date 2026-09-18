@@ -291,6 +291,15 @@ def _installed_child_environment(extra: dict) -> dict:
         "SO101_VALIDATION_EVIDENCE_ROOT", str(Path(extra["SO101_VALIDATION_POINTS"]).parent))
     environment["PYTHONPATH"] = ":".join(
         [str(demo), str(teleop), str(support), *underlay, test_site])
+    # ament must resolve the packages from the copied prefixes for the installed
+    # module-identity check, never from the dev overlay.
+    environment["AMENT_PREFIX_PATH"] = ":".join([
+        str(OFFLINE_INSTALL / "so101_demo_py"),
+        str(OFFLINE_INSTALL / "so101_teleop"),
+        str(OFFLINE_INSTALL / "so101_mujoco_support"),
+        *[p.rsplit("/lib/python3.12/site-packages", 1)[0] for p in underlay],
+        "/opt/ros/jazzy",
+    ])
     environment["TMPDIR"] = extra["_TMPDIR"]
     environment["TMP"] = extra["_TMPDIR"]
     environment["TEMP"] = extra["_TMPDIR"]
