@@ -6188,3 +6188,27 @@ first time the teleop directory form has been green for a real reason rather tha
 "optional because CTest passed".
 
 _Ledger HEAD when written: `7a1fcf6b5`._
+
+
+## CP-UQ140 — Correction f1308af3, part 9: the second evidence pass is preserved
+
+The evidence produced *after* the first preservation is now inside the task root too, at
+`correction-f1308af3-79a8-41a1-bbe5-03968a781103/evidence/` (23 files total), with
+`preservation-manifest-v2.json` recording, per file, the source and destination sizes, both
+sha256 values, a readback comparison and the disposition (`COPIED` / `ALREADY_PRESENT`). This
+pass covers `deploy-final.json` (the redeployed service's facts), the rebuild log, the
+recollection/argv/coverage scripts and their outputs, and the still-running full-gate log. All
+10 entries are present with matching readback; the originals in `/tmp` are untouched.
+
+Correction status at this point, stated plainly: items 1, 3, 4, 6 and 7 are done and verified
+(the delegation root fix with real-root argv evidence, the teleop coverage repair to
+`coverage_exact: true` with exit 0, the 3236/3238 reconciliation by fresh collection, the
+evidence preservation, and the end-to-end capabilities repair verified on the redeployed
+service). Item 5's rule is satisfied for the copy actually in use (byte-verified before the
+redeploy). Item 2's positive half remains: a **bounded** delegated run on the real demo package
+root whose serial lane executes only the audited conflicts and whose executed multiset equals
+that run's own collection — the demo root's audit runner is long-running, so this needs a round
+that can wait for it (the CP-UQ128 runs are still occupying that path and are being left
+undisturbed as instructed). Task 11's functional manifest and acceptance remain after that.
+
+_Ledger HEAD when written: `5b9416795`._
