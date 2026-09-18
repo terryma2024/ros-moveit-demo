@@ -7053,3 +7053,71 @@ campaign) is in flight against this service. Its purpose is narrow and stated: g
 happens.
 
 _Ledger HEAD when written: `01e920ca0`._
+
+## CP-UQ174 — The broker is fixed; the worker's sim now dies in a SetPause callback inside the evidence plugin
+
+The rebuilt image did what it was supposed to. With the new image behind the unchanged tag, the
+coordinator got past `_wait_broker_ready`, the broker container came up (image `0b893cb1528e`), the
+worker's MuJoCo stack launched, controllers reached `active`, `scene_setup` read back
+`success: true`, and the readiness line printed:
+
+```
+{"evidence": {"actions": {...all true...}, "controllers": {"arm_controller": "active", ...},
+ "services": {"/apply_planetary_scene": true, ...}}, "failure_code": null, "phase": "READY", "ready": true}
+```
+
+So the campaign now fails **later and for a different reason**, and it fails with a real stack trace
+rather than a guess. `ros2_control_node` segfaults:
+
+```
+[ros2_control_node-4] Stack trace (most recent call last) in thread 2275008:
+[ros2_control_node-4] #17 ... rclcpp::executors::MultiThreadedExecutor::run(unsigned long)
+[ros2_control_node-4] #15 ... rclcpp::Executor::execute_service(std::shared_ptr<rclcpp::ServiceBase>)
+[ros2_control_node-4] #13 ... rclcpp::Service<mujoco_ros2_control_msgs::srv::SetPause>::handle_request(...)
+[ros2_control_node-4] #3  ... mujoco_ros2_control::MujocoSystemInterface::set_pause_callback(...)
+[ros2_control_node-4] #2  Object ".../dev-install/so101_mujoco_support/lib/libso101_simulation_evidence_plugin.so"
+[ros2_control_node-4] #1  Object ".../libso101_simulation_evidence_plugin.so"
+[ros2_control_node-4] #0  Object ".../libso101_simulation_evidence_plugin.so"
+[ros2_control_node-4] Segmentation fault (Address not mapped to object [0xf0])
+[INFO] [launch]: process[ros2_control_node-4] was required: shutting down launched system
+```
+
+`#0`-`#2` are in the task-owned plugin, reached from the `SetPause` service through
+`MujocoSystemInterface::set_pause_callback`. That is a different layer from everything this plan has
+touched so far (Python runtime, contracts, web, deployment), and the stack names the boundary
+exactly: the plugin's pause hook, not the guard, not the broker, not the contract.
+
+Two claims I had to check and can now state with evidence:
+
+- **Camera rendering is not the failure.** The log shows the EGL path succeeding
+  (`EGL: Successfully initialized headless OpenGL context`, `Initializing rendering for cameras
+  (using EGL)`, `Starting the camera rendering loop, publishing at 10.000000 Hz`,
+  `Resized offscreen buffer to 640 x 480`). The `OpenGL error 0x502` line is a warning, not the
+  cause. My earlier hypothesis that the missing display broke GLFW was wrong in its conclusion even
+  though the GLFW warning is real: `docs/experiments/v5-t003-text-agent-experiment-ledger.md`
+  (RULING-EXP-002-002) already records that on ai-station `DISPLAY=:1` "could not create a GLFW
+  window" and that `headless:=true` is the supported equivalent, with `sensor_rendering:=false`
+  sufficient for the truth-bridge qualification. Adding `DISPLAY`/`XAUTHORITY` to the service
+  therefore changed nothing, which the identical crash with and without it confirms.
+- **The coordinator is reaped, the campaign is not.** After the node died the launch system shut
+  down cleanly (static transforms, `robot_state_publisher`, `move_group` all exited cleanly,
+  `cleanup-gates.json` shows `cleanup_gates_passed: true`), the coordinator process is gone, and no
+  broker container is running — yet
+  `GET /expert-validation/campaigns/campaign-42256e0cfe354e479fff673a1172b68e` still reports
+  `status: RUNNING` with all four points `UNRUN` and `batch_cleanup_complete: false`. The spec that
+  launched it is still polling. That is a supervision observation worth keeping: a worker whose sim
+  dies after READY leaves the projection non-terminal rather than failed.
+
+The plugin's own history is not obviously implicated: `git log -- src/so101_mujoco_support` ends at
+`5cc2b6644 fix: guard incomplete MuJoCo contact snapshots`, and this plan has not modified that
+package. What is *not* yet established is whether the crash is (a) a latent race in the plugin's
+pause hook that the camera rendering thread makes reachable, (b) specific to this deployment's
+plugin build (`dev-install/…/libso101_simulation_evidence_plugin.so`, built 11:31 today), or (c)
+present in the ordinary single-robot path too. The next experiment is chosen to separate those:
+launch the documented supported stack directly
+(`so101_mujoco_task_station.launch.py headless:=true sensor_rendering:=true include_teleop:=false`)
+in a private `ROS_DOMAIN_ID` and call `/mujoco_ros2_control_node/set_pause` once — a minimal repro
+that does not need the service, the lease or a campaign, then repeat with the single variable
+`sensor_rendering:=false`.
+
+_Ledger HEAD when written: `dc2bea5aa`._
