@@ -2878,3 +2878,44 @@ evidence: scratch/stageB-layout2.U0OFWcl6/layout.log, scratch/stageB-layout.wXew
 decision: KEEP
 next_experiment: EXP-UQ37 Stage B owned Web start and readback on the production freeze
 ```
+
+```yaml
+checkpoint_id: CP-UQ37
+last_valid_experiment: EXP-UQ37
+current_hypothesis: Stage B owned Web refresh/start on the production freeze is complete and read back;
+  the service truthfully reports every exact-N budget as unselectable/NOT_MEASURED.
+goal: goal-d30193b8-a2e5-495d-b6c7-6879782448ac (round 3)
+web_start:
+  - "First attempt (scratch/stageB-webstart.Y92HUi74/server.log, retained): declaring only
+    SO101_VALIDATION_PROVENANCE_BINDING made the frozen revision refuse with
+    ContractError(BUDGET_PROFILE_UNAVAILABLE: incomplete authority [...]) - partial authority is rejected
+    by design."
+  - "Owned start (scratch/stageB-webstart2.zMVk9xRa/): launcher
+    freeze-install/so101_teleop/lib/so101_teleop/so101_expert_validation_server.py via the task venv,
+    PID 1945387, started 2026-09-18 21:18:17, private scratch TMPs, NO production authority declared.
+    Uvicorn serves http://127.0.0.1:8010."
+readback:
+  - "GET /health -> 200 {\"ok\":true,\"service\":\"expert-validation\"}."
+  - "GET / -> 307 redirect to http://127.0.0.1:8010/expert-validation (Web UI route)."
+  - "GET /expert-validation/capabilities -> available true, fixed_worker_counts [1..8],
+    worker_count_availability entries selectable=false: every real exact-N budget is NOT_MEASURED and no
+    availability is fabricated."
+  - "Routes: /health, /expert-validation/{capabilities,campaigns,campaigns/preflight,lease,manifests,
+    artifacts} plus cancel and full-restart-retries."
+  - "Audited Web dist: freeze-install/so101_teleop/share/so101_teleop/web/index.html
+    sha256 8e1cb7ee86b74c220e211eb9003bf2ecbb4557593af88e5f279aeea6ede3d3d3."
+next_commands:
+  - "GET /expert-validation (UI asset bytes vs the freeze dist) and GET /expert-validation/lease for the
+    store/fence/lease state; then the owned recovery readback with
+    so101_expert_validation_recover.py, applying only if a fresh ownership check requires it."
+  - "Stage C: capability probe inside a manager-delegated unit, then sealed N1 calibration; Stage D
+    approval packets; Stage E owned Chrome for the signed N1/Nx."
+inferred:
+  - Stage B's owned window is satisfied for the Web refresh/start; the service is up on 8010 and honest
+    about unmeasured budgets.
+conclusion: GOAL ROUND 3/4 - Stage B Web start verified.
+evidence: scratch/stageB-webstart2.zMVk9xRa/{server.log,readback.log,routes.log,endpoints.log,start-web.sh},
+  scratch/stageB-webstart.Y92HUi74/server.log
+decision: KEEP
+next_experiment: EXP-UQ38 Stage B UI/lease/recovery readback, then Stage C delegated-measurement path
+```
