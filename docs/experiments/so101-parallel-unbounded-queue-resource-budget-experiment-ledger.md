@@ -3586,3 +3586,29 @@ What run19 does establish, and it is worth keeping:
   truthful declaration of these prefixes still fails.
 
 N1 remains `NOT_MEASURED`; nothing is extrapolated to another N.
+
+## CP-UQ62 — Stage C: the trace input was stale, and what the refusal must be instead
+
+Two facts settled this round, and one diagnostic invalidated:
+
+- run19's overlay document is correct for the containment rule that CP-UQ60/CP-UQ61 chased:
+  `install_root` is `candidate-install` and both declared prefixes are
+  `candidate-install/so101_demo_py` and `candidate-install/so101_mujoco_support`, each therefore
+  relative to it, each a real directory, each carrying an AMENT resource-index marker
+  (`share/ament_index/resource_index/packages/so101_demo_py` exists in both the candidate install
+  and `dev-install`).
+- The traced call that reported line 863 passed **run17's** overlay document, not run19's: the
+  trace script reads a fixed path, and run17 predates the prefix fix. Its conclusion is therefore
+  void, and line 863 (`prefix.relative_to(install_root)`) cannot be the check that refuses run19's
+  document, since that document satisfies it by construction.
+
+So the refusal run19 hits is a different check in the candidate copy that raises the same code --
+the AMENT re-query (`get_package_prefix(package) != expected_prefix`) is the remaining candidate.
+The next diagnostic is one substitution: point the trace at
+`stage-c/batches/n1-calibration-20260918-run19/raw/overlay-provenance-binding.json` (or re-run it
+against the newest batch), keep the child's PATH/PYTHONPATH/AMENT_PREFIX_PATH as
+`child_environment_for_launcher` builds them, and print the raising line of the *candidate* copy.
+That names the branch instead of inferring it, which is the lesson of this round: CP-UQ58 read an
+empty log as success and CP-UQ61's trace read a stale document as evidence.
+
+N1 remains `NOT_MEASURED`; nothing is extrapolated to another N.
