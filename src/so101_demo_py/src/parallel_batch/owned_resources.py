@@ -677,6 +677,10 @@ class MeasurementSession:
                 }, sort_keys=True) + "\n")
             if self.control is not None:
                 self.control.observe_sample(sample.sequence, sample.monotonic_s)
+                if float(sample.observation.observed.get("cpu_core_equivalent", 0.0)) > 0.0:
+                    # Readiness: the workload is doing real work, so the cold-start window
+                    # closes here instead of after a guessed duration.
+                    self.control.mark_workload_active(self.clock())
                 self.control.check_health(
                     self.clock(), sampler_alive=True,
                     endpoint_healthy=bool(self._control_socket is not None),
