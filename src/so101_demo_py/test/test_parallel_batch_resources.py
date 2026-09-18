@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from dataclasses import FrozenInstanceError
 import fcntl
 import hashlib
@@ -37,6 +37,7 @@ from so101_demo.parallel_batch.resources import (
 
 PACKAGE = Path(__file__).resolve().parents[1]
 CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v1.yaml'
+CLI_CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v2.yaml'
 _ROOT_IDS = itertools.count()
 _ROOTS = {}
 
@@ -111,6 +112,40 @@ def allocator(tmp_path, config, probe=None, environment=None, suffix='batch'):
         claim_root=claim_root(),
     )
 
+
+class _SyntheticAdmissionGate:
+    """Offline exact-N gate for the production CLI/manifest tests."""
+
+    execution_identity_sha256 = "a" * 64
+
+    def __init__(self, code=None):
+        self.code = code
+        self.requests = []
+
+    def admit(self, request):
+        from so101_demo.parallel_batch.resource_budget import ResourceBudgetAdmission
+        self.requests.append(request)
+        admitted = self.code is None
+        return ResourceBudgetAdmission(
+            admitted=admitted,
+            reason_codes=() if admitted else (self.code,),
+            worker_count=request.worker_count,
+            profile_sha256="b" * 64,
+            qualification_sha256="c" * 64,
+            execution_identity_sha256=request.execution_identity_sha256,
+            observation_monotonic_s=1.0)
+
+
+@pytest.fixture(autouse=True)
+def synthetic_resource_gate(monkeypatch):
+    """Offline gate for CLI paths; the allocator unit fixtures keep their own policy."""
+
+    import so101_demo.cli.mujoco_parallel_batch as parallel_cli
+    import so101_demo.parallel_batch.resources as resources_module
+    gate = _SyntheticAdmissionGate()
+    monkeypatch.setattr(resources_module, "_DEFAULT_RESOURCE_GATE", gate)
+    monkeypatch.setattr(parallel_cli, "_DEFAULT_RESOURCE_GATE", gate)
+    return gate
 
 def resource_root(tmp_path, suffix='batch'):
     """Keep UDS fixtures in this registered scratch tree without pytest's deep suffix."""
@@ -670,7 +705,7 @@ def production_batch_argv(
     points = PACKAGE / 'config/mujoco/moveit_expert_validation_points_v1.yaml'
     values = [
         '--points', str(points),
-        '--config', str(CONFIG_PATH),
+        '--config', str(CLI_CONFIG_PATH),
         '--batch-id', 'three-worker-headroom-test',
         '--worker-count', worker_count,
         '--evidence-root', str(root),
@@ -695,115 +730,79 @@ def production_batch_argv(
     return values
 
 
-def test_production_cli_composes_three_workers_with_current_accepted_headroom(
-    tmp_path, config,
-):
-    from so101_demo.cli.mujoco_parallel_batch import (
-        ProductionBatchComposition,
-        prepare_batch,
-    )
+def test_production_cli_composes_three_workers_with_an_admitted_exact_n_gate(tmp_path):
+    """Version two composes N=3 through the exact-N gate, not the retired evidence chain."""
 
-    evidence, acceptance, provenance_probe = accepted_live_evidence(tmp_path, config)
+    from so101_demo.cli.mujoco_parallel_batch import (
+        ProductionBatchComposition, prepare_batch)
+
     root = resource_root(tmp_path, 'cli-three-valid')
     prepared = prepare_batch(
-        production_batch_argv(
-            root,
-            evidence=evidence,
-            acceptance=acceptance,
-            current_provenance_root=next(
-                iter(provenance_probe.current_paths.values())
-            ).parent,
-        ),
+        production_batch_argv(root, worker_count='3'),
         provenance_verifier=lambda _inputs: {'source_commit': 'a' * 40},
     )
     composition = ProductionBatchComposition(
-        prepared,
-        resource_probe=FakeProbe(),
-        claim_root=claim_root(),
-    )
+        prepared, resource_probe=FakeProbe(), claim_root=claim_root())
     try:
         assert composition.resource_manifest.worker_count == 3
         assert composition.resource_manifest.requested_worker_count == 3
-        assert composition.resource_manifest.live_headroom_evidence[
-            'accepted_batch_id'
-        ] == 'accepted-two-worker-live-001'
     finally:
         composition._release_partial()
 
 
-def test_production_cli_rejects_absent_three_worker_headroom(tmp_path):
+def test_production_cli_rejects_three_workers_without_an_exact_n_authority(tmp_path, monkeypatch):
+    import so101_demo.cli.mujoco_parallel_batch as parallel_cli
     from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
 
-    with pytest.raises(CliError, match='THREE_WORKER_LIVE_EVIDENCE_REQUIRED'):
+    monkeypatch.setattr(parallel_cli, '_DEFAULT_RESOURCE_GATE', None)
+    with pytest.raises(CliError, match='BUDGET_PROFILE_UNAVAILABLE'):
         prepare_batch(
             production_batch_argv(resource_root(tmp_path, 'cli-three-absent')),
             provenance_verifier=lambda _inputs: {'source_commit': 'a' * 40},
         )
 
 
-def test_production_cli_rejects_headroom_authority_for_two_workers(
-    tmp_path, config,
-):
+def test_production_cli_refuses_retired_headroom_authority_for_any_n(tmp_path, config):
     from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
 
     evidence, acceptance, provenance_probe = accepted_live_evidence(tmp_path, config)
-    with pytest.raises(CliError, match='LIVE_HEADROOM_EVIDENCE_UNEXPECTED'):
-        prepare_batch(
-            production_batch_argv(
-                resource_root(tmp_path, 'cli-two-unexpected'),
-                worker_count='2',
-                evidence=evidence,
-                acceptance=acceptance,
-                current_provenance_root=next(
-                    iter(provenance_probe.current_paths.values())
-                ).parent,
-            ),
-            provenance_verifier=lambda _inputs: {'source_commit': 'a' * 40},
-        )
+    for worker_count in ('2', '3'):
+        with pytest.raises(CliError, match='LIVE_HEADROOM_EVIDENCE_UNEXPECTED'):
+            prepare_batch(
+                production_batch_argv(
+                    resource_root(tmp_path, f'cli-legacy-{worker_count}'),
+                    worker_count=worker_count,
+                    evidence=evidence,
+                    acceptance=acceptance,
+                    current_provenance_root=next(
+                        iter(provenance_probe.current_paths.values())
+                    ).parent,
+                ),
+                provenance_verifier=lambda _inputs: {'source_commit': 'a' * 40},
+            )
 
 
-def test_production_cli_rejects_stale_three_worker_current_provenance(
-    tmp_path, config,
-):
-    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
-
-    evidence, acceptance, provenance_probe = accepted_live_evidence(tmp_path, config)
-    stale = provenance_probe.current_paths['scene_sha256']
-    stale.chmod(0o600)
-    stale.write_text('{}', encoding='utf-8')
-    stale.chmod(0o400)
-    with pytest.raises(CliError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'):
-        prepare_batch(
-            production_batch_argv(
-                resource_root(tmp_path, 'cli-three-stale'),
-                evidence=evidence,
-                acceptance=acceptance,
-                current_provenance_root=stale.parent,
-            ),
-            provenance_verifier=lambda _inputs: {'source_commit': 'a' * 40},
-        )
-
-
-def test_production_cli_rejects_forged_three_worker_acceptance(tmp_path, config):
+def test_production_cli_refuses_forged_or_stale_legacy_evidence(tmp_path, config):
     from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
 
     evidence, acceptance, provenance_probe = accepted_live_evidence(tmp_path, config)
     document = json.loads(acceptance.read_text(encoding='utf-8'))
     document['candidate_manifest_sha256'] = '0' * 64
     acceptance.write_text(json.dumps(document), encoding='utf-8')
-    with pytest.raises(CliError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'):
+    stale = provenance_probe.current_paths['scene_sha256']
+    stale.chmod(0o600)
+    stale.write_text('{}', encoding='utf-8')
+    stale.chmod(0o400)
+    with pytest.raises(CliError, match='LIVE_HEADROOM_EVIDENCE_UNEXPECTED'):
         prepare_batch(
             production_batch_argv(
                 resource_root(tmp_path, 'cli-three-forged'),
                 evidence=evidence,
                 acceptance=acceptance,
-                current_provenance_root=next(
-                    iter(provenance_probe.current_paths.values())
-                ).parent,
+                current_provenance_root=stale.parent,
             ),
             provenance_verifier=lambda _inputs: {'source_commit': 'a' * 40},
         )
-
 
 def rewrite_accepted_artifact(evidence, acceptance_path, name, **changes):
     sealed = evidence.parent
@@ -2876,7 +2875,7 @@ def test_dry_run_cli_writes_private_manifest_without_starting_processes(tmp_path
     exit_code = main(
         [
             '--config',
-            str(CONFIG_PATH),
+            str(CLI_CONFIG_PATH),
             '--worker-count',
             '2',
             '--evidence-root',
@@ -2896,7 +2895,7 @@ def test_dry_run_cli_writes_private_manifest_without_starting_processes(tmp_path
     assert [worker['ros_domain_id'] for worker in document['workers']] == [181, 182]
 
 
-def test_default_three_worker_cli_rejects_self_signed_live_headroom_evidence(
+def test_default_three_worker_cli_refuses_retired_self_signed_evidence(
     tmp_path, config, monkeypatch
 ):
     root = resource_root(tmp_path, 'dry-three')
@@ -2913,7 +2912,7 @@ def test_default_three_worker_cli_rejects_self_signed_live_headroom_evidence(
     exit_code = main(
         [
             '--config',
-            str(CONFIG_PATH),
+            str(CLI_CONFIG_PATH),
             '--worker-count',
             '3',
             '--live-headroom-evidence',
@@ -2936,7 +2935,7 @@ def test_cli_requires_dry_run_and_does_not_create_output(tmp_path):
         main(
             [
                 '--config',
-                str(CONFIG_PATH),
+                str(CLI_CONFIG_PATH),
                 '--evidence-root',
                 str(root),
             ],
@@ -2970,3 +2969,61 @@ def test_fixed_eight_rejects_missing_live_qualification_before_domain_claims(tmp
         assert not owner.evidence_root.exists()
     finally:
         owner.close()
+
+
+def test_v2_adopt_existing_rechecks_budget_and_provenance(tmp_path):
+    """The version-two restore path re-runs the same provider and refuses drift."""
+
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v2
+    from so101_demo.parallel_batch.resources import (
+        ResourceAllocationError, WorkerResourceAllocator)
+
+    config = load_parallel_runtime_config_v2(CLI_CONFIG_PATH)
+    root = resource_root(tmp_path, 'v2-adopt')
+
+    def build(gate):
+        return WorkerResourceAllocator(
+            config, root, probe=FakeProbe(), base_environment={},
+            claim_root=claim_root(), resource_gate=gate)
+
+    original = build(_SyntheticAdmissionGate())
+    try:
+        manifest = original.allocate(worker_count=2)
+        assert manifest.schema_version == 2
+        assert manifest.live_headroom_evidence['profile_sha256'] == 'b' * 64
+    finally:
+        original.close()
+
+    # A background/live refusal is reported with the provider's own code.
+    refusing = build(_SyntheticAdmissionGate(code='BACKGROUND_ENVELOPE_EXCEEDED'))
+    try:
+        with pytest.raises(ResourceAllocationError) as error:
+            refusing.adopt_existing(manifest)
+        assert 'BACKGROUND_ENVELOPE_EXCEEDED' in str(error.value)
+        assert refusing.manifest is None
+    finally:
+        refusing.close()
+
+    # A different recorded profile identity is a runtime fingerprint mismatch.
+    drifted_gate = _SyntheticAdmissionGate()
+    drifted_gate.execution_identity_sha256 = 'a' * 64
+    drifted = build(drifted_gate)
+    drifted_manifest = replace(
+        manifest,
+        live_headroom_evidence={**dict(manifest.live_headroom_evidence),
+                                'profile_sha256': 'd' * 64})
+    try:
+        with pytest.raises(ResourceAllocationError) as error:
+            drifted.adopt_existing(drifted_manifest)
+        assert 'RUNTIME_FINGERPRINT_MISMATCH' in str(error.value)
+    finally:
+        drifted.close()
+
+    # A retained version-one manifest can never start a version-two restore.
+    legacy = build(_SyntheticAdmissionGate())
+    try:
+        with pytest.raises(ResourceAllocationError) as error:
+            legacy.adopt_existing(replace(manifest, schema_version=1))
+        assert 'LEGACY_CONTRACT_EXECUTION_FORBIDDEN' in str(error.value)
+    finally:
+        legacy.close()

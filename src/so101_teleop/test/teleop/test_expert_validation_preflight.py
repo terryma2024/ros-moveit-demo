@@ -76,13 +76,13 @@ def _request(tmp_path, mode="PARALLEL", count=4, **changes):
     return CampaignStartRequest(**values)
 
 
-def test_fixed_default_k_uses_ceiling_capacity(tmp_path):
+def test_fixed_selection_capacity_is_shared_and_quota_free(tmp_path):
     receipt = PreflightEngine(Resources()).preflight(
         _request(tmp_path, mode="PARALLEL", count=5, worker_count=2)
     )
     assert receipt.admitted
-    assert receipt.execution_config.max_points_per_worker == 3
-    assert receipt.capacity == 6
+    assert not hasattr(receipt.execution_config, "max_points_per_worker")
+    assert receipt.capacity == 5
 
 
 @pytest.mark.parametrize(
@@ -100,13 +100,14 @@ def test_fixed_worker_count_is_closed(tmp_path, mode, worker_count, error):
         )
 
 
-def test_fixed_capacity_shortfall_is_rejected_without_downgrade(tmp_path):
+def test_fixed_legacy_quota_is_refused_without_downgrade(tmp_path):
     resources = Resources(admitted=False, reasons=("GPU_HEADROOM",))
     receipt = PreflightEngine(resources).preflight(
         _request(tmp_path, count=5, worker_count=2, max_points_per_worker=2)
     )
     assert not receipt.admitted
-    assert receipt.reason_codes == ("INSUFFICIENT_CAPACITY", "GPU_HEADROOM")
+    assert receipt.reason_codes == (
+        "LEGACY_MAX_POINTS_PER_WORKER_UNSUPPORTED", "GPU_HEADROOM")
     assert receipt.execution_config.worker_count == 2
 
 
@@ -146,28 +147,29 @@ def test_receipt_binds_canonical_request_session_and_expiry(tmp_path):
 @pytest.mark.parametrize("workers,maximum,capacity", [(2, 10, 20), (8, 3, 24)])
 def test_fixed_twenty_points_keeps_exact_requested_capacity(tmp_path, workers, maximum, capacity):
     receipt = PreflightEngine(Resources()).preflight(
-        _request(tmp_path, count=20, worker_count=workers, max_points_per_worker=maximum))
+        _request(tmp_path, count=20, worker_count=workers))
     assert receipt.admitted
-    assert receipt.capacity == capacity
+    assert receipt.capacity == 20
     assert receipt.execution_config.worker_count == workers
-    assert receipt.execution_config.max_points_per_worker == maximum
+    assert not hasattr(receipt.execution_config, "max_points_per_worker")
 
 
 def test_eight_worker_resource_rejection_keeps_supported_count(tmp_path):
     receipt = PreflightEngine(Resources(False, ("CPU_HEADROOM",))).preflight(
-        _request(tmp_path, count=20, worker_count=8, max_points_per_worker=3))
+        _request(tmp_path, count=20, worker_count=8))
     assert not receipt.admitted
     assert receipt.reason_codes == ("CPU_HEADROOM",)
-    assert receipt.capacity == 24
+    assert receipt.capacity == 20
     assert receipt.execution_config.worker_count == 8
 
 
-def test_host_fixed_eight_remains_unqualified_even_with_enough_resources(monkeypatch):
+def test_host_fixed_eight_requires_the_exact_n_gate(monkeypatch):
     from so101_demo.parallel_batch.resources import ResourceSnapshot, SystemResourceProbe
     from so101_teleop.expert_validation.production import _HostResourceProbe
     from so101_teleop.expert_validation.preflight import FixedExecutionConfig
     monkeypatch.setattr(SystemResourceProbe, "snapshot", lambda self: ResourceSnapshot(32, 64, 12))
-    admitted, reasons, observations = _HostResourceProbe().probe(None, FixedExecutionConfig("PARALLEL", 8, 3))
+    admitted, reasons, observations = _HostResourceProbe().probe(
+        None, FixedExecutionConfig("PARALLEL", 8))
     assert not admitted
     assert reasons == ("FIXED_WORKER_LIVE_QUALIFICATION_REQUIRED",)
     assert observations["requested_worker_count"] == 8

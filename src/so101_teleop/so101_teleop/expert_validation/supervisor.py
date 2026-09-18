@@ -160,7 +160,6 @@ class ExpertValidationSupervisor:
                 "--config", str(request.parallel_config_path),
                 "--batch-id", batch_id,
                 "--worker-count", str(config.worker_count),
-                "--max-points-per-worker", str(config.max_points_per_worker),
                 "--evidence-root", str(batch_root),
                 "--broker-image", request.broker_image_id,
                 "--yolo-weights", str(request.yolo_weights_path),
@@ -187,7 +186,6 @@ class ExpertValidationSupervisor:
                 batch_id=batch_id,
                 execution_mode=config.execution_mode,
                 worker_count=config.worker_count,
-                max_points_per_worker=config.max_points_per_worker,
                 argv=tuple(argv),
                 environment=environment,
                 batch_root=batch_root,
@@ -287,7 +285,8 @@ class ExpertValidationSupervisor:
                 coordinator_epoch=1,
             )
             self.store.bind_retry_batch(batch)
-            config = FixedExecutionConfig("SEQUENTIAL", 1, 1)
+            # Manual business-failure retry stays an independent single-point N1 batch.
+            config = FixedExecutionConfig("SEQUENTIAL", 1)
             receipt = type("RetryReceipt", (), {"execution_config": config})()
             owner_request = self._owner_request(
                 original, receipt, batch_id, batch_root, point_ids=(item.point_id,)
