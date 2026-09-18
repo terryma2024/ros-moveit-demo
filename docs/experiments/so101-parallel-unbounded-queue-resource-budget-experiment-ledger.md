@@ -523,3 +523,78 @@ disproven_routes:
 open_risks:
   - Real host stop latency and owned-group containment are unmeasured and require the Stage C window.
 next_command: implement Task 6 RED (quantized 1x window and two non-overlapping deficits)
+
+## EXP-UQ06 — Task 6 sampler, clock estimator and candidate CLI
+
+```yaml
+experiment_id: EXP-UQ06
+status: VALID
+prior_experiment: EXP-UQ05
+hypothesis: A closed measurement authorization plus an interval-based clock estimator can qualify or
+  refuse a candidate batch, and sealing can produce a candidate-only B document.
+prediction: RED fails with the module absent; GREEN passes the quantized-1x, two-deficit, overlap,
+  stale-window, authorization and sealing tests plus the CLI refusal tests.
+single_variable: resource_measurement module, candidate CLI and its console script
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Task 5 committed; synthetic raw files; no ROS, no service start.
+success_criteria:
+  - rtf_interval keeps a quantized 1x window healthy and exposes a real deficit's upper bound.
+  - Two complete non-overlapping deficit windows fail; an overlapping window never double counts.
+  - Stale/ineligible windows and out-of-range authorization fields are refused.
+  - Sealing writes canonical candidate-only bytes with no P/M/D reference; the CLI refuses wrong hash,
+    intent mismatch, expiry, non-null deployment refs, out-of-evidence-root batch roots and missing
+    host measurement capability.
+failure_criteria:
+  - Any epsilon back-fill from failed samples, any profile reference in B, or a CLI that starts work
+    without capability.
+invalid_criteria:
+  - Treating the fail-closed runtime refusal as a measurement failure.
+provenance:
+  source_commit: d7caaaf4f (Task 5 checkpoint; this task's parent commit)
+  install_overlay: $TASK_ROOT/dev-build + dev-install (symlink-install dev overlay)
+  runtime_executable: the exact shared TEST_PYTHON above
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: so101_pytest measurement-red src/so101_demo_py/test/test_parallel_resource_measurement.py -q
+    exit_code: 1
+  - command: so101_pytest measurement-green src/so101_demo_py/test/test_parallel_resource_measurement.py src/so101_demo_py/test/test_parallel_measurement_cli.py -q
+    exit_code: 0
+observed:
+  - RED: collection error with ModuleNotFoundError for resource_measurement.
+  - GREEN scratch/measurement-green.*: 11 passed, 0 failed (6 measurement + 5 CLI tests).
+  - Fixed during GREEN without weakening assertions: QUALIFICATION intent without a calibration hash now
+    raises CALIBRATION_EVIDENCE_REQUIRED before the generic sha check, and the CLI reports refused codes
+    for OSError as well as ContractError.
+  - Real host facts are read only through /proc (meminfo, vmstat, pressure); NVML and delegated cgroup v2
+    are required capabilities and their absence aborts with MEASUREMENT_CAPABILITY_MISSING.
+  - KNOWN LIMIT (honest): the candidate CLI validates authority/config/capabilities, binds the owned
+    measurement context and then refuses with MEASUREMENT_RUNTIME_UNAVAILABLE because the composition
+    runner hook that would spawn the owned workload is not yet wired. No measurement can start from this
+    CLI until that hook exists in Stage B/C. The CLI never reads an approved profile.
+inferred:
+  - Clock epsilon values remain NOT_MEASURED; the estimator only proves the arithmetic and the
+    non-overlap discipline.
+conclusion: VALID at offline level with an explicitly recorded runtime-wiring gap.
+evidence:
+  - scratch/measurement-red.*, scratch/measurement-green.*
+decision: KEEP
+next_experiment: EXP-UQ07
+```
+
+```yaml
+checkpoint_id: CP-UQ06
+last_valid_experiment: EXP-UQ06
+current_hypothesis: The coordinator can drop the lifetime quota and converge on NO_RECOVERABLE_WORKERS.
+working_tree_status: Task 6 files committed
+owned_processes: NONE
+preserved_processes: NONE from this task family
+confirmed_conclusions:
+  - Authorization/estimator/sealing implemented; candidate runtime hook still missing (EXP-UQ06).
+disproven_routes:
+  - Letting a failed sample enlarge epsilon, or letting B reference a profile.
+open_risks:
+  - Candidate CLI cannot yet start the owned workload; Stage C cannot begin until that hook is built and
+    an authorized measurement window exists.
+next_command: implement Task 7 RED (one worker consumes twenty without a lifetime quota)
