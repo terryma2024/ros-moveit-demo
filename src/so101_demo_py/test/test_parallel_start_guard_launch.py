@@ -27,14 +27,25 @@ V2_CONFIG = WORKTREE / "src/so101_demo_py/config/mujoco/parallel_batch_v2.yaml"
 
 
 def _installed_prefix() -> Path:
-    """The install under test: an explicit copied prefix wins, otherwise the active overlay."""
+    """The demo package prefix: an explicit copy (base/so101_demo_py) or the active overlay."""
 
     explicit = os.environ.get("SO101_E2E_INSTALL_PREFIX")
     if explicit:
-        return Path(explicit).resolve()
+        base = Path(explicit).resolve()
+        return (base / "so101_demo_py").resolve() if (base / "so101_demo_py").is_dir() else base
     from ament_index_python.packages import get_package_prefix
 
     return Path(get_package_prefix("so101_demo_py")).resolve()
+
+
+def _copy_base() -> Path | None:
+    """The copied install base when one was named explicitly, else None (overlay mode)."""
+
+    explicit = os.environ.get("SO101_E2E_INSTALL_PREFIX")
+    if not explicit:
+        return None
+    base = Path(explicit).resolve()
+    return base if (base / "so101_demo_py").is_dir() else base.parent
 
 
 def _v3_config(tmp_path: Path, workers: int) -> Path:
@@ -64,6 +75,19 @@ def _entry_environment(prefix: Path, task_root: Path | None = None) -> dict[str,
         "PYTHONNOUSERSITE": "1",
         "SO101_DISABLE_KIMI_EDITABLE_FINDER": "1",
     })
+    if os.environ.get("SO101_E2E_INSTALL_PREFIX"):
+        # An explicit copied prefix must supply the modules too, not just the console script.
+        base = _copy_base() or prefix
+        sites = [base / "so101_demo_py/lib/python3.12/site-packages",
+                 base / "so101_teleop/lib/python3.12/site-packages"]
+        inherited = environment.get("PYTHONPATH", "")
+        environment["PYTHONPATH"] = os.pathsep.join(
+            [str(site) for site in sites] + ([inherited] if inherited else []))
+        prefixes = [base / "so101_demo_py", base / "so101_teleop",
+                    base / "so101_mujoco_support"]
+        existing = environment.get("AMENT_PREFIX_PATH", "")
+        environment["AMENT_PREFIX_PATH"] = os.pathsep.join(
+            [str(item) for item in prefixes] + ([existing] if existing else []))
     if task_root is not None:
         environment["SO101_TASK_ROOT"] = str(task_root)
     else:
@@ -197,8 +221,11 @@ def test_retired_measurement_entry_reports_retirement(tmp_path) -> None:
     entry = prefix / "lib/so101_demo_py/so101_measure_parallel_resources"
     completed = subprocess.run([sys.executable, str(entry)], capture_output=True, text=True,
                                timeout=60, env=_entry_environment(prefix, tmp_path))
-    assert completed.returncode == 2, completed.stdout + completed.stderr
-    payload = json.loads(completed.stdout.strip().splitlines()[-1])
+    combined = completed.stdout + completed.stderr
+    assert completed.returncode == 2, combined
+    lines = completed.stdout.strip().splitlines()
+    assert lines, f"the retired entry printed nothing on stdout: {combined!r}"
+    payload = json.loads(lines[-1])
     assert payload["error"] == "MEASUREMENT_ENTRY_RETIRED"
     assert payload["authorizes_execution"] is False
 

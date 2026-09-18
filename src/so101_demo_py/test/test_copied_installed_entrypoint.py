@@ -45,6 +45,40 @@ RUNTIME_MODULES = (
 )
 
 
+def _current_runtime_files() -> tuple[str, ...]:
+    """Every runtime file the copy is expected to carry, repository-relative and sorted."""
+
+    roots = ("src/so101_demo_py/src", "src/so101_teleop/so101_teleop")
+    files: list[str] = []
+    for root in roots:
+        for path in sorted((WORKTREE / root).rglob("*.py")):
+            if "__pycache__" in path.parts:
+                continue
+            files.append(str(path.relative_to(WORKTREE)))
+    # setup.py is build metadata: colcon installs its own generated copy, so it is not a
+    # byte-for-byte runtime artifact. The entry points, modules, launch/config/assets and the
+    # generated OpenAPI document are.
+    files.append("src/so101_teleop/so101_teleop/expert_validation_openapi.json")
+    return tuple(sorted(files))
+
+
+def _copied_runtime_path(relative: str) -> Path:
+    """Map a repository-relative runtime path into the copied install under test."""
+
+    text = str(relative)
+    if text.startswith("src/so101_demo_py/src/"):
+        return (DEMO_PREFIX / "lib/python3.12/site-packages/so101_demo"
+                / text[len("src/so101_demo_py/src/"):])
+    if text.startswith("src/so101_teleop/so101_teleop/"):
+        return (COPIED_PREFIX / "so101_teleop/lib/python3.12/site-packages/so101_teleop"
+                / text[len("src/so101_teleop/so101_teleop/"):])
+    if text.startswith("src/so101_demo_py/"):
+        return DEMO_PREFIX / text[len("src/so101_demo_py/"):]
+    if text == "src/so101_demo_py/setup.py":
+        return DEMO_PREFIX / "setup.py"
+    raise AssertionError(f"unmapped runtime path: {relative}")
+
+
 def _copied_environment(scratch: Path, **extra: str) -> dict[str, str]:
     environment = dict(os.environ)
     site = COPIED_PREFIX / "so101_demo_py/lib/python3.12/site-packages"
@@ -102,14 +136,33 @@ def test_runtime_bytes_of_the_copied_prefix_match_the_frozen_source() -> None:
 
     assert ENTRYPOINT.is_file()
     assert not ENTRYPOINT.is_symlink()
-    head = subprocess.run(
-        ["git", "-C", str(WORKTREE), "rev-parse", "HEAD"],
-        capture_output=True, text=True, check=True).stdout.strip()
-    changed = subprocess.run(
-        ["git", "-C", str(WORKTREE), "diff", "--name-only", "6e68d0f51", head, "--",
-         "src/so101_demo_py/src", "src/so101_teleop/so101_teleop", "src/so101_demo_py/setup.py"],
-        capture_output=True, text=True, check=True).stdout.split()
-    assert changed == [], f"runtime code changed since the copied install: {changed}"
+    if os.environ.get("SO101_E2E_INSTALL_PREFIX"):
+        # An explicitly named copy is checked against the tree it was built from: every
+        # current runtime file must match byte for byte, and a retired module must be gone.
+        mismatched = []
+        for relative in _current_runtime_files():
+            source = WORKTREE / relative
+            copied = _copied_runtime_path(relative)
+            if not copied.is_file() or source.read_bytes() != copied.read_bytes():
+                mismatched.append(relative)
+        assert mismatched == [], (
+            f"copied runtime bytes differ from the tree: {len(mismatched)} file(s): "
+            f"{mismatched[:12]}")
+        for retired in ("parallel_batch/resource_budget.py",
+                        "parallel_batch/resource_measurement.py",
+                        "parallel_batch/measurement_control.py",
+                        "parallel_batch/owned_resources.py"):
+            assert not _copied_runtime_path(
+                f"src/so101_demo_py/src/{retired}").exists(), retired
+    else:
+        head = subprocess.run(
+            ["git", "-C", str(WORKTREE), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True).stdout.strip()
+        changed = subprocess.run(
+            ["git", "-C", str(WORKTREE), "diff", "--name-only", "6e68d0f51", head, "--",
+             "src/so101_demo_py/src", "src/so101_teleop/so101_teleop", "src/so101_demo_py/setup.py"],
+            capture_output=True, text=True, check=True).stdout.split()
+        assert changed == [], f"runtime code changed since the copied install: {changed}"
     for relative in RUNTIME_MODULES:
         source = WORKTREE / "src/so101_demo_py/src" / relative
         installed = DEMO_PREFIX / "lib/python3.12/site-packages/so101_demo" / relative
