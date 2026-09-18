@@ -4365,3 +4365,30 @@ comparison accepted the install (it is past `PROVENANCE_INSTALLED_BYTES` and run
 statements cannot both be about the same files, so my comparison is the suspect -- most likely it
 reads a different installed path than the one the launcher hashes -- and it should be reconciled
 before trusting it as a freshness check.
+
+## CP-UQ87 — The workload's own blocker: a v2 config handed to a v1 broker
+
+The launcher's failure resolves to the broker container, and the broker's traceback names it exactly:
+
+    /opt/venv/bin/so101_parallel_perception_broker -> build_broker_transport(runtime_spec)
+      -> load_parallel_runtime_config(config_path)
+      -> ContractError: UNKNOWN_CONFIG_FIELD: ['deployment', 'execution']
+
+The broker runs from the pinned image (`so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1`,
+whose digest is sealed in the authorization) and its installed `so101_demo` parses the **v1** config
+schema, while the measurement hands it the **v2** document
+(`candidate-install/.../config/mujoco/parallel_batch_v2.yaml`, which carries `execution:` and
+`deployment:` by design). The broker then dies, and the supervisor reports the consequence as
+`SupervisorError: OWNED_PROCESS_ABSENT` from `_confirm_identity` -- the process it expected is gone
+because it crashed at startup.
+
+The broker spec that carried the path is
+`stage-c/batches/n1-calibration-20260918-run56/ipc/broker/broker-spec.json`, so the next unit is to
+read that document and the writer that populates it, and decide which side is wrong: either the v2
+path must give the broker a config it understands (a translated/compatible document, not the v2 file),
+or the image is expected to carry a v2-capable package and must be rebuilt -- a heavier decision,
+since the image digest is part of the sealed authority.
+
+This is the first blocker in this task that belongs to the *workload's* composition rather than to
+the harness's dialogue with the allocator, and it is only reachable because the preceding units
+fixed the root/cwd chain: launcher, broker and worker 1 all start now.
