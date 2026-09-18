@@ -17,7 +17,7 @@ success_contract: Stage A offline implementation gates; Stage B full gates and f
 worktree: /data/work/so101-worktrees/unbounded-queue-resource-budget
 branch: codex/so101-unbounded-queue-resource-budget
 base_commit: 84620fc0529779a27c6985f8717d78f0386e0135
-current_commit: 84620fc0529779a27c6985f8717d78f0386e0135
+current_commit: PENDING_AFTER_COMMIT (continuation dispatch 2e37ac85; last probe HEAD ccdb0119140ee3095144b948f57d8dd592502db8)
 evidence_root: /data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main
 task_root: /data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main/unbounded-queue-resource-budget
 dispatch: /data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main/unbounded-queue-resource-budget/dispatch-20260918-84620fc0
@@ -37,8 +37,8 @@ disproven_routes:
 open_hypotheses:
   - Whether the operator approves a short-path scratch relocation for the socket-based demo gate in
     Stage B, or accepts those pre-existing failures as documented environment blockers.
-latest_checkpoint: CP-UQ00
-next_experiment: EXP-UQ01
+latest_checkpoint: CP-UQ08
+next_experiment: EXP-UQ09 (Task 8 adaptive no-K)
 ```
 
 ## Approvals (four independent authorities; plan lines 13-25, 36-40, 144, 193)
@@ -738,3 +738,102 @@ next_command: implement Task 8 RED at src/so101_demo_py/test/test_parallel_adapt
 | A5 | Independent GPT-6 Astra/High reviews (Tasks 1-4 code, L/inventory table, closed contexts, Task 11 API, Task 16 guide) and Sol/High execution-result review | plan lines 15-17, 126, 316, 344, 575 | Stage B entry gate "all Stage A code reviewed"; not satisfiable by the inline executor |
 | A6 | Decision on the deep-scratch socket-path blocker (shorten the scratch root, or accept documented pre-existing demo failures) | AGENTS fsync/scratch rule vs AF_UNIX 107-byte limit | Task 12 full-demo gate |
 | A7 | Approval to wire the candidate measurement runner hook (composition spawn path) | plan Task 6/13 | Stage C runtime start |
+
+
+## Correction — 2026-09-18, continuation dispatch 2e37ac85
+
+- The EXP-UQ03 statement that failure sets were "byte-identical" to the baseline was an overclaim: the
+  comparison was by test ID only, and the traces/scratch paths differ. Correct wording: ZERO new failure
+  IDs at that time, with 33 of 35 traces carrying UNIX_SOCKET_PATH_TOO_LONG. The independent XML check
+  (scratch/identity-green.F9ndT0QL: 117 passed / 35 failed) is retained as the accurate record.
+- Header fields base_commit/current_commit/latest_checkpoint were stale (still reporting CP-UQ00); they now
+  point at the live continuation state. Historical EXP/CP bodies are unchanged.
+- TDD evidence honesty retained as written: Task 7's RED was FROZEN_CONFIG_REQUIRED (constructor/version
+  gate), not direct quota exhaustion; Tasks 2–6 REDs were missing module/function/collection failures at
+  the intended new boundary. No bootstrap failure was relabelled as product-behaviour proof.
+
+## EXP-UQ08 — AF_UNIX boundary repair (dirfd transport vs canonical path length)
+
+```yaml
+experiment_id: EXP-UQ08
+status: VALID
+prior_experiment: EXP-UQ07
+hypothesis: The 35 Task 3 failures are caused by resources.py rejecting the canonical absolute socket
+  path length even though runtime/parallel_ipc.py already binds/connects through /proc/self/fd/<fd>/<name>;
+  unifying preflight with that transport fixes them without shortening TMPDIR or weakening the kernel limit.
+prediction: RED transport tests fail while the transport helper is absent; after the shared helper and
+  preflight rewiring, both Task 3 files reach clean GREEN with the true oversized-basename boundary intact.
+single_variable: shared dirfd transport capability + preflight/adaptive/ipc fixture alignment
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Continuation dispatch 2e37ac85 read completely; receipt and probe-01 written first.
+  - Worktree clean at ccdb01191; no service, no measurement, no deletion.
+success_criteria:
+  - Long durable absolute root (>107 bytes) really binds and connects through the descriptor transport.
+  - Exact encoded sockaddr length including the terminating NUL is bounded by 108; overlong basename and
+    invalid basename fail closed; /proc capability absence fails closed; symlinked parent stays rejected.
+  - Canonical absolute paths remain the audited identity; no manifest/journal/environment change.
+  - Both Task 3 files (152 tests) pass with no exclusions, and the two non-socket failures are fixed.
+failure_criteria:
+  - Deleting the guard, raising an arbitrary constant, chdir, symlink alias, abstract sockets, or
+    external short paths; any weakened assertion.
+invalid_criteria:
+  - Counting a hung/killed test invocation as evidence.
+provenance:
+  source_commit: ccdb0119140ee3095144b948f57d8dd592502db8
+  install_overlay: $TASK_ROOT/dev-build + dev-install (symlink-install dev overlay)
+  runtime_executable: the exact shared TEST_PYTHON above
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: so101_pytest transport-red src/so101_demo_py/test/test_parallel_unix_transport.py -q
+    exit_code: 1
+  - command: so101_pytest transport-only src/so101_demo_py/test/test_parallel_unix_transport.py -q
+    exit_code: 0
+  - command: so101_pytest socket-fix-green src/so101_demo_py/test/test_parallel_ipc.py src/so101_demo_py/test/test_parallel_resource_identity.py src/so101_demo_py/test/test_parallel_batch_resources.py src/so101_demo_py/test/test_parallel_unix_transport.py -q
+    exit_code: 0
+observed:
+  - RED: transport helper import missing (IpcError/UNIX_SOCKADDR_CAPACITY_BYTES/_PROC_FD_ROOT absent).
+  - Two of my own new transport tests were defective and were fixed, not worked around: wrong exact-size
+    arithmetic for fd 0, and a blocking echo (client sent but the server read its own socket) that caused
+    a 600 s harness timeout. The killed invocation left no stray process (verified by ps).
+  - GREEN scratch/socket-fix-green.tkmbf4Z0: 199 passed / 0 failed. Per file: resources 144,
+    ipc 42, identity 8, transport 5. The two Task 3 files total exactly 152 tests, all passing, with no
+    --ignore/-k filters.
+  - test_concurrent_batches_cannot_claim_the_same_ros_domains -> pass (intended one-admitted/one-rejected
+    ROS_DOMAIN_CLAIMED semantics preserved); test_dry_run_cli_writes_private_manifest_without_starting_processes
+    -> pass (manifest now written, exit 0); test_socket_path_must_fit_linux_unix_domain_limit -> pass with
+    an overlong basename as the true kernel boundary.
+  - Implementation: runtime/parallel_ipc.py now owns UNIX_SOCKADDR_CAPACITY_BYTES=108,
+    require_proc_fd_transport, require_transport_basename (preflight, no parent access, conservative fd
+    digit reservation) and transport_address (exact address + terminating NUL check); server bind and
+    client connect both use it. resources.py and adaptive_pool.py preflight now call the shared helper and
+    map failures to their existing error strings; the retained constant names stay for compatibility.
+  - test_parallel_ipc.py's raw listener fixture now binds via the descriptor transport, so no endpoint is
+    created at a long kernel address.
+inferred:
+  - The remaining baseline failures are NOT socket-related and are addressed under Priority 2.
+conclusion: VALID. Priority 1 complete; the 35 Task 3 failures are genuinely resolved (not accepted).
+evidence:
+  - scratch/transport-red.*, scratch/transport-only.UUmaIlWG (defective-test failure), scratch/socket-fix-green.tkmbf4Z0
+decision: KEEP
+next_experiment: EXP-UQ09
+```
+
+```yaml
+checkpoint_id: CP-UQ08
+last_valid_experiment: EXP-UQ08
+current_hypothesis: Priority 2 environment repairs (torch/mujoco/task-owned isolated env, pinned
+  submodule init, support overlay mapping) remove the remaining baseline nonpasses.
+working_tree_status: Priority 1 files staged for this commit
+owned_processes: NONE
+preserved_processes: NONE from this task family (CP-Z01/CP-Z02 state intact; canonical dirty=2 untracked docs only)
+confirmed_conclusions:
+  - AF_UNIX boundary unified on the descriptor transport; 152/152 Task 3 tests pass (EXP-UQ08).
+disproven_routes:
+  - Rejecting long canonical socket ancestors; shortening TMPDIR/evidence layout to satisfy the kernel.
+open_risks:
+  - Remaining baseline nonpasses: ~45 missing-mujoco cases, torch (3), support-prefix assertion, pinned
+    submodule uninitialized; a task-owned isolated interpreter may be required and adds provenance work.
+next_command: classify remaining baseline nonpasses, initialize the pinned submodule in this worktree,
+  then build the task-owned isolated environment per so101-dev python-dependency-install reference
