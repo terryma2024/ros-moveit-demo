@@ -3636,3 +3636,32 @@ the way the AMENT re-query resolves. That is the next diagnostic, and it is now 
 environment with `child_environment_for_launcher` itself (as the runner does, including whatever
 `so101_env_dev` sets) rather than by hand, then trace. N1 remains `NOT_MEASURED`; nothing is
 extrapolated to another N.
+
+## CP-UQ64 — Stage C: the pipeline runs end to end, and host-wide swap aborts it
+
+Run: `stage-c/batches/n1-calibration-20260918-run22/`. Commits `6137e98b7`, `eb2fdb7ae`;
+r24 (`61f293001d8815fa...`) against `bindings/candidate-install-binding-r3.json`.
+
+The provenance barrier is cleared, and this time the evidence says so rather than the silence:
+run22's workload stderr and stdout are both **0 bytes** while the abort reason is a *measurement*
+latch, not a launcher failure -- provenance passed, the launcher started, the sampler ran (17
+samples), the safety policy evaluated, the abort latched, and cleanup verified containment and
+quiet end. The bug that had survived the last three rounds was in my own patch:
+`overlay_package_prefixes` returns a mapping and the child environment iterated it as a sequence,
+putting the bare names `so101_demo_py` and `so101_mujoco_support` on `AMENT_PREFIX_PATH`, so the
+launcher's AMENT re-query fell through to the inherited `dev-install` prefixes and refused an
+otherwise correct overlay. Iterating the mapping's values (`6137e98b7`, with a test that asserts
+absolute entries) moved the child's refusal from `PROVENANCE_EXTERNAL_PACKAGE_PREFIX` to
+`PROVENANCE_INSTALLED_BYTES`, which was then true: the candidate install had to be rebuilt *after*
+the source edits and *before* sealing. It was rebuilt last (`colcon_rc=0`, 1128 files), bound as
+r3, sealed as r24, and run without touching the source in between.
+
+The new latch is a policy finding, not a plumbing one. `swap_delta` is `0` for sixteen samples and
+`1` for the seventeenth -- one kilobyte of *host-wide* swap movement -- and
+`abort_on_swap_activity: true` latched on it at 0.99 s. The host has 4.0 GB of its 8.4 GB swap in
+use from unrelated activity, so a zero-tolerance host-wide rule makes every measurement abort
+regardless of what the workload does: the signal is ambient, not attributable. The consistent fix
+is the one the rest of the sampler already follows -- take swap activity from the owned cgroup
+(`memory.swap.current` / `memory.events`) so it describes the workload, and keep the host-wide
+figure in `diagnostics` (where it already is). That is the next change. N1 remains `NOT_MEASURED`
+and nothing is extrapolated to another N.
