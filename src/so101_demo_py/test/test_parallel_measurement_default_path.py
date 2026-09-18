@@ -184,6 +184,12 @@ def _install_prefix(tmp_path, *, exit_code: int = 0, sleep_s: float = 0.0) -> Pa
     launcher.chmod(0o700)
     for name in ("__init__.py", "resource_measurement.py"):
         _write(prefix / INSTALLED_PATTERN / name, b"# installed copy\n")
+    _write(prefix / INSTALLED_PATTERN / "so101_demo/cli/mujoco_parallel_batch.py",
+           b"# installed launcher module\n")
+    _write(prefix / INSTALLED_PATTERN / "so101_demo_py-0.1.0-py3.12.egg-info/entry_points.txt",
+           b"[console_scripts]\nso101_parallel_batch = "
+           b"so101_demo.cli.mujoco_parallel_batch:main\n")
+    (prefix / "so101_mujoco_support").mkdir(mode=0o700, parents=True, exist_ok=True)
     return prefix
 
 
@@ -967,3 +973,19 @@ def test_child_environment_prefers_the_candidate_site_packages(tmp_path):
     assert environment["PYTHONPATH"].split(":")[1] == "/somewhere/else"
     bare = child_environment_for_launcher({}, console_dir, site_packages=site)
     assert bare["PYTHONPATH"] == str(site)
+
+
+def test_overlay_package_prefixes_live_under_the_install_root(tmp_path):
+    """The launcher requires both package prefixes to be inside its install root, so they
+    are the install tree's own directories, not whatever AMENT happens to answer."""
+
+    from so101_demo.cli.measure_parallel_resources import (
+        MeasurementCliError, overlay_package_prefixes)
+
+    for name in ("so101_demo_py", "so101_mujoco_support"):
+        (tmp_path / name).mkdir()
+    prefixes = overlay_package_prefixes(tmp_path)
+    assert prefixes == {"so101_demo_py": tmp_path / "so101_demo_py",
+                        "so101_mujoco_support": tmp_path / "so101_mujoco_support"}
+    with pytest.raises(MeasurementCliError, match="MEASUREMENT_OVERLAY_INPUT_MISSING"):
+        overlay_package_prefixes(tmp_path / "absent")
