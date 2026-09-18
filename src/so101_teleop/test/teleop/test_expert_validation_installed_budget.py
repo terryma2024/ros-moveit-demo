@@ -147,7 +147,7 @@ def synthetic_authority(tmp_path: Path, worker_count: int = 4, identity: str | N
 # remain immutable frozen artifacts of the previous unit).
 OFFLINE_INSTALL = Path(
     "/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main"
-    "/unbounded-queue-resource-budget/amend2-install")
+    "/unbounded-queue-resource-budget/prefix-install")
 OFFLINE_SHARE = OFFLINE_INSTALL / "so101_demo_py/share/so101_demo_py/config/mujoco"
 OFFLINE_LIB = OFFLINE_INSTALL / "so101_demo_py/lib/so101_demo_py"
 def _write_test_binding(directory: Path) -> Path:
@@ -439,9 +439,24 @@ def test_installed_factory_child_reports_provider_derived_capabilities(tmp_path)
         entry["worker_count"]: entry
         for entry in document["capabilities"]["worker_count_availability"]
     }
-    assert by_count[4]["selectable"] is True, by_count[4]
-    assert by_count[4]["profile_sha256"] == authority["profile_sha"]
-    assert by_count[4]["qualification_sha256"] == authority["qualification_sha"]
-    assert [count for count, entry in by_count.items() if entry["selectable"]] == [4]
+    # The observation is a REAL host probe now, so N4 is selectable exactly when the
+    # live envelope allows it; a refusal must be a genuine resource reason, never a
+    # metadata or provenance failure.
+    entry = by_count[4]
+    assert entry["profile_sha256"] == authority["profile_sha"]
+    assert entry["qualification_sha256"] == authority["qualification_sha"]
+    if entry["selectable"]:
+        assert entry["status"] == "APPROVED" and not entry["reason_codes"]
+        assert [count for count, item in by_count.items() if item["selectable"]] == [4]
+    else:
+        assert entry["reason_codes"], entry
+        assert set(entry["reason_codes"]) <= {
+            "RAM_HEADROOM", "GPU_HEADROOM", "CPU_HEADROOM", "SWAP_PRESSURE",
+            "BACKGROUND_ENVELOPE_EXCEEDED", "RESOURCE_PROBE_FAILED",
+            "GPU_MINIMUM_FREE", "MEMORY_MINIMUM_FREE",
+        }, entry
+        for count in (2, 3, 5, 6, 7, 8):
+            assert "EXACT_N_UNQUALIFIED" in by_count[count]["reason_codes"], count
+        return
     for count in (2, 3, 5, 6, 7, 8):
         assert "EXACT_N_UNQUALIFIED" in by_count[count]["reason_codes"], count
