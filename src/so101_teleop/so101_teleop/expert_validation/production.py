@@ -31,7 +31,11 @@ from .executor_registry import ExecutorRegistry, QualificationProbes
 from .lease import ValidationLeaseService
 from .manifest_geometry import current_manifest_source_hash, freeze_manifest_context
 from .models import UpstreamCursor
-from .preflight import CampaignStartRequest, FIXED_WORKER_COUNTS
+from .preflight import (
+    CampaignStartRequest,
+    FIXED_WORKER_COUNTS,
+    FixedExecutionConfig,
+)
 from .process_owner import CoordinatorOwnershipError, ExecutionProcessOwner, OwnedCoordinator
 from .service import ExpertValidationService, ServiceConflict
 from .store import StoreConflict, SupervisorStore
@@ -305,6 +309,10 @@ class _HostResourceProbe:
             )
             workers = getattr(config, "worker_count", 1)
             observations["requested_worker_count"] = workers
+            version_two = not isinstance(config, FixedExecutionConfig)
+            if version_two and self._resource_gate is None:
+                reasons.append("BUDGET_PROFILE_UNAVAILABLE")
+                return not reasons, tuple(reasons), observations
             if self._resource_gate is not None:
                 from so101_demo.parallel_batch.resource_budget import FixedAdmissionRequest
                 identity = self._resource_gate.execution_identity_sha256
@@ -320,6 +328,7 @@ class _HostResourceProbe:
                     ))
                     reasons.extend(decision.reason_codes)
                 return not reasons, tuple(reasons), observations
+            # Retained version-one interpretation only; v2 never reaches this block.
             if workers > 3:
                 reasons.append("FIXED_WORKER_LIVE_QUALIFICATION_REQUIRED")
             if snapshot.logical_cpu_count < 4 * workers:
@@ -479,19 +488,15 @@ class ProductionExpertValidationService(ExpertValidationService):
         }
 
     def _worker_count_availability(self):
-        """Exact-N availability; without an approved profile every N stays unselectable."""
+        """Exact-N availability derived from the shared provider's decisions."""
 
-        return tuple(
-            {
-                "worker_count": count,
-                "selectable": False,
-                "status": "NOT_MEASURED",
-                "reason_codes": ["BUDGET_PROFILE_UNAVAILABLE"],
-                "profile_sha256": None,
-                "qualification_sha256": None,
-            }
-            for count in FIXED_WORKER_COUNTS[1:]
-        )
+        from so101_demo.parallel_batch.resource_budget import worker_count_availability
+
+        gate = getattr(self.preflight_engine, "resource_gate", None)
+        identity = getattr(gate, "execution_identity_sha256", None) if gate else None
+        return worker_count_availability(
+            gate, worker_counts=FIXED_WORKER_COUNTS[1:], batch_id="capabilities",
+            execution_identity_sha256=identity or "0" * 64)
 
     def acquire_lease(self, body):
         return asdict(self.lease_service.acquire(body["service_session_id"]))
@@ -1241,11 +1246,29 @@ class ProductionExpertValidationService(ExpertValidationService):
         self._subscribers.discard(queue)
 
 
+def default_admission_factory(environment: Mapping[str, str]):
+    """Compose the installed shared gate from verified P/Q/M/D authority (or None)."""
+
+    from so101_demo.parallel_batch.resource_budget import (
+        build_live_observation, build_runtime_fingerprint_from_environment,
+        compose_production_admission)
+
+    identity = environment.get("SO101_VALIDATION_EXECUTION_IDENTITY")
+    current = (
+        build_runtime_fingerprint_from_environment(environment, identity=identity)
+        if identity else None
+    )
+    return compose_production_admission(
+        environment=environment, current=current,
+        observation_source=build_live_observation)
+
+
 def create_production_service(
     evidence_root: Path,
     *,
     environment: Mapping[str, str] | None = None,
     execution_port=None,
+    admission_factory=None,
 ) -> ProductionExpertValidationService:
     """Compose all durable authorities used by the installed server entry point.
 
@@ -1261,8 +1284,10 @@ def create_production_service(
     store = SupervisorStore.open(state_root)
     try:
         owner = ExecutionProcessOwner(store=store)
+        factory = admission_factory or default_admission_factory
+        resource_gate = factory(environment)
         preflight = PreflightEngine(
-            _HostResourceProbe(),
+            _HostResourceProbe(resource_gate=resource_gate),
             singleton_probe=lambda: not owner.has_active_execution(),
         )
         supervisor = ExpertValidationSupervisor(

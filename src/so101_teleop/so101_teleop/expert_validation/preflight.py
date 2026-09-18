@@ -171,6 +171,7 @@ class PreflightEngine:
         ttl_ns: int = 30_000_000_000,
     ) -> None:
         self._resources = resource_probe
+        self.resource_gate = getattr(resource_probe, "_resource_gate", None)
         self._singleton_probe = singleton_probe
         self._clock_ns = clock_ns
         self._ttl_ns = ttl_ns

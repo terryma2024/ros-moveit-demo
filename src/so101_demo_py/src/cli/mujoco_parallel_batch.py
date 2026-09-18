@@ -1028,6 +1028,24 @@ _LEGACY_QUOTA_FLAG = '--max-points-per-worker'
 _DEFAULT_RESOURCE_GATE = None
 
 
+def _compose_default_resource_gate():
+    """Installed composition of the shared exact-N gate; None when no authority exists."""
+
+    from so101_demo.parallel_batch.resource_budget import (
+        build_live_observation, build_runtime_fingerprint_from_environment,
+        compose_production_admission)
+
+    environment = dict(os.environ)
+    identity = environment.get("SO101_VALIDATION_EXECUTION_IDENTITY")
+    current = (
+        build_runtime_fingerprint_from_environment(environment, identity=identity)
+        if identity else None
+    )
+    return compose_production_admission(
+        environment=environment, current=current,
+        observation_source=build_live_observation)
+
+
 def _load_runtime_config(path: Path):
     """New execution loads the closed v2 document; a v1 document is refused."""
 
@@ -1055,7 +1073,7 @@ def prepare_batch(
 ) -> PreparedBatch:
     _reject_legacy_quota_flag(argv)
     if resource_gate is None:
-        resource_gate = _DEFAULT_RESOURCE_GATE
+        resource_gate = _compose_default_resource_gate() or _DEFAULT_RESOURCE_GATE
     options = build_parser().parse_args(argv)
     adaptive_only = (
         options.adaptive_config,
