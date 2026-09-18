@@ -876,3 +876,49 @@ def test_child_environment_works_without_an_inherited_path(tmp_path):
     console_dir = tmp_path / "lib"; console_dir.mkdir()
     environment = child_environment_for_launcher({}, console_dir)
     assert environment["PATH"] == str(console_dir)
+
+
+def _overlay_inputs(tmp_path):
+    (tmp_path / "so101_demo_py").mkdir(exist_ok=True)
+    files = {}
+    for name in ("console", "module", "entry_points", "config", "points"):
+        path = tmp_path / name
+        path.write_text(name + "\n")
+        files[name] = path
+    return files
+
+
+def test_overlay_binding_document_matches_the_launcher_schema(tmp_path):
+    from so101_demo.cli.measure_parallel_resources import write_overlay_provenance_binding
+
+    files = _overlay_inputs(tmp_path)
+    target = write_overlay_provenance_binding(
+        target=tmp_path / "binding.json", source_root=tmp_path, build_root=tmp_path,
+        install_root=tmp_path, package_prefix=tmp_path / "so101_demo_py",
+        console=files["console"], module=files["module"], entry_points=files["entry_points"],
+        parallel_config=files["config"], point_catalog=files["points"],
+        source_commit="a" * 40)
+    document = json.loads(target.read_text())
+    assert set(document) == {"schema_version", "source_root", "source_commit", "build_root",
+                             "install_root", "package_prefixes", "artifacts"}
+    assert document["schema_version"] == 1
+    assert set(document["artifacts"]) == {"coordinator_console", "coordinator_module",
+                                          "entry_points", "parallel_config", "point_catalog"}
+    for name, entry in document["artifacts"].items():
+        assert len(entry["sha256"]) == 64, name
+    assert (target.stat().st_mode & 0o777) == 0o600
+
+
+def test_overlay_binding_refuses_a_missing_input(tmp_path):
+    from so101_demo.cli.measure_parallel_resources import (
+        MeasurementCliError, write_overlay_provenance_binding)
+
+    files = _overlay_inputs(tmp_path)
+    files["module"].unlink()
+    with pytest.raises(MeasurementCliError, match="MEASUREMENT_OVERLAY_INPUT_MISSING"):
+        write_overlay_provenance_binding(
+            target=tmp_path / "binding.json", source_root=tmp_path, build_root=tmp_path,
+            install_root=tmp_path, package_prefix=tmp_path / "so101_demo_py",
+            console=files["console"], module=files["module"], entry_points=files["entry_points"],
+            parallel_config=files["config"], point_catalog=files["points"],
+            source_commit="a" * 40)
