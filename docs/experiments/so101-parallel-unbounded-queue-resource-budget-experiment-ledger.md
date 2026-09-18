@@ -7179,3 +7179,33 @@ so the build runs through `so101_colcon lg-mujoco-control-build` and its evidenc
 registered task root.
 
 _Ledger HEAD when written: `1440d564e`._
+
+## CP-UQ176 — Rebuilding the pinned control stack fixes the pause crash, proven by A/B
+
+The task-owned build finished clean: `so101_colcon lg-mujoco-control-build` → `Summary: 3 packages
+finished [1min 23s]`, `exit_code 0`
+(`colcon/lg-mujoco-control-build.9gfwD3JR/result.json`), installing into
+`$TASK_ROOT/mujoco-control-fork/install`. The new library carries the newer source: it contains
+`"Cannot resume simulation"` **once**, where the shared fork install contains it **zero** times —
+the same dating test that identified the mismatch in CP-UQ175.
+
+Then the identical minimal repro, changing exactly one variable (which `libmujoco_ros2_control.so`
+is loaded):
+
+| | stale shared library (2026-08-13) | rebuilt pinned library (2026-09-19) |
+| --- | --- | --- |
+| `set_pause {paused: true}` | client exit **124**, node **SIGSEGV** (`[0xf0]`) | `SetPause_Response(success=True, message='Simulation paused.')`, client exit **0** |
+| `set_pause {paused: false}` | not reached (node already dead) | `exit 0`, node alive |
+| node PID across the calls | gone | unchanged (`2284809`) |
+| segfault lines in the launch log | 1 | **0** |
+
+So the crash was the library/plugin version mismatch, and the repair is a rebuild — no source change
+to this plan's surface, no change to the shared fork install, no global configuration touched. The
+new prefix lives at `$TASK_ROOT/mujoco-control-fork/install` and is used by *this* deployment only.
+
+Next: replay the deployment environment with that prefix prepended (the same
+`/proc/<pid>/environ` replay used in CP-UQ173, with the colcon setup's own `AMENT_PREFIX_PATH` /
+`LD_LIBRARY_PATH` / `PYTHONPATH` values), restart the service on a fresh state root, and re-run the
+acceptance — first the cheap `preflight + r01-sequential` probe, then the full manifest.
+
+_Ledger HEAD when written: `d896b9eb6`._
