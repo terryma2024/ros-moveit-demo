@@ -447,3 +447,79 @@ open_risks:
   - PENDING INDEPENDENT REVIEW (Astra/High, unavailable in-session): closed context constructors, digest
     graph and reason-code set before Stage B freeze (plan Task 4).
 next_command: implement Task 5 RED (sampler gap latches abort without Web)
+
+## EXP-UQ05 — Task 5 Web-less measurement owner, cancellation and watchdog
+
+```yaml
+experiment_id: EXP-UQ05
+status: VALID
+prior_experiment: EXP-UQ04
+hypothesis: An owned measurement binding can latch a permanent abort and send exactly one authenticated
+  cancellation without any production Web server or lease, and never claim cleanup it did not prove.
+prediction: RED fails at the missing module; GREEN proves gap/death/breach/sequence latching, single send,
+  no replacement, foreign-identity refusal and event-time recording.
+single_variable: measurement_control module plus unified composition stop predicate
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Task 4 committed; no ROS, no service, fake clock and recorder sender only.
+success_criteria:
+  - The plan's gap fixture latches, sends once, blocks permit_side_effect and never clears.
+  - Unreachable owner with an unverifiable scope raises FOREIGN_IDENTITY and produces no receipt;
+    a fresh owned scope records t_owned_groups_gone only through the containment callable.
+  - detect-to-send overrun is recorded as INVALID; ACK is not cleanup.
+failure_criteria:
+  - Any second cancel, any latch clearing, or a cleanup receipt without proof.
+invalid_criteria:
+  - Counting the deep-scratch socket-path rejection as a product failure (the fixture now uses the short
+    private socket directory the design requires).
+provenance:
+  source_commit: 64d6cb72c (Task 4 checkpoint; this task's parent commit)
+  install_overlay: $TASK_ROOT/dev-build + dev-install (symlink-install dev overlay)
+  runtime_executable: the exact shared TEST_PYTHON above
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: so101_pytest control-red src/so101_demo_py/test/test_parallel_measurement_control.py -q
+    exit_code: 2
+  - command: so101_pytest control-green src/so101_demo_py/test/test_parallel_measurement_control.py src/so101_demo_py/test/test_parallel_batch_web_control.py src/so101_demo_py/test/test_parallel_processes.py -q
+    exit_code: 0
+  - command: so101_pytest control-cli-regression src/so101_demo_py/test/test_parallel_batch_cli.py -q
+    exit_code: 1
+observed:
+  - RED: collection error with ModuleNotFoundError for measurement_control (module absent by design).
+  - GREEN scratch/control-green.*: 54 passed, 0 failed (10 new control tests + retained web_control and
+    parallel_processes suites).
+  - CLI regression comparison against baseline-demo-rest junit: 22 failures in test_parallel_batch_cli.py,
+    exactly the same 22 pre-existing socket-path failures; regressions = [] (script comparison by test ID).
+  - Fixture note: pytest tmp_path lives under the deep mandated scratch (108-char TASK_ROOT), so the
+    control socket is created in a short private directory (tempfile.mkdtemp under /tmp, removed after the
+    run). This mirrors design 6.1, which requires the real control socket to use a short path verified
+    against the 107-byte budget; the binding validator still enforces and tests that budget.
+  - Composition wiring: ProductionBatchComposition._stop_requested() consults an owned measurement control
+    first and injects it unconditionally into wait_for_children; FixedCoordinatorControlServer now accepts
+    legal v2 fixed requests (FIRST_PASS/FULL_RESTART_RETRY) and refuses adaptive pool requests.
+inferred:
+  - Broker start/warmup, spawn, reload, recovery and finalization boundaries share this predicate through
+    the existing composition stop checks; the physical stop latency is NOT measured here.
+conclusion: VALID at unit level. Actual stop latency and live containment remain unmeasured.
+evidence:
+  - scratch/control-red.*, scratch/control-green.*, scratch/control-cli-regression.*
+decision: KEEP
+next_experiment: EXP-UQ06
+```
+
+```yaml
+checkpoint_id: CP-UQ05
+last_valid_experiment: EXP-UQ05
+current_hypothesis: The sampler/clock estimator and the authorized candidate CLI can be implemented with
+  pure interval fixtures and sealed B output only.
+working_tree_status: Task 5 files committed
+owned_processes: NONE
+preserved_processes: NONE from this task family
+confirmed_conclusions:
+  - Abort latch, single authenticated cancel and containment rules implemented (EXP-UQ05).
+disproven_routes:
+  - Treating a control ACK as cleanup, or a Web lease as a prerequisite for candidate abort authority.
+open_risks:
+  - Real host stop latency and owned-group containment are unmeasured and require the Stage C window.
+next_command: implement Task 6 RED (quantized 1x window and two non-overlapping deficits)
