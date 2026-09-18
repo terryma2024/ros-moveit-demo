@@ -5854,3 +5854,43 @@ recovery, the N1 FULL_RESTART single-point retry) plus the five consecutive vali
 batches — using the service just deployed.
 
 _Ledger HEAD when written: `68a4bd6c9`._
+
+
+## CP-UQ130 — Task 11 started: the live-sim fixture now targets the deployed service
+
+Commit for the fixture work. Two changes, both required before any browser acceptance can mean
+anything:
+
+- **`SO101_LIVE_SERVICE_BASE_URL` is honoured.** When it is set, the `liveServer` fixture uses
+  that URL and returns `stop: async () => {}` with `reusedDeployedService: true` instead of
+  spawning a second stack on a free port. That is what lets the acceptance run against the
+  service deployed in CP-UQ129 (`http://127.0.0.1:8010`) rather than a private copy of it.
+- **The spawned service receives `SO101_TASK_ROOT`.** The start guard keeps its lock and
+  cleanup state in one task-owned directory; without it the guard fails closed with
+  `PROBE_STATE_ROOT_UNSET` (found the hard way in CP-UQ123). The fixture now passes it
+  explicitly with the task-root default.
+
+`tsc --noEmit` is clean after the change.
+
+**Task 11's remaining scope, recorded with the pointers found while doing this** (the file is
+`src/so101_teleop/web/e2e/expert-validation/`):
+
+1. `fixtures/live-sim.ts` still carries `QUALIFICATION_ENV` (line ~190) with the retired
+   acceptance/provenance paths and passes it to the spawned service (~line 262); the budget
+   provenance binding, the L3 budget check and that environment must go, while the real Chrome,
+   install-file, simulation, controller and owner preconditions stay.
+2. `live-sim/04-resource-budget.spec.ts` must become the single `04-start-guard.spec.ts`
+   replacing the budget cases with guard cases (no duplicate file left behind).
+3. `fixtures/functional-manifest.ts` plus the `prepare:functional-manifest` package script have
+   to be created: a closed manifest built from the deployed service's real capabilities, read by
+   the spec modules at collection time, one case per supported worker option (fixed 4-point and
+   20-point batches per N, the adaptive ladder, control/cancel/recovery, the N1 FULL_RESTART
+   single-point retry) with `workers: 1`, `retries: 0` and explicit per-case timeouts.
+4. The acceptance itself, with per-case JUnit/screenshots/actual domain and window evidence, and
+   the separate five-consecutive-valid-physical-batch stability record at one fixed N, points,
+   parameters and lifecycle.
+
+Nothing above is claimed as done. The service it will run against is live and verified
+(CP-UQ129), and the guard suites, lane gates and copied-prefix gates are green.
+
+_Ledger HEAD when written: `0d1f5722d`._
