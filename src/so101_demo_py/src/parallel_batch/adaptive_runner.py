@@ -371,7 +371,6 @@ class AdaptiveBatchRunner:
                 run_mode=self.request.run_mode,
                 selected_point_ids=selected,
                 worker_count=worker_count,
-                max_points_per_worker=max(1, len(selected)),
                 evidence_root=pool_root,
             )
             pool = self.pool_factory(pool_request)

@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import hashlib
+import hmac
 import json
 import math
 import os
 from pathlib import Path
 import re
+import secrets
 import tempfile
 import threading
 import time
@@ -419,6 +422,79 @@ class ProductionAdaptivePoolFactory:
         self.adaptive_request = adaptive_request
         self.composition_factory = composition_factory
         self.composition_kwargs = dict(composition_kwargs or {})
+        # Per-factory secret: pool tokens are derivable only by this instance, so a
+        # caller cannot mint an adaptive allocation context from public data.
+        self._pool_secret = secrets.token_bytes(32)
+        self._frozen_options: dict[int, object] = {}
+
+    def pool_token_for(self, pool_generation: int) -> str:
+        """Deterministic, factory-private token for one pool generation."""
+
+        if type(pool_generation) is not int or pool_generation < 1:
+            raise ValueError("POOL_GENERATION")
+        return hmac.new(
+            self._pool_secret,
+            f"{self.adaptive_request.batch_id}:{pool_generation}".encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+
+    def issue_allocation_context(
+        self,
+        *,
+        scope,
+        pool_token: str,
+        pool_generation: int,
+        frozen_options,
+    ):
+        """Issue the typed adaptive context after re-checking the owning authority."""
+
+        from .resource_budget import _issue_adaptive_context
+        from .resource_identity import canonical_sha256
+
+        if scope.request_kind != "ADAPTIVE":
+            raise ValueError("ALLOCATION_CONTEXT_MISMATCH")
+        expected = self.pool_token_for(pool_generation)
+        if not isinstance(pool_token, str) or not hmac.compare_digest(pool_token, expected):
+            raise ValueError("ADAPTIVE_POOL_TOKEN_MISMATCH")
+        if frozen_options.worker_count != scope.worker_count:
+            raise ValueError("ADAPTIVE_WORKER_COUNT")
+        # The frozen options must be exactly the factory-derived ones for this scope;
+        # a caller cannot inject a different affinity/infrastructure policy.
+        expected_options = replace(
+            self.adaptive_request.options,
+            worker_count=scope.worker_count,
+            fallback_worker_counts=(),
+        )
+        if frozen_options != expected_options:
+            raise ValueError("ADAPTIVE_FROZEN_OPTIONS_MISMATCH")
+        recorded = self._frozen_options.get(pool_generation)
+        if recorded is not None and recorded != frozen_options:
+            raise ValueError("ADAPTIVE_FROZEN_OPTIONS_MISMATCH")
+        expected_root = (
+            self.adaptive_request.runtime_root
+            / f"p/g{pool_generation:02d}w{scope.worker_count:02d}"
+        )
+        if scope.batch_id != self.adaptive_request.batch_id and not scope.batch_id.startswith(
+            f"{self.adaptive_request.batch_id}-g{pool_generation:02d}-"
+        ):
+            raise ValueError("ADAPTIVE_POOL_IDENTITY")
+        authority_sha256 = canonical_sha256(
+            {
+                "adaptive_batch_id": self.adaptive_request.batch_id,
+                "run_mode": self.adaptive_request.run_mode.value,
+                "selected_point_ids": list(self.adaptive_request.selected_point_ids),
+                "pool_generation": pool_generation,
+                "worker_count": scope.worker_count,
+                "pool_token_sha256": hashlib.sha256(pool_token.encode("utf-8")).hexdigest(),
+                "runtime_root": str(expected_root),
+            }
+        )
+        return _issue_adaptive_context(
+            scope=scope,
+            pool_token_sha256=hashlib.sha256(pool_token.encode("utf-8")).hexdigest(),
+            pool_generation=pool_generation,
+            authority_sha256=authority_sha256,
+        )
 
     def __call__(self, request: PoolRequest) -> ProductionAdaptivePool:
         if not isinstance(request, PoolRequest):
@@ -434,7 +510,6 @@ class ProductionAdaptivePoolFactory:
             or not set(request.selected_point_ids).issubset(
                 self.adaptive_request.selected_point_ids
             )
-            or request.max_points_per_worker != len(request.selected_point_ids)
             or request.evidence_root
             != self.adaptive_request.runtime_root
             / f"p/g{generation:02d}w{request.worker_count:02d}"
@@ -450,6 +525,7 @@ class ProductionAdaptivePoolFactory:
             worker_count=request.worker_count,
             fallback_worker_counts=(),
         )
+        self._frozen_options[generation] = options
         worker_ids = tuple(
             f"worker-{index:02d}" for index in range(1, request.worker_count + 1)
         )

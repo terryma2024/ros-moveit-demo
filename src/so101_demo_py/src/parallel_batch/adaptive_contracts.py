@@ -181,7 +181,6 @@ class PoolRequest:
     run_mode: RunMode
     selected_point_ids: tuple[str, ...]
     worker_count: int
-    max_points_per_worker: int
     evidence_root: Path
 
     def __init__(
@@ -190,7 +189,6 @@ class PoolRequest:
         run_mode: RunMode,
         selected_point_ids: tuple[str, ...],
         worker_count: int,
-        max_points_per_worker: int,
         evidence_root: Path,
         *,
         _factory_token: object,
@@ -205,10 +203,6 @@ class PoolRequest:
         if validated_count > _MAX_ADAPTIVE_WORKER_COUNT:
             raise ContractError("MAX_WORKER_COUNT")
         object.__setattr__(self, "worker_count", validated_count)
-        max_points = _require_positive_int("max_points_per_worker", max_points_per_worker)
-        if max_points > _MAX_POINT_COUNT:
-            raise ContractError("MAX_POINTS_PER_WORKER")
-        object.__setattr__(self, "max_points_per_worker", max_points)
         object.__setattr__(
             self, "evidence_root", _require_absolute_path("evidence_root", evidence_root)
         )
@@ -220,17 +214,19 @@ def _new_pool_request_for_production_factory(
     run_mode: RunMode,
     selected_point_ids: tuple[str, ...],
     worker_count: int,
-    max_points_per_worker: int,
     evidence_root: Path,
 ) -> PoolRequest:
-    """Construct a pool request for ``ProductionAdaptivePoolFactory`` only."""
+    """Construct a pool request for ``ProductionAdaptivePoolFactory`` only.
+
+    The request carries no lifetime point quota; affinity, fallback tiers and
+    infrastructure-attempt limits remain the unchanged adaptive authority.
+    """
 
     return PoolRequest(
         batch_id,
         run_mode,
         selected_point_ids,
         worker_count,
-        max_points_per_worker,
         evidence_root,
         _factory_token=_POOL_REQUEST_FACTORY_TOKEN,
     )
