@@ -292,11 +292,30 @@ def sample_resources(
         swap_delta = 0
         psi_delta = 0.0
     else:
-        elapsed = monotonic_s - state.get("monotonic_s", monotonic_s)
-        cpu_delta = 0.0 if elapsed <= 0 else (cpu_usage_us - state.get("cpu_usage_us", cpu_usage_us)) / 1e6 / elapsed
         swap_delta = max(0, swap_total - state.get("swap_total", swap_total))
         psi_delta = max(0.0, psi_total - state.get("psi_total", psi_total))
-        cpu_delta = max(0.0, cpu_delta)
+        # A cgroup may spend a whole cpu.max quota inside a single period, so a rate
+        # measured over less than a period can read up to twice the enforced cap: the
+        # 22.43 cores observed against an 18.6-core quota were exactly that artifact.
+        # The rate is measured over at least cpu_window_s and held between boundaries.
+        window_s = float(state.get("cpu_window_s", 0.0) or 0.0)
+        start_s = state.get("window_start_s")
+        start_usage = state.get("window_start_usage_us")
+        cpu_delta = float(state.get("cpu_rate", 0.0))
+        if start_s is None or start_usage is None:
+            state["window_start_s"] = monotonic_s
+            state["window_start_usage_us"] = cpu_usage_us
+            cpu_delta = 0.0
+        else:
+            span = monotonic_s - float(start_s)
+            # A monotonic span that should equal the window can miss it by a few
+            # float ulps, which would only delay the rate by one sample.
+            complete = (span >= window_s - 1e-9 if window_s > 0.0 else span > 0.0)
+            if complete:
+                cpu_delta = max(0.0, (cpu_usage_us - int(start_usage)) / 1e6 / span)
+                state["window_start_s"] = monotonic_s
+                state["window_start_usage_us"] = cpu_usage_us
+                state["cpu_rate"] = cpu_delta
     observation = LiveResourceObservation(
         monotonic_s=monotonic_s,
         capacity={

@@ -343,6 +343,7 @@ class MeasurementSession:
         self._events: dict[str, float | None] = {name: None for name in _EVENT_NAMES}
         self._thread: threading.Thread | None = None
         self._stopped = threading.Event()
+        self._rebaseline = threading.Event()
         self._lock = threading.Lock()
         self._directory_fd: int | None = None
         self._control_socket: socket.socket | None = None
@@ -505,10 +506,16 @@ class MeasurementSession:
     def _sample_loop(self) -> None:
         from .resource_measurement import sample_resources
 
-        state: dict = {}
+        state: dict = {"cpu_window_s": max(float(self._interval_s),
+                                           float(self.sampling.cgroup_cpu_period_us) / 1e6)}
         sequence = 0
         deadline = self.clock()
         while not self._stopped.is_set():
+            if self._rebaseline.is_set():
+                # Only usage accumulated from the attach point is the workload's own.
+                self._rebaseline.clear()
+                state = {"cpu_window_s": max(float(self._interval_s),
+                                             float(self.sampling.cgroup_cpu_period_us) / 1e6)}
             sequence += 1
             try:
                 sample = sample_resources(
@@ -552,6 +559,11 @@ class MeasurementSession:
             deadline, delay = _advance_sampling_grid(
                 now=self.clock(), deadline=deadline, interval_s=float(self._interval_s))
             self._stopped.wait(delay)
+
+    def _request_sampling_rebaseline(self) -> None:
+        """Drop the sampler's carry-over so a migrated task's earlier CPU is not counted."""
+
+        self._rebaseline.set()
 
     def _breach(self, sample) -> str | None:
         observation = sample.observation
@@ -607,6 +619,7 @@ class MeasurementSession:
         self._record("WORKLOAD_SPAWN")
         try:
             self.cgroup.attach(process.pid)
+            self._request_sampling_rebaseline()
         except ContractError:
             child.kill_group()
             child.wait(timeout=5.0)
