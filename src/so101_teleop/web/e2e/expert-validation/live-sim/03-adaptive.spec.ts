@@ -2,13 +2,22 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { liveSimTest as test, expect, recordGate, requireGate } from "../fixtures/live-sim";
-import { ExpertValidationPage } from "../pages/expert-validation-page";
+import {
+  ExpertValidationPage,
+  releaseAcquiredLeases,
+} from "../pages/expert-validation-page";
 
 /**
  * R03: 20-point ADAPTIVE live run on the Web default ladder (W8).  R05 is
  * embedded: only a safe terminal first pass with eligible business FAILED
  * points proceeds to real per-point FULL_RESTART retries.
  */
+
+// The exclusive lease belongs to the deployed service, not to this spec: hand it back
+// even when the test fails, or the next spec is refused with 409 Conflict.
+test.afterEach(async ({ request }) => {
+  await releaseAcquiredLeases(request);
+});
 
 test("R03 twenty-point adaptive live run @live-sim", async ({ page, liveServer }) => {
   test.setTimeout(3_600_000);

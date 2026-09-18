@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from "@playwright/test";
+import { expect, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 
 export type PointStatus =
   | "ELIGIBLE_UNRUN"
@@ -11,6 +11,24 @@ export type PointStatus =
   | "TERMINAL_UNRUN"
   | "INVALID_BLOCKED"
   | "INFRA_FAILED_REMAINDER";
+
+/**
+ * Leases acquired through the console, kept at module scope so a teardown can hand them back even
+ * when the test itself failed half-way.  The console has no release control, and a suite that
+ * acquires an exclusive lease without returning it can run exactly one spec per lease lifetime:
+ * the next spec then sees `409 Conflict` on acquire.
+ */
+const acquiredLeases = new Map<string, string>();
+
+export async function releaseAcquiredLeases(request: APIRequestContext): Promise<void> {
+  for (const [leaseId, body] of [...acquiredLeases]) {
+    const response = await request.delete(`/expert-validation/lease/${leaseId}`, {
+      data: JSON.parse(body) as Record<string, unknown>,
+    });
+    expect(response.ok(), `release lease failed: ${response.status()}`).toBe(true);
+    acquiredLeases.delete(leaseId);
+  }
+}
 
 export class ExpertValidationPage {
   readonly page: Page;
@@ -31,7 +49,23 @@ export class ExpertValidationPage {
   }
 
   async acquireLease(): Promise<void> {
-    await this.page.getByRole("button", { name: "Acquire lease" }).click();
+    const [response] = await Promise.all([
+      this.page.waitForResponse(
+        (candidate) =>
+          candidate.url().endsWith("/expert-validation/lease") &&
+          candidate.request().method() === "POST",
+      ),
+      this.page.getByRole("button", { name: "Acquire lease" }).click(),
+    ]);
+    // The lease is exclusive across the whole deployed service, so a refusal has to be reported
+    // here: without this the button simply stays enabled and the failure surfaces as a timeout
+    // five seconds later, with the real cause (`409 Conflict`) only visible in the service log.
+    expect(
+      response.status(),
+      `acquire lease refused: ${response.status()} ${await response.text()}`,
+    ).toBe(200);
+    const payload = (await response.json()) as { lease_id: string };
+    acquiredLeases.set(payload.lease_id, response.request().postData() ?? "{}");
     await expect(this.page.getByRole("button", { name: "Acquire lease" })).toBeDisabled();
   }
 

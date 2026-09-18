@@ -5,13 +5,22 @@ import { join } from "node:path";
 import { liveSimTest as test, expect, recordGate } from "../fixtures/live-sim";
 import { readJournalEvents } from "../assertions/journal";
 import { readSealedAttempt } from "../assertions/live-evidence";
-import { ExpertValidationPage } from "../pages/expert-validation-page";
+import {
+  ExpertValidationPage,
+  releaseAcquiredLeases,
+} from "../pages/expert-validation-page";
 
 /**
  * R01: four-point SEQUENTIAL live MuJoCo smoke through real Chrome and the
  * production entry.  Page success is flow evidence only; per-point robot
  * qualification is reported from sealed artifacts, never from the page.
  */
+
+// The exclusive lease belongs to the deployed service, not to this spec: hand it back
+// even when the test fails, or the next spec is refused with 409 Conflict.
+test.afterEach(async ({ request }) => {
+  await releaseAcquiredLeases(request);
+});
 
 test("R01 four-point sequential live smoke @live-sim", async ({ page, liveServer }) => {
   test.setTimeout(1_800_000);
