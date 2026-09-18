@@ -6621,3 +6621,33 @@ Also recorded: the previous acceptance run finished with **2 passed / 18 failed*
 is the pre-fix behaviour; the current run is in flight against the redeployed service.
 
 _Ledger HEAD when written: `21eb764f1`._
+
+## CP-UQ158 — My own fix caused the next failure; now corrected
+
+Reading the rest of `verify_provenance` shows the second gate was **my own incomplete patch**:
+making `repository_root` optional left the very next line unconditional —
+
+```python
+package_root = repository_root / "src/so101_demo_py"
+```
+
+so with no checkout `None / "..."` raised `TypeError`, the caller's `except Exception` turned it
+into `PROVENANCE_VERIFICATION_FAILED`, and the coordinator died one line further along than before.
+That is why the log changed from `PROVENANCE_SOURCE_ROOT` to `PROVENANCE_VERIFICATION_FAILED`
+instead of disappearing.
+
+Fix: the package root falls back to the derived path when there is no checkout (a Path either way,
+so downstream checks decide for themselves whether their files exist). Verified by the same suites:
+`lg-t11-prov2` **132 passed, 0 failed**.
+
+Two further gates are visible in the same function and are **not** yet decided: the
+`shutil.which("so101_parallel_batch")` requirement (`PROVENANCE_CONSOLE_MISSING`) and the
+`_validate_provenance_overlay` identity chain (`PROVENANCE_EXTERNAL_PACKAGE_PREFIX` and friends).
+Both look like the same class of runtime admission the plan retired, and the next acceptance run
+will say which one bites first — the coordinator log names it in one line, which has been the
+fastest signal throughout this stretch.
+
+A fresh copy build was started so the deployed service can carry this fix; next round verifies it,
+redeploys, and re-runs the acceptance.
+
+_Ledger HEAD when written: `eb9c545ff`._
