@@ -94,6 +94,7 @@ class JournalReplay:
 
     events: tuple[JournalEvent, ...]
     damaged_tail_path: Path | None = None
+    schema_version: int = 1
 
 
 class JournalCorruption(RuntimeError):
@@ -103,12 +104,16 @@ class JournalCorruption(RuntimeError):
 class CoordinatorJournal:
     """Exclusive owner of a batch's durable event history."""
 
-    def __init__(self, root, batch_id):
+    def __init__(self, root, batch_id, schema_version=1):
         """Prepare an owner without acquiring or modifying the journal."""
         if not isinstance(batch_id, str) or not batch_id:
             raise ValueError('batch_id must be a nonempty string')
+        if type(schema_version) is not int or schema_version not in (1, 2):
+            raise ValueError('schema_version must be 1 or 2')
         self.root = Path(root).resolve()
         self.batch_id = batch_id
+        self.schema_version = schema_version
+        self._recorded_schema_version = schema_version
         self.coordinator_epoch = 0
         self.segment_path = None
         self._lock = None
@@ -122,9 +127,9 @@ class CoordinatorJournal:
         self._damaged_tail_path = None
 
     @classmethod
-    def create(cls, root, batch_id):
+    def create(cls, root, batch_id, schema_version=1):
         """Acquire and open a journal, or fail without issuing authorization."""
-        journal = cls(root, batch_id)
+        journal = cls(root, batch_id, schema_version)
         journal.acquire()
         return journal
 
@@ -136,7 +141,8 @@ class CoordinatorJournal:
             events, _, _, tail = journal._read_history()
             if tail:
                 raise JournalCorruption('incomplete journal tail')
-            return JournalReplay(tuple(deepcopy(events)))
+            return JournalReplay(tuple(deepcopy(events)),
+                                 schema_version=journal._recorded_schema_version)
 
     def acquire(self):
         """Acquire the nonblocking flock, validate history, then open a new epoch."""
@@ -179,6 +185,9 @@ class CoordinatorJournal:
                     'coordinator_epoch': epoch, 'prev_segment_sha256': terminal,
                     'prev_tail_sha256': _digest(tail[1]) if tail else None,
                 }
+                # v1 keeps its exact header bytes; v2 records its schema explicitly.
+                if self.schema_version != 1:
+                    header['schema_version'] = self.schema_version
                 # Persist the epoch first: a crash before segment creation leaves a
                 # harmless counter gap, and never reuses an issued epoch.
                 _atomic_write(epoch_path, _canonical({
@@ -268,12 +277,18 @@ class CoordinatorJournal:
                     if _canonical(value) != payload or not isinstance(value, dict):
                         raise ValueError('noncanonical frame')
                     if not header_seen:
-                        if (type(value.get('coordinator_epoch')) is not int or value != {
+                        expected_header = {
                             'kind': 'segment', 'batch_id': self.batch_id,
                             'coordinator_epoch': epoch, 'prev_segment_sha256': terminal,
                             'prev_tail_sha256': _digest(pending_tail[1]) if pending_tail else None,
-                        }):
+                        }
+                        recorded = value.get('schema_version', 1)
+                        if (type(value.get('coordinator_epoch')) is not int
+                                or type(recorded) is not int or recorded not in (1, 2)
+                                or value != ({**expected_header, 'schema_version': recorded}
+                                             if 'schema_version' in value else expected_header)):
                             raise ValueError('segment chain mismatch')
+                        self._recorded_schema_version = recorded
                         if pending_tail:
                             if (not pending_tail[0].is_file()
                                     or pending_tail[0].read_bytes() != pending_tail[1]):

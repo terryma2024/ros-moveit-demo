@@ -446,3 +446,28 @@ def test_read_only_replay_rejects_torn_tail_without_preserving_or_rotating_it(tm
         for item in tmp_path.rglob('*') if item.is_file()
     }
     assert after == before
+
+
+def test_v2_journal_records_schema_two_and_stays_readable(tmp_path):
+    """New v2 execution writes schema 2 without changing v1 frames or semantics."""
+
+    v1 = CoordinatorJournal.create(tmp_path / "v1", "batch-1")
+    v1.append("LEASE_GRANTED", "key-1", {"point_id": "p1"})
+    v1.close()
+    v1_header = frames(v1.segment_path)[0][1]
+    assert "schema_version" not in v1_header
+    assert CoordinatorJournal.read_only_replay(tmp_path / "v1", "batch-1").schema_version == 1
+
+    v2_root = tmp_path / "v2"
+    v2 = CoordinatorJournal.create(v2_root, "batch-2", schema_version=2)
+    v2.append("LEASE_GRANTED", "key-1", {"point_id": "p1"})
+    v2.close()
+    v2_header = frames(v2.segment_path)[0][1]
+    assert v2_header["schema_version"] == 2
+    replay = CoordinatorJournal.read_only_replay(v2_root, "batch-2")
+    assert replay.schema_version == 2
+    assert [(event.type, event.idempotency_key) for event in replay.events] == [
+        ("LEASE_GRANTED", "key-1")
+    ]
+    with pytest.raises(ValueError):
+        CoordinatorJournal(v2_root, "batch-2", schema_version=3)

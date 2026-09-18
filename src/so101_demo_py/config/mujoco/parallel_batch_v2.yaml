@@ -1,0 +1,80 @@
+schema_version: 2
+execution:
+  backend: mujoco
+  max_worker_count: 8
+  ros_domain_ids: [181, 182, 183, 184, 185, 186, 187, 188]
+  heartbeat_interval_s: 1.0
+  heartbeat_timeout_s: 5.0
+  lease_duration_s: 300.0
+  lease_ack_timeout_s: 5.0
+  attempt_start_ack_timeout_s: 5.0
+  result_ack_timeout_s: 10.0
+  initializing_hard_timeout_s: 180.0
+  executing_hard_timeout_s: 240.0
+  finalizing_hard_timeout_s: 120.0
+  batch_hard_timeout_s: 5400.0
+  worker_recovery_timeout_s: 120.0
+  broker_recovery_timeout_s: 90.0
+  broker_max_frame_bytes: 8388608
+  broker_queue_capacity_per_model: 3
+  broker_inflight_per_worker_per_model: 1
+  yolo_queue_timeout_s: 10.0
+  yolo_inference_timeout_s: 20.0
+  grounded_sam_queue_timeout_s: 10.0
+  grounded_sam_inference_timeout_s: 60.0
+  max_frame_age_s: 5.0
+  max_rgbd_skew_s: 0.0
+  max_tf_skew_s: 0.0
+  yolo_model_id: plastic-cup-yolo11n-seg-v1
+  yolo_imgsz: 640
+  requested_device: cuda
+  allow_cpu_fallback: false
+  grounding_box_threshold: 0.35
+  grounding_text_threshold: 0.25
+  grounding_duplicate_iou: 0.85
+  grounding_max_candidates: 16
+  sam_mask_quality_threshold: 0.75
+  sam_min_mask_pixels: 64
+  sam_max_mask_area_ratio: 0.50
+  sampling:
+    resource_sample_interval_s: 0.05
+    fast_channel_interval_s: 0.025
+    pss_sample_interval_s: 0.10
+    primary_cpu_window_s: 0.10
+    review_cpu_window_s: 1.0
+    cgroup_cpu_period_us: 100000
+    baseline_minimum_s: 60.0
+    post_cleanup_quiet_s: 5.0
+    maximum_sample_gap_s: 0.10
+  clock:
+    window_s: 1.0
+    stride_s: 1.0
+    minimum_consecutive_steady_windows: 5
+    maximum_clock_age_s: 5.0
+    pace_source: FROZEN_SIM_SETTING
+  safety:
+    capacity_fraction: 0.8
+    minimum_free_fraction: 0.20
+    gpu_device_index: 0
+    abort_on_swap_activity: true
+    abort_on_psi_full_stall: true
+    throttling_disqualifies_run: true
+    require_complete_attribution: true
+  coverage:
+    policy: EXACT_N_V2
+    required_normal_runs: 5
+    required_full_restart: true
+    qualification_point_count: 20
+    cells:
+      - COLD_START
+      - STEADY_YOLO
+      - STEADY_GROUNDED_SAM
+      - STEADY_MIXED
+      - MOTION_RELEASE
+      - BROKER_RELOAD_WITH_N_RESIDENT
+      - WORKER_RECOVERY_WITH_N_RESIDENT
+      - FINALIZATION_CLEANUP
+deployment:
+  approved_profile_path: null
+  approved_profile_sha256: null
+  promotion_record_path: null
