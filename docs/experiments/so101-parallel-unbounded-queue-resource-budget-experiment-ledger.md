@@ -5783,3 +5783,37 @@ Next round re-runs the parallel lane to confirm 0 failures and closes the rest o
 final clean HEAD).
 
 _Ledger HEAD when written: `06bf044c6`._
+
+
+## CP-UQ128 — Task 9's decisive gates are green, with the source freeze recorded
+
+Re-ran the parallel lane after CP-UQ127's fixes: `lg-demo-parallel3` **exit 0** and
+`PARALLEL_RESULT_RC=0` with **2967 tests, 0 failures, 0 errors** (271 deselects from the
+verified 3236-node collection). Together with the round-9 evidence this closes the gate set the
+plan asks for:
+
+| Gate | Evidence |
+| --- | --- |
+| demo parallel lane (`-n 8`, deselect set) | 2967 tests, 0 failures, result summary exit 0 |
+| demo serial lane (`-n 0`, exact node IDs) | 271 tests, result summary exit 0 |
+| teleop CTest (`-j 1`) | exit 0, result summary exit 0 |
+| copied-prefix acceptance (`lg-copy-final2`) | 15 passed, 0 skipped, against the immutable copy |
+| Bun / OpenAPI (`generate:api:validation`, unit, build) | all exit 0, and the generator produced **no schema diff** |
+| source freeze | `freeze-source-light.json`: HEAD `b57e544e3`, tree clean, 328 runtime files hashed, pointing at the copy build/install bases it was verified against |
+
+`freeze-source-light.json` is written into the task root and records the HEAD, the clean status,
+every runtime file's sha256, and the copy directories, so the "which bytes produced this copy"
+question is answerable from evidence rather than from memory.
+
+**Still running when this was written**: the two `so101_pytest` *directory* runs
+(`lg-demo-full src/so101_demo_py/test`, `lg-teleop-full src/so101_teleop/test`). They exercise the
+same suites the lanes above already covered through the audited split runner; the next round
+collects their exit codes, and — as noted in CP-UQ120 — the teleop *directory* form is known to
+report a non-zero coverage verdict from that runner even when every test passes, so its real gate
+remains the CTest lane above.
+
+With that, Task 9 is complete except for collecting those two wrapper exit codes. Next: **Task 10**,
+the normal task-owned deployment, which must export `SO101_TASK_ROOT` (the guard's shared state
+root, see CP-UQ123) alongside the service's existing environment, then read back served bytes.
+
+_Ledger HEAD when written: `b57e544e3`._
