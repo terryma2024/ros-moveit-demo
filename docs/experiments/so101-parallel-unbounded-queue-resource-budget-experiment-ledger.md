@@ -4275,3 +4275,25 @@ State: the 60 s baseline, the 25 ms peak alias and a 95-sample measurement windo
 `abort_reason` None are all reproduced under the amended policy (run53: baseline 311 samples); the
 only thing standing between this task and a launcher that actually starts its workload is that cwd.
 All exact-N budgets remain `NOT_MEASURED`; nothing was pushed, merged, deleted or fabricated.
+
+## CP-UQ83 — The spawn cwd is fixed, and the refusal moved to CPU_HEADROOM
+
+`production_runner_factory` now spawns the launcher from the batch parent rather than from the
+launcher's own root, so `Popen` has an existing cwd while the root the allocator demands stays
+absent. That removed the `MEASUREMENT_WORKLOAD_UNAVAILABLE: workload` failures: the gate went from
+three to two, and both remaining cases now progress all the way to the admission gate and are
+refused there with `{"code": "CPU_HEADROOM", "status": "REFUSED"}` instead of the workload error
+they assert.
+
+What the counters say, read just now: this process's cgroup and its ancestors report
+`nr_throttled 0` / `throttled_usec 0`, and the leaf scope carries no cpu controller at all, so the
+ambient host throttling that `CPU_HEADROOM` describes is not visible from here. That makes the
+source of the refusal in those two tests the next thing to name rather than guess -- the gate's live
+observation is built inside `compose_measurement_admission` from real host facts, while the tests
+inject their hermetic cgroup and device only into the *session*, so the two are observing different
+objects and the assertion is meeting the real one.
+
+This is recorded as the open item, with the change committed (`ce6105449` plus this one) and the tree
+clean. The measurement path itself is otherwise complete under the amended policy: a 311-sample
+baseline, the 25 ms peak alias, and a 95-sample window with `abort_reason` None. All exact-N budgets
+remain `NOT_MEASURED`; nothing was pushed, merged, deleted or fabricated.
