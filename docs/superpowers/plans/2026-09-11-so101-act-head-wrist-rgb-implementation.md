@@ -4,9 +4,9 @@
 
 **Goal:** 在 MuJoCo 中实现双 RGB、独立颈部搜索、MoveIt 示教和 ACT 无干预 pick-place，并在单次 120 s 内完成撤离与物理验收。
 
-**Architecture:** ACT 输入仅为双 RGB 和 8 维状态，输出 6 维绝对位置目标。搜索、动作执行和物理监督各自拥有明确接口，ROS/控制器与仿真真值留在 adapter 边界。先交付相机与搜索，再交付可重放的数据管线，最后训练、接入执行与封存测试；每一阶段均能独立验收。
+**Architecture:** ACT 输入仅为双 RGB 和 8 维状态，输出 6 维绝对位置目标。搜索、动作执行和物理监督各自拥有明确接口，ROS/控制器与仿真真值留在 adapter 边界。MoveIt 示教采集复用已合入的自适应多 stack Worker Pool，但以独立的 ACT collection workload、Worker 私有 Recorder 和确定性聚合器接入；先通过 W1/W2 资格验证，再按证据扩大并发。先交付相机与搜索，再交付可重放的数据管线，最后训练、接入执行与封存测试；每一阶段均能独立验收。
 
-**Tech Stack:** Python、ROS 2 Jazzy、MuJoCo、MoveIt 2、ros2_control、C++ CameraPlugin、LeRobot/PyTorch、React/TypeScript/Bun。
+**Tech Stack:** Python、ROS 2 Jazzy、MuJoCo、MoveIt 2、ros2_control、C++ CameraPlugin、LeRobot/PyTorch、自适应 Worker Pool、fsync journal、有界 IPC、React/TypeScript/Bun。
 
 **Spec:** [SO-101 双 RGB ACT 设计](../specs/2026-09-10-so101-act-head-wrist-rgb-design.md)。执行者必须先读设计和本计划；校准项由测量工件提供，不把测试示例数值用于实际控制。
 
@@ -20,6 +20,9 @@
 - `act_timeout_s=120`（2 分钟），从首次推理前开始用单调墙钟计时，包含等待、抓放、撤离和最终检查；不得暂停或刷新计时。
 - 非法动作拒绝并留证，不静默裁剪；监督器只批准、拒绝、停止与交接，不替 ACT 生成抓放动作。
 - Train 50、Validation 10、Offline Test 10 个成功 episode；Rollout Validation 至少 10 个固定初始条件；Rollout Test 至少 10 个封存初始条件。
+- 首版只并行 MoveIt 专家示教采集；ACT 闭环验证和封存测试仍按单场景独立执行。资格/扩容 episode 不进入正式训练数据。
+- 现有并行点位验证的 W8 默认值不自动继承。ACT 采集先通过 W1 语义等价和 W2 隔离/吞吐资格；W4/W6/W8 必须逐档测量双 RGB 无损录制、仿真实时因子与资源占用。
+- 业务失败形成 scenario 终态，不靠 fallback 重试；只有基础设施失败允许同一 scenario 增加 infra attempt。并发降级不得改变 split、数据契约或成功标准。
 - V5-T009 首次无干预成功率至少 70%；V5-T010 至少 20 个共享测试场景。搜索失败进入端到端分母，恢复另计干预。
 - 目标平台是 macOS 与 ai-station/Linux，分别验证；实体机械臂迁移属于 V6，本计划不授权实机动作。
 - 不运行无关 `benchmark_test`；普通 Python 包测试只收集 `src/so101_demo_py/test/`。
@@ -30,9 +33,9 @@
 
 ## 范围、基线与交付顺序
 
-建议把后续执行拆为三个审阅批次：A 相机/搜索（Task 1–6）、B 执行安全与数据（Task 7、7A、8–11）、C 训练/产品接入/验收（Task 12、12A、13–16）。本总计划保持一份，避免跨文件接口漂移。2026-09-11 根据 Astra high 审查增加 Task 7A 与 Task 12A，共 18 个任务；编号后缀保留既有引用。Task 7A 在 Task 8 之前，Task 12A 在 Task 13 之前执行。A 的输出是可搜索、锁定并生成合格观测的仿真；B 的输出是有安全门控、可重放的示教；C 的输出是经过封存测试的 ACT 系统。
+建议把后续执行拆为三个审阅批次：A 相机/搜索（Task 1–6）、B 执行安全与数据（Task 7、7A、8–11、11A）、C 训练/产品接入/验收（Task 12、12A、13–16）。本总计划保持一份，避免跨文件接口漂移。2026-09-11 根据 Astra high 审查增加 Task 7A 与 Task 12A；2026-09-16 根据已合入的自适应多 stack 实现增加 Task 11A，共 19 个任务。编号后缀保留既有引用。Task 7A 在 Task 8 之前，Task 11A 在 Task 12 之前，Task 12A 在 Task 13 之前执行。A 的输出是可搜索、锁定并生成合格观测的仿真；B 的输出是有安全门控、可重放且完成并发资格验证的示教管线；C 的输出是经过封存测试的 ACT 系统。
 
-编写时源码基线：`0fbef11441e7eb541854b367a21b38dc354c43ac`。设计文档当前为未跟踪文件，属于用户已有工作，执行前不得清理。路径均相对 `moveit-demo` 仓库根。
+原计划编写基线为 `0fbef11441e7eb541854b367a21b38dc354c43ac`。本次并行采集修订基于 `e6c91cb6437f254f65531346bffaec53655e9162`；自适应 Worker Pool 合入提交为 `25d1130a990f34334b20e9ced4bcde4f4ed83aba`。执行时仍需读取实际 HEAD、dirty files 和两远端状态，不能假定这些哈希仍是最新工作树。路径均相对 `moveit-demo` 仓库根。
 
 已核实的集成点：
 
@@ -42,6 +45,9 @@
 - `src/so101_demo_py/config/mujoco/ros2_controllers.yaml` 使用独立的五维 arm 和一维 gripper JointTrajectoryController。
 - CameraPlugin 位于子模块 `third_party/mujoco_ros2_control`；依赖锁为 `src/so101_demo_py/config/dependency-lock.yaml`，当前锁定 `71bc9346cf93d6227a6678fcacf63f3e18acfcba`。修改子模块后先提交子模块，再更新父仓 gitlink 和锁，不改写历史 provenance 报告。
 - 仿真物理证据来源为 `src/so101_mujoco_support` 与 `src/so101_demo_py/src/backends/mujoco/observer.py`。持物监督复用既有杯子证据；Task 8 在 support 插件增设不经杯子过滤的全机器人接触流。所有真值仍只供监督/审计，不进入 ACT observation。
+- `src/so101_demo_py/src/parallel_batch/` 已有自适应 Runner、queue、pool、coordinator、Worker、Broker、资源声明和 fsync journal；`runtime/parallel_*` 提供进程/ROS/IPC 组合。`ParallelWorker` 当前硬编码点位验证阶段，Task 11A 通过 ACT 专用 ports 适配其调用边界，不复制 lease、heartbeat、fallback 或 cleanup 实现。
+- `adaptive_contracts.py` 单批最多 20 个 `selected_point_ids`。Task 11A 在外层将冻结的 scenario 清单确定性分 wave，每个 wave 复用 `AdaptiveBatchRunner`，外层 journal 负责跨 wave 恢复和最终数据集顺序；不得放宽现有点位验证上限来容纳整套数据。
+- `config/mujoco/parallel_adaptive_workers_v1.yaml` 的 W8/fallback 和共享 Broker C2 来自 MoveIt 点位验证。ACT 使用独立 `config/act/parallel_collection_v1.yaml`，先冻结 W2/fallback W1；只有资格实验通过才更新默认档位。
 
 ## 文件结构与职责
 
@@ -54,7 +60,8 @@
 | 图像与搜索 | `act/synchronizer.py`, `act/search.py`, `act/bearing.py` | 因果取样、扫描/锁定、相机视线方向 |
 | 校准 | `act/calibration.py`, `cli/act_preflight.py` | 校准报告、配置冻结、正式采集门槛 |
 | 执行与监督 | `act/execution.py`, `act/supervisor.py`, `adapters/act/ros_execution.py`, `adapters/act/physics.py` | 双控制器、路径检查、释放门控和状态机 |
-| 数据 | `act/expert.py`, `act/recorder.py`, `act/sampling.py`, `act/collection.py` | 实际 reference、无损记录、划分与批采 |
+| 数据 | `act/expert.py`, `act/recorder.py`, `act/sampling.py`, `act/collection.py` | 实际 reference、无损记录、划分与单场景采集 |
+| 并行采集 | `act/parallel_collection.py`, `adapters/act/parallel_collection_runtime.py`, `adapters/act/parallel_collection_results.py`, `cli/act_collect_parallel.py` | scenario→wave、Worker ports、基础设施降级、原子封存与确定性总 manifest |
 | 模型 | `act/bundle.py`, `act/policy.py`, `adapters/act/lerobot.py`, `cli/act_train.py` | 离线模型工件、单次推理、版本隔离 |
 | 推理进程 | `adapters/act/inference_process.py`, `cli/act_inference_worker.py` | 指定解释器、模型加载、非阻塞 IPC |
 | 离线评估 | `act/offline_evaluation.py`, `cli/act_offline_evaluate.py` | 冻结 Offline Test 与带 mask 的动作误差 |
@@ -71,6 +78,7 @@ Python 接口中的 `dict` 均为下列闭合 JSON schema，校验拒绝多余�
 | `ActionPrefix` | `session_id:str, attempt_id:str, sequence:int, observation_time_s:float, target_times_s:tuple[float,...], positions:tuple[tuple[float,...],...]`（每行 6 维） |
 | `SearchResult` | `found:bool, status:str, bearing_rad:float|None, frame_id:str, ray_origin_frame_id:str, neck_yaw_rad:float|None, confidence:float|None, timestamp:float, attempt_id:str` |
 | `Scenario` | `scene_id:str, split:str, xy:tuple[float,float], arm_q:tuple[float,...]`（6 维）, `search_start_rad:float, seed:int, config_sha256:str` |
+| `CollectionScenarioResult` | `scene_id:str, split:str, status:str, business_failure:str|None, infra_attempts:int, episode_root:str, episode_sha256:str, worker_id:str, pool_generation:int, worker_count:int` |
 | `RunResult` | `scene_id:str, split:str, search_locked:bool, done:bool, interventions:int, failure:str|None, elapsed_wall_s:float, elapsed_sim_s:float, checkpoint_sha256:str, config_sha256:str` |
 
 `ContractError(ValueError)` 用于输入/工件拒绝；执行状态使用稳定字符串，如 `ACT_TIMEOUT`、`TARGET_AMBIGUOUS`、`TARGET_NOT_FOUND`、`INPUT_STALE`、`COLLISION_REJECTED`、`RELEASE_UNSUPPORTED`、`CONTROLLER_PAIR_FAILED`。错误细节留审计侧，不悄悄转换为成功。
@@ -921,7 +929,7 @@ git commit -m "feat: record controller-reference demonstrations"
 - Modify: `src/so101_demo_py/setup.py`
 - Create: `src/so101_demo_py/test/test_act_sampling.py`
 
-**Interfaces:** Consumes: Task 6 校准和 MoveIt 完整预检。Produces: `assert_separated(a:list[tuple],b:list[tuple],gap_m:float)->None`；`make_manifest(config:dict, seed:int)->dict`（五集合 Scenario 列表）；CLI `act_sample --calibration PATH --output PATH --seed INT`。
+**Interfaces:** Consumes: Task 6 校准和 MoveIt 完整预检。Produces: `assert_separated(a:list[tuple],b:list[tuple],gap_m:float)->None`；`make_manifest(config:dict, seed:int)->dict`（五集合 Scenario 列表、示教候选预算与稳定 `scene_id`）；`project_collection_manifest(split_manifest:dict)->dict`（只含 Train/Validation/Offline Test，并保存总清单 SHA256）；CLI `act_sample --calibration PATH --output PATH --collection-output PATH --seed INT [--qualification-output PATH] [--qualification-load-output PATH]`。两个可选输出分别生成 8 个功能资格场景和 40 个持续负载场景，均与正式五集合互斥且不得进入训练。
 
 - [ ] **Step 1: 写入边界失败测试。**
 
@@ -952,7 +960,7 @@ def assert_separated(a, b, gap_m):
         raise ValueError("SPLIT_DISTANCE_VIOLATION")
 ```
 
-Scenario 恢复必须调用 Task 3 的 joint_overrides 写入接口，不能只修改期望读回；记录 reset 后实测七关节作为清单实现证据。候选网格逐点检查桌边、碰撞、pre-grasp/grasp/lift/place/retreat IK 与完整规划、搜索可见性和双视角覆盖，输出有效单元而非包围矩形。单元内部采样的实际点重新完整检查；杯子 XY 与小幅初始关节扰动使用显式种子，初始 arm_q 不能在恢复观察姿态时无声覆盖。按距离/左右/边缘/head 锁定角分层配额，记录拒绝原因。五集合空间隔离、种子、初始状态与轨迹去重；固定外观/光照/尺寸/放置区。闭环验证场景保存 Scenario 全字段，测试场景物理失败不能抽掉后补成容易成功的集合。区域不足输出 QUOTA_UNSATISFIED，不缩小隔离距离暗中凑数。
+Scenario 恢复必须调用 Task 3 的 joint_overrides 写入接口，不能只修改期望读回；记录 reset 后实测七关节作为清单实现证据。候选网格逐点检查桌边、碰撞、pre-grasp/grasp/lift/place/retreat IK 与完整规划、搜索可见性和双视角覆盖，输出有效单元而非包围矩形。单元内部采样的实际点重新完整检查；杯子 XY 与小幅初始关节扰动使用显式种子，初始 arm_q 不能在恢复观察姿态时无声覆盖。按距离/左右/边缘/head 锁定角分层配额，记录拒绝原因。五集合空间隔离、种子、初始状态与轨迹去重；固定外观/光照/尺寸/放置区。闭环验证场景保存 Scenario 全字段，测试场景物理失败不能抽掉后补成容易成功的集合。正式采集前按小批实测有效率为 Train/Validation/Offline Test 冻结大于成功配额的候选预算，每项生成与清单顺序无关的稳定 `scene_id`；运行期间不得临时追加随机候选。`collection.json` 必须由已经原子写入的五集合 `splits.json` 确定性投影，记录后者的内容 hash，并把 Rollout Validation/Test 标记为来源清单中的 `NOT_COLLECTION_ELIGIBLE`，不能自行重新采样。候选耗尽仍不足时输出 QUOTA_UNSATISFIED，并在新数据版本中重新采样，不能缩小隔离距离或反复执行业务失败场景暗中凑数。
 
 - [ ] **Step 4: 验证 GREEN 与失败矩阵。**
 
@@ -960,7 +968,7 @@ Scenario 恢复必须调用 Task 3 的 joint_overrides 写入接口，不能只�
 act_test src/so101_demo_py/test/test_act_sampling.py -q
 ```
 
-预期非零测试收集、全部通过。参数化检查相邻格边界泄漏、重复 seed/episode、无法达到配额、中心通过但实际点拒绝、manifest 重放；生成至少 50/10/10 示教配额与 10/10 闭环场景，另保留 20 个共享路线比较场景。测试清单生成前不得跑 ACT 筛成功位置。
+预期非零测试收集、全部通过。参数化检查相邻格边界泄漏、重复 seed/episode、无法达到配额、中心通过但实际点拒绝、manifest 重放、候选顺序变化时 `scene_id` 稳定、collection 投影只含三个示教 split 且总清单 hash 可读回；生成足以覆盖至少 50/10/10 成功示教目标的冻结候选预算与 10/10 闭环场景，另保留 20 个共享路线比较场景。测试清单生成前不得跑 ACT 筛成功位置。
 
 - [ ] **Step 5: 审查本任务 diff 并提交。**
 
@@ -981,7 +989,7 @@ git commit -m "feat: isolate ACT spatial splits"
 - Modify: `src/so101_demo_py/setup.py`
 - Create: `src/so101_demo_py/test/test_act_collection.py`
 
-**Interfaces:** Consumes: Task 9 recorder、Task 10 manifest、QUALIFIED 校准、搜索/教师/物理监督。Produces: `training_eligible(record:dict)->bool`；`collect(manifest:dict, root:Path, ports:dict)->dict`；CLI `act_collect --manifest PATH --calibration PATH --root PATH --limit INT`，ports 固定 reset/search/expert/recorder/supervisor。
+**Interfaces:** Consumes: Task 9 recorder、一个 Task 10 `Scenario`、QUALIFIED 校准、搜索/教师/物理监督。Produces: `training_eligible(record:dict)->bool`；`prepare_scenario(scenario:dict, reset_port:object)->dict`（只做一次 reset、七关节读回与安全就绪证明）；`collect_authorized_scenario(scenario:dict, preparation:dict, root:Path, ports:dict)->CollectionScenarioResult`（从搜索到 QC，不再 reset）；W1 调试 CLI `act_collect --manifest PATH --calibration PATH --root PATH --limit INT [--qualification]`，ports 固定 reset/search/expert/recorder/supervisor。全局候选循环、配额和并发调度属于 Task 11A。
 
 - [ ] **Step 1: 写入边界失败测试。**
 
@@ -1008,7 +1016,7 @@ def training_eligible(record):
     return record["qc"] == "PASS" and record["done"] and record["interventions"] == 0
 ```
 
-统一 reset→search→lock→stable→record→expert→release→retreat→final-check→QC。首次小批 limit=5，逐条读回无损 RGB、时间网格、reference、物理结果和 hash；动作重放通过后再启动正式批次。仅采 Train/Validation/Offline Test 示教，两个 Rollout 集合不得运行专家采标签。每条成功示教受 120 s 墙钟预算；失败原始证据保留，满足配额时退出，候选预算耗尽则返回不足。放置失败先保留证据再独立 reset，持物/未知时不能直接 reset。每条记录生命周期、运行产物 provenance 与模型来源。
+W1 CLI 每条 scenario 先调用一次 `prepare_scenario`，再把返回的 reset epoch、实测七关节与场景哈希传给 `collect_authorized_scenario`，完成 search→lock→stable→record→teacher inference→expert→release→retreat→final-check→QC；后半段拒绝再次 reset。先以 W1 调试入口运行 5 条小批，逐条读回无损 RGB、时间网格、reference、物理结果和 hash；动作重放通过后才允许 Task 11A 做并发资格验证。正式模式仅采 Train/Validation/Offline Test 示教；`--qualification` 只接受 qualification 场景并阻止结果进入训练 manifest；两个 Rollout 集合不得运行专家采标签。每条成功示教受 120 s 墙钟预算；搜索、规划、执行或 QC 失败也封存原始证据并返回不可改写业务终态，不在此函数内自动重试。放置失败先保留证据再独立恢复，持物/未知时不能直接 reset。每条记录生命周期、运行产物 provenance 与模型来源。
 
 - [ ] **Step 4: 验证 GREEN 与失败矩阵。**
 
@@ -1016,7 +1024,7 @@ def training_eligible(record):
 act_test src/so101_demo_py/test/test_act_collection.py -q
 ```
 
-预期非零测试收集、全部通过。单测注入失败 reset、搜索歧义、MoveIt 失败、QC 时间洞和配置中途变化，检查不进入训练且原件存在；正式批次检查各层候选/拒绝/搜索失败/物理失败/成功数。B 阶段通过条件为可重放数据及完整校准，不包括 ACT 成功率。
+预期非零测试收集、全部通过。单测注入失败 reset、搜索歧义、MoveIt 失败、旧 reset epoch/教师 pose、QC 时间洞、Recorder 队列背压、磁盘写入失败和配置中途变化，检查每个 attempt 只 reset 一次，搜索失败成为业务 `FAILED`，不进入训练且原件存在；同一 `scene_id` 的重入不能覆盖既有终态。B 阶段通过条件还包括 Task 11A 并发资格，不包括 ACT 成功率。
 
 - [ ] **Step 5: 审查本任务 diff 并提交。**
 
@@ -1027,6 +1035,140 @@ git commit -m "feat: collect quality-gated ACT demonstrations"
 ```
 
 提交前确认暂存区没有用户已有改动；只在相关自动检查和本任务必需运行门通过后勾选，校准/训练长任务的结果另写账本。
+
+### Task 11A: 自适应多 stack 示教采集与并发资格验证
+
+**Files:**
+
+- Create: `src/so101_demo_py/src/act/parallel_collection.py`
+- Create: `src/so101_demo_py/src/act/parallel_collection_recovery.py`
+- Create: `src/so101_demo_py/src/adapters/act/parallel_collection_runtime.py`
+- Create: `src/so101_demo_py/src/adapters/act/parallel_collection_results.py`
+- Create: `src/so101_demo_py/src/runtime/act_parallel_collection_composition.py`
+- Create: `src/so101_demo_py/src/cli/act_collect_parallel.py`
+- Create: `src/so101_demo_py/config/act/parallel_collection_v1.yaml`
+- Modify: `src/so101_demo_py/src/parallel_batch/worker.py`
+- Modify: `src/so101_demo_py/src/cli/mujoco_parallel_batch.py`
+- Modify: `src/so101_demo_py/setup.py`
+- Create: `src/so101_demo_py/test/test_act_parallel_collection.py`
+- Create: `src/so101_demo_py/test/test_act_parallel_collection_runtime.py`
+- Create: `src/so101_demo_py/test/test_act_parallel_collection_recovery.py`
+- Create: `src/so101_demo_py/test/test_act_parallel_collection_integration.py`
+- Modify: `src/so101_demo_py/test/test_parallel_batch_worker.py`
+- Modify: `src/so101_demo_py/test/test_parallel_batch_cli.py`
+
+**Interfaces:** Consumes: Task 10 冻结候选清单、Task 11 `prepare_scenario`/`collect_authorized_scenario`、`AdaptiveBatchRunner`、`ProductionAdaptivePoolFactory(composition_factory=...)`、现有 coordinator/Worker/Broker/resources/cleanup。Produces: `partition_waves(scene_ids:tuple[str,...], max_wave_size:int=20)->tuple[tuple[str,...],...]`；`ParallelActCollectionRunner(manifest:dict, config:dict, root:Path).run()->dict`；`ActWaveReconciler.reconcile(wave_record:dict)->dict`；闭合枚举 `workload_kind=point_validation|act_collection`；`AuthorizedWorkloadResult(decision, action_may_have_started:bool, terminal_failure:dict|None)`；`ActCollectionWorkload.run_authorized(...)->AuthorizedWorkloadResult`；`ActCollectionWorkerRuntime`（reset/恢复与 ROS 资源 port）；`ActCollectionResultStore`（Worker seal/recovery receipt port）；`ActCollectionResultVerifier.verify/discover`（coordinator result port）；CLI `act_collect_parallel --manifest PATH [--split-manifest PATH] --calibration PATH --config PATH --root PATH [--qualification] [--worker-count INT]`。正式模式要求 `--split-manifest` 并验证 collection 中的来源 hash；资格模式禁止该参数。`--worker-count` 只能选择配置中已声明的资格档位，并写入结果工件。
+
+- [ ] **Step 1: 写外层 wave、终态与恢复的失败测试。**
+
+```python
+from so101_demo.act.parallel_collection import partition_waves
+
+def test_manifest_order_is_partitioned_without_duplication():
+    scene_ids = tuple(f"scene-{index:03d}" for index in range(45))
+    waves = partition_waves(scene_ids, max_wave_size=20)
+    assert tuple(map(len, waves)) == (20, 20, 5)
+    assert tuple(item for wave in waves for item in wave) == scene_ids
+```
+
+增加 fake W2 集成测试：每个 `scene_id` 只有一个业务终态；pool generation 失败后，只把未封存项交给 W1；已封存项不重跑；同一 scenario 的冲突终态拒绝；journal 截断后恢复到最后一个 fsync 事件。测试业务失败 `FAILED` 不进入 fallback，基础设施 `INVALID/INDETERMINATE` 才增加 `infra_attempts`。另模拟父进程在 Worker seal/coordinator commit 之后、AdaptiveBatchRunner 导入之前退出，要求恢复先对账旧 wave，再为剩余项生成新的 continuation batch。
+
+- [ ] **Step 2: 验证 RED。**
+
+```zsh
+act_test \
+  src/so101_demo_py/test/test_act_parallel_collection.py \
+  src/so101_demo_py/test/test_act_parallel_collection_runtime.py \
+  src/so101_demo_py/test/test_act_parallel_collection_recovery.py \
+  src/so101_demo_py/test/test_act_parallel_collection_integration.py -q
+```
+
+预期新符号缺失或新增边界断言失败；保存退出码和日志。不得把既有 adaptive tests 的通过当成本任务 RED。
+
+- [ ] **Step 3: 实现确定性 wave 和外层权威。**
+
+`ParallelActCollectionRunner` 只创建 `RunMode.EXECUTE` 请求，并先校验 manifest hash、资格配置、成功配额、唯一 `scene_id` 和 split 白名单；ACT collection workload 不提供 plan-only/validation 映射。正式模式要求同时读取五集合总清单和 collection 投影，核对来源 SHA256、三个示教 split 的逐项身份/顺序，并拒绝投影中出现 Rollout 场景；`--qualification` 模式只接受 `qualification`，禁止 `--split-manifest`，强制写入隔离 root，并禁止生成可供 Task 12 消费的训练 manifest。它按冻结清单顺序切成最多 20 项的 wave，为每个 wave 创建短 ASCII batch id 和独立 `AdaptiveBatchRequest`。外层 fsync journal 记录 `COLLECTION_MANIFEST`、`WAVE_STARTED`、每个 `SCENARIO_TERMINAL`、`WAVE_TERMINAL`、split 配额和最终 summary；恢复时拒绝 manifest/config hash 变化，并从第一个未终态 scenario 继续。
+
+现有 `AdaptiveBatchRunner` 对 `POOL_STARTING` 后未写 `BATCH_TERMINAL` 的批次保持 `CRASHED_BATCH_REPORT_ONLY`；ACT 不能把它原地重启。外层发现未终态 wave 时，`ActWaveReconciler` 先取得该 collection root 的独占恢复锁，读取外层记录的旧 batch id/runtime root、resource/owned-process manifest、adaptive journal 和 coordinator journal；调用现有精确 cleanup/fence，确认旧 Worker/Broker 进程、controller goal、socket 与 Domain 均已停止或释放。任一对象身份不明或无法清理时停止恢复，不能启动新 pool。
+
+完成 fencing 后，对账器先按 coordinator journal 顺序重建每个 lease 的权威裁决，再遍历原 wave 的冻结 `scene_id` 和精确 workspace。已有 coordinator result commit 的位置调用 `ActCollectionResultVerifier.verify`；缺 commit 时，只有 journal 中没有 `LEASE_EXPIRED`、revocation、replacement 或 `LATE_RESULT_REJECTED`，且封存 manifest 的单调完成时间不晚于原 lease deadline，才允许在该 lease 的登记 workspace 调用 `discover`。durable expiry/revocation/replacement 的优先级高于磁盘 seal；迟到封存只保留审计，不能成为终态或配额。身份、workload/config/manifest hash、终态、时间或内容 hash 不匹配就 fail closed。每个验证通过的结果以 `SCENARIO_RECONCILED` fsync 到外层 journal，保留原 worker/generation/attempt 和完成顺序证据；没有有效封存结果的已启动 lease 计一次 infra attempt。对账完成后才写 `WAVE_RECONCILED`，不得修改或续写旧 AdaptiveBatchRunner journal。
+
+剩余 scenario 保持原 wave 顺序，按累计 `infra_attempts` 的剩余额度分组；每组使用新的单字符 continuation batch id 和 `max_infra_attempts_per_point=全局上限-该组累计次数` 创建新的 AdaptiveBatchRunner。已到上限的项直接形成 `INFRA_EXHAUSTED`，不再调度。continuation 的 batch/runtime root、来源 wave 和 prior attempts 在启动前 fsync；若再次崩溃，重复相同 fencing→verify/discover→import 流程。这样总 infra attempt 上限跨 continuation 生效，已封存结果不重复采集。
+
+每个 wave 通过 `ProductionAdaptivePoolFactory` 注入 `ActCollectionBatchComposition`，复用现有 selector、lease、heartbeat、generation fallback、Domain claim、owned-process manifest 和 cleanup。不要复制或修改 `adaptive_contracts.py` 的 20 项上限。将 `scenario_id` 映射为现有 `point_id` 只属于调度适配，终态工件仍使用 collection schema。现有 `PointStatus.PASSED` 表示该 scenario 产生训练合格 episode，`PointStatus.FAILED` 表示已封存的业务失败；两者均是不可改写终态。
+
+正式采集按 split 和冻结顺序分别分 wave，一个 wave 完整终态后才判断配额。每个 split 选择 manifest 顺序中前 N 个训练合格结果；包含第 N 个成功的 wave 中，排在其后的成功 episode 保留为 `SURPLUS_SUCCESS` 但不进入 Task 12，之后的 wave 标记 `UNSCHEDULED_QUOTA_MET`。因此 Worker 完成顺序不会改变数据集成员。资格模式没有成功配额，必须消费完整资格清单。增加乱序完成测试，要求 W1/W2 的选中 `scene_id` 集合一致。
+
+默认 `parallel_collection_v1.yaml` 使用 `worker_count: 2`、`qualification_worker_counts: [1,2,4,6,8]`、独立 Domain 池，以及闭合降级表 `1:[]`、`2:[1]`、`4:[2,1]`、`6:[4,2,1]`、`8:[6,4,2,1]`；并显式包含 `max_wave_size: 20`、Recorder 队列上限、最小持续写入吞吐、帧间隔容差、lease/heartbeat/启动超时、infra attempt 上限、共享教师 Broker executor 数和资源采样周期。`qualification_worker_counts` 只允许显式资格运行，不能直接改变正式默认。运行目录固定为 `<registered-root>/<run-code>/r/<one-char-wave-id>/p/gNNwNN`，`run-code` 仅允许 `s`（W1 smoke）、`u`（完整单 stack 基线）、`q1`/`q2`/`q4`/`q6`/`q8`（资格）或 `d`（正式数据）；wave id 使用单个 ASCII 字符。
+
+`act_parallel_socket_paths(pool_root, worker_count)` 作为 ACT composition 的唯一端点清单，合并现有 `adaptive_socket_paths()` 与每个 Worker 的 Task 7A command broker 短端点 `ipc/<worker-index>/a`。启动预检、owned-process/endpoint manifest、精确 cleanup 和崩溃恢复都读取这一个清单，不能各自拼路径。CLI 在创建进程前用真实 evidence root 和每个候选档位枚举全部端点，最长编码路径超过 107 bytes 立即拒绝。测试断言每个 Worker 的 command broker 均在清单中，启动、清理与恢复使用相同集合；另以完整清单的实际最长端点验证 107 bytes 通过、根路径增加 1 byte 后 108 bytes 且零进程启动。W4/W6/W8 只有在 Step 6 的资格证据通过后才允许改成正式默认值。
+
+- [ ] **Step 3a: 适配现有 Worker ports，不复制调度状态机。**
+
+在 `parallel_batch/worker.py` 增加可选、闭合的 workload port。未指定时构造 `PointValidationWorkload`，逐行封装当前 `_run_authorized` 的既有 inference→admit→execute/plan 逻辑，确保原 CLI 和证据字节契约保持不变；`act_collection` 才构造 `ActCollectionWorkload`。Worker 继续拥有每个危险边界的 lease heartbeat/`_boundary` 检查、异常捕获与 `_safe_stop`；workload 只能通过受控 callback 调用 runtime/Broker，不能自行绕过 coordinator。两类 workload 返回 `AuthorizedWorkloadResult`，保持当前 `_run_authorized` 的 decision、`action_may_have_started` 与 terminal failure 三项语义，再由 Worker 执行既有 seal/commit/recovery。ACT 的搜索/规划/QC 业务失败必须作为正常 decision 返回，不能抛异常进入 `_safe_stop`。
+
+`ActCollectionWorkerRuntime.reset_point` 调用 Task 11 `prepare_scenario`，只做一次 reset、实测七关节读回和 reset epoch 建立；`point_initial_gate` 只验证 controller 无活跃 goal、相机/Recorder/Broker/ROS 就绪和 preparation 身份，不执行 head 搜索，不把业务失败塞进初始门。`ActCollectionWorkload.run_authorized` 在获准阶段一次完成 head 搜索、相机稳定、教师 snapshot/Broker inference、pose 陈旧检查、录制、专家执行和 QC，并调用 `collect_authorized_scenario`，禁止第二次 reset。搜索歧义/未找到、规划/执行失败和 QC 失败返回正常业务 `FAILED`；端口、进程、通信或封存故障才返回 `INVALID/INDETERMINATE` 触发 fallback。所有动作边界继续由 coordinator lease 和 Task 7A 控制权仲裁授权。
+
+Broker 请求/响应必须关联 batch、worker、worker generation、`scenario_id`/point、attempt、lease generation、reset epoch、request sequence 和输入帧时间。现有 LeaseIdentity 已包含的字段直接复用；reset epoch 和 frame stamp 由 ACT runtime 作为请求负载校验。head 搜索检测留在 Worker 进程，head/wrist 训练帧由 Worker 私有 Recorder 直接写盘，不进入共享 Broker。
+
+`mujoco_parallel_batch.py` 的 worker spec 增加闭合 `workload_kind`、scenario manifest/config 绝对路径和哈希；子进程 builder 只从本地注册表选择 point-validation 或 ACT 的 runtime/workload/results factory，不接受任意 import path。`ProductionBatchComposition` 根据同一 `workload_kind` 选择 `_ArtifactResults`/`SealedResultAdapter` 或 `ActCollectionResultStore`/`ActCollectionResultVerifier`，并把选择写入 batch manifest。默认未提供该字段时仍走现有点位验证。resume 时必须从已封存 manifest 读回并拒绝 workload 或 hash 变化。
+
+`ActCollectionResultStore` 在 Worker 私有临时目录写原始 RGB、状态/action、事件、QC 和 provenance；成功或业务失败都先写闭合 manifest、逐文件 hash，以及由 Worker/Coordinator 共用注入时钟产生的 `completed_monotonic_s`，再原子 rename 并 fsync 文件与父目录。它完整实现 Worker 需要的 `seal_attempt`、`write_recovery_receipt`、`verify_recovery_receipt`。`ActCollectionResultVerifier` 完整实现 coordinator 需要的 `verify(lease, location, run_mode)` 与 `discover(lease, workspace)`，只在登记 workspace 内发现身份、状态、hash、完成时间和终态都匹配的封存结果，并拒绝 `completed_monotonic_s > lease_deadline_monotonic_s`。seal 后、terminal ACK 前崩溃时，coordinator 可通过 discover 提交同一结果；冲突或未封存目录 fail closed。Recorder 队列满、持续磁盘吞吐不足、图像缺口或时间网格不连续记为业务 QC 失败，不静默丢帧；调度器可暂停发新 lease。基础设施崩溃留下的未封存临时目录保留作证据，不计业务终态。
+
+- [ ] **Step 4: 验证 GREEN、隔离和故障矩阵。**
+
+```zsh
+act_test \
+  src/so101_demo_py/test/test_act_parallel_collection.py \
+  src/so101_demo_py/test/test_act_parallel_collection_runtime.py \
+  src/so101_demo_py/test/test_act_parallel_collection_recovery.py \
+  src/so101_demo_py/test/test_act_parallel_collection_integration.py \
+  src/so101_demo_py/test/test_parallel_adaptive_runner.py \
+  src/so101_demo_py/test/test_parallel_adaptive_pool.py \
+  src/so101_demo_py/test/test_parallel_batch_worker.py \
+  src/so101_demo_py/test/test_parallel_batch_cli.py \
+  src/so101_demo_py/test/test_parallel_batch_crash_recovery.py -q
+```
+
+预期非零测试收集、全部通过。故障矩阵至少覆盖：旧 point-validation worker spec 仍构造原 runtime/results/verifier；真实 ACT 子进程 spec 构造 ACT workload；每 scenario 只 reset 一次；搜索失败封存为 `FAILED` 且不 fallback；旧教师 pose/reset epoch 拒绝；两个 Worker 不同 ROS Domain/namespace/root；错误 Worker 或旧 generation 的 Broker 响应拒绝；一个 Worker Recorder 变慢时另一个不串帧；Broker/Worker 进程退出只重派未封存项；seal 后 ACK 前崩溃由 `discover` 恢复；`LEASE_EXPIRED`→迟到 seal→父进程崩溃后对账仍拒绝该结果；coordinator commit 后、外层导入前崩溃可对账导入；未完成旧进程 fencing 时禁止 continuation；累计 infra attempts 跨 continuation 不超限；recovery receipt 身份和 workspace 越界拒绝；重复/冲突终态；wave 20+20+余数；不同完成顺序仍选择相同的 manifest 前 N 个合格 `scene_id`；W8→W6 完成但 W8 资格失败；五集合总清单到 collection 投影再到最终 dataset 的 hash 可贯通；端点清单包含每个 command broker 且启动/清理/恢复集合一致；完整清单最长路径 107 bytes 通过、108 bytes 时零进程启动；SIGTERM 后 owned process、Domain、socket、command broker 和 controller goal 精确清理。
+
+- [ ] **Step 5: 运行 W1/W2 资格批次。**
+
+先生成单独的功能资格 manifest，使用 8 个覆盖不同区域和搜索角的 scenario；这些 episode 永久标记 `qualification`，不进入 Train/Validation/Offline Test。对同一清单分别运行 W1 单条入口、W1 并行入口和 W2。语义等价比较 schema、scene/reset 身份、10 Hz 时间网格、reference 定义、QC/失败分类、封存结构和物理结果，不要求不同运行的像素或 MoveIt 浮点轨迹逐字节相同。
+
+W2 通过条件：8 个 scenario 各有唯一终态；无跨 Worker topic、帧、controller goal 或目录写入；无静默丢帧；所有进程、Domain、socket 与 goal 完成精确清理；`levels_used == [2]`，零 infra interruption/retry、零 fallback、零 crash continuation；有效 episode/分钟高于完整八场景 W1 基线，且物理成功率和 QC 合格率没有超出预先冻结的退化容差。每次运行记录代码/config/manifest/Broker 模型 hash、`levels_used`、每 scenario infra attempts、CPU、RSS、GPU、磁盘写入、仿真实时因子、帧间隔分位数、吞吐与失败分布。发生降级后完成的批次只作为恢复证据，不计 W2 资格或吞吐。功能资格只证明 W2 接线和隔离，不用于选择 W4/W6/W8。
+
+- [ ] **Step 6: 逐档选择正式并发并运行正式采集。**
+
+W2 功能资格通过后，另冻结 40 个 `split=qualification`、`manifest_purpose=load` 的 scenario 作为持续负载清单；它与正式五集合及 8 场景功能清单互斥，确定性分成两个完整的 20 项 wave。扩容依次运行 W4、W6、W8，持续负载配置固定 `initial_points_per_worker=2`，要求每个 wave 中每个 Worker 至少连续完成 2 个 terminal lease；少于 2 个则该档失败，不在运行时追加候选。每个被测档位 Wn 的每个 wave 都必须满足 `levels_used == [n]`、零 infra interruption/retry、零 fallback、零 crash continuation；任何降级完成只进入恢复报告，不参与 Wn 资格、吞吐或资源排名。每一档跑完整清单，不因早期成功停止；任何一档失败时停止升档。候选正式默认档位还需在全新 root 上重复一次完整持续负载，两轮都通过同样的纯档位正确性、资源稳定和吞吐门才算稳定。
+
+选择“满足全部数据正确性门且两轮有效 episode/分钟最高的稳定档位”为正式默认，不能只按 wall time。比较同时检查运行后半段吞吐不持续下降、Recorder 队列高水位可回落、磁盘延迟/帧间隔/RTF/RSS 没有越过冻结阈值。W8 点位验证或 W10 单样本不能代替 ACT 采集资格。正式采集使用冻结候选 manifest 和选定档位；基础设施 fallback 只降并发，业务失败不重试。每个 split 完成包含第 N 个成功的整个 wave 后，聚合器按原 manifest 顺序选择前 N 个合格 episode 并生成总 manifest；候选耗尽不足则返回 QUOTA_UNSATISFIED，并保留失败与 surplus 证据。
+
+- [ ] **Step 7: 审查本任务 diff 并提交。**
+
+```zsh
+git add \
+  src/so101_demo_py/src/act/parallel_collection.py \
+  src/so101_demo_py/src/act/parallel_collection_recovery.py \
+  src/so101_demo_py/src/adapters/act/parallel_collection_runtime.py \
+  src/so101_demo_py/src/adapters/act/parallel_collection_results.py \
+  src/so101_demo_py/src/runtime/act_parallel_collection_composition.py \
+  src/so101_demo_py/src/cli/act_collect_parallel.py \
+  src/so101_demo_py/config/act/parallel_collection_v1.yaml \
+  src/so101_demo_py/src/parallel_batch/worker.py \
+  src/so101_demo_py/src/cli/mujoco_parallel_batch.py \
+  src/so101_demo_py/setup.py \
+  src/so101_demo_py/test/test_act_parallel_collection.py \
+  src/so101_demo_py/test/test_act_parallel_collection_runtime.py \
+  src/so101_demo_py/test/test_act_parallel_collection_recovery.py \
+  src/so101_demo_py/test/test_act_parallel_collection_integration.py \
+  src/so101_demo_py/test/test_parallel_batch_worker.py \
+  src/so101_demo_py/test/test_parallel_batch_cli.py
+git diff --cached --check
+git commit -m "feat: collect ACT demonstrations across isolated stacks"
+```
+
+提交前确认暂存区没有用户已有改动；只有单元/集成测试、W1/W2 资格和所选正式并发档位的现场证据均通过后才勾选。若更高档位未通过，可保留较低的已合格默认值并把失败档位写入账本，不得把计划中的候选 W8 写成运行事实。
 
 ### Task 12: LeRobot 导出、训练与模型工件
 
@@ -1040,7 +1182,7 @@ git commit -m "feat: collect quality-gated ACT demonstrations"
 - Modify: `src/so101_demo_py/setup.py`
 - Create: `src/so101_demo_py/test/test_act_bundle.py`
 
-**Interfaces:** Consumes: Task 11 QC manifest。Produces: `training_rows(rows:list[dict])->list[dict]`；`export_dataset(manifest:dict, output:Path)->Path`；`train_act(config:dict, dataset:Path, output:Path)->Path`；`load_bundle(path:Path)->dict`；`load_policy(bundle_path:Path)->object`（返回具有 `infer(observation:dict)->tuple[tuple[float,...],...]` 与 `reset()->None` 的模型对象）；CLI `act_train --manifest PATH --config PATH --output PATH`。
+**Interfaces:** Consumes: Task 11A 确定性聚合并通过 QC 的 manifest。Produces: `training_rows(rows:list[dict])->list[dict]`；`export_dataset(manifest:dict, output:Path)->Path`；`train_act(config:dict, dataset:Path, output:Path)->Path`；`load_bundle(path:Path)->dict`；`load_policy(bundle_path:Path)->object`（返回具有 `infer(observation:dict)->tuple[tuple[float,...],...]` 与 `reset()->None` 的模型对象）；CLI `act_train --manifest PATH --config PATH --output PATH`。
 
 - [ ] **Step 1: 写入边界失败测试。**
 
@@ -1261,7 +1403,7 @@ git commit -m "feat: run timestamped ACT inference"
 - Create: `src/so101_demo_py/src/act/session.py`
 - Create: `src/so101_demo_py/src/runtime/act_composition.py`
 - Create: `src/so101_demo_py/src/cli/act_session.py`
-- Create: `src/so101_demo_py/launch/so101_mujoco_act.launch.py`
+- Modify: `src/so101_demo_py/launch/so101_mujoco_act.launch.py`
 - Modify: `src/so101_demo_py/setup.py`
 - Create: `src/so101_demo_py/test/test_act_session.py`
 
@@ -1468,16 +1610,37 @@ ros2 run so101_demo_py act_session --help
 
 ```zsh
 ros2 run so101_demo_py act_preflight --output "$ACT_EVIDENCE/calibration.json"
-ros2 run so101_demo_py act_sample --calibration "$ACT_EVIDENCE/calibration.json" --output "$ACT_EVIDENCE/splits.json" --seed 20260911
+ros2 run so101_demo_py act_sample --calibration "$ACT_EVIDENCE/calibration.json" --output "$ACT_EVIDENCE/splits.json" --collection-output "$ACT_EVIDENCE/collection.json" --qualification-output "$ACT_EVIDENCE/parallel-qualification.json" --qualification-load-output "$ACT_EVIDENCE/parallel-load.json" --seed 20260911
 ```
 
-- [ ] 运行 5 条小批采集，读取 QC 和重放证据；通过后再运行正式示教配额。`act_collect` 的 limit 是总尝试上限，不是必须成功的数量，第二次运行仅继续未完成配额，不重复覆盖前 5 条；同一初始条件的重试留独立 attempt。
+- [ ] 先用 W1 单条入口运行 5 条小批，读取 QC 和重放证据。`act_collect` 的 limit 是总尝试上限，不是成功数量；这个 smoke 使用独立 root，不并入正式数据集。
 
 ```zsh
-ros2 run so101_demo_py act_collect --manifest "$ACT_EVIDENCE/splits.json" --calibration "$ACT_EVIDENCE/calibration.json" --root "$ACT_EVIDENCE/dataset" --limit 5
+ros2 run so101_demo_py act_collect --manifest "$ACT_EVIDENCE/parallel-qualification.json" --calibration "$ACT_EVIDENCE/calibration.json" --root "$ACT_EVIDENCE/s" --limit 5 --qualification
 ```
 
-正式采集预算从分层有效率估算后写入配置/账本；不在计划中捏造可达区域或假定所有点一次成功。配额不满则报告不足，不能用复制 episode 补齐。`act_collect` 完成时在 root 写 `manifest.json`，其中包含 QC 和数据 split，不导出 Rollout Validation/Test 示教。
+- [ ] 在独立资格清单上运行完整八场景的单 stack 基线、W1 并行入口和 W2；结果分别写入不同 root。三次均必须使用相同 manifest/calibration/config hash，且这些 episode 不并入正式数据集。
+
+```zsh
+ros2 run so101_demo_py act_collect --manifest "$ACT_EVIDENCE/parallel-qualification.json" --calibration "$ACT_EVIDENCE/calibration.json" --root "$ACT_EVIDENCE/u" --limit 8 --qualification
+ros2 run so101_demo_py act_collect_parallel --manifest "$ACT_EVIDENCE/parallel-qualification.json" --calibration "$ACT_EVIDENCE/calibration.json" --config src/so101_demo_py/config/act/parallel_collection_v1.yaml --root "$ACT_EVIDENCE/q1" --qualification --worker-count 1
+ros2 run so101_demo_py act_collect_parallel --manifest "$ACT_EVIDENCE/parallel-qualification.json" --calibration "$ACT_EVIDENCE/calibration.json" --config src/so101_demo_py/config/act/parallel_collection_v1.yaml --root "$ACT_EVIDENCE/q2" --qualification --worker-count 2
+```
+
+`u` 是完整八场景单 stack 基线；前面的 `s` 只用于尽早检查 5 条记录的内容和重放。W1 并行与 W2 的吞吐、成功率和 QC 都与 `u` 比较，不能用 5 条 smoke 作为性能分母。
+
+W2 通过后才按 Task 11A 在 40 场景、两个完整 wave 的持续负载清单上逐档运行 W4/W6/W8；每档使用 `q4`、`q6`、`q8` 短 root，候选默认档位的第二轮使用一个新的总 evidence root，不能覆盖历史结果。所有入口先打印最长 socket 路径与字节数，超过 107 bytes 时不启动任何子进程。选择档位并把两轮资格报告 hash 写入 config/账本后，用短目录 `d` 执行正式采集：
+
+```zsh
+ros2 run so101_demo_py act_collect_parallel --manifest "$ACT_EVIDENCE/parallel-load.json" --calibration "$ACT_EVIDENCE/calibration.json" --config src/so101_demo_py/config/act/parallel_collection_v1.yaml --root "$ACT_EVIDENCE/q4" --qualification --worker-count 4
+ros2 run so101_demo_py act_collect_parallel --manifest "$ACT_EVIDENCE/parallel-load.json" --calibration "$ACT_EVIDENCE/calibration.json" --config src/so101_demo_py/config/act/parallel_collection_v1.yaml --root "$ACT_EVIDENCE/q6" --qualification --worker-count 6
+ros2 run so101_demo_py act_collect_parallel --manifest "$ACT_EVIDENCE/parallel-load.json" --calibration "$ACT_EVIDENCE/calibration.json" --config src/so101_demo_py/config/act/parallel_collection_v1.yaml --root "$ACT_EVIDENCE/q8" --qualification --worker-count 8
+ros2 run so101_demo_py act_collect_parallel --manifest "$ACT_EVIDENCE/collection.json" --split-manifest "$ACT_EVIDENCE/splits.json" --calibration "$ACT_EVIDENCE/calibration.json" --config src/so101_demo_py/config/act/parallel_collection_v1.yaml --root "$ACT_EVIDENCE/d"
+```
+
+上面三条扩容命令按顺序执行，前一档未通过就不运行后一档。候选默认的第二轮在新建并登记的 evidence root 中只重跑该档；第二轮未通过则回退到前一个已两轮通过的档位，若不存在则不启动正式批采。
+
+正式采集预算从分层有效率估算后写入冻结清单；不在计划中捏造可达区域或假定所有点一次成功。配额不满则报告不足，不能用复制 episode 或业务失败重跑补齐。并行入口完成时在 `d/manifest.json` 写按冻结候选顺序聚合的结果，其中包含 QC、数据 split、Worker/pool generation、infra attempts、surplus 和未调度原因，不导出 Rollout Validation/Test 示教。
 
 - [ ] 使用独立训练 venv 执行离线入口，记录 `sys.executable` 与完整依赖锁。`ACT_TRAIN_PYTHON` 必须解析为该 venv 的实际 Python，先验证 LeRobot/torch 来源；不能沿用 ROS Python 安装训练依赖。
 
@@ -1494,7 +1657,7 @@ uv pip install --python "$ACT_TRAIN_PYTHON" --no-deps -e src/so101_demo_py
 首次安装用于资格检查，Task 12 在训练前把验证通过的精确依赖写入 `config/act/requirements.lock`；随后用该锁重建第二个干净训练环境并重复 smoke，证明可复现。未通过安装/版本资格不得启动正式训练。训练代码不得 import ROS。
 ```zsh
 "$ACT_TRAIN_PYTHON" -c 'import sys,torch,lerobot; print(sys.executable); print(torch.__file__); print(lerobot.__file__)'
-"$ACT_TRAIN_PYTHON" -m so101_demo.cli.act_train --manifest "$ACT_EVIDENCE/dataset/manifest.json" --config src/so101_demo_py/config/act/training.yaml --output "$ACT_EVIDENCE/models"
+"$ACT_TRAIN_PYTHON" -m so101_demo.cli.act_train --manifest "$ACT_EVIDENCE/d/manifest.json" --config src/so101_demo_py/config/act/training.yaml --output "$ACT_EVIDENCE/models"
 ```
 
 Task 12 的 CLI 支持 `python -m`，输出 `models/bundle.json`，引用真实 checkpoint 及其 SHA，不用可变的 latest 链接代替封存工件。
@@ -1514,7 +1677,7 @@ from pathlib import Path
 root = Path(os.environ["ACT_EVIDENCE"])
 artifacts = {
     "bundle_sha256": root / "models/bundle.json",
-    "dataset_manifest_sha256": root / "dataset/manifest.json",
+    "dataset_manifest_sha256": root / "d/manifest.json",
     "split_manifest_sha256": root / "splits.json",
     "calibration_sha256": root / "calibration.json",
     "runtime_config_sha256": Path("src/so101_demo_py/config/act/runtime.yaml"),
@@ -1525,7 +1688,7 @@ with (root / "freeze-paths.json").open("x") as stream:
 with (root / "freeze.json").open("x") as stream:
     json.dump(freeze, stream, indent=2)
 PY_FREEZE
-"$ACT_TRAIN_PYTHON" -m so101_demo.cli.act_offline_evaluate --manifest "$ACT_EVIDENCE/dataset/manifest.json" --bundle "$ACT_EVIDENCE/models/bundle.json" --freeze "$ACT_EVIDENCE/freeze.json" --output "$ACT_EVIDENCE/offline-test"
+"$ACT_TRAIN_PYTHON" -m so101_demo.cli.act_offline_evaluate --manifest "$ACT_EVIDENCE/d/manifest.json" --bundle "$ACT_EVIDENCE/models/bundle.json" --freeze "$ACT_EVIDENCE/freeze.json" --output "$ACT_EVIDENCE/offline-test"
 ```
 
 freeze 文件采用上述五个 hash 字段，另由同目录的 freeze-paths.json 记录五项实际文件路径；生成 freeze 时一并保存，evaluate_offline 据此读取并校验五项，而非只比较两个文件。不得为记录训练后的 runtime 配置回写原始 dataset manifest。模型内部的 checkpoint 与预处理 hash 由 load_bundle 继续递归核验。输出报告必须显示至少 10 个 Offline Test episode 和有效 mask 计数，缺失报告则 Task 16 不完成。
@@ -1549,7 +1712,8 @@ ros2 run so101_demo_py act_evaluate --manifest "$ACT_EVIDENCE/splits.json" --spl
 | controller 定时能力 | 7 | 10 Hz 重放的 reference/joint 对齐、部分接受取消与停止速度测量 | 不放宽标签时间语义、不平移迟到目标 |
 | 持物/释放/路径检查 | 8 | 新鲜双侧接触/离台/支撑证据、已知非法路径及悬空开爪故障注入 | 无有效 permit，不交付 ACT execute |
 | LeRobot 版本和 GPU/CPU 能力 | 12、13 | 执行时锁版本，导出/训练/推理 smoke 与真实延迟分位数 | 标训练或部署未合格，不报平台通过 |
-| 数据空间隔离与规模 | 10、11 | 实际 XY 距离、分层配额、全轨迹预检和物理结果 | 报 QUOTA_UNSATISFIED，不复用封存位置 |
+| 数据空间隔离与规模 | 10、11、11A | 实际 XY 距离、冻结候选预算、分层配额、全轨迹预检和物理结果 | 报 QUOTA_UNSATISFIED，不复用封存位置或重跑业务失败 |
+| ACT 采集并发档位 | 11A | 8 场景验证 W1/W2 功能；40 场景两个完整 wave 逐档测 W4/W6/W8，候选默认再独立复测；记录有效 episode/分钟、CPU/RSS/GPU/磁盘、RTF、帧间隔、QC 与物理成功率 | 使用两轮都通过全部门槛的最高吞吐档位；未通过 W2 则只保留 W1，不启动正式并行采集 |
 
 ## 自审：设计覆盖与一致性
 
@@ -1559,14 +1723,14 @@ ros2 run so101_demo_py act_evaluate --manifest "$ACT_EVIDENCE/splits.json" --spl
 | 4 模型与视野 | 2、3、6 | RGB-only、neck、名称映射、两平台、原 RGB-D 回归 |
 | 5 搜索和方位 | 5、6、14 | 360°预算、身份一致、几何方位、过期失效与控制权 |
 | 6 观测/action | 1、4、7、13 | 因果采样、前缀时间、双控制器、异步取消 |
-| 7 示教 | 9、11 | 实际 reference、10 Hz、释放/撤离尾段、失败保留 |
+| 7 示教 | 9、11、11A | 实际 reference、10 Hz、释放/撤离尾段、失败保留、并行封存与确定性汇总 |
 | 8 随机区域 | 3、6、10 | 每实际点预检、分层拒绝统计与初始关节扰动 |
-| 9 数据/泛化 | 10–12、12A、16 | 五集合隔离、闭环调参、70%与20场景比较 |
+| 9 数据/泛化 | 10–12、12A、16 | 五集合隔离、冻结候选、资格数据排除、闭环调参、70%与20场景比较 |
 | 10 安全/恢复 | 3、7、7A、8、13、14 | 120 s 墙钟、路径碰撞、支撑开爪、release epoch、最多1次重搜 |
-| 11 组件/Teleop | 2、3、12、14、15 | 子模块锁、领域/adapter、训练隔离、界面命令 |
-| 12 校准顺序 | 6–8、10–13 | 分阶段测量，完整 QUALIFIED 才正式采集 |
-| 13 验收证据 | 16及全局 gate | 各层结果独立、两平台、原始证据与删除约束 |
-| 14 本地依据 | 基线与 Files | 已查现有路径，新路径均标 Create |
+| 11 组件/Teleop | 2、3、11A、12、14、15 | 子模块锁、领域/adapter、复用并行基础设施、训练隔离、界面命令 |
+| 12 校准顺序 | 6–8、10–13 | 分阶段测量，W1/W2 资格和完整 QUALIFIED 后才正式并行采集 |
+| 13 验收证据 | 11A、16及全局 gate | 并发正确性与吞吐分开、各层结果独立、两平台、原始证据与删除约束 |
+| 14 本地依据 | 基线、Files 与 Worker Pool 指南 | 已查合入实现和限制，新路径均标 Create |
 
 执行前还需将所选工作树与本计划基线比对；文件有改名时先更新计划路径再实现。每个任务的代码片段只规定核心边界，完整交付必须通过该任务失败矩阵与运行门，不能把 smoke test 通过当作整任务完成。
 
@@ -1582,4 +1746,24 @@ ros2 run so101_demo_py act_evaluate --manifest "$ACT_EVIDENCE/splits.json" --spl
 | P2 推理环境断点 | Task 12 load_policy、Task 13 Step 3a | 无 LeRobot 的 ROS 环境与独立 worker 的真实进程 smoke |
 | P2 Offline Test 无入口 | Task 12A、Task 16、运行命令 | 冻结 hash、10 episode、padding mask 与动作误差报告 |
 
-本次修订仅更新实施计划，以上均为待执行要求，不表示相应测试或运行验收已通过。历史审查记录对应修订前的文件 hash，保留原记录，不覆盖历史结论。
+## Astra high 并行采集审查修订记录（2026-09-16）
+
+| 审查问题 | 修订位置 | 新验收证据 |
+| --- | --- | --- |
+| P1 搜索放入 initial gate 会被误判为 infra，且后续重复 reset | Task 11 分阶段接口；Task 11A Step 3a | 每 attempt 一次 reset；搜索失败封存为业务 `FAILED` 且不 fallback；旧 reset epoch/pose 拒绝 |
+| P1 production 子进程缺少 ACT ports 与恢复 verifier 注入口 | Task 11A Files、workload factory、result store/verifier | 旧 spec 默认行为回归；真实 ACT 子进程构造；seal 后 ACK 前崩溃由 `discover` 恢复 |
+| P2 资格目录超过 Unix socket 长度 | Task 11A 短目录合同、运行命令 | 真实绝对根枚举全部 socket，编码长度不超过 107 bytes，超限零进程启动 |
+| P2 配额选择受 Worker 完成顺序影响 | Task 11A 完整 wave 屏障与 manifest 前 N 规则 | 乱序完成仍选择相同 `scene_id`；surplus/unscheduled 有明确状态 |
+| P2 qualification schema 与正式 split 冲突 | Task 10、11、11A qualification mode | 两种模式互斥白名单；资格结果不能生成 Task 12 输入 |
+| P2 8 场景不足以证明 W8 持续负载 | Task 11A Step 5–6、测量门槛 | 8 场景只验 W2 功能；40 场景形成两个完整 wave、每 wave 每 Worker 至少 2 项、候选默认全新 root 复测 |
+| 第二轮 P1：已启动未终态的 AdaptiveBatchRunner 只能报告，外层无续跑协议 | Task 11A `ActWaveReconciler` | 旧资源先 fencing；verify/discover 后导入；累计 infra budget 分组 continuation；外层导入前崩溃测试 |
+| 第二轮 P2：五集合总清单与三 split 采集白名单冲突 | Task 10 collection 投影、运行命令 | `splits.json` → `collection.json` hash 贯通；Rollout 集合不调度；正式入口只读投影 |
+| 第二轮 P3：preferred 项可被 stealing，不能写成静态保证 | 设计第 7 节、Task 11A Step 6 | 初始优先分配；按每个 Worker 实际 terminal lease 验收 |
+| 第三轮 P2：崩溃对账可能导入 durable expiry 后的迟到 seal | Task 11A 对账优先级 | expiry/revocation/replacement/late rejection 优先；seal 完成时间不超过 lease deadline；专门故障测试 |
+| 第三轮 P2：降级完成可能误算被测档位资格 | Task 11A Step 5–6 | 每个资格 wave 固定 `levels_used == [n]`，零 infra retry/fallback/continuation；降级只作恢复证据 |
+| 第三轮 P2：socket 预检遗漏 Task 7A command broker | Task 11A `act_parallel_socket_paths` | adaptive 与每 Worker `ipc/<index>/a` 共用启动/清理/恢复清单；全清单 107/108-byte 边界测试 |
+| 第三轮 P3：缺完整八场景单 stack 命令 | 运行命令 `u` root | 5 条 smoke 与 8 条性能基线分开，W1/W2 都与完整基线比较 |
+| 第三轮 P3：Task 14 重复标 Create | Task 14 Files | `so101_mujoco_act.launch.py` 改为 Modify，保留 Task 3 Create |
+| 第四轮 P3：无法构造“只有新增短端点超长”的测试 | Task 11A socket 故障矩阵 | 改为端点包含性、三类消费者同集合，以及全清单最长路径 107/108-byte 边界 |
+
+本次修订仅更新设计与实施计划，以上均为待执行要求，不表示相应测试、采集或运行验收已通过。历史审查记录对应各轮修订前的文件 hash，保留原记录，不覆盖历史结论。

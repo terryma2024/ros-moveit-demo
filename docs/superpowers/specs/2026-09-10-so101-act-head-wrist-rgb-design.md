@@ -2,7 +2,7 @@
 
 日期：2026-09-10
 
-更新：2026-09-11，补齐动作执行、碰撞与释放门控、撤离终态和闭环验证集合；ACT 单次运行上限为 2 分钟。
+更新：2026-09-16，结合已合入的自适应多 stack Worker Pool，增加并行示教采集、录制背压、确定性汇总与并发资格验证；ACT 单次运行上限仍为 2 分钟。
 
 状态：已确认方案的设计汇总，供实现与审阅使用。本文不代表相机、控制器、数据集或 ACT 已完成运行验收。
 
@@ -34,6 +34,9 @@
 | 抓取确认后遮挡 | 不因检测框消失重新搜索，交由持物监督 |
 | 示教来源 | MoveIt 教师完整 pick-place 的实际执行命令 |
 | 杯子位置 | 可抓取区域内分层、连续随机采样；空间隔离数据划分 |
+| 并行范围 | 首版只并行 MoveIt 专家示教采集；ACT 闭环验证和封存测试保持单场景独立执行 |
+| 并行实现 | 复用现有自适应 Worker Pool 的隔离、lease、跨代降级、终态提交与精确清理；新增 ACT collection workload，不复用点位验证证据 schema |
+| 初始并发 | W1 建立语义基线，W2 通过资格验证后才进入正式采集；W4/W6/W8 需按 ACT 双 RGB 无损录制负载逐档验证 |
 
 ## 3. 系统分工与信息边界
 
@@ -59,6 +62,11 @@ head RGB + wrist RGB + q1…q6 + neck 朝向
                                执行命令记录
                                       ↓
 双 RGB 与实测关节 → EpisodeRecorder → ACT 数据集
+
+冻结的示教候选清单 → ParallelActCollectionRunner
+                              ├→ Worker 1：独立 ROS Domain + 完整 MuJoCo/MoveIt stack + Recorder
+                              ├→ Worker 2：独立 ROS Domain + 完整 MuJoCo/MoveIt stack + Recorder
+                              └→ …；共享的仅是经过身份隔离的教师感知 Broker 与调度状态
 ```
 
 ACT 不读取 `task_camera`、Depth、`/cup_pose`、TF、Planning Scene、物体真值、接触或教师内部阶段。教师轨迹经过转换后是训练 action 标签，不作为 observation。运行基础设施仍可维护 TF，不能把“不输入 ACT”误解为删除系统 TF。
@@ -180,6 +188,26 @@ RESET → SEARCH → LOCK → 相机稳定 → START_RECORDING
 
 MoveIt/controller 失败、抓放失败、时间不连续、neck 意外运动、reset 不完整或配置中途变化均不进入成功示教训练集。`DISCARD` 表示从训练集合排除，原始失败证据仍保留。控制器 action 重放与物理结果检查通过后，才批量采集。
 
+### 并行多 stack 示教采集
+
+仓库现有自适应 Worker Pool 已提供独立 ROS Domain、完整 MuJoCo/MoveIt stack、动态 lease、跨代降级、共享感知 Broker、fsync 终态与精确清理。这些基础设施边界可以复用，但当前 `ParallelWorker` 的点位执行流程、子进程构造、结果验证器、最多 20 个点的批次契约和封存工件均面向 MoveIt 随机点验证。实现时需要加入闭合的 `point_validation|act_collection` workload factory，让 Worker、runtime、results、coordinator verifier 和恢复发现使用同一类型；默认类型保持现有点位验证行为。ACT 不能把点位验证的 `PASSED` 直接改名为训练 episode，也不能把现有默认 W8 当作双 RGB 录制负载的合格并发度。
+
+正式采集前先冻结五集合总清单，再从中确定性投影只含 Train、Validation、Offline Test 的 collection manifest；投影保存总清单内容哈希，Rollout Validation/Test 明确不具备采集资格。每个示教候选有稳定的 `scenario_id`、split、随机种子、杯子位置、初始七关节状态、搜索起点与配置哈希。`ParallelActCollectionRunner` 按清单顺序把候选切成不超过 20 项的确定性 wave，复用现有自适应 Runner 处理每个 wave；外层 fsync journal 保存跨 wave 的终态、成功配额和恢复位置。调度键可以映射到现有 `point_id`，业务语义仍保持 `scenario_id`，不得把 Worker 的完成顺序写成数据集顺序。
+
+一个候选同一时刻只有一个有效 lease。每次只 reset 一次：初始门只建立 reset epoch、读回七关节并验证控制器/相机/Recorder/Broker 就绪；head 搜索、教师感知、录制、专家执行和 QC 在取得动作权限后作为一个业务流程运行，不在中途再次 reset。业务失败，例如搜索失败、规划失败、物理抓放失败或 QC 不合格，在该候选上形成不可改写的终态，不因降低 Worker 数自动重试；基础设施失败才允许在同一候选身份下增加 infra attempt，并由下一 pool generation 接管。Worker 只有在原始 episode、QC、终态 manifest 和内容哈希全部原子写入并 fsync 后才提交 ACK。结果存储同时提供 Worker recovery receipt 以及 coordinator 的 `verify/discover`；seal 后、ACK 前崩溃时只恢复同一封存结果。恢复时已封存的终态不重跑，冲突结果 fail closed。
+
+现有自适应 Runner 对已启动但未完成的批次只允许报告，ACT 外层不能直接把同一 Runner 原地续跑。wave 崩溃恢复必须先锁定恢复权，依据旧 resource/owned-process manifest 完成进程、控制目标、socket 和 Domain fencing，再回放 adaptive/coordinator journal。对账器先重建 lease 的 durable 裁决：已有 commit 的结果可以验证；未提交结果只有在没有 expiry、revocation、replacement 或 late-result rejection，且封存完成时间未超过原 lease deadline 时才允许从原 workspace 发现。durable invalidation 优先于磁盘 seal，迟到结果只作审计。验证通过后写入外层 journal；其余已启动 lease 增加一次 infra attempt，剩余项按累计剩余额度使用新的短 continuation batch id 运行。fencing 或结果身份无法证明时停止，禁止用新 batch 与旧进程并行。
+
+每个 Worker 独占 ROS Domain、仿真会话、namespace、controller、`ROS_HOME`、日志/临时目录、head/wrist topic、Recorder 与证据子目录。任何控制客户端都必须经过同一所有权仲裁；不同 Worker 之间不得共享 controller、Recorder、相机缓存或 episode 临时目录。共享教师感知 Broker 只处理 `task_camera` 的无状态推理，并以 batch、worker、generation、scenario、attempt、reset epoch 和请求序号隔离请求/响应。head 搜索检测首版留在 Worker 内；若将来接入共享 Broker，需要单独通过时序、身份和模型来源验证。head/wrist 训练图像始终由本 Worker 无损记录，不能经 task_camera Broker 转发。
+
+每个 Worker 先写自己的临时 episode，完成后以原子 manifest 封存。顶层聚合器只引用封存工件，按 split 和冻结候选顺序分 wave；每个 wave 全部终态后，才选择该 split 中清单顺序最靠前的 N 个合格 episode。包含第 N 个成功的 wave 内，后续成功结果保留为 surplus，但不进入训练；后续 wave 不再调度。这样 Worker 完成顺序不会改变数据集成员。已封存目录在并行执行期间不能移动、重命名或覆盖。Recorder 使用有界队列和明确的磁盘背压：不能为维持吞吐静默丢帧、降采样或压缩改变数据语义。队列或磁盘延迟导致无法维持合格的 10 Hz 连续窗口时，该 episode 记为 QC 失败；调度器可以暂停新 lease，不能把不完整 episode 计入配额。
+
+并发资格按 W1 → W2 → W4/W6/W8 逐档进行。W1/W2 使用 8 个专用场景验证入口语义、exact-once、跨 Worker 无串帧、资源释放与基本吞吐。扩容另用至少 40 个持续负载场景，形成两个完整的 20 项 wave；每个 wave 为每个 Worker 初始优先分配 2 个 scenario，最终仍按实际 terminal lease 验收每个 Worker 是否连续处理至少 2 项。更高档位只在前一档通过后运行，候选默认档位还需在全新 evidence root 复测一次。某档位的资格 wave 必须始终保持该 Worker 数，零 fallback、infra retry 和 crash continuation；降级后完成只证明恢复能力，不计入原档位性能。每轮记录 CPU、内存、GPU、磁盘写入、仿真实时因子、Recorder 队列、帧间隔、前后半段有效 episode 吞吐和失败分布。默认 Worker 数由两轮稳定证据确定；现有 MoveIt 点位验证的 W8/W10 性能结果只证明基础设施具备扩展能力，不证明 ACT 采集合格。
+
+并行运行仍使用一个登记的 evidence root，但 runtime 子目录必须短。每个资格档位和正式采集使用固定短码，wave 使用单字符 batch id；ACT composition 用统一清单枚举现有 adaptive 端点和每 Worker 的控制权仲裁 socket，启动、清理与崩溃恢复共享该清单。启动任何进程前，用真实绝对路径检查全部 Unix socket，编码长度超过现有 107-byte 上限就拒绝启动。可读的长描述写入 manifest，不进入 socket 路径。
+
+资格与扩容场景不进入正式训练数据，避免同一初始条件重复采集造成隐性加权。正式批次只能消费冻结候选清单；若业务失败导致成功配额不足，结束当前批次并生成新的候选清单和数据版本，不能在原批次中反复运行失败候选直到成功。基础设施 fallback 只改变并发度，不改变 split、场景配置、episode 内容契约或成功标准。
+
 ## 8. 可抓取区域与连续随机位置
 
 先在桌面构建候选网格，以机器人基坐标系记录杯子 XY；Z 由桌面和杯子几何确定，再经过物理稳定检查。杯子首版保持直立，尺寸、外观、光照、相机安装和放置区固定。
@@ -209,6 +237,8 @@ Rollout Validation 是开发期间反复使用的仿真场景清单。每个场�
 闭环验证允许用于开发决策，但其轨迹不作为当前训练集新增示教，也不能作为封存测试证据。训练与闭环验证均不得查看封存测试来选参数。正式采集前冻结各集合清单和初始执行配置；后续在闭环验证上调整执行前缀或监督阈值时生成新配置版本，并重新通过控制与标签重放检查。最终测试前冻结 checkpoint 和全部运行参数。
 
 数量是采集起点，不保证 70% 成功率。若增加训练数据，只扩充训练区域与训练种子；观察测试失败后用于针对性训练的数据不再保持测试资格，应另设新的封存测试批次。
+
+并行采集不得改变五集合划分。Train、Validation 和 Offline Test 的专家示教可以并行采集，Rollout Validation、Rollout Test 与路线比较清单不进入专家采集队列。聚合器以五集合总清单及其 collection 投影为唯一 split 权威，拒绝 Worker 自报或路径推断的 split；最终数据 manifest 必须保存两级清单 hash。资格、扩容、失败重试和恢复产生的 episode 均按来源单独标记，禁止意外并入训练集。
 
 V5-T010 使用至少 20 个共享测试场景比较 MoveIt 与 ACT。先冻结 ACT checkpoint、阈值与测试清单，再运行两条路线；此时 MoveIt 对照运行的轨迹属于封存评测证据，不能回流当前模型训练。分别报告空间分布内表现与空间留出表现。
 
@@ -242,6 +272,9 @@ MoveIt 恢复动作单独计为干预，不得将恢复后的成功算作 ACT �
 | `RgbObservationSynchronizer` | 双 RGB 与状态 → 合格观测或明确输入错误 |
 | `MoveItExpertActionTap` | 已执行参考与时间 → 6 维标签、重建核验记录 |
 | `EpisodeRecorder` | 同步观测、动作与审计流 → 原始 episode、QC 与训练导出 |
+| `ParallelActCollectionRunner` | 冻结候选清单与独立 Worker 组合 → wave 调度、基础设施降级、跨 wave 恢复和确定性总 manifest |
+| `ActCollectionWorkload` | 一个 scenario lease → 单次 reset 后的搜索/专家执行/录制/QC；业务失败与基础设施失败分离 |
+| `ActCollectionResultStore` | Worker 私有临时 episode → 原子终态、fsync journal、内容哈希与冲突拒绝 |
 | `ActPolicyRunner` | 合格观测与 checkpoint → 定时 6 维动作块 |
 | `ActSupervisor` | 输入、动作与监督证据 → 执行许可、停止与恢复交接 |
 | `ActExecutionAdapter` | 获准的执行前缀 → 双 controller 定时提交、goal 协调、过期拒绝与停止确认 |
@@ -258,6 +291,8 @@ MoveIt 恢复动作单独计为干预，不得将恢复后的成功算作 ACT �
 
 执行预检还需冻结双 controller 提交提前量、接受超时和允许时间偏差、插值与路径检查精度、允许接触规则、开爪判定、支撑与释放稳定窗口、撤离安全区域及最终稳定阈值。ACT 单次运行上限已确定为 120 s 单调墙钟，不作为闭环调参项。
 
+并行采集还需冻结候选清单哈希、wave 大小、已通过资格验证的 Worker 数、fallback 序列、ROS Domain 池、lease/heartbeat/启动超时、infra attempt 上限、Recorder 队列与磁盘背压阈值、每 Worker 资源上限、教师 Broker 模型/权重哈希及 executor 数。并发档位改变属于新的采集配置版本；若降级发生，最终 manifest 记录每条 episode 的 pool generation 与实际 Worker 档位。
+
 参数生成顺序：模型和 RGB 出口 → 全阶段视野与碰撞预检 → 搜索和控制交接 → 动作记录/重放 → 可抓取区域与数据划分 → 小批 QC → 正式采集 → 训练 → 冻结测试。所有待校准项均由对应预检报告给出明确值、单位、测量依据及配置哈希；未通过该门槛时不得启动正式采集。
 
 ## 13. 验收与证据
@@ -271,6 +306,8 @@ MoveIt 恢复动作单独计为干预，不得将恢复后的成功算作 ACT �
 | 控制权 | neck/arm 命令隔离；交接无残留 goal；ACT 阶段 neck 锁定；reset 后缓存失效 |
 | 动作执行 | 双 controller 共同时间基准；部分接受可停止；替换无旧动作残留；迟到及跨 attempt 推理结果拒绝 |
 | 标签/数据 | controller reference 对齐与重放通过；固定 10 Hz 连续窗口；8 维 state/6 维 action；无禁止输入 |
+| 并行采集 | W1 与单条入口在 schema/QC/终态语义上等价；8 场景 W2 功能资格 exact-once、无跨 Worker 图像或控制串扰、所有候选有唯一终态、恢复不重跑已封存项、进程和 Domain 精确清理 |
+| 并发扩容 | 至少 40 场景、两个完整 wave 的持续负载，W4/W6/W8 逐档测量且每个 wave 中每 Worker 连续处理至少 2 项；每轮保持单一被测档位、零 infra retry/fallback/continuation；候选默认在新 root 复测；两轮吞吐提升且帧连续性、物理成功率、资源趋势与 QC 不退化 |
 | 随机采样 | 每个实际点完整预检；分层配额、拒绝统计、空间隔离和种子可复现 |
 | 监督/恢复 | 插值路径碰撞拒绝；抓取前丢失可停可恢复；遮挡确认窗口有界；悬空开爪拒绝；释放证据不跨 epoch；持物不明不重搜；干预单独统计 |
 | 闭环验证 | 至少 10 个可复现初始条件；保留历次调参结果；与训练和封存测试隔离 |
@@ -295,5 +332,10 @@ MoveIt 恢复动作单独计为干预，不得将恢复后的成功算作 ACT �
 - [相机插件配置](../../../src/so101_demo_py/config/mujoco/mujoco_plugins.yaml)：既有 10 Hz task_camera RGB-D。
 - [CameraPlugin 实现](../../../third_party/mujoco_ros2_control/mujoco_ros2_control_plugins/src/camera_plugin.cpp)：逐相机配置、发布器与渲染路径。
 - [Teleop 操作说明](../../../src/so101_teleop/docs/so101-teleop-web-ui.md)：现有 MuJoCo backend 的控制能力边界。
+- [自适应 Worker Pool 源码指南](../../guides/so101-parallel-adaptive-worker-pool-source-guide.md)：已实现的隔离、lease、fallback、Broker、journal、清理和扩容证据。
+- [自适应契约](../../../src/so101_demo_py/src/parallel_batch/adaptive_contracts.py)：W1–W16 档位与单批最多 20 项的闭合契约。
+- [自适应 Runner](../../../src/so101_demo_py/src/parallel_batch/adaptive_runner.py)：跨 pool generation 的不可变终态、恢复与降级。
+- [并行 Worker](../../../src/so101_demo_py/src/parallel_batch/worker.py)：现有点位验证状态机及 lease/heartbeat 边界。
+- [并行配置](../../../src/so101_demo_py/config/mujoco/parallel_adaptive_workers_v1.yaml)：MoveIt 点位验证的 W8 默认值和 Domain 池，仅作基础设施依据。
 
 本文中的组件名和新接口为设计约定；上述链接是已有实现依据，不表示新增功能已经存在。
