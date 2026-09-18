@@ -5979,3 +5979,38 @@ the task root with sizes and sha256; and the honest capabilities diagnosis for
 the functional manifest is generated from it.
 
 _Ledger HEAD when written: `ffb275f0d`._
+
+
+## CP-UQ133 — Correction f1308af3, part 2: the mode mismatch was the last budget gate
+
+Two items from the correction handoff, both closed:
+
+**Evidence preservation (item 6).** All 13 critical files from
+`/tmp/so101-debug-startup-probe-b82d10b8/` — including `deploy.json`, `retired_task14_tests.py`,
+the pre-edit copies of `contracts.py`/`resources.py`/the CLI and the lane/full-gate logs — were
+copied to new immutable paths under
+`correction-f1308af3-79a8-41a1-bbe5-03968a781103/evidence/` with `preservation-manifest.json`
+recording source and destination sizes, both sha256 values and a readback comparison. All 13
+copied, all readbacks match, originals untouched.
+
+**The capabilities mismatch is diagnosed and fixed (item 7).** The deployed service advertised
+`execution_modes=[SEQUENTIAL]` while fixed counts 1..8 were selectable because
+`ExecutorRegistry.v1` still derived availability from *budget qualifications*:
+`PARALLEL` required `two_worker_live_acceptance is not None` and `ADAPTIVE` required a
+twenty-point acceptance aggregate plus performance evidence across {1,2,4,6,8} — retired
+documents that the live-sim fixture used to inject through the `QUALIFICATION_ENV` I removed in
+CP-UQ131. Removing that injection did not create the mismatch; it exposed it.
+
+Availability is now a statement about the **deployed composition**: `PARALLEL` needs the fixed
+upstream, the parallel config, the broker image and the resource probe; `ADAPTIVE` needs the
+adaptive runner, pool, wrapper, cleanup and config files installed. The reasons are renamed to
+`PARALLEL_COMPOSITION_UNAVAILABLE` / `ADAPTIVE_COMPOSITION_UNAVAILABLE` so nothing in the
+capability response reads as a budget verdict, and the two registry tests now assert a missing
+*broker* and a missing *adaptive pool file* respectively, plus that a complete probe set yields
+`available: true` with `reason: None`. `lg-corr-cap2` (registry + API + start-guard suites):
+**30 passed, 0 failed**.
+
+That is what the functional manifest needs before it can be generated: the modes it must cover
+are now advertised truthfully by the real service rather than filtered away.
+
+_Ledger HEAD when written: `a36ce1282`._
