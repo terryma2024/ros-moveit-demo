@@ -86,10 +86,16 @@ class OwnedCgroupV2:
         if missing:
             raise ContractError(
                 f"MEASUREMENT_CAPABILITY_MISSING: cgroup_controllers {sorted(missing)!r}")
-        for name in ("cgroup.procs", "cpu.max", "memory.max", "cpu.stat"):
+        # cgroup v2 exposes the accounting file cpu.stat as mode 0444 even inside a
+        # delegated subtree, so write access is required only for the control files the
+        # measurement really writes; cpu.stat must be present and readable.
+        for name in ("cgroup.procs", "cpu.max", "memory.max"):
             node = self.path / name
             if not node.exists() or not os.access(node, os.W_OK):
                 raise ContractError(f"MEASUREMENT_CAPABILITY_MISSING: cgroup_{name}")
+        node = self.path / "cpu.stat"
+        if not node.exists() or not os.access(node, os.R_OK):
+            raise ContractError("MEASUREMENT_CAPABILITY_MISSING: cgroup_cpu.stat")
 
     def set_limits(self, *, memory_max_bytes: int, cpu_quota_us: int,
                    period_us: int = _DEFAULT_CPU_PERIOD_US) -> dict[str, int]:
