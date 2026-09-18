@@ -2770,3 +2770,44 @@ decision: KEEP
 next_experiment: EXP-UQ34 Stage B production copy/A0/binding and owned Web refresh; Stage C under a
   manager-delegated unit once provisioned; Stage D per-N approval packets
 ```
+
+```yaml
+checkpoint_id: CP-UQ34
+last_valid_experiment: EXP-UQ34
+current_hypothesis: Task12 versioned production freeze artifacts (A0 + binding) are produced and
+  byte-verified; the remaining Stage B/C/D/E objects are enumerated with exact commands.
+artifacts:
+  - "bindings/production-freeze-a0.json (0600): schema-2 FullByteAudit over the freeze-install prefix,
+    943 actual installed files with their raw SHA256, origins for so101_demo_py / so101_teleop /
+    so101_mujoco_support, source_clean true, A0 sha256 ac7993e2049c6c4f... ."
+  - "bindings/production-freeze-binding.json (0600): kind PRODUCTION_FROZEN_BINDING, install_kind
+    production_frozen_copy, install_prefix freeze-install, a0_path/a0_sha256, 943 inventory files,
+    module origins, and the frozen tree commit (62cc630c3f18 at audit time)."
+  - "Verification: all six runtime modules and all eight installed launch files byte-match the frozen
+    source; the debug manifest inside the prefix records its own build HEAD 6e68d0f51. Runtime-code HEAD
+    is 528ccb44f; 6e68d0f51 and 62cc630c3f18 are docs-only deltas from it, so the installed bytes equal
+    the runtime code (an empty git diff over src/so101_demo_py/src, src/so101_teleop/so101_teleop and
+    setup.py)."
+  - "This freeze is a versioned task-owned production copy; it does not overwrite or reuse the older
+    production prefix / A0 (a812...) / bindings and is explicitly NOT a qualification record."
+next_objects:
+  - "Stage B owned window: task-owned Web refresh/start using this freeze's copied launcher and the
+    audited Web dist, with PID/domain/store/fence/lease/URL/served-bytes readback; then the owned
+    recovery apply only if a fresh ownership check requires it."
+  - "Stage C: measurement console inside a manager-delegated unit (subtree_control pre-enabled) or an
+    explicit decision to enforce cpu alone from the delegated [cpu] controller with memory as the
+    whole-host guard; N1..8 sealed authorizations per the plan, results recorded as resource_qualified
+    and product_qualification_passed separately."
+  - "Stage D: per-N candidate packets (P/R/Q/B/location hashes) submitted for the real operator approval
+    objects; no APPROVED record is pre-written. Stage E: owned Chrome once N1/Nx are signed."
+inferred:
+  - The offline/production-freeze side of Task12 is complete with immutable, byte-audited artifacts; all
+    remaining steps are object-bound windows, not review waits.
+conclusion: AUTHORIZED MAINLINE CONTINUES; remaining work is object-bound (delegated unit, operator
+  approvals, owned windows).
+evidence: bindings/production-freeze-{a0,binding}.json, freeze-install,
+  scratch/capability-probe.plqC8Jzn, scratch/delegated-*, scratch/pkg8demo2.G7s3ZfXT
+decision: KEEP
+next_experiment: EXP-UQ35 Stage B owned Web refresh on the production freeze; Stage C delegated-unit
+  measurement; Stage D approval packets
+```
