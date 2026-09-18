@@ -308,3 +308,28 @@ def test_runtime_receives_executor_counts_from_adaptive_identity(
         'plastic-cup-yolo11n-seg-v1': 2,
         'grounded-sam': 1,
     }
+
+
+def test_container_argv_forwards_the_measured_thread_bounds(tmp_path, monkeypatch):
+    """Docker does not forward the host environment, so the thread bounds that are part of the
+    measured runtime identity must be passed explicitly. Without them the container's torch and
+    BLAS open one thread per core, blow past the cgroup's cpu.max quota, and the run aborts as
+    CPU_THROTTLED -- which is exactly what run66 recorded."""
+
+    from so101_demo.cli.parallel_perception_broker import container_run_argv
+
+    root = tmp_path / 'threads'; root.mkdir(mode=0o700)
+    (root / 'workers').mkdir(mode=0o700)
+    yolo, grounded = tmp_path / 'yolo', tmp_path / 'grounded'
+    yolo.mkdir(); grounded.mkdir(); (yolo / 'best.pt').write_bytes(b'model')
+    for name in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS',
+                 'TORCH_NUM_THREADS', 'NUMEXPR_NUM_THREADS'):
+        monkeypatch.setenv(name, '1')
+    argv = container_run_argv(
+        root, image_id='sha256:' + 'b' * 64, yolo_weights=yolo / 'best.pt',
+        grounded_root=grounded, gpu_groups=[44], uid=os.getuid(), gid=os.getgid(),
+        batch_id='batch-1', broker_generation=1)
+    envs = [argv[index + 1] for index, item in enumerate(argv) if item == '--env']
+    for name in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS',
+                 'TORCH_NUM_THREADS', 'NUMEXPR_NUM_THREADS'):
+        assert f'{name}=1' in envs, (name, envs)

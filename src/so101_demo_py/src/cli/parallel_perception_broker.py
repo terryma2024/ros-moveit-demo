@@ -96,6 +96,14 @@ def container_run_argv(batch_root, *, image_id, yolo_weights, grounded_root,
     for mount in (f'{ipc}:/runtime:rw', f'{inputs}:/inputs:ro',
                   f'{yolo_weights}:/models/yolo/best.pt:ro', f'{grounded_root}:/models/grounded:ro'):
         argv.extend(['--volume', mount])
+    # Thread bounds are part of the measured runtime identity, and docker does not forward
+    # the host environment: without this the container's torch and BLAS open one thread per
+    # core, blow past the cgroup's cpu.max quota and the run aborts as CPU_THROTTLED (run66).
+    for name in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS',
+                 'TORCH_NUM_THREADS', 'NUMEXPR_NUM_THREADS'):
+        value = os.environ.get(name)
+        if value:
+            argv.extend(['--env', f'{name}={value}'])
     argv.extend(['--env', f'PARALLEL_IMAGE_ID={image_id}', image_id, *broker_argv()])
     return argv
 
