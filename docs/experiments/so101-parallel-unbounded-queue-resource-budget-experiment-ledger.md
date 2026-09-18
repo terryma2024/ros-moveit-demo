@@ -232,3 +232,75 @@ open_risks:
   - Live/installed recovery entry and online refresh remain unverified and unauthorized.
 next_command: implement Task 2 RED (test_v1_can_be_read_but_not_executed)
 ```
+
+## EXP-UQ02 — Task 2 v2 execution contract and immutable v1 reading
+
+```yaml
+experiment_id: EXP-UQ02
+status: VALID
+prior_experiment: EXP-UQ01
+hypothesis: A closed v2 contract plus a read-only historical reader can remove the lifetime quota from
+  new execution without changing any v1 byte or the v1 journal frame format.
+prediction: RED fails only because require_v2_execution is absent; after implementation the new contract
+  tests, the retained journal tests and the crash-recovery tests all pass.
+single_variable: version-two contract surface
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Task 1 committed; dev overlay importable; no runtime process started.
+success_criteria:
+  - require_v2_execution rejects 1/1 and 3/2 with LEGACY_CONTRACT_EXECUTION_FORBIDDEN and accepts 2/2.
+  - v1 YAML stays byte-identical (aadcac01d...), historical view is read-only and byte-stable.
+  - v2 config is closed (unknown/duplicate/nonfinite rejected) and carries no quota/resource-formula fields.
+  - v2 journal records schema_version 2 and still replays read-only; v1 header bytes are unchanged.
+failure_criteria:
+  - Any v1 byte change, weakened assertion, or v2 config accepting legacy quota fields.
+invalid_criteria:
+  - Wrong overlay, foreign module origin, or the tests not actually running.
+provenance:
+  source_commit: e81634585 (Task 1 checkpoint; this task's parent commit)
+  install_overlay: $TASK_ROOT/dev-build + $TASK_ROOT/dev-install (symlink-install dev overlay)
+  runtime_executable: the exact shared TEST_PYTHON above
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: so101_pytest contracts-red src/so101_demo_py/test/test_parallel_batch_contracts.py::test_v1_can_be_read_but_not_executed -q
+    exit_code: 1
+  - command: so101_pytest contracts-green src/so101_demo_py/test/test_parallel_batch_contracts.py src/so101_demo_py/test/test_parallel_batch_journal.py src/so101_demo_py/test/test_parallel_batch_crash_recovery.py -q
+    exit_code: 0
+observed:
+  - RED scratch/contracts-red.Qp8SMjIr: 1 failed, ImportError "cannot import name 'require_v2_execution'"
+    at the intended new boundary (not a dependency/collection failure).
+  - GREEN scratch/contracts-green.*: 116 passed in 1.39 s, zero failures; the 9 new tests all ran and
+    passed (v1 gate, v1 YAML hash freeze, read-only historical view, unknown-version rejection, closed
+    v2 config, unknown/duplicate/nonfinite rejection, mode/count-only fixed config, no-quota v2 request
+    with retry N1 invariants, v2 journal schema 2 readback).
+  - v1 YAML/source hash baseline retained at bindings/v1-contract-baseline.json (base 84620fc0 blob hashes
+    for contracts/journal/coordinator/resources/adaptive_contracts plus the three v1 YAML hashes).
+inferred:
+  - ContractError.code is additive: existing message-based assertions keep working (full retained test
+    modules passed unchanged).
+conclusion: VALID. v2 contract and read-only v1 history exist; no new execution path is enabled yet.
+evidence:
+  - scratch/contracts-red.Qp8SMjIr/, scratch/contracts-green.*
+  - $TASK_ROOT/bindings/v1-contract-baseline.json
+decision: KEEP
+next_experiment: EXP-UQ03
+```
+
+## CP-UQ02 — Task 2 checkpoint
+
+```yaml
+checkpoint_id: CP-UQ02
+last_valid_experiment: EXP-UQ02
+current_hypothesis: The acyclic identity layer (L/S/E/I/R plus full-byte audit) can be added as a new
+  module with synthetic closed configs only.
+working_tree_status: Task 2 files committed; no other tracked changes
+owned_processes: NONE
+preserved_processes: NONE from this task family
+confirmed_conclusions:
+  - v1 bytes/hashes frozen and still readable; v2 contract closed and quota-free (EXP-UQ02).
+disproven_routes:
+  - Reusing v1 asdict hashing for v2 identity (design 434-455): v2 separates semantic S from raw bytes.
+open_risks:
+  - Later consumers must call require_v2_execution before any spawn; not yet wired (Tasks 7-10).
+next_command: implement Task 3 RED (test_first_promotion_changes_audit_not_semantic_identity)
