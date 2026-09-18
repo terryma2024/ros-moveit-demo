@@ -492,7 +492,8 @@ class ProductionExpertValidationService(ExpertValidationService):
 
         from so101_demo.parallel_batch.resource_budget import worker_count_availability
 
-        gate = getattr(self.preflight_engine, "resource_gate", None)
+        engine = getattr(getattr(self, "supervisor", None), "preflight_engine", None)
+        gate = getattr(engine, "resource_gate", None)
         identity = getattr(gate, "execution_identity_sha256", None) if gate else None
         return worker_count_availability(
             gate, worker_counts=FIXED_WORKER_COUNTS[1:], batch_id="capabilities",
