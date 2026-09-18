@@ -6107,3 +6107,28 @@ insisted on re-collecting instead of adding historical counts. Evidence:
 `deselect-args.txt`, with the six audited serial modules derived from **this** run's manifest.
 
 _Ledger HEAD when written: `37ac1167a`._
+
+
+## CP-UQ137 — Correction f1308af3, part 6: the real-root argv is correct, and the helper fails closed
+
+Delegating the **real** teleop package root through the wrapper
+(`so101_pytest lg-corr-argv-teleop src/so101_teleop/test -q -k zzz_no_such_test`) produced two
+facts worth keeping:
+
+- `collect.argv.txt` in the run (`scratch/lg-corr-argv-teleop.hSlspVZG`) contains the root
+  **once**. Before the CP-UQ132 fix the same file contained it twice, so the correction is
+  visible on a real package root and not only on the synthetic probe.
+- The run then stopped in the collection phase: passing `-k` to `--collect-only` deselects
+  everything, pytest exits 5 (no tests ran), and the helper **fails closed** (`COLLECT_RC=5`,
+  overall exit 1) instead of proceeding to a parallel phase with an empty manifest. No
+  `parallel.argv.txt`/`serial.argv.txt` was written, so no whole-root argument could reach the
+  serial phase either. That is the fail-closed behaviour the handoff requires, demonstrated by
+  an unintended but real trigger rather than asserted.
+
+My `-k` probe was therefore the wrong way to bound a delegated run — the helper's collection
+must exit 0 — and the record says so rather than presenting it as a pass. The bounded positive
+run on a real package root, with the serial phase executing only the audited conflicts and the
+executed multiset equal to that run's own collection, remains open, along with the teleop
+`coverage_exact=false` repair and the functional-manifest acceptance.
+
+_Ledger HEAD when written: `5559851bc`._
