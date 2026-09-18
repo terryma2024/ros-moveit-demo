@@ -299,7 +299,6 @@ def production_pool(tmp_path, summary, **composition_state):
         run_mode=summary.run_mode,
         selected_point_ids=tuple(summary.point_statuses),
         worker_count=1,
-        max_points_per_worker=len(summary.point_statuses),
         evidence_root=tmp_path / "r/a001/p/g01w01",
     )
     options = dc_replace(

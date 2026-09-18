@@ -268,7 +268,6 @@ def test_pool_request_accepts_the_generation_scoped_internal_batch_id(tmp_path):
         run_mode=RunMode.EXECUTE,
         selected_point_ids=("p01",),
         worker_count=8,
-        max_points_per_worker=1,
         evidence_root=tmp_path,
     )
 
@@ -277,6 +276,63 @@ def test_pool_request_accepts_the_generation_scoped_internal_batch_id(tmp_path):
         "run_mode": RunMode.EXECUTE,
         "selected_point_ids": ("p01",),
         "worker_count": 8,
-        "max_points_per_worker": 1,
         "evidence_root": tmp_path,
     }
+
+
+def test_pool_contract_has_no_lifetime_quota(tmp_path):
+    """The adaptive pool request keeps affinity/fallback but has no lifetime K."""
+
+    from so101_demo.parallel_batch.adaptive_contracts import (
+        _new_pool_request_for_production_factory,
+    )
+    from so101_demo.parallel_batch.contracts import RunMode
+    request = _new_pool_request_for_production_factory(
+        batch_id='pool-a', run_mode=RunMode.EXECUTE, selected_point_ids=('p1', 'p2'),
+        worker_count=2, evidence_root=tmp_path)
+    assert not hasattr(request, 'max_points_per_worker')
+
+
+def test_adaptive_factory_issues_typed_context_only_for_its_own_pool(tmp_path):
+    """Only the owning factory can mint an adaptive allocation context."""
+
+    from dataclasses import replace
+    from types import SimpleNamespace
+
+    from so101_demo.parallel_batch.adaptive_contracts import (
+        AdaptiveBatchRequest, AdaptiveWorkerOptions)
+    from so101_demo.parallel_batch.contracts import RunMode
+    from so101_demo.parallel_batch.adaptive_pool import ProductionAdaptivePoolFactory
+    from so101_demo.parallel_batch.resource_budget import (
+        AdaptiveAllocationContext, AllocationScope)
+
+    options = AdaptiveWorkerOptions(
+        worker_count=2, fallback_worker_counts=(1,), initial_points_per_worker=2,
+        worker_start_timeout_s=30.0, max_infra_attempts_per_point=1,
+        ros_domain_ids=(191, 192))
+    adaptive_request = AdaptiveBatchRequest(
+        'pa01', RunMode.EXECUTE, ('p1', 'p2', 'p3', 'p4'), options, tmp_path)
+    prepared = SimpleNamespace(request=None, adaptive_request=adaptive_request)
+    factory = ProductionAdaptivePoolFactory(
+        prepared, composition_factory=lambda *args, **kwargs: None)
+    frozen = replace(options, worker_count=2, fallback_worker_counts=())
+    token = factory.pool_token_for(1)
+    scope = AllocationScope('pa01', 1, 2, 'ADAPTIVE', 'a' * 64)
+    context = factory.issue_allocation_context(
+        scope=scope, pool_token=token, pool_generation=1, frozen_options=frozen)
+    assert isinstance(context, AdaptiveAllocationContext)
+    assert context.scope.request_kind == 'ADAPTIVE'
+    assert context.pool_generation == 1
+    for bad_token, bad_generation, bad_options in (
+        ('f' * 64, 1, frozen),
+        (token, 2, frozen),
+        (token, 1, replace(frozen, initial_points_per_worker=3)),
+    ):
+        with pytest.raises(ValueError):
+            factory.issue_allocation_context(
+                scope=scope, pool_token=bad_token, pool_generation=bad_generation,
+                frozen_options=bad_options)
+    with pytest.raises(ValueError):
+        factory.issue_allocation_context(
+            scope=AllocationScope('pa01', 1, 2, 'FIXED_PRODUCTION', 'a' * 64),
+            pool_token=token, pool_generation=1, frozen_options=frozen)
