@@ -1221,3 +1221,44 @@ def test_baseline_runs_for_the_configured_minimum_and_persists_samples(tmp_path)
             assert row["capacity"][dimension] > 0, (row["sequence"], dimension)
         assert row["attribution_complete"] is True
     session.finish()
+
+
+def test_baseline_writes_an_independent_peak_alias_cross_check(tmp_path):
+    """Amendment 74d6b781 keeps the independent fast-channel peak alias: a second channel at
+    fast_channel_interval_s records its own peaks during the baseline, and the cross-check
+    must be able to disagree with the primary samples rather than rubber-stamp them."""
+
+    import dataclasses
+    import json as _json
+
+    from so101_demo.parallel_batch.owned_resources import cross_check_peak_alias
+
+    prefix = _install_prefix(tmp_path)
+    bindings = _bindings(tmp_path, prefix)
+    authorization, path, digest = _sealed_authorization(tmp_path, bindings)
+    plan = build_candidate_plan(
+        authorization=authorization, authorization_path=path, config_path=V2_CONFIG,
+        evidence_root=bindings["evidence_root"], batch_id="batch-alias")
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v2
+
+    config = load_parallel_runtime_config_v2(V2_CONFIG)
+    sampling = dataclasses.replace(config.measurement.sampling, baseline_minimum_s=0.4)
+    session = _session_factory(tmp_path)(
+        authorization=authorization, batch_root=plan.batch_root, batch_id=plan.batch_id,
+        sampling=sampling, safety=config.measurement.safety, owner=_identity())
+    session.begin()
+    alias_path = plan.batch_root / "raw/peak-alias.json"
+    assert alias_path.is_file(), alias_path
+    alias = _json.loads(alias_path.read_text())
+    assert alias["interval_s"] <= 0.03, alias
+    assert alias["samples"] >= 4, alias
+    rows = [_json.loads(line) for line
+            in (plan.batch_root / "raw/baseline-samples.jsonl").read_text().splitlines()
+            if line.strip()]
+    for dimension, peak in alias["peaks"].items():
+        primary_peak = max(float(row["observed"][dimension]) for row in rows)
+        assert peak >= primary_peak - 1e-9, (dimension, peak, primary_peak)
+    disagreeing = cross_check_peak_alias(
+        rows, {"peaks": {name: 0.0 for name in alias["peaks"]}})
+    assert disagreeing["consistent"] is False, disagreeing
+    session.finish()

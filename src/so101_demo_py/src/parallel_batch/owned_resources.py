@@ -70,6 +70,28 @@ def _advance_sampling_grid(*, now: float, deadline: float,
     return target, max(0.0, target - float(now))
 
 
+def cross_check_peak_alias(primary_samples, alias) -> dict[str, object]:
+    """Compare the fast-channel peaks against the primary samples, dimension by dimension.
+
+    The check must be able to disagree: if any primary sample reports a value above the alias
+    peak for that dimension, the two channels saw different workloads and the alias cannot be
+    used as independent corroboration.
+    """
+
+    peaks = dict((alias or {}).get("peaks") or {})
+    disagreements = []
+    for name, peak in peaks.items():
+        for row in primary_samples:
+            observed = float(row.get("observed", {}).get(name, 0.0))
+            if observed > float(peak) + 1e-9:
+                disagreements.append({
+                    "dimension": name, "primary": observed, "alias_peak": float(peak),
+                    "sequence": row.get("sequence")})
+                break
+    return {"consistent": not disagreements, "disagreements": disagreements,
+            "dimensions": sorted(peaks)}
+
+
 class OwnedCgroupV2:
     """One measurement-owned cgroup with verified limits and a verified empty cleanup."""
 
@@ -418,6 +440,20 @@ class MeasurementSession:
         path = self.batch_root / "raw/baseline-samples.jsonl"
         path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         deadline = float(self.clock()) + minimum
+        import threading
+
+        alias: dict[str, object] = {}
+
+        def collect() -> None:
+            try:
+                alias.update(self._run_peak_alias(deadline))
+            except Exception as error:  # noqa: BLE001 - a lost alias must be visible, not silent
+                alias.update({"error": f"{type(error).__name__}: {error}", "samples": 0,
+                              "interval_s": float(self.sampling.fast_channel_interval_s),
+                              "peaks": {}})
+
+        alias_thread = threading.Thread(target=collect, daemon=True)
+        alias_thread.start()
         sequence = 0
         while not self._stopped.is_set():
             now = float(self.clock())
@@ -441,7 +477,31 @@ class MeasurementSession:
                 continue
             break
         path.chmod(0o600)
+        alias_thread.join(timeout=max(1.0, 4 * float(self.sampling.fast_channel_interval_s)))
+        alias_path = self.batch_root / "raw/peak-alias.json"
+        alias_path.write_text(json.dumps(alias, sort_keys=True) + "\n")
+        alias_path.chmod(0o600)
+        self._peak_alias = dict(alias)
         return sequence
+
+    def _run_peak_alias(self, deadline: float) -> dict[str, object]:
+        """The independent fast channel: its own cadence, its own peaks, same deadline.
+
+        The policy amendment keeps this as a cross-check for calibration and qualification,
+        so it samples independently of the primary loop rather than reusing its readings.
+        """
+
+        interval = max(float(self.sampling.fast_channel_interval_s), 0.001)
+        peaks: dict[str, float] = {}
+        samples = 0
+        while not self._stopped.is_set() and float(self.clock()) < deadline:
+            observation = self._observe()
+            samples += 1
+            for name, value in observation.observed.items():
+                peaks[name] = max(peaks.get(name, 0.0), float(value))
+            if self._stopped.wait(interval):
+                break
+        return {"samples": samples, "interval_s": interval, "peaks": peaks}
 
     def _observe(self):
         if self._observation_source is not None:
