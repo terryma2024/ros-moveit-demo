@@ -3690,3 +3690,31 @@ the grid period, and the health check races the sampler's own write-observe pair
 them is profile first -- the pass is the thing that must fit inside 100 ms -- then make the check
 read a sample that has already been written. N1 remains `NOT_MEASURED`; nothing is extrapolated to
 another N.
+
+## CP-UQ66 — Stage C: the sampler now fits, and two ambient host guards stand in the way
+
+Run: `stage-c/batches/n1-calibration-20260918-run24/`. Commit `9fd31892e` (63 passed);
+r26 (`87c1959b6dbde618...`) against `bindings/candidate-install-binding-r5.json`.
+
+The sampling cost is fixed and the evidence is the period itself: one device read per pass instead
+of three (`sample_resources` called `used_bytes` twice and `total_bytes` once, and every access is
+a fresh NVML query) took run24 to **44 samples with a maximum gap of 58.7 ms**, well inside the
+100 ms allowance. `SAMPLER_GAP` no longer fires; the two earlier causes (a pass exceeding the
+allowance, and the check racing the sampler's write-observe pair) are both behind us at this cost
+level.
+
+What stops the run now is the host, not the harness, and it is visible in two independent places:
+
+- The launcher writes `{"message": "SWAP_PRESSURE", "status": "ERROR"}` (48 bytes) and exits: the
+  product refuses to start a precision batch while the host is swapping. This host has 4.0 GB of
+  its 8.4 GB swap in use from unrelated work, so the workload never starts.
+- The measurement latched `PSI_FULL_STALL` at 2.315 s on a single sample whose host-wide
+  `psi_full_delta` was 0.0068 s -- the same defect family as the swap rule fixed in CP-UQ65
+  (ambient signal, zero tolerance). The consistent fix is cgroup-scoped pressure
+  (`memory.pressure`/`cpu.pressure` inside the owned cgroup), and it is worth making regardless.
+
+Neither is a harness defect and neither is ours to clear by force: freeing the host's swap would
+mean touching other sessions' memory or global settings, which the standing prohibitions rule out.
+The honest statement of Stage C's precondition is therefore: a candidate measurement needs a host
+that is not swapping, and while this one is, N1 stays `NOT_MEASURED` -- and nothing is extrapolated
+to another N.
