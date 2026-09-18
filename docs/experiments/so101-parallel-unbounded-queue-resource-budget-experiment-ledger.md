@@ -7273,3 +7273,55 @@ The first reuse-mode probe that ran *with* the declared root is in flight
 `campaign-51cb982bee32481ba5c62b0134f88f96`).
 
 _Ledger HEAD when written: `a0cfbdb59`._
+
+## CP-UQ178 — The full suite runs the whole project chain: 20 passed, 3 failed, both causes fixed
+
+The first complete `so101_bun lg-live-functional run test:e2e:live-sim` against the repaired
+deployment (`browser/lg-live-functional.fJ0U4Bhg`) ran **every** project — `live-preflight` →
+`r01-sequential` → `parallel-resource` + `functional-cases` + `adaptive` — and reported
+**20 passed, 3 failed (6.0m)**. R01 passed for real (four points, sealed evidence, journal, cleanup,
+`R01.passed.json` gate written). The three failures were two defects and one consequence:
+
+| Failure | Cause |
+| --- | --- |
+| `R02 parallel two-worker live run with mid-run reload` | stuck `Acquire lease` button; the service log shows `POST /expert-validation/lease` → **409 Conflict** at the moment the spec clicked |
+| `R05 n1-full-restart-single-point accepted by the deployed service` | manifest asked for `PARALLEL` at `worker_count: 1`, but selectable counts are `[2..8]` |
+| `R03 twenty-point adaptive live run` | `R02_GATE_REQUIRED` — it depends on the R02 gate, so it never had a chance |
+
+**Defect 1 — the exclusive lease was never returned.** The console has no release control, the
+service lease lives 300 s, and each spec takes a *new* browser context, so the first spec to finish
+left a lease that made the next one's acquire fail. `acquireLease()` now waits for the POST
+response and asserts `200` (a refusal is reported as `acquire lease refused: 409 …` instead of a
+five-second locator timeout), records the lease id, and an exported `releaseAcquiredLeases(request)`
+runs in `test.afterEach` for the three specs that acquire one — so a half-failed test still hands
+the lease back. This is the same class of leak as the stale deployment roots: state that belongs to
+the run has to be released by the run.
+
+**Defect 2 — the frozen manifest contradicted the execution contract.** The plan is explicit
+(line 20: "PARALLEL N=2..8，SEQUENTIAL N=1"; line 250: the retry batch is exactly one point, N1;
+line 545: the retry config is `FixedExecutionConfigV2(2,'SEQUENTIAL',1)`), yet the manifest carried
+`n1-full-restart-single-point` as `PARALLEL`/1 and the stability record as `PARALLEL`/1. A
+one-worker PARALLEL case can never be accepted, so the case was unsatisfiable as written.
+
+Fixed test-first and with the manifest treated as an input that must be checked:
+
+- **RED**: a new contract spec (`contract/functional-manifest.spec.ts`) validates every case against
+  the execution contract — mode is advertised, PARALLEL ⇒ count ≥ 2 with 4..20 points, SEQUENTIAL ⇒
+  count == 1, `FULL_RESTART_RETRY` ⇒ exactly one point at N1 in SEQUENTIAL, attempts ≥ 1 and
+  timeout 5400 s — plus the frozen stability record (N1/SEQUENTIAL, 20 points, 5 consecutive,
+  5400 s). Against the manifest then in use: **2 failed**.
+- **GREEN**: the builder now emits `SEQUENTIAL` for the N1 retry case and for the stability record.
+  The manifest was regenerated as a **new** artifact rather than overwriting the frozen one:
+  `functional-manifest.gfpWtGRM/manifest.json` (sha256
+  `b776098c83c7b39d6c21416c66fb8187e2f0bcbf299808631dbfb2e19a378a10`, 17 cases) is retained
+  untouched, and the acceptance now uses `functional-manifest.asnquVsj/manifest.json` (sha256
+  `b928a606398d95da110ec63605dcd46f098b7a7633c7c94dd6b7a56fb8f14c3d`, 17 cases, N1 case and
+  stability record `SEQUENTIAL`). Contract spec: **2 passed**; the preflight contract spec still
+  **8 passed**.
+
+Committed as `d951907c6`. The second full run is in flight
+(`lg-live-functional2`, service `service-light.mnTXdInQ`, fresh state root, campaign list empty),
+and its outcome decides whether the remaining failures are real or were only ever downstream of
+these two.
+
+_Ledger HEAD when written: `d951907c6`._
