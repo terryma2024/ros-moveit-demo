@@ -128,8 +128,8 @@ def launcher_module_for_install(site_packages: Path) -> Path:
     return candidate if candidate.is_file() else _installed_launcher_module()
 
 
-def child_environment_for_launcher(environment, console_dir,
-                                   site_packages=None) -> dict[str, str]:
+def child_environment_for_launcher(environment, console_dir, site_packages=None,
+                                   prefixes=None) -> dict[str, str]:
     """The child environment: no inherited authority, and the install's own console.
 
     A copied install ships its console beside the module it runs
@@ -142,6 +142,9 @@ def child_environment_for_launcher(environment, console_dir,
     values["PATH"] = os.pathsep.join(
         part for part in (str(console_dir), inherited) if part)
     if site_packages is not None:
+        values["AMENT_PREFIX_PATH"] = os.pathsep.join(
+            str(path) for path in prefixes or ()) + (
+            os.pathsep + values["AMENT_PREFIX_PATH"] if values.get("AMENT_PREFIX_PATH") else "")
         inherited_path = values.get("PYTHONPATH", "")
         values["PYTHONPATH"] = os.pathsep.join(
             part for part in (str(site_packages), inherited_path) if part)
@@ -196,6 +199,18 @@ def entry_points_for_install(install_prefix: Path) -> Path:
         return install_prefix_entry_points(install_prefix)
     except MeasurementCliError:
         return _installed_entry_points()
+
+
+def overlay_package_prefixes(install_root: Path) -> dict[str, Path]:
+    """The two prefixes the launcher requires, and they must sit inside its install root."""
+
+    prefixes: dict[str, Path] = {}
+    for name in ("so101_demo_py", "so101_mujoco_support"):
+        prefix = Path(install_root) / name
+        if not prefix.is_dir() or prefix.is_symlink():
+            raise MeasurementCliError(f"MEASUREMENT_OVERLAY_INPUT_MISSING: {name}")
+        prefixes[name] = prefix
+    return prefixes
 
 
 def _ament_package_prefixes() -> dict[str, Path]:
@@ -288,7 +303,8 @@ def production_runner_factory(plan, *, child_runner=None, image_inspector=None):
         raise MeasurementCliError("MEASUREMENT_RUNTIME_UNAVAILABLE: launcher")
     site_packages = install_prefix / "so101_demo_py/lib/python3.12/site-packages"
     environment = child_environment_for_launcher(
-        dict(os.environ), launcher.parent, site_packages=site_packages)
+        dict(os.environ), launcher.parent, site_packages=site_packages,
+        prefixes=overlay_package_prefixes(install_prefix))
     from so101_demo.cli.mujoco_parallel_batch import _BROKER_IMAGE
 
     tag = verify_broker_image(tag=_BROKER_IMAGE, digest=plan.bindings.broker_image_id,
@@ -297,8 +313,8 @@ def production_runner_factory(plan, *, child_runner=None, image_inspector=None):
         target=ensure_private_batch_root(plan.batch_root) / "raw/overlay-provenance-binding.json",
         source_root=Path(str(binding.get("source_root", "")) or Path.cwd()),
         build_root=install_prefix, install_root=install_prefix,
-        package_prefix=_ament_package_prefixes()["so101_demo_py"],
-        package_prefixes=_ament_package_prefixes(),
+        package_prefix=overlay_package_prefixes(install_prefix)["so101_demo_py"],
+        package_prefixes=overlay_package_prefixes(install_prefix),
         console=launcher,
         module=launcher_module_for_install(site_packages),
         entry_points=entry_points_for_install(install_prefix),
