@@ -4107,3 +4107,18 @@ that the earlier combination failure was the long baseline colliding with that t
 bound rather than a cross-file state leak -- the timing assertion now measures baseline-plus-margin,
 and the code assertion is unaffected. The isolation task from the previous addendum stays open but
 is downgraded from "suspected state leak" to "verify with the fast config in the full gate".
+
+### CP-UQ77 addendum — Unit 7 (RED -> GREEN): the independent 25 ms peak alias
+
+`_run_baseline` now starts a second, independent channel at `fast_channel_interval_s` (25 ms in
+the authoritative config) that runs for the same baseline deadline, takes its own observations at
+its own cadence, and records per-dimension peaks to `raw/peak-alias.json`; a thread failure is
+recorded in that document instead of being swallowed by the daemon thread. `cross_check_peak_alias`
+compares the alias peaks against the primary baseline samples dimension by dimension and reports
+disagreements, so the corroboration can fail rather than rubber-stamp.
+
+RED: the test failed with `ImportError: cannot import name 'cross_check_peak_alias'`, then -- after
+the first implementation -- with `KeyError: 'interval_s'` caused by a `NameError: name 'DIMENSIONS'
+is not defined` inside the alias thread, which the error-recording change now makes visible. GREEN:
+both the alias test and the baseline test pass, and the six-file measurement/budget suite is green
+in ~8 s with fresh scratch.
