@@ -111,6 +111,11 @@ CREATE TABLE IF NOT EXISTS recovery_fences (
   batch_id TEXT NOT NULL REFERENCES campaign_batches(batch_id),
   reason TEXT NOT NULL, command_id TEXT NOT NULL, created_at_ns INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS operator_recoveries (
+  campaign_id TEXT PRIMARY KEY REFERENCES recovery_fences(campaign_id),
+  command_id TEXT NOT NULL UNIQUE,
+  receipt_json TEXT NOT NULL, receipt_sha256 TEXT NOT NULL
+);
 """
 
 
@@ -447,7 +452,110 @@ class SupervisorStore:
         return dict(row) if row is not None else None
 
     def has_recovery_fence(self) -> bool:
-        return self._connection.execute("SELECT 1 FROM recovery_fences LIMIT 1").fetchone() is not None
+        for row in self._connection.execute("SELECT campaign_id FROM recovery_fences"):
+            try:
+                if self.operator_recovery(row["campaign_id"]) is None:
+                    return True
+            except StoreConflict:
+                return True
+        return False
+
+    def operator_recovery_context(self, campaign_id: str) -> dict:
+        """Return historical binding facts, never control credentials or success claims."""
+        campaign = self._connection.execute(
+            "SELECT * FROM campaigns WHERE campaign_id=?", (campaign_id,)
+        ).fetchone()
+        fence = self.recovery_fence(campaign_id)
+        if campaign is None or fence is None:
+            raise StoreConflict("RECOVERY_FENCE_NOT_FOUND")
+        batches = [dict(row) for row in self._connection.execute(
+            "SELECT * FROM campaign_batches WHERE campaign_id=? ORDER BY batch_id", (campaign_id,)
+        )]
+        owners = [dict(row) for row in self._connection.execute(
+            "SELECT o.* FROM owned_execution o JOIN campaign_batches b USING(batch_id) "
+            "WHERE b.campaign_id=? ORDER BY o.batch_id", (campaign_id,)
+        )]
+        receipt = self._connection.execute(
+            "SELECT receipt_json,receipt_sha256 FROM preflight_receipts WHERE receipt_id=?",
+            (campaign["preflight_receipt_id"],),
+        ).fetchone()
+        if receipt is None:
+            raise StoreConflict("RECOVERY_PREFLIGHT_NOT_FOUND")
+        document = json.loads(receipt["receipt_json"])
+        if _sha(document) != receipt["receipt_sha256"]:
+            raise StoreConflict("RECOVERY_PREFLIGHT_INVALID")
+        binding = {"campaign": dict(campaign), "batches": batches, "owners": owners,
+                   "preflight_receipt_sha256": receipt["receipt_sha256"]}
+        return {**binding, "fence": fence, "fence_sha256": _sha(fence),
+                "binding_sha256": _sha(binding), "preflight": document}
+
+    def _check_operator_receipt(self, campaign_id: str, receipt: dict) -> None:
+        context = self.operator_recovery_context(campaign_id)
+        if (
+            receipt.get("campaign_id") != campaign_id
+            or receipt.get("fence_sha256") != context["fence_sha256"]
+            or receipt.get("binding_sha256") != context["binding_sha256"]
+            or receipt.get("status") != "OPERATOR_RECOVERED_ABORTED"
+            or receipt.get("execution_success") is not False
+            or receipt.get("upstream_cleanup_claimed") is not False
+        ):
+            raise StoreConflict("RECOVERY_RECEIPT_INVALID")
+        for prefix in ("report", "backup", "config"):
+            path = Path(receipt[f"{prefix}_path"])
+            if (
+                not path.is_absolute() or path != path.resolve(strict=True)
+                or not path.is_relative_to(self.root / "operator-recovery")
+            ):
+                raise StoreConflict("RECOVERY_EVIDENCE_INVALID")
+            metadata = path.stat(follow_symlinks=False)
+            if (
+                not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid()
+                or metadata.st_nlink != 1 or stat.S_IMODE(metadata.st_mode) != 0o600
+                or hashlib.sha256(path.read_bytes()).hexdigest() != receipt[f"{prefix}_sha256"]
+            ):
+                raise StoreConflict("RECOVERY_EVIDENCE_INVALID")
+        report = json.loads(Path(receipt["report_path"]).read_bytes())
+        for key in ("campaign_id", "command_id", "fence_sha256", "binding_sha256"):
+            if report.get(key) != receipt.get(key):
+                raise StoreConflict("RECOVERY_REPORT_INVALID")
+        if receipt["config_sha256"] != context["preflight"].get("parallel_config_sha256"):
+            raise StoreConflict("RECOVERY_CONFIG_MISMATCH")
+
+    def operator_recovery(self, campaign_id: str) -> dict | None:
+        row = self._connection.execute(
+            "SELECT * FROM operator_recoveries WHERE campaign_id=?", (campaign_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        try:
+            receipt = json.loads(row["receipt_json"])
+            if _sha(receipt) != row["receipt_sha256"] or receipt.get("command_id") != row["command_id"]:
+                raise StoreConflict("RECOVERY_RECEIPT_INVALID")
+            self._check_operator_receipt(campaign_id, receipt)
+        except (OSError, KeyError, TypeError, ValueError) as error:
+            raise StoreConflict("RECOVERY_RECEIPT_INVALID") from error
+        return receipt
+
+    def record_operator_recovery(self, receipt: dict) -> dict:
+        """Commit only an audited abort resolution; original fence/history stays intact."""
+        campaign_id = receipt["campaign_id"]
+        request = {key: receipt[key] for key in (
+            "campaign_id", "command_id", "fence_sha256", "binding_sha256", "config_sha256",
+        )}
+        digest = _sha(request)
+        with self._transaction():
+            self._check_operator_receipt(campaign_id, receipt)
+            if self._connection.execute(
+                "SELECT 1 FROM commands WHERE command_id=?", (receipt["command_id"],)
+            ).fetchone() is not None:
+                raise StoreConflict("COMMAND_ID_REUSED")
+            if self.operator_recovery(campaign_id) is not None:
+                raise StoreConflict("RECOVERY_ALREADY_RESOLVED")
+            self._connection.execute("INSERT INTO operator_recoveries VALUES (?, ?, ?, ?)",
+                                     (campaign_id, receipt["command_id"], _json(receipt), _sha(receipt)))
+            self._connection.execute("INSERT INTO commands VALUES (?, ?, ?, ?, ?)",
+                                     (receipt["command_id"], digest, "OPERATOR_RECOVERY", "COMPLETE", _json(receipt)))
+        return receipt
 
     def acknowledge_execution_owner(self, owned=None, **values) -> None:
         if owned is not None:

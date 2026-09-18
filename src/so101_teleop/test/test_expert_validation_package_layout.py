@@ -22,6 +22,7 @@ EXPERT_VALIDATION_TESTS = {
     "test_expert_validation_frozen_manifest",
     "test_expert_validation_lease",
     "test_expert_validation_main",
+    "test_expert_validation_operator_recovery",
     "test_expert_validation_preflight",
     "test_expert_validation_process_owner",
     "test_expert_validation_process_owner_integration",

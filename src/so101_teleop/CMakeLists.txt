@@ -47,6 +47,7 @@ install(
   PROGRAMS
     scripts/so101_teleop_server.py
     scripts/so101_expert_validation_server.py
+    scripts/so101_expert_validation_recover.py
     scripts/tile_ai_station_guis.py
     scripts/gazebo_window_recorder.py
     scripts/simulator_window_recorder.py
@@ -121,6 +122,7 @@ if(BUILD_TESTING)
   so101_add_pytest_test(test_expert_validation_service test/teleop/test_expert_validation_service.py)
   so101_add_pytest_test(test_expert_validation_statistics test/teleop/test_expert_validation_statistics.py)
   so101_add_pytest_test(test_expert_validation_store test/teleop/test_expert_validation_store.py)
+  so101_add_pytest_test(test_expert_validation_operator_recovery test/teleop/test_expert_validation_operator_recovery.py)
   so101_add_pytest_test(test_expert_validation_supervisor test/teleop/test_expert_validation_supervisor.py)
 endif()
 
