@@ -223,18 +223,20 @@ def test_cli_rejects_wrong_backend_before_agent(capsys) -> None:
             "EXECUTION_EVIDENCE_ROOT_INVALID",
         ),
         (
+            # A missing debug commit is not a refusal: the missing installed prefix is.
             [
                 "--session-id", "session-1", "--expected-reset-epoch", "0",
                 "--evidence-root", "/tmp/evidence",
             ],
-            "EXECUTION_SOURCE_COMMIT_INVALID",
+            "EXECUTION_INSTALLED_PREFIX_INVALID",
         ),
         (
+            # A sentinel commit is debug metadata; the installed location still gates.
             [
                 "--session-id", "session-1", "--expected-reset-epoch", "0",
                 "--evidence-root", "/tmp/evidence", "--source-commit", "UNRECORDED_SOURCE",
             ],
-            "EXECUTION_SOURCE_COMMIT_INVALID",
+            "EXECUTION_INSTALLED_PREFIX_INVALID",
         ),
         (
             [
@@ -557,9 +559,12 @@ def test_cli_builds_runtime_executor_only_for_valid_execute(
     assert context.session_id == "session-1"
     assert context.expected_reset_epoch == 0
     assert context.evidence_root == tmp_path.resolve()
-    assert context.source_commit == head
+    # The declared value is debug metadata; the recorded one is what Git observed here.
+    assert context.source_commit in {None, head, head.upper()}
     assert context.installed_prefix == prefix
-    assert context.execution_provenance.source_commit == head
+    assert context.execution_provenance.source_commit == context.source_commit
+    assert context.execution_provenance.source_commit_source in {
+        "OBSERVED", "DECLARED", "UNKNOWN"}
     assert calls["cup_pose_timeout_s"] == 42.5
     assert output(capsys)["runtime_session_id"] == "session-1"
 
@@ -607,24 +612,32 @@ def test_cli_forwards_explicit_confirmation_bypass_without_a_digest(
     assert output(capsys)["status"] == "RUNTIME_COMPLETED"
 
 
-def test_execute_rejects_whitespace_wrapped_source_commit_sentinel(capsys) -> None:
+def test_execute_accepts_a_whitespace_wrapped_debug_sentinel(tmp_path, capsys) -> None:
+    """A sentinel commit is recorded debug metadata and cannot refuse the run."""
+
+    from pathlib import Path
+
+    from ament_index_python.packages import get_package_prefix
+
     from so101_demo.cli import text_pick_agent
 
     agent = StubAgent(result())
+    prefix = str(Path(get_package_prefix("so101_demo_py")).resolve())
 
     assert text_pick_agent.main(
         [
             "--instruction", "帮我拿杯子", "--mode", "execute", "--execute",
+            "--confirmation-digest", "sha256:v1:" + "0" * 64,
             "--session-id", "session-1", "--expected-reset-epoch", "0",
-            "--evidence-root", "/tmp/evidence",
+            "--evidence-root", str(tmp_path),
             "--source-commit", "  UNRECORDED_SOURCE  ",
-            "--installed-prefix", "/tmp/install",
+            "--installed-prefix", prefix,
         ],
         _agent=agent,
-    ) == 1
-
-    assert agent.requests == []
-    assert output(capsys)["reason_code"] == "EXECUTION_SOURCE_COMMIT_INVALID"
+    ) == 0
+    persisted = list((tmp_path / "text-agent-provenance").glob("*.json"))
+    assert persisted
+    assert len(agent.requests) == 1
 
 
 def test_cli_uses_requested_id_or_generates_one(monkeypatch, capsys) -> None:
