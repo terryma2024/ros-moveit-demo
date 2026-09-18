@@ -7763,3 +7763,29 @@ evaluated == 4`, per-point artifacts and full cleanup. The idle slots are the pl
 not inferred. `fixed-n8-p4` is the last of this batch and is already in the same job.
 
 _Ledger HEAD when written: `d1e2a2e33`._
+
+## CP-UQ192 — Every fixed-N option has now executed its four-point campaign for real
+
+`fixed-n8-p4` passed for real: `COMPLETED`, `requested 4`, `evaluated 4`, **eight** worker slots —
+`worker-02/03/05/06` with one lease each and `worker-01/04/07/08` with none, all `STOPPED` — 4/4
+points `PASSED` with 13 artifacts each, cleanup true, 2.1 m. That closes the four-point sweep of all
+seven configured fixed-N options:
+
+| Case | Slots (leases) | Timing |
+| --- | --- | --- |
+| `fixed-n2-p4` | 2 (1, 1) | 3.0 m |
+| `fixed-n3-p4` | 3 (1, 2, 1) | 3.0 m |
+| `fixed-n4-p4` | 4 (1, 1, 1, 1) | 1.8 m |
+| `fixed-n5-p4` | 5 (1, 1, 0, 1, 1) | 2.0 m |
+| `fixed-n6-p4` | 6 (1, 0, 1, 1, 0, 1) | 2.1 m |
+| `fixed-n7-p4` | 7 (1, 0, 1, 0, 0, 1, 1) | 2.3 m |
+| `fixed-n8-p4` | 8 (0, 1, 1, 0, 1, 1, 0, 0) | 2.1 m |
+
+Each row is a real campaign through the deployed console with its own
+`execution-fixed-n*-p4.json` under `browser/lg-exec-*/runtime/*/`: exact `requested == evaluated == 4`,
+all N worker slots present in the projection, per-point terminal status and artifact counts, terminal
+campaign status and full cleanup. The idle slots — 1, 2 and 4 of them at N=5, 6, 7 and 8 — are the
+plan's "fewer points than N still starts N runtimes, idle is not a reduction" rule observed on the
+record rather than asserted. No capability check is counted as execution anywhere in this table.
+
+_Ledger HEAD when written: `4cdabc7af`._
