@@ -2427,3 +2427,70 @@ evidence: colcon/progress2-demo-colcon.*, scratch/progress-*, progress-install
 decision: KEEP
 next_experiment: NONE-AUTHORIZED (await Sol review)
 ```
+
+```yaml
+checkpoint_id: CP-UQ29
+last_valid_experiment: EXP-UQ29
+current_hypothesis: The P2 copied-CLI acceptance gap is repaired with the real installed entrypoint, and
+  subsequent task pytest runs default to 8 audited xdist workers.
+dispatch: 8eef27e3-d4a0-4089-b3a5-9efc6df8c308 (exclusive O_EXCL receipt first, then a read-only probe
+  with shell date -Iseconds 2026-09-18T18:54:25+08:00, HEAD 3fa4a3aa22f4d0b1a5b4b44475e494554a828c0c
+  clean, CP-UQ28A, pane %68/PID 1345571, handoff SHA256
+  4832c94069d8952dd59b6eb858283a0cff55a7d4e0d1d1fd124d1f52880ce38d; host 24 cores / 26.5 GiB
+  available / loadavg 0.23)
+corrections:
+  - The previous `test_debug_only_provenance.py` copied-install case wrote a fake
+    `#!/bin/sh exit 1` entrypoint and injected a hermetic agent; it proved module admission only and is
+    no longer presented as copied console/default-composition acceptance (the fake stub is gone and the
+    test is re-scoped).
+  - "Evidence: colcon/xdist8-demo-colcon.venD07h2 exit 1, 9 failed / 3265 passed with the real child
+    argv forwarding `test -n 8` - all nine are in test_parallel_batch_resources.py, the shared
+    claim/domain probe module, which is concrete evidence that this module must stay serial (already in
+    tools/so101_pytest_gate.py SERIAL_MODULES)."
+repairs:
+  - "Real copied-entrypoint acceptance: new src/so101_demo_py/test/test_copied_installed_entrypoint.py
+    runs the immutable progress-install console script as a subprocess with the copied module origins
+    and asserts (a) the real installed entrypoint is an EASY-INSTALL console script whose SHA equals the
+    debug manifest entry, (b) the default bootstrap composes from the copied bytes, persists provenance
+    with module/entrypoint/prefix observations and source_commit null/UNKNOWN, and stops only at
+    PLANNER_CHAIN_FAILED (the unauthorized live provider gate), (c) invalid session/reset/evidence
+    context fails closed with the specific codes and no provenance, (d) launch executable/launch files/
+    policy/scene are functionally discovered while a genuinely empty prefix fails with
+    "installed executable is unavailable". No agent, admission factory, provider, resolver, default
+    factory or global gate is injected."
+  - "Runtime bytes unchanged since ff8a1479f (git diff over src/so101_demo_py/src,
+    src/so101_teleop/so101_teleop and setup.py is empty), so the immutable progress-install prefix is
+    reused after re-verifying the module bytes; no new prefix, no symlink, old prefixes untouched."
+  - "pytest default 8 workers: task-owned tools/test-gate.zsh sets SO101_PYTEST_WORKERS=8 and adds
+    `-n 8` unless the caller passes -n/-p no:xdist/--collect-only, recording actual_workers in
+    workers.txt; the demo conftest writes a per-worker proof (worker, interpreter, prefix, tempdir,
+    expected) inside the run scratch and fails if a worker escaped TMPDIR. No global addopts change."
+  - "Audited parallel/serial runner: task-owned tools/pytest-parallel.zsh derives the serial group from
+    tools/so101_pytest_gate.py SERIAL_MODULES, collects the full nodeid manifest, runs the serial group
+    serially and the remainder with -n 8, and asserts an empty intersection and an exactly equal union."
+gates:
+  - "scratch/xdist8-demo.1820566: coverage_exact true, manifest 3275 = serial 318 + parallel 2957,
+    intersection 0; serial 318 passed, parallel 2956 passed / 1 skipped; workers 8."
+  - "scratch/xdist8-teleop3.1844980: coverage_exact true, manifest 532 = parallel 532, intersection 0,
+    532 passed in 18.6s with 8 workers (48.5s serial)."
+  - "colcon/xdist8-demo-serial.8ftQI8MP: exit 0 in 552.3s, 3274 passed, 1 skipped - the required
+    ament_python package gate (serial, because the -n 8 evidence above shows the resource-probe module
+    must not be parallelised)."
+  - "colcon test-result --all (dev build base): 3861 tests, 0 errors, 0 failures, 1 skipped."
+  - "scratch/xdist8-copied-accept3.CNNXqFHo: 19 passed (12 new copied-entrypoint acceptance cases plus
+    the re-scoped module-admission cases) at 8 workers."
+remaining_unauthorized_gate:
+  - The copied entrypoint's preview/execute completion needs the live DeepSeek/Ollama provider and, for
+    motion, the ROS/MoveIt stack; both are outside this authorization. The acceptance therefore asserts
+    the default composition up to that precise gate (PLANNER_CHAIN_FAILED) instead of claiming a
+    completed non-motion CLI run.
+inferred:
+  - Copied console/default composition and launch resources are now genuinely exercised; the four
+    previously closed items stay closed.
+conclusion: VALID offline. Stop for Sol execution-result review.
+evidence: scratch/xdist8-*, colcon/xdist8-*, tools/{test-gate.zsh,pytest-parallel.zsh},
+  followups/copied-cli-xdist8-8eef27e3-.../{executor.receipt,startup-probe01.log,
+  startup-probe01.result.json}
+decision: KEEP
+next_experiment: NONE-AUTHORIZED (await Sol review)
+```
