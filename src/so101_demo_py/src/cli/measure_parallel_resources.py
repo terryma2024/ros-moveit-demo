@@ -10,6 +10,7 @@ authorization bytes, inside the owned cgroup, under the real sampler and deadlin
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import os
@@ -76,6 +77,50 @@ def require_measurement_capabilities(
     }
 
 
+def _installed_package_prefix() -> Path:
+    import so101_demo
+
+    return Path(so101_demo.__file__).resolve().parents[1]
+
+
+def _installed_module_root() -> Path:
+    return _installed_package_prefix().parent
+
+
+def _installed_launcher_module() -> Path:
+    from so101_demo.cli import mujoco_parallel_batch
+
+    return Path(mujoco_parallel_batch.__file__).resolve()
+
+
+def _installed_entry_points() -> Path:
+    """The metadata file of the installed distribution, wherever this interpreter finds it."""
+
+    from importlib.metadata import PackageNotFoundError, distribution
+
+    try:
+        candidate = Path(distribution("so101-demo-py").locate_file("entry_points.txt"))
+    except (PackageNotFoundError, FileNotFoundError):
+        candidate = None
+    if candidate is not None and candidate.is_file():
+        return candidate
+    # A source-tree import has no distribution metadata; the file that declares the same
+    # console entries there is the package's own setup.py.
+    fallback = Path(_installed_package_prefix()) / "setup.py"
+    if fallback.is_file():
+        return fallback
+    raise MeasurementCliError("MEASUREMENT_OVERLAY_INPUT_MISSING: entry_points")
+
+
+def measurement_source_commit() -> str:
+    """The source commit as a debug observation: environment first, never a runtime Git call."""
+
+    from so101_demo.runtime.provenance import observed_source_commit
+
+    observed = observed_source_commit(Path.cwd()) or ""
+    return str(observed or os.environ.get("SO101_MEASUREMENT_SOURCE_COMMIT", ""))
+
+
 def child_environment_for_launcher(environment, console_dir) -> dict[str, str]:
     """The child environment: no inherited authority, and the install's own console.
 
@@ -116,6 +161,53 @@ def _default_image_inspector(tag: str) -> str:
     return completed.stdout
 
 
+def _file_sha256(path: Path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def write_overlay_provenance_binding(
+    *, target: Path, source_root: Path, build_root: Path, install_root: Path,
+    package_prefix: Path, console: Path, module: Path, entry_points: Path,
+    parallel_config: Path, point_catalog: Path, source_commit: str,
+) -> Path:
+    """Write the external overlay binding the launcher verifies before creating a root.
+
+    The launcher reads its ``--provenance-binding`` as an *overlay* document (schema 1) that
+    names the trees and the artifact hashes it should compare, which is a different document
+    from the sealed authorization's provenance binding, so it gets its own file.
+    """
+
+    inputs = {
+        "coordinator_console": Path(console), "coordinator_module": Path(module),
+        "entry_points": Path(entry_points), "parallel_config": Path(parallel_config),
+        "point_catalog": Path(point_catalog),
+    }
+    for name, path in inputs.items():
+        if not path.is_file():
+            raise MeasurementCliError(f"MEASUREMENT_OVERLAY_INPUT_MISSING: {name}")
+    for name, path in (("source_root", source_root), ("build_root", build_root),
+                       ("install_root", install_root), ("package_prefix", package_prefix)):
+        if not Path(path).is_dir():
+            raise MeasurementCliError(f"MEASUREMENT_OVERLAY_INPUT_MISSING: {name}")
+    document = {
+        "schema_version": 1,
+        "source_root": str(Path(source_root).resolve()),
+        "source_commit": str(source_commit),
+        "build_root": str(Path(build_root).resolve()),
+        "install_root": str(Path(install_root).resolve()),
+        "package_prefixes": {"so101_demo_py": str(Path(package_prefix).resolve())},
+        "artifacts": {
+            name: {"path": str(path.resolve()), "sha256": _file_sha256(path)}
+            for name, path in inputs.items()
+        },
+    }
+    target = Path(target)
+    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    target.write_text(json.dumps(document, indent=1, sort_keys=True) + "\n")
+    target.chmod(0o600)
+    return target
+
+
 def production_runner_factory(plan, *, child_runner=None, image_inspector=None):
     """Real composition runner: the frozen copied install's fixed batch entry."""
 
@@ -131,7 +223,18 @@ def production_runner_factory(plan, *, child_runner=None, image_inspector=None):
 
     tag = verify_broker_image(tag=_BROKER_IMAGE, digest=plan.bindings.broker_image_id,
                               inspector=image_inspector)
-    argv = (str(launcher), *plan.runner_argv(broker_image=tag))
+    overlay = write_overlay_provenance_binding(
+        target=Path(plan.batch_root) / "raw/overlay-provenance-binding.json",
+        source_root=Path(str(binding.get("source_root", "")) or Path.cwd()),
+        build_root=_installed_module_root(), install_root=_installed_module_root(),
+        package_prefix=_installed_package_prefix(),
+        console=launcher, module=_installed_launcher_module(),
+        entry_points=_installed_entry_points(),
+        parallel_config=Path(plan.config_path),
+        point_catalog=Path(plan.bindings.points_path),
+        source_commit=measurement_source_commit())
+    argv = (str(launcher),
+            *plan.runner_argv(broker_image=tag, provenance_binding=overlay))
 
     def runner(candidate_plan, session):
         if child_runner is not None:
