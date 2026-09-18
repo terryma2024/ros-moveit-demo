@@ -27,7 +27,7 @@ export default defineConfig({
     },
     {
       name: "parallel-resource",
-      testMatch: /\/live-sim\/(02-parallel|04-resource-budget)\.spec\.ts$/,
+      testMatch: /\/live-sim\/(02-parallel|04-start-guard)\.spec\.ts$/,
       dependencies: ["r01-sequential"],
     },
     {

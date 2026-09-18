@@ -187,17 +187,14 @@ export function recordGate(evidenceRoot: string, gate: string, detail: object): 
 // Prefix resolution is shared with the installed fixtures so both gates audit the same
 // overlay/underlay origins; see resolvePackagePrefixes in fixtures/installed.ts.
 
-const QUALIFICATION_ENV: Record<string, string> = {
+// Functional model/config locations only. The retired budget authority (acceptance and
+// fault-injection aggregate paths, qualification environment) is deliberately absent: the
+// lightweight start guard needs no profile and no qualification document to admit a start.
+const MODEL_ENV: Record<string, string> = {
   SO101_VALIDATION_YOLO_WEIGHTS:
     "/data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt",
   SO101_VALIDATION_GROUNDED_ROOT: "/data/work/so101-models/grounded-sam-v2-scipy-lock",
   SO101_VALIDATION_BROKER_IMAGE: "so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1",
-  SO101_VALIDATION_PARALLEL_ACCEPTANCE:
-    "/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-20-f91/aggregate_results.json",
-  SO101_VALIDATION_ADAPTIVE_ACCEPTANCE:
-    "/data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/r/e2001/aggregate_results.json",
-  SO101_VALIDATION_ADAPTIVE_FAULT_INJECTION:
-    "/data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/r/su09/aggregate_results.json",
   SO101_VALIDATION_ADAPTIVE_PERFORMANCE_TIERS: "1,2,4,6,8",
 };
 
@@ -274,7 +271,7 @@ export const liveSimTest = base.extend<{ liveServer: LiveServer }>({
     const child: ChildProcess = spawn(python, [entry], {
       env: {
         ...process.env,
-        ...QUALIFICATION_ENV,
+        ...MODEL_ENV,
         SO101_DISABLE_KIMI_EDITABLE_FINDER: "1",
         PYTHONNOUSERSITE: "1",
         PYTHONPATH: [...sitePackages, "/opt/ros/jazzy/lib/python3.12/site-packages"].join(":"),
