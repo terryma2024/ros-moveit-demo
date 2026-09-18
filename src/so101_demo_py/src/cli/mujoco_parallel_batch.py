@@ -476,6 +476,13 @@ def _prepare_start_guard(options, config, *, batch_id, worker_count, start_guard
         reason = getattr(error, "reason", None) or "START_GUARD_REFUSED"
         raise CliError(reason) from error
     return guard, {
+        "policy": {
+            "timeout_s": config.start_guard.timeout_s,
+            "cpu_busy_warn_fraction": config.start_guard.cpu_busy_warn_fraction,
+            "ram_minimum_bytes": config.start_guard.ram_minimum_bytes,
+            "ram_minimum_fraction": config.start_guard.ram_minimum_fraction,
+            "gpu_minimum_bytes": config.start_guard.gpu_minimum_bytes,
+        },
         "status": result.status,
         "checked_monotonic_s": result.completed_monotonic_s,
         "cleanup_state": result.cleanup_state,
@@ -1270,17 +1277,12 @@ def prepare_batch(
             "evidence_root": str(evidence_root),
             "provenance": dict(provenance),
             "start_guard": None if guard_summary is None else {
-                # Deterministic facts only: a resume must reproduce this manifest byte for
-                # byte, so observations, timestamps and busy ratios stay in the guard
-                # evidence instead of the frozen batch plan.
-                "status": guard_summary["status"],
+                # The frozen plan records only what it will enforce. A guard *status* is a
+                # host observation (busy CPU can turn PASS into WARN between two identical
+                # runs), so embedding it would make a resume refuse a legitimate replay;
+                # the observation itself is kept in the guard evidence and the receipts.
                 "cleanup_state": guard_summary["cleanup_state"],
-                "gpu_uuid": guard_summary["gpu_uuid"],
-                "checks": {
-                    name: {"status": check["status"], "reason": check["reason"],
-                           "cutoff": check["cutoff"], "unit": check["unit"]}
-                    for name, check in sorted(guard_summary["checks"].items())
-                },
+                "policy": dict(guard_summary["policy"]),
             },
         }
     if options.resume:

@@ -2283,7 +2283,12 @@ def test_fixed_w4_starts_without_any_budget_authority(tmp_path):
     assert prepared.start_guard_evidence["checks"]["ram"]["unit"] == "bytes"
     assert prepared.request.worker_count == 4
     assert prepared.manifest["schema_version"] == 3
-    assert prepared.manifest["start_guard"]["status"] == prepared.start_guard_evidence["status"]
+    assert prepared.manifest["start_guard"]["policy"] == {
+        key: prepared.start_guard_evidence["policy"][key]
+        for key in ("timeout_s", "cpu_busy_warn_fraction", "ram_minimum_bytes",
+                    "ram_minimum_fraction", "gpu_minimum_bytes")}
+    assert prepared.manifest["start_guard"]["cleanup_state"] == "CLEAR"
+    assert "status" not in prepared.manifest["start_guard"]
     assert "live_headroom" not in prepared.manifest
 
 
