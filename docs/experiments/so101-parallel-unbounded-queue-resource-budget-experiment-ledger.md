@@ -3665,3 +3665,28 @@ is the one the rest of the sampler already follows -- take swap activity from th
 (`memory.swap.current` / `memory.events`) so it describes the workload, and keep the host-wide
 figure in `diagnostics` (where it already is). That is the next change. N1 remains `NOT_MEASURED`
 and nothing is extrapolated to another N.
+
+## CP-UQ65 — Stage C: the sampler gap, now measured instead of argued
+
+Run: `stage-c/batches/n1-calibration-20260918-run23/`. Commit `4c560bbed` (62 passed);
+r25 (`343dd458eceda6ac...`) against `bindings/candidate-install-binding-r4.json`.
+
+The cgroup-scoped swap change is in and the swap latch is gone: `swap_delta` now comes from the
+owned cgroup's `memory.swap.current`, so one kilobyte of unrelated host movement can no longer
+abort a measurement, and the host figure stays in `diagnostics["swap_total"]`. The rebuild ordering
+held too -- rebuild last, seal, run untouched (`colcon_rc=0`, 1128 files, binding r4).
+
+This run finally answers the sampler question with recorded timestamps rather than inference. From
+the receipt's own `control_events` and the sample file:
+
+- samples at 0.193 s and 0.304 s -- a **111 ms period**, against a 100 ms allowance;
+- `t_last_sample` 0.193, `t_breach`/`t_detect`/`t_abort_latch` 0.317, i.e. the control latched on
+  `0.317 - 0.193 = 124 ms`;
+- `t_last_sample` is still 0.193 although a second sample had been *written* at 0.304, so the
+  latch fired from a check that ran between the sampler's write and its `observe_sample` call.
+
+Two distinct causes, both real and both fixable: a pass that costs more than the allowance becomes
+the grid period, and the health check races the sampler's own write-observe pair. The order to fix
+them is profile first -- the pass is the thing that must fit inside 100 ms -- then make the check
+read a sample that has already been written. N1 remains `NOT_MEASURED`; nothing is extrapolated to
+another N.
