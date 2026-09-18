@@ -7646,3 +7646,14 @@ summary: the N=2 and N=3 evidence files live under
 `browser/lg-exec-n345p4.M06abryN/runtime/*/execution-fixed-n3-p4.json`.
 
 _Ledger HEAD when written: `52290b866`._
+
+**Correction to CP-UQ186, from the spec's own timings.** It said the N=3 case "took far longer than
+the N=2 case (3.0 min)". The Playwright line for it reads `R06 fixed-n3-p4 executes 3×4 for real
+@live-sim (3.0m)` — the *same* 3.0 minutes, so my estimate came from my own polling gaps, not from
+the run. The recovery pattern (`WORKER_REGISTERED: 6`, `WORKER_RECOVERED: 3`) is real and recorded
+in the journal, but it did not add wall-clock time to the case. The observation that matters stands:
+`fixed-n3-p4` is `COMPLETED` with exactly three worker slots, 4/4 points `PASSED`, 13 artifacts
+each and cleanup true. The next case is already running: `947a6146` (N=4) with four worker slots
+created and `evaluated: 0` at the time of writing.
+
+_Ledger HEAD when written: `618725508`._
