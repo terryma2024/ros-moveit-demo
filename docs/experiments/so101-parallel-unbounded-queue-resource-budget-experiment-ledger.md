@@ -5659,3 +5659,47 @@ after that: the two full lane gates (`lg-demo-package-parallel` with the deselec
 clean HEAD.
 
 _Ledger HEAD when written: `521896564`._
+
+
+## CP-UQ125 — Task 9: the immutable copy exists and the copied gates pass against it
+
+The background colcon build finished with `COPY_BUILD_RC=0` and both packages installed:
+
+- build base: `/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main/unbounded-queue-resource-budget/copy-build-light.EenHG5ii`
+- install base: `/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main/unbounded-queue-resource-budget/copy-install-light.uJr9RhIc`
+
+Verification of the copy itself: `so101_demo_py` and `so101_teleop` are present, the demo
+console entries (`so101_parallel_batch`, `so101_parallel_batch_cleanup`,
+`so101_measure_parallel_resources`) exist, **no `.git` directory** is inside the copy, and the
+copied `parallel_batch` package contains `start_guard.py` / `start_guard_probe.py` with the
+retired `resource_budget.py` / `resource_measurement.py` / `measurement_control.py` /
+`owned_resources.py` **absent** — the copy is genuinely post-Task-6, not stale.
+
+`SO101_E2E_INSTALL_PREFIX=<install base> so101_pytest lg-copy-final2
+test_copied_installed_entrypoint.py test_parallel_start_guard_launch.py` → **15 passed, 0
+failed**. Getting there required three honest corrections, all of which were the test being
+wrong rather than the copy:
+
+1. The copied-prefix helper pointed at the install *base* where the demo package lives at
+   `base/so101_demo_py`; the retired-entry test therefore looked for the console script in a
+   directory that does not exist. `_installed_prefix()` now resolves the package prefix and
+   keeps `_copy_base()` for the module/AMENT paths, and the entry's own output is included in
+   the failure message so this cannot hide again.
+2. The byte-for-byte runtime check compared `setup.py`, which colcon legitimately regenerates
+   at install time; it is excluded with that reason written down, and the check now walks every
+   current runtime file under `src/so101_demo_py/src` and `src/so101_teleop/so101_teleop`
+   (plus the generated OpenAPI document) and additionally asserts the four retired modules are
+   **not** in the copy.
+3. The historical `git diff 6e68d0f51 HEAD` assertion in that test only makes sense for the old
+   frozen prefix; with an explicit copy it now compares the copied bytes against the tree the
+   copy was built from, which is the check that actually protects a reused prefix.
+
+**What remains in Task 9** (recorded rather than implied): the two full lane gates through
+colcon (`lg-demo-package-parallel` with the deselect set, `lg-demo-package-serial` with the
+exact serial node IDs, and `lg-teleop-package` with CTest `-j 1`), the `lg-demo-full` and
+`lg-teleop-full` wrapper runs, the Bun/OpenAPI gates, the source-freeze document from the final
+clean HEAD, and the remaining copy provenance checks (dependency origins and the debug
+manifest). The split inputs those gates need are already produced and verified (3236 nodes,
+2965 parallel / 271 serial, exact union).
+
+_Ledger HEAD when written: `37e141318`._
