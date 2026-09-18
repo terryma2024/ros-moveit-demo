@@ -29,13 +29,9 @@ test("R03 twenty-point adaptive live run @live-sim", async ({ page, liveServer }
   await app.generateManifest(20);
   await app.configureAdaptive();
   await app.runPreflight();
-  await app.startValidation();
-
-  const campaigns = await (
-    await fetch(`${liveServer.baseURL}/expert-validation/campaigns`)
-  ).json();
-  expect(campaigns).toHaveLength(1);
-  const campaignId = campaigns[0].campaign_id;
+  // The campaign id comes from this spec's own start response: the campaign list also holds the
+  // campaigns of every spec that ran before it.
+  const campaignId = await app.startValidation();
 
   const deadline = Date.now() + 3_300_000;
   let projection: any = null;

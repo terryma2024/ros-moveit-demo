@@ -30,12 +30,9 @@ test("R01 four-point sequential live smoke @live-sim", async ({ page, liveServer
   await app.generateManifest(4);
   await app.configureSequential();
   await app.runPreflight();
-  await app.startValidation();
-
-  const campaignsResponse = await fetch(`${liveServer.baseURL}/expert-validation/campaigns`);
-  const campaigns = await campaignsResponse.json();
-  expect(campaigns).toHaveLength(1);
-  const campaignId = campaigns[0].campaign_id;
+  // The campaign id comes from this spec's own start response: the campaign list also holds the
+  // campaigns of every spec that ran before it.
+  const campaignId = await app.startValidation();
 
   // Wait for a safe terminal state with full cleanup.
   const deadline = Date.now() + 1_500_000;

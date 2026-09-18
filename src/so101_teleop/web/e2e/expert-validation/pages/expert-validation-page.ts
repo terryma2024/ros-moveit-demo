@@ -145,9 +145,28 @@ export class ExpertValidationPage {
     return this.page.getByRole("button", { name: "Start validation" });
   }
 
-  async startValidation(): Promise<void> {
-    await this.startButton().click();
-    await expect(this.page.getByRole("heading", { name: /^Campaign campaign-/ })).toBeVisible();
+  async startValidation(): Promise<string> {
+    const [response] = await Promise.all([
+      this.page.waitForResponse(
+        (candidate) =>
+          candidate.url().endsWith("/expert-validation/campaigns") &&
+          candidate.request().method() === "POST",
+      ),
+      this.startButton().click(),
+    ]);
+    // The heading appears from the console's own state, so reading the campaign list right after
+    // the click can return the *previous* campaign: the id has to come from this response.
+    expect(
+      response.status(),
+      `start validation refused: ${response.status()} ${await response.text()}`,
+    ).toBe(200);
+    const payload = (await response.json()) as { campaign_id?: string };
+    expect(payload.campaign_id, "campaign id missing from the start response").toBeTruthy();
+    const campaignId = payload.campaign_id as string;
+    await expect(
+      this.page.getByRole("heading", { name: new RegExp(`^Campaign ${campaignId}`) }),
+    ).toBeVisible();
+    return campaignId;
   }
 
   notice(text: string | RegExp): Locator {
