@@ -103,12 +103,32 @@ OFFLINE_INSTALL = Path(
     "/unbounded-queue-resource-budget/repair-offline-install")
 OFFLINE_SHARE = OFFLINE_INSTALL / "so101_demo_py/share/so101_demo_py/config/mujoco"
 OFFLINE_LIB = OFFLINE_INSTALL / "so101_demo_py/lib/so101_demo_py"
-OFFLINE_BINDING = Path(
-    "/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main"
-    "/unbounded-queue-resource-budget/bindings/offline-provenance.json")
+def _write_test_binding(directory: Path) -> Path:
+    """Test-owned copied-install binding for the CURRENT clean HEAD, never a frozen one."""
+
+    import subprocess
+
+    worktree = Path(__file__).resolve().parents[3]
+    head = subprocess.run(["git", "-C", str(worktree), "rev-parse", "HEAD"],
+                          capture_output=True, text=True, check=True).stdout.strip()
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    target = directory / "repair-offline-binding.json"
+    target.write_text(json.dumps({
+        "schema_version": 1, "kind": "OFFLINE_COPIED_BINDING",
+        "note": "Synthetic test-owned copied-install binding confined to this fixture.",
+        "source_root": str(worktree), "source_commit": head,
+        "worktree_dirty_tracked": False,
+        "install_prefix": str(OFFLINE_INSTALL), "install_kind": "offline_copied",
+        "module_origins": {
+            "so101_demo": str(OFFLINE_INSTALL / "so101_demo_py/lib/python3.12/site-packages/so101_demo/__init__.py"),
+            "so101_teleop": str(OFFLINE_INSTALL / "so101_teleop/lib/python3.12/site-packages/so101_teleop/__init__.py"),
+        },
+    }, indent=2, sort_keys=True) + "\n")
+    target.chmod(0o600)
+    return target
 
 
-def installed_environment(**overrides):
+def installed_environment(binding_dir: Path, **overrides):
     """The installed layout environment, pointed at copied (non-symlink) artifacts."""
 
     environment = {
@@ -121,7 +141,7 @@ def installed_environment(**overrides):
         "SO101_VALIDATION_CLEANUP_EXECUTABLE": str(
             OFFLINE_LIB / "so101_parallel_batch_cleanup"),
         "SO101_VALIDATION_ADAPTIVE_WRAPPER": str(OFFLINE_LIB / "run_so101_adaptive_batch.zsh"),
-        "SO101_VALIDATION_PROVENANCE_BINDING": str(OFFLINE_BINDING),
+        "SO101_VALIDATION_PROVENANCE_BINDING": str(_write_test_binding(binding_dir)),
         "SO101_VALIDATION_YOLO_WEIGHTS":
             "/data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/"
             "optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt",
@@ -370,7 +390,7 @@ def test_installed_factory_child_reports_provider_derived_capabilities(tmp_path)
     authority = synthetic_authority(tmp_path, 4, current.sha256)
     evidence = tmp_path / "evidence"
     evidence.mkdir(mode=0o700, parents=True)
-    environment = installed_environment(**_environment(authority, tmp_path))
+    environment = installed_environment(tmp_path / 'binding', **_environment(authority, tmp_path))
     environment["SO101_VALIDATION_EVIDENCE_ROOT"] = str(evidence)
     scratch = tmp_path / "tmp"
     scratch.mkdir(mode=0o700, exist_ok=True)
