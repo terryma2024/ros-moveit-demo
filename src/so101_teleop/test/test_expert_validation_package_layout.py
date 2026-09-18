@@ -29,6 +29,7 @@ EXPERT_VALIDATION_TESTS = {
     "test_expert_validation_production_projection",
     "test_expert_validation_projection",
     "test_expert_validation_service",
+    "test_expert_validation_start_guard",
     "test_expert_validation_statistics",
     "test_expert_validation_store",
     "test_expert_validation_supervisor",

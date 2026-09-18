@@ -28,7 +28,12 @@ import pytest
 TASK_ROOT = Path(
     "/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main"
     "/unbounded-queue-resource-budget")
-COPIED_PREFIX = TASK_ROOT / "freeze-install"
+#: The copied install under test. Task 9 of the lightweight start guard plan replaced the
+#: hardcoded historical prefix with an explicit one: the new immutable copy of the current
+#: runtime is named by SO101_E2E_INSTALL_PREFIX, and the old path stays only as the
+#: historical default for this file's pre-guard assertions.
+COPIED_PREFIX = Path(
+    os.environ.get("SO101_E2E_INSTALL_PREFIX", str(TASK_ROOT / "freeze-install")))
 DEMO_PREFIX = COPIED_PREFIX / "so101_demo_py"
 ENTRYPOINT = DEMO_PREFIX / "lib/so101_demo_py/text_pick_agent"
 WORKTREE = Path(__file__).resolve().parents[3]
