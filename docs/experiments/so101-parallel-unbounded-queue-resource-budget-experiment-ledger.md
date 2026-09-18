@@ -3815,3 +3815,27 @@ recorded in the receipt -- particularly `t_breach`, which was `None` here -- bef
 gap rule as a complete account of sampler health.
 
 N1 remains `NOT_MEASURED`; nothing is extrapolated to another N.
+
+## CP-UQ71 — Stage C: third round of host evidence, and the gap rule is now complete
+
+Commits `7d59d6d56` (66 passed); r28 sealed explicitly from r27 against
+`bindings/candidate-install-binding-r7.json`; attempt `run41`: 114 samples, maximum gap 86.8 ms,
+no measurement latch, launcher `{"message": "SWAP_PRESSURE", "status": "ERROR"}`.
+
+The harness gained one real fix this round, and it closes the anomaly CP-UQ70 recorded: the health
+check only ever compares `now` with the *latest* sample, so a gap that opens and closes between two
+checks was invisible -- exactly how run39 took 142.9 ms without latching. `observe_sample` now
+receives both timestamps and rules on the interval itself, with tests for the 142.9 ms case
+(latches) and for two samples inside the allowance (does not). That makes the gap rule a complete
+account of sampler health rather than one that depends on where a check happens to land.
+
+The host condition now has genuine evidence from **three** rounds -- round 27 (run25-27), round 29
+(run38-39) and this one (run41) -- with the same signature every time: a healthy sampler (104-126
+samples, gaps 59-87 ms, `abort_reason` `None`) and the product's own `SWAP_PRESSURE` refusal before
+the workload starts. The swap belongs to other sessions (`gnome-shell`, `codex`, `update-manager`,
+`node`, `dockerd` per CP-UQ68) and clearing it is outside the authorized scope.
+
+This is not a blocker for the goal: Stage B's residual items, Stage D's per-N candidate packets and
+Stage E's Task 16 readiness packet are all unblocked by the host's swap state, so the goal stays
+active, N1 retries continue between those, and `blocked` is deliberately not claimed. N1 remains
+`NOT_MEASURED`; nothing is extrapolated to another N.
