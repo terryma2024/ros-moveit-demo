@@ -177,6 +177,15 @@ def install_prefix_entry_points(install_prefix: Path) -> Path:
     raise MeasurementCliError("MEASUREMENT_OVERLAY_INPUT_MISSING: entry_points")
 
 
+def entry_points_for_install(install_prefix: Path) -> Path:
+    """The metadata file of the sealed install, or this interpreter's when it has none."""
+
+    try:
+        return install_prefix_entry_points(install_prefix)
+    except MeasurementCliError:
+        return _installed_entry_points()
+
+
 def _ament_package_prefixes() -> dict[str, Path]:
     """The prefixes the launcher's overlay check compares against AMENT, not import paths."""
 
@@ -277,7 +286,7 @@ def production_runner_factory(plan, *, child_runner=None, image_inspector=None):
         package_prefix=_ament_package_prefixes()["so101_demo_py"],
         package_prefixes=_ament_package_prefixes(),
         console=launcher, module=_installed_launcher_module(),
-        entry_points=install_prefix_entry_points(install_prefix),
+        entry_points=entry_points_for_install(install_prefix),
         parallel_config=Path(plan.config_path),
         point_catalog=Path(plan.bindings.points_path),
         source_commit=measurement_source_commit())
