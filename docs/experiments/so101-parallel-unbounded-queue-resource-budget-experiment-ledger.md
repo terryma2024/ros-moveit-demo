@@ -4446,3 +4446,26 @@ source for those six fields -- can work against the sealed image digest.
 
 Nothing was changed this round beyond the ledger; the tree is clean and the launcher/broker/worker-1
 chain reached in CP-UQ86 stands.
+
+## CP-UQ90 — The broker's parser is fixed, and the image is what runs it
+
+The deciding question from CP-UQ89 is answered: the broker is a **Docker image**
+(`docker/parallel-perception/Dockerfile`) whose `ENTRYPOINT` is
+`/opt/venv/bin/so101_parallel_perception_broker`, and the image `COPY src/so101_demo_py` into
+`/opt/so101_demo_py` and pip-installs it into `/opt/venv`. So the running broker code is the source
+tree **as of the image build**, which is why a worktree edit alone cannot reach it -- and why the
+sealed image digest in the authorization is meaningful.
+
+The in-tree half is fixed and proven: `contracts.load_runtime_config_any_schema(path)` chooses the
+parser by the document's declared `schema_version` (2 -> v2, 1 -> v1, anything else refused), and
+`runtime/parallel_ipc.build_broker_transport` -- which had called the v1 parser unconditionally, the
+line that produced `UNKNOWN_CONFIG_FIELD: ['deployment', 'execution']` -- now uses it. RED proven by
+stashing the two source files (test fails), GREEN after restoring (test passes); committed
+`736985797`.
+
+The remaining half is the image rebuild, and its inputs must be found rather than guessed: the
+Dockerfile takes `DOCKERFILE_SHA256`, `LOCK_SHA256` and `SOURCE_SHA256` and verifies the copied tree
+against them before pip runs, so a build with invented arguments fails closed. The `requirements.lock`
+that `verify_source` expects is not at `docker/parallel-perception/requirements.lock`, so locating the
+lock and the exact hash recipe is the next step; then a rebuild of that image, and the fresh seal
+afterwards will bind the new digest automatically because the seal script reads it live.
