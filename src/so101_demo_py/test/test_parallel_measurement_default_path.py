@@ -760,3 +760,27 @@ def test_launcher_rejects_a_finalized_measurement_root(tmp_path):
     (root / "aggregate_results.json").write_text("{}\n")
     with pytest.raises(CliError, match="DUPLICATE_BATCH_EVIDENCE_ROOT"):
         _batch_evidence_root_state(evidence_root=root, measurement=True)
+
+
+def test_measurement_gate_entrypoint_has_no_undefined_globals():
+    """The launcher's measurement gate had never run: it referenced
+    ParallelRuntimeConfigV2 without importing it and died with NameError on the first
+    real measurement workload. Every global this entry point loads must resolve."""
+
+    import builtins, dis
+    from so101_demo.cli import mujoco_parallel_batch as launcher
+
+    def loaded_globals(function):
+        seen, stack = set(), [function.__code__]
+        while stack:
+            code = stack.pop()
+            for instruction in dis.get_instructions(code):
+                if instruction.opname == "LOAD_GLOBAL":
+                    seen.add(instruction.argval)
+            stack.extend(item for item in code.co_consts if hasattr(item, "co_names"))
+        return seen
+
+    missing = sorted(
+        name for name in loaded_globals(launcher._compose_measurement_gate)
+        if not hasattr(launcher, name) and not hasattr(builtins, name))
+    assert missing == []
