@@ -6164,3 +6164,27 @@ of failing closed. That is the whole cause of `coverage_exact=false` / `extra: 5
 manifest extraction, not evidence about the 523 executed tests — and the fix is to derive the
 expected node ids from a genuinely node-id-based collection (or refuse to run when none are
 produced).
+
+
+## CP-UQ139 — Correction f1308af3, part 8: the teleop coverage verdict is now genuinely exact
+
+CP-UQ138 diagnosed the artefact; this checkpoint removes it. `tools/pytest-parallel.zsh` no
+longer scrapes the human-readable report for node ids: the collection runs with the audited
+collection plugin (`-p tools.so101_pytest_gate`, `SO101_TEST_NODEID_MANIFEST=…`), the manifest is
+built from that JSON, and **an empty manifest is now a hard failure**
+(`COLLECT_MANIFEST_EMPTY`) instead of a silent comparison against nothing. The raw report and its
+argv are still recorded for the audit trail.
+
+Re-running the whole teleop root through the wrapper (`lg-corr-teleop-cov`):
+
+| Before | After |
+| --- | --- |
+| `manifest: 0`, `parallel: 523`, `extra: 523 (shown as 5)`, `coverage_exact: false`, exit 1 | `manifest: 530`, `parallel: 529`, `serial: 1`, `union: 530`, `intersection: 0`, `extra: []`, `missing: []`, `coverage_exact: true`, **exit 0** |
+
+So the whole-teleop gate passes on its own terms — every collected node id executed exactly once
+across the two lanes, with a real node-id manifest and no foreign or lost cases — and the
+`coverage_exact=false` verdict can no longer be produced by an extraction artefact. This is the
+first time the teleop directory form has been green for a real reason rather than skipped as
+"optional because CTest passed".
+
+_Ledger HEAD when written: `7a1fcf6b5`._
