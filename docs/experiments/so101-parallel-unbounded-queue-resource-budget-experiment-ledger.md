@@ -376,3 +376,74 @@ open_risks:
   - PENDING INDEPENDENT REVIEW (Astra/High, not available in this session): L algorithm and the
     inventory exclusion/inclusion table (plan Task 3) must be reviewed before Stage B freeze.
 next_command: implement Task 4 RED (synthetic 20% arithmetic table and typed contexts)
+
+## EXP-UQ04 — Task 4 closed allocation contexts and exact-N budget authority
+
+```yaml
+experiment_id: EXP-UQ04
+status: VALID
+prior_experiment: EXP-UQ03
+hypothesis: One provider can own the 20% arithmetic, the closed context types and the qualification
+  check, so no consumer can forge authority or recompute a formula.
+prediction: RED fails because the module is absent; GREEN passes the synthetic 20% table plus context,
+  admission, authority-chain, staleness and qualification-shape tests.
+single_variable: resource_budget module
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Identity layer committed; synthetic profiles/authorities only (no host measurement).
+success_criteria:
+  - headroom_ok matches the design fixtures and rejects nonfinite/negative input.
+  - Direct context construction fails with ALLOCATION_CONTEXT_MISMATCH; measurement/adaptive contexts
+    cannot be admitted on the production path; a candidate/null profile chain raises BUDGET_PROFILE_UNAVAILABLE.
+  - Production admission enforces profile hash, runtime identity, APPROVED exact-N entry, qualification
+    record and live envelope (headroom, attribution, swap/PSI, throttling, observation freshness).
+  - Missing/UNKNOWN exact-N entries and N8-for-N4 substitution are refused at issuance.
+failure_criteria:
+  - Any forgeable context, consumer-specific formula, or admission without a qualification record.
+invalid_criteria:
+  - Test-helper defects counted as implementation behaviour (two such defects were fixed, not weakened).
+provenance:
+  source_commit: 40d4fd62c (Task 3 checkpoint; this task's parent commit)
+  install_overlay: $TASK_ROOT/dev-build + dev-install (symlink-install dev overlay)
+  runtime_executable: the exact shared TEST_PYTHON above
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: so101_pytest budget-red src/so101_demo_py/test/test_parallel_resource_budget.py -q
+    exit_code: 1
+  - command: so101_pytest budget-green src/so101_demo_py/test/test_parallel_resource_budget.py src/so101_demo_py/test/test_parallel_resource_identity.py -q
+    exit_code: 0
+observed:
+  - RED scratch/budget-red.*: 26 failed, ModuleNotFoundError for resource_budget (intended).
+  - GREEN scratch/budget-green.*: 34 passed, 0 failed. Fixed during GREEN without weakening assertions:
+    scope identity now uses the real current fingerprint, the synthetic deployment receipt binds the real
+    promotion file hash, and admit_production reads the identity from the context scope.
+  - The provider stores no self-digest inside the profile document; the loaded profile hash comes from the
+    external secure read and is bound into the issued context authority.
+inferred:
+  - Reason codes cover BUDGET_PROFILE_UNAVAILABLE, EXACT_N_UNQUALIFIED, RUNTIME_FINGERPRINT_MISMATCH,
+    BACKGROUND_ENVELOPE_EXCEEDED, RESOURCE_PROBE_FAILED, *_HEADROOM, SWAP_PRESSURE and
+    QUALIFICATION_EVIDENCE_INVALID as designed.
+conclusion: VALID. The shared production gate exists offline; no consumer is migrated yet.
+evidence:
+  - scratch/budget-red.*, scratch/budget-green.*
+decision: KEEP
+next_experiment: EXP-UQ05
+```
+
+```yaml
+checkpoint_id: CP-UQ04
+last_valid_experiment: EXP-UQ04
+current_hypothesis: A Web-less measurement owner can latch abort from sampler/owner health without any
+  production lease or Web control server.
+working_tree_status: Task 4 files committed
+owned_processes: NONE
+preserved_processes: NONE from this task family
+confirmed_conclusions:
+  - Explicit contexts + exact-N provider implemented; production admission refuses non-approved N (EXP-UQ04).
+disproven_routes:
+  - Using a generic purpose string or false resource flag to enter the fixed path.
+open_risks:
+  - PENDING INDEPENDENT REVIEW (Astra/High, unavailable in-session): closed context constructors, digest
+    graph and reason-code set before Stage B freeze (plan Task 4).
+next_command: implement Task 5 RED (sampler gap latches abort without Web)
