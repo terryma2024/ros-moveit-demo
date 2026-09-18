@@ -7121,3 +7121,61 @@ that does not need the service, the lease or a campaign, then repeat with the si
 `sensor_rendering:=false`.
 
 _Ledger HEAD when written: `dc2bea5aa`._
+
+## CP-UQ175 — The pause crash is a library/plugin version mismatch, and it is outside this plan's surface
+
+The crash CP-UQ174 located is now reproduced **without any of this plan's code in the loop**: a plain
+`ros2 launch so101_demo_py so101_mujoco_task_station.launch.py headless:=true
+sensor_rendering:=true include_teleop:=false` in a private `ROS_DOMAIN_ID=193`, followed by exactly
+one `ros2 service call … /mujoco_ros2_control_node/set_pause "{paused: true}"`. The node dies with
+the same `Segmentation fault (Address not mapped to object [0xf0])` and the service call itself never
+returns (client exit 124). No service, lease, campaign, broker or guard is involved.
+
+The frames, untruncated this time, name the real path — and it is **not** the paused-snapshot hook I
+first read:
+
+```
+#3  libmujoco_ros2_control.so      mujoco_ros2_control::MujocoSystemInterface::set_pause_callback(...)
+#2  libso101_simulation_evidence_plugin.so
+      so101_mujoco_support::SimulationEvidencePlugin::on_physics_step(mjModel_ const*, mjData_ const*)
+#1  libso101_simulation_evidence_plugin.so
+      so101_mujoco_support::EvidenceBuilder::build_step(mjModel_ const*, mjData_ const*, bool, …)
+#0  libso101_simulation_evidence_plugin.so
+      so101_mujoco_support::EvidenceBuilder::build(mjModel_ const*, mjData_ const*, bool, …)
+```
+
+So the library's pause callback dispatches into a slot that the plugin implements as
+`on_physics_step`, with `(model, data)` — and the plugin then walks into the snapshot builder and
+faults. That is the signature of a **vtable/interface mismatch**, and the dating confirms it:
+
+| Fact | Evidence |
+| --- | --- |
+| The installed library predates the observer interface | `strings libmujoco_ros2_control.so` contains **zero** occurrences of `"Cannot resume simulation"`, a literal added on **2026-08-25** by submodule commit `64ff4b6` |
+| The observer dispatcher and `refresh_data_snapshot()` are newer still | both arrived on **2026-08-25** in `e6702bb feat: dispatch authoritative simulation lifecycle events`; `on_state_snapshot` in the plugin interface also dates from **2026-08-25** (`65d60ea`) |
+| The library is genuinely old | `/data/work/ws_mujoco_ros2_control_fork/install/lib/libmujoco_ros2_control.so` is dated **2026-08-13**, and that workspace has **no sources left** — only `build/`, `install/`, `log/`, so the pairing cannot be rebuilt from it |
+| The plugin is current | built 2026-09-18 11:31 from the pinned submodule `e4c0241` (**2026-09-16**), i.e. after every one of the changes above |
+
+A library from before 2026-08-25 calling a plugin from after 2026-09-16 cannot be correct, and the
+fault address is consistent with the builder dereferencing a stale `mjData` base (the field it reads
+first is `data->time`). Note also that `refresh_data_snapshot()` — which exists precisely to hand a
+fresh snapshot to observers — is part of the library that is **not** installed.
+
+Two things this means, recorded plainly:
+
+- **It is not this plan's defect and not this plan's surface.** The plan changed Python, contracts,
+  web and deployment; the crash reproduces through the packaged launcher with none of that. The
+  plugin is task-owned but unmodified by the plan (`git log -- src/so101_mujoco_support` ends at
+  `5cc2b6644`, 2026-09-16, before this plan's commits).
+- **It does block the live acceptance**, which is the part of the task that cannot be faked.
+
+The repair chosen is deliberately narrow: build the pinned submodule
+(`mujoco_ros2_control`, `mujoco_ros2_control_msgs`, `mujoco_ros2_control_plugins`) into a
+**task-owned** workspace `$TASK_ROOT/mujoco-control-fork/{src,build,install,log}` — the shared
+fork install is read-only to this task and is not being touched — and then use that prefix ahead of
+the stale one for this deployment. `colcon build` needed the sanctioned wrapper rather than a raw
+call: my first attempt passed `--log-base` after the verb and colcon rejected it, which is exactly
+the entry point `$TASK_ROOT/tools/test-gate.zsh` already encodes (`colcon --log-base … build …`),
+so the build runs through `so101_colcon lg-mujoco-control-build` and its evidence lands under the
+registered task root.
+
+_Ledger HEAD when written: `1440d564e`._
