@@ -162,3 +162,73 @@ open_risks:
   - Socket-creating Stage A target tests may hit the same path limit; each occurrence will be reported, not hidden.
 next_command: implement Task 1 (operator recovery entry) RED test, then GREEN
 ```
+
+## EXP-UQ01 — Task 1 audited operator recovery integration
+
+```yaml
+experiment_id: EXP-UQ01
+status: VALID
+prior_experiment: EXP-UQ00
+hypothesis: The retained six-file recovery snapshot can be integrated with targeted patches so the
+  formal operator recovery entry exists, previews by default, and never rewrites history or claims cleanup.
+prediction: RED fails only on the missing formal entry; GREEN passes the snapshot suite plus the plan's
+  keyword-only/preview/no-write assertions without touching original fences.
+single_variable: recovery source integration
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Worktree clean at Task 0 checkpoint; no running validation service; live apply remains unauthorized.
+success_criteria:
+  - 22 RED tests fail at "formal operator recovery entry is missing"; GREEN passes all of them plus the
+    package layout registration test; snapshot bytes are reproduced exactly.
+failure_criteria:
+  - RED fails on import path/interpreter errors, or GREEN needs weakened assertions.
+invalid_criteria:
+  - Wrong overlay origin, foreign so101_teleop module, or any live apply/recovery.
+provenance:
+  source_commit: 8709912d9a60d3b5eb4e0f4a20f7c2b3ab0e9d38 (Task 0 checkpoint, pre-Task-1 tree)
+  install_overlay: $TASK_ROOT/dev-build + $TASK_ROOT/dev-install (symlink-install dev overlay)
+  runtime_executable: the exact shared TEST_PYTHON above
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: so101_pytest recovery-red src/so101_teleop/test/teleop/test_expert_validation_operator_recovery.py -q
+    exit_code: 1
+  - command: so101_pytest recovery-green src/so101_teleop/test/teleop/test_expert_validation_operator_recovery.py src/so101_teleop/test/test_expert_validation_package_layout.py -q
+    exit_code: 0
+observed:
+  - RED scratch/recovery-red.GLNxsSja: 22 failed in 0.59 s; 42 occurrences of the intended
+    "formal operator recovery entry is missing" assertion, no import/interpreter error.
+  - GREEN scratch/recovery-green.8iJu3eb9: 28 passed in 15.56 s; JUnit comparison shows all 22 RED test
+    IDs are present and passing, plus the 6 package-layout tests; zero non-pass results.
+  - Integration used reviewed snapshot diffs (patch -p0), not whole-file overwrite: CMakeLists.txt,
+    expert_validation/store.py and test_expert_validation_package_layout.py are byte-identical to the
+    retained snapshot, and the three new files were copied with their recorded hashes
+    (operator_recovery.py d8e7cf0c, recover script 3e3706c8, recovery test 6f86a679 + appended key RED tests).
+inferred:
+  - The snapshot's RuntimeInspector keyword-only constructor and preview default are preserved; the plan's
+    Task 1 interface note is satisfied by the retained API.
+conclusion: VALID. Formal recovery entry integrated offline; NOT deployed and NOT ONLINE_RECOVERY_VERIFIED.
+evidence:
+  - scratch/recovery-red.GLNxsSja/, scratch/recovery-green.8iJu3eb9/
+  - recovery-source-snapshot hashes above; commit for this task (see CP-UQ01)
+decision: KEEP
+next_experiment: EXP-UQ02
+```
+
+## CP-UQ01 — Task 1 checkpoint
+
+```yaml
+checkpoint_id: CP-UQ01
+last_valid_experiment: EXP-UQ01
+current_hypothesis: v2 contract and readonly v1 reader can be added without changing v1 bytes.
+working_tree_status: Task 1 six files staged/committed; no other tracked changes
+owned_processes: NONE
+preserved_processes: NONE from this task family
+confirmed_conclusions:
+  - Recovery entry exists and previews by default; original fence/history untouched in all tests.
+disproven_routes:
+  - Treating receipt persistence as deployment success (design 503-505); live apply stays gated to Stage B.
+open_risks:
+  - Live/installed recovery entry and online refresh remain unverified and unauthorized.
+next_command: implement Task 2 RED (test_v1_can_be_read_but_not_executed)
+```
