@@ -4469,3 +4469,30 @@ against them before pip runs, so a build with invented arguments fails closed. T
 that `verify_source` expects is not at `docker/parallel-perception/requirements.lock`, so locating the
 lock and the exact hash recipe is the next step; then a rebuild of that image, and the fresh seal
 afterwards will bind the new digest automatically because the seal script reads it live.
+
+## CP-UQ91 — The broker image is rebuilt and the config-schema defect is gone from it
+
+The deciding question is settled and the image half is done. `verify_source`'s recipe turned out to
+need no lock file: the three build arguments are `sha256(Dockerfile)`, `sha256('\n'.join(PINS)+'\n')`
+from `parallel_perception_runtime.PINS` (11 pins) and `source_hash(src/so101_demo_py)`, so they are
+recomputable from the tree. The first rebuild attempt failed on a genuine Dockerfile defect rather
+than on my change -- the wheel build could not copy `../../scripts/run_so101_adaptive_batch.zsh`
+because the Dockerfile only copied `src/so101_demo_py` -- so the Dockerfile now also
+`COPY scripts /scripts`, which is what that relative path means from the package directory.
+
+The rebuild then succeeded end to end (`build_rc=0`), producing digest
+`sha256:d83749a239f44abeccf005d8596dcdb9fdf2a1ee3429071b87beb736361174f1` under the canonical tag, with
+the previous image preserved as `so101-parallel-perception:pre-74d6b781` so nothing was lost. The
+launcher's spec then carried the new digest and the broker got **past** the config load -- the
+`UNKNOWN_CONFIG_FIELD: ['deployment', 'execution']` failure is gone from the image, which is the
+in-tree loader fix working through a rebuilt image.
+
+Its next failure is a different and narrower one, recorded verbatim from
+`n1-calibration-20260918-run57-session/raw/workload-stderr.log`:
+
+    PermissionError: [Errno 13] Permission denied: '/opt/so101_demo_py/config/mujoco/parallel_batch_v2.yaml'
+    ... so101_demo.runtime.parallel_processes.SupervisorError: EARLY_EXIT: broker: 1
+
+The broker's provenance self-check reads that packaged config inside the image and cannot, so the
+next round inspects the in-image modes and the container's user/mounts (a read-only tree should still
+be readable, so the mode or the user is the suspect, not the content).
