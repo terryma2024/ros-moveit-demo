@@ -3088,3 +3088,27 @@ computed from: `capacity {cpu_core_equivalent 24.0, ram_bytes 33365602304, gpu_b
 `background {cpu 0.099469, ram 4990173184, gpu 1019609088}`, `tool_overhead {ram 43024384}`,
 `attribution_complete true`. Every exact-N budget remains `NOT_MEASURED` until a sealed batch
 exists; nothing here is extrapolated to another N.
+
+## CP-UQ43 — Stage C: the runtime identity binds the owned scope, and the first real latch
+
+Run: `scratch/stageC-auth.S2WPqrz0/{identity-a,identity-b}.json`, `measure6.log`.
+
+The volatile input was found by dumping the identity document from two scopes and diffing it: the
+only differing field is `cgroup` — the runtime identity includes the cgroup of the measuring
+process. Per-run scope names therefore changed the identity on every run
+(`cc61a7bb…`, `0a923b40…`, `26043f84…`, `54df7c4c…`), so no sealed declaration could ever match.
+With a **fixed** unit name (`so101-n1cal.scope`) the identity is stable, and the r3 revision
+(`authorizations/n1-calibration-20260918-r3.json`, sha256 `04178e8a041abfed…`) declares the
+identity observed in that scope. This is a usage requirement of the design, not a code defect:
+R binds the measurement to its owned scope, so the scope must be a stable manager-provisioned
+unit rather than a throwaway timestamped one.
+
+With r3 the measurement finally advanced past every gate: it applied the cgroup limits, created
+its owned cgroup, began sampling, and then latched `MEASUREMENT_ABORT_LATCHED: SAMPLER_GAP`. That
+is the first genuine measurement outcome recorded for this task: a sealed run that refused rather
+than an unmeasured path. The abort evidence is in
+`stage-c/batches/n1-calibration-20260918/` (raw, coverage events). The sampler gap is now the one
+open Stage C question: whether the sampling interval is too tight for this host, whether the
+sampler starves while the caps are applied, or whether the interval is misconfigured for a
+single-worker batch. No budget is claimed from this run: N1 remains `NOT_MEASURED` until a batch
+completes and seals, and nothing is extrapolated to any other N.
