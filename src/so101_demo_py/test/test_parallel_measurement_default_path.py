@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from so101_demo.cli.measure_parallel_resources import main
+from so101_demo.cli.measure_parallel_resources import main, session_batch_root
 from so101_demo.parallel_batch.contracts import ContractError
 from so101_demo.parallel_batch.measurement_control import ProcessIdentity
 from so101_demo.parallel_batch.owned_resources import MeasurementSession, OwnedCgroupV2
@@ -1206,13 +1206,14 @@ def test_baseline_runs_for_the_configured_minimum_and_persists_samples(tmp_path)
     config = load_parallel_runtime_config_v2(V2_CONFIG)
     sampling = dataclasses.replace(config.measurement.sampling, baseline_minimum_s=0.3)
     session = _session_factory(tmp_path)(
-        authorization=authorization, batch_root=plan.batch_root, batch_id=plan.batch_id,
+        authorization=authorization, batch_root=session_batch_root(plan),
+        batch_id=plan.batch_id,
         sampling=sampling, safety=config.measurement.safety, owner=_identity())
     started = _time.monotonic()
     session.begin()
     elapsed = _time.monotonic() - started
     assert elapsed >= 0.3, elapsed
-    samples_path = plan.batch_root / "raw/baseline-samples.jsonl"
+    samples_path = session_batch_root(plan) / "raw/baseline-samples.jsonl"
     assert samples_path.is_file(), samples_path
     rows = [_json.loads(line) for line in samples_path.read_text().splitlines() if line.strip()]
     assert len(rows) >= 4, len(rows)
@@ -1244,16 +1245,17 @@ def test_baseline_writes_an_independent_peak_alias_cross_check(tmp_path):
     config = load_parallel_runtime_config_v2(V2_CONFIG)
     sampling = dataclasses.replace(config.measurement.sampling, baseline_minimum_s=0.4)
     session = _session_factory(tmp_path)(
-        authorization=authorization, batch_root=plan.batch_root, batch_id=plan.batch_id,
+        authorization=authorization, batch_root=session_batch_root(plan),
+        batch_id=plan.batch_id,
         sampling=sampling, safety=config.measurement.safety, owner=_identity())
     session.begin()
-    alias_path = plan.batch_root / "raw/peak-alias.json"
+    alias_path = session_batch_root(plan) / "raw/peak-alias.json"
     assert alias_path.is_file(), alias_path
     alias = _json.loads(alias_path.read_text())
     assert alias["interval_s"] <= 0.03, alias
     assert alias["samples"] >= 4, alias
     rows = [_json.loads(line) for line
-            in (plan.batch_root / "raw/baseline-samples.jsonl").read_text().splitlines()
+            in (session_batch_root(plan) / "raw/baseline-samples.jsonl").read_text().splitlines()
             if line.strip()]
     for dimension, peak in alias["peaks"].items():
         primary_peak = max(float(row["observed"][dimension]) for row in rows)

@@ -155,6 +155,19 @@ def child_environment_for_launcher(environment, console_dir, site_packages=None,
     return values
 
 
+def session_batch_root(plan) -> Path:
+    """The session's own root, beside the empty root the launcher must allocate.
+
+    The parallel-batch allocator refuses an evidence root that already exists
+    (`DIRECTORY_CONFLICT`), while the measurement session must own its raw files before the
+    launcher starts. Keeping the session's artifacts in a sibling leaves the launcher's root
+    untouched for allocation, and both live inside the sealed authorization's batch root.
+    """
+
+    root = Path(plan.batch_root)
+    return root.with_name(f"{plan.batch_id}-session")
+
+
 def verify_broker_image(*, tag: str, digest: str, inspector=None) -> str:
     """Return the tag once it is proven to still carry the sealed image digest.
 
@@ -414,7 +427,7 @@ def main(argv=None, *, runner_factory=None, capability_probe=None, session_facto
         if not decision.admitted:
             raise MeasurementCliError(decision.reason_codes[0])
         session = (session_factory or _session)(
-            authorization=authorization, batch_root=plan.batch_root,
+            authorization=authorization, batch_root=session_batch_root(plan),
             batch_id=plan.batch_id, sampling=config.measurement.sampling,
             safety=config.measurement.safety, owner=_local_identity(),
             cgroup_parent=options.cgroup_parent, device_index=options.device_index)
