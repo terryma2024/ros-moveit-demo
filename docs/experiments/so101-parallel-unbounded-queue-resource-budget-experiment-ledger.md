@@ -4149,3 +4149,30 @@ three separate places, and none of them may be read as evidence:
 Nothing was pushed, merged, deleted or fabricated; the next round re-runs the gate with captured
 output, rebuilds `so101_demo_py` only, writes a valid binding, seals a fresh authorization and runs
 N1 inside a delegated scope.
+
+## CP-UQ78 — The amended policy reaches a real 60 s baseline, and the launcher hits a directory conflict
+
+Run: `stage-c/batches/n1-calibration-20260918-run51/`. Gate: `so101_pytest policy74d6b781-gate2`
+returned **0** with the task env (`so101_colcon_gate_env`), which is the first sanctioned gate run of
+the amendment; the earlier `gate_rc=1` from CP-UQ77's addendum was my environment error
+(`so101_env_dev` alone does not put the package on the import path) and is corrected here.
+
+What the run proves, from its own files:
+
+- r30 (`bbeeb2a21023198f...`) was sealed against the now-valid binding r9, whose
+  `installed_matches_source` is true.
+- The measurement ran **inside a delegated scope** and completed the genuine pre-workload baseline:
+  `raw/baseline-samples.jsonl` holds **309 persisted samples** and `raw/peak-alias.json` exists, so
+  the independent fast channel ran too.
+- The measurement window recorded 109 samples with `abort_reason` **None**: with swap and PSI gone
+  from admission and the session aborts, nothing policy-shaped refuses the run any more. This is the
+  first N1 attempt in the whole task that reached the workload launch with the new policy.
+
+The new blocker is the launcher's own allocator: it exits 1 with
+`{"message": "DIRECTORY_CONFLICT: <path>", "status": "ERROR"}`. That path and the batch layout are
+recorded in the run's `raw/workload-stderr.log`, and the conflict is new because the session now
+writes baseline and alias artifacts into the batch root the launcher also owns -- the same
+integration seam as the earlier duplicate-root and private-root findings, with the baseline as the
+new occupant. The fix is either to keep the session's baseline artifacts outside the root the
+launcher allocates or to teach that allocator about them; it is the next unit, and the measurement
+harness up to the workload launch is otherwise complete under the amended policy.
