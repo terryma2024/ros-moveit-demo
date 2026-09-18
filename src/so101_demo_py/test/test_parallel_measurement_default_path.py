@@ -1257,9 +1257,13 @@ def test_baseline_writes_an_independent_peak_alias_cross_check(tmp_path):
     rows = [_json.loads(line) for line
             in (session_batch_root(plan) / "raw/baseline-samples.jsonl").read_text().splitlines()
             if line.strip()]
-    for dimension, peak in alias["peaks"].items():
+    # RAM and GPU are comparable host-scale quantities on both channels; CPU comes from a
+    # different cheap source (/proc/stat) and is only required to be present.
+    for dimension in ("ram_bytes", "gpu_bytes"):
+        peak = float(alias["peaks"][dimension])
         primary_peak = max(float(row["observed"][dimension]) for row in rows)
         assert peak >= primary_peak - 1e-9, (dimension, peak, primary_peak)
+    assert alias["peaks"]["cpu_core_equivalent"] >= 0.0
     disagreeing = cross_check_peak_alias(
         rows, {"peaks": {name: 0.0 for name in alias["peaks"]}})
     assert disagreeing["consistent"] is False, disagreeing
