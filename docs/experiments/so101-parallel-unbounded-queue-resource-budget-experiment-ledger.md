@@ -670,3 +670,71 @@ open_risks:
   - Consumers (CLI/Web/allocator) still reference max_points_per_worker and the N>3 hardcode until
     Tasks 9-11; those paths remain un-migrated and must not be used for new production runs.
 next_command: implement Task 8 RED (test_pool_contract_has_no_lifetime_quota)
+
+## CP-UQ07b — Stage A partial handoff (inline DST execution stop point)
+
+```yaml
+checkpoint_id: CP-UQ07b
+last_valid_experiment: EXP-UQ07
+current_hypothesis: Tasks 8-11 and the Task 13/14/15 offline parts continue from commit 2b008e00b.
+working_tree_status: clean at the Task 7 ledger commit (no tracked or untracked changes)
+owned_processes: NONE (no ROS/Web/measurement process was started in this session)
+preserved_processes: NONE from this task family; canonical install, shared venv, other worktrees and
+  Codex/dst sessions untouched
+confirmed_conclusions:
+  - Frozen design/plan hashes verified; base tree clean (EXP-UQ00).
+  - Recovery entry integrated offline and preview-by-default (EXP-UQ01); NOT deployed.
+  - v2 contract + read-only v1 history; v1 YAML hash aadcac01d... unchanged (EXP-UQ02).
+  - Acyclic L/S/E/I/R + byte audits (EXP-UQ03); closed contexts and exact-N authority (EXP-UQ04);
+    Web-less measurement abort/containment (EXP-UQ05); authorization/estimator/sealing + fail-closed
+    candidate CLI (EXP-UQ06); shared queue without a lifetime quota (EXP-UQ07).
+disproven_routes:
+  - Reusing v1 whole-document hashing for v2 identity; keeping CAPACITY_EXHAUSTED as a v2 terminal reason;
+    treating a control ACK as cleanup; letting a candidate config carry deployment references.
+open_risks:
+  - PENDING INDEPENDENT REVIEWS (all require GPT-6 Astra / High, unavailable in this session):
+    Task 3 L/inventory exclusion table; Task 4 closed contexts/digest graph; Task 11 API/type boundary;
+    Task 16 guide. Plan Task 1/2 code review is also outstanding.
+  - PENDING AUTHORIZATION GATES (see the approvals table above): candidate measurement window (Stage C),
+    owned service refresh/recovery/deployment window (Stage B/D), operator profile promotion (Stage D),
+    exclusive owned Chrome window (Stage E). No promotion record was written and no service was started.
+  - Stage A remaining work: Task 8 (ADAPTIVE no-K + typed context), Task 9 (teleop v2 API/preflight/
+    store + manual N1 retry), Task 10 (three consumers on one provider, spawn re-check, CLI legacy flag),
+    Task 11 (OpenAPI + Web no-K UI + contract/installed tests), Task 13 aggregation, Task 14 promotion
+    parser, Task 15 offline live-evidence verifier.
+  - Candidate runtime gap (EXP-UQ06): the candidate CLI validates and binds authority but refuses with
+    MEASUREMENT_RUNTIME_UNAVAILABLE because the composition runner hook is not wired.
+  - Environment blockers proven pre-existing and NOT caused by this work: (a) test_grounding_dino_domain_retention
+    needs torch, absent from the exact shared venv (no dependency install authorized); (b) socket-based
+    demo tests fail with UNIX_SOCKET_PATH_TOO_LONG because the mandated TASK_ROOT is 108 characters
+    (baseline 71 failures, byte-identical failure sets after every task; Task 5 fixtures use the short
+    socket directory the design requires).
+  - Consumers still carry K/N>3: production.py:305, cli/mujoco_parallel_batch.py:416,
+    parallel_batch/resources.py:1295 plus 41 max_points_per_worker references.
+retained:
+  - Registered root /data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main with the
+    new task directory unbounded-queue-resource-budget/: tools/test-gate.zsh, tools/task-env.zsh,
+    bindings/v1-contract-baseline.json, run-index.txt, dev-build/, dev-install/, scratch/*, colcon/*.
+  - dispatch-20260918-84620fc0/executor-receipt.md (executor-authored, distinct from transport receipt).
+  - All commits: 8709912d9, cdf333a98, e81634585, ebff2f44e, 573120b28, 40d4fd62c, 64d6cb72c, d7caaaf4f,
+    da37bd96b, eb751c112, 2b008e00b on branch codex/so101-unbounded-queue-resource-budget (no push, no merge).
+archived: none
+deletion_candidates:
+  - $TASK_ROOT/scratch/* (all test scratches, including the pre-existing baseline runs) after readback;
+    no deletion authorized or performed.
+  - $TASK_ROOT/colcon/*colcon-log and stale dev-build objects if a clean reconfigure supersedes them;
+    currently retained because Task 12 requires a logged reconfigure rather than reuse.
+next_command: implement Task 8 RED at src/so101_demo_py/test/test_parallel_adaptive_contracts.py::test_pool_contract_has_no_lifetime_quota
+```
+
+## Approval and review requests to the operator (not self-approved)
+
+| # | Request | Why it is needed | Where it blocks |
+| --- | --- | --- | --- |
+| A1 | Candidate measurement window for one exact N, with the sealed MeasurementAuthorization | design 188-194, plan Task 13 Stage C | Stage C cannot start; the CLI would refuse and no measurement may begin |
+| A2 | Owned service refresh / exclusive offline recovery + deployment window | design 507-513, plan Task 12 | Stage B's owned recovery/Web refresh; no signal may be sent before it |
+| A3 | Operator exact-N / profile-hash promotion approval after Sol/Astra review | design 490-494, plan Task 14 | Stage D; no APPROVED M or carrier refs may be written |
+| A4 | Exclusive owned live Chrome acceptance window | design 554-556, plan Task 15 | Stage E |
+| A5 | Independent GPT-6 Astra/High reviews (Tasks 1-4 code, L/inventory table, closed contexts, Task 11 API, Task 16 guide) and Sol/High execution-result review | plan lines 15-17, 126, 316, 344, 575 | Stage B entry gate "all Stage A code reviewed"; not satisfiable by the inline executor |
+| A6 | Decision on the deep-scratch socket-path blocker (shorten the scratch root, or accept documented pre-existing demo failures) | AGENTS fsync/scratch rule vs AF_UNIX 107-byte limit | Task 12 full-demo gate |
+| A7 | Approval to wire the candidate measurement runner hook (composition spawn path) | plan Task 6/13 | Stage C runtime start |
