@@ -923,8 +923,10 @@ class FixedAdmissionGate:
         provider: ResourceBudgetProvider,
         *,
         context: FixedProductionContext | MeasurementContext | None = None,
+        context_factory=None,
         current: RuntimeFingerprint | None = None,
         live: LiveResourceObservation | None = None,
+        observation_source=None,
         now_monotonic_s: float | None = None,
     ) -> None:
         if not isinstance(provider, ResourceBudgetProvider):
@@ -933,10 +935,16 @@ class FixedAdmissionGate:
             context, (FixedProductionContext, MeasurementContext)
         ):
             raise ContractError("ALLOCATION_CONTEXT_MISMATCH")
+        if context_factory is not None and not callable(context_factory):
+            raise ContractError("ALLOCATION_CONTEXT_MISMATCH")
+        if observation_source is not None and not callable(observation_source):
+            raise ContractError("RESOURCE_PROBE_FAILED")
         self.provider = provider
         self.context = context
+        self.context_factory = context_factory
         self.current = current
         self.live = live
+        self.observation_source = observation_source
         self.now_monotonic_s = now_monotonic_s
 
     @property
@@ -946,7 +954,8 @@ class FixedAdmissionGate:
     def admit(self, request: FixedAdmissionRequest) -> ResourceBudgetAdmission:
         """Answer one admission question; a missing probe is never a pass."""
 
-        if self.current is None or self.live is None:
+        live = self.observation_source() if self.observation_source is not None else self.live
+        if self.current is None or live is None:
             return ResourceBudgetAdmission(
                 admitted=False,
                 reason_codes=("RESOURCE_PROBE_FAILED",),
@@ -956,20 +965,36 @@ class FixedAdmissionGate:
                 execution_identity_sha256=request.execution_identity_sha256,
                 observation_monotonic_s=0.0,
             )
+        context = self.context
+        if context is None and self.context_factory is not None:
+            try:
+                context = self.context_factory(request)
+            except ContractError as error:
+                # Exact-N/profile refusals are decisions, not crashes; a tampered
+                # authority still raises from composition time.
+                return ResourceBudgetAdmission(
+                    admitted=False,
+                    reason_codes=(error.code,),
+                    worker_count=request.worker_count,
+                    profile_sha256=self.provider.profile_sha256,
+                    qualification_sha256=None,
+                    execution_identity_sha256=request.execution_identity_sha256,
+                    observation_monotonic_s=live.monotonic_s,
+                )
         if request.request_kind == "MEASUREMENT":
-            if not isinstance(self.context, MeasurementContext):
+            if not isinstance(context, MeasurementContext):
                 raise ContractError("ALLOCATION_CONTEXT_MISMATCH")
-            if self.context.scope.worker_count != request.worker_count:
+            if context.scope.worker_count != request.worker_count:
                 raise ContractError("ALLOCATION_CONTEXT_MISMATCH")
             return self.provider.admit_measurement(
-                context=self.context, current=self.current, live=self.live,
+                context=context, current=self.current, live=live,
                 now_monotonic_s=self.now_monotonic_s)
-        if not isinstance(self.context, FixedProductionContext):
+        if not isinstance(context, FixedProductionContext):
             raise ContractError("ALLOCATION_CONTEXT_MISMATCH")
-        if self.context.scope.worker_count != request.worker_count:
+        if context.scope.worker_count != request.worker_count:
             raise ContractError("ALLOCATION_CONTEXT_MISMATCH")
         return self.provider.admit_production(
-            context=self.context, current=self.current, live=self.live,
+            context=context, current=self.current, live=live,
             now_monotonic_s=self.now_monotonic_s)
 
 
@@ -1128,3 +1153,200 @@ def build_deployment_receipt(
     target = Path(promotion_path).parent / "deployment-receipt.json"
     _write_private(target, encoded)
     return target
+
+
+# --- Installed production composition (F2) -------------------------------------------
+
+_AUTHORITY_ENV = {
+    "profile": "SO101_VALIDATION_BUDGET_PROFILE",
+    "profile_sha256": "SO101_VALIDATION_BUDGET_PROFILE_SHA256",
+    "promotion": "SO101_VALIDATION_PROMOTION_RECORD",
+    "deployment_receipt": "SO101_VALIDATION_DEPLOYMENT_RECEIPT",
+    "qualifications": "SO101_VALIDATION_QUALIFICATION_PATHS",
+    "identity": "SO101_VALIDATION_EXECUTION_IDENTITY",
+}
+
+
+def compose_production_admission(
+    *,
+    environment: Mapping[str, str],
+    live_observation: LiveResourceObservation | None = None,
+    observation_source=None,
+    current: RuntimeFingerprint | None = None,
+    now_monotonic_s: float | None = None,
+    control_binding: Mapping[str, object] | None = None,
+) -> FixedAdmissionGate | None:
+    """Compose the shared gate from verified installed P/Q/M/D authority.
+
+    Returns None only when the environment declares no authority at all, which the
+    consumers report as BUDGET_PROFILE_UNAVAILABLE. A partially declared or tampered
+    authority raises instead of silently degrading.
+    """
+
+    from .resource_identity import normalization_sha256
+
+    values = {key: environment.get(name) for key, name in _AUTHORITY_ENV.items()}
+    if not any(values.values()):
+        return None
+    missing = sorted(key for key, value in values.items() if not value)
+    if missing:
+        raise ContractError(f"BUDGET_PROFILE_UNAVAILABLE: incomplete authority {missing}")
+    identity = _require_sha256("execution_identity_sha256", values["identity"])
+    if current is None:
+        current = RuntimeFingerprint(
+            schema_version=2,
+            facts={"execution_identity_sha256": identity, "source": "installed-authority"},
+            normalization_sha256=normalization_sha256(),
+            semantic_config_sha256=identity,
+            execution_inventory_sha256=identity,
+            installed_inventory_sha256=identity,
+        )
+    provider = ResourceBudgetProvider()
+    provider.load(Path(values["profile"]), expected_sha256=values["profile_sha256"])
+    try:
+        qualifications = json.loads(values["qualifications"])
+    except ValueError as error:
+        raise ContractError("QUALIFICATION_EVIDENCE_INVALID") from error
+    if not isinstance(qualifications, Mapping) or not qualifications:
+        raise ContractError("QUALIFICATION_EVIDENCE_INVALID")
+    for count, qualification_path in qualifications.items():
+        if not str(count).isdigit():
+            raise ContractError("QUALIFICATION_EVIDENCE_INVALID")
+        document, digest = read_private_document(Path(qualification_path))
+        provider.record_qualification(
+            ExactNQualification.from_document(document, raw_sha256=digest))
+
+    binding = dict(control_binding or {"authority": "installed-production"})
+
+    def context_factory(request: FixedAdmissionRequest) -> FixedProductionContext:
+        scope = AllocationScope(
+            batch_id=request.batch_id,
+            epoch=request.epoch,
+            worker_count=request.worker_count,
+            request_kind="FIXED_PRODUCTION",
+            execution_identity_sha256=request.execution_identity_sha256,
+        )
+        return issue_production_context(
+            provider=provider,
+            scope=scope,
+            profile_path=Path(values["profile"]),
+            expected_profile_sha256=values["profile_sha256"],
+            promotion_path=Path(values["promotion"]),
+            deployment_receipt_path=Path(values["deployment_receipt"]),
+            control_binding=binding,
+        )
+
+    return FixedAdmissionGate(
+        provider,
+        context_factory=context_factory,
+        current=current,
+        live=live_observation,
+        observation_source=observation_source,
+        now_monotonic_s=now_monotonic_s,
+    )
+
+
+def worker_count_availability(
+    gate: FixedAdmissionGate | None,
+    *,
+    worker_counts: Sequence[int],
+    batch_id: str,
+    execution_identity_sha256: str,
+) -> tuple[dict[str, object], ...]:
+    """Derive per-N availability from provider decisions, never from literals."""
+
+    entries = []
+    for worker_count in worker_counts:
+        if gate is None:
+            entries.append({
+                "worker_count": worker_count, "selectable": False,
+                "status": "NOT_MEASURED",
+                "reason_codes": ("BUDGET_PROFILE_UNAVAILABLE",),
+                "profile_sha256": None, "qualification_sha256": None,
+            })
+            continue
+        decision = gate.admit(FixedAdmissionRequest(
+            worker_count=worker_count, batch_id=batch_id, epoch=1,
+            execution_identity_sha256=execution_identity_sha256,
+            request_kind="FIXED_PRODUCTION"))
+        status = "APPROVED" if decision.admitted else (
+            "NOT_MEASURED" if "BUDGET_PROFILE_UNAVAILABLE" in decision.reason_codes
+            else "REJECTED")
+        entries.append({
+            "worker_count": worker_count,
+            "selectable": decision.admitted,
+            "status": status,
+            "reason_codes": decision.reason_codes,
+            "profile_sha256": decision.profile_sha256,
+            "qualification_sha256": decision.qualification_sha256,
+        })
+    return tuple(entries)
+
+
+def build_live_observation(*, environment: Mapping[str, str] | None = None) -> LiveResourceObservation:
+    """Fresh whole-host observation for production admission; fail closed if unreadable."""
+
+    del environment
+    from .resources import SystemResourceProbe
+
+    try:
+        snapshot = SystemResourceProbe().snapshot()
+    except Exception as error:  # noqa: BLE001 - an unreadable probe is never a pass
+        raise ContractError("RESOURCE_PROBE_FAILED") from error
+    capacity = {
+        "ram_bytes": float(snapshot.total_ram_bytes) if hasattr(snapshot, "total_ram_bytes")
+        else float(snapshot.available_ram_gib * (1024 ** 3)),
+        "gpu_bytes": float(snapshot.gpu_total_bytes) if hasattr(snapshot, "gpu_total_bytes")
+        else float(snapshot.gpu_free_gib * (1024 ** 3)),
+        "cpu_core_equivalent": float(snapshot.logical_cpu_count),
+    }
+    observed = {
+        "ram_bytes": float(snapshot.used_ram_gib * (1024 ** 3))
+        if hasattr(snapshot, "used_ram_gib") else 0.0,
+        "gpu_bytes": float(
+            capacity["gpu_bytes"] - snapshot.gpu_free_gib * (1024 ** 3)),
+        "cpu_core_equivalent": 0.0,
+    }
+    background = {
+        "ram_bytes": float(capacity["ram_bytes"] - snapshot.available_ram_gib * (1024 ** 3)),
+        "gpu_bytes": observed["gpu_bytes"],
+        "cpu_core_equivalent": 0.0,
+    }
+    return LiveResourceObservation(
+        monotonic_s=time.monotonic(),
+        capacity=capacity,
+        observed=observed,
+        background=background,
+        tool_overhead={key: 0.0 for key in DIMENSIONS},
+        remaining={key: 0.0 for key in DIMENSIONS},
+        error={key: 0.0 for key in DIMENSIONS},
+        attribution_complete=False,
+        swap_delta=0,
+        psi_full_delta=0.0,
+        throttled=False,
+    )
+
+
+def build_runtime_fingerprint_from_environment(
+    environment: Mapping[str, str], *, identity: str
+) -> RuntimeFingerprint:
+    """Fingerprint facts from the verified installed binding, never from PATH guesses."""
+
+    from .resource_identity import normalization_sha256
+
+    binding_path = environment.get("SO101_VALIDATION_PROVENANCE_BINDING")
+    facts: dict[str, object] = {"source": "installed-binding"}
+    if binding_path:
+        document, digest = read_private_document(Path(binding_path))
+        facts.update({
+            "provenance_binding_sha256": digest,
+            "install_prefix": str(document.get("install_prefix", "")),
+            "source_commit": str(document.get("source_commit", "")),
+            "install_kind": str(document.get("install_kind", "")),
+        })
+    facts["execution_identity_sha256"] = identity
+    return RuntimeFingerprint(
+        schema_version=2, facts=facts, normalization_sha256=normalization_sha256(),
+        semantic_config_sha256=identity, execution_inventory_sha256=identity,
+        installed_inventory_sha256=identity,
+    )

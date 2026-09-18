@@ -2595,7 +2595,27 @@ def _load_cli_config(path):
     return load_parallel_runtime_config_v2(Path(path))
 
 
-def main(argv=None, *, claim_root: Path | None = None, resource_gate=None) -> int:
+def _compose_default_resource_gate(environment: Mapping[str, str]):
+    """Installed composition of the shared gate; the test seam is only a fallback."""
+
+    from .resource_budget import (
+        build_live_observation, build_runtime_fingerprint_from_environment,
+        compose_production_admission)
+
+    identity = environment.get("SO101_VALIDATION_EXECUTION_IDENTITY")
+    current = (
+        build_runtime_fingerprint_from_environment(environment, identity=identity)
+        if identity else None
+    )
+    return compose_production_admission(
+        environment=environment, current=current,
+        observation_source=build_live_observation)
+
+
+def main(
+    argv=None, *, claim_root: Path | None = None, resource_gate=None,
+    environment: Mapping[str, str] | None = None,
+) -> int:
     """Write a resource manifest without starting ROS, MuJoCo or Broker."""
     arguments = _parser().parse_args(argv)
     allocator = None
@@ -2612,7 +2632,11 @@ def main(argv=None, *, claim_root: Path | None = None, resource_gate=None) -> in
             claim_root=claim_root,
             live_headroom_evidence=arguments.live_headroom_evidence,
             resource_gate=(
-                resource_gate if resource_gate is not None else _DEFAULT_RESOURCE_GATE
+                resource_gate
+                if resource_gate is not None
+                else _compose_default_resource_gate(
+                    dict(os.environ if environment is None else environment))
+                or _DEFAULT_RESOURCE_GATE
             ),
         )
         manifest = allocator.allocate(arguments.worker_count)
