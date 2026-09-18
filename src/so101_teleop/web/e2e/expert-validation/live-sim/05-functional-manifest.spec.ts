@@ -51,7 +51,12 @@ for (const entry of manifest.cases) {
 }
 
 for (const entry of manifest.cases) {
-  test(`R05 ${entry.id} accepted by the deployed service @live-sim`, async ({ liveServer }) => {
+  // Capability only: this asks the deployed service what it advertises.  Running the workload
+  // those options describe is `06-fixed-n-execution.spec.ts`, and only that file may be read as
+  // an execution result.
+  test(`R05 ${entry.id} advertised by the deployed service (capability only) @live-sim`, async ({
+    liveServer,
+  }) => {
     test.setTimeout(120_000);
     requireGateDetail(process.env.SO101_E2E_EVIDENCE_ROOT!, "R01", {
       evidenceRoot: process.env.SO101_E2E_EVIDENCE_ROOT,
