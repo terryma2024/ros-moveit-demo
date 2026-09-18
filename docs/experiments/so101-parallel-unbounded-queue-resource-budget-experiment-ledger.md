@@ -1736,3 +1736,70 @@ evidence:
   - scratch/f1-red.*, scratch/f1-green*.*, followups/repair-review-3c00fb20-.../startup-probe01.*
 decision: KEEP
 next_experiment: EXP-UQ20 (F2 production composition)
+
+## EXP-UQ20 — F2 installed production composition and dynamic exact-N capability
+
+```yaml
+experiment_id: EXP-UQ20
+status: VALID
+prior_experiment: EXP-UQ19
+hypothesis: The installed factory, both console CLIs and the allocator can compose the SAME provider
+  from verified installed P/Q/M/D authority, derive per-N capabilities from provider decisions, and keep
+  fail-closed refusals with no formula path for v2.
+prediction: RED at the missing composer; GREEN with the actual installed factory (imported from a copied
+  prefix in a child process) reporting exactly one selectable N and every other N refused by code.
+single_variable: production admission composer + consumer wiring + capability derivation
+lifecycle: ISOLATED_STACK
+preconditions:
+  - F1 committed; review findings used as root cause; frozen plan/design hashes unchanged.
+success_criteria:
+  - compose_production_admission returns None only with no declared authority and raises on partial or
+    tampered authority; it verifies the profile hash and records per-N qualification documents.
+  - The gate mints the exact-N context per request, converts exact-N/profile refusals into decisions and
+    re-reads a fresh live observation per admission.
+  - _HostResourceProbe uses the gate for v2 (no N>3/4N/6+4N/GPU8 path), capabilities come from
+    worker_count_availability, and prepare_batch/resources.main default to the installed composer.
+  - A copied-install child process running the ACTUAL create_production_service reports N4 selectable with
+    the profile/Q hashes and every other N refused with EXACT_N_UNQUALIFIED.
+failure_criteria:
+  - Any production dependence on a test seam, hand-written availability, or silent downgrade.
+invalid_criteria:
+  - Fixture/environment errors counted as product failures (four were fixed: coverage matrix, fingerprint
+    identity, copied-install AMENT prefixes, stale copied install).
+provenance:
+  source_commit: 97985069e plus the F2 commits
+  install_overlay: repair-offline-install (copied from the repaired source) + dev overlay + task venv
+  runtime_executable: $TASK_ROOT/venv/bin/python
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: so101_pytest f2-red test_expert_validation_installed_budget.py -q
+    exit_code: 1
+  - command: so101_pytest f2-green14 test_expert_validation_installed_budget.py -q
+    exit_code: 0
+  - command: so101_pytest f2-regression src/so101_teleop/test test_parallel_batch_cli.py test_parallel_batch_resources.py -q
+    exit_code: 0
+observed:
+  - RED: 3 failed at the missing compose_production_admission / capability derivation.
+  - GREEN: 4 passed, including the copied-install child that imports so101_demo/so101_teleop from
+    repair-offline-install via explicit PYTHONPATH+AMENT_PREFIX_PATH, resolves the test-owned binding for
+    the current clean HEAD, and prints capabilities with N4 selectable (profile/Q hashes bound) and
+    N2,N3,N5..N8 refused by EXACT_N_UNQUALIFIED; the child also proved its tempdir resolved inside the
+    run scratch.
+  - Regression: 788 passed across the teleop package plus the CLI and resources suites.
+  - The three consumers agree through the same gate: Web probe (admit N4, refuse N5), CLI _prepare_live_headroom
+    (admit N4 via the gate summary) and allocator _live_headroom (admit N4 with the gate's profile hash,
+    refuse N5 with the same code).
+  - Missing authority returns None and every consumer keeps BUDGET_PROFILE_UNAVAILABLE; tampered profile
+    bytes raise HASH_MISMATCH at composition; live drift (unattributed background) refuses the requested N
+    with BACKGROUND_ENVELOPE_EXCEEDED and worker_count 4 (no downgrade).
+  - New immutable artifacts: repair-offline-build*/repair-offline-install (copied from the repaired
+    source); the earlier offline-install/production-install and their bindings were not modified.
+inferred:
+  - F3 remains: the promotion/deployment producers still emit schema 1 while the context issuer reads
+    schema 2.
+conclusion: VALID for F2.
+evidence:
+  - scratch/f2-red.*, scratch/f2-green*.*, scratch/f2-regression.*, colcon/repair-offline-build*.*
+decision: KEEP
+next_experiment: EXP-UQ21 (F3 producer/reader round-trip)
