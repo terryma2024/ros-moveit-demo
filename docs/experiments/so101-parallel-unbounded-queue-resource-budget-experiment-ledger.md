@@ -3839,3 +3839,30 @@ This is not a blocker for the goal: Stage B's residual items, Stage D's per-N ca
 Stage E's Task 16 readiness packet are all unblocked by the host's swap state, so the goal stays
 active, N1 retries continue between those, and `blocked` is deliberately not claimed. N1 remains
 `NOT_MEASURED`; nothing is extrapolated to another N.
+
+## CP-UQ72 — Stage B residual: the owned service is up but serves no UI, and its verbs are now on record
+
+Read-only probes against the owned service on `127.0.0.1:8010` this round:
+
+- `GET /health` -> 200 `{"ok":true,"service":"expert-validation"}`; `GET /` -> 307 (the documented
+  redirect to `/expert-validation`).
+- `GET /expert-validation` -> **503 `{"code":"WEB_ASSETS_NOT_BUILT"}`**. That is not a crash: the
+  route has a deliberate branch. When the server is constructed with a usable `static_dir` whose
+  `index.html` exists it mounts the SPA and serves the page; otherwise both ``/expert-validation``
+  handlers return exactly this 503 (`api.py`, the `static_dir is None` / missing-`index.html`
+  branches). The running instance was started without that assets root.
+- `GET /openapi.json` lists the documented verbs, which puts the Stage B lease/fence item on record
+  as an interface rather than a recollection: `POST /expert-validation/lease` and
+  `DELETE|PUT /expert-validation/lease/{lease_id}`, alongside `GET|POST
+  /expert-validation/campaigns`, `POST /expert-validation/campaigns/preflight`, `GET
+  /expert-validation/campaigns/{id}`, `POST .../{id}/cancel`, `POST .../{id}/full-restart-retries`,
+  `GET /expert-validation/capabilities`, `GET|POST /expert-validation/manifests`, `GET
+  /expert-validation/artifacts/{id}` and `POST /tasks/runs`.
+
+The assets themselves are built and present in the worktree:
+`src/so101_teleop/web/dist/index.html` with sha256 prefix `8e1cb7ee86b74c22` (`dist/` and
+`node_modules/` both exist, and the package's `build` script is `tsc -b && vite build`). So the
+next Stage B step is concrete and verifiable: restart the *owned* service with that dist as its
+`static_dir`, then read back the served bytes and compare their hash with the dist file -- the
+"served-bytes readback" the stage asks for -- and take the lease/fence capture from the documented
+verbs above. N1 remains `NOT_MEASURED`; nothing is extrapolated to another N.
