@@ -63,6 +63,37 @@ def test_ineligible_or_stale_windows_are_invalid(clock_epoch):
     assert 'WINDOW_INELIGIBLE' in decision.reason_codes
 
 
+
+
+def runtime_bindings(tmp_path):
+    """Closed, plan-conforming runtime bindings for the retained authorization fixtures."""
+
+    def write(path, data):
+        import hashlib
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        path.write_bytes(data)
+        path.chmod(0o600)
+        return hashlib.sha256(data).hexdigest()
+
+    points = tmp_path / "models/points.yaml"
+    points_sha = write(points, b"points: [p1]\n")
+    weights = tmp_path / "models/yolo.pt"
+    weights_sha = write(weights, b"weights")
+    grounded = tmp_path / "models/grounded"
+    grounded.mkdir(mode=0o700, parents=True, exist_ok=True)
+    manifest_sha = write(grounded / "manifest.json", b'{"models": []}\n')
+    provenance = tmp_path / "bindings/provenance.json"
+    provenance_sha = write(provenance, b'{"schema_version": 1, "install_prefix": "/tmp/i"}\n')
+    return {
+        "points_path": str(points), "points_sha256": points_sha,
+        "yolo_weights_path": str(weights), "yolo_weights_sha256": weights_sha,
+        "grounded_root": str(grounded), "grounded_manifest_sha256": manifest_sha,
+        "broker_image_id": "sha256:" + "b" * 64,
+        "provenance_binding_path": str(provenance),
+        "provenance_binding_sha256": provenance_sha,
+    }
+
+
 def authorization_document(tmp_path, **changes):
     document = {
         "schema_version": 2, "operator_uid": 1000, "dispatch_id": "dispatch-a",
@@ -73,6 +104,7 @@ def authorization_document(tmp_path, **changes):
         "expires_at_ns": 4_000_000_000_000_000_000, "batch_root": str(tmp_path / "batches"),
         "owned_scope_sha256": "d" * 64, "safety_policy_sha256": "e" * 64,
         "intent": "CALIBRATION_ONLY", "calibration_sha256": None,
+        "runtime_bindings": runtime_bindings(tmp_path),
     }
     document.update(changes)
     return document
