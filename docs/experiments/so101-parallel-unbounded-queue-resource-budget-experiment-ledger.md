@@ -3254,3 +3254,32 @@ one. Two side observations: `stageC-fix8` also shows one failure in the combined
 (`test_oversized_cmdline_process_is_classified_not_refused`) that passes in isolation -- a
 test-isolation issue to investigate, unrelated to the identity change. No budget is claimed:
 N1 stays `NOT_MEASURED` and nothing is extrapolated to another N.
+
+## CP-UQ49 — Stage C: the broker binding is a digest, the launcher wants a tag
+
+Run: `scratch/stageC-auth.S2WPqrz0/measure15.log`,
+`stage-c/batches/n1-calibration-20260918-run8|run9/`.
+
+r11 (`authorizations/n1-calibration-20260918-r11.json`, sha256 `54c9c66f6f7cd5f2…`) was sealed with
+runtime bindings read from the frozen declarations instead of hand-written, each hash re-verified
+from the file bytes first: broker, yolo weights
+(`/data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt`,
+`f281d25258493e2c…`), grounded manifest
+(`/data/work/so101-models/grounded-sam-v2-scipy-lock/manifest.json`, `0486be2fca63736d…`) and the
+frozen points catalog (`c74915477bfea979…`). That fixed run8's `BROKER_IMAGE_MISMATCH`, and the
+next refusal is `BROKER_IMAGE_ID` from the authorization parser itself: the sealed broker binding
+must be a digest (`sha256:` plus 64 hex), while the launcher's `--broker-image` must equal
+`_BROKER_IMAGE`, the local image name
+(`so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1`). `runner_argv` passes the sealed
+binding straight to the launcher, so one value cannot satisfy both checks -- the earlier
+`sha256:bbbb…` placeholder satisfied the parser and failed the launcher, and r11 does the
+reverse.
+
+The real digest is observable, not guessable: `docker image inspect
+so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1 --format '{{.Id}}'` returns
+`sha256:4fb57abe1109e7cc1c7fbf1780a7dd10b4167f12abfa59ba34b1903a60c4c972`. The intended shape is
+therefore: seal that digest in the authorization, have the runner pass the *tag* the launcher
+expects, and verify before spawning that the tag's current image id equals the sealed digest,
+refusing with its own code otherwise -- the digest stays meaningful and the launcher's check is
+satisfied. That fix, a re-seal (r12) and the re-run are the next step. N1 remains
+`NOT_MEASURED`; nothing is extrapolated to another N.
