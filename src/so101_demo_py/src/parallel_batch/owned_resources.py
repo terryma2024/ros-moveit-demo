@@ -52,6 +52,24 @@ def own_cgroup_path() -> Path:
     return _CGROUP_ROOT / entry.strip().lstrip("/")
 
 
+def _advance_sampling_grid(*, now: float, deadline: float,
+                           interval_s: float) -> tuple[float, float]:
+    """Return the next sampling deadline and the delay to it, on a drift-free grid.
+
+    Waiting the interval *after* each sample makes the period the sum of the sampling work
+    and the interval, so a sample slower than the interval alone can exceed the maximum
+    sample gap. The grid keeps the period at the interval while the work fits inside it and
+    degrades to the work itself when it does not, so a genuinely starved sampler still
+    breaches the gap and latches.
+    """
+
+    step = max(float(interval_s), 0.0)
+    target = float(deadline) + step
+    if target < float(now):
+        target = float(now)
+    return target, max(0.0, target - float(now))
+
+
 class OwnedCgroupV2:
     """One measurement-owned cgroup with verified limits and a verified empty cleanup."""
 
@@ -489,6 +507,7 @@ class MeasurementSession:
 
         state: dict = {}
         sequence = 0
+        deadline = self.clock()
         while not self._stopped.is_set():
             sequence += 1
             try:
@@ -530,7 +549,9 @@ class MeasurementSession:
                 if self.control.stop_requested():
                     self.abort_reason = self.control.latch_reason
                     return
-            self._stopped.wait(self._interval_s)
+            deadline, delay = _advance_sampling_grid(
+                now=self.clock(), deadline=deadline, interval_s=float(self._interval_s))
+            self._stopped.wait(delay)
 
     def _breach(self, sample) -> str | None:
         observation = sample.observation
