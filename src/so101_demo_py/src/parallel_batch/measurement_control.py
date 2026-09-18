@@ -152,9 +152,21 @@ class MeasurementControl:
         if sequence <= self._last_sequence:
             self._latch("SAMPLE_SEQUENCE_REGRESSION", self._clock())
             return
+        previous = self._last_sample_s
         self._last_sequence = sequence
         self._last_sample_s = sample_time
         self._events["t_last_sample"] = sample_time
+        # Health checks only ever compare `now` with the latest sample, so a gap that opens
+        # and closes between two checks is invisible -- run39 took 142.9 ms and never
+        # latched. This call holds both timestamps and rules on the gap itself.
+        if (previous is not None
+                and sample_time - previous > self._maximum_sample_gap_s):
+            self._latch("SAMPLER_GAP", self._clock())
+
+    def event_times(self) -> dict[str, float | None]:
+        """The latching view, so one receipt shows what the control actually saw."""
+
+        return dict(self._events)
 
     def mark_sampling_start(self, now: float) -> None:
         """Anchor the grace window for the opening sample."""
