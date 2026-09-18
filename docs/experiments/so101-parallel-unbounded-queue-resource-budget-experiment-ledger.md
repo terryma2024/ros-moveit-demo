@@ -6592,3 +6592,32 @@ byte-compare the copy against the tree, redeploy the task-owned service from it 
 acceptance and read whether the coordinator now survives long enough to spawn its workers.
 
 _Ledger HEAD when written: `16336f2ed`._
+
+## CP-UQ157 — The CP-UQ155 fix works, and the next provenance gate is already named
+
+The rebuilt copy was verified byte-for-byte against the tree (`mujoco_parallel_batch.py` and
+`executor_registry.py` both match), the service was redeployed from it in order (old PID `2240583`
+exited, `/health` ok, served bytes match, guard policy and modes unchanged), and the acceptance was
+relaunched. The new campaign's coordinator log shows the progress precisely:
+
+```json
+{"message": "PROVENANCE_VERIFICATION_FAILED", "status": "ERROR"}
+```
+
+**`PROVENANCE_SOURCE_ROOT` is gone** — the CP-UQ155 fix took effect and the coordinator now gets
+one gate further before dying. The new failure is the *second* provenance requirement, at
+`cli/mujoco_parallel_batch.py:1227-1229`, where `provenance_verifier(inputs)` raising (or returning
+a non-mapping) is turned into a hard `CliError`. That is the same class of runtime admission the
+plan retired: provenance is deployment evidence, not a precondition, and the code immediately above
+it already performs the functional checks (broker image identity) that actually matter.
+
+Next round: read `verify_provenance` (the default verifier passed by `prepare_batch`) to separate
+its functional content checks from its source/prefix/document checks, and let a copied install
+proceed with provenance recorded as unavailable — the same treatment CP-UQ155 gave the source root.
+Then redeploy from a fresh copy and re-run the acceptance; the campaign's own coordinator log is the
+fastest signal for whether the next gate is the last one.
+
+Also recorded: the previous acceptance run finished with **2 passed / 18 failed** (5.3 min), which
+is the pre-fix behaviour; the current run is in flight against the redeployed service.
+
+_Ledger HEAD when written: `21eb764f1`._
