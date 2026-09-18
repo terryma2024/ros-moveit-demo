@@ -7823,3 +7823,24 @@ With CP-UQ192 this makes nine of the fourteen fixed-N campaigns (seven four-poin
 executed for real; the remaining twenty-point options are N=4..8, then the sequential four-point case.
 
 _Ledger HEAD when written: `2964a9a88`._
+
+## CP-UQ195 — Four twenty-point campaigns executed; the lease split is the fixed-N proof
+
+The second 20-point batch passed (`4 passed (13.7m)`):
+
+| Case | Slots (leases) | Points | Failed | Terminal | Cleanup | Timing |
+| --- | --- | --- | --- | --- | --- | --- |
+| `fixed-n4-p20` | 4 (5, 5, 5, 5) | 20/20 `PASSED` | none | `COMPLETED` | true | 7.6 m |
+| `fixed-n5-p20` | 5 (4, 4, 4, 4, 4) | 20/20 `PASSED` | none | `COMPLETED` | true | 6.0 m |
+
+Together with CP-UQ194 (`fixed-n2-p20` 10+10, `fixed-n3-p20` 7/7/6) that is four twenty-point
+campaigns whose lease counts multiply out to exactly twenty — 10×2, 7+7+6, 5×4, 4×5 — which is the
+fixed-N contract expressed in the run's own accounting rather than in an assertion about a maximum
+N. Every case reported `requested == evaluated == 20`, no failed points, a terminal status and a
+complete cleanup, with its own `execution-fixed-n*-p20.json`.
+
+Eleven of the fourteen fixed-N campaigns have now executed for real: all seven four-point options
+(CP-UQ192) and these four twenty-point ones. The last three twenty-point options (N=6, 7, 8) are
+running now, followed by the sequential four-point case.
+
+_Ledger HEAD when written: `add60da97`._
