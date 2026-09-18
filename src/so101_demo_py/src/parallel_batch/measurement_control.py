@@ -246,6 +246,12 @@ class MeasurementControl:
                 self._latch("SAMPLER_GAP", moment)
             return
         if moment - self._last_sample_s > self._maximum_sample_gap_s:
+            # The same cold-start window applies here: a check that lands inside the
+            # workload's startup must not latch what observe_sample is allowed to excuse.
+            if self._in_cold_start(self._last_sample_s) and (
+                    self._events.get("t_cold_start_grace") is None):
+                self._events["t_cold_start_grace"] = moment
+                return
             self._latch("SAMPLER_GAP", moment)
 
     def _latch(self, reason: str, now: float) -> None:
