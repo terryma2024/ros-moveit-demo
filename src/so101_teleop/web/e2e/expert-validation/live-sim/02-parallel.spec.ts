@@ -34,13 +34,9 @@ test("R02 parallel two-worker live run with mid-run reload @live-sim", async ({ 
   await app.generateManifest(4);
   await app.configureParallel(2);
   await app.runPreflight();
-  await app.startValidation();
-
-  const campaigns = await (
-    await fetch(`${liveServer.baseURL}/expert-validation/campaigns`)
-  ).json();
-  expect(campaigns).toHaveLength(1);
-  const campaignId = campaigns[0].campaign_id;
+  // The campaign id comes from this spec's own start response: the campaign list also holds the
+  // campaigns of every spec that ran before it.
+  const campaignId = await app.startValidation();
 
   const deadline = Date.now() + 1_500_000;
   let projection: any = null;
