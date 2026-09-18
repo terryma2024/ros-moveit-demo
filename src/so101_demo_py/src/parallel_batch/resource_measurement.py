@@ -384,11 +384,34 @@ def sample_resources(
                 "cpu_s": (int(fields[11]) + int(fields[12])) / ticks,
                 "comm": comm,
             })
+    # ... and the subtree, because cpu.stat is hierarchical: a container's work sits in a child
+    # cgroup, so a parent-only list reads as idle while the parent's counter shows ~19 cores.
+    tree_processes = []
+    cgroup_path = getattr(cgroup, "path", None)
+    if isinstance(cgroup_path, Path) and cgroup_path.is_dir():
+        for procs in sorted(cgroup_path.rglob("cgroup.procs")):
+            try:
+                pids = sorted(set(int(p) for p in procs.read_text().split()))
+            except (OSError, ValueError):
+                continue
+            for pid in pids:
+                try:
+                    fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+                    comm = Path(f"/proc/{pid}/comm").read_text().strip()
+                except (OSError, IndexError, ValueError):
+                    continue
+                tree_processes.append({
+                    "pid": pid,
+                    "cpu_s": (int(fields[11]) + int(fields[12])) / ticks,
+                    "comm": comm,
+                    "cgroup": str(procs.parent.relative_to(cgroup_path)) or ".",
+                })
     diagnostics = {
         "mem_available_bytes": memory["MemAvailable"],
         "cpu_usage_us": cpu_usage_us,
         "per_process_cpu": per_process,
         "cgroup_process_cpu": cgroup_processes,
+        "cgroup_tree_process_cpu": tree_processes,
     }
     sample = ResourceSample(
         sequence=sequence, monotonic_s=monotonic_s, observation=observation,

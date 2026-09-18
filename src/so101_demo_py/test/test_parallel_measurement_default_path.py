@@ -1308,3 +1308,29 @@ def test_sample_resources_attributes_cpu_to_the_cgroups_processes():
     entries = sample.diagnostics["cgroup_process_cpu"]
     assert any(entry["pid"] == os.getpid() for entry in entries), entries
     assert all({"pid", "cpu_s", "comm"} <= set(entry) for entry in entries)
+
+
+def test_sample_resources_walks_descendant_cgroups_for_attribution(tmp_path):
+    """The container's work lives in a child cgroup, so a direct-member list reads as idle while
+    the parent's hierarchical cpu.stat shows ~19 cores. The sampler must walk the subtree."""
+
+    import os
+    import so101_demo.parallel_batch.resource_measurement as rm
+
+    root = tmp_path / "owned"; root.mkdir()
+    child = root / "docker-child"; child.mkdir()
+    (child / "cgroup.procs").write_text(f"{os.getpid()}\n")
+
+    class CgroupWithTree(_FakeCgroup):
+        def __init__(self, usage_us, path):
+            super().__init__(usage_us, swap=[0, 0], pressure=[0, 0])
+            self.path = path
+
+        def pids(self):
+            return []
+
+    sample = rm.sample_resources(owned_inventory=(), cgroup=CgroupWithTree([0, 0], root),
+                                 device=_FakeDevice(), sequence=1, state={})
+    entries = sample.diagnostics["cgroup_tree_process_cpu"]
+    assert any(entry["pid"] == os.getpid() and entry["cgroup"].endswith("docker-child")
+               for entry in entries), entries
