@@ -4077,3 +4077,20 @@ authoritative config, and the fix for them is a candidate copy of that config wi
 baseline (never a hidden bypass), which is the next small unit. Still outstanding from the
 handoff: the independent 25 ms peak-alias cross-check, the wider gates (pytest -n 8, colcon,
 Bun/OpenAPI/Web), then the freeze/A0/fresh-authorization sequence.
+
+### CP-UQ77 addendum — test-config follow-ups after unit 6
+
+The CLI test file now derives its config from the authoritative document into the phase scratch with
+`baseline_minimum_s: 0.2` (an explicit candidate copy, no bypass flag; the authoritative document is
+untouched), and that file went from minutes to **5 passed in 0.13 s**. Two follow-ups are recorded
+rather than hidden:
+
+- The other end-to-end session runs (`test_parallel_measurement_default_path.py` CLI call sites and
+  `test_parallel_measurement_runtime.py`, which still load the authoritative config) account for the
+  remaining ~5 minutes of the four-file suite; they need the same candidate-copy treatment.
+- `test_real_session_latches_on_a_safety_breach_and_refuses` **passes alone (0.59 s)** and fails only
+  when combined with other files (`assert 'CGROUP_MEMORY_OOM_KILL' in 'MEASUREMENT_ABORT_LATCHED'`).
+  This is the third time a combination-only failure has been seen in this area (CP-UQ48 recorded the
+  same shape for `test_oversized_cmdline_process_is_classified_not_refused`), so the isolation
+  investigation is now a named task rather than an aside: run the failing pair with per-test state
+  inspection rather than assuming the assertion is wrong.
