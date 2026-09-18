@@ -6455,3 +6455,27 @@ container has appeared yet, so the campaign is in its early phase and the run co
 round reads `browser/lg-live-functional.g8SrEpVn/{result.json,reports/}` once it settles.
 
 _Ledger HEAD when written: `b24b4e403`._
+
+## CP-UQ151 — Task 11: R01's campaign starts but never spawns a worker
+
+CP-UQ150 showed the campaign is live; reading its projection pins exactly where it stops:
+
+```json
+{"status": "STARTED", "execution_mode": "SEQUENTIAL", "requested": 0,
+ "points": [["UNRUN", 0 attempts] x4], "workers": [], "broker": null}
+```
+
+So the start request was accepted (200), the campaign record exists and is polled, the lease is
+renewed — but **no worker ever appears**, no point is attempted, and `requested` stays 0. That is
+why R01 has been sitting there: the browser is waiting for a campaign that will never leave
+STARTED, and the 17 manifest cases stay blocked behind its gate for the same reason.
+
+The next step is therefore inside the service's own start path rather than the browser:
+`start_campaign_api` builds the composition from the preflight receipt and hands it to the
+supervisor, whose `workers` list is still empty. Candidates to read, in order: the supervisor's
+journal/store for the start attempt (`state/validation-service/supervisor.sqlite3`), the
+service's own log for a swallowed exception around the spawn, and the coordinator executable the
+composition resolves. Whatever it is, it is a real deployment/composition defect and not something
+to paper over: R01's spec timeout is the symptom, not the fault.
+
+_Ledger HEAD when written: `5cce310d6`._
