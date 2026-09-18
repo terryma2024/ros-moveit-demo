@@ -7789,3 +7789,16 @@ plan's "fewer points than N still starts N runtimes, idle is not a reduction" ru
 record rather than asserted. No capability check is counted as execution anywhere in this table.
 
 _Ledger HEAD when written: `4cdabc7af`._
+
+## CP-UQ193 — The 20-point sweep has started and is committing points
+
+With the four-point sweep closed (CP-UQ192), the same driver is now running the twenty-point cases;
+`fixed-n2-p20` (campaign `…7192e9d6`, batch `b7ec5`, created 04:33:02) is the first. Measured from
+its own journal rather than from elapsed impressions: two results committed (`RESULT_COMMITTED: 2`,
+`evaluated: 2`) within roughly the first two minutes, `ATTEMPT_STARTED: 4`, `LEASE_GRANTED: 4`,
+`WORKER_REGISTERED: 4` with `WORKER_RECOVERED: 2` — the per-point worker recycle first seen in the
+four-point sweep, now visible twice as the campaign works through twenty points on two slots. No
+evidence file exists until the case terminates with cleanup, so no outcome is claimed; `fixed-n3-p20`
+follows in the same job.
+
+_Ledger HEAD when written: `7df9387e5`._
