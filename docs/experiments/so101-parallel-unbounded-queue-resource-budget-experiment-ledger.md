@@ -4122,3 +4122,30 @@ the first implementation -- with `KeyError: 'interval_s'` caused by a `NameError
 is not defined` inside the alias thread, which the error-recording change now makes visible. GREEN:
 both the alias test and the baseline test pass, and the six-file measurement/budget suite is green
 in ~8 s with fresh scratch.
+
+### CP-UQ77 addendum — a failed sequence, recorded rather than smoothed
+
+The attempt to chain the gate, the rebuild, a fresh seal and an N1 measurement in one job failed in
+three separate places, and none of them may be read as evidence:
+
+- The gate's own result is **unknown**: its output was lost to a broken pipe in my script
+  (`write error: no such file or directory`), so `gate_rc=1` there says nothing about the tests.
+  It has to be re-run through `so101_pytest` with its output captured properly.
+- The rebuild **failed** for an environmental reason, not a code one:
+  `so101_mujoco_support` needs `mujoco_3d_lidar` present in the same install base
+  (`candidate-install/mujoco_3d_lidar/share/mujoco_3d_lidar/package.sh` is missing), so colcon
+  exited 1 and `candidate-install` was left unchanged. The amended modules compile
+  (`py_compile ok`), and the fix is to build the measured package (`so101_demo_py`) into that prefix
+  (the `so101_mujoco_support` prefix already exists there from earlier rebuilds) or to include the
+  missing dependency in the same invocation.
+- Because the rebuild failed, `bindings/candidate-install-binding-r8.json` describes a tree that was
+  never written; it is now marked `"invalid": true` with the reason, and must not be used for an
+  authorization.
+- The measurement attempt itself is void too: I ran it as a plain background job instead of inside
+  `systemd-run --user --scope -p Delegate=yes`, so the cgroup controllers were unavailable and the
+  CLI correctly refused with `MEASUREMENT_CAPABILITY_MISSING: cgroup_controllers ['cpu',
+  'memory']`. That refusal is the harness working; it is not a measurement attempt.
+
+Nothing was pushed, merged, deleted or fabricated; the next round re-runs the gate with captured
+output, rebuilds `so101_demo_py` only, writes a valid binding, seals a fresh authorization and runs
+N1 inside a delegated scope.
