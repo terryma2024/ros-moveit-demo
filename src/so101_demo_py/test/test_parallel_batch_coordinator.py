@@ -11,7 +11,8 @@ from pathlib import Path
 import pytest
 
 from so101_demo.parallel_batch.contracts import (
-    BatchRequest, RunMode, ValidationStatus, WorkerState, load_parallel_runtime_config,
+    BatchKindV2, BatchRequest, BatchRequestV2, RunMode, ValidationStatus, WorkerState,
+    load_parallel_runtime_config, load_parallel_runtime_config_v2,
 )
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 
@@ -69,10 +70,13 @@ def make(tmp_path):
                 evidence_root=root,
             )
         else:
-            request = BatchRequest('batch-a', mode, points, workers, k, root)
+            # Fixed execution migrated to the version-two no-quota contract; the retained
+            # v1 request type stays importable for historical reading only.
+            request = BatchRequestV2('batch-a', mode, points, workers, root,
+                                     BatchKindV2.FIRST_PASS)
         clock, results = Clock(), Results()
-        config = load_parallel_runtime_config(
-            Path(__file__).resolve().parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
+        config = load_parallel_runtime_config_v2(
+            Path(__file__).resolve().parents[1] / 'config/mujoco/parallel_batch_v2.yaml')
         selector_args = (
             {} if point_selector is None else {'point_selector': point_selector}
         )
@@ -236,15 +240,18 @@ def test_adaptive_selector_allows_one_worker_to_lease_beyond_initial_k(make):
     assert c.snapshot().terminal_reason == 'POINTS_COMPLETE'
 
 
-def test_default_selector_keeps_the_v1_hard_k_limit(make):
-    """No selector means the original immutable per-worker debit remains active."""
-    c, _, results, _, _ = make(points=('p1', 'p2'), workers=2, k=1)
+def test_default_selector_releases_the_next_point_without_a_quota(make):
+    """The v1 lifetime debit is superseded: a released worker wins the next point."""
+    c, _, results, _, request = make(points=('p1', 'p2'), workers=2)
+    assert not hasattr(request, 'max_points_per_worker')
     lease = start(c)
+    assert lease.point_id == 'p1'
     finish(c, results, lease, 'PASSED')
     generation = recover_worker(c)
 
-    assert c.grant_lease('w1', generation=generation) is None
-    assert c.grant_lease('w2', generation=1).point_id == 'p2'
+    next_lease = c.grant_lease('w1', generation=generation)
+    assert next_lease is not None and next_lease.point_id == 'p2'
+    assert c.snapshot().workers['w1'].lease_count == 2
 
 
 def test_journal_fsync_precedes_grant_projection_and_ack(make, monkeypatch):
@@ -346,7 +353,7 @@ def test_capacity_exhaustion_waits_for_inflight_and_recoverable_worker(make):
         gate_summary=gate_summary(lease2))
     assert lease2.point_id == 'p3'
     finish(c, results, lease2, 'PASSED')
-    assert c.snapshot().terminal_reason == 'CAPACITY_EXHAUSTED'
+    assert c.snapshot().terminal_reason == 'NO_RECOVERABLE_WORKERS'
     assert not c.snapshot().points['p2'].terminal
     c.complete_cleanup(owned_processes_stopped=True, controllers_stopped=True)
     assert c.snapshot().points['p2'].terminal
@@ -738,7 +745,7 @@ def test_unrecoverable_invalid_does_not_leave_batch_stuck_on_idle_capacity(make)
     finish(c, results, lease, 'PASSED')
     generation = recover_worker(c, 'w2')
     assert c.grant_lease('w2', generation=generation) is None
-    assert c.snapshot().terminal_reason == 'CAPACITY_EXHAUSTED'
+    assert c.snapshot().terminal_reason == 'NO_RECOVERABLE_WORKERS'
 
 
 def test_batch_deadline_still_bounds_final_cleanup(make):
@@ -1057,3 +1064,27 @@ def test_dry_run_scheduler_summary_is_idempotent_and_replayable(make):
         snapshot = restored.snapshot()
         assert snapshot.workers['w1'].state is WorkerState.RECOVERING
         assert snapshot.summary.validation_statuses['p1'] is ValidationStatus.VALIDATION_INVALID
+
+
+def test_one_worker_consumes_twenty_without_lifetime_quota(make):
+    """A shared queue grants as many points as remain; no lifetime quota stops it."""
+    points = tuple(f'p{i}' for i in range(20))
+    c, clock, results, journal, request = make(points=points, workers=1)
+    received, generations = [], []
+    generation = 1
+    for index, point in enumerate(points):
+        lease = start(c, generation=generation)
+        assert lease.worker_id == 'w1'
+        generations.append(lease.worker_generation)
+        received.append(lease.point_id)
+        finish(c, results, lease, 'PASSED')
+        if index != len(points) - 1:
+            generation = recover_worker(c, generation=generation)
+    assert received == list(points)
+    snapshot = c.snapshot()
+    assert snapshot.terminal_reason == 'POINTS_COMPLETE'
+    assert tuple(snapshot.workers) == ('w1',)
+    assert snapshot.workers['w1'].lease_count == 20
+    assert snapshot.workers['w1'].generation == generation == 20
+    assert generations == list(range(1, 21))
+    assert snapshot.workers['w1'].state == WorkerState.RECOVERING
