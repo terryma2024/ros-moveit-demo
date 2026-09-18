@@ -101,6 +101,9 @@ class HermeticCgroup(OwnedCgroupV2):
     def memory_swap_current(self) -> int:
         return 0
 
+    def memory_pressure_full(self) -> int:
+        return 0
+
     def memory_peak(self) -> int:
         return self.charged_bytes + 1024
 
@@ -665,12 +668,16 @@ class _FakeCgroup:
     throttled = False
     cpu_capacity_core_equivalent = 24.0
 
-    def __init__(self, usage_us, swap=None):
+    def __init__(self, usage_us, swap=None, pressure=None):
         self._usage = list(usage_us)
         self._swap = list(swap or [0] * len(self._usage))
+        self._pressure = list(pressure or [0] * len(self._usage))
 
     def memory_swap_current(self):
         return self._swap.pop(0)
+
+    def memory_pressure_full(self):
+        return self._pressure.pop(0)
 
     def cpu_usage_us(self):
         return self._usage.pop(0)
@@ -1088,3 +1095,23 @@ def test_sample_resources_reads_the_device_once_per_pass():
         rm.sample_resources(owned_inventory=(), cgroup=cgroup, device=device,
                             sequence=sequence, state=state)
     assert device.reads == 2, device.reads
+
+
+def test_sample_resources_takes_pressure_from_the_owned_cgroup(monkeypatch):
+    """Host memory pressure moves for unrelated reasons (run24 latched PSI_FULL_STALL on
+    0.0068 s of host-wide stall), so the policy reads the owned cgroup's pressure."""
+
+    import types
+    import so101_demo.parallel_batch.resource_measurement as rm
+
+    monkeypatch.setattr(rm, "time", types.SimpleNamespace(monotonic=lambda: 900.0))
+    host_psi = [0.0]
+    monkeypatch.setattr(rm, "_read_swap_and_psi", lambda: (0, host_psi[0]))
+    cgroup = _FakeCgroup([0, 0], swap=[0, 0], pressure=[1000, 6000])
+    state = {}
+    for sequence in (1, 2):
+        host_psi[0] += 1.5
+        sample = rm.sample_resources(owned_inventory=(), cgroup=cgroup, device=_FakeDevice(),
+                                     sequence=sequence, state=state)
+    assert sample.observation.psi_full_delta == 5000
+    assert sample.diagnostics["psi_full_host_us"] == 3.0

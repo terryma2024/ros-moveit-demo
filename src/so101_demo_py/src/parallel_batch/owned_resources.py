@@ -193,6 +193,17 @@ class OwnedCgroupV2:
     def memory_peak(self) -> int:
         return int(self._read("memory.peak", "0") or 0)
 
+    def memory_pressure_full(self) -> int:
+        """The owned cgroup's own full-stall time, in microseconds."""
+
+        total = 0
+        for line in self._read("memory.pressure").splitlines():
+            if line.startswith("full "):
+                for token in line.split()[1:]:
+                    if token.startswith("total="):
+                        total = int(token.split("=", 1)[1])
+        return total
+
     def memory_swap_current(self) -> int:
         """The owned cgroup's own swap, so a policy breach describes the workload.
 

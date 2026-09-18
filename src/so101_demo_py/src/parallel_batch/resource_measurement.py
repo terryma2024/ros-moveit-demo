@@ -279,7 +279,8 @@ def sample_resources(
     if cgroup is None or device is None:
         raise ContractError("MEASUREMENT_CAPABILITY_MISSING")
     if (not hasattr(cgroup, "cpu_usage_us") or not hasattr(cgroup, "memory_current")
-            or not hasattr(cgroup, "memory_swap_current")):
+            or not hasattr(cgroup, "memory_swap_current")
+            or not hasattr(cgroup, "memory_pressure_full")):
         raise ContractError("MEASUREMENT_CAPABILITY_MISSING")
     if not hasattr(device, "total_bytes") or not hasattr(device, "used_bytes"):
         raise ContractError("MEASUREMENT_CAPABILITY_MISSING")
@@ -289,7 +290,8 @@ def sample_resources(
     device_facts = device.refresh()
     device_facts_gpu_total = float(device_facts.get("total_bytes", 0))
     device_facts_gpu_used = float(device_facts.get("used_bytes", 0))
-    host_swap_total, psi_total = _read_swap_and_psi()
+    host_swap_total, host_psi_us = _read_swap_and_psi()
+    psi_total = float(cgroup.memory_pressure_full())
     swap_used = int(cgroup.memory_swap_current())
     monotonic_s = time.monotonic()
     cpu_usage_us = int(cgroup.cpu_usage_us())
@@ -353,6 +355,7 @@ def sample_resources(
         "cpu_usage_us": cpu_usage_us,
         "swap_total": host_swap_total,
         "swap_used_bytes": swap_used,
+        "psi_full_host_us": host_psi_us,
     }
     sample = ResourceSample(
         sequence=sequence, monotonic_s=monotonic_s, observation=observation,
