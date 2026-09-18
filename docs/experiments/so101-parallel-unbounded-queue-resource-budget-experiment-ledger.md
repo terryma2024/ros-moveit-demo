@@ -3561,3 +3561,28 @@ the `_last_sample_s is None` branch firing before the sampler published (the run
 `mark_sampling_start` is not reached because the control is bound after `SAMPLING_START`), or a
 health check called with a `now` far from the sampler's clock. N1 remains `NOT_MEASURED`; nothing is
 extrapolated to another N.
+
+## CP-UQ61 — Correction to CP-UQ58: run18's empty stderr was preemption, not success
+
+Run19 is the same code path with one difference that matters: the sampler no longer latches, so the
+workload lives long enough to report. It writes `{"message": "PROVENANCE_EXTERNAL_PACKAGE_PREFIX"}`
+-- the same refusal as before. So CP-UQ58's headline claim ("the launcher's stderr is empty: it
+passed provenance and started") is withdrawn: run18 aborted at 0.50 s and the launcher was killed
+before it could print the error it was about to print. An empty log was read as a success when it
+was only a shorter life.
+
+What run19 does establish, and it is worth keeping:
+
+- The control instrumentation works and the sampler is healthy: 89 samples over 5.8 s,
+  `t_last_sample` recorded, `t_breach`/`t_detect`/`t_abort_latch` all `None`, `abort_reason` `None`.
+  The earlier SAMPLER_GAP latches are therefore not a standing condition of the sampler; they
+  coincided with the workload dying and the main thread's health checks continuing.
+- The provenance check still refuses with the install-root prefixes declared and the child's
+  `AMENT_PREFIX_PATH` set to the same prefixes. The next hypothesis is testable in one command:
+  `get_package_prefix` needs an AMENT resource-index marker, and the candidate install's
+  `share/ament_index/resource_index/packages` contains [so101_demo_py ] while
+  `dev-install` contains [so101_demo_py ]. If the markers are missing, the launcher's AMENT
+  re-query raises and is converted into exactly this refusal code, which would explain why every
+  truthful declaration of these prefixes still fails.
+
+N1 remains `NOT_MEASURED`; nothing is extrapolated to another N.
