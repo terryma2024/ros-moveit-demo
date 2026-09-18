@@ -1596,3 +1596,77 @@ evidence:
     colcon/full-demo-colcon2.W4qsiawV, colcon/full-teleop-colcon.9Q1viRup, colcon/full-test-result.*
 decision: KEEP
 next_experiment: NONE-AUTHORIZED (Stage B owned actions need authority)
+
+## EXP-UQ18 — production copied install, A0 audit and final authorized state
+
+```yaml
+experiment_id: EXP-UQ18
+status: VALID
+prior_experiment: EXP-UQ17
+hypothesis: With all Stage A code committed and clean, the production copied overlay can be built and
+  audited offline, producing the frozen install and A0 that Stage C/D would reference.
+prediction: The production build exits 0; the external binding binds the clean HEAD and the production
+  prefix; the A0 full-byte audit covers the copied files and the v2 config carrier.
+single_variable: production copied install + A0 audit generation
+lifecycle: ISOLATED_STACK
+preconditions:
+  - All Stage A code committed; full offline gates green (EXP-UQ17); no service started.
+success_criteria:
+  - production-install copied (no symlink install), module origins inside the prefix.
+  - bindings/production-provenance.json binds the clean HEAD, and bindings/production-a0.json records the
+    full-byte inventory including the v2 config carrier.
+failure_criteria:
+  - A dirty tree, a symlinked install, or an unverifiable origin.
+invalid_criteria:
+  - n/a
+provenance:
+  source_commit: a812c9c6693a5adab3a01fad2f0cf50f7197ed3b
+  install_overlay: $TASK_ROOT/production-install (copied)
+  runtime_executable: $TASK_ROOT/venv/bin/python
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: so101_colcon production-copy-build build --packages-select so101_demo_py so101_teleop so101_mujoco_support --build-base $TASK_ROOT/production-build --install-base $TASK_ROOT/production-install
+    exit_code: 0
+observed:
+  - production-install built exit 0; module origins resolve inside the production prefix (verified by the
+    A0 generation script that imported both packages from the production overlay).
+  - bindings/production-provenance.json: source_commit a812c9c66, worktree_dirty_tracked false,
+    install_prefix $TASK_ROOT/production-install, carrier sha256 8ae1855adaf6bc9f…
+  - bindings/production-a0.json: 1275 files, A0 sha256 08277ce1ce78a13e…, carrier recorded as the only
+    semantic S carrier among the audited files.
+inferred:
+  - Stage C measurement, Stage D promotion and Stage E browser acceptance remain blocked on their own
+    authority; nothing here claims a qualified N, an approved profile or a live acceptance.
+conclusion: VALID offline. This is the final authorized artifact of the current instruction set.
+evidence:
+  - colcon/production-copy-build.*, bindings/production-provenance.json, bindings/production-a0.json
+decision: KEEP
+next_experiment: NONE-AUTHORIZED
+```
+
+```yaml
+checkpoint_id: CP-UQ18
+last_valid_experiment: EXP-UQ18
+current_hypothesis: NONE (authorized offline work complete)
+working_tree_status: clean at the final docs commit
+owned_processes: NONE
+preserved_processes: NONE from this task family
+confirmed_conclusions:
+  - Stage A implementation complete with clean demo (3228 passed) / teleop (525 passed) / colcon
+    (3807 tests, 0 errors, 0 failures) / Web (unit 114, build, contract 17, installed 15) gates.
+  - Production copied install + A0 audit frozen at commit a812c9c66 (EXP-UQ18).
+  - All N budgets remain NOT_MEASURED; no profile, promotion, deployment receipt or live acceptance exists.
+blocked_commands:
+  - Stage B owned recovery/Web refresh: production-install launcher + so101_expert_validation_recover.py --apply + owned Web start (needs the exclusive owned window).
+  - Stage C measurement: $TASK_ROOT/production-install/so101_demo_py/lib/so101_demo_py/so101_measure_parallel_resources --authorization <sealed> --intent CALIBRATION_ONLY (needs a sealed MeasurementAuthorization window; the candidate runner hook is also still unwired).
+  - Stage D promotion: publish_promotion + carrier-ref commit + A1/D (needs operator exact-N/profile-hash approval plus Astra/Sol reviews).
+  - Stage E live Chrome: so101_bun live-qualified-pipeline run test:e2e:live-sim --project parallel-resource (needs the exclusive owned browser window).
+  - Independent reviews: GPT-6 Astra/High for Tasks 1-4 code, L/inventory, closed contexts, Task 11 API and Task 16 guide; GPT-5.6 Sol/High execution-result review (cannot be self-approved).
+retained:
+  - All prior evidence plus venv-build/*, offline-install/offline-build, production-install/production-build,
+    bindings/{dev-contract,offline-provenance,production-provenance,production-a0}.json, colcon/*,
+    scratch/*, browser/*.
+archived: none
+deletion_candidates: $TASK_ROOT/scratch/* and superseded colcon run logs (classification only; nothing deleted)
+next_command: NONE authorized; awaiting the operator decisions listed above.
