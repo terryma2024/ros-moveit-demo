@@ -6014,3 +6014,37 @@ That is what the functional manifest needs before it can be generated: the modes
 are now advertised truthfully by the real service rather than filtered away.
 
 _Ledger HEAD when written: `a36ce1282`._
+
+
+## CP-UQ134 — Correction f1308af3, part 3: the deployed copy is stale, and that is checkable
+
+The handoff's item 5 asks for the runtime bytes to be read back against the deployed immutable
+copy, with the explicit rule that an existing copy may be reused only while the runtime is
+unchanged. It is **not** unchanged: the correction itself edited runtime files after that copy
+was built in CP-UQ125. Comparing the copy's installed `so101_teleop` modules against the tree:
+
+| Runtime file | Copy status |
+| --- | --- |
+| `expert_validation/executor_registry.py` | absent from the copy's installed package |
+| `expert_validation/api.py` | bytes differ |
+| `expert_validation/production.py` | absent from the copy's installed package |
+
+(That the registry and production modules are *absent* rather than different reflects how
+`so101_teleop` installs its python package; either way the copy no longer represents the
+runtime.) This matters beyond bookkeeping: `executor_registry.py` is exactly the file whose
+budget-qualification gate produced the `execution_modes=[SEQUENTIAL]` mismatch, so **the service
+deployed in CP-UQ129 still advertises the old capability set** and cannot be the basis of the
+functional manifest.
+
+A fresh copy build is therefore running into new directories
+(`copy-build-final.*` / `/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main/unbounded-queue-resource-budget/copy-install-final.mcoFwDqP`). Once it finishes the next round will: re-verify the copy (entry,
+modules, launch/config/assets, no `.git`), restart the task-owned service from it with
+`SO101_TASK_ROOT` as before, re-read `/health`, the served-byte hash and the capabilities — which
+should now honestly advertise PARALLEL and ADAPTIVE — and only then generate the functional
+manifest from those real capabilities.
+
+Also recorded: the two `so101_pytest` directory runs started in CP-UQ128 are **still running**
+after this long; per the correction handoff they are left alone, and their eventual
+stdout/result files are preserved wherever they land, including a failed coverage verdict.
+
+_Ledger HEAD when written: `9ee6f8fce`._
