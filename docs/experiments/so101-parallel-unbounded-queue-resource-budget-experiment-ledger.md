@@ -1525,3 +1525,74 @@ evidence:
   - scratch/qualification-*, scratch/promotion-*, browser/live-evidence-green.*, browser/live-suite-build.*
 decision: KEEP
 next_experiment: EXP-UQ17 (Task 12 unified offline gates)
+
+## EXP-UQ17 — Task 12 offline gates (dev reconfigure, CTest registration, full gates, colcon)
+
+```yaml
+experiment_id: EXP-UQ17
+status: VALID
+prior_experiment: EXP-UQ16
+hypothesis: After all Stage A code is committed and clean, a logged dev reconfigure exposes every new
+  CTest gate and the full source/package/colcon gates pass without exclusions.
+prediction: CTest lists the three required new suites with registered absolute interpreters; the demo,
+  teleop, colcon and colcon-test-result gates exit 0.
+single_variable: final dev reconfigure + full offline gates
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Stage A code committed and clean; task venv with pinned setuptools 68.1.2 (required by colcon's
+    setup.py develop path); no service or measurement started.
+success_criteria:
+  - ctest --show-only=json-v1 lists test_expert_validation_operator_recovery, _v2_contract and
+    _resource_budget, with absolute interpreters inside the registered set.
+  - full-demo, full-teleop, colcon test (both packages) and colcon test-result all exit 0.
+failure_criteria:
+  - Any exclusion, xfail or accepted baseline failure counted as a pass.
+invalid_criteria:
+  - Harness path/Python-path issues treated as product regressions (two were fixed as environment work).
+provenance:
+  source_commit: 0f1f7d697 plus the registration/test fixes in this unit
+  install_overlay: $TASK_ROOT/dev-install (symlink install) + $TASK_ROOT/venv
+  runtime_executable: $TASK_ROOT/venv/bin/python and /usr/bin/python3 (CTest)
+  ros_domain_id: n/a
+  gz_partition: n/a
+commands:
+  - command: so101_colcon final-dev-reconfigure build ... --cmake-clean-cache
+    exit_code: 0
+  - command: so101_record_tool <run> ctest --test-dir $TASK_ROOT/dev-build/so101_teleop --show-only=json-v1
+    exit_code: 0
+  - command: so101_pytest full-demo src/so101_demo_py/test -q
+    exit_code: 0
+  - command: so101_pytest full-teleop2 src/so101_teleop/test -q
+    exit_code: 0
+  - command: so101_colcon full-demo-colcon2 test --packages-select so101_demo_py ... --pytest-args test
+    exit_code: 0
+  - command: so101_colcon full-teleop-colcon test --packages-select so101_teleop ...
+    exit_code: 0
+  - command: so101_colcon full-test-result test-result --test-result-base $TASK_ROOT/dev-build --verbose
+    exit_code: 0
+observed:
+  - dev reconfigure (with --cmake-clean-cache) exit 0 after the setuptools pin.
+  - First CTest readback found 52 registered suites and reported the two NEW suites
+    (test_expert_validation_v2_contract, test_expert_validation_resource_budget) as missing; both were
+    registered in src/so101_teleop/CMakeLists.txt and the retained package-layout expectation was updated.
+    Second readback: 54 registered, missing none, interpreters ['/usr/bin/python3'] all absolute and
+    inside the registered COLCON_TEST_PYTHONS set.
+  - full-demo pytest: 3228 passed, 1 skipped, 0 failed, exit 0 (6min4s).
+  - full-teleop pytest: 525 passed, 0 failed, exit 0 (40s).
+  - demo colcon test: exit 0, 1 package finished in 5min54s. The first attempt failed at collection with
+    ModuleNotFoundError: tools (the demo suite imports the repo-root helper package); the colcon/CTest
+    harness runs per package, so the repo root is now appended to PYTHONPATH by so101_colcon_gate_env —
+    the same path the direct `python -m pytest` gate gets implicitly from the repo-root CWD.
+  - teleop colcon test: exit 0 (1min10s); colcon test-result: exit 0.
+  - Web gates (EXP-UQ15): unit 114 passed, build exit 0, contract e2e 17 passed; installed e2e from the
+    copied offline overlay 15 passed.
+inferred:
+  - The Stage A offline implementation and the Task 12 offline gate set are complete; the remaining plan
+    work needs separate authority (owned recovery/deployment, candidate measurement, promotion, Chrome)
+    and the independent Astra/Sol reviews.
+conclusion: VALID offline; no runtime, measurement or promotion claim.
+evidence:
+  - colcon/final-dev-reconfigure*, colcon/ctest-registration.*, scratch/full-demo.*, scratch/full-teleop2.*,
+    colcon/full-demo-colcon2.W4qsiawV, colcon/full-teleop-colcon.9Q1viRup, colcon/full-test-result.*
+decision: KEEP
+next_experiment: NONE-AUTHORIZED (Stage B owned actions need authority)
