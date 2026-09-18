@@ -4592,3 +4592,28 @@ That makes the honest options narrow and specific:
 Two data points at the same offset justify (1) as the next unit, with a RED test that a gap inside
 the cold-start window does not latch while an identical gap outside it still does, and a receipt
 field that shows which case applied.
+
+## CP-UQ96 — The grace window is one second; the cold start is about three
+
+Run61 (r40, candidate rebuilt, detached unit) still latched `SAMPLER_GAP`: 53 samples, baseline 317,
+and the offending interval sits around 3.4 s after `SAMPLING_START` -- outside the one-second
+`_COLD_START_GRACE_S` I anchored at `WORKLOAD_SPAWN`. So the grace mechanism works (its unit tests
+pass) and its window is simply the wrong size for this workload: importing torch inside the worker
+takes several seconds, and the starvation the sampler suffers lands in the middle of it.
+
+That leaves a design choice about how the window should *end*, and the options differ in what they
+can hide:
+
+1. a longer fixed bound (for example 10 s): simple, but it is a ten-second hole in the gap rule,
+   which is a lot of policy to give away, and its size would be a guess;
+2. anchor the end at **readiness** rather than a duration -- from `WORKLOAD_SPAWN` until the sampler
+   first observes the workload doing real work (or the launcher reports the batch started) -- so the
+   window closes when the cold start is actually over, and the receipt records when it closed. This
+   keeps the hole as small as the cold start really is, at the cost of deriving a readiness signal
+   from evidence the run already has.
+
+Option 2 is the one consistent with how the rest of this harness behaves (anchors at observed events
+rather than fixed clocks: the attach rebaseline, the opening-sample grace, the generation counters).
+The next unit implements it, with the receipt recording both `t_cold_start_grace` and the anchor that
+closed the window, and the RED tests covering: a gap inside the cold start does not latch, the first
+gap after readiness does, and the window cannot reopen.
