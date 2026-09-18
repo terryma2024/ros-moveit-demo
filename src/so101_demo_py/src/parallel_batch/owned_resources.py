@@ -677,10 +677,10 @@ class MeasurementSession:
                 }, sort_keys=True) + "\n")
             if self.control is not None:
                 self.control.observe_sample(sample.sequence, sample.monotonic_s)
-                if float(sample.observation.observed.get("cpu_core_equivalent", 0.0)) > 0.0:
-                    # Readiness: the workload is doing real work, so the cold-start window
-                    # closes here instead of after a guessed duration.
-                    self.control.mark_workload_active(self.clock())
+                # Deliberately no early readiness closure here: the launcher itself is
+                # CPU-active from its first moments, so "activity" closed the window before
+                # the worker's cold start (run62 still latched a 3 s gap). The window is
+                # bounded by its measured ceiling instead.
                 self.control.check_health(
                     self.clock(), sampler_alive=True,
                     endpoint_healthy=bool(self._control_socket is not None),
