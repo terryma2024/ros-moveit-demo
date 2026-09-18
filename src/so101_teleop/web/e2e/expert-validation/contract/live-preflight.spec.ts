@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 
 import { test, expect } from "@playwright/test";
 
@@ -41,25 +41,22 @@ test("live gate requires a durable evidence root", () => {
   expect(() => validateLiveSimPreconditions(env)).toThrow("LIVE_SIM_EVIDENCE_ROOT_REQUIRED");
 });
 
-test("live gate requires a valid provenance binding", ({ }, testInfo) => {
+test("live gate requires the deployed service state root when a service is reused", () => {
+  // A reused deployed service keeps its own evidence root, and the batch journal the specs read
+  // lives there rather than under the browser run directory.  Without an explicit root the
+  // journal assertions would quietly read an empty directory, so the validator fails closed.
   const env = baseEnv();
-  delete env.SO101_VALIDATION_PROVENANCE_BINDING;
-  expect(() => validateLiveSimPreconditions(env)).toThrow("LIVE_SIM_PROVENANCE_INVALID");
+  env.SO101_LIVE_SERVICE_BASE_URL = "http://127.0.0.1:8010";
+  delete env.SO101_LIVE_SERVICE_STATE_ROOT;
+  expect(() => validateLiveSimPreconditions(env)).toThrow("LIVE_SIM_SERVICE_STATE_ROOT_REQUIRED");
 
-  const tampered = testInfo.outputPath("tampered-binding.json");
-  mkdirSync(testInfo.outputPath(), { recursive: true });
-  writeFileSync(
-    tampered,
-    JSON.stringify({
-      schema_version: 1,
-      source_root: JSON.parse(
-        readFileSync(process.env.SO101_VALIDATION_PROVENANCE_BINDING!, "utf-8"),
-      ).source_root,
-      source_commit: "0".repeat(40),
-    }),
-  );
-  env.SO101_VALIDATION_PROVENANCE_BINDING = tampered;
-  expect(() => validateLiveSimPreconditions(env)).toThrow("LIVE_SIM_PROVENANCE_INVALID");
+  env.SO101_LIVE_SERVICE_STATE_ROOT = "/tmp/not-an-evidence-root";
+  expect(() => validateLiveSimPreconditions(env)).toThrow("LIVE_SIM_SERVICE_STATE_ROOT_INVALID");
+
+  const owned = `${process.env.SO101_E2E_EVIDENCE_ROOT}/state`;
+  env.SO101_LIVE_SERVICE_STATE_ROOT = owned;
+  mkdirSync(owned, { recursive: true });
+  expect(validateLiveSimPreconditions(env).serviceStateRoot).toBe(owned);
 });
 
 test("live gate requires the installed prefix", () => {
@@ -86,10 +83,14 @@ test("live gate refuses to start over an existing stack", () => {
 });
 
 test("live gate accepts the fully qualified environment", () => {
-  const result = validateLiveSimPreconditions(baseEnv(), { stackScan: () => "" });
+  const env = baseEnv();
+  delete env.SO101_LIVE_SERVICE_BASE_URL;
+  const result = validateLiveSimPreconditions(env, { stackScan: () => "" });
   expect(result.evidenceRoot).toBe(process.env.SO101_E2E_EVIDENCE_ROOT);
   expect(result.sourceCommit).toMatch(/^[0-9a-f]{40}$/);
   expect(result.installPrefix).toBe(process.env.SO101_E2E_INSTALL_PREFIX);
+  // Without a reused service the fixture owns its own state root under the run directory.
+  expect(result.serviceStateRoot).toBeNull();
 });
 
 test("stack scanner ignores itself and unrelated processes", () => {

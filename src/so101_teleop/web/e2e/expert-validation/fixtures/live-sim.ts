@@ -34,6 +34,8 @@ export type LiveSimPreconditions = {
   sourceRoot: string;
   sourceCommit: string;
   installPrefix: string;
+  /** State root of the reused deployed service; null when this fixture owns its own service. */
+  serviceStateRoot: string | null;
 };
 
 export class LiveSimGateError extends Error {
@@ -110,7 +112,21 @@ export function validateLiveSimPreconditions(
   // SO101_LIVE_SERVICE_BASE_URL names the deployed service, the acceptance runs against it by
   // design and the fixture must not start or demand a second one. Without that variable the
   // original conflict check stays in force.
-  if (!env.SO101_LIVE_SERVICE_BASE_URL) {
+  let serviceStateRoot: string | null = null;
+  if (env.SO101_LIVE_SERVICE_BASE_URL) {
+    // The reused service keeps its own state root: the coordinator journal, cleanup gates and
+    // sealed attempts the specs read live under it, not under the browser run directory. It is
+    // named explicitly and must be an owned, existing directory, because a wrong root would
+    // otherwise turn every journal assertion into a silent read of an empty directory.
+    const root = env.SO101_LIVE_SERVICE_STATE_ROOT ?? "";
+    if (!root) {
+      throw new LiveSimGateError("LIVE_SIM_SERVICE_STATE_ROOT_REQUIRED");
+    }
+    if (!root.startsWith("/data/work/so101-evidence/") || !existsSync(root)) {
+      throw new LiveSimGateError("LIVE_SIM_SERVICE_STATE_ROOT_INVALID");
+    }
+    serviceStateRoot = root;
+  } else {
     const conflicts = stackConflicts(deps.stackScan);
     if (conflicts.length > 0) {
       throw new LiveSimGateError(`LIVE_SIM_STACK_PRESENT:${conflicts.join(",")}`);
@@ -121,6 +137,7 @@ export function validateLiveSimPreconditions(
     sourceRoot,
     sourceCommit: env.SO101_DEBUG_SOURCE_COMMIT ?? "unknown",
     installPrefix,
+    serviceStateRoot,
   };
 }
 
@@ -224,8 +241,13 @@ export const liveSimTest = base.extend<{ liveServer: LiveServer }>({
     const preconditions = validateLiveSimPreconditions();
     const slug = testInfo.title.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
     const caseDir = join(preconditions.evidenceRoot, "runtime", `${slug}-${Date.now().toString(36)}`);
-    const stateDir = join(caseDir, "state");
-    mkdirSync(stateDir, { recursive: true });
+    // A reused service already owns its state root; only a fixture-spawned service gets a fresh
+    // one under this run's case directory.
+    const stateDir = preconditions.serviceStateRoot ?? join(caseDir, "state");
+    mkdirSync(caseDir, { recursive: true });
+    if (preconditions.serviceStateRoot === null) {
+      mkdirSync(stateDir, { recursive: true });
+    }
     proveChrome(caseDir);
 
     const prefixes = resolvePackagePrefixes(
