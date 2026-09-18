@@ -20,7 +20,7 @@ import threading
 
 from so101_demo.runtime.parallel_ipc import IpcError, encode_frame, receive_frame
 
-from .contracts import BatchRequest
+from .contracts import BatchKindV2, BatchRequest, BatchRequestV2
 
 
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
@@ -40,7 +40,13 @@ class FixedCoordinatorControlServer:
     """Own one private Unix endpoint bound to a live upstream Coordinator epoch."""
 
     def __init__(self, *, coordinator, campaign_id: str, control_token: str, path: Path):
-        if not isinstance(coordinator.request, BatchRequest):
+        # The closed schema-1 wire serves both the retained v1 execution contract and
+        # legitimate v2 fixed batches. Adaptive pools keep their own control path.
+        request = coordinator.request
+        if isinstance(request, BatchRequestV2):
+            if request.batch_kind not in {BatchKindV2.FIRST_PASS, BatchKindV2.FULL_RESTART_RETRY}:
+                raise WebControlError("FIXED_COORDINATOR_REQUEST_REQUIRED")
+        elif not isinstance(request, BatchRequest):
             raise WebControlError("FIXED_COORDINATOR_REQUEST_REQUIRED")
         if not isinstance(campaign_id, str) or _IDENTIFIER.fullmatch(campaign_id) is None:
             raise WebControlError("CAMPAIGN_ID_INVALID")
