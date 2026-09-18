@@ -5247,3 +5247,52 @@ Progress: Tasks 1-4 of 12 are complete, each with its own commit
 wiring `EpochStartGuard` into the real CLI/allocator/restore composition.
 
 _Ledger HEAD when written: `6216fe029`._
+
+
+## CP-UQ117 — Task 5 (part one): the epoch guard exists and is proven; the CLI wiring is next
+
+**Done this round.** `EpochStartGuard` and `compose_default_start_guard` now live in
+`parallel_batch/start_guard_probe.py` (commit `05b9990d2`, EOF style fix `c728b75d8`).
+RED (`lg-t5-red`, with the block temporarily removed): 7 collected, **4 failed + 2 errors,
+0 collection errors** — the epoch guard genuinely did not exist. GREEN (`lg-t5-green`):
+**7 passed**, exit 0, `-n 8`. The tests pin the reviewed semantics rather than a happy path:
+
+- one fresh probe covers every spawn in an epoch (`probe_count == 1` after five
+  `require_before_spawn` calls), and a new epoch probes again;
+- a changed scope (worker count) and an observation older than the policy deadline both
+  force a fresh probe instead of reusing a stale observation;
+- a FAIL result raises `StartGuardRefused` with the real reason and is **never** reused;
+- `cleanup_state != CLEAR` is refused even when the status is only WARN;
+- the installed composition honours `SO101_TASK_ROOT` and creates the shared state root;
+- a subprocess test imports the composition and the v3 contract and asserts that
+  `resource_budget`, `resource_measurement`, `measurement_control` and `owned_resources` stay
+  out of `sys.modules`;
+- a fixed request with one point and four workers keeps **four** slots.
+
+**Precise remaining Task 5 edits** (measured against the current tree, so the next round does
+not have to rediscover them):
+
+- `cli/mujoco_parallel_batch.py`: 29 sites mention the retired plumbing. Replace
+  `_compose_default_resource_gate` (L1093) and the `_DEFAULT_RESOURCE_GATE` hook (L1090) with
+  a v3 composition; make `_load_runtime_config` (L1109) load v3 and refuse v1/v2 with
+  `CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION`; replace `_prepare_live_headroom` (L482) with a
+  guard check that builds the scope from the real owner identity; delete
+  `_compose_measurement_gate` (L451) and make `--measurement-authorization` a retired-flag
+  error; drop `resource_gate` from `PreparedBatch` (L183), `prepare_batch` (L1132), the
+  measurement branch (L1201/1224), the allocator call (L1375) and the spec reader (L2692).
+- `parallel_batch/resources.py`: 14 sites. `_live_headroom_decision`/`_live_headroom`
+  (L1354-1390) keep the guard result and delete the `>3` refusal, the `!=3 → None` branch and
+  the profile-drift comparison in restore (L1185-1196); `_compose_default_resource_gate`
+  (L2605) and the measurement composition (L2628) go away.
+- `parallel_batch/adaptive_pool.py`: L451 `_issue_adaptive_context` is the only budget
+  import; remove it and keep the adaptive affinity/fallback policy intact.
+- Tests: the autouse `synthetic_resource_gate` fixture in `test_parallel_batch_cli.py` (L56)
+  and `test_parallel_batch_resources.py` (L146) must be replaced by the real guard with only
+  the lowest process port replaced — injecting a fake admission gate as positive proof is
+  explicitly forbidden by the plan.
+- Commit for the wiring step is the plan's own message: `feat: wire real epoch startup guard`.
+
+No runtime budget code has been deleted yet; Task 6 does that, and this round deliberately
+did not start the 400-line wiring edit with too little context left to finish and verify it.
+
+_Ledger HEAD when written: `c728b75d8`._
