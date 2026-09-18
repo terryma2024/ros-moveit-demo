@@ -2660,3 +2660,64 @@ evidence: scratch/freeze-teleop3.*, scratch/freeze-teleop-installed.*, browser/f
 decision: KEEP
 next_experiment: EXP-UQ32 remaining Stage A offline sweep and Web/Bun/installed gates on freeze-install
 ```
+
+```yaml
+checkpoint_id: CP-UQ32
+last_valid_experiment: EXP-UQ32
+current_hypothesis: The review's three P2s are closed with genuine evidence, the real ament_python
+  8-worker package gate is green, and the Stage C cgroup/NVML capability has a raw probe plus a
+  concrete, sudo-free fix path.
+dispatch: 23541f5a-3c38-433d-85c2-3b0001bd535a (user authorization text quoted in the handoff:
+  "发送修复指令。并要求dst继续完成B-E。授权机制执行。"; exclusive O_EXCL receipt plus startup probe with shell
+  date -Iseconds 2026-09-18T20:44:05+08:00, HEAD 93fc681aa4021a80b3964e7639c81d2d99a2a6b4 clean,
+  CP-UQ31, pane %68/PID 1345571, handoff SHA 0cd6b59c..., review SHA 7cedb19b... = required value)
+p2_closure:
+  - "Runner cross-package/audit: RED = the demo-scoped run mixed the foreign teleop nodeid into its
+    serial phase and the mapping failure did not stop the script (scratch/red-foreign-nodeid.*).
+    GREEN = serial nodeids are resolved against THIS run's manifest (foreign entries skipped and
+    recorded), the mapping exits fail-closed, collect forwards extra args with argv/exit recorded,
+    coverage is a multiset over full nested nodeid identity, and every phase stores argv/result/exit/
+    elapsed plus exact-interpreter and worker proofs. Evidence: scratch/green2-foreign.iizZnh2r
+    (foreign skipped, coverage_exact true), scratch/green4-teleop.g1GE0TfA (532 = serial 1 + parallel
+    531, intersection 0), scratch/xdist8-demo4.cafOc9zm (3277 = 319 + 2958)."
+  - "Real ament_python package gate: tools/pkg8-gate.zsh runs two genuine colcon invocations whose real
+    child argv was probed (colcon forwards -n and --deselect): parallel 8 workers with 319 deselect
+    tokens for the minimal serial set, then serial for the five serial module paths.
+    scratch/pkg8demo2.G7s3ZfXT: coverage_exact true, manifest 3277 = parallel 2958 + serial 319,
+    intersection 0, PARALLEL_RC=0 SERIAL_RC=0 COVERAGE_RC=0 - this replaces the old full-serial 3274
+    package run without serialising the whole package and without using the direct runner as the
+    package gate."
+  - "Ledger current fields refreshed (current_commit, latest_checkpoint CP-UQ31, next_experiment
+    EXP-UQ32) and the retired socket-relocation question annotated, with the original entries kept
+    (commit b11d48b54)."
+capability_probe:
+  - "Raw probe run: scratch/capability-probe.plqC8Jzn/raw-probe.log (shell date 2026-09-18T21:12:48+08:00)."
+  - "Chain: user@1000.service controllers=[cpu memory pids] subtree_control=[cpu memory pids]; app.slice
+    controllers=[cpu memory pids] subtree_control=[memory pids]; our own dsh-subprocess-*.scope
+    controllers=[memory pids] subtree_control=[] (no cpu controller delegated into it)."
+  - "Attempts inside the task-owned scope (no sudo): +cpu -> ENOENT (controller not present in this
+    scope's cgroup.controllers); +memory -> EBUSY (the scope has member processes, so the no-internal-
+    process rule blocks enabling); +pids -> OK. The child cgroup therefore exposes only [pids]:
+    cpu.max/memory.max do not exist and the measurement's OwnedCgroupV2.require_delegated(cpu,memory)
+    correctly refuses. NVML whole-device read succeeded (gpu_total/used/free bytes recorded)."
+  - "Sudo-free fix path for Stage C: create a fresh delegated scope for the measurement with
+    `systemd-run --user --scope -p Delegate=yes -- <measurement console …>`; verified available
+    (/usr/bin/systemd-run; `systemd-run --user --scope --quiet -p Delegate=yes -- true` returned OK), so
+    the parent->child cpu+memory delegation can be established without touching global/shared config."
+authorization_record:
+  - "Latest user authorization grants the task-owned B-E windows in scope: B owned recovery/Web refresh,
+    C finite candidate measurement, D deployment execution window, E owned Chrome window. The product
+    content gates are unchanged: each real exact-N/profile-SHA issuance still needs its own operator
+    approval object, Stage C needs its sealed authorization, Stage E needs the N1/Nx signature; no
+    APPROVED record is pre-written and no issuer/trust-root rule is altered."
+inferred:
+  - Scheduling, package-gate and ledger P2s are closed; Stage C has raw capability evidence plus a
+    concrete sudo-free delegation path, and Stages B/D/E proceed under the granted windows with their
+    unchanged content gates.
+conclusion: OFFLINE/AUTHORIZED MAINLINE CONTINUES; product content gates remain object-bound.
+evidence: scratch/pkg8demo2.G7s3ZfXT/*, scratch/green4-teleop.*, scratch/green2-foreign.*,
+  scratch/capability-probe.plqC8Jzn/raw-probe.log, tools/{pytest-parallel.zsh,pkg8-gate.zsh}
+decision: KEEP
+next_experiment: EXP-UQ33 Stage C measurement inside a fresh delegated scope; Stage B freeze/production
+  binding; Stage D per-N approval packets; Stage E owned Chrome once N1/Nx are signed
+```
