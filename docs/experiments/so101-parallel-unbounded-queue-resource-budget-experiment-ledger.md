@@ -7553,3 +7553,37 @@ The immediate next action inside item 1 is the RED step: a functional case that 
 campaign and fails on today's spec, which never starts one.
 
 _Ledger HEAD when written: `e5bc046b5`._
+
+## CP-UQ184 — The real per-option execution driver exists and its first case passed
+
+Correction `58936fb6-…` item 1 is under way with a concrete, verified increment instead of a
+relabelling exercise:
+
+- **Truthful labels**: the sixteen R05 cases are now titled `… advertised by the deployed service
+  (capability only)`, and the file says in-place that only the execution spec may be read as an
+  execution result.
+- **New driver**: `live-sim/06-fixed-n-execution.spec.ts`, registered as the `fixed-n-execution`
+  project, builds one case per `FIRST_PASS` manifest entry (fourteen fixed-N, the sequential
+  four-point and the adaptive twenty-point), drives it through the deployed console
+  (lease → manifest → mode/N → preflight → start), polls to a terminal state with cleanup under the
+  case's own `batch_timeout_s`, and asserts exact `requested`/`evaluated`, every point's terminal
+  status and artifact count, all N worker slots for fixed N — including N greater than the point
+  count — and the batch's `cleanup-gates.json`. It writes `execution-<case>.json` per case into the
+  run's evidence directory. `FULL_RESTART_RETRY` is filtered out **and named as such** because it is
+  a single-point retry through the failure workflow; it is not claimed here.
+- **First real execution**: `lg-exec-n2p4.jGouw4Ny` — `exit_code: 0`, 184 s, `3 passed`:
+  `R06 fixed-n2-p4 executes 2×4 for real`. Its own evidence record:
+  `status COMPLETED`, `mode PARALLEL`, `requested 4`, `evaluated 4`, workers
+  `['worker-01','worker-02']` (exactly the requested N), points `P01..P04` all `PASSED` with 13
+  artifacts each, `cleanup True`. Committed with the driver.
+
+Every wait in this round used 10–45 s checks against a finite deadline and none blocked longer than
+60 s, and the run's `result.json` exit code (not a pipeline status) is what is quoted.
+
+**Next in the same driver**: run the remaining fifteen cases (the thirteen other fixed-N pairs, the
+sequential four-point and the adaptive twenty-point) and keep the honest per-case records; then the
+retry case through the real `SEQUENTIAL` N1 `FULL_RESTART_RETRY` workflow, the receipt-consumer
+audit, and the five-consecutive single-N physical record. The adaptive path needs its copy install
+rebuilt from the CP-UQ182 guard wiring before its case can run.
+
+_Ledger HEAD when written: `08da9d084`._
