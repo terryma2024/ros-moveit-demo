@@ -1137,7 +1137,8 @@ def run_candidate_batch(
         raise ContractError("CANDIDATE_SESSION")
     if sealer is None:
         sealer = seal_measurement
-    plan.batch_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    # The launcher's allocator creates this root itself and refuses an existing one;
+    # the measurement session writes into its own sibling root instead.
     session.begin()
     receipt: Mapping[str, object] | None = None
     try:
