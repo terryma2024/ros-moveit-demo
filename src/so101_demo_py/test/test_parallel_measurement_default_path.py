@@ -1334,3 +1334,25 @@ def test_sample_resources_walks_descendant_cgroups_for_attribution(tmp_path):
     entries = sample.diagnostics["cgroup_tree_process_cpu"]
     assert any(entry["pid"] == os.getpid() and entry["cgroup"].endswith("docker-child")
                for entry in entries), entries
+
+
+def test_sample_resources_records_where_the_cpu_counter_came_from():
+    """The cgroup's counter grows ~19 cores while its own members are idle: the sample must
+    record the path the counter belongs to and the scope's counter beside it, so the two can be
+    compared instead of inferred."""
+
+    import so101_demo.parallel_batch.resource_measurement as rm
+
+    class CgroupWithPath(_FakeCgroup):
+        def __init__(self, usage_us, path):
+            super().__init__(usage_us, swap=[0, 0], pressure=[0, 0])
+            self.path = path
+
+    root = Path("/tmp") / "so101-cgroup-path-probe"
+    sample = rm.sample_resources(owned_inventory=(), cgroup=CgroupWithPath([0, 0], root),
+                                device=_FakeDevice(), sequence=1, state={})
+    diagnostics = sample.diagnostics
+    assert diagnostics["cgroup_path"] == str(root)
+    assert "session_cgroup" in diagnostics
+    assert diagnostics["scope_cpu_usage_us"] is None or isinstance(
+        diagnostics["scope_cpu_usage_us"], int)

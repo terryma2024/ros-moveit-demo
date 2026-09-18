@@ -406,9 +406,31 @@ def sample_resources(
                     "comm": comm,
                     "cgroup": str(procs.parent.relative_to(cgroup_path)) or ".",
                 })
+    # Provenance of the numbers: the counter's own cgroup, the session's cgroup, and the
+    # parent scope's counter beside it -- the last two tell whether the ~19 cores attributed
+    # to this cgroup actually belong to it or to an ancestor.
+    session_cgroup = ""
+    try:
+        session_cgroup = next(line.split("::", 1)[1].strip() for line in
+                              Path("/proc/self/cgroup").read_text().splitlines()
+                              if line.startswith("0::"))
+    except (OSError, StopIteration):
+        session_cgroup = ""
+    scope_usage = None
+    if session_cgroup:
+        parent = str(Path("/sys/fs/cgroup") / session_cgroup.strip("/")).rsplit("/", 1)[0]
+        try:
+            for line in Path(parent, "cpu.stat").read_text().splitlines():
+                if line.startswith("usage_usec"):
+                    scope_usage = int(line.split()[1])
+        except (OSError, IndexError, ValueError):
+            scope_usage = None
     diagnostics = {
         "mem_available_bytes": memory["MemAvailable"],
         "cpu_usage_us": cpu_usage_us,
+        "cgroup_path": str(getattr(cgroup, "path", "")),
+        "session_cgroup": session_cgroup,
+        "scope_cpu_usage_us": scope_usage,
         "per_process_cpu": per_process,
         "cgroup_process_cpu": cgroup_processes,
         "cgroup_tree_process_cpu": tree_processes,
