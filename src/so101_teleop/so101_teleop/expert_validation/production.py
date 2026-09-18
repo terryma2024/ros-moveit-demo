@@ -337,8 +337,17 @@ class _HostResourceProbe:
             reasons.append("RESOURCE_PROBE_FAILED")
             return not reasons, tuple(reasons), observations
         observations["start_guard_status"] = result.status
-        observations["start_guard_checks"] = {
-            name: check.status for name, check in sorted(result.checks.items())
+        observations["start_guard"] = {
+            "status": result.status,
+            "cleanup_state": result.cleanup_state,
+            "gpu_uuid": None if result.snapshot is None else result.snapshot.gpu_uuid,
+            "observed_monotonic_s": result.completed_monotonic_s,
+            "checks": {
+                name: {"status": check.status, "reason": check.reason,
+                       "observed": check.observed, "cutoff": check.cutoff,
+                       "unit": check.unit}
+                for name, check in sorted(result.checks.items())
+            },
         }
         if result.snapshot is not None:
             observations.update(
@@ -495,13 +504,38 @@ class ProductionExpertValidationService(ExpertValidationService):
             "execution_modes": available_modes,
             "fixed_worker_counts": FIXED_WORKER_COUNTS,
             "worker_count_availability": self._worker_count_availability(),
+            "start_guard_policy": self._start_guard_policy(),
             "default_execution_mode": capability.default_execution_mode,
             "lease_duration_s": lease.duration_s,
             "lease_renewal_margin_s": lease.renewal_margin_s,
         }
 
+    def _start_guard_policy(self):
+        """The enforced guard policy for display; never a resource qualification."""
+
+        engine = getattr(getattr(self, "supervisor", None), "preflight_engine", None)
+        probe = getattr(engine, "_resources", None)
+        guard_object = getattr(probe, "_start_guard", None)
+        if guard_object is None:
+            return None
+        try:
+            policy = guard_object.policy
+        except Exception:
+            return None
+        if policy is None:
+            return None
+        return {
+            "timeout_s": policy.timeout_s,
+            "cpu_busy_warn_fraction": policy.cpu_busy_warn_fraction,
+            "ram_minimum_bytes": policy.ram_minimum_bytes,
+            "ram_minimum_fraction": policy.ram_minimum_fraction,
+            "gpu_minimum_bytes": policy.gpu_minimum_bytes,
+        }
+
     def _worker_count_availability(self):
-        """Exact-N availability derived from the shared provider's decisions."""
+        """Every advertised count whose domains/ports exist; the guard decides at start."""
+
+        from .api import WorkerCountAvailability
 
         configured = getattr(self, "configured_worker_counts", None)
         if configured is None:
@@ -678,6 +712,7 @@ class ProductionExpertValidationService(ExpertValidationService):
             "execution_mode": receipt.execution_mode,
             "execution_config": asdict(receipt.execution_config),
             "resource_observations": dict(receipt.resource_observations),
+            "start_guard": receipt.resource_observations.get("start_guard"),
             "reason_codes": receipt.reason_codes,
             "expires_at_monotonic_ns": receipt.expires_at_monotonic_ns,
         }

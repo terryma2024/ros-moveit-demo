@@ -8,7 +8,7 @@ from so101_teleop.expert_validation.api import (
 
 def _fixed_body(**changes):
     body = {
-        'contract_version': 2, 'service_session_id': 'browser-a', 'lease_id': 'lease-a',
+        'contract_version': 3, 'service_session_id': 'browser-a', 'lease_id': 'lease-a',
         'lease_generation': 1, 'manifest_id': 'manifest-20',
         'execution_mode': 'PARALLEL', 'worker_count': 2,
     }
@@ -30,7 +30,7 @@ def test_v2_fixed_config_is_mode_and_count_only():
 
 def test_v2_adaptive_config_keeps_its_own_fields_without_quota():
     configuration = CampaignConfiguration(
-        contract_version=2, service_session_id='browser-a', lease_id='lease-a',
+        contract_version=3, service_session_id='browser-a', lease_id='lease-a',
         lease_generation=1, manifest_id='manifest-20', execution_mode='ADAPTIVE',
         preferred_worker_count=8, fallback_worker_counts=(6, 4, 2, 1),
         initial_points_per_worker=3, worker_start_timeout_s=30.0,
