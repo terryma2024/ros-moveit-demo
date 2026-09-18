@@ -4020,3 +4020,18 @@ rather than kept, because they asserted the policy this amendment removes. GREEN
 the measurement default-path and resource-budget files, including a new test that a cgroup whose
 swap counter raises `OSError` and whose pressure file returns garbage samples normally and leaves
 both deprecated fields `None`.
+
+### CP-UQ77 addendum — Unit 4 (RED -> GREEN): the host facts and R carry no swap/PSI
+
+`HostFacts` no longer has `swap_total_bytes`, `swap_pages` or `psi_full_s`; `_HOST_FACT_FIELDS`
+(the R document's field list) dropped `swap_total_bytes`, so a SwapTotal difference cannot drift R;
+`_read_swap_pages`/`_read_psi_full_s` are gone, `probe_host_facts` no longer reads
+`/proc/vmstat` swap counters or `/proc/pressure/memory`, and `LiveObservationSource` carries only
+`nr_throttled` between samples, reporting the deprecated swap/PSI deltas as `None`.
+
+RED: the two new tests failed (`AssertionError: swap_total_bytes` from the probe test, and the
+observation test saw `0`/`0.0` where absence is required). GREEN after the source change and after
+updating the two fixtures that still constructed `HostFacts` with the removed keys
+(`test_parallel_measurement_default_path.py`, `test_expert_validation_installed_budget.py`):
+87 passed across default-authority-paths, measurement default-path, resource-budget, measurement
+runtime and CLI.
