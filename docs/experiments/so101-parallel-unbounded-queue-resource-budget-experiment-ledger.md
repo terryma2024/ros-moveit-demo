@@ -6651,3 +6651,25 @@ A fresh copy build was started so the deployed service can carry this fix; next 
 redeploys, and re-runs the acceptance.
 
 _Ledger HEAD when written: `eb9c545ff`._
+
+## CP-UQ159 — The overlay identity question is only asked of checkouts and bound overlays
+
+The third provenance gate is addressed the same way as the first two. `verify_provenance` called
+`_validate_provenance_overlay` unconditionally, but that function's whole job is to compare a
+*source checkout's* expected module/console paths against the ones actually in use — a question a
+pure copied install has no way to answer and should not be asked. It now runs only when a checkout
+exists or an external binding was supplied; otherwise the provenance record says
+`overlay_kind: COPIED_INSTALL`, `external_overlay_bound: false`, which is the honest answer, and
+the functional checks above it (model files and their hashes, broker image identity) are unaffected.
+
+Verified: `lg-t11-prov3` (CLI + installed provenance + debug-only provenance + the launch suite)
+**139 passed, 0 failed, 0 skipped**.
+
+The `PROVENANCE_CONSOLE_MISSING` condition from `shutil.which("so101_parallel_batch")` is still in
+place and is the next candidate; it is a plain PATH assumption rather than an identity check, so
+the next acceptance run will show whether the copied install's console script is reachable from the
+service environment (the service spawns the coordinator by interpreter plus argv, so this lookup is
+about provenance evidence rather than about spawning). The copy rebuild for the deployed service is
+in flight; the round after this one verifies it, redeploys, and re-runs the acceptance.
+
+_Ledger HEAD when written: `f423ea37e`._
