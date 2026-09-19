@@ -186,8 +186,10 @@ class W2BrokerPort:
             start_event_type,
             NormalizedInferenceResponseIdentity.from_request(request),
         )
+        # The v4 vocabulary is dotted (`V4_OPERATIONS`), so the production inference operation is
+        # `broker.infer` - the bare `infer` the container path uses is not a v4 operation.
         response = self.connection.call(
-            "infer",
+            "broker.infer",
             {
                 "request": BrokerTransport.serialize_request(request),
                 "snapshot": BrokerTransport.serialize_snapshot(broker_snapshot),
@@ -210,7 +212,7 @@ class W2BrokerPort:
 
         self.refresh(wait_until_healthy=True)
         self.connection.call(
-            "cancel_generation",
+            "coordinator.cancel_request",
             {"worker_id": worker_id, "worker_generation": generation},
         )
         return True

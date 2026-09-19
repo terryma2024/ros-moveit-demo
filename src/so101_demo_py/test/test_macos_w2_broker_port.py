@@ -82,7 +82,7 @@ def test_cancel_waits_for_health_then_sends_one_message() -> None:
     assert clients[-1].kwargs["endpoint_path"] == "/new.sock"
     assert clients[-1].kwargs["max_frame_bytes"] == 4096
     assert clients[-1].calls == [
-        ("cancel_generation", {"worker_id": "w1", "worker_generation": 4})
+        ("coordinator.cancel_request", {"worker_id": "w1", "worker_generation": 4})
     ]
 
 
