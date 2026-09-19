@@ -345,6 +345,17 @@ def test_admission_rule_refuses_unknown_duplicate_and_tampered_requests() -> Non
     assert unknown["error"]["code"] == "UNKNOWN_OPERATION"
     assert "coordinator.cancel_request" not in IMPLEMENTED_OPERATIONS
 
+    cancelled = admission_decision(
+        operation="broker.infer", request_id="w2-att-00-yolo", serialized_request=good,
+        consumed_ids=set(), bound_digest=bound, cancelled_ids={"w2-att-00-yolo"})
+    assert cancelled["error"]["code"] == "CANCELLED"
+    # cancellation is refused whether or not the id was ever consumed
+    cancelled_after_use = admission_decision(
+        operation="broker.infer", request_id="w2-att-00-yolo", serialized_request=good,
+        consumed_ids={"w2-att-00-yolo"}, bound_digest=bound,
+        cancelled_ids={"w2-att-00-yolo"})
+    assert cancelled_after_use["error"]["code"] == "CANCELLED"
+
     duplicate = admission_decision(
         operation="broker.infer", request_id="w1-att-00-yolo", serialized_request=good,
         consumed_ids=consumed, bound_digest=bound)

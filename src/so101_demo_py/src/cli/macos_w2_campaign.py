@@ -172,7 +172,7 @@ def _declared_digest(serialized: object) -> str | None:
 
 
 def admission_decision(*, operation: str, request_id: str, serialized_request: object,
-                       consumed_ids, bound_digest: str) -> dict | None:
+                       consumed_ids, bound_digest: str, cancelled_ids=()) -> dict | None:
     """The campaign's admission rule, as a pure function so it can be tested without a socket.
 
     Returns a refusal mapping the v4 server turns into a non-OK response, or `None` to serve. The
@@ -182,6 +182,10 @@ def admission_decision(*, operation: str, request_id: str, serialized_request: o
 
     if operation not in IMPLEMENTED_OPERATIONS:
         return {"error": {"code": "UNKNOWN_OPERATION", "detail": operation}}
+    if request_id in cancelled_ids:
+        # A cancelled request's result is forfeit: it is refused whether or not it was ever consumed,
+        # which is the safety-cancel property the Coordinator owns in the design.
+        return {"error": {"code": "CANCELLED", "detail": request_id}}
     if request_id in consumed_ids:
         return {"error": {"code": "DUPLICATE_REQUEST", "detail": request_id}}
     if operation == "broker.infer":
@@ -205,6 +209,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--evidence-root", type=Path, required=True)
     parser.add_argument("--yolo-weights", type=Path, required=True)
     parser.add_argument("--grounded-root", type=Path, required=True)
+    parser.add_argument("--cancel-second-worker-after-served", type=int, default=0,
+                        help="fault injection: after this many served requests, cancel every "
+                             "remaining request of the second Worker, whose results are then forfeit")
     parser.add_argument("--tamper-snapshot-sha", action="store_true",
                         help="fault injection: tell the Workers to declare a wrong snapshot digest, "
                              "so the bound-digest check must refuse them")
@@ -494,6 +501,7 @@ def run(argv: list[str] | None = None) -> int:
                     broker_birth_identity=ready.broker_birth_identity)
 
         consumed_ids: set[str] = set()
+        cancelled_ids: set[str] = set()
         infer_served = 0
         handler_errors: list[dict] = []
         fault_trace: list[dict] = []
@@ -515,10 +523,15 @@ def run(argv: list[str] | None = None) -> int:
                 serialized_request = (payload or {}).get("request")
             except Exception:  # noqa: BLE001 - an unreadable payload is a mismatch, not a pass
                 serialized_request = None
+            if (arguments.cancel_second_worker_after_served
+                    and len(served) == arguments.cancel_second_worker_after_served):
+                leases_w2 = leases.get("w2") or {}
+                cancelled_ids.update(f"{attempt}-{leases_w2.get('model_id', 'yolo')}"
+                                     for attempt in leases_w2.get("attempt_ids", []))
             refusal = admission_decision(
                 operation=request.operation, request_id=request.request_id,
                 serialized_request=serialized_request, consumed_ids=consumed_ids,
-                bound_digest=input_digest)
+                bound_digest=input_digest, cancelled_ids=cancelled_ids)
             if refusal is not None:
                 if refusal["error"]["code"] == "DUPLICATE_REQUEST":
                     served.append({"request_id": request.request_id,
@@ -620,6 +633,7 @@ def run(argv: list[str] | None = None) -> int:
         document["handlers_joined"] = True
         document["server_rejections"] = list(getattr(server, "rejections", ()) or ())
         document["fault_trace"] = fault_trace
+        document["cancelled_ids"] = sorted(cancelled_ids)
 
 
         per_slot = summarize_per_slot_pick_place(evidence_root=arguments.evidence_root)
