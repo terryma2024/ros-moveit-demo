@@ -11783,3 +11783,24 @@ the pattern worth keeping: the port's tests were green each time the interface w
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `11100bd5`; no evidence deleted._
+
+### CP-UQ263 addendum 9 — the Worker's whole broker interface, enumerated
+
+`grep self._broker.` over `parallel_batch/worker.py` returns exactly three call sites and therefore
+exactly two methods:
+
+```text
+331, 743  cancel_generation(worker_id, generation)          # fenced on `is True`
+897       request_model(lease, execution_kind, snapshot=…, start_event_id=…,
+                         start_event_type=…, reset_epoch=…)
+```
+
+No other attribute is touched - not `broker_generation`, not `connection`, not `resources` - so
+`W2BrokerPort` now satisfies the complete Worker-side interface, with the two caller-checked fixes
+that enumeration produced (the `is True` fence and the construction-bound perception runner). That
+closes the interface question for wiring: the next round can bind the port and expect only the
+Coordinator channel, the authority document and the perception runner to be supplied by the driver.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `00e9689e`; no evidence deleted._
