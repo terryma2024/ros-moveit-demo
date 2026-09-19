@@ -886,12 +886,18 @@ export interface components {
         /**
          * StartGuardPolicyResponse
          * @description The enforced policy, so a client can display the cutoffs it was judged against.
+         *
+         *     ``mps_minimum_headroom_bytes`` is present only for the schema-v4 macOS MPS combination. It is
+         *     the fixed unified-memory floor, reported so a client can show the cutoff that refused a start;
+         *     it is not a capacity certification and it does not scale with the worker count.
          */
         StartGuardPolicyResponse: {
             /** Cpu Busy Warn Fraction */
             cpu_busy_warn_fraction: number;
             /** Gpu Minimum Bytes */
             gpu_minimum_bytes: number;
+            /** Mps Minimum Headroom Bytes */
+            mps_minimum_headroom_bytes?: number | null;
             /** Ram Minimum Bytes */
             ram_minimum_bytes: number;
             /** Ram Minimum Fraction */
@@ -902,8 +908,14 @@ export interface components {
         /**
          * StartGuardStatus
          * @description The server's own decision. A client cannot supply or overwrite it.
+         *
+         *     ``admission_kind`` labels what the accelerator check actually measured. On the macOS MPS
+         *     combination it is ``unified-memory-proxy``: a host unified-memory figure, not a device-level
+         *     free-VRAM reading. Leaving it null is honest for a snapshot that carries no accelerator check.
          */
         StartGuardStatus: {
+            /** Admission Kind */
+            admission_kind?: string | null;
             /**
              * Checks
              * @default {}

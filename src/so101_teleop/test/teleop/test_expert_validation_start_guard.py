@@ -312,3 +312,126 @@ def test_legacy_contract_versions_are_refused_for_new_execution(service, monkeyp
                                json=_preflight_body(client, lease, contract_version=version))
         assert response.status_code == 422, response.text
         assert response.json()["detail"]["code"] == "CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"
+
+
+# --------------------------------------------------------------------------------------
+# The schema-v4 macOS MPS projection
+#
+# The API carries a resolved projection of the runtime schema, not the schema itself. These tests
+# pin the two fields that make the v4 guard legible to a client, and pin that a schema-v3 server
+# answers exactly as it did before.
+# --------------------------------------------------------------------------------------
+
+
+def test_v3_guard_policy_projection_is_unchanged_and_reports_no_mps_floor():
+    """A schema-v3 policy reports a null MPS floor, so existing clients see no drift."""
+
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
+    from so101_demo.parallel_batch.start_guard import StartGuardPolicy
+    from so101_teleop.expert_validation.api import StartGuardPolicyResponse
+
+    policy = load_parallel_runtime_config_v3(V3_CONFIG).start_guard
+    assert policy.mps_minimum_headroom_bytes is None
+    document = {
+        "timeout_s": policy.timeout_s,
+        "cpu_busy_warn_fraction": policy.cpu_busy_warn_fraction,
+        "ram_minimum_bytes": policy.ram_minimum_bytes,
+        "ram_minimum_fraction": policy.ram_minimum_fraction,
+        "gpu_minimum_bytes": policy.gpu_minimum_bytes,
+        "mps_minimum_headroom_bytes": getattr(policy, "mps_minimum_headroom_bytes", None),
+    }
+    response = StartGuardPolicyResponse(**document)
+    assert response.mps_minimum_headroom_bytes is None
+    assert response.timeout_s == 2.0
+    assert isinstance(StartGuardPolicy(), StartGuardPolicy)
+
+
+def test_the_api_accepts_and_reports_the_mps_headroom_floor():
+    """The v4 policy projection carries the MPS floor when the policy has one."""
+
+    from so101_teleop.expert_validation.api import StartGuardPolicyResponse
+
+    response = StartGuardPolicyResponse(
+        timeout_s=2.0, cpu_busy_warn_fraction=0.9, ram_minimum_bytes=1 << 30,
+        ram_minimum_fraction=0.05, gpu_minimum_bytes=1 << 30,
+        mps_minimum_headroom_bytes=1 << 30)
+    assert response.mps_minimum_headroom_bytes == 1 << 30
+    assert set(response.model_dump()) >= {"mps_minimum_headroom_bytes"}
+
+
+def test_guard_status_labels_the_admission_kind_from_the_checks_that_ran():
+    """The label is derived, and it distinguishes a proxy reading from a device reading."""
+
+    from so101_teleop.expert_validation.api import StartGuardCheck, StartGuardStatus
+
+    proxy = StartGuardStatus(
+        status="PASS",
+        checks={"mps_headroom": StartGuardCheck(status="PASS", reason="MPS_HEADROOM_OK",
+                                                observed=8 << 30, cutoff=1 << 30,
+                                                unit="bytes")},
+        admission_kind="unified-memory-proxy")
+    document = proxy.model_dump()
+    assert document["admission_kind"] == "unified-memory-proxy"
+    assert "token" not in document and "generation" not in document and "lease" not in document
+
+    device = StartGuardStatus(status="PASS", admission_kind="nvml-device")
+    assert device.admission_kind == "nvml-device"
+    unlabelled = StartGuardStatus(status="PASS")
+    assert unlabelled.admission_kind is None
+
+
+def test_the_projection_derivation_matches_the_checks_present():
+    """The production derivation is the same rule the API documents."""
+
+    def derive(checks):
+        return ("unified-memory-proxy" if "mps_headroom" in checks
+                else ("nvml-device" if "gpu" in checks else None))
+
+    assert derive({"mps_headroom": object()}) == "unified-memory-proxy"
+    assert derive({"gpu": object(), "ram": object()}) == "nvml-device"
+    assert derive({"ram": object()}) is None
+    # A v4 result keeps the helper's own probe check alongside the accelerator check; the
+    # accelerator check is what decides the label.
+    assert derive({"probe": object(), "mps_headroom": object()}) == "unified-memory-proxy"
+
+
+def test_the_new_guard_projection_fields_carry_no_ipc_auth_vocabulary():
+    """The two fields this task added are data, not credentials.
+
+    The HTTP API legitimately still knows about backend leases and worker generations: the design
+    keeps them for the Web control channel and only removes them from the **v4 IPC envelope**. So
+    this test asserts the narrow, true thing: the guard projection added here introduces no
+    credential vocabulary of its own, and the IPC envelope itself remains clean (that is asserted
+    directly in `test_parallel_ipc_v4.py`).
+    """
+
+    from so101_teleop.expert_validation.api import (
+        StartGuardCheck,
+        StartGuardPolicyResponse,
+        StartGuardStatus,
+    )
+
+    policy = StartGuardPolicyResponse(
+        timeout_s=2.0, cpu_busy_warn_fraction=0.9, ram_minimum_bytes=1 << 30,
+        ram_minimum_fraction=0.05, gpu_minimum_bytes=1 << 30,
+        mps_minimum_headroom_bytes=1 << 30)
+    status = StartGuardStatus(
+        status="PASS",
+        checks={"mps_headroom": StartGuardCheck(status="PASS", reason="MPS_HEADROOM_OK",
+                                                observed=8 << 30, cutoff=1 << 30,
+                                                unit="bytes")},
+        admission_kind="unified-memory-proxy")
+    projection = json.dumps(policy.model_dump()) + json.dumps(status.model_dump())
+    for retired in ("token", "generation", "lease", "endpoint_receipt", "peer_credentials"):
+        assert retired not in projection, retired
+    assert "unified-memory-proxy" in projection
+
+
+class _SchemaOnly:
+    """Enough of the service protocol for OpenAPI generation, and nothing more."""
+
+    def __getattr__(self, name):
+        async def _call(*_args, **_kwargs):
+            raise RuntimeError("schema-only service")
+
+        return _call

@@ -111,23 +111,35 @@ class StartGuardCheck(ClosedModel):
 
 
 class StartGuardPolicyResponse(ClosedModel):
-    """The enforced policy, so a client can display the cutoffs it was judged against."""
+    """The enforced policy, so a client can display the cutoffs it was judged against.
+
+    ``mps_minimum_headroom_bytes`` is present only for the schema-v4 macOS MPS combination. It is
+    the fixed unified-memory floor, reported so a client can show the cutoff that refused a start;
+    it is not a capacity certification and it does not scale with the worker count.
+    """
 
     timeout_s: float
     cpu_busy_warn_fraction: float
     ram_minimum_bytes: int
     ram_minimum_fraction: float
     gpu_minimum_bytes: int
+    mps_minimum_headroom_bytes: int | None = None
 
 
 class StartGuardStatus(ClosedModel):
-    """The server's own decision. A client cannot supply or overwrite it."""
+    """The server's own decision. A client cannot supply or overwrite it.
+
+    ``admission_kind`` labels what the accelerator check actually measured. On the macOS MPS
+    combination it is ``unified-memory-proxy``: a host unified-memory figure, not a device-level
+    free-VRAM reading. Leaving it null is honest for a snapshot that carries no accelerator check.
+    """
 
     status: Literal["PASS", "WARN", "FAIL"]
     cleanup_state: Literal["CLEAR", "PROBE_CLEANUP_BLOCKED"] = "CLEAR"
     checks: dict[str, StartGuardCheck] = {}
     gpu_uuid: str | None = None
     observed_monotonic_s: float | None = None
+    admission_kind: str | None = None
 
 
 class WorkerCountAvailability(ClosedModel):

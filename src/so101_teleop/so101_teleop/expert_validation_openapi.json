@@ -1866,7 +1866,7 @@
       },
       "StartGuardPolicyResponse": {
         "additionalProperties": false,
-        "description": "The enforced policy, so a client can display the cutoffs it was judged against.",
+        "description": "The enforced policy, so a client can display the cutoffs it was judged against.\n\n``mps_minimum_headroom_bytes`` is present only for the schema-v4 macOS MPS combination. It is\nthe fixed unified-memory floor, reported so a client can show the cutoff that refused a start;\nit is not a capacity certification and it does not scale with the worker count.",
         "properties": {
           "cpu_busy_warn_fraction": {
             "title": "Cpu Busy Warn Fraction",
@@ -1875,6 +1875,17 @@
           "gpu_minimum_bytes": {
             "title": "Gpu Minimum Bytes",
             "type": "integer"
+          },
+          "mps_minimum_headroom_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mps Minimum Headroom Bytes"
           },
           "ram_minimum_bytes": {
             "title": "Ram Minimum Bytes",
@@ -1901,8 +1912,19 @@
       },
       "StartGuardStatus": {
         "additionalProperties": false,
-        "description": "The server's own decision. A client cannot supply or overwrite it.",
+        "description": "The server's own decision. A client cannot supply or overwrite it.\n\n``admission_kind`` labels what the accelerator check actually measured. On the macOS MPS\ncombination it is ``unified-memory-proxy``: a host unified-memory figure, not a device-level\nfree-VRAM reading. Leaving it null is honest for a snapshot that carries no accelerator check.",
         "properties": {
+          "admission_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admission Kind"
+          },
           "checks": {
             "additionalProperties": {
               "$ref": "#/components/schemas/StartGuardCheck"

@@ -337,11 +337,18 @@ class _HostResourceProbe:
             reasons.append("RESOURCE_PROBE_FAILED")
             return not reasons, tuple(reasons), observations
         observations["start_guard_status"] = result.status
+        # The label is derived from the checks that actually ran, so a client can tell a
+        # unified-memory proxy apart from a device-level VRAM reading without guessing.
+        admission_kind = (
+            "unified-memory-proxy" if "mps_headroom" in result.checks
+            else ("nvml-device" if "gpu" in result.checks else None)
+        )
         observations["start_guard"] = {
             "status": result.status,
             "cleanup_state": result.cleanup_state,
             "gpu_uuid": None if result.snapshot is None else result.snapshot.gpu_uuid,
             "observed_monotonic_s": result.completed_monotonic_s,
+            "admission_kind": admission_kind,
             "checks": {
                 name: {"status": check.status, "reason": check.reason,
                        "observed": check.observed, "cutoff": check.cutoff,
@@ -530,6 +537,9 @@ class ProductionExpertValidationService(ExpertValidationService):
             "ram_minimum_bytes": policy.ram_minimum_bytes,
             "ram_minimum_fraction": policy.ram_minimum_fraction,
             "gpu_minimum_bytes": policy.gpu_minimum_bytes,
+            # Present only for the schema-v4 macOS MPS combination; null keeps the v3 answer
+            # byte-identical for every existing consumer.
+            "mps_minimum_headroom_bytes": getattr(policy, "mps_minimum_headroom_bytes", None),
         }
 
     def _worker_count_availability(self):
