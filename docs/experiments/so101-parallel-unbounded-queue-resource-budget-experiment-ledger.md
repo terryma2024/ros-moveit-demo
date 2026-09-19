@@ -7881,3 +7881,26 @@ options and six of the seven twenty-point ones (N=2..7), each with its own evide
 complete cleanup.
 
 _Ledger HEAD when written: `8d7e50e3b`._
+
+## CP-UQ197 — Goal budget raised to 200 rounds on the operator's instruction
+
+The operator asked for 100 further rounds, so the same goal (`goal-e568087d-…`, objective unchanged:
+"SO-101 lightweight start guard: execute approved 12-task plan, deploy and complete real functional
+acceptance") was edited from `maxGoalRounds: 100` to **200** and resumed; it now reads
+`phase: active`, `roundsStarted: 100`, `maxGoalRounds: 200`, `activation: armed`, revision 4. No
+scope was added and no admission restored by this change — it is budget only.
+
+The work continues where CP-UQ196 left it, and the two actions are in flight:
+
+1. **The service now runs under an exit-capturing wrapper.** The previous deployment was started
+   detached, which is why the N=8 death left only an abrupt end in the log and no status. The
+   wrapper keeps a parent shell alive and appends `SERVICE_EXIT=<status> at <utc>` to
+   `service-light.s2jytgW3/service-exit.log` when the service terminates, so the next kill is
+   recorded with its actual status instead of being inferred.
+2. **A batch is running the sequential four-point case and a single `fixed-n8-p20` retry** in that
+   order: the sequential case closes the last non-adaptive mode in the manifest, and the N=8 retry
+   is the one bounded attempt promised in CP-UQ196 — if it dies again, the exit log names the
+   status and the failure is kept; if it passes, the earlier death was transient and the incident
+   stays in the record either way.
+
+_Ledger HEAD when written: `e3a49cee1`._
