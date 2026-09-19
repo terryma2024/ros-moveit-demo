@@ -23,9 +23,16 @@ import uuid
 import yaml
 
 from ..runtime.parallel_ipc import IpcError, require_transport_basename
+from ..runtime.unix_address import (
+    DARWIN_SUN_PATH_CAPACITY_BYTES,
+    LINUX_SUN_PATH_CAPACITY_BYTES,
+    UnixAddressError,
+    require_encoded_length,
+)
 from .contracts import (
     ParallelRuntimeConfigV3,
     ParallelRuntimeConfigV4,
+    IpcTransport,
     ParallelRuntimeConfig,
     ParallelRuntimeConfigV2,
     load_parallel_runtime_config,
@@ -1632,8 +1639,18 @@ class WorkerResourceAllocator:
             # The durable canonical path may exceed 107 bytes; only the exact kernel
             # sockaddr built from the owned parent descriptor must fit sun_path.
             try:
-                require_transport_basename(socket_path)
-            except IpcError as error:
+                if isinstance(self.config, ParallelRuntimeConfigV4):
+                    # Schema v4 replaced the dirfd transport with the Darwin private-path strategy:
+                    # the same namespace stays basename-shaped, but the bound is the encoded
+                    # `sun_path` capacity rather than the presence of `/proc/self/fd`.
+                    require_encoded_length(socket_path, capacity_bytes=(
+                        DARWIN_SUN_PATH_CAPACITY_BYTES
+                        if self.config.ipc_transport is IpcTransport.DARWIN_PRIVATE_PATH_UNIX
+                        else LINUX_SUN_PATH_CAPACITY_BYTES
+                    ))
+                else:
+                    require_transport_basename(socket_path)
+            except (IpcError, UnixAddressError) as error:
                 raise ResourceAllocationError(str(error)) from error
         self._probe_namespace_collisions(
             paths, domains
