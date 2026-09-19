@@ -12576,3 +12576,26 @@ following claims remain blocked by `LINUX_REGRESSION_DEFERRED`:
 - any main-branch merge or release claim that depends on the Linux half.
 
 _Ledger source HEAD: `c8e5c583`; no evidence deleted._
+
+### CP-UQ272 addendum — tmux was restarted; Screen Recording still is not granted to it
+
+The restart the user was asked for did happen, and the permission still does not apply:
+
+```text
+tmux server : pid 10775, started Sun Sep 20 01:14:19 2026 (was pid 59433 from 21:13:49)
+identity    : tmux-55554944a40667abf836332cab24562eec45b0ba   <- unchanged, so the grant would apply
+Accessibility: GRANTED (System Events still answers with a live process list)
+Screen Recording: DENIED  - screencapture -x -> "could not create image from display"
+```
+
+Because the binary's code identity did not change, a restart with an enabled grant should have been
+enough. It was not, which points at the grant itself rather than at process lifetime: the entry for
+tmux is either present-but-off in **System Settings -> Privacy & Security -> Screen & System Audio
+Recording**, or it points at a different binary than `/opt/homebrew/bin/tmux` (for example the
+Cellar path behind the symlink). TCC keys Screen Recording on the responsible process's identity, and
+for this session that is `tmux`; the terminal application is not in the chain.
+
+Until that toggle is genuinely on, every per-point `viewer.png` fails closed, and with it any counted
+Task 14 batch - this remains the single external condition on the macOS side.
+
+_Ledger source HEAD: `ade2136e`; no evidence deleted._
