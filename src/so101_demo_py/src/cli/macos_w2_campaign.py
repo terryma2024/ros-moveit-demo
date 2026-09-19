@@ -446,7 +446,16 @@ def run(argv: list[str] | None = None) -> int:
                 time.sleep(max(0.0, arguments.worker_deadline_s) + 2.0)
 
             try:
-                return _serve(request)
+                outcome = _serve(request)
+                if not isinstance(outcome, dict):
+                    # The v4 server answers a non-mapping outcome with INTERNAL_ERROR, which hides the
+                    # reason. Recording it here names the anomaly instead.
+                    handler_errors.append({
+                        "request_id": request.request_id, "operation": request.operation,
+                        "error": f"NON_MAPPING_OUTCOME: {type(outcome).__name__}"})
+                    return {"error": {"code": "INTERNAL_OUTCOME",
+                                      "detail": f"{type(outcome).__name__}"}}
+                return outcome
             except Exception as error:  # noqa: BLE001 - the v4 server answers INTERNAL_ERROR
                 # The server turns a handler exception into a stable INTERNAL_ERROR, so the Worker
                 # cannot see why. Recording the cause here is what lets a later stall run name the
