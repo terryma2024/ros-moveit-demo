@@ -105,9 +105,13 @@ if lease_argument:
         coordinator=lambda: authority, authority=authority, config=port_config,
         resources=SimpleNamespace(worker_root=Path(lease_document["worker_root"])),
         connection=_V4Client(endpoint_path=endpoint))
+    declared_sha = lease_document["input_sha256"]
+    if lease_document.get("tamper_input_sha256"):
+        # Fault injection: declare a digest the Coordinator never bound.
+        declared_sha = "0" * 64
     snapshot = SimpleNamespace(
         path=Path(lease_document["snapshot_path"]), shape=tuple(lease_document["shape"]),
-        input_sha256=lease_document["input_sha256"],
+        input_sha256=declared_sha,
         source_stamp_ns=lease_document["source_stamp_ns"],
         source_frame_id=lease_document["source_frame_id"])
     for attempt_id in lease_document["attempt_ids"]:
