@@ -83,18 +83,25 @@ if station_arguments and (station_ready or {}).get("exit_code") != 0:
     os.replace(out_path + ".part", out_path)
     raise SystemExit("STATION_NOT_READY")
 
-client = V4PermissionOnlyClient(endpoint_path=endpoint)
-results = []
-for index in range(3):
-    response = client.call("worker.progress", {"worker_id": worker_id, "index": index},
-                           request_id=f"{worker_id}-req-{index:02d}")
-    body = response.output_descriptor or {}
-    results.append({"request_id": response.request_id, "status": response.status,
-                    "device": body.get("device"), "candidates": body.get("candidates")})
+try:
+    client = V4PermissionOnlyClient(endpoint_path=endpoint)
+    results = []
+    for index in range(3):
+        response = client.call("worker.progress", {"worker_id": worker_id, "index": index},
+                               request_id=f"{worker_id}-req-{index:02d}")
+        body = response.output_descriptor or {}
+        results.append({"request_id": response.request_id, "status": response.status,
+                        "device": body.get("device"), "candidates": body.get("candidates")})
 
-with open(out_path + ".part", "w", encoding="utf-8") as handle:
-    json.dump({"worker_id": worker_id, "pid": os.getpid(), "results": results,
-               "station_record": station_record}, handle)
-    handle.flush()
-    os.fsync(handle.fileno())
-os.replace(out_path + ".part", out_path)
+    with open(out_path + ".part", "w", encoding="utf-8") as handle:
+        json.dump({"worker_id": worker_id, "pid": os.getpid(), "results": results,
+                   "station_record": station_record}, handle)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(out_path + ".part", out_path)
+finally:
+    # The station outlives its Worker unless someone stops it (CP-UQ268): the supervisor owns
+    # this process group, but the launch the stack spawned can land in its own group, so the
+    # Worker that started the station is the one that must shut it down - on every exit path.
+    if station is not None:
+        station.shutdown()
