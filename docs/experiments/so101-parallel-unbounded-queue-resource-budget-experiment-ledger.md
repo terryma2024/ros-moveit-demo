@@ -12931,3 +12931,39 @@ removed).
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `29a01971`; no evidence deleted._
+
+### CP-UQ277 addendum — the refusal defect is fixed, and it was in the server, not the port
+
+Reading the v4 server's mapping settled it: a handler result is a refusal **only** when it is a
+mapping containing an `error` key; anything else becomes a success descriptor. My refusal branches
+returned `{"ok": False, "code": …}`, so the server answered `status: OK` and the Worker read a
+refusal as an admission - the exact inversion the one-time design exists to prevent.
+
+Fixed on both sides of the wire:
+
+- the campaign's three refusal branches now return `{"error": {"code": …}}`, which the server turns
+  into a non-OK `V4Response` with an `error` body;
+- the port reads the code from that body rather than from the response object.
+
+Re-run and verification:
+
+```text
+task16-consume-once-04   served 14, devices ['mps'], duplicates_refused 2
+                         w1 infer: 3 x OK
+                         w1 duplicate: {"status": "REFUSED",
+                                        "error": "W2BrokerPortError: BROKER_INFER_REFUSED: UNKNOWN"}
+                         orphans []
+task16-broker-port-09    6 passed (port suite after the fix)
+```
+
+The duplicate is now refused **and** the Worker knows it was refused. The remaining blemish in that
+line is the code reading `UNKNOWN` instead of `DUPLICATE_REQUEST` in that particular run - the fix
+for it (reading the code from the error body) landed in the same commit, and this run predates it.
+
+The campaign reported `INCOMPLETE` rather than `PASS`, which is the honest answer for a run whose
+happy path the probe deliberately breaks: it demands six admitted requests with no refusal, and the
+probe adds two refusals on purpose.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `52421687`; no evidence deleted._
