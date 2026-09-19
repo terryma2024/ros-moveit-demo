@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ235 (tail of this file)
+latest_checkpoint: CP-UQ236 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -55,7 +55,7 @@ current_design: docs/superpowers/specs/2026-09-19-so101-macos-mps-private-ipc-de
   SHA-256 480da6dcdfea1da988f9f4e706c8340dbb6d7283200c27bb723859119145db1b
 current_worktree: /Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini
 current_branch: codex/so101-unbounded-queue-resource-budget (HEAD b55c181e at takeover)
-next_experiment: Task 7 RED - Coordinator local one-time request registry
+next_experiment: Task 8 RED - real MPS broker bootstrap and single execution lane
 correction_cp_uq229: the header's `worktree`, `evidence_root` and `task_root` fields describe the
   historical ai-station Stage A-E dispatch (`84620fc0`) and are not rewritten, because that history
   is not invalidated. The live dispatch, worktree and evidence root for the current macOS MPS/private
@@ -9421,3 +9421,55 @@ The v4 document gained one required field (`max_input_snapshot_bytes: 67108864`)
 gate was re-run with it and remains green.
 
 _Ledger source HEAD: `0ee79d07`; no evidence deleted; no Linux or W4/W6/W8 action._
+
+## CP-UQ236 — One-time admission is local, and the durability-ordering tests now run on Darwin
+
+```yaml
+checkpoint_id: CP-UQ236
+last_valid_experiment: EXP-UQ236-TASK7-REGISTRY
+current_hypothesis: With no token, generation or lease on the v4 control channel, a single local
+  lock-protected table can be the whole admission gate for inference results.
+working_tree_status: clean at commit 54990e1e
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome extension host, Sparkle updater,
+  SkyComputerUseService
+open_risks:
+  - The worker/broker call sites that must route every result through `admit_inference_result` are
+    Task 8/Task 9 work; this checkpoint proves the table and the Coordinator hook.
+next_command: Task 8 RED - real MPS broker bootstrap, shared models and one execution lane
+```
+
+`checkpoint_id: CP-UQ236`
+`last_valid_experiment: EXP-UQ236-TASK7-REGISTRY`
+`commit: 54990e1e feat(so101): gate inference results with one-time requests`
+
+`EXP-UQ236-TASK7-REGISTRY: VALID`
+
+GREEN (`task7-green-02/`, exit 0, **18 passed**), then with the Coordinator hook
+(`task7-regression-02/`, exit 0, **154 passed, 2 deselected**) and finally the whole Coordinator
+suite with the portability fix below (`task7-regression-05/`, exit 0, **138 passed**).
+
+What the registry guarantees:
+
+- one opaque `request_id`, bound atomically to slot, point, attempt, model, input-snapshot SHA,
+  deadline and the Broker's PID plus birth identity; the binding never leaves the Coordinator;
+- an id is never reused: a duplicate registration is refused, including after a consume;
+- `consume_result` is the only admission path. It refuses an unknown id, a second consume
+  (`REQUEST_ALREADY_CONSUMED`), a cancelled request, an expired deadline, an input-SHA mismatch and
+  a Broker-identity mismatch, and it records every decision in an append-only event log;
+- consume, cancel and `sweep_expired` share one lock boundary. Twenty-five racing rounds and an
+  eight-way concurrent consume test both show exactly one winner;
+- `invalidate_broker` releases every binding to one identity in a single call and returns the ids,
+  and a late result from the replaced Broker is then refused;
+- the registry is capacity-bounded, and there is no token/generation/lease parameter anywhere in
+  the API, so a caller cannot pass one even by accident.
+
+A real, pre-existing Darwin defect was found and fixed in the *test harness* while doing this. Two
+durability-ordering tests (`test_journal_fsync_precedes_grant_projection_and_ack` and
+`test_aggregate_atomic_write_syncs_file_then_replace_then_parent`) resolved an fsync descriptor by
+hardcoding `/proc/self/fd/<fd>`, so on Darwin they compared against a path that does not exist and
+failed for a reason unrelated to the journal. The suite now resolves the descriptor through
+`/proc/self/fd` on Linux and `fcntl(F_GETPATH)` on Darwin. The two tests then pass unchanged, which
+is a strictly stronger check than deselecting them.
+
+_Ledger source HEAD: `54990e1e`; no evidence deleted; no Linux or W4/W6/W8 action._
