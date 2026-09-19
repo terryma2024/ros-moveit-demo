@@ -53,7 +53,8 @@ _WORKER_MODULE = "so101_demo.cli.macos_w2_worker"
 
 
 def build_worker_leases(*, plan, batch_id: str, evidence_root: Path,
-                         input_sha256: str, deadline_s: float = 240.0) -> dict[str, dict]:
+                         input_sha256: str, deadline_s: float = 240.0,
+                         tamper_input_sha256: bool = False) -> dict[str, dict]:
     """Write each Worker's lease document and the frame it is told to send.
 
     The entry point knows both ends of the identity it binds, so it writes the identity down and
@@ -78,6 +79,7 @@ def build_worker_leases(*, plan, batch_id: str, evidence_root: Path,
             "source_frame_id": "task_camera_frame", "shape": [480, 640, 3],
             # The Worker's v4 client deadline; a fault probe shortens it instead of waiting 240 s.
             "deadline_s": float(deadline_s),
+            "tamper_input_sha256": bool(tamper_input_sha256),
             "start_event_type": "attempt_started",
         }
         frame_path = Path(document["snapshot_path"])
@@ -122,6 +124,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--evidence-root", type=Path, required=True)
     parser.add_argument("--yolo-weights", type=Path, required=True)
     parser.add_argument("--grounded-root", type=Path, required=True)
+    parser.add_argument("--tamper-snapshot-sha", action="store_true",
+                        help="fault injection: tell the Workers to declare a wrong snapshot digest, "
+                             "so the bound-digest check must refuse them")
     parser.add_argument("--stall-serve-after", type=int, default=0,
                         help="fault injection: delay this request's answer beyond the Worker's "
                              "deadline, so a timeout must be refused rather than admitted")
@@ -392,7 +397,8 @@ def run(argv: list[str] | None = None) -> int:
         # ids the Worker derives (both functions are unit-tested in test_macos_w2_campaign.py).
         leases = build_worker_leases(
             plan=plan, batch_id=arguments.batch_id, evidence_root=arguments.evidence_root,
-            input_sha256=input_digest, deadline_s=arguments.worker_deadline_s)
+            input_sha256=input_digest, deadline_s=arguments.worker_deadline_s,
+            tamper_input_sha256=arguments.tamper_snapshot_sha)
         bind_worker_requests(campaign, leases, ready=ready)
         # The IPC-shape probe ids stay bound while the Worker still serves that shape, so this
         # change cannot silently refuse the requests the previous gate proved.
@@ -462,6 +468,25 @@ def run(argv: list[str] | None = None) -> int:
         def _serve(request):
             if request.operation not in implemented_operations:
                 return {"error": {"code": "UNKNOWN_OPERATION", "detail": request.operation}}
+            if request.operation == "broker.infer":
+                # The one-time table binds an input digest, so a result computed from a different
+                # snapshot must be refused rather than admitted: a Worker that sends bytes the
+                # Coordinator never bound is not answering the bound question.
+                # `payload` arrives in whatever shape the transport decoded it to, so the digest is
+                # read defensively: an unreadable or absent digest is a mismatch, never a pass.
+                try:
+                    payload = request.payload
+                    if isinstance(payload, (bytes, bytearray, str)):
+                        payload = json.loads(payload)
+                    serialized = (payload or {}).get("request")
+                    if isinstance(serialized, (bytes, bytearray, str)):
+                        serialized = json.loads(serialized)
+                    declared = (serialized or {}).get("input_sha256")
+                except Exception:  # noqa: BLE001 - any unreadable digest is a refusal
+                    declared = None
+                if declared != input_digest:
+                    return {"error": {"code": "SNAPSHOT_MISMATCH",
+                                      "detail": f"{request.request_id}: {declared!r}"}}
             detector = models["yolo"]
             batch = bootstrap.lane.submit(
                 lambda: detector.detect(warm_frame(), DetectionQuery(class_id="cup")),
