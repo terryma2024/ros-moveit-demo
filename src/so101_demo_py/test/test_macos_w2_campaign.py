@@ -317,3 +317,41 @@ def test_worker_leases_and_bindings_use_the_ids_the_worker_derives(tmp_path: Pat
                      "w2-att-00-yolo", "w2-att-01-yolo", "w2-att-02-yolo"]
     assert all(binding["broker_pid"] == 4242 for binding in campaign.bindings)
     assert all(binding["input_sha256"] == "a" * 64 for binding in campaign.bindings)
+
+
+def test_admission_rule_refuses_unknown_duplicate_and_tampered_requests() -> None:
+    """The campaign's admission rule, tested without a socket.
+
+    Order matters and is asserted: an unimplemented operation is refused first, a repeated id is
+    refused before it can consume the table twice, and an inference whose declared digest is not the
+    bound one is refused - including when the digest is unreadable, which must never count as a match.
+    """
+
+    import json
+
+    from so101_demo.cli.macos_w2_campaign import IMPLEMENTED_OPERATIONS, admission_decision
+
+    bound = "a" * 64
+    good = json.dumps({"input_sha256": bound})
+    consumed = {"w1-att-00-yolo"}
+
+    assert admission_decision(
+        operation="broker.infer", request_id="w1-att-01-yolo", serialized_request=good,
+        consumed_ids=consumed, bound_digest=bound) is None
+
+    unknown = admission_decision(
+        operation="coordinator.cancel_request", request_id="x", serialized_request=good,
+        consumed_ids=set(), bound_digest=bound)
+    assert unknown["error"]["code"] == "UNKNOWN_OPERATION"
+    assert "coordinator.cancel_request" not in IMPLEMENTED_OPERATIONS
+
+    duplicate = admission_decision(
+        operation="broker.infer", request_id="w1-att-00-yolo", serialized_request=good,
+        consumed_ids=consumed, bound_digest=bound)
+    assert duplicate["error"]["code"] == "DUPLICATE_REQUEST"
+
+    for tampered in (json.dumps({"input_sha256": "0" * 64}), None, "not json", {}, b"\xff\xfe"):
+        refusal = admission_decision(
+            operation="broker.infer", request_id="w1-att-02-yolo", serialized_request=tampered,
+            consumed_ids=set(), bound_digest=bound)
+        assert refusal["error"]["code"] == "SNAPSHOT_MISMATCH", tampered

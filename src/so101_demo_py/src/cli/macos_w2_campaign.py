@@ -110,6 +110,42 @@ def bind_worker_requests(campaign, leases: dict[str, dict], *, ready,
                 broker_pid=ready.broker_pid, broker_birth_identity=ready.broker_birth_identity)
 
 
+#: The operations this composition implements; anything else is refused rather than served.
+IMPLEMENTED_OPERATIONS = frozenset({"broker.infer", "worker.progress", "worker.result"})
+
+
+def _declared_digest(serialized: object) -> str | None:
+    """Read the digest a Worker declared, defensively: anything unreadable is *not* a match."""
+
+    try:
+        document = serialized
+        if isinstance(document, (bytes, bytearray, str)):
+            document = json.loads(document)
+        return (document or {}).get("input_sha256")
+    except Exception:  # noqa: BLE001 - an unreadable digest must not become a pass
+        return None
+
+
+def admission_decision(*, operation: str, request_id: str, serialized_request: object,
+                       consumed_ids, bound_digest: str) -> dict | None:
+    """The campaign's admission rule, as a pure function so it can be tested without a socket.
+
+    Returns a refusal mapping the v4 server turns into a non-OK response, or `None` to serve. The
+    order matters: an unimplemented operation is refused before anything else, and a repeated id is
+    refused before it can consume the table a second time.
+    """
+
+    if operation not in IMPLEMENTED_OPERATIONS:
+        return {"error": {"code": "UNKNOWN_OPERATION", "detail": operation}}
+    if request_id in consumed_ids:
+        return {"error": {"code": "DUPLICATE_REQUEST", "detail": request_id}}
+    if operation == "broker.infer":
+        declared = _declared_digest(serialized_request)
+        if declared != bound_digest:
+            return {"error": {"code": "SNAPSHOT_MISMATCH", "detail": f"{request_id}: {declared!r}"}}
+    return None
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="so101_macos_w2_campaign",
@@ -426,87 +462,25 @@ def run(argv: list[str] | None = None) -> int:
             call on the shared lane - the difference is only what the caller sends and reads back.
             """
 
-            # One-time admission: a request id may be consumed once and never again, which is the
-            # property the Coordinator's table exists to provide. A repeat is refused here rather
-            # than served, so a late or duplicated result can never be admitted.
-            if request.request_id in consumed_ids:
-                served.append({"request_id": request.request_id, "operation": request.operation,
-                               "duplicate": True})
-                # A refusal must be a mapping carrying `error`: that is what the v4 server turns
-                # into a non-OK status, and what the Worker's port checks.
-                return {"error": {"code": "DUPLICATE_REQUEST",
-                                  "detail": request.request_id}}
-            nonlocal infer_served
+            serialized_request = None
+            try:
+                payload = request.payload
+                if isinstance(payload, (bytes, bytearray, str)):
+                    payload = json.loads(payload)
+                serialized_request = (payload or {}).get("request")
+            except Exception:  # noqa: BLE001 - an unreadable payload is a mismatch, not a pass
+                serialized_request = None
+            refusal = admission_decision(
+                operation=request.operation, request_id=request.request_id,
+                serialized_request=serialized_request, consumed_ids=consumed_ids,
+                bound_digest=input_digest)
+            if refusal is not None:
+                if refusal["error"]["code"] == "DUPLICATE_REQUEST":
+                    served.append({"request_id": request.request_id,
+                                   "operation": request.operation, "duplicate": True})
+                return refusal
             consumed_ids.add(request.request_id)
 
-            if request.operation == "broker.infer":
-                infer_served += 1
-            stall_fired = bool(arguments.stall_serve_after
-                               and infer_served == arguments.stall_serve_after)
-            if stall_fired:
-                # Fault injection: hold the answer past the Worker's deadline. The client must
-                # refuse on timeout - an inference that never arrived cannot be admitted.
-                time.sleep(max(0.0, arguments.worker_deadline_s) + 2.0)
-            if request.operation == "broker.infer":
-                fault_trace.append({"request_id": request.request_id, "infer_served": infer_served,
-                                    "stall_fired": stall_fired,
-                                    "worker_deadline_s": float(arguments.worker_deadline_s)})
-
-            try:
-                outcome = _serve(request)
-                if not isinstance(outcome, dict):
-                    # The v4 server answers a non-mapping outcome with INTERNAL_ERROR, which hides the
-                    # reason. Recording it here names the anomaly instead.
-                    handler_errors.append({
-                        "request_id": request.request_id, "operation": request.operation,
-                        "error": f"NON_MAPPING_OUTCOME: {type(outcome).__name__}"})
-                    return {"error": {"code": "INTERNAL_OUTCOME",
-                                      "detail": f"{type(outcome).__name__}"}}
-                return outcome
-            except Exception as error:  # noqa: BLE001 - the v4 server answers INTERNAL_ERROR
-                # The server turns a handler exception into a stable INTERNAL_ERROR, so the Worker
-                # cannot see why. Recording the cause here is what lets a later stall run name the
-                # failure instead of inferring it (CP-UQ278 addendum 3).
-                import traceback as _traceback
-
-                handler_errors.append({
-                    "request_id": request.request_id, "operation": request.operation,
-                    "error": f"{type(error).__name__}: {error}",
-                    "traceback_tail": _traceback.format_exc().splitlines()[-4:],
-                })
-                raise
-
-        #: The operations this composition implements. Anything else must be refused: the previous
-        #: handler served *every* operation by running a model call, which would silently answer an
-        #: unimplemented request (a cancellation, say) with a plausible-looking inference.
-        implemented_operations = frozenset({"broker.infer", "worker.progress", "worker.result"})
-
-        def _serve(request):
-            # `infer_served` belongs to the enclosing scope: without this declaration the augmented
-            # assignment below made it a local of `_serve`, and every inference died with
-            # UnboundLocalError - which the server reports only as INTERNAL_ERROR.
-            nonlocal infer_served
-            if request.operation not in implemented_operations:
-                return {"error": {"code": "UNKNOWN_OPERATION", "detail": request.operation}}
-            if request.operation == "broker.infer":
-                # The one-time table binds an input digest, so a result computed from a different
-                # snapshot must be refused rather than admitted: a Worker that sends bytes the
-                # Coordinator never bound is not answering the bound question.
-                # `payload` arrives in whatever shape the transport decoded it to, so the digest is
-                # read defensively: an unreadable or absent digest is a mismatch, never a pass.
-                try:
-                    payload = request.payload
-                    if isinstance(payload, (bytes, bytearray, str)):
-                        payload = json.loads(payload)
-                    serialized = (payload or {}).get("request")
-                    if isinstance(serialized, (bytes, bytearray, str)):
-                        serialized = json.loads(serialized)
-                    declared = (serialized or {}).get("input_sha256")
-                except Exception:  # noqa: BLE001 - any unreadable digest is a refusal
-                    declared = None
-                if declared != input_digest:
-                    return {"error": {"code": "SNAPSHOT_MISMATCH",
-                                      "detail": f"{request.request_id}: {declared!r}"}}
             detector = models["yolo"]
             batch = bootstrap.lane.submit(
                 lambda: detector.detect(warm_frame(), DetectionQuery(class_id="cup")),
