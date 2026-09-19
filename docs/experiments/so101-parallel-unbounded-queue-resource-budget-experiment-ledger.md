@@ -12888,3 +12888,16 @@ Each line is the run's own exit code and elapsed time from the registered eviden
 commands, provenance and JUnit/CTest artefacts sit beside them in the same directories.
 
 _Ledger source HEAD: (this commit's parent); no evidence deleted._
+
+Two lines in that index exit non-zero, and they are not passes:
+
+- `task12-package-gate-01` (exit 1): the `colcon test`/CTest package gate is **INVALID** on this host
+  because `colcon test` loses `DYLD_LIBRARY_PATH` and collects zero tests
+  (`Library not loaded: @rpath/librosidl_typesupport_c.dylib`); the valid macOS gate is the direct
+  pytest run, and the plan's requirement that a package gate be real is therefore **partially** met -
+  recorded in CP-UQ244-CP-UQ247 and never counted as green.
+- `source-gate-after-path-fix-01` (exit 1): 234 failed / 3177 passed / 8 skipped, where every failure
+  cluster is an environment boundary (`/data/work`, `/proc/self/fd`, `PATH_OWNER`, model runtime,
+  `/run/user`) rather than task code; no platform skips were added to make it green.
+
+_Ledger source HEAD: `8bc97a96`; no evidence deleted._
