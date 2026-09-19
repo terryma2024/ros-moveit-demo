@@ -7904,3 +7904,51 @@ The work continues where CP-UQ196 left it, and the two actions are in flight:
    stays in the record either way.
 
 _Ledger HEAD when written: `e3a49cee1`._
+
+## CP-UQ198 — Recovery checkpoint after the DST pane died (dispatch c1dca423)
+
+The DST pane was killed by signal 9 at `2026-09-19 09:18:12 +08` and launcher PID 1345571 is gone.
+This checkpoint records what I verified **after** the restart, before starting anything, per the
+resume handoff; the receipt for dispatch `c1dca423-475b-4480-9c42-1973ceaa2454` was written first
+(37 bytes, UUID + LF, sha256
+`3e245b0a6b006324dc52cace32076732b59a37cee68b7e4c71ccec1645bf34d8`).
+
+**Identity, verified**: worktree `7f65e128e9d536bca255bf043181529a1d465550` (equal to the handoff),
+branch `codex/so101-unbounded-queue-resource-budget`, `dirty_entries: 0`, MuJoCo submodule at
+`e4c0241aee52a40727681bd5872c09bf814e941a`. Goal `goal-e568087d-…` restored to the same objective,
+`phase: active`, `roundsStarted: 101`, `maxGoalRounds: 200`, armed (revision 5) — the limit was not
+changed.
+
+**Ownership, verified before starting anything**: zero `so101_expert_validation_server`,
+`playwright`, `ros2_control_node`, `so101_parallel_batch`, `move_group`, `rviz` or `bun test`
+processes; port 8010 free. Two **task-owned** containers were left behind by the crashed runs, both
+from the rebuilt perception image `0b893cb1528e` and both mine:
+`6d11f06ba026` ("Up 19 minutes", created 09:17:20 — the N8 retry that died with the pane) and
+`faab1d0ad1fe` ("Up 4 hours", created 05:22:50 — the *first* N8 attempt from CP-UQ196). No foreign
+object was touched, and neither has been removed yet: they are evidence of the boundary and are
+holding GPU memory, which the next acceptance runs must not inherit.
+
+**The interrupted run is diagnostic INVALID, and why.** `browser/lg-exec-seq-n8retry.64UX1ITI`
+(`exit_code: 1`, 86 s, `2 failed, 2 passed`) shows `R06 fixed-n8-p20` failing at 1.2 m with
+`TypeError: fetch failed` / `[cause] read ECONNRESET`, then `R06 sequential-n1-p4` failing in 4.1 s
+with `connect ECONNREFUSED 127.0.0.1:8010` and `page.goto: net::ERR_CONNECTION_REFUSED`. The
+service log ends mid-poll on `200 OK` lines for campaign `ef973f12…` and then stops. The
+exit-capturing wrapper added in CP-UQ197 wrote **no** `service-exit.log`, because that wrapper lived
+inside the same pane session that received the kill: the pane and the service died together, so the
+N8 failure is a *consequence* of the service's death, not a product outcome, and the sequential case
+never reached the service at all. Neither is counted as a result.
+
+Two distinct boundaries are now separated, which is what CP-UQ196 could not do:
+
+1. **The 09:17 death is explained by the pane kill** — the service's lifetime was tied to the TUI
+   pane's session, so SIGKILL to the pane took it down. That is a harness/deployment defect of mine,
+   not a workload defect.
+2. **The 05:22 death (CP-UQ196) remains unexplained**, with an OOM hypothesis that `dmesg` cannot
+   confirm from this account and `sudo` is out of scope for.
+
+The next actions follow from that split: hold the service under a lifetime **independent of this
+TUI pane** with real exit-status capture, re-check the N8-p20 boundary once under that ownership,
+then rebuild and deploy the current copied install (which carries the CP-UQ182 adaptive guard wiring
+and the CP-UQ185 no-op cleanup) before the adaptive and remaining acceptance work.
+
+_Ledger HEAD when written: `7f65e128e`._
