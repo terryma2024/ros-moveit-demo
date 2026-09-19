@@ -13308,3 +13308,31 @@ addition and is the next thing to do if this line is pursued.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `0e63b43b`; no evidence deleted._
+
+### CP-UQ278 addendum 4 — the stall question, bounded to the server layer and left there
+
+The instrumented run (`task16-timeout-03`) disproves my previous hypothesis:
+
+```text
+handler_errors: 0          <- the campaign's handler never raised
+w1 infer:  3 x W2BrokerPortError: BROKER_INFER_REFUSED: INTERNAL_ERROR
+w1 duplicate: W2BrokerPortError: BROKER_INFER_REFUSED: DUPLICATE_REQUEST
+served 2, duplicates_refused 2, pick exit 1, orphans []
+```
+
+If the model call had failed, the handler would have recorded it. It did not, so the `INTERNAL_ERROR`
+answers originate in the **server's outer path** - reading or validating the request, or writing the
+response - and only two requests reached the handler at all. The most consistent reading is a
+shutdown/queue race under the stall: the Workers' short client deadline (4 s, deliberately shortened
+for this probe) made them finish early, the campaign's main thread moved on to cleanup, and
+connections still queued met a server that was tearing down.
+
+That is an artefact of **my fault probe**, not of the production path: every ordinary campaign run
+(`task16-stability-01..03`, `task14-fr-01..05`, `task14-perslot-summary-01`) serves all its requests
+with `devices ['mps']` and a clean shutdown. I am leaving the exact line unidentified rather than
+guessing further, and the instrumented recording stays in place so a future run names it if this
+matters.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `c11312c8`; no evidence deleted._
