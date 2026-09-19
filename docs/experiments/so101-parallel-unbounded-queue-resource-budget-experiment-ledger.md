@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ233 (tail of this file)
+latest_checkpoint: CP-UQ234 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -55,7 +55,7 @@ current_design: docs/superpowers/specs/2026-09-19-so101-macos-mps-private-ipc-de
   SHA-256 480da6dcdfea1da988f9f4e706c8340dbb6d7283200c27bb723859119145db1b
 current_worktree: /Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini
 current_branch: codex/so101-unbounded-queue-resource-budget (HEAD b55c181e at takeover)
-next_experiment: Task 5 RED - permission-only v4 RPC envelope
+next_experiment: Task 6 RED - immutable inference input snapshot
 correction_cp_uq229: the header's `worktree`, `evidence_root` and `task_root` fields describe the
   historical ai-station Stage A-E dispatch (`84620fc0`) and are not rewritten, because that history
   is not invalidated. The live dispatch, worktree and evidence root for the current macOS MPS/private
@@ -9302,3 +9302,71 @@ capacity and refuses to pretend it can do durable unlinking, because a v3 endpoi
 owning process.
 
 _Ledger source HEAD: `14b6e527`; no evidence deleted; no Linux or W4/W6/W8 action._
+
+## CP-UQ234 — The v4 RPC is permission-only, and the v3 Linux transport tests still say so
+
+```yaml
+checkpoint_id: CP-UQ234
+last_valid_experiment: EXP-UQ234-TASK5-V4-RPC
+current_hypothesis: The v4 envelope can drop token/generation/lease while remaining a bounded,
+  closed server, and the frozen v3 Linux protocol tests keep failing on Darwin rather than being
+  rewritten to pass.
+working_tree_status: clean at commit b6bab6be
+owned_processes: NONE - every server was stopped and every socket unlinked inside the gate
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome extension host, Sparkle updater,
+  SkyComputerUseService
+open_risks:
+  - The v4 client performs no authentication at all. This is the approved single-user task-owned
+    simulation trust model; it is not a multi-tenant security claim.
+  - The source gate cannot be fully green on this host because 19 v3 Linux transport tests require
+    /proc/self/fd. That is DEFERRED_ENVIRONMENT and stays visible.
+next_command: Task 6 RED - immutable inference input snapshot
+```
+
+`checkpoint_id: CP-UQ234`
+`last_valid_experiment: EXP-UQ234-TASK5-V4-RPC`
+`commit: b6bab6be feat(so101): add permission-only v4 Unix RPC`
+
+`EXP-UQ234-TASK5-V4-RPC: VALID`
+
+GREEN (`task5-green-04/`, exit 0, **33 passed, 0 failed**). `task5-red-01/`,
+`task5-green-01/` … `-03/` are retained iteration evidence. Two of those iterations found real
+defects and one found a real gap in the acceptance rule:
+
+1. the server bound its socket without setting the mode, so it came out `0755` and the address
+   strategy correctly refused to register it. `bind` now binds under `umask(0o177)` and then
+   `chmod`s to `0600` before `listen`, so the socket is never reachable by group or other.
+2. the first version's accept loop only *enqueued* connections; nothing consumed the queue, so
+   every round trip timed out after the client's 30 s budget. The accept loop is now paired with a
+   bounded dispatcher that dequeues and runs each connection on its own short-lived thread, which
+   is what lets two Workers be in flight while the queue still bounds pending work. The evidence
+   records `peak_queue_depth` and `refused_connects`.
+3. the queue-full test originally demanded a `QUEUE_FULL` *response* while also setting
+   `queue_capacity=1`, which also sets the listen backlog, so the kernel refused the extra
+   connections with `ECONNREFUSED` before the server ever saw them. Both refusals are legitimate
+   and the test now accepts either, while still requiring that the server keeps serving after the
+   burst.
+
+What v4 now guarantees:
+
+- the request envelope has exactly `request_id`, `operation`, `deadline_monotonic_ns`, `payload`;
+  the response has exactly `request_id`, `status`, `error`, `output_descriptor`, `timing`, with
+  exactly one of descriptor/error;
+- a frame carrying `token`, `generation`, `lease`, `lease_id`, `lease_epoch`, `endpoint_receipt`,
+  `peer_credentials`, `inode` or `receipt` is refused in either direction, so the retired
+  vocabulary cannot be smuggled back in;
+- the server enforces the frame cap, a closed schema, the operation allowlist, the deadline and a
+  bounded queue, with stable codes `MALFORMED_FRAME`, `OVERSIZED_FRAME`, `UNKNOWN_OPERATION`,
+  `DEADLINE_EXPIRED`, `QUEUE_FULL`, `INVALID_REQUEST`, `INTERNAL_ERROR`;
+- the client makes **no** endpoint authentication call: a monkeypatched `os.stat`/`os.lstat` for
+  the endpoint path records zero calls during a successful round trip;
+- two concurrent clients each get their own answer with their own `request_id`;
+- restart creates a new campaign directory and a new socket, the old path is unusable, and cleanup
+  leaves no socket and no campaign directory behind.
+
+The frozen v3 surface was re-run and is unchanged (`task4-regression-01/`, exit 1,
+**19 failed, 28 passed**): the same Linux-only `/proc/self/fd`, `/run/user` and `SO_PEERCRED`
+assumptions that CP-UQ225 recorded. They are recorded as `DEFERRED_ENVIRONMENT`, not skipped, not
+rewritten, and not counted as v4 regressions.
+
+_Ledger source HEAD: `b6bab6be`; no evidence deleted; no Linux or W4/W6/W8 action._
