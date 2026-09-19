@@ -10540,3 +10540,14 @@ Nothing here counts as a Task 14 batch: no pick-place ran, no GUI capture was ta
 remains 0/5. `LINUX_REGRESSION_DEFERRED` is retained.
 
 _Ledger source HEAD: `1262638b`; no evidence deleted._
+
+### CP-UQ252 addendum — the v4 suites and the entry point are unaffected
+
+`entrypoint-regression-02/` re-runs the exact V4 suite set after `ce35a07b` (the Darwin station
+config) and reports **177 passed**, identical to `entrypoint-regression-01/` before it: the campaign
+entry point, inference registry, permission-only IPC, W2 composition and the frozen v3/v4 contract
+tests all still pass. Screen Recording was probed once more at the same time and is still denied to
+this session (`screencapture -x` → "could not create image from display", tmux server pid 59433
+unrestarted), so Task 14's batches stay blocked on that single external condition.
+
+_Ledger source HEAD: `908a1b82`; no evidence deleted._
