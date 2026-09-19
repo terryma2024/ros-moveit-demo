@@ -415,6 +415,7 @@ def run(argv: list[str] | None = None) -> int:
         consumed_ids: set[str] = set()
         infer_served = 0
         handler_errors: list[dict] = []
+        fault_trace: list[dict] = []
 
         def handler(request):
             """Serve one request: a real forward pass, admitted through the one-time table.
@@ -440,11 +441,16 @@ def run(argv: list[str] | None = None) -> int:
 
             if request.operation == "broker.infer":
                 infer_served += 1
-            if (arguments.stall_serve_after
-                    and infer_served == arguments.stall_serve_after):
+            stall_fired = bool(arguments.stall_serve_after
+                               and infer_served == arguments.stall_serve_after)
+            if stall_fired:
                 # Fault injection: hold the answer past the Worker's deadline. The client must
                 # refuse on timeout - an inference that never arrived cannot be admitted.
                 time.sleep(max(0.0, arguments.worker_deadline_s) + 2.0)
+            if request.operation == "broker.infer":
+                fault_trace.append({"request_id": request.request_id, "infer_served": infer_served,
+                                    "stall_fired": stall_fired,
+                                    "worker_deadline_s": float(arguments.worker_deadline_s)})
 
             try:
                 outcome = _serve(request)
@@ -594,6 +600,7 @@ def run(argv: list[str] | None = None) -> int:
         server.join_workers(timeout_s=30.0)   # returns None; the wait itself is the guarantee
         document["handlers_joined"] = True
         document["server_rejections"] = list(getattr(server, "rejections", ()) or ())
+        document["fault_trace"] = fault_trace
 
 
         # The per-slot physical evidence, summarised where the campaign's own result can carry it:
