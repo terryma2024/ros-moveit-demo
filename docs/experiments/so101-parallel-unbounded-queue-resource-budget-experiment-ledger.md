@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ282 (tail of this file)
+latest_checkpoint: CP-UQ283 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -13472,3 +13472,50 @@ closed), the refusal code is not the specific one, and the reason is not yet kno
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `6a67b0e0`; no evidence deleted._
+
+## CP-UQ283 — The "INTERNAL_ERROR anomaly" was my own unbound local, and it is fixed
+
+```yaml
+checkpoint_id: CP-UQ283
+last_valid_experiment: EXP-UQ283-SNAPSHOT-BINDING-AND-SCOPE-FIX
+root_cause: my stall patch (round 95) put `infer_served += 1` inside the nested `handler` without a
+  `nonlocal` declaration, so every `broker.infer` raised UnboundLocalError and the server could only
+  report it as INTERNAL_ERROR
+working_tree_status: clean after the scoped commit below
+owned_processes: NONE
+```
+
+### The finding, in one line
+
+```text
+raw response before the fix:
+  {"code": "INTERNAL_ERROR",
+   "detail": "UnboundLocalError: cannot access local variable 'infer_served' ..."}
+raw response after the fix (tamper probe):
+  {"code": "SNAPSHOT_MISMATCH", "detail": "w1-att-00-yolo: '0000…0000'"}
+```
+
+### What this means, including the part that is uncomfortable
+
+- The digest-binding check works: a Worker that declares a digest the Coordinator never bound is
+  refused with the specific code, and the raw frame names the offending digest.
+- The `INTERNAL_ERROR` that occupied rounds 106-113 was **my defect**, introduced when I refactored the
+  handler to add the stall probe. `infer_served += 1` inside the nested function made the name local
+  there and it was read before assignment, so **every inference through the port failed from round 95
+  until this fix**, while the campaign still looked healthy in `served`, `devices` and the per-slot
+  pick-place summaries - which is exactly why it survived so long.
+- Consequently the **inference leg** of every run in that window is void: `task14-perslot-summary-01`,
+  `task16-op-vocabulary-01`, the pick-place probes and the stability runs after round 95 exercised a
+  handler that always raised. Their **pick-place** evidence is unaffected (that path uses the batch
+  runner, not the Broker), and CP-UQ270's `3 x OK, device mps` predates the regression and stands.
+- Four hypotheses died on the way - handler raise, non-mapping outcome, evidence race, server-layer
+  shutdown race - and none of them was the cause. What actually found it was recording the **raw
+  response frame** instead of the code my port derived from it, which is the lesson worth keeping:
+  instrument what arrived, not what you made of it.
+
+Next: re-run a clean campaign to restore the inference-through-the-port evidence on the current code,
+then re-run the five-batch series so the appendix table's runs are all post-fix.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `810f02c9`; no evidence deleted._
