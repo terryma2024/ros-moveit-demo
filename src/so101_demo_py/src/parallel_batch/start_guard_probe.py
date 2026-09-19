@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import fcntl
 import json
+import math
 import os
 import select
 import signal
@@ -29,13 +30,19 @@ from pathlib import Path
 
 from .start_guard import (
     FAIL,
+    PASS,
+    WARN,
     GuardCheck,
     GuardResult,
     GuardScope,
     ProbeError,
     ResourceSnapshot,
     StartGuardPolicy,
+    _read_cpu,
+    _read_cpu_busy,
+    _read_ram,
     evaluate_snapshot,
+    host_ports,
     probe_snapshot,
 )
 
@@ -644,6 +651,60 @@ def _write_all(descriptor: int, payload: bytes) -> None:
         offset += os.write(descriptor, payload[offset:])
 
 
+def _v4_cpu_ram_result(policy: StartGuardPolicy, scope: GuardScope,
+                       deadline_monotonic_s: float, started_monotonic_s: float) -> GuardResult:
+    """The Darwin half of the guard: real CPU/RAM checks, no NVIDIA probe, no fabricated GPU.
+
+    Check names, cutoffs and units mirror `evaluate_snapshot` exactly so the parent's accelerator
+    merge needs no second vocabulary; only the `gpu` check is absent, because on this platform the
+    MPS proxy admission replaces it.
+    """
+
+    active = host_ports()
+    clock = active.clock or time.monotonic
+    checks: dict[str, GuardCheck] = {}
+    try:
+        cpuset, cores, _sources = _read_cpu(active, clock)
+        ram_capacity, ram_available, _ram_sources = _read_ram(active)
+        busy = _read_cpu_busy(active, clock, deadline_monotonic_s)
+    except ProbeError as error:
+        return GuardResult(
+            scope=scope, status=FAIL, started_monotonic_s=started_monotonic_s,
+            completed_monotonic_s=max(started_monotonic_s, time.monotonic()),
+            checks={"probe": GuardCheck(FAIL, error.reason, None, None, "state")},
+            snapshot=None, cleanup_state=CLEAR)
+
+    if not cpuset or not math.isfinite(cores) or cores <= 0:
+        checks["cpu_capacity"] = GuardCheck(
+            FAIL, "CPU_CAPACITY_UNAVAILABLE", cores if math.isfinite(cores) else None,
+            None, "cores")
+    else:
+        checks["cpu_capacity"] = GuardCheck(PASS, "CPU_CAPACITY_OK", cores, None, "cores")
+
+    if busy is None:
+        checks["cpu_busy"] = GuardCheck(
+            WARN, "CPU_BUSY_UNKNOWN", None, policy.cpu_busy_warn_fraction, "fraction")
+    elif busy > policy.cpu_busy_warn_fraction:
+        checks["cpu_busy"] = GuardCheck(
+            WARN, "CPU_BUSY", busy, policy.cpu_busy_warn_fraction, "fraction")
+    else:
+        checks["cpu_busy"] = GuardCheck(
+            PASS, "CPU_BUSY_OK", busy, policy.cpu_busy_warn_fraction, "fraction")
+
+    floor = max(policy.ram_minimum_bytes,
+                int(math.floor(policy.ram_minimum_fraction * ram_capacity)))
+    if ram_available < floor:
+        checks["ram"] = GuardCheck(FAIL, "RAM_BELOW_MINIMUM", ram_available, floor, "bytes")
+    else:
+        checks["ram"] = GuardCheck(PASS, "RAM_OK", ram_available, floor, "bytes")
+
+    status = FAIL if any(check.status == FAIL for check in checks.values()) else PASS
+    return GuardResult(
+        scope=scope, status=status, started_monotonic_s=started_monotonic_s,
+        completed_monotonic_s=max(started_monotonic_s, time.monotonic()),
+        checks=checks, snapshot=None, cleanup_state=CLEAR)
+
+
 def run_helper(request_fd: int, result_fd: int) -> int:
     """Helper side: read one closed request, do every read, write one result."""
 
@@ -658,9 +719,19 @@ def run_helper(request_fd: int, result_fd: int) -> int:
         _write_all(result_fd, json.dumps(payload).encode())
         return 2
     try:
-        snapshot = probe_snapshot(policy, scope, deadline)
-        result = evaluate_snapshot(snapshot, policy, scope, started_monotonic_s=request_started,
-                                   completed_monotonic_s=time.monotonic())
+        if request["policy"].get("mps_minimum_headroom_bytes") is None:
+            snapshot = probe_snapshot(policy, scope, deadline)
+            result = evaluate_snapshot(snapshot, policy, scope,
+                                       started_monotonic_s=request_started,
+                                       completed_monotonic_s=time.monotonic())
+        else:
+            # Schema v4 Darwin request: the accelerator admission is the parent's MPS proxy check,
+            # evaluated against `mps_minimum_headroom_bytes`. This side must still measure and
+            # enforce CPU/RAM - dropping them would make the Darwin guard weaker than v3 - but it
+            # must not touch NVML, which is what `probe_snapshot`'s GPU read does. A GPU-less
+            # snapshot is not representable in the frozen v3 model, so no snapshot is emitted and
+            # no CUDA-shaped device is fabricated.
+            result = _v4_cpu_ram_result(policy, scope, deadline, request_started)
     except ProbeError as error:
         completed = time.monotonic()
         result = GuardResult(

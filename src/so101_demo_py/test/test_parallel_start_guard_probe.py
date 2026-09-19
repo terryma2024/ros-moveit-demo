@@ -332,3 +332,34 @@ def test_probe_request_carries_the_v4_accelerator_discriminator(tmp_path) -> Non
 
     assert captured[0]["policy"]["mps_minimum_headroom_bytes"] == 1 << 30
     assert captured[1]["policy"]["mps_minimum_headroom_bytes"] is None
+
+
+def test_v4_helper_measures_cpu_and_ram_without_an_nvidia_probe() -> None:
+    """The Darwin half of the guard keeps CPU/RAM and drops only the NVIDIA read.
+
+    A schema-v4 request (one carrying `mps_minimum_headroom_bytes`) must produce the same cpu/ram
+    checks the v3 path produces, with no `gpu` check at all - the parent's MPS proxy admission
+    replaces it - and it must not return a snapshot, because a GPU-less ResourceSnapshot is not
+    representable and fabricating one is forbidden.
+    """
+
+    import os
+    import time
+
+    from so101_demo.parallel_batch.start_guard import PASS, GuardScope, StartGuardPolicy
+    from so101_demo.parallel_batch.start_guard_probe import _v4_cpu_ram_result
+
+    scope = GuardScope(
+        batch_id="v4-helper", epoch=1, owner_pid=os.getpid(), owner_starttime_ticks=1,
+        gpu_selector="MPS:default", worker_count=2,
+    )
+    policy = StartGuardPolicy(timeout_s=2.0, mps_minimum_headroom_bytes=1 << 30)
+    result = _v4_cpu_ram_result(policy, scope, time.monotonic() + 2.0, time.monotonic())
+
+    assert set(result.checks) == {"cpu_capacity", "cpu_busy", "ram"}
+    assert result.snapshot is None
+    assert result.checks["cpu_capacity"].unit == "cores"
+    assert result.checks["cpu_busy"].cutoff == policy.cpu_busy_warn_fraction
+    assert result.checks["ram"].unit == "bytes"
+    assert result.checks["ram"].status is PASS
+    assert result.status is PASS
