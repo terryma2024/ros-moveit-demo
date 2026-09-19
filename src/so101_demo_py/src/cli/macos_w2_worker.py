@@ -6,6 +6,7 @@ has not acknowledged, so a Worker that reaches the task loop without one cannot 
 
 import json
 import os
+from pathlib import Path
 import sys
 import time
 
@@ -14,6 +15,7 @@ ack_path, endpoint, worker_id, out_path = sys.argv[1:5]
 #: Optional station arguments. Absent means the IPC-only Worker every earlier campaign used;
 #: present means this Worker also owns a visible station, started from the validated chain.
 station_arguments = sys.argv[5:8]
+lease_argument = sys.argv[8:9]
 
 from so101_demo.runtime.parallel_ipc_v4 import V4PermissionOnlyClient
 
@@ -32,13 +34,12 @@ if len(station_arguments) == 3:
     # product guard: a canonical checkout prefix refuses the launch instead of shadowing this branch.
     # The domain is the one the plan allocated to this slot, so two Workers never share a ROS graph.
     import subprocess
-    from pathlib import Path as _Path
 
     from so101_demo.runtime.parallel_worker_runtime import station_environment
     from so101_demo.runtime.task_stack import PersistentTaskStack, default_task_station_config
 
     station_session, station_root, station_domain = station_arguments
-    config = default_task_station_config(station_session, _Path(station_root))
+    config = default_task_station_config(station_session, Path(station_root))
     environment = station_environment(base=dict(os.environ))
     environment["ROS_DOMAIN_ID"] = station_domain
     station = PersistentTaskStack()
@@ -56,7 +57,7 @@ if len(station_arguments) == 3:
     if ready_binary is None:
         from ament_index_python.packages import get_package_prefix
 
-        candidate = _Path(get_package_prefix("so101_demo_py")) / "lib/so101_demo_py/motion_stack_ready"
+        candidate = Path(get_package_prefix("so101_demo_py")) / "lib/so101_demo_py/motion_stack_ready"
         ready_binary = str(candidate) if candidate.is_file() else None
     if ready_binary is None:
         raise SystemExit("STATION_READY_BINARY_MISSING")
@@ -83,6 +84,53 @@ if station_arguments and (station_ready or {}).get("exit_code") != 0:
     os.replace(out_path + ".part", out_path)
     raise SystemExit("STATION_NOT_READY")
 
+infer_results = []
+if lease_argument:
+    # The Worker now speaks the production path: it reads the identity the entry point bound for it
+    # and asks the shared Broker through `W2BrokerPort`, so its inference is a real model call gated
+    # by the one-time table instead of an IPC-shape probe.
+    from types import SimpleNamespace
+
+    from so101_demo.parallel_batch.contracts import ExecutionKind
+    from so101_demo.runtime.macos_w2_broker_port import BrokerAuthority, W2BrokerPort
+    from so101_demo.runtime.parallel_ipc_v4 import V4PermissionOnlyClient as _V4Client
+
+    lease_document = json.loads(Path(lease_argument[0]).read_text())
+    authority = BrokerAuthority(healthy=True, generation=1, endpoint_path=endpoint)
+    port_config = SimpleNamespace(
+        broker_max_frame_bytes=8 * 1024 * 1024, executing_hard_timeout_s=240.0,
+        broker_recovery_timeout_s=90.0)
+    port = W2BrokerPort(
+        coordinator=lambda: authority, authority=authority, config=port_config,
+        resources=SimpleNamespace(worker_root=Path(lease_document["worker_root"])),
+        connection=_V4Client(endpoint_path=endpoint))
+    snapshot = SimpleNamespace(
+        path=Path(lease_document["snapshot_path"]), shape=tuple(lease_document["shape"]),
+        input_sha256=lease_document["input_sha256"],
+        source_stamp_ns=lease_document["source_stamp_ns"],
+        source_frame_id=lease_document["source_frame_id"])
+    for attempt_id in lease_document["attempt_ids"]:
+        lease = SimpleNamespace(
+            attempt_id=attempt_id, batch_id=lease_document["batch_id"],
+            coordinator_epoch=lease_document["coordinator_epoch"], worker_id=worker_id,
+            worker_generation=lease_document["worker_generation"],
+            point_id=lease_document["point_id"],
+            lease_generation=lease_document["lease_generation"])
+        try:
+            response = port.request_one(
+                lease, ExecutionKind.ATTEMPT, model_id=lease_document["model_id"],
+                snapshot=snapshot, start_event_id=f"{attempt_id}-start",
+                start_event_type=lease_document["start_event_type"],
+                reset_epoch=lease_document["reset_epoch"])
+            descriptor = getattr(response, "output_descriptor", None) or {}
+            infer_results.append({"request_id": f"{attempt_id}-{lease_document['model_id']}",
+                                  "status": getattr(response, "status", None),
+                                  "device": descriptor.get("device")})
+        except Exception as error:  # noqa: BLE001 - the failure mode is the evidence
+            infer_results.append({"request_id": f"{attempt_id}-{lease_document['model_id']}",
+                                  "status": "ERROR", "error": f"{type(error).__name__}: {error}"})
+
+
 try:
     client = V4PermissionOnlyClient(endpoint_path=endpoint)
     results = []
@@ -95,7 +143,7 @@ try:
 
     with open(out_path + ".part", "w", encoding="utf-8") as handle:
         json.dump({"worker_id": worker_id, "pid": os.getpid(), "results": results,
-                   "station_record": station_record}, handle)
+                   "station_record": station_record, "infer_results": infer_results}, handle)
         handle.flush()
         os.fsync(handle.fileno())
     os.replace(out_path + ".part", out_path)
