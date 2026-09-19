@@ -1818,3 +1818,53 @@ def test_v3_adopt_existing_rechecks_the_start_guard(tmp_path, config):
         assert adopted.start_guard['status'] in ('PASS', 'WARN')
     finally:
         restored.close()
+
+
+def test_start_guard_scope_takes_its_selector_from_the_v4_accelerator() -> None:
+    """The v4 document has no `gpu_device`; the guard scope must use the resolved accelerator.
+
+    Schema v4 replaced the v3 CUDA device reference with the closed platform combination, so a
+    Darwin document carries `accelerator` (`mps` + `default`) instead. The scope built for the
+    guard therefore reads `MPS:default`, and the v3 CUDA form still wins when `gpu_device` exists.
+    """
+
+    from types import SimpleNamespace
+
+    from so101_demo.parallel_batch.resources import WorkerResourceAllocator
+
+    seen = []
+
+    class _Recorded(Exception):
+        """Stop the check right after the scope exists; the scope is the thing under test."""
+
+    class _Guard:
+        def require_before_spawn(self, scope):
+            seen.append(scope)
+            raise _Recorded
+
+    v4_self = SimpleNamespace(
+        _start_guard=_Guard(),
+        config=SimpleNamespace(
+            accelerator=SimpleNamespace(kind="mps", resolved_selector="default")
+        ),
+        batch_id="unit-v4",
+    )
+    with pytest.raises(_Recorded):
+        WorkerResourceAllocator._start_guard_check(v4_self, 2)
+
+    v3_self = SimpleNamespace(
+        _start_guard=_Guard(),
+        config=SimpleNamespace(
+            gpu_device=SimpleNamespace(
+                selector_kind="UUID", selector="GPU-00000000-0000-0000-0000-000000000000"
+            )
+        ),
+        batch_id="unit-v3",
+    )
+    with pytest.raises(_Recorded):
+        WorkerResourceAllocator._start_guard_check(v3_self, 4)
+
+    assert [scope.gpu_selector for scope in seen] == [
+        "MPS:default",
+        "UUID:GPU-00000000-0000-0000-0000-000000000000",
+    ]
