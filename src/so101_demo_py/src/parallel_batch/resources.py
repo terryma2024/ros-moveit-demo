@@ -25,6 +25,7 @@ import yaml
 from ..runtime.parallel_ipc import IpcError, require_transport_basename
 from .contracts import (
     ParallelRuntimeConfigV3,
+    ParallelRuntimeConfigV4,
     ParallelRuntimeConfig,
     ParallelRuntimeConfigV2,
     load_parallel_runtime_config,
@@ -958,7 +959,7 @@ class WorkerResourceAllocator:
         start_guard=None,
     ) -> None:
         if not isinstance(config, (ParallelRuntimeConfig, ParallelRuntimeConfigV2,
-                                    ParallelRuntimeConfigV3)):
+                                    ParallelRuntimeConfigV3, ParallelRuntimeConfigV4)):
             raise ResourceAllocationError('CONFIG')
         raw_root = str(evidence_root)
         root = Path(evidence_root)
@@ -984,7 +985,14 @@ class WorkerResourceAllocator:
         self.batch_id = selected_batch_id
         self._start_guard = start_guard
         self.allocation_policy = (
-            AllocationPolicy(config.max_worker_count, config.ros_domain_ids)
+            AllocationPolicy(
+            # v4's exact-W2 platform claim, not the inherited v3 field: `max_worker_count` stays
+            # frozen at its v3 value, and `AllocationPolicy` requires
+            # `len(ros_domain_ids) >= max_worker_count`.
+            config.worker_count if isinstance(config, ParallelRuntimeConfigV4)
+            else config.max_worker_count,
+            config.ros_domain_ids,
+        )
             if allocation_policy is None
             else allocation_policy
         )
@@ -1033,7 +1041,9 @@ class WorkerResourceAllocator:
             raise ResourceAllocationError('WORKER_COUNT')
         if len(self.allocation_policy.ros_domain_ids) < requested:
             raise ResourceAllocationError('ROS_DOMAIN_IDS')
-        version_three = isinstance(self.config, ParallelRuntimeConfigV3)
+        version_three = isinstance(
+            self.config, (ParallelRuntimeConfigV3, ParallelRuntimeConfigV4)
+        )
         if version_three:
             # Version three has no formula budget: the one bounded startup check decides.
             admission, guard_document = self._start_guard_check(requested)
@@ -1120,7 +1130,8 @@ class WorkerResourceAllocator:
         if self._closed or self._manifest is not None:
             raise ResourceAllocationError('ALLOCATOR_NOT_ACTIVE')
         expected_schema = (
-            3 if isinstance(self.config, ParallelRuntimeConfigV3)
+            4 if isinstance(self.config, ParallelRuntimeConfigV4)
+            else 3 if isinstance(self.config, ParallelRuntimeConfigV3)
             else 2 if isinstance(self.config, ParallelRuntimeConfigV2) else 1
         )
         if (
