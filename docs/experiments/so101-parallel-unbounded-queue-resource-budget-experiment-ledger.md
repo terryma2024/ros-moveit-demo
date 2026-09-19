@@ -10898,3 +10898,34 @@ chain were each justified by a live RED, and this one would be a guess until tha
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `ffe94119`; no evidence deleted._
+
+### CP-UQ256 follow-up 6 — the constraint that decides the v4 helper design
+
+Three facts, read rather than assumed:
+
+```text
+probe_snapshot (start_guard.py:659-689)  reads cpu -> ram -> cpu_busy -> resolve_gpu_target
+ResourceSnapshot.__post_init__ (189-213) requires `gpu_uuid: str`, `gpu_total_bytes: int`,
+                                         `gpu_free_bytes: int` - none may be None
+evaluate_snapshot                        consults `snapshot.gpu_uuid` directly (line 740)
+```
+
+So a GPU-less snapshot is **not representable** in the frozen v3 model, and the GPU read is the last
+step of `probe_snapshot`, after every CPU/RAM read. That rules out the tempting shortcuts:
+
+- do not let the child skip `probe_snapshot` outright - CPU/RAM validation would silently vanish and
+  the Darwin guard would be weaker than v3;
+- do not fill the GPU fields with MPS numbers - that would fabricate a CUDA-style device in evidence
+  the design explicitly refuses to fake;
+- do not relax `ResourceSnapshot` - it is frozen v3 surface.
+
+The design that satisfies all three: for a request carrying the Darwin discriminator, the helper
+reuses the CPU/RAM readers (`_read_cpu`, `_read_ram`, `_read_cpu_busy`), evaluates the cpu-busy and
+RAM thresholds itself, and returns a `GuardResult` with `snapshot=None` plus those checks; the parent
+then merges the MPS proxy admission exactly as it already does. A request without the discriminator
+keeps the current path byte for byte, and that equivalence is the first test to write.
+
+Recorded as the decided design with its justification, not as done work. Task 14 stays 0/5 and
+`LINUX_REGRESSION_DEFERRED` is retained.
+
+_Ledger source HEAD: `f71e3484`; no evidence deleted._
