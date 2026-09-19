@@ -122,14 +122,20 @@ class W2BrokerPort:
             broker_generation=self.broker_generation,
         )
 
-    def cancel_generation(self, worker_id: str, generation: int) -> object:
-        """Cancel one generation on the Broker, after it is healthy enough to answer."""
+    def cancel_generation(self, worker_id: str, generation: int) -> bool:
+        """Cancel one generation on the Broker, after it is healthy enough to answer.
+
+        `ParallelWorker` fences on `cancel_generation(...) is True`, so this answers the boolean the
+        lease logic asks for; a refusal that cannot reach the Broker raises instead of returning a
+        false fence.
+        """
 
         self.refresh(wait_until_healthy=True)
-        return self.connection.call(
+        self.connection.call(
             "cancel_generation",
             {"worker_id": worker_id, "worker_generation": generation},
         )
+        return True
 
 
 def authority_from_document(document: Mapping[str, object]) -> BrokerAuthority:
