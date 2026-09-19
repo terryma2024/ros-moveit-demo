@@ -201,9 +201,15 @@ class W2BrokerPort:
             # lives inside that mapping, not on the response itself.
             error = getattr(response, "error", None) or {}
             code = error.get("code") if isinstance(error, Mapping) else None
-            raise W2BrokerPortError(
+            refusal = W2BrokerPortError(
                 f"BROKER_INFER_REFUSED: {code or getattr(response, 'status', 'UNKNOWN')}"
             )
+            # The raw frame the server sent, kept on the refusal so a caller's evidence can show what
+            # actually arrived instead of only the code this port derived from it.
+            refusal.response_document = (
+                response.to_document() if hasattr(response, "to_document") else None
+            )
+            raise refusal
         return response
 
     def cancel_generation(self, worker_id: str, generation: int) -> bool:

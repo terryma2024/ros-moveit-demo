@@ -133,7 +133,8 @@ if lease_argument:
                                   "device": descriptor.get("device")})
         except Exception as error:  # noqa: BLE001 - the failure mode is the evidence
             infer_results.append({"request_id": f"{attempt_id}-{lease_document['model_id']}",
-                                  "status": "ERROR", "error": f"{type(error).__name__}: {error}"})
+                                  "status": "ERROR", "error": f"{type(error).__name__}: {error}",
+                                  "response": getattr(error, "response_document", None)})
 
     # A duplicate of the first request: the one-time table must refuse it, so a late or repeated
     # result cannot be admitted a second time.
