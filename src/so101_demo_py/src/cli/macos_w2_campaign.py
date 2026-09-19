@@ -367,7 +367,8 @@ def run(argv: list[str] | None = None) -> int:
                       # session id is campaign-scoped and the station root is Worker-scoped, so two
                       # slots never share a scene, an epoch or an evidence directory.
                       f"{arguments.campaign_id}-{worker_id}",
-                      str(arguments.evidence_root / f"{worker_id}-station")],
+                      str(arguments.evidence_root / f"{worker_id}-station"),
+                      str(plan.ros_domain_ids[slot])],
                 nonce=f"{arguments.campaign_id}-{worker_id}", ack_path=ack,
                 ack_timeout_s=120.0)
             workers.append({"slot_id": slot_id, "worker_id": worker_id,
