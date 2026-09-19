@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ236 (tail of this file)
+latest_checkpoint: CP-UQ237 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -55,7 +55,7 @@ current_design: docs/superpowers/specs/2026-09-19-so101-macos-mps-private-ipc-de
   SHA-256 480da6dcdfea1da988f9f4e706c8340dbb6d7283200c27bb723859119145db1b
 current_worktree: /Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini
 current_branch: codex/so101-unbounded-queue-resource-budget (HEAD b55c181e at takeover)
-next_experiment: Task 8 RED - real MPS broker bootstrap and single execution lane
+Task 8 RED - real MPS broker bootstrap and single execution lane (and first fix the 45-case bare sysctl invocation)
 correction_cp_uq229: the header's `worktree`, `evidence_root` and `task_root` fields describe the
   historical ai-station Stage A-E dispatch (`84620fc0`) and are not rewritten, because that history
   is not invalidated. The live dispatch, worktree and evidence root for the current macOS MPS/private
@@ -9473,3 +9473,37 @@ failed for a reason unrelated to the journal. The suite now resolves the descrip
 is a strictly stronger check than deselecting them.
 
 _Ledger source HEAD: `54990e1e`; no evidence deleted; no Linux or W4/W6/W8 action._
+
+## CP-UQ237 — The full source gate is measured, and its failures are all environment boundaries
+
+`checkpoint_id: CP-UQ237`
+`last_valid_experiment: EXP-UQ237-SOURCE-GATE-MEASURE`
+`commit: df962446 (ledger only; source HEAD 54990e1e)`
+
+`EXP-UQ237-SOURCE-GATE-MEASURE: VALID MEASUREMENT`
+
+`source-gate-after-t7-01/`: the whole `src/so101_demo_py/test` suite (benchmark excluded),
+exit 1, **239 failed, 3132 passed, 8 skipped, 40 errors in 88.29 s**. This is a measurement of
+this host against a Linux-targeted suite, not a regression from this task: the failure-reason
+histogram is entirely environment boundaries.
+
+| Count | Reason | Classification |
+| --- | --- | --- |
+| 280 | `FileNotFoundError: /data/work/...` plus 28 `OSError: [Errno 30] Read-only file system: '/data'` | The ai-station evidence root does not exist on this Mac. `DEFERRED_ENVIRONMENT`. |
+| 76 | `FileNotFoundError: /proc/self/fd...` on top of 65 `UNIX_TRANSPORT_UNAVAILABLE` and 63 `ResourceAllocationError: UNIX_TRANSPORT_UNAVAILABLE` | The schema-v3 Linux dirfd transport. This is the boundary the v4 Darwin path replaces for the product, not a v3 test that may be rewritten. `DEFERRED_ENVIRONMENT`. |
+| 71 | `ValueError: PATH_OWNER` | v3 endpoint-owner checks that require Linux ownership semantics. `DEFERRED_ENVIRONMENT`. |
+| 66 | `ModelRuntimeInfrastructureError` | No perception model runtime is provisioned on this host. `DEFERRED_ENVIRONMENT`. |
+| 45 | `FileNotFoundError: 'sysctl'` | A v3 Darwin memory fallback invokes `sysctl` without an absolute path while `/usr/sbin` is not on the bash tool's PATH. Real, small, and task-owned: worth a scoped fix. |
+| 5 | `FileNotFoundError: /run/user/501` | Linux runtime directory. `DEFERRED_ENVIRONMENT`. |
+
+The macOS package gate therefore cannot be reported green, and no platform skip was added to make
+it look green. The gates this task added are green on their own merits: contracts 91, accelerator
+probe 21, start guard 99 across four files, campaign supervisor 13, Unix address 23, v4 RPC 33,
+input snapshot 16, inference registry 18, Coordinator 138.
+
+Next round's first candidate fix is the bare `sysctl` invocation (45 cases), which is the only
+cluster above that looks like a genuine product portability gap rather than a missing Linux
+facility. It must be fixed as a real fix (absolute path plus a fail-closed fallback), never by
+loosening the memory check.
+
+_Ledger source HEAD: `df962446`; no evidence deleted._
