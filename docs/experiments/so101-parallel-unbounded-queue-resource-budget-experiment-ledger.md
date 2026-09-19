@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ271 (tail of this file)
+latest_checkpoint: CP-UQ272 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -12542,3 +12542,37 @@ ahead, the honest conclusion is that Task 14 will not be counted in this goal, a
 either, which stays `DEFERRED_ENVIRONMENT`.
 
 _Ledger source HEAD: `6999c438`; no evidence deleted._
+
+## CP-UQ272 — Task 15: the Linux regression checkpoint, registered and not executed
+
+```yaml
+checkpoint_id: CP-UQ272
+last_valid_experiment: none - this task registers a deferral; it runs no Linux command
+working_tree_status: clean at commit c8e5c583
+owned_processes: NONE
+open_risks:
+  - Every Linux gate below is unrun. None may be reported as PASS, SKIP or N/A.
+next_command: none until a Linux CUDA/NVML environment exists
+```
+
+Task 15 of the plan requires exactly this text and nothing executed:
+
+```text
+status: DEFERRED_ENVIRONMENT
+reason: no Linux environment available
+resume_when: Linux CUDA/NVML environment is ready
+required_gates: schema-v3 CUDA/NVML; schema-v4 CUDA+proc_fd_unix; EGL; real Broker device; package/CTest; exact W2
+```
+
+The macOS results do **not** substitute for any of it. `ai-station-001-lin` (100.82.102.56) was last
+seen offline earlier in this task and `macbook-air` refuses the connection (host key verification), so
+no Linux host was reachable at any point in this session; no Linux command has been run, and the
+following claims remain blocked by `LINUX_REGRESSION_DEFERRED`:
+
+- cross-platform validity of schema v4 (the two closed combinations are defined, but only the Darwin
+  one has ever executed);
+- Linux CUDA/NVML admission, `proc_fd_unix` transport, EGL rendering and a real `cuda` Broker device;
+- Linux package/CTest gates and a Linux exact-W2 campaign;
+- any main-branch merge or release claim that depends on the Linux half.
+
+_Ledger source HEAD: `c8e5c583`; no evidence deleted._
