@@ -13519,3 +13519,28 @@ then re-run the five-batch series so the appendix table's runs are all post-fix.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `810f02c9`; no evidence deleted._
+
+### CP-UQ283 addendum — the inference leg is restored, and all three legs now run at once
+
+`task14-infer-fixed-01`, on the fixed code, with the tamper and stall probes off:
+
+```text
+status W2_CAMPAIGN_INCOMPLETE | served 14 | devices ['mps'] | duplicates_refused 2
+  w1: infer [OK, OK, OK]   duplicate REFUSED
+  w2: infer [OK, OK, OK]   duplicate REFUSED
+  per-slot: w1 executed 4 / w2 executed 4, failures ['TERMINAL_CAPTURE_FAILED']
+```
+
+So one campaign now demonstrates, together: **real inference through the port on the shared MPS Broker**
+(6 x OK, devices `mps`), **one-time admission refusing duplicates** (2 refused, with the specific code),
+and **real pick-place execution on each slot's own station** (8 executed point-runs). The only thing
+standing between this and a counted batch is the per-point `viewer.png`, i.e. the TCC grant.
+
+Since the runs between rounds 95 and 113 exercised a handler that always raised, this run is the one to
+cite for the inference leg; CP-UQ270 remains the original pre-regression demonstration. The five-batch
+appendix (Appendix A) still lists runs from before the fix, so the next step is to re-run the series
+post-fix and replace that table rather than let stale rows stand.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `4f576450`; no evidence deleted._
