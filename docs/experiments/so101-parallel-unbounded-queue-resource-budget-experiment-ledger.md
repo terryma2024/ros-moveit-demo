@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ242 (tail of this file)
+latest_checkpoint: CP-UQ243 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -55,7 +55,7 @@ current_design: docs/superpowers/specs/2026-09-19-so101-macos-mps-private-ipc-de
   SHA-256 480da6dcdfea1da988f9f4e706c8340dbb6d7283200c27bb723859119145db1b
 current_worktree: /Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini
 current_branch: codex/so101-unbounded-queue-resource-budget (HEAD b55c181e at takeover)
-next_experiment: Task 13 - bisect the W2 smoke broker-phase hang, then run the real W2 shape
+next_experiment: instrument the macOS identity read during a real spawn, then rerun the W2 shape gate
 correction_cp_uq229: the header's `worktree`, `evidence_root` and `task_root` fields describe the
   historical ai-station Stage A-E dispatch (`84620fc0`) and are not rewritten, because that history
   is not invalidated. The live dispatch, worktree and evidence root for the current macOS MPS/private
@@ -9819,3 +9819,71 @@ loading the *real* model set cannot be demonstrated here at all. That is an envi
 code defect, and it bounds what Task 13 and Task 14 can ever claim on this machine.
 
 _Ledger source HEAD: `0bb4ec74`; no evidence deleted; no Linux or W4/W6/W8 action._
+
+## CP-UQ243 — The W2 runtime shape ran end to end, and the identity race is now fail-closed
+
+```yaml
+checkpoint_id: CP-UQ243
+last_valid_experiment: EXP-UQ243-TASK13-W2-RUNTIME-SHAPE
+current_hypothesis: The two-phase smoke can run the whole exact-W2 runtime shape on this host, and
+  the birth-identity read must fail closed rather than promote an unidentifiable child.
+working_tree_status: clean at commit 2d93bb42
+owned_processes: NONE - every child was reaped; cleanup receipts are complete
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome extension host, Sparkle updater,
+  SkyComputerUseService
+open_risks:
+  - macOS `read_process_identity()` returns None for the smoke's worker children, so the smoke now
+    refuses them by design and the W2 shape gate is INCOMPLETE, not PASS.
+  - The identity budget reuses the ACK timeout; it should be its own short bound.
+next_command: instrument the identity read during a real spawn to find why macOS returns None
+```
+
+`checkpoint_id: CP-UQ243`
+`last_valid_experiment: EXP-UQ243-TASK13-W2-RUNTIME-SHAPE`
+
+### The hang is fixed, and the shape ran end to end
+
+The Task 13 hang was a harness defect with a clear cause: the smoke re-executed itself after the
+guard phase but re-derived the phase from the environment, so the broker phase landed back in the
+guard phase and re-executed forever. Step markers found it in one run. The smoke now names its
+phase explicitly, and `task13-w2-runtime-smoke-01/` then completed **all 13 steps**:
+
+```text
+guard      : PASS / MPS_HEADROOM_OK, 10.76 GB available, admission_kind unified-memory-proxy
+broker     : ready=True, device=mps, models [yolo, grounded-sam] both on mps:0,
+             lane {submitted 7, executed 7, rejected 0, peak_depth 1, max_concurrent 1},
+             warm-up 0.26 s, receipt written
+endpoint   : /private/tmp/so101-ipc-501/b-a0d0967f1bcb/broker.sock, mode 0600, 53 encoded bytes
+workers    : two real child processes, both ACTIVE, both reaped
+round trips: 6 served requests, every output device mps:0
+negatives  : MALFORMED_FRAME, OVERSIZED_FRAME, UNKNOWN_OPERATION, DEADLINE_EXPIRED
+cleanup    : complete, directory removed, registry empty, both workers gone
+```
+
+That is the exact-W2 runtime shape — one broker, one shared model set, one lane, two workers, two
+clients, negative paths, restart-safe cleanup — proven on this host with real MPS.
+
+### A real defect the run exposed, and an honest A/B
+
+The first run recorded `birth_identity: None` for worker `w2` while still reporting it `ACTIVE`.
+That is unsafe: `_matches_receipt` can never match an identity-less child, so a later PID-reuse
+check is impossible for it. The supervisor now retries the identity read and **fails closed**.
+
+```text
+A  task13-identity-ab-01/ (fix in):    INCOMPLETE, w1/w2 FAILED, birth None
+   both children still completed 3/3 round trips each; each spawn spent the full 60 s budget
+B  task13-identity-ab-02/ (fix out):   PASS, w1/w2 ACTIVE, birth None
+conclusion: A is the correct direction and B is the unsafe one. The regression is the fix working.
+```
+
+A new, narrower problem is now the top of the queue and is recorded as such: on this host
+`read_process_identity()` returns `None` for these macOS worker children even though the same call
+succeeds for a plain child spawned the same way, and even though the children are demonstrably
+alive and serving requests. Two concrete leads are recorded: the identity budget incorrectly
+reuses the ACK timeout instead of having its own short bound, and the one read that did succeed
+belonged to the child that was still importing.
+
+`EXP-UQ243`: the runtime shape is proven; the identity-read root cause is **not** confirmed, and no
+W2 acceptance is claimed while the smoke refuses its own workers.
+
+_Ledger source HEAD: `2d93bb42`; no evidence deleted; no Linux or W4/W6/W8 action._
