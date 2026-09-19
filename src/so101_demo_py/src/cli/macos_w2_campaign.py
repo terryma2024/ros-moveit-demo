@@ -525,6 +525,38 @@ def run(argv: list[str] | None = None) -> int:
             time.sleep(0.5)
         document["worker_results"] = results
 
+        # The per-slot physical evidence, summarised where the campaign's own result can carry it:
+        # a reader should not have to walk the directory tree to learn whether each slot executed
+        # its points, and what the contacts were.
+        import glob as _glob
+
+        per_slot = {}
+        for worker_id in ("w1", "w2"):
+            pick_root = arguments.evidence_root / f"{worker_id}-station/pick"
+            manifests = sorted(_glob.glob(f"{pick_root}/**/dynamic-execute-manifest.json",
+                                          recursive=True))
+            points = sorted(_glob.glob(f"{pick_root}/**/point-result.json", recursive=True))
+            executed, contacts = [], []
+            for manifest in manifests:
+                entry = json.loads(Path(manifest).read_text())
+                if entry.get("current_state") == "DONE" and entry.get("failure") is None:
+                    executed.append(Path(manifest).parent.parent.name)
+                    sample = (entry.get("final_samples") or [{}])[0]
+                    contacts.append({"point": Path(manifest).parent.parent.name,
+                                     "simulation_step": sample.get("simulation_step"),
+                                     "table_contact": sample.get("table_contact"),
+                                     "max_normal_force_n": sample.get("maximum_normal_force_n")})
+            per_slot[worker_id] = {
+                "executed_points": sorted(executed),
+                "manifests": len(manifests),
+                "point_results": len(points),
+                "failure_codes": sorted({json.loads(Path(p).read_text()).get("failure_code")
+                                         for p in points}),
+                "contacts": contacts,
+                "evidence_root": str(pick_root),
+            }
+        document["per_slot_pick_place"] = per_slot
+
         # Every response is admitted through the one-time table before it counts.
         admitted, refused = [], []
         for entry in served:
