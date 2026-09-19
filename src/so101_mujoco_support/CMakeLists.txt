@@ -12,6 +12,7 @@ find_package(mujoco_ros2_control_plugins REQUIRED)
 find_package(mujoco_vendor REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rcutils REQUIRED)
 find_package(realtime_tools REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
@@ -24,6 +25,9 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/PhysicsStepEvidence.msg"
   "msg/PhysicsStepEvidenceChunk.msg"
   "msg/SimulationEvidence.msg"
+  "msg/ScalarJointEvidence.msg"
+  "msg/RobotContactEvidence.msg"
+  "msg/SceneStateEvidence.msg"
   DEPENDENCIES geometry_msgs std_msgs)
 rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} rosidl_typesupport_cpp)
 
@@ -37,7 +41,7 @@ target_link_libraries(so101_simulation_evidence_plugin PUBLIC
   mujoco_ros2_control_plugins::mujoco_ros2_control_plugins
   ${cpp_typesupport_target})
 ament_target_dependencies(so101_simulation_evidence_plugin PUBLIC
-  geometry_msgs pluginlib rclcpp realtime_tools std_msgs)
+  geometry_msgs pluginlib rclcpp rcutils realtime_tools std_msgs)
 pluginlib_export_plugin_description_file(mujoco_ros2_control_plugins so101_mujoco_plugins.xml)
 
 add_executable(graceful_shutdown_move_group src/graceful_shutdown_move_group.cpp)
@@ -74,5 +78,5 @@ install(TARGETS graceful_shutdown_move_group RUNTIME DESTINATION lib/${PROJECT_N
 install(DIRECTORY include/ DESTINATION include)
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(geometry_msgs mujoco_ros2_control_plugins mujoco_vendor pluginlib
-  rclcpp realtime_tools rosidl_default_runtime std_msgs)
+  rclcpp rcutils realtime_tools rosidl_default_runtime std_msgs)
 ament_package()

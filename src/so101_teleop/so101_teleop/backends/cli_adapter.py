@@ -191,6 +191,21 @@ class CliBackendAdapter:
         if error is not None:
             return self._envelope(operation, spec, session_id, ok=False, error=error)
         argv = [str(executable), *spec.fixed_args, *arguments]
+        action_options = {}
+        if os.environ.get("SO101_ACT_PROFILE") in ("1", "true"):
+            path = os.environ.get("SO101_ACT_CONTROL_CONTEXT")
+            if not path:
+                return self._envelope(operation,spec,session_id,ok=False,
+                    error=BackendError("CONTROL_CONTEXT_REQUIRED","broker control context is required"))
+            context = json.loads(Path(path).read_text())
+            if context.get("session_id") != session_id:
+                return self._envelope(operation,spec,session_id,ok=False,
+                    error=BackendError("SESSION_MISMATCH","broker control session differs"))
+            fd = context.get("connection_fd")
+            if type(fd) is not int or fd < 0:
+                return self._envelope(operation,spec,session_id,ok=False,
+                    error=BackendError("INHERITED_CONTROL_CONNECTION_REQUIRED","persistent broker connection is required"))
+            action_options["pass_fds"] = (fd,)
         try:
             completed = self._run_process(
                 argv,
@@ -199,6 +214,7 @@ class CliBackendAdapter:
                 timeout=spec.timeout_s,
                 check=False,
                 shell=False,
+                **action_options,
             )
         except subprocess.TimeoutExpired as error:
             stdout = error.stdout or ""

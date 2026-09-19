@@ -278,3 +278,34 @@ def test_reset_passes_free_joint_overrides_to_service() -> None:
     resetter.reset("task_start", (override,))
 
     assert services.reset_calls == [("task_start", (override,))]
+
+
+def test_atomic_reset_hook_arms_observers_before_any_resume_step():
+    events=[]
+    class TracedServices(Services):
+        def pause(self,paused):events.append(('pause',paused));return super().pause(paused)
+        def reset_world(self,*args):events.append(('reset',));return super().reset_world(*args)
+    services=TracedServices()
+    def arm(snapshot):
+        assert snapshot.paused and snapshot.simulation_step==0 and snapshot.reset_epoch==4
+        events.append(('armed',4))
+    resetter=MujocoResetClient(services,Observer(),simulation_session_id='session',
+        controller_names=('arm_controller','gripper_controller'),expected_joint_positions=(0.,)*6,
+        expected_object_position=(.1,.2,.3),on_reset_snapshot=arm,
+        progress=lambda:setattr(services,'joint_callback_count',services.joint_callback_count+1))
+    receipt=resetter.reset('task_start')
+    assert receipt.new_epoch==4
+    index=events.index(('reset',))
+    assert events[index+1]==('armed',4) and events[index+2]==('pause',False)
+
+
+def test_atomic_reset_hook_failure_prevents_resume():
+    services=Services()
+    def bad(snapshot):raise ValueError('CONTACT_OBSERVER_ARM_FAILED')
+    resetter=MujocoResetClient(services,Observer(),simulation_session_id='session',
+        controller_names=('arm_controller','gripper_controller'),expected_joint_positions=(0.,)*6,
+        expected_object_position=(.1,.2,.3),on_reset_snapshot=bad,
+        progress=lambda:setattr(services,'joint_callback_count',services.joint_callback_count+1))
+    with pytest.raises(ResetFailed,match='CONTACT_OBSERVER_ARM_FAILED'):resetter.reset('task_start')
+    assert services.pauses.count(False)==1 and services.pauses[-1] is True
+    assert len(services.reset_calls)==1

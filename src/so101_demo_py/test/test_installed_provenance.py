@@ -30,6 +30,7 @@ EXPECTED_EXECUTABLES = {
     "text_pick_agent",
 }
 EXPECTED_LAUNCHERS = {
+    "so101_mujoco_act.launch.py",
     "so101_gazebo.launch.py",
     "so101_gazebo_pick_place.launch.py",
     "so101_mujoco.launch.py",
