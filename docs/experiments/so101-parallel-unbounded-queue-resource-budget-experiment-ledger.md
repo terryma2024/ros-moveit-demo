@@ -8274,3 +8274,38 @@ product defect, and `tools/final-gates.sh` now sources the helper before the web
 cannot recur silently.
 
 _Ledger HEAD when written: `242d16f66`._
+
+## CP-UQ209 — Stability batch 1 FAILED at shutdown: OWNED_GROUP_SURVIVORS: worker
+
+The first of the five consecutive twenty-point batches did **not** complete, and the series is
+therefore at **0 valid batches**, recorded before any further attempt:
+
+- the journal shows 19 `RESULT_COMMITTED` with `ATTEMPT_STARTED: 18`, `WORKER_RECOVERED: 18`,
+  `WORKER_REGISTERED: 19`, `WORKER_QUARANTINED: 1`, then `BATCH_STOPPING`;
+- the shutdown log escalates on the sim:
+  `process[ros2_control_node-4] failed to terminate '5' seconds after receiving 'SIGINT',
+  escalating to 'SIGTERM'` → `'10.0' seconds after receiving 'SIGTERM', escalating to 'SIGKILL'`;
+- then the coordinator raises, from `supervisor.wait_for_children`:
+  `so101_demo.runtime.parallel_processes.SupervisorError: OWNED_GROUP_SURVIVORS: worker`;
+- the campaign never reaches a terminal, cleaned-up state: the projection stays `RUNNING` with
+  `batch_cleanup_complete: false`, and its own worker manifest
+  (`workers/worker-01/owned-runtime-processes.json`) is **empty** — so the survivor the supervisor
+  refused to ignore was not a process this worker recorded owning;
+- my broker container from that campaign was still up afterwards (logs kept, container removed), and
+  the stalled Playwright case was stopped rather than left to time out.
+
+Evidence kept under `$TASK_ROOT/stability-failure-batch1/` (`coordinator.log`, 33,029 lines, and the
+broker's last 40 log lines). Nothing was deleted, and no foreign process was touched — the host also
+runs an unrelated `codex` ACT-data task whose processes are visible in `ps` and were left alone.
+
+This is a genuine product boundary, not a harness artefact: the plan's own supervisor refuses to
+declare a batch stopped while a worker group survives, and refuses to call cleanup complete — which
+is the correct fail-closed behaviour — but the shutdown path itself could not retire a worker group
+after eighteen per-point worker recoveries. The next step is a **cheap reproduction**: a four-point
+N1 sequential campaign (the shape the sweep already ran cleanly) and, if it reproduces, reading
+`wait_for_children` together with the worker-recovery path in
+`so101_demo/runtime/parallel_processes.py` and the coordinator's worker lifecycle, before any further
+five-batch attempt. The service will be restarted on a fresh root so this campaign's stuck state
+cannot contaminate the reproduction.
+
+_Ledger HEAD when written: `144f5afeb`._
