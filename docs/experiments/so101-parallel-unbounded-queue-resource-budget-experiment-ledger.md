@@ -12385,3 +12385,33 @@ orphan check.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `a5efe043`; no evidence deleted._
+
+### CP-UQ269 addendum 2 — the helpers are wired, and mismatch 2 is closed
+
+`main()` now builds the lease documents and binds the Worker-derived ids through the two tested
+functions, passing the lease path to each Worker as a fourth station argument. The IPC-shape probe
+ids stay bound alongside them, so the shape the previous gate proved cannot be silently refused.
+
+```text
+task14-campaign-ready-13   status W2_CAMPAIGN_PASS, served 6, cleanup complete
+                           w1 ready True phase READY trips 3 failure None
+                           w2 ready True phase READY trips 3 failure None
+                           orphans []
+```
+
+So the admission table now speaks the same vocabulary the Worker's port does
+(`{attempt_id}-{model_id}`), which was mismatch 2 of 3 from addendum 3.
+
+Honest note on the earlier revert: this run passes with essentially the content that failed as
+`task14-campaign-ready-11`. The difference I can identify is ordering - the failing attempt wrote the
+lease files inside the same loop that bound, this one writes them before binding and before the spawn
+loop - and I have not proven that is the mechanism. It is recorded as unexplained rather than as
+"fixed", because a passing run after a revert is not a diagnosis.
+
+Remaining: mismatch 3 - the Worker still cannot *use* that identity, because it neither reads the
+lease document nor builds the snapshot descriptor and lease object the port's `request_one` needs.
+That is the next step, and the helpers' test means the entry-point side of it is now covered.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `9b47c64c`; no evidence deleted._
