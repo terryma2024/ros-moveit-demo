@@ -11713,3 +11713,30 @@ currently takes as an injected callable, and it is now specified rather than gue
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `97faab31`; no evidence deleted._
+
+### CP-UQ263 addendum 6 — the port now owns the whole v4 call path
+
+`request_one` is implemented on the port, mirroring the container proxy's call while dropping
+everything schema v4 removed:
+
+- identity built from the lease and the snapshot exactly as the production path builds it,
+  including `attempt_id` vs `validation_id` by `ExecutionKind`, the worker-root-relative
+  `input_relative_path`, the input SHA and the deadline;
+- `before_send(request)` honoured, so the Coordinator's local authorization still runs before the
+  bytes leave the Worker;
+- the envelope is `{"operation": "infer", "request": …, "snapshot": …}` sent through the
+  **v4 permission-only client** - no token, generation, lease or endpoint receipt;
+- a response carrying `ok=False` is refused as `BROKER_INFER_REFUSED` instead of flowing into the
+  chain, so a refused inference cannot be mistaken for an admitted one.
+
+`request_model` keeps the production positional contract and now calls this method through the
+`send(model_id, before_send)` callback it hands to the perception chain.
+
+`task14-broker-port-05`: **6 passed**. The whole Worker-side broker path - refusal to serve without a
+perception chain, positional chain contract, one-model delegation, fence boolean, rollback refusal,
+bounded recovery wait - is covered by fakes and needs no live Broker to test.
+
+Task 14 remains 0/5: the port is not yet wired into a Worker runtime, no batch has run, and
+`LINUX_REGRESSION_DEFERRED` is retained.
+
+_Ledger source HEAD: `1b116965`; no evidence deleted._
