@@ -13184,3 +13184,24 @@ point fails closed on the GUI capture". It remains **0/5**: the plan counts a ba
 passes, and I am not going to relabel a failing capture as a pass. `LINUX_REGRESSION_DEFERRED` stands.
 
 _Ledger source HEAD: `5b68085d`; no evidence deleted._
+
+### CP-UQ281 addendum — the five-run FULL_RESTART series, batches as they finish
+
+```text
+batch 1: exit=7 status=W2_CAMPAIGN_INCOMPLETE served=8 cleanup=True
+    w1: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+    w2: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+batch 2: exit=7 status=W2_CAMPAIGN_INCOMPLETE served=8 cleanup=True
+    w1: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+    w2: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+```
+
+Each batch composes a fresh claim, IPC root, Broker generation and two stations. In the batches
+recorded so far **both slots executed all four points** (4 manifests, 4 point results, nothing
+refused) and cleanup was complete; every single point still ends FAILED with
+TERMINAL_CAPTURE_FAILED, which is the TCC viewer-capture blocker and not the chain. So this series
+is evidence of repeatability of the whole W2 chain **including per-slot pick-place execution**, and
+it is explicitly **not** the plan's counted five-batch stability: a batch that fails its capture is
+not a pass, and Task 14 therefore stays 0/5.
+
+_Ledger source HEAD: (this commit's parent); no evidence deleted._
