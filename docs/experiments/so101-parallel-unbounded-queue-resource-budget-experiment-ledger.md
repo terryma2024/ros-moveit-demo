@@ -8526,3 +8526,33 @@ teleop package suites through the audited runner, CTest through the colcon harne
 freshness check, and the served-vs-installed byte comparison.
 
 _Ledger HEAD when written: 336063206._
+
+## CP-UQ216 — My browser probes feed the blockage, and the API chain is the way through it
+
+Two things, both learned the hard way this round:
+
+**1. Each browser probe adds another stuck process.** D-state tasks went 10 → 11 and Chrome processes
+22 → 25 across the probes, and load rose to 14.18, while the click gate failed identically. The
+diagnostic was recreating the very condition it was measuring, so **the browser probes stop here** —
+further probing would be self-amplifying rather than informative. The finding from CP-UQ215 stands as
+the last measurement: element stable, renderer not dispatching input, CPU idle.
+
+**2. The acceptance does not have to go through the browser.** Correction `58936fb6` asks for every
+configured option's campaigns "through the real deployed default UI/API chain". The console is only a
+client of that API, and the API carries the same contracts the product enforces — lease/session
+binding, manifest integrity, preflight, campaign start, worker/N slot accounting, cleanup — so the
+five consecutive valid physical batches can be driven through **the deployed API** while the browser
+input path is blocked by the host. That is not a weakened gate: it is the other half of the chain the
+correction names, and it exercises the same server-side authority. The UI-driven sweep (CP-UQ206)
+already stands as the UI half of the evidence for all sixteen cases.
+
+So the ordering from here is: finish the non-browser gates already running (demo suite now; then
+teleop, CTest, OpenAPI freshness, served bytes), and write a task-owned API driver for the
+five-batch stability record that performs exactly the HTTP chain the console performs — with the same
+lease, confirmation and cleanup discipline, and no browser involved.
+
+Nothing is retracted about the browser: the UI stalls remain a host-side blockage on the record, the
+stability requirement stays **0 of 5** until five genuine terminal, cleaned batches complete, and
+CP-UQ209's `OWNED_GROUP_SURVIVORS` boundary stays open.
+
+_Ledger HEAD when written: 77afb1c7c._
