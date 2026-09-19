@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ240 (tail of this file)
+latest_checkpoint: CP-UQ241 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -55,7 +55,7 @@ current_design: docs/superpowers/specs/2026-09-19-so101-macos-mps-private-ipc-de
   SHA-256 480da6dcdfea1da988f9f4e706c8340dbb6d7283200c27bb723859119145db1b
 current_worktree: /Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini
 current_branch: codex/so101-unbounded-queue-resource-budget (HEAD b55c181e at takeover)
-next_experiment: Task 11 - audit whether Teleop/OpenAPI/Web expose accelerator, guard or IPC state
+next_experiment: Task 12 - fresh source, package, OpenAPI, copied-install and served-byte gates
 correction_cp_uq229: the header's `worktree`, `evidence_root` and `task_root` fields describe the
   historical ai-station Stage A-E dispatch (`84620fc0`) and are not rewritten, because that history
   is not invalidated. The live dispatch, worktree and evidence root for the current macOS MPS/private
@@ -9691,3 +9691,72 @@ What Task 10 added:
 - the v3 plan still resolves the frozen Linux combination with no MPS field present anywhere.
 
 _Ledger source HEAD: `930a0396`; no evidence deleted; no Linux or W4/W6/W8 action._
+
+## CP-UQ241 — The Teleop projection was wrong, and two gate results were invalid for a package reason
+
+```yaml
+checkpoint_id: CP-UQ241
+last_valid_experiment: EXP-UQ241-TASK11-TELEOP
+current_hypothesis: The API already projects the guard and worker-count surface, so the honest
+  change is two data fields, not a UI refactor; and the runner must import this worktree's teleop.
+working_tree_status: clean at commit b1557da5
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome extension host, Sparkle updater,
+  SkyComputerUseService
+open_risks:
+  - 27 teleop failures remain on this host, measured at 31 before this change and unchanged in kind.
+next_command: Task 12 - fresh source, package, OpenAPI, copied-install and served-byte gates
+```
+
+`checkpoint_id: CP-UQ241`
+`last_valid_experiment: EXP-UQ241-TASK11-TELEOP`
+`commit: b1557da5 feat(teleop): expose macOS MPS W2 runtime state`
+
+### A real provenance defect in the task-local runner
+
+The first teleop gate imported `so101_teleop` from
+`/Users/matianyi/Projects/robot_demo_001/moveit-demo/install/...` — the **canonical checkout's**
+installed copy, a different revision from this worktree. `SOURCE_PACKAGES` only linked
+`so101_demo`, so every teleop assertion was silently testing someone else's code. The runner now
+links `src/so101_teleop/so101_teleop` too and fails closed if the link is not importable, and the
+five earlier teleop/OpenAPI gates (`task11-teleop-01/02`, `task11-openapi-01/02/03`) are marked
+INVALID with that reason. That is exactly the "stale installed binary" failure the repository's
+own rules warn about, caught here by reading the provenance record instead of trusting the result.
+
+### Task 11 result
+
+`EXP-UQ241-TASK11-TELEOP: VALID`
+
+The API already exposes the worker-count and guard surface, so no UI refactor was warranted. Two
+data fields were added to the resolved projection:
+
+- `StartGuardPolicyResponse.mps_minimum_headroom_bytes: int | None` — the fixed unified-memory
+  floor, present only on the schema-v4 MPS combination, so a client can show the cutoff that
+  refused a start. Null on every v3 answer, which keeps existing consumers byte-compatible.
+- `StartGuardStatus.admission_kind: str | None` — `unified-memory-proxy` when the accelerator
+  check ran (`mps_headroom` present) or `nvml-device` when the v3 GPU check ran. This is the
+  design's insistence that a unified-memory proxy is never presented as a device-level VRAM
+  reading, made legible to the browser.
+
+A/B evidence, because "no regression" should be measured:
+
+```text
+task11-teleop-ab-01/ (edits stashed): 31 failed, 365 passed
+task11-teleop-full-01/ (edits in):    27 failed, 369 passed
+fixed by this change: the 4 new projection tests, nothing else
+newly failing: none
+```
+
+Generated artifacts were regenerated with the project's own tools, never hand-edited:
+`expert_validation_openapi.json` via `python3 -m so101_teleop.openapi_export --validation`, and
+`web/src/api/expert-validation-schema.d.ts` via `bun run generate:api:validation` after
+`bun install --frozen-lockfile`. Both new fields appear in both artifacts.
+
+The web gate is **green when run as separate steps**: `task11-web-build-01/` (exit 0,
+`tsc -b && vite build`) and `task11-web-unit-01/` (exit 0, **30 files, 126 tests**). Chaining them
+in one shell produced 77 failures with `act(...) is not supported in production builds of React` —
+the `vite build` step leaves `NODE_ENV=production` set and vitest then loads production React. That
+is a harness ordering artifact, not a product or test defect, and the two gates are recorded
+separately so neither hides the other.
+
+_Ledger source HEAD: `b1557da5`; no evidence deleted; no Linux or W4/W6/W8 action._
