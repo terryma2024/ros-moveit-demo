@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ237 (tail of this file)
+latest_checkpoint: CP-UQ238 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -55,7 +55,7 @@ current_design: docs/superpowers/specs/2026-09-19-so101-macos-mps-private-ipc-de
   SHA-256 480da6dcdfea1da988f9f4e706c8340dbb6d7283200c27bb723859119145db1b
 current_worktree: /Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini
 current_branch: codex/so101-unbounded-queue-resource-budget (HEAD b55c181e at takeover)
-next_experiment: Task 8 RED - real MPS broker bootstrap and single execution lane (and first fix the 45-case bare sysctl invocation)
+next_experiment: Task 9 RED - whole-pool rebuild after a broker failure
 correction_cp_uq229: the header's `worktree`, `evidence_root` and `task_root` fields describe the
   historical ai-station Stage A-E dispatch (`84620fc0`) and are not rewritten, because that history
   is not invalidated. The live dispatch, worktree and evidence root for the current macOS MPS/private
@@ -9507,3 +9507,77 @@ facility. It must be fixed as a real fix (absolute path plus a fail-closed fallb
 loosening the memory check.
 
 _Ledger source HEAD: `df962446`; no evidence deleted._
+
+## CP-UQ238 — The environment gap was the PATH, and the MPS broker really warms up on one lane
+
+```yaml
+checkpoint_id: CP-UQ238
+last_valid_experiment: EXP-UQ238-TASK8-MPS-BROKER
+current_hypothesis: A single Broker can load one real model set on MPS, warm it, synchronise, and
+  publish a ready receipt that is derived from recorded facts rather than asserted.
+working_tree_status: clean at commit a89e5571
+owned_processes: NONE - the real smoke exited; its lane worker thread died with the process
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome extension host, Sparkle updater,
+  SkyComputerUseService
+open_risks:
+  - The smoke uses tiny stand-in models. It proves the bootstrap, not the perception model set; the
+    real weights are Task 12/13 work.
+  - The Broker is not yet wired to `PerceptionBroker` or to the Coordinator's registry; that is
+    Task 9 and Task 10 work.
+next_command: Task 9 RED - whole-pool rebuild after a broker failure
+```
+
+`checkpoint_id: CP-UQ238`
+`last_valid_experiment: EXP-UQ238-TASK8-MPS-BROKER`
+`commit: a89e5571 feat(so101): bootstrap a single-lane shared MPS broker`
+
+### The 45-case "sysctl" cluster was a PATH gap, not product code
+
+`path-fix-mujoco-01/` (exit 0, **13 passed**). The failing tests import `mujoco`, and
+`mujoco/__init__.py` calls a bare `sysctl -n sysctl.proc_translated` at import time. The DSH bash
+tool starts with a minimal `PATH` that omits `/usr/sbin` and `/sbin`, and macOS ships `sysctl` in
+`/usr/sbin`; a login shell has it. The task-local runner now appends `/usr/sbin:/sbin` and fails
+closed if `sysctl` is still unreachable, so the environment matches an interactive shell instead of
+masking a product problem. Re-measured source gate
+(`source-gate-after-path-fix-01/`): **234 failed, 3177 passed, 8 skipped**, down from
+`239 failed, 3132 passed` — 45 more passing tests and no new failures. No product `sysctl` call
+needed changing: `start_guard.py` and `accelerator_probe.py` already use the absolute path.
+
+### Task 8: real device, real lane
+
+`EXP-UQ238-TASK8-MPS-BROKER: VALID`
+
+RED/GREEN: `task8-green-01/` … `-05/` are retained; the final gate
+(`task8-green-05/`, exit 0, **36 passed**). Three real defects were found by the tests rather than
+by inspection:
+
+1. the lane originally executed the item in the *submitter's* thread, so two concurrent submitters
+   could run two Metal calls at once — exactly what "single lane" forbids. It is now a single
+   worker thread with a bounded queue, and `max_concurrent` is incremented only by that worker.
+2. `MpsBrokerBootstrap.clock` was referenced as `self._clock`, a latent `AttributeError`.
+3. real PyTorch reports MPS tensor devices as **`mps:0`**, not `mps`, so the parameter/output
+   device check refused a genuinely correct model. `is_mps_device` now accepts both spellings and
+   still refuses `cpu`, `cuda:0`, `None` and `mpsx`.
+
+Real-device smoke (`task8-mps-bootstrap-smoke-01/`, exit 0) on this host:
+
+```text
+status: READY, receipt_ready: true
+fallback_env_before_import: 0 (the first uninstrumented run correctly REFUSED with
+  MPS_FALLBACK_NOT_PINNED and its readback is retained as refusal-readback.json)
+import_order_checked_before_import: true
+torch 2.13.0, mps built+available, runtime_device mps, fraction 0.8
+recommended_max_memory_bytes 19069665280, driver_allocated_memory_bytes 10977280
+models: tiny-yolo and tiny-grounded-sam, both device mps:0, parameters [mps:0],
+  output shape [1, 4, 1, 1] float32, synchronized true
+lane: submitted 7, executed 7, rejected 0, peak_depth 1, max_concurrent 1
+after two concurrent inferences: max_concurrent still 1
+warmup_total_latency_s: 0.3047
+```
+
+That is the design's three broker requirements measured rather than asserted: the fallback pin is
+checked before `import torch` (and again after), the allocator cap is set before any model loads,
+and both models share one lane whose measured concurrency never exceeds one. Tiny models mean this
+claims the bootstrap only — not the perception weights and not any W2 runtime result.
+
+_Ledger source HEAD: `a89e5571`; no evidence deleted; no Linux or W4/W6/W8 action._
