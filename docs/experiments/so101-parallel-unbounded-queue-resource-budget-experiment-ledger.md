@@ -8556,3 +8556,38 @@ stability requirement stays **0 of 5** until five genuine terminal, cleaned batc
 CP-UQ209's `OWNED_GROUP_SURVIVORS` boundary stays open.
 
 _Ledger HEAD when written: 77afb1c7c._
+
+## CP-UQ217 — The host is degraded: pytest now blocks in D state too
+
+The demo package gate did not fail on an assertion; it **stopped making progress in the kernel**. Its
+serial phase was correctly targeted — `serial.argv.txt` names exactly the audited conflict modules
+(`test_parallel_batch_resources.py`, `test_parallel_start_guard_launch.py`,
+`test_text_pick_agent_e2e_process.py`, `test_parallel_adaptive_integration.py`,
+`test_parallel_batch_worker.py`, `test_inject_so101_parallel_fault.py`), with one declared skip
+(`test_adaptive_helper_handshake_and_sigint_cleanup`) — so the target list I flagged for checking is
+fine. What is not fine is the process state:
+
+- `venv/bin/python -m pytest …` has been in **`D`** (uninterruptible) with
+  `wchan = os_acquire_rwlock_write` for over a minute, after writing only `F.` (one failure, one pass)
+  to `serial.log`; no junit, no `rc`;
+- the host shows **11 `D`-state tasks** and load **14.2**; CPU is otherwise idle (13.8 % busy measured
+  earlier), so this is an I/O/lock pathology, not compute saturation;
+- my broker container `e2bb172bd754` is still `Up` at 56 minutes and the daemon still refuses to kill
+  it, and the orphaned Chrome GPU processes from the blocked browser runs are still stuck.
+
+So the degradation that first showed as "the browser cannot dispatch input" now also blocks the package
+suite's I/O. The run was stopped through its own job handle — exact-owned, no pattern-matched signal —
+rather than left to accumulate load.
+
+**What this does and does not block.** Blocked: anything that needs the host to complete real I/O or
+input under load — the five-batch stability record, the package/CTest gates, and the browser-driven
+acceptance. Not blocked: ledger work, the API driver for the stability record (writing it), and
+read-only evidence work.
+
+I am recording this as the concrete blocking condition, with three consecutive rounds of the same
+observation (105: browser stall, 106: input-dispatch isolation, 107–108: probes and pytest blocked by
+the same `D`-state condition). If it persists, the goal belongs in `blocked` with this reason rather
+than in a sequence of re-attempts; if it clears, the API route (CP-UQ216) is ready to carry the
+stability record without the browser.
+
+_Ledger HEAD when written: f30f2e42f._
