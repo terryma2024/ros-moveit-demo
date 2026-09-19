@@ -1666,7 +1666,11 @@ class WorkerResourceAllocator:
             domain_conflicts = [
                 domain_id
                 for domain_id in domains
-                if self.probe.ros_domain_in_use(domain_id)
+                if (
+                    self._domain_claimed_by_another_campaign(domain_id)
+                    if isinstance(self.config, ParallelRuntimeConfigV4)
+                    else self.probe.ros_domain_in_use(domain_id)
+                )
             ]
             socket_conflicts = [
                 item['socket_path']
@@ -1682,6 +1686,32 @@ class WorkerResourceAllocator:
             raise ResourceAllocationError(f'ROS_DOMAIN_IN_USE: {joined}')
         if socket_conflicts:
             raise ResourceAllocationError(f'SOCKET_CONFLICT: {socket_conflicts[0]}')
+
+    def _domain_claimed_by_another_campaign(self, domain_id: int) -> bool:
+        """Portable domain-claim check for schema v4: read the durable claim, never `/proc`.
+
+        The allocator holds the flock on its own claims by the time this runs, so the recorded
+        owner decides the answer: our own pid is not a conflict, a live other pid is, and a dead
+        pid is a stale file from a finished campaign. Anything unreadable or malformed fails closed,
+        because "cannot verify" must never be reported as "free".
+        """
+
+        path = self.claim_root / f'domain-{domain_id}.lock'
+        if not os.path.lexists(path):
+            return False
+        try:
+            payload = Path(path).read_bytes()
+        except OSError as error:
+            raise ResourceAllocationError(f'PROBE_FAILED: claim unreadable: {error}') from error
+        try:
+            owner = int(json.loads(payload.decode('utf-8'))['pid'])
+        except (UnicodeError, ValueError, KeyError, TypeError) as error:
+            raise ResourceAllocationError(f'PROBE_FAILED: claim malformed: {error}') from error
+        if owner == os.getpid():
+            return False
+        from .start_guard_probe import read_process_identity
+
+        return read_process_identity(owner) is not None
 
     def _create_directories(
         self, paths: tuple[dict[str, Path | str | int], ...], parent_fd: int

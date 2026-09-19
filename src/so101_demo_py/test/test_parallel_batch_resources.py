@@ -1868,3 +1868,55 @@ def test_start_guard_scope_takes_its_selector_from_the_v4_accelerator() -> None:
         "MPS:default",
         "UUID:GPU-00000000-0000-0000-0000-000000000000",
     ]
+
+
+def test_domain_claim_check_reads_the_durable_claim(tmp_path: Path) -> None:
+    """The v4 domain check answers from the claim file, not from `/proc`.
+
+    It must not report the allocator's own claim as a conflict (the allocator already holds the
+    flock when the check runs), must see a live other owner, must ignore a stale file, and must
+    fail closed on a malformed one.
+    """
+
+    import json
+    import os
+    import subprocess
+    import sys
+    import time
+    from pathlib import Path as _Path
+    from types import SimpleNamespace
+
+    from so101_demo.parallel_batch.resources import (
+        ResourceAllocationError,
+        WorkerResourceAllocator,
+    )
+
+    claim_root = _Path(tmp_path) / "claims"
+    claim_root.mkdir(mode=0o700)
+    stub = SimpleNamespace(claim_root=claim_root)
+
+    assert WorkerResourceAllocator._domain_claimed_by_another_campaign(stub, 231) is False
+
+    own = claim_root / "domain-231.lock"
+    own.write_text(json.dumps({"pid": os.getpid()}))
+    assert WorkerResourceAllocator._domain_claimed_by_another_campaign(stub, 231) is False
+
+    live = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(20)"])
+    try:
+        own.write_text(json.dumps({"pid": live.pid}))
+        assert WorkerResourceAllocator._domain_claimed_by_another_campaign(stub, 231) is True
+        live.terminate()
+        live.wait(timeout=10)
+        time.sleep(0.2)
+        assert WorkerResourceAllocator._domain_claimed_by_another_campaign(stub, 231) is False
+    finally:
+        if live.poll() is None:
+            live.kill()
+
+    own.write_text("not json")
+    try:
+        WorkerResourceAllocator._domain_claimed_by_another_campaign(stub, 231)
+    except ResourceAllocationError as error:
+        assert "PROBE_FAILED: claim malformed" in str(error)
+    else:  # pragma: no cover - the failure must be explicit
+        raise AssertionError("a malformed claim must fail closed")
