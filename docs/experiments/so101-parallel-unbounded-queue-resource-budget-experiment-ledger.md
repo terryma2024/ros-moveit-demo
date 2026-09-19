@@ -12687,3 +12687,25 @@ Two things must not be smoothed over in any summary: Task 14 is **0/5**, and
 `LINUX_REGRESSION_DEFERRED` still blocks cross-platform and release claims.
 
 _Ledger source HEAD: `87e44239`; no evidence deleted._
+
+### CP-UQ274 addendum — platform stability: three more consecutive campaign runs
+
+Run back-to-back, with the orphan check after each:
+
+```text
+task16-stability-01   exit 0   W2_CAMPAIGN_PASS   orphans 0
+task16-stability-02   exit 0   W2_CAMPAIGN_PASS   orphans 0
+task16-stability-03   exit 0   W2_CAMPAIGN_PASS   orphans 0
+```
+
+Each run composes the exact-W2 campaign from scratch: fresh claim, fresh campaign IPC root, fresh
+Broker generation, two Workers that own a station each on their own domain, both stations proven ready,
+six probe round trips and six real `broker.infer` calls through the port, then exact cleanup.
+
+This is **platform stability, not Task 14's five `FULL_RESTART` simulation batches**, and the
+distinction matters in both directions: these runs carry no pick-place, no MoveIt shadow, no MuJoCo
+contact/placement evidence and no GUI capture, so they cannot be counted toward `five_batch_stability`;
+what they do show is that the composed macOS runtime now starts, serves and cleans up repeatably
+rather than once.
+
+_Ledger source HEAD: `332485ea`; no evidence deleted._
