@@ -137,6 +137,12 @@ def _local_guard_check(self, policy, scope):
 
     started = _time.monotonic()
     ports = _dataclasses.replace(_guard.host_ports(), busy_window_s=0.0)
+    if sys.platform == "darwin":
+        class MacTestGpu:
+            def devices(self):
+                return (_guard.GpuDevice(0, "GPU-MACOS-TEST", 16 << 30, 8 << 30),)
+
+        ports = _dataclasses.replace(ports, nvml=MacTestGpu())
     try:
         snapshot = _guard.probe_snapshot(policy, scope, started + policy.timeout_s, ports=ports)
         return _guard.evaluate_snapshot(snapshot, policy, scope, started_monotonic_s=started,
@@ -173,6 +179,27 @@ def claim_root():
     node_id = os.environ.get('PYTEST_CURRENT_TEST', 'standalone').split(' (', 1)[0]
     suffix = hashlib.sha256(node_id.encode('utf-8')).hexdigest()[:12]
     return Path(os.environ['TMPDIR']).parent / f'claims-{suffix}'
+
+
+@pytest.mark.skipif(sys.platform != 'darwin', reason='macOS /tmp is a system alias')
+def test_trusted_parent_accepts_the_root_owned_macos_tmp_alias(tmp_path):
+    """The handoff's /tmp evidence root reaches the same trusted /private/tmp inode."""
+
+    relative = tmp_path.relative_to('/private/tmp')
+    alias_target = Path('/tmp') / relative / 'batch'
+
+    descriptor = resources_api._open_trusted_parent(alias_target)
+    try:
+        assert os.fstat(descriptor).st_ino == tmp_path.stat().st_ino
+    finally:
+        os.close(descriptor)
+
+
+@pytest.mark.skipif(sys.platform != 'darwin', reason='macOS has no procfs stat')
+def test_domain_claim_owner_has_a_portable_process_birth_identity():
+    """Persistent ROS-domain claims remain PID-reuse safe without procfs."""
+
+    assert resources_api._process_starttime_ticks() > 0
 
 
 def test_oversized_cmdline_process_is_classified_not_refused():
@@ -1659,9 +1686,17 @@ def test_dry_run_cli_writes_private_manifest_without_starting_processes(tmp_path
     root = resource_root(tmp_path, 'dry')
     calls = []
 
+    if sys.platform == 'darwin':
+        # This test never binds a socket; Darwin's missing dirfd transport is covered
+        # separately and must not hide which schema-v3 resource probe was invoked.
+        monkeypatch.setattr(resources_api, 'require_transport_basename', lambda _path: None)
+
+    def retired_probe(_self):
+        raise AssertionError('schema-v3 must use only the lightweight start guard')
+
     monkeypatch.setattr(
         'so101_demo.parallel_batch.resources.SystemResourceProbe.snapshot',
-        lambda self: ResourceSnapshot(32, 64.0, 12.0),
+        retired_probe,
     )
     monkeypatch.setattr(
         'so101_demo.parallel_batch.resources.SystemResourceProbe.ros_domain_in_use',
@@ -1671,11 +1706,12 @@ def test_dry_run_cli_writes_private_manifest_without_starting_processes(tmp_path
         'so101_demo.parallel_batch.resources.SystemResourceProbe.socket_in_use',
         lambda self, path: False,
     )
-    monkeypatch.setattr(
-        'so101_demo.parallel_batch.resources.subprocess.Popen',
-        lambda *args, **kwargs: calls.append((args, kwargs)),
-        raising=False,
-    )
+    if sys.platform != 'darwin':
+        monkeypatch.setattr(
+            'so101_demo.parallel_batch.resources.subprocess.Popen',
+            lambda *args, **kwargs: calls.append((args, kwargs)),
+            raising=False,
+        )
 
     exit_code = main(
         [

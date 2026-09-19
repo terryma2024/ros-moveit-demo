@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 from types import SimpleNamespace
 from pathlib import Path
 
@@ -69,6 +70,12 @@ def _local_guard_check(self, policy, scope):
 
     started = _time.monotonic()
     ports = _dataclasses.replace(_guard.host_ports(), busy_window_s=0.0)
+    if sys.platform == "darwin":
+        class MacTestGpu:
+            def devices(self):
+                return (_guard.GpuDevice(0, "GPU-MACOS-TEST", 16 << 30, 8 << 30),)
+
+        ports = _dataclasses.replace(ports, nvml=MacTestGpu())
     try:
         snapshot = _guard.probe_snapshot(policy, scope, started + policy.timeout_s, ports=ports)
         return _guard.evaluate_snapshot(snapshot, policy, scope, started_monotonic_s=started,

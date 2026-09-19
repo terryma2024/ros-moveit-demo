@@ -11,6 +11,7 @@ import dataclasses
 import math
 import os
 import pathlib
+import types
 import subprocess
 import sys
 
@@ -434,6 +435,13 @@ def test_real_host_probe_returns_a_usable_snapshot(scope):
     clock = __import__("time").monotonic
     started = clock()
     selector = "INDEX:0"
+    if sys.platform == "darwin":
+        with pytest.raises(ProbeError) as excinfo:
+            probe_snapshot(policy, dataclasses.replace(scope, gpu_selector=selector),
+                           started + policy.timeout_s)
+        assert excinfo.value.reason == "GPU_TARGET_UNAVAILABLE"
+        assert clock() - started < policy.timeout_s
+        return
     snapshot = probe_snapshot(policy, dataclasses.replace(scope, gpu_selector=selector),
                               started + policy.timeout_s)
     elapsed = clock() - started
@@ -454,6 +462,120 @@ def test_busy_window_default_is_100ms():
 
     assert module.CPU_BUSY_WINDOW_S == 0.1
     assert module.host_ports().busy_window_s == module.CPU_BUSY_WINDOW_S
+
+
+def test_host_ports_uses_all_logical_cpus_without_linux_affinity(monkeypatch):
+    """A non-Linux host still exposes a real, nonempty CPU capacity."""
+
+    import so101_demo.parallel_batch.start_guard as module
+
+    monkeypatch.delattr(module.os, "sched_getaffinity", raising=False)
+    monkeypatch.setattr(module.os, "cpu_count", lambda: 4)
+
+    assert module.host_ports().affinity == (0, 1, 2, 3)
+
+
+def test_missing_cgroup_membership_uses_unconstrained_host_root(monkeypatch):
+    """A host without procfs has no cgroup constraint, rather than a probe crash."""
+
+    import so101_demo.parallel_batch.start_guard as module
+
+    def missing_membership(_path):
+        raise FileNotFoundError("procfs is unavailable")
+
+    monkeypatch.setattr(pathlib.Path, "read_text", missing_membership)
+
+    assert module._read_own_cgroup_path() == "/"
+
+
+def test_missing_proc_meminfo_uses_macos_host_statistics(monkeypatch, tmp_path):
+    """The guard retains real RAM capacity on macOS without Linux procfs."""
+
+    import so101_demo.parallel_batch.start_guard as module
+
+    responses = {
+        ("/usr/sbin/sysctl", "-n", "hw.memsize"): "1073741824\n",
+        ("/usr/bin/vm_stat",): (
+            "Mach Virtual Memory Statistics: (page size of 16384 bytes)\n"
+            "Pages free:                               10.\n"
+            "Pages active:                             20.\n"
+            "Pages inactive:                           30.\n"
+            "Pages speculative:                         5.\n"
+            "Pages wired down:                          4.\n"
+            "Pages purgeable:                           3.\n"
+        ),
+    }
+
+    def fake_run(argv, **_kwargs):
+        return types.SimpleNamespace(stdout=responses[tuple(argv)])
+
+    def unavailable_sysconf(_name):
+        raise ValueError("sysconf unavailable")
+
+    monkeypatch.setattr(
+        module,
+        "subprocess",
+        types.SimpleNamespace(run=fake_run, SubprocessError=subprocess.SubprocessError),
+        raising=False,
+    )
+    monkeypatch.setattr(module.os, "sysconf", unavailable_sysconf)
+
+    observed = module.read_meminfo(tmp_path / "missing-proc-meminfo")
+
+    assert observed.total_bytes == 1 << 30
+    assert observed.available_bytes == 48 * 16384
+
+
+def test_macos_meminfo_uses_sysconf_when_sysctl_is_denied(monkeypatch, tmp_path):
+    """A sandbox denial cannot erase host RAM that sysconf reports directly."""
+
+    import so101_demo.parallel_batch.start_guard as module
+
+    vm_stat = (
+        "Mach Virtual Memory Statistics: (page size of 16384 bytes)\n"
+        "Pages free:                               10.\n"
+        "Pages inactive:                           30.\n"
+        "Pages speculative:                         5.\n"
+        "Pages purgeable:                           3.\n"
+    )
+
+    def fake_run(argv, **_kwargs):
+        if tuple(argv) == ("/usr/sbin/sysctl", "-n", "hw.memsize"):
+            raise PermissionError("sandbox denied sysctl")
+        return types.SimpleNamespace(stdout=vm_stat)
+
+    def fake_sysconf(name):
+        return {"SC_PAGE_SIZE": 16384, "SC_PHYS_PAGES": 65536}[name]
+
+    monkeypatch.setattr(
+        module,
+        "subprocess",
+        types.SimpleNamespace(run=fake_run, SubprocessError=subprocess.SubprocessError),
+        raising=False,
+    )
+    monkeypatch.setattr(module.os, "sysconf", fake_sysconf)
+
+    observed = module.read_meminfo(tmp_path / "missing-proc-meminfo")
+
+    assert observed.total_bytes == 1 << 30
+    assert observed.available_bytes == 48 * 16384
+
+
+def test_missing_proc_meminfo_stays_unavailable_off_macos(monkeypatch, tmp_path):
+    """A missing Linux proc file must not invoke Darwin host commands."""
+
+    import so101_demo.parallel_batch.start_guard as module
+
+    def forbidden_run(*_args, **_kwargs):
+        raise AssertionError('Darwin command invoked on a non-Darwin host')
+
+    monkeypatch.setattr(sys, 'platform', 'linux')
+    monkeypatch.setattr(module.subprocess, 'run', forbidden_run)
+
+    observed = module.read_meminfo(tmp_path / 'missing-proc-meminfo')
+
+    assert observed.total_bytes is None
+    assert observed.available_bytes is None
 
 
 def test_resolve_gpu_target_is_pure(scope):
