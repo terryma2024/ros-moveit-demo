@@ -11647,3 +11647,31 @@ proxy defines - that is the next thing to read before the port is wired in.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `c772784d`; no evidence deleted._
+
+### CP-UQ263 addendum 4 — the perception contract is positional, and one injection is still owed
+
+The production proxy settles the shape my port had guessed:
+
+```python
+perception_runner(lease, execution_kind, snapshot,
+                  lambda model_id, before_send: self._request_one(lease, execution_kind,
+                      model_id=model_id, snapshot=snapshot, start_event_id=...,
+                      start_event_type=..., reset_epoch=..., before_send=before_send))
+```
+
+So `request_model` passes the chain **four positional arguments**, the fourth being a one-model call.
+The port now does exactly that: `perception_runner(lease, execution_kind, snapshot, send)`, where
+`send(model_id, before_send=None)` delegates to a `request_one` callable the driver injects, and a
+missing runner or missing `request_one` refuses rather than silently skipping the model call.
+
+`task14-broker-port-03`: **6 passed**, with the test now asserting the positional call, the fastening
+of `model_id`/`before_send`, and both refusals.
+
+Still owed before the port is wired in: `_request_one`'s own body - the operation name and payload
+the Broker expects - which is the last unread piece of the production proxy. Injecting it keeps the
+port honest in the meantime: the protocol call is supplied by the driver that has read it, not
+invented here.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `53259f59`; no evidence deleted._
