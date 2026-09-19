@@ -24,6 +24,7 @@ import pytest
 
 from so101_demo.parallel_batch.campaign_supervisor import (
     ACK_TIMEOUT,
+    IDENTITY_UNAVAILABLE,
     ACTIVE,
     FAILED,
     SPAWNING,
@@ -366,8 +367,6 @@ def test_a_child_without_a_readable_birth_identity_is_never_promoted(tmp_path):
     ACTIVE, which would have made a later PID-reuse check impossible.
     """
 
-    from so101_demo.parallel_batch.campaign_supervisor import IDENTITY_UNAVAILABLE
-
     reads = {"count": 0}
 
     def unreadable_identity(pid):
@@ -392,6 +391,108 @@ def test_a_child_without_a_readable_birth_identity_is_never_promoted(tmp_path):
         document = json.loads(supervisor.receipt_path.read_text())
         assert document["children"][0]["status"] == FAILED
         assert document["children"][0]["birth_identity"] is None
+    finally:
+        supervisor.terminate_all()
+        supervisor.release_claim()
+
+
+def test_a_short_lived_child_is_identified_at_spawn_not_after_the_ack_wait(tmp_path):
+    """The identity is captured at spawn, so a child that exits before promotion is still known.
+
+    This is the Task 13 root cause: the read used to happen only after the ACK wait, so a child
+    that finished first was unidentifiable and could never be signalled safely.
+    """
+
+    from so101_demo.parallel_batch.start_guard_probe import ProcessIdentityRecord
+
+    child_reads = {"count": 0}
+
+    parent_pid = os.getpid()
+
+    def child_exits_after_the_first_read(pid):
+        if pid == parent_pid:
+            return ProcessIdentityRecord(pid=pid, start_time_ticks=1)
+        child_reads["count"] += 1
+        if child_reads["count"] == 1:
+            return ProcessIdentityRecord(pid=pid, start_time_ticks=555001)
+        return None
+
+    supervisor = CampaignSupervisor(
+        campaign_id="identity-spawn-time", state_root=tmp_path / "supervisor",
+        ack_timeout_s=5.0, identity_timeout_s=0.05,
+        identity_reader=child_exits_after_the_first_read, sleep=lambda _s: None,
+    )
+    supervisor.acquire_claim()
+    try:
+        ack_path = tmp_path / "ack.json"
+        record = supervisor.spawn(role="worker", slot=0,
+                                  argv=_ack_command(ack_path, sleep_s=30.0),
+                                  nonce="n-short-lived", ack_path=ack_path)
+        assert record.status == FAILED
+        assert record.reason == IDENTITY_UNAVAILABLE
+        assert child_reads["count"] >= 2, "read at spawn, rechecked at promotion"
+        document = json.loads(supervisor.receipt_path.read_text())
+        assert document["children"][0]["status"] == FAILED
+        assert document["children"][0]["birth_identity"] is None
+    finally:
+        supervisor.terminate_all()
+        supervisor.release_claim()
+
+
+def test_a_stable_identity_read_at_spawn_and_promotion_promotes_the_child(tmp_path):
+    """Two agreeing reads (spawn then promotion) promote the child with that identity."""
+
+    from so101_demo.parallel_batch.start_guard_probe import ProcessIdentityRecord
+
+    supervisor = CampaignSupervisor(
+        campaign_id="identity-stable", state_root=tmp_path / "supervisor",
+        ack_timeout_s=5.0, sleep=lambda _s: None,
+        identity_reader=lambda pid: ProcessIdentityRecord(pid=pid, start_time_ticks=777001),
+    )
+    supervisor.acquire_claim()
+    try:
+        ack_path = tmp_path / "ack.json"
+        record = supervisor.spawn(role="worker", slot=0,
+                                  argv=_ack_command(ack_path, sleep_s=30.0),
+                                  nonce="n-stable", ack_path=ack_path)
+        assert record.status == ACTIVE
+        assert record.birth_identity == 777001
+    finally:
+        supervisor.terminate_all()
+        supervisor.release_claim()
+
+
+def test_a_changed_identity_between_spawn_and_promotion_fails_closed(tmp_path):
+    """A PID reporting a different identity at promotion means reuse: refuse it."""
+
+    from so101_demo.parallel_batch.start_guard_probe import ProcessIdentityRecord
+
+    parent_pid = os.getpid()
+    child_reads = {"count": 0}
+
+    def reused_pid(pid):
+        # The supervisor's own process reports normally; the child's identity *changes* between
+        # the spawn read and the promotion recheck, which is exactly what PID reuse looks like.
+        if pid == parent_pid:
+            return ProcessIdentityRecord(pid=pid, start_time_ticks=1)
+        child_reads["count"] += 1
+        return ProcessIdentityRecord(pid=pid,
+                                     start_time_ticks=1000 if child_reads["count"] == 1 else 2000)
+
+    supervisor = CampaignSupervisor(
+        campaign_id="identity-changed", state_root=tmp_path / "supervisor",
+        ack_timeout_s=5.0, identity_timeout_s=0.05, identity_reader=reused_pid,
+        sleep=lambda _s: None,
+    )
+    supervisor.acquire_claim()
+    try:
+        ack_path = tmp_path / "ack.json"
+        record = supervisor.spawn(role="worker", slot=0,
+                                  argv=_ack_command(ack_path, sleep_s=30.0),
+                                  nonce="n-changed", ack_path=ack_path)
+        assert record.status == FAILED
+        assert record.reason == IDENTITY_UNAVAILABLE
+        assert child_reads["count"] >= 2
     finally:
         supervisor.terminate_all()
         supervisor.release_claim()
@@ -422,7 +523,27 @@ def test_a_child_whose_identity_resolves_on_a_retry_is_promoted(tmp_path):
                                   nonce="n-retry", ack_path=ack_path)
         assert record.status == ACTIVE
         assert record.birth_identity == 424242
-        assert reads["count"] == 3
+        assert reads["count"] >= 3, "retried until the read resolved"
+    finally:
+        supervisor.terminate_all()
+        supervisor.release_claim()
+
+
+def test_a_child_stderr_sink_is_accepted_and_used(tmp_path):
+    """A child's own diagnostics can be captured, so a failing child is never silent."""
+
+    supervisor = _supervisor(tmp_path)
+    supervisor.acquire_claim()
+    try:
+        ack_path = tmp_path / "ack.json"
+        log_path = tmp_path / "child.log"
+        with open(log_path, "wb") as sink:
+            record = supervisor.spawn(
+                role="worker", slot=0,
+                argv=[PYTHON, "-c", "import sys; sys.stderr.write('child diagnostic\\n')"],
+                nonce="n-stderr", ack_path=ack_path, ack_timeout_s=0.5, stderr=sink)
+        assert record.status == FAILED  # no ACK was written, so it is refused, and that is fine
+        assert "child diagnostic" in log_path.read_text()
     finally:
         supervisor.terminate_all()
         supervisor.release_claim()

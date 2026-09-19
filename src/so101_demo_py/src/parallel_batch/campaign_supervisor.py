@@ -243,7 +243,8 @@ class CampaignSupervisor:
     """Owns one campaign: the claim, the durable receipt, and every child process."""
 
     def __init__(self, campaign_id: str, *, state_root: Path, claim_identity: str = CLAIM_IDENTITY,
-                 ack_timeout_s: float = 10.0, terminate_grace_s: float = 0.5,
+                 ack_timeout_s: float = 10.0, identity_timeout_s: float = 2.0,
+                 terminate_grace_s: float = 0.5,
                  kill_grace_s: float = 0.5, clock: Callable[[], float] = time.monotonic,
                  popen: Callable[..., object] = subprocess.Popen,
                  identity_reader: Callable[[int], ProcessIdentityRecord | None]
@@ -255,6 +256,9 @@ class CampaignSupervisor:
         self.state_root = Path(state_root)
         self.claim_identity = claim_identity
         self.ack_timeout_s = float(ack_timeout_s)
+        #: The identity read gets its own short bound instead of reusing the ACK timeout. A live
+        #: child reports its identity at once; an exited one never will.
+        self.identity_timeout_s = float(identity_timeout_s)
         self.terminate_grace_s = float(terminate_grace_s)
         self.kill_grace_s = float(kill_grace_s)
         self._clock = clock
@@ -443,7 +447,8 @@ class CampaignSupervisor:
 
     def spawn(self, *, role: str, slot: int, argv: Sequence[str], nonce: str,
               ack_path: Path, ack_timeout_s: float | None = None,
-              environment: Mapping[str, str] | None = None) -> SpawnIntent:
+              environment: Mapping[str, str] | None = None,
+              stderr: object | None = None) -> SpawnIntent:
         """Spawn one owned child and promote it to ACTIVE only after its registered ACK."""
 
         intent = self.begin_spawn(role=role, slot=slot, argv=argv, nonce=nonce)
@@ -455,6 +460,9 @@ class CampaignSupervisor:
                 list(intent.argv),
                 env=None if environment is None else dict(environment),
                 start_new_session=True,
+                # A child's own diagnostics are evidence: an optional sink keeps a failing child
+                # from being silent, which is exactly how the identity race stayed hidden.
+                **({} if stderr is None else {"stderr": stderr}),
             )
         except OSError as error:
             self._update_child(replace(intent, status=FAILED, reason=SPAWN_FAILED,
@@ -463,6 +471,11 @@ class CampaignSupervisor:
 
         pid = int(child.pid)
         timeout = self.ack_timeout_s if ack_timeout_s is None else float(ack_timeout_s)
+        # Capture the birth identity *now*, while the child is certainly still alive, and before
+        # the ACK wait. Reading it only after the wait is a real race: a short-lived child can
+        # finish and exit first, and an exited child is unidentifiable, so it could never be
+        # signalled safely. This was measured on macOS, where the read returns None once gone.
+        birth = self._read_birth_identity(pid, deadline=self._clock() + self.identity_timeout_s)
         deadline = self._clock() + timeout
         ack: RegistrationAck | None = None
         while self._clock() < deadline:
@@ -485,12 +498,13 @@ class CampaignSupervisor:
             self._update_child(failed)
             return failed
 
-        # The birth identity is what makes later signalling safe: without it, a PID that has been
-        # reused cannot be told apart from ours, and the child must not be promoted at all. The
-        # read races with process start (and on Darwin with the first `psutil` sample), so retry
-        # briefly and then fail closed rather than recording a child we could not identify.
-        identity = self._read_birth_identity(pid, deadline=self._clock() + timeout)
-        if identity is None:
+        # The identity captured at spawn is what makes later signalling safe. Re-check it once
+        # before promoting: if it changed or vanished, the PID was reused or the child exited, and
+        # promoting it would arm a signal against an unknown process.
+        identity = self._read_birth_identity(
+            pid, deadline=self._clock() + self.identity_timeout_s)
+        if birth is None or identity is None or \
+                identity.start_time_ticks != birth.start_time_ticks:
             self._stop_exact(child, pid)
             failed = replace(intent, status=FAILED, pid=pid, reason=IDENTITY_UNAVAILABLE,
                              recorded_monotonic_s=self._clock())
