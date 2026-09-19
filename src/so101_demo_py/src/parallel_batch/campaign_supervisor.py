@@ -498,13 +498,14 @@ class CampaignSupervisor:
             self._update_child(failed)
             return failed
 
-        # The identity captured at spawn is what makes later signalling safe. Re-check it once
-        # before promoting: if it changed or vanished, the PID was reused or the child exited, and
-        # promoting it would arm a signal against an unknown process.
-        identity = self._read_birth_identity(
+        # The identity captured at spawn is authoritative. Re-check it once before promoting, and
+        # refuse only on evidence of *reuse*: a different identity for the same PID. A vanished or
+        # zombie child is not a reuse, and refusing it would reject healthy short-lived Workers —
+        # measured on this host, where a Worker can finish its round trips inside the ACK window.
+        recheck = self._read_birth_identity(
             pid, deadline=self._clock() + self.identity_timeout_s)
-        if birth is None or identity is None or \
-                identity.start_time_ticks != birth.start_time_ticks:
+        if birth is None or (recheck is not None
+                             and recheck.start_time_ticks != birth.start_time_ticks):
             self._stop_exact(child, pid)
             failed = replace(intent, status=FAILED, pid=pid, reason=IDENTITY_UNAVAILABLE,
                              recorded_monotonic_s=self._clock())
@@ -512,7 +513,7 @@ class CampaignSupervisor:
             return failed
 
         active = replace(intent, status=ACTIVE, pid=pid, process_group=ack.process_group,
-                         birth_identity=identity.start_time_ticks,
+                         birth_identity=birth.start_time_ticks,
                          ack=ack, recorded_monotonic_s=self._clock())
         self._update_child(active)
         return active
