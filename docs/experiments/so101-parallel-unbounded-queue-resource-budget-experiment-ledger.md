@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ274 (tail of this file)
+latest_checkpoint: CP-UQ275 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -12736,3 +12736,34 @@ permission, and it closes an acceptance item that is currently marked PARTIAL.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `68fcebe8`; no evidence deleted._
+
+### CP-UQ274 addendum 3 — the "Broker crash" cannot be injected here, and why that is a finding
+
+`--crash-broker-after-served N` was added to the entry point as an explicit, one-shot fault switch.
+The first run with it (`task16-broker-crash-01`) exited **137** with no result document: the signal
+went to `ready.broker_pid`, and in this composition that PID is **the campaign process itself** -
+`models` and `bootstrap.lane` live in-process, so there is no separate Broker child to crash.
+
+The switch now refuses that case instead of committing suicide:
+
+```text
+if int(ready.broker_pid) == os.getpid():
+    document["broker_crash"] = {"pid": …, "refused": "BROKER_IS_THIS_PROCESS"}
+    return {"ok": False, "code": "BROKER_IS_THIS_PROCESS", …}
+```
+
+Two consequences worth stating plainly:
+
+1. **a live Broker-crash + pool-rebuild injection is not reachable in this composition.** The design's
+   rebuild path belongs to a Supervisor that owns a Broker *process*; the macOS campaign runs its MPS
+   lane in-process, so the plan's "Broker crash" evidence cannot be produced from here without first
+   changing the composition to spawn the Broker as an owned child - which is the same
+   spawned-vs-in-process gap that already blocks the pick-place chain (CP-UQ271);
+2. the SIGKILLed run left a campaign IPC directory behind (`b-2816165253b2`), because a process killed
+   with SIGKILL cannot run its cleanup - a real limitation of the design that only shows up under
+   external SIGKILL, and the reason the next run was refused by the inventory until the residue was
+   verified dead and removed.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `b6293a35`; no evidence deleted._
