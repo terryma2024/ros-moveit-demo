@@ -54,5 +54,12 @@ export default defineConfig({
       testMatch: "**/live-sim/07-retry-full-restart.spec.ts",
       dependencies: ["live-preflight"],
     },
+    {
+      // The five consecutive valid physical batches: long by construction (five twenty-point
+      // campaigns), so it is a project of its own and never part of a mixed run.
+      name: "five-consecutive",
+      testMatch: "**/live-sim/08-five-consecutive.spec.ts",
+      dependencies: ["live-preflight"],
+    },
   ],
 });
