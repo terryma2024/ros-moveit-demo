@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ254 (tail of this file)
+latest_checkpoint: CP-UQ255 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -10653,3 +10653,59 @@ that allocates resources instead of describing them.
 14 remains 0/5 with `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `b9b2f39a`; no evidence deleted._
+
+## CP-UQ255 — The allocation RED is green up to the start guard, without touching the v3 freeze
+
+```yaml
+checkpoint_id: CP-UQ255
+last_valid_experiment: EXP-UQ255-W2-RESOURCE-GREEN
+current_hypothesis: The v4 resource RED (CP-UQ254) is an allocator gap, not a document error.
+  CONFIRMED, with one wrong first fix caught by a tested invariant.
+working_tree_status: clean after the scoped commit below
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - Allocation still requires a composed start guard; the probe deliberately supplies none, so the
+    next step is to compose the Darwin MPS guard exactly as the campaign entry point does.
+  - Screen Recording is still denied to this session, so Task 14 batches remain blocked.
+next_command: compose the start guard for the v4 allocation and confirm the two resolved Workers
+```
+
+### The first fix was wrong, and the tests said so
+
+My first attempt edited the *document* and the v4 frozen map so `max_worker_count` would read 2.
+`test_schema_v4_keeps_the_v3_runtime_values_frozen` failed on exactly that: for every name shared
+between the v3 and v4 frozen maps the values must be identical, i.e. v4 reuses v3's frozen values
+rather than redefining them. Rewriting that assertion would have been "change the test until it
+passes", which the plan forbids, so the change was reverted instead: **the frozen v3 field stays
+8**, and the v4 platform ceiling comes from the field v4 actually owns — `worker_count`, whose
+frozen v4 value is the exact-W2 claim.
+
+### The real defect
+
+`WorkerResourceAllocator` refused `ParallelRuntimeConfigV4` outright (`ResourceAllocationError:
+CONFIG`) because its accepted-type tuple predated schema v4, and its derived `AllocationPolicy` used
+the frozen `max_worker_count` (8) against two `ros_domain_ids`, which `AllocationPolicy` rejects
+(`len(domains) >= max_worker_count`). Either one alone makes every v4 allocation impossible; both
+were latent because every earlier v4 caller *described* resources instead of allocating them.
+
+The fix is scoped to `resources.py`: accept v4, treat it as the v3-shaped field set for the
+allocation branch, report schema 4 in the manifest document, and derive the policy ceiling from
+`config.worker_count` for v4 only.
+
+### Evidence
+
+```text
+task14-w2-resources-red-01    ALLOCATION_POLICY_ROS_DOMAIN_IDS      (before)
+task14-w2-resources-green-02  ContractError FROZEN_RUNTIME_VALUE    (wrong first fix)
+task14-w2-resources-green-05  ResourceAllocationError START_GUARD_UNAVAILABLE  (policy now passes)
+entrypoint-regression-04      177 passed  (the frozen-value invariant is green again)
+task14-w2-resources-ab-01/02  45 failed, 47 passed with AND without the change -> the resources
+                              suite's failures are pre-existing in this environment, not a
+                              regression from this commit
+```
+
+`EXP-UQ255-W2-RESOURCE-GREEN: VALID` for the allocator scope only. No Worker has started, no batch
+ran, Task 14 stays 0/5, and `LINUX_REGRESSION_DEFERRED` is retained.
+
+_Ledger source HEAD: (parent of this commit); no evidence deleted._
