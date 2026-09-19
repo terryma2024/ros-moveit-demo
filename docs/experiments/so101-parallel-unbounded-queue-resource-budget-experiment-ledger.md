@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ268 (tail of this file)
+latest_checkpoint: CP-UQ269 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -12304,3 +12304,57 @@ Worker the lease document plus a snapshot descriptor for the frame it is told to
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `2241d972`; no evidence deleted._
+
+## CP-UQ269 — An "additive" binding change broke a passing gate, and I reverted it
+
+```yaml
+checkpoint_id: CP-UQ269
+last_valid_experiment: EXP-UQ269-BINDING-CHANGE-REVERTED
+current_hypothesis: Binding the ids the Worker will derive, and handing it a lease document, is an
+  additive change that leaves the campaign passing. DISPROVEN by the run.
+working_tree_status: clean - the change is fully reverted and the gate is green again
+owned_processes: NONE - four orphaned station processes were reaped by exact PID
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - The cause of the regression is not understood: one Worker's three round trips were served and
+    the other's were not, with two stations left behind.
+  - Screen Recording is still denied to this session.
+next_command: cover the CLI binding path with a test before touching it again
+```
+
+`EXP-UQ269-BINDING-CHANGE-REVERTED: INVALID` - the run it produced is not evidence of anything except
+that the change was wrong.
+
+### What was tried
+
+Writing a per-Worker lease document (`wN-lease.json`) with the identities the Worker will use, binding
+`{attempt_id}-yolo` alongside the existing `wN-req-NN` probe ids, and appending the lease path as a
+fourth station argument (which the child ignores until it is taught to read it).
+
+### What happened
+
+```text
+task14-campaign-ready-11   status W2_CAMPAIGN_INCOMPLETE, served 3 (not 6), cleanup "complete"
+                           orphans left: 4 processes, reaped by exact PID afterwards
+```
+
+Both lease documents were written, so the entry point reached that code; one Worker served its three
+trips and the other never did. The change touches binding and file creation, not the station path, so
+the mechanism is not obvious from the outside - which is precisely why the honest move was to revert
+first and diagnose with a test rather than to keep iterating against a live campaign.
+
+### After the revert
+
+```text
+task14-campaign-ready-12   status W2_CAMPAIGN_PASS, served 6
+                           orphans []
+```
+
+So the gate is green again and the tree carries no half-change. The next attempt at mismatches 2 and 3
+starts by covering the CLI's binding and lease-document path with a test - the two previous rounds
+that went well both began by reading the caller, and this one shows what happens when a live
+integration run is the first thing to see a change.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `695169c3`; no evidence deleted._
