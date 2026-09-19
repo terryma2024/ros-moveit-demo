@@ -262,7 +262,7 @@ def test_journal_fsync_precedes_grant_projection_and_ack(make, monkeypatch):
     real_fsync = os.fsync
 
     def block(fd):
-        if Path(f'/proc/self/fd/{fd}').resolve() == journal.segment_path:
+        if _fd_path(fd) == journal.segment_path:
             entered.set()
             assert release.wait(5)
         real_fsync(fd)
@@ -579,6 +579,32 @@ def test_duplicate_requests_do_not_debit_or_recommit(make):
     assert c.snapshot().workers['w1'].lease_count == 1
 
 
+
+def _fd_path(fd):
+    """Resolve an open descriptor to a path on this platform.
+
+    Linux exposes the mapping as `/proc/self/fd/<fd>`. Darwin has no `/proc`, so the same fact is
+    read from `fcntl(F_GETPATH)`. Without this, the durability-ordering tests below could only run
+    on Linux, and a Darwin-only regression in the journal's fsync ordering would be invisible.
+    """
+
+    import ctypes
+    import fcntl as _fcntl
+
+    if Path("/proc/self/fd").is_dir():
+        return Path(f"/proc/self/fd/{fd}").resolve()
+    try:
+        buffer = ctypes.create_string_buffer(1024)
+        # On Darwin the call returns the NUL-padded path bytes as its result.
+        result = _fcntl.fcntl(fd, _fcntl.F_GETPATH, buffer)
+        raw = result if isinstance(result, bytes) else buffer.raw
+        resolved = raw.split(b"\x00", 1)[0].decode("utf-8", "replace")
+        if resolved:
+            return Path(resolved).resolve()
+    except (OSError, AttributeError, ValueError, TypeError):
+        pass
+    return Path(f"<fd:{fd}>")
+
 def test_aggregate_atomic_write_syncs_file_then_replace_then_parent(make, monkeypatch):
     """The aggregate replacement must follow file and directory durability ordering."""
     c, _, _, journal, _ = make()
@@ -586,7 +612,7 @@ def test_aggregate_atomic_write_syncs_file_then_replace_then_parent(make, monkey
     real_sync, real_replace = os.fsync, os.replace
 
     def sync(fd):
-        steps.append(('sync', Path(f'/proc/self/fd/{fd}').resolve()))
+        steps.append(('sync', _fd_path(fd)))
         return real_sync(fd)
 
     def move(source, target):
@@ -1116,3 +1142,59 @@ def test_batch_started_document_excludes_the_start_guard(make):
     # The rest of the identity is unchanged, so a resumed batch still matches its own document.
     assert frozen['batch_id'] == request.batch_id
     assert frozen['worker_count'] == request.worker_count
+
+
+# --------------------------------------------------------------------------------------
+# Schema-v4 inference admission hook
+#
+# The v4 control channel carries no token, generation or lease, so the Coordinator's local
+# one-time registry is the only admission gate for a Broker result.
+# --------------------------------------------------------------------------------------
+
+
+def test_coordinator_without_a_registry_keeps_its_exact_v3_behaviour(make):
+    """A v1/v2/v3 Coordinator has no registry, and admitting through one is an error."""
+
+    c, _, _, _, _ = make()
+    assert c.inference_registry is None
+    with pytest.raises(ValueError, match="INFERENCE_REGISTRY_ABSENT"):
+        c.admit_inference_result("any-id")
+
+
+def test_coordinator_uses_the_registry_for_one_time_admission(make):
+    """With a registry, exactly one result is admitted per registered request id."""
+
+    import time as _time
+
+    from so101_demo.parallel_batch.inference_registry import InferenceRegistry
+
+    c, _, _, _, _ = make()
+    registry = InferenceRegistry(campaign_id="w2-campaign")
+    Coordinator = type(c)
+    wired = Coordinator(
+        c.journal, c.request, config=c.config, clock=c.clock, result_port=c.result_port,
+        inference_registry=registry)
+    assert wired.inference_registry is registry
+
+    registry.register_request(
+        request_id="req-0001", slot_id="slot-0", point_id="p1", attempt=1, model_id="m",
+        input_sha256="a" * 64,
+        deadline_monotonic_ns=_time.monotonic_ns() + 30 * 10**9,
+        broker_pid=4242, broker_birth_identity=7)
+
+    first = wired.admit_inference_result("req-0001", output_sha256="b" * 64,
+                                         input_sha256="a" * 64, broker_pid=4242,
+                                         broker_birth_identity=7)
+    assert first.accepted is True
+    second = wired.admit_inference_result("req-0001", output_sha256="b" * 64)
+    assert second.accepted is False
+    assert second.reason == "REQUEST_ALREADY_CONSUMED"
+
+
+def test_coordinator_refuses_a_registry_that_is_not_a_registry(make):
+    """The hook is validated at construction, so a wrong port fails loudly."""
+
+    c, _, _, _, _ = make()
+    with pytest.raises(ValueError, match="INFERENCE_REGISTRY_PORT"):
+        type(c)(c.journal, c.request, config=c.config, clock=c.clock,
+                result_port=c.result_port, inference_registry=object())
