@@ -13857,3 +13857,31 @@ cannot reach it by construction.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `738ff4ad`; no evidence deleted._
+
+### CP-UQ286 addendum 4 — the happy path is unreachable by construction, and my fix for it is unfinished
+
+While extracting the verdict rule I noticed its consequence: because the Worker **always** repeats one
+request id (the duplicate probe added in round 91), every campaign since then refuses at least two
+requests, and `campaign_status` requires *no* refusals - so **no run can report PASS any more**, however
+healthy it is. The pre-round-91 PASS runs are the last ones that could reach it.
+
+The fix is to make that probe opt-in, and the campaign side of it is in place:
+
+```text
+--duplicate-probe   (off by default) -> the lease carries duplicate_probe: false
+task14-clean-pass-01  still refused 2 duplicates, because the Worker's side of the switch is not wired yet
+```
+
+Attempting the Worker side produced a broken file: my patch inserted the guard with the wrong
+indentation, `ast.parse` rejected it, and the verification run I had already launched was killed. The
+Worker file has been reverted to its committed state (syntax verified) and the campaign flag committed
+on its own, so nothing half-broken is left behind.
+
+So the state is: **the flag exists but does not yet change behaviour**, the happy path is still
+unreachable, and the next step is to write the Worker-side guard carefully - reading the block and
+re-indenting it as a whole rather than patching around it, which is the second time this session that a
+sed-style edit to a nested block has cost a run.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `9adbd1c1`; no evidence deleted._
