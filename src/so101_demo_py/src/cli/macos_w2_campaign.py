@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import sys
 import time
 from pathlib import Path
@@ -119,6 +120,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--evidence-root", type=Path, required=True)
     parser.add_argument("--yolo-weights", type=Path, required=True)
     parser.add_argument("--grounded-root", type=Path, required=True)
+    parser.add_argument("--crash-broker-after-served", type=int, default=0,
+                        help="fault injection: signal the owned Broker child exactly once, after "
+                             "this many served requests (0 disables it)")
     parser.add_argument("--skip-models", action="store_true",
                         help="compose and pre-flight only; never a pass")
     return parser
@@ -413,6 +417,30 @@ def run(argv: list[str] | None = None) -> int:
             device = detector.runtime_device
             served.append({"request_id": request.request_id, "operation": request.operation,
                            "candidates": candidates, "device": device})
+            # Fault injection, explicit and one-shot: the Broker child is signalled by exact PID
+            # only after the requested number of requests has been served, and what the campaign
+            # does next is the evidence - never an automatic kill and never a silent retry.
+            if (arguments.crash_broker_after_served
+                    and len(served) == arguments.crash_broker_after_served
+                    and not document.get("broker_crash")):
+                killed = False
+                if int(ready.broker_pid) == os.getpid():
+                    # Fail closed rather than commit suicide: in this composition the MPS Broker is
+                    # in-process (`models` and `bootstrap.lane` live here), so `broker_pid` is this
+                    # process. A crash injection needs a Broker that is genuinely a separate owned
+                    # child; signalling ourselves would destroy the evidence instead of producing it.
+                    document["broker_crash"] = {"pid": ready.broker_pid,
+                                                "refused": "BROKER_IS_THIS_PROCESS"}
+                    return {"ok": False, "code": "BROKER_IS_THIS_PROCESS",
+                            "request_id": request.request_id}
+                try:
+                    os.kill(ready.broker_pid, signal.SIGKILL)
+                    killed = True
+                except OSError as error:
+                    document["broker_crash"] = {"pid": ready.broker_pid, "error": str(error)}
+                else:
+                    document["broker_crash"] = {"pid": ready.broker_pid, "signal": "SIGKILL"}
+                document["broker_crash"]["killed"] = killed
             if request.operation == "broker.infer":
                 payload = request.payload or {}
                 serialized = payload.get("request")
