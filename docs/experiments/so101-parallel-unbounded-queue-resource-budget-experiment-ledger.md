@@ -13709,3 +13709,23 @@ and the fact that the one-time-admission row is now MET - not the verdict, which
 that must pass and cannot while the capture fails closed.
 
 _Ledger source HEAD: `c4f499ff`; no evidence deleted._
+
+### CP-UQ285 addendum — a broad regression sweep after the pick-place and handler work
+
+```text
+post-fix-regression-01   371 passed, 1 failed
+   failed: test_parallel_ros_runtime.py::test_consumer_readiness_primes_and_retains_isolated_pose_publisher
+```
+
+Suites covered: broker port, campaign, W2 composition, contracts, start guard, guard probe, accelerator
+probe, worker runtime, ROS runtime, inference registry, permission-only IPC.
+
+The single failure is the **pre-existing** one pinned by A/B in this session
+(`task14-darwin-station-ab-01`: identical failure with the unrelated change stashed, at
+`parallel_ros_runtime.py:1717`). So the product changes made between rounds 95 and 122 - the operation
+vocabulary, the digest binding, one-time consumption, the handler scope fix, the per-slot evidence
+summary and the fault-injection traces - introduced **no regression** in the unit suites.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `de49207c`; no evidence deleted._
