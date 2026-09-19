@@ -8035,3 +8035,44 @@ the sixteen `FIRST_PASS` manifest cases. The remaining one is the adaptive ladde
 deployed copy that carries CP-UQ182/CP-UQ185 and is running now.
 
 _Ledger HEAD when written: `0f1ff8dd2`._
+
+## CP-UQ202 — The adaptive ladder executes twenty points for real; three defects had to fall first
+
+`R06 adaptive-ladder-p20 executes 8×20 for real` now passes (`3 passed (5.6m)`): campaign
+`…b2c42e69`/`…c0f3…` style record — `COMPLETED`, `requested 20`, `evaluated 20`, every point
+`PASSED`, cleanup proven by the pool's own receipt
+(`r/<batch_id>/cleanup-receipt.json`: `cleanup_complete: true`, `released_domain_ids:
+[215,216,217,218,219,220,221,222]`), and every point's attempt directory present under the pool's
+`workers/worker-*/attempts/`. That is the first time the ADAPTIVE mode has run a real campaign in
+this task, and with it **all sixteen `FIRST_PASS` manifest cases have executed for real** — fourteen
+fixed-N, the sequential four-point and the adaptive ladder.
+
+Getting there took three distinct defects, each found by the next failure rather than by guessing:
+
+1. **The adaptive path had no start guard** (CP-UQ182): `prepare_batch` skipped it for
+   `adaptive_workers`, so every generation was refused with `START_GUARD_UNAVAILABLE`.
+2. **The guard then broke the journal** (`1c4f28c67`): threading the guard into the pool request
+   made the coordinator freeze `asdict(request)` into `BATCH_STARTED`, and a guard object is not
+   JSON: every adaptive pool died at `stage=coordinator` with `Object of type EpochStartGuard is not
+   JSON serializable`. The guard is a runtime capability, not request identity, so it is now excluded
+   from the document the journal stores and resume compares — test-first, with the coordinator suite
+   at 135 cases green.
+3. **My own deployment was not the source I claimed** — the launcher replayed the recorded
+   environment *after* systemd's values, so the entry file came from the new copy while every
+   `import` resolved to the previous one (`copy-install-final.5EPRaqiL`, visible in an adaptive
+   traceback). The launcher now front-loads the deployed copy's Python paths, and the running
+   process's `PYTHONPATH` and an import probe both confirm `so101_demo`/`so101_teleop` come from the
+   current copy. This also explains the second adaptive symptom (a `POOL_ROOT` from pre-fix cleanup
+   code that the new copy already fixed).
+
+Two of my driver's assertions were also wrong about *where* adaptive evidence lives, and both are
+corrected rather than dropped: per-point evidence is the pool's per-worker attempt directories (the
+projection's artifact list is a coordinator-path property, matching what `03-adaptive` asserts), and
+cleanup is the wrapper's `cleanup-receipt.json`, not the coordinator's `cleanup-gates.json`
+(commits `093253be5` and the cleanup-receipt change).
+
+Consequence recorded for the next step: the earlier fixed-N evidence was produced by the *previous*
+copy's code (same sources except the adaptive/cleanup fixes), so the fixed-N sweep is being re-run
+against the current copy rather than being carried forward on a technicality.
+
+_Ledger HEAD when written: `fcd9b0495`._
