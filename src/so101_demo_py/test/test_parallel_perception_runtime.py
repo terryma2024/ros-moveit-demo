@@ -1134,3 +1134,78 @@ def test_grounded_preparation_is_not_a_completed_model_result(tmp_path, monkeypa
     )
     assert f.runtime.infer(f.req, f.snapshot).outcome.value == expected
     assert calls == calls_expected
+
+
+# --------------------------------------------------------------------------------------
+# The Broker's inference device is a resolved platform value, not a hard-coded constant
+#
+# Task 13 found this: the broker CLI accepted `--device` but dropped it, so the runtime always
+# asked for CUDA. On the schema-v4 macOS combination that made the real model set unloadable even
+# though every layer above the Broker said MPS.
+# --------------------------------------------------------------------------------------
+
+
+def test_frozen_options_default_to_cuda_for_every_schema_v3_caller():
+    """Schema v3 behaviour is unchanged: the default device is still CUDA."""
+
+    from so101_demo.runtime.parallel_perception_runtime import (
+        GROUNDED_ID, YOLO_ID, frozen_options)
+
+    options = frozen_options(Path('/models/yolo/best.pt'), Path('/models/grounded'))
+    assert options[YOLO_ID].requested_device == 'cuda'
+    assert options[GROUNDED_ID].requested_device == 'cuda'
+    assert options[YOLO_ID].allow_cpu_fallback is False
+    assert options[GROUNDED_ID].allow_cpu_fallback is False
+
+
+def test_frozen_options_can_be_built_for_mps_without_a_cpu_fallback():
+    """The macOS combination resolves to MPS, and never to a CPU fallback."""
+
+    from so101_demo.runtime.parallel_perception_runtime import (
+        GROUNDED_ID, GROUNDED_SHA, YOLO_ID, YOLO_SHA, frozen_options)
+
+    options = frozen_options(Path('/models/yolo/best.pt'), Path('/models/grounded'),
+                             requested_device='mps')
+    assert options[YOLO_ID].requested_device == 'mps'
+    assert options[GROUNDED_ID].requested_device == 'mps'
+    assert options[YOLO_ID].allow_cpu_fallback is False
+    assert options[GROUNDED_ID].allow_cpu_fallback is False
+    # The frozen artifact digests are unchanged by the device choice.
+    assert options[YOLO_ID].yolo_weights_sha256 == YOLO_SHA
+    assert options[GROUNDED_ID].grounded_manifest_sha256 == GROUNDED_SHA
+
+
+def test_frozen_options_refuse_an_unsupported_device():
+    """Only the detector factory's closed device set is accepted, and CPU is never implied."""
+
+    from so101_demo.runtime.parallel_perception_runtime import frozen_options
+
+    for device in ('cuda:0', 'metall', '', None, 'MPS'):
+        with pytest.raises(ValueError, match='REQUESTED_DEVICE_UNSUPPORTED'):
+            frozen_options(Path('/models/yolo/best.pt'), Path('/models/grounded'),
+                           requested_device=device)
+
+
+def test_requested_devices_matches_the_detector_factory_set():
+    """The runtime's advertised device set is the same one the factory validates against."""
+
+    import inspect
+
+    from so101_demo.adapters.perception import detector_factory
+    from so101_demo.runtime.parallel_perception_runtime import REQUESTED_DEVICES
+
+    source = inspect.getsource(detector_factory._validate_options)
+    for device in REQUESTED_DEVICES:
+        assert f'"{device}"' in source, device
+    assert set(REQUESTED_DEVICES) == {'auto', 'cuda', 'mps', 'cpu'}
+
+
+def test_the_broker_argv_documents_the_device_the_platform_should_choose():
+    """The container argv's frozen device remains the Linux value; macOS chooses its own."""
+
+    from so101_demo.cli.parallel_perception_broker import broker_argv
+
+    argv = broker_argv()
+    device = argv[argv.index('--device') + 1]
+    assert device == 'cuda', 'the Linux container argv keeps CUDA'
+    assert '--no-cpu-fallback' in argv
