@@ -11622,3 +11622,28 @@ timeout, and the perception-runner requirement.
 Task 14 remains 0/5 and `LINUX_REGRESSION_DEFERRED` is retained.
 
 _Ledger source HEAD: `d12e536e`; no evidence deleted._
+
+### CP-UQ263 addendum 3 — the port was checked against its real caller, and one signature was wrong
+
+Reading the call sites instead of trusting my own port's shape paid off twice:
+
+```text
+parallel_batch/worker.py:897  self._broker.request_model(current, ExecutionKind.…,
+                                snapshot=…, start_event_id=…, start_event_type=…, reset_epoch=…)
+parallel_batch/worker.py:331  record["fenced"] = self._broker.cancel_generation(
+                                lease.worker_id, lease.worker_generation) is True
+```
+
+`request_model`'s shape matched what the port already had. `cancel_generation` did **not**: the
+Worker fences on `... is True`, and my port returned the Broker's response document, so every fence
+would have read `False` - a real defect that no test of mine would have caught, because I had
+written the test against the same wrong assumption.
+
+The port now returns `True` on a completed cancellation and raises when it cannot reach the Broker;
+`task14-broker-port-02` re-runs the suite with that assertion (**6 passed**). The remaining unchecked
+guess is the keyword shape the port passes into the Worker's perception runner, which the production
+proxy defines - that is the next thing to read before the port is wired in.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `c772784d`; no evidence deleted._
