@@ -11559,3 +11559,41 @@ Neither is a reason to declare the goal blocked: (2) is work I can still do, and
 external action already requested from the user.
 
 _Ledger source HEAD: `973dbeb1`; no evidence deleted._
+
+### CP-UQ263 addendum — the v4 proxy's shape, read from the production proxy
+
+`_WorkerBrokerProxy` (`cli/mujoco_parallel_batch.py:2105-2230`) is the piece to port, and its shape is
+small enough to state exactly:
+
+```text
+__init__(coordinator, endpoint, resources, config, *, broker_generation,
+         broker_generation_consumer=None, perception_runner=None,
+         client_factory=UnixRpcClient, clock, sleep)
+  -> client = client_factory(endpoint, deadline_s=config.executing_hard_timeout_s,
+                             max_frame_bytes=config.broker_max_frame_bytes)
+  -> refuses a non-positive broker_generation (BROKER_GENERATION_AUTHORITY)
+
+request_model(lease, execution_kind, *, snapshot, start_event_id, start_event_type, reset_epoch)
+  -> _refresh_broker(wait_until_healthy=False) then runs the perception chain
+
+cancel_generation(worker_id, generation)
+  -> _refresh_broker(wait_until_healthy=True), then one "cancel_generation" message
+
+_refresh_broker(*, wait_until_healthy, startup=False)
+  -> asks the coordinator (startup_broker() or current_broker()) for the authority document
+     {healthy, broker_generation, endpoint, ...}, refuses a generation rollback, rebuilds the client
+```
+
+So the macOS v4 version differs in exactly two places, both already implemented in this branch:
+
+1. **the client** is `V4PermissionOnlyClient` (permission-only envelope, `0600` socket under the
+   Darwin private root) instead of the dirfd `UnixRpcClient`;
+2. **the coordinator channel** is the v4 permission-only one, so no token, generation or lease
+   fields travel in either direction - the generation bookkeeping stays local to the Worker.
+
+Everything else - `request_model`, `cancel_generation`, the refresh/rollback rules, the perception
+runner hook - can keep the same contract, which is what makes this a port rather than a rewrite. Its
+unit test can use a fake client factory and a fake coordinator, mirroring the existing proxy tests
+rather than needing a live Broker.
+
+_Ledger source HEAD: `bddc1955`; no evidence deleted._
