@@ -11003,3 +11003,29 @@ this is a wiring step rather than new design work.
 Task 14 remains 0/5 and `LINUX_REGRESSION_DEFERRED` is retained.
 
 _Ledger source HEAD: (parent of this commit); no evidence deleted._
+
+### CP-UQ257 addendum — the claim root was one line, the preflight is the sixth gate
+
+With a task-owned private claim root passed explicitly (`claim_root=...`, 0700), the Linux default
+`/run/user/<uid>/so101-parallel-domain-claims` stops being a problem and allocation proceeds to:
+
+```text
+ResourceAllocationError: UNIX_TRANSPORT_UNAVAILABLE
+  resources.py:1095 allocate -> _preflight(paths, parent_fd, domains) -> resources.py:1637
+```
+
+So the allocator's preflight still assumes the Linux transport shape (`/proc/self/fd`-style or
+`/run/user`-rooted checks). This is the sixth v3/Linux assumption found in the same path, after the
+accepted config type, the policy ceiling, the guard selector form, the accelerator input, and the
+claim root.
+
+That pattern is itself the finding, and it changes the plan for the next round: patching gate by
+gate is now clearly the wrong shape. The v4 Darwin combination needs one explicit branch in the
+allocator — a Darwin preflight and claim root taken from the existing private-path strategy
+(`runtime/unix_address.py`) — with the v3 branch left byte-identical, rather than six independent
+conditionals scattered along a Linux code path. The six gates found so far are the specification for
+that branch.
+
+No Worker allocated yet; Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `fca32ffb`; no evidence deleted._
