@@ -12272,3 +12272,35 @@ model call admitted by the one-time table.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `657f118b`; no evidence deleted._
+
+### CP-UQ268 addendum 4 — mismatch 1 of 3 is closed, and the campaign is unchanged
+
+The campaign's server now distinguishes the two shapes that reach it:
+
+```text
+infer            -> the production path: the Worker's serialized InferenceRequest + snapshot;
+                    answers {"ok": True, "request_id", "device", "candidates"}, or refuses with
+                    {"ok": False, "code": "INVALID_REQUEST"} when the request cannot be tied to a
+                    bound id - the refusal signal the port checks;
+anything else    -> the IPC-shape probe this entry point has served since Task 13, unchanged.
+```
+
+Both run the same real forward pass on the shared lane.
+
+Verification, with the orphan check included as it now always is:
+
+```text
+task14-campaign-ready-10   status W2_CAMPAIGN_PASS
+                           served: 6, devices ['mps'], lane {executed 13, max_concurrent 1, rejected 0}
+                           cleanup complete, orphans []
+```
+
+Remaining mismatches from addendum 3: the identifiers (the Worker derives
+`{attempt_id}-{model_id}` while the campaign binds `wN-req-NN`) and the Worker's missing lease and
+snapshot descriptor. Those two are the next step, and they are one change: the entry point already
+knows both ends of the identity it binds, so it can bind the id the Worker will use and hand the
+Worker the lease document plus a snapshot descriptor for the frame it is told to send.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `2241d972`; no evidence deleted._
