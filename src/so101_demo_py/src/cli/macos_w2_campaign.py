@@ -408,6 +408,7 @@ def run(argv: list[str] | None = None) -> int:
 
         consumed_ids: set[str] = set()
         infer_served = 0
+        handler_errors: list[dict] = []
 
         def handler(request):
             """Serve one request: a real forward pass, admitted through the one-time table.
@@ -438,6 +439,22 @@ def run(argv: list[str] | None = None) -> int:
                 # refuse on timeout - an inference that never arrived cannot be admitted.
                 time.sleep(max(0.0, arguments.worker_deadline_s) + 2.0)
 
+            try:
+                return _serve(request)
+            except Exception as error:  # noqa: BLE001 - the v4 server answers INTERNAL_ERROR
+                # The server turns a handler exception into a stable INTERNAL_ERROR, so the Worker
+                # cannot see why. Recording the cause here is what lets a later stall run name the
+                # failure instead of inferring it (CP-UQ278 addendum 3).
+                import traceback as _traceback
+
+                handler_errors.append({
+                    "request_id": request.request_id, "operation": request.operation,
+                    "error": f"{type(error).__name__}: {error}",
+                    "traceback_tail": _traceback.format_exc().splitlines()[-4:],
+                })
+                raise
+
+        def _serve(request):
             detector = models["yolo"]
             batch = bootstrap.lane.submit(
                 lambda: detector.detect(warm_frame(), DetectionQuery(class_id="cup")),
@@ -556,6 +573,7 @@ def run(argv: list[str] | None = None) -> int:
                 "evidence_root": str(pick_root),
             }
         document["per_slot_pick_place"] = per_slot
+        document["handler_errors"] = handler_errors
 
         # Every response is admitted through the one-time table before it counts.
         admitted, refused = [], []
