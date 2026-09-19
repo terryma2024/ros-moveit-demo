@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ264 (tail of this file)
+latest_checkpoint: CP-UQ265 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -11984,3 +11984,65 @@ Task 14 remains 0/5: no pick-place has run inside a campaign, and `LINUX_REGRESS
 retained.
 
 _Ledger source HEAD: `c381f51a`; no evidence deleted._
+
+## CP-UQ265 — Readiness wiring landed, with two gaps I am not going to paper over
+
+```yaml
+checkpoint_id: CP-UQ265
+last_valid_experiment: EXP-UQ265-CAMPAIGN-READY-WIRING (PASS with unverified internals)
+current_hypothesis: Each Worker can wait for its own station's ready contract on its own ROS domain.
+  PARTIALLY CONFIRMED: the code path exists and the campaign passes, but the evidence is not yet
+  captured and the failure branch is not closed.
+working_tree_status: clean after the scoped commit below
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - `station_record` is never written into the Worker's result document, so the readiness outcome is
+    not in the evidence.
+  - The Worker records the readiness exit code but does not fail on it: a Worker could serve round
+    trips after a *failed* readiness check. That is not fail-closed and must be fixed before any
+    batch is counted.
+  - Screen Recording is still denied to this session.
+next_command: write the station record into the result document AND refuse to serve when readiness
+  did not pass
+```
+
+`EXP-UQ265-CAMPAIGN-READY-WIRING: PARTIAL` - the campaign passes, the readiness internals are not yet
+proven, and the failure branch is open.
+
+### What changed
+
+- The entry point passes each Worker its station session, a Worker-scoped station root and **its own
+  `ros_domain_id` from the plan** (`plan.ros_domain_ids[slot]`), so the two stations never share a ROS
+  graph - closing the gap CP-UQ264 recorded;
+- the Worker resolves `motion_stack_ready` from the **package prefix** when PATH does not carry it
+  (the first attempt failed closed with `STATION_READY_BINARY_MISSING`, which is the guard doing its
+  job rather than a silent skip);
+- the Worker starts its station through `PersistentTaskStack` + `station_environment` and then runs
+  the readiness check on its own domain before its round trips.
+
+### The run
+
+```text
+task14-campaign-ready-04   status W2_CAMPAIGN_PASS, cleanup complete, 0 processes left
+                           w1/w2 round trips: 3 x OK each
+```
+
+### Two things that run does *not* prove, and the housekeeping around it
+
+The Worker result documents contain the round trips but **no `station_record`**, so the readiness
+outcome is not in the evidence; and the Worker stores the readiness exit code without acting on it,
+so a failed check would not stop it. Both are defects in my own patch, both are recorded above, and
+neither may be glossed over by the campaign's PASS.
+
+Housekeeping, recorded because it was mine: the interrupted run left 19 dead campaign directories
+under `/private/tmp/so101-ipc-501/` (empty, or holding a socket with no listener - verified by
+attempting a connect on each, none live). They were removed, which is what the design's cleanup is
+supposed to do; no *evidence* under the registered task root was touched. Two runs of mine are
+recorded as INVALID rather than counted: `task14-campaign-ready-02` (interrupted before any result)
+and `task14-campaign-ready-03` (gate refused because I had pre-created/reused its run root - my third
+harness mistake of this kind, already noted in CP-UQ260's addenda).
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `922e8dc7`; no evidence deleted._
