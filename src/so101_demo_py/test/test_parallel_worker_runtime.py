@@ -1857,3 +1857,42 @@ def test_recover_does_not_restart_when_recovery_crosses_deadline(tmp_path: Path)
 
     assert runtime.recover("worker-1", 1, 10.0) is False
     assert [spec.role for spec in processes.specs] == ["task-station"]
+
+
+def test_station_environment_scrubs_and_refuses_a_canonical_prefix(tmp_path: Path) -> None:
+    """A station must never resolve its nodes from another checkout.
+
+    CP-UQ261: the canonical project install was in AMENT_PREFIX_PATH, `ros2_control_node` came from
+    it, and it waited forever for a `/robot_description` that node set never published.
+    """
+
+    import os
+
+    from so101_demo.runtime.parallel_worker_runtime import (
+        CANONICAL_INSTALL_MARKER,
+        station_environment,
+    )
+
+    resources = _resources(tmp_path, "worker-1", 0, 181)
+    base = {
+        "AMENT_PREFIX_PATH": os.pathsep.join(
+            ["/branch/install/so101_demo_py", f"/canonical/{CANONICAL_INSTALL_MARKER}/so101_demo_py"]
+        ),
+        "PATH": os.pathsep.join(["/usr/bin", f"/canonical/{CANONICAL_INSTALL_MARKER}/bin"]),
+        "DYLD_LIBRARY_PATH": f"/canonical/{CANONICAL_INSTALL_MARKER}/lib",
+        "ROS_DOMAIN_ID": "999",
+    }
+
+    environment = station_environment(resources, base=base)
+
+    assert CANONICAL_INSTALL_MARKER not in environment["AMENT_PREFIX_PATH"]
+    assert environment["AMENT_PREFIX_PATH"] == "/branch/install/so101_demo_py"
+    assert environment["PATH"] == "/usr/bin"
+    assert environment["DYLD_LIBRARY_PATH"] == ""
+    # The Worker's own environment wins, and its domain is the one the allocator granted.
+    assert environment["ROS_DOMAIN_ID"] == str(resources.ros_domain_id)
+
+    poisoned = dict(resources.environment or {})
+    poisoned["AMENT_PREFIX_PATH"] = f"/canonical/{CANONICAL_INSTALL_MARKER}/so101_demo_py"
+    with pytest.raises(RuntimeError, match="CANONICAL_INSTALL_PREFIX"):
+        station_environment(replace(resources, environment=poisoned), base=base)

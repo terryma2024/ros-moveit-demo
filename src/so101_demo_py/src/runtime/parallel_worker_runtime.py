@@ -606,6 +606,58 @@ def task_station_config(
     )
 
 
+#: A station that resolves its nodes from another checkout is not evidence for this branch. The
+#: canonical project install is the concrete case CP-UQ261 hit: `ros2_control_node` waited forever
+#: for a `/robot_description` the mismatched node set never published.
+CANONICAL_INSTALL_MARKER = "moveit-demo/install"
+
+#: Every variable discovery walks. They are scrubbed together because AMENT_PREFIX_PATH alone is
+#: not enough: `ros2 run`/`launch` also resolve executables through PATH and libraries through
+#: DYLD_LIBRARY_PATH.
+_DISCOVERY_VARIABLES = (
+    "AMENT_PREFIX_PATH",
+    "CMAKE_PREFIX_PATH",
+    "COLCON_PREFIX_PATH",
+    "PATH",
+    "PYTHONPATH",
+    "DYLD_LIBRARY_PATH",
+    "LD_LIBRARY_PATH",
+)
+
+
+def station_environment(
+    resources: WorkerResources | None = None, *, base: Mapping[str, str] | None = None
+) -> dict[str, str]:
+    """The environment a station may run under: this checkout's chain, never another checkout's.
+
+    Canonical prefixes are stripped from every discovery variable, then the merged result is
+    checked again - including whatever the Worker's own environment contributes - and a surviving
+    canonical prefix is a refusal rather than a silent launch from the wrong build.
+    """
+
+    environment = dict(os.environ if base is None else base)
+    for name in _DISCOVERY_VARIABLES:
+        value = environment.get(name)
+        if not value:
+            continue
+        kept = [
+            entry
+            for entry in value.split(os.pathsep)
+            if CANONICAL_INSTALL_MARKER not in entry
+        ]
+        environment[name] = os.pathsep.join(kept)
+    if resources is not None:
+        environment.update(dict(resources.environment or {}))
+        environment["ROS_DOMAIN_ID"] = str(resources.ros_domain_id)
+    for name in _DISCOVERY_VARIABLES:
+        if CANONICAL_INSTALL_MARKER in environment.get(name, ""):
+            raise RuntimeError(
+                f"CANONICAL_INSTALL_PREFIX: refusing to launch a station with {name} pointing "
+                "at another checkout"
+            )
+    return environment
+
+
 def _required(name: str):
     def missing(*_args, **_kwargs):
         raise RuntimeError(f"parallel Worker runtime port is required: {name}")
