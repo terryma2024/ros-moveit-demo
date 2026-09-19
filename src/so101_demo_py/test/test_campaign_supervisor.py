@@ -396,18 +396,18 @@ def test_a_child_without_a_readable_birth_identity_is_never_promoted(tmp_path):
         supervisor.release_claim()
 
 
-def test_a_short_lived_child_is_identified_at_spawn_not_after_the_ack_wait(tmp_path):
-    """The identity is captured at spawn, so a child that exits before promotion is still known.
+def test_a_child_that_exits_after_the_spawn_read_is_still_promoted_with_its_identity(tmp_path):
+    """A vanished child is not a reused PID: the spawn-time identity stands.
 
-    This is the Task 13 root cause: the read used to happen only after the ACK wait, so a child
-    that finished first was unidentifiable and could never be signalled safely.
+    This is the Task 13 root cause, measured: on this host a Worker can complete its round trips
+    inside the ACK window, so the promotion recheck legitimately sees a zombie or nothing at all.
+    Refusing that rejected healthy Workers; refusing a *changed* identity is what stops reuse.
     """
 
     from so101_demo.parallel_batch.start_guard_probe import ProcessIdentityRecord
 
-    child_reads = {"count": 0}
-
     parent_pid = os.getpid()
+    child_reads = {"count": 0}
 
     def child_exits_after_the_first_read(pid):
         if pid == parent_pid:
@@ -428,12 +428,11 @@ def test_a_short_lived_child_is_identified_at_spawn_not_after_the_ack_wait(tmp_p
         record = supervisor.spawn(role="worker", slot=0,
                                   argv=_ack_command(ack_path, sleep_s=30.0),
                                   nonce="n-short-lived", ack_path=ack_path)
-        assert record.status == FAILED
-        assert record.reason == IDENTITY_UNAVAILABLE
+        assert record.status == ACTIVE
+        assert record.birth_identity == 555001
         assert child_reads["count"] >= 2, "read at spawn, rechecked at promotion"
         document = json.loads(supervisor.receipt_path.read_text())
-        assert document["children"][0]["status"] == FAILED
-        assert document["children"][0]["birth_identity"] is None
+        assert document["children"][0]["birth_identity"] == 555001
     finally:
         supervisor.terminate_all()
         supervisor.release_claim()
@@ -523,7 +522,7 @@ def test_a_child_whose_identity_resolves_on_a_retry_is_promoted(tmp_path):
                                   nonce="n-retry", ack_path=ack_path)
         assert record.status == ACTIVE
         assert record.birth_identity == 424242
-        assert reads["count"] >= 3, "retried until the read resolved"
+        assert reads["count"] >= 2, "read retried at spawn and rechecked at promotion"
     finally:
         supervisor.terminate_all()
         supervisor.release_claim()
