@@ -12213,3 +12213,27 @@ its own ownership object is designed to), and the eight processes were reaped by
 confirming they belonged to this run. Task 14 stays 0/5 and `LINUX_REGRESSION_DEFERRED` is retained.
 
 _Ledger source HEAD: `f10e685c`; no evidence deleted._
+
+### CP-UQ268 addendum 2 — the orphan defect is fixed and the check is now part of the gate
+
+The Worker's serving section is wrapped in `try/finally`, so the station it started is shut down on
+every exit path - the success path, the `STATION_NOT_READY` refusal, and any exception in between.
+The comment in the code records why this belongs to the Worker rather than the supervisor: the
+supervisor owns the Worker's process group, but the launch the stack spawns can land in its own group,
+so a group kill cannot reach it.
+
+Re-run, with the process check as the acceptance criterion:
+
+```text
+task14-campaign-ready-09   status W2_CAMPAIGN_PASS, cleanup complete
+                           w1 ready True phase READY domain 181 trips 3
+                           w2 ready True phase READY domain 182 trips 3
+                           orphans after the campaign: []      <- the fix, measured
+```
+
+Until this commit the PASS and "eight processes still alive" were both true at once, which is exactly
+the kind of gap a status document hides; from now on the orphan check runs with every campaign I count.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `38505d56`; no evidence deleted._
