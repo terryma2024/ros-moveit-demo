@@ -10929,3 +10929,26 @@ Recorded as the decided design with its justification, not as done work. Task 14
 `LINUX_REGRESSION_DEFERRED` is retained.
 
 _Ledger source HEAD: `f71e3484`; no evidence deleted._
+
+### CP-UQ256 follow-up 7 — the child branch is the only thing left in this chain
+
+`320df6a0` sends the discriminator; the helper does not read it yet. The remaining edit is confined to
+`run_helper` (`start_guard_probe.py:642-667`) and must:
+
+1. read `request["policy"].get("mps_minimum_headroom_bytes")` after building the policy;
+2. when it is present, skip `probe_snapshot` (whose `resolve_gpu_target` is the NVML call that raises
+   `GPU_TARGET_UNAVAILABLE` on Darwin) and instead reuse the module's CPU/RAM readers
+   (`_read_cpu`, `_read_ram`, `_read_cpu_busy`, all reachable from the same module), evaluate the
+   cpu-busy and RAM thresholds, and return a `GuardResult` with `snapshot=None` plus those checks;
+3. when it is absent, run today's code path unchanged;
+4. keep the checks' names and units identical to `evaluate_snapshot`'s so the parent's
+   `_merge_accelerator` composition does not need a second vocabulary.
+
+Tests owed with it: the v4 branch produces CPU/RAM checks and no GPU check; the v3 branch is
+byte-identical (compare the serialized result document for a stubbed snapshot); and the integration
+probe (`probe-w2-resources.py`) then resolves two Workers.
+
+The verification commands are already in place, so the next round starts by reading
+`evaluate_snapshot`'s check construction and editing exactly one function.
+
+_Ledger source HEAD: `320df6a0`; no evidence deleted._
