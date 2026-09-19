@@ -49,6 +49,7 @@ class W2BrokerPort:
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
         connection=None,
+        resources=None,
     ) -> None:
         if not isinstance(authority, BrokerAuthority):
             raise TypeError("a BrokerAuthority is required")
@@ -61,6 +62,7 @@ class W2BrokerPort:
         self._clock = clock
         self._sleep = sleep
         self.connection = connection
+        self.resources = resources
 
     def _connect(self, authority: BrokerAuthority):
         return self._client_factory(
@@ -101,8 +103,7 @@ class W2BrokerPort:
         return authority
 
     def request_model(self, lease, execution_kind, *, snapshot, start_event_id,
-                      start_event_type, reset_epoch, perception_runner=None,
-                      request_one=None) -> object:
+                      start_event_type, reset_epoch, perception_runner=None) -> object:
         """Run one inference through the shared Broker and the Worker's perception chain.
 
         The production proxy's contract is positional and `parallel_ros_runtime` is written against
@@ -114,11 +115,8 @@ class W2BrokerPort:
         self.refresh(wait_until_healthy=False)
         if perception_runner is None:
             raise W2BrokerPortError("PERCEPTION_RUNNER_REQUIRED")
-        if request_one is None:
-            raise W2BrokerPortError("REQUEST_ONE_REQUIRED")
-
         def send(model_id, before_send=None):
-            return request_one(
+            return self.request_one(
                 lease,
                 execution_kind,
                 model_id=model_id,
@@ -130,6 +128,72 @@ class W2BrokerPort:
             )
 
         return perception_runner(lease, execution_kind, snapshot, send)
+
+    def request_one(self, lease, execution_kind, *, model_id, snapshot, start_event_id,
+                    start_event_type, reset_epoch, before_send=None):
+        """One model call on the shared Broker: identity in, response out, no authentication.
+
+        The identity fields are Worker/Coordinator bookkeeping and are identical to the container
+        path's; the envelope carries `operation: infer` plus the serialized request and snapshot and
+        nothing else, because schema v4 has no token, generation or lease field to put there.
+        """
+
+        from ..parallel_batch.contracts import (
+            ExecutionKind,
+            InferenceRequest,
+            NormalizedInferenceResponseIdentity,
+        )
+        from .parallel_ipc import BrokerTransport
+        from .parallel_perception_runtime import Snapshot
+
+        self.refresh(wait_until_healthy=False)
+        request_id = f"{lease.attempt_id}-{model_id}"
+        identity = {
+            "request_id": request_id,
+            "model_id": model_id,
+            "execution_kind": execution_kind,
+            "batch_id": lease.batch_id,
+            "coordinator_epoch": lease.coordinator_epoch,
+            "worker_id": lease.worker_id,
+            "worker_generation": lease.worker_generation,
+            "point_id": lease.point_id,
+            "lease_generation": lease.lease_generation,
+            "reset_epoch": reset_epoch,
+            "image_timestamp_s": snapshot.source_stamp_ns / 1_000_000_000.0,
+            "input_relative_path": str(
+                snapshot.path.relative_to(self.resources.worker_root.parent)
+            ),
+            "input_sha256": snapshot.input_sha256,
+            "deadline_s": float(self.config.executing_hard_timeout_s),
+        }
+        if execution_kind is ExecutionKind.ATTEMPT:
+            identity["attempt_id"] = lease.attempt_id
+        else:
+            identity["validation_id"] = lease.attempt_id
+        request = InferenceRequest(**identity)
+        if before_send is not None:
+            before_send(request)
+        broker_snapshot = Snapshot(
+            snapshot.shape,
+            snapshot.source_stamp_ns,
+            snapshot.source_frame_id,
+            start_event_id,
+            start_event_type,
+            NormalizedInferenceResponseIdentity.from_request(request),
+        )
+        response = self.connection.call(
+            "infer",
+            {
+                "request": BrokerTransport.serialize_request(request),
+                "snapshot": BrokerTransport.serialize_snapshot(broker_snapshot),
+            },
+            request_id=request_id,
+        )
+        if getattr(response, "ok", None) is False:
+            raise W2BrokerPortError(
+                f"BROKER_INFER_REFUSED: {getattr(response, 'code', 'UNKNOWN')}"
+            )
+        return response
 
     def cancel_generation(self, worker_id: str, generation: int) -> bool:
         """Cancel one generation on the Broker, after it is healthy enough to answer.
