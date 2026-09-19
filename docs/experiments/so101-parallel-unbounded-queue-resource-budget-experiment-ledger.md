@@ -12967,3 +12967,26 @@ probe adds two refusals on purpose.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `52421687`; no evidence deleted._
+
+### CP-UQ277 addendum 2 — one-time consumption, verified end to end
+
+```text
+task16-consume-once-05   status W2_CAMPAIGN_INCOMPLETE (exit 7, correct for a probe that breaks the
+                         happy path on purpose), devices ['mps'], duplicates_refused 2, orphans []
+  w1 duplicate: {"status": "REFUSED", "error": "W2BrokerPortError: BROKER_INFER_REFUSED: DUPLICATE_REQUEST"}
+  w2 duplicate: {"status": "REFUSED", "error": "W2BrokerPortError: BROKER_INFER_REFUSED: DUPLICATE_REQUEST"}
+```
+
+Both Workers sent a repeat of an id they had already used, the one-time table refused both, and the
+Worker's port reported the refusal with the server's own code. That is live macOS evidence for a
+design property that, one round ago, was inverted in my own code: the table refuses, and a refusal
+cannot be mistaken for an admission.
+
+This closes the "request register / one-time consume / late-or-duplicate rejection" line of the
+acceptance matrix to the extent it can be closed outside a counted batch - the remaining fault
+evidences (inference timeout, active-Worker cancel, Broker crash + rebuild) stay open per CP-UQ276
+point 4, and the Broker-crash one is structurally unreachable in this composition.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `2961ba71`; no evidence deleted._
