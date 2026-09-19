@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ286 (final report, refreshed)
+latest_checkpoint: CP-UQ287 (clean campaign PASS)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -13885,3 +13885,51 @@ sed-style edit to a nested block has cost a run.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `9adbd1c1`; no evidence deleted._
+
+## CP-UQ287 — A clean campaign reports PASS again, and the defect that prevented it was real
+
+```yaml
+checkpoint_id: CP-UQ287
+last_valid_experiment: EXP-UQ287-CLEAN-CAMPAIGN-PASS
+defect_found: the one-time table's bound deadline was 300 s while a campaign now spans ~9 minutes
+  (each Worker runs a pick-place batch before the admission decision is applied), so every consume
+  expired and every request was recorded as refused - which the verdict reads as INCOMPLETE
+working_tree_status: clean after the scoped commit below
+owned_processes: NONE
+open_risks:
+  - The per-point viewer capture still fails (macOS TCC), so Task 14 remains 0/5 even though the
+    campaign's own contract now passes.
+next_command: keep the TCC probe running; consider re-running the five-batch series with this verdict
+```
+
+### The run
+
+```text
+task14-clean-pass-05   STATUS W2_CAMPAIGN_PASS
+                       served 12, devices ['mps'], admitted 12, refused 0
+                       per-slot: w1 executed 4 / w2 executed 4 (failures TERMINAL_CAPTURE_FAILED)
+```
+
+That is the first `W2_CAMPAIGN_PASS` since round 91, and it needed three separate corrections to get
+back:
+
+1. the duplicate probe became **opt-in** (`--duplicate-probe`), because the verdict requires no
+   refusals and a probe that always refuses made PASS unreachable by construction;
+2. the probe's Worker-side guard had to be written by re-indenting the whole block - my sed-style
+   attempt broke the file and cost a run (CP-UQ286 addendum 4);
+3. **the admission deadline was raised from 300 s to `batch_hard_timeout_s`**: with pick-place now
+   running inside each Worker, the campaign outlives the old bound, so every consume expired with
+   `EXPIRED` and all twelve requests were recorded as refused even though every inference ran. That
+   third one is a genuine defect in my composition - the gate was measuring its own deadline rather
+   than the work - and the extracted verdict function from round 131 is what made it legible:
+   `refused 12, reasons ['EXPIRED']` with `admitted 0`.
+
+### What this changes, and what it does not
+
+The campaign's own contract now holds on the fixed code with both slots executing real pick-place. It
+does **not** make Task 14 pass: the plan counts a batch only when it succeeds, and every point still
+fails closed at `TERMINAL_CAPTURE_FAILED` because Screen Recording is denied to this session. So
+**Task 14 remains 0/5**, `five_batch_stability` is still not claimed, and `LINUX_REGRESSION_DEFERRED`
+stands.
+
+_Ledger source HEAD: `b5ce154b`; no evidence deleted._
