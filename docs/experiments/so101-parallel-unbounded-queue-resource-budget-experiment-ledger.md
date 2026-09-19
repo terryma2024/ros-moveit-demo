@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ284 (corrections) + Appendix B (post-fix series)
+latest_checkpoint: CP-UQ284 (corrections) + Appendix B + stall recheck
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -13637,3 +13637,23 @@ after four rounds of hypotheses built on my own derived values.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `fd2f0a01`; no evidence deleted._
+
+### CP-UQ284 addendum — the stall case re-measured on fixed code, and it did not reproduce
+
+```text
+task16-timeout-fixed-01   status W2_CAMPAIGN_INCOMPLETE | served 14 | devices ['mps']
+                          w1 infer: [OK, OK, OK]      w2 infer: [OK, OK, OK]
+```
+
+With the handler fixed, the same stall configuration that produced `INTERNAL_ERROR` everywhere now
+produces **no failures at all**: all six inferences are served. So the previous anomaly really was the
+scope defect and nothing else - but this run does **not** demonstrate that the stall is handled well,
+because it does not establish that the stall fired: either the injected sleep did not exceed the
+Worker's 4 s client budget, or the flags never reached the campaign (the runner appends `EXTRA_ARGS`
+unquoted, and that path has not been verified for this pair of flags).
+
+Recorded as an unmeasured case with a concrete next check - print the campaign's parsed arguments into
+its result document, then re-run - rather than as "the timeout path is fine". Nothing about Task 14
+changes: **0/5**, `LINUX_REGRESSION_DEFERRED` in force, Screen Recording still the external blocker.
+
+_Ledger source HEAD: `765e399d`; no evidence deleted._
