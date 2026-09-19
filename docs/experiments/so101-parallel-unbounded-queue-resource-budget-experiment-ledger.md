@@ -8458,3 +8458,31 @@ re-attempting any browser-driven acceptance — reading the D-state processes' `
 readable) or waiting for the container's I/O to complete, rather than forcing cleanup.
 
 _Ledger HEAD when written: b2c636009._
+
+## CP-UQ214 — A fresh browser renders the console fine, which weakens the GPU-contention hypothesis
+
+Recorded because it narrows the stall rather than confirming the previous guess:
+
+- a fresh browser probe against the same service, run *after* the stalled case was stopped, loads
+  `/expert-validation` and finds the heading plus an **enabled** `Acquire lease` button — i.e. a new
+  Chrome instance can start and render even while the host is loaded (load ~10) and the stuck broker
+  container is still up;
+- at the same time the process table shows **several** Chrome `--type=gpu-process` and utility
+  processes in uninterruptible sleep (`D`), ages ~15 m, ~5.5 m and ~2.5 m, one per browser attempt I
+  have made, all orphaned; `gnome-shell` has been in `D` for 18 days and is unrelated;
+- no acceptance process, simulator or coordinator is running, and my container `e2bb172bd754` is
+  still `Up`.
+
+So "the GPU is held, therefore browsers cannot start" is **not supported**: browsers do start. What
+remains open is why the *spec's* browser instance never issues its first request while a manual probe
+against the same page succeeds. The next diagnostic is therefore click-level and still read-only for
+the service: drive the fixture's own launch options (the acceptance suite uses
+`executablePath: chromeExecutablePath()`, not Playwright's bundled shell) and perform the
+`Acquire lease` click while watching for `POST /expert-validation/lease`; if the click posts, the stall
+is in the fixture/runner, and if it does not, the difference is in the launch options and I will
+bisect them one at a time.
+
+Nothing was signalled: the stuck Chrome processes have no recorded owned-process manifest, so they stay
+as `OWNERSHIP_UNPROVEN`; the stalled run was again stopped through its own job handle.
+
+_Ledger HEAD when written: 2a34bbafa._
