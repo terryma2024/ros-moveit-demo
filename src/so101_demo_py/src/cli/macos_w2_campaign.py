@@ -51,6 +51,58 @@ from ..runtime.unix_address import PRIVATE_TMP, DarwinPrivatePathUnixAddress
 _WORKER_MODULE = "so101_demo.cli.macos_w2_worker"
 
 
+def build_worker_leases(*, plan, batch_id: str, evidence_root: Path,
+                         input_sha256: str) -> dict[str, dict]:
+    """Write each Worker's lease document and the frame it is told to send.
+
+    The entry point knows both ends of the identity it binds, so it writes the identity down and
+    hands it to the Worker rather than letting the two sides derive ids independently. The frame is
+    created once; a later run reuses it rather than rewriting evidence.
+    """
+
+    leases: dict[str, dict] = {}
+    for index, worker_id in enumerate(("w1", "w2")):
+        slot_id = "slot-0" if index == 0 else "slot-1"
+        assigned = plan.slots.assigned_points[index][1] or "p1"
+        document = {
+            "worker_id": worker_id, "slot_id": slot_id, "batch_id": batch_id,
+            "coordinator_epoch": 1, "worker_generation": 1, "lease_generation": 1,
+            "reset_epoch": 1, "point_id": assigned, "model_id": "yolo",
+            "attempt_ids": [f"{worker_id}-att-{attempt:02d}" for attempt in range(3)],
+            "worker_root": str(evidence_root / f"{worker_id}-worker"),
+            "snapshot_path": str(evidence_root / f"{worker_id}-frame.npy"),
+            "input_sha256": input_sha256, "source_stamp_ns": 1_000_000_000,
+            "source_frame_id": "task_camera_frame", "shape": [480, 640, 3],
+            "start_event_type": "attempt_started",
+        }
+        frame_path = Path(document["snapshot_path"])
+        frame_path.parent.mkdir(parents=True, exist_ok=True)
+        if not frame_path.exists():
+            frame_path.write_bytes(b"campaign-warm-frame")
+        lease_path = evidence_root / f"{worker_id}-lease.json"
+        lease_path.write_text(json.dumps(document, sort_keys=True))
+        document["lease_path"] = str(lease_path)
+        leases[worker_id] = document
+    return leases
+
+
+def bind_worker_requests(campaign, leases: dict[str, dict], *, ready,
+                         deadline_s: float = 300.0) -> None:
+    """Bind every id the Workers will use *before* any of them is served.
+
+    An id that was never bound is refused by the one-time table, so this is the admission gate - and
+    it binds the `{attempt_id}-{model_id}` ids the Worker derives, not a parallel set.
+    """
+
+    for worker_id, document in sorted(leases.items()):
+        for attempt_id in document["attempt_ids"]:
+            campaign.request_binding(
+                request_id=f"{attempt_id}-{document['model_id']}", slot_id=document["slot_id"],
+                point_id=document["point_id"], attempt=1,
+                input_sha256=document["input_sha256"], deadline_s=deadline_s,
+                broker_pid=ready.broker_pid, broker_birth_identity=ready.broker_birth_identity)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="so101_macos_w2_campaign",

@@ -266,3 +266,54 @@ def test_campaign_ports_expose_the_worker_simulation_seams() -> None:
     supplied = CampaignPorts(model_factories={}, worker_station=station, worker_broker=broker)
     assert supplied.worker_station is station
     assert supplied.worker_broker is broker
+
+
+def test_worker_leases_and_bindings_use_the_ids_the_worker_derives(tmp_path: Path) -> None:
+    """The admission gate must bind the ids the Worker will actually request with.
+
+    The Worker's port derives `{attempt_id}-{model_id}`, so anything else in the table is a parallel
+    vocabulary that would refuse real inference. The lease document is also what tells the Worker
+    which identity it owns, so the two sides cannot drift.
+    """
+
+    import json
+
+    from so101_demo.cli.macos_w2_campaign import bind_worker_requests, build_worker_leases
+    from so101_demo.parallel_batch.w2_composition import exact_w2_slots
+
+    class _Plan:
+        slots = exact_w2_slots(("p1", "p2"))
+
+    leases = build_worker_leases(
+        plan=_Plan(), batch_id="b1", evidence_root=tmp_path, input_sha256="a" * 64
+    )
+
+    assert sorted(leases) == ["w1", "w2"]
+    document = leases["w1"]
+    assert document["attempt_ids"] == ["w1-att-00", "w1-att-01", "w1-att-02"]
+    assert document["slot_id"] == "slot-0" and leases["w2"]["slot_id"] == "slot-1"
+    assert document["point_id"] == "p1" and leases["w2"]["point_id"] == "p2"
+    assert Path(document["snapshot_path"]).is_file()
+    on_disk = json.loads(Path(document["lease_path"]).read_text())
+    assert on_disk["attempt_ids"] == document["attempt_ids"]
+    assert on_disk["model_id"] == "yolo"
+
+    class _Ready:
+        broker_pid = 4242
+        broker_birth_identity = 17
+
+    class _Campaign:
+        def __init__(self):
+            self.bindings = []
+
+        def request_binding(self, **kwargs):
+            self.bindings.append(kwargs)
+
+    campaign = _Campaign()
+    bind_worker_requests(campaign, leases, ready=_Ready())
+
+    bound = sorted(binding["request_id"] for binding in campaign.bindings)
+    assert bound == ["w1-att-00-yolo", "w1-att-01-yolo", "w1-att-02-yolo",
+                     "w2-att-00-yolo", "w2-att-01-yolo", "w2-att-02-yolo"]
+    assert all(binding["broker_pid"] == 4242 for binding in campaign.bindings)
+    assert all(binding["input_sha256"] == "a" * 64 for binding in campaign.bindings)
