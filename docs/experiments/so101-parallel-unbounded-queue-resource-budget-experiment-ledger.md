@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ256 (tail of this file)
+latest_checkpoint: CP-UQ257 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -10952,3 +10952,54 @@ The verification commands are already in place, so the next round starts by read
 `evaluate_snapshot`'s check construction and editing exactly one function.
 
 _Ledger source HEAD: `320df6a0`; no evidence deleted._
+
+## CP-UQ257 — The v4 admission passes, and the next Linux-only assumption appears
+
+```yaml
+checkpoint_id: CP-UQ257
+last_valid_experiment: EXP-UQ257-V4-ADMISSION-GREEN
+current_hypothesis: The guard chain was the last obstacle to allocating exact W2 from the v4
+  document. CONFIRMED for admission; the allocator then hits a Linux claim root.
+working_tree_status: clean after the scoped commit below
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - Domain claiming still targets `/run/user/<uid>/so101-parallel-domain-claims`, a Linux runtime
+    path, so no Worker is allocated yet.
+  - Screen Recording is still denied to this session; Task 14 batches remain blocked.
+next_command: give the v4 allocator its Darwin claim root (the private path strategy already exists)
+```
+
+`EXP-UQ257-V4-ADMISSION-GREEN: VALID` for the guard scope only.
+
+### What the new branch does
+
+`run_helper` now splits on the discriminator sent in `320df6a0`:
+
+- no `mps_minimum_headroom_bytes` → today's path, unchanged;
+- Darwin request → `_v4_cpu_ram_result`, which measures cpuset/cores, RAM and CPU busy through the
+  same readers and emits `cpu_capacity`, `cpu_busy` and `ram` checks with **identical names, cutoffs
+  and units** to `evaluate_snapshot`, no `gpu` check, `snapshot=None`, and `FAIL` only if a measured
+  check fails. CPU/RAM stay enforced; NVML is never touched; no CUDA-shaped device is fabricated.
+
+```text
+task14-guard-helper-01       67 passed  (guard probe + start guard suites)
+direct smoke                 status PASS, checks [cpu_busy, cpu_capacity, ram], snapshot None,
+                             ram observed 12 106 350 592 bytes vs cutoff 1 288 490 188
+task14-w2-resources-green-13 admission now passes; allocation proceeds to domain claiming
+```
+
+### The next gate
+
+```text
+ResourceAllocationError: PATH_ANCESTOR_UNAVAILABLE: /run/user/501/so101-parallel-domain-claims
+  resources.py:1432 _claim_domains -> _open_trusted_parent
+```
+
+`claim_root` defaults to a Linux runtime directory. The Darwin private path strategy that replaces
+it already exists (`runtime/unix_address.py`, `CampaignIpcRoot`, `/private/tmp/so101-ipc-<uid>`), so
+this is a wiring step rather than new design work.
+
+Task 14 remains 0/5 and `LINUX_REGRESSION_DEFERRED` is retained.
+
+_Ledger source HEAD: (parent of this commit); no evidence deleted._
