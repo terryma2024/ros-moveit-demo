@@ -362,7 +362,12 @@ def run(argv: list[str] | None = None) -> int:
             record = supervisor.spawn(
                 role="worker", slot=slot,
                 argv=[sys.executable, "-m", _WORKER_MODULE, str(ack), str(endpoint.path),
-                      worker_id, str(arguments.evidence_root / f"{worker_id}-result.json")],
+                      worker_id, str(arguments.evidence_root / f"{worker_id}-result.json"),
+                      # Each Worker owns a visible station on the domain the plan gave it: the
+                      # session id is campaign-scoped and the station root is Worker-scoped, so two
+                      # slots never share a scene, an epoch or an evidence directory.
+                      f"{arguments.campaign_id}-{worker_id}",
+                      str(arguments.evidence_root / f"{worker_id}-station")],
                 nonce=f"{arguments.campaign_id}-{worker_id}", ack_path=ack,
                 ack_timeout_s=120.0)
             workers.append({"slot_id": slot_id, "worker_id": worker_id,
