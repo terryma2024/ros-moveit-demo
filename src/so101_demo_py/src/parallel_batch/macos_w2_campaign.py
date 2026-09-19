@@ -62,13 +62,26 @@ class CampaignInventory:
 def read_inventory(*, claim_path: Path, ipc_base: Path) -> CampaignInventory:
     """Read the host state before touching anything, without signalling a single process."""
 
+    # A campaign directory counts as *live* only while it still holds something: a socket, or a
+    # receipt recording work. An empty directory is residue from a run that stopped before its
+    # cleanup, which is not a reason to refuse the next campaign; treating it as one would make a
+    # single crashed run block the host forever.
+    live: list[str] = []
+    base = Path(ipc_base)
+    if base.is_dir():
+        for campaign in sorted(base.glob("b-*")):
+            try:
+                entries = list(campaign.iterdir())
+            except OSError:
+                live.append(str(campaign))
+                continue
+            if entries:
+                live.append(str(campaign))
     return CampaignInventory(
         claim_held=Path(claim_path).exists(),
         live_endpoints=(),
         owned_processes=(),
-        existing_campaign_dirs=tuple(
-            sorted(str(item) for item in Path(ipc_base).glob("b-*"))
-        ) if Path(ipc_base).is_dir() else (),
+        existing_campaign_dirs=tuple(live),
     )
 
 

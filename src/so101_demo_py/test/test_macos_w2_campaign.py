@@ -60,17 +60,18 @@ def test_a_clean_host_is_reported_clean(tmp_path):
     assert inventory.clean is True
 
 
-def test_an_existing_claim_or_campaign_directory_is_not_clean(tmp_path):
-    """The pre-flight must see a live claim and any leftover campaign directory."""
+def test_a_live_claim_makes_the_host_not_clean(tmp_path):
+    """A held claim alone is enough to stop a new campaign."""
 
     claim = tmp_path / "campaign-claim.lock"
     claim.write_text("")
     ipc_base = tmp_path / "so101-ipc"
-    (ipc_base / "b-leftover").mkdir(parents=True)
+    (ipc_base / "b-live").mkdir(parents=True)
+    (ipc_base / "b-live" / "broker.sock").write_text("")
     inventory = read_inventory(claim_path=claim, ipc_base=ipc_base)
     assert inventory.clean is False
     assert inventory.claim_held is True
-    assert inventory.existing_campaign_dirs == (str(ipc_base / "b-leftover"),)
+    assert inventory.existing_campaign_dirs == (str(ipc_base / "b-live"),)
 
 
 def test_the_pre_flight_never_signals_anything(tmp_path):
@@ -217,3 +218,27 @@ def test_the_infrastructure_disposition_is_never_a_business_status(tmp_path):
     assert document["kind"] == INFRASTRUCTURE_FAILURE
     assert document["business_status"] is None
     assert document["campaign_id"] == "b-composed"
+
+
+def test_an_empty_campaign_directory_is_residue_not_a_live_stack(tmp_path):
+    """Only a campaign directory that still holds something counts as live.
+
+    A run that stops before its cleanup leaves an empty directory behind. Treating that as a
+    blocking condition would make one crashed run refuse every later campaign on the host.
+    """
+
+    from so101_demo.parallel_batch.macos_w2_campaign import read_inventory
+
+    ipc_base = tmp_path / "so101-ipc"
+    (ipc_base / "b-empty-residue").mkdir(parents=True)
+    (ipc_base / "b-holds-a-socket").mkdir(parents=True)
+    (ipc_base / "b-holds-a-socket" / "broker.sock").write_text("")
+
+    inventory = read_inventory(claim_path=tmp_path / "no-claim", ipc_base=ipc_base)
+    assert inventory.existing_campaign_dirs == (str(ipc_base / "b-holds-a-socket"),)
+    assert inventory.clean is False
+
+    (ipc_base / "b-holds-a-socket" / "broker.sock").unlink()
+    after = read_inventory(claim_path=tmp_path / "no-claim", ipc_base=ipc_base)
+    assert after.existing_campaign_dirs == ()
+    assert after.clean is True
