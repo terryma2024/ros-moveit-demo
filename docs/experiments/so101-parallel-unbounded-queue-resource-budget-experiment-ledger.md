@@ -10845,3 +10845,23 @@ pair, including a case proving the no-accelerator path is byte-identical to toda
 No Worker has been allocated, no batch ran; Task 14 stays 0/5 and `LINUX_REGRESSION_DEFERRED` holds.
 
 _Ledger source HEAD: `20219623`; no evidence deleted._
+
+### CP-UQ256 follow-up 4 — the refusal happens in the helper child, so the fix is a request field
+
+Correcting my own previous diagnosis: it is not only that merging is the wrong shape. The v3
+measurement runs in a **spawned helper child** (`check` writes a request document, `self._spawn`,
+collects the result, and only then calls `_merge_accelerator`). That child imports
+`probe_snapshot` / `evaluate_snapshot` from `.start_guard`, which is where `nvmlInit_v2` raises
+`GPU_TARGET_UNAVAILABLE` (`start_guard.py:346-366`). By the time the parent could merge the MPS
+admission, the helper has already failed — so no amount of parent-side merging can rescue it.
+
+The fix shape is therefore a request field: the parent already sends `policy.gpu_minimum_bytes` in
+the JSON request, and it must also tell the child which accelerator family it is probing (the Darwin
+policy carries `mps_minimum_headroom_bytes`, which is exactly the discriminator). The child then runs
+the MPS admission instead of the NVML one, and a request without that discriminator must produce
+byte-identical v3 behaviour. This belongs to `start_guard_probe.check` (request) + the helper entry
+point + `_merge_accelerator`, and it needs its own RED/GREEN pair, including the v3-unchanged case.
+
+Still: no Worker allocated, Task 14 0/5, `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `9d6d1ffc`; no evidence deleted._
