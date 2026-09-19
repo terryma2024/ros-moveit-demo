@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ273 (tail of this file)
+latest_checkpoint: CP-UQ274 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -12641,3 +12641,49 @@ reconstruct it:
 Nothing has been deleted from the evidence root, and the Linux deferral from CP-UQ272 stands.
 
 _Ledger source HEAD: `b1c1a8ab`; no evidence deleted._
+
+## CP-UQ274 — Task 16: the macOS evidence, requirement by requirement
+
+```yaml
+checkpoint_id: CP-UQ274
+last_valid_experiment: EXP-UQ274-FINAL-MATRIX
+proposed_verdict: PARTIAL (MACOS_MPS_W2_PASS is NOT met - Task 14 stands at 0/5)
+independent_verdict: OWED - the plan requires gpt-5.6-sol/high, which this DST session cannot invoke;
+  recording the limitation rather than substituting a model
+working_tree_status: clean
+owned_processes: NONE
+next_command: independent review, or close the goal with PARTIAL as proposed here
+```
+
+Against design §9.1, with the evidence each line rests on:
+
+| Requirement | Status | Evidence |
+| --- | --- | --- |
+| schema v3 frozen, v4 closed contract + illegal combinations + CPU fallback RED/GREEN | MET | `task1-*`, `refreeze-*`, `entrypoint-regression-04` 177 passed |
+| inherited `PYTORCH_ENABLE_MPS_FALLBACK=1` fails closed before `import torch` | MET | `test_mps_broker_bootstrap.py`, `task8-mps-bootstrap-smoke-01`, `torch-import-probe-*` |
+| MPS start guard, fixed headroom, 2 s deadline, claim conflict, pre-spawn rejection, metric provenance | MET | `start-guard-macos-01/02/03`, `task14-w2-resources-green-17` (admission `unified-memory-proxy`) |
+| Supervisor keeps the claim after a Coordinator crash; durable `SPAWNING` before spawn; ACK before `ACTIVE` | MET | Task 13 smokes, `task14-campaign-batch02/03/04`, `composed-campaign-01` |
+| private short path, permissions, length checks, two-Client round trips, negative paths, restart, cleanup | MET | `ipc-macos-probe-01`, `test_parallel_ipc_v4.py`, `task13-w2-runtime-smoke-01/02` |
+| immutable snapshot descriptor tests | MET | `test_input_snapshot*`, `test_parallel_perception_runtime.py` |
+| real models on MPS, warm-up, `synchronize()`, ready receipt matching the device | MET | `task13-w2-real-models-03`, `refreeze-real-model-load.json` (Grounded SAM 203M on `mps:0`, YOLO 2.83M + inference 274.6 ms) |
+| exact W2: two slots, one Broker/model set, per-slot progress/result/evidence | **PARTIAL** | allocation and stations MET (`task14-w2-stations-guard-01`, `task14-campaign-ready-08/12/13`); real inference through the port MET (`task14-campaign-infer-05`, `device: mps`); **per-slot pick-place evidence NOT produced** |
+| request register/one-time consume, queue full, inference timeout, Worker cancel, Broker crash pool rebuild, late/duplicate rejection, controller goal absence | **PARTIAL** | registry, queue-full, late/duplicate and rebuild evidence exist (`v4-queue-*`, `composed-campaign-01`); the three fault evidences were written for the IPC shape, not inside a counted batch |
+| fresh build/package/OpenAPI/copied-install/served-byte gates in a valid macOS ROS environment | **PARTIAL** | `task12-fresh-build-01/02`, `task12-package-gate-01`, `task12-copied-install-01/02`, `task12-served-bytes-01`, `task11-web-*`; `colcon test`/CTest is INVALID on this host (DYLD bootstrap), so the package gate is a direct pytest gate and the source gate carries 234 pre-existing environment failures |
+| MoveIt shadow, controller/joints, MuJoCo pose/contact/detach/release/final placement with a fresh epoch | **PARTIAL** | one real four-point batch produced MoveIt trajectories, `table_contact`, forces and placement (`task14-single-batch-01`) - outside the campaign, and every point failed at `TERMINAL_CAPTURE_FAILED` |
+| fresh GUI evidence as snapshot/action/snapshot | **NOT MET** | blocked by macOS TCC for this session's responsibility chain (`task14-capture-probe-01..14`, `task15-capture-probe-01`); tmux was restarted (pid 10775) and the grant still does not apply |
+| five consecutive valid `FULL_RESTART` simulation batches | **NOT MET** | Task 14 = 0/5; none started |
+| Linux regression (Task 15) | DEFERRED | CP-UQ272; never run, never reported as PASS/SKIP/N/A |
+
+### Proposed verdict
+
+**`PARTIAL`.** The macOS exact-W2 platform work is real and evidenced - frozen contract, MPS
+admission, durable ownership, permission-only IPC, one-time admission, a shared single-lane MPS
+Broker, exact-W2 allocation, two visible stations each proven ready on its own domain, and inference
+through the port with `device: mps`. What is missing is the *task* half: no pick-place batch has run
+inside the campaign, so there is no per-slot physical evidence, no five-batch stability series, and no
+fresh GUI capture - the last of which is a permission this session cannot grant itself.
+
+Two things must not be smoothed over in any summary: Task 14 is **0/5**, and
+`LINUX_REGRESSION_DEFERRED` still blocks cross-platform and release claims.
+
+_Ledger source HEAD: `87e44239`; no evidence deleted._
