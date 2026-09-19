@@ -24,6 +24,10 @@ mujoco_gl: cgl
 # budget and it is not derived from the worker count.
 mps_process_memory_fraction: 0.8
 
+# Data-plane limit, independent of `execution.broker_max_frame_bytes`. A control frame carries a
+# descriptor; the descriptor points at a snapshot no larger than this.
+max_input_snapshot_bytes: 67108864
+
 execution:
   backend: mujoco
   max_worker_count: 8

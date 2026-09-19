@@ -1749,8 +1749,13 @@ EXECUTION_V4_FIELDS = frozenset(
 V4_CONFIG_FIELDS = frozenset({
     "schema_version", "execution", "start_guard", "accelerator", "requested_device",
     "allow_cpu_fallback", "worker_count", "ipc_transport", "mujoco_gl",
-    "mps_process_memory_fraction",
+    "mps_process_memory_fraction", "max_input_snapshot_bytes",
 })
+
+#: The independent data-plane limit. `broker_max_frame_bytes` bounds the control frame; this
+#: bounds the immutable snapshot a descriptor points at. Neither substitutes for the other, so
+#: the snapshot limit must be at least as large as one frame and is validated on its own.
+DEFAULT_MAX_INPUT_SNAPSHOT_BYTES = 64 * 1024 * 1024
 
 
 def _require_fraction(name: str, value: object) -> float:
@@ -1869,6 +1874,7 @@ class ParallelRuntimeConfigV4:
     ipc_transport: IpcTransport
     mujoco_gl: str
     mps_process_memory_fraction: float | None
+    max_input_snapshot_bytes: int
 
     FROZEN_YOLO_WEIGHTS_SHA256: ClassVar[str] = _FROZEN_YOLO_WEIGHTS_SHA256
     FROZEN_GROUNDED_SAM_MANIFEST_SHA256: ClassVar[str] = (
@@ -1904,7 +1910,7 @@ class ParallelRuntimeConfigV4:
         for name in (
             "max_worker_count", "broker_max_frame_bytes", "broker_queue_capacity_per_model",
             "broker_inflight_per_worker_per_model", "yolo_imgsz", "grounding_max_candidates",
-            "sam_min_mask_pixels",
+            "sam_min_mask_pixels", "max_input_snapshot_bytes",
         ):
             object.__setattr__(self, name, _require_positive_int(name, getattr(self, name)))
         if not isinstance(self.ros_domain_ids, (list, tuple)):
@@ -2004,6 +2010,7 @@ class ParallelRuntimeConfigV4:
             "worker_count": self.worker_count,
             "mps_process_memory_fraction": self.mps_process_memory_fraction,
             "mps_minimum_headroom_bytes": self.mps_minimum_headroom_bytes,
+            "max_input_snapshot_bytes": self.max_input_snapshot_bytes,
             "yolo_model_id": self.yolo_model_id,
             "yolo_weights_sha256": self.yolo_weights_sha256,
             "grounded_sam_manifest_sha256": self.grounded_sam_manifest_sha256,
@@ -2065,6 +2072,7 @@ def parse_parallel_runtime_config_v4(document: object) -> ParallelRuntimeConfigV
         ipc_transport=resolved.get("ipc_transport", top["ipc_transport"]),
         mujoco_gl=resolved.get("mujoco_gl", top["mujoco_gl"]),
         mps_process_memory_fraction=top["mps_process_memory_fraction"],
+        max_input_snapshot_bytes=top["max_input_snapshot_bytes"],
         **execution,
     )
 
