@@ -242,3 +242,27 @@ def test_an_empty_campaign_directory_is_residue_not_a_live_stack(tmp_path):
     after = read_inventory(claim_path=tmp_path / "no-claim", ipc_base=ipc_base)
     assert after.existing_campaign_dirs == ()
     assert after.clean is True
+
+
+def test_campaign_ports_expose_the_worker_simulation_seams() -> None:
+    """The simulation driver plugs in through `CampaignPorts`, not through the campaign body.
+
+    Both seams default to `None`, which is what keeps every earlier campaign - the IPC-only Worker -
+    working unchanged; a caller that supplies them gets a Worker that owns a station and talks to
+    the shared Broker through the v4 port.
+    """
+
+    from so101_demo.parallel_batch.macos_w2_campaign import CampaignPorts
+
+    default = CampaignPorts(model_factories={})
+    assert default.worker_station is None
+    assert default.worker_broker is None
+    assert default.stop_worker("w1") is True
+    assert default.cancel_goals() is True
+    assert default.confirm_absence() is True
+
+    station = lambda resources: ("station", resources)  # noqa: E731 - the seam is the subject
+    broker = lambda *args, **kwargs: ("broker", args, kwargs)
+    supplied = CampaignPorts(model_factories={}, worker_station=station, worker_broker=broker)
+    assert supplied.worker_station is station
+    assert supplied.worker_broker is broker
