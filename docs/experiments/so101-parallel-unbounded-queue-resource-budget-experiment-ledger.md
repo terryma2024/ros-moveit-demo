@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ284 (corrections, stall closed) + Appendix B
+latest_checkpoint: CP-UQ285 (revised matrix) + Appendix B
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -13688,3 +13688,24 @@ named, and the inference-timeout item remains open in the Task 16 matrix - hones
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `38b22e7d`; no evidence deleted._
+
+## CP-UQ285 — Revised acceptance matrix (supersedes CP-UQ274 for the rows below)
+
+Only the rows that changed since CP-UQ274 are restated; everything else stands as written there.
+
+| Requirement | CP-UQ274 | Now | Evidence |
+| --- | --- | --- | --- |
+| exact W2: two slots, one Broker/model set, per-slot progress/result/evidence | PARTIAL | **PARTIAL (stronger)** | each slot now runs the production pick-place batch on its own station/domain/evidence root - 8 executed point-runs per batch, `per_slot_pick_place` in the campaign document (`task14-infer-fixed-01`, Appendix B) |
+| real inference through the port on the shared Broker | MET (CP-UQ270) | **MET (re-established)** | `task14-infer-fixed-01`: 6 x `broker.infer` OK, `devices ['mps']`; Appendix B repeats it five times |
+| one-time consume / late-or-duplicate rejection | PARTIAL | **MET (live)** | duplicates refused with `DUPLICATE_REQUEST`; tampered snapshot refused with `SNAPSHOT_MISMATCH` (`task16-snapshot-mismatch-07`) |
+| inference timeout / active-Worker cancel / Broker crash + rebuild | PARTIAL | **OPEN, unchanged** | the timeout probe was closed with its harness defect named (CP-UQ284 addendum 2); cancel is unimplemented in this composition; Broker crash is structurally unreachable (`broker_pid == os.getpid()`) |
+| MoveIt shadow / controller / MuJoCo pose·contact·detach·release / placement with a fresh epoch | PARTIAL | **PARTIAL (stronger)** | per-slot manifests all `state DONE`, `table_contact True`, ~0.233 N, fresh per batch - but every point still fails closed at `TERMINAL_CAPTURE_FAILED` |
+| five consecutive `FULL_RESTART` simulation batches | NOT MET | **NOT MET** | five consecutive batches now exist and repeat (Appendix B, 5/5) but none passes, so `five_batch_stability` is **not** claimed: Task 14 stays **0/5** |
+| fresh GUI snapshot/action/snapshot | NOT MET | **NOT MET** | TCC denies Screen Recording to this session (probe `task16-capture-probe-11`); external blocker, never reported as a pass |
+| Linux regression | DEFERRED | **DEFERRED** | CP-UQ272 |
+
+Verdict unchanged: **`PARTIAL`**. What changed is the quality of the evidence behind three PARTIAL rows
+and the fact that the one-time-admission row is now MET - not the verdict, which is gated by a batch
+that must pass and cannot while the capture fails closed.
+
+_Ledger source HEAD: `c4f499ff`; no evidence deleted._
