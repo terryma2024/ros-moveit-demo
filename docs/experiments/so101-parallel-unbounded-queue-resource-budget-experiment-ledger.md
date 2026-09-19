@@ -13336,3 +13336,21 @@ matters.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `c11312c8`; no evidence deleted._
+
+## Appendix A — the five FULL_RESTART batches, one line per batch
+
+| batch | campaign result | served | cleanup | w1 executed | w2 executed | failures | fresh per batch |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | W | 8 | True | w1: manifests=4 executed=4 points=4 | w2: manifests=4 executed=4 points=4 | TERMINAL_CAPTURE_FAILED (all points) | 3 result docs, 2 station roots |
+| 2 | W | 8 | True | w1: manifests=4 executed=4 points=4 | w2: manifests=4 executed=4 points=4 | TERMINAL_CAPTURE_FAILED (all points) | 3 result docs, 2 station roots |
+| 3 | W | 8 | True | w1: manifests=4 executed=4 points=4 | w2: manifests=4 executed=4 points=4 | TERMINAL_CAPTURE_FAILED (all points) | 3 result docs, 2 station roots |
+| 4 | W | 8 | True | w1: manifests=4 executed=4 points=4 | w2: manifests=4 executed=4 points=4 | TERMINAL_CAPTURE_FAILED (all points) | 3 result docs, 2 station roots |
+| 5 | W | 8 | True | w1: manifests=4 executed=4 points=4 | w2: manifests=4 executed=4 points=4 | TERMINAL_CAPTURE_FAILED (all points) | 3 result docs, 2 station roots |
+
+Each row is one full restart: a fresh claim, campaign IPC root, Broker generation, both station
+roots and both Worker sessions. The executed counts come from the series summary, which counted
+dynamic execute manifests whose `current_state` is DONE with `failure` None; the last column comes
+from the evidence directories themselves. No batch reused another's session or directory, and the
+series ended with no process and no station left.
+
+_Ledger source HEAD: (this commit's parent); no evidence deleted._
