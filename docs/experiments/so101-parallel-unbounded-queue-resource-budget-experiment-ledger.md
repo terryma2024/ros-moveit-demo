@@ -8486,3 +8486,43 @@ Nothing was signalled: the stuck Chrome processes have no recorded owned-process
 as `OWNERSHIP_UNPROVEN`; the stalled run was again stopped through its own job handle.
 
 _Ledger HEAD when written: 2a34bbafa._
+
+## CP-UQ215 — The stall is Playwright's input pipeline, not the console or the CPU
+
+Three probes isolate it, and none of them needed guessing:
+
+1. **The button is fine.** Sampling its box six times over 2.4 s against the deployed service gives an
+   identical `[41, 365, 112, 36]`, `documentHeight` 720, `animations: 0`, `disabled: false`.
+2. **Playwright cannot act on it.** With the acceptance suite's own Chrome
+   (`executablePath: /usr/bin/google-chrome`), `locator.click()` fails after 20 s with
+   `waiting for element to be visible, enabled and stable` while the locator resolves to exactly that
+   button — the same gate that leaves the acceptance cases hanging until their 30-minute timeout and
+   explains the zero state-changing requests.
+3. **The console's handler works.** A DOM-level click (`button.click()` inside the page) produces
+   `POST /expert-validation/lease` → `200 OK` and disables the button. So the UI and the service are
+   both healthy; only the *input dispatch* path fails.
+
+Host measurements rule out the obvious cause: **CPU busy is 13.8 %** with 1.3 % iowait over a 2 s
+window, so this is not CPU starvation — but there are **10 tasks in `D` state**, all of them the
+orphaned Chrome `--type=gpu-process`/utility processes from my stopped browser attempts, plus my
+broker container `e2bb172bd754` which the daemon still refuses to kill. The consistent reading is that
+the renderer cannot complete input dispatch while a GPU operation is blocked; script execution
+(`element.click()`) bypasses that pipeline and succeeds.
+
+Consequences recorded rather than worked around:
+
+- browser-driven acceptance is **blocked by the host**, not by the product, and I will not force it
+  with `force: true`/`dispatchEvent` in the acceptance drivers — that would skip the very
+  actionability contract the console is supposed to satisfy;
+- the blocking objects cannot be cleared within the rules: the container's ownership is proven but the
+  daemon blocks removal, and the Chrome processes have no recorded owned-process manifest, so they are
+  `OWNERSHIP_UNPROVEN` and stay — they are also in uninterruptible sleep, so no signal would take
+  effect anyway;
+- the five-batch stability record stays **0 of 5** and CP-UQ209's `OWNED_GROUP_SURVIVORS` boundary
+  stays open.
+
+Next, the non-browser gates proceed because they do not depend on the browser at all: the demo and
+teleop package suites through the audited runner, CTest through the colcon harness, the OpenAPI schema
+freshness check, and the served-vs-installed byte comparison.
+
+_Ledger HEAD when written: 336063206._
