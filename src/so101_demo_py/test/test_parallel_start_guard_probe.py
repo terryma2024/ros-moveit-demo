@@ -292,3 +292,43 @@ def test_helper_module_is_importable_as_a_module_entry_point():
                                capture_output=True, text=True, env=dict(os.environ))
     assert completed.returncode == 0, completed.stderr
     assert "--request-fd" in completed.stdout and "--result-fd" in completed.stdout
+
+
+def test_probe_request_carries_the_v4_accelerator_discriminator(tmp_path) -> None:
+    """The helper must be told which accelerator family it is probing.
+
+    A schema-v4 Darwin policy carries `mps_minimum_headroom_bytes`; a v3 policy leaves it None. The
+    request document is the only channel to the helper, so the discriminator has to travel there -
+    and its absence on a v3 policy is what keeps that path byte-identical.
+    """
+
+    import json
+
+    from so101_demo.parallel_batch.start_guard import GuardScope, StartGuardPolicy
+    from so101_demo.parallel_batch.start_guard_probe import ProbeCoordinator
+
+    captured = []
+
+    class _Sentinel(Exception):
+        pass
+
+    scope = GuardScope(
+        batch_id="discriminator", epoch=1, owner_pid=__import__("os").getpid(),
+        owner_starttime_ticks=1, gpu_selector="MPS:default", worker_count=2,
+    )
+    v4_policy = StartGuardPolicy(timeout_s=2.0, mps_minimum_headroom_bytes=1 << 30)
+    v3_policy = StartGuardPolicy(timeout_s=2.0)
+
+    coordinator = ProbeCoordinator(tmp_path)
+    coordinator._spawn = lambda request, deadline: (  # noqa: SLF001 - the request is the subject
+        captured.append(json.loads(request.decode())) or (_ for _ in ()).throw(_Sentinel())
+    )
+
+    import pytest
+
+    for policy in (v4_policy, v3_policy):
+        with pytest.raises(_Sentinel):
+            coordinator.check(policy, scope)
+
+    assert captured[0]["policy"]["mps_minimum_headroom_bytes"] == 1 << 30
+    assert captured[1]["policy"]["mps_minimum_headroom_bytes"] is None
