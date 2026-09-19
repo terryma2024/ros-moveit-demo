@@ -13829,3 +13829,15 @@ evidences (CP-UQ285's matrix).
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `47426003`; no evidence deleted._
+
+### CP-UQ286 addendum 2 — the fault switches are asserted to travel with the lease
+
+`lease-flags-01`: the lease test now also asserts that `deadline_s` and `tamper_input_sha256` are
+present on the document - and that a tuned call propagates `deadline_s=4.0` and
+`tamper_input_sha256=True`. That is the offline version of the question round 121 could not answer from
+a live run ("did the flags reach the campaign?"): at least the lease side of the chain is now pinned by
+a test rather than inferred.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `63b4eddb`; no evidence deleted._
