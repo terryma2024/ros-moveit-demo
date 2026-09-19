@@ -12767,3 +12767,18 @@ Two consequences worth stating plainly:
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `b6293a35`; no evidence deleted._
+
+### CP-UQ275 addendum — the refusal is verified live, and it proves the PID identity
+
+```text
+task16-broker-crash-03   exit 0, status W2_CAMPAIGN_PASS, served 12
+                          broker_crash: {"pid": 15937, "refused": "BROKER_IS_THIS_PROCESS"}
+                          cleanup complete, orphans []
+```
+
+The recorded PID is the campaign's own process, so the claim in addendum 3 is not an inference from
+the exit code any more: the composition's `broker_pid` **is** the campaign process. The injection is
+refused, written down, and the campaign carries on to a complete, orphan-free run - which is the right
+behaviour for a switch that must never be able to destroy its own evidence.
+
+_Ledger source HEAD: `cfb2cbb9`; no evidence deleted._
