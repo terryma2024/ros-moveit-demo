@@ -11740,3 +11740,23 @@ Task 14 remains 0/5: the port is not yet wired into a Worker runtime, no batch h
 `LINUX_REGRESSION_DEFERRED` is retained.
 
 _Ledger source HEAD: `1b116965`; no evidence deleted._
+
+### CP-UQ263 addendum 7 — pre-wiring baseline
+
+`task14-pre-wiring-regression-01` runs every suite the Worker-side wiring can touch - broker port,
+worker runtime, ROS runtime, campaign, composition, contracts, inference registry, permission-only
+IPC:
+
+```text
+281 passed, 1 failed
+failed: test_parallel_ros_runtime.py::test_consumer_readiness_primes_and_retains_isolated_pose_publisher
+```
+
+That failure is the **pre-existing** one pinned by A/B in this same session
+(`task14-darwin-station-ab-01`: it fails identically with the Darwin station change stashed, at
+`parallel_ros_runtime.py:1717`), so this run records no regression from the four port iterations and
+gives the wiring round a clean baseline: 282 tests, one known environmental failure.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `ecd773ba`; no evidence deleted._
