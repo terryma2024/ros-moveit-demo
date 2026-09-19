@@ -10796,3 +10796,24 @@ Test debt remaining: `resources._start_guard_check` deriving the guard selector 
 accelerator still has no unit test of its own; only the integration probe covers it.
 
 _Ledger source HEAD: `6bfa9343`; no evidence deleted._
+
+### CP-UQ256 follow-up 2 — the guard takes the accelerator, but still asks for CUDA bytes
+
+```text
+task14-w2-resources-green-10  ProbeError ACCELERATOR_KIND  (my probe passed the config, not the kind)
+task14-w2-resources-green-11  accelerator_probe=MpsAcceleratorProbeSelection, then
+                              ResourceAllocationError GPU_TARGET_UNAVAILABLE
+```
+
+`compose_default_start_guard(policy, accelerator=...)` accepts the v4 selection and
+`select_accelerator_probe("mps")` resolves, so the accelerator *input* now reaches the guard. The
+admission still refuses, which locates the last gate precisely: the guard's check set is built from
+`StartGuardPolicy.gpu_minimum_bytes`, a CUDA quantity, while the Darwin document's budget is
+`mps_minimum_headroom_bytes` and its kind is the `unified-memory-proxy` admission. The v4 branch must
+evaluate the MPS headroom (`evaluate_accelerator_snapshot`) whenever an accelerator is supplied, and
+leave the NVML snapshot path to v3 untouched.
+
+That is the last known gate between the v4 document and two allocated Workers, and it belongs to the
+accelerator/guard boundary the plan put in Tasks 4–5.
+
+_Ledger source HEAD: `e70ab514`; no evidence deleted._
