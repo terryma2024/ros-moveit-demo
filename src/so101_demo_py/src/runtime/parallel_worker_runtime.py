@@ -570,6 +570,42 @@ def headless_task_station_config(resources: WorkerResources) -> PersistentStackC
     )
 
 
+def task_station_config(
+    resources: WorkerResources, *, platform: str | None = None
+) -> PersistentStackConfig:
+    """The single station command this platform can actually run.
+
+    Linux keeps the frozen headless command byte for byte. Darwin cannot use it: the task station
+    launcher refuses `headless:=true` on macOS because the MuJoCo viewer's render context must be
+    created on the AppKit main thread, so a macOS Worker owns a *visible* station instead. Any
+    other platform fails closed rather than silently launching the wrong shape.
+    """
+
+    resolved = sys.platform if platform is None else platform
+    if resolved == "linux":
+        return headless_task_station_config(resources)
+    if resolved != "darwin":
+        raise RuntimeError(f"unsupported task station platform: {resolved}")
+    if not isinstance(resources, WorkerResources):
+        raise TypeError("WorkerResources are required")
+    command = ros2_command(
+        "launch",
+        "so101_demo_py",
+        "so101_mujoco_task_station.launch.py",
+        "headless:=false",
+        "sensor_rendering:=true",
+        "include_teleop:=false",
+        f"session_id:={resources.session_id}",
+        f"task_evidence_root:={resources.worker_root}",
+    )
+    return PersistentStackConfig(
+        resources.session_id,
+        False,
+        resources.worker_root,
+        (StackProcessSpec("task-station", tuple(command)),),
+    )
+
+
 def _required(name: str):
     def missing(*_args, **_kwargs):
         raise RuntimeError(f"parallel Worker runtime port is required: {name}")
@@ -653,6 +689,7 @@ class ParallelWorkerRuntime:
         run_mode: RunMode,
         *,
         process_group: Any | None = None,
+        station_config: Callable[[WorkerResources], PersistentStackConfig] | None = None,
         ready_probe: Callable[[tuple[str, ...]], bool] | None = None,
         reset_point: Callable[[Any], Any] | None = None,
         reserve_workspace: Callable[[Any, Any], Any] | None = None,
@@ -696,6 +733,11 @@ class ParallelWorkerRuntime:
         self._processes = process_group or WorkerOwnedProcessTree(
             manifest_path=resources.worker_root / "owned-runtime-processes.json"
         )
+        # The station shape is a platform decision (Linux headless, Darwin visible), so it is a
+        # port with a default rather than a hard-coded launch command.
+        self._station_config = station_config or task_station_config
+        if not callable(self._station_config):
+            raise TypeError("station_config must be callable")
         self._ready_probe = ready_probe or _required("ready_probe")
         self._reset_point = reset_point or _required("reset_point")
         # Task 11 production always supplies the durable reservation owner.  The
@@ -762,7 +804,7 @@ class ParallelWorkerRuntime:
     def start_physical_runtime(self) -> None:
         if self._physical_started:
             raise RuntimeError("parallel Worker physical runtime already started")
-        config = headless_task_station_config(self.resources)
+        config = self._station_config(self.resources)
         for spec in config.processes:
             self._processes.start(spec, environment=self.resources.environment)
         self._physical_started = True

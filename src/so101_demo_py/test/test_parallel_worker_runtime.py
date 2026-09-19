@@ -538,6 +538,81 @@ def test_worker_launch_configs_keep_resources_distinct(tmp_path: Path) -> None:
     )
 
 
+def test_task_station_config_keeps_linux_frozen_and_gives_darwin_a_visible_station(
+    tmp_path: Path,
+) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import (
+        headless_task_station_config,
+        task_station_config,
+    )
+
+    resources = _resources(tmp_path, "worker-1", 0, 181)
+
+    linux = task_station_config(resources, platform="linux")
+    assert linux == headless_task_station_config(resources)
+    assert linux.headless is True
+
+    darwin = task_station_config(resources, platform="darwin")
+    assert darwin.headless is False
+    assert darwin.session_id == resources.session_id
+    assert darwin.evidence_root == resources.worker_root
+    assert len(darwin.processes) == 1
+    assert darwin.processes[0].argv[-5:] == (
+        "headless:=false",
+        "sensor_rendering:=true",
+        "include_teleop:=false",
+        "session_id:=session-worker-1",
+        f"task_evidence_root:={resources.worker_root}",
+    )
+
+
+def test_task_station_config_refuses_a_platform_it_cannot_launch(tmp_path: Path) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import task_station_config
+
+    with pytest.raises(RuntimeError, match="unsupported task station platform: win32"):
+        task_station_config(_resources(tmp_path, "worker-1", 0, 181), platform="win32")
+
+
+def test_physical_runtime_uses_the_injected_station_config(tmp_path: Path) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import (
+        build_worker_runtime,
+        task_station_config,
+    )
+
+    resources = _resources(tmp_path, "worker-1", 0, 181)
+    processes = _ProcessGroup()
+    seen: list[object] = []
+
+    def station_config(candidate):
+        seen.append(candidate)
+        return task_station_config(candidate, platform="darwin")
+
+    runtime = build_worker_runtime(
+        resources,
+        RunMode.PLAN_ONLY,
+        process_group=processes,
+        station_config=station_config,
+        reset_point=lambda _lease: SimpleNamespace(
+            reset_completed_monotonic_s=10.0,
+            simulation_time_s=12.0,
+            simulation_session_id="session-worker-1",
+        ),
+        initial_gate=lambda *_args: object(),
+        capture_rgb=lambda *_args: None,
+    )
+    runtime.start_physical_runtime()
+
+    assert seen == [resources]
+    assert len(processes.specs) == 1
+    assert processes.specs[0].argv[-5:] == (
+        "headless:=false",
+        "sensor_rendering:=true",
+        "include_teleop:=false",
+        "session_id:=session-worker-1",
+        f"task_evidence_root:={resources.worker_root}",
+    )
+
+
 def test_visible_task_station_wrapper_keeps_legacy_macos_defaults(tmp_path: Path) -> None:
     from so101_demo.runtime.task_stack import default_task_station_config
 
