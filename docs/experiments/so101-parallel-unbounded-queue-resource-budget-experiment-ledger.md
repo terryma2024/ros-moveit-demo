@@ -12990,3 +12990,33 @@ point 4, and the Broker-crash one is structurally unreachable in this compositio
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `2961ba71`; no evidence deleted._
+
+## CP-UQ278 — The open items, in one place, at the end of the budget
+
+```yaml
+checkpoint_id: CP-UQ278
+verdict: PARTIAL (unchanged; see CP-UQ276)
+working_tree_status: clean
+owned_processes: NONE
+open_risks:
+  - Screen Recording denied to this session's responsibility chain (probe task16-capture-probe-04).
+  - The composition keeps the MPS Broker in-process while spawning CLI Workers, so the pick-place
+    chain and the Broker-crash evidence are both structurally out of reach.
+next_command: handle the goal policy; nothing further can be completed inside this budget
+```
+
+| Open item | Why it is open |
+| --- | --- |
+| inference-timeout evidence | not attempted: the Worker's port uses the 240 s executing hard timeout, so a live stall probe needs the lease to carry a short deadline first - a change I would rather not land half-verified in the last rounds |
+| active-Worker cancel evidence | same shape: needs a live Worker driven by a Coordinator lease, which the spawned Worker does not own |
+| Broker crash + full pool rebuild | structurally unreachable here: `broker_pid == os.getpid()` (verified live in `task16-broker-crash-03`) |
+| pick-place inside the campaign | needs the in-process `ParallelWorkerRuntime` ported onto the spawned Worker (CP-UQ271) |
+| five `FULL_RESTART` simulation batches | requires the previous two items |
+| fresh GUI evidence | requires the TCC grant; asked for repeatedly since round 9 |
+| Linux regression | `DEFERRED_ENVIRONMENT` (CP-UQ272) |
+| independent verdict | the plan names `gpt-5.6-sol/high`; this session cannot invoke it and used no substitute |
+
+Everything above is recorded rather than glossed, and none of it changes the verdict: **PARTIAL**, with
+Task 14 at 0/5 and `LINUX_REGRESSION_DEFERRED` in force.
+
+_Ledger source HEAD: `e10e4980`; no evidence deleted._
