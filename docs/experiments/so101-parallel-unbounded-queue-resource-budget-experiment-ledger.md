@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ249 (tail of this file)
+latest_checkpoint: CP-UQ250 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -10308,3 +10308,102 @@ cleanup   : complete, directory removed, registry empty, both workers gone
 Regression: `entrypoint-regression-01/` exit 0, **177 passed**.
 
 _Ledger source HEAD: `c1756cb6`; no evidence deleted._
+
+## CP-UQ250 — The real macOS station now runs from this branch, and GUI capture is the wall
+
+```yaml
+checkpoint_id: CP-UQ250
+last_valid_experiment: EXP-UQ250-MACOS-STATION-AND-BATCH
+current_hypothesis: The Task 14 simulation half needs the real ROS/MoveIt/MuJoCo station. That
+  station now boots and executes real pick-place from THIS worktree's own install; the plan's
+  fresh-GUI evidence requirement is blocked by macOS TCC for this executor's process chain.
+working_tree_status: clean at commit 90abe596
+owned_processes: NONE - the batch's own supervisor cleaned up every station child; three orphans
+  from my hand-rolled smoke runner were reaped by exact PID and are recorded as a runner defect
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - GUI capture is unavailable to this session: Accessibility and Screen Recording are both denied
+    to the responsibility chain (tmux under launchd), so no `viewer.png` can be produced and every
+    point fails TERMINAL_CAPTURE_FAILED. Task 14 cannot claim a batch until the user grants both.
+  - The Worker runtime still has no Darwin station config: `headless_task_station_config` is the
+    only station command and the task station itself refuses `headless:=true` on Darwin.
+  - The product's window filter requires "mujoco" in the window title, and CoreGraphics reports an
+    empty title for every window on this host; that filter is unverifiable until permission exists.
+next_command: ask the user to grant Accessibility + Screen & System Audio Recording to the
+  responsible binary, then re-run the capture probe before touching Task 14 again
+```
+
+`EXP-UQ250-MACOS-STATION-AND-BATCH: INVALID` — the batch fails closed on missing GUI capture, so it
+counts for nothing. What follows is what was actually proven and what was actually blocked.
+
+### The branch can build and run its own station
+
+`station-build-01/` builds seven packages from this worktree into a task-owned install in **1 min
+3 s**: `mujoco_ros2_control_msgs`, `mujoco_3d_lidar`, `mujoco_ros2_control_plugins` (from the pinned
+`third_party/mujoco_ros2_control` submodule `e4c0241a`), `mujoco_ros2_control`,
+`so101_mujoco_support`, `so101_demo_py`, `so101_teleop`. Recorded deviation: `-DBUILD_TESTING=OFF`,
+which removes test binaries only. The canonical checkout's install is never sourced; the station
+prints its own prefix in every log line, and `graceful_shutdown_move_group` only exists in the
+worktree build — the canonical `so101_isolated_ws` install still ships the pre-rename
+`so101_move_group`, which is exactly the stale-binary trap the `so101-dev` skill warns about.
+
+`task14-station-smoke-02/`: the real GUI station reaches the ready contract from that install —
+`ready: true`, phase `READY`, `arm_controller`/`gripper_controller`/`joint_state_broadcaster` all
+`active`, `/apply_planning_scene`, `/get_planning_scene`, `/plan_kinematic_path` present, and
+`scene_setup` reading back `pedestal`, `plastic_cup`, `table` from the canonical scene.
+
+One harness mistake is kept in the record: `task14-station-smoke-01/` used
+`so101_mujoco.launch.py run_mode:=dry_run`, which is **log-messages-only** when
+`pick_place=False` — it launched no node, exited 0, and the readiness probe then failed with
+`MOTION_STACK_CONTROLLER_NOT_ACTIVE`. Exit 0 from a launch that starts nothing is not readiness.
+
+### A real four-point pick-place ran, and failed only on the screenshot
+
+`task14-single-batch-01/` runs the production runner `so101_mujoco_rgbd_batch` (own station, ordered
+point list, per-point evidence) from this branch's install: 350 s, exit 1. Every point executed
+real physics and real manipulation:
+
+```text
+point                     state  failure  sim_step  table_contact  max_normal_force_n  perception
+01-task_start             DONE   None     33644     True           0.2329              OK, cup 141 pts
+02-cup_test_forward_5cm   DONE   None     36463     True           0.2331              OK, cup 168 pts
+03-cup_test_left_5cm      DONE   None     31921     True           0.2328              OK, cup 378 pts
+04-cup_test_right_5cm     DONE   None     33155     True           0.2330              OK, cup 126 pts
+```
+
+MoveIt planned and the controllers executed seven trajectories per point
+(`arm_controller started execution` → `successfully finished`), the RGB-D chain returned
+`cup_pose_position_xyz` within 0.6 mm of the declared 5 cm offsets, and the fitted cup radius was
+0.0394 m against an expected 0.040 m. All four points then failed with
+`TERMINAL_CAPTURE_FAILED`: point status `FAILED`, batch status `FAILED`.
+
+Cleanup after the batch was **complete** — no `ros2_control_node`, `move_group`,
+`robot_state_publisher` or `spawner` survived — which is the product's `OwnedProcessGroup` doing
+what my own smoke runner failed to do (that runner left three children reparented to PID 1; they
+were reaped by exact PID after confirming their parent was gone).
+
+### The wall, measured rather than assumed
+
+The product captures the viewer through `MacViewerCapture`: a Swift window inventory for the MuJoCo
+owner PID, then `screencapture -x -l <window_id>`. Probed directly while the station was live:
+
+```text
+swift list_windows.swift 1851   -> [{"owner_pid":1851,"title":"","window_id":3635,"onscreen":true}]
+screencapture -x -l 3635 out.png -> rc 1 "could not create image from window"
+screencapture -x desktop.png     -> rc 1 "could not create image from display"
+osascript AX probe               -> "osascript is not allowed assistive access" (-25211)
+```
+
+Both Accessibility and Screen Recording are denied to this executor's responsibility chain
+(`bash <- node <- node <- dsh <- zsh <- tmux <- launchd`). This is a TCC boundary on the machine, not
+a defect in the branch, and it cannot be worked around from inside the session: the plan requires
+fresh GUI evidence via the project `gui-capture` skill, and that skill's macOS path needs exactly
+these two permissions. Note also that the CoreGraphics inventory reports an empty title for *every*
+window here — Chrome and Ghostty included — so `MacViewerCapture`'s `"mujoco" in title` filter is
+untestable until permission exists and may need re-validation afterwards.
+
+Consequence for the plan: Task 14's five `FULL_RESTART` batches are **not started**, no batch is
+counted, and `MACOS_MPS_W2_PASS` remains unwritten. `LINUX_REGRESSION_DEFERRED` is retained; no
+Linux gate was run or reported as PASS/SKIP/N/A.
+
+_Ledger source HEAD: `90abe596`; no evidence deleted._
