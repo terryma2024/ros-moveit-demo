@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ252 (tail of this file)
+latest_checkpoint: CP-UQ253 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -10551,3 +10551,62 @@ this session (`screencapture -x` → "could not create image from display", tmux
 unrestarted), so Task 14's batches stay blocked on that single external condition.
 
 _Ledger source HEAD: `908a1b82`; no evidence deleted._
+
+## CP-UQ253 — The macOS W2 simulation join, written down before it is written
+
+```yaml
+checkpoint_id: CP-UQ253
+last_valid_experiment: none - this checkpoint is a wiring map, not a run
+current_hypothesis: Task 14's blocker is one missing join, not one missing subsystem. The parts
+  exist and are separately verified; nothing yet composes them into a W2 simulation batch.
+working_tree_status: clean at commit c50f8830
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - Screen Recording is still denied to this session (tmux pid 59433 unrestarted): per-point viewer
+    capture and therefore any counted Task 14 batch remain blocked.
+  - The join below is design, not evidence. It is recorded so the next round starts from a map
+    instead of re-deriving it.
+next_command: implement the macOS W2 simulation join in the order listed below
+```
+
+### What already exists, and where
+
+| Piece | Where | Verified by |
+| --- | --- | --- |
+| Exact-W2 plan + slot/point assignment | `parallel_batch/w2_composition.py` | `test_w2_composition.py` |
+| Campaign supervision, durable claim, SPAWNING/ACTIVE receipts | `parallel_batch/campaign_supervisor.py` | Task 13 smokes |
+| Local MPS Broker + single lane + ready receipt | `runtime/mps_broker_bootstrap.py` | `task13-w2-real-models-03`, `task14-campaign-batch02` |
+| Permission-only v4 IPC (dirfd-free, `0600`/`0700`) | `runtime/unix_address.py`, `runtime/parallel_ipc_v4.py` | `test_parallel_ipc_v4.py` |
+| One-time request register/consume/cancel | `parallel_batch/inference_registry.py` | `test_inference_registry.py` |
+| Per-slot station ownership (now GUI on Darwin) | `runtime/task_stack.py`, `parallel_worker_runtime.task_station_config` | `task14-owned-station-01`, CP-UQ251 |
+| Lease lifecycle + real ROS ports for one Worker | `parallel_batch/worker.py`, `runtime/parallel_ros_runtime.py` | `test_parallel_worker_runtime.py` |
+| Whole-point pick-place with physical evidence | `application/task_batch.py` + `runtime/task_batch_runtime.py` | `task14-single-batch-01` |
+
+### What is missing: one composition, in this order
+
+1. **Resources.** Allocate two `WorkerResources` from `parallel_batch/resources.py`
+   (`AllocationPolicy(config.max_worker_count, config.ros_domain_ids)` → domains 181/182, one
+   worker root each). The allocator already carries the Darwin paths.
+2. **Broker.** Start the Broker through `CampaignSupervisor` with the MPS bootstrap command instead
+   of the container argv. The CLI's `_broker_command_builder` hook is the shape to copy; the
+   container branch must stay untouched for v3.
+3. **Station per slot.** Two `ParallelWorkerRuntime`s built with the new
+   `task_station_config` port, each owning a visible station on its own domain. No shared station,
+   no shared domain.
+4. **Broker proxy per slot.** A v4 IPC client implementing what `_WorkerBrokerProxy` implements and
+   `parallel_ros_runtime` expects: `request_model`, `cancel_generation`, `_refresh_broker`, plus the
+   coordinator-side `authorize_local` binding. Inference must go over the private socket and the
+   result must pass the Coordinator's one-time consume before any RGB-D/TF/pose admission.
+5. **Batch loop.** Drive `BatchCoordinator` + `ParallelWorker` for one point per slot, with a fresh
+   coordinator epoch, a fresh campaign IPC path and a fresh Broker generation per `FULL_RESTART`
+   batch, over five consecutive batches.
+6. **Evidence per batch.** MoveIt shadow divergence, controller/joint state, MuJoCo pose/contact/
+   detach/release, final placement, both slots' progress/result/evidence, shared-Broker readback,
+   GUI snapshot/action/snapshot, and exact cleanup.
+
+Items 1–4 are code; item 5 is the five-batch loop; item 6 needs Screen Recording. Landing 1–4 is
+useful even before the permission gap closes, because every unit of it is testable without a
+camera — but no batch may be counted until item 6 is real.
+
+_Ledger source HEAD: `c50f8830`; no evidence deleted._
