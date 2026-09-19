@@ -10817,3 +10817,31 @@ That is the last known gate between the v4 document and two allocated Workers, a
 accelerator/guard boundary the plan put in Tasks 4–5.
 
 _Ledger source HEAD: `e70ab514`; no evidence deleted._
+
+### CP-UQ256 follow-up 3 — the accelerator is delivered correctly, and the guard still merges CUDA
+
+```text
+task14-w2-resources-green-12  accelerator_probe=DarwinMpsAcceleratorProbe
+                              admission_kind=unified-memory-proxy
+                              compose_default_start_guard(policy, accelerator=<that probe>)
+                              -> ResourceAllocationError GPU_TARGET_UNAVAILABLE
+```
+
+Two things are now settled. `select_accelerator_probe("mps")` returns a
+`MpsAcceleratorProbeSelection` whose `.probe` is the `DarwinMpsAcceleratorProbe` and whose
+`admission_kind` is `unified-memory-proxy`, and `compose_default_start_guard(..., accelerator=...)`
+wants **the probe**, not the selection wrapper (passing the wrapper silently falls back to the v3
+NVML path — that was my mistake in green-10/11, now corrected in the probe script).
+
+The remaining defect is in the guard itself, and it is precise: `ProbeCoordinator.check` documents
+that a supplied accelerator "runs inside the same policy deadline and **is merged into the result**",
+so the schema-v3 checks still execute — including the NVML GPU check, which on Darwin raises
+`GPU_TARGET_UNAVAILABLE` (`start_guard.py:346-366`, `nvmlInit_v2`). Merging is the wrong shape for a
+closed platform combination: on Darwin the MPS proxy admission must **replace** the CUDA/NVML check,
+while a guard composed without an accelerator must keep returning exactly the v3 result. That change
+belongs to `start_guard_probe.check` / `EpochStartGuard.begin_epoch` and needs its own RED/GREEN
+pair, including a case proving the no-accelerator path is byte-identical to today's.
+
+No Worker has been allocated, no batch ran; Task 14 stays 0/5 and `LINUX_REGRESSION_DEFERRED` holds.
+
+_Ledger source HEAD: `20219623`; no evidence deleted._
