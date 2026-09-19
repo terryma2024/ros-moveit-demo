@@ -8309,3 +8309,34 @@ five-batch attempt. The service will be restarted on a fresh root so this campai
 cannot contaminate the reproduction.
 
 _Ledger HEAD when written: `144f5afeb`._
+
+## CP-UQ210 — The failed stability batch left a container the daemon cannot kill, and the repro stalled in the browser
+
+Two facts from the reproduction attempt, both recorded before any further run:
+
+**1. A container of mine is stuck beyond `docker kill`.** `e2bb172bd754` (image `0b893cb1528e`, the
+perception broker from the failed stability batch, created 12:05:56) has been `Up` for 44 minutes
+while its init is idle in `do_wait`. Both `docker kill` and `docker rm -f` refuse with
+`tried to kill container, but did not receive an exit event`, and the container remains listed. Its
+logs are kept (`stability-failure-batch1/broker-e2bb172bd754.log`,
+`broker-second-e2bb172bd754.log`), and I am **not** escalating: restarting the Docker daemon or using
+`sudo` is out of scope, and no foreign object is touched. Note for context: an earlier orphan broker
+from the 05:22 run stayed up for four hours while campaigns continued to pass, so this may not block
+work — but it holds GPU memory and its persistence is itself a boundary worth naming.
+
+**2. The four-point N1 reproduction never reached the service.** The run's own service log for that
+root contains **zero** `POST`/`PUT`/`DELETE` requests — only the console's capability and campaign
+polls — so the case stalled inside the browser before acquiring a lease, and my `acquireLease` waits
+for a lease response until the test timeout, which is exactly the shape observed. The run was stopped
+rather than left to time out. This is a harness/browser boundary, not a verdict about shutdown
+survivors: it neither reproduced nor exonerated `OWNED_GROUP_SURVIVORS`.
+
+**Next, in order.** (a) Re-run the four-point N1 case in a fresh run and confirm from the service log
+that `POST /expert-validation/lease` and `POST /manifests` appear; if the browser stalls again, take
+the failing page's screenshot/console from the Playwright trace instead of guessing. (b) Only then
+chase the shutdown boundary itself: read `wait_for_children` beside the coordinator's worker-recovery
+path, and try to reproduce with the smallest N1 campaign that triggers at least one
+`WORKER_RECOVERED`. (c) Keep the five-batch stability record at **0 valid batches** until a batch
+actually reaches a terminal, cleaned-up state.
+
+_Ledger HEAD when written: `fbf7a3cd6`._
