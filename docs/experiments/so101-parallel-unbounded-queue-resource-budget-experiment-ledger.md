@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ244 (tail of this file)
+latest_checkpoint: CP-UQ245 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -55,7 +55,7 @@ current_design: docs/superpowers/specs/2026-09-19-so101-macos-mps-private-ipc-de
   SHA-256 480da6dcdfea1da988f9f4e706c8340dbb6d7283200c27bb723859119145db1b
 current_worktree: /Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini
 current_branch: codex/so101-unbounded-queue-resource-budget (HEAD b55c181e at takeover)
-next_experiment: instrument read_process_identity at the exact spawn moment and log raw psutil output
+next_experiment: NONE on this host - Tasks 13/14 blocked by absent frozen perception weights
 correction_cp_uq229: the header's `worktree`, `evidence_root` and `task_root` fields describe the
   historical ai-station Stage A-E dispatch (`84620fc0`) and are not rewritten, because that history
   is not invalidated. The live dispatch, worktree and evidence root for the current macOS MPS/private
@@ -9948,3 +9948,71 @@ broker, one shared model set, one lane at `max_concurrent` 1, two Workers, six r
 negative protocol paths and complete cleanup.
 
 _Ledger source HEAD: `da182db6`; no evidence deleted; no Linux or W4/W6/W8 action._
+
+## CP-UQ245 — The identity race is solved, 5/5 W2 runs pass, and the model artifacts are absent
+
+```yaml
+checkpoint_id: CP-UQ245
+last_valid_experiment: EXP-UQ245-TASK13-IDENTITY-ROOT-CAUSE
+current_hypothesis: CONFIRMED and CLOSED. The reader never failed; the promotion rule was wrong.
+working_tree_status: clean at commit 27625b17
+owned_processes: NONE - every child reaped in every run
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome extension host, Sparkle updater,
+  SkyComputerUseService
+open_risks:
+  - Task 13 cannot be completed on this host: the frozen perception weights are absent and cannot be
+    synthesized.
+  - Task 14 cannot be started for the same reason plus the missing Linux environment.
+next_command: none available on this host for Tasks 13/14; report PARTIAL with LINUX_REGRESSION_DEFERRED
+```
+
+### Root cause: confirmed, and it was my rule, not the reader
+
+Instrumenting the reader at the exact spawn moment (`task13-identity-instrumented-01/`, five runs,
+~60 recorded reads) settled it beyond doubt:
+
+```text
+at spawn      : psutil status "running"/"sleeping", create_time present, reader returns the real
+                identity EVERY time (0 construct failures, 0 create_time failures)
+at promotion  : psutil status "zombie", reader returns None — because the Worker had already
+                finished its three round trips and exited inside the ACK window
+```
+
+So `read_process_identity()` was always correct. The defect was **my promotion rule**: it demanded a
+*second successful read* and therefore rejected healthy Workers that completed quickly. The rule is
+now "refuse only on evidence of PID reuse" — a different identity for the same PID. A departed or
+zombie child keeps the spawn-time identity, which is exactly what audit and safe signalling need.
+
+`task13-w2-shape-after-fix-01/`: **five of five real W2 runs pass**, every Worker `ACTIVE` with a
+present birth identity, six served round trips, cleanup complete each time.
+
+```text
+rep1..rep5: W2_RUNTIME_SHAPE_PASS [('w1','ACTIVE',True), ('w2','ACTIVE',True)] served 6 cleanup True
+```
+
+Regression: `task13-fix-regression-01/` exit 0, **197 passed** across supervisor, recovery,
+registry, contracts, v4 IPC and Unix address.
+
+### Why Tasks 13 and 14 cannot be finished on this host
+
+Task 13 additionally requires the **real** model set: a Broker that loads and warms up the actual
+YOLO and Grounded-SAM models. The perception runtime takes `--yolo-weights` and `--grounded-root`
+and verifies them against frozen SHA-256 values
+(`f281d252…0781` and `0486be2f…1775`). Measured on this host:
+
+- no `/models`, no `/data/work`, no `$HOME` model root; no `best.pt`, no Grounded-SAM manifest;
+- no Docker or Podman, so no image carrying them can be pulled even if one existed;
+- `ros2` is not on the PATH (Gazebo `gz` and MuJoCo are present, so the missing piece is the model
+  artifacts and the provisioned runtime, not the simulator).
+
+An artifact that must hash to an exact frozen SHA-256 cannot be synthesized or substituted without
+falsifying provenance, so this is an irreducible external dependency rather than an engineering
+task. The same measured condition has now been recorded across three consecutive rounds:
+`CP-UQ242` (35 tests failing with `ModelRuntimeInfrastructureError`), `CP-UQ243` and `CP-UQ244`
+(the weights absent), and this checkpoint.
+
+Task 14 adds five consecutive `FULL_RESTART` W2 **simulation** batches with independent Gazebo and
+MoveIt physics evidence. Each batch needs the real perception models and the full simulation stack,
+so it inherits the same blocker.
+
+_Ledger source HEAD: `27625b17`; no evidence deleted; no Linux or W4/W6/W8 action._
