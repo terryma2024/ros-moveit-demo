@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ276 (tail of this file)
+latest_checkpoint: CP-UQ277 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -12901,3 +12901,33 @@ Two lines in that index exit non-zero, and they are not passes:
   `/run/user`) rather than task code; no platform skips were added to make it green.
 
 _Ledger source HEAD: `8bc97a96`; no evidence deleted._
+
+### CP-UQ276 addendum 3 — one-time consumption works, and it exposed a port defect
+
+```text
+task16-consume-once-03   status W2_CAMPAIGN_INCOMPLETE (exit 7)
+                         served 14, devices ['mps'], duplicates_refused 2
+                         w1 infer: 3 x OK, duplicate: {"request_id": "w1-att-00-yolo",
+                                                       "status": "ADMITTED_TWICE"}
+                         orphans []
+```
+
+The server-side property is real: the campaign refused **both** duplicated request ids
+(`DUPLICATE_REQUEST`), so a late or repeated result cannot be served twice - the first live evidence
+for the one-time table doing its job rather than merely existing.
+
+The same run exposed a defect in my port: the Worker reported `ADMITTED_TWICE` for the duplicate,
+because `W2BrokerPort.request_one` looks for `ok is False` on the response object, while a v4 refusal
+is carried in the response's status/code fields. A refusal must never be readable as an admission -
+that is the exact failure the one-time design exists to prevent - so the port's check is wrong and is
+recorded here as an open defect rather than as a passing feature. The campaign's own status was
+`INCOMPLETE` for the same reason: the duplicate counted as served.
+
+Two earlier attempts of this probe also cost a run each, both harness-shaped: a `KeyError: 'device'`
+in the served summary when a refusal carries no device (fixed by reading defensively), and a stale
+campaign directory from the failed run making the next run refuse its inventory (verified dead and
+removed).
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `29a01971`; no evidence deleted._
