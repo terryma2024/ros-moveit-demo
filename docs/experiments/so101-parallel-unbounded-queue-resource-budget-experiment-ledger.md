@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ266 (tail of this file)
+latest_checkpoint: CP-UQ267 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -12098,3 +12098,49 @@ domain. Both are plausible causes and neither is established yet.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `c59f5273`; no evidence deleted._
+
+## CP-UQ267 — The Worker's station now launches; the failure is the gate runner's PYTHONPATH surgery
+
+```yaml
+checkpoint_id: CP-UQ267
+last_valid_experiment: EXP-UQ267-WORKER-STATION-LAUNCH-DIAGNOSIS
+current_hypothesis: The Worker-started station fails at CONTROLLERS because of its configuration.
+  DISPROVEN: it failed because the package was not on the prefix path, and then because the gate
+  runner strips the station install's site-packages.
+working_tree_status: clean at commit 1eb96d9c
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - The campaign needs its own runner that sources the station chain without the unit-gate PYTHONPATH
+    surgery; `run-gate.sh` is a pytest runner and mangles exactly what a station needs.
+  - Screen Recording is still denied to this session.
+next_command: add `run-w2-campaign.sh` (station-env.sh chain, no PYTHONPATH stripping) and re-run
+```
+
+`EXP-UQ267-WORKER-STATION-LAUNCH-DIAGNOSIS: VALID` as a diagnosis; the campaign is INCOMPLETE.
+
+### Two failures, two different causes, both found in the logs
+
+```text
+task14-campaign-ready-05 (branch overlay only)
+  launch: "package 'mujoco_ros2_control' not found, searching: ['<branch>/install/so101_demo_py', …]"
+  -> the campaign ran with an overlay that holds only so101_demo_py; the MuJoCo stack lived in the
+     canonical install, which station_environment correctly refused to let through. The guard did
+     its job and the consequence was honest: no station at all.
+
+task14-campaign-ready-06 (station install as the overlay)
+  launch proceeds (66 log lines, controllers load), then
+  [ERROR] [scene_setup-9]: process has died, exit code 1
+  traceback: importlib.metadata -> distribution('so101-demo-py') -> StopIteration
+  -> `run-gate.sh` strips `$GATE_INSTALL_OVERLAY/*` (including the install's site-packages) from
+     PYTHONPATH by design, so the installed console script cannot find its own distribution.
+```
+
+So neither failure was a station-configuration problem; the first was the environment guard working,
+the second is my own gate runner being a *pytest* runner and mangling what a launched station needs.
+The Worker-side plumbing itself is now behaving: it starts the station, insists on a ready contract,
+records the outcome, and refuses to serve without it.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `bc26f324`; no evidence deleted._
