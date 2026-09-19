@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ262 (tail of this file)
+latest_checkpoint: CP-UQ263 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -11502,3 +11502,60 @@ admission and cleanup is unchanged.
 Task 14 remains 0/5 and `LINUX_REGRESSION_DEFERRED` is retained.
 
 _Ledger source HEAD: `98ea0d0c`; no evidence deleted._
+
+## CP-UQ263 — Where the macOS W2 work stands, in one page
+
+```yaml
+checkpoint_id: CP-UQ263
+last_valid_experiment: EXP-UQ263-STATE-CONSOLIDATION
+current_hypothesis: n/a - this checkpoint consolidates state so the remaining work is unambiguous
+working_tree_status: clean at commit 973dbeb1
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - Screen Recording is still denied to this session (tmux pid 59433 unrestarted since 21:13), so
+    per-point viewer capture and any counted Task 14 batch remain blocked.
+  - Map steps 4-5 (worker-side v4 broker proxy, FULL_RESTART batch loop) are unwritten code, not
+    blockers.
+next_command: read the CLI's `_WorkerBrokerProxy` and `parallel_ros_runtime`'s broker expectations,
+  then implement the macOS v4 proxy as a small port with fakes in its unit test
+```
+
+### Done and verified
+
+- **Tasks 0-12 (macOS halves)**: frozen v3 + closed v4 schema, Darwin MPS start guard, durable
+  supervisor ownership, permission-only v4 IPC, immutable snapshots, one-time request registry,
+  single-lane MPS Broker, fresh package/OpenAPI/copied-install gates.
+- **Task 13**: real MPS models load and infer on `mps:0`; the exact-W2 runtime shape passes
+  (`task13-w2-runtime-smoke-*`, `task14-campaign-batch02/03` = `W2_CAMPAIGN_PASS`, 6/6 consumed,
+  cleanup complete).
+- **W2 structure (map steps 1-3)**: exact-W2 allocation on Darwin (`823ce3c3`, two Workers on
+  domains 181/182 with their own roots), a visible station per slot via the new
+  `task_station_config`, and **both stations ready** (`task14-w2-stations-guard-01`: READY at
+  15.1 s / 18.0 s, controllers active, clean shutdown) through the product environment guard
+  (`11c11afa`).
+- **Real station execution**: a four-point `so101_mujoco_rgbd_batch` ran real MoveIt trajectories and
+  MuJoCo physics from this branch's install (`task14-single-batch-01`).
+
+### Not done
+
+| Item | State |
+| --- | --- |
+| Worker-side v4 broker proxy (map step 4) | unwritten |
+| `FULL_RESTART` batch loop, five consecutive batches (map step 5) | unwritten; Task 14 = 0/5 |
+| MoveIt shadow / controller / MuJoCo contact / placement per batch | not collected |
+| fresh GUI snapshot/action/snapshot | **blocked by TCC** (`screencapture -x` -> "could not create image from display", tmux server unrestarted) |
+| Linux regression (Task 15) | `DEFERRED_ENVIRONMENT`, never run, never reported as PASS/SKIP/N/A |
+| Task 16 final report | not started; must decide `MACOS_MPS_W2_PASS` vs `PARTIAL` on the real evidence |
+
+### The two conditions that decide the outcome
+
+1. **Screen Recording** must be enabled for the responsible binary and the tmux server restarted.
+   Until then no batch can be counted, because every point's terminal capture fails closed.
+2. **The driver** is the remaining engineering: allocate (done) -> start stations (done) -> shared
+   MPS Broker (exists for the campaign) -> worker-side v4 proxy -> batch loop -> evidence.
+
+Neither is a reason to declare the goal blocked: (2) is work I can still do, and (1) is a single
+external action already requested from the user.
+
+_Ledger source HEAD: `973dbeb1`; no evidence deleted._
