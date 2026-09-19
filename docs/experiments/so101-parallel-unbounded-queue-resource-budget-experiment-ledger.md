@@ -11120,3 +11120,31 @@ No new failure is attributable to this commit.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `feaebb21`; no evidence deleted._
+
+### CP-UQ258 addendum — the portable domain scan is not available on macOS, and I reverted it
+
+I implemented `_ros_domain_in_use_portable` (psutil scan of same-UID processes, comparing
+`ROS_DOMAIN_ID` in their environment) and its test, ran it, and it failed for a reason worth keeping:
+
+```text
+task14-domain-probe-01   FAILED  ResourceAllocationError at resources.py:409
+                         (psutil.AccessDenied while reading a same-UID process environment)
+```
+
+macOS denies environment reads for many processes even within the same UID, so a process-environment
+scan cannot distinguish "no claim" from "cannot see". Failing closed on every unreadable process
+makes allocation impossible (which is what the run showed); returning `False` would silently drop a
+real claim and let two Workers share a ROS domain - the exact failure this check exists to prevent.
+Neither branch is acceptable, so the change was reverted in full (source and test) and the tree is
+green again.
+
+The conclusion for the next round: the eighth gate needs a **filesystem** answer, not a process
+answer. The campaign already keeps durable claims under the claim root, and those files are portable
+and fail-closed; a Darwin `ros_domain_in_use` should read the claim registry (and treat "cannot
+verify" as a refusal) rather than guess from process environments. That is a design decision about
+what this platform can prove, and it belongs next to the trust-boundary note that already accepts
+same-UID processes in a single-user simulation host.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `00889fc1`; no evidence deleted._
