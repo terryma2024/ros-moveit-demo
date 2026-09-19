@@ -10773,3 +10773,26 @@ no station started from this path, no batch ran. Task 14 remains 0/5 and `LINUX_
 is retained.
 
 _Ledger source HEAD: `9c336e65`; no evidence deleted._
+
+### CP-UQ256 follow-up — the owed test, and the A/B reference I got wrong first
+
+`task14-guard-selector-regression-01`: the guard suite with the new test is **52 passed**.
+
+```text
+test_guard_scope_accepts_only_the_v4_mps_selector_form
+  task14-guard-selector-red-03  vs 9c336e65 (true pre-fix)  -> 1 failed   (real RED)
+  task14-guard-selector-01      vs current                  -> 2 passed  (GREEN)
+```
+
+The test accepts `MPS:default` and refuses `MPS:0`, `MPS:mps`, `MPS:`, `mps:default` and
+`UNIFIED:default`, so the v4 form is closed and the v3 `UUID:`/`INDEX:` forms are untouched.
+
+Correction kept on the record: my first A/B used `4244f907` as the "pre-fix" reference, but that
+commit is a *descendant* of the fix, so the test passed and the A/B proved nothing. The genuine
+pre-fix revision is `9c336e65`, and against it the test fails. Reporting either result without
+checking the reference revision would have been wrong.
+
+Test debt remaining: `resources._start_guard_check` deriving the guard selector from the v4
+accelerator still has no unit test of its own; only the integration probe covers it.
+
+_Ledger source HEAD: `6bfa9343`; no evidence deleted._
