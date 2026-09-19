@@ -11869,3 +11869,39 @@ contains `macos_w2_broker_port.py`, `station_environment` and the station config
 and `LINUX_REGRESSION_DEFERRED` is retained.
 
 _Ledger source HEAD: `bdefc300`; no evidence deleted._
+
+### CP-UQ263 addendum 13 — correction: the Worker spawn lives in the CLI entry point, not in the library
+
+Checking where the campaign actually spawns its Workers before wiring into it turned up a layer
+mistake in my own previous step:
+
+```text
+parallel_batch/macos_w2_campaign.py   no supervisor.start, no worker module, no argv builder
+cli/macos_w2_worker.py                argv: ack_path, endpoint, worker_id, out_path
+```
+
+The composed library owns the Broker, the endpoints, the registry and the outcome document; the
+**two-phase spawn of the two Workers belongs to `cli/macos_w2_campaign.py`**, which is why that entry
+point is the thing that binds the six request ids before serving. So the `worker_station` /
+`worker_broker` seams added in `e154ddc8` sit on `CampaignPorts`, which is the wrong layer for what
+they describe: they are properties of the *entry point's* child spawn, not of the library run.
+
+They are harmless there and their test passes, but the wiring round should not follow them. The
+sequence is instead:
+
+1. `cli/macos_w2_campaign.py` builds each Worker's station config (`task_station_config`) and its
+   Broker port (`W2BrokerPort` with `perception_runner` and the Coordinator authority) and passes them
+   to the child - by argv switch, or by having the child import the same helpers with the authority
+   it is given;
+2. `cli/macos_w2_worker.py` starts the station through `PersistentTaskStack` +
+   `station_environment`, then serves its round trips through the port rather than the bare client;
+3. the library's `CampaignPorts` keep holding what the *composition* needs, which is what they
+   already do.
+
+Left in the record rather than quietly moved, because the next round would otherwise extend the
+wrong object - and because "which layer owns the spawn" is exactly the question Task 13's entry point
+was created to answer.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `e154ddc8`; no evidence deleted._
