@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ231 (tail of this file)
+latest_checkpoint: CP-UQ232 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -55,7 +55,7 @@ current_design: docs/superpowers/specs/2026-09-19-so101-macos-mps-private-ipc-de
   SHA-256 480da6dcdfea1da988f9f4e706c8340dbb6d7283200c27bb723859119145db1b
 current_worktree: /Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini
 current_branch: codex/so101-unbounded-queue-resource-budget (HEAD b55c181e at takeover)
-next_experiment: Task 3 RED - CampaignSupervisor as real parent, spawner and reaper
+next_experiment: Task 4 RED - DarwinPrivatePathUnixAddress and exact endpoint cleanup
 correction_cp_uq229: the header's `worktree`, `evidence_root` and `task_root` fields describe the
   historical ai-station Stage A-E dispatch (`84620fc0`) and are not rewritten, because that history
   is not invalidated. The live dispatch, worktree and evidence root for the current macOS MPS/private
@@ -9173,3 +9173,66 @@ requires an NVML-shaped `gpu_free_bytes`, and `EpochStartGuard` only passes the 
 for a policy that carries the floor, so existing v3 coordinators keep their exact signature.
 
 _Ledger source HEAD: `24badcea`; no evidence deleted; no Linux or W4/W6/W8 action._
+
+## CP-UQ232 — The supervisor is now the real parent, and its intent is durable before every spawn
+
+```yaml
+checkpoint_id: CP-UQ232
+last_valid_experiment: EXP-UQ232-TASK3-SUPERVISOR
+current_hypothesis: A campaign can be made crash-auditable without new authority, by making the
+  spawn intent durable before Popen and by refusing the next campaign on any unresolved intent.
+working_tree_status: clean at commit f20e1bc7
+owned_processes: NONE - every test child was stopped and reaped; terminate_all readback is in the gate
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome extension host, Sparkle updater,
+  SkyComputerUseService
+open_risks:
+  - ACK handshake semantics are proven against task-owned Python children; wiring the real broker and
+    worker bootstrap to the ACK is Task 8/Task 9 work and is not claimed here.
+  - The receipt is a JSON file with fsync + atomic replace; that is durability against crash, not
+    against a hostile same-UID writer, and the v4 trust model does not claim the latter.
+next_command: Task 4 RED - DarwinPrivatePathUnixAddress and exact endpoint cleanup
+```
+
+`checkpoint_id: CP-UQ232`
+`last_valid_experiment: EXP-UQ232-TASK3-SUPERVISOR`
+`commit: f20e1bc7 feat(so101): supervise owned W2 children durably`
+
+`EXP-UQ232-TASK3-SUPERVISOR: VALID`
+
+RED (`task3-red-01/`, exit 4, zero collectors): `No module named
+'so101_demo.parallel_batch.campaign_supervisor'`. Nothing ran, so nothing can be mistaken for a
+product failure. GREEN (`task3-green-03/`, exit 0, **13 passed**), and the regression gate
+(`task3-regression-01/`, exit 0, **118 passed**) re-ran the process, resource-identity and full
+contract files together. `task3-green-01/` and `-02/` are retained iteration evidence; `-01` failed
+because the test's `python -c` children read `sys.argv[0]` as `-c`, which was a test-harness bug
+fixed in the test.
+
+What the supervisor now guarantees:
+
+- **Claim**: `MPS:DEFAULT` is an `flock(LOCK_EX | LOCK_NB)` on a state-root lock file. A second
+  supervisor gets `CAMPAIGN_CLAIM_HELD`, and unlinking the lock path does not transfer the claim,
+  because the held descriptor still owns the inode.
+- **Durable intent**: `begin_spawn` writes a `SPAWNING` entry (role, slot, expected argv, nonce,
+  timestamp) with `fsync` + `os.replace` + directory `fsync` *before* anything is executed.
+- **Registration gate**: `spawn` runs the child in its own session, then waits for a child-written
+  `RegistrationAck` whose PID matches. Only then does the entry become `ACTIVE` with the child's
+  real PID, process group and birth identity. A child that never acknowledges is stopped by exact
+  identity and recorded `FAILED / CHILD_ACK_TIMEOUT`; it is never promoted.
+- **Blocking**: an unresolved `SPAWNING` intent in an on-disk receipt refuses the next campaign with
+  `CAMPAIGN_RECEIPT_UNRESOLVED`, including after a simulated supervisor crash that dropped the
+  claim without cleaning up.
+- **Exact cleanup**: `terminate_all` stops and reaps only ACTIVE children whose recorded birth
+  identity still matches, and clears the receipt only when `cleanup_complete` holds. A child whose
+  PID was rewritten to a foreign process (this pytest process, in the test) is reported by
+  `inspect_orphans` and never signalled.
+- **Coordinator liveness**: `check_coordinator` returns `ALIVE`, `OWNER_GONE` or
+  `HEARTBEAT_LOST`; the latter two run owned cleanup *while the claim is still held*, which is what
+  lets a successor trust the receipt.
+
+One test byproduct is recorded rather than hidden: the first (buggy) child script left a stray file
+named `30.0` at the repository root. It was moved, not deleted, to
+`impl-macos-mps-w2-01/test-byproducts/30.0` (sha256
+`da43c199020cae82c9ef40de76fd86271f9dd20ca3274c81803f970e55d8ac07`), and the worktree is clean
+again.
+
+_Ledger source HEAD: `f20e1bc7`; no evidence deleted; no Linux or W4/W6/W8 action._
