@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ241 (tail of this file)
+latest_checkpoint: CP-UQ242 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -55,7 +55,7 @@ current_design: docs/superpowers/specs/2026-09-19-so101-macos-mps-private-ipc-de
   SHA-256 480da6dcdfea1da988f9f4e706c8340dbb6d7283200c27bb723859119145db1b
 current_worktree: /Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini
 current_branch: codex/so101-unbounded-queue-resource-budget (HEAD b55c181e at takeover)
-next_experiment: Task 12 - fresh source, package, OpenAPI, copied-install and served-byte gates
+next_experiment: Task 13 - bisect the W2 smoke broker-phase hang, then run the real W2 shape
 correction_cp_uq229: the header's `worktree`, `evidence_root` and `task_root` fields describe the
   historical ai-station Stage A-E dispatch (`84620fc0`) and are not rewritten, because that history
   is not invalidated. The live dispatch, worktree and evidence root for the current macOS MPS/private
@@ -9760,3 +9760,62 @@ is a harness ordering artifact, not a product or test defect, and the two gates 
 separately so neither hides the other.
 
 _Ledger source HEAD: `b1557da5`; no evidence deleted; no Linux or W4/W6/W8 action._
+
+## CP-UQ242 — Task 12 gates are green or honestly deferred; the W2 smoke harness still hangs
+
+```yaml
+checkpoint_id: CP-UQ242
+last_valid_experiment: EXP-UQ242-TASK12-GATES
+current_hypothesis: The fresh-install, copied-install and served-byte gates can be closed with real
+  provenance, and the remaining macOS package failures are all Linux-facility boundaries.
+working_tree_status: clean at commit 0bb4ec74 (no code change was required this round)
+owned_processes: NONE - the smoke left no orphan; pgrep found nothing after the timeout
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome extension host, Sparkle updater,
+  SkyComputerUseService
+open_risks:
+  - task13-w2-runtime-smoke-01 hangs in its broker phase and is INCOMPLETE, not PASS.
+  - The perception weights are not provisioned anywhere on this host, so a real broker loading the
+    real model set cannot be demonstrated here.
+next_command: bisect the Task 13 smoke hang with a flushed marker at the top of the broker phase
+```
+
+`checkpoint_id: CP-UQ242`
+`last_valid_experiment: EXP-UQ242-TASK12-GATES`
+
+### Task 12 results
+
+| Gate | Run | Result |
+| --- | --- | --- |
+| Fresh symlink build | `task12-fresh-build-02/` | exit 0, 1 package, v4 config and all 9 new modules present |
+| Package boundary (direct pytest, documented macOS contract) | `task12-package-gate-01/` | exit 1, **232 failed, 3247 passed, 8 skipped** = 3487 collected |
+| Native `colcon test` | `task12-colcon-test-01/` | **INVALID environment**: drops `DYLD_LIBRARY_PATH`, `Library not loaded: @rpath/librosidl_typesupport_c.dylib`, zero nodeids, exit 2, `colcon test-result` = 0 tests |
+| Collection disjointness | `task12-collection-06/` | ordinary 3487 nodeids / 183 files, benchmark 585 / 13 files, intersection **0**, ordinary pulls no benchmark file, union 4072, arithmetic 232+3247+8 = 3487 |
+| Real (non-symlink) install | `task12-real-build-01/` | exit 0 |
+| Copied install | `task12-copied-install-02/` | exit 0, all 9 new modules resolve **inside the copy**, no `.git`, no symlink into the source or build tree, v4 config a real file and it parses from the copy |
+| Served bytes | `task12-served-bytes-01/` | exit 0, served index byte-identical (`c09fc43a…`), CSS 28820 B (`80a25e20…`) and JS 1090734 B (`0590ee3b…`) both byte-identical to `web/dist` |
+| Web build / unit (separate steps) | `task11-web-build-01/`, `task11-web-unit-01/` | exit 0 / exit 0, **30 files, 126 tests** |
+
+The first copied-install attempt (`task12-copied-install-01/`) is INVALID for a real reason worth
+recording: `colcon build --symlink-install` writes a *develop* pythonpath hook pointing at the build
+directory, so a copied install is not self-contained by construction. The gate now uses a real
+install, and the copy is verified to be free of symlinks.
+
+### Task 13 status: INCOMPLETE, and the honest reason
+
+The first real W2 runtime-shape smoke completed its **start-guard phase** for real:
+`start-guard.json` shows `PASS / MPS_HEADROOM_OK`, available 10 783 621 120 bytes (10.04 GiB),
+cutoff 1 073 741 824, `admission_kind: unified-memory-proxy`, metric source
+`unified-memory-proxy:vm_stat(host_available)+torch.mps.recommended_max_memory@torch2.13.0`.
+
+The **broker phase hangs**. Run under a hard 180 s wall-clock limit it exited 124 with a completely
+empty log, so nothing in that phase produced output before the kill; `pgrep` found no orphan
+afterwards. One real design constraint was already learned and fixed in the harness: the
+accelerator probe imports torch, so the guard must run in its own phase and re-exec into the broker
+phase — the same thing the Broker launcher does. The hang is after that re-exec.
+
+No W2 runtime PASS is claimed. Also recorded: the perception weights are not provisioned anywhere
+on this host (no `plastic-cup-yolo*`, no `grounded-sam*`, no model root under `$HOME`), so a broker
+loading the *real* model set cannot be demonstrated here at all. That is an environment fact, not a
+code defect, and it bounds what Task 13 and Task 14 can ever claim on this machine.
+
+_Ledger source HEAD: `0bb4ec74`; no evidence deleted; no Linux or W4/W6/W8 action._
