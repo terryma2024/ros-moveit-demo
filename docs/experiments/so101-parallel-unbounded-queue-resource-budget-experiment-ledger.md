@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ234 (tail of this file)
+latest_checkpoint: CP-UQ235 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -55,7 +55,7 @@ current_design: docs/superpowers/specs/2026-09-19-so101-macos-mps-private-ipc-de
   SHA-256 480da6dcdfea1da988f9f4e706c8340dbb6d7283200c27bb723859119145db1b
 current_worktree: /Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini
 current_branch: codex/so101-unbounded-queue-resource-budget (HEAD b55c181e at takeover)
-next_experiment: Task 6 RED - immutable inference input snapshot
+next_experiment: Task 7 RED - Coordinator local one-time request registry
 correction_cp_uq229: the header's `worktree`, `evidence_root` and `task_root` fields describe the
   historical ai-station Stage A-E dispatch (`84620fc0`) and are not rewritten, because that history
   is not invalidated. The live dispatch, worktree and evidence root for the current macOS MPS/private
@@ -9370,3 +9370,54 @@ assumptions that CP-UQ225 recorded. They are recorded as `DEFERRED_ENVIRONMENT`,
 rewritten, and not counted as v4 regressions.
 
 _Ledger source HEAD: `b6bab6be`; no evidence deleted; no Linux or W4/W6/W8 action._
+
+## CP-UQ235 — Snapshots are immutable, verified against the bytes, and never deleted
+
+```yaml
+checkpoint_id: CP-UQ235
+last_valid_experiment: EXP-UQ235-TASK6-SNAPSHOT
+current_hypothesis: The data plane can stay out of the control frame while every declared fact is
+  re-derived from the bytes before a model ever sees them.
+working_tree_status: clean at commit 0ee79d07
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome extension host, Sparkle updater,
+  SkyComputerUseService
+open_risks:
+  - The Broker wiring that calls `read_document` before queueing a request is Task 8 work; this
+    checkpoint proves the store and registry, not the end-to-end request path.
+next_command: Task 7 RED - Coordinator local one-time request registry
+```
+
+`checkpoint_id: CP-UQ235`
+`last_valid_experiment: EXP-UQ235-TASK6-SNAPSHOT`
+`commit: 0ee79d07 feat(so101): validate immutable inference snapshots`
+
+`EXP-UQ235-TASK6-SNAPSHOT: VALID`
+
+GREEN (`task6-green-01/`, exit 0, **16 passed**), then with the contract extension
+(`task6-green-03/`, exit 0, **107 passed** across the snapshot and contract files). The RED pass
+(`task6-red-01/`) surfaced one real wording bug: `SnapshotDescriptor` refuses a bad path with
+`SnapshotError`, which is a `RuntimeError`, not a `ValueError`; the test now asserts the class the
+product actually raises instead of the class a reviewer might expect.
+
+What now holds:
+
+- a descriptor carries exactly `relative_path`, `size_bytes`, `sha256`, `shape`, `dtype`,
+  `encoding`, `frame_timestamp_ns`, and validates every one of them at construction;
+- absolute paths, `..`, `.`, backslashes and empty paths are refused before any filesystem call;
+- the writer rejects anything that is not a real `ndarray`, rejects a non-identifier slot, writes
+  under a `.part` name with `fsync`, renames atomically, `fsync`s the directory, and then removes
+  the owner write bit so the snapshot is immutable for the campaign;
+- the reader re-derives size, SHA-256, shape and dtype from the bytes and refuses any mismatch, a
+  symlink, a non-file, a missing file, or a file above the ceiling even when the descriptor agrees;
+- `broker_max_frame_bytes` (8 MiB) and `max_input_snapshot_bytes` (64 MiB) are separate closed
+  fields in the v4 document and the resolved manifest, and a control frame carrying a descriptor
+  stays under 1 KiB in the test;
+- the registry holds a snapshot until the request completes, is cancelled, or is invalidated;
+  after release it reports a `DELETION_CANDIDATE` and the file is verified still readable. Nothing
+  is deleted.
+
+The v4 document gained one required field (`max_input_snapshot_bytes: 67108864`), so the contract
+gate was re-run with it and remains green.
+
+_Ledger source HEAD: `0ee79d07`; no evidence deleted; no Linux or W4/W6/W8 action._
