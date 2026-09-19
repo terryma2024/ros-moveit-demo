@@ -140,6 +140,12 @@ class BatchCoordinator:
             for event in replay.events:
                 self._apply(event)
             frozen = asdict(request)
+            # The start guard is a runtime capability, not request identity: the journal payload is
+            # canonical JSON (and resume compares this document), so the guard object must not
+            # travel in it.  Threading it into the pool request without this exclusion failed every
+            # adaptive pool at BATCH_STARTED with
+            # `TypeError: Object of type EpochStartGuard is not JSON serializable`.
+            frozen.pop('start_guard', None)
             frozen['evidence_root'] = str(request.evidence_root)
             frozen['selected_point_ids'] = list(request.selected_point_ids)
             if self._events:
