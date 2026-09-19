@@ -513,7 +513,12 @@ def run(argv: list[str] | None = None) -> int:
             input_sha256=input_digest, deadline_s=arguments.worker_deadline_s,
             tamper_input_sha256=arguments.tamper_snapshot_sha,
             duplicate_probe=arguments.duplicate_probe)
-        bind_worker_requests(campaign, leases, ready=ready)
+        # The admission decision is applied once the Workers finish, and each Worker now runs a
+        # pick-place batch before it does - so the bound deadline has to cover the whole campaign, not
+        # the 300 s that sufficed when the Worker only served round trips. `batch_hard_timeout_s` is
+        # the configured ceiling for exactly this span.
+        admission_deadline_s = float(getattr(config, "batch_hard_timeout_s", 5400.0))
+        bind_worker_requests(campaign, leases, ready=ready, deadline_s=admission_deadline_s)
         # The IPC-shape probe ids stay bound while the Worker still serves that shape, so this
         # change cannot silently refuse the requests the previous gate proved.
         for worker_id in ("w1", "w2"):
@@ -522,7 +527,7 @@ def run(argv: list[str] | None = None) -> int:
                 campaign.request_binding(
                     request_id=f"{worker_id}-req-{index:02d}", slot_id=slot_id,
                     point_id=plan.slots.assigned_points[0 if worker_id == "w1" else 1][1] or "p1",
-                    attempt=1, input_sha256=input_digest, deadline_s=300.0,
+                    attempt=1, input_sha256=input_digest, deadline_s=admission_deadline_s,
                     broker_pid=ready.broker_pid,
                     broker_birth_identity=ready.broker_birth_identity)
 
