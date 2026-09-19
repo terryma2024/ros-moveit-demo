@@ -11905,3 +11905,29 @@ was created to answer.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `e154ddc8`; no evidence deleted._
+
+### CP-UQ263 addendum 14 — the Worker child can own a station, and the IPC-only path is unchanged
+
+The spawn call in `cli/macos_w2_campaign.py:362` passes exactly four arguments
+(`ack_path, endpoint, worker_id, out_path`). Two optional ones now follow them
+(`station_session, station_root`); when they are absent the child behaves exactly as before, and when
+they are present it starts a visible station through `default_task_station_config` +
+`PersistentTaskStack` with `station_environment(base=os.environ)` - the product guard, so a canonical
+checkout prefix refuses the launch.
+
+The ACK payload now records whether a station was requested, which is how a reader can tell the two
+shapes apart after the fact.
+
+Verified on the unchanged path:
+
+```text
+task14-worker-station-01   status W2_CAMPAIGN_PASS, cleanup complete
+                           ack "station" flag: [False, False]
+```
+
+So adding station ownership did not disturb the campaign that every earlier checkpoint rests on, and
+the entry point only needs to pass the two arguments to turn it on.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `2e09f383`; no evidence deleted._
