@@ -12237,3 +12237,38 @@ the kind of gap a status document hides; from now on the orphan check runs with 
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `38505d56`; no evidence deleted._
+
+### CP-UQ268 addendum 3 — what the port needs before it can replace the bare client
+
+Reading the campaign's server side settles the scope of the last wiring step:
+
+```text
+binding     cli/macos_w2_campaign.py:329  campaign.request_binding(
+                request_id=f"{worker_id}-req-{index:02d}", slot_id=…, point_id=…, attempt=1,
+                input_sha256=…, deadline_s=300, broker_pid=…, broker_birth_identity=…)
+server      handler(request) ignores `request.operation`: it runs one real YOLO forward pass on the
+            shared lane and returns {"request_id", "device", "candidates"}
+```
+
+Three mismatches stand between that and the port:
+
+1. **the operation is ignored** - the port sends `infer` with a serialized `InferenceRequest` and
+   snapshot, and expects the refusal signal (`ok=False`) to be meaningful;
+2. **the identifiers do not line up** - the Worker's port derives
+   `request_id = f"{lease.attempt_id}-{model_id}"`, while the campaign binds `w1-req-00…`; the
+   one-time table is the admission gate, so either the binding must be produced from the same
+   identity the Worker will use, or the Worker must be told which ids it owns;
+3. **the Worker has no lease and no snapshot** - `request_one` needs `attempt_id`, `batch_id`,
+   `coordinator_epoch`, `worker_id`, `worker_generation`, `point_id`, `lease_generation` plus a
+   snapshot descriptor (`path`, `shape`, `sha256`, `source_stamp_ns`, `source_frame_id`), and the
+   campaign's child currently has none of them.
+
+So the next step is not "swap the client": it is to pass the Worker the lease identity and a snapshot
+descriptor (the campaign already knows both ends of the identity it binds), teach the server to honour
+`infer` and to answer the refusal the port checks, and only then route the round trips through
+`W2BrokerPort` - at which point the Worker's inference also stops being a stub and becomes a real
+model call admitted by the one-time table.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `657f118b`; no evidence deleted._
