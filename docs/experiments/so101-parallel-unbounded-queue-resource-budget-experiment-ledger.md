@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ255 (tail of this file)
+latest_checkpoint: CP-UQ256 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -10732,3 +10732,44 @@ with the guard/accelerator boundary and must build the scope device from the res
 not from `gpu_device`.
 
 _Ledger source HEAD: `c803f5a1`; no evidence deleted._
+
+## CP-UQ256 — Four gates cleared, one left, and a test debt I am not hiding
+
+```yaml
+checkpoint_id: CP-UQ256
+last_valid_experiment: EXP-UQ256-W2-RESOURCE-PARTIAL
+current_hypothesis: The v4 allocation path can be unblocked by replacing its v3-only assumptions one
+  by one. Four are gone; the fifth is the Darwin guard's accelerator input.
+working_tree_status: clean after the scoped commit below
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - TEST DEBT: the last two edits (`start_guard._require_gpu_selector` accepting `MPS:default`,
+    `resources._start_guard_check` deriving the selector from the v4 accelerator) were made while
+    investigating and are validated only by the integration probe. They are NOT done until their
+    RED/GREEN unit tests exist; if a unit test cannot justify them they must be reverted.
+  - The guard still refuses admission with GPU_TARGET_UNAVAILABLE: `require_before_spawn(scope)`
+    never receives the Darwin MPS accelerator snapshot.
+  - Screen Recording remains denied to this session, so Task 14 batches stay blocked.
+next_command: give the Darwin guard its accelerator input, then write the owed unit tests
+```
+
+### The gate sequence, all from one probe
+
+```text
+green-05  START_GUARD_UNAVAILABLE                 (no guard supplied - correct fail-closed)
+green-06  PROBE_STATE_ROOT_UNSET                  (guard needs the registered task root - correct)
+green-07  CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION (`gpu_device`, a v3/CUDA field v4 replaced)
+green-08  ValueError: gpu_selector must be UUID:<uuid> or INDEX:<index>   (CUDA-shaped scope)
+green-09  GPU_TARGET_UNAVAILABLE                  (scope accepted; the guard cannot see an MPS target)
+```
+
+Each one is the same species of defect: a v3/CUDA assumption inside the allocation path that no v4
+caller ever exercised because every v4 caller described resources instead of allocating them. Two
+were fixed with tests already in place (`84f217cc`), two more were fixed in this round.
+
+`EXP-UQ256-W2-RESOURCE-PARTIAL: PARTIAL` — explicitly not a pass. No Worker has been allocated yet,
+no station started from this path, no batch ran. Task 14 remains 0/5 and `LINUX_REGRESSION_DEFERRED`
+is retained.
+
+_Ledger source HEAD: `9c336e65`; no evidence deleted._
