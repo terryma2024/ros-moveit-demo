@@ -11319,3 +11319,28 @@ This is recorded as an in-flight observation, not a conclusion: the run had not 
 written, and the ready result for both slots is still owed.
 
 _Ledger source HEAD: `f412680a`; no evidence deleted._
+
+### CP-UQ260 addendum 2 — the portable claim refuses a second campaign, as it must
+
+Running a second allocation while the sequential station gate still held its claims produced:
+
+```text
+task14-env-diff-02   exit 1
+ResourceAllocationError: ROS_DOMAIN_CLAIMED: 181
+  resources.py:1101 allocate -> _claim_domains -> 1460
+```
+
+That is the portable check from `823ce3c3` working in the direction that matters: a live campaign
+holding domain 181 is seen by a *different* process, and the new campaign is refused instead of
+silently sharing a domain. It is the first cross-process evidence for that check, since the unit test
+only exercised its branches in isolation.
+
+It also means the environment diff has to wait until the sequential gate releases its claim - a
+one-campaign-at-a-time rule the driver must respect, not a defect.
+
+Two harness lessons for the next round, both mine rather than the product's: probe documents must be
+written to a **file** instead of stdout (station launch output interleaves with stdout and has now
+broken three parses), and the gate must create its own run root (pre-creating it makes `run-gate.sh`
+refuse, which cost round 42).
+
+_Ledger source HEAD: `9548cf09`; no evidence deleted._
