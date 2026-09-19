@@ -1,0 +1,77 @@
+schema_version: 4
+
+# Platform selection for this document. Exactly two combinations are admitted by
+# `contracts.parse_parallel_runtime_config_v4`; this file names the Darwin one.
+#
+#   Linux : accelerator cuda + requested_device cuda + proc_fd_unix + mujoco_gl egl
+#   macOS : accelerator mps  + requested_device mps  + darwin_private_path_unix + cgl
+#
+# The Linux combination stays in the contract; it is simply not executable here (no
+# Linux environment) and is recorded as DEFERRED_ENVIRONMENT.
+accelerator:
+  kind: mps
+  selector: default
+requested_device: mps
+allow_cpu_fallback: false
+
+# Exact W2 only. W1/W4/W6/W8 return PLATFORM_WORKER_COUNT_UNSUPPORTED, and no cross-N
+# qualification may be inferred from this value.
+worker_count: 2
+ipc_transport: darwin_private_path_unix
+mujoco_gl: cgl
+
+# Single-Broker MPS allocator cap, fixed before any MPS allocation. It is not a per-worker
+# budget and it is not derived from the worker count.
+mps_process_memory_fraction: 0.8
+
+execution:
+  backend: mujoco
+  max_worker_count: 8
+  ros_domain_ids: [181, 182]
+  heartbeat_interval_s: 1.0
+  heartbeat_timeout_s: 5.0
+  lease_duration_s: 300.0
+  lease_ack_timeout_s: 5.0
+  attempt_start_ack_timeout_s: 5.0
+  result_ack_timeout_s: 10.0
+  initializing_hard_timeout_s: 180.0
+  executing_hard_timeout_s: 240.0
+  finalizing_hard_timeout_s: 120.0
+  batch_hard_timeout_s: 5400.0
+  worker_recovery_timeout_s: 120.0
+  broker_recovery_timeout_s: 90.0
+  broker_max_frame_bytes: 8388608
+  broker_queue_capacity_per_model: 3
+  broker_inflight_per_worker_per_model: 1
+  yolo_queue_timeout_s: 10.0
+  yolo_inference_timeout_s: 20.0
+  grounded_sam_queue_timeout_s: 10.0
+  grounded_sam_inference_timeout_s: 60.0
+  max_frame_age_s: 5.0
+  max_rgbd_skew_s: 0.0
+  max_tf_skew_s: 0.0
+  yolo_model_id: plastic-cup-yolo11n-seg-v1
+  yolo_imgsz: 640
+  grounding_box_threshold: 0.35
+  grounding_text_threshold: 0.25
+  grounding_duplicate_iou: 0.85
+  grounding_max_candidates: 16
+  sam_mask_quality_threshold: 0.75
+  sam_min_mask_pixels: 64
+  sam_max_mask_area_ratio: 0.50
+  clock:
+    window_s: 1.0
+    stride_s: 1.0
+    minimum_consecutive_steady_windows: 5
+    maximum_clock_age_s: 5.0
+    pace_source: FROZEN_SIM_SETTING
+
+start_guard:
+  timeout_s: 2.0
+  cpu_busy_warn_fraction: 0.90
+  ram_minimum_bytes: 1073741824
+  ram_minimum_fraction: 0.05
+  gpu_minimum_bytes: 1073741824
+  # Fixed unified-memory headroom floor (1 GiB). It only rejects a plainly short start; it is
+  # not a capacity certification and does not scale with N, models or points.
+  mps_minimum_headroom_bytes: 1073741824

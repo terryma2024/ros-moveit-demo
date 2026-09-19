@@ -89,13 +89,21 @@ def _require_identifier(name: str, value: object) -> str:
 
 @dataclass(frozen=True)
 class StartGuardPolicy:
-    """Closed policy. Configuration cannot enlarge the deadline past the design's 2 s."""
+    """Closed policy. Configuration cannot enlarge the deadline past the design's 2 s.
+
+    ``mps_minimum_headroom_bytes`` belongs to the schema-v4 Darwin combination only. It is a
+    fixed positive byte count that blocks a plainly short-of-memory start; it does not scale
+    with the worker count, the model count or the point count, and it is not a capacity
+    certification. It stays ``None`` for every other platform, so a v3 document cannot carry
+    an MPS threshold and a Linux v4 document cannot silently acquire one.
+    """
 
     timeout_s: float = 2.0
     cpu_busy_warn_fraction: float = 0.90
     ram_minimum_bytes: int = 1 << 30
     ram_minimum_fraction: float = 0.05
     gpu_minimum_bytes: int = 1 << 30
+    mps_minimum_headroom_bytes: int | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "timeout_s", _require_finite_number(
@@ -108,6 +116,17 @@ class StartGuardPolicy:
             "ram_minimum_fraction", self.ram_minimum_fraction, minimum=0.0, maximum=1.0))
         object.__setattr__(self, "gpu_minimum_bytes", _require_bytes(
             "gpu_minimum_bytes", self.gpu_minimum_bytes))
+        if self.mps_minimum_headroom_bytes is not None:
+            object.__setattr__(self, "mps_minimum_headroom_bytes", _require_positive_bytes(
+                "mps_minimum_headroom_bytes", self.mps_minimum_headroom_bytes))
+
+
+def _require_positive_bytes(name: str, value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{name} must be a positive int")
+    if value <= 0:
+        raise ValueError(f"{name} must be a positive int")
+    return value
 
 
 def _require_gpu_selector(value: object) -> str:

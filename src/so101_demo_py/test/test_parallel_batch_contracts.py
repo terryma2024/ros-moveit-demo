@@ -864,3 +864,294 @@ def test_budget_environment_does_not_change_v3_loading(monkeypatch):
         monkeypatch.setenv(name, "/nonexistent/retired")
     monkeypatch.setenv("SO101_VALIDATION_LOCATION_BINDING", "/nonexistent/location.json")
     assert contracts.load_parallel_runtime_config_v3(V3_CONFIG_PATH) == baseline
+
+
+# --------------------------------------------------------------------------------------
+# Version 4: the closed macOS MPS W2 contract
+#
+# Version 4 keeps exactly two closed platform combinations. The Linux one
+# (`cuda` + `proc_fd_unix`) is retained in the contract and covered by offline unit
+# assertions only; the Darwin one (`mps` + `darwin_private_path_unix`) is what this
+# task executes for real at exact worker_count=2.
+# --------------------------------------------------------------------------------------
+
+V4_CONFIG_PATH = PACKAGE / "config/mujoco/parallel_batch_v4_macos_mps_w2.yaml"
+V3_CONFIG_SHA256 = "991b5c1b4fbd0cc1f0a97bd20a5b5a4e02028634f3f4ef288ad87554b383ab70"
+
+
+def _v4_document() -> dict:
+    return yaml.safe_load(V4_CONFIG_PATH.read_text())
+
+
+def test_schema_v3_bytes_are_frozen_by_the_v4_work():
+    """Adding v4 must not rewrite one byte of the v3 document or its parser surface."""
+
+    import so101_demo.parallel_batch.contracts as contracts
+
+    digest = hashlib.sha256(V3_CONFIG_PATH.read_bytes()).hexdigest()
+    assert digest == V3_CONFIG_SHA256
+    config = contracts.load_parallel_runtime_config_v3(V3_CONFIG_PATH)
+    assert config.schema_version == 3
+    assert config.requested_device == "cuda"
+    assert config.max_worker_count == 8
+    assert set(contracts.EXECUTION_V3_FIELDS) == set(
+        item.name for item in fields(contracts.ParallelRuntimeConfigV3)
+    ) - {"schema_version", "start_guard"}
+    # v3 selects its platform the v3 way; the v4 accelerator vocabulary must not leak in.
+    assert "accelerator" not in {item.name for item in fields(contracts.ParallelRuntimeConfigV3)}
+    assert "ipc_transport" not in {item.name for item in fields(contracts.ParallelRuntimeConfigV3)}
+
+
+def test_schema_v4_macos_document_resolves_the_closed_darwin_combination():
+    """The shipped macOS document resolves to mps + darwin_private_path_unix + cgl at W2."""
+
+    import so101_demo.parallel_batch.contracts as contracts
+
+    config = contracts.load_parallel_runtime_config_v4(V4_CONFIG_PATH)
+    assert isinstance(config, contracts.ParallelRuntimeConfigV4)
+    assert config.schema_version == 4
+    assert config.accelerator.kind is contracts.AcceleratorKind.MPS
+    assert config.accelerator.selector == "default"
+    assert config.requested_device == "mps"
+    assert config.allow_cpu_fallback is False
+    assert config.worker_count == 2
+    assert config.ipc_transport is contracts.IpcTransport.DARWIN_PRIVATE_PATH_UNIX
+    assert config.mujoco_gl == "cgl"
+    assert config.mps_process_memory_fraction == 0.8
+    assert config.start_guard.mps_minimum_headroom_bytes == 1 << 30
+
+
+def test_schema_v4_retains_the_linux_combination_in_the_contract():
+    """The Linux v4 combination stays declared even though this task cannot execute it."""
+
+    import so101_demo.parallel_batch.contracts as contracts
+
+    document = _v4_document()
+    document["accelerator"] = {"kind": "cuda", "selector": "INDEX:0"}
+    document["requested_device"] = "cuda"
+    document["ipc_transport"] = "proc_fd_unix"
+    document["mujoco_gl"] = "egl"
+    # The MPS allocator cap and the unified-memory headroom belong to the Darwin combination.
+    document["mps_process_memory_fraction"] = None
+    document["start_guard"].pop("mps_minimum_headroom_bytes")
+    config = contracts.parse_parallel_runtime_config_v4(document)
+    assert config.accelerator.kind is contracts.AcceleratorKind.CUDA
+    assert config.ipc_transport is contracts.IpcTransport.PROC_FD_UNIX
+    assert config.mujoco_gl == "egl"
+    assert config.worker_count == 2
+    assert config.mps_process_memory_fraction is None
+    assert config.mps_minimum_headroom_bytes is None
+
+
+def test_schema_v4_refuses_mps_fields_on_the_linux_combination():
+    """An MPS threshold or allocator cap must not be smuggled into the CUDA combination."""
+
+    import so101_demo.parallel_batch.contracts as contracts
+
+    linux = _v4_document()
+    linux["accelerator"] = {"kind": "cuda", "selector": "INDEX:0"}
+    linux["requested_device"] = "cuda"
+    linux["ipc_transport"] = "proc_fd_unix"
+    linux["mujoco_gl"] = "egl"
+
+    leaking_cap = dict(linux)
+    with pytest.raises(contracts.ContractError, match="MPS_PROCESS_MEMORY_FRACTION"):
+        contracts.parse_parallel_runtime_config_v4(leaking_cap)
+
+    leaking_headroom = _v4_document()
+    leaking_headroom.update({
+        "accelerator": {"kind": "cuda", "selector": "INDEX:0"},
+        "requested_device": "cuda",
+        "ipc_transport": "proc_fd_unix",
+        "mujoco_gl": "egl",
+        "mps_process_memory_fraction": None,
+    })
+    with pytest.raises(contracts.ContractError, match="MPS_MINIMUM_HEADROOM_BYTES"):
+        contracts.parse_parallel_runtime_config_v4(leaking_headroom)
+
+
+@pytest.mark.parametrize("worker_count", [1, 3, 4, 6, 8])
+def test_schema_v4_platform_worker_count_is_exactly_two(worker_count):
+    """W4/W6/W8 and W1 are outside this contract's declared platform support."""
+
+    import so101_demo.parallel_batch.contracts as contracts
+
+    document = _v4_document()
+    document["worker_count"] = worker_count
+    with pytest.raises(contracts.ContractError, match="PLATFORM_WORKER_COUNT_UNSUPPORTED"):
+        contracts.parse_parallel_runtime_config_v4(document)
+
+
+@pytest.mark.parametrize(
+    "key, value",
+    [
+        ("requested_device", "cpu"),
+        ("allow_cpu_fallback", True),
+        ("ipc_transport", "auto_tcp"),
+        ("mujoco_gl", "osmesa"),
+    ],
+)
+def test_schema_v4_rejects_cpu_fallback_and_cross_platform_combinations(key, value):
+    """No CPU device, CPU fallback, arbitrary TCP transport or third GL backend is admitted."""
+
+    import so101_demo.parallel_batch.contracts as contracts
+
+    document = _v4_document()
+    document[key] = value
+    with pytest.raises(contracts.ContractError):
+        contracts.parse_parallel_runtime_config_v4(document)
+
+
+def test_schema_v4_rejects_cross_platform_accelerator_and_ipc_pairs():
+    """Accelerator, IPC transport and GL backend must form one closed combination."""
+
+    import so101_demo.parallel_batch.contracts as contracts
+
+    document = _v4_document()
+    document["ipc_transport"] = "proc_fd_unix"
+    with pytest.raises(contracts.ContractError):
+        contracts.parse_parallel_runtime_config_v4(document)
+
+    document = _v4_document()
+    document["mujoco_gl"] = "egl"
+    with pytest.raises(contracts.ContractError):
+        contracts.parse_parallel_runtime_config_v4(document)
+
+    document = _v4_document()
+    document["accelerator"] = {"kind": "cuda", "selector": "INDEX:0"}
+    with pytest.raises(contracts.ContractError):
+        contracts.parse_parallel_runtime_config_v4(document)
+
+
+@pytest.mark.parametrize(
+    "fraction", [0, 0.0, -0.1, 1.5, 2, None, "0.8"]
+)
+def test_schema_v4_rejects_non_positive_or_coercible_memory_fraction(fraction):
+    """The allocator cap must be a real number in (0, 1] before any MPS allocation."""
+
+    import so101_demo.parallel_batch.contracts as contracts
+
+    document = _v4_document()
+    document["mps_process_memory_fraction"] = fraction
+    with pytest.raises(contracts.ContractError):
+        contracts.parse_parallel_runtime_config_v4(document)
+
+
+@pytest.mark.parametrize("headroom", [0, -1, 1.5, True, "1073741824", None])
+def test_schema_v4_requires_a_positive_integer_headroom(headroom):
+    """The fixed headroom is a positive byte count, never a scaled or coerced budget."""
+
+    import so101_demo.parallel_batch.contracts as contracts
+
+    document = _v4_document()
+    document["start_guard"]["mps_minimum_headroom_bytes"] = headroom
+    with pytest.raises(contracts.ContractError):
+        contracts.parse_parallel_runtime_config_v4(document)
+
+
+def test_schema_v4_document_is_closed_against_unknown_fields(tmp_path):
+    """Unknown top-level, accelerator, execution or guard fields all fail closed."""
+
+    import so101_demo.parallel_batch.contracts as contracts
+
+    for mutate, expected in (
+        (lambda d: d.update({"deployment": {"approved_profile_path": None}}),
+         "UNKNOWN_CONFIG_FIELD"),
+        (lambda d: d["accelerator"].update({"device_index": 0}), "UNKNOWN_ACCELERATOR_FIELD"),
+        (lambda d: d["execution"].update({"cpu_budget": 4}), "UNKNOWN_EXECUTION_FIELD"),
+        (lambda d: d["start_guard"].update({"mps_headroom_gib": 1}),
+         "UNKNOWN_START_GUARD_FIELD"),
+    ):
+        document = _v4_document()
+        mutate(document)
+        path = tmp_path / "v4-drift.yaml"
+        path.write_text(yaml.safe_dump(document))
+        with pytest.raises(contracts.ContractError, match=expected):
+            contracts.load_parallel_runtime_config_v4(path)
+
+
+def test_schema_v4_auto_transport_resolves_per_platform():
+    """`auto` resolves to the current platform's closed default and never to TCP."""
+
+    import so101_demo.parallel_batch.contracts as contracts
+    import sys
+
+    document = _v4_document()
+    document["ipc_transport"] = "auto"
+    if sys.platform == "darwin":
+        document["accelerator"] = {"kind": "mps", "selector": "default"}
+        document["requested_device"] = "mps"
+        document["mujoco_gl"] = "cgl"
+        config = contracts.parse_parallel_runtime_config_v4(document)
+        assert config.ipc_transport is contracts.IpcTransport.DARWIN_PRIVATE_PATH_UNIX
+    else:
+        document["accelerator"] = {"kind": "cuda", "selector": "INDEX:0"}
+        document["requested_device"] = "cuda"
+        document["mujoco_gl"] = "egl"
+        config = contracts.parse_parallel_runtime_config_v4(document)
+        assert config.ipc_transport is contracts.IpcTransport.PROC_FD_UNIX
+
+
+def test_schema_v4_manifest_records_resolved_platform_values():
+    """A resolved manifest must never report `auto`; it records the real platform choice."""
+
+    import so101_demo.parallel_batch.contracts as contracts
+
+    config = contracts.load_parallel_runtime_config_v4(V4_CONFIG_PATH)
+    manifest = config.resolved_manifest()
+    assert manifest["accelerator"] == "mps"
+    assert manifest["ipc_transport"] == "darwin_private_path_unix"
+    assert manifest["mujoco_gl"] == "cgl"
+    assert manifest["worker_count"] == 2
+    assert manifest["mps_minimum_headroom_bytes"] == 1 << 30
+    assert "auto" not in set(manifest.values())
+
+
+def test_schema_v4_keeps_the_v3_runtime_values_frozen():
+    """v4 reuses the frozen functional timing/frame values instead of redefining them."""
+
+    import so101_demo.parallel_batch.contracts as contracts
+
+    config = contracts.load_parallel_runtime_config_v4(V4_CONFIG_PATH)
+    assert "ros_domain_ids" not in contracts.FROZEN_RUNTIME_VALUES_V4, (
+        "ros_domain_ids is a per-platform isolation choice, not a frozen runtime value"
+    )
+    for name, expected in contracts.FROZEN_RUNTIME_VALUES_V4.items():
+        if name == "accelerator_kind":
+            assert str(config.accelerator.kind) == expected, name
+            continue
+        if name == "accelerator_selector":
+            assert config.accelerator.resolved_selector == expected, name
+            continue
+        assert getattr(config, name) == expected, name
+    # The functional timing/frame values v4 does not redefine must still match v3 exactly.
+    # The platform selection itself (`requested_device`, `allow_cpu_fallback`) may differ.
+    shared = ((set(contracts.FROZEN_RUNTIME_VALUES_V4)
+               & set(contracts._FROZEN_RUNTIME_VALUES_V3))
+              - {"schema_version", "requested_device", "allow_cpu_fallback"})
+    assert len(shared) >= 30
+    for name in shared:
+        assert (contracts.FROZEN_RUNTIME_VALUES_V4[name]
+                == contracts._FROZEN_RUNTIME_VALUES_V3[name]), name
+
+
+def test_runtime_config_loader_selects_v4_parser():
+    """The any-schema loader must dispatch v4 to the v4 parser and keep v3 intact."""
+
+    import so101_demo.parallel_batch.contracts as contracts
+
+    loaded = contracts.load_runtime_config_any_schema(V4_CONFIG_PATH)
+    assert isinstance(loaded, contracts.ParallelRuntimeConfigV4)
+    assert isinstance(contracts.load_runtime_config_any_schema(V3_CONFIG_PATH),
+                      contracts.ParallelRuntimeConfigV3)
+
+
+def test_require_v4_execution_refuses_other_versions():
+    """Execution admission is version-exact: v4 runs only against a v4 config."""
+
+    import so101_demo.parallel_batch.contracts as contracts
+
+    contracts.require_v4_execution(4, 4)
+    for request_version, config_version in ((3, 3), (4, 3), (3, 4), (2, 2), (True, 4)):
+        with pytest.raises(contracts.ContractError, match="CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"):
+            contracts.require_v4_execution(request_version, config_version)
