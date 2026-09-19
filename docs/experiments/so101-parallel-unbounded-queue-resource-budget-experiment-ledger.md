@@ -10865,3 +10865,36 @@ point + `_merge_accelerator`, and it needs its own RED/GREEN pair, including the
 Still: no Worker allocated, Task 14 0/5, `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `9d6d1ffc`; no evidence deleted._
+
+### CP-UQ256 follow-up 5 — the exact edit site, and why I did not edit it yet
+
+`run_helper` (`start_guard_probe.py:642-667`) is the whole helper side:
+
+```python
+request = json.loads(_read_all(request_fd).decode())
+policy = StartGuardPolicy(**request["policy"]); scope = GuardScope(**request["scope"])
+...
+snapshot = probe_snapshot(policy, scope, deadline)              # <- NVML lives here
+result = evaluate_snapshot(snapshot, policy, scope, ...)
+```
+
+and the parent's request document (`check`, lines 446-464) sends `policy.gpu_minimum_bytes` but nothing
+that says which accelerator family the child is probing. The v4 fix is therefore:
+
+1. the parent adds the discriminator to the request (the Darwin policy's
+   `mps_minimum_headroom_bytes` is exactly it, so no new vocabulary is needed);
+2. the child, when the discriminator is present, must keep the CPU/RAM measurement and **drop only
+   the GPU/NVML part** — a guard that silently skipped CPU/RAM validation would be weaker than v3,
+   which is not an acceptable trade;
+3. `_merge_accelerator` keeps deciding the MPS admission;
+4. requests without the discriminator must produce byte-identical v3 results, with a test proving it.
+
+Step 2 is the part that needs care, because the GPU probe and the CPU/RAM probe live in the same
+`probe_snapshot` call, and whether it can already degrade without NVML is exactly what I have not yet
+read. I am deliberately not making that edit half-informed: the last three product edits in this
+chain were each justified by a live RED, and this one would be a guess until that call is read.
+`entrypoint-regression-05` (263 passed) stands as the pre-change baseline for the round that does it.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `ffe94119`; no evidence deleted._
