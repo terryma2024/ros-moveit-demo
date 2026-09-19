@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ253 (tail of this file)
+latest_checkpoint: CP-UQ254 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -10610,3 +10610,46 @@ useful even before the permission gap closes, because every unit of it is testab
 camera — but no batch may be counted until item 6 is real.
 
 _Ledger source HEAD: `c50f8830`; no evidence deleted._
+
+## CP-UQ254 — Step 1 of the join is blocked by a real v4 inconsistency
+
+```yaml
+checkpoint_id: CP-UQ254
+last_valid_experiment: EXP-UQ254-W2-RESOURCE-RED (RED, not a pass)
+current_hypothesis: Allocating exact W2 from the v4 document works. DISPROVEN.
+working_tree_status: clean at commit b9b2f39a
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - The v4 document claims an exact-W2 platform but still carries v3's `max_worker_count: 8`
+    against only two `ros_domain_ids`, so `AllocationPolicy` refuses before any Worker can exist.
+  - Screen Recording is still denied to this session, so Task 14 batches stay blocked too.
+next_command: decide the v4 fix (document max_worker_count or allocator derivation), write the RED
+  test in the owning contract test file, then green it
+```
+
+### The failure
+
+`task14-w2-resources-red-01/` loads the v4 document with the shipped loader and allocates two
+Workers. `load_execution_config` resolves it correctly (`ParallelRuntimeConfigV4`, `worker_count 2`,
+`ros_domain_ids [181, 182]`), and then:
+
+```text
+ResourceAllocationError: ALLOCATION_POLICY_ROS_DOMAIN_IDS
+  resources.py:185 in AllocationPolicy.__post_init__
+```
+
+The cause is inside my own Task 10 document, not in the allocator's rule. The rule requires
+`len(ros_domain_ids) >= max_worker_count`; the v4 YAML declares `max_worker_count: 8` (inherited from
+the v3 document) with only two domains. `WorkerResourceAllocator.__init__` builds exactly that policy
+when the caller does not supply one (`resources.py:987`), so **no Worker can be allocated from the
+macOS v4 configuration at all** — map step 1 of CP-UQ253 cannot proceed until this is fixed.
+
+This is what the plan's "each task returns genuine defects to its owning task" rule exists for: the
+defect belongs to Task 10 (composition/resolved manifest), and Task 14 is simply the first caller
+that allocates resources instead of describing them.
+
+`EXP-UQ254-W2-RESOURCE-RED: RED` — recorded as a failure, never as a pass. No batch counts, and Task
+14 remains 0/5 with `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `b9b2f39a`; no evidence deleted._
