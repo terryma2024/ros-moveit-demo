@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ284 (corrections) + Appendix B + stall recheck
+latest_checkpoint: CP-UQ284 (corrections, stall closed) + Appendix B
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -13657,3 +13657,34 @@ its result document, then re-run - rather than as "the timeout path is fine". No
 changes: **0/5**, `LINUX_REGRESSION_DEFERRED` in force, Screen Recording still the external blocker.
 
 _Ledger source HEAD: `765e399d`; no evidence deleted._
+
+### CP-UQ284 addendum 2 — the trace answers the flag question and ends this line of inquiry
+
+```text
+task16-timeout-fixed-02   served 14, handler_errors 0
+fault_trace (per inference): infer_served 1, 3, 4, 5, ...   stall_fired False, worker_deadline_s 4.0
+w1/w2 infer: [OK, OK, OK]
+```
+
+Two facts from this run:
+
+1. **the fault flags do reach the campaign** - `worker_deadline_s: 4.0` is the injected value, so the
+   runner's unquoted `${EXTRA_ARGS}` expansion works as intended;
+2. **there is no trace entry with `infer_served == 2`** - exactly the request the stall was armed for.
+   Its handler slept and then never recorded a decision, while the Workers still reported six OK
+   inferences.
+
+That is a defect in **my fault-injection harness**, not in the product: the request that gets stalled
+loses its trace line, so the probe cannot explain itself. The production path is unaffected - the clean
+post-fix series (Appendix B) serves all its inferences and executes both slots' pick-place five times
+over - and Task 14's actual blocker is the TCC grant, not this.
+
+Decision: **stop pursuing the stall probe.** It has consumed several rounds, it is instrumentation I
+invented for a fault the plan does not require at this level, and every remaining question about it is
+about my harness rather than the composition. It stays in the ledger with its evidence and its defect
+named, and the inference-timeout item remains open in the Task 16 matrix - honestly open, not
+"verified by a probe that cannot explain itself".
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `38b22e7d`; no evidence deleted._
