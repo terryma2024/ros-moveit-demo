@@ -13933,3 +13933,22 @@ fails closed at `TERMINAL_CAPTURE_FAILED` because Screen Recording is denied to 
 stands.
 
 _Ledger source HEAD: `b5ce154b`; no evidence deleted._
+
+### CP-UQ287 addendum — the series re-run with the PASS-capable code
+
+```text
+batch 1: exit=0 status=W2_CAMPAIGN_PASS served=12 cleanup=True
+    w1: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+    w2: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+batch 1: exit=0 status=W2_CAMPAIGN_PASS served=12 cleanup=True
+    w1: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+    w2: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+```
+
+Batch 1 of this series is the first **PASS with per-slot pick-place** in the whole task: `exit=0`,
+`W2_CAMPAIGN_PASS`, `served 12`, one-time admission clean, and eight executed point-runs across the
+two slots. As with every batch, the points themselves still fail closed at
+`TERMINAL_CAPTURE_FAILED` (TCC), so this is evidence about the **campaign contract**, not a counted
+Task 14 batch: **0/5** stands, `LINUX_REGRESSION_DEFERRED` stands.
+
+_Ledger source HEAD: (this commit's parent); no evidence deleted._
