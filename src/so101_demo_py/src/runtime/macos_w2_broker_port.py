@@ -196,9 +196,13 @@ class W2BrokerPort:
             },
             request_id=request_id,
         )
-        if getattr(response, "ok", None) is False:
+        if getattr(response, "ok", True) is False:
+            # The v4 response carries a refusal as a non-OK status plus an `error` mapping; the code
+            # lives inside that mapping, not on the response itself.
+            error = getattr(response, "error", None) or {}
+            code = error.get("code") if isinstance(error, Mapping) else None
             raise W2BrokerPortError(
-                f"BROKER_INFER_REFUSED: {getattr(response, 'code', 'UNKNOWN')}"
+                f"BROKER_INFER_REFUSED: {code or getattr(response, 'status', 'UNKNOWN')}"
             )
         return response
 

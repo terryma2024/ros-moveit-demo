@@ -417,8 +417,10 @@ def run(argv: list[str] | None = None) -> int:
             if request.request_id in consumed_ids:
                 served.append({"request_id": request.request_id, "operation": request.operation,
                                "duplicate": True})
-                return {"ok": False, "code": "DUPLICATE_REQUEST",
-                        "request_id": request.request_id}
+                # A refusal must be a mapping carrying `error`: that is what the v4 server turns
+                # into a non-OK status, and what the Worker's port checks.
+                return {"error": {"code": "DUPLICATE_REQUEST",
+                                  "detail": request.request_id}}
             consumed_ids.add(request.request_id)
 
             detector = models["yolo"]
@@ -443,8 +445,8 @@ def run(argv: list[str] | None = None) -> int:
                     # child; signalling ourselves would destroy the evidence instead of producing it.
                     document["broker_crash"] = {"pid": ready.broker_pid,
                                                 "refused": "BROKER_IS_THIS_PROCESS"}
-                    return {"ok": False, "code": "BROKER_IS_THIS_PROCESS",
-                            "request_id": request.request_id}
+                    return {"error": {"code": "BROKER_IS_THIS_PROCESS",
+                                      "detail": request.request_id}}
                 try:
                     os.kill(ready.broker_pid, signal.SIGKILL)
                     killed = True
@@ -459,8 +461,8 @@ def run(argv: list[str] | None = None) -> int:
                 if not isinstance(serialized, (str, bytes, dict)):
                     # Fail closed with the shape the port checks: an inference that cannot be tied
                     # to a bound request is refused rather than answered.
-                    return {"ok": False, "code": "INVALID_REQUEST",
-                            "request_id": request.request_id}
+                    return {"error": {"code": "INVALID_REQUEST",
+                                      "detail": request.request_id}}
                 return {"ok": True, "request_id": request.request_id, "device": device,
                         "candidates": candidates}
             return {"request_id": request.request_id, "device": device,
