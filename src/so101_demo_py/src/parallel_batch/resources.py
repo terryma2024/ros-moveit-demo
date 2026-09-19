@@ -2641,17 +2641,22 @@ _DEFAULT_RESOURCE_GATE = None
 
 
 def _load_cli_config(path):
-    """Version two is the only new-execution carrier; v1 stays read-only."""
+    """The active execution document: v3 unchanged, v4 added for macOS MPS W2; v1 stays read-only.
+
+    The schema gate lives in one place (`w2_composition.load_execution_config`) so the CLI, this
+    allocator and the offline tests cannot disagree about which documents may execute.
+    """
+
+    from .w2_composition import load_execution_config
 
     try:
-        document = yaml.safe_load(Path(path).read_text(encoding='utf-8'))
-    except (OSError, yaml.YAMLError) as error:
-        raise ResourceAllocationError(f'CONFIG_READ_FAILED: {path}') from error
-    version = document.get('schema_version') if isinstance(document, dict) else None
-    if type(version) is not int or version != 3:
-        raise ResourceAllocationError('CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION')
-    from .contracts import load_parallel_runtime_config_v3
-    return load_parallel_runtime_config_v3(Path(path))
+        return load_execution_config(Path(path))
+    except Exception as error:  # noqa: BLE001 - re-expressed in this module's error vocabulary
+        from .contracts import ContractError
+
+        if isinstance(error, ContractError):
+            raise ResourceAllocationError(str(error)) from error
+        raise
 
 
 def _compose_default_start_guard(config):
