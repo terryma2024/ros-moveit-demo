@@ -514,7 +514,7 @@ def run(argv: list[str] | None = None) -> int:
                             "birth_identity": record.birth_identity})
         document["workers"] = workers
 
-        deadline = time.monotonic() + 300
+        deadline = time.monotonic() + 1500
         results: list[dict] = []
         while time.monotonic() < deadline:
             results = [json.loads((arguments.evidence_root / f"w{i}-result.json").read_text())

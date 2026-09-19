@@ -163,10 +163,44 @@ try:
         results.append({"request_id": response.request_id, "status": response.status,
                         "device": body.get("device"), "candidates": body.get("candidates")})
 
+    # The pick-place half of the Worker: once its station is ready and its round trips are served,
+    # one real point list runs on that station and on the Worker's own ROS domain through the
+    # production batch runner in attach mode, with its own evidence root - so the two slots never
+    # share a batch, a reset epoch or a directory.
+    pick_place = {"requested": False}
+    if station is not None and lease_argument:
+        import subprocess as _subprocess
+
+        from ament_index_python.packages import get_package_prefix as _prefix
+
+        share = Path(_prefix("so101_demo_py")) / "share/so101_demo_py"
+        batch_binary = Path(_prefix("so101_demo_py")) / "lib/so101_demo_py/so101_mujoco_rgbd_batch"
+        pick_root = Path(station_arguments[1]) / "pick"
+        pick_root.mkdir(parents=True, exist_ok=True)
+        pick_place = {"requested": True, "binary": str(batch_binary),
+                      "evidence_root": str(pick_root),
+                      "points": str(share / "config/mujoco/rgbd_task_points.yaml")}
+        if not batch_binary.is_file():
+            pick_place["error"] = "BATCH_BINARY_MISSING"
+        else:
+            mujoco_pid = station.wait_for_descendant("ros2_control_node", 120.0)
+            pick_place["mujoco_pid"] = mujoco_pid
+            completed = _subprocess.run(
+                [str(batch_binary),
+                 "--points", pick_place["points"],
+                 "--batch-id", f"{station_arguments[0]}-pick",
+                 "--session-id", station_arguments[0],
+                 "--evidence-root", str(pick_root),
+                 "--attach-existing-stack", "--mujoco-pid", str(mujoco_pid)],
+                capture_output=True, text=True, env=environment)
+            pick_place["exit_code"] = completed.returncode
+            pick_place["stdout_tail"] = (completed.stdout or "")[-400:]
+            pick_place["stderr_tail"] = (completed.stderr or "")[-400:]
+
     with open(out_path + ".part", "w", encoding="utf-8") as handle:
         json.dump({"worker_id": worker_id, "pid": os.getpid(), "results": results,
                    "station_record": station_record, "infer_results": infer_results,
-               "duplicate_result": duplicate_result}, handle)
+               "duplicate_result": duplicate_result, "pick_place": pick_place}, handle)
         handle.flush()
         os.fsync(handle.fileno())
     os.replace(out_path + ".part", out_path)
