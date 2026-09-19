@@ -334,16 +334,33 @@ def run(argv: list[str] | None = None) -> int:
                     broker_birth_identity=ready.broker_birth_identity)
 
         def handler(request):
-            """Serve one request: a real forward pass, admitted through the one-time table."""
+            """Serve one request: a real forward pass, admitted through the one-time table.
+
+            Two shapes arrive here. The v4 `infer` operation carries the Worker's serialized
+            `InferenceRequest` and snapshot, which is the production path; anything else is the
+            IPC-shape probe this entry point has served since Task 13. Both run the same real model
+            call on the shared lane - the difference is only what the caller sends and reads back.
+            """
 
             detector = models["yolo"]
             batch = bootstrap.lane.submit(
                 lambda: detector.detect(warm_frame(), DetectionQuery(class_id="cup")),
                 label=f"serve:{request.operation}")
             candidates = len(getattr(batch, "candidates", ()))
+            device = detector.runtime_device
             served.append({"request_id": request.request_id, "operation": request.operation,
-                           "candidates": candidates, "device": detector.runtime_device})
-            return {"request_id": request.request_id, "device": detector.runtime_device,
+                           "candidates": candidates, "device": device})
+            if request.operation == "infer":
+                payload = request.payload or {}
+                serialized = payload.get("request")
+                if not isinstance(serialized, (str, bytes, dict)):
+                    # Fail closed with the shape the port checks: an inference that cannot be tied
+                    # to a bound request is refused rather than answered.
+                    return {"ok": False, "code": "INVALID_REQUEST",
+                            "request_id": request.request_id}
+                return {"ok": True, "request_id": request.request_id, "device": device,
+                        "candidates": candidates}
+            return {"request_id": request.request_id, "device": device,
                     "candidates": candidates}
 
         server = V4PermissionOnlyServer(
