@@ -47,6 +47,36 @@ def scope():
     )
 
 
+def test_guard_scope_accepts_only_the_v4_mps_selector_form() -> None:
+    """Schema v4's Darwin combination has no CUDA UUID or index.
+
+    v4 replaced `gpu_device` with the closed platform combination, so the guard scope carries
+    `MPS:default` - the single selector the Darwin contract can resolve. The two CUDA forms stay
+    accepted for v3, and anything else must fail closed.
+    """
+
+    scope = GuardScope(
+        batch_id="mps-t2",
+        epoch=1,
+        owner_pid=os.getpid(),
+        owner_starttime_ticks=4242,
+        gpu_selector="MPS:default",
+        worker_count=2,
+    )
+    assert scope.gpu_selector == "MPS:default"
+
+    for refused in ("MPS:0", "MPS:mps", "MPS:", "mps:default", "UNIFIED:default"):
+        with pytest.raises(ValueError, match="gpu_selector"):
+            GuardScope(
+                batch_id="mps-t2",
+                epoch=1,
+                owner_pid=os.getpid(),
+                owner_starttime_ticks=4242,
+                gpu_selector=refused,
+                worker_count=2,
+            )
+
+
 @pytest.fixture
 def valid_snapshot():
     return ResourceSnapshot(
