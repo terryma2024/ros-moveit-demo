@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ281 (tail of this file)
+latest_checkpoint: CP-UQ282 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -13205,3 +13205,53 @@ it is explicitly **not** the plan's counted five-batch stability: a batch that f
 not a pass, and Task 14 therefore stays 0/5.
 
 _Ledger source HEAD: (this commit's parent); no evidence deleted._
+
+## CP-UQ282 — Five consecutive FULL_RESTART campaigns, each with per-slot pick-place execution
+
+```yaml
+checkpoint_id: CP-UQ282
+last_valid_experiment: EXP-UQ282-FIVE-FULL-RESTART-SERIES
+current_hypothesis: The whole macOS W2 chain - fresh composition, two stations per batch, inference
+  through the port, and a real pick-place batch per slot - repeats across five FULL_RESTART batches.
+  CONFIRMED for everything except the counted pass.
+working_tree_status: clean
+owned_processes: NONE - the series ended with zero processes and zero stations
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - Every point of every batch still fails at TERMINAL_CAPTURE_FAILED (macOS TCC denies Screen
+    Recording to this session). This is an EXTERNAL blocker; it is not a pass and Task 14 stays 0/5.
+next_command: recheck the TCC grant; with it, the same series is the counted 5/5
+```
+
+`EXP-UQ282-FIVE-FULL-RESTART-SERIES: VALID as a repeatability series; NOT a counted five-batch pass.`
+
+### The series
+
+`task14-five-batches-01/summary.txt`, five batches, each composing a fresh claim, campaign IPC root,
+Broker generation, both stations, both Worker sessions and both evidence roots:
+
+```text
+batch 1..5:  exit=7  status=W2_CAMPAIGN_INCOMPLETE  served=8  cleanup=True
+             w1: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+             w2: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+```
+
+- **40 executed point-runs** across the series (5 batches x 2 slots x 4 points), every one reaching
+  MuJoCo `state DONE` with `failure None` and recorded contacts (`table_contact True`, ~0.233 N);
+- per batch, 3 result documents (campaign + both Workers) and 2 station roots, so no batch reused a
+  session, an epoch, a station or an evidence directory;
+- every batch's cleanup was complete and the series ended with **no process and no station left**;
+- the only failure recorded anywhere in the series is `TERMINAL_CAPTURE_FAILED`.
+
+### What this does and does not establish
+
+It establishes that the macOS exact-W2 chain is **repeatable across five consecutive full restarts**,
+now including a real pick-place execution per slot on that slot's own station and domain - which is
+the gap CP-UQ271 named and CP-UQ281 closed.
+
+It does **not** establish the plan's `five_batch_stability=5/5`, because a counted batch must pass and
+every point fails closed on the GUI capture. Task 14 remains **0/5**; the missing piece is the TCC
+grant for Screen Recording, which this session has asked for repeatedly and cannot grant itself.
+`LINUX_REGRESSION_DEFERRED` remains in force.
+
+_Ledger source HEAD: `eb89275e`; no evidence deleted._
