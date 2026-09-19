@@ -12358,3 +12358,30 @@ integration run is the first thing to see a change.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `695169c3`; no evidence deleted._
+
+### CP-UQ269 addendum — test-first scaffolding, and it is explicitly not wired
+
+Following the lesson of the revert, the lease and binding logic now exists as two tested functions in
+`cli/macos_w2_campaign.py`:
+
+```text
+build_worker_leases(*, plan, batch_id, evidence_root, input_sha256) -> dict[str, dict]
+    writes each Worker's lease document + its frame once, and records the identity it owns
+bind_worker_requests(campaign, leases, *, ready, deadline_s=300.0)
+    binds every `{attempt_id}-{model_id}` id the Worker will derive, before anything is served
+```
+
+`task14-lease-helpers-01`: **1 passed** - it asserts the ids the Worker derives, the per-slot domain
+and point assignment, that the lease file on disk matches the returned document, and that the bindings
+carry the Broker identity and input digest.
+`task14-lease-helpers-regression-01`: **34 passed** for the campaign and composition suites.
+
+**These functions are not called by `main()` yet.** That is deliberate and worth stating plainly: the
+previous attempt made the change and the live campaign was the first thing to see it, which cost a
+round and left the mechanism unexplained. The next step is to make `main()` use exactly these
+functions - so the campaign's live run tests wiring, not logic - and to re-run the campaign with the
+orphan check.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `a5efe043`; no evidence deleted._
