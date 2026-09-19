@@ -1155,3 +1155,25 @@ def test_require_v4_execution_refuses_other_versions():
     for request_version, config_version in ((3, 3), (4, 3), (3, 4), (2, 2), (True, 4)):
         with pytest.raises(contracts.ContractError, match="CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"):
             contracts.require_v4_execution(request_version, config_version)
+
+
+def test_schema_v4_declares_the_independent_snapshot_limit():
+    """The snapshot ceiling is its own closed field, separate from the control-frame cap."""
+
+    import so101_demo.parallel_batch.contracts as contracts
+
+    config = contracts.load_parallel_runtime_config_v4(V4_CONFIG_PATH)
+    assert config.max_input_snapshot_bytes == 64 * 1024 * 1024
+    assert config.max_input_snapshot_bytes != config.broker_max_frame_bytes
+    assert config.resolved_manifest()["max_input_snapshot_bytes"] == 64 * 1024 * 1024
+
+    for bad in (0, -1, 1.5, True, "67108864"):
+        document = _v4_document()
+        document["max_input_snapshot_bytes"] = bad
+        with pytest.raises(contracts.ContractError):
+            contracts.parse_parallel_runtime_config_v4(document)
+
+    missing = _v4_document()
+    missing.pop("max_input_snapshot_bytes")
+    with pytest.raises(contracts.ContractError, match="MISSING_CONFIG_FIELD"):
+        contracts.parse_parallel_runtime_config_v4(missing)
