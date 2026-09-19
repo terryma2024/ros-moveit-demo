@@ -8340,3 +8340,54 @@ path, and try to reproduce with the smallest N1 campaign that triggers at least 
 actually reaches a terminal, cleaned-up state.
 
 _Ledger HEAD when written: `fbf7a3cd6`._
+
+## CP-UQ211 — Owned-cleanup correction: my selection method was unsafe, and is retracted
+
+Correction `9cbb34f7-0503-47a4-8764-2fc3905dc6af` (handoff sha256
+`2c3888c24be168c8b53d2b47cc363328527dcac615cd68a2e01759ed3bb1639c`) is accepted in full. Its receipt
+was written first, with `os.open(O_CREAT|O_EXCL|O_WRONLY)`: 37 bytes, UUID + LF, sha256
+`b4ee5bc4f261e0e2f2866dbc7baa3e45b7383c883b207aa138b2133ed2af5592`, and `receipt-facts.json` records
+shell time `2026-09-19 12:51:13 +0800`, HEAD `d15c3272e`, `dirty_entries: 0` and the goal unchanged
+(`goal-e568087d-…`, active, 104/200, armed).
+
+**What I did that the correction forbids.** Three of my cleanups selected targets by host-wide pattern
+match rather than by proven ownership:
+
+1. `pkill -INT -f "[r]os2_control_node"` — twice, while preparing service restarts (before the
+   fault-catalog run and before the stability run).
+2. `for P in $(pgrep -f "[r]os2_control_node"); do kill -TERM $P; done` — in the CP-UQ209 round, whose
+   read-back file happened to show no matched PID at that instant and therefore proved nothing.
+3. `docker ps | grep 0b893cb1528e` then `docker rm -f` — container removal by **image equality**,
+   which the correction names as insufficient.
+
+All three are retracted as methods. Nothing foreign was knowingly stopped, but "nothing bad happened"
+is not the standard; the standard is proven ownership before a signal.
+
+**Correction to CP-UQ209's cleanup facts.** Its "my broker container ... container removed" sentence
+described removals chosen by image match. The ownership of the containers I did remove is now provable
+from inspect files I had saved *before* removing them, and it is my own in every case:
+
+| Container | `com.so101.batch-id` | Evidence-root bind | Campaign |
+| --- | --- | --- | --- |
+| `6d11f06ba026` | `b77d2` | `service-light.s2jytgW3/state/campaigns/campaign-ef973f12…` | the 09:17 N8 retry (CP-UQ198's invalid run) |
+| `faab1d0ad1fe` | `beedb` | `service-light.s2jytgW3/state/campaigns/campaign-376d5580…` | the 05:22 N8 attempt (CP-UQ196) |
+| `e2bb172bd754` | (captured now) | (captured now) | the failed stability batch (CP-UQ209) |
+
+The broker launcher itself sets `--label com.so101.batch-id=<batch id>` and
+`com.so101.broker-generation`, and binds the campaign's `runtime`/`inputs` directories, so **exact**
+ownership is available by label plus evidence-root path — image equality was never necessary.
+
+**The rule I will follow from here**, exactly as the correction states it: candidates come only from
+the current batch/campaign's recorded owned-process manifest or the task-owned
+supervisor/systemd/cgroup; before any signal I re-read and match PID plus `/proc/<pid>/stat` start
+time, PGID/cgroup, campaign/session/domain and the evidence-root path, and all of them must identify
+the current task-owned object. If ownership cannot be proven I record `OWNERSHIP_UNPROVEN` with the
+candidate facts and keep diagnosing instead — never signal. Container removal requires the exact
+container ID recorded by the current campaign plus inspected task labels and state/evidence linkage,
+with inspect and log evidence preserved before removal.
+
+Also carried forward: the stability requirement stays **at 0 of 5 valid batches** until five
+independent terminal, cleaned batches complete; CP-UQ209's `OWNED_GROUP_SURVIVORS` boundary is a real
+open failure and will not be softened or fabricated away.
+
+_Ledger HEAD when written: `d15c3272e`._
