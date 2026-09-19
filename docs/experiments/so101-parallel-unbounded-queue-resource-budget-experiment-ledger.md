@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ275 (tail of this file)
+latest_checkpoint: CP-UQ276 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -12782,3 +12782,72 @@ refused, written down, and the campaign carries on to a complete, orphan-free ru
 behaviour for a switch that must never be able to destroy its own evidence.
 
 _Ledger source HEAD: `cfb2cbb9`; no evidence deleted._
+
+## CP-UQ276 — Task 16: final report and verdict
+
+```yaml
+checkpoint_id: CP-UQ276
+verdict: PARTIAL
+macos_mps_w2_pass: NOT WRITTEN - Task 14 stands at 0/5
+linux_regression: DEFERRED_ENVIRONMENT (CP-UQ272), never run, never reported as PASS/SKIP/N/A
+independent_verdict: OWED - the plan requires gpt-5.6-sol/high; this DST session cannot invoke it, and
+  no substitute model was used
+working_tree_status: clean
+owned_processes: NONE
+```
+
+### What this task delivered, with the evidence that carries it
+
+1. **Frozen v3 + closed schema v4** - the two platform combinations are defined and illegal ones fail
+   closed; v3 semantics are byte-frozen (`task1-*`, `refreeze-*`, `entrypoint-regression-04`, 177
+   passed).
+2. **Darwin MPS admission** - `PYTORCH_ENABLE_MPS_FALLBACK` checked before `import torch`, guard scope
+   built from the resolved accelerator, `unified-memory-proxy` admission, 2 s deadline.
+3. **Durable ownership** - claim, `SPAWNING` intent before spawn, registration ACK before `ACTIVE`,
+   exact-signal only on matching PID and birth identity, exact cleanup. Three consecutive campaigns
+   plus every earlier run ended with zero orphans (`task16-stability-01..03`).
+4. **Permission-only v4 IPC** - private short path, `0700`/`0600`, no token/generation/lease in either
+   direction, bounded queue, stable refusal codes.
+5. **Exact-W2 on macOS** - two Workers, domains 181/182, their own roots; each owns a visible station;
+   both proven `READY` on their own domain before serving (`task14-campaign-ready-08/12/13`).
+6. **Real inference through the port** - `broker.infer` over the v4 socket, one-time admission, real
+   YOLO forward pass on the shared single lane, `device: mps` (`task14-campaign-infer-05`).
+
+### What is missing, stated as precisely as I can
+
+1. **The composition's shape differs from the plan's assumption.** The macOS campaign runs the MPS
+   Broker *in-process* (`broker_pid == os.getpid()`, verified live in `task16-broker-crash-03`) while
+   its Workers are spawned CLI children; the plan (and the Linux path) assumes the opposite - a
+   Supervisor-owned Broker process with an in-process Worker runtime. That single difference is why
+   (a) the pick-place chain is not wired into the Workers and (b) a live Broker-crash + pool-rebuild
+   injection is unreachable here.
+2. **No pick-place batch inside the campaign**, therefore no per-slot MoveIt shadow / controller /
+   MuJoCo contact / placement evidence and no five-batch stability series. One real four-point batch
+   ran outside the campaign and every point failed at `TERMINAL_CAPTURE_FAILED`
+   (`task14-single-batch-01` - its trajectories, contacts and placement are real evidence, but not a
+   counted batch).
+3. **No fresh GUI evidence.** Screen Recording is denied to this session's responsibility chain and
+   stayed denied after the tmux restart (pid 10775); probed repeatedly, most recently
+   `task16-capture-probe-02`. This is a permission the session cannot grant itself.
+4. **Fault evidences** (inference timeout, active-Worker cancel, Broker crash + rebuild) exist only in
+   the IPC shape, never inside a counted campaign, and the Broker-crash one is structurally
+   unreachable per point 1.
+5. **Linux regression** is deferred, so cross-platform validity, CUDA/NVML admission, `proc_fd_unix`,
+   EGL, a real `cuda` Broker device, Linux package/CTest and Linux exact-W2 remain unproven, and any
+   release claim is blocked.
+
+### Evidence classification (Task 16 requirement)
+
+- **retained**: `impl-macos-mps-w2-01/`, `station-build-01/`, `model-artifacts/`, the named campaign
+  and station runs, and this ledger;
+- **archived**: task0/task1 baselines, superseded gates, and everything this session recorded as
+  INVALID (`task11-teleop-01/02`, `task11-openapi-01/02/03`, `task14-campaign-ready-02/03`, `-11`,
+  the capture probes);
+- **deletion candidates, none deleted**: per-run `tmp/` trees, `test-byproducts/`, and the transient
+  IPC campaign directories already removed under `/private/tmp/so101-ipc-501` (runtime residue, not
+  evidence).
+
+Nothing has been pushed, merged or published; no evidence was deleted; no global configuration was
+changed.
+
+_Ledger source HEAD: `47f62e2c`; no evidence deleted._
