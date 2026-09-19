@@ -122,20 +122,22 @@ def test_request_model_uses_the_positional_perception_contract() -> None:
         seen["sent"] = send("yolo", before_send=None)
         return "admitted"
 
-    def request_one(lease, kind, **kwargs):
-        seen["request_one"] = (lease, kind, kwargs["model_id"], kwargs["before_send"])
-        return {"model_id": kwargs["model_id"]}
-
     port = W2BrokerPort(
         coordinator=lambda: BrokerAuthority(True, 1, "/x"),
         authority=BrokerAuthority(True, 1, "/x"),
         config=_Config(),
         client_factory=_factory([]),
     )
+
+    def request_one(lease, kind, **kwargs):
+        seen["request_one"] = (lease, kind, kwargs["model_id"], kwargs["before_send"])
+        return {"model_id": kwargs["model_id"]}
+
+    port.request_one = request_one  # the method the driver's chain reaches through `send`
+
     result = port.request_model(
         "lease", "yolo", snapshot="snap", start_event_id="e1",
-        start_event_type="attempt_started", reset_epoch=1,
-        perception_runner=runner, request_one=request_one,
+        start_event_type="attempt_started", reset_epoch=1, perception_runner=runner,
     )
 
     assert result == "admitted"
@@ -143,10 +145,8 @@ def test_request_model_uses_the_positional_perception_contract() -> None:
     assert seen["sent"] == {"model_id": "yolo"}
     assert seen["request_one"] == ("lease", "yolo", "yolo", None)
 
-    for missing in ({"perception_runner": None}, {"request_one": None}):
-        kwargs = {"perception_runner": runner, "request_one": request_one, **missing}
-        with pytest.raises(W2BrokerPortError):
-            port.request_model(
-                "lease", "yolo", snapshot="snap", start_event_id="e1",
-                start_event_type="attempt_started", reset_epoch=1, **kwargs,
-            )
+    with pytest.raises(W2BrokerPortError, match="PERCEPTION_RUNNER_REQUIRED"):
+        port.request_model(
+            "lease", "yolo", snapshot="snap", start_event_id="e1",
+            start_event_type="attempt_started", reset_epoch=1,
+        )
