@@ -12415,3 +12415,27 @@ That is the next step, and the helpers' test means the entry-point side of it is
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `9b47c64c`; no evidence deleted._
+
+### CP-UQ269 addendum 3 — the port now really calls the Broker, and the contract answers
+
+The Worker reads its lease document and issues three `infer` calls through `W2BrokerPort` against the
+live Broker, in addition to the IPC-shape probes. The campaign passes and the failures are now
+*contract* answers rather than silence:
+
+```text
+task14-campaign-infer-03   status W2_CAMPAIGN_PASS, served 6 (probe shape), orphans []
+w1/w2 infer_results: 3 x {"request_id": "wN-att-NN-yolo", "status": "ERROR",
+                          "error": "ContractError: EMPTY_ID: reset_epoch"}
+```
+
+So the whole path is connected - lease document -> port -> `V4PermissionOnlyClient` -> campaign
+server -> refusal - and the first real request is refused by `InferenceRequest`'s own validation,
+which is the contract doing its job rather than the plumbing failing silently. Two harness mistakes of
+mine were fixed on the way, both worth naming because they cost runs: I inserted the new block in the
+middle of the `try:` I had added earlier (IndentationError), and the block used `Path` while the
+module only imported it locally (NameError, which killed both Workers before they wrote anything).
+Four orphaned station processes from that run were reaped by exact PID.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `c48c0b46`; no evidence deleted._
