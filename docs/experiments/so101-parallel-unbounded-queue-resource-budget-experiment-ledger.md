@@ -12868,3 +12868,23 @@ commit and the local branch is ahead-only. `main` was never merged, no second wo
 session or goal was created, and every commit in this stretch is scoped to the files a task named.
 
 _Ledger source HEAD: `48304291`; no evidence deleted._
+
+### CP-UQ276 addendum 2 — index of the package, web and install gates
+
+```text
+task11-buninstall-01             exit_code=0 elapsed_s=0 finished_utc=2026-09-19T13:50:36Z 
+task11-webtypes-05               exit_code=0 elapsed_s=1 finished_utc=2026-09-19T13:50:43Z 
+task11-web-unit-01               exit_code=0 elapsed_s=1 finished_utc=2026-09-19T13:51:07Z 
+task11-web-build-01              exit_code=0 elapsed_s=2 finished_utc=2026-09-19T13:51:03Z 
+task11-openapi-04                exit_code=0 elapsed_s=0 finished_utc=2026-09-19T13:50:07Z 
+task12-fresh-build-02            exit_code=0 elapsed_s=2 finished_utc=2026-09-19T13:59:03Z 
+task12-package-gate-01           exit_code=1 elapsed_s=88 finished_utc=2026-09-19T14:00:47Z 
+task12-copied-install-02         exit_code=0 elapsed_s=1 finished_utc=2026-09-19T14:02:25Z 
+task12-served-bytes-01           exit_code=0 elapsed_s=0 finished_utc=2026-09-19T14:03:14Z 
+source-gate-after-path-fix-01    exit_code=1 elapsed_s=85 finished_utc=2026-09-19T13:43:32Z 
+```
+
+Each line is the run's own exit code and elapsed time from the registered evidence root; the
+commands, provenance and JUnit/CTest artefacts sit beside them in the same directories.
+
+_Ledger source HEAD: (this commit's parent); no evidence deleted._
