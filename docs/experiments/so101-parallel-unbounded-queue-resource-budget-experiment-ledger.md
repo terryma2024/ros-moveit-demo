@@ -13569,3 +13569,22 @@ pre-fix evidence stays where it is, and the post-fix series will be the one cite
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `a4997a5d`; no evidence deleted._
+
+### CP-UQ283 addendum 3 — the post-fix series, batches as they finish
+
+```text
+batch 1: exit=7 status=W2_CAMPAIGN_INCOMPLETE served=14 cleanup=True
+    w1: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+    w2: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+batch 2: exit=7 status=W2_CAMPAIGN_INCOMPLETE served=14 cleanup=True
+    w1: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+    w2: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+```
+
+The visible difference from the pre-fix series is `served`: **14** per batch instead of 8, because
+the six inferences per batch are now really served (6 probe + 6 infer + 2 duplicate refusals).
+Everything else is unchanged: both slots execute all four points, cleanup is complete, and every
+point still fails only at TERMINAL_CAPTURE_FAILED. This series, not the earlier one, is the set to
+cite once it completes; Appendix A will be replaced with these numbers.
+
+_Ledger source HEAD: (this commit's parent); no evidence deleted._
