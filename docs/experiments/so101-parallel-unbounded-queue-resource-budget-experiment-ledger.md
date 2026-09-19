@@ -13803,3 +13803,29 @@ Verdict: **`PARTIAL`**, with the gaps above named precisely. Nothing was pushed,
 no evidence was deleted; no Linux gate was run or reported as PASS/SKIP/N/A.
 
 _Ledger source HEAD: (this commit's parent); no evidence deleted._
+
+### CP-UQ286 addendum — cancellation evidence at the admission level
+
+The campaign can now cancel a Worker's outstanding requests, and the admission rule refuses a
+cancelled id **whether or not it was ever consumed** - the safety-cancel property the design places in
+the Coordinator. Probed live with `--cancel-second-worker-after-served 4`:
+
+```text
+task16-cancel-01   status W2_CAMPAIGN_INCOMPLETE | served 10 | devices ['mps']
+                   cancelled_ids: ['w2-att-00-yolo', 'w2-att-01-yolo', 'w2-att-02-yolo']
+  w1: [OK, OK, OK]
+  w2: [ERROR CANCELLED, ERROR CANCELLED, ERROR CANCELLED]
+```
+
+So the second Worker's three inferences were all refused with `CANCELLED` while the first Worker's
+proceeded: a cancelled request's result is forfeit rather than admitted. `admission-rule-02` covers the
+branch offline (suite at 17 passed), including the "cancelled after consumption" ordering.
+
+Scope, stated so it is not overread: this is **admission-level** cancellation - fence and result
+forfeit. The plan's fuller item also asks for a *controller goal* to be cancelled and its absence
+confirmed; no motion runs in this probe, so that half remains open together with the other fault
+evidences (CP-UQ285's matrix).
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `47426003`; no evidence deleted._
