@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ267 (tail of this file)
+latest_checkpoint: CP-UQ268 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -12144,3 +12144,55 @@ records the outcome, and refuses to serve without it.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `bc26f324`; no evidence deleted._
+
+## CP-UQ268 — Both W2 Workers now own a READY station on their own domain
+
+```yaml
+checkpoint_id: CP-UQ268
+last_valid_experiment: EXP-UQ268-W2-CAMPAIGN-READY-STATIONS
+current_hypothesis: With a runner that keeps the station chain intact, the campaign's Workers can
+  reach the ready contract before serving. CONFIRMED for both slots.
+working_tree_status: clean - harness runner only, no product change in this round
+owned_processes: NONE - supervisor cleanup, 0 processes left
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - The Workers still serve round trips rather than inference through `W2BrokerPort`; the port is
+    written and tested but not yet bound.
+  - Screen Recording is still denied, so per-point GUI capture and any counted batch remain blocked.
+next_command: bind `W2BrokerPort` into the Worker and make its round trips real inferences
+```
+
+`EXP-UQ268-W2-CAMPAIGN-READY-STATIONS: VALID`
+
+### The run
+
+`task14-campaign-ready-08/`:
+
+```text
+status : W2_CAMPAIGN_PASS        cleanup complete
+
+w1 | station ready: True  phase READY  ROS_DOMAIN_ID 181  round trips 3  failure None
+     controllers: arm_controller active, gripper_controller active,
+                  joint_state_broadcaster active
+w2 | station ready: True  phase READY  ROS_DOMAIN_ID 182  round trips 3  failure None
+     controllers: arm_controller active, gripper_controller active,
+                  joint_state_broadcaster active
+```
+
+That is the structural chain Task 14 needs, end to end and in one process tree: exact W2, a visible
+station per slot, **each on its own ROS domain**, **each proven ready before it serves**, one shared
+MPS Broker with one-time admission, and exact cleanup by the supervisor.
+
+### Why it works now, and what that says about the earlier failures
+
+The only change was the runner: `run-w2-campaign.sh` sources the validated chain
+(underlay -> `extra_ws` -> this branch's station install), refuses any surviving canonical prefix,
+and - unlike the pytest gate runner - leaves the station install's `site-packages` on `PYTHONPATH`,
+so an installed console script can find its own distribution. CP-UQ267's two failures were therefore
+both harness-shaped: one was the environment guard refusing a canonical prefix (correct), the other
+my pytest runner deleting what a launched station needs.
+
+Task 14 remains 0/5: no pick-place has run inside a campaign, the Workers' inference still goes
+through the bare client rather than the port, and `LINUX_REGRESSION_DEFERRED` is retained.
+
+_Ledger source HEAD: `8fe50f43`; no evidence deleted._
