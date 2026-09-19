@@ -54,7 +54,7 @@ def make(tmp_path):
 
     def factory(
         points=('p1', 'p2'), workers=1, k=3, mode=RunMode.EXECUTE,
-        *, point_selector=None, adaptive=False,
+        *, point_selector=None, adaptive=False, start_guard=None,
     ):
         module = importlib.import_module('so101_demo.parallel_batch.coordinator')
         root = tmp_path / str(len(journals))
@@ -68,7 +68,7 @@ def make(tmp_path):
             # adaptive pool contract no longer carries a lifetime quota.
             request = _new_pool_request_for_production_factory(
                 batch_id='batch-a', run_mode=mode, selected_point_ids=points,
-                worker_count=workers, evidence_root=root,
+                worker_count=workers, evidence_root=root, start_guard=start_guard,
             )
         else:
             # Fixed execution migrated to the version-two no-quota contract; the retained
@@ -1089,3 +1089,30 @@ def test_one_worker_consumes_twenty_without_lifetime_quota(make):
     assert snapshot.workers['w1'].generation == generation == 20
     assert generations == list(range(1, 21))
     assert snapshot.workers['w1'].state == WorkerState.RECOVERING
+
+
+def test_batch_started_document_excludes_the_start_guard(make):
+    """The journal payload is canonical JSON, so a runtime guard handle cannot travel in it.
+
+    Threading the prepared guard into the pool request -- the fix for `START_GUARD_UNAVAILABLE` --
+    first broke every adaptive pool at `BATCH_STARTED` with `TypeError: Object of type
+    EpochStartGuard is not JSON serializable`, because the coordinator freezes `asdict(request)`
+    into the event.  The guard has to reach the allocator without entering the journal, and the
+    frozen request must keep exactly the identity the resume check compares.
+    """
+
+    class _SentinelGuard:
+        """Stands in for the composed guard; only its presence in (or absence from) JSON matters."""
+
+    coordinator, _clock, _results, journal, request = make(
+        points=('p1',), workers=1, k=1, adaptive=True, start_guard=_SentinelGuard(),
+    )
+    assert request.start_guard is not None
+
+    events = journal.replay().events
+    started = next(event for event in events if event.type == 'BATCH_STARTED')
+    frozen = started.payload['delta']['request']
+    assert 'start_guard' not in frozen
+    # The rest of the identity is unchanged, so a resumed batch still matches its own document.
+    assert frozen['batch_id'] == request.batch_id
+    assert frozen['worker_count'] == request.worker_count
