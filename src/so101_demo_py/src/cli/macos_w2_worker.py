@@ -70,9 +70,21 @@ if len(station_arguments) == 3:
     station_ready["exit_code"] = completed.returncode
     station_ready["ros_domain_id"] = station_domain
 
+station_record = {"requested": bool(station_arguments), "ready": station_ready}
+if station_arguments and (station_ready or {}).get("exit_code") != 0:
+    # Fail closed: a Worker must not serve a station whose ready contract did not pass, and the
+    # refusal is written down rather than only exiting, so the evidence says why.
+    payload = {"worker_id": worker_id, "pid": os.getpid(), "station_record": station_record,
+               "failure_code": "STATION_NOT_READY", "results": []}
+    with open(out_path + ".part", "w", encoding="utf-8") as handle:
+        json.dump(payload, handle)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(out_path + ".part", out_path)
+    raise SystemExit("STATION_NOT_READY")
+
 client = V4PermissionOnlyClient(endpoint_path=endpoint)
 results = []
-station_record = {"requested": bool(station_arguments), "ready": station_ready}
 for index in range(3):
     response = client.call("worker.progress", {"worker_id": worker_id, "index": index},
                            request_id=f"{worker_id}-req-{index:02d}")
@@ -81,7 +93,8 @@ for index in range(3):
                     "device": body.get("device"), "candidates": body.get("candidates")})
 
 with open(out_path + ".part", "w", encoding="utf-8") as handle:
-    json.dump({"worker_id": worker_id, "pid": os.getpid(), "results": results}, handle)
+    json.dump({"worker_id": worker_id, "pid": os.getpid(), "results": results,
+               "station_record": station_record}, handle)
     handle.flush()
     os.fsync(handle.fileno())
 os.replace(out_path + ".part", out_path)
