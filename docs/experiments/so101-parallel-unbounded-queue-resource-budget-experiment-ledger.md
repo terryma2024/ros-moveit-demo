@@ -13442,3 +13442,33 @@ change, and it is a correction to my harness rather than to the protocol.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `f1fab771`; no evidence deleted._
+
+### CP-UQ282 addendum 5 — three explanations disproved; the anomaly needs one more probe
+
+```text
+task16-snapshot-mismatch-04   served 8, devices ['mps'], handlers_joined True
+                              w1/w2 infer: BROKER_INFER_REFUSED: INTERNAL_ERROR
+                              handler_errors: still empty
+```
+
+The evidence race is now disproved as well, because the campaign waits for in-flight handlers before
+writing the document (`server.join_workers(30.0)`, recorded as `handlers_joined: True` - a change worth
+keeping in its own right, since it is what makes any later handler-side record trustworthy).
+
+Three explanations have now been eliminated for the `INTERNAL_ERROR` the Workers receive for a
+tampered snapshot:
+
+1. the handler raised - the recorder would hold it;
+2. the handler returned a non-mapping - the new guard would hold it;
+3. the record was made after the document was sealed - handlers are now joined first.
+
+What is left is a gap in my instrumentation, not a conclusion: I have never printed what the **server**
+actually sent or what its `rejections` list holds. The next probe is therefore concrete and small -
+record, in the campaign document, the server's `rejections` and the raw status/error of each response
+the Workers received - and only then decide whether this is a protocol defect or an artefact of the
+tamper probe. Until that is done, the honest statement is: **the tampered inference is refused (fail
+closed), the refusal code is not the specific one, and the reason is not yet known.**
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `6a67b0e0`; no evidence deleted._
