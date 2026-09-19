@@ -8226,3 +8226,35 @@ then `$TASK_ROOT/tools/final-gates.sh` (package/Web/OpenAPI/CTest, served bytes 
 multiset) once no campaign is using the sim.
 
 _Ledger HEAD when written: `91e03a9ae`._
+
+## CP-UQ207 — The retry needs a genuine failure, and the product forbids injecting one by catalog
+
+Correction item 4 asks for the single-point failure retry through the real `SEQUENTIAL` N1
+`FULL_RESTART` workflow. The driver is ready (CP-UQ203) but it needs a **genuine valid failure**, and
+this round established that the product deliberately makes one unavailable by configuration:
+
+- I built a task-owned catalog with one anchor out of reach and started the service with it through the
+  product's own `SO101_VALIDATION_POINTS` (verified inside the running process). Manifest generation
+  then refused with **`409 VALIDATION_MANIFEST_CATALOG_MISMATCH`** — reproduced directly against the
+  API. The reason is a real integrity property, not an accident: `load_baseline_catalog()` requires the
+  installed catalog to hash to the frozen `CATALOG_SHA256` (`POINT_CATALOG_HASH_MISMATCH` otherwise),
+  while `freeze_manifest_context` compares the identity's catalog hash with the selection's. A changed
+  catalog is therefore rejected before any campaign exists.
+- Nothing else in the product injects a valid failure: the control channel offers only `STATUS` and
+  `CANCEL_BATCH`, and `SO101_VALIDATION_ADAPTIVE_FAULT_INJECTION` is a *capability flag* for the
+  scripted suite (`executor_registry`), not a live fault injector.
+
+So a live retry is *conditional on the sim genuinely failing a point*, which twenty-plus campaigns
+have not done here. I am recording that as the outcome rather than manufacturing a failure: the
+`retry-full-restart` project stays in place, fails loudly with the point statuses when no eligible
+failure exists, and will run the moment one appears — including inside the five-batch stability
+record. The workflow's own product behaviour is meanwhile covered by the plan's installed suite
+(`contract/retry-and-lease.spec.ts`, C17: only a valid failure is retry-eligible, the retry is a
+`FULL_RESTART` attempt with its own statistics) and by the code path this audit read:
+`supervisor.start_retries` builds `FixedExecutionConfig("SEQUENTIAL", 1)` with
+`batch_kind = FULL_RESTART_RETRY` under a fresh `retry-00N` batch root.
+
+The service is being returned to the standard catalog now, and the next block is the five consecutive
+valid physical batches at N1 / 20 points.
+
+_Ledger HEAD when written: `52300e598`._
