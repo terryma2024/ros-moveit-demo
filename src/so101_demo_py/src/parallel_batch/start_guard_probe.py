@@ -450,6 +450,11 @@ class ProbeCoordinator:
                     "ram_minimum_bytes": policy.ram_minimum_bytes,
                     "ram_minimum_fraction": policy.ram_minimum_fraction,
                     "gpu_minimum_bytes": policy.gpu_minimum_bytes,
+                    # Schema v4 discriminator: the Darwin policy carries an MPS headroom floor,
+                    # which tells the helper it is probing the unified-memory accelerator rather
+                    # than an NVIDIA device. A v3 policy leaves it None and the helper keeps its
+                    # NVML path unchanged.
+                    "mps_minimum_headroom_bytes": policy.mps_minimum_headroom_bytes,
                 },
                 "scope": {
                     "batch_id": scope.batch_id,
