@@ -13255,3 +13255,24 @@ grant for Screen Recording, which this session has asked for repeatedly and cann
 `LINUX_REGRESSION_DEFERRED` remains in force.
 
 _Ledger source HEAD: `eb89275e`; no evidence deleted._
+
+### CP-UQ282 addendum — the per-slot evidence is now part of the campaign's own document
+
+`task14-perslot-summary-01` verifies the new `per_slot_pick_place` field:
+
+```text
+status W2_CAMPAIGN_INCOMPLETE
+  w1 | executed 4 | manifests 4 | point_results 4 | failures ['TERMINAL_CAPTURE_FAILED']
+       sample contact: {point 01-task_start, simulation_step 34737, table_contact True,
+                        max_normal_force_n 0.23299}
+  w2 | executed 4 | manifests 4 | point_results 4 | failures ['TERMINAL_CAPTURE_FAILED']
+       sample contact: {point 01-task_start, simulation_step 34871, table_contact True,
+                        max_normal_force_n 0.23292}
+```
+
+So each slot's execution count, its evidence root, its failure codes and its contact records are now
+readable from the campaign result itself, beside `served`, `cleanup` and `broker_crash` - no directory
+walking required to see whether both slots did their work. GUI capture remains the external blocker;
+Task 14 stays 0/5 and `LINUX_REGRESSION_DEFERRED` stands.
+
+_Ledger source HEAD: `b9bda5bf`; no evidence deleted._
