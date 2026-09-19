@@ -155,10 +155,23 @@ for (const entry of executions) {
       }
     }
 
-    // The batch on disk knows the same identity and finished its own cleanup.
+    // The batch on disk knows the same identity and finished its own cleanup.  The coordinator
+    // path records `cleanup-gates.json`; the adaptive wrapper records its pool's cleanup receipt
+    // under the runtime root, including the ROS domain ids it released.
     expect(projection.batch_id).toBeTruthy();
-    expect(readFileSync(join(batchRoot, "cleanup-gates.json"), "utf8")).toContain(
-      "batch_cleanup_complete",
-    );
+    if (entry.mode === "ADAPTIVE") {
+      const receipt = JSON.parse(
+        readFileSync(
+          join(batchRoot, "r", projection.batch_id, "cleanup-receipt.json"),
+          "utf8",
+        ),
+      ) as { cleanup_complete?: boolean; released_domain_ids?: number[] };
+      expect(receipt.cleanup_complete).toBe(true);
+      expect(receipt.released_domain_ids?.length ?? 0).toBeGreaterThan(0);
+    } else {
+      expect(readFileSync(join(batchRoot, "cleanup-gates.json"), "utf8")).toContain(
+        "batch_cleanup_complete",
+      );
+    }
   });
 }
