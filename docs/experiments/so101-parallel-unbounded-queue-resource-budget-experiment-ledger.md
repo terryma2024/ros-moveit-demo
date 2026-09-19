@@ -13413,3 +13413,32 @@ reachable from a well-formed request - rather than another round of probe-and-gu
 next step; Task 14 remains 0/5 and `LINUX_REGRESSION_DEFERRED` stands.
 
 _Ledger source HEAD: `95893461`; no evidence deleted._
+
+### CP-UQ282 addendum 4 — the anomaly is now in my instrumentation, not in the handler
+
+The non-mapping guard did not fire either:
+
+```text
+task16-snapshot-mismatch-03   served 8, devices ['mps']
+                              w1/w2 infer: BROKER_INFER_REFUSED: INTERNAL_ERROR
+                              handler_errors: no records at all
+```
+
+So neither of the handler-side causes the server can turn into INTERNAL_ERROR is present: my handler did
+not raise (the recorder would have logged it) and it did not return a non-mapping (the new guard would
+have logged that). Meanwhile the client still received `status: INTERNAL_ERROR`, which the server can
+only emit from `_send_error(..., INTERNAL, ...)`.
+
+The explanation that fits - and it is about **my** code, not the server's - is a race in the evidence:
+the campaign's main thread writes `campaign-result.json` as soon as both Worker result files appear,
+while those handlers may still be running. The tampered inferences fail fast, the Workers finish, the
+document is serialised, and any handler-side record made after that moment never reaches the file. The
+same race explains why the stall probe (CP-UQ278 addendum 4) also came back with an empty recorder.
+
+The fix is the one the server already offers: **`join_workers(timeout_s)` before the document is
+written**, so the evidence cannot be closed while handlers are still in flight. That is the next
+change, and it is a correction to my harness rather than to the protocol.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `f1fab771`; no evidence deleted._
