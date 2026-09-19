@@ -141,7 +141,14 @@ def _require_gpu_selector(value: object) -> str:
         if not body.isdigit():
             raise ValueError("gpu_selector INDEX must be a non-negative integer")
         return value
-    raise ValueError("gpu_selector must be UUID:<uuid> or INDEX:<index>")
+    if kind == "MPS":
+        # Schema v4's Darwin combination has no CUDA UUID or index: the accelerator is the
+        # unified-memory MPS device, and the closed contract only ever resolves it to `default`.
+        # The two CUDA forms above stay byte-identical, so v3 behaviour is untouched.
+        if body != "default":
+            raise ValueError("gpu_selector MPS must be the resolved default accelerator")
+        return value
+    raise ValueError("gpu_selector must be UUID:<uuid>, INDEX:<index> or MPS:default")
 
 
 @dataclass(frozen=True)
