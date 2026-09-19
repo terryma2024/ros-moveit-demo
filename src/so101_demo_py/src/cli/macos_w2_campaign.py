@@ -454,7 +454,14 @@ def run(argv: list[str] | None = None) -> int:
                 })
                 raise
 
+        #: The operations this composition implements. Anything else must be refused: the previous
+        #: handler served *every* operation by running a model call, which would silently answer an
+        #: unimplemented request (a cancellation, say) with a plausible-looking inference.
+        implemented_operations = frozenset({"broker.infer", "worker.progress", "worker.result"})
+
         def _serve(request):
+            if request.operation not in implemented_operations:
+                return {"error": {"code": "UNKNOWN_OPERATION", "detail": request.operation}}
             detector = models["yolo"]
             batch = bootstrap.lane.submit(
                 lambda: detector.detect(warm_frame(), DetectionQuery(class_id="cup")),
