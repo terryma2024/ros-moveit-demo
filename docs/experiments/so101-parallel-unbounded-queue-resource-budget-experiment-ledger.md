@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ258 (tail of this file)
+latest_checkpoint: CP-UQ259 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -11174,3 +11174,66 @@ That is the eighth gate's specification, and it is portable because it reads fil
 table instead of `/proc`. Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `ad2a525c`; no evidence deleted._
+
+## CP-UQ259 — Exact W2 now allocates two real Workers on macOS
+
+```yaml
+checkpoint_id: CP-UQ259
+last_valid_experiment: EXP-UQ259-W2-WORKERS-ALLOCATED
+current_hypothesis: With the eight v3/Linux assumptions replaced, the v4 document allocates exact
+  W2 on Darwin. CONFIRMED - two Workers, two domains, two worker roots.
+working_tree_status: clean at commit 823ce3c3
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - The allocation is proven; nothing downstream of it has run yet (no station, no Broker, no batch).
+  - Screen Recording is still denied to this session, so Task 14 batches remain blocked.
+next_command: build the macOS W2 simulation composition on top of allocated resources (map steps 2-4)
+```
+
+`EXP-UQ259-W2-WORKERS-ALLOCATED: VALID` for allocation.
+
+### The result
+
+`task14-w2-resources-green-17/`:
+
+```text
+worker-01  slot_index 1  ROS_DOMAIN_ID 181  generation 1
+           worker_root <run>/resources/workers/worker-01
+worker-02  slot_index 2  ROS_DOMAIN_ID 182  generation 1
+           worker_root <run>/resources/workers/worker-02
+```
+
+Two Workers, two distinct domains, two distinct roots and two distinct session ids - the resource
+half of CP-UQ253's map step 1, on the Darwin MPS document, with the guard admission `PASS` through
+the `unified-memory-proxy` kind.
+
+### What it took
+
+Eight v3/Linux assumptions, each found by a live refusal rather than by reading:
+
+| # | Assumption | Fixed by |
+| --- | --- | --- |
+| 1 | allocator accepted only v1/v2/v3 config types | `84f217cc` |
+| 2 | policy ceiling taken from the frozen `max_worker_count` (8) vs two domains | `84f217cc` |
+| 3 | guard scope device from the v3 `gpu_device` | `7a400133` |
+| 4 | guard selector forms were CUDA-only (`UUID:`/`INDEX:`) | `7a400133` + `6bfa9343` test |
+| 5 | accelerator probe merged into, rather than replacing, the NVML check | `320df6a0`, `cc992945` |
+| 6 | claim root defaulted to `/run/user/<uid>` | probe-side `claim_root` |
+| 7 | transport rule required the Linux dirfd form | `feaebb21` |
+| 8 | live-domain probe read `/proc` | `823ce3c3` |
+
+Two of those rounds are worth remembering for how they went: the psutil process-environment scan was
+implemented, run, and **reverted** because macOS denies same-UID environment reads (CP-UQ258
+addendum), and the portable replacement had to dodge a self-conflict trap - the allocator holds its
+own claim flock before the collision check runs, so the check reads the recorded owner instead of
+trying the lock.
+
+Regression: `task14-domain-claim-regression-01` - 175 passed, 45 failed, the 45 being exactly the
+pre-existing environmental failures of `test_parallel_batch_resources.py` (A/B: 45 failed / 47-48
+passed with and without changes). No new failure.
+
+Task 14 remains 0/5: no station has been started from this allocation, no Broker, no batch, and
+`LINUX_REGRESSION_DEFERRED` is retained.
+
+_Ledger source HEAD: `823ce3c3`; no evidence deleted._
