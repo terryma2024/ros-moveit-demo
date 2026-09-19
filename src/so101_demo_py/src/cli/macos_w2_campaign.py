@@ -53,7 +53,7 @@ _WORKER_MODULE = "so101_demo.cli.macos_w2_worker"
 
 
 def build_worker_leases(*, plan, batch_id: str, evidence_root: Path,
-                         input_sha256: str) -> dict[str, dict]:
+                         input_sha256: str, deadline_s: float = 240.0) -> dict[str, dict]:
     """Write each Worker's lease document and the frame it is told to send.
 
     The entry point knows both ends of the identity it binds, so it writes the identity down and
@@ -76,6 +76,8 @@ def build_worker_leases(*, plan, batch_id: str, evidence_root: Path,
             "snapshot_path": str(evidence_root / f"{worker_id}-frame.npy"),
             "input_sha256": input_sha256, "source_stamp_ns": 1_000_000_000,
             "source_frame_id": "task_camera_frame", "shape": [480, 640, 3],
+            # The Worker's v4 client deadline; a fault probe shortens it instead of waiting 240 s.
+            "deadline_s": float(deadline_s),
             "start_event_type": "attempt_started",
         }
         frame_path = Path(document["snapshot_path"])
@@ -120,6 +122,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--evidence-root", type=Path, required=True)
     parser.add_argument("--yolo-weights", type=Path, required=True)
     parser.add_argument("--grounded-root", type=Path, required=True)
+    parser.add_argument("--stall-serve-after", type=int, default=0,
+                        help="fault injection: delay this request's answer beyond the Worker's "
+                             "deadline, so a timeout must be refused rather than admitted")
+    parser.add_argument("--worker-deadline-s", type=float, default=240.0)
     parser.add_argument("--crash-broker-after-served", type=int, default=0,
                         help="fault injection: signal the owned Broker child exactly once, after "
                              "this many served requests (0 disables it)")
@@ -386,7 +392,7 @@ def run(argv: list[str] | None = None) -> int:
         # ids the Worker derives (both functions are unit-tested in test_macos_w2_campaign.py).
         leases = build_worker_leases(
             plan=plan, batch_id=arguments.batch_id, evidence_root=arguments.evidence_root,
-            input_sha256=input_digest)
+            input_sha256=input_digest, deadline_s=arguments.worker_deadline_s)
         bind_worker_requests(campaign, leases, ready=ready)
         # The IPC-shape probe ids stay bound while the Worker still serves that shape, so this
         # change cannot silently refuse the requests the previous gate proved.
@@ -401,6 +407,7 @@ def run(argv: list[str] | None = None) -> int:
                     broker_birth_identity=ready.broker_birth_identity)
 
         consumed_ids: set[str] = set()
+        infer_served = 0
 
         def handler(request):
             """Serve one request: a real forward pass, admitted through the one-time table.
@@ -422,6 +429,14 @@ def run(argv: list[str] | None = None) -> int:
                 return {"error": {"code": "DUPLICATE_REQUEST",
                                   "detail": request.request_id}}
             consumed_ids.add(request.request_id)
+
+            if request.operation == "broker.infer":
+                infer_served += 1
+            if (arguments.stall_serve_after
+                    and infer_served == arguments.stall_serve_after):
+                # Fault injection: hold the answer past the Worker's deadline. The client must
+                # refuse on timeout - an inference that never arrived cannot be admitted.
+                time.sleep(max(0.0, arguments.worker_deadline_s) + 2.0)
 
             detector = models["yolo"]
             batch = bootstrap.lane.submit(
