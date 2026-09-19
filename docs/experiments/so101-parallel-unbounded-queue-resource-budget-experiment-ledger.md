@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ229 (tail of this file)
+latest_checkpoint: CP-UQ230 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -55,7 +55,7 @@ current_design: docs/superpowers/specs/2026-09-19-so101-macos-mps-private-ipc-de
   SHA-256 480da6dcdfea1da988f9f4e706c8340dbb6d7283200c27bb723859119145db1b
 current_worktree: /Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini
 current_branch: codex/so101-unbounded-queue-resource-budget (HEAD b55c181e at takeover)
-next_experiment: Task 1 RED - closed schema-v4 macOS MPS W2 contracts
+next_experiment: Task 2 RED - Darwin MPS AcceleratorProbe and lightweight start guard
 correction_cp_uq229: the header's `worktree`, `evidence_root` and `task_root` fields describe the
   historical ai-station Stage A-E dispatch (`84620fc0`) and are not rewritten, because that history
   is not invalidated. The live dispatch, worktree and evidence root for the current macOS MPS/private
@@ -9052,3 +9052,53 @@ Nothing was deleted, archived, pushed, or published. No W4/W6/W8 run, no Linux c
 ai-station operation, and no real-hardware action occurred in this checkpoint.
 
 _Ledger source HEAD: `b55c181e` (worktree clean apart from this checkpoint)._
+
+## CP-UQ230 — Schema v4 is a closed platform combination; schema v3 is byte-frozen
+
+`checkpoint_id: CP-UQ230`
+`last_valid_experiment: EXP-UQ230-TASK1-V4-CONTRACT`
+`commit: 668ddb59 feat(so101): add closed macOS MPS W2 schema v4`
+
+`EXP-UQ230-TASK1-V4-CONTRACT: VALID`
+
+RED (`task1-red-01/`, exit 1, **31 failed, 1 passed, 57 deselected**): every failure was the
+absence of v4, not a product assertion. Twenty-seven were `FileNotFoundError` for the not-yet
+created v4 YAML, four were `AttributeError` for the missing v4 names, and one was the genuine
+pre-change product fact that v3 `requested_device` must be `cuda`. The single pass was
+`test_schema_v3_bytes_are_frozen_by_the_v4_work`, i.e. the v3 freeze already held.
+
+GREEN (`task1-green-09/`, exit 0, **33 passed, 57 deselected**), then the whole file
+(`task1-full-01/`, exit 0, **90 passed, 0 failed, 0 errors**). `task1-green-01/` … `-08/` are the
+intermediate cycles while the v4 field split was being settled; `-01`/`-02` failed on the closed
+mapping (a field moved to the top level was still required inside `execution`), `-03` on a
+read-only property, `-04`/`-05` on frozen-value bookkeeping, `-06`/`-07`/`-08` on the Linux
+combination still carrying Darwin-only pins. They are retained as iteration evidence.
+
+What v4 now is:
+
+- exactly two closed combinations — Linux `cuda + proc_fd_unix + egl` and Darwin
+  `mps + darwin_private_path_unix + cgl`. Anything else, including an unknown `mujoco_gl`, is
+  `PLATFORM_COMBINATION_UNSUPPORTED`;
+- exact `worker_count == 2`; `1, 3, 4, 6, 8` all return `PLATFORM_WORKER_COUNT_UNSUPPORTED`;
+- `allow_cpu_fallback` must be exactly `False`; `requested_device: cpu` is refused;
+- `mps_process_memory_fraction` must be a real number in `(0, 1]` (bools and numeric strings are
+  refused, not coerced) and is refused outright on the Linux combination;
+- `mps_minimum_headroom_bytes` must be a positive int, is required on Darwin and refused on Linux,
+  so an MPS threshold cannot be smuggled into the CUDA document;
+- `ipc_transport: auto` resolves to `darwin_private_path_unix` on Darwin and `proc_fd_unix`
+  otherwise, and `resolved_manifest()` never reports `auto`;
+- the v3 surface is untouched: the v3 YAML SHA-256 is still
+  `991b5c1b4fbd0cc1f0a97bd20a5b5a4e02028634f3f4ef288ad87554b383ab70`, its 38 execution fields and
+  5 guard fields are unchanged, and no `accelerator`/`ipc_transport` field exists on
+  `ParallelRuntimeConfigV3`.
+
+`StartGuardPolicy` gained `mps_minimum_headroom_bytes: int | None = None`. The default keeps every
+existing v3 construction byte-identical, `START_GUARD_FIELDS` is unchanged so v3 still refuses the
+key, and the v3 guard gate was re-run under Task 0 to confirm it. The full contracts file is green
+(90 passed), which is the file's own v1–v3 history included.
+
+One contract decision worth recording, because it is a narrowing a reviewer should see: v4 requires
+`ros_domain_ids` to have exactly `worker_count` entries, so the Darwin v4 document configures two
+domains (`181, 182`). That is the exact-W2 isolation choice, not a new budget mechanism.
+
+_Ledger source HEAD: `668ddb59`; worktree clean; no evidence deleted._
