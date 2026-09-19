@@ -13,7 +13,7 @@ ack_path, endpoint, worker_id, out_path = sys.argv[1:5]
 
 #: Optional station arguments. Absent means the IPC-only Worker every earlier campaign used;
 #: present means this Worker also owns a visible station, started from the validated chain.
-station_arguments = sys.argv[5:7]
+station_arguments = sys.argv[5:8]
 
 from so101_demo.runtime.parallel_ipc_v4 import V4PermissionOnlyClient
 
@@ -26,19 +26,53 @@ with open(ack_path + ".part", "w", encoding="utf-8") as handle:
 os.replace(ack_path + ".part", ack_path)
 
 station = None
-if len(station_arguments) == 2:
+station_ready = None
+if len(station_arguments) == 3:
     # Station ownership belongs to the Worker that will use it, and the environment comes from the
     # product guard: a canonical checkout prefix refuses the launch instead of shadowing this branch.
+    # The domain is the one the plan allocated to this slot, so two Workers never share a ROS graph.
+    import subprocess
+    from pathlib import Path as _Path
+
     from so101_demo.runtime.parallel_worker_runtime import station_environment
     from so101_demo.runtime.task_stack import PersistentTaskStack, default_task_station_config
 
-    station_session, station_root = station_arguments
-    config = default_task_station_config(station_session, __import__("pathlib").Path(station_root))
+    station_session, station_root, station_domain = station_arguments
+    config = default_task_station_config(station_session, _Path(station_root))
+    environment = station_environment(base=dict(os.environ))
+    environment["ROS_DOMAIN_ID"] = station_domain
     station = PersistentTaskStack()
-    station.start(config, environment=station_environment(base=dict(os.environ)))
+    station.start(config, environment=environment)
+
+    # Wait for the same contract the rest of the branch uses, on this Worker's own domain: a Worker
+    # must not drive a station that is not ready, and a missing readiness binary is a failure rather
+    # than a reason to continue.
+    import shutil
+
+    # PATH is not guaranteed inside a spawned Worker, so the binary is resolved from the package
+    # prefix the branch actually installed; a Worker that cannot find it refuses to continue rather
+    # than drive a station it cannot prove ready.
+    ready_binary = shutil.which("motion_stack_ready")
+    if ready_binary is None:
+        from ament_index_python.packages import get_package_prefix
+
+        candidate = _Path(get_package_prefix("so101_demo_py")) / "lib/so101_demo_py/motion_stack_ready"
+        ready_binary = str(candidate) if candidate.is_file() else None
+    if ready_binary is None:
+        raise SystemExit("STATION_READY_BINARY_MISSING")
+    completed = subprocess.run(
+        [ready_binary, "--timeout-s", "150"], capture_output=True, text=True, env=environment,
+    )
+    try:
+        station_ready = json.loads(completed.stdout or "{}")
+    except ValueError:
+        station_ready = {"raw": (completed.stdout or completed.stderr)[-200:]}
+    station_ready["exit_code"] = completed.returncode
+    station_ready["ros_domain_id"] = station_domain
 
 client = V4PermissionOnlyClient(endpoint_path=endpoint)
 results = []
+station_record = {"requested": bool(station_arguments), "ready": station_ready}
 for index in range(3):
     response = client.call("worker.progress", {"worker_id": worker_id, "index": index},
                            request_id=f"{worker_id}-req-{index:02d}")
