@@ -356,3 +356,73 @@ def test_clean_release_clears_the_receipt_for_the_next_campaign(tmp_path):
     successor.acquire_claim()
     assert successor.receipt.children == ()
     successor.release_claim()
+
+
+def test_a_child_without_a_readable_birth_identity_is_never_promoted(tmp_path):
+    """Without a birth identity a child cannot be signalled safely, so it is stopped and failed.
+
+    This is a real defect the Task 13 runtime smoke found: the identity read races with process
+    start, and the first version recorded `birth_identity: None` while still reporting the child
+    ACTIVE, which would have made a later PID-reuse check impossible.
+    """
+
+    from so101_demo.parallel_batch.campaign_supervisor import IDENTITY_UNAVAILABLE
+
+    reads = {"count": 0}
+
+    def unreadable_identity(pid):
+        reads["count"] += 1
+        return None
+
+    supervisor = CampaignSupervisor(
+        campaign_id="identity-campaign", state_root=tmp_path / "supervisor",
+        ack_timeout_s=5.0, identity_reader=unreadable_identity, sleep=lambda _s: None,
+    )
+    supervisor.acquire_claim()
+    try:
+        ack_path = tmp_path / "ack.json"
+        record = supervisor.spawn(role="worker", slot=0,
+                                  argv=_ack_command(ack_path, sleep_s=30.0),
+                                  nonce="n-identity", ack_path=ack_path)
+        assert record.status == FAILED
+        assert record.reason == IDENTITY_UNAVAILABLE
+        assert record.birth_identity is None
+        assert reads["count"] >= 2, "the read must be retried before giving up"
+        assert supervisor.is_gone(record.pid) is True
+        document = json.loads(supervisor.receipt_path.read_text())
+        assert document["children"][0]["status"] == FAILED
+        assert document["children"][0]["birth_identity"] is None
+    finally:
+        supervisor.terminate_all()
+        supervisor.release_claim()
+
+
+def test_a_child_whose_identity_resolves_on_a_retry_is_promoted(tmp_path):
+    """A slow but successful identity read still promotes the child, with the real identity."""
+
+    from so101_demo.parallel_batch.start_guard_probe import ProcessIdentityRecord
+
+    reads = {"count": 0}
+
+    def slow_identity(pid):
+        reads["count"] += 1
+        if reads["count"] < 3:
+            return None
+        return ProcessIdentityRecord(pid=pid, start_time_ticks=424242)
+
+    supervisor = CampaignSupervisor(
+        campaign_id="identity-retry", state_root=tmp_path / "supervisor",
+        ack_timeout_s=5.0, identity_reader=slow_identity, sleep=lambda _s: None,
+    )
+    supervisor.acquire_claim()
+    try:
+        ack_path = tmp_path / "ack.json"
+        record = supervisor.spawn(role="worker", slot=0,
+                                  argv=_ack_command(ack_path, sleep_s=30.0),
+                                  nonce="n-retry", ack_path=ack_path)
+        assert record.status == ACTIVE
+        assert record.birth_identity == 424242
+        assert reads["count"] == 3
+    finally:
+        supervisor.terminate_all()
+        supervisor.release_claim()

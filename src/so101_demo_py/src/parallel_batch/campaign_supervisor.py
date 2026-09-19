@@ -41,6 +41,9 @@ STOPPED = "STOPPED"
 ACK_TIMEOUT = "CHILD_ACK_TIMEOUT"
 SPAWN_FAILED = "CHILD_SPAWN_FAILED"
 
+#: A child whose birth identity could not be read is not promoted: we could not signal it safely.
+IDENTITY_UNAVAILABLE = "CHILD_IDENTITY_UNAVAILABLE"
+
 #: The roles a campaign is allowed to own, and the slots each role may occupy.
 OWNED_ROLES: Mapping[str, int] = {"broker": 1, "worker": 2, "coordinator": 1}
 
@@ -482,13 +485,34 @@ class CampaignSupervisor:
             self._update_child(failed)
             return failed
 
-        identity = self._identity_reader(pid)
+        # The birth identity is what makes later signalling safe: without it, a PID that has been
+        # reused cannot be told apart from ours, and the child must not be promoted at all. The
+        # read races with process start (and on Darwin with the first `psutil` sample), so retry
+        # briefly and then fail closed rather than recording a child we could not identify.
+        identity = self._read_birth_identity(pid, deadline=self._clock() + timeout)
+        if identity is None:
+            self._stop_exact(child, pid)
+            failed = replace(intent, status=FAILED, pid=pid, reason=IDENTITY_UNAVAILABLE,
+                             recorded_monotonic_s=self._clock())
+            self._update_child(failed)
+            return failed
+
         active = replace(intent, status=ACTIVE, pid=pid, process_group=ack.process_group,
-                         birth_identity=(None if identity is None
-                                         else identity.start_time_ticks),
+                         birth_identity=identity.start_time_ticks,
                          ack=ack, recorded_monotonic_s=self._clock())
         self._update_child(active)
         return active
+
+    def _read_birth_identity(self, pid: int, *, deadline: float):
+        """Retry the identity read until the deadline; return None if it never resolved."""
+
+        while True:
+            identity = self._identity_reader(pid)
+            if identity is not None and identity.start_time_ticks > 0:
+                return identity
+            if self._clock() >= deadline:
+                return None
+            self._sleep(0.02)
 
     # -- stop, exactly -------------------------------------------------------------------
 
