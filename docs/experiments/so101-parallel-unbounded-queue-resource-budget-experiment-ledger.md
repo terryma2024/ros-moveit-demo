@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ230 (tail of this file)
+latest_checkpoint: CP-UQ231 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -55,7 +55,7 @@ current_design: docs/superpowers/specs/2026-09-19-so101-macos-mps-private-ipc-de
   SHA-256 480da6dcdfea1da988f9f4e706c8340dbb6d7283200c27bb723859119145db1b
 current_worktree: /Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini
 current_branch: codex/so101-unbounded-queue-resource-budget (HEAD b55c181e at takeover)
-next_experiment: Task 2 RED - Darwin MPS AcceleratorProbe and lightweight start guard
+next_experiment: Task 3 RED - CampaignSupervisor as real parent, spawner and reaper
 correction_cp_uq229: the header's `worktree`, `evidence_root` and `task_root` fields describe the
   historical ai-station Stage A-E dispatch (`84620fc0`) and are not rewritten, because that history
   is not invalidated. The live dispatch, worktree and evidence root for the current macOS MPS/private
@@ -9102,3 +9102,74 @@ One contract decision worth recording, because it is a narrowing a reviewer shou
 domains (`181, 182`). That is the exact-W2 isolation choice, not a new budget mechanism.
 
 _Ledger source HEAD: `668ddb59`; worktree clean; no evidence deleted._
+
+## CP-UQ231 — A real MPS snapshot is admitted on this host inside the fixed budget
+
+```yaml
+checkpoint_id: CP-UQ231
+last_valid_experiment: EXP-UQ231-TASK2-MPS-GUARD
+current_hypothesis: The Darwin admission boundary CP-UQ228 recorded as GPU_TARGET_UNAVAILABLE has a
+  real replacement: one bounded unified-memory read admits or refuses a W2 campaign without NVML.
+working_tree_status: clean at commit 24badcea
+owned_processes: NONE - the vm_stat helper exits inside the probe; no task-owned process survives
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome extension host, Sparkle updater,
+  SkyComputerUseService
+open_risks:
+  - torch.mps.current_allocated_memory()/driver_allocated_memory() describe this process only and stay
+    diagnostic; they must never enter the admission comparison.
+  - The 9.66 GiB figure is one host observation, not a capacity certification and not a per-N budget.
+next_command: Task 3 RED - CampaignSupervisor as real parent, spawner and reaper
+```
+
+`checkpoint_id: CP-UQ231`
+`last_valid_experiment: EXP-UQ231-TASK2-MPS-GUARD`
+`commit: 24badcea feat(so101): add lightweight Darwin MPS start guard`
+
+`EXP-UQ231-TASK2-MPS-GUARD: VALID`
+
+RED (`task2-red-01/`, exit 4, zero collectors): `ImportError: cannot import name 'accelerator_probe'`.
+The only reason nothing ran was the absent module, which is a legitimate RED for a new boundary.
+
+GREEN (`task2-green-08/`, exit 0, **99 passed, 0 failed, 0 errors**) across four files: the new
+`test_parallel_accelerator_probe.py` (21 cases) plus `test_parallel_start_guard.py`,
+`test_parallel_start_guard_probe.py` and `test_parallel_start_guard_composition.py`, so the v3 guard
+suite and the new v4 hook were validated together. `task2-green-01/` … `-07/` are retained iteration
+evidence (the `_reap_helper` timeout/not-reaped split, and two self-inflicted test-harness bugs that
+were fixed in the test, never by weakening a product assertion).
+
+Real read-only smoke on this host (`task2-mps-probe-smoke-01/`, exit 0):
+
+```text
+host: Terry-Mac-mini.local, macOS-26.6.2-arm64
+python: /Users/matianyi/ros2_jazzy/.venv/bin/python3 (3.11.15)
+torch: 2.13.0 at /Users/matianyi/ros2_jazzy/.venv/lib/python3.11/site-packages/torch
+torch.backends.mps.is_built() = True
+torch.backends.mps.is_available() = True
+torch.mps.recommended_max_memory() = 19069665280 bytes
+vm_stat: 23 lines, page size 16384, raw text retained as vm_stat-raw.txt
+snapshot.kind = mps, selector = default
+snapshot.available_bytes = 10372448256 (min(host available, recommended) = 9.66 GiB)
+snapshot.metric_source = unified-memory-proxy:vm_stat(host_available)
+                         +torch.mps.recommended_max_memory@torch2.13.0
+evaluation = PASS / MPS_HEADROOM_OK, cutoff 1073741824
+probe elapsed = 0.552 s inside the 2 s policy deadline
+model_loaded = false, mps_kernel_launched = false
+```
+
+What the checkpoint establishes: the boundary that CP-UQ228 reported as
+`GPU_TARGET_UNAVAILABLE` now has a real, auditable replacement that admits this host, and the
+figure is labelled `unified-memory-proxy` everywhere. What it does not establish: any capacity
+certification, any per-N budget, or any part of the W2 runtime. No model was loaded and no MPS
+kernel was launched, so this is not broker or inference evidence.
+
+Fail-closed branches covered by the gate: MPS not built / not available; missing, zero, negative or
+non-int `recommended_max_memory`; empty, unit-less, zero-page-size or counter-less `vm_stat`; a
+raising helper; an already-expired deadline with zero helper calls; a deadline consumed mid-read; a
+helper that ignores its deadline (`VM_STAT_TIMEOUT`) versus one that cannot be confirmed dead
+(`VM_STAT_NOT_REAPED`); and a policy without the floor, which is refused rather than admitted.
+
+The v3 surface is unchanged: `START_GUARD_FIELDS` still has no MPS key, `ResourceSnapshot` still
+requires an NVML-shaped `gpu_free_bytes`, and `EpochStartGuard` only passes the accelerator keyword
+for a policy that carries the floor, so existing v3 coordinators keep their exact signature.
+
+_Ledger source HEAD: `24badcea`; no evidence deleted; no Linux or W4/W6/W8 action._
