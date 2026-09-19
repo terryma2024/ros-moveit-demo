@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ246 (tail of this file)
+latest_checkpoint: CP-UQ247 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -55,7 +55,7 @@ current_design: docs/superpowers/specs/2026-09-19-so101-macos-mps-private-ipc-de
   SHA-256 480da6dcdfea1da988f9f4e706c8340dbb6d7283200c27bb723859119145db1b
 current_worktree: /Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini
 current_branch: codex/so101-unbounded-queue-resource-budget (HEAD b55c181e at takeover)
-next_experiment: run impl-macos-mps-w2-01/fetch-model-artifacts.zsh once ai-station is online, then Task 13 real-model broker
+next_experiment: Task 14 - five consecutive FULL_RESTART W2 simulation batches
 correction_cp_uq229: the header's `worktree`, `evidence_root` and `task_root` fields describe the
   historical ai-station Stage A-E dispatch (`84620fc0`) and are not rewritten, because that history
   is not invalidated. The live dispatch, worktree and evidence root for the current macOS MPS/private
@@ -10083,3 +10083,98 @@ the Linux container argv still choosing CUDA. Regression evidence:
 tests are the delta.
 
 _Ledger source HEAD: `0cd645ba`; no evidence deleted; ai-station untouched._
+
+## CP-UQ247 — The model blocker is gone: the real published set runs exact W2 on MPS
+
+```yaml
+checkpoint_id: CP-UQ247
+last_valid_experiment: EXP-UQ247-TASK13-REAL-MODELS-W2
+current_hypothesis: CONFIRMED. With the published artifacts and the corrected device wiring, the
+  real Broker loads both real models on MPS and serves two real Workers.
+working_tree_status: clean at commit 1d09bc87
+owned_processes: NONE - both Workers reaped, endpoint unlinked, campaign directory removed
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome extension host, Sparkle updater,
+  SkyComputerUseService
+open_risks:
+  - The environment change (6 pip packages) and the digest re-freeze are recorded below; both are
+    reversible and neither touched the user's global configuration.
+  - Task 14 (five FULL_RESTART simulation batches) still needs the Gazebo/MoveIt side, unstarted.
+next_command: Task 14 - first FULL_RESTART W2 simulation batch
+```
+
+`checkpoint_id: CP-UQ247`
+`last_valid_experiment: EXP-UQ247-TASK13-REAL-MODELS-W2`
+
+### Where the artifacts come from, and what I verified
+
+The user supplied two Hugging Face repositories. Both digests are now checked against published
+bytes rather than assumed:
+
+- **YOLO weights**, public repo `zjumty/so101-yolo11n-seg-plastic-cup`: `best.pt` hashes to
+  `f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781` — exactly the frozen value.
+- **Grounded SAM bundle**, private repo `zjumty/so101-grounded-sam-cup-pickplace`: `bundle/` is the
+  model root; all 11 files match the digests inside `bundle/manifest.json`, and that manifest
+  matches the repo's own `SHA256SUMS`.
+
+Two environment quirks were worked around **per-command only**: `~/.local/bin` is not on this
+session's PATH, and `NO_PROXY` ends with `[::1]`, which httpx parses as a URL and crashes on. No
+global configuration was changed.
+
+### The digest mismatch, and the re-freeze (commit `1d09bc87`)
+
+The published manifest is `b55bb601…`; the code froze `0486be2f…`. The distinction matters: the
+Hub manifest is canonically encoded exactly as `verify_model_bundle` requires, and its
+`threshold-lock.json` hashes to `b02e3be2…` — the pair that
+`docs/reports/grounded-sam-yolo-seg-benchmark-report.md:5` already calls the frozen production
+candidate. The report also still carries `0486be2f…` at line 125, so the repo disagreed with
+itself. Per the user's decision the contract now names the published bundle:
+
+- `_FROZEN_GROUNDED_SAM_MANIFEST_SHA256` in `parallel_batch/contracts.py` (both v3 and v4 inherit it)
+- `src/cli/perception_benchmark.py`, `config/perception_benchmark/benchmark.yaml`
+- the three `grounding_dino_*_training.yaml` configs
+- the four test files that pin the literal
+
+Three new tests pin both digests, the config copies, and assert the retired digest appears in no
+shipped config. Regression: failure counts for the affected files are **identical before and after**
+(28 cli / 45 resources / 16 ipc), so nothing regressed.
+
+### The real model set on MPS, measured
+
+`refreeze-real-groundedsam-load-01/` and `refreeze-real-yolo-load-02/`: both detectors build through
+the production factory on MPS with CPU fallback disabled.
+
+```text
+grounded-sam : LOADED, runtime_device mps, 203M parameters, both modules on mps:0, 6.03 s
+yolo         : LOADED, runtime_device mps, 2.83M parameters on mps:0, 26.8 s cold start
+```
+
+### Exact W2 with the real published models — `task13-w2-real-models-01/`
+
+```text
+status    : W2_REAL_MODELS_PASS
+guard     : PASS / MPS_HEADROOM_OK, unified-memory-proxy, 12.35 GB available
+broker    : ready, device mps, models [yolo, grounded-sam], both on mps:0, warm-up 7.03 s
+lane      : submitted 13, executed 13, rejected 0, peak_depth 1, max_concurrent 1
+workers   : w1 and w2 both ACTIVE, both with real birth identities, both reaped
+served    : 6 round trips, every response device "mps"
+negatives : MALFORMED_FRAME, OVERSIZED_FRAME, UNKNOWN_OPERATION, DEADLINE_EXPIRED
+cleanup   : complete, directory removed, registry empty, both workers gone
+```
+
+Two product bugs were found and fixed on the way, both of which would have blocked a real macOS
+campaign:
+
+1. the broker CLI accepted `--device` but `frozen_options()` hard-coded CUDA and discarded it, so
+   the real model set could never load on Apple silicon (commit `0cd645ba`);
+2. the supervisor promoted children whose birth identity could not be read, and then — after the
+   first fix — rejected healthy short-lived children by demanding a *second* successful read. The
+   rule is now "refuse only on evidence of PID reuse", measured across five consecutive passing
+   runs (commits `2d93bb42`, `27625b17`).
+
+### The environment change, recorded
+
+`ultralytics==8.4.115` plus 5 dependencies were installed into `~/ros2_jazzy/.venv` with the user's
+explicit approval. The before/after freeze is retained: **161 → 167 packages**, the six additions
+listed, and no upgrade or downgrade of torch, torchvision or numpy.
+
+_Ledger source HEAD: `1d09bc87`; no evidence deleted._
