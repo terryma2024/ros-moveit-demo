@@ -11597,3 +11597,28 @@ unit test can use a fake client factory and a fake coordinator, mirroring the ex
 rather than needing a live Broker.
 
 _Ledger source HEAD: `bddc1955`; no evidence deleted._
+
+### CP-UQ263 addendum 2 — the Worker-side Broker port exists and is tested
+
+`runtime/macos_w2_broker_port.py` is the v4 port of `_WorkerBrokerProxy`, and it keeps the
+production contract while changing exactly the two things schema v4 changes:
+
+- the transport is a `V4PermissionOnlyClient` (`0600` socket under the Darwin private root) and the
+  cancellation message carries only `worker_id` and `worker_generation` - no token, no lease, no
+  endpoint receipt;
+- a generation is read **only** from the Coordinator's authority document and may only move forward:
+  `BROKER_GENERATION_ROLLBACK` refuses a backwards authority, and a Worker never keeps a connection
+  to a replaced Broker.
+
+`request_model` still refreshes the authority first and then runs the Worker's perception chain -
+the Broker response is not an outcome by itself - and `cancel_generation` still waits for a healthy
+Broker, bounded by `broker_recovery_timeout_s` rather than forever.
+
+`task14-broker-port-01`: **6 passed**, covering the authority reduction (including a missing or
+zero generation and an empty endpoint), the non-positive initial generation refusal, the
+health-waiting cancellation with a rebuilt client, the rollback refusal, the bounded recovery
+timeout, and the perception-runner requirement.
+
+Task 14 remains 0/5 and `LINUX_REGRESSION_DEFERRED` is retained.
+
+_Ledger source HEAD: `d12e536e`; no evidence deleted._
