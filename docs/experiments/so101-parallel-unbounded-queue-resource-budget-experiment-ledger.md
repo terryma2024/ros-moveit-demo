@@ -13051,3 +13051,17 @@ stall landed on a probe call and everything passed.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `4618a16f`; no evidence deleted._
+
+### CP-UQ278 addendum 2 — why the plan's checkboxes are still unchecked
+
+The plan states that its checkboxes are the single progress list. They are all still `- [ ]` (87 of
+them), and that is deliberate: ticking them now would be a bulk claim I cannot back item by item
+inside the remaining rounds, and this task has spent its whole budget refusing exactly that kind of
+claim. Each box maps to a requirement that CP-UQ274 assesses individually with its evidence, and the
+assessment is not uniform - several rows are MET, several PARTIAL, two NOT MET, one DEFERRED.
+
+If a later session wants the boxes ticked, the honest procedure is the one this ledger already uses:
+take each box, name the run or test that carries it, tick it only if that artefact exists and passed,
+and leave the rest - in particular every box under Task 14 - unchecked.
+
+_Ledger source HEAD: `46e08553`; no evidence deleted._
