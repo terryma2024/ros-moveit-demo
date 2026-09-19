@@ -47,14 +47,28 @@ def canonical_json(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
 
 
-def frozen_options(yolo_weights, grounded_root):
+#: The devices the detector factory accepts. Kept here so the runtime and the factory agree.
+REQUESTED_DEVICES = ("auto", "cuda", "mps", "cpu")
+
+
+def frozen_options(yolo_weights, grounded_root, *, requested_device='cuda'):
+    """The frozen detector options for one Broker.
+
+    ``requested_device`` defaults to ``'cuda'`` so every schema-v3 caller keeps its exact previous
+    behaviour. The schema-v4 macOS combination passes ``'mps'``: the device is a resolved platform
+    value there, and hard-coding CUDA made the Broker unable to load a model on Apple silicon even
+    though the whole contract above it said MPS. CPU fallback stays disabled either way.
+    """
+
+    if requested_device not in REQUESTED_DEVICES:
+        raise ValueError(f'REQUESTED_DEVICE_UNSUPPORTED: {requested_device!r}')
     return {
         YOLO_ID: DetectorFactoryOptions(
-            backend='yolo_seg', requested_device='cuda', allow_cpu_fallback=False,
+            backend='yolo_seg', requested_device=requested_device, allow_cpu_fallback=False,
             yolo_weights_path=yolo_weights, yolo_weights_sha256=YOLO_SHA,
             yolo_model_id=YOLO_ID, yolo_imgsz=640),
         GROUNDED_ID: DetectorFactoryOptions(
-            backend='grounded_sam', requested_device='cuda', allow_cpu_fallback=False,
+            backend='grounded_sam', requested_device=requested_device, allow_cpu_fallback=False,
             grounded_model_root=grounded_root, grounded_manifest_sha256=GROUNDED_SHA,
             grounded_thresholds=GroundedSamThresholds.defaults()),
     }

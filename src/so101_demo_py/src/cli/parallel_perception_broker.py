@@ -376,6 +376,13 @@ def main(argv=None, *, transport=None):
         if flag == '--no-cpu-fallback':
             parser.add_argument(flag, action='store_true', required=True)
             index += 1
+        elif flag == '--device':
+            # The device is the one frozen flag whose value is chosen per platform, so it is
+            # constrained to the detector factory's closed set instead of a single literal.
+            from so101_demo.runtime.parallel_perception_runtime import REQUESTED_DEVICES
+
+            parser.add_argument(flag, required=True, choices=list(REQUESTED_DEVICES))
+            index += 2
         else:
             parser.add_argument(flag, required=True, choices=[frozen[index + 1]])
             index += 2
@@ -404,7 +411,10 @@ def main(argv=None, *, transport=None):
     runtime_identity = runtime_identity if type(runtime_identity) is dict else {}
     runtime = ParallelPerceptionRuntime(
         input_root=Path(args.input_root), ready_receipt=model_ready_path,
-        options=frozen_options(Path(args.yolo_weights), Path(args.grounded_root)),
+        # The device comes from the argument the contract already froze; it used to be dropped
+        # here, which silently forced CUDA on a platform whose resolved value is MPS.
+        options=frozen_options(Path(args.yolo_weights), Path(args.grounded_root),
+                              requested_device=args.device),
         executor_counts={
             YOLO_ID: runtime_identity.get('yolo_executor_count', 1),
             GROUNDED_ID: runtime_identity.get('grounded_sam_executor_count', 1),
