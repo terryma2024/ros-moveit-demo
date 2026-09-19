@@ -10407,3 +10407,32 @@ counted, and `MACOS_MPS_W2_PASS` remains unwritten. `LINUX_REGRESSION_DEFERRED` 
 Linux gate was run or reported as PASS/SKIP/N/A.
 
 _Ledger source HEAD: `90abe596`; no evidence deleted._
+
+### CP-UQ250 addendum — owned-process readback, and the permission grant measured again
+
+Four orphaned fixtures from my own earlier teleop gates (`task11-teleop-full-01`,
+`task11-teleop-ab-01`: two `descendant_helper.py`, two `process_tree_helper.py --mode runner`, all
+reparented to PID 1 between 21:51 and 21:55) were reaped by exact PID after their run roots were
+matched to this task's evidence root. Readback afterwards: no `descendant_helper`,
+`process_tree_helper`, `mujoco_ros2_control`, `move_group`, `ros2_control_node`, `rgbd_cup_pose` or
+`ros2 launch` process remains.
+
+After the user granted permissions, the probes changed but not enough:
+
+```text
+Accessibility     : GRANTED  - System Events now answers with a live process list; the earlier
+                               -25211 "osascript is not allowed assistive access" is gone
+Screen Recording  : DENIED   - screencapture -x still exits 1 with "could not create image from
+                               display"
+tmux server       : pid 59433, started Sat Sep 19 21:13:49 2026 - unchanged, so the grant has not
+                               been picked up by a new responsible process
+```
+
+macOS evaluates Screen Recording per responsibility chain and caches it for the life of the
+process, so `/opt/homebrew/bin/tmux` (code identity
+`tmux-55554944a40667abf836332cab24562eec45b0ba`, no TeamIdentifier) must be both **enabled** in
+System Settings and then **restarted** before the capture path can work. Task 14 stays blocked on
+that single, non-code condition; nothing about the Station, the MPS Broker or the W2 contract is
+blocking it.
+
+_Ledger source HEAD: `2809052b`; no evidence deleted._
