@@ -13544,3 +13544,28 @@ post-fix and replace that table rather than let stale rows stand.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `4f576450`; no evidence deleted._
+
+### CP-UQ283 addendum 2 — my rerun reused its own run roots; stopped, corrected, relaunched
+
+The first attempt to re-run the five-batch series post-fix was launched with the **same run names** as
+the pre-fix series, so `run-w2-campaign.sh` refused every batch (`exit=3`, run root already exists) and
+its summary file was overwritten with those refusals before I noticed:
+
+```text
+task14-five-batches-01/summary.txt   (clobbered)   batch 1..2: exit=3, status=W2_CAMPAIGN_INCOMPLETE
+task14-five-batches-01/summary-clobbered-by-rerun.txt   kept as the record of the mishap
+```
+
+Two consequences, stated rather than smoothed over:
+
+- the **pre-fix numbers survive in this ledger** (Appendix A and CP-UQ282), which is why the appendix was
+  written when it was - but the series' own summary file no longer holds them, and the pre-fix per-run
+  directories still exist untouched, so nothing else was lost;
+- the rerun itself produced nothing: it is recorded as **INVALID**, not as a repeated result.
+
+The runner now uses fresh names (`task14-fr2-0N`, `task14-five-batches-02`) and has been relaunched; the
+pre-fix evidence stays where it is, and the post-fix series will be the one cited once complete.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `a4997a5d`; no evidence deleted._
