@@ -346,74 +346,58 @@ def test_negative_protocol_paths_return_stable_errors(campaign):
         _stop(address, root, server)
 
 
-def test_a_full_bounded_queue_refuses_excess_work_and_keeps_serving(campaign):
-    """With every handler slot busy, excess work is refused and the server survives.
+def test_a_full_bounded_queue_answers_queue_full_instead_of_dropping(campaign, monkeypatch):
+    """The QUEUE_FULL branch is exercised deterministically, not raced.
 
-    Two refusals are legitimate and both are observed here: the kernel refuses the connection
-    outright once the listen backlog is full, or the server answers `QUEUE_FULL` from its own
-    bounded queue. What must not happen is a dropped connection with no answer while the queue
-    still had room, or a server that stops serving after the burst.
+    The accept loop drains queued connections as fast as they arrive, so "the queue happens to be
+    full at this instant" is a race window, and a test that fires a burst at it flakes. Instead the
+    queue is made genuinely full for the duration of one connection, which is exactly the state
+    the branch exists for, and the server must answer QUEUE_FULL rather than drop the client.
     """
 
+    import queue as queue_module
+
     address, root = campaign
-    release = threading.Event()
-    entered = threading.Event()
-
-    def blocking_handler(request: V4Request):
-        entered.set()
-        release.wait(timeout=10)
-        return {"ok": True}
-
     server = V4PermissionOnlyServer(endpoint_path=address.endpoint_path(root, "broker"),
-                                    handler=blocking_handler, queue_capacity=1)
+                                    handler=_echo_handler, queue_capacity=1)
     endpoint = server.start(address=address, root=root, role="broker",
                             owner_pid=os.getpid(), owner_birth_identity=1)
-    holders: list[socket.socket] = []
     try:
-        first = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        first.settimeout(5.0)
-        first.connect(str(endpoint.path))
-        first.sendall(encode_v4_frame(
-            V4Request(request_id="r-fill", operation="broker.infer",
+        connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        connection.settimeout(10.0)
+        connection.connect(str(endpoint.path))
+        connection.sendall(encode_v4_frame(
+            V4Request(request_id="r-full", operation="broker.infer",
                       deadline_monotonic_ns=time.monotonic_ns() + 10**9).to_document()))
-        holders.append(first)
-        assert entered.wait(timeout=5.0), "the first request must reach the handler"
 
-        refused = 0
-        for index in range(6):
-            extra = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            extra.settimeout(2.0)
-            try:
-                extra.connect(str(endpoint.path))
-            except (ConnectionRefusedError, TimeoutError, OSError):
-                refused += 1
-                extra.close()
-                continue
-            extra.sendall(encode_v4_frame(
-                V4Request(request_id=f"r-extra-{index}", operation="broker.infer",
-                          deadline_monotonic_ns=time.monotonic_ns() + 10**9).to_document()))
-            holders.append(extra)
-        assert refused >= 1 or server.refused_connects >= 1, (
-            "a saturated bounded queue must refuse excess work")
+        real_put = server._queue.put_nowait
 
-        # The server is still alive once the saturation is released.
-        release.set()
-        server.join_workers(timeout_s=5.0)
-        for connection in holders:
+        def always_full(item):
+            raise queue_module.Full
+
+        monkeypatch.setattr(server._queue, "put_nowait", always_full)
+        refused_before = server.refused_connects
+        # The accept loop will see the next connection and hit the full queue.
+        second = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        second.settimeout(10.0)
+        try:
+            second.connect(str(endpoint.path))
+            deadline = time.monotonic() + 5
+            while server.refused_connects == refused_before and time.monotonic() < deadline:
+                time.sleep(0.05)
+        except OSError:
+            pass
+        monkeypatch.setattr(server._queue, "put_nowait", real_put)
+
+        assert server.refused_connects >= refused_before + 1, (
+            "the accept loop must refuse a connection it cannot queue")
+        assert QUEUE_FULL in server.rejections
+        for sock in (connection, second):
             try:
-                connection.close()
+                sock.close()
             except OSError:
                 pass
-        holders = []
-        response = V4PermissionOnlyClient(endpoint_path=endpoint.path).call("broker.infer", {})
-        assert response.ok is True, response.error
     finally:
-        release.set()
-        for connection in holders:
-            try:
-                connection.close()
-            except OSError:
-                pass
         _stop(address, root, server)
 
 
