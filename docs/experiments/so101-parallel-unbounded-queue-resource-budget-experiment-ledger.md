@@ -8391,3 +8391,36 @@ independent terminal, cleaned batches complete; CP-UQ209's `OWNED_GROUP_SURVIVOR
 open failure and will not be softened or fabricated away.
 
 _Ledger HEAD when written: `d15c3272e`._
+
+## CP-UQ212 — Cleanup targets are now selected by proof, with a regression check that proves it
+
+The correction's target-selection requirement is implemented in the task root, not asserted in prose:
+
+- **`$TASK_ROOT/tools/owned_targets.py`** takes the batch's own recorded owned-process manifest and the
+  campaign's evidence root, and selects a candidate only after re-reading `/proc/<pid>/stat` and
+  matching the recorded **start time** and **PGID**, plus finding the campaign's evidence root in the
+  process's environment (`SO101_VALIDATION_EVIDENCE_ROOT` / `SO101_TASK_ROOT`) or command line. Every
+  other outcome is reported as `OWNERSHIP_UNPROVEN` with a reason — `MANIFEST_EVIDENCE_ROOT_MISMATCH`,
+  `PID_INVALID`, `PID_GONE`, `PID_ZOMBIE`, `STARTTIME_MISMATCH`, `PGID_MISMATCH`,
+  `EVIDENCE_ROOT_NOT_IN_PROCESS` — and left alone. `--dry-run` prints the selection; only an explicit
+  `--signal` acts, and only on verified targets.
+- **`$TASK_ROOT/tools/test_owned_targets.py`** is the hermetic regression check the correction asked
+  for. It starts two `/usr/bin/sleep` children with the *same executable and arguments* as the owned
+  child: one with a foreign environment and no manifest entry, one with the same evidence root but a
+  falsified recorded start time. Result: `verified: [3186002]` (only the exact-owned child),
+  `unproven: 3186003 -> EVIDENCE_ROOT_NOT_IN_PROCESS, 3186004 -> STARTTIME_MISMATCH`, the foreign
+  sentinel still alive, and `OWNED_TARGETS_REGRESSION_OK`. Nothing real is started and no foreign
+  service is involved.
+
+Container cleanup now follows the same standard. The stuck broker `e2bb172bd754` has its ownership
+**proven** — label `com.so101.batch-id = bef23`, generation 1, and binds to
+`service-light.2l3JdNrA/state/campaigns/campaign-4ee7d85f.../bef23/broker-inputs`, i.e. exactly the
+failed stability batch — and its `docker inspect` document is preserved next to its logs. Removal is
+blocked by the daemon itself (`tried to kill container, but did not receive an exit event`), so it
+stays, with evidence intact and no escalation.
+
+Unchanged and not softened: the five-batch stability requirement remains **0 of 5** until five
+independent terminal, cleaned batches complete, and CP-UQ209's `OWNED_GROUP_SURVIVORS` failure stays
+open.
+
+_Ledger HEAD when written: `e2202cc45`._
