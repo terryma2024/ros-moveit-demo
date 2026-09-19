@@ -2,7 +2,7 @@ schema_version: 1
 model:
   model_id: IDEA-Research/grounding-dino-tiny
   revision: a2bb814dd30d776dcf7e30523b00659f4f141c71
-  bundle_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+  bundle_manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
   files:
     .gitattributes: 11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361
     README.md: cf46f74c7b6850f1d5cbe406028324d8798148726016d46a69a365b4a2d3e89f
