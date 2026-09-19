@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ270 (tail of this file)
+latest_checkpoint: CP-UQ271 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -12491,3 +12491,54 @@ Task 14 remains 0/5: this is inference plumbing, not a pick-place batch, and
 `LINUX_REGRESSION_DEFERRED` is retained.
 
 _Ledger source HEAD: `e16bd706`; no evidence deleted._
+
+## CP-UQ271 — What is left of Task 14, measured against the remaining budget
+
+```yaml
+checkpoint_id: CP-UQ271
+last_valid_experiment: none - this is an assessment, not a run
+current_hypothesis: The remaining Task 14 work can be finished inside this goal's budget. Assessed as
+  NOT reachable, for two independent reasons.
+working_tree_status: clean at commit 6999c438
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - A counted batch needs per-point `viewer.png`; Screen Recording is denied to this session and has
+    been for ~70 rounds, so no batch can pass its terminal capture.
+  - The Worker is a spawned CLI process, while the perception/planning/execution chain
+    (`ParallelWorkerRuntime` + `ParallelRosRuntimePorts` + `ParallelWorker`) is an in-process
+    library: joining them is a port of the Linux batch path, not a wiring change.
+next_command: decide Task 16's verdict on the evidence that exists; do not start the port speculatively
+```
+
+### What exists and is verified (the macOS, exact-W2 half)
+
+- frozen v3 + closed v4 schema, Darwin MPS start guard, durable supervisor ownership, permission-only
+  v4 IPC, immutable snapshots, one-time request registry, single-lane shared MPS Broker;
+- exact-W2 resource allocation on Darwin (two Workers, domains 181/182, own roots);
+- both Workers own a visible station, **each proven READY on its own domain before serving**
+  (`task14-campaign-ready-08`, `-12`, `-13`), with the orphan check clean from `task14-campaign-infer-*`;
+- **real inference through the port on the shared MPS Broker**, `device: mps`
+  (`task14-campaign-infer-05`, CP-UQ270);
+- a real four-point MuJoCo pick-place batch executed from this branch's install
+  (`task14-single-batch-01`), with MoveIt trajectories, contacts and placement evidence - run outside
+  the campaign, and every point failed only at `TERMINAL_CAPTURE_FAILED`.
+
+### What a counted Task 14 batch still requires
+
+1. **the perception/plan/execute chain inside each Worker** - today the Worker's inference is real but
+   its input is a synthetic warm frame; feeding it a station RGB-D snapshot and driving
+   `ParallelWorker`/`BatchCoordinator` means porting the in-process Linux batch path onto the spawned
+   macOS Worker;
+2. **per-point `viewer.png`** - blocked by macOS TCC for this session's responsibility chain, which is
+   why every point of the one real batch failed at `TERMINAL_CAPTURE_FAILED`;
+3. **five consecutive `FULL_RESTART` batches** with fresh epochs, IPC paths and Broker generations -
+   none started, so Task 14 stands at **0/5**.
+
+Items 1 and 3 are engineering; item 2 is a permission the user has been asked for since round 9 and
+that cannot be granted from inside the session. With ~20 rounds of budget left and a port of that size
+ahead, the honest conclusion is that Task 14 will not be counted in this goal, and Task 16 must report
+**`PARTIAL`** with exactly these gaps - not `MACOS_MPS_W2_PASS`, and not silence about the Linux half
+either, which stays `DEFERRED_ENVIRONMENT`.
+
+_Ledger source HEAD: `6999c438`; no evidence deleted._
