@@ -8185,3 +8185,44 @@ The current build and the running acceptance sweep are untouched by this entry: 
 not the workspace, the service or any campaign.
 
 _Ledger HEAD when written: `85d9cd3ff`._
+
+## CP-UQ206 — All sixteen FIRST_PASS cases executed for real on the deployed copy
+
+The sweep finished clean: `18 passed (1.3h)`, the run's own `exit_code: 0`, and **zero failed cases**.
+Sixteen real campaigns, one per manifest case, driven through the deployed console against the copy
+that carries the adaptive and cleanup fixes (`copy-install-final.795JfhlK`):
+
+| Case | Mode | Requested | Evaluated | N slots | Leases | Status | Cleanup |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `adaptive-ladder-p20` | ADAPTIVE | 20 | 20 | 0 | 0 | COMPLETED |
+| `fixed-n2-p20` | PARALLEL | 20 | 20 | 2 | 20 | COMPLETED |
+| `fixed-n2-p4` | PARALLEL | 4 | 4 | 2 | 4 | COMPLETED |
+| `fixed-n3-p20` | PARALLEL | 20 | 20 | 3 | 20 | COMPLETED |
+| `fixed-n3-p4` | PARALLEL | 4 | 4 | 3 | 4 | COMPLETED |
+| `fixed-n4-p20` | PARALLEL | 20 | 20 | 4 | 20 | COMPLETED |
+| `fixed-n4-p4` | PARALLEL | 4 | 4 | 4 | 4 | COMPLETED |
+| `fixed-n5-p20` | PARALLEL | 20 | 20 | 5 | 20 | COMPLETED |
+| `fixed-n5-p4` | PARALLEL | 4 | 4 | 5 | 4 | COMPLETED |
+| `fixed-n6-p20` | PARALLEL | 20 | 20 | 6 | 20 | COMPLETED |
+| `fixed-n6-p4` | PARALLEL | 4 | 4 | 6 | 4 | COMPLETED |
+| `fixed-n7-p20` | PARALLEL | 20 | 20 | 7 | 20 | COMPLETED |
+| `fixed-n7-p4` | PARALLEL | 4 | 4 | 7 | 4 | COMPLETED |
+| `fixed-n8-p20` | PARALLEL | 20 | 20 | 8 | 20 | COMPLETED |
+| `fixed-n8-p4` | PARALLEL | 4 | 4 | 8 | 4 | COMPLETED |
+| `sequential-n1-p4` | SEQUENTIAL | 4 | 4 | 1 | 4 | COMPLETED |
+
+Every row is a genuine campaign with `requested == evaluated`, the exact requested N slots present
+(including N greater than the point count), leases summing to the point count (10×2, 7+7+6, 5×4,
+3+3+3+3+3+3+2, …), terminal status and completed cleanup; the capability checks of `R05` are labelled
+`capability only` and are not part of this table. The adaptive row reports zero workers because the
+projection does not list pool workers — its evidence is the pool's per-worker attempt directories and
+its `cleanup-receipt.json`, which the case verifies (CP-UQ202).
+
+Consolidated record: `$TASK_ROOT/sweep-current-summary.txt`, derived from the runs' own
+`execution-<case>.json` files by `$TASK_ROOT/tools/summarise-execution-evidence.py`.
+
+Next: the fault-injected single-point retry case, then the five consecutive valid physical batches,
+then `$TASK_ROOT/tools/final-gates.sh` (package/Web/OpenAPI/CTest, served bytes and the executed-nodeid
+multiset) once no campaign is using the sim.
+
+_Ledger HEAD when written: `91e03a9ae`._
