@@ -8076,3 +8076,33 @@ copy's code (same sources except the adaptive/cleanup fixes), so the fixed-N swe
 against the current copy rather than being carried forward on a technicality.
 
 _Ledger HEAD when written: `fcd9b0495`._
+
+## CP-UQ203 — The retry case exists, and the sixteen-case sweep is re-running on the current copy
+
+Two things are in flight, both recorded here so the next round does not have to rediscover them.
+
+**1. The live retry case (correction item 4).** A `FULL_RESTART_RETRY` is only reachable through a
+*genuine* valid failure, and this environment has passed every point in every campaign so far, so the
+case runs against a task-owned points catalog with exactly one anchor moved out of the robot's reach:
+`$TASK_ROOT/fault-injection/points-unreachable-anchor.yaml` (sha256 `560980891dfd…`, a copy of the
+installed catalog with `cup_test_right_5cm` at `x = 0.60 m`), selected through the product's own
+`SO101_VALIDATION_POINTS`. Nothing is faked — the sim really cannot perform that point, the failure
+is a valid business failure, and it is fault injection for this workflow only, never counted as a
+normal acceptance campaign. The new project `retry-full-restart` drives the console's real retry
+panel (select the failed point, `CONFIRM FULL_RESTART RETRIES`, confirm) and then asserts the retry
+is an **independent fresh batch**: its own `retry-001/batch_manifest.json` with
+`batch_kind = FULL_RESTART_RETRY`, exactly one selected point and `worker_count = 1`, its own
+coordinator journal and `cleanup-gates.json`, a batch id different from the first pass, and separate
+`FIRST_PASS` / `FULL_RESTART_RETRY` rows in the store's `campaign_batches`. Committed `7f9804117`.
+
+**2. The sixteen-case sweep is re-running against the current copy** (`lg-exec-sweep-current`,
+`Running 18 tests`, job `bash-11`). The earlier fixed-N evidence came from the *previous* copy's code
+— same sources except the adaptive/cleanup fixes, but not the deployed bytes — so it is being
+reproduced rather than carried forward on a technicality. It must finish before the service is
+restarted with the fault catalog for the retry case, because both need port 8010 and the same
+service.
+
+After those: the five consecutive valid physical batches at one N/commit/params/lifecycle, then the
+final source/package/Web, install/served-byte, physics and visual gates.
+
+_Ledger HEAD when written: `7f9804117`._
