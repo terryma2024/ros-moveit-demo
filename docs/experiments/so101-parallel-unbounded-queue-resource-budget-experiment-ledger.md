@@ -12851,3 +12851,20 @@ Nothing has been pushed, merged or published; no evidence was deleted; no global
 changed.
 
 _Ledger source HEAD: `47f62e2c`; no evidence deleted._
+
+### CP-UQ276 addendum — the local-only claim, verified
+
+```text
+branch                codex/so101-unbounded-queue-resource-budget
+HEAD                  48304291   worktree clean
+origin/<branch>       bf1b6091   (the base this task started from)
+ahead / behind        141 / 0
+commits this stretch  97
+Screen Recording      still denied (task16-capture-probe-03)
+```
+
+Nothing was pushed, fetched into a merge, or published: the remote branch still points at the base
+commit and the local branch is ahead-only. `main` was never merged, no second worktree, branch, tmux
+session or goal was created, and every commit in this stretch is scoped to the files a task named.
+
+_Ledger source HEAD: `48304291`; no evidence deleted._
