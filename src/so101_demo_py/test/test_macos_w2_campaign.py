@@ -355,3 +355,43 @@ def test_admission_rule_refuses_unknown_duplicate_and_tampered_requests() -> Non
             operation="broker.infer", request_id="w1-att-02-yolo", serialized_request=tampered,
             consumed_ids=set(), bound_digest=bound)
         assert refusal["error"]["code"] == "SNAPSHOT_MISMATCH", tampered
+
+
+def test_per_slot_summary_reads_a_synthetic_evidence_tree(tmp_path: Path) -> None:
+    """The per-slot summary is the campaign's own statement about what each slot did.
+
+    It must count executed points from their manifests, keep the failure codes, stay quiet rather
+    than raise when a directory or a file is unreadable, and report zeros for a slot that produced
+    nothing - the last case is a fact the run has to record, not a reason to lose it.
+    """
+
+    import json
+
+    from so101_demo.cli.macos_w2_campaign import summarize_per_slot_pick_place
+
+    def write(path: Path, payload) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload))
+
+    root = tmp_path
+    base = root / "w1-station/pick/batches/b1/points"
+    write(base / "01-task_start/dynamic/dynamic-execute-manifest.json",
+          {"current_state": "DONE", "failure": None,
+           "final_samples": [{"simulation_step": 33, "table_contact": True,
+                              "maximum_normal_force_n": 0.233}]})
+    write(base / "02-failed/dynamic/dynamic-execute-manifest.json",
+          {"current_state": "DONE", "failure": {"code": "X"}, "final_samples": []})
+    write(base / "01-task_start/point-result.json", {"status": "FAILED",
+                                                     "failure_code": "TERMINAL_CAPTURE_FAILED"})
+    (base / "01-task_start/broken.json").write_text("{not json")
+
+    summary = summarize_per_slot_pick_place(evidence_root=root)
+
+    w1 = summary["w1"]
+    assert w1["manifests"] == 2 and w1["point_results"] == 1
+    assert w1["executed_points"] == ["01-task_start"]
+    assert w1["failure_codes"] == ["TERMINAL_CAPTURE_FAILED"]
+    assert w1["contacts"] == [{"point": "01-task_start", "simulation_step": 33,
+                               "table_contact": True, "max_normal_force_n": 0.233}]
+    # a slot with nothing on disk is reported, not omitted and not an exception
+    assert summary["w2"]["manifests"] == 0 and summary["w2"]["executed_points"] == []

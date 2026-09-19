@@ -24,6 +24,7 @@ non-zero when the run is not a pass.
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
 import signal
@@ -108,6 +109,50 @@ def bind_worker_requests(campaign, leases: dict[str, dict], *, ready,
                 point_id=document["point_id"], attempt=1,
                 input_sha256=document["input_sha256"], deadline_s=deadline_s,
                 broker_pid=ready.broker_pid, broker_birth_identity=ready.broker_birth_identity)
+
+
+def summarize_per_slot_pick_place(*, evidence_root: Path, workers=("w1", "w2")) -> dict:
+    """Read each slot's pick-place evidence back out of its own directory tree, defensively.
+
+    A reader should not have to walk the tree to learn whether a slot executed its points, so the
+    campaign document carries this summary. Missing directories are reported as zeros rather than
+    raising: a slot that produced nothing is a fact worth recording, not a reason to lose the run.
+    """
+
+    summary: dict[str, dict] = {}
+    for worker_id in workers:
+        pick_root = Path(evidence_root) / f"{worker_id}-station/pick"
+        manifests = sorted(glob.glob(f"{pick_root}/**/dynamic-execute-manifest.json", recursive=True))
+        points = sorted(glob.glob(f"{pick_root}/**/point-result.json", recursive=True))
+        executed, contacts = [], []
+        for manifest in manifests:
+            try:
+                entry = json.loads(Path(manifest).read_text())
+            except (OSError, ValueError):
+                continue
+            if entry.get("current_state") == "DONE" and entry.get("failure") is None:
+                point = Path(manifest).parent.parent.name
+                executed.append(point)
+                sample = (entry.get("final_samples") or [{}])[0]
+                contacts.append({"point": point,
+                                 "simulation_step": sample.get("simulation_step"),
+                                 "table_contact": sample.get("table_contact"),
+                                 "max_normal_force_n": sample.get("maximum_normal_force_n")})
+        failure_codes = set()
+        for result in points:
+            try:
+                failure_codes.add(json.loads(Path(result).read_text()).get("failure_code"))
+            except (OSError, ValueError):
+                failure_codes.add("UNREADABLE_POINT_RESULT")
+        summary[worker_id] = {
+            "executed_points": sorted(executed),
+            "manifests": len(manifests),
+            "point_results": len(points),
+            "failure_codes": sorted(code for code in failure_codes if code is not None),
+            "contacts": contacts,
+            "evidence_root": str(pick_root),
+        }
+    return summary
 
 
 #: The operations this composition implements; anything else is refused rather than served.
@@ -577,36 +622,7 @@ def run(argv: list[str] | None = None) -> int:
         document["fault_trace"] = fault_trace
 
 
-        # The per-slot physical evidence, summarised where the campaign's own result can carry it:
-        # a reader should not have to walk the directory tree to learn whether each slot executed
-        # its points, and what the contacts were.
-        import glob as _glob
-
-        per_slot = {}
-        for worker_id in ("w1", "w2"):
-            pick_root = arguments.evidence_root / f"{worker_id}-station/pick"
-            manifests = sorted(_glob.glob(f"{pick_root}/**/dynamic-execute-manifest.json",
-                                          recursive=True))
-            points = sorted(_glob.glob(f"{pick_root}/**/point-result.json", recursive=True))
-            executed, contacts = [], []
-            for manifest in manifests:
-                entry = json.loads(Path(manifest).read_text())
-                if entry.get("current_state") == "DONE" and entry.get("failure") is None:
-                    executed.append(Path(manifest).parent.parent.name)
-                    sample = (entry.get("final_samples") or [{}])[0]
-                    contacts.append({"point": Path(manifest).parent.parent.name,
-                                     "simulation_step": sample.get("simulation_step"),
-                                     "table_contact": sample.get("table_contact"),
-                                     "max_normal_force_n": sample.get("maximum_normal_force_n")})
-            per_slot[worker_id] = {
-                "executed_points": sorted(executed),
-                "manifests": len(manifests),
-                "point_results": len(points),
-                "failure_codes": sorted({json.loads(Path(p).read_text()).get("failure_code")
-                                         for p in points}),
-                "contacts": contacts,
-                "evidence_root": str(pick_root),
-            }
+        per_slot = summarize_per_slot_pick_place(evidence_root=arguments.evidence_root)
         document["per_slot_pick_place"] = per_slot
         document["handler_errors"] = handler_errors
 
