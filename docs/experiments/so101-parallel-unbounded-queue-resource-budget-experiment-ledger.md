@@ -8106,3 +8106,41 @@ After those: the five consecutive valid physical batches at one N/commit/params/
 final source/package/Web, install/served-byte, physics and visual gates.
 
 _Ledger HEAD when written: `7f9804117`._
+
+## CP-UQ204 — Receipt-consumer audit (correction item 5): nothing retired gates acceptance
+
+The audit the correction asked for, read from the code rather than from memory:
+
+**Mode admission is functional, and no budget/calibration receipt is consulted.**
+`executor_registry.build()` computes availability from installed components and a live probe only:
+
+```
+fixed    = probes.fixed_upstream and probes.parallel_config
+parallel = all((fixed, probes.broker_image, probes.resource_probe))
+adaptive = all((runner, pool, wrapper, cleanup, config))
+```
+
+`resource_probe` is the shared start guard's real observation, not a stored qualification. The
+retired budget aggregates and performance tiers appear **nowhere** in that expression, and
+`production.py:300` states the same rule in code: "Fixed mode admits through the shared start guard;
+no budget authority is consulted."
+
+**The descriptive acceptance fields that survive gate nothing.** `ExecutorCapability` still carries
+`two_worker_live_acceptance`, `adaptive_twenty_point_acceptance` and
+`adaptive_performance_evidence`; the first two are unused, and the third only fills the *reported*
+`performance_qualified_tiers`. Their env files are read through `_optional_file`, so a deployment
+without them is unaffected. They are metadata, not requirements — I am leaving them in place rather
+than churning the contract, and recording that decision here.
+
+**The R01/R02/R03 receipts are functional and stay.** `02-parallel`, `04-start-guard` and
+`05-functional-manifest` call `requireGateDetail(..., "R01", ...)`, which re-checks the *producing
+run* (campaign id, status, cleanup, identity hashes) instead of trusting a filename; `R02` is the
+same for the adaptive ladder. Those receipts are written by real campaigns (`recordGate` after a
+terminal, cleaned-up batch) — exactly the "actual functional receipts" the correction wants in place
+of retired ones — so nothing was removed, fabricated or deleted.
+
+With the audit closed, the remaining work is: finish the sixteen-case sweep on the current copy, run
+the fault-injected retry case, produce the five consecutive valid physical batches at one N, and the
+final source/package/Web, install/served-byte, physics and visual gates.
+
+_Ledger HEAD when written: `2db41f84b`._
