@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ238 (tail of this file)
+latest_checkpoint: CP-UQ239 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -55,7 +55,7 @@ current_design: docs/superpowers/specs/2026-09-19-so101-macos-mps-private-ipc-de
   SHA-256 480da6dcdfea1da988f9f4e706c8340dbb6d7283200c27bb723859119145db1b
 current_worktree: /Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini
 current_branch: codex/so101-unbounded-queue-resource-budget (HEAD b55c181e at takeover)
-next_experiment: Task 9 RED - whole-pool rebuild after a broker failure
+next_experiment: Task 10 RED - compose exact W2, resolved manifest and package resources
 correction_cp_uq229: the header's `worktree`, `evidence_root` and `task_root` fields describe the
   historical ai-station Stage A-E dispatch (`84620fc0`) and are not rewritten, because that history
   is not invalidated. The live dispatch, worktree and evidence root for the current macOS MPS/private
@@ -9581,3 +9581,58 @@ and both models share one lane whose measured concurrency never exceeds one. Tin
 claims the bootstrap only — not the perception weights and not any W2 runtime result.
 
 _Ledger source HEAD: `a89e5571`; no evidence deleted; no Linux or W4/W6/W8 action._
+
+## CP-UQ239 — The rebuild order is a testable contract, and absence is confirmed separately
+
+```yaml
+checkpoint_id: CP-UQ239
+last_valid_experiment: EXP-UQ239-TASK9-POOL-RECOVERY
+current_hypothesis: A Broker failure can be recovered by rebuilding the whole pool, and every
+  safety gate can be asserted as an order rather than described in a comment.
+working_tree_status: clean at commit d63c32b7
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome extension host, Sparkle updater,
+  SkyComputerUseService
+open_risks:
+  - The recovery is expressed over injected ports; wiring the real Supervisor, ROS cancellation
+    helpers and Broker spawn into those ports is Task 10/13 work and is not claimed here.
+  - This checkpoint proves the ordering and the refusal gates, not a live end-to-end broker crash.
+next_command: Task 10 RED - compose exact W2, resolved manifest and package resources
+```
+
+`checkpoint_id: CP-UQ239`
+`last_valid_experiment: EXP-UQ239-TASK9-POOL-RECOVERY`
+`commit: d63c32b7 feat(so101): rebuild the full W2 pool after broker failure`
+
+`EXP-UQ239-TASK9-POOL-RECOVERY: VALID`
+
+GREEN (`task9-green-04/`, exit 0, **13 passed**) and the regression gate
+(`task9-regression-01/`, exit 0, **135 passed** across recovery, registry, contracts and
+supervisor). `task9-green-01/` … `-03/` are retained; all three were test-expectation bugs in the
+new tests, not product changes, and each was fixed in the test.
+
+The recovery is now a declared tuple, `RECOVERY_STEPS`, and the test asserts the recorded port
+calls match it element by element. That makes "the design's order was followed" a fact rather than
+a claim. The gates, each with its own refusal test:
+
+- the request must be removed from the local table **first**; if the table will not give it up,
+  recovery does not start at all and no process is touched;
+- the point is recorded as `INFRASTRUCTURE_FAILURE` with `business_status: None`, so an
+  infrastructure fault can never masquerade as a business failure;
+- both Workers are stopped before anything is spawned;
+- controller cancellation and controller **absence** are two separate ports, so a caller cannot
+  satisfy the design by cancelling and asserting success. Unproven absence stops the rebuild before
+  any process is reaped or any Broker is spawned;
+- every owned PID must come back from the reap; one missing PID stops the rebuild, because a
+  process we cannot prove dead may still hold the old socket;
+- the new campaign path must differ from the old one;
+- the Broker must be ready before either Worker is spawned, and a partially rebuilt pool is never
+  reported as ready;
+- rebuilding the pool and requeueing the point are separate decisions, so a successful rebuild with
+  a declined requeue is reported honestly as `recovered: false` with `broker_ready: true`;
+- every worker spawn in the trace targets the new campaign path, never the old one.
+
+When no motion was in flight the controller ports are not called at all, which matches the
+design's LEASED/INITIALIZING case rather than pretending there was a goal to cancel.
+
+_Ledger source HEAD: `d63c32b7`; no evidence deleted; no Linux or W4/W6/W8 action._
