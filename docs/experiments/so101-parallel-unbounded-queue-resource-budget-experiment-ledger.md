@@ -13341,11 +13341,11 @@ _Ledger source HEAD: `c11312c8`; no evidence deleted._
 
 | batch | campaign result | served | cleanup | w1 executed | w2 executed | failures | fresh per batch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | W | 8 | True | w1: manifests=4 executed=4 points=4 | w2: manifests=4 executed=4 points=4 | TERMINAL_CAPTURE_FAILED (all points) | 3 result docs, 2 station roots |
-| 2 | W | 8 | True | w1: manifests=4 executed=4 points=4 | w2: manifests=4 executed=4 points=4 | TERMINAL_CAPTURE_FAILED (all points) | 3 result docs, 2 station roots |
-| 3 | W | 8 | True | w1: manifests=4 executed=4 points=4 | w2: manifests=4 executed=4 points=4 | TERMINAL_CAPTURE_FAILED (all points) | 3 result docs, 2 station roots |
-| 4 | W | 8 | True | w1: manifests=4 executed=4 points=4 | w2: manifests=4 executed=4 points=4 | TERMINAL_CAPTURE_FAILED (all points) | 3 result docs, 2 station roots |
-| 5 | W | 8 | True | w1: manifests=4 executed=4 points=4 | w2: manifests=4 executed=4 points=4 | TERMINAL_CAPTURE_FAILED (all points) | 3 result docs, 2 station roots |
+| 1 | W2_CAMPAIGN_INCOMPLETE | 8 | True | w1: manifests=4 executed=4 points=4 | w2: manifests=4 executed=4 points=4 | TERMINAL_CAPTURE_FAILED (all points) | 3 result docs, 2 station roots |
+| 2 | W2_CAMPAIGN_INCOMPLETE | 8 | True | w1: manifests=4 executed=4 points=4 | w2: manifests=4 executed=4 points=4 | TERMINAL_CAPTURE_FAILED (all points) | 3 result docs, 2 station roots |
+| 3 | W2_CAMPAIGN_INCOMPLETE | 8 | True | w1: manifests=4 executed=4 points=4 | w2: manifests=4 executed=4 points=4 | TERMINAL_CAPTURE_FAILED (all points) | 3 result docs, 2 station roots |
+| 4 | W2_CAMPAIGN_INCOMPLETE | 8 | True | w1: manifests=4 executed=4 points=4 | w2: manifests=4 executed=4 points=4 | TERMINAL_CAPTURE_FAILED (all points) | 3 result docs, 2 station roots |
+| 5 | W2_CAMPAIGN_INCOMPLETE | 8 | True | w1: manifests=4 executed=4 points=4 | w2: manifests=4 executed=4 points=4 | TERMINAL_CAPTURE_FAILED (all points) | 3 result docs, 2 station roots |
 
 Each row is one full restart: a fresh claim, campaign IPC root, Broker generation, both station
 roots and both Worker sessions. The executed counts come from the series summary, which counted
