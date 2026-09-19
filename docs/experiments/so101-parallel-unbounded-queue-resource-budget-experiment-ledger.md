@@ -13729,3 +13729,28 @@ summary and the fault-injection traces - introduced **no regression** in the uni
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `de49207c`; no evidence deleted._
+
+### CP-UQ285 addendum 2 — the campaign's own statements now have offline tests
+
+Two pieces of the campaign that were previously covered only by live runs are now pure functions with
+unit tests:
+
+```text
+admission_decision(...)             unknown operation -> duplicate -> tampered digest, in that order
+summarize_per_slot_pick_place(...)  executed points, failure codes, contacts, zeros for an empty slot
+```
+
+`admission-rule-01`: 1 passed (unknown/duplicate/tampered, including unreadable digests).
+`per-slot-summary-01`: suite at 17 passed after adding the synthetic-tree test, which covers a DONE
+manifest, a failed one, an unreadable file and a slot with nothing on disk.
+
+Verification that the refactors did not disturb the live path: `task14-admission-refactor-01` -
+`served 14`, `devices ['mps']`, duplicates refused 2, both slots executed 4 points.
+
+That matters because of how this session's worst defect happened: a change validated only by a live
+run, with tests written against the same wrong assumption. The campaign's security-relevant decisions
+are no longer in that category.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `0a8a5e42`; no evidence deleted._
