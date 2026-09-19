@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ285 (revised matrix) + Appendix B
+latest_checkpoint: CP-UQ286 (final report, refreshed)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -13754,3 +13754,52 @@ are no longer in that category.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `0a8a5e42`; no evidence deleted._
+
+## CP-UQ286 — Final report, refreshed (read this one; CP-UQ276 is its first edition)
+
+```yaml
+checkpoint_id: CP-UQ286
+verdict: PARTIAL
+task14: 0/5 - five consecutive FULL_RESTART batches exist and repeat, but none passes
+linux_regression: DEFERRED_ENVIRONMENT (CP-UQ272)
+independent_verdict: OWED (gpt-5.6-sol/high unavailable to this session; no substitute used)
+external_blocker: macOS TCC denies Screen Recording to this session -> every point fails
+  TERMINAL_CAPTURE_FAILED; probed 12 times, most recently task16-capture-probe-12
+working_tree_status: clean; branch ahead of origin only; nothing pushed, merged or published
+```
+
+### What the macOS exact-W2 platform does, all verified
+
+- frozen v3 contract and a closed v4 one; illegal combinations and CPU fallback fail closed;
+- Darwin MPS admission: fallback pinned before `import torch`, guard scope from the resolved
+  accelerator, `unified-memory-proxy` admission, 2 s deadline;
+- durable ownership: claim, `SPAWNING` before spawn, ACK before `ACTIVE`, exact-signal only on matching
+  PID **and** birth identity, exact cleanup - five consecutive batches ended with no process left;
+- permission-only v4 IPC: private short path, `0700`/`0600`, no token/generation/lease vocabulary,
+  bounded queue, stable refusal codes;
+- exact W2 on macOS: two Workers, domains 181/182, own roots; **each owns a visible station and proves
+  it ready on its own domain before serving** (`task14-campaign-ready-08`, Appendix B);
+- **real inference through the port** on the shared single-lane MPS Broker, `device: mps`
+  (`task14-infer-fixed-01`);
+- **real pick-place per slot**: the production batch runner attached to each Worker's own station -
+  8 executed point-runs per batch, MoveIt trajectories, MuJoCo contacts (`table_contact True`,
+  ~0.233 N), per-slot evidence roots (`CP-UQ281`, Appendix B);
+- **one-time admission demonstrated live**: duplicates refused with `DUPLICATE_REQUEST`, a tampered
+  snapshot refused with `SNAPSHOT_MISMATCH` (`task16-snapshot-mismatch-07`);
+- the campaign's admission rule and per-slot summary are now pure functions with unit tests.
+
+### What is missing, and why
+
+1. **A counted batch.** Every point fails closed at the per-point `viewer.png` because Screen Recording
+   is denied to this session's responsibility chain. `five_batch_stability` is therefore **not**
+   claimed and Task 14 stays **0/5** - the five batches are evidence of repeatability, not a pass.
+2. **Inference timeout and active-Worker cancel evidence.** The timeout probe was closed with its own
+   harness defect named (CP-UQ284); cancellation has no server-side implementation in this composition.
+3. **Broker crash + pool rebuild.** Structurally unreachable here: the MPS Broker runs in-process
+   (`broker_pid == os.getpid()`, verified live).
+4. **Linux regression.** Deferred; no Linux command was run or reported as anything.
+
+Verdict: **`PARTIAL`**, with the gaps above named precisely. Nothing was pushed, merged or published;
+no evidence was deleted; no Linux gate was run or reported as PASS/SKIP/N/A.
+
+_Ledger source HEAD: (this commit's parent); no evidence deleted._
