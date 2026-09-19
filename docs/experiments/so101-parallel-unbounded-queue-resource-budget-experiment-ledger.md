@@ -41,13 +41,26 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ114 (tail of this file)
+latest_checkpoint: CP-UQ229 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
 superseding_design: docs/superpowers/specs/2026-09-19-so101-parallel-validation-lightweight-start-guard-design.md
   SHA-256 73cc295ce6fba187c85e38081c458112b448357e844c7afa9e3a06ed3f2bfdb5
-next_experiment: Task 2 - shared start_guard decision model and cheap CPU/RAM/GPU reads
+current_dispatch: macos-mps-private-ipc-f8176773-cfdb-437a-b23a-32367f0a7c97 on the mac-mini worktree
+current_task_root: /tmp/so101-debug-unbounded-queue-w2-mac-mini-3eed4ddd-a50c-4c21-b78f-60be2216ef9d
+current_plan: docs/superpowers/plans/2026-09-19-so101-macos-mps-private-ipc-implementation.md
+  SHA-256 cd098f4025eb00cb1beae0b0072dcaca35010c9ab1c1ac2334b4bda37df3ead2 (review PASS, e8e91c78…7fc86)
+current_design: docs/superpowers/specs/2026-09-19-so101-macos-mps-private-ipc-design.md
+  SHA-256 480da6dcdfea1da988f9f4e706c8340dbb6d7283200c27bb723859119145db1b
+current_worktree: /Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini
+current_branch: codex/so101-unbounded-queue-resource-budget (HEAD b55c181e at takeover)
+next_experiment: Task 1 RED - closed schema-v4 macOS MPS W2 contracts
+correction_cp_uq229: the header's `worktree`, `evidence_root` and `task_root` fields describe the
+  historical ai-station Stage A-E dispatch (`84620fc0`) and are not rewritten, because that history
+  is not invalidated. The live dispatch, worktree and evidence root for the current macOS MPS/private
+  IPC implementation are the `current_*` fields above. The pre-CP-UQ219 `next_experiment` value was
+  stale; no historical experiment entry was altered.
 ```
 
 ## Approvals (four independent authorities; plan lines 13-25, 36-40, 144, 193)
@@ -8931,3 +8944,111 @@ No W4/W6/W8 run or claim occurred. No ai-station operation, real hardware action
 configuration change, foreign cleanup, evidence deletion, or main-branch publication occurred.
 
 _Ledger source HEAD before terminal commit: `9d0679325`._
+
+## CP-UQ229 — macOS MPS/private-IPC dispatch is taken over; the v3 baseline is frozen
+
+```yaml
+checkpoint_id: CP-UQ229
+kind: IMPLEMENTATION_START
+last_valid_experiment: EXP-UQ229-TASK0-BASELINE
+current_hypothesis: The approved schema-v4 design closes exactly the two boundaries that CP-UQ228
+  recorded as blocking (NVML-only admission and the Linux dirfd IPC address), so a real macOS MPS
+  W2 campaign becomes supportable without weakening any frozen contract.
+working_tree_status: clean at takeover, then this ledger checkpoint and the task-root run records
+owned_processes: NONE - no task-owned runtime stack, socket, or test process is running
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome extension host, Sparkle updater,
+  and SkyComputerUseService; they are not task-owned and must not be signalled
+open_risks:
+  - The 3 pre-existing Darwin /proc/self/fd transport failures must go GREEN through the frozen v3
+    path plus the new v4 path, never by deleting or skipping the Linux assertions.
+  - macOS package/CTest runner loses DYLD_LIBRARY_PATH; Task 12 must use the repository's documented
+    direct-pytest package gate for this ament_python package instead of claiming a false RED.
+next_command: Task 1 RED - $TEST_PYTHON -m pytest -q src/so101_demo_py/test/test_parallel_batch_contracts.py -k 'schema_v4 or schema_v3_frozen'
+```
+
+### Dispatch and goal readback (no second executor, no second goal)
+
+| Item | Read back value |
+| --- | --- |
+| Host | `Terry-Mac-mini.local` (this session runs directly on it; no ssh, no ai-station action) |
+| Worktree | `/Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini` |
+| Branch | `codex/so101-unbounded-queue-resource-budget` |
+| HEAD | `b55c181e5b793aef95bf3bc7be9191138ddf00cd` = dispatch HEAD in the handoff; `a3468eca` is an ancestor |
+| Upstream | `origin/codex/so101-unbounded-queue-resource-budget` at `bf1b6091` (branch is ahead 2) |
+| Status | `git status --porcelain=v1` empty; submodule `third_party/mujoco_ros2_control` `e4c0241a` |
+| tmux | exactly one task session `dst-so01-macos-mps-w2`, pane 0, pid 59434, tty `/dev/ttys006` |
+| DSH session | `12d743e2-8902-4eca-acd1-835a39daa152` |
+| Goal | `goal-746d697c-16dd-4456-aeef-ea2d7edfd945`, revision 1, phase `active`, `roundsStarted=1` |
+| Goal round cap | `maxGoalRounds=100`, read from the DSH session store AND from the goal tool, not from prose |
+| Goal patch | `followups/macos-mps-private-ipc-f8176773-cfdb-437a-b23a-32367f0a7c97/goal-100.patch.yml` |
+| Receipt | `followups/.../dst.receipt`, 37 bytes, token `56178130-5b2d-4725-baf9-6bc31eabebc2`, sha256 `44e07cdf346db5733a74c2459f0a6f0555d8a1bb91e5753c6e1a34fbeb314c2d` |
+| Second executor / second goal | not found: the only task tmux session is the one above, `seenGoalIds` has one entry |
+
+Input documents were read completely and their SHA-256 values match the handoff exactly: design
+`480da6dc…db1b`, design review `05a483e5…b71c8`, plan `cd098f40…ead2`, plan review `e8e91c78…7fc86`
+(verdict `PASS`). The prior session's terminal result stands as history: `CP-UQ228` reported
+`PARTIAL_PASS / PHYSICAL_W2_BLOCKED` with `five_batch_stability: 0/5`, and this task exists to close
+those two boundaries. No physical claim from that session is reused as evidence here.
+
+### Implementation run root
+
+`/tmp/so101-debug-unbounded-queue-w2-mac-mini-3eed4ddd-a50c-4c21-b78f-60be2216ef9d/impl-macos-mps-w2-01/`
+holds `environment.json`, `git-status.txt`, `git-identity.txt`, `process-inventory.txt`,
+`module-origins.txt`, `ipc-base-readback.txt`, and the task-local gate runner `run-gate.sh`.
+Each gate gets its own sibling run directory with argv, provenance, stdout/stderr, elapsed time,
+exit code, and JUnit. No second evidence root was created; the root still has one writer.
+
+### Gate runner bootstrap: three INVALID attempts, then a valid baseline
+
+The runner needed three corrections before any product test could run. Every attempt is retained;
+none of them is counted as a product RED:
+
+1. `task0-baseline-01/` — INVALID. The runner used `set -u`; the ROS Jazzy `install/setup.bash`
+   reads unset `COLCON_TRACE` and aborted at line 11. Zero tests started.
+2. `task0-baseline-02/` — INVALID. `PYTHONPATH` pointed at `<worktree>/src/so101_demo_py/src`, but
+   `setup.py` maps the namespace as `package_dir={"so101_demo": "src"}`, so the importable name
+   `so101_demo` was absent (`ModuleNotFoundError`, exit 4, zero nodeids). The runner now builds the
+   mapped-namespace layout (`source-packages/so101_demo -> src`) that the prior verified run used.
+3. `task0-baseline-03/` — INVALID. Tests resolve the `so101_demo_py` ament prefix through
+   `ament_index_python`, and `AMENT_PREFIX_PATH` had no such prefix
+   (`PackageNotFoundError`, exit 4, zero nodeids). The runner now sources the task-owned overlay
+   `branch-build-01/install`.
+4. `task0-baseline-04/` — collected and ran, but the overlay's `build/`+`install/` package copies
+   won the module search, so a source edit would not have reached the test process. Kept as
+   superseded evidence and superseded by `task0-baseline-05/`.
+
+`EXP-UQ229-TASK0-BASELINE: VALID`
+
+```text
+run_root: task0-baseline-05/
+argv: /Users/matianyi/ros2_jazzy/.venv/bin/python3 -m pytest -q
+      src/so101_demo_py/test/test_parallel_batch_contracts.py
+      src/so101_demo_py/test/test_parallel_start_guard.py
+      src/so101_demo_py/test/test_parallel_unix_transport.py
+      --junitxml=task0-baseline-05/task0-baseline.xml
+exit_code: 1
+result: 3 failed, 108 passed (111 collected), 0 errors, JUnit read back
+elapsed_s: 1
+```
+
+Module origins for that gate: `rclpy` from `/Users/matianyi/ros2_jazzy/install/rclpy`, `torch`
+2.13.0 from the Jazzy venv, `so101_demo` from the source tree
+(`impl-macos-mps-w2-01/source-packages/so101_demo`), and ament prefix for `so101_demo_py` from
+`branch-build-01/install/so101_demo_py`. The three failures are exactly the frozen schema-v3 Darwin
+boundary recorded as `CP-UQ226`:
+
+- `test_transport_basename_budget_and_exact_kernel_size`
+- `test_long_durable_root_binds_connects_and_keeps_canonical_path`
+- `test_failed_bind_leaves_no_socket_and_no_fd_leak`
+
+All three fail because v3 requires `/proc/self/fd`, which does not exist on Darwin. They are the
+baseline this task must replace with the closed v4 `darwin_private_path_unix` combination while
+keeping the v3 branch and its Linux assertions intact. Environment facts for the record:
+`torch.backends.mps.is_built()=True`, `is_available()=True`,
+`recommended_max_memory()=19069665280` bytes; `/private/tmp/so101-ipc-501` does not exist, so no
+prior campaign IPC directory is being reused.
+
+Nothing was deleted, archived, pushed, or published. No W4/W6/W8 run, no Linux command, no
+ai-station operation, and no real-hardware action occurred in this checkpoint.
+
+_Ledger source HEAD: `b55c181e` (worktree clean apart from this checkpoint)._
