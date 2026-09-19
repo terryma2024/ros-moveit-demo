@@ -11675,3 +11675,41 @@ invented here.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `53259f59`; no evidence deleted._
+
+### CP-UQ263 addendum 5 — `_request_one` read; the v4 call is smaller than the v3 one
+
+The last unread piece of the production proxy (`cli/mujoco_parallel_batch.py:2234-2290+`) builds one
+Broker call like this:
+
+```text
+refresh authority (no health wait); sequence += 1
+request_id = f"{lease.attempt_id}-{model_id}"
+InferenceRequest(**identity) with
+  request_id, model_id, execution_kind, batch_id, coordinator_epoch, worker_id,
+  worker_generation, point_id, lease_generation, reset_epoch, image_timestamp_s,
+  input_relative_path (from the Worker root parent), input_sha256, deadline_s,
+  and attempt_id or validation_id depending on ExecutionKind
+before_send(request) when supplied
+Snapshot(shape, source_stamp_ns, source_frame_id, start_event_id, start_event_type,
+         NormalizedInferenceResponseIdentity.from_request(request))
+message = _message(key, lease, {"operation": "infer",
+                                "request": BrokerTransport.serialize_request(request),
+                                "snapshot": BrokerTransport.serialize_snapshot(broker_snapshot)})
+```
+
+Two things follow for the macOS port, and both are simplifications rather than additions:
+
+1. the payload is `{"operation": "infer", "request": …, "snapshot": …}` - the v4 envelope has no
+   place for a token, so `_message`'s v3 key/lease machinery collapses to a validated
+   `V4Request(request_id, "infer", deadline_monotonic_ns, payload)`;
+2. the identity fields stay the same, because they are Worker/Coordinator bookkeeping rather than
+   transport authentication - `InferenceRequest`, `Snapshot`, `BrokerTransport` and
+   `NormalizedInferenceResponseIdentity` are reused unchanged.
+
+So the driver's `request_one` is: build the identity from the lease and the snapshot, serialize it,
+call the v4 client once with that payload, and return the response. That is the piece the port
+currently takes as an injected callable, and it is now specified rather than guessed.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `97faab31`; no evidence deleted._
