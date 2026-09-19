@@ -583,6 +583,13 @@ def run(argv: list[str] | None = None) -> int:
             time.sleep(0.5)
         document["worker_results"] = results
 
+        # Evidence must not be sealed while handlers are still in flight: a handler record made after
+        # the document is written would never reach it, which is what made two fault probes look as if
+        # the handler had never complained (CP-UQ282 addendum 4). The server exposes exactly this wait.
+        server.join_workers(timeout_s=30.0)   # returns None; the wait itself is the guarantee
+        document["handlers_joined"] = True
+
+
         # The per-slot physical evidence, summarised where the campaign's own result can carry it:
         # a reader should not have to walk the directory tree to learn whether each slot executed
         # its points, and what the contacts were.
