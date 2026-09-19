@@ -8258,3 +8258,19 @@ The service is being returned to the standard catalog now, and the next block is
 valid physical batches at N1 / 20 points.
 
 _Ledger HEAD when written: `52300e598`._
+
+## CP-UQ208 — Web unit gate green (30 files, 126 tests), and the trap that made it look red
+
+Ran the final gates' light portion while the stability batches use the sim. The first attempt
+reported `15 failed | 15 passed` files and `77 failed | 49 passed` tests in 2.1 s — every failure the
+same sentence: `act(...) is not supported in production builds of React`. That is the documented trap
+this task's env already names: the ROS/colcon shell exports `NODE_ENV=production`, and vitest plus
+`@testing-library/react` need React's development build. `$TASK_ROOT/tools/task-env.zsh` provides
+`so101_web_test_env` for exactly this, and my first script forgot it.
+
+Re-run with `so101_web_test_env`: **30 files passed, 126 tests passed**, `exit_code: 0`
+(`browser/lg-final-web2.fOwqWU3j`). The red run is kept as evidence of the environment trap, not of a
+product defect, and `tools/final-gates.sh` now sources the helper before the web gate so the mistake
+cannot recur silently.
+
+_Ledger HEAD when written: `242d16f66`._
