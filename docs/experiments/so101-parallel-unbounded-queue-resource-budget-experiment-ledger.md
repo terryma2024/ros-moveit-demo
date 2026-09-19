@@ -13276,3 +13276,35 @@ walking required to see whether both slots did their work. GUI capture remains t
 Task 14 stays 0/5 and `LINUX_REGRESSION_DEFERRED` stands.
 
 _Ledger source HEAD: `b9bda5bf`; no evidence deleted._
+
+### CP-UQ278 addendum 3 — the stall question, narrowed by reading the server
+
+The v4 server's structure is exactly as documented, and it rules out the explanation I first reached
+for:
+
+```text
+V4PermissionOnlyServer.start():  accept thread + dispatch thread, both daemon
+_accept_loop():                  accept() -> bounded queue, refuses when full
+_dispatch_loop():                dequeue one connection -> one short-lived `v4-ipc-handler` thread
+_run_connection():               handle_connection(), then close
+```
+
+So a single stalled handler **cannot** starve other clients at the server: each connection gets its own
+thread, and the queue only bounds *pending* work. The `INTERNAL_ERROR` answers therefore came from the
+handler itself raising, not from the server refusing to serve.
+
+The hypothesis that fits every observation (`served 2`, all six inferences refused with
+`INTERNAL_ERROR`, no orphans): the campaign's **main thread proceeded to its cleanup** while one
+handler was still sleeping, tearing down the shared lane and endpoints under it; the stalled handler's
+subsequent model call then raised, and later connections hit a shutting-down server. That is fail
+closed rather than silent - the campaign did not admit anything - but it also means **one stalled
+request ends the whole campaign**, and that is a behaviour worth recording rather than discovering
+later.
+
+What would settle it: catching and logging the handler's exception with its traceback in the campaign
+document, so the next stall run names the failure instead of inferring it. That is a small, safe
+addition and is the next thing to do if this line is pursued.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `0e63b43b`; no evidence deleted._
