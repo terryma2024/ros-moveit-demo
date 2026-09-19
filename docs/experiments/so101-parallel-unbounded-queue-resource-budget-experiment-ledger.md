@@ -11148,3 +11148,29 @@ same-UID processes in a single-user simulation host.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `00889fc1`; no evidence deleted._
+
+### CP-UQ258 addendum 2 — the portable domain check, with the self-conflict trap mapped
+
+Two facts from the allocator decide the implementation, and both were read rather than assumed:
+
+```text
+allocate():      1101  self._claim_domains(domains)      # this allocator already holds the flocks
+                 1102  self._preflight(paths, parent_fd, domains)   # collision check runs after
+claim payload:   the `domain-<id>.lock` file content is JSON carrying `pid: os.getpid()`
+```
+
+So a naive "try to flock the claim file and treat failure as a conflict" would detect **itself** and
+refuse every allocation. The portable check must therefore read the recorded owner instead:
+
+1. `claim_root/domain-<id>.lock` missing -> no claim, no conflict;
+2. payload unreadable, non-JSON or missing `pid` -> fail closed (`PROBE_FAILED`), because "cannot
+   verify" must never be reported as "free";
+3. recorded `pid == os.getpid()` -> this allocator's own claim, not a conflict;
+4. recorded pid alive (the portable identity reader already exists) -> `ROS_DOMAIN_IN_USE`;
+5. recorded pid gone -> a stale file from a finished campaign, not a conflict - the flock is gone
+   with it, and the next campaign re-claims it.
+
+That is the eighth gate's specification, and it is portable because it reads files and the process
+table instead of `/proc`. Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `ad2a525c`; no evidence deleted._
