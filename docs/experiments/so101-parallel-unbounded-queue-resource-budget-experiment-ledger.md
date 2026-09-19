@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ272 (tail of this file)
+latest_checkpoint: CP-UQ273 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -12599,3 +12599,45 @@ Until that toggle is genuinely on, every per-point `viewer.png` fails closed, an
 Task 14 batch - this remains the single external condition on the macOS side.
 
 _Ledger source HEAD: `ade2136e`; no evidence deleted._
+
+## CP-UQ273 — Task 16 in progress: the scoped final checks that can run without GUI or Linux
+
+```yaml
+checkpoint_id: CP-UQ273
+last_valid_experiment: EXP-UQ273-FINAL-SCOPED-CHECKS
+working_tree_status: clean; head at the commit below
+owned_processes: NONE
+open_risks:
+  - The verdict is not yet written; the remaining Task 16 items are the per-task evidence table, the
+    retained/archived/deletion-candidate classification and the PARTIAL statement.
+next_command: write the Task 16 report and classify the evidence
+```
+
+```text
+git diff --check                      clean
+ordinary suite collection             3531 tests collected (src/so101_demo_py/test, benchmark suite
+                                      not collected by this gate)
+```
+
+Two forward references to keep honest: this session added its own tests (broker port, station
+environment guard, guard selector forms, lease/binding helpers, campaign seams), so the count is not
+directly comparable to the 3487 recorded in Task 12 - what matters for the gate is that collection is
+non-zero and that the benchmark suite is excluded, both of which hold.
+
+The evidence classification Task 16 requires, stated now so the final report does not have to
+reconstruct it:
+
+- **retained (the load-bearing records)**: `impl-macos-mps-w2-01/` (runners, probes, environment),
+  `station-build-01/` (the branch's own install), `model-artifacts/` (verified weights), the campaign
+  and station runs named in CP-UQ248-CP-UQ272, and the ledger itself;
+- **archived (superseded but auditable)**: the task0/task1 baseline runs, the source/collected gates
+  superseded by later reruns, and the invalidated gates this session recorded explicitly
+  (`task11-teleop-01/02`, `task11-openapi-01/02/03`, `task14-campaign-ready-02/03`, `-11`, the
+  `task14-*-probe-*` capture probes);
+- **deletion candidates (no delete without authorisation)**: `test-byproducts/`, the per-run `tmp/`
+  trees, and the 19 dead IPC campaign directories already removed under `/private/tmp/so101-ipc-501`
+  (those were transient runtime residue, not evidence, and their removal is recorded in CP-UQ265).
+
+Nothing has been deleted from the evidence root, and the Linux deferral from CP-UQ272 stands.
+
+_Ledger source HEAD: `b1c1a8ab`; no evidence deleted._
