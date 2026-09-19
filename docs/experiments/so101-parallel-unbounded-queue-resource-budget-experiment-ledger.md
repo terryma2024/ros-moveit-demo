@@ -11760,3 +11760,26 @@ gives the wiring round a clean baseline: 282 tests, one known environmental fail
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `ecd773ba`; no evidence deleted._
+
+### CP-UQ263 addendum 8 — the wiring contract is now fully checked, and one more defect fell out
+
+`RosWorkerRuntimePorts.run_perception_chain(self, lease, execution_kind, snapshot, broker_request)`
+(`runtime/parallel_ros_runtime.py:1142`) matches the positional contract the port now uses, and the
+production CLI binds it by construction: `perception_runner=runtime_ports.run_perception_chain`. Two
+consequences, one of which was another real defect in my port:
+
+1. the chain requires `self.broker_generation` to be a positive int (the port's own authority rule
+   already enforces that) and a reset receipt for `lease.attempt_id` - a wiring detail, not a port
+   concern;
+2. **the port bound the runner per call**, while `ParallelWorker` calls
+   `request_model(current, kind, snapshot=…, …)` with no runner at all - so every request through the
+   wired port would have refused with `PERCEPTION_RUNNER_REQUIRED`. The runner is now a constructor
+   argument, exactly as production builds it, and a port constructed without one still refuses.
+
+`task14-broker-port-07`: **6 passed**. This is the third defect this port has produced by checking its
+callers rather than its own assumptions (after the fence boolean and the positional chain), which is
+the pattern worth keeping: the port's tests were green each time the interface was wrong.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `11100bd5`; no evidence deleted._
