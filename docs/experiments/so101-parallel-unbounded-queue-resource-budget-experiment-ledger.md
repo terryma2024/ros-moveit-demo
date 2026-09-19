@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ257 (tail of this file)
+latest_checkpoint: CP-UQ258 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -11067,3 +11067,56 @@ one supplies the transport rule.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `997e0cba`; no evidence deleted._
+
+## CP-UQ258 — The Darwin transport branch works; the domain probe is the eighth gate
+
+```yaml
+checkpoint_id: CP-UQ258
+last_valid_experiment: EXP-UQ258-DARWIN-TRANSPORT-BRANCH
+current_hypothesis: The allocator's preflight only needed the v4 transport rule. CONFIRMED, and the
+  next Linux-only assumption is the live-domain probe.
+working_tree_status: clean at commit feaebb21
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - `SystemResourceProbe.ros_domain_in_use` reads `/proc`, so the v4 Darwin allocator cannot check
+    live ROS domain collisions yet.
+  - Screen Recording is still denied to this session; Task 14 batches remain blocked.
+next_command: give the v4 allocator a portable same-UID domain probe (psutil is already a dependency)
+```
+
+`EXP-UQ258-DARWIN-TRANSPORT-BRANCH: VALID` for the transport scope.
+
+### What changed
+
+`_preflight` now selects its transport rule by schema: the v3 `require_transport_basename` is
+untouched for v3 documents, and a `ParallelRuntimeConfigV4` document validates the encoded `sun_path`
+instead - 104 bytes for `darwin_private_path_unix`, 108 for the Linux combination, both taken from
+`runtime/unix_address.py` rather than re-declared. Every other preflight rule (symlink, directory
+conflict, namespace collision) stays in force on both platforms.
+
+### The probe chain, now measured end to end
+
+```text
+green-13  GPU_TARGET_UNAVAILABLE          (fixed in cc992945: the v4 CPU/RAM helper branch)
+green-14  UNIX_TRANSPORT_UNAVAILABLE      (fixed in feaebb21: v4 transport rule)
+green-15  SOCKET_PATH_TOO_LONG: 128 bytes + NUL > 104
+          -> real Darwin fact: the evidence root is too long for sun_path; the socket namespace
+             must live under the private short base (`/private/tmp/so101-ipc-<uid>`), which the
+             Darwin strategy already owns
+green-16  PROBE_FAILED: proc filesystem unavailable
+          -> `SystemResourceProbe.ros_domain_in_use` iterates `/proc`; on Darwin there is none
+```
+
+Note the shape of green-15: it is not a defect to patch away but the platform telling the truth. The
+short base is the design's answer, and the probe now passes `ipc_root=/private/tmp/so101-ipc-501/...`
+explicitly - which is also what the production composition must do.
+
+Regression: `task14-allocator-transport-regression-01` - 174 passed, 45 failed, where those 45 are
+exactly the pre-existing environmental failures of `test_parallel_batch_resources.py` measured
+earlier with and without changes (`task14-w2-resources-ab-01/02`: 45 failed, 47 passed both ways).
+No new failure is attributable to this commit.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `feaebb21`; no evidence deleted._
