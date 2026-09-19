@@ -11481,3 +11481,24 @@ Task 14 remains 0/5 - the Broker, the v4 broker proxy and the batch loop are sti
 `LINUX_REGRESSION_DEFERRED` is retained.
 
 _Ledger source HEAD: `11c11afa`; no evidence deleted._
+
+### CP-UQ262 addendum 2 — the real W2 campaign still passes after the portability work
+
+`task14-campaign-batch03/` re-runs the production macOS W2 campaign (MPS Broker, two Workers, one
+shared model set, one execution lane, permission-only v4 IPC, one-time consume) after every change
+this stretch made to contracts, the allocator, the guard and the worker runtime:
+
+```text
+status    : W2_CAMPAIGN_PASS          (11 s, exit 0)
+workers   : w1 on slot-0, w2 on slot-1
+admission : 6 requests CONSUMED, 0 refused
+cleanup   : complete, directory removed, registry empty, workers_reaped [true, true]
+```
+
+That is the regression that had to hold: eight v3/Linux assumptions were replaced in the resource
+and guard path, and the end-to-end campaign that exercises the Broker, the two Workers, one-time
+admission and cleanup is unchanged.
+
+Task 14 remains 0/5 and `LINUX_REGRESSION_DEFERRED` is retained.
+
+_Ledger source HEAD: `98ea0d0c`; no evidence deleted._
