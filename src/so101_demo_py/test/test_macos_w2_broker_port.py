@@ -76,7 +76,7 @@ def test_cancel_waits_for_health_then_sends_one_message() -> None:
         sleep=lambda _s: None,
     )
 
-    port.cancel_generation("w1", 4)
+    assert port.cancel_generation("w1", 4) is True
 
     # The client is rebuilt for the honest authority and the message carries no token or lease.
     assert clients[-1].kwargs["endpoint_path"] == "/new.sock"
