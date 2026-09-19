@@ -1150,7 +1150,7 @@ def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_p
         "run_mode": "plan_only",
         "image_id": "sha256:" + "b" * 64,
         "yolo_weights_sha256": "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781",
-        "grounded_manifest_sha256": "0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775",
+        "grounded_manifest_sha256": "b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05",
         "config_path": str(config),
         "request_deadline_s": 5.0,
         "max_frame_bytes": 8388608,

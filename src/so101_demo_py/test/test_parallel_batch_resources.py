@@ -393,7 +393,7 @@ def production_batch_argv(
         'f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781',
         '--grounded-root', '/models/grounded',
         '--grounded-manifest-sha256',
-        '0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775',
+        'b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05',
         '--run-mode', 'dry_run',
     ]
     if evidence is not None:

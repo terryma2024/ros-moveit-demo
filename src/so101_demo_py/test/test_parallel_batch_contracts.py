@@ -333,7 +333,7 @@ def test_runtime_config_exposes_reviewed_model_hashes_without_yaml_schema_drift(
         "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781"
     )
     assert config.grounded_sam_manifest_sha256 == (
-        "0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775"
+        "b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05"
     )
     assert "yolo_weights_sha256" not in yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
 
@@ -1177,3 +1177,58 @@ def test_schema_v4_declares_the_independent_snapshot_limit():
     missing.pop("max_input_snapshot_bytes")
     with pytest.raises(contracts.ContractError, match="MISSING_CONFIG_FIELD"):
         contracts.parse_parallel_runtime_config_v4(missing)
+
+
+def test_frozen_model_digests_match_the_published_hub_artifacts():
+    """The frozen digests must name the artifacts that are actually published.
+
+    Both bundles are published under `zjumty/` on the Hugging Face Hub. The YOLO weights were
+    always the published file; the Grounded SAM manifest digest had drifted from the published
+    bundle (`b55bb601…`, which the benchmark report calls the frozen production candidate and
+    which pairs with threshold-lock `b02e3be2…`) to the earlier `0486be2f…`. This pins both to the
+    published values so the next drift fails here instead of at a campaign start.
+    """
+
+    import so101_demo.parallel_batch.contracts as contracts
+
+    assert contracts._FROZEN_YOLO_WEIGHTS_SHA256 == (
+        "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781"
+    )
+    assert contracts._FROZEN_GROUNDED_SAM_MANIFEST_SHA256 == (
+        "b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05"
+    )
+    # Both runtime schemas must expose the same pair, so a platform cannot freeze its own.
+    for schema in (contracts.ParallelRuntimeConfigV3, contracts.ParallelRuntimeConfigV4):
+        assert schema.FROZEN_YOLO_WEIGHTS_SHA256 == contracts._FROZEN_YOLO_WEIGHTS_SHA256
+        assert (schema.FROZEN_GROUNDED_SAM_MANIFEST_SHA256
+                == contracts._FROZEN_GROUNDED_SAM_MANIFEST_SHA256)
+
+
+def test_the_benchmark_and_training_configs_carry_the_same_frozen_digests():
+    """Every config that names a model digest names the same one as the code."""
+
+    from pathlib import Path as _Path
+
+    import so101_demo.parallel_batch.contracts as contracts
+
+    package = _Path(__file__).resolve().parents[1]
+    benchmark = (package / "config/perception_benchmark/benchmark.yaml").read_text()
+    assert contracts._FROZEN_YOLO_WEIGHTS_SHA256 in benchmark
+    assert contracts._FROZEN_GROUNDED_SAM_MANIFEST_SHA256 in benchmark
+    for name in ("grounding_dino_training.yaml",
+                 "grounding_dino_domain_retention_training.yaml",
+                 "grounding_dino_domain_retention_last_stage_training.yaml"):
+        text = (package / "config/perception" / name).read_text()
+        assert contracts._FROZEN_GROUNDED_SAM_MANIFEST_SHA256 in text, name
+
+
+def test_the_retired_grounded_sam_manifest_digest_is_not_used_anywhere():
+    """The superseded digest must not linger in any shipped config or constant."""
+
+    from pathlib import Path as _Path
+
+    retired = "0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775"
+    package = _Path(__file__).resolve().parents[1]
+    for pattern in ("config/**/*.yaml", "config/**/*.json"):
+        for path in package.glob(pattern):
+            assert retired not in path.read_text(), path
