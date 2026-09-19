@@ -114,11 +114,22 @@ class BatchCoordinator:
     def __init__(
             self, journal, request, *, config, clock=time.monotonic, result_port,
             fault_hook=None, recovery_start_authorization=None,
-            point_selector: Callable[[str, frozenset[str]], str | None] | None = None):
-        """Restore durable state or initialize one immutable batch."""
+            point_selector: Callable[[str, frozenset[str]], str | None] | None = None,
+            inference_registry=None):
+        """Restore durable state or initialize one immutable batch.
+
+        ``inference_registry`` is the schema-v4 one-time request table. It is optional so every
+        existing v1/v2/v3 construction keeps its exact signature and behaviour; when it is
+        supplied, :meth:`admit_inference_result` is the only way a Broker result may enter this
+        Coordinator's state, and a refused admission never reaches a point, a pose or an action
+        gate.
+        """
         self._lock = threading.RLock()
         self.journal, self.request = journal, request
         self.clock, self.result_port = clock, result_port
+        if inference_registry is not None and not hasattr(inference_registry, 'consume_result'):
+            raise ValueError('INFERENCE_REGISTRY_PORT')
+        self._inference_registry = inference_registry
         if fault_hook is not None and not callable(fault_hook):
             raise ValueError('FAULT_HOOK_CALLABLE')
         if (recovery_start_authorization is not None
@@ -1092,3 +1103,23 @@ class BatchCoordinator:
             value.get('broker_recovery_deadline_monotonic_s'),
             value.get('broker_recovery_failed', False),
             value['terminal_reason'], value['batch_cleanup_complete'], summary)
+
+    # -- schema-v4 inference admission -----------------------------------------------
+
+    @property
+    def inference_registry(self):
+        """The v4 one-time request table, or None for a v1/v2/v3 Coordinator."""
+
+        return self._inference_registry
+
+    def admit_inference_result(self, request_id, **facts):
+        """Admit one Broker result through the registry, or refuse it.
+
+        Returns the registry decision. A refusal is final: the result must not reach RGB-D
+        freshness, TF, geometry, pose admission or any action gate, and the caller records the
+        refusal reason instead of retrying the same id.
+        """
+
+        if self._inference_registry is None:
+            raise ValueError('INFERENCE_REGISTRY_ABSENT')
+        return self._inference_registry.consume_result(request_id, **facts)
