@@ -400,6 +400,8 @@ def run(argv: list[str] | None = None) -> int:
                     broker_pid=ready.broker_pid,
                     broker_birth_identity=ready.broker_birth_identity)
 
+        consumed_ids: set[str] = set()
+
         def handler(request):
             """Serve one request: a real forward pass, admitted through the one-time table.
 
@@ -408,6 +410,16 @@ def run(argv: list[str] | None = None) -> int:
             IPC-shape probe this entry point has served since Task 13. Both run the same real model
             call on the shared lane - the difference is only what the caller sends and reads back.
             """
+
+            # One-time admission: a request id may be consumed once and never again, which is the
+            # property the Coordinator's table exists to provide. A repeat is refused here rather
+            # than served, so a late or duplicated result can never be admitted.
+            if request.request_id in consumed_ids:
+                served.append({"request_id": request.request_id, "operation": request.operation,
+                               "duplicate": True})
+                return {"ok": False, "code": "DUPLICATE_REQUEST",
+                        "request_id": request.request_id}
+            consumed_ids.add(request.request_id)
 
             detector = models["yolo"]
             batch = bootstrap.lane.submit(
@@ -507,7 +519,9 @@ def run(argv: list[str] | None = None) -> int:
         document["admission"] = {"admitted": admitted, "refused": refused}
         document["served"] = {
             "count": len(served),
-            "devices": sorted({item["device"] for item in served}),
+            # A refused duplicate carries no device, so the summary reads defensively.
+            "devices": sorted({item["device"] for item in served if "device" in item}),
+            "duplicates_refused": sum(1 for item in served if item.get("duplicate")),
             "lane_stats": {"executed": bootstrap.lane.stats.executed,
                            "max_concurrent": bootstrap.lane.stats.max_concurrent,
                            "rejected": bootstrap.lane.stats.rejected},
