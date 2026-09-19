@@ -13020,3 +13020,34 @@ Everything above is recorded rather than glossed, and none of it changes the ver
 Task 14 at 0/5 and `LINUX_REGRESSION_DEFERRED` in force.
 
 _Ledger source HEAD: `e10e4980`; no evidence deleted._
+
+### CP-UQ278 addendum — the inference-timeout probe: refusals, and an unexpected mechanism
+
+`--stall-serve-after N` holds the Nth inference answer past the Worker's client deadline
+(`--worker-deadline-s`, carried in the lease so the port's client uses it).
+
+```text
+task16-timeout-02   status W2_CAMPAIGN_INCOMPLETE, served 2, devices [], orphans []
+                    w1/w2 infer: all six calls -> W2BrokerPortError:
+                                 BROKER_INFER_REFUSED: INTERNAL_ERROR
+```
+
+What this supports: **no inference was admitted while the server was stalled** - every call failed
+closed with a refusal, which is the property that matters (a timeout must never be readable as an
+admission).
+
+What it does not support, and I am not going to dress it up: the failures carry `INTERNAL_ERROR`
+rather than a deadline code, and only two requests were recorded as served, so the stall appears to
+have affected the server's request loop more broadly than "one slow answer". The v4 server is built
+with an accept loop, a bounded dispatcher and per-connection handler threads, so a single stall
+*should* not starve other clients; whichever of the plausible causes it is (the stalled handler
+holding something shared, the lane submission, or a client disconnect racing the response write) is
+**not established** by this run. Recorded as an open question with its evidence, not as a finding.
+
+The two earlier attempts at this probe cost two runs and both were mine: the first version stalled the
+Nth served request in general rather than the Nth *inference* (the probe traffic interleaves), so the
+stall landed on a probe call and everything passed.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `4618a16f`; no evidence deleted._
