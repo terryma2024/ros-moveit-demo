@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ232 (tail of this file)
+latest_checkpoint: CP-UQ233 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -55,7 +55,7 @@ current_design: docs/superpowers/specs/2026-09-19-so101-macos-mps-private-ipc-de
   SHA-256 480da6dcdfea1da988f9f4e706c8340dbb6d7283200c27bb723859119145db1b
 current_worktree: /Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini
 current_branch: codex/so101-unbounded-queue-resource-budget (HEAD b55c181e at takeover)
-next_experiment: Task 4 RED - DarwinPrivatePathUnixAddress and exact endpoint cleanup
+next_experiment: Task 5 RED - permission-only v4 RPC envelope
 correction_cp_uq229: the header's `worktree`, `evidence_root` and `task_root` fields describe the
   historical ai-station Stage A-E dispatch (`84620fc0`) and are not rewritten, because that history
   is not invalidated. The live dispatch, worktree and evidence root for the current macOS MPS/private
@@ -9236,3 +9236,69 @@ named `30.0` at the repository root. It was moved, not deleted, to
 again.
 
 _Ledger source HEAD: `f20e1bc7`; no evidence deleted; no Linux or W4/W6/W8 action._
+
+## CP-UQ233 — Darwin now has a real private socket path, and its cleanup only deletes what it registered
+
+```yaml
+checkpoint_id: CP-UQ233
+last_valid_experiment: EXP-UQ233-TASK4-UNIX-ADDRESS
+current_hypothesis: The IPC half of CP-UQ228's PHYSICAL_W2_BLOCKED has a real replacement: a
+  canonical private path whose filesystem contract is the whole access check.
+working_tree_status: clean at commit 14b6e527
+owned_processes: NONE - every bound socket was bound and unlinked inside the test process
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome extension host, Sparkle updater,
+  SkyComputerUseService
+open_risks:
+  - The Linux `proc_fd_unix` transport tests still fail on this host by design; they are recorded as
+    DEFERRED_ENVIRONMENT, not skipped and not rewritten.
+  - The v4 Client deliberately has no endpoint authentication. That is the approved trust model for a
+    single-user task-owned simulation host and is not a multi-tenant security claim.
+next_command: Task 5 RED - permission-only v4 RPC envelope and lightweight IPC validation
+```
+
+`checkpoint_id: CP-UQ233`
+`last_valid_experiment: EXP-UQ233-TASK4-UNIX-ADDRESS`
+`commit: 14b6e527 feat(so101): add private Darwin Unix address strategy`
+
+`EXP-UQ233-TASK4-UNIX-ADDRESS: VALID`
+
+RED (`task4-red-01/`, exit 1, **14 failed, 7 passed**) and GREEN
+(`task4-green-04/`, exit 0, **23 passed**). `task4-green-01/` … `-03/` are retained iteration
+evidence. Two of those iterations found real product gaps rather than test bugs:
+
+1. the first version demanded that the *immediate* parent of the private base be root-owned and
+   sticky, which is right for `/private/tmp/so101-ipc-<uid>` and wrong for any other base. It was
+   replaced by an ancestor walk, which is the property that actually matters: nobody else may be
+   able to rename the directory a socket is bound into. An ancestor is accepted when it is not
+   group/other-writable, or when it is a root-owned sticky directory.
+2. the ancestor check originally applied only to directories **not** owned by the current user, so a
+   user's own `0777` directory passed. That is exactly the case where another local user can swap
+   the base, and it now fails with `ANCESTOR_WRITABLE` regardless of owner.
+
+A third iteration was a test-environment fact worth keeping: pytest's own `tmp_path` on this host is
+about 200 bytes, which no Darwin `sun_path` can ever hold (measured capacity: 103 bytes bind, 104
+fails with `AF_UNIX path too long`). Socket-binding tests therefore use a short per-test directory
+directly under `/private/tmp/so101-ipc-<uid>` and remove it in teardown; the teardown readback shows
+no leftover `so101-ipc-test-*` directory.
+
+What the strategy now guarantees:
+
+- canonical base `/private/tmp/so101-ipc-<uid>`; never `$TMPDIR`, never the evidence root, never
+  `/tmp` (a Darwin symlink);
+- the base and the campaign directory are owned by us, real directories, not symlinks, mode `0700`;
+- every campaign gets a fresh `b-<12 hex>` directory, and a colliding id is skipped, never reused
+  and never deleted;
+- endpoint names are the closed role map (`coordinator.sock`, `broker.sock`, `w1.sock`, `w2.sock`);
+- the encoded-path check is on bytes plus the terminating NUL against the real capacity, so a
+  multi-byte path is refused for its byte length, not its character count;
+- a bound socket is mode `0600` and is registered with its device/inode identity;
+- cleanup unlinks exactly one registered socket after re-checking that identity, reports
+  `ALREADY_GONE` when it vanished, `NOT_OWNED` when something replaced it (and then deletes
+  nothing), and removes the campaign directory only when it is empty. A sibling campaign is never
+  scanned or touched.
+
+The frozen Linux `proc_fd_unix` behaviour is untouched: `ProcFdUnixAddress` keeps the 108-byte
+capacity and refuses to pretend it can do durable unlinking, because a v3 endpoint dies with its
+owning process.
+
+_Ledger source HEAD: `14b6e527`; no evidence deleted; no Linux or W4/W6/W8 action._
