@@ -13385,3 +13385,31 @@ unimplemented operation is now refused with a stable v4 code instead of being an
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `7eb76dcb`; no evidence deleted._
+
+### CP-UQ282 addendum 3 — the tampered snapshot is refused, but the code is wrong again
+
+The campaign now enforces the digest the one-time table binds: an `broker.infer` whose declared
+`input_sha256` differs from the bound digest is refused as `SNAPSHOT_MISMATCH`, and an unreadable or
+absent digest is treated as a mismatch rather than a pass. `--tamper-snapshot-sha` makes the Workers
+declare a wrong digest so the check can be exercised live.
+
+```text
+task16-snapshot-mismatch-01 / -02   served 8, devices ['mps'] (probe traffic unaffected)
+                                    w1/w2 infer: all six -> BROKER_INFER_REFUSED: INTERNAL_ERROR
+                                    handler_errors: 0
+```
+
+Two things follow, and only one of them is good news:
+
+1. **the tampered inference was refused** - nothing computed from unbound bytes was admitted, which is
+   the security-relevant outcome;
+2. **the refusal carries `INTERNAL_ERROR`, not `SNAPSHOT_MISMATCH`** - and since `handler_errors` is
+   empty, my handler did not raise, so the answer came from the **server layer**. That is now the
+   *second* independent probe (after the stall probe, CP-UQ278 addendum 4) where the server answers
+   `INTERNAL_ERROR` in a situation that should carry a specific code.
+
+That pattern is worth one focused look - enumerate the server's `INTERNAL` paths and find which is
+reachable from a well-formed request - rather than another round of probe-and-guess. Recorded as the
+next step; Task 14 remains 0/5 and `LINUX_REGRESSION_DEFERRED` stands.
+
+_Ledger source HEAD: `95893461`; no evidence deleted._
