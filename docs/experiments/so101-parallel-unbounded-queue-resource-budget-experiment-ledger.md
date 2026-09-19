@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ265 (tail of this file)
+latest_checkpoint: CP-UQ266 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -12046,3 +12046,55 @@ harness mistake of this kind, already noted in CP-UQ260's addenda).
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `922e8dc7`; no evidence deleted._
+
+## CP-UQ266 — The readiness gap is closed, and it immediately refused both Workers
+
+```yaml
+checkpoint_id: CP-UQ266
+last_valid_experiment: EXP-UQ266-STATION-READY-FAIL-CLOSED
+current_hypothesis: With the station record written and the failure branch closed, the campaign
+  either proves readiness or refuses. It refused - which is the correct outcome of the fix.
+working_tree_status: clean after the scoped commit below
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - Both stations stop at phase CONTROLLERS inside the campaign Worker, while the same station
+    reached READY in ~15 s when a probe started it - the difference is not yet diagnosed.
+  - Screen Recording is still denied to this session.
+next_command: compare the Worker-started station against the probe-started one (env, argv, ros-log)
+```
+
+`EXP-UQ266-STATION-READY-FAIL-CLOSED: VALID` for the fix; the campaign itself is INCOMPLETE, not PASS.
+
+### The two gaps are closed
+
+- the Worker now writes `station_record` into its result document, so the readiness outcome is
+  evidence rather than a variable;
+- a non-zero readiness exit **stops the Worker before it serves anything**, writes a document naming
+  `STATION_NOT_READY`, and exits - a Worker can no longer drive a station it could not prove ready.
+
+### What the fixed code then reported
+
+```text
+task14-campaign-ready-05   status W2_CAMPAIGN_INCOMPLETE (exit 7), cleanup complete
+w1-result.json  ready=False phase=CONTROLLERS domain=181 exit=1 trips=0 failure=STATION_NOT_READY
+w2-result.json  ready=False phase=CONTROLLERS domain=182 exit=1 trips=0 failure=STATION_NOT_READY
+```
+
+Two facts worth separating:
+
+1. **the per-slot domain wiring is proven**: each Worker's station ran on the domain the plan gave it
+   (181 and 182), which is what CP-UQ264 could not show;
+2. **readiness now fails visibly** instead of being skipped - and it fails at `CONTROLLERS`, where the
+   probe-driven station reached `READY` in ~15 s on the very same domains
+   (`task14-w2-stations-guard-01`).
+
+So the campaign Worker's station is configured differently from the probe's, and that difference is
+the next thing to find: the probe used `task_station_config(worker)` (with `sensor_rendering:=true`
+and the allocator's per-Worker environment), while the child uses
+`default_task_station_config(session, root)` with `station_environment(base=os.environ)` plus the
+domain. Both are plausible causes and neither is established yet.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `c59f5273`; no evidence deleted._
