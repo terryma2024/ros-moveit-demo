@@ -12196,3 +12196,20 @@ Task 14 remains 0/5: no pick-place has run inside a campaign, the Workers' infer
 through the bare client rather than the port, and `LINUX_REGRESSION_DEFERRED` is retained.
 
 _Ledger source HEAD: `8fe50f43`; no evidence deleted._
+
+### CP-UQ268 addendum — the stations outlived their Workers, and my cleanup missed them
+
+Immediately after the PASS was written, eight processes matching
+`ros2_control_node|move_group|robot_state_publisher|spawner` were still alive: the two stations had
+**outlived the two Workers** that started them, even though the campaign reported `cleanup complete`.
+
+That report was accurate for what the supervisor owns - the Worker process group - and the defect is
+in the Worker child: it starts a `PersistentTaskStack` and never shuts it down, so whether the station
+dies with the Worker depends on the process-group membership of the `ros2 launch` the stack spawned.
+When that launch lands in its own group, the supervisor's group kill cannot reach it.
+
+Recorded as a real product defect to fix (the child must shut its station down in a `finally`, the way
+its own ownership object is designed to), and the eight processes were reaped by exact PID after
+confirming they belonged to this run. Task 14 stays 0/5 and `LINUX_REGRESSION_DEFERRED` is retained.
+
+_Ledger source HEAD: `f10e685c`; no evidence deleted._
