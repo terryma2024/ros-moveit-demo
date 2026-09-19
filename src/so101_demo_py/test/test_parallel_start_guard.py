@@ -584,3 +584,42 @@ def test_resolve_gpu_target_is_pure(scope):
     assert target.uuid == GPU0
     with pytest.raises(ProbeError):
         resolve_gpu_target("INDEX:3", devices, {})
+
+
+# --------------------------------------------------------------------------------------
+# The v3 admission path keeps NVML: the MPS proxy must not reach it
+# --------------------------------------------------------------------------------------
+
+
+def test_v3_admission_still_resolves_the_nvml_device_not_a_unified_memory_proxy():
+    """A v3 scope resolves a real NVML device; no MPS figure can stand in for `gpu_free_bytes`."""
+
+    from so101_demo.parallel_batch import start_guard as guard_module
+
+    devices = (guard_module.GpuDevice(index=0, uuid="GPU-abc", total_bytes=32 << 30,
+                                      free_bytes=20 << 30),)
+    target = guard_module.resolve_gpu_target("INDEX:0", devices, {})
+    assert target.uuid == "GPU-abc"
+    assert target.free_bytes == 20 << 30
+
+    # No NVML device means the v3 path refuses; it is never satisfied by host memory.
+    with pytest.raises(guard_module.ProbeError, match="GPU_TARGET_UNAVAILABLE"):
+        guard_module.resolve_gpu_target("INDEX:0", (), {})
+
+
+def test_v3_start_guard_policy_default_carries_no_mps_threshold():
+    """The default policy is the v3 shape: no MPS floor, so no MPS admission can be applied."""
+
+    from dataclasses import fields
+
+    from so101_demo.parallel_batch import contracts
+    from so101_demo.parallel_batch import start_guard as guard
+
+    policy = StartGuardPolicy()
+    assert policy.mps_minimum_headroom_bytes is None
+    # The v3 document parser still refuses the key, so a v3 config cannot acquire the floor.
+    assert "mps_minimum_headroom_bytes" not in contracts.START_GUARD_FIELDS
+    # And the v3 decision cannot be handed the proxy: it demands an NVML-shaped snapshot whose
+    # device-level figure lives in `gpu_free_bytes`.
+    assert "gpu_free_bytes" in {item.name for item in fields(guard.ResourceSnapshot)}
+    assert not hasattr(guard, "MPS_ADMISSION")

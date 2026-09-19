@@ -39,6 +39,10 @@ from .start_guard import (
     probe_snapshot,
 )
 
+# Imported for the schema-v4 accelerator hook. The import is a module reference only: the MPS
+# vocabulary stays in accelerator_probe, so schema v3 never pays for it and never consults it.
+from . import accelerator_probe as _accelerator_probe
+
 CLEAR = "CLEAR"
 PROBE_CLEANUP_BLOCKED = "PROBE_CLEANUP_BLOCKED"
 
@@ -395,8 +399,17 @@ class ProbeCoordinator:
             return "timeout", "cleanup state read"
         return "ok", state
 
-    def check(self, policy: StartGuardPolicy, scope: GuardScope) -> GuardResult:
-        """One bounded request. Never raises for a resource problem; always returns a result."""
+    def check(self, policy: StartGuardPolicy, scope: GuardScope, *,
+              accelerator: object | None = None) -> GuardResult:
+        """One bounded request. Never raises for a resource problem; always returns a result.
+
+        ``accelerator`` is the schema-v4 hook. When it is supplied (an
+        :class:`~so101_demo.parallel_batch.accelerator_probe.AcceleratorProbe`, a bare callable
+        taking ``deadline_monotonic_ns``, or a ready
+        :class:`~so101_demo.parallel_batch.accelerator_probe.AcceleratorSnapshot`), its
+        admission check runs inside the same policy deadline and is merged into the result. When
+        it is omitted the result is exactly the schema-v3 result.
+        """
 
         if not isinstance(policy, StartGuardPolicy) or not isinstance(scope, GuardScope):
             raise ValueError("policy and scope must be the closed models")
@@ -470,14 +483,84 @@ class ProbeCoordinator:
                 document = json.loads(payload.decode())
             except (UnicodeDecodeError, ValueError) as error:
                 return self._fail(scope, started, "PROBE_RESULT_INVALID", str(error), CLEAR)
-            return _result_from_document(document, scope)
+            result = _result_from_document(document, scope)
+            return self._merge_accelerator(result, policy, accelerator)
         finally:
             self._release_lock(lock)
+
+    # -- schema-v4 accelerator admission -------------------------------------------------
+
+    def _merge_accelerator(self, result: GuardResult, policy: StartGuardPolicy,
+                           accelerator: object | None) -> GuardResult:
+        """Run the MPS admission check inside the same deadline and merge it into the result.
+
+        A v4 Darwin policy always carries ``mps_minimum_headroom_bytes``. If it does, the
+        accelerator check is mandatory: a missing probe, a probe error, a malformed snapshot or
+        a figure below the fixed floor all produce a FAIL rather than an unguarded start. A
+        policy without the floor is the v3 shape and is returned untouched.
+        """
+
+        if policy.mps_minimum_headroom_bytes is None:
+            return result
+
+        def refused(reason: str, detail: str) -> GuardResult:
+            checks = dict(result.checks)
+            # The helper's own checks are kept for diagnosis; the refusal is what decides.
+            checks["mps_accelerator"] = GuardCheck(FAIL, reason, detail or None, None, "state")
+            return _with_checks(result, checks, FAIL)
+
+        if accelerator is None:
+            return refused("MPS_ACCELERATOR_PROBE_MISSING",
+                           "the Darwin combination requires an accelerator probe")
+
+        snapshot: object = accelerator
+        if not isinstance(snapshot, _accelerator_probe.AcceleratorSnapshot):
+            reader = getattr(accelerator, "probe", None)
+            if reader is None and callable(accelerator):
+                reader = accelerator
+            if reader is None:
+                return refused("MPS_ACCELERATOR_PROBE_MISSING",
+                               f"{type(accelerator).__name__} is not a probe")
+            remaining_ns = int((self._clock() + policy.timeout_s) * 1_000_000_000)
+            try:
+                snapshot = reader(deadline_monotonic_ns=remaining_ns)
+            except _accelerator_probe.ProbeError as error:
+                return refused(error.reason, error.detail)
+            except Exception as error:  # noqa: BLE001 - any probe failure is a refusal
+                return refused("MPS_ACCELERATOR_PROBE_FAILED",
+                               f"{type(error).__name__}: {error}")
+
+        if not isinstance(snapshot, _accelerator_probe.AcceleratorSnapshot):
+            return refused("MPS_ACCELERATOR_SNAPSHOT_INVALID",
+                           f"{type(snapshot).__name__} is not an AcceleratorSnapshot")
+        try:
+            evaluation = _accelerator_probe.evaluate_accelerator_snapshot(snapshot, policy)
+        except _accelerator_probe.ProbeError as error:
+            return refused(error.reason, error.detail)
+
+        checks = dict(result.checks)
+        checks.update(evaluation.checks)
+        status = FAIL if FAIL in {check.status for check in checks.values()} else result.status
+        return _with_checks(result, checks, status)
 
 
 # --------------------------------------------------------------------------------------
 # result transport
 # --------------------------------------------------------------------------------------
+
+
+def _with_checks(result: GuardResult, checks: dict, status: str) -> GuardResult:
+    """A copy of ``result`` with merged checks; the snapshot and cleanup state are preserved."""
+
+    return GuardResult(
+        scope=result.scope,
+        status=status,
+        started_monotonic_s=result.started_monotonic_s,
+        completed_monotonic_s=result.completed_monotonic_s,
+        checks=checks,
+        snapshot=result.snapshot,
+        cleanup_state=result.cleanup_state,
+    )
 
 
 def _result_to_document(result: GuardResult) -> dict:
@@ -619,6 +702,21 @@ def _scope_key(scope: GuardScope) -> tuple:
             scope.gpu_selector, scope.worker_count)
 
 
+def _check_with_accelerator(coordinator, policy: StartGuardPolicy, scope: GuardScope,
+                            accelerator: object | None) -> GuardResult:
+    """Call the coordinator's ``check``, passing the accelerator hook only when it is needed.
+
+    The keyword is only ever passed for a schema-v4 policy. That keeps every existing
+    coordinator double (a plain object with ``check(policy, scope)``) valid for schema v3,
+    which is the version still executed on Linux, instead of forcing a signature change on
+    callers that have no accelerator concept.
+    """
+
+    if policy.mps_minimum_headroom_bytes is None:
+        return coordinator.check(policy, scope)
+    return coordinator.check(policy, scope, accelerator=accelerator)
+
+
 class EpochStartGuard:
     """One fresh probe covers the spawns that immediately follow it in the same epoch.
 
@@ -628,7 +726,7 @@ class EpochStartGuard:
     """
 
     def __init__(self, coordinator: ProbeCoordinator, policy: StartGuardPolicy, *,
-                 clock=time.monotonic) -> None:
+                 clock=time.monotonic, accelerator: object | None = None) -> None:
         if not isinstance(coordinator, ProbeCoordinator):
             raise ValueError("coordinator must be a ProbeCoordinator")
         if not isinstance(policy, StartGuardPolicy):
@@ -636,6 +734,7 @@ class EpochStartGuard:
         self._coordinator = coordinator
         self._policy = policy
         self._clock = clock
+        self._accelerator = accelerator
         self._key: tuple | None = None
         self._result: GuardResult | None = None
         self._probes = 0
@@ -657,7 +756,8 @@ class EpochStartGuard:
     def begin_epoch(self, scope: GuardScope) -> GuardResult:
         """Always take one fresh observation for the new epoch."""
 
-        self._result = self._coordinator.check(self._policy, scope)
+        self._result = _check_with_accelerator(
+            self._coordinator, self._policy, scope, self._accelerator)
         self._key = _scope_key(scope)
         self._probes += 1
         return self._result
@@ -688,7 +788,12 @@ class EpochStartGuard:
 
 
 def compose_default_start_guard(policy: StartGuardPolicy, *,
-                                state_root: Path | None = None) -> EpochStartGuard:
-    """The installed composition: one task-level state root, one shared lock."""
+                                state_root: Path | None = None,
+                                accelerator: object | None = None) -> EpochStartGuard:
+    """The installed composition: one task-level state root, one shared lock.
 
-    return EpochStartGuard(ProbeCoordinator(state_root), policy)
+    ``accelerator`` selects the schema-v4 admission check. It is left ``None`` for schema v3,
+    whose guard remains the NVML-backed snapshot guard.
+    """
+
+    return EpochStartGuard(ProbeCoordinator(state_root), policy, accelerator=accelerator)
