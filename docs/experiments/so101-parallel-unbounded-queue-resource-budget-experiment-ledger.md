@@ -8011,3 +8011,27 @@ running process** (`/proc/<MainPID>/environ`), zero campaigns at start, `/health
 acceptance batch re-run against it.
 
 _Ledger HEAD when written: `1475049cf`._
+
+## CP-UQ201 — All fourteen fixed-N campaigns and the sequential case executed for real
+
+The clean run under the independent service finished `EXEC_N8RETRY3_RC=0`, `4 passed (10.6m)`:
+
+| Case | Slots (leases) | Points | Failed | Terminal | Cleanup | Timing |
+| --- | --- | --- | --- | --- | --- | --- |
+| `fixed-n8-p20` | 8 (2, 2, 2, 3, 3, 3, 2, 3) | 20/20 `PASSED` | none | `COMPLETED` | true | 5.0 m |
+| `sequential-n1-p4` | 1 (4) | 4/4 `PASSED` | none | `COMPLETED` | true | 5.6 m |
+
+**`fixed-n8-p20` passes**, which settles the CP-UQ196 question by experiment rather than by
+hypothesis: the N=8 workload is not what killed the service. The 05:22 death was a service whose
+lifetime belonged to a process tree that no longer exists, with a leftover broker container holding
+the GPU; under the systemd-held unit — and with the orphan containers removed — the same
+eight-slot, twenty-point campaign runs to `COMPLETED`, `20/20` points `PASSED`, every lease accounted
+for (2+2+2+3+3+3+2+3 = 20) and full cleanup. The service stayed `ActiveState=active`,
+`ExecMainStatus=0` throughout.
+
+With this, **all fourteen fixed-N campaigns have executed for real** — seven four-point (CP-UQ192)
+and seven twenty-point (CP-UQ194/195/196/201) — plus the sequential four-point case, i.e. fifteen of
+the sixteen `FIRST_PASS` manifest cases. The remaining one is the adaptive ladder, which needs the
+deployed copy that carries CP-UQ182/CP-UQ185 and is running now.
+
+_Ledger HEAD when written: `0f1ff8dd2`._
