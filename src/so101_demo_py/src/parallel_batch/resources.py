@@ -1376,7 +1376,14 @@ class WorkerResourceAllocator:
             raise ResourceAllocationError('START_GUARD_UNAVAILABLE')
         device = getattr(self.config, 'gpu_device', None)
         if device is None:
-            raise ResourceAllocationError('CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION')
+            # v4 replaced the v3 CUDA `gpu_device` with the closed platform combination, so the
+            # guard's selector comes from the resolved accelerator (`mps:default` on Darwin).
+            accelerator = getattr(self.config, 'accelerator', None)
+            if accelerator is None:
+                raise ResourceAllocationError('CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION')
+            gpu_selector = f'MPS:{accelerator.resolved_selector}'
+        else:
+            gpu_selector = f'{device.selector_kind}:{device.selector}'
         from .start_guard import GuardScope
         from .start_guard_probe import read_process_identity
 
@@ -1386,7 +1393,7 @@ class WorkerResourceAllocator:
             epoch=1,
             owner_pid=os.getpid(),
             owner_starttime_ticks=identity.start_time_ticks if identity is not None else 0,
-            gpu_selector=f'{device.selector_kind}:{device.selector}',
+            gpu_selector=gpu_selector,
             worker_count=worker_count,
         )
         result = self._start_guard.require_before_spawn(scope)
