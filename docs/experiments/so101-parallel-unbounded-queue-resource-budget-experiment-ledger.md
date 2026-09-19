@@ -11804,3 +11804,25 @@ Coordinator channel, the authority document and the perception runner to be supp
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `00e9689e`; no evidence deleted._
+
+### CP-UQ263 addendum 10 — the install carries this session's runtime changes
+
+`setup.py` maps one namespace package (`packages=[python_package]`,
+`package_dir={python_package: "src"}`), so every module under `src/` is installed without being
+listed - `macos_w2_broker_port.py` included. That was read, not assumed, and then verified by
+rebuilding the station install (7 packages, exit 0) and importing from it:
+
+```text
+station-build-01 rebuild  -> exit 0
+import from the install   -> W2BrokerPort ok, BrokerAuthority 1
+                             CANONICAL_INSTALL_MARKER == "moveit-demo/install", guard callables ok
+                             authority_from_document({"healthy": True, "broker_generation": 2, …})
+                             -> BrokerAuthority(healthy=True, generation=2, endpoint_path='/x/s')
+```
+
+So the driver can import the v4 port, the environment guard and the station config from the install
+rather than from a source path, which is what the wiring round needs.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `dd7fe5c9`; no evidence deleted._
