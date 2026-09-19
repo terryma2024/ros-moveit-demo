@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ261 (tail of this file)
+latest_checkpoint: CP-UQ262 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -11401,3 +11401,60 @@ contention hypothesis is retired.
 Task 14 remains 0/5 and `LINUX_REGRESSION_DEFERRED` is retained.
 
 _Ledger source HEAD: `60fba22f`; no evidence deleted._
+
+## CP-UQ262 — Exact W2: two slots, two domains, two ready stations
+
+```yaml
+checkpoint_id: CP-UQ262
+last_valid_experiment: EXP-UQ262-TWO-READY-STATIONS
+current_hypothesis: With the canonical prefix scrubbed, each allocated slot owns a station that
+  reaches the full ready contract on its own domain. CONFIRMED for both slots.
+working_tree_status: clean - no product changes in this round
+owned_processes: NONE - both stacks shut down in 0.33 s and 0.5 s, no process or orphan left
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - The station environment is currently assembled by a gate wrapper; the driver must build it (and
+    refuse a canonical prefix) itself.
+  - The Broker, the v4 broker proxy and the batch loop are still unwritten, so no batch can run.
+  - Screen Recording is still denied to this session.
+next_command: move the environment scrubbing into the driver, then wire the shared MPS Broker
+```
+
+`EXP-UQ262-TWO-READY-STATIONS: VALID`
+
+### The result
+
+`task14-w2-stations-scrub-01/`:
+
+```text
+worker-01  slot 1  ROS_DOMAIN_ID 181  peers_already_running 0
+           ready=True phase=READY failure=None   ready_wait 14.9 s   shutdown 0.33 s
+           controllers: arm_controller active, gripper_controller active,
+                        joint_state_broadcaster active
+worker-02  slot 2  ROS_DOMAIN_ID 182  peers_already_running 1
+           ready=True phase=READY failure=None   ready_wait 17.9 s   shutdown 0.5 s
+           controllers: arm_controller active, gripper_controller active,
+                        joint_state_broadcaster active
+grep "Waiting for data on 'robot_description'": 0
+```
+
+That is the structural core of Task 14: **two allocated Workers, two ROS domains, two independently
+owned visible stations, each reaching the complete ready contract, with the second starting while
+the first is already up** - so neither resource contention nor a launch conflict was ever the
+problem (CP-UQ260's hypothesis is retired), and the portability work of CP-UQ259 is what made the
+allocation possible at all.
+
+### One gate recorded as INVALID, and my cleanup
+
+`task14-w2-stations-seq-01` was killed while its first station sat in the canonical-prefix wait; it
+produced no document and is recorded as **INVALID**, not as a failure of the product. Killing the
+gate wrapper first left its Python probe and two canonical-install stations orphaned; the probe was
+then terminated by exact PID and the seven reparented processes (two `robot_state_publisher`, two
+`ros2_control_node`, two `move_group`, one spawner) were reaped by exact PID, verified to zero. The
+lesson is the same one the plan already states: stop the owned process that owns the children, not
+the wrapper above it.
+
+Task 14 remains 0/5 - no Broker, no inference, no pick-place, no GUI evidence - and
+`LINUX_REGRESSION_DEFERRED` is retained.
+
+_Ledger source HEAD: `01d827c5`; no evidence deleted._
