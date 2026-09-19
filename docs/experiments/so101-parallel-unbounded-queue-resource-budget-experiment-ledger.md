@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ248 (tail of this file)
+latest_checkpoint: CP-UQ249 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -10238,3 +10238,73 @@ drops. `v4-queue-det-01/` … `-05/`: **5 of 5 passing**.
 recovery, supervisor, v4 IPC, Unix address, MPS bootstrap, W2 composition and contracts.
 
 _Ledger source HEAD: `10175636`; no evidence deleted._
+
+## CP-UQ249 — The macOS W2 campaign now runs from a production entry point
+
+```yaml
+checkpoint_id: CP-UQ249
+last_valid_experiment: EXP-UQ249-MACOS-W2-ENTRYPOINT
+current_hypothesis: CONFIRMED. The composition plus a two-phase launcher turns the v4 contract into
+  a runnable campaign, and the one-time table is the gate that proves it.
+working_tree_status: clean at commit c1756cb6
+owned_processes: NONE - both workers reaped, endpoint unlinked, campaign directory removed
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome extension host, Sparkle updater,
+  SkyComputerUseService
+open_risks:
+  - Task 14's five FULL_RESTART *simulation* batches still need MoveIt shadow, controller/joint
+    state and MuJoCo pose/contact evidence; the controller stack present on this host is built
+    from the canonical checkout, not from this worktree.
+next_command: decide whether the canonical controller stack can be used as-is for Task 14 or must
+  first be rebuilt from this worktree
+```
+
+`EXP-UQ249-MACOS-W2-ENTRYPOINT: VALID`
+
+### What was missing, and what now exists
+
+`mujoco_parallel_batch` is the Linux container path and requires `--broker-image`, a CUDA device
+and `proc_fd_unix`; there was no way to *run* a v4 macOS campaign. Two new modules close that
+(`c1756cb6`):
+
+- `cli/macos_w2_campaign.py` — the launcher: inventory, config, plan, start guard, claim, broker,
+  endpoint, two workers, one-time admission, cleanup;
+- `cli/macos_w2_worker.py` — one Worker: registered ACK first, then three round trips.
+
+### Three real defects the run exposed, in order
+
+1. **The guard and the broker cannot share an interpreter.** The probe imports `torch.mps`; the
+   bootstrap requires torch to be unimported when it pins `PYTORCH_ENABLE_MPS_FALLBACK`. The
+   launcher now runs the guard as its own phase, writes `start-guard.json`, and hands over with
+   `execve` — the same shape the verified Task 13 smoke uses.
+2. **The warm-up input shape.** The bootstrap's default warm-up is a `(N, C, H, W)` tensor while
+   `DetectionFrame` requires `(H, W, 3)` uint8. Handled by an explicit `_as_rgb8` coercion rather
+   than by loosening the frame contract.
+3. **The one-time table refused all six responses.** The first full run reached `served 6` with both
+   Workers `ACTIVE`, and admission reported `REQUEST_UNKNOWN` for every id, so nothing was admitted
+   and the run correctly reported `INCOMPLETE` instead of passing. The gate was right: the launcher
+   never bound the requests. It now binds each id before it is served, and an unbound id would still
+   be refused.
+
+That third one is the most useful result of the round: the design's central safety property —
+"only a result the Coordinator bound in advance can be used" — was demonstrated failing closed on a
+real omission in my own code, not in a unit test.
+
+### The campaign, run for real through the entry point
+
+`task14-campaign-batch02/`:
+
+```text
+status    : W2_CAMPAIGN_PASS
+guard     : PASS / MPS_HEADROOM_OK, unified-memory-proxy, 11.38 GB available
+broker    : ready, device mps, models [yolo, grounded-sam]
+            model devices [mps:0, mps:0], parameter devices [['mps:0'], ['mps:0']]
+            warm-up 7.81 s, lane {submitted 7, executed 7, rejected 0, max_concurrent 1}
+workers   : w1 on slot-0 and w2 on slot-1, both ACTIVE with real birth identities, both reaped
+served    : 6 round trips, all device "mps", lane executed 13, max_concurrent still 1
+admission : 6 admitted, 0 refused
+cleanup   : complete, directory removed, registry empty, both workers gone
+```
+
+Regression: `entrypoint-regression-01/` exit 0, **177 passed**.
+
+_Ledger source HEAD: `c1756cb6`; no evidence deleted._
