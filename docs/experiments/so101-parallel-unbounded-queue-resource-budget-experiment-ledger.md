@@ -11852,3 +11852,20 @@ and give it the perception runner instead of calling the client directly.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `3d1c22b4`; no evidence deleted._
+
+### CP-UQ263 addendum 12 — the campaign still passes, from the rebuilt install
+
+`task14-campaign-batch04/` re-runs the production W2 campaign after the four port iterations and the
+station-install rebuild:
+
+```text
+status    : W2_CAMPAIGN_PASS        (10 s, exit 0)
+admission : 6 admitted, 0 refused
+cleanup   : complete, directory removed, registry empty, workers reaped [true, true]
+```
+
+So the composition that the wiring will extend is still green, and this run used the install that now
+contains `macos_w2_broker_port.py`, `station_environment` and the station config. Task 14 remains 0/5
+and `LINUX_REGRESSION_DEFERRED` is retained.
+
+_Ledger source HEAD: `bdefc300`; no evidence deleted._
