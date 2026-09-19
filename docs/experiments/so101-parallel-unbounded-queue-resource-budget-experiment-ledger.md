@@ -11288,3 +11288,34 @@ is a launch conflict.
 Task 14 remains 0/5 and `LINUX_REGRESSION_DEFERRED` is retained.
 
 _Ledger source HEAD: `626b4370`; no evidence deleted._
+
+### CP-UQ260 addendum — the sequential run points away from contention
+
+Observation from `task14-w2-stations-seq-01/` while it was still running (slot 1 started alone, slot 2
+not started yet):
+
+```text
+processes matching `ros2_control_node|move_group`: 2  = one station (control node + move_group)
+grep -c "Successfully switched controllers" stdout.log: 0
+result.txt: empty (the ready check was still inside its 180 s budget)
+```
+
+So the first station, with **no peer running**, had not activated its controllers either, while the
+identical station command launched by `run-owned-station.sh` reached `READY` in 0.87 s of startup and
+about 25 s of readiness (`task14-owned-station-02`). That makes "two MuJoCo stacks contend for the
+Mac mini" a poor explanation of CP-UQ260 and moves the suspicion to what my probe passes into the
+station, i.e. the Worker's own environment from the allocator:
+
+```python
+environment = {**os.environ, **dict(worker.environment or {}), "ROS_DOMAIN_ID": str(worker.ros_domain_id)}
+```
+
+The next diagnostic is therefore a diff, not another run: print the allocator's `worker.environment`
+for slot 1 and compare it against the environment the verified smoke used, looking for a variable
+that changes discovery, the RMW implementation, the ROS home/log root, or the spawner's timing. If a
+variable is the cause, the fix belongs where the allocator builds it - not in the station.
+
+This is recorded as an in-flight observation, not a conclusion: the run had not finished when it was
+written, and the ready result for both slots is still owed.
+
+_Ledger source HEAD: `f412680a`; no evidence deleted._
