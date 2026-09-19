@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ250 (tail of this file)
+latest_checkpoint: CP-UQ251 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -10436,3 +10436,61 @@ that single, non-code condition; nothing about the Station, the MPS Broker or th
 blocking it.
 
 _Ledger source HEAD: `2809052b`; no evidence deleted._
+
+## CP-UQ251 — The macOS Worker can now own a station, and one pre-existing failure is pinned
+
+```yaml
+checkpoint_id: CP-UQ251
+last_valid_experiment: EXP-UQ251-DARWIN-STATION-CONFIG
+current_hypothesis: The plan's Task 9/10 boundary never handled Darwin's station shape, so a
+  parallel macOS Worker could not start a station at all. CONFIRMED, and fixed.
+working_tree_status: clean at commit ce35a07b
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - Screen Recording is still denied to this session's responsibility chain, so Task 14's fresh GUI
+    evidence and the per-point viewer capture remain blocked (CP-UQ250 addendum).
+  - The macOS W2 simulation composition (two visible stations sharing one MPS Broker, driven
+    through the Coordinator) does not exist yet; the station config is only its first prerequisite.
+next_command: compose the macOS W2 simulation path on top of task_station_config
+```
+
+`EXP-UQ251-DARWIN-STATION-CONFIG: VALID`
+
+### The defect, and why it belonged to Task 9/10
+
+`RosWorkerRuntime.start_physical_runtime` called `headless_task_station_config(resources)`
+unconditionally, and that function's docstring says what it is: *"the single supported Linux
+headless Worker launch command"*. On Darwin the station launcher refuses `headless:=true` outright
+(`macOS task station requires headless=false`, `runtime/launch_composition.py`), so the macOS Worker
+path could never start. That is a genuine gap in the owning task's boundary, not a Task 14 harness
+problem, so it was fixed there.
+
+`task_station_config(resources, *, platform=None)` now resolves the shape per platform:
+
+- `linux` → the frozen `headless_task_station_config` object, unchanged;
+- `darwin` → the same station with `headless:=false`, `sensor_rendering:=true`,
+  `include_teleop:=false`, the Worker's `session_id` and `task_evidence_root`;
+- anything else → `unsupported task station platform: <name>`, fail closed.
+
+`ParallelWorkerRuntime` takes the same decision as a port (`station_config`, defaulting to the new
+resolver), so tests inject a station shape instead of monkeypatching the host platform.
+
+### RED → GREEN → regression
+
+```text
+task14-darwin-station-red-01   3 failed  ImportError: cannot import name 'task_station_config'
+task14-darwin-station-green-03 3 passed  (-k station_config)
+task14-darwin-station-regression-01  117 passed, 1 failed
+```
+
+The single regression failure,
+`test_parallel_ros_runtime.py::test_consumer_readiness_primes_and_retains_isolated_pose_publisher`,
+is **pre-existing**: `task14-darwin-station-ab-01` runs it with this change stashed and it fails
+identically at `parallel_ros_runtime.py:1717`. It is not caused by this commit and is not counted as
+a regression. One gate attempt is recorded as invalid rather than hidden: pointing
+`GATE_INSTALL_OVERLAY` at the station install breaks unit collection
+(`ModuleNotFoundError: No module named 'so101_mujoco_support'`), so the unit gates keep using the
+task-owned branch install.
+
+_Ledger source HEAD: `ce35a07b`; no evidence deleted._
