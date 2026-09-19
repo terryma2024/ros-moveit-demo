@@ -206,3 +206,112 @@ def test_no_active_path_imports_the_retired_budget_chain():
     for retired in ("resource_budget", "resource_measurement", "measurement_control",
                     "owned_resources"):
         assert not any(retired in name for name in payload["imported"]), payload["imported"]
+
+
+# --------------------------------------------------------------------------------------
+# Schema-v4 accelerator hook
+#
+# The guard is shared by both schemas. For schema v4 the policy carries the fixed MPS
+# headroom floor, and the accelerator admission check becomes mandatory inside the same
+# deadline. For schema v3 nothing changes: the epoch result is returned untouched.
+# --------------------------------------------------------------------------------------
+
+
+def _mps_policy(floor=1 << 30):
+    return StartGuardPolicy(mps_minimum_headroom_bytes=floor)
+
+
+def _healthy_mps_snapshot():
+    from so101_demo.parallel_batch.accelerator_probe import AcceleratorSnapshot
+
+    return AcceleratorSnapshot(
+        kind="mps", selector="default", available_bytes=8 << 30,
+        recommended_max_memory_bytes=16 << 30, current_allocated_memory_bytes=0,
+        driver_allocated_memory_bytes=0, metric_source="unified-memory-proxy:vm_stat+torch.mps",
+    )
+
+
+def test_v3_policy_never_consults_the_accelerator_hook(tmp_path, scope):
+    """A v3 policy has no floor, so the MPS vocabulary cannot influence its result."""
+
+    policy = load_parallel_runtime_config_v3(V3_CONFIG).start_guard
+    assert policy.mps_minimum_headroom_bytes is None
+    coordinator = probe_module.ProbeCoordinator(tmp_path / "sg")
+    guard = probe_module.EpochStartGuard(coordinator, policy,
+                                         accelerator=lambda **_: _healthy_mps_snapshot())
+    result = guard.begin_epoch(scope)
+    assert "mps_accelerator" not in result.checks
+    assert "mps_headroom" not in result.checks
+
+
+def test_v4_policy_without_a_probe_fails_closed(tmp_path, scope):
+    """A Darwin policy demands the accelerator check; a missing probe is a refusal."""
+
+    coordinator = probe_module.ProbeCoordinator(tmp_path / "sg")
+    guard = probe_module.EpochStartGuard(coordinator, _mps_policy())
+    result = guard.begin_epoch(scope)
+    assert result.status == FAIL
+    assert result.checks["mps_accelerator"].reason == "MPS_ACCELERATOR_PROBE_MISSING"
+
+
+def test_v4_policy_merges_a_healthy_accelerator_snapshot(tmp_path, scope):
+    """A healthy accelerator read adds the headroom check without hiding the helper's checks."""
+
+    coordinator = probe_module.ProbeCoordinator(tmp_path / "sg")
+    guard = probe_module.EpochStartGuard(coordinator, _mps_policy(),
+                                         accelerator=lambda **_: _healthy_mps_snapshot())
+    result = guard.begin_epoch(scope)
+    assert result.checks["mps_headroom"].reason == "MPS_HEADROOM_OK"
+    assert result.checks["mps_headroom"].cutoff == 1 << 30
+    # The helper's own probe check is still present, so a resource refusal is not masked.
+    assert "probe" in result.checks
+    if sys.platform == "darwin":
+        # On this host the NVML-backed helper still refuses, and the v4 guard reports FAIL:
+        # the accelerator PASS never overrides a helper refusal.
+        assert result.status == FAIL
+
+
+def test_v4_policy_refuses_a_snapshot_below_the_fixed_floor(tmp_path, scope):
+    """A headroom figure below the fixed floor is a hard refusal, not a warning."""
+
+    from so101_demo.parallel_batch.accelerator_probe import AcceleratorSnapshot
+
+    tight = AcceleratorSnapshot(
+        kind="mps", selector="default", available_bytes=(1 << 30) - 1,
+        recommended_max_memory_bytes=16 << 30, current_allocated_memory_bytes=0,
+        driver_allocated_memory_bytes=0, metric_source="unified-memory-proxy:vm_stat+torch.mps",
+    )
+    coordinator = probe_module.ProbeCoordinator(tmp_path / "sg")
+    guard = probe_module.EpochStartGuard(coordinator, _mps_policy(),
+                                         accelerator=lambda **_: tight)
+    result = guard.begin_epoch(scope)
+    assert result.status == FAIL
+    assert result.checks["mps_headroom"].reason == "MPS_HEADROOM_BELOW_MINIMUM"
+
+
+def test_v4_probe_error_is_reported_with_its_own_reason(tmp_path, scope):
+    """A probe refusal keeps its stable reason instead of becoming a generic failure."""
+
+    from so101_demo.parallel_batch.accelerator_probe import ProbeError
+
+    def refusing(**_: object):
+        raise ProbeError("MPS_UNAVAILABLE", "torch.backends.mps.is_available() is false")
+
+    coordinator = probe_module.ProbeCoordinator(tmp_path / "sg")
+    guard = probe_module.EpochStartGuard(coordinator, _mps_policy(), accelerator=refusing)
+    result = guard.begin_epoch(scope)
+    assert result.status == FAIL
+    assert result.checks["mps_accelerator"].reason == "MPS_UNAVAILABLE"
+
+
+def test_v4_probe_selection_keeps_cuda_on_the_v3_path():
+    """`select_accelerator_probe` returns the MPS probe only for the Darwin combination."""
+
+    from so101_demo.parallel_batch import accelerator_probe
+
+    assert accelerator_probe.select_accelerator_probe("cuda") is None
+    selection = accelerator_probe.select_accelerator_probe("mps")
+    assert isinstance(selection, accelerator_probe.MpsAcceleratorProbeSelection)
+    assert selection.admission_kind == "unified-memory-proxy"
+    with pytest.raises(accelerator_probe.ProbeError, match="ACCELERATOR_KIND"):
+        accelerator_probe.select_accelerator_probe("tpu")
