@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ260 (tail of this file)
+latest_checkpoint: CP-UQ261 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -11344,3 +11344,60 @@ broken three parses), and the gate must create its own run root (pre-creating it
 refuse, which cost round 42).
 
 _Ledger source HEAD: `9548cf09`; no evidence deleted._
+
+## CP-UQ261 — Root cause: the canonical install shadowed the branch, and that is why no station was ready
+
+```yaml
+checkpoint_id: CP-UQ261
+last_valid_experiment: EXP-UQ261-STATION-PREFIX-SHADOWING (gate FAILED; cause identified)
+current_hypothesis: The station readiness failures (CP-UQ260, sequential run) come from resource
+  contention or a launch conflict. DISPROVEN as the primary cause.
+working_tree_status: clean - no product changes in this round
+owned_processes: the sequential gate is still running and will reap its own stations
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - Station launches inherit an AMENT_PREFIX_PATH whose head is the branch overlay for one package
+    but whose tail is the canonical checkout's install, so nodes resolve from the wrong build.
+  - Screen Recording is still denied to this session.
+next_command: launch stations from a scrubbed environment (station-env.sh order) and re-run the gate
+```
+
+`EXP-UQ261-STATION-PREFIX-SHADOWING: FAILED` for the gate, but the cause is now established.
+
+### The evidence
+
+While the sequential gate was waiting, the running nodes were resolved from the canonical checkout:
+
+```text
+pgrep ros2_control_node -> /Users/matianyi/Projects/robot_demo_001/moveit-demo/install/...
+station stdout          -> [controller_manager]: Waiting for data on 'robot_description' topic
+                           (repeated for minutes - it never resolves)
+task14-w2-stations-seq-01/provenance.txt:
+  AMENT_PREFIX_PATH = <branch-build-01>/install/so101_demo_py
+                      /Users/matianyi/Projects/robot_demo_001/moveit-demo/install/so101_demo_py
+                      .../moveit-demo/install/so101_teleop
+                      .../moveit-demo/install/so101_mujoco_support
+                      .../moveit-demo/install/mujoco_ros2_control ... (the whole canonical stack)
+```
+
+So the probe's stations were launched against the **canonical** MuJoCo/MoveIt/ros2_control install,
+while the launch description, configs and evidence root came from this branch. `ros2_control_node`
+then waited forever for a `/robot_description` that the mismatched node set never delivered.
+
+That is both the mechanical cause and a plan violation: the global constraints forbid using the
+canonical checkout's install as this branch's proof. The working comparison was already in hand and
+I missed what it was telling me: `task14-owned-station-02`, the smoke that reached `READY`, launched
+through `station-env.sh`, which sources the underlay, `extra_ws` and then this branch's station
+install - and no canonical prefix.
+
+### What this changes
+
+The macOS W2 driver must build each station's environment explicitly from the validated chain
+(underlay -> `extra_ws` -> the branch's station install) and must **refuse to launch** if a canonical
+`moveit-demo/install` prefix is present in `AMENT_PREFIX_PATH`, rather than silently accepting it.
+The two earlier failures (concurrent and sequential) are now explained by a single cause; the
+contention hypothesis is retired.
+
+Task 14 remains 0/5 and `LINUX_REGRESSION_DEFERRED` is retained.
+
+_Ledger source HEAD: `60fba22f`; no evidence deleted._
