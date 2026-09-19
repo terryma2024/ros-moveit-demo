@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ280 (tail of this file)
+latest_checkpoint: CP-UQ281 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -13131,3 +13131,56 @@ Readback is exactly `roundsStarted=100, maxGoalRounds=200`, phase `active`, acti
 goal id. Task 14 stands at 0/5 and `LINUX_REGRESSION_DEFERRED` remains in force.
 
 _Ledger source HEAD: `e8e7f347`; no evidence deleted._
+
+## CP-UQ281 — The spawned-Worker pick-place gap is closed: both slots execute real pick-place
+
+```yaml
+checkpoint_id: CP-UQ281
+last_valid_experiment: EXP-UQ281-WORKER-PICK-PLACE
+current_hypothesis: The spawned Worker can drive the production pick-place batch on its own station
+  and domain, producing per-slot physical evidence. CONFIRMED.
+working_tree_status: clean after the scoped commit below
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - Every point still fails at TERMINAL_CAPTURE_FAILED, because macOS TCC denies Screen Recording to
+    this session's responsibility chain. That is an EXTERNAL blocker and is not a pass.
+  - Screen Recording remains denied; no counted Task 14 batch is possible until it is granted.
+next_command: recheck the Screen Recording grant; if it is ever granted, the same run becomes a
+  counted batch candidate
+```
+
+`EXP-UQ281-WORKER-PICK-PLACE: VALID` for the structural gap; the campaign itself is INCOMPLETE.
+
+### What changed
+
+Each Worker, after its station is ready and its round trips and inferences are served, runs the
+production batch runner (`so101_mujoco_rgbd_batch`) in **attach mode** against **its own station**,
+on **its own ROS domain**, with **its own evidence root** (`<worker station root>/pick`) - so the two
+slots never share a batch, a session, a reset epoch or a directory. This is the minimum safe form of
+the port CP-UQ271 called for: it reuses the production per-point flow instead of re-implementing the
+in-process runtime inside a spawned child.
+
+### The evidence
+
+```text
+task14-pickplace-06   W2_CAMPAIGN_INCOMPLETE (exit 7), served 8, orphans []
+  w1: 4 dynamic execute manifests, all state DONE, failure None
+      01-task_start           step 33829  table_contact True  max_normal_force 0.2330 N
+      02-cup_test_forward_5cm step 36771  table_contact True  max_normal_force 0.2331 N
+  w2: 4 dynamic execute manifests, all state DONE, failure None
+      01-task_start           step 37030  table_contact True  max_normal_force 0.2330 N
+      02-cup_test_forward_5cm step 38249  table_contact True  max_normal_force 0.2332 N
+  per-point evidence: rgb.png, point-cloud-preview.png, point-result.json for all four points on both
+  slots; every point's status is FAILED with failure_code TERMINAL_CAPTURE_FAILED
+```
+
+So both slots now produce **their own** MoveIt execution and MuJoCo physics evidence - trajectories
+completed, contacts recorded, placement reached - inside the campaign, on their own domains. What is
+still missing is the per-point `viewer.png`, and that is the TCC grant, not the chain.
+
+Task 14 therefore moves from "0/5, nothing to count" to "0/5, physical evidence present but every
+point fails closed on the GUI capture". It remains **0/5**: the plan counts a batch only when it
+passes, and I am not going to relabel a failing capture as a pass. `LINUX_REGRESSION_DEFERRED` stands.
+
+_Ledger source HEAD: `5b68085d`; no evidence deleted._
