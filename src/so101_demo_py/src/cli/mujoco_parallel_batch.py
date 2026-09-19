@@ -1107,16 +1107,16 @@ def compose_default_start_guard(policy):
 
 
 def _load_runtime_config(path: Path):
-    """New execution loads the closed v3 document; v1 and v2 are history only."""
+    """New execution loads the closed document: v3 unchanged, v4 added for macOS MPS W2.
 
-    try:
-        document = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError) as error:
-        raise ContractError(f"CONFIG_READ_FAILED: {path}") from error
-    version = document.get("schema_version") if isinstance(document, dict) else None
-    if type(version) is not int or version != 3:
-        raise ContractError("CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION")
-    return load_parallel_runtime_config_v3(Path(path))
+    The gate is delegated to `w2_composition.load_execution_config` so the CLI, the resource
+    allocator and the offline tests cannot drift apart on which schemas are executable. v1 and v2
+    remain history only, exactly as before.
+    """
+
+    from so101_demo.parallel_batch.w2_composition import load_execution_config
+
+    return load_execution_config(Path(path))
 
 
 def _reject_legacy_quota_flag(argv) -> None:
