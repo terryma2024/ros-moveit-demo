@@ -98,6 +98,14 @@ class CampaignPorts:
     stop_worker: Callable[[str], bool] = lambda _name: True
     #: Wall clock, for receipts and deadlines.
     clock: Callable[[], float] = time.monotonic
+    #: Build the station command a Worker owns. `None` keeps the composition's IPC-only Worker,
+    #: which is what every campaign before the simulation driver needs; the real caller passes
+    #: `parallel_worker_runtime.task_station_config`.
+    worker_station: Callable[[object], object] | None = None
+    #: Build the Worker-side Broker port. `None` keeps the IPC-only Worker; the simulation driver
+    #: passes a factory returning `macos_w2_broker_port.W2BrokerPort` with the perception runner
+    #: and the Coordinator authority already bound.
+    worker_broker: Callable[..., object] | None = None
 
 
 @dataclass
