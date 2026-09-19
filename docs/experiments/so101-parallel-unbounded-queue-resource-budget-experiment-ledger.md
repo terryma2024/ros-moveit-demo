@@ -8144,3 +8144,44 @@ the fault-injected retry case, produce the five consecutive valid physical batch
 final source/package/Web, install/served-byte, physics and visual gates.
 
 _Ledger HEAD when written: `2db41f84b`._
+
+## CP-UQ205 — Correction: CP-UQ198 overstated causality, which stays UNKNOWN
+
+**CP-UQ198 claimed more than the evidence supports and this entry retracts that part of it.** It said
+the 09:17 service death "is explained by the pane kill -- the service's lifetime was tied to the TUI
+pane's session, so SIGKILL to the pane took it down", and called that "a harness/deployment defect of
+mine". None of that is established.
+
+What is actually recorded, and all that is:
+
+- pane `%68` died from signal 9 at `2026-09-19 09:18:12 +08`, and its launcher PID 1345571 no longer
+  exists;
+- the validation service was not running when checked after the restart, and port 8010 was free;
+- the exit-capturing wrapper written in CP-UQ197 left **no** `service-exit.log`, so no exit status,
+  signal or timestamp for the service exists;
+- the interrupted run shows `[cause] read ECONNRESET` on the N8 case and then
+  `connect ECONNREFUSED 127.0.0.1:8010` for the sequential case, with the service log ending on
+  ordinary `200 OK` lines and no traceback.
+
+Those facts prove a **simultaneous boundary**: the pane and the service disappeared inside the same
+window, and the run is diagnostic INVALID because its client lost the service. They do **not** prove
+that the pane's SIGKILL caused the service's death. In particular nothing tested whether the service
+was in the pane's session or cgroup at all -- it was started detached with `start_new_session=True`
+-- so a shared-cause explanation (host-level event, resource kill, or an unrelated failure) is not
+excluded. **Causality for the 09:17 death: UNKNOWN.** No harness defect is established by it.
+
+The earlier **05:22 death also remains UNKNOWN**, exactly as CP-UQ196 recorded: it left no traceback,
+`dmesg` is unreadable from this account, `sudo` is out of scope, and an OOM kill was and remains a
+hypothesis.
+
+This correction applies to CP-UQ198 and to any later entry that inherited its causal reading
+(CP-UQ199's "closing part of the CP-UQ198 boundary" and the framing in CP-UQ200/CP-UQ203): the
+operational measures that followed are **not** retracted and are **not** rolled back -- a service held
+by `systemd --user` with `ExecMainStatus` capture is simply stronger evidence than a detached child
+whose status nobody records, and that is why it was adopted. It was not adopted because the causal
+claim had been demonstrated, and the claim itself is withdrawn here.
+
+The current build and the running acceptance sweep are untouched by this entry: it changes the record,
+not the workspace, the service or any campaign.
+
+_Ledger HEAD when written: `85d9cd3ff`._
