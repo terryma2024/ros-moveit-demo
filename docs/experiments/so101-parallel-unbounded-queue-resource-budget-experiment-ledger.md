@@ -11458,3 +11458,26 @@ Task 14 remains 0/5 - no Broker, no inference, no pick-place, no GUI evidence - 
 `LINUX_REGRESSION_DEFERRED` is retained.
 
 _Ledger source HEAD: `01d827c5`; no evidence deleted._
+
+### CP-UQ262 addendum — the product guard launches both stations for real
+
+`task14-w2-stations-guard-01/` re-runs the two-station gate with the probe no longer assembling its
+own environment: it now calls `station_environment(worker)` from `parallel_worker_runtime`
+(`11c11afa`), the same guard its unit test covers.
+
+```text
+worker-01 slot 1 domain 181  ready=True phase=READY  wait 15.1 s  shutdown 0.38 s  running=False
+worker-02 slot 2 domain 182  ready=True phase=READY  wait 18.0 s  shutdown 0.40 s  running=False
+stations left afterwards: 0
+```
+
+So the environment rule that CP-UQ261 identified is now enforced by product code on the launch path,
+not by a gate wrapper: every canonical checkout prefix is stripped from all seven discovery
+variables, a surviving one refuses the launch, and the Worker's granted `ROS_DOMAIN_ID` is the one
+the station runs under. Both slots still reach the full ready contract with a peer station already
+running.
+
+Task 14 remains 0/5 - the Broker, the v4 broker proxy and the batch loop are still unwritten - and
+`LINUX_REGRESSION_DEFERRED` is retained.
+
+_Ledger source HEAD: `11c11afa`; no evidence deleted._
