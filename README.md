@@ -270,6 +270,33 @@ for bundle preparation, launch arguments, frozen thresholds, training recipes,
 and delivery artifacts. The accepted adapted bundle uses Grounding DINO Tiny
 epoch 1 and SAM 2.1 Hiera Tiny decoder epoch 4.
 
+#### Published model artifacts
+
+Both model bundles are published on the Hugging Face Hub:
+
+| Artifact | Hub repository | Verified SHA-256 |
+| --- | --- | --- |
+| YOLO11n-Seg plastic-cup weights (`best.pt`) | <https://huggingface.co/zjumty/so101-yolo11n-seg-plastic-cup> | `f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781` |
+| Grounding DINO Tiny + SAM 2.1 bundle | <https://huggingface.co/zjumty/so101-grounded-sam-cup-pickplace> | `0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775` (manifest) |
+
+Download one file at a time, for example the weights:
+
+```bash
+curl -L -o /models/yolo/best.pt \
+  https://huggingface.co/zjumty/so101-yolo11n-seg-plastic-cup/resolve/main/best.pt
+# Linux reports sha256sum; macOS ships shasum instead.
+if command -v sha256sum >/dev/null 2>&1; then sha256sum /models/yolo/best.pt; \
+else shasum -a 256 /models/yolo/best.pt; fi
+```
+
+The weights repository is public; the Grounded SAM bundle is private, so
+downloading it needs Hub credentials. Loaders check these digests before
+loading anything and treat a mismatch as a startup failure rather than a
+warning, so a substituted file makes the run stop matching the recorded
+evidence. The same digests appear in
+`src/so101_demo_py/config/perception_benchmark/benchmark.yaml`, in the
+`grounding_dino_*_training.yaml` configs, and in `parallel_batch/contracts.py`.
+
 The [acceptance report](docs/reports/grounded-sam-yolo-seg-benchmark-report.md)
 records four independent MuJoCo pick-place runs per machine as of September 7,
 2026: Linux CUDA and two Mac MPS hosts each completed all four preset positions.
