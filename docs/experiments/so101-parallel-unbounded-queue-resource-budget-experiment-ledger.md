@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ279 (tail of this file)
+latest_checkpoint: CP-UQ280 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -13109,3 +13109,25 @@ requirement MET / PARTIAL / NOT MET / DEFERRED with the artefact that carries it
   or reported as anything.
 
 _Ledger source HEAD: `4a372263`; no evidence deleted._
+
+## CP-UQ280 — The goal budget is extended to 200 rounds by explicit authorization
+
+```yaml
+checkpoint_id: CP-UQ280
+authorization: direct user instruction to keep the same goal and raise its cap by exactly +100
+goal_id: goal-746d697c-16dd-4456-aeef-ea2d7edfd945
+before: revision 5, phase blocked (code round-limit), roundsStarted 100, maxGoalRounds 100, disarmed
+after:  revision 7, phase active, roundsStarted 100, maxGoalRounds 200, armed
+working_tree_status: clean at commit e8e7f347
+owned_processes: NONE
+open_risks:
+  - Screen Recording is still denied to this session's responsibility chain; it remains an external
+    blocker and must never be reported as a pass.
+next_command: close the CP-UQ271 spawned-worker pick-place gap, then Task 14
+```
+
+The same goal was edited (not created, cleared or replaced): `maxGoalRounds` 100 -> 200, then resumed.
+Readback is exactly `roundsStarted=100, maxGoalRounds=200`, phase `active`, activation `armed`, same
+goal id. Task 14 stands at 0/5 and `LINUX_REGRESSION_DEFERRED` remains in force.
+
+_Ledger source HEAD: `e8e7f347`; no evidence deleted._
