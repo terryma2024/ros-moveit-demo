@@ -11029,3 +11029,41 @@ that branch.
 No Worker allocated yet; Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `fca32ffb`; no evidence deleted._
+
+### CP-UQ257 addendum 2 — the Darwin branch, specified to the line
+
+`_preflight` refuses because of the transport check, and the reason is now precise. The allocator
+builds each slot's socket as a **dirfd-relative namespace**:
+
+```python
+socket_namespace = self.ipc_root / str(slot_index)      # resources.py:1596
+socket_path      = socket_namespace / 's'               # 1607
+...
+require_transport_basename(socket_path)                 # 1635 -> IpcError -> UNIX_TRANSPORT_UNAVAILABLE
+```
+
+`require_transport_basename` is the Linux `proc_fd_unix` rule: the socket must be bindable as a
+basename inside an owned parent descriptor. The path shape it sees (`/…/ipc/0/s`) is already
+basename-compatible, so the refusal is about the transport being *available* at all — i.e. the
+`/proc/self/fd` dirfd form Darwin does not have. That is exactly the rule schema v4 replaces with the
+Darwin private-path strategy (`runtime/unix_address.py`, absolute `/private/tmp/so101-ipc-<uid>`
+endpoints, `0700` root, `0600` sockets, `sun_path` capacity 103).
+
+So the Darwin branch of the allocator is small and well-defined:
+
+1. keep the namespace/path construction above (it stays basename-shaped and the workers' environment
+   keys do not change);
+2. select the transport validation by schema: `require_transport_basename` for v3, and the Darwin
+   strategy's encoded-length validation (`validate_encoded_length`, 103 bytes) for a
+   `ParallelRuntimeConfigV4` document;
+3. leave every other `_preflight` rule (`SYMLINK_PATH`, `DIRECTORY_CONFLICT`, namespace collisions)
+   in force for both platforms - those are platform-neutral and must not be relaxed;
+4. add the v4 case to the allocator's own tests plus one proving the v3 refusal is unchanged.
+
+This is the seventh gate, and with it the branch has a complete specification: the six earlier gates
+supply the platform selection, policy ceiling, guard selector, accelerator input and claim root; this
+one supplies the transport rule.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `997e0cba`; no evidence deleted._
