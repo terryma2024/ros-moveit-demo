@@ -435,6 +435,7 @@ def run(argv: list[str] | None = None) -> int:
                 # into a non-OK status, and what the Worker's port checks.
                 return {"error": {"code": "DUPLICATE_REQUEST",
                                   "detail": request.request_id}}
+            nonlocal infer_served
             consumed_ids.add(request.request_id)
 
             if request.operation == "broker.infer":
@@ -475,6 +476,10 @@ def run(argv: list[str] | None = None) -> int:
         implemented_operations = frozenset({"broker.infer", "worker.progress", "worker.result"})
 
         def _serve(request):
+            # `infer_served` belongs to the enclosing scope: without this declaration the augmented
+            # assignment below made it a local of `_serve`, and every inference died with
+            # UnboundLocalError - which the server reports only as INTERNAL_ERROR.
+            nonlocal infer_served
             if request.operation not in implemented_operations:
                 return {"error": {"code": "UNKNOWN_OPERATION", "detail": request.operation}}
             if request.operation == "broker.infer":
@@ -588,6 +593,7 @@ def run(argv: list[str] | None = None) -> int:
         # the handler had never complained (CP-UQ282 addendum 4). The server exposes exactly this wait.
         server.join_workers(timeout_s=30.0)   # returns None; the wait itself is the guarantee
         document["handlers_joined"] = True
+        document["server_rejections"] = list(getattr(server, "rejections", ()) or ())
 
 
         # The per-slot physical evidence, summarised where the campaign's own result can carry it:
