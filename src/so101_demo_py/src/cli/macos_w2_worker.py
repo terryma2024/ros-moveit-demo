@@ -98,7 +98,8 @@ if lease_argument:
     lease_document = json.loads(Path(lease_argument[0]).read_text())
     authority = BrokerAuthority(healthy=True, generation=1, endpoint_path=endpoint)
     port_config = SimpleNamespace(
-        broker_max_frame_bytes=8 * 1024 * 1024, executing_hard_timeout_s=240.0,
+        broker_max_frame_bytes=8 * 1024 * 1024,
+        executing_hard_timeout_s=float(lease_document.get("deadline_s", 240.0)),
         broker_recovery_timeout_s=90.0)
     port = W2BrokerPort(
         coordinator=lambda: authority, authority=authority, config=port_config,
