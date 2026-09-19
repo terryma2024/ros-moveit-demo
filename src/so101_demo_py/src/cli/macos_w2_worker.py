@@ -138,24 +138,28 @@ if lease_argument:
 
     # A duplicate of the first request: the one-time table must refuse it, so a late or repeated
     # result cannot be admitted a second time.
-    duplicate_id = lease_document["attempt_ids"][0]
-    duplicate_lease = SimpleNamespace(
-        attempt_id=duplicate_id, batch_id=lease_document["batch_id"],
-        coordinator_epoch=lease_document["coordinator_epoch"], worker_id=worker_id,
-        worker_generation=lease_document["worker_generation"],
-        point_id=lease_document["point_id"],
-        lease_generation=lease_document["lease_generation"])
-    try:
-        port.request_one(
-            duplicate_lease, ExecutionKind.ATTEMPT, model_id=lease_document["model_id"],
-            snapshot=snapshot, start_event_id=f"{duplicate_id}-start",
-            start_event_type=lease_document["start_event_type"],
-            reset_epoch=lease_document["reset_epoch"])
-        duplicate_result = {"request_id": f"{duplicate_id}-{lease_document['model_id']}",
-                            "status": "ADMITTED_TWICE"}
-    except Exception as error:  # noqa: BLE001
-        duplicate_result = {"request_id": f"{duplicate_id}-{lease_document['model_id']}",
-                            "status": "REFUSED", "error": f"{type(error).__name__}: {error}"}
+    # The duplicate probe is opt-in: with it off, a clean campaign can report PASS rather than
+    # being INCOMPLETE by construction, since the verdict refuses when anything was refused.
+    duplicate_result = None
+    if lease_document.get("duplicate_probe"):
+        duplicate_id = lease_document["attempt_ids"][0]
+        duplicate_lease = SimpleNamespace(
+            attempt_id=duplicate_id, batch_id=lease_document["batch_id"],
+            coordinator_epoch=lease_document["coordinator_epoch"], worker_id=worker_id,
+            worker_generation=lease_document["worker_generation"],
+            point_id=lease_document["point_id"],
+            lease_generation=lease_document["lease_generation"])
+        try:
+            port.request_one(
+                duplicate_lease, ExecutionKind.ATTEMPT, model_id=lease_document["model_id"],
+                snapshot=snapshot, start_event_id=f"{duplicate_id}-start",
+                start_event_type=lease_document["start_event_type"],
+                reset_epoch=lease_document["reset_epoch"])
+            duplicate_result = {"request_id": f"{duplicate_id}-{lease_document['model_id']}",
+                                "status": "ADMITTED_TWICE"}
+        except Exception as error:  # noqa: BLE001
+            duplicate_result = {"request_id": f"{duplicate_id}-{lease_document['model_id']}",
+                                "status": "REFUSED", "error": f"{type(error).__name__}: {error}"}
 
 
 try:
