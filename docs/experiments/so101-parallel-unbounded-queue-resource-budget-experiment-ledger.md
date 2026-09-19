@@ -8424,3 +8424,37 @@ independent terminal, cleaned batches complete, and CP-UQ209's `OWNED_GROUP_SURV
 open.
 
 _Ledger HEAD when written: `e2202cc45`._
+
+## CP-UQ213 — The N1 diagnostic stalls in the browser, and the host shows a GPU-shaped blockage
+
+The four-point N1 reproduction was re-run against a fresh service root, exactly as the owned-cleanup
+correction prescribed, and it stalled the same way: after minutes, that root's service log contains
+**zero** `POST`/`PUT`/`DELETE` requests and no campaign exists, so the case never reaches its first
+state-changing call. Reading the page instead of guessing says the console itself is healthy — a
+direct browser probe against the same service shows the heading rendered,
+`Acquire lease` **enabled**, `Generate points` enabled, the two gated buttons disabled, and only a
+favicon 404 in the console. So the stall is not a UI defect and not a service defect.
+
+What the host shows at the same moment (read-only; **no signals sent**):
+
+- 22 Chrome processes, including a `--type=gpu-process` that has been in uninterruptible sleep
+  (`D`) for ~15 minutes and a utility process in `D` for ~12 minutes, both orphaned to PID 1;
+- load average **9.72** (1 min) on a 31 GiB host with 23 GiB available;
+- my broker container `e2bb172bd754` — ownership proven earlier: label `com.so101.batch-id = bef23`
+  and binds to the failed stability campaign — still `Up 51 minutes`, and the daemon still refuses to
+  kill or remove it.
+
+**Hypothesis, explicitly not a finding:** the browser cases cannot start because the GPU is held by
+that container and orphaned Chrome GPU processes are stuck on it. I have not proven the causal chain,
+and per the correction I am not going to signal anything selected by process name, command substring,
+image, port or age: the stuck Chrome processes carry no recorded owned-process manifest, so their
+ownership is `OWNERSHIP_UNPROVEN` and they stay untouched; the container's ownership *is* proven but
+the daemon itself blocks removal, and restarting Docker or using `sudo` is out of scope.
+
+The stalled run was stopped through its own job handle (exact-owned), not by signalling a match. The
+five-batch stability requirement remains **0 of 5**, CP-UQ209's `OWNED_GROUP_SURVIVORS` boundary stays
+open, and the next diagnostic step is to establish whether the blockage clears on its own before
+re-attempting any browser-driven acceptance — reading the D-state processes' `/proc/<pid>/stack` (if
+readable) or waiting for the container's I/O to complete, rather than forcing cleanup.
+
+_Ledger HEAD when written: b2c636009._
