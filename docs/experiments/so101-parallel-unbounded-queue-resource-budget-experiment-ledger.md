@@ -10709,3 +10709,26 @@ task14-w2-resources-ab-01/02  45 failed, 47 passed with AND without the change -
 ran, Task 14 stays 0/5, and `LINUX_REGRESSION_DEFERRED` is retained.
 
 _Ledger source HEAD: (parent of this commit); no evidence deleted._
+
+### CP-UQ255 addendum — the third v3-only gate in the same allocation path
+
+Continuing the probe with a composed guard (`EpochStartGuard` via
+`compose_default_start_guard(config.start_guard)`) and the registered task root exported, the next
+gate appears at `resources.py:1377`:
+
+```text
+task14-w2-resources-green-06  CoordinatorError PROBE_STATE_ROOT_UNSET: SO101_TASK_ROOT
+                              (the guard fails closed without the registered root - correct)
+task14-w2-resources-green-07  ResourceAllocationError CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION
+                              resources.py:1379  ->  `device = getattr(config, 'gpu_device', None)`
+```
+
+`_start_guard_check` builds its `GuardScope` device from `config.gpu_device`, which is exactly the
+v3/CUDA field v4 replaces with `accelerator` (`mps` + `default`). So the v4 macOS document has no
+`gpu_device`, the getattr returns `None`, and the allocation refuses. Three v3-only assumptions now
+sit in one path — accepted config type (fixed), policy ceiling (fixed), guard device (open) — and all
+three were invisible until a real caller *allocated* instead of describing. The remaining fix belongs
+with the guard/accelerator boundary and must build the scope device from the resolved v4 accelerator,
+not from `gpu_device`.
+
+_Ledger source HEAD: `c803f5a1`; no evidence deleted._
