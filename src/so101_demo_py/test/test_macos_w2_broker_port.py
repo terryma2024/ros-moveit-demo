@@ -111,12 +111,20 @@ def test_refresh_times_out_instead_of_waiting_forever() -> None:
         port.refresh(wait_until_healthy=True)
 
 
-def test_request_model_runs_the_perception_chain_and_requires_it() -> None:
+def test_request_model_uses_the_positional_perception_contract() -> None:
+    """`parallel_ros_runtime` expects `perception_runner(lease, kind, snapshot, request_one)`."""
+
     seen = {}
 
-    def runner(**kwargs):
-        seen.update(kwargs)
+    def runner(*args):
+        lease, kind, snapshot, send = args
+        seen["args"] = (lease, kind, snapshot)
+        seen["sent"] = send("yolo", before_send=None)
         return "admitted"
+
+    def request_one(lease, kind, **kwargs):
+        seen["request_one"] = (lease, kind, kwargs["model_id"], kwargs["before_send"])
+        return {"model_id": kwargs["model_id"]}
 
     port = W2BrokerPort(
         coordinator=lambda: BrokerAuthority(True, 1, "/x"),
@@ -126,16 +134,19 @@ def test_request_model_runs_the_perception_chain_and_requires_it() -> None:
     )
     result = port.request_model(
         "lease", "yolo", snapshot="snap", start_event_id="e1",
-        start_event_type="attempt_started", reset_epoch=1, perception_runner=runner,
+        start_event_type="attempt_started", reset_epoch=1,
+        perception_runner=runner, request_one=request_one,
     )
 
     assert result == "admitted"
-    assert seen["broker_generation"] == 1
-    assert seen["snapshot"] == "snap"
-    assert seen["connection"] is port.connection
+    assert seen["args"] == ("lease", "yolo", "snap")
+    assert seen["sent"] == {"model_id": "yolo"}
+    assert seen["request_one"] == ("lease", "yolo", "yolo", None)
 
-    with pytest.raises(W2BrokerPortError, match="PERCEPTION_RUNNER_REQUIRED"):
-        port.request_model(
-            "lease", "yolo", snapshot="snap", start_event_id="e1",
-            start_event_type="attempt_started", reset_epoch=1,
-        )
+    for missing in ({"perception_runner": None}, {"request_one": None}):
+        kwargs = {"perception_runner": runner, "request_one": request_one, **missing}
+        with pytest.raises(W2BrokerPortError):
+            port.request_model(
+                "lease", "yolo", snapshot="snap", start_event_id="e1",
+                start_event_type="attempt_started", reset_epoch=1, **kwargs,
+            )

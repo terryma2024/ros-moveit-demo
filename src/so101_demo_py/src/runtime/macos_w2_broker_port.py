@@ -101,26 +101,35 @@ class W2BrokerPort:
         return authority
 
     def request_model(self, lease, execution_kind, *, snapshot, start_event_id,
-                      start_event_type, reset_epoch, perception_runner=None) -> object:
+                      start_event_type, reset_epoch, perception_runner=None,
+                      request_one=None) -> object:
         """Run one inference through the shared Broker and the Worker's perception chain.
 
-        `perception_runner` is the port the Worker runtime supplies; the Broker response itself is
-        never an outcome - only the chain that consumes it can admit a pose.
+        The production proxy's contract is positional and `parallel_ros_runtime` is written against
+        it: `perception_runner(lease, execution_kind, snapshot, request_one)` where `request_one`
+        performs exactly one model call. The Broker response is never an outcome by itself - only
+        the chain that consumes it can admit a pose.
         """
 
         self.refresh(wait_until_healthy=False)
         if perception_runner is None:
             raise W2BrokerPortError("PERCEPTION_RUNNER_REQUIRED")
-        return perception_runner(
-            lease=lease,
-            execution_kind=execution_kind,
-            snapshot=snapshot,
-            start_event_id=start_event_id,
-            start_event_type=start_event_type,
-            reset_epoch=reset_epoch,
-            connection=self.connection,
-            broker_generation=self.broker_generation,
-        )
+        if request_one is None:
+            raise W2BrokerPortError("REQUEST_ONE_REQUIRED")
+
+        def send(model_id, before_send=None):
+            return request_one(
+                lease,
+                execution_kind,
+                model_id=model_id,
+                snapshot=snapshot,
+                start_event_id=start_event_id,
+                start_event_type=start_event_type,
+                reset_epoch=reset_epoch,
+                before_send=before_send,
+            )
+
+        return perception_runner(lease, execution_kind, snapshot, send)
 
     def cancel_generation(self, worker_id: str, generation: int) -> bool:
         """Cancel one generation on the Broker, after it is healthy enough to answer.
