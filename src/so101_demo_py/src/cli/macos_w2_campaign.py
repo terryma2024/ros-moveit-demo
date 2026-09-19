@@ -67,7 +67,9 @@ def build_worker_leases(*, plan, batch_id: str, evidence_root: Path,
         document = {
             "worker_id": worker_id, "slot_id": slot_id, "batch_id": batch_id,
             "coordinator_epoch": 1, "worker_generation": 1, "lease_generation": 1,
-            "reset_epoch": 1, "point_id": assigned, "model_id": "yolo",
+            # `InferenceRequest.reset_epoch` is a non-empty *identifier* string, not a number
+            # (contracts.py `_require_id`), so the lease carries the identifier form of the epoch.
+            "reset_epoch": "epoch-1", "point_id": assigned, "model_id": "yolo",
             "attempt_ids": [f"{worker_id}-att-{attempt:02d}" for attempt in range(3)],
             "worker_root": str(evidence_root / f"{worker_id}-worker"),
             "snapshot_path": str(evidence_root / f"{worker_id}-frame.npy"),
@@ -411,7 +413,7 @@ def run(argv: list[str] | None = None) -> int:
             device = detector.runtime_device
             served.append({"request_id": request.request_id, "operation": request.operation,
                            "candidates": candidates, "device": device})
-            if request.operation == "infer":
+            if request.operation == "broker.infer":
                 payload = request.payload or {}
                 serialized = payload.get("request")
                 if not isinstance(serialized, (str, bytes, dict)):
