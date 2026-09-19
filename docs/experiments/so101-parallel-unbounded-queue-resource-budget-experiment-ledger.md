@@ -7952,3 +7952,38 @@ then rebuild and deploy the current copied install (which carries the CP-UQ182 a
 and the CP-UQ185 no-op cleanup) before the adaptive and remaining acceptance work.
 
 _Ledger HEAD when written: `7f65e128e`._
+
+## CP-UQ199 — The service now outlives the pane, and the current source is deployed
+
+Three things changed, each closing part of the CP-UQ198 boundary:
+
+**1. The service has a lifetime of its own.** It runs as the user unit `so101-validation.service`
+(`systemd-run --user --unit=so101-validation --collect`), started through the task-owned launcher
+`$TASK_ROOT/tools/run-validation-service.zsh`, which replays the recorded deployment environment,
+prepends the task-owned control prefix (so the stale shared fork library can never win), and execs
+the installed entry. Its `MainPID` was `2737354` with `ActiveState=active` after deployment, and
+when it dies `systemctl --user show -p ExecMainStatus -p ExecMainCode` names the status — the pane
+that launched it can now be killed without taking it down, which is precisely what CP-UQ198 could
+not say.
+
+**2. The two orphaned broker containers are gone, with their evidence kept.** Both were mine (image
+`0b893cb1528e`): `6d11f06ba026` from the 09:17 N8 retry and `faab1d0ad1fe` from the 05:22 attempt.
+Their `docker inspect` documents and last 40 log lines are preserved under
+`$TASK_ROOT/crash-c1dca423/` before removal; both logs stop inside model loading (SAM2/GroundingDINO
+imports), i.e. neither broker had reported ready. No foreign object was touched.
+
+**3. The current source is built and deployed as a new immutable copy.** `so101_colcon
+lg-copy-build-c1dca423` built `so101_demo_py` and `so101_teleop` from HEAD
+`8c164981451ea8c1b600344e8365c0d0090c1f53` into `copy-install-final.R4AFJ3xq` with `exit_code: 0`
+(`copy-final-c1dca423/copy-build-record.json`), and the launcher now takes the copy directory from
+`COPY_INSTALL_DIR` so the entry, the served web root and the v3 config all come from that same copy.
+Deployment verified: `/health` 200 within 5 s, `served_matches_installed` true (page hash
+`c09fc43a38261065` equals the new copy's `index.html`), and capabilities report all three execution
+modes with the expected start-guard policy. The copy therefore carries the CP-UQ182 adaptive guard
+wiring and the CP-UQ185 no-op cleanup, which the previous deployment did not.
+
+Next: the bounded `fixed-n8-p20` retry and the sequential four-point case against this deployment,
+then the adaptive case, the genuine N1 `SEQUENTIAL` `FULL_RESTART` single-failed-point retry with its
+own statistics, and the five-batch physical record.
+
+_Ledger HEAD when written: `8c1649814`._
