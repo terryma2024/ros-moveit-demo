@@ -245,6 +245,21 @@ class InferenceRegistry:
                 )
         raise RegistryError("REQUEST_UNKNOWN", request_id)
 
+    def cancel_request_safe(self, request_id: str, *, reason: str = "cancelled") -> bool:
+        """Cancel if the request is pending. Returns whether it was removed, never raises.
+
+        The recovery path needs a yes/no answer rather than an exception: it must be able to ask
+        "is this request still ours to remove?" without treating an already-terminal request as an
+        error.
+        """
+
+        with self._lock:
+            binding = self._pending.pop(request_id, None)
+            if binding is None:
+                return False
+            self._events.append(RegistryEvent(request_id, CANCELLED, self._clock(), reason))
+            return True
+
     def sweep_expired(self) -> tuple[InferenceBinding, ...]:
         """Release every binding whose deadline has passed, in registration order."""
 
