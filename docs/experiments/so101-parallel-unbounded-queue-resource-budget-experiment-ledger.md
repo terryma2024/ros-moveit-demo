@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ243 (tail of this file)
+latest_checkpoint: CP-UQ244 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -55,7 +55,7 @@ current_design: docs/superpowers/specs/2026-09-19-so101-macos-mps-private-ipc-de
   SHA-256 480da6dcdfea1da988f9f4e706c8340dbb6d7283200c27bb723859119145db1b
 current_worktree: /Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini
 current_branch: codex/so101-unbounded-queue-resource-budget (HEAD b55c181e at takeover)
-next_experiment: instrument the macOS identity read during a real spawn, then rerun the W2 shape gate
+next_experiment: instrument read_process_identity at the exact spawn moment and log raw psutil output
 correction_cp_uq229: the header's `worktree`, `evidence_root` and `task_root` fields describe the
   historical ai-station Stage A-E dispatch (`84620fc0`) and are not rewritten, because that history
   is not invalidated. The live dispatch, worktree and evidence root for the current macOS MPS/private
@@ -9887,3 +9887,64 @@ belonged to the child that was still importing.
 W2 acceptance is claimed while the smoke refuses its own workers.
 
 _Ledger source HEAD: `2d93bb42`; no evidence deleted; no Linux or W4/W6/W8 action._
+
+## CP-UQ244 — The identity race is intermittent, measured, and still unexplained
+
+```yaml
+checkpoint_id: CP-UQ244
+last_valid_experiment: EXP-UQ244-TASK13-IDENTITY-RACE
+current_hypothesis: The identity read failed because it ran after the ACK wait; moving it to spawn
+  time and giving it its own budget fixes it. HALF CONFIRMED: it improves the odds, not the odds to 1.
+working_tree_status: clean at commit da182db6
+owned_processes: NONE - every child was reaped in every repetition
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome extension host, Sparkle updater,
+  SkyComputerUseService
+open_risks:
+  - 3 of 5 real W2 runs lost at least one child's birth identity; the W2 shape gate cannot pass
+    reliably while that is true, and no W2 acceptance is claimed.
+  - The root cause of `read_process_identity() -> None` for a live macOS child is NOT confirmed.
+next_command: instrument the reader at the exact moment of a real spawn and log the raw psutil
+  result for the child pid (status, create_time, exception type), then decide the fix
+```
+
+`checkpoint_id: CP-UQ244`
+`last_valid_experiment: EXP-UQ244-TASK13-IDENTITY-RACE`
+
+### What was learned this round
+
+1. **The hang was the harness, and step markers found it immediately.** The smoke re-executed
+   itself after the guard phase but re-derived the phase from the environment, so the broker phase
+   landed back in the guard phase and re-executed forever. Naming the phase explicitly fixed it,
+   and the shape then completed all 13 steps.
+
+2. **The identity race is real, and it is intermittent.** Five independent runs, ten real worker
+   spawns:
+
+   ```text
+   rep1 PASS       w1 ACTIVE birth=yes   w2 ACTIVE birth=yes
+   rep2 INCOMPLETE w1 ACTIVE birth=yes   w2 FAILED birth=no
+   rep3 INCOMPLETE w1 ACTIVE birth=yes   w2 FAILED birth=no
+   rep4 INCOMPLETE w1 FAILED birth=no    w2 ACTIVE birth=yes
+   rep5 PASS       w1 ACTIVE birth=yes   w2 ACTIVE birth=yes
+   ```
+
+   Three of five runs were affected. That rules out a deterministic bug in the retry loop: the loop
+   runs its full budget and `read_process_identity()` keeps answering `None` for a process that is
+   demonstrably alive, because it goes on to complete three real RPC round trips.
+
+3. **Two product changes survived the tests** (`da182db6`, 19 green):
+   the identity is now captured **at spawn**, before the ACK wait, and re-checked before promotion
+   (a changed or vanished identity is refused); the read has its **own short budget**
+   (`identity_timeout_s`, default 2 s) instead of reusing the 60 s ACK timeout; and `spawn` accepts
+   an optional **stderr sink**, because a failing child being silent is exactly how this race
+   stayed hidden.
+
+4. **A fresh probe run resolved the identity immediately** (`task13-identity-probe-02/`,
+   `sleeping`, `create_time 1789828080.713253`), which is why the root cause is still open: the
+   same read succeeds outside the smoke and intermittently fails inside it.
+
+No W2 acceptance is claimed. The shape itself has now been observed passing twice, with one
+broker, one shared model set, one lane at `max_concurrent` 1, two Workers, six round trips, four
+negative protocol paths and complete cleanup.
+
+_Ledger source HEAD: `da182db6`; no evidence deleted; no Linux or W4/W6/W8 action._
