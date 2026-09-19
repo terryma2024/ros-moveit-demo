@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ239 (tail of this file)
+latest_checkpoint: CP-UQ240 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -55,7 +55,7 @@ current_design: docs/superpowers/specs/2026-09-19-so101-macos-mps-private-ipc-de
   SHA-256 480da6dcdfea1da988f9f4e706c8340dbb6d7283200c27bb723859119145db1b
 current_worktree: /Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini
 current_branch: codex/so101-unbounded-queue-resource-budget (HEAD b55c181e at takeover)
-next_experiment: Task 10 RED - compose exact W2, resolved manifest and package resources
+next_experiment: Task 11 - audit whether Teleop/OpenAPI/Web expose accelerator, guard or IPC state
 correction_cp_uq229: the header's `worktree`, `evidence_root` and `task_root` fields describe the
   historical ai-station Stage A-E dispatch (`84620fc0`) and are not rewritten, because that history
   is not invalidated. The live dispatch, worktree and evidence root for the current macOS MPS/private
@@ -9636,3 +9636,58 @@ When no motion was in flight the controller ports are not called at all, which m
 design's LEASED/INITIALIZING case rather than pretending there was a goal to cancel.
 
 _Ledger source HEAD: `d63c32b7`; no evidence deleted; no Linux or W4/W6/W8 action._
+
+## CP-UQ240 — Exact W2 composes to a resolved manifest, and the schema gate lives in one place
+
+```yaml
+checkpoint_id: CP-UQ240
+last_valid_experiment: EXP-UQ240-TASK10-W2-COMPOSITION
+current_hypothesis: Widening the execution-schema gate for v4 can be done without changing one byte
+  of v3 behaviour, and exact W2 can be composed into a manifest that records resolved values only.
+working_tree_status: clean at commit 930a0396
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome extension host, Sparkle updater,
+  SkyComputerUseService
+open_risks:
+  - The CLI and allocator now reach v4, but the CLI still has no v4-only launch path wired to the
+    Supervisor and Broker; that wiring is Task 13 work.
+  - The `resources` suite has 45 pre-existing Darwin failures from the v3 Linux `/proc/self/fd`
+    transport. The count is identical before and after this change, which is how the no-regression
+    claim is grounded.
+next_command: Task 11 - check whether Teleop/OpenAPI/Web expose accelerator, guard or IPC state
+```
+
+`checkpoint_id: CP-UQ240`
+`last_valid_experiment: EXP-UQ240-TASK10-W2-COMPOSITION`
+`commit: 930a0396 feat(so101): compose exact W2 macOS MPS campaigns`
+
+`EXP-UQ240-TASK10-W2-COMPOSITION: VALID`
+
+GREEN (`task10-green-01/`, exit 0, **19 passed**). Regression
+(`task10-regression-01/`): **73 failed, 245 passed**, and the important number is the distribution —
+the `test_parallel_batch_resources` failure count is **45 before and 45 after** this change, all
+`UNIX_TRANSPORT_UNAVAILABLE` / `/proc/self/fd` on Darwin. No regression was introduced; the CLI
+suite's 28 failures were already present in `source-gate-after-path-fix-01/`.
+
+What Task 10 added:
+
+- `w2_composition.load_execution_config` is now the single schema gate used by the CLI, the resource
+  allocator and the tests. It returns the **byte-identical** v3 object (asserted by equality against
+  `load_parallel_runtime_config_v3`) and adds v4; v1/v2 stay refused with the same error code.
+- `load_execution_config_for_schema` refuses a Darwin v4 document on a non-Darwin host and a Linux
+  v4 document on Darwin. That is what makes "the Linux combination is retained in the contract but
+  not executed here" a checked statement.
+- `exact_w2_slots` always returns two slots. A one-point campaign keeps `slot-1` idle and is
+  reported as such, so a short batch can never silently become W1; a three-point campaign fills both
+  slots in order.
+- `compose_w2_campaign` refuses any worker count other than two, a relative evidence root and an
+  empty campaign id, and records the resolved manifest fields: accelerator `mps`, selector
+  `default`, transport `darwin_private_path_unix`, GL `cgl`, worker count 2, Broker PID **and** birth
+  identity, model provenance (id, weights SHA, Grounded-SAM manifest SHA, image size), snapshot root,
+  supervisor receipt path, guard timeout, headroom floor, allocator fraction, snapshot ceiling, frame
+  ceiling and the two ROS domain ids. No value in the projection is `auto`.
+- `assert_no_host_platform_calls` refuses a plan that mixes MPS with the Linux transport (or the
+  reverse), so a Darwin plan cannot claim an NVML or `/proc/self/fd` dependency.
+- the v3 plan still resolves the frozen Linux combination with no MPS field present anywhere.
+
+_Ledger source HEAD: `930a0396`; no evidence deleted; no Linux or W4/W6/W8 action._
