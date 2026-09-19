@@ -55,7 +55,8 @@ _WORKER_MODULE = "so101_demo.cli.macos_w2_worker"
 
 def build_worker_leases(*, plan, batch_id: str, evidence_root: Path,
                          input_sha256: str, deadline_s: float = 240.0,
-                         tamper_input_sha256: bool = False) -> dict[str, dict]:
+                         tamper_input_sha256: bool = False,
+                         duplicate_probe: bool = False) -> dict[str, dict]:
     """Write each Worker's lease document and the frame it is told to send.
 
     The entry point knows both ends of the identity it binds, so it writes the identity down and
@@ -81,6 +82,7 @@ def build_worker_leases(*, plan, batch_id: str, evidence_root: Path,
             # The Worker's v4 client deadline; a fault probe shortens it instead of waiting 240 s.
             "deadline_s": float(deadline_s),
             "tamper_input_sha256": bool(tamper_input_sha256),
+            "duplicate_probe": bool(duplicate_probe),
             "start_event_type": "attempt_started",
         }
         frame_path = Path(document["snapshot_path"])
@@ -228,6 +230,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--evidence-root", type=Path, required=True)
     parser.add_argument("--yolo-weights", type=Path, required=True)
     parser.add_argument("--grounded-root", type=Path, required=True)
+    parser.add_argument("--duplicate-probe", action="store_true",
+                        help="have each Worker repeat one request id, so the one-time table's refusal "
+                             "is exercised; off by default, because a refused request makes the "
+                             "campaign verdict INCOMPLETE by construction")
     parser.add_argument("--cancel-second-worker-after-served", type=int, default=0,
                         help="fault injection: after this many served requests, cancel every "
                              "remaining request of the second Worker, whose results are then forfeit")
@@ -505,7 +511,8 @@ def run(argv: list[str] | None = None) -> int:
         leases = build_worker_leases(
             plan=plan, batch_id=arguments.batch_id, evidence_root=arguments.evidence_root,
             input_sha256=input_digest, deadline_s=arguments.worker_deadline_s,
-            tamper_input_sha256=arguments.tamper_snapshot_sha)
+            tamper_input_sha256=arguments.tamper_snapshot_sha,
+            duplicate_probe=arguments.duplicate_probe)
         bind_worker_requests(campaign, leases, ready=ready)
         # The IPC-shape probe ids stay bound while the Worker still serves that shape, so this
         # change cannot silently refuse the requests the previous gate proved.
