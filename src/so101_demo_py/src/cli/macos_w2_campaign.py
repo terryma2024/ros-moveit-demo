@@ -111,6 +111,25 @@ def bind_worker_requests(campaign, leases: dict[str, dict], *, ready,
                 broker_pid=ready.broker_pid, broker_birth_identity=ready.broker_birth_identity)
 
 
+def campaign_status(*, cleanup_complete: bool, results, workers, served, refused) -> str:
+    """The campaign's own verdict, as a pure function so the rule is testable and readable.
+
+    `W2_CAMPAIGN_PASS` requires all of: cleanup complete, two Worker result documents, both Workers
+    recorded `ACTIVE`, at least six served requests whose devices are exactly `["mps"]`, and **no
+    refused request at all**. The last clause is deliberate: a probe that deliberately exercises a
+    refusal (a duplicate, a tampered snapshot, a cancellation) cannot report PASS, which is why the
+    fault probes read INCOMPLETE - the verdict is about the happy path only.
+    """
+
+    if (cleanup_complete and len(results) == 2
+            and all(worker["status"] == "ACTIVE" for worker in workers)
+            and served["count"] >= 6
+            and served["devices"] == ["mps"]
+            and not refused):
+        return "W2_CAMPAIGN_PASS"
+    return "W2_CAMPAIGN_INCOMPLETE"
+
+
 def summarize_per_slot_pick_place(*, evidence_root: Path, workers=("w1", "w2")) -> dict:
     """Read each slot's pick-place evidence back out of its own directory tree, defensively.
 
@@ -668,13 +687,9 @@ def run(argv: list[str] | None = None) -> int:
         supervisor.terminate_all()
         document["cleanup"]["workers_reaped"] = [supervisor.is_gone(w["pid"]) for w in workers]
 
-        document["status"] = "W2_CAMPAIGN_PASS" if (
-            document["cleanup"]["complete"] and len(results) == 2
-            and all(w["status"] == "ACTIVE" for w in workers)
-            and document["served"]["count"] >= 6
-            and document["served"]["devices"] == ["mps"]
-            and not refused
-        ) else "W2_CAMPAIGN_INCOMPLETE"
+        document["status"] = campaign_status(
+            cleanup_complete=bool(document["cleanup"]["complete"]), results=results,
+            workers=workers, served=document["served"], refused=refused)
         print(json.dumps(document, indent=2, sort_keys=True))
         (arguments.evidence_root / "campaign-result.json").write_text(
             json.dumps(document, indent=2, sort_keys=True) + "\n")

@@ -414,3 +414,25 @@ def test_per_slot_summary_reads_a_synthetic_evidence_tree(tmp_path: Path) -> Non
                                "table_contact": True, "max_normal_force_n": 0.233}]
     # a slot with nothing on disk is reported, not omitted and not an exception
     assert summary["w2"]["manifests"] == 0 and summary["w2"]["executed_points"] == []
+
+
+def test_campaign_verdict_requires_the_happy_path_and_no_refusals() -> None:
+    """PASS is the happy path only: any refusal - even a deliberate probe - reads INCOMPLETE."""
+
+    from so101_demo.cli.macos_w2_campaign import campaign_status
+
+    good = dict(cleanup_complete=True, results=[{}, {}],
+                workers=[{"status": "ACTIVE"}, {"status": "ACTIVE"}],
+                served={"count": 6, "devices": ["mps"]}, refused=[])
+    assert campaign_status(**good) == "W2_CAMPAIGN_PASS"
+
+    for change in (
+        {"cleanup_complete": False},
+        {"results": [{}]},
+        {"workers": [{"status": "ACTIVE"}, {"status": "STOPPED"}]},
+        {"served": {"count": 5, "devices": ["mps"]}},
+        {"served": {"count": 6, "devices": []}},
+        {"served": {"count": 6, "devices": ["cpu"]}},
+        {"refused": [{"reason": "DUPLICATE_REQUEST"}]},
+    ):
+        assert campaign_status(**{**good, **change}) == "W2_CAMPAIGN_INCOMPLETE", change
