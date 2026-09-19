@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ283 + Appendix B (post-fix series)
+latest_checkpoint: CP-UQ284 (corrections) + Appendix B (post-fix series)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -13612,3 +13612,28 @@ points) with MoveIt trajectories and MuJoCo contacts. Every point still fails on
 itself, so Task 14 stays **0/5** and no batch is reported as passing.
 
 _Ledger source HEAD: (this commit's parent); no evidence deleted._
+
+## CP-UQ284 — Corrections: four ledger conclusions that CP-UQ283 invalidated
+
+The handler scope defect (CP-UQ283) means several conclusions recorded between rounds 106 and 113 were
+drawn from a handler that always raised. They are **void as statements about the protocol**, and are
+listed here rather than edited in place so the record shows both the claim and its retraction:
+
+| Recorded claim | Where | Status |
+| --- | --- | --- |
+| "the INTERNAL_ERROR comes from the server's outer path, most likely a shutdown/queue race under the stall" | CP-UQ278 addendum 4 | **VOID** - it came from my handler's `UnboundLocalError` |
+| "the v4 server cannot starve other clients, so the handler itself raised" | CP-UQ278 addendum 3 | reasoning stands, but the *conclusion* it was used for (that the handler raised for a legitimate reason) is **VOID** |
+| "the anomaly is in my instrumentation, not the handler" | CP-UQ282 addendum 4 | **VOID** - the instrumented recorder was correct and empty because the exception was raised in `handler`, outside the wrapper I had added around `_serve` |
+| "the tampered snapshot is refused but the code is wrong; server-layer anomaly" | CP-UQ282 addendum 3 / addendum 5 | half true: the refusal is real and the tamper check works, but the *code* was wrong only because of my defect. After the fix the code is the intended `SNAPSHOT_MISMATCH` |
+
+What survives, verified on the fixed code: the digest-binding check refuses an unbound snapshot with the
+specific code; one-time admission refuses duplicates with `DUPLICATE_REQUEST`; the v4 server's structure
+(accept loop, bounded queue, one thread per connection) is as documented; and the stall behaviour of the
+**fixed** handler has not been re-measured - it is no longer an open anomaly, it is an unmeasured case.
+
+Lesson kept: record the **raw frame that arrived**, not the code derived from it. That is what found this,
+after four rounds of hypotheses built on my own derived values.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `fd2f0a01`; no evidence deleted._
