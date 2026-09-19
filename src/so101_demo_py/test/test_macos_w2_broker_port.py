@@ -127,6 +127,7 @@ def test_request_model_uses_the_positional_perception_contract() -> None:
         authority=BrokerAuthority(True, 1, "/x"),
         config=_Config(),
         client_factory=_factory([]),
+        perception_runner=runner,
     )
 
     def request_one(lease, kind, **kwargs):
@@ -137,7 +138,7 @@ def test_request_model_uses_the_positional_perception_contract() -> None:
 
     result = port.request_model(
         "lease", "yolo", snapshot="snap", start_event_id="e1",
-        start_event_type="attempt_started", reset_epoch=1, perception_runner=runner,
+        start_event_type="attempt_started", reset_epoch=1,
     )
 
     assert result == "admitted"
@@ -145,8 +146,15 @@ def test_request_model_uses_the_positional_perception_contract() -> None:
     assert seen["sent"] == {"model_id": "yolo"}
     assert seen["request_one"] == ("lease", "yolo", "yolo", None)
 
+    # A port built without a runner is the one that must refuse: `ParallelWorker` never passes one.
+    unbound = W2BrokerPort(
+        coordinator=lambda: BrokerAuthority(True, 1, "/x"),
+        authority=BrokerAuthority(True, 1, "/x"),
+        config=_Config(),
+        client_factory=_factory([]),
+    )
     with pytest.raises(W2BrokerPortError, match="PERCEPTION_RUNNER_REQUIRED"):
-        port.request_model(
+        unbound.request_model(
             "lease", "yolo", snapshot="snap", start_event_id="e1",
             start_event_type="attempt_started", reset_epoch=1,
         )

@@ -50,6 +50,7 @@ class W2BrokerPort:
         sleep: Callable[[float], None] = time.sleep,
         connection=None,
         resources=None,
+        perception_runner=None,
     ) -> None:
         if not isinstance(authority, BrokerAuthority):
             raise TypeError("a BrokerAuthority is required")
@@ -63,6 +64,9 @@ class W2BrokerPort:
         self._sleep = sleep
         self.connection = connection
         self.resources = resources
+        # Bound at construction, exactly as the production proxy does it: `ParallelWorker` calls
+        # `request_model` without a runner, so a per-call-only runner would refuse every request.
+        self.perception_runner = perception_runner
 
     def _connect(self, authority: BrokerAuthority):
         return self._client_factory(
@@ -113,7 +117,8 @@ class W2BrokerPort:
         """
 
         self.refresh(wait_until_healthy=False)
-        if perception_runner is None:
+        runner = self.perception_runner if perception_runner is None else perception_runner
+        if runner is None:
             raise W2BrokerPortError("PERCEPTION_RUNNER_REQUIRED")
         def send(model_id, before_send=None):
             return self.request_one(
@@ -127,7 +132,7 @@ class W2BrokerPort:
                 before_send=before_send,
             )
 
-        return perception_runner(lease, execution_kind, snapshot, send)
+        return runner(lease, execution_kind, snapshot, send)
 
     def request_one(self, lease, execution_kind, *, model_id, snapshot, start_event_id,
                     start_event_type, reset_epoch, before_send=None):
