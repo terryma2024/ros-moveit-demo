@@ -1033,7 +1033,6 @@ class WorkerResourceAllocator:
             raise ResourceAllocationError('WORKER_COUNT')
         if len(self.allocation_policy.ros_domain_ids) < requested:
             raise ResourceAllocationError('ROS_DOMAIN_IDS')
-        observed = self._probe_snapshot()
         version_three = isinstance(self.config, ParallelRuntimeConfigV3)
         if version_three:
             # Version three has no formula budget: the one bounded startup check decides.
@@ -1044,21 +1043,23 @@ class WorkerResourceAllocator:
             required = ResourceThresholds(0, 0.0, 0.0)
             failures = ()
             headroom_ratio = 0.0
-        elif self.allocation_policy.enforce_resource_thresholds:
-            required = ResourceThresholds(
-                logical_cpu_count=self.config.min_logical_cpu_per_worker * requested,
-                available_ram_gib=float(
-                    self.config.available_ram_base_gib
-                    + self.config.available_ram_per_worker_gib * requested
-                ),
-                gpu_free_gib=float(self.config.min_available_gpu_gib),
-            )
-            failures = _resource_failures(observed, required)
-            headroom_ratio = self.config.required_live_headroom_ratio
         else:
-            required = ResourceThresholds(0, 0.0, 0.0)
-            failures = ()
-            headroom_ratio = 0.0
+            observed = self._probe_snapshot()
+            if self.allocation_policy.enforce_resource_thresholds:
+                required = ResourceThresholds(
+                    logical_cpu_count=self.config.min_logical_cpu_per_worker * requested,
+                    available_ram_gib=float(
+                        self.config.available_ram_base_gib
+                        + self.config.available_ram_per_worker_gib * requested
+                    ),
+                    gpu_free_gib=float(self.config.min_available_gpu_gib),
+                )
+                failures = _resource_failures(observed, required)
+                headroom_ratio = self.config.required_live_headroom_ratio
+            else:
+                required = ResourceThresholds(0, 0.0, 0.0)
+                failures = ()
+                headroom_ratio = 0.0
         if not version_three:
             admission = ResourceAdmission(
                 admitted=not failures,
@@ -1202,7 +1203,6 @@ class WorkerResourceAllocator:
                 })
             if dict(environment) != expected_environment:
                 raise ResourceAllocationError('RECOVERY_RESOURCE_ENVIRONMENT')
-        observed = self._probe_snapshot()
         if isinstance(self.config, ParallelRuntimeConfigV3):
             # Restore re-runs one fresh bounded check; the recorded guard document is kept
             # as evidence, and ownership/domain checks below are unchanged.
@@ -1211,6 +1211,7 @@ class WorkerResourceAllocator:
                 raise ResourceAllocationError(admission.reason, admission=admission)
             manifest = replace(manifest, admission=admission, start_guard=guard_document)
         else:
+            observed = self._probe_snapshot()
             required = ResourceThresholds(
                 logical_cpu_count=self.config.min_logical_cpu_per_worker * manifest.worker_count,
                 available_ram_gib=float(
@@ -1787,14 +1788,43 @@ def _verify_trusted_directory(
         return value
     if value.st_uid not in {0, uid} or (final_parent and value.st_uid != uid):
         raise ResourceAllocationError(f'UNSAFE_DIRECTORY_OWNER: {name}')
-    if mode & 0o002 or (value.st_uid == 0 and mode & 0o020):
+    root_owned_sticky = (
+        not final_parent
+        and value.st_uid == 0
+        and bool(mode & stat.S_ISVTX)
+    )
+    if (mode & 0o002 or (value.st_uid == 0 and mode & 0o020)) and not root_owned_sticky:
         raise ResourceAllocationError(f'UNSAFE_DIRECTORY_MODE: {name}')
     return value
+
+
+def _trusted_macos_tmp_path(path: Path) -> Path:
+    if sys.platform != 'darwin' or path.parts[:2] != ('/', 'tmp'):
+        return path
+    alias = Path('/tmp')
+    try:
+        alias_info = alias.lstat()
+        target = (alias.parent / os.readlink(alias)).resolve(strict=True)
+        target_info = target.stat()
+    except OSError as error:
+        raise ResourceAllocationError(f'SYMLINK_PATH: {path}') from error
+    if (
+        alias_info.st_uid != 0
+        or not stat.S_ISLNK(alias_info.st_mode)
+        or target != Path('/private/tmp')
+        or target_info.st_uid != 0
+        or not stat.S_ISDIR(target_info.st_mode)
+        or not stat.S_IMODE(target_info.st_mode) & stat.S_ISVTX
+    ):
+        raise ResourceAllocationError(f'SYMLINK_PATH: {path}')
+    return target.joinpath(*path.parts[2:])
 
 
 def _open_trusted_parent(path: Path) -> int:
     if not path.is_absolute() or not path.name:
         raise ResourceAllocationError('ABSOLUTE_PATH_REQUIRED')
+    display_path = path
+    path = _trusted_macos_tmp_path(path)
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     descriptor = os.open('/', flags)
     parts = path.parent.parts[1:]
@@ -1805,8 +1835,10 @@ def _open_trusted_parent(path: Path) -> int:
                 child = os.open(part, flags, dir_fd=descriptor)
             except OSError as error:
                 if error.errno in {errno.ELOOP, errno.ENOTDIR}:
-                    raise ResourceAllocationError(f'SYMLINK_PATH: {path}') from error
-                raise ResourceAllocationError(f'PATH_ANCESTOR_UNAVAILABLE: {path}') from error
+                    raise ResourceAllocationError(f'SYMLINK_PATH: {display_path}') from error
+                raise ResourceAllocationError(
+                    f'PATH_ANCESTOR_UNAVAILABLE: {display_path}'
+                ) from error
             os.close(descriptor)
             descriptor = child
             _verify_trusted_directory(
@@ -2563,7 +2595,12 @@ def _process_starttime_ticks() -> int:
         fields = line[closing + 2 :].split()
         value = int(fields[19])
     except (OSError, UnicodeError, ValueError, IndexError) as error:
-        raise ResourceAllocationError('PROCESS_STARTTIME_UNAVAILABLE') from error
+        from .start_guard_probe import read_process_identity
+
+        identity = read_process_identity(os.getpid())
+        if identity is None:
+            raise ResourceAllocationError('PROCESS_STARTTIME_UNAVAILABLE') from error
+        value = identity.start_time_ticks
     if value <= 0:
         raise ResourceAllocationError('PROCESS_STARTTIME_UNAVAILABLE')
     return value

@@ -86,7 +86,7 @@ def read_process_identity(pid: int) -> ProcessIdentityRecord | None:
     try:
         document = (Path("/proc") / str(pid) / "stat").read_text()
     except (OSError, UnicodeError):
-        return None
+        return _read_portable_process_identity(pid)
     close = document.rfind(")")
     if close < 0:
         return None
@@ -100,6 +100,21 @@ def read_process_identity(pid: int) -> ProcessIdentityRecord | None:
     except (ImportError, ValueError):
         return None
     return ProcessIdentityRecord(pid=pid, start_time_ticks=ticks)
+
+
+def _read_portable_process_identity(pid: int) -> ProcessIdentityRecord | None:
+    try:
+        import psutil
+    except ImportError:
+        return None
+    try:
+        process = psutil.Process(pid)
+        created_us = int(round(process.create_time() * 1_000_000))
+        if process.status() == psutil.STATUS_ZOMBIE or created_us <= 0:
+            return None
+    except (psutil.Error, OSError, ValueError):
+        return None
+    return ProcessIdentityRecord(pid=pid, start_time_ticks=created_us)
 
 
 def default_state_root() -> Path:

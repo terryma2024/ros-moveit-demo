@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import time
+import types
 from pathlib import Path
 
 import pytest
@@ -75,6 +76,11 @@ def test_all_reads_are_helper_owned(coordinator, scope, monkeypatch):
     monkeypatch.setattr("so101_demo.parallel_batch.start_guard.probe_snapshot", forbidden)
     policy = StartGuardPolicy()
     result = coordinator.check(policy, scope)
+    if sys.platform == "darwin":
+        assert result.status == "FAIL"
+        assert result.checks["probe"].reason == "GPU_TARGET_UNAVAILABLE"
+        assert result.cleanup_state == "CLEAR"
+        return
     assert result.status in ("PASS", "WARN"), result
     assert result.snapshot is not None
     assert result.snapshot.gpu_uuid.startswith("GPU-")
@@ -87,7 +93,11 @@ def test_normal_path_reaps_the_helper_and_leaves_clear_state(coordinator, scope)
     result = guarded.check(StartGuardPolicy(), scope)
     elapsed = time.monotonic() - started
 
-    assert result.status in ("PASS", "WARN"), result
+    if sys.platform == "darwin":
+        assert result.status == "FAIL"
+        assert result.checks["probe"].reason == "GPU_TARGET_UNAVAILABLE"
+    else:
+        assert result.status in ("PASS", "WARN"), result
     assert result.cleanup_state == "CLEAR"
     assert recorder.calls == 1
     assert elapsed < 2.5, elapsed
@@ -192,6 +202,36 @@ def test_restart_recovers_exact_pid_starttime(coordinator):
         if child.poll() is None:
             child.kill()
             child.wait(timeout=10)
+
+
+def test_process_identity_uses_creation_time_without_procfs(monkeypatch):
+    """macOS cleanup still binds signals to a PID plus stable birth identity."""
+
+    def missing_procfs(_path):
+        raise FileNotFoundError("procfs unavailable")
+
+    class FakeProcess:
+        def __init__(self, pid):
+            self.pid = pid
+
+        def create_time(self):
+            return 1234.567890
+
+        def status(self):
+            return "running"
+
+    fake_psutil = types.SimpleNamespace(
+        Process=FakeProcess,
+        STATUS_ZOMBIE="zombie",
+        Error=RuntimeError,
+    )
+    monkeypatch.setattr(Path, "read_text", missing_procfs)
+    monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
+
+    identity = probe_module.read_process_identity(4321)
+
+    assert identity == probe_module.ProcessIdentityRecord(
+        pid=4321, start_time_ticks=1234567890)
 
 
 def test_persistent_state_corruption_fails_closed(coordinator, scope):

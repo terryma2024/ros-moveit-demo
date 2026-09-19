@@ -8,6 +8,7 @@ supply or override a status, and history projections never probe.
 import dataclasses
 import json
 import shutil
+import sys
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -34,6 +35,13 @@ def _local_check(self, policy, scope, *, nvml=None, busy=None):
 
     started = time.monotonic()
     ports = dataclasses.replace(guard_module.host_ports(), busy_window_s=0.0)
+    if sys.platform == "darwin" and nvml is None:
+        class MacTestGpu:
+            def devices(self):
+                return (guard_module.GpuDevice(
+                    0, "GPU-MACOS-TEST", 16 << 30, 8 << 30),)
+
+        ports = dataclasses.replace(ports, nvml=MacTestGpu())
     if busy is not None:
         ports = dataclasses.replace(ports, busy_window_s=0.0)
     if nvml is not None:

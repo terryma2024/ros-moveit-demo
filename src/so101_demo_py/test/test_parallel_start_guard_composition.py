@@ -43,20 +43,32 @@ def guard(tmp_path):
 
 def test_one_probe_covers_the_epoch_and_a_new_epoch_probes_again(guard, scope):
     first = guard.begin_epoch(scope)
-    assert first.status in ("PASS", "WARN"), first
+    if sys.platform == "darwin":
+        assert first.status == "FAIL", first
+        assert first.checks["probe"].reason == "GPU_TARGET_UNAVAILABLE"
+    else:
+        assert first.status in ("PASS", "WARN"), first
     assert guard.probe_count == 1
 
     # Every spawn in the same epoch shares the fresh result instead of paying 2 s again.
     for _ in range(4):
         shared = guard.require_before_spawn(scope)
-        assert shared is first
-    assert guard.probe_count == 1
+        if sys.platform == "darwin":
+            assert shared.status == "FAIL"
+            assert shared.checks["probe"].reason == "GPU_TARGET_UNAVAILABLE"
+        else:
+            assert shared is first
+    if sys.platform == "darwin":
+        # Refusals are intentionally observed again rather than cached as admission.
+        assert guard.probe_count == 5
+    else:
+        assert guard.probe_count == 1
 
     # A new epoch is a new observation.
     guard.begin_epoch(GuardScope(batch_id="lg-t5", epoch=2, owner_pid=scope.owner_pid,
                                  owner_starttime_ticks=1, gpu_selector="INDEX:0",
                                  worker_count=4))
-    assert guard.probe_count == 2
+    assert guard.probe_count == (6 if sys.platform == "darwin" else 2)
 
 
 def test_scope_change_and_expiry_force_a_fresh_probe(guard, scope):

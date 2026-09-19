@@ -15,6 +15,9 @@ from __future__ import annotations
 import ctypes
 import math
 import os
+import re
+import subprocess
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -288,7 +291,11 @@ class SysfsCgroupReader:
 
 
 def _read_own_cgroup_path() -> str:
-    for line in Path("/proc/self/cgroup").read_text().splitlines():
+    try:
+        document = Path("/proc/self/cgroup").read_text()
+    except (OSError, UnicodeError):
+        return "/"
+    for line in document.splitlines():
         fields = line.split(":", 2)
         if len(fields) == 3 and fields[0] == "0":
             return fields[2].strip() or "/"
@@ -343,7 +350,9 @@ def read_meminfo(path: Path = _MEMINFO_PATH) -> Meminfo:
     try:
         text = Path(path).read_text()
     except OSError:
-        return Meminfo(total_bytes=None, available_bytes=None)
+        if sys.platform != "darwin":
+            return Meminfo(total_bytes=None, available_bytes=None)
+        return _read_macos_meminfo()
     values: dict[str, int] = {}
     for line in text.splitlines():
         fields = line.split(":")
@@ -356,11 +365,60 @@ def read_meminfo(path: Path = _MEMINFO_PATH) -> Meminfo:
     return Meminfo(total_bytes=values.get("MemTotal"), available_bytes=values.get("MemAvailable"))
 
 
+def _read_macos_meminfo() -> Meminfo:
+    try:
+        try:
+            total_bytes = int(os.sysconf("SC_PAGE_SIZE")) * int(
+                os.sysconf("SC_PHYS_PAGES")
+            )
+        except (OSError, ValueError):
+            total_result = subprocess.run(
+                ["/usr/sbin/sysctl", "-n", "hw.memsize"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=0.5,
+            )
+            total_bytes = int(total_result.stdout.strip())
+        vm_result = subprocess.run(
+            ["/usr/bin/vm_stat"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=0.5,
+        )
+        page_match = re.search(r"page size of ([0-9]+) bytes", vm_result.stdout)
+        if page_match is None:
+            raise ValueError("vm_stat page size missing")
+        page_size = int(page_match.group(1))
+        reclaimable = 0
+        wanted = {"free", "inactive", "speculative", "purgeable"}
+        for name, count in re.findall(
+            r"^Pages ([A-Za-z ]+):\s+([0-9]+)\.$", vm_result.stdout, re.MULTILINE
+        ):
+            if name.strip().lower() in wanted:
+                reclaimable += int(count)
+        available_bytes = min(total_bytes, reclaimable * page_size)
+        if total_bytes <= 0 or available_bytes < 0:
+            raise ValueError("invalid macOS memory counters")
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return Meminfo(total_bytes=None, available_bytes=None)
+    return Meminfo(total_bytes=total_bytes, available_bytes=available_bytes)
+
+
+def _host_affinity() -> tuple[int, ...]:
+    getter = getattr(os, "sched_getaffinity", None)
+    if getter is not None:
+        return tuple(sorted(getter(0)))
+    count = os.cpu_count()
+    return tuple(range(count)) if count is not None and count > 0 else ()
+
+
 def host_ports() -> HostPorts:
     return HostPorts(
         cgroup=SysfsCgroupReader(),
         meminfo=read_meminfo(),
-        affinity=tuple(sorted(os.sched_getaffinity(0))),
+        affinity=_host_affinity(),
         nvml=CtypesNvmlPort(),
         environ=dict(os.environ),
         clock=time.monotonic,

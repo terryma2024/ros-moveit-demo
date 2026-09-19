@@ -8591,3 +8591,343 @@ than in a sequence of re-attempts; if it clears, the API route (CP-UQ216) is rea
 stability record without the browser.
 
 _Ledger HEAD when written: f30f2e42f._
+
+## CP-UQ220 — macOS W2 takeover from the last committed ai-station checkpoint
+
+`checkpoint_id: CP-UQ220`
+`source_checkpoint: CP-UQ217`
+`host: Terry-Mac-mini.local`
+`branch: codex/so101-unbounded-queue-resource-budget`
+`source_head: 9d0679325bd685a144690909b1c764509a984019`
+`source_upstream: origin/codex/so101-unbounded-queue-resource-budget @ 9d0679325bd685a144690909b1c764509a984019`
+`submodule third_party/mujoco_ros2_control: e4c0241`
+`evidence_root: /tmp/so101-debug-unbounded-queue-w2-mac-mini-3eed4ddd-a50c-4c21-b78f-60be2216ef9d`
+`status: RUNNING`
+`last_valid_experiment: NONE (takeover checkpoint; no macOS experiment has run yet)`
+`next_experiment: EXP-UQ220-MAC-INVENTORY`
+
+The macOS continuation starts from the last committed checkpoint, CP-UQ217. Two later checkpoint
+drafts, CP-UQ218 and CP-UQ219, existed only as uncommitted ai-station workspace state and were never
+pushed; they are migration context, not repository history. Their admissible facts are carried here
+without claiming them as committed checkpoints: a fresh final gate again entered host-level
+uninterruptible I/O; the exact-owned pytest was stopped by its owned PGID and its task-side D-state
+returned to zero; the partial run collected 65 cases with one failure but never reached its parallel
+phase or terminal evidence, so it is not a valid RED, GREEN, or package gate; and the exact task-owned
+Docker container remained unremovable. The ai-station executor is frozen and unavailable. This
+continuation will not contact it, clean it up, or infer current host state from those old observations.
+
+The takeover contract is deliberately narrow: **W2 means exactly `worker_count = 2`**. It covers only
+functional correctness on this Mac — exact two-slot admission, progress/results/evidence, terminal
+cleanup ownership, cancellation/recovery, and independent physical evidence. It does not restore or
+claim W4/W6/W8 qualification, an N1–N8 budget, provider promotion, swap/PSI criteria, source-commit
+admission, ament-prefix admission, or any extrapolation beyond W2. Historical current-copy evidence
+that all sixteen FIRST_PASS cases ran green on ai-station remains context, including the two W2 cases;
+it is not macOS proof. The five-batch stability record also remains **0 of 5** until this continuation
+produces valid W2 evidence. No real hardware is authorized.
+
+Before this entry, the worktree, index, and untracked set were clean. The dispatch receipt was created
+atomically with `O_CREAT|O_EXCL` before any other task action and read back as exactly the dispatch UUID
+plus LF (37 bytes, sha256
+`51e4448b1019044f8c78c0b89f0f996ae971e036b268df413b70aafdf9b23e51`). The handoff and all four
+approved artifacts were read completely, and their approved sha256 values matched. No runtime
+inventory, service start, test, GUI action, signal, container action, or cleanup has occurred on the
+Mac yet. `ROS_DOMAIN_ID`, `GZ_PARTITION`, the exact ROS Python, and the install overlay are therefore
+explicitly **UNVERIFIED_PENDING_INVENTORY**, rather than inherited from the other host.
+
+The first exact next command is a read-only ownership and environment inventory whose output is
+retained under the registered evidence root:
+
+```zsh
+evidence_root=/tmp/so101-debug-unbounded-queue-w2-mac-mini-3eed4ddd-a50c-4c21-b78f-60be2216ef9d
+{
+  date '+%Y-%m-%dT%H:%M:%S%z'
+  hostname
+  pwd
+  printenv ROS_DOMAIN_ID GZ_PARTITION DYLD_LIBRARY_PATH PYTHONPATH
+  command -v ros2 python3 colcon tmux docker lsof
+  tmux list-sessions
+  ps -axo pid,ppid,pgid,state,lstart,command
+  lsof -nP -iTCP:8010 -sTCP:LISTEN
+  docker ps --no-trunc
+} > "$evidence_root/mac-takeover-inventory.txt" 2>&1
+inventory_rc=$?
+print -r -- "inventory_rc=$inventory_rc"
+```
+
+The inventory is observational only. Any later stop or cleanup target must be derived from a
+task-owned manifest or supervisor and revalidated by exact identity; process-name, command-substring,
+port, image, or age matches alone never authorize a signal or removal.
+
+_Ledger HEAD when written: `9d0679325` (this checkpoint is the first intentional worktree edit)._
+
+## CP-UQ221 — macOS inventory is valid; no inherited runtime is admitted
+
+`EXP-UQ220-MAC-INVENTORY: VALID`
+
+The sandboxed inventory returned `inventory_rc=1` because macOS denied `ps` and the tmux socket. Per
+the repository rule, that denial was not treated as absence: the same read-only checks were repeated
+with host access and returned `host_inventory_rc=0`. The retained records are
+`mac-takeover-inventory.txt` and `mac-takeover-host-inventory.txt` in the registered evidence root.
+
+- The only task-related tmux/process tree is this same resumed Codex session,
+  `codex-unbounded-queue-w2-mac-mini`; no second executor was created.
+- `lsof -nP -iTCP:8010 -sTCP:LISTEN` returned 1 with no rows, so no service owns the task port.
+- Docker's selected context is `desktop-linux`, but the user socket does not exist and read-only
+  `docker ps --no-trunc` returns 1. No container state is inferred beyond the daemon being
+  unavailable through that context, and no Docker mutation has occurred.
+- `ROS_DOMAIN_ID` and `GZ_PARTITION` were unset. The exact ROS Python exists at
+  `/Users/matianyi/ros2_jazzy/.venv/bin/python3`; it imports `rclpy` from the Jazzy install.
+- The existing repository overlay is the canonical checkout's install, not this worktree:
+  `so101_demo` resolves to
+  `/Users/matianyi/Projects/robot_demo_001/moveit-demo/build/so101_demo_py/so101_demo/__init__.py`
+  and `so101_teleop` resolves to the corresponding canonical install. It is acceptable only as an
+  underlay. It cannot prove this branch and will not be presented as branch acceptance.
+
+`EXP-UQ221-W2-SOURCE-GATE: PLANNED`. The next step is a source-prepended, exact-Python diagnostic
+gate over the W2 contract, allocator/start guard, coordinator/CLI, preflight, registry, and supervisor
+tests. It uses unique `ROS_DOMAIN_ID=203`, `GZ_PARTITION=so101_uq_w2_mac_3eed4ddd`, a fresh task-local
+temp tree, a nonzero collection, a JUnit document, and explicit import/executable provenance. This is
+a source diagnostic, not an installed package gate and not physical W2 evidence. Any assertion
+failure is recorded before a patch; an environment/bootstrap failure is classified separately.
+
+_Ledger source HEAD: `9d0679325`; intentional dirty path remains this ledger only._
+
+## CP-UQ222 — First source gate is INVALID at collection, not RED
+
+`EXP-UQ221-W2-SOURCE-GATE: INVALID`
+
+The exact Python and isolation preflight passed, but collection returned 4 with no tests collected and
+no JUnit. This is a bootstrap/configuration failure, not a source assertion failure:
+
+1. `so101_demo_py/setup.py` maps the installed package name `so101_demo` directly onto the source
+   directory named `src`. Prepending `src/so101_demo_py/src` therefore does not create an importable
+   `so101_demo` package; the provenance probe visibly resolved `so101_demo` to the stale canonical
+   build, and collection could not find branch modules such as `runtime.debug_provenance`.
+2. The single invocation crossed the demo and teleop package roots. The demo's `[tool:pytest]`
+   `testpaths = test` root then mis-resolved the teleop arguments and the ROS launch-testing hook
+   attempted unrelated collection. No selected W2 test boundary ran.
+
+The complete invalid attempt is retained at `unit-w2-source-01/`. The correction uses a task-local
+`so101_demo` symlink package pointing at this worktree's `src/so101_demo_py/src`, verifies its resolved
+origin, and runs demo and teleop collection/execution as two independent exact-Python invocations from
+their own package roots. No product file changes are justified by this bootstrap result.
+
+`EXP-UQ222-W2-SOURCE-GATE-RETRY: PLANNED` with the same tests, domain, partition, and evidence
+requirements, under fresh root `unit-w2-source-02`.
+
+_Ledger source HEAD: `9d0679325`; intentional dirty path remains this ledger only._
+
+## CP-UQ223 — Second source gate is INVALID; origin fixed, pytest root incomplete
+
+`EXP-UQ222-W2-SOURCE-GATE-RETRY: INVALID`
+
+The task-local package shim worked: the provenance record resolves `so101_demo`, `so101_teleop`, and
+`rclpy` to the intended worktree/Jazzy sources, and the task-local temp directory is effective. The
+demo collection still returned 4 before collecting a selected test because running from the package
+directory removed the repository root from `sys.path`. The ROS launch-testing collection hook imports
+ordinary test modules while inspecting the `test` directory; `test_pytest_full_gate_runner.py` then
+correctly required `tools.so101_pytest_gate`, which was not importable without the repository root.
+All six selected paths consequently reported no collectors. This is again bootstrap INVALID, not RED,
+and the complete evidence is retained under `unit-w2-source-02/`.
+
+The working comparison is the repository's own ordinary gate: it runs with the repository root
+importable while selecting package configuration explicitly. The next and final bootstrap correction
+keeps the verified package shim, prepends the repository root, runs from the repository root, and uses
+`-c src/so101_demo_py/setup.cfg` and `-c src/so101_teleop/pytest.ini` in separate invocations. A third
+bootstrap failure will stop this source-shim path in favor of the fresh installed overlay rather than
+accumulating more retries.
+
+`EXP-UQ223-W2-SOURCE-GATE-RETRY-2: PLANNED` under fresh root `unit-w2-source-03`.
+
+_Ledger source HEAD: `9d0679325`; intentional dirty path remains this ledger only._
+
+## CP-UQ224 — Valid macOS RED: the start guard unconditionally called a Linux-only API
+
+`EXP-UQ223-W2-SOURCE-GATE-RETRY-2: VALID RED`
+
+The corrected runner collected 454 selected demo cases and 41 selected teleop cases with exact
+worktree/Jazzy origins. The demo execution reached assertions and finished `107 failed, 347 passed`
+with a readable 454-case JUnit; teleop execution did not start because the demo phase was nonzero.
+This is the first valid macOS RED. Its dominant root is precise: 95 assertion traces contain
+`AttributeError: module 'os' has no attribute 'sched_getaffinity'`, raised by
+`start_guard.host_ports()`. The downstream `START_GUARD_REFUSED` results are consequences, not
+independent defects. Smaller Linux-only clusters (`/proc`, `/run/user/<uid>`, `/proc/self/fd`) remain
+separately visible and are not hidden by this fix.
+
+TDD cycle 1 names the broken behavior: a non-Linux host with a real logical CPU count must expose a
+nonempty affinity set instead of crashing before the guard can make a decision. The new regression
+test was first run alone and failed exactly at the unconditional `os.sched_getaffinity(0)` call
+(`tdd-cpu-affinity-red/`, 1 failed). The minimal implementation uses `sched_getaffinity` when present
+and otherwise returns `range(os.cpu_count())`; the same test then passed (`tdd-cpu-affinity-green/`,
+1 passed). This preserves Linux affinity/cgroup semantics and adds no budget or admission bypass.
+
+`EXP-UQ224-W2-SOURCE-GATE-AFTER-AFFINITY: PLANNED`. Re-run the exact selected demo set under a fresh
+root to measure the next independent failure boundary before any further patch.
+
+_Ledger source HEAD: `9d0679325`; intentional source changes are the ledger, the guard fallback, and
+its regression test._
+
+## CP-UQ225 — The Mac guard boundary is green; remaining full-suite failures are separate Linux assumptions
+
+`EXP-UQ224-W2-SOURCE-GATE-AFTER-AFFINITY: VALID RED` finished `106 failed, 349 passed`.
+The dominant next failure was no longer CPU affinity: it was the unconditional read of
+`/proc/self/cgroup`. Independent RED → GREEN cycles then established the smallest portable guard
+behavior without weakening Linux checks:
+
+- `tdd-cgroup-root-red/` → `tdd-cgroup-root-green/`: an unavailable or undecodable cgroup-membership
+  file means the unconstrained host root `/`; a present Linux cgroup file retains its prior parsing.
+- `tdd-macos-meminfo-red/` → `tdd-macos-meminfo-green/` and the corrected
+  `tdd-macos-sysconf-red2/` → `tdd-macos-sysconf-green/`: on Darwin, total RAM comes from
+  `sysconf(SC_PAGE_SIZE) * sysconf(SC_PHYS_PAGES)` (with `/usr/sbin/sysctl` only as a fallback), and
+  available RAM comes from `/usr/bin/vm_stat`; malformed or unavailable probes still fail closed.
+- `tdd-process-identity-red/` → `tdd-process-identity-green/`: when `/proc/<pid>/stat` is absent,
+  `psutil.Process(pid).create_time()` supplies the stable opaque birth identity; missing, changed, or
+  unreadable processes still return no identity.
+
+The exact guard-focused Mac gate `start-guard-macos-03/` is GREEN: **61 passed, 0 failed**, with a
+readable JUnit result. Its real-host Darwin assertion deliberately expects
+`GPU_TARGET_UNAVAILABLE`: the approved production design requires NVML GPU identity, and this Mac
+does not provide it. Test-only complete GPU fixtures exercise the W2 allocator/CLI logic without
+claiming a production GPU admission.
+
+Two allocator portability cycles were also measured, not inferred. The full selected source gate
+moved from `76 failed, 383 passed` (`unit-w2-source-05/`) to `73 failed, 387 passed`
+(`unit-w2-source-06/`) after a RED → GREEN fix that accepts only the root-owned `/tmp` symlink whose
+exact target is root-owned sticky `/private/tmp`. A further RED → GREEN cycle gives Darwin domain
+claims the same stable process-birth identity used by the guard; the next full source gate reached
+`72 failed, 389 passed` (`unit-w2-source-07/`). Linux behavior remains unchanged in both cases.
+
+The remaining failures are not evidence that the approved start guard is red. Sixty traces are the
+same absent `/proc/self/fd` Unix-socket transport, with downstream `UNIX_TRANSPORT_UNAVAILABLE`
+allocation failures; smaller clusters assume `/run/user/<uid>` or other Linux `/proc` process
+metadata. Those boundaries are retained rather than masked by platform skips.
+
+_Ledger source HEAD: `9d0679325`; all named RED/GREEN and source-gate directories are retained under
+the registered Mac evidence root._
+
+## CP-UQ226 — `/dev/fd` cannot preserve the Linux dirfd Unix-socket transport on Darwin
+
+`EXP-UQ226-DARWIN-DIRFD-PROBE: VALID NEGATIVE`
+
+The task-owned probe `ipc-macos-probe-01/probe.log` opened a mode-0700 runtime directory, retained its
+directory descriptor, and attempted the Darwin-looking address `/dev/fd/3/control.sock`. `/dev/fd`
+is present and reports as a directory, but `socket.bind()` returned `ENOENT`; no socket was created.
+The installed macOS SDK exposes neither `bindat` nor `connectat`. Therefore `/dev/fd/<dirfd>/<name>`
+is not a functional or security-equivalent replacement for Linux `/proc/self/fd/<dirfd>/<name>`.
+
+No production IPC fallback is introduced. Returning a long canonical path would violate Darwin's
+`sun_path` limit, and a short symlink alias would weaken the pinned-parent identity guarantee. The
+Unix transport remains fail closed on this host. This blocks a real two-Worker production launch on
+the Mac independently of the already-recorded NVML admission boundary; it does not invalidate the
+61-case guard gate or authorize changing the approved GPU/IPC contracts.
+
+The next gate is the complete affected guard test set plus read-only formatting/static checks. If it
+is green, the Mac result can establish portable lightweight-guard correctness while reporting full
+physical W2 acceptance as unsupported by this host, not as PASS.
+
+_Ledger source HEAD: `9d0679325`; no socket, process, or evidence cleanup was performed._
+
+## CP-UQ227 — Schema-v3 again has exactly one admission probe
+
+`EXP-UQ227-AFFECTED-GUARD-GATE: VALID GREEN`
+
+The valid `guard-affected-final-02/` RED reached 76 tests and finished `4 failed, 72 passed`.
+It separated three boundaries:
+
+1. Darwin correctly refuses and re-probes an unavailable GPU rather than caching that refusal as an
+   epoch admission.
+2. `WorkerResourceAllocator.allocate()` and `adopt_existing()` still called the retired
+   `SystemResourceProbe.snapshot()` before their schema-v3 lightweight guard. On this Mac that first
+   failed at `/proc/meminfo`; on Linux it duplicated CPU/RAM/GPU observation and contradicted the
+   approved one-guard design.
+3. launch-test subprocesses did not place `ROS_HOME`/`ROS_LOG_DIR` under the task root and therefore
+   tried to write `$HOME/.ros` through the sandbox.
+
+The minimal production correction calls `_probe_snapshot()` only in the legacy non-v3 branches.
+Schema-v3 allocation and restore now use only `_start_guard_check()`. The resource regression replaces
+the old permissive `SystemResourceProbe.snapshot` stub with a forbidden call, proving that a v3 dry
+run does not touch it. No v1/v2 formula, threshold, or legacy restore behavior changed. Test harnesses
+now keep ROS logs under their task root and model a complete GPU only inside offline Darwin fixtures;
+production continues to refuse this host with exact `GPU_TARGET_UNAVAILABLE`.
+
+The four failed nodeids first passed together in `guard-targeted-green-01/` (`4 passed`). After a
+manual cross-platform review, `tdd-nondarwin-meminfo-red3/` proved that an absent proc meminfo file on
+a non-Darwin platform incorrectly invoked Darwin commands; `tdd-nondarwin-meminfo-green/` proves the
+fallback is now Darwin-only and all other platforms retain the former unavailable result.
+
+Final current-source results after that last production edit:
+
+- `branch-build-01/`: fresh `so101_demo_py` symlink install, exit 0, one package built;
+- `guard-affected-final-04/`: **77 passed, 0 failed, 0 errors**, JUnit read back;
+- `teleop-guard-final-03/`: **7 passed, 0 failed, 0 errors**, JUnit read back;
+- `resource-portability-final-02/`: **3 passed, 0 failed, 0 errors**, including the v3 forbidden
+  legacy-probe assertion;
+- `final-readback-01/`: all ten changed Python files compile from source bytes and
+  `git diff --check` exits 0.
+
+The attempted package-runner record `colcon-guard-package-final-01/` is **INVALID**, not RED: the
+correct ROS venv ran pytest but `colcon` removed the macOS dylib search environment, so import of
+`rclpy` failed before collection with
+`Library not loaded: @rpath/librosidl_typesupport_c.dylib` (zero runnable nodeids, exit 4). This is
+the exact bootstrap boundary named by the repository's macOS package-test contract. In the same
+current zsh environment, direct `rclpy` import succeeds from the Jazzy tree and the package-boundary
+tests above collect and pass. Those targeted direct gates do not masquerade as a complete all-tests
+package gate.
+
+The broad `ament_flake8` diagnostic in `static-checks-01/` is also non-gating: it reports 2,764
+violations across already-nonconforming complete files (including 2,518 quote-style findings), not a
+change-specific baseline. The source-byte compilation and diff whitespace checks are the valid static
+readbacks for this continuation.
+
+_Ledger source HEAD: `9d0679325`; the worktree is intentionally dirty pending the terminal commit._
+
+## CP-UQ228 — Mac terminal result: guard portable, production W2 physical acceptance unsupported
+
+`checkpoint_id: CP-UQ228`
+`host: Terry-Mac-mini.local`
+`scope: exact worker_count=2 only`
+`status: PARTIAL_PASS / PHYSICAL_W2_BLOCKED`
+`five_batch_stability: 0/5`
+
+The lightweight start guard and its demo/teleop consumers are portable and green at the supported
+Mac test boundary. A real production W2 campaign is not supportable on this host without changing
+approved contracts:
+
+- the guard's required NVML device enumeration fails closed as `GPU_TARGET_UNAVAILABLE`; Apple GPU
+  capacity is not substituted or guessed;
+- the authenticated Unix transport requires the Linux pinned-parent address
+  `/proc/self/fd/<dirfd>/<name>`; the retained Darwin probe proves `/dev/fd/<dirfd>/<name>` returns
+  `ENOENT`, and the SDK offers no `bindat`/`connectat` equivalent. No long-path or symlink-alias
+  weakening was added.
+
+These two boundaries occur before a genuine two-Worker simulation can establish exact slot identity,
+progress/results, cancellation/recovery, cleanup, or independent physical evidence. Therefore no
+Gazebo/MuJoCo stack or GUI was started, no screenshot was manufactured, no physical W2 batch is
+claimed, and the stability count remains 0/5. Historical ai-station FIRST_PASS evidence remains
+historical context only.
+
+The final host inventory is retained as `final-host-inventory.txt`. It shows no surviving pytest,
+colcon, start-guard helper, SO-101 parallel process, or listener on TCP 8010; the only task-related
+session is this same `codex-unbounded-queue-w2-mac-mini` continuation. The inventory command exits 1
+only because `lsof` correctly found no listener.
+
+Evidence disposition (nothing deleted):
+
+- **retained final evidence:** `guard-affected-final-04/`, `teleop-guard-final-03/`,
+  `resource-portability-final-02/`, `branch-build-01/`, `final-readback-01/`,
+  `final-host-inventory.txt`, the receipt, approved package, inventory/provenance records, every valid
+  RED→GREEN pair, and every full source-gate result;
+- **archived runs:** none — this Mac evidence root has no archive move;
+- **deletion candidates only:** invalid bootstrap attempts (`unit-w2-source-01/`,
+  `unit-w2-source-02/`, `guard-affected-final-01/`, `colcon-guard-package-final-01/`,
+  `tdd-macos-sysconf-red/`, `tdd-nondarwin-meminfo-red/`, `tdd-nondarwin-meminfo-red2/`), superseded
+  intermediate gates (`unit-w2-source-03/` through `unit-w2-source-07/`,
+  `start-guard-macos-01/`, `guard-affected-final-02/`, `guard-affected-final-03/`,
+  `teleop-guard-final-01/`, `teleop-guard-final-02/`, `resource-portability-final-01/`), and their
+  task-local temp/build byproducts. They remain auditable in place because deletion was not
+  authorized.
+
+No W4/W6/W8 run or claim occurred. No ai-station operation, real hardware action, global
+configuration change, foreign cleanup, evidence deletion, or main-branch publication occurred.
+
+_Ledger source HEAD before terminal commit: `9d0679325`._

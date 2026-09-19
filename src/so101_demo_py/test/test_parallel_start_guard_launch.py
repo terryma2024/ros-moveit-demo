@@ -90,6 +90,8 @@ def _entry_environment(prefix: Path, task_root: Path | None = None) -> dict[str,
             [str(item) for item in prefixes] + ([existing] if existing else []))
     if task_root is not None:
         environment["SO101_TASK_ROOT"] = str(task_root)
+        environment["ROS_HOME"] = str(task_root / "ros-home")
+        environment["ROS_LOG_DIR"] = str(task_root / "ros-home/log")
     else:
         environment.pop("SO101_TASK_ROOT", None)
     return environment
@@ -159,6 +161,12 @@ def test_allocator_default_entry_writes_the_v3_guard_composition(tmp_path) -> No
          "--evidence-root", str(evidence), "--dry-run"],
         capture_output=True, text=True, timeout=180, cwd=str(tmp_path),
         env=_entry_environment(prefix, tmp_path / "task-root"))
+    if sys.platform == "darwin":
+        assert completed.returncode == 2, completed.stdout + completed.stderr
+        failure = json.loads(completed.stderr.strip().splitlines()[-1])
+        assert failure["error"] == "GPU_TARGET_UNAVAILABLE"
+        assert failure["admission"]["reason"] == "GPU_TARGET_UNAVAILABLE"
+        return
     assert completed.returncode == 0, completed.stdout + completed.stderr
     manifest = json.loads(completed.stdout.strip().splitlines()[-1])
     assert manifest["schema_version"] == 3
@@ -195,6 +203,13 @@ def test_debug_metadata_cannot_block_but_control_errors_still_refuse(tmp_path) -
          "--config", str(config), "--worker-count", "1",
          "--evidence-root", str(tmp_path / "debug-hostile"), "--dry-run"],
         capture_output=True, text=True, timeout=180, cwd=str(tmp_path), env=debug_hostile)
+    if sys.platform == "darwin":
+        assert accepted.returncode == 2, accepted.stdout + accepted.stderr
+        failure = json.loads(accepted.stderr.strip().splitlines()[-1])
+        assert failure["error"] == "GPU_TARGET_UNAVAILABLE"
+        assert "manifest" not in failure["error"].lower()
+        assert "commit" not in failure["error"].lower()
+        return
     assert accepted.returncode == 0, accepted.stdout + accepted.stderr
     assert json.loads(accepted.stdout.strip().splitlines()[-1])["schema_version"] == 3
 
