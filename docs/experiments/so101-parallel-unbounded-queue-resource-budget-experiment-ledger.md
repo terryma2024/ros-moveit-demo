@@ -11826,3 +11826,29 @@ rather than from a source path, which is what the wiring round needs.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `dd7fe5c9`; no evidence deleted._
+
+### CP-UQ263 addendum 11 — where the wiring plugs in
+
+The composition's injection point is `CampaignPorts` (`parallel_batch/macos_w2_campaign.py:89`):
+
+```text
+model_factories : Mapping[str, Callable[[], object]]   # built per Broker, real caller passes the detectors
+cancel_goals    : Callable[[], bool] = lambda: True     # cancel controller goals
+confirm_absence : Callable[[], bool] = lambda: True     # observe their absence independently
+stop_worker     : Callable[[str], bool] = lambda _n: True
+clock           : Callable[[], float] = time.monotonic
+```
+
+So the wiring round extends this dataclass rather than the campaign's body: a real-station Worker needs
+(1) the port itself, built per Worker with `perception_runner=ports.run_perception_chain` and the
+Coordinator authority, and (2) the station ownership it starts through `task_station_config` +
+`PersistentTaskStack` with `station_environment`. Both are pure injections, which is why the
+composition was written with every platform-specific piece behind this seam.
+
+`macos_w2_worker.py` (`cli/`) is the child that would then hold the port: it already speaks the v4
+permission-only client for its round trips, so the change is to route those through `W2BrokerPort`
+and give it the perception runner instead of calling the client directly.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `3d1c22b4`; no evidence deleted._
