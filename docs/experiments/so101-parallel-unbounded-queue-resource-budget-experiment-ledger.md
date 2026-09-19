@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ269 (tail of this file)
+latest_checkpoint: CP-UQ270 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -12439,3 +12439,55 @@ Four orphaned station processes from that run were reaped by exact PID.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `c48c0b46`; no evidence deleted._
+
+## CP-UQ270 — Worker inference now really runs on the shared MPS Broker
+
+```yaml
+checkpoint_id: CP-UQ270
+last_valid_experiment: EXP-UQ270-WORKER-INFERENCE-THROUGH-PORT
+current_hypothesis: The Worker can send a real inference request through `W2BrokerPort`, admitted by
+  the one-time table and executed on the shared MPS lane. CONFIRMED.
+working_tree_status: clean after the scoped commit below
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - The Worker's inference uses a synthetic warm frame, not an RGB-D snapshot from its own station;
+    the pick-place chain (perception -> pose admission -> plan -> execute) is still unwired.
+  - Screen Recording is still denied to this session.
+next_command: feed the Worker a real snapshot from its station and drive the point chain
+```
+
+`EXP-UQ270-WORKER-INFERENCE-THROUGH-PORT: VALID`
+
+### The run
+
+```text
+task14-campaign-infer-05   status W2_CAMPAIGN_PASS, served 12 (6 IPC-shape + 6 real infer)
+                           w1 infer: 3 x {"request_id": "w1-att-00-yolo", "status": "OK",
+                                          "device": "mps"}
+                           orphans []
+```
+
+That is the production path, end to end and inside the campaign: the Worker reads the identity the
+entry point bound for it, derives `{attempt_id}-yolo`, sends it through `W2BrokerPort` over the
+permission-only v4 socket, the campaign's server runs a real YOLO forward pass on the shared lane and
+answers, and the device is `mps`.
+
+### The three mismatches, closed in order
+
+| # | Mismatch | Closed by |
+| --- | --- | --- |
+| 1 | the server ignored `request.operation` | a `broker.infer` branch that answers `ok`/refuses |
+| 2 | the table bound ids the Worker does not derive | entry point binds `{attempt_id}-{model_id}` and hands over the lease |
+| 3 | the Worker had no lease, snapshot or port | the Worker reads the lease, builds the descriptors, and calls the port |
+
+Three details were found by letting the contract answer rather than by guessing: `reset_epoch` is a
+non-empty *identifier* string, not a number (`EMPTY_ID: reset_epoch`); the v4 vocabulary is dotted, so
+the operation is `broker.infer` and not `infer` (`UNKNOWN_OPERATION`); and a worker's `cancel_generation`
+maps to `coordinator.cancel_request` in that vocabulary. My own port test asserted the wrong operation
+name until this round, which is why the test passed while the protocol refused the call.
+
+Task 14 remains 0/5: this is inference plumbing, not a pick-place batch, and
+`LINUX_REGRESSION_DEFERRED` is retained.
+
+_Ledger source HEAD: `e16bd706`; no evidence deleted._
