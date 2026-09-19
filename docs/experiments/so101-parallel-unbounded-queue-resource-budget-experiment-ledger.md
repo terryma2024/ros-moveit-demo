@@ -13337,7 +13337,11 @@ Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `c11312c8`; no evidence deleted._
 
-## Appendix A — the five FULL_RESTART batches, one line per batch
+## Appendix A — the five FULL_RESTART batches, one line per batch (PRE-FIX: cite Appendix B instead)
+
+> These runs predate the handler scope fix (CP-UQ283), so their inference leg is void:
+> `served` is 8 here because the six inferences per batch all failed. The numbers below are the
+> faithful record of what those runs did; **Appendix B is the set to cite.**
 
 | batch | campaign result | served | cleanup | w1 executed | w2 executed | failures | fresh per batch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -13586,5 +13590,25 @@ the six inferences per batch are now really served (6 probe + 6 infer + 2 duplic
 Everything else is unchanged: both slots execute all four points, cleanup is complete, and every
 point still fails only at TERMINAL_CAPTURE_FAILED. This series, not the earlier one, is the set to
 cite once it completes; Appendix A will be replaced with these numbers.
+
+_Ledger source HEAD: (this commit's parent); no evidence deleted._
+
+## Appendix B — the same series re-run after the CP-UQ283 fix (authoritative)
+
+| batch | campaign result | served | cleanup | w1 executed | w2 executed | failures | fresh per batch |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | W2_CAMPAIGN_INCOMPLETE | 14 | True | manifests=4 executed=4 points=4 | manifests=4 executed=4 points=4 | TERMINAL_CAPTURE_FAILED (all points) | 3 result docs, 2 station roots |
+| 2 | W2_CAMPAIGN_INCOMPLETE | 14 | True | manifests=4 executed=4 points=4 | manifests=4 executed=4 points=4 | TERMINAL_CAPTURE_FAILED (all points) | 3 result docs, 2 station roots |
+| 3 | W2_CAMPAIGN_INCOMPLETE | 14 | True | manifests=4 executed=4 points=4 | manifests=4 executed=4 points=4 | TERMINAL_CAPTURE_FAILED (all points) | 3 result docs, 2 station roots |
+| 4 | W2_CAMPAIGN_INCOMPLETE | 14 | True | manifests=4 executed=4 points=4 | manifests=4 executed=4 points=4 | TERMINAL_CAPTURE_FAILED (all points) | 3 result docs, 2 station roots |
+| 5 | W2_CAMPAIGN_INCOMPLETE | 14 | True | manifests=4 executed=4 points=4 | manifests=4 executed=4 points=4 | TERMINAL_CAPTURE_FAILED (all points) | 3 result docs, 2 station roots |
+
+Five consecutive FULL_RESTART batches on the fixed code, each composing a fresh claim, campaign IPC
+root, Broker generation, both station roots and both Worker sessions. Per batch: six probe requests,
+**six real `broker.infer` calls served on the shared MPS Broker** (`devices ['mps']`), two duplicate
+requests refused by the one-time table, and **eight executed pick-place point-runs** (two slots x four
+points) with MoveIt trajectories and MuJoCo contacts. Every point still fails only at
+`TERMINAL_CAPTURE_FAILED`, which is the macOS TCC Screen Recording grant this session cannot give
+itself, so Task 14 stays **0/5** and no batch is reported as passing.
 
 _Ledger source HEAD: (this commit's parent); no evidence deleted._
