@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ278 (tail of this file)
+latest_checkpoint: CP-UQ279 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -13065,3 +13065,47 @@ take each box, name the run or test that carries it, tick it only if that artefa
 and leave the rest - in particular every box under Task 14 - unchecked.
 
 _Ledger source HEAD: `46e08553`; no evidence deleted._
+
+## CP-UQ279 — Closing state of the macOS MPS / private-IPC task
+
+```yaml
+checkpoint_id: CP-UQ279
+verdict: PARTIAL
+task14: 0/5 - no counted FULL_RESTART simulation batch
+linux_regression: DEFERRED_ENVIRONMENT
+independent_verdict: OWED (gpt-5.6-sol/high unavailable to this session; no substitute used)
+working_tree_status: clean; branch ahead of origin only, nothing pushed or merged
+owned_processes: NONE - no ROS or station process left running
+```
+
+### What the task achieved
+
+The macOS exact-W2 platform is built, tested and exercised end to end: frozen v3 plus a closed v4
+contract, Darwin MPS admission that fails closed, durable supervisor ownership with exact-signal
+reaping, permission-only v4 IPC with no token/lease vocabulary, a single-lane shared MPS Broker,
+exact-W2 resource allocation, two Workers that each own a visible station on their own ROS domain and
+prove it ready before serving, real inference through the port with `device: mps`, and one-time
+admission demonstrated live refusing duplicates with the server's own code.
+
+### What remains, and the two reasons
+
+1. **Task 14's counted batches.** They need the pick-place chain inside the Workers, which means
+   porting the in-process runtime onto this spawned-Worker composition - the structural gap that also
+   makes a live Broker-crash injection unreachable (`broker_pid == os.getpid()`).
+2. **Fresh GUI evidence.** macOS TCC denies Screen Recording to this session's responsibility chain;
+   tmux was restarted (pid 10775) and the grant still does not apply. Every per-point `viewer.png`
+   fails closed, so no batch could be counted even if the chain existed.
+
+Neither was hidden, and neither was reported as a pass: the acceptance matrix in CP-UQ274 marks each
+requirement MET / PARTIAL / NOT MET / DEFERRED with the artefact that carries it.
+
+### For whoever continues
+
+- the ledger is the single writer's record; CP-UQ274 is the requirement-by-requirement matrix, and
+  CP-UQ271/CP-UQ276 name the structural work still owed;
+- the plan's checkboxes are deliberately unchecked, with the procedure for ticking them in the
+  CP-UQ278 addendum;
+- nothing has been pushed, merged or published; no evidence has been deleted; no Linux gate was run
+  or reported as anything.
+
+_Ledger source HEAD: `4a372263`; no evidence deleted._
