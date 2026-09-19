@@ -297,6 +297,14 @@ def test_worker_leases_and_bindings_use_the_ids_the_worker_derives(tmp_path: Pat
     on_disk = json.loads(Path(document["lease_path"]).read_text())
     assert on_disk["attempt_ids"] == document["attempt_ids"]
     assert on_disk["model_id"] == "yolo"
+    # the fault-injection switches must travel with the lease, or a probe would silently do nothing
+    assert on_disk["deadline_s"] == 240.0
+    assert on_disk["tamper_input_sha256"] is False
+
+    tuned = build_worker_leases(plan=_Plan(), batch_id="b1", evidence_root=tmp_path,
+                                input_sha256="a" * 64, deadline_s=4.0, tamper_input_sha256=True)
+    tuned_disk = json.loads(Path(tuned["w1"]["lease_path"]).read_text())
+    assert tuned_disk["deadline_s"] == 4.0 and tuned_disk["tamper_input_sha256"] is True
 
     class _Ready:
         broker_pid = 4242
