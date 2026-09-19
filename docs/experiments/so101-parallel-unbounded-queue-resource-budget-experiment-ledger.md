@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ263 (tail of this file)
+latest_checkpoint: CP-UQ264 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -11931,3 +11931,56 @@ the entry point only needs to pass the two arguments to turn it on.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `2e09f383`; no evidence deleted._
+
+## CP-UQ264 — The W2 campaign now runs with two station-owning Workers
+
+```yaml
+checkpoint_id: CP-UQ264
+last_valid_experiment: EXP-UQ264-CAMPAIGN-WITH-STATIONS
+current_hypothesis: The campaign can carry per-Worker station ownership without disturbing the
+  Broker, the one-time admission or the cleanup. CONFIRMED.
+working_tree_status: clean at commit below
+owned_processes: NONE - the supervisor's process-group cleanup took both stations with their Workers
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - The Worker starts its station but never waits for the ready contract, so this checkpoint proves
+    "started and reaped with its Worker", not "ready before the round trips".
+  - The Worker still talks to the Broker through the bare v4 client, not through `W2BrokerPort`.
+  - Screen Recording is still denied to this session.
+next_command: wait for the ready contract inside the Worker, then route its round trips through the port
+```
+
+`EXP-UQ264-CAMPAIGN-WITH-STATIONS: VALID` for what it measured, with the limit above stated up front.
+
+### The run
+
+`task14-campaign-stations-01/`:
+
+```text
+status    : W2_CAMPAIGN_PASS
+acks      : station requested [True, True]
+cleanup   : complete
+processes : 0 ros2_control_node / move_group left afterwards
+```
+
+Each Worker is spawned with a campaign-scoped station session and a Worker-scoped station root
+(`<evidence>/wN-station`), so two slots never share a scene, an epoch or an evidence directory - and
+the environment still comes from `station_environment`, so a canonical checkout prefix would have
+refused the launch rather than shadowing this branch.
+
+That the stations disappeared with their Workers is the ownership property the design asked for: the
+supervisor owns the Worker's process group, the station is inside it, and cleanup is exact without a
+second reaper.
+
+### What it does not prove, and the next step
+
+The Worker starts its station and then runs its three round trips immediately; it does not wait for
+`READY`. So this run does not yet show a station that is ready *before* the Worker uses it - that is
+the next change, together with routing the round trips through `W2BrokerPort` (built with
+`perception_runner` and the Coordinator authority), which turns the current IPC-only Worker into one
+whose inference goes through the shared MPS Broker and the one-time registry.
+
+Task 14 remains 0/5: no pick-place has run inside a campaign, and `LINUX_REGRESSION_DEFERRED` is
+retained.
+
+_Ledger source HEAD: `c381f51a`; no evidence deleted._
