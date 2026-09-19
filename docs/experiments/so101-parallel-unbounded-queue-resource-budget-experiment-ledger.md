@@ -13841,3 +13841,19 @@ a test rather than inferred.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `63b4eddb`; no evidence deleted._
+
+### CP-UQ286 addendum 3 — the verdict rule is now readable and tested, and it explains an old puzzle
+
+`campaign_status(...)` is extracted and covered by `campaign-verdict-01` (suite at 18 passed): PASS
+requires cleanup complete, two Worker result documents, both Workers `ACTIVE`, at least six served
+requests with devices exactly `["mps"]`, **and no refused request at all**.
+
+That last clause resolves something that looked inconsistent earlier in this ledger: the stable runs
+before round 91 reported `W2_CAMPAIGN_PASS`, and everything since reports `W2_CAMPAIGN_INCOMPLETE` -
+not because anything regressed, but because the duplicate probe added in round 91 makes every later run
+refuse at least two requests on purpose. The verdict is about the happy path, and the fault probes
+cannot reach it by construction.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `738ff4ad`; no evidence deleted._
