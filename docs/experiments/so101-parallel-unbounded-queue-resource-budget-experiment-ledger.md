@@ -12709,3 +12709,30 @@ what they do show is that the composed macOS runtime now starts, serves and clea
 rather than once.
 
 _Ledger source HEAD: `332485ea`; no evidence deleted._
+
+### CP-UQ274 addendum 2 — the fault evidence that is *not* GUI-blocked, and how to produce it
+
+Screen Recording was probed once more this round (`task16-capture-probe-01`, still
+`could not create image from display`), so the counted-batch half stays blocked. The fault evidences
+the plan asks for - Broker crash with a full W2 pool rebuild, inference timeout, active-Worker cancel -
+are *not* GUI-blocked, and the machinery to produce the first one for real is now mapped:
+
+```text
+CampaignSupervisor.terminate_all() -> CleanupReceipt          (campaign_supervisor.py:597)
+OwnershipReceipt.live_children() / .unresolved()              (210-217)  SpawnIntent per child
+SpawnIntent.to_document() / resolved()                        (115-155) pid + birth identity + role
+```
+
+So a live injection is: let the campaign serve a few requests, read the ownership receipt, take the
+`broker` child's exact PID and birth identity, signal exactly that process, then record what the
+composition does next - the design's answer being a whole-pool rebuild on a new generation and a new
+campaign IPC path, with the old bindings invalidated.
+
+The entry point needs a small, explicit switch for that (never an automatic kill), and the run's
+evidence must show the new generation, the new endpoint, both Workers restarted and the cleanup still
+exact. That is the next piece of work: it is reachable inside the remaining budget, it needs no GUI
+permission, and it closes an acceptance item that is currently marked PARTIAL.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `68fcebe8`; no evidence deleted._
