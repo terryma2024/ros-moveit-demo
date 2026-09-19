@@ -47,5 +47,12 @@ export default defineConfig({
       testMatch: "**/live-sim/06-fixed-n-execution.spec.ts",
       dependencies: ["live-preflight"],
     },
+    {
+      // The manual single-point failure retry: needs a service started with the fault-injection
+      // points catalog, so it stays its own project rather than running with the sweep.
+      name: "retry-full-restart",
+      testMatch: "**/live-sim/07-retry-full-restart.spec.ts",
+      dependencies: ["live-preflight"],
+    },
   ],
 });
