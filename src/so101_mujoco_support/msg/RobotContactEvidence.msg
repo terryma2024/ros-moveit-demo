@@ -1,0 +1,10 @@
+string simulation_session_id
+uint64 reset_epoch
+uint64 physics_step
+float64 simulation_time_s
+string[] geom_a
+string[] geom_b
+float64[] signed_distance_m
+float64[] normal_force_n
+bool truncated
+bool evidence_loss

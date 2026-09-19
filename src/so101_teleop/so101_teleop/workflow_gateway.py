@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from typing import Protocol
@@ -19,14 +20,22 @@ class WorkflowRunner(Protocol):
 
 
 class WorkflowGateway:
-    def __init__(self, runner: WorkflowRunner) -> None:
+    def __init__(self, runner: WorkflowRunner, *, control_authority=None) -> None:
+        if os.environ.get("SO101_ACT_PROFILE") in ("1", "true") and control_authority is None:
+            raise PermissionError("CONTROL_CONTEXT_REQUIRED")
+        self._control_authority = control_authority
+        self._act_session_id = None
         self._runner = runner
         self._snapshot = WorkflowSnapshot()
         self._snapshot_revision: int | None = None
         self._override_consumed = False
 
     async def start(self, run_id: str | None, session_id: str) -> WorkflowSnapshot:
-        self._snapshot = await self._runner.start(run_id or str(uuid.uuid4()), session_id)
+        run_id = run_id or str(uuid.uuid4())
+        if self._control_authority is not None:
+            self._control_authority.begin_workflow(session_id, run_id)
+            self._act_session_id = session_id
+        self._snapshot = await self._runner.start(run_id, session_id)
         self._snapshot_revision = None
         self._override_consumed = False
         return self._snapshot
@@ -63,6 +72,8 @@ class WorkflowGateway:
         return self._snapshot
 
     def _require_run(self, run_id: str) -> None:
+        if self._control_authority is not None:
+            self._control_authority.require(self._act_session_id)
         if self._snapshot.run_id != run_id:
             raise WorkflowRejected("WORKFLOW_RUN_MISMATCH")
 

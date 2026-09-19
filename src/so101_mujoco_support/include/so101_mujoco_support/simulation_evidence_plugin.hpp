@@ -25,9 +25,24 @@
 #include "so101_mujoco_support/msg/physics_step_evidence.hpp"
 #include "so101_mujoco_support/msg/physics_step_evidence_chunk.hpp"
 #include "so101_mujoco_support/msg/simulation_evidence.hpp"
+#include "so101_mujoco_support/msg/scalar_joint_evidence.hpp"
+#include "so101_mujoco_support/msg/robot_contact_evidence.hpp"
+#include "so101_mujoco_support/msg/scene_state_evidence.hpp"
 
 namespace so101_mujoco_support
 {
+class SceneStateBuilder
+{
+public:
+  bool configure(const mjModel * model);
+  const std::string & model_sha256() const {return model_sha256_;}
+  msg::SceneStateEvidence build(const mjModel * model, const mjData * data,
+    const std::string & session, uint64_t epoch, uint64_t step, bool paused) const;
+private:
+  const mjModel * model_{nullptr};
+  std::string model_sha256_;
+};
+
 struct EvidenceState
 {
   std::string simulation_session_id;
@@ -81,6 +96,10 @@ msg::PhysicsCancellationAck make_cancellation_ack(
   const msg::PhysicsCancellationRequest & request, uint64_t reset_epoch,
   uint64_t observed_physics_step, double observed_simulation_time_s);
 
+msg::ScalarJointEvidence make_scalar_joint_evidence(
+  const mjModel * model, const mjData * data, const std::vector<std::string> & joint_names,
+  const std::string & session, uint64_t reset_epoch, uint64_t simulation_step, bool paused);
+
 class PhysicsStepEvidenceBuffer
 {
 public:
@@ -108,6 +127,36 @@ private:
   std::optional<msg::PhysicsHazardLatch> hazard_latch_;
 };
 
+class RobotContactBuilder
+{
+public:
+  bool configure(const mjModel * model, const std::vector<std::string> & roots,
+    std::size_t max_contacts);
+  msg::RobotContactEvidence build(const mjModel * model, const mjData * data,
+    const std::string & session, uint64_t epoch, uint64_t step) const;
+private:
+  std::vector<bool> protected_geoms_;
+  std::vector<std::string> names_;
+  std::size_t max_contacts_{128};
+};
+
+class RobotContactBuffer
+{
+public:
+  explicit RobotContactBuffer(std::size_t capacity);
+  bool append(const msg::RobotContactEvidence & sample);
+  bool empty() const;
+  msg::RobotContactEvidence front() const;
+  void pop_published();
+  void reset(uint64_t epoch);
+private:
+  std::size_t capacity_;
+  std::deque<msg::RobotContactEvidence> samples_;
+  std::optional<msg::RobotContactEvidence> last_;
+  std::optional<uint64_t> epoch_;
+  bool loss_{false};
+};
+
 class SimulationEvidencePlugin final
   : public mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase,
     public mujoco_ros2_control_plugins::MuJoCoROS2ControlSimulationObserver
@@ -128,6 +177,7 @@ private:
     const mjModel * model, const mjData * data, bool paused,
     uint64_t reset_generation, bool advance_physics_step);
   void try_publish_chunk();
+  void try_publish_robot_contacts();
   void publish_hazard_if_needed();
   void acknowledge_cancellation_request(
     const msg::PhysicsCancellationRequest & request);
@@ -141,6 +191,15 @@ private:
   rclcpp::Subscription<msg::PhysicsCancellationRequest>::SharedPtr
     cancellation_request_subscription_;
   rclcpp::Publisher<msg::PhysicsCancellationAck>::SharedPtr cancellation_ack_publisher_;
+  rclcpp::Publisher<msg::ScalarJointEvidence>::SharedPtr scalar_joint_publisher_;
+  std::vector<std::string> scalar_joint_names_;
+  SceneStateBuilder scene_builder_;
+  rclcpp::Publisher<msg::SceneStateEvidence>::SharedPtr scene_publisher_;
+  std::unique_ptr<realtime_tools::RealtimePublisher<msg::SceneStateEvidence>> realtime_scene_publisher_;
+  rclcpp::Publisher<msg::RobotContactEvidence>::SharedPtr robot_publisher_;
+  std::unique_ptr<realtime_tools::RealtimePublisher<msg::RobotContactEvidence>> realtime_robot_publisher_;
+  RobotContactBuilder robot_builder_;
+  std::unique_ptr<RobotContactBuffer> robot_buffer_;
   EvidenceBuilder builder_;
   EvidenceState state_;
   EvidenceState physics_state_;

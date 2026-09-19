@@ -753,3 +753,23 @@ def test_start_fingerprint_rejects_one_milliradian_joint_drift():
         assert False, "expected PLAN_STALE_START"
     except PlanRejected as error:
         assert str(error) == "PLAN_STALE_START"
+
+
+def test_act_cancel_bypasses_command_lock_and_running_task():
+    async def scenario():
+        calls=[]
+        class Authority:
+            def require(self,*args):raise AssertionError('Stop must not use primary lease RPC')
+            def stop(self,session):calls.append(session);return True
+        worker=Worker();worker._act_control=Authority()
+        service=service_for(worker);service._lease=('ui-lease',time.monotonic()+30)
+        service.bind_task_active(lambda:True)
+        await service._commands._lock.acquire()
+        try:
+            result=await asyncio.wait_for(service.command('cancel',dict(command_id='stop',lease_id='ui-lease',session_id='sim-a')),.2)
+            assert result.succeeded and calls==['sim-a']
+            rejected=await asyncio.wait_for(service.command('cancel',dict(command_id='old-stop',lease_id='expired',session_id='sim-a')),.2)
+            assert not rejected.succeeded and rejected.code=='LEASE_REQUIRED'
+            assert calls==['sim-a']
+        finally:service._commands._lock.release()
+    asyncio.run(scenario())

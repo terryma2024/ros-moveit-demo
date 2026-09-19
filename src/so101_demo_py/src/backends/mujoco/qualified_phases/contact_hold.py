@@ -11,7 +11,7 @@ from pathlib import Path
 
 import rclpy
 from control_msgs.action import FollowJointTrajectory
-from rclpy.action import ActionClient
+from so101_demo.adapters.act.leased_action_client import make_action_client as ActionClient
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
 from so101_demo.application.phases.grasp_strategy import seating_preload_target

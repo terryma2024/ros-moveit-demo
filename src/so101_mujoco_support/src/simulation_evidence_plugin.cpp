@@ -12,6 +12,7 @@
 #include <vector>
 
 #include <pluginlib/class_list_macros.hpp>
+#include <rcutils/sha256.h>
 
 namespace so101_mujoco_support
 {
@@ -38,6 +39,96 @@ bool finite_contact(const mjContact & contact)
          std::isfinite(contact.dist);
 }
 }  // namespace
+
+bool SceneStateBuilder::configure(const mjModel * model)
+{
+  model_ = nullptr;
+  model_sha256_.clear();
+  if (!model || mj_version() != 340) {return false;}
+  const auto size = mj_sizeModel(model);
+  if (size <= 0) {return false;}
+  std::vector<uint8_t> bytes(static_cast<std::size_t>(size));
+  mj_saveModel(model, nullptr, bytes.data(), size);
+  rcutils_sha256_ctx_t context;
+  rcutils_sha256_init(&context);
+  rcutils_sha256_update(&context, bytes.data(), bytes.size());
+  uint8_t digest[RCUTILS_SHA256_BLOCK_SIZE];
+  rcutils_sha256_final(&context, digest);
+  constexpr char hex[] = "0123456789abcdef";
+  for (const auto value : digest) {
+    model_sha256_ += hex[value >> 4];
+    model_sha256_ += hex[value & 15];
+  }
+  model_ = model;
+  return true;
+}
+
+msg::SceneStateEvidence SceneStateBuilder::build(
+  const mjModel * model, const mjData * data, const std::string & session,
+  uint64_t epoch, uint64_t step, bool paused) const
+{
+  if (!model_ || model != model_ || !data || session.empty() ||
+    !std::isfinite(data->time) || data->time < 0.0)
+  {
+    throw std::invalid_argument("invalid full-scene snapshot");
+  }
+  msg::SceneStateEvidence output;
+  output.simulation_session_id = session;
+  output.reset_epoch = epoch;
+  output.simulation_step = step;
+  output.paused = paused;
+  output.model_sha256 = model_sha256_;
+  const auto nanoseconds = static_cast<int64_t>(std::llround(data->time * 1.0e9));
+  output.header.stamp.sec = static_cast<int32_t>(nanoseconds / 1000000000LL);
+  output.header.stamp.nanosec = static_cast<uint32_t>(nanoseconds % 1000000000LL);
+  output.header.frame_id = "world";
+  output.qpos.assign(data->qpos, data->qpos + model->nq);
+  output.qvel.assign(data->qvel, data->qvel + model->nv);
+  if (!std::all_of(output.qpos.begin(), output.qpos.end(), [](double v) {return std::isfinite(v);}) ||
+    !std::all_of(output.qvel.begin(), output.qvel.end(), [](double v) {return std::isfinite(v);}))
+  {
+    throw std::invalid_argument("non-finite full-scene state");
+  }
+  return output;
+}
+
+msg::ScalarJointEvidence make_scalar_joint_evidence(
+  const mjModel * model, const mjData * data, const std::vector<std::string> & joint_names,
+  const std::string & session, uint64_t reset_epoch, uint64_t simulation_step, bool paused)
+{
+  if (!model || !data || !std::isfinite(data->time) || data->time < 0.0 || session.empty() ||
+    joint_names.empty())
+  {
+    throw std::invalid_argument("invalid scalar joint snapshot");
+  }
+  msg::ScalarJointEvidence output;
+  output.simulation_session_id = session;
+  output.reset_epoch = reset_epoch;
+  output.simulation_step = simulation_step;
+  output.paused = paused;
+  const auto nanoseconds = static_cast<int64_t>(std::llround(data->time * 1.0e9));
+  output.header.stamp.sec = static_cast<int32_t>(nanoseconds / 1000000000LL);
+  output.header.stamp.nanosec = static_cast<uint32_t>(nanoseconds % 1000000000LL);
+  output.header.frame_id = "world";
+  for (const auto & joint : joint_names) {
+    const int id = mj_name2id(model, mjOBJ_JOINT, joint.c_str());
+    if (id < 0 || model->jnt_type[id] != mjJNT_HINGE ||
+      std::find(output.joint_names.begin(), output.joint_names.end(), joint) !=
+      output.joint_names.end())
+    {
+      throw std::invalid_argument("unknown, repeated or non-hinge audit joint");
+    }
+    const auto position = data->qpos[model->jnt_qposadr[id]];
+    const auto velocity = data->qvel[model->jnt_dofadr[id]];
+    if (!std::isfinite(position) || !std::isfinite(velocity)) {
+      throw std::invalid_argument("non-finite scalar joint state");
+    }
+    output.joint_names.push_back(joint);
+    output.positions_rad.push_back(position);
+    output.velocities_rad_s.push_back(velocity);
+  }
+  return output;
+}
 
 bool EvidenceBuilder::configure(
   const mjModel * model, const std::string & object_body,
@@ -414,6 +505,122 @@ void PhysicsStepEvidenceBuffer::reset()
   hazard_latch_.reset();
 }
 
+bool RobotContactBuilder::configure(
+  const mjModel * model, const std::vector<std::string> & roots, std::size_t max_contacts)
+{
+  if (!model || roots.empty() || max_contacts == 0) {return false;}
+  std::vector<int> root_ids;
+  for (const auto & root : roots) {
+    const int id = mj_name2id(model, mjOBJ_BODY, root.c_str());
+    if (id <= 0) {return false;}
+    root_ids.push_back(id);
+  }
+  protected_geoms_.assign(model->ngeom, false);
+  names_.clear();
+  max_contacts_ = max_contacts;
+  for (int geom = 0; geom < model->ngeom; ++geom) {
+    names_.push_back(name(model, mjOBJ_GEOM, geom));
+    int body = model->geom_bodyid[geom];
+    while (body != 0) {
+      if (std::find(root_ids.begin(), root_ids.end(), body) != root_ids.end()) {
+        protected_geoms_[geom] = true;
+        if (names_.back().empty()) {return false;}
+        break;
+      }
+      body = model->body_parentid[body];
+    }
+  }
+  return std::find(protected_geoms_.begin(), protected_geoms_.end(), true) != protected_geoms_.end();
+}
+
+msg::RobotContactEvidence RobotContactBuilder::build(
+  const mjModel * model, const mjData * data, const std::string & session,
+  uint64_t epoch, uint64_t step) const
+{
+  msg::RobotContactEvidence output;
+  output.simulation_session_id = session;
+  output.reset_epoch = epoch;
+  output.physics_step = step;
+  if (!model || !data || protected_geoms_.size() != static_cast<std::size_t>(model->ngeom) ||
+    !std::isfinite(data->time) || session.empty())
+  {
+    output.truncated = output.evidence_loss = true;
+    return output;
+  }
+  output.simulation_time_s = data->time;
+  for (int index = 0; index < data->ncon; ++index) {
+    const auto & contact = data->contact[index];
+    const int a = contact.geom[0];
+    const int b = contact.geom[1];
+    if (a < 0 || b < 0 || a >= model->ngeom || b >= model->ngeom) {
+      output.truncated = output.evidence_loss = true;
+      continue;
+    }
+    if (!protected_geoms_[a] && !protected_geoms_[b]) {continue;}
+    if (output.geom_a.size() >= max_contacts_ || !finite_contact(contact) ||
+      names_[a].empty() || names_[b].empty())
+    {
+      output.truncated = output.evidence_loss = true;
+      continue;
+    }
+    mjtNum wrench[6]{};
+    mj_contactForce(model, data, index, wrench);
+    if (!std::isfinite(wrench[0])) {
+      output.truncated = output.evidence_loss = true;
+      continue;
+    }
+    output.geom_a.push_back(names_[a]);
+    output.geom_b.push_back(names_[b]);
+    output.signed_distance_m.push_back(contact.dist);
+    output.normal_force_n.push_back(std::max(0.0, wrench[0]));
+  }
+  return output;
+}
+
+RobotContactBuffer::RobotContactBuffer(std::size_t capacity) : capacity_(capacity)
+{
+  if (capacity == 0) {throw std::invalid_argument("invalid robot contact capacity");}
+}
+
+bool RobotContactBuffer::append(const msg::RobotContactEvidence & sample)
+{
+  if (!epoch_) {epoch_ = sample.reset_epoch;}
+  const bool valid = sample.reset_epoch == *epoch_ && !sample.simulation_session_id.empty() &&
+    std::isfinite(sample.simulation_time_s) && sample.simulation_time_s >= 0.0 &&
+    (!last_ || (sample.simulation_session_id == last_->simulation_session_id &&
+    sample.physics_step == last_->physics_step + 1 && sample.simulation_time_s > last_->simulation_time_s));
+  if (!valid || sample.truncated || sample.evidence_loss) {loss_ = true;}
+  if (!valid || samples_.size() >= capacity_) {
+    loss_ = true;
+    last_ = sample;
+    return false;
+  }
+  samples_.push_back(sample);
+  last_ = sample;
+  return true;
+}
+
+bool RobotContactBuffer::empty() const {return samples_.empty();}
+
+msg::RobotContactEvidence RobotContactBuffer::front() const
+{
+  if (samples_.empty()) {throw std::logic_error("empty robot contact buffer");}
+  auto sample = samples_.front();
+  sample.evidence_loss = sample.evidence_loss || loss_;
+  return sample;
+}
+
+void RobotContactBuffer::pop_published()
+{
+  if (samples_.empty()) {throw std::logic_error("empty robot contact buffer");}
+  samples_.pop_front();
+}
+
+void RobotContactBuffer::reset(uint64_t epoch)
+{
+  samples_.clear();last_.reset();epoch_ = epoch;loss_ = false;
+}
+
 bool SimulationEvidencePlugin::init(
   rclcpp::Node::SharedPtr node, const mjModel * model,
   mjData * data)
@@ -474,6 +681,27 @@ bool SimulationEvidencePlugin::init(
     node_ = std::move(node);
     const auto evidence_qos =
       rclcpp::QoS(rclcpp::KeepLast(1)).reliable().transient_local();
+    scalar_joint_names_ = parameter<std::vector<std::string>>(node_, "scalar_joint_audit_names", {});
+    if (!scalar_joint_names_.empty()) {
+      make_scalar_joint_evidence(model, data, scalar_joint_names_,
+        state_.simulation_session_id, 0, 0, false);
+      scalar_joint_publisher_ = node_->create_publisher<msg::ScalarJointEvidence>(
+        "/so101/simulation/joints", evidence_qos);
+    }
+    const auto robot_roots = parameter<std::vector<std::string>>(node_, "robot_contact_roots", {});
+    if (!robot_roots.empty()) {
+      const auto capacity = parameter<int64_t>(node_, "robot_contact_buffer_capacity", 5000);
+      if (capacity <= 0 || !robot_builder_.configure(model, robot_roots, max_contacts)) {return false;}
+      robot_buffer_ = std::make_unique<RobotContactBuffer>(static_cast<std::size_t>(capacity));
+      robot_buffer_->reset(0);
+      robot_publisher_ = node_->create_publisher<msg::RobotContactEvidence>(
+        "/so101/simulation/robot_contacts", rclcpp::QoS(rclcpp::KeepLast(10000)).reliable());
+      realtime_robot_publisher_ = std::make_unique<realtime_tools::RealtimePublisher<msg::RobotContactEvidence>>(robot_publisher_);
+      if (!scene_builder_.configure(model)) {return false;}
+      scene_publisher_ = node_->create_publisher<msg::SceneStateEvidence>(
+        "/so101/simulation/scene_state", evidence_qos);
+      realtime_scene_publisher_ = std::make_unique<realtime_tools::RealtimePublisher<msg::SceneStateEvidence>>(scene_publisher_);
+    }
     publisher_ = node_->create_publisher<Evidence>(topic, evidence_qos);
     realtime_publisher_ = std::make_unique<realtime_tools::RealtimePublisher<Evidence>>(publisher_);
     const auto chunk_qos = rclcpp::QoS(rclcpp::KeepLast(100)).reliable();
@@ -549,6 +777,11 @@ void SimulationEvidencePlugin::on_physics_step(const mjModel * model, const mjDa
   current_physics_step_.store(step.physics_step, std::memory_order_release);
   current_simulation_time_s_.store(step.simulation_time_s, std::memory_order_release);
   physics_step_buffer_->append(step);
+  if (robot_buffer_) {
+    robot_buffer_->append(robot_builder_.build(model, data, step.simulation_session_id,
+      step.reset_epoch, step.physics_step));
+    try_publish_robot_contacts();
+  }
   publish_hazard_if_needed();
   if (physics_step_buffer_->ready()) {
     try_publish_chunk();
@@ -567,10 +800,35 @@ void SimulationEvidencePlugin::try_publish_snapshot(
     realtime_publisher_->msg_ =
       builder_.build(model, data, paused, state_, reset_generation, advance_physics_step);
     realtime_publisher_->unlockAndPublish();
+    if (realtime_scene_publisher_ && realtime_scene_publisher_->trylock()) {
+      try {
+        realtime_scene_publisher_->msg_ = scene_builder_.build(model, data,
+          state_.simulation_session_id, state_.reset_epoch, state_.simulation_step, paused);
+        realtime_scene_publisher_->unlockAndPublish();
+      } catch (...) {
+        realtime_scene_publisher_->unlock();
+      }
+    }
     last_publish_time_s_ = data->time;
     published_ = true;
   } catch (...) {
     realtime_publisher_->unlock();
+  }
+}
+
+void SimulationEvidencePlugin::try_publish_robot_contacts()
+{
+  if (!robot_buffer_ || !realtime_robot_publisher_) {return;}
+  while (!robot_buffer_->empty()) {
+    if (!realtime_robot_publisher_->trylock()) {return;}
+    try {
+      realtime_robot_publisher_->msg_ = robot_buffer_->front();
+      realtime_robot_publisher_->unlockAndPublish();
+      robot_buffer_->pop_published();
+    } catch (...) {
+      realtime_robot_publisher_->unlock();
+      return;
+    }
   }
 }
 
@@ -645,6 +903,11 @@ void SimulationEvidencePlugin::on_state_snapshot(
   const auto generation = reset_generation_.load(std::memory_order_acquire);
   const bool reset_pending = generation != state_.consumed_reset_generation;
   try_publish_snapshot(model, data, true, generation, true);
+  if (scalar_joint_publisher_) {
+    scalar_joint_publisher_->publish(make_scalar_joint_evidence(
+        model, data, scalar_joint_names_, state_.simulation_session_id, generation,
+        reset_pending ? 0 : state_.simulation_step, true));
+  }
   if (reset_pending && generation == state_.consumed_reset_generation) {
     physics_state_.publisher_sequence = 0;
     physics_state_.simulation_step = 0;
@@ -655,6 +918,7 @@ void SimulationEvidencePlugin::on_state_snapshot(
     if (physics_step_buffer_) {
       physics_step_buffer_->reset();
     }
+    if (robot_buffer_) {robot_buffer_->reset(generation);}
     current_reset_epoch_.store(generation, std::memory_order_release);
     current_physics_step_.store(0, std::memory_order_release);
     current_simulation_time_s_.store(data->time, std::memory_order_release);
@@ -664,6 +928,14 @@ void SimulationEvidencePlugin::on_state_snapshot(
 
 void SimulationEvidencePlugin::cleanup()
 {
+  realtime_scene_publisher_.reset();
+  scene_publisher_.reset();
+  scene_builder_ = SceneStateBuilder{};
+  robot_buffer_.reset();
+  realtime_robot_publisher_.reset();
+  robot_publisher_.reset();
+  scalar_joint_publisher_.reset();
+  scalar_joint_names_.clear();
   physics_step_buffer_.reset();
   cancellation_request_subscription_.reset();
   cancellation_ack_publisher_.reset();
