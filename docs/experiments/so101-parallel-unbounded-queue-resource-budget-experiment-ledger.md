@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ251 (tail of this file)
+latest_checkpoint: CP-UQ252 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -10494,3 +10494,49 @@ a regression. One gate attempt is recorded as invalid rather than hidden: pointi
 task-owned branch install.
 
 _Ledger source HEAD: `ce35a07b`; no evidence deleted._
+
+## CP-UQ252 — The product's own station ownership works on macOS, with no orphans
+
+```yaml
+checkpoint_id: CP-UQ252
+last_valid_experiment: EXP-UQ252-OWNED-DARWIN-STATION
+current_hypothesis: The stack that the W2 simulation driver will own per slot must start and stop a
+  visible macOS station by itself. CONFIRMED in product code.
+working_tree_status: clean at commit 1262638b
+owned_processes: NONE - the stack's own shutdown left no process behind
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - Screen Recording is still denied to this session's responsibility chain (tmux pid 59433 has not
+    been restarted), so per-point GUI capture and Task 14's batches remain blocked.
+  - The macOS W2 simulation composition above this stack is still unwritten.
+next_command: compose two owned stations plus the shared MPS Broker behind the Coordinator
+```
+
+`EXP-UQ252-OWNED-DARWIN-STATION: VALID`
+
+`task14-owned-station-01/` starts the station through `PersistentTaskStack` +
+`default_task_station_config` — the same ownership the parallel Worker runtime uses — from this
+branch's install and measures both ends:
+
+```text
+argv            : ros2 launch so101_demo_py so101_mujoco_task_station.launch.py
+                  headless:=false session_id:=task14-owned-station-01
+                  task_evidence_root:=<run>/station include_teleop:=false
+config_headless : false
+ros2_control_node pid resolved : 3608   (startup_s 0.87)
+ready           : ready=true, phase READY, arm/gripper/joint_state all active,
+                  /apply_planning_scene /get_planning_scene /plan_kinematic_path present
+shutdown        : 0.28 s, still_running=false
+orphans after   : none - ros2_control_node, move_group, robot_state_publisher, spawner all gone
+```
+
+That is the concrete difference from my first hand-rolled runner, which left three children
+reparented to PID 1: ownership belongs to `OwnedProcessGroup`, and now it is exercised on Darwin.
+`graceful_shutdown_move_group` also reports `GRACEFUL_SHUTDOWN_MOVE_GROUP_OK` on the way out, and the
+scene, camera plugin, MuJoCo physics thread and evidence plugin all initialise from this branch's
+build.
+
+Nothing here counts as a Task 14 batch: no pick-place ran, no GUI capture was taken, and Task 14
+remains 0/5. `LINUX_REGRESSION_DEFERRED` is retained.
+
+_Ledger source HEAD: `1262638b`; no evidence deleted._
