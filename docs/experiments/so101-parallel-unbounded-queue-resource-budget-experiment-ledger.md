@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ259 (tail of this file)
+latest_checkpoint: CP-UQ260 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -11237,3 +11237,54 @@ Task 14 remains 0/5: no station has been started from this allocation, no Broker
 `LINUX_REGRESSION_DEFERRED` is retained.
 
 _Ledger source HEAD: `823ce3c3`; no evidence deleted._
+
+## CP-UQ260 — Two stations start, but neither reaches the ready contract concurrently
+
+```yaml
+checkpoint_id: CP-UQ260
+last_valid_experiment: EXP-UQ260-TWO-STATIONS-READY (FAILED gate, clean cleanup)
+current_hypothesis: Each allocated slot can own its own station on its own domain. Start-up
+  CONFIRMED; the ready contract is not met when both run at once.
+working_tree_status: clean - no product changes in this round
+owned_processes: NONE - both stacks shut down in 0.18 s each and left no process behind
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome, Ghostty, Sparkle updater
+open_risks:
+  - Both stations reported MOTION_STACK_CONTROLLER_NOT_ACTIVE (joint_state_broadcaster) after a
+    180 s budget, while a single station reached READY in about 25 s earlier - contention or a
+    launch-level conflict, not yet diagnosed.
+  - Screen Recording is still denied to this session.
+next_command: run the two stations sequentially (ready slot 1, then start slot 2) and compare logs
+```
+
+`EXP-UQ260-TWO-STATIONS-READY: FAILED` - recorded as a failure, not a partial pass.
+
+### What the run did establish
+
+`task14-w2-stations-02/` (367 s, exit 0):
+
+```text
+worker-01  slot 1  ROS_DOMAIN_ID 181  headless=false  -> station started
+worker-02  slot 2  ROS_DOMAIN_ID 182  headless=false  -> station started
+argv tail  : so101_mujoco_task_station.launch.py headless:=false sensor_rendering:=true
+             include_teleop:=false session_id:=<per-worker session>
+             task_evidence_root:=<run>/.../workers/worker-0N
+shutdown   : 0.18 s each, still_running=false, zero ros2_control_node / move_group left
+```
+
+So the structural claim holds: **two allocated Workers, two ROS domains, two independently owned
+visible stations, started and stopped by product code**, with the per-slot session id and evidence
+root threaded through. What failed is readiness: both readiness probes returned
+`MOTION_STACK_CONTROLLER_NOT_ACTIVE` with dependency `joint_state_broadcaster` after their 180 s
+budget, where the single-station smoke earlier reached `READY` (controllers active, MoveIt services
+present) in about 25 s.
+
+Two candidate causes are worth distinguishing next round, and the run does not yet tell them apart:
+resource contention between two 500 Hz MuJoCo physics loops plus two MoveIt stacks on one Mac mini,
+or a launch-level conflict that only appears when a second station starts (shared file, shared
+service name on the same domain, or a spawner timeout). The sequential run separates them: if slot 2
+reaches ready when started alone after slot 1 is up, it is contention; if it fails the same way, it
+is a launch conflict.
+
+Task 14 remains 0/5 and `LINUX_REGRESSION_DEFERRED` is retained.
+
+_Ledger source HEAD: `626b4370`; no evidence deleted._
