@@ -692,14 +692,18 @@ def _render_mujoco_robot_description(
     sim_speed_factor: float = -1.0,
     initial_keyframe: str = "task_start",
     platform_name: str | None = None,
+    act_profile: bool = False,
 ) -> str:
     if initial_keyframe not in MUJOCO_CUP_KEYFRAMES:
         raise RuntimeError(f"unsupported MuJoCo initial keyframe: {initial_keyframe}")
+    if act_profile and initial_keyframe not in MUJOCO_CUP_KEYFRAMES[:4]:
+        raise RuntimeError(f"unsupported ACT initial keyframe: {initial_keyframe}")
     if not isfinite(sim_speed_factor) or (
         sim_speed_factor != -1.0 and sim_speed_factor <= 0.0
     ):
         raise RuntimeError("sim_speed_factor must be -1.0 or finite and positive")
-    description = (share / "assets/mujoco/so101.urdf").read_text(encoding="utf-8")
+    asset = "assets/mujoco/act/so101.urdf" if act_profile else "assets/mujoco/so101.urdf"
+    description = (share / asset).read_text(encoding="utf-8")
     description = description.replace("@SO101_MUJOCO_SCENE@", scene)
     description = description.replace("@SO101_MUJOCO_INITIAL_KEYFRAME@", initial_keyframe)
     description = description.replace("@SO101_MUJOCO_HEADLESS@", str(headless).lower())
@@ -771,6 +775,10 @@ def _mujoco_stack_actions(
     else:
         raise RuntimeError("sensor_rendering must be auto, true, or false")
     timeout = LaunchConfiguration("readiness_timeout_s").perform(context)
+    act_profile_value = context.launch_configurations.get("act_profile", "false")
+    if act_profile_value not in {"true", "false"}:
+        raise RuntimeError("act_profile must be true or false")
+    act_profile = act_profile_value == "true"
     robot_description = _render_mujoco_robot_description(
         share,
         scene,
@@ -778,8 +786,9 @@ def _mujoco_stack_actions(
         sensor_rendering=sensor_rendering,
         sim_speed_factor=sim_speed_factor,
         initial_keyframe=initial_keyframe,
+        act_profile=act_profile,
     )
-    config = share / "config/mujoco"
+    config = share / ("config/mujoco/act" if act_profile else "config/mujoco")
     controllers = str(config / "ros2_controllers.yaml")
     parameters = [
         {"use_sim_time": True, "robot_description": robot_description},
@@ -813,7 +822,7 @@ def _mujoco_stack_actions(
             ],
             output="both",
         )
-        for controller in _CONTROLLERS
+        for controller in (_CONTROLLERS + ("neck_controller",) if act_profile else _CONTROLLERS)
     ]
     move_group = Node(
         package="so101_mujoco_support",
@@ -2227,9 +2236,59 @@ def _configured_task_station_actions(context):
             raise RuntimeError("headless task station requires Linux")
         if include_teleop == "true":
             raise RuntimeError("headless task station requires include_teleop=false")
+    act_profile = context.launch_configurations.get("act_profile", "false") == "true"
+    broker_options = []
+    environment_actions = []
+    if act_profile:
+        from ..adapters.act.command_broker import endpoint_bytes
+        endpoint = LaunchConfiguration("act_broker_socket").perform(context)
+        endpoint_bytes(endpoint)
+        mode = LaunchConfiguration("act_calibration_mode").perform(context)
+        if mode not in {"true", "false"}:raise ValueError("ACT_CALIBRATION_MODE_INVALID")
+        broker_options = ["--socket", endpoint, "--session-id", session_id,
+                          "--parent-pid", str(os.getpid()), "--lease-timeout-s", "30"]
+        if mode == "true":
+            speed = LaunchConfiguration("act_stop_velocity_rad_s").perform(context)
+            age = LaunchConfiguration("act_max_age_s").perform(context)
+            if not speed or not age:raise ValueError("EXPLICIT_CALIBRATION_PARAMETERS_REQUIRED")
+            if not isfinite(float(speed)) or float(speed)<0 or not isfinite(float(age)) or float(age)<=0:
+                raise ValueError("STOP_CONFIG_INVALID")
+            broker_options += ["--calibration-mode", "--stop-velocity-rad-s", speed, "--max-age-s", age]
+        else:
+            report = Path(LaunchConfiguration("act_calibration_report").perform(context))
+            from ..act.calibration import require_qualified
+            require_qualified(json.loads(report.read_text()))
+            broker_options += ["--calibration-report", str(report)]
+        timing_keys=("act_submit_lead_s","act_accept_timeout_s","act_stop_timeout_s","act_permit_ttl_s")
+        timing=[LaunchConfiguration(key).perform(context) for key in timing_keys]
+        if any(timing):
+            if not all(timing):raise ValueError("PAIRED_TIMING_PARAMETERS_REQUIRED")
+            if mode!="true":raise ValueError("FULL_SUPERVISOR_REQUIRED")
+            if not 0 < float(timing[1]) < float(timing[0]):
+                raise ValueError("EXECUTION_TIMING_INVALID")
+            for key,value in zip(timing_keys,timing,strict=True):
+                if not isfinite(float(value)) or float(value)<=0:raise ValueError("EXECUTION_TIMING_INVALID")
+                broker_options += ["--"+key.removeprefix("act_").replace("_","-"),value]
+        motion_path=context.launch_configurations.get("act_motion_calibration_manifest", "")
+        if motion_path:
+            from ..adapters.act.calibration_motion import require_motion_manifest
+            if mode!="true" or not all(timing):raise ValueError("MOTION_CALIBRATION_MODE_REQUIRED")
+            motion=require_motion_manifest(json.loads(Path(motion_path).read_text()))
+            if motion["session_id"]!=session_id or motion["submit_lead_s"]!=float(timing[0]) or motion["stop_velocity_rad_s"]!=float(speed):
+                raise ValueError("MOTION_CALIBRATION_CONFIG_MISMATCH")
+            broker_options += ["--motion-calibration-manifest",motion_path]
+        environment_actions = [SetEnvironmentVariable("SO101_ACT_PROFILE", "1"),
+                               SetEnvironmentVariable("SO101_ACT_BROKER_SOCKET", endpoint)]
     share = Path(get_package_share_directory("so101_demo_py"))
     stack = _mujoco_stack_actions(context, share, session_id)
     teleop_actions = []
+    if act_profile:
+        broker = Node(package="so101_demo_py", executable="act_command_broker",
+                      arguments=broker_options, output="screen")
+        teleop_actions += [RegisterEventHandler(OnProcessStart(target_action=stack.simulator,
+                                                               on_start=[broker])),
+                           RegisterEventHandler(OnProcessExit(target_action=broker,
+                               on_exit=[Shutdown(reason="ACT command broker exited")]))]
     if include_teleop == "true":
         teleop_share = Path(get_package_share_directory("so101_teleop"))
         teleop_actions.append(
@@ -2245,6 +2304,7 @@ def _configured_task_station_actions(context):
             )
         )
     actions = [
+        *environment_actions,
         *teleop_actions,
         *camera_static_transform_nodes(),
         *stack.actions,
@@ -2290,7 +2350,7 @@ def _task_station_teleop_actions(
     )
 
 
-def build_task_station_launch_description() -> LaunchDescription:
+def build_task_station_launch_description(*, act_profile: bool = False) -> LaunchDescription:
     """Build one visible persistent MuJoCo/MoveIt/camera-TF task station."""
 
     share = Path(get_package_share_directory("so101_demo_py"))
@@ -2310,20 +2370,30 @@ def build_task_station_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "include_teleop",
-                default_value="true",
+                default_value="false" if act_profile else "true",
                 choices=("true", "false"),
             ),
             DeclareLaunchArgument("teleop_port", default_value="8080"),
             DeclareLaunchArgument("readiness_timeout_s", default_value="90.0"),
             DeclareLaunchArgument(
                 "mujoco_scene",
-                default_value=str(share / "assets/mujoco/scene.xml"),
+                default_value=str(share / ("assets/mujoco/act/scene.xml" if act_profile
+                                          else "assets/mujoco/scene.xml")),
             ),
             DeclareLaunchArgument(
                 "mujoco_initial_keyframe",
                 default_value="task_start",
-                choices=MUJOCO_CUP_KEYFRAMES,
+                choices=MUJOCO_CUP_KEYFRAMES[:4] if act_profile else MUJOCO_CUP_KEYFRAMES,
             ),
+            *([DeclareLaunchArgument("act_profile", default_value="true", choices=("true",)),
+               DeclareLaunchArgument("act_broker_socket", default_value=[LaunchConfiguration("task_evidence_root"), "/ipc/a"]),
+               DeclareLaunchArgument("act_calibration_mode", default_value="true", choices=("true", "false")),
+               DeclareLaunchArgument("act_calibration_report", default_value=""),
+               DeclareLaunchArgument("act_motion_calibration_manifest", default_value=""),
+               DeclareLaunchArgument("act_stop_velocity_rad_s", default_value=""),
+               DeclareLaunchArgument("act_max_age_s", default_value=""),
+               *[DeclareLaunchArgument(key,default_value="") for key in ("act_submit_lead_s","act_accept_timeout_s","act_stop_timeout_s","act_permit_ttl_s")]]
+              if act_profile else []),
             OpaqueFunction(function=_configured_task_station_actions),
         ]
     )

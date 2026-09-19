@@ -1,0 +1,978 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "source_commit",
+    "config_sha256",
+    "measurements",
+    "checks"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "status": {
+      "enum": [
+        "CALIBRATION_REQUIRED",
+        "QUALIFIED"
+      ]
+    },
+    "source_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "config_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "measurements": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "head_translation_m": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": {
+                "type": "number"
+              }
+            },
+            "unit": {
+              "const": "m"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "head_rpy_rad": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": {
+                "type": "number"
+              }
+            },
+            "unit": {
+              "const": "rad"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "wrist_translation_m": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": {
+                "type": "number"
+              }
+            },
+            "unit": {
+              "const": "m"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "wrist_rpy_rad": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": {
+                "type": "number"
+              }
+            },
+            "unit": {
+              "const": "rad"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "head_intrinsics_px": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "array",
+              "minItems": 4,
+              "maxItems": 4,
+              "items": {
+                "type": "number"
+              }
+            },
+            "unit": {
+              "const": "px"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "wrist_intrinsics_px": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "array",
+              "minItems": 4,
+              "maxItems": 4,
+              "items": {
+                "type": "number"
+              }
+            },
+            "unit": {
+              "const": "px"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "yaw_zero_bearing_rad": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "rad"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "horizontal_fov_rad": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "rad"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "coarse_step_rad": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "rad"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "search_timeout_s": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "s"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "max_fine_corrections": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "unit": {
+              "const": "count"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "max_fine_total_rad": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "rad"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "min_confidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "1"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "tracking_iou": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "1"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "min_bbox_aspect": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "1"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "center_deadband_px": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "px"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "vertical_bounds_px": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "number"
+              }
+            },
+            "unit": {
+              "const": "px"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "min_area_px2": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "px^2"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "lock_valid_neck_rad": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "number"
+              }
+            },
+            "unit": {
+              "const": "rad"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "velocity_limit_rad_s": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "array",
+              "minItems": 6,
+              "maxItems": 6,
+              "items": {
+                "type": "number"
+              }
+            },
+            "unit": {
+              "const": "rad/s"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "acceleration_limit_rad_s2": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "array",
+              "minItems": 6,
+              "maxItems": 6,
+              "items": {
+                "type": "number"
+              }
+            },
+            "unit": {
+              "const": "rad/s^2"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "max_age_s": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "s"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "max_skew_s": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "s"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "grasp_occlusion_window_s": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "s"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "submit_lead_s": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "s"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "stop_velocity_rad_s": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "rad/s"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "stop_latency_s": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "s"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "support_distance_m": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "m"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "release_stable_s": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "s"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "retreat_distance_m": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "m"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "placement_stable_s": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "s"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "path_step_s": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "s"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "path_clearance_m": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "m"
+            },
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        }
+      }
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "collision",
+        "execution",
+        "fov",
+        "release",
+        "retreat",
+        "search",
+        "synchronization"
+      ],
+      "properties": {
+        "retreat": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "UNMEASURED"
+          ]
+        },
+        "fov": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "UNMEASURED"
+          ]
+        },
+        "execution": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "UNMEASURED"
+          ]
+        },
+        "search": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "UNMEASURED"
+          ]
+        },
+        "release": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "UNMEASURED"
+          ]
+        },
+        "synchronization": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "UNMEASURED"
+          ]
+        },
+        "collision": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "UNMEASURED"
+          ]
+        }
+      }
+    }
+  }
+}

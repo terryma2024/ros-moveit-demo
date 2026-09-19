@@ -65,6 +65,7 @@ protected:
       <body name="cup" pos="0 0 .08"><freejoint name="cup_joint"/><geom name="cup_geom" type="sphere" size=".05" mass=".1"/></body>
       <body name="left"><freejoint name="left_joint"/><geom name="left_tip" type="sphere" size=".02" mass=".1"/></body>
       <body name="right"><freejoint name="right_joint"/><geom name="right_tip" type="sphere" size=".02" mass=".1"/></body>
+      <body name="mast" pos=".7 .2 .2"><freejoint name="mast_joint"/><geom name="mast_geom" type="sphere" size=".02" mass=".1"/></body>
       </worldbody></mujoco>)";
     char error[1024]{};
     model_.reset(mj_loadXML(xml_path.c_str(), nullptr, error, sizeof(error)));
@@ -816,3 +817,124 @@ TEST_F(AtomicEvidenceTest, ControllerUpdatesDoNotInventPhysicsStepEvidence)
   rclcpp::shutdown();
 }
 }  // namespace
+
+TEST(ScalarJointEvidenceTest, NamedHingeSnapshotUsesActualAddressesAndResetScope)
+{
+  const auto path = std::filesystem::temp_directory_path() / "so101_scalar_evidence.xml";
+  std::ofstream(path) << R"(<mujoco><worldbody><body name="robot">
+    <joint name="neck_yaw_joint" type="hinge"/><geom type="sphere" size=".02"/>
+    <body name="arm"><joint name="1" type="hinge"/><geom type="sphere" size=".02"/></body>
+    </body><body name="cup"><freejoint/><geom type="sphere" size=".02"/></body>
+    </worldbody></mujoco>)";
+  char error[1024]{};
+  std::unique_ptr<mjModel, ModelDeleter> model(mj_loadXML(path.c_str(), nullptr, error, sizeof(error)));
+  ASSERT_NE(model, nullptr) << error;
+  std::unique_ptr<mjData, DataDeleter> data(mj_makeData(model.get()));
+  data->qpos[0] = -.4; data->qpos[1] = .2; data->qvel[0] = .01;
+  data->time = 3.5;
+  const auto message = so101_mujoco_support::make_scalar_joint_evidence(
+    model.get(), data.get(), {"1", "neck_yaw_joint"}, "session-a", 4, 0, true);
+  EXPECT_EQ(message.simulation_session_id, "session-a");
+  EXPECT_EQ(message.reset_epoch, 4U); EXPECT_EQ(message.simulation_step, 0U);
+  EXPECT_TRUE(message.paused); EXPECT_EQ(message.joint_names, (std::vector<std::string>{"1", "neck_yaw_joint"}));
+  EXPECT_EQ(message.positions_rad, (std::vector<double>{.2, -.4}));
+  EXPECT_EQ(message.velocities_rad_s, (std::vector<double>{0., .01}));
+  EXPECT_EQ(message.header.stamp.sec, 3); EXPECT_EQ(message.header.stamp.nanosec, 500000000U);
+  EXPECT_THROW(so101_mujoco_support::make_scalar_joint_evidence(
+    model.get(), data.get(), {"missing"}, "s", 0, 0, true), std::invalid_argument);
+}
+
+TEST_F(AtomicEvidenceTest, WholeRobotBuilderKeepsNonCupContactAndLegacyFilter)
+{
+  so101_mujoco_support::RobotContactBuilder robot;
+  ASSERT_TRUE(robot.configure(model_.get(), {"left", "right"}, 128));
+  place_free_body("cup_joint", .5, 0, .2);
+  place_free_body("left_joint", 0, 0, .01);
+  place_free_body("right_joint", 0, 0, .03);
+  mj_forward(model_.get(), data_.get());
+  const auto output = robot.build(model_.get(), data_.get(), "session-a", 1, 1);
+  EXPECT_FALSE(output.truncated);
+  EXPECT_GE(output.geom_a.size(), 2u);
+  EXPECT_EQ(output.geom_a.size(), output.geom_b.size());
+  const auto legacy = builder_.build(model_.get(), data_.get(), false, state_);
+  EXPECT_FALSE(legacy.has_contact);
+}
+
+TEST(RobotContactBufferTest, OverflowAndTransientContactPersistUntilExplicitEpochReset)
+{
+  so101_mujoco_support::RobotContactBuffer buffer(2);
+  so101_mujoco_support::msg::RobotContactEvidence sample;
+  sample.simulation_session_id = "s";
+  sample.reset_epoch = 1;
+  sample.physics_step = 1;
+  sample.simulation_time_s = .002;
+  sample.geom_a = {"arm"}; sample.geom_b = {"table"};
+  sample.signed_distance_m = {-.001}; sample.normal_force_n = {2.};
+  ASSERT_TRUE(buffer.append(sample));
+  sample.physics_step = 2;sample.simulation_time_s = .004;
+  sample.geom_a.clear();sample.geom_b.clear();sample.signed_distance_m.clear();sample.normal_force_n.clear();
+  ASSERT_TRUE(buffer.append(sample));
+  sample.physics_step = 3;sample.simulation_time_s = .006;
+  EXPECT_FALSE(buffer.append(sample));
+  EXPECT_TRUE(buffer.front().evidence_loss);
+  EXPECT_EQ(buffer.front().geom_a.front(), "arm");
+  buffer.pop_published();
+  EXPECT_TRUE(buffer.front().evidence_loss);
+  buffer.reset(2);
+  sample.reset_epoch = 2;sample.physics_step = 1;sample.simulation_time_s = .008;
+  ASSERT_TRUE(buffer.append(sample));
+  EXPECT_FALSE(buffer.front().evidence_loss);
+}
+
+TEST_F(AtomicEvidenceTest, WholeRobotRetainsArmTableArmArmAndArmMastPairs)
+{
+  so101_mujoco_support::RobotContactBuilder robot;
+  ASSERT_TRUE(robot.configure(model_.get(), {"left", "right", "mast"}, 128));
+  place_free_body("cup_joint", .5, 0, .2);
+  place_free_body("left_joint", 0, 0, .01);
+  place_free_body("right_joint", 0, 0, .03);
+  place_free_body("mast_joint", 0, 0, .06);
+  mj_forward(model_.get(), data_.get());
+  const auto output = robot.build(model_.get(), data_.get(), "session-a", 1, 1);
+  const auto has_pair = [&output](const std::string & first, const std::string & second) {
+      for (std::size_t i = 0; i < output.geom_a.size(); ++i) {
+        if ((output.geom_a[i] == first && output.geom_b[i] == second) ||
+          (output.geom_a[i] == second && output.geom_b[i] == first)) {return true;}
+      }
+      return false;
+    };
+  EXPECT_TRUE(has_pair("left_tip", "table"));
+  EXPECT_TRUE(has_pair("left_tip", "right_tip"));
+  EXPECT_TRUE(has_pair("right_tip", "mast_geom"));
+  EXPECT_FALSE(output.evidence_loss);
+  EXPECT_FALSE(builder_.build(model_.get(), data_.get(), false, state_).has_contact);
+  ASSERT_TRUE(robot.configure(model_.get(), {"left", "right", "mast"}, 1));
+  EXPECT_TRUE(robot.build(model_.get(), data_.get(), "session-a", 1, 1).truncated);
+}
+
+TEST_F(AtomicEvidenceTest, FullSceneStateTracksEveryDynamicBodyAndBindsCompiledModel)
+{
+  so101_mujoco_support::SceneStateBuilder scene;
+  ASSERT_TRUE(scene.configure(model_.get()));
+  const auto fingerprint = scene.model_sha256();
+  ASSERT_EQ(fingerprint.size(), 64U);
+  place_free_body("mast_joint", .8, .3, .4);
+  data_->time = .25;
+  const auto sample = scene.build(model_.get(), data_.get(), "session-a", 3, 17, false);
+  EXPECT_EQ(sample.model_sha256, fingerprint);
+  EXPECT_EQ(sample.qpos.size(), static_cast<std::size_t>(model_->nq));
+  EXPECT_EQ(sample.simulation_session_id, "session-a");
+  EXPECT_EQ(sample.reset_epoch, 3U);
+  EXPECT_EQ(sample.simulation_step, 17U);
+  EXPECT_FALSE(sample.paused);
+  for (int i=0; i<model_->nq; ++i) {EXPECT_DOUBLE_EQ(sample.qpos[i], data_->qpos[i]);}
+  const auto paused = scene.build(model_.get(), data_.get(), "session-a", 4, 0, true);
+  EXPECT_TRUE(paused.paused);
+  EXPECT_EQ(paused.reset_epoch, 4U);
+  EXPECT_EQ(paused.simulation_step, 0U);
+  EXPECT_EQ(paused.qpos, sample.qpos);
+  model_->geom_size[0] += .001;
+  so101_mujoco_support::SceneStateBuilder changed;
+  ASSERT_TRUE(changed.configure(model_.get()));
+  EXPECT_NE(changed.model_sha256(), fingerprint);
+}

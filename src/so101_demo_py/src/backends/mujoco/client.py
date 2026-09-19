@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 import threading
 import time
 from dataclasses import dataclass
@@ -14,10 +15,42 @@ from mujoco_ros2_control_msgs.msg import FreeJointState
 from mujoco_ros2_control_msgs.srv import ResetWorld, SetPause
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
+from so101_mujoco_support.msg import ScalarJointEvidence
+from .observer import ATOMIC_EVIDENCE_QOS
+
+from so101_demo.act.joints import ARM_JOINTS, ACT_JOINTS, JOINT_LIMITS, ordered_positions
 
 
 class MujocoServiceError(RuntimeError):
     """Raised when a pinned ROS interface is unavailable or returns failure."""
+
+
+@dataclass(frozen=True, slots=True)
+class JointResetOverride:
+    """Named one-degree-of-freedom reset target, in radians and radians/s."""
+
+    name: str
+    position: float
+    velocity: float = 0.0
+
+    def __post_init__(self):
+        if self.name not in ACT_JOINTS:
+            raise ValueError("unknown or non-scalar reset joint")
+        ordered_positions({"position": self.position, "velocity": self.velocity},
+                          ("position", "velocity"))
+        limits = JOINT_LIMITS.get(self.name)
+        if limits is not None and not limits[0] <= self.position <= limits[1]:
+            raise ValueError("reset joint position is out of bounds")
+
+
+def joint_override_message(items: tuple[JointResetOverride, ...]) -> JointState:
+    if any(not isinstance(item, JointResetOverride) for item in items):
+        raise ValueError("joint reset overrides must be validated records")
+    if len(set(item.name for item in items)) != len(items):
+        raise ValueError("duplicate reset joint")
+    return JointState(name=[item.name for item in items],
+                      position=[float(item.position) for item in items],
+                      velocity=[float(item.velocity) for item in items])
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,28 +127,80 @@ class MujocoRosClient:
     ) -> None:
         if not math.isfinite(service_timeout_s) or service_timeout_s <= 0.0:
             raise ValueError("service_timeout_s must be finite and positive")
+        from so101_demo.adapters.act.leased_action_client import context_from_environment
+        self.control_context = context_from_environment()
+        if os.environ.get("SO101_ACT_PROFILE") in ("1", "true") and self.control_context is None:
+            raise PermissionError("CONTROL_CONTEXT_REQUIRED")
         self._service_node = service_node
         self._joint_state_node = joint_state_node
         self._timeout_s = service_timeout_s
-        self._pause = service_node.create_client(SetPause, "/mujoco_ros2_control_node/set_pause")
-        self._reset = service_node.create_client(
-            ResetWorld, "/mujoco_ros2_control_node/reset_world"
-        )
-        self._switch = service_node.create_client(
-            SwitchController, "/controller_manager/switch_controller"
-        )
+        self._pause = self._reset = self._switch = None
+        if self.control_context is None:
+            self._pause = service_node.create_client(SetPause, "/mujoco_ros2_control_node/set_pause")
+            self._reset = service_node.create_client(ResetWorld, "/mujoco_ros2_control_node/reset_world")
+            self._switch = service_node.create_client(SwitchController, "/controller_manager/switch_controller")
         self._list = service_node.create_client(
             ListControllers, "/controller_manager/list_controllers"
         )
         self._joint_lock = threading.Lock()
         self._joint_positions: dict[str, float] = {}
+        self._joint_velocities: dict[str, float] = {}
         self._joint_callback_count = 0
+        self._scalar_joint_callback_count = 0
+        self._reset_joint_snapshot = None
+        self._scalar_joint_subscription = None
         self._joint_subscription = joint_state_node.create_subscription(
             JointState, "/joint_states", self._joint_callback, qos_profile_sensor_data
         )
 
+    def enable_reset_joint_audit(self):
+        """Read authoritative paused scalar snapshots without changing policy inputs."""
+        if self._scalar_joint_subscription is None:
+            self._scalar_joint_subscription = self._joint_state_node.create_subscription(
+                ScalarJointEvidence, "/so101/simulation/joints", self._scalar_joint_callback,
+                ATOMIC_EVIDENCE_QOS)
+
+    def _scalar_joint_callback(self, message):
+        names = message.joint_names
+        if (len(set(names)) != len(names) or set(names) != set(ACT_JOINTS)
+                or len(names) != len(message.positions_rad)
+                or len(names) != len(message.velocities_rad_s)):
+            return
+        positions = dict(zip(names, message.positions_rad, strict=True))
+        velocities = dict(zip(names, message.velocities_rad_s, strict=True))
+        stamp = message.header.stamp.sec + message.header.stamp.nanosec * 1e-9
+        if (not message.simulation_session_id or stamp < 0 or not math.isfinite(stamp)
+                or any(not math.isfinite(value) for value in (*positions.values(), *velocities.values()))):
+            return
+        with self._joint_lock:
+            self._scalar_joint_callback_count += 1
+            self._reset_joint_snapshot = dict(
+                positions=positions, velocities=velocities, sim_time_s=stamp,
+                simulation_session_id=message.simulation_session_id,
+                reset_epoch=message.reset_epoch, simulation_step=message.simulation_step,
+                paused=message.paused, received_wall_s=time.monotonic(),
+                callback_count=self._scalar_joint_callback_count)
+
+    @property
+    def scalar_joint_callback_count(self):
+        with self._joint_lock:
+            return self._scalar_joint_callback_count
+
+    def reset_joint_snapshot(self, names=ARM_JOINTS):
+        with self._joint_lock:
+            if self._reset_joint_snapshot is None:
+                raise MujocoServiceError("reset physics snapshot is unavailable")
+            snapshot = self._reset_joint_snapshot
+            try:
+                return dict(snapshot, positions=ordered_positions(snapshot["positions"], names),
+                            velocities=ordered_positions(snapshot["velocities"], names))
+            except ValueError as error:
+                raise MujocoServiceError("complete reset physics snapshot is unavailable") from error
+
     def _joint_callback(self, message: JointState) -> None:
         if len(message.name) != len(message.position):
+            return
+        if len(set(message.name)) != len(message.name):
             return
         positions = {}
         for name, position in zip(message.name, message.position, strict=True):
@@ -127,6 +212,11 @@ class MujocoRosClient:
             return
         with self._joint_lock:
             self._joint_positions = positions
+            self._joint_velocities = (
+                dict(zip(message.name, message.velocity, strict=True))
+                if len(message.velocity) == len(message.name)
+                and all(math.isfinite(value) for value in message.velocity) else {}
+            )
             self._joint_callback_count += 1
 
     @property
@@ -150,6 +240,10 @@ class MujocoRosClient:
         return response
 
     def pause(self, paused: bool) -> bool:
+        if self.control_context is not None:
+            from so101_demo.adapters.act.leased_action_client import connection_for
+            result=connection_for(self.control_context).request("pause",self.control_context,paused=paused)
+            return bool(result["pause_result"]["success"])
         request = SetPause.Request()
         request.paused = paused
         return bool(self._call(self._pause, request, "pause").success)
@@ -158,6 +252,8 @@ class MujocoRosClient:
         self,
         keyframe: str,
         free_joint_overrides: tuple[FreeJointResetOverride, ...] = (),
+        *,
+        joint_overrides: tuple[JointResetOverride, ...] = (),
     ) -> bool:
         names = tuple(value.name for value in free_joint_overrides)
         if len(set(names)) != len(names):
@@ -167,9 +263,31 @@ class MujocoRosClient:
         request.state_overrides.free_joints = [
             _free_joint_message(value) for value in free_joint_overrides
         ]
+        request.state_overrides.joint_states = joint_override_message(joint_overrides)
+        if self.control_context is not None:
+            from so101_demo.adapters.act.leased_action_client import connection_for, message_dict
+            result = connection_for(self.control_context).request("reset_world", self.control_context,
+                reset_request=message_dict(request))
+            return bool(result["reset_result"]["success"])
         return bool(self._call(self._reset, request, "reset").success)
 
+    def finish_reset(self) -> bool:
+        if self.control_context is None:return True
+        from so101_demo.adapters.act.leased_action_client import connection_for
+        connection_for(self.control_context).request("finish_reset",self.control_context)
+        return True
+
     def switch_controllers(self, *, activate, deactivate) -> bool:
+        if self.control_context is not None:
+            from so101_demo.adapters.act.leased_action_client import connection_for
+            result=connection_for(self.control_context).request("switch_controllers",self.control_context,
+                activate=list(activate),deactivate=list(deactivate))
+            if not result["switch_result"]["ok"]:return False
+            deadline=time.monotonic()+self._timeout_s
+            while time.monotonic()<deadline:
+                states=self._controller_states()
+                if all(states.get(name)=="active" for name in activate) and all(states.get(name)=="inactive" for name in deactivate):return True
+            raise MujocoServiceError("controller state transition timeout")
         request = SwitchController.Request()
         request.activate_controllers = list(activate)
         request.deactivate_controllers = list(deactivate)
@@ -208,22 +326,34 @@ class MujocoRosClient:
         states = self._controller_states()
         return all(states.get(name) == "active" for name in names)
 
-    def latest_joint_positions(self) -> tuple[float, ...]:
+    def latest_joint_positions(self, names=ARM_JOINTS) -> tuple[float, ...]:
         with self._joint_lock:
             positions = dict(self._joint_positions)
         try:
-            return tuple(positions[str(index)] for index in range(1, 7))
-        except KeyError as error:
-            raise MujocoServiceError("complete six-joint state is unavailable") from error
+            return ordered_positions(positions, names)
+        except ValueError as error:
+            raise MujocoServiceError("complete named joint state is unavailable") from error
 
-    def joints_converged(self, expected, tolerance: float, *, after_callback_count: int) -> bool:
+    def latest_joint_velocities(self, names=ARM_JOINTS) -> tuple[float, ...]:
+        with self._joint_lock:
+            velocities = dict(self._joint_velocities)
+        try:
+            return ordered_positions(velocities, names)
+        except ValueError as error:
+            raise MujocoServiceError("complete named joint velocity is unavailable") from error
+
+    def joints_converged(self, expected, tolerance: float, *, after_callback_count: int,
+                         names=ARM_JOINTS) -> bool:
+        if len(expected) != len(names) or any(not math.isfinite(value) for value in expected):
+            return False
         if self.joint_callback_count <= after_callback_count:
             return False
         try:
-            actual = self.latest_joint_positions()
+            actual = self.latest_joint_positions(names)
         except MujocoServiceError:
             return False
-        return all(abs(value - target) <= tolerance for value, target in zip(actual, expected))
+        return all(abs(value - target) <= tolerance
+                   for value, target in zip(actual, expected, strict=True))
 
     def progress(self) -> None:
         rclpy.spin_once(self._joint_state_node, timeout_sec=0.01)

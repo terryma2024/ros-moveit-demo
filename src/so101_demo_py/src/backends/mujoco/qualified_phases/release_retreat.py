@@ -20,7 +20,7 @@ from moveit_msgs.msg import (
     PlanningSceneComponents,
 )
 from moveit_msgs.srv import ApplyPlanningScene, GetMotionPlan, GetPlanningScene
-from rclpy.action import ActionClient
+from so101_demo.adapters.act.leased_action_client import make_action_client as ActionClient
 from rclpy.duration import Duration
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.time import Time

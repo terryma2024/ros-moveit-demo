@@ -8,7 +8,8 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from so101_demo.backends.mujoco.observer import EvidenceStale
-from so101_demo.backends.mujoco.client import FreeJointResetOverride
+from so101_demo.backends.mujoco.client import FreeJointResetOverride, JointResetOverride
+from so101_demo.act.joints import ARM_JOINTS, ACT_JOINTS, ordered_positions
 from so101_demo.core.simulation.types import ResetReceipt
 
 
@@ -28,6 +29,7 @@ class MujocoResetClient:
         controller_names: Sequence[str],
         expected_joint_positions: Sequence[float],
         expected_object_position: Sequence[float],
+        expected_joint_names: Sequence[str] = ARM_JOINTS,
         timeout_s: float = 5.0,
         joint_tolerance: float = 0.002,
         object_tolerance_m: float = 0.003,
@@ -35,11 +37,16 @@ class MujocoResetClient:
         velocity_tolerance: float = 1.0e-9,
         monotonic: Callable[[], float] = time.monotonic,
         progress: Callable[[], None] = lambda: time.sleep(0.01),
+        on_reset_snapshot: Callable[[Any], None] | None = None,
     ) -> None:
         if not simulation_session_id or not controller_names:
             raise ValueError("session id and controller names must be non-empty")
-        if len(expected_joint_positions) != 6 or len(expected_object_position) != 3:
-            raise ValueError("expected reset state must contain six joints and one position")
+        names = tuple(expected_joint_names)
+        if names not in (ARM_JOINTS, ACT_JOINTS) or len(expected_joint_positions) != len(names):
+            raise ValueError("expected reset state must match six arm or seven ACT joint names")
+        if len(expected_object_position) != 3:
+            raise ValueError("expected reset state must contain one object position")
+        ordered_positions(dict(zip(names, expected_joint_positions, strict=True)), names)
         if not math.isfinite(timeout_s) or timeout_s <= 0.0:
             raise ValueError("timeout must be positive")
         self._services = services
@@ -47,6 +54,10 @@ class MujocoResetClient:
         self._session_id = simulation_session_id
         self._controllers = tuple(controller_names)
         self._expected_joints = tuple(float(value) for value in expected_joint_positions)
+        self._expected_joint_names = names
+        if names == ACT_JOINTS:
+            services.enable_reset_joint_audit()
+        self.last_reset_joint_snapshot = None
         self._expected_object = tuple(float(value) for value in expected_object_position)
         self._timeout_s = timeout_s
         self._joint_tolerance = joint_tolerance
@@ -55,6 +66,9 @@ class MujocoResetClient:
         self._velocity_tolerance = velocity_tolerance
         self._monotonic = monotonic
         self._progress = progress
+        if on_reset_snapshot is not None and not callable(on_reset_snapshot):
+            raise ValueError("reset snapshot hook must be callable")
+        self._on_reset_snapshot = on_reset_snapshot
 
     def _failure(self, reason: str) -> ResetFailed:
         try:
@@ -176,29 +190,79 @@ class MujocoResetClient:
         self,
         keyframe: str,
         free_joint_overrides: tuple[FreeJointResetOverride, ...] = (),
+        *,
+        joint_overrides: tuple[JointResetOverride, ...] = (),
     ) -> ResetReceipt:
         if not keyframe:
             raise ValueError("keyframe must be non-empty")
+        if joint_overrides:
+            written = {item.name: item.position for item in joint_overrides}
+            if len(written) != len(joint_overrides) or set(written) != set(self._expected_joint_names):
+                raise ValueError("reset override must cover the expected joint set exactly once")
+            if ordered_positions(written, self._expected_joint_names) != self._expected_joints:
+                raise ValueError("reset override and expected feedback disagree")
+        def converged(after_count):
+            kwargs = {"after_callback_count": after_count}
+            if self._expected_joint_names != ARM_JOINTS:
+                kwargs["names"] = self._expected_joint_names
+            if not self._services.joints_converged(self._expected_joints, self._joint_tolerance,
+                                                   **kwargs):
+                return False
+            if self._expected_joint_names != ARM_JOINTS:
+                velocities = self._services.latest_joint_velocities(self._expected_joint_names)
+                return all(abs(value) <= self._joint_tolerance for value in velocities)
+            return True
         deadline = self._monotonic() + self._timeout_s
         try:
             old = self._wait_for_initial_snapshot(deadline=deadline)
             expected_epoch = old.reset_epoch + 1
             if old.paused:
                 self._require(self._services.pause(False), "prepare running")
+            context = getattr(self._services, "control_context", None)
+            if context is not None:
+                from so101_demo.adapters.act.leased_action_client import connection_for
+                connection_for(context).request("prepare_reset", context)
             self._require(
                 self._services.switch_controllers(activate=(), deactivate=self._controllers),
                 "deactivate",
             )
             self._require(self._services.pause(True), "pause")
-            self._require(
-                self._services.reset_world(keyframe, free_joint_overrides),
-                "reset",
-            )
+            scalar_after_count = (self._services.scalar_joint_callback_count
+                                  if self._expected_joint_names == ACT_JOINTS else None)
+            reset_kwargs = {"joint_overrides": joint_overrides} if joint_overrides else {}
+            self._require(self._services.reset_world(keyframe, free_joint_overrides,
+                                                    **reset_kwargs), "reset")
             reset_snapshot = self._wait_for_reset_snapshot(
                 old=old,
                 expected_epoch=expected_epoch,
                 deadline=deadline,
             )
+            if self._expected_joint_names == ACT_JOINTS:
+                after_count = scalar_after_count
+                expected_velocity = {item.name: item.velocity for item in joint_overrides}
+                target_velocity = tuple(expected_velocity.get(name, 0.)
+                                        for name in self._expected_joint_names)
+                while self._monotonic() <= deadline:
+                    self._progress()
+                    try:
+                        scalar = self._services.reset_joint_snapshot(self._expected_joint_names)
+                    except Exception:
+                        continue
+                    if (scalar["callback_count"] > after_count
+                            and scalar["simulation_session_id"] == self._session_id
+                            and scalar["reset_epoch"] == expected_epoch
+                            and scalar["simulation_step"] == 0 and scalar["paused"]
+                            and abs(scalar["sim_time_s"] - reset_snapshot.simulation_time_s) <= 1e-6
+                            and all(abs(a-b) <= 1e-9 for a,b in zip(
+                                scalar["positions"], self._expected_joints, strict=True))
+                            and all(abs(a-b) <= 1e-9 for a,b in zip(
+                                scalar["velocities"], target_velocity, strict=True))):
+                        self.last_reset_joint_snapshot = scalar
+                        break
+                else:
+                    raise self._failure("fresh paused scalar-joint reset snapshot timeout")
+            if self._on_reset_snapshot is not None:
+                self._on_reset_snapshot(reset_snapshot)
             joint_callback_count_after_reset = self._services.joint_callback_count
             self._require(self._services.pause(False), "resume")
             self._require(
@@ -209,11 +273,7 @@ class MujocoResetClient:
                 self._progress()
                 if (
                     self._services.joint_callback_count > joint_callback_count_after_reset
-                    and self._services.joints_converged(
-                        self._expected_joints,
-                        self._joint_tolerance,
-                        after_callback_count=joint_callback_count_after_reset,
-                    )
+                    and converged(joint_callback_count_after_reset)
                 ):
                     break
             else:
@@ -242,12 +302,10 @@ class MujocoResetClient:
                         continue
                     if not self._services.controllers_active(self._controllers):
                         raise self._failure("controller convergence failed")
-                    if not self._services.joints_converged(
-                        self._expected_joints,
-                        self._joint_tolerance,
-                        after_callback_count=joint_callback_count_after_reset,
-                    ):
+                    if not converged(joint_callback_count_after_reset):
                         raise self._failure("joint convergence failed")
+                    if context is not None:
+                        self._require(self._services.finish_reset(), "broker reset final evidence")
                     return ResetReceipt(
                         old_epoch=old.reset_epoch,
                         new_epoch=reset_snapshot.reset_epoch,

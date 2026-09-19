@@ -142,6 +142,7 @@ class RosTelemetryWorker:
         self._executor: SingleThreadedExecutor | None = None
         self._threads: list[threading.Thread] = []
         self._stop_event = threading.Event()
+        self._act_control = None
 
     def start(self) -> None:
         rclpy.init(args=None)
@@ -158,10 +159,20 @@ class RosTelemetryWorker:
         self._ik_client = self._node.create_client(GetPositionIK, "/compute_ik")
         self._state_validity = self._node.create_client(GetStateValidity, "/check_state_validity")
         self._controllers = self._node.create_client(ListControllers, "/controller_manager/list_controllers")
-        self._execute = ActionClient(self._node, ExecuteTrajectory, "/execute_trajectory")
-        self._arm = ActionClient(self._node, FollowJointTrajectory,
+        action_client = ActionClient
+        if os.environ.get("SO101_ACT_PROFILE") in ("1", "true"):
+            from so101_demo.adapters.act.leased_action_client import BrokerConnection
+            from .act_control import ActControl
+            endpoint = os.environ.get("SO101_ACT_BROKER_SOCKET")
+            if not endpoint:
+                raise PermissionError("CONTROL_CONTEXT_REQUIRED")
+            self._act_control = ActControl(BrokerConnection(
+                endpoint, rpc_lock_path=str(Path(endpoint).with_name("teleop-rpc.lock"))))
+            action_client = self._act_control.proxy
+        self._execute = action_client(self._node, ExecuteTrajectory, "/execute_trajectory")
+        self._arm = action_client(self._node, FollowJointTrajectory,
                                  "/arm_controller/follow_joint_trajectory")
-        self._gripper = ActionClient(self._node, FollowJointTrajectory,
+        self._gripper = action_client(self._node, FollowJointTrajectory,
                                      "/gripper_controller/follow_joint_trajectory")
         self._node.create_timer(0.20, self._publish_snapshot)
         self._executor = SingleThreadedExecutor(); self._executor.add_node(self._node)
@@ -187,6 +198,8 @@ class RosTelemetryWorker:
     def stop(self) -> None:
         """Stop background middleware work before interpreter teardown."""
         self._stop_event.set()
+        if getattr(self, "_act_control", None) is not None:
+            self._act_control.close()
         self._gazebo_transport = None
         if self._executor is not None:
             self._executor.shutdown(timeout_sec=2.0)
@@ -602,6 +615,11 @@ class TeleopService:
         if self._worker.snapshot().mode is not ServerMode.READY: return self._result(body,False,"READINESS_NOT_SATISFIED","fresh ROS, TF and controller evidence required")
         if not self._lease_ok(body): return self._result(body,False,"LEASE_REQUIRED","valid lease required")
         if body.get("session_id") and body["session_id"] != self._worker.snapshot().simulation_session_id: return self._result(body,False,"SESSION_MISMATCH","simulation session changed")
+        authority = getattr(self._worker, "_act_control", None)
+        if authority is not None:
+            try: authority.require(self._worker.snapshot().simulation_session_id)
+            except PermissionError as error:
+                return self._result(body, False, str(error), "broker control lease refused")
         return None
     def _mutation_gate(self, body):
         if gate := self._base_mutation_gate(body):
@@ -691,13 +709,36 @@ class TeleopService:
         # the command it started is still progressing.
         if name == "lease_renew":
             if not self._lease_ok(body): return self._result(body,False,"LEASE_REQUIRED","valid lease required")
+            authority = getattr(self._worker, "_act_control", None)
+            if authority is not None:
+                try: await asyncio.to_thread(authority.require, self._worker.snapshot().simulation_session_id)
+                except PermissionError as error: return self._result(body,False,str(error),"broker control lease refused")
             self._lease=(self._lease[0],time.monotonic()+30); return self._result(body,True,"OK","lease renewed")
+        authority = getattr(self._worker, "_act_control", None)
+        if name == "cancel" and authority is not None:
+            # Cancellation must remain available while the existing command
+            # or workflow holds its lock. Broker checks the captured real lease.
+            if not self._lease_ok(body):return self._result(body,False,"LEASE_REQUIRED","valid lease required")
+            session=self._worker.snapshot().simulation_session_id
+            if body.get("session_id") and body["session_id"]!=session:
+                return self._result(body,False,"SESSION_MISMATCH","simulation session changed")
+            try:
+                if await asyncio.to_thread(authority.stop,session) is not True:
+                    raise RuntimeError("STOP_NOT_CONFIRMED")
+            except (PermissionError,RuntimeError,OSError) as error:
+                return self._result(body,False,str(error),"broker stop refused or unconfirmed")
+            return self._result(body,True,"OK","broker confirmed controller stop")
         async def operation():
             try:
                 if name == "lease":
                     if self._lease is not None and self._lease[1] > time.monotonic():
                         return self._result(body,False,"LEASE_BUSY","another operator holds the control lease")
-                    lease_id=str(uuid.uuid4()); self._lease=(lease_id,time.monotonic()+30); return self._result(body,True,"OK","lease acquired",layers={"lease_id":lease_id})
+                    lease_id=str(uuid.uuid4())
+                    authority = getattr(self._worker, "_act_control", None)
+                    if authority is not None:
+                        await asyncio.to_thread(authority.acquire,self._worker.snapshot().simulation_session_id,lease_id)
+                        authority.publish_context()
+                    self._lease=(lease_id,time.monotonic()+30); return self._result(body,True,"OK","lease acquired",layers={"lease_id":lease_id})
                 if name in ("plan_joints", "plan_tcp"):
                     if gate:=self._mutation_gate(body): return gate
                     if name == "plan_joints":
@@ -813,6 +854,9 @@ class TeleopService:
                         if body.get("operator_confirmation") != "FORCE CONTINUE": return self._result(body,False,"OVERRIDE_NOT_ALLOWED","physical validation confirmation required")
                     if operation == "stop":
                         return self._backend_unavailable(body, "workflow_stop")
+                    authority = getattr(self._worker, "_act_control", None)
+                    if authority is not None:
+                        await asyncio.to_thread(authority.begin_workflow,session_id,run_id)
                     envelope = await asyncio.to_thread(
                         self._backend.run_workflow,
                         WorkflowRequest(operation, session_id, checkpoint),
@@ -852,7 +896,7 @@ class TeleopService:
                     )
                     return self._result(body,True,"OK","backend checkpoint owner completed workflow request",data={"workflow":{"run_id":run_id,"current_state":states[-1] if states else "IDLE","next_state":None,"trace":states,"checkpoint_fresh":checkpoint.is_file() or manifest_fresh,"evidence_manifest":evidence_manifest if manifest_fresh else None,"physical_outcome":physical_outcome.model_dump() if physical_outcome else None}})
                 return self._result(body,False,"READINESS_NOT_SATISFIED",f"{name} requires a live dedicated gateway")
-            except (RuntimeError, PlanRejected, KeyError, ValueError) as error:
+            except (RuntimeError, PermissionError, PlanRejected, KeyError, ValueError) as error:
                 layers = dict(getattr(self._worker, "_attachment_evidence", {})) if name.startswith("attachment_") else {}
                 return self._result(body,False,str(error),"live ROS operation did not complete", layers=layers)
         try: return await self._commands.run(command_id, repr((name, sorted(body.items()))), operation)
