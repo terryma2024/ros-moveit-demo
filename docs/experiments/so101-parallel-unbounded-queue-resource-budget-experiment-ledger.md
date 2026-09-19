@@ -13354,3 +13354,34 @@ from the evidence directories themselves. No batch reused another's session or d
 series ended with no process and no station left.
 
 _Ledger source HEAD: (this commit's parent); no evidence deleted._
+
+### CP-UQ282 addendum — a latent defect: the handler used to answer *any* operation
+
+While checking whether the Worker's `cancel_generation` (which maps to `coordinator.cancel_request`)
+had a server side, the answer turned out to be worse than "not implemented": the handler ignored
+`request.operation` entirely and served every request with a model call. A cancellation, a result
+submission, a typo - all of them came back as a plausible-looking inference. That is exactly the
+"silently answer the wrong question" failure this task has spent its budget refusing.
+
+The handler now declares what it implements and refuses the rest:
+
+```text
+implemented: {"broker.infer", "worker.progress", "worker.result"}
+anything else -> {"error": {"code": "UNKNOWN_OPERATION", "detail": <operation>}}
+```
+
+`task16-op-vocabulary-01` verifies the change does not disturb the real traffic:
+
+```text
+status W2_CAMPAIGN_INCOMPLETE | served 8 | devices ['mps']
+  w1 executed 4 failures ['TERMINAL_CAPTURE_FAILED']
+  w2 executed 4 failures ['TERMINAL_CAPTURE_FAILED']
+handler_errors: 0
+```
+
+So the composition still serves its own requests and still executes both slots' pick-place, while an
+unimplemented operation is now refused with a stable v4 code instead of being answered by a model.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `7eb76dcb`; no evidence deleted._
