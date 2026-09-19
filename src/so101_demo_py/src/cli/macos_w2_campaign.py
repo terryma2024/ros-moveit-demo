@@ -375,6 +375,15 @@ def run(argv: list[str] | None = None) -> int:
         import hashlib
 
         input_digest = hashlib.sha256(b"campaign-warm-frame").hexdigest()
+        # The identity each Worker will request with lives in one place: the lease document written
+        # here and handed to the Worker. Binding therefore uses the same `{attempt_id}-{model_id}`
+        # ids the Worker derives (both functions are unit-tested in test_macos_w2_campaign.py).
+        leases = build_worker_leases(
+            plan=plan, batch_id=arguments.batch_id, evidence_root=arguments.evidence_root,
+            input_sha256=input_digest)
+        bind_worker_requests(campaign, leases, ready=ready)
+        # The IPC-shape probe ids stay bound while the Worker still serves that shape, so this
+        # change cannot silently refuse the requests the previous gate proved.
         for worker_id in ("w1", "w2"):
             slot_id = "slot-0" if worker_id == "w1" else "slot-1"
             for index in range(3):
@@ -437,7 +446,8 @@ def run(argv: list[str] | None = None) -> int:
                       # slots never share a scene, an epoch or an evidence directory.
                       f"{arguments.campaign_id}-{worker_id}",
                       str(arguments.evidence_root / f"{worker_id}-station"),
-                      str(plan.ros_domain_ids[slot])],
+                      str(plan.ros_domain_ids[slot]),
+                      leases[worker_id]["lease_path"]],
                 nonce=f"{arguments.campaign_id}-{worker_id}", ack_path=ack,
                 ack_timeout_s=120.0)
             workers.append({"slot_id": slot_id, "worker_id": worker_id,
