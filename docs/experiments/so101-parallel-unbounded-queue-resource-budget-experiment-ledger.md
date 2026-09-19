@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ247 (tail of this file)
+latest_checkpoint: CP-UQ248 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -55,7 +55,7 @@ current_design: docs/superpowers/specs/2026-09-19-so101-macos-mps-private-ipc-de
   SHA-256 480da6dcdfea1da988f9f4e706c8340dbb6d7283200c27bb723859119145db1b
 current_worktree: /Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini
 current_branch: codex/so101-unbounded-queue-resource-budget (HEAD b55c181e at takeover)
-next_experiment: Task 14 - five consecutive FULL_RESTART W2 simulation batches
+next_experiment: wire the composed campaign behind a CLI entry point, then attempt a first FULL_RESTART
 correction_cp_uq229: the header's `worktree`, `evidence_root` and `task_root` fields describe the
   historical ai-station Stage A-E dispatch (`84620fc0`) and are not rewritten, because that history
   is not invalidated. The live dispatch, worktree and evidence root for the current macOS MPS/private
@@ -10178,3 +10178,63 @@ explicit approval. The before/after freeze is retained: **161 → 167 packages**
 listed, and no upgrade or downgrade of torch, torchvision or numpy.
 
 _Ledger source HEAD: `1d09bc87`; no evidence deleted._
+
+## CP-UQ248 — The missing composition now exists, and a flaky gate is deterministic
+
+```yaml
+checkpoint_id: CP-UQ248
+last_valid_experiment: EXP-UQ248-COMPOSED-MACOS-W2
+current_hypothesis: The v4 pieces are complete but unwired; the composition is the missing layer
+  between the tested libraries and a runnable macOS campaign. CONFIRMED.
+working_tree_status: clean at commit 10175636
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome extension host, Sparkle updater,
+  SkyComputerUseService
+open_risks:
+  - The composition is not yet driven by a CLI entry point, and Task 14's simulation batches need a
+    full ROS/MoveIt/Gazebo launch path that does not exist for the v4 configuration yet.
+next_command: wire the composed campaign behind a CLI entry point, then attempt a first FULL_RESTART
+```
+
+### The gap this round found
+
+Grepping for production callers showed that **every v4 component is reachable only from tests**:
+`MpsBrokerBootstrap`, `CampaignSupervisor`, `parallel_ipc_v4`, `unix_address` and the rest have no
+caller in `src/` outside their own modules. The plan's task file lists name the wiring points
+(`runtime/parallel_ros_runtime.py`, `runtime/parallel_worker_runtime.py`,
+`cli/mujoco_parallel_batch.py`) and those files are unmodified — the plan's Task 13 assumes a
+composed runtime that Tasks 2–10 were each supposed to build a piece of, and nothing owned the
+join. That is why my Task 13 smoke had to hand-assemble its own sequence, and it is why Task 14
+cannot start yet.
+
+`parallel_batch/macos_w2_campaign.py` is that join (`2b9320e5`). It composes the supervisor, the
+MPS broker, the private address strategy, the permission-only v4 RPC, the immutable snapshots, the
+one-time registry and the seven-step recovery, with every platform-specific port injected so the
+Linux path stays untouched. It refuses at construction if the plan is not the Darwin MPS
+combination, if the slot count is not exactly two, or if the plan mixes platforms.
+
+A malformed `remove_active_request` lambda in my first draft was caught by the syntax check and
+replaced with a proper `InferenceRegistry.cancel_request_safe` that answers yes/no instead of
+raising — the recovery path needs to ask "is this still ours to remove?" without treating an
+already-terminal request as an error.
+
+`composed-campaign-01/`: **12 passed**, covering a clean-host pre-flight, a claim or leftover
+campaign directory making it dirty, the three construction refusals, one-time admission (admitted
+once, refused on repeat, refused from a replaced broker identity, refused when unknown), the closed
+rebuild trace starting at `remove_active_request` and ending at `coordinator_decision`, released
+snapshots still on disk as deletion candidates, and the infrastructure disposition carrying
+`business_status: None`.
+
+### A flaky gate, fixed rather than tolerated
+
+`test_a_full_bounded_queue_refuses_excess_work_and_keeps_serving` failed in the composition
+regression but had passed earlier: re-running it alone gave pass/pass/fail. The cause is structural
+— the accept loop drains the queue as fast as a burst fills it, so "the queue is full right now" is
+a race window, and a first fix (a longer burst) still failed 2 of 5. The test now makes the queue
+genuinely full for the duration of one connection and asserts the accept loop answers rather than
+drops. `v4-queue-det-01/` … `-05/`: **5 of 5 passing**.
+
+`composed-regression-02/`: **283 passed, 0 failed** across composition, registry, snapshots,
+recovery, supervisor, v4 IPC, Unix address, MPS bootstrap, W2 composition and contracts.
+
+_Ledger source HEAD: `10175636`; no evidence deleted._
