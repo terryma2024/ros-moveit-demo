@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { liveSimTest as test, expect } from "../fixtures/live-sim";
@@ -128,7 +128,31 @@ for (const entry of executions) {
     }
     for (const point of projection.points) {
       expect(["PASSED", "FAILED"], `${point.display_id} terminal`).toContain(point.status);
-      expect(point.artifacts.length, `${point.display_id} artifacts`).toBeGreaterThan(0);
+    }
+    if (entry.mode === "ADAPTIVE") {
+      // Adaptive results are imported from the pool's workers, so a point's evidence lives in the
+      // pool's per-worker attempt directories rather than in the campaign projection's artifact
+      // list — the plan's own `03-adaptive` spec reads the same shape.  Every point must still
+      // have its own attempt directory: an aggregate `PASSED` is not per-point evidence.
+      const poolRoot = join(batchRoot, "r", projection.batch_id, "p");
+      const generations = readdirSync(poolRoot).filter((name) => !name.endsWith(".json"));
+      expect(generations.length, "one pool generation").toBeGreaterThan(0);
+      const attempts = new Set<string>();
+      for (const generation of generations) {
+        const workersRoot = join(poolRoot, generation, "workers");
+        for (const workerId of readdirSync(workersRoot)) {
+          const workerAttempts = join(workersRoot, workerId, "attempts");
+          if (!existsSync(workerAttempts)) continue;
+          for (const pointId of readdirSync(workerAttempts)) attempts.add(pointId);
+        }
+      }
+      expect([...attempts].sort(), "every adaptive point has an attempt on disk").toEqual(
+        projection.points.map((point: any) => point.point_id).sort(),
+      );
+    } else {
+      for (const point of projection.points) {
+        expect(point.artifacts.length, `${point.display_id} artifacts`).toBeGreaterThan(0);
+      }
     }
 
     // The batch on disk knows the same identity and finished its own cleanup.
