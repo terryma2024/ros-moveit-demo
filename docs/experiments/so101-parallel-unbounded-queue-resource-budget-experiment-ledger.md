@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ245 (tail of this file)
+latest_checkpoint: CP-UQ246 (tail of this file)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -55,7 +55,7 @@ current_design: docs/superpowers/specs/2026-09-19-so101-macos-mps-private-ipc-de
   SHA-256 480da6dcdfea1da988f9f4e706c8340dbb6d7283200c27bb723859119145db1b
 current_worktree: /Users/matianyi/Projects/robot_demo_001/.worktrees/so101-unbounded-queue-resource-budget-mac-mini
 current_branch: codex/so101-unbounded-queue-resource-budget (HEAD b55c181e at takeover)
-next_experiment: NONE on this host - Tasks 13/14 blocked by absent frozen perception weights
+next_experiment: run impl-macos-mps-w2-01/fetch-model-artifacts.zsh once ai-station is online, then Task 13 real-model broker
 correction_cp_uq229: the header's `worktree`, `evidence_root` and `task_root` fields describe the
   historical ai-station Stage A-E dispatch (`84620fc0`) and are not rewritten, because that history
   is not invalidated. The live dispatch, worktree and evidence root for the current macOS MPS/private
@@ -10016,3 +10016,70 @@ MoveIt physics evidence. Each batch needs the real perception models and the ful
 so it inherits the same blocker.
 
 _Ledger source HEAD: `27625b17`; no evidence deleted; no Linux or W4/W6/W8 action._
+
+## CP-UQ246 — The artifacts have a canonical home, and a second real blocker was fixed
+
+```yaml
+checkpoint_id: CP-UQ246
+last_valid_experiment: EXP-UQ246-ARTIFACT-PROVENANCE
+current_hypothesis: The artifacts can be fetched rather than invented. CONFIRMED as the route;
+  BLOCKED on the source host being offline.
+working_tree_status: clean at commit 0cd645ba
+owned_processes: NONE
+preserved_processes: the user's ChatGPT/Codex desktop app, Chrome extension host, Sparkle updater,
+  SkyComputerUseService; ai-station was not modified in any way (read-only reachability check only)
+open_risks:
+  - ai-station is offline in the tailnet (last seen 7h ago), so the fetch cannot run yet.
+  - macbook-air is an active peer but unreachable (host key verification failed), so it is not a
+    fallback source without the operator adding its key.
+next_command: zsh impl-macos-mps-w2-01/fetch-model-artifacts.zsh  (once ai-station is online)
+```
+
+### The artifacts have exact, recorded provenance
+
+Grepping the retained ledgers for the two frozen digests found the canonical command that
+originally provisioned them, which names both paths explicitly:
+
+```text
+weights    : /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/assets-r8/best.pt
+             sha256 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+model root : /data/work/so101-models/grounded-sam-v2-scipy-lock
+             manifest sha256 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+source     : docs/experiments/v5-t005-grounded-sam-rgbd-experiment-ledger.md line 2755
+```
+
+So the correct action is a verified **fetch** from ai-station, never a synthesis. A task-local
+script now does exactly that, fail-closed: `impl-macos-mps-w2-01/fetch-model-artifacts.zsh`. It
+refuses to install anything whose SHA-256 does not match, modifies nothing on the remote host, and
+writes a receipt. Both of its states are exercised:
+
+- `--check-only` on the real state reports both artifacts MISSING, exit 1;
+- with a decoy installed, it reports `VERDICT: MISMATCH - frozen value is f281d252…0781`, exit 1.
+
+### Why it cannot run yet
+
+`ssh ai-station` times out (exit 255). The tailnet explains it: `ai-station-001-lin` is
+`offline, last seen 7h ago`. This Mac's own tailnet egress is fine (`github.com -> 200`), and
+`tailscale status` shows the Mac and `macbook-air` active, so the failure is the peer being down,
+not the network path. `macbook-air` refuses with host key verification failure, so it is not a
+fallback without the operator adding its key. Local capacity is sufficient: 146 GB free.
+
+### A second, independent real defect found and fixed while checking this
+
+Checking whether the Broker could even *use* MPS revealed a real product bug: the broker CLI
+accepted `--device`, but `frozen_options()` hard-coded `requested_device='cuda'` and threw the
+parsed value away. On the schema-v4 macOS combination that made the real model set unloadable even
+though every layer above the Broker resolved to MPS. The device layer already supported MPS
+(`select_runtime_device` handles `"mps"`, and the detector factory validates the closed set
+`auto|cuda|mps|cpu`); only the wiring was missing.
+
+Fixed in `0cd645ba`: `frozen_options(..., requested_device='cuda')` keeps every schema-v3 caller
+byte-identical, the broker passes the parsed device through, and the CLI constrains `--device` to
+the factory's closed set instead of a single frozen literal. Five new tests cover the default,
+MPS without CPU fallback, refusal of an unsupported device, agreement with the factory's set, and
+the Linux container argv still choosing CUDA. Regression evidence:
+`task13-device-regression-01/` shows the failure counts for the three affected files are
+**identical before and after** (28 CLI, 69 perception-runtime), so nothing regressed; the five new
+tests are the delta.
+
+_Ledger source HEAD: `0cd645ba`; no evidence deleted; ai-station untouched._
