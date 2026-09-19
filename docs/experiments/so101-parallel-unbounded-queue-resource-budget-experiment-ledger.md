@@ -7987,3 +7987,27 @@ then the adaptive case, the genuine N1 `SEQUENTIAL` `FULL_RESTART` single-failed
 own statistics, and the five-batch physical record.
 
 _Ledger HEAD when written: `8c1649814`._
+
+## CP-UQ200 — My own launcher invalidated a run, and the fix is recorded
+
+The first acceptance attempt under the new unit was **my harness's fault, not the product's**, and it
+is recorded as such rather than salvaged:
+
+- the N=8 campaign `…b65c17af` ran well under systemd — eight workers, `evaluated` climbing 0 → 7 →
+  14 → 19 with the service `ActiveState=active`, `ExecMainStatus=0` — which already shows the CP-UQ196
+  death was not an N=8 workload property;
+- but the launcher replayed the recorded deployment environment **after** systemd's `--setenv`, so the
+  unit's `SO101_VALIDATION_EVIDENCE_ROOT` was overwritten by the older recorded value
+  (`service-light.RpN2T2XL/state`) while the specs read `service-light.s2jytgW3/state`. State and
+  assertions pointed at different directories, so every journal/evidence assertion in that run was
+  reading the wrong tree: the run is diagnostic **INVALID** and was stopped, not counted.
+- The 20th point was still uncommitted when I stopped it; since the harness was invalid I am **not**
+  diagnosing that as a product boundary — if it recurs in the clean run it will be diagnosed there.
+
+Fix: the launcher keeps the values the unit passes explicitly and re-exports them after the replay, so
+an explicit root always wins over a recorded one. The unit was restarted on a fresh root
+`service-light.QAnXMD8A` with the explicit `SO101_VALIDATION_EVIDENCE_ROOT` verified **inside the
+running process** (`/proc/<MainPID>/environ`), zero campaigns at start, `/health` 200, and the
+acceptance batch re-run against it.
+
+_Ledger HEAD when written: `1475049cf`._
