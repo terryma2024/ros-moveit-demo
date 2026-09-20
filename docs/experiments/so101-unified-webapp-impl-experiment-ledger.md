@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-77
+latest_checkpoint: CP-78
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1791,3 +1791,20 @@ Also noted for the remaining moves, so the next round does not have to rediscove
 adds `domains`, `global_state`, `blocked_reason` and nests the Teleop health under `teleop`). Moving
 that case therefore includes updating its assertion to the aggregate shape - a contract change the
 plan asks for, not a regression.
+
+## CP-78: four of eleven cases migrated, including the one whose contract changed
+
+Two more cases now run on the unified app:
+
+- `test_health_and_snapshot_remain_available_without_web_assets` - and this is the case CP-77 flagged:
+  its assertion moved from the old flat `{"ok": True}` to the aggregate contract the plan asks for
+  (`ok`, `teleop.ok` nested, and the three domain keys), so the change is a recorded contract update
+  rather than a loosened check. The snapshot assertion is unchanged;
+- `test_task_artifact_route_rejects_manifest_escape` - the task artifact 404 authority comes from the
+  same `ManifestArtifactStore`, so only the app construction changed.
+
+GREEN: `pyrgate test_api.py` **12 passed**.
+
+Migration progress: helper in place; 4 of 11 cases on the unified app (both static-asset cases, the
+health projection, the artifact escape); the four mutation cases still need the authority fixture;
+the superseded validation-unavailable assertion is still to be dropped.
