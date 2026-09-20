@@ -207,9 +207,20 @@ export class DomainRuntime {
 
   lastRenewalError: string | null = null;
 
+  /**
+   * True while a renewal is in flight. The page uses this for its "renewing" indicator, which is
+   * presentation state the runtime can own without the page scheduling anything.
+   */
+  renewing = false;
+
   async renew(): Promise<void> {
     if (this.disposed || !this.authorityValue) return;
-    await this.transport.renew();
+    this.renewing = true;
+    try {
+      await this.transport.renew();
+    } finally {
+      this.renewing = false;
+    }
   }
 
   async post(path: string, body: Record<string, unknown>): Promise<unknown> {
