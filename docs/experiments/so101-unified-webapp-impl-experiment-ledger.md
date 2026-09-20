@@ -5759,3 +5759,35 @@ reports 21 failures on the baseline and the same 21 after this change (identical
 the junit XMLs of gates `87941f8f` and `23ff4b00404f4c9e9894952483a27356`). They bind sockets under
 `pytest`'s long `tmp_path`, which is exactly the >104-byte case this platform cannot address; the server
 itself is proven usable here by the teleop-side test above.
+
+## CP-169: the macOS campaign has a control endpoint, pinned to the service's wire
+
+`parallel_batch/macos_control_endpoint.py` (new) serves the closed control wire for a macOS campaign.
+It deliberately does **not** re-implement the wire: the request field set is imported from
+`web_control` (the same object, not a copy), and so are the identifier and token patterns, the
+unsigned-field list the request hash covers, the frame codec, the peer-uid read and the bind rule. What
+is new is only what the reply may report - a state provider supplies `state`, `batch_terminal` and
+`batch_cleanup_complete`, and the three cleanup facts stay at their not-proven defaults unless the
+campaign can actually show them, because an acknowledgement of a stop is not a cleanup receipt.
+
+`test_expert_validation_macos_control_parity.py` (new, teleop side) is the fail-closed half of the
+CP-165 decision, since two implementations of one wire is a real drift risk. It asserts the reply field
+set equals `expert_validation.control._REPLY_FIELDS` exactly, that the request field set is the *same
+object* the Linux server validates, and then drives the endpoint with the service's own client:
+
+- `STATUS` reports `RUNNING`; `CANCEL_BATCH` requests the durable stop exactly once and answers
+  `STOPPING` with `batch_cleanup_complete False` and `cleanup_receipt_sha256 None`;
+- `authorize_coordinator_stop` then refuses with `BATCH_NOT_TERMINAL`, and after the campaign reports
+  terminal **and** cleanup complete it still refuses with `OWNED_DESCENDANTS_REMAIN` - i.e. the endpoint
+  cannot manufacture a stop authorization, which is the property that matters;
+- a wrong token is refused and the campaign's stop callback is never invoked;
+- a path that already holds something is never replaced (bind refuses, the bytes are unchanged);
+- `close()` removes only the inode it bound.
+
+Gate `bb2b3fa4` (with the control suite in the same invocation): **25 passed, 1 skipped**, exit 0.
+
+Still to do for the service-driven campaign, unchanged from CP-165/166: the entry point that validates
+the supervisor's argv (run mode, exact-W2, weight and manifest digests, a v4 document, the selected
+points), hosts this endpoint at `SO101_FIXED_CONTROL_SOCKET`, and runs the W2 campaign with
+`PYTORCH_ENABLE_MPS_FALLBACK=0` set in-process so the launcher does not re-exec and change its own argv;
+then the live campaign and the Chrome observation.
