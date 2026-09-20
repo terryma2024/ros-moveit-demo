@@ -2164,3 +2164,40 @@ and the web-process ROS-free property holds in the installed artifact. What rema
 Chrome/browser half of the L2 gate (it needs a live service and system Chrome) and the full
 `--packages-up-to` closure with the approved MuJoCo underlay, which this two-package overlay does not
 require.
+
+## CP-95: serving from the copied prefix found a real bug - installed deployments had no UI
+
+Ran the installed launcher from the copied prefix and probed it over HTTP. The first run exposed a
+genuine defect:
+
+```
+/health/live 200 | /health/ready 503 | / 503 | /tasks 503 | /tasks/unknown 404 | mutation CONTROLLER_INSTANCE_REQUIRED
+```
+
+`/` returning 503 while `<prefix>/share/so101_teleop/web/index.html` **exists** pointed at
+`installed_web_assets()`: it used a fixed two-parent offset, which is right from the installed
+*script* (`<prefix>/lib/so101_teleop/...`) but wrong from the installed *module*
+(`<prefix>/lib/python3.11/site-packages/so101_teleop/unified/main.py`, where the share dir is three
+levels up). So every installed deployment would have served 503 for every page with the bundle sitting
+right there - a defect no source-level test would have caught, and one the Chrome gate would have hit
+later.
+
+**Fixed** by walking the ancestors instead of assuming an offset, with a test that builds both
+installed layouts and asserts each resolves to the same share directory (and that an unrelated path
+resolves to `None`). Commit follows this entry.
+
+After rebuilding and re-copying the overlay, the same probe from the copied prefix gives:
+
+```
+/                            200   (SPA shell: <div id="root"> present)
+/tasks                       200
+/expert-validation           200
+/assets/does-not-exist.js    404   (missing asset is not answered with HTML)
+/tasks/definitely-unknown    404   (API namespace is not answered with HTML)
+/health/live                 200   |  /health/ready 503  (fail closed, as designed)
+mutation without headers     CONTROLLER_INSTANCE_REQUIRED
+```
+
+That is the plan's L2 "单服务与路由" row: one listener, the installed bundle served, direct navigation
+to each page working, and API/artifact namespaces excluded from the SPA fallback - all from an
+installed copied prefix rather than a dev server.
