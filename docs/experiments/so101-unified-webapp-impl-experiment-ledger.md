@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-34
+latest_checkpoint: CP-35
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -885,3 +885,23 @@ product; `Select` is ported but not yet consumed. `CampaignSetup` keeps a native
 worker count because its existing tests query native `<option>` elements and jsdom cannot render the
 radix listbox portal - switching it means rewriting those assertions in the same change and moving
 the open/select interaction to the browser gate, which is the honest next step for that component.
+
+## CP-35: the two required viewports are measured in the browser gate
+
+`web/e2e/unified/live-sim.spec.ts` gained the layout evidence the design demands and that jsdom
+cannot produce: for 1400x900 and 390x844 it loads `/`, `/expert-validation` and `/tasks` and asserts
+`documentElement.scrollWidth <= clientWidth + 1` plus that no element's right edge exceeds the
+viewport, i.e. no horizontal page overflow. It also re-checks the map contract in a real browser
+(one marker radius across all `circle[data-point-status]`, skipped when the run has no manifest,
+since the unit test already pins the contract). The fixture contract test asserts both viewport
+sizes, `setViewportSize`, the overflow measurement and the marker selector are present.
+
+GREEN: `NODE_ENV=test bun run test` (vitest) green; `pygate test_unified_live_fixture.py` exit 0.
+These Playwright tests execute only in the separately authorized live/installed gate, so this is
+prepared evidence, not a claim that the viewports were checked here.
+
+Decision recorded on the worker-count control: it stays a native `<select>`. Switching it to the
+ported radix `Select` would move the qualification assertion (an unknown exact N is disabled) out of
+jsdom, because radix mounts its listbox in a portal that jsdom cannot render, and the plan requires
+preserving test selectors rather than trading a real assertion for a cosmetic one. The ported
+`Select` remains available for controls that need it.
