@@ -1899,3 +1899,34 @@ as CP-73 showed for a claim about production code.
 
 So `api.create_app` genuinely has no callers now. The remaining step is to delete its route table and
 update `test_unified_route_parity.py`, after which the package has one route table.
+
+## CP-84: CP-67's deviation is closed - one route table in the package
+
+Deleted the duplicate route table. `so101_teleop/api.py` is now a small compatibility surface: the
+`validate_bind_address` re-export from the leaf policy module, the model re-exports that
+`expert_validation/production.py` imports from this path, and nothing else. `create_app` and all of its
+inline closures are gone.
+
+`test_unified_route_parity.py` was repurposed rather than dropped: with no second table to compare
+against, it now asserts (a) every route the migrated legacy tests were moved onto is served by the
+unified app (22 route/method pairs, including the tasks and validation surfaces), (b) the unified-only
+additions are present, and (c) `so101_teleop.api` really has no `create_app` any more - so the deletion
+is itself guarded.
+
+Two consumers surfaced during the change and were fixed rather than left broken:
+
+- `server.py` and `main.py` still imported `create_app` (from the CP-73 refactor, which removed the
+  *call* but not the import); both now import the bind policy directly. This is exactly why the tests
+  were run before committing.
+- A false alarm on my side: I tried importing `WorkerCountAvailability` from `so101_teleop.api` in a
+  probe, but it is defined in `expert_validation/api.py` and `production.py`'s
+  `from .api import WorkerCountAvailability` is relative to that package, so it was never this module's
+  export.
+
+GREEN: `pyrgate` over test_main_backend, test_api, test_unified_route_parity, test_unified_launch and
+test_openapi_export **32 passed**; plus test_unified_api, test_unified_cancel_integration,
+test_unified_lifecycle, test_unified_live_fixture and test_launch_contract **33 passed**. Commit
+`75b0de67`.
+
+With this, the plan's "router 核心抽成同源 routers，旧 create_app wrapper 只是调用它们" requirement is
+satisfied in the only way that leaves no second copy: there is no legacy wrapper left to drift.
