@@ -1930,3 +1930,19 @@ test_unified_lifecycle, test_unified_live_fixture and test_launch_contract **33 
 
 With this, the plan's "router 核心抽成同源 routers，旧 create_app wrapper 只是调用它们" requirement is
 satisfied in the only way that leaves no second copy: there is no legacy wrapper left to drift.
+
+## CP-85: verified in the gate after the route-table deletion
+
+CP-84 changed production modules (`api.py`, `server.py`, `main.py`) and eleven tests, so the overlay was
+reconfigured from clean and the affected gate set re-run:
+
+```
+colcon build ... --cmake-clean-cache ...                                   -> exit 0
+ctest -R "test_unified|test_api|test_main_backend|test_launch_contract|test_openapi_export" -> exit 0
+```
+
+Nothing regressed: the 17 unified modules plus the migrated `test_api`, the ROS-entry tests, the launch
+contract and the OpenAPI export all pass in the ament gate after the duplicate route table was removed.
+
+This is the current end state of the task: one route table, one web entry point, one lifecycle owner,
+and every test this work added or migrated green in the real gate.
