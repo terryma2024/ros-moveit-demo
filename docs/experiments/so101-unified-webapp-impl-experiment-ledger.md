@@ -4206,3 +4206,55 @@ The RED test that should exist builds on the harness already in `expert-validati
 inside `RuntimeProvider` with a transport whose `post` records its calls, click Acquire lease, and assert
 the recorder saw `/expert-validation/lease`. That fails today because the click goes to the bare client,
 and it passes once the handler uses the runtime in scope.
+
+## CP-136: the acquire now goes through the runtime - and the runtime holds no authority yet
+
+The wiring fix is in and verified in jsdom, and the live page shows it working as far as the runtime:
+
+**jsdom first.** RED with the harness the existing suite already has (a `RuntimeProvider` with a recording
+`DomainTransport`): the test failed because the recorder never saw `/expert-validation/lease` - the right
+reason, not an environment error like my deleted attempt. After routing `onAcquireLease` through the
+runtime in scope:
+
+```text
+new test           1 passed
+whole frontend     45 files, 203 tests passed      (202 before; the existing renewal test now drives
+                                                   the fixed path: it clicks Acquire lease inside
+                                                   RuntimeProvider and asserts lease_generation: 1)
+```
+
+One existing test needed its double corrected rather than its assertion: `renderWithRuntime`'s transport
+answered `post` with `{code: "OK"}`, and once acquire goes through that transport the page adopts a lease
+that has no `generation`. A placeholder was fine while the path was unused; it is a lease now. Committed
+as `2d90ee7f` and pushed.
+
+**Then the real page, with the bundle rebuilt** (`bun run build`, 1.58 s) and served from a task-owned
+asset directory, with the task-local `websockets` visible:
+
+```text
+before: {"codes": ["CONTROLLER_INSTANCE_REQUIRED"], "httpErrors": ["409 /expert-validation/lease"], ...}
+after:  {"codes": ["CONTROLLER_INSTANCE_REQUIRED"], "httpErrors": [], 
+         "tail": "... CONTROLLER_INSTANCE_REQUIRED: this document holds no authority ..."}
+server: POST /control/instances 200 OK (twice); WebSocket .../channel [accepted] (twice); no 409 at all
+```
+
+The 409 is gone, so the acquire is no longer hitting the server without authority - the fix did what it
+claimed. The message that remains is the **client's own** refusal, raised by `DomainRuntime.post` when
+`authorityValue` is null ("this document holds no authority"). So the runtime exists in the page, the
+server registered the instance and accepted the channel, and yet the runtime never finished `start()`,
+which is the only place that assigns the authority:
+
+```text
+domain-runtime.ts:63  async start(): Promise<void> {
+                        this.proof = await this.transport.register(this.domain);
+                        this.binding = await this.transport.connect(this.proof);
+                        this.authorityValue = { instanceId, proof, channelRevision, executionGeneration: 0 };
+                        this.current = await this.transport.snapshot();
+```
+
+Two registrations and two accepted channels say `start()` ran twice (a double mount, plausibly StrictMode)
+and that `connect` reached the server - but the client-side promise resolves only when the handshake
+*message* arrives, and something about that exchange is not completing. That is the next question, and it
+is narrow: does `DomainRuntime.start()` ever resolve in the page, and who awaits it - the provider or
+nobody? A rejected `start()` would leave exactly this state: instance registered, channel accepted on the
+server, and no authority on the client.
