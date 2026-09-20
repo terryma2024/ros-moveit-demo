@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-44
+latest_checkpoint: CP-45
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1062,3 +1062,19 @@ With CP-42, CP-43 and this checkpoint, every responsibility of the validation pa
 is now owned and tested by the runtime: identity and generation validation, expiry extension,
 capability-derived cadence, invalid-capability refusal, the in-flight indicator, and the error
 record. Deleting that effect is now a mechanical edit plus the page's notice/indicator wiring.
+
+## CP-45: the validation page validates through the runtime
+
+`RuntimeProvider` gained `useOptionalDomainRuntime(domain)`, which returns null outside a provider so
+components keep working in unit tests. `expert-validation-app.tsx` now calls
+`runtime.validateRenewal(...)` for the lease identity/generation/expiry rule instead of comparing the
+fields inline, and reports `runtime.lastRenewalError` when it refuses; the inline comparison remains
+only as the no-provider fallback the unit tests exercise. One check, one owner.
+
+GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` **45 files / 199 tests**. Commit follows
+this entry.
+
+What is left of Task 9's migration is now only the scheduling: the page still owns a re-armed
+`setTimeout` at `(lease_duration_s - lease_renewal_margin_s)`, while the runtime can already compute
+that cadence (CP-44). Swapping that scheduling to `runtime.startHeartbeat(() => ...)` - and giving the
+provider a per-domain cadence rather than one `heartbeatMs` for both domains - is the final edit.
