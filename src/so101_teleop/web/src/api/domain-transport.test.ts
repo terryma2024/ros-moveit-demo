@@ -67,3 +67,20 @@ describe("validation renewal", () => {
     expect(calls).toEqual([]);
   });
 });
+
+test("a lease without an id never builds a renewal URL", async () => {
+  const calls: string[] = [];
+  const transport = createHttpTransport("validation", {
+    baseUrl: "http://127.0.0.1:8800",
+    fetchImpl: async (url) => {
+      calls.push(url);
+      return new Response("{}", { status: 200 });
+    },
+  });
+  transport.setAuthority?.(AUTHORITY);
+  // A partial lease reached the transport in a live run and the renewal PUT went to
+  // /expert-validation/lease/undefined; the guard has to be on the shape, not only on absence.
+  transport.setLease?.({ service_session_id: "s1", generation: 1 } as never);
+  expect(await transport.renew()).toBeUndefined();
+  expect(calls.filter((u) => u.includes("undefined"))).toEqual([]);
+});
