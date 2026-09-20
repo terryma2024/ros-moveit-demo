@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-31
+latest_checkpoint: CP-32
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -831,3 +831,23 @@ test renders all six variants and all six sizes to prove the merged button surfa
 
 Remaining in Task 8: `sidebar`, the last item, which also has to respect the shell's navigation
 semantics from Task 9.
+
+## CP-32: the shell uses the ported sheet, and the nav semantics survive it
+
+`AppShell`'s hand-rolled collapse is gone. Narrow screens now open the **ported design-system
+`Sheet`** (radix dialog) with the two primary entries inside it, while wide screens keep the list
+permanently visible (`hidden ... md:block`). The earlier accessibility fix is preserved rather than
+undone: the entries are never behind a permanent `hidden` attribute, so assistive technology can
+always reach them, and radix owns the trigger's `aria-expanded`.
+
+The shell test was updated to assert what is now true: the sheet trigger renders with
+`aria-expanded="false"`, the wide-screen `navigation[aria-label=Primary]` contains both entries,
+and clicking the trigger does not throw. The sheet's own portal content is not asserted in jsdom
+(no layout), which stays with the browser gate.
+
+GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` **45 files / 190 tests**. Commit
+`28bbb6ea`.
+
+Remaining in Task 8: `sidebar` itself, the last item; with the shell's navigation now provided by
+the sheet, the sidebar can be introduced only if the shell genuinely needs it, and the plan is
+explicit that new items are introduced only where a page needs them.
