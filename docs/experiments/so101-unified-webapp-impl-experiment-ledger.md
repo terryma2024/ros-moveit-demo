@@ -6004,3 +6004,66 @@ produced a live cleanup receipt of the same shape the Stage A gate asks for
 (`workers_reaped [true, true]`, `directory_removed`, `registry_empty`), and the adapter's stop receipt
 (`clear: true`, `survivors: []`) covers the case where a cancel does arrive - as it did in the earlier
 runs, when the service's own lease expiry ended the campaign on purpose.
+
+## CP-173: the campaign's own verdict, read from its evidence - a station limit, not a service one
+
+CP-172 left one question open: the campaign served zero requests. Its own document answers it, and the
+answer is not in the service:
+
+```
+worker_results[0] = {worker_id: w1, failure_code: "STATION_NOT_READY", results: [],
+                     station_record: {requested: true, ready: {ready: false, phase: "CONTROLLERS",
+                       failure_code: "MOTION_STACK_CONTROLLER_NOT_ACTIVE", exit_code: 1,
+                       evidence: {dependency: "joint_state_broadcaster", observed: null},
+                       ros_domain_id: "181"}}}
+worker_results[1] = the same for w2 on domain 182
+served = {count: 0, devices: [], lane_stats: {executed: 7, ...}}   # the 7 are the model warm-ups
+admission = {admitted: [], refused: []}
+cleanup = {complete: true, directory_removed: true, registry_empty: true, workers_reaped: [true, true]}
+```
+
+So both Workers refused to drive a station they could not prove ready - which is the fail-closed
+behaviour the worker module documents - and never sent a request, which is why nothing was served or
+admitted. The service side did everything it was asked to: it launched the coordinator, held the lease,
+never cancelled, and the campaign cleaned up exactly.
+
+**The station half was then improved and re-measured.** The successful CLI-driven campaigns of earlier
+rounds ran the campaign with the MuJoCo fork overlay sourced and the dylib farm on `DYLD_LIBRARY_PATH`
+(`run.sh` in `stageB-live*`/`stageB-n1live*`), and the service I had been serving was started without
+either. Adding them (`serve-live.sh` now sources `stageB-fork-wbs3hj2h/install/setup.bash` and exports
+`DYLD_LIBRARY_PATH=/Users/matianyi/ros2_jazzy/macos_dylib_farm/current:<install>/lib:<fork>/lib`) moved
+the station from "no motion stack at all" to the **full stack launching**:
+
+```
+[robot_state_publisher-3] [static_transform_publisher-1] [static_transform_publisher-2]
+[ros2_control_node-4] [spawner-5] [spawner-6] [spawner-7] [move_group-8] [scene_setup-9]
+[controller_manager]: Using ROS clock for triggering controller manager cycles.
+[spawner_gripper_controller]: waiting for service /controller_manager/list_controllers to become available...
+```
+
+and then the station was torn down with the spawners still waiting, ~11 s after the controller manager
+announced itself, while the worker's readiness probe allows **150 s**
+(`macos_w2_worker.py:66`, `motion_stack_ready --timeout-s 150`). The probe returned a structured verdict
+rather than crashing (`exit_code 1`, no `raw` fallback), so what it observed was a controller list it
+could not read, not a missing binary.
+
+That is as far as this round can honestly take it: on this host the station's `controller_manager`
+does not offer `list_controllers` to the probe within its window, so `joint_state_broadcaster` is never
+observed active and every worker refuses. The two candidates - the probe's domain/timing versus the
+controller manager genuinely not coming up on this underlay - are **not distinguished yet**, and the
+next step is to run `motion_stack_ready` by hand against a running station on the worker's domain
+rather than to guess between them.
+
+**Where that leaves the dispatch's second task.** The execution path it asked for exists and is proven:
+a typed fail-closed adapter, the service's own control protocol served by the macOS campaign, launch
+and cancel and cleanup driven through the service API, the lease lifecycle correct end to end
+(16 renewals, 0 refusals), and a campaign that runs to its own verdict with exact cleanup
+(`workers_reaped [true, true]`, `directory_removed`, `registry_empty`). What it cannot do on this host
+is reach `W2_CAMPAIGN_PASS`, because the station's controllers do not activate - an environment limit
+of the same family the §7 `installed`/`physics` rows already record - and because the service cannot
+*project* the macOS campaign's points at all (CP-172: the projection reads a coordinator journal this
+composition does not write). The `N=1` retry remains excluded by CP-166's three declarations plus the
+service's 4-point floor.
+
+Machine after the round: no service, station or worker processes; **0 task-owned helpers**; **0 IPC
+residue** (the campaign's own `directory_removed`); tree clean.
