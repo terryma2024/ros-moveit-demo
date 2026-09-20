@@ -98,3 +98,28 @@ test("missing provider and missing domain are explicit errors", () => {
     ),
   ).toThrow("DOMAIN_RUNTIME_MISSING: validation");
 });
+
+test("browser back and forward update the page without remounting the provider", async () => {
+  const teleopTransport = transport();
+  const runtime = new DomainRuntime("teleop", teleopTransport);
+  render(
+    <RuntimeProvider teleop={runtime}>
+      <Page name="one" />
+    </RuntimeProvider>,
+  );
+  await userEvent.click(screen.getByRole("button", { name: "tasks" }));
+  expect(screen.getByTestId("page").textContent).toBe("tasks");
+
+  // The browser changes the URL outside React and fires popstate; the shell must follow it
+  // without re-registering the document or dropping the runtime.
+  globalThis.history.pushState({}, "", "/expert-validation");
+  globalThis.dispatchEvent(new PopStateEvent("popstate"));
+  expect(await screen.findByText("validation")).toBeTruthy();
+  expect(teleopTransport.register).toHaveBeenCalledTimes(1);
+  expect(teleopTransport.close).not.toHaveBeenCalled();
+
+  globalThis.history.pushState({}, "", "/");
+  globalThis.dispatchEvent(new PopStateEvent("popstate"));
+  expect(await screen.findByText("teleop")).toBeTruthy();
+  expect(teleopTransport.register).toHaveBeenCalledTimes(1);
+});
