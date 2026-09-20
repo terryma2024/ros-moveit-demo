@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-50
+latest_checkpoint: CP-51
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1179,3 +1179,17 @@ runtime that this host cannot fully exercise. The other 15 names are all present
 
 Still open in Task 11: the three incremental rebuild proofs, the `colcon test` run over the installed
 overlay with per-test TEMP provenance, and the copied-install Chrome gate.
+
+## CP-51: all 15 unified tests pass inside the real ament/CTest gate
+
+Ran `ctest --test-dir <build>/so101_teleop -R test_unified --output-on-failure` through `rosgate`
+against the overlay built in CP-50: **exit 0**. This is the strongest evidence in the session so far,
+because it exercises the tests through the plan's actual gate - CTest/ament with the installed
+overlay, the registered interpreter and the real environment - rather than a direct pytest
+invocation. Every module this task added (gate, arbiter, instances, safety, ipc, bridge,
+two_channel, parents, admission, api, lifecycle, budget_adapter, live_fixture, launch,
+web_dependencies) passes there.
+
+Still open in Task 11: the three incremental rebuild proofs, a full `colcon test` over the package
+(69 tests, only the unified subset has been run in-gate), the per-test TEMP provenance run, and the
+copied-install Chrome gate.
