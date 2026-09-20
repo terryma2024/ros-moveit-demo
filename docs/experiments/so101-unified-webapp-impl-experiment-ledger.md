@@ -5836,3 +5836,23 @@ Both digests match what the earlier live campaign used. What remains is the live
 `SO101_VALIDATION_COORDINATOR` at the adapter, let the unified service take a real campaign through
 preflight and its own API, and observe it - with the Chrome evidence the dispatch asks for - and then
 the retry half, which CP-166 records as structurally excluded here.
+
+### CP-170 addendum - the adapter had a launch bug that only a script run could show
+
+`python src/cli/macos_service_campaign.py --help` failed with `ImportError: attempted relative import
+with no known parent package`. The service launches its coordinator as `[sys.executable, <path>,
+...flags]` - a **script**, not a module - so every relative import in the adapter would have died at the
+first live launch, and the tests could not see it because pytest imports the file *as a module*.
+
+Fixed by importing `so101_demo....` absolutely. No `sys.path` bootstrap: the service imports that package
+itself to resolve its layout, and the launched child inherits the same path, so fabricating a mapping
+here would hide a real environment problem instead of reporting it.
+
+The regression test runs the file the way the supervisor does - `subprocess.run([sys.executable,
+<adapter path>, *flags])` with the task's own `pyshim` and the demo source on `PYTHONPATH` - and asserts
+a named refusal (`CONFIG_MISSING`) rather than a traceback, with `ModuleNotFoundError` explicitly
+forbidden from stderr. That is the shape of assertion this class of bug needs: it is the only one that
+runs the artefact the way production does.
+
+Gates after the fix: adapter file **5 passed** (gate `aTOa2jQm`); adapter + parity + control **30 passed,
+1 skipped** (gate `y40936k4`); task-owned helpers alive **0**; `git diff --check` clean.
