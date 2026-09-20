@@ -3583,3 +3583,39 @@ on Linux, or through the request API - not something to fix by bending the runti
 **What is deliberately not claimed anywhere in this table:** `resource qualified`, any promotion, any
 five-consecutive-success business verdict, or that macOS validation through the unified service is
 supported. The retired per-N budget chain is `NOT_APPLICABLE_SUPERSEDED` and no number here resurrects it.
+
+## CP-123: the retry is reachable on macOS after all - through this deliverable's own API
+
+CP-122 ended the N1 row with "needs a CUDA/Linux host or the request-API entry". The API entry is not
+hypothetical, and this is a correction to the last cell of the consolidated table above: the route exists
+in the unified server, on this host, and I simply posted to the wrong path.
+
+Gate `95ab2e7e5ef944289016722bd71d8cec` (exit 0, 4.9 s) started the installed unified server and read its
+own OpenAPI document:
+
+```text
+/expert-validation/campaigns                        [get, post]
+/expert-validation/campaigns/preflight              [post]
+/expert-validation/campaigns/{campaign_id}          [get]
+/expert-validation/campaigns/{campaign_id}/cancel   [post]
+/expert-validation/campaigns/{campaign_id}/full-restart-retries  [post]
+RetryRequest: command_id, confirmation, lease_generation, lease_id, point_ids, service_session_id
+              (all six required)
+```
+
+So a full-restart retry is a first-class operation of the expert-validation domain, addressed per campaign,
+and it carries the authority fields the rest of the API requires. My probe POSTed to
+`/expert-validation/campaigns/<id>/retry` and got `405 Method Not Allowed` - the endpoint is
+`full-restart-retries`, which is my wrong path, not a missing feature.
+
+What that leaves for the row is a smaller and better-specified task than "find a Linux host": drive
+`full-restart-retries` against a **live campaign with a valid lease** in the unified service, with
+`point_ids` naming exactly one point, and observe whether the runtime performs the single-point N1 retry
+or refuses it with a named code. Both outcomes are acceptance-relevant; the setup is what is missing
+(a live campaign inside the unified service, which needs the station runtime behind it), not the entry
+point.
+
+Two of my own errors are worth noting together because they are the same error: I assumed the retry had no
+reachable entry here (CP-122) and I guessed the route name instead of reading the OpenAPI document the
+server was already serving. The document costs one `curl`; I had run that same `curl` in earlier rounds
+and only grepped it for guard and worker routes.
