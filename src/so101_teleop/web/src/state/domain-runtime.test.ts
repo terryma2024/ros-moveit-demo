@@ -110,3 +110,62 @@ test("a document without authority cannot post and dispose closes the transport"
     succeeded: true,
   });
 });
+
+test("the renewal heartbeat belongs to the runtime, not to a page", async () => {
+  vi.useFakeTimers();
+  try {
+    const snapshot: RuntimeSnapshot = { sequence: 1, serviceEpoch: "e1", executionGeneration: 1, payload: null };
+    const { transport } = makeTransport(snapshot);
+    const runtime = new DomainRuntime("teleop", transport);
+    await runtime.start();
+    runtime.adoptAuthority({
+      instanceId: "i1",
+      proof: "p1",
+      channelRevision: 1,
+      executionGeneration: 1,
+    });
+    runtime.startHeartbeat(1000);
+    expect(runtime.heartbeatRunning()).toBe(true);
+    await vi.advanceTimersByTimeAsync(3000);
+    // Three ticks of renewal, and nothing was torn down by any page lifecycle in between.
+    expect(transport.renew).toHaveBeenCalledTimes(3);
+    expect(transport.close).not.toHaveBeenCalled();
+    // Starting it twice must not double the timers.
+    runtime.startHeartbeat(1000);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(transport.renew).toHaveBeenCalledTimes(4);
+    runtime.dispose();
+    expect(runtime.heartbeatRunning()).toBe(false);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(transport.renew).toHaveBeenCalledTimes(4);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a failed renewal is recorded and never retried with a new lease generation", async () => {
+  vi.useFakeTimers();
+  try {
+    const snapshot: RuntimeSnapshot = { sequence: 1, serviceEpoch: "e1", executionGeneration: 1, payload: null };
+    const { transport } = makeTransport(snapshot);
+    transport.renew = vi.fn(async () => {
+      throw new Error("LEASE_RENEW_FAILED");
+    });
+    const runtime = new DomainRuntime("teleop", transport);
+    await runtime.start();
+    runtime.adoptAuthority({
+      instanceId: "i1",
+      proof: "p1",
+      channelRevision: 1,
+      executionGeneration: 1,
+    });
+    runtime.startHeartbeat(1000);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(transport.renew).toHaveBeenCalledTimes(2);
+    expect(runtime.lastRenewalError).toContain("LEASE_RENEW_FAILED");
+    expect(transport.post).not.toHaveBeenCalled();
+    runtime.dispose();
+  } finally {
+    vi.useRealTimers();
+  }
+});

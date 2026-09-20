@@ -39,6 +39,7 @@ export class DomainRuntime {
   private pending: RuntimeSnapshot[] = [];
   private fetching = false;
   private disposed = false;
+  private heartbeat: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     readonly domain: DomainName,
@@ -122,6 +123,37 @@ export class DomainRuntime {
     }
   }
 
+  /**
+   * Start the lease renewal heartbeat.
+   *
+   * It belongs to the runtime, not to a page: switching pages must not stop a renewal, and only an
+   * explicit `dispose` (the root provider unmounting) ends it. Renewal never takes the ordinary
+   * mutation path, so a long arm action cannot starve it.
+   */
+  startHeartbeat(intervalMs: number): void {
+    if (this.disposed || this.heartbeat !== null) return;
+    this.heartbeat = setInterval(() => {
+      void this.renew().catch((error: unknown) => {
+        // A failed renewal is reported through the transport; it must never be silently retried
+        // with a new lease generation.
+        this.lastRenewalError = String(error);
+      });
+    }, intervalMs);
+  }
+
+  stopHeartbeat(): void {
+    if (this.heartbeat !== null) {
+      clearInterval(this.heartbeat);
+      this.heartbeat = null;
+    }
+  }
+
+  heartbeatRunning(): boolean {
+    return this.heartbeat !== null;
+  }
+
+  lastRenewalError: string | null = null;
+
   async renew(): Promise<void> {
     if (this.disposed || !this.authorityValue) return;
     await this.transport.renew();
@@ -139,6 +171,7 @@ export class DomainRuntime {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.stopHeartbeat();
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.transport.close();
