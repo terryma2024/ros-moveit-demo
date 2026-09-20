@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-23
+latest_checkpoint: CP-24
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -668,3 +668,22 @@ build alone.
 
 Remaining in Task 8: the per-primitive smart merge that preserves business variants, ARIA, events,
 disabled reasons and testids.
+
+## CP-24: every surface is bound to the tokens
+
+`tailwind.config.ts` now maps the semantic palette onto the captured custom properties -
+background, foreground, card, popover, primary, secondary, muted, accent, destructive, border,
+input, ring and the sidebar group, plus radius and both font families. Business outcomes get their
+own utilities (`success` -> `--state-success`, `pending`, `failure`) so blue is never success. The
+base layer in `index.css` moved from `bg-slate-950 text-slate-100` to `bg-background
+text-foreground`, so the old hardcoded slate surface is gone rather than left behind a few
+restyled buttons. Still Tailwind 3.4.17: plain `var()` bindings, no v4 `@theme` declaration in
+either the config or the CSS entry.
+
+GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` **39 files / 175 tests**. Commit
+follows this entry.
+
+Two self-inflicted test defects were caught by the suite in this round (a wrong expected variable
+name, and a comment mentioning `@theme` tripping a "no v4 syntax" assertion). Both are fixed, and
+the second is now comment-stripped the same way the theme test does it. The commit was gated on the
+full suite this time.
