@@ -2067,3 +2067,35 @@ when the bundle has not been built in that checkout. `pyrgate test_unified_live_
 
 This is the third guard added by auditing rather than assuming, alongside the packaging drift guard
 (CP-90) and the pytest-registration guard (CP-36).
+
+## CP-92: installed-overlay audit - artifacts present, dependency closure absent
+
+Inspected the installed prefix from CP-50/CP-85 rather than the source tree. **Everything this task
+added is installed where it belongs:**
+
+| Path in `install/so101_teleop` | Result |
+| --- | --- |
+| `lib/so101_teleop/so101_unified_web_server.py` | present - the operator-reachable entry point |
+| `share/so101_teleop/web/index.html` | present - the built bundle |
+| `share/so101_teleop/web/fonts/dm-sans-variable.woff2` | present - the self-hosted font |
+| `.../site-packages/so101_teleop/unified/app.py` | present - the unified factory |
+| `.../site-packages/so101_teleop/unified_openapi.json` | present - the aggregate contract |
+
+Importing that installed factory, however, fails in two layers, and the failure has nothing to do with
+this task's code:
+
+```
+... expert_validation/catalog.py: ModuleNotFoundError: No module named 'ament_index_python'
+   (resolved by sourcing the ROS workspace, as CP-8 recorded)
+... expert_validation/catalog.py:16: ModuleNotFoundError:
+    No module named 'so101_demo.cli.mujoco_parallel_batch'
+```
+
+The second one is the **incomplete `so101_demo` install closure** first recorded in CP-8: the source
+tree needs the documented symlink shim for source-mode tests, and an installed-only run needs the real
+installed package, which does not exist on this host. So the L2/installed gate is blocked at the
+dependency-closure boundary *before* even reaching the MuJoCo underlay from CP-58/61/62 - while the
+artifacts this task produces are demonstrably installed correctly.
+
+This is the honest shape of the install-layer status: **packaging verified, dependency closure absent**,
+with both reasons reproducible from the commands above.
