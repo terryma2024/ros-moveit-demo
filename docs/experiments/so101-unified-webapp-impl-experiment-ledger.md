@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-19
+latest_checkpoint: CP-20
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -562,3 +562,30 @@ is exactly the path that fails for the CLI here while succeeding for curl. Task 
 therefore needs either a CLI HTTP path that works against this proxy or a curl-driven capture of
 the correct maia registry URL shape. No product change in this checkpoint; the hypothesis is
 recorded so the next round does not repeat it.
+
+## CP-20: the registry template is `r/{name}.json`, and every probed item URL 404s
+
+Extracted the item URL template from the pinned package itself:
+`dist/index.js` contains the literal template `r/{name}.json` against the base
+`https://ui.shadcn.com`, plus `https://ui.shadcn.com/schema.json` and
+`/schema/registry-item.json`. There is no style segment in the template, and the module exposes
+`registry:ui|lib|component|hook|page|file|block` item types.
+
+Every candidate item URL was then probed through the working proxy and returned the site's 35 KB
+HTML 404 page:
+
+```
+/r/button.json                     404
+/r/utils.json                      404   (also /r/utils.json?style=maia)
+/r/button.json?style=maia&base=radix 404
+/r/font-dm-sans.json               404
+/r/maia/utils.json                 404
+/r/styles/maia/utils.json          404   (also button.json, index.json, font-* items)
+/r/styles/new-york/utils.json      200   <- legacy style only
+```
+
+So the reachable registry surface here serves the legacy `new-york` style, while the `maia`
+(radix preset) items are behind a route this environment cannot resolve. Combined with CP-19,
+the remaining Task 8 work needs either (a) a CLI HTTP path that survives this proxy, or (b) the
+registry route discovered from a working network — guessing further is not a good use of rounds,
+and the lock keeps its honest `PENDING_REGISTRY_ITEMS` marker meanwhile.
