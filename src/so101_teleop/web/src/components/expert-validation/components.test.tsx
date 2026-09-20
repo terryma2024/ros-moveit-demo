@@ -124,3 +124,76 @@ describe("campaign setup start guard", () => {
     expect(screen.queryByLabelText("Start guard")).toBeNull();
   });
 });
+
+describe("CampaignSetup exact-N qualification", () => {
+  const base = {
+    state: { pointCount: 4, executionMode: "PARALLEL" as const, workerCount: 4 },
+    leaseHeld: true,
+    manifestReady: true,
+    onChange: () => undefined,
+    onAcquireLease: () => undefined,
+    onGenerate: () => undefined,
+    onPreflight: () => undefined,
+    onStart: () => undefined,
+  };
+  const capabilities = {
+    available: true,
+    execution_modes: ["SEQUENTIAL", "PARALLEL"] as const,
+    default_execution_mode: "PARALLEL" as const,
+    minimum_points: 4,
+    maximum_points: 20,
+    fixed_worker_counts: [1, 2, 3, 4, 5, 6, 7, 8],
+    worker_count_availability: [
+      { worker_count: 4, selectable: true, status: "APPROVED", reason_codes: [] },
+    ],
+    adaptive_default_ladder: [2, 4, 8],
+  } as never;
+
+  test("an unknown exact N is disabled and shows the provider reason", () => {
+    render(
+      <CampaignSetup
+        {...base}
+        capabilities={capabilities}
+        qualifications={[
+          {
+            selected_n: 4,
+            status: "UNKNOWN",
+            reasons: ["BUDGET_PROVIDER_NOT_READY"],
+            runtime_identity: "R",
+            contract_version: 2,
+            profile_sha256: null,
+            approval_sha256: null,
+          },
+        ]}
+      />,
+    );
+    const select = screen.getByLabelText("Worker count") as HTMLSelectElement;
+    const four = Array.from(select.options).find((option) => option.value === "4");
+    expect(four?.disabled).toBe(true);
+    expect(screen.getByText(/BUDGET_PROVIDER_NOT_READY/)).toBeTruthy();
+  });
+
+  test("an available promoted N stays selectable and there is no K input", () => {
+    render(
+      <CampaignSetup
+        {...base}
+        capabilities={capabilities}
+        qualifications={[
+          {
+            selected_n: 4,
+            status: "AVAILABLE",
+            reasons: [],
+            runtime_identity: "R",
+            contract_version: 2,
+            profile_sha256: "profile",
+            approval_sha256: "approval",
+          },
+        ]}
+      />,
+    );
+    const select = screen.getByLabelText("Worker count") as HTMLSelectElement;
+    const four = Array.from(select.options).find((option) => option.value === "4");
+    expect(four?.disabled).toBe(false);
+    expect(screen.queryByLabelText(/max points per worker/i)).toBeNull();
+  });
+});

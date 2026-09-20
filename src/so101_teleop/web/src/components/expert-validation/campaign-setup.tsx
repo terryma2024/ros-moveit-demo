@@ -1,4 +1,5 @@
 import type { Capabilities, ExecutionMode } from "@/api/expert-validation-types";
+import { workerOption, type QualificationView } from "@/api/qualification-view";
 import { Button } from "@/components/ui/button";
 
 export type SetupState = {
@@ -9,6 +10,13 @@ export type SetupState = {
 
 type Props = {
   capabilities?: Capabilities;
+  /**
+   * The read-only per-N qualification view. When present it is authoritative for whether an
+   * exact N may be selected: an unknown or unpromoted N is disabled with its own reason, and
+   * the UI never lowers N or substitutes ADAPTIVE. There is no K or max-points-per-worker
+   * input anywhere in this component.
+   */
+  qualifications?: QualificationView[];
   state: SetupState;
   leaseHeld: boolean;
   leaseRenewing?: boolean;
@@ -24,6 +32,7 @@ type Props = {
 
 export function CampaignSetup({
   capabilities,
+  qualifications,
   state,
   leaseHeld,
   leaseRenewing = false,
@@ -44,8 +53,15 @@ export function CampaignSetup({
   const fixedWorkerCounts = capabilities?.fixed_worker_counts ?? [];
   const validFixedWorkers = fixedWorkerCounts.includes(state.workerCount)
     && (state.executionMode === "SEQUENTIAL" ? state.workerCount === 1 : state.workerCount >= 2);
+  const qualification = qualifications?.find((view) => view.selected_n === state.workerCount);
+  const qualificationOption = qualification ? workerOption(qualification) : null;
   const exactNSelectable = state.executionMode === "SEQUENTIAL"
-    || (availability?.selectable ?? false);
+    || ((availability?.selectable ?? false) && !(qualificationOption?.disabled ?? false));
+  const exactNReason = qualificationOption?.disabled
+    ? qualificationOption.reason
+    : availability && !availability.selectable
+      ? (availability.reason_codes ?? []).join(", ") || "EXACT_N_UNQUALIFIED"
+      : null;
   return (
     <section aria-label="Campaign setup" className="space-y-3 rounded-lg border border-slate-700 bg-slate-900 p-4">
       <h2 className="text-lg font-semibold">Campaign setup</h2>
@@ -93,7 +109,18 @@ export function CampaignSetup({
               className="ml-2 bg-slate-800 px-2"
             >
               {fixedWorkerCounts.map((count) => (
-                <option key={count} value={count} disabled={state.executionMode === "PARALLEL" && count === 1}>
+                <option
+                  key={count}
+                  value={count}
+                  disabled={
+                    (state.executionMode === "PARALLEL" && count === 1)
+                    || Boolean(
+                      qualifications?.some(
+                        (view) => view.selected_n === count && workerOption(view).disabled,
+                      ),
+                    )
+                  }
+                >
                   {count === 1 && state.executionMode === "PARALLEL" ? "1 (SEQUENTIAL only)" : count}
                 </option>
               ))}
@@ -102,8 +129,8 @@ export function CampaignSetup({
           <p>共享队列 · 每 worker 一次一任务</p>
           <p aria-live="polite">
             {availability
-              ? `${availability.status}${availability.selectable ? "" : ` · ${(availability.reason_codes ?? []).join(", ") || "EXACT_N_UNQUALIFIED"}`}`
-              : "EXACT_N_UNQUALIFIED · BUDGET_PROFILE_UNAVAILABLE"}
+              ? `${availability.status}${exactNReason ? ` · ${exactNReason}` : ""}`
+              : `EXACT_N_UNQUALIFIED · ${exactNReason ?? "BUDGET_PROFILE_UNAVAILABLE"}`}
           </p>
         </>
       ) : (
