@@ -29,8 +29,8 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-07
-next_experiment: Task 6 single factory, lifecycle, routers and OpenAPI export
+latest_checkpoint: CP-08
+next_experiment: Task 10 budget adapter, then Task 12A live-fixture code, then Tasks 7-9 frontend, then Task 11 build gates
 ```
 
 ## CP-01: Registration, host probe and deviations
@@ -235,3 +235,45 @@ final run of that same command exits 0 and supersedes them; the failure records 
 not deleted. Every task commit is backed by a green gated invocation of that task's own test
 modules. Test modules delivered: gate 15, arbiter 15, instances 12, safety 12, ipc 8,
 bridge 7, two_channel 6, parents 12, admission 8 (95 test functions).
+
+## CP-08: Task 6 - one factory, lifecycle, routers and OpenAPI
+
+Delivered `unified/{ports,app,lifecycle,main,compose}.py`, `scripts/so101_unified_web_server.py`,
+a rewritten `openapi_export.py` (one schema, three views), `QualificationView` in
+`unified/contracts.py`, `web/package.json` `generate:api:unified`, and
+`test/teleop/test_unified_{api,lifecycle}.py` plus an added export test.
+
+GREEN: ROS-sourced gate over `test_unified_api.py` + `test_unified_lifecycle.py` +
+`test_openapi_export.py` exits 0; the plain gate over the nine backend modules exits 0.
+Covered: exactly one `/tasks/runs` POST route, no `disabled_tasks` shim, unique operation ids,
+the plan's literal factory test, structured `CONTROLLER_INSTANCE_REQUIRED` for every legacy
+mutation path (POST/PUT/DELETE) without authority headers, authority headers without a
+composed registry failing closed as `SERVICE_NOT_COMPOSED`, read-only routes staying reachable
+while a domain is unavailable, unknown API/artifact paths returning JSON 404 instead of the SPA,
+the legacy `max_points_per_worker` contract rejected before body validation, bind-address
+policy, lifecycle ordering (bridge failure lowering Teleop readiness only, blocked arbiter
+refusing to serve, validation maintenance failure recorded, shutdown closing owned work),
+composition without ROS producing a readable app with reasons, the budget-view field set, the
+entry point having no helper/driver flags, and a subprocess import probe proving the web chain
+never loads rclpy.
+
+Exports generated through the gate: `unified_openapi.json` (45 paths, "SO-101 Unified"),
+`openapi.json` (29, "SO-101 Teleop"), `expert_validation_openapi.json` (22, "SO-101 Expert
+Validation"), and the three generated `.d.ts` files after `bun install --frozen-lockfile`
+(lockfile unchanged).
+
+### Environment facts discovered in this checkpoint (they change how gates must run)
+
+1. `so101_demo_py` uses setuptools `package_dir={so101_demo: "src"}`, so the source tree has
+   no `so101_demo/` directory: `so101_demo.*` is only importable after a colcon install. A
+   symlink shim `$SO101_TASK_ROOT/pyshim/so101_demo -> src/so101_demo_py/src` reproduces the
+   install-time mapping for source-mode tests. The plan's Task 0 export
+   (`PYTHONPATH=.../src/so101_demo_py`) does **not** make `so101_demo` importable and is
+   recorded as a plan defect. Installed gates (Task 11) must still use the real copied prefix.
+2. `so101_teleop.expert_validation.__init__` imports `.catalog`, which imports
+   `ament_index_python`; therefore the unified factory currently needs the ROS environment to
+   import. `pyrgate`/`rosgate` (see the CP-07 recipe, extended with the shim path and
+   `-p no:launch_testing -p no:launch_ros -p no:launch_pytest`) is the gate for anything that
+   touches the validation package. Making that import lazy is a candidate follow-up, not done.
+3. `rosgate <cmd...>` runs an arbitrary command through `record_gate` under the sourced
+   workspace; the three OpenAPI exports were produced through it.
