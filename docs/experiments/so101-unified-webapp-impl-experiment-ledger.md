@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-75
+latest_checkpoint: CP-76
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1751,3 +1751,24 @@ still passes, because it only requires legacy routes to be a subset of unified o
 
 No code changed in this checkpoint: the value is the classification, which is what made the renewal
 migration (CP-37..CP-49) go smoothly after four rounds of preparation.
+
+## CP-76: the migration recipe's first assumption is proven
+
+CP-75's recipe assumes the existing `Service` stub satisfies the unified `TeleopPort` well enough for
+the read-only cases. Proven rather than assumed: a new test in `test_api.py` builds
+`create_unified_app(UnifiedServices(teleop=Service(), tasks=None, validation=None))` and asserts
+
+- `/health` reports the stub's Teleop health nested under `teleop`;
+- `/snapshot` returns the stub's session (`sim-a`);
+- `/gazebo/camera/presets` returns the stub's presets;
+- a mutation without instance authority is refused with `CONTROLLER_INSTANCE_REQUIRED` - i.e. the same
+  app that serves reads enforces authority on writes.
+
+One assertion was wrong on the first run (`{"presets": []}` where the stub answers
+`{"presets": ["overview", "top"]}`) and was corrected against the stub rather than the other way round.
+
+GREEN: `pyrgate test_api.py test_unified_route_parity.py` all pass together. Commit follows this entry.
+
+So the remaining migration is mechanical: move the other read-only cases onto this shape, add the
+authority fixture for the four mutation cases, drop the superseded validation-unavailable assertion,
+then delete `api.create_app`.
