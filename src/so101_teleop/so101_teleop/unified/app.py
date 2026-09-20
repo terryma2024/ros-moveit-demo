@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
 
-from so101_teleop.api import validate_bind_address
+from so101_teleop.bind_policy import validate_bind_address
 from so101_teleop.expert_validation.api import (
     CampaignCancelRequest,
     CapabilitiesResponse as _ValidationCapabilitiesResponse,
