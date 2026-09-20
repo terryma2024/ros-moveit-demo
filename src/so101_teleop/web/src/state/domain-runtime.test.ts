@@ -344,27 +344,10 @@ test("accepted snapshots are observable so a page needs no subscription of its o
   expect(seen).toEqual([4, 5]);
   runtime.dispose();
 });
-test("adopting a lease advances the authority generation the server expects", () => {
-  const transport = {
-    register: async () => ({ instance_id: "i", proof: "p", domain: "validation" as const }),
-    connect: async () => ({ instance_id: "i", revision: 1, domain: "validation" as const }),
-    snapshot: async () => ({ sequence: 0, serviceEpoch: "e", executionGeneration: 1, payload: null }),
-    subscribe: () => () => undefined,
-    renew: async () => undefined,
-    setAuthority: () => undefined,
-    post: vi.fn(async () => ({})),
-    close: () => undefined,
-  };
-  const runtime = new DomainRuntime("validation", transport as never);
-  runtime.adoptAuthority({ instanceId: "i", proof: "p", channelRevision: 1, executionGeneration: 0 });
-  runtime.adoptLease({ lease_id: "l", service_session_id: "s", generation: 1, expires_monotonic_ns: 10 ** 15 });
-  // The controller binding advances the generation server-side, so every mutation after the acquire
-  // has to present the lease's generation; starting() set 0 and nothing advanced it.
-  expect(runtime.mutationHeaders()?.executionGeneration).toBe(1);
-});
 
 test("the transport is told the authority, so renewal can present it", async () => {
   const setAuthority = vi.fn();
+  const setLease = vi.fn();
   const transport = {
     register: async () => ({ instance_id: "i", proof: "p", domain: "validation" as const }),
     connect: async () => ({ instance_id: "i", revision: 1, domain: "validation" as const }),
@@ -372,6 +355,7 @@ test("the transport is told the authority, so renewal can present it", async () 
     subscribe: () => () => undefined,
     renew: async () => undefined,
     setAuthority,
+    setLease,
     post: vi.fn(async () => ({})),
     close: () => undefined,
   };
@@ -383,32 +367,9 @@ test("the transport is told the authority, so renewal can present it", async () 
   expect(setAuthority).toHaveBeenCalled();
   expect(setAuthority.mock.calls.at(-1)?.[0]).toMatchObject({ instanceId: "i", channelRevision: 1 });
   runtime.adoptLease({ lease_id: "l", service_session_id: "s", generation: 1, expires_monotonic_ns: 10 ** 15 });
-  expect(setAuthority.mock.calls.at(-1)?.[0]).toMatchObject({ executionGeneration: 1 });
+  // The transport learns the lease so a domain that renews by id can present it, and the authority's
+  // execution generation stays where the server put it: the two counters are separate by design.
+  expect(setLease).toHaveBeenCalledWith(expect.objectContaining({ lease_id: "l" }));
+  expect(runtime.mutationHeaders()?.executionGeneration).toBe(0);
 });
 
-test("the runtime adopts the lease its own renewal returned", async () => {
-  const transport = {
-    register: async () => ({ instance_id: "i", proof: "p", domain: "validation" as const }),
-    connect: async () => ({ instance_id: "i", revision: 1, domain: "validation" as const }),
-    snapshot: async () => ({ sequence: 0, serviceEpoch: "e", executionGeneration: 1, payload: null }),
-    subscribe: () => () => undefined,
-    // A renewal must extend the expiry as well as the generation, or the runtime refuses it.
-    renew: async () => ({
-      lease_id: "l",
-      service_session_id: "s",
-      generation: 2,
-      expires_monotonic_ns: 2 * 10 ** 15,
-    }),
-    setAuthority: () => undefined,
-    setLease: () => undefined,
-    post: vi.fn(async () => ({})),
-    close: () => undefined,
-  };
-  const runtime = new DomainRuntime("validation", transport as never);
-  await runtime.start();
-  runtime.adoptLease({ lease_id: "l", service_session_id: "s", generation: 1, expires_monotonic_ns: 10 ** 15 });
-  await runtime.renew();
-  // The renewal advances the generation server-side, so the authority has to follow it; otherwise the
-  // next mutation is refused with STALE_EXECUTION_GENERATION: 2 != 1.
-  expect(runtime.mutationHeaders()?.executionGeneration).toBe(2);
-});

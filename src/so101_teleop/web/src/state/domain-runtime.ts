@@ -94,9 +94,10 @@ export class DomainRuntime {
     // adopted the authority has to present the generation that belongs to it. Leaving the value
     // `start()` set (0) made every mutation after the acquire fail with STALE_EXECUTION_GENERATION.
     this.transport.setLease?.(lease);
-    if (lease !== null && this.authorityValue !== null) {
-      this.adoptAuthority({ ...this.authorityValue, executionGeneration: lease.generation });
-    }
+    // Deliberately does NOT touch executionGeneration: the lease's renewal generation and the domain's
+    // execution generation are different counters (design line 104 - a renewal does not change the
+    // generation a running action was frozen with). Conflating them made the client send a generation
+    // one ahead of the server, and every mutation was refused STALE_EXECUTION_GENERATION.
   }
 
   lease(): LeaseIdentity | null {
