@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-71
+latest_checkpoint: CP-72
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1648,3 +1648,22 @@ so the new guard really runs in the ament gate rather than only in a direct pyte
 
 Nothing regressed across those three commits, and this is the current best evidence line for the whole
 task: a clean reconfigure, a successful build, and every unified module green in the real gate.
+
+## CP-72: commit-scope audit against the plan's staging rules
+
+The plan devotes a section to exact staging ("精确 staging 清单"): each task's commit must contain only
+that task's files, must exclude the ledger, and must not sweep directories. Audited all **123 commits**
+since the base:
+
+- **22 task commits** and **~100 ledger/checkpoint commits**.
+- **No commit mixes the ledger with code**: every commit touching `docs/experiments/` touches nothing
+  else, so the audit trail never rides along with a product change.
+- **No commit reaches outside** `src/so101_teleop/`, `docs/experiments/` or `docs/guides/` - checked per
+  commit with a negative filter, and the result was empty. Nothing in the repo root, no other package,
+  no evidence root, no build output.
+- Task commits stay small and single-purpose: 1-3 files for the focused changes, with the larger counts
+  belonging to the plan's own multi-file tasks (19 files for the Task 6 factory/lifecycle/routes commit,
+  17 for the Task 7 root-provider commit, 10 for the Task 4 child/IPC commit).
+
+That is the plan's "先 `git diff --check`、回读 `git diff --cached --name-only` 并与本清单逐项相等"
+discipline, verified after the fact rather than asserted.
