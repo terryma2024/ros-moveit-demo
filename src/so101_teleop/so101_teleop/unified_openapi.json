@@ -3441,6 +3441,70 @@
               "title": "Operation",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
           }
         ],
         "requestBody": {
@@ -3583,6 +3647,72 @@
     "/control/lease": {
       "post": {
         "operationId": "acquire_lease_control_lease_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -3621,6 +3751,72 @@
     "/control/lease/renew": {
       "post": {
         "operationId": "renew_lease_control_lease_renew_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -3659,6 +3855,72 @@
     "/execution/cancel": {
       "post": {
         "operationId": "cancel_execution_cancel_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -3754,6 +4016,72 @@
       },
       "post": {
         "operationId": "start_campaign_expert_validation_campaigns_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -3792,6 +4120,72 @@
     "/expert-validation/campaigns/preflight": {
       "post": {
         "operationId": "preflight_expert_validation_campaigns_preflight_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -3878,6 +4272,70 @@
               "title": "Campaign Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
           }
         ],
         "requestBody": {
@@ -3926,6 +4384,70 @@
             "schema": {
               "title": "Campaign Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
             }
           }
         ],
@@ -3985,6 +4507,72 @@
     "/expert-validation/lease": {
       "post": {
         "operationId": "acquire_lease_expert_validation_lease_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -4031,6 +4619,70 @@
             "schema": {
               "title": "Lease Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
             }
           }
         ],
@@ -4079,6 +4731,70 @@
               "title": "Lease Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
           }
         ],
         "requestBody": {
@@ -4119,6 +4835,72 @@
     "/expert-validation/manifests": {
       "post": {
         "operationId": "create_manifest_expert_validation_manifests_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -4221,6 +5003,70 @@
               "title": "Preset",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
           }
         ],
         "requestBody": {
@@ -4261,6 +5107,72 @@
     "/gazebo/screenshot": {
       "post": {
         "operationId": "screenshot_gazebo_screenshot_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -4299,6 +5211,72 @@
     "/gripper/execute": {
       "post": {
         "operationId": "gripper_gripper_execute_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -4394,6 +5372,70 @@
               "title": "Operation",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
           }
         ],
         "requestBody": {
@@ -4434,6 +5476,72 @@
     "/plan/joints": {
       "post": {
         "operationId": "plan_joints_plan_joints_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -4472,6 +5580,72 @@
     "/plan/tcp": {
       "post": {
         "operationId": "plan_tcp_plan_tcp_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -4518,6 +5692,70 @@
             "schema": {
               "title": "Plan Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
             }
           }
         ],
@@ -4568,6 +5806,70 @@
               "title": "Plan Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
           }
         ],
         "requestBody": {
@@ -4608,6 +5910,72 @@
     "/robot/home": {
       "post": {
         "operationId": "home_robot_home_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -4646,6 +6014,72 @@
     "/scene/repair": {
       "post": {
         "operationId": "scene_repair_scene_repair_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -4684,6 +6118,72 @@
     "/simulation/reset": {
       "post": {
         "operationId": "reset_simulation_simulation_reset_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -4777,6 +6277,72 @@
     "/tasks/captures": {
       "post": {
         "operationId": "capture_tasks_captures_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -4824,6 +6390,70 @@
               "title": "Capture Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
           }
         ],
         "requestBody": {
@@ -4862,6 +6492,72 @@
     "/tasks/environment/shutdown": {
       "post": {
         "operationId": "shutdown_tasks_environment_shutdown_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -4916,6 +6612,72 @@
     "/tasks/reachability": {
       "post": {
         "operationId": "reachability_tasks_reachability_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -4974,6 +6736,72 @@
       },
       "post": {
         "operationId": "start_tasks_runs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -5060,6 +6888,70 @@
               "title": "Run Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
           }
         ],
         "requestBody": {
@@ -5109,6 +7001,70 @@
               "title": "Run Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
           }
         ],
         "requestBody": {
@@ -5157,6 +7113,70 @@
             "schema": {
               "title": "Operation",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
             }
           }
         ],

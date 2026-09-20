@@ -167,3 +167,20 @@ def test_instance_registration_route_requires_a_composed_registry(app):
         response = client.post("/control/instances", json={"domain": "teleop"})
         assert response.status_code == 503
         assert response.json()["code"] == "SERVICE_NOT_COMPOSED"
+
+
+def test_authority_headers_are_part_of_the_generated_contract(app):
+    """The plan requires the authority headers to be generated into the single OpenAPI document,
+    not just read off the raw request."""
+    schema = app.openapi()
+    for path in ("/gripper/execute", "/plan/joints", "/robot/home", "/tasks/runs"):
+        operation = schema["paths"][path]["post"]
+        names = {parameter["name"] for parameter in operation.get("parameters", [])}
+        assert names >= {
+            "X-SO101-Instance-ID",
+            "X-SO101-Instance-Proof",
+            "X-SO101-Channel-Revision",
+            "X-SO101-Execution-Generation",
+        }, (path, names)
+    for name in ("InstanceProofResponse", "QualificationViewResponse"):
+        assert name in schema["components"]["schemas"], name

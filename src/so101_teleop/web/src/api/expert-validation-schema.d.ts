@@ -1659,7 +1659,12 @@ export interface operations {
     start_campaign_expert_validation_campaigns_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1692,7 +1697,12 @@ export interface operations {
     preflight_expert_validation_campaigns_preflight_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1756,7 +1766,12 @@ export interface operations {
     cancel_campaign_expert_validation_campaigns__campaign_id__cancel_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path: {
                 campaign_id: string;
             };
@@ -1791,7 +1806,12 @@ export interface operations {
     retry_campaign_expert_validation_campaigns__campaign_id__full_restart_retries_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path: {
                 campaign_id: string;
             };
@@ -1846,7 +1866,12 @@ export interface operations {
     acquire_lease_expert_validation_lease_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1879,7 +1904,12 @@ export interface operations {
     renew_lease_expert_validation_lease__lease_id__put: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path: {
                 lease_id: string;
             };
@@ -1914,7 +1944,12 @@ export interface operations {
     release_lease_expert_validation_lease__lease_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path: {
                 lease_id: string;
             };
@@ -1949,7 +1984,12 @@ export interface operations {
     create_manifest_expert_validation_manifests_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2064,7 +2104,12 @@ export interface operations {
     capture_tasks_captures_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2097,7 +2142,12 @@ export interface operations {
     rendered_image_tasks_captures__capture_id__rendered_image_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path: {
                 capture_id: string;
             };
@@ -2132,7 +2182,12 @@ export interface operations {
     shutdown_tasks_environment_shutdown_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2185,7 +2240,12 @@ export interface operations {
     reachability_tasks_reachability_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2238,7 +2298,12 @@ export interface operations {
     start_tasks_runs_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2302,7 +2367,12 @@ export interface operations {
     cancel_tasks_runs__run_id__cancel_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -2337,7 +2407,12 @@ export interface operations {
     recovery_tasks_runs__run_id__recovery_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path: {
                 run_id: string;
             };

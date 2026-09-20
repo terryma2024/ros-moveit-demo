@@ -1999,7 +1999,12 @@ export interface operations {
     attachment_attachment__operation__post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path: {
                 operation: string;
             };
@@ -2126,7 +2131,12 @@ export interface operations {
     acquire_lease_control_lease_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2161,7 +2171,12 @@ export interface operations {
     renew_lease_control_lease_renew_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2196,7 +2211,12 @@ export interface operations {
     cancel_execution_cancel_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2282,7 +2302,12 @@ export interface operations {
     start_campaign_expert_validation_campaigns_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2315,7 +2340,12 @@ export interface operations {
     preflight_expert_validation_campaigns_preflight_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2379,7 +2409,12 @@ export interface operations {
     cancel_campaign_expert_validation_campaigns__campaign_id__cancel_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path: {
                 campaign_id: string;
             };
@@ -2414,7 +2449,12 @@ export interface operations {
     retry_campaign_expert_validation_campaigns__campaign_id__full_restart_retries_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path: {
                 campaign_id: string;
             };
@@ -2469,7 +2509,12 @@ export interface operations {
     acquire_lease_expert_validation_lease_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2502,7 +2547,12 @@ export interface operations {
     renew_lease_expert_validation_lease__lease_id__put: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path: {
                 lease_id: string;
             };
@@ -2537,7 +2587,12 @@ export interface operations {
     release_lease_expert_validation_lease__lease_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path: {
                 lease_id: string;
             };
@@ -2572,7 +2627,12 @@ export interface operations {
     create_manifest_expert_validation_manifests_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2656,7 +2716,12 @@ export interface operations {
     camera_preset_gazebo_camera_presets__preset__post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path: {
                 preset: string;
             };
@@ -2693,7 +2758,12 @@ export interface operations {
     screenshot_gazebo_screenshot_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2728,7 +2798,12 @@ export interface operations {
     gripper_gripper_execute_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2823,7 +2898,12 @@ export interface operations {
     parameters_parameters__operation__post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path: {
                 operation: string;
             };
@@ -2860,7 +2940,12 @@ export interface operations {
     plan_joints_plan_joints_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2895,7 +2980,12 @@ export interface operations {
     plan_tcp_plan_tcp_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2930,7 +3020,12 @@ export interface operations {
     execute_plans__plan_id__execute_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path: {
                 plan_id: string;
             };
@@ -2967,7 +3062,12 @@ export interface operations {
     execute_all_plans__plan_id__execute_all_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path: {
                 plan_id: string;
             };
@@ -3004,7 +3104,12 @@ export interface operations {
     home_robot_home_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3039,7 +3144,12 @@ export interface operations {
     scene_repair_scene_repair_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3074,7 +3184,12 @@ export interface operations {
     reset_simulation_simulation_reset_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3160,7 +3275,12 @@ export interface operations {
     capture_tasks_captures_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3193,7 +3313,12 @@ export interface operations {
     rendered_image_tasks_captures__capture_id__rendered_image_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path: {
                 capture_id: string;
             };
@@ -3228,7 +3353,12 @@ export interface operations {
     shutdown_tasks_environment_shutdown_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3281,7 +3411,12 @@ export interface operations {
     reachability_tasks_reachability_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3334,7 +3469,12 @@ export interface operations {
     start_tasks_runs_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3398,7 +3538,12 @@ export interface operations {
     cancel_tasks_runs__run_id__cancel_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -3433,7 +3578,12 @@ export interface operations {
     recovery_tasks_runs__run_id__recovery_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -3468,7 +3618,12 @@ export interface operations {
     workflow_workflow__operation__post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
             path: {
                 operation: string;
             };
