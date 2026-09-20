@@ -29,8 +29,8 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-10
-next_experiment: finish Task 7 (migrate page effects into the runtimes, single execute-all POST, pages consume the provider), then Tasks 8, 9, then Task 11
+latest_checkpoint: CP-11
+next_experiment: Task 9 layouts and shell (no network needed), then Task 11 static CMake dependencies, then retry Task 8 registry access through a node-run CLI or the correct registry URL shape
 ```
 
 ## CP-01: Registration, host probe and deviations
@@ -360,3 +360,47 @@ with one `POST /plans/{id}/execute-all`, and having the three page components an
 `client.ts`/`task-client.ts`/`expert-validation-client.ts`/state stores consume the provider.
 Until that lands the pages keep their current effects and the runtimes only own instance
 authority, subscription and recovery.
+
+## CP-11: Task 7B (single execute-all) done; Task 8 blocked on registry access
+
+**Task 7B** - `TeleopApiClient.executeAll` now sends exactly one
+`POST /plans/{plan_id}/execute-all` carrying the command id, lease, session and gripper
+target, and returns the parent projection; the caller in `app.tsx` records the parent's phase
+instead of two child results and only clears the plan when the parent is COMPLETE. A non-COMPLETE
+parent is never retried with a second POST. `bun run build` exit 0, `NODE_ENV=test bun run test`
+**34 files / 150 tests**. Commit `1933e95c`.
+
+**Task 8 is blocked on the pinned CLI's registry access.** Reproduced twice in the isolated
+preview project `<root>/preset-preview-8f09f448` (created by the plan's own recipe):
+
+```
+cd <root>/preset-preview-8f09f448
+bunx shadcn@4.21.0 init -d --template vite --base radix --preset b311momZs0
+# -> Request to https://ui.shadcn.com/init?...preset=b311momZs0... failed, reason: other side closed
+# same failure with HTTPS_PROXY/HTTP_PROXY=http://127.0.0.1:10809 exported for bun
+```
+
+The package itself resolves (`bunx shadcn@4.21.0 --version` prints `4.21.0`, matching the
+plan's pinned version), and the same URL returns **200 to curl** through the proxy, so this is a
+bun-specific fetch failure for `ui.shadcn.com`, not general network denial. Evidence retained:
+`operator/preset-init.json`, `preset-preview-8f09f448/init.log`, `init-proxy.log`.
+
+What was nevertheless verified and captured for the later Task 8 work:
+
+- The CLI's own request URL independently confirms the decoded preset:
+  `base=radix, style=maia, baseColor=mist, theme=blue, chartColor=mist, iconLibrary=lucide,
+  font=dm-sans, fontHeading=outfit, radius=large, menuAccent=subtle, menuColor=default`.
+- `operator/preset-init.json` holds the real manifest: `name=radix-maia`,
+  `dependencies=["shadcn@latest","class-variance-authority","cn","tw-animate-css","radix-ui","lucide-react"]`,
+  `registryDependencies=["utils","font-dm-sans","font-heading-outfit"]`, and the complete
+  light/dark `cssVars` token sets in oklch plus `css` and `config`.
+- `https://ui.shadcn.com/r/styles/new-york/utils.json` returns 200; `/r/styles/maia/*.json` and
+  the `font-*` items return 404, so the maia/font registry URL shape still has to be determined
+  from the CLI rather than guessed.
+
+Consequences: `design-system.lock.json`, the `src/lib/design-system.test.ts` RED test, the CLI
+`--dry-run --diff` capture and the theme/primitives smart merge are **not** done. Task 11's static
+CMake test also asserts `design-system.lock.json`, so that assertion stays unmet until Task 8
+produces the lock. Next attempt should run the pinned CLI under the repository's own Node
+(`NODE_USE_ENV_PROXY=1 npx -y shadcn@4.21.0 ...`) or discover the correct registry URL shape from
+the CLI source, and must still fail closed rather than substitute `latest`.
