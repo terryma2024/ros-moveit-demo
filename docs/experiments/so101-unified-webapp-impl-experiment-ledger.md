@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-36
+latest_checkpoint: CP-37
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -919,3 +919,20 @@ demanded that "新增追溯 tests ... 追加其真实文件名后才 stage". The
 that forgets registration fail locally instead of only in the C++-free ament run.
 
 Commit follows this entry.
+
+## CP-37: lease renewal moved into the runtime
+
+`DomainRuntime` now owns the renewal heartbeat: `startHeartbeat(intervalMs)`, `stopHeartbeat()`,
+`heartbeatRunning()` and `lastRenewalError`. It is deliberately not tied to any component
+lifecycle - switching pages cannot stop a renewal, and only the root provider's `dispose` ends it.
+Starting it twice does not double the timers, and a failed renewal is recorded rather than retried
+with a new lease generation or routed through the mutation path.
+
+GREEN: `NODE_ENV=test bun run test` **46 files / 192 tests**; `bun run build` exit 0. Two tests use
+fake timers to prove three ticks of renewal happen with no page teardown in between, that
+`dispose` is what stops it, and that a `LEASE_RENEW_FAILED` is recorded with no POST attempt.
+
+This is the runtime half of Task 9's effect migration. The remaining half is mechanical but touches
+live page code (`app.tsx`, `expert-validation-app.tsx`): delete their page-scoped telemetry/renew
+effects and consume the runtime instead, which needs a careful read of both effects before editing
+rather than a quick substitution.
