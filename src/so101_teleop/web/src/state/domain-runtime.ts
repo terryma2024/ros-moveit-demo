@@ -86,6 +86,12 @@ export class DomainRuntime {
    */
   adoptLease(lease: LeaseIdentity | null): void {
     this.leaseValue = lease;
+    // Binding the controller advances the execution generation server-side, so once a lease is
+    // adopted the authority has to present the generation that belongs to it. Leaving the value
+    // `start()` set (0) made every mutation after the acquire fail with STALE_EXECUTION_GENERATION.
+    if (lease !== null && this.authorityValue !== null) {
+      this.authorityValue = { ...this.authorityValue, executionGeneration: lease.generation };
+    }
   }
 
   lease(): LeaseIdentity | null {

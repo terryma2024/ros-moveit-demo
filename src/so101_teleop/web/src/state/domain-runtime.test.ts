@@ -344,3 +344,21 @@ test("accepted snapshots are observable so a page needs no subscription of its o
   expect(seen).toEqual([4, 5]);
   runtime.dispose();
 });
+test("adopting a lease advances the authority generation the server expects", () => {
+  const transport = {
+    register: async () => ({ instance_id: "i", proof: "p", domain: "validation" as const }),
+    connect: async () => ({ instance_id: "i", revision: 1, domain: "validation" as const }),
+    snapshot: async () => ({ sequence: 0, serviceEpoch: "e", executionGeneration: 1, payload: null }),
+    subscribe: () => () => undefined,
+    renew: async () => undefined,
+    setAuthority: () => undefined,
+    post: vi.fn(async () => ({})),
+    close: () => undefined,
+  };
+  const runtime = new DomainRuntime("validation", transport as never);
+  runtime.adoptAuthority({ instanceId: "i", proof: "p", channelRevision: 1, executionGeneration: 0 });
+  runtime.adoptLease({ lease_id: "l", service_session_id: "s", generation: 1, expires_monotonic_ns: 10 ** 15 });
+  // The controller binding advances the generation server-side, so every mutation after the acquire
+  // has to present the lease's generation; starting() set 0 and nothing advanced it.
+  expect(runtime.mutationHeaders()?.executionGeneration).toBe(1);
+});
