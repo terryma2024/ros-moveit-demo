@@ -14003,3 +14003,39 @@ What this does not change: every point still fails at `TERMINAL_CAPTURE_FAILED`,
 **0/5**, `five_batch_stability` is not claimed, and `LINUX_REGRESSION_DEFERRED` stands.
 
 _Ledger source HEAD: (this commit's parent); no evidence deleted._
+
+### CP-UQ288 addendum — MoveIt shadow probe on a live station: the transition works, the CLI's contract does not
+
+`moveit-shadow-03`, on a station this branch owns and which reached `READY` (all three controllers
+active, all three MoveIt services present):
+
+```text
+observe_initial    attached_ids []                     exit 0
+attach             -                                   exit 1  failure_code SCENE_APPLY_FAILED
+observe_attached   attached_ids ["plastic_cup"]        exit 1  failure_code SCENE_READBACK_MISMATCH
+detach             attached_ids []                     exit 0
+observe_detached   attached_ids []                     exit 0
+```
+
+Three facts, kept separate:
+
+1. **the shadow transition is real**: the planning scene reports no attachment, then `plastic_cup`,
+   then nothing again - attach and detach do change MoveIt's planning state on a live station;
+2. **the CLI's own contract is not satisfied**: `attach` exits 1 with `SCENE_APPLY_FAILED` and the
+   readback that follows exits 1 with `SCENE_READBACK_MISMATCH`, while `attached_links` stays empty
+   throughout (only `attached_ids` changes). Whatever the mismatch compares, it is not satisfied by
+   this attach;
+3. **why is unestablished** - I have not read `scene_setup`'s apply/readback predicates, and I am not
+   going to guess at them in the ledger.
+
+Two harness mistakes were mine on the way, both worth naming because both were the guard doing its job:
+the first probe bypassed `station_environment` and the station never activated its controllers
+(CP-UQ261's failure mode reproduced by omitting the very guard written for it), and the second used the
+pytest gate runner, which does not source the station install, so `mujoco_ros2_control` was absent. The
+probe now runs through a dedicated `run-with-station-env.sh` - the same validated chain the campaign
+uses.
+
+Scope: this is **standalone** shadow evidence, not per-batch shadow evidence; the plan asks for the
+latter and it remains tied to a counted batch. Task 14 stays 0/5 and `LINUX_REGRESSION_DEFERRED` stands.
+
+_Ledger source HEAD: `71f64a90`; no evidence deleted._
