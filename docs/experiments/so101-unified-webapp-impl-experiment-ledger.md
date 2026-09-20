@@ -5157,3 +5157,37 @@ retry contract and authority behaviour) - and the two live items that remain, th
 service and its single-point `FULL_RESTART_RETRY`, are blocked by the service's execution path not
 supporting the macOS document. Closing that is implementing a runner path that exists in the CLI, and it is
 Stage C work.
+
+## CP-157: the remaining §7 item is scoped, and it is a control-plane feature
+
+CP-156 ended on `CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION`: the service hands its runner the macOS v4
+document and the v3-era runner refuses it. What closes that is not another acceptance fix, and the size is
+visible in two counts:
+
+```text
+service supervisor (expert_validation/supervisor.py)   references to the v3 control plane
+  SO101_FIXED_CONTROL_* / control_binding / control_socket                          9
+macOS campaign CLI (cli/macos_w2_campaign.py)          references to that same protocol
+                                                                                    0
+```
+
+The macOS runner reports its progress through its **own** documents under its own evidence root
+(`{"status": "PENDING"}`, then `REFUSED` / `COMPOSED_ONLY` / `RUNNING`, with a
+`campaign-result.json` and per-point artifacts), and it does not speak the control socket the service uses to
+track a v3 campaign. So running a macOS campaign from the service needs one of two integrations - teach the
+W2 CLI the control protocol, or teach the service to follow a W2 child through its evidence documents - and
+either one has real design surface in the campaign's process model. That is the honest reason the last row is
+Stage C / live-runtime work, and it is the same boundary CP-110 recorded in general terms ("macOS validation
+through the unified service is not a supported combination today"), now with the mechanism named.
+
+**Suites re-confirmed at the end of this stretch:** the unified selection is **148 passed** and the frontend
+suite is green (46 files / 206 tests) after the guard fix, the interpreter fix and the client fixes.
+
+**One more instrument note, because this is the fifth of its kind.** Two greps in the middle of CP-157's
+sourcing failed with "No such file or directory" for files that plainly exist, and the reason was my own
+harness: the gate helpers (`pyrgate`, `buntest`) `cd` the shell, so a relative path in a later command in the
+same invocation resolves from wherever the last helper left it. Absolute paths and `grep -c` on full paths
+fixed it. The catalogue of my own tools that answered wrongly now reads: a test that could not fail, `[ -f
+<dir> ]` skipping an overlay, `pgrep -af` flooding and mismatching, `pgrep -fc` reporting zero for live
+processes, and helpers that move the shell. Every one of them was caught by asking whether the answer made
+sense rather than by trusting it, and every fix was a differently-shaped check.
