@@ -1,6 +1,6 @@
 {
   "base": "radix",
-  "blocked_reason": "PENDING_REGISTRY_ITEMS: the pinned CLI cannot fetch ui.shadcn.com in this environment (bun and node both report 'other side closed' while curl receives 200), and every probed maia registry URL shape returns 404, so the per-component items, the self-hosted font files and their licenses are not captured yet.",
+  "blocked_reason": "PENDING_PRODUCT_MERGE: the preset manifest and all 18 radix-maia registry items (utils, the two font items and every listed primitive) are captured with verified sha256 hashes, but the token/primitives smart merge into this Tailwind 3.4.17 project and the self-hosted font files have not been applied yet.",
   "bun": "1.3.14",
   "cli": {
     "package": "shadcn",
@@ -19,7 +19,26 @@
     "style": "maia",
     "theme": "blue"
   },
-  "fonts": [],
+  "fonts": [
+    {
+      "family": "'DM Sans Variable', sans-serif",
+      "file": null,
+      "item": "font-dm-sans",
+      "license": null,
+      "provider": "google",
+      "sha256": "8de4f05edcc2f2790474f55e660360e29fc1eebe479ba12e349c3b413cda269f",
+      "source_url": "DM_Sans"
+    },
+    {
+      "family": "'Outfit Variable', sans-serif",
+      "file": null,
+      "item": "font-heading-outfit",
+      "license": null,
+      "provider": "google",
+      "sha256": "6701689cce06ad34ae8132afd92af10f40d8d2e389b6a6f895819fd8631054d7",
+      "source_url": "Outfit"
+    }
+  ],
   "node": "25.9.0",
   "preset": "b311momZs0",
   "registry": [
@@ -45,6 +64,221 @@
       "sha256": "242969b2ed2d4ced3c35fdbc07605fd47758b3893f00f972f5af98df322a60df",
       "type": "registry:base",
       "url": "https://ui.shadcn.com/init?base=radix&style=maia&baseColor=mist&theme=blue&iconLibrary=lucide&font=dm-sans&rtl=false&menuAccent=subtle&menuColor=default&radius=large&chartColor=mist&fontHeading=outfit&preset=b311momZs0&template=vite&track=1"
+    },
+    {
+      "name": "alert-dialog",
+      "package_versions": {
+        "dependencies": [
+          "cn"
+        ],
+        "registryDependencies": [
+          "button"
+        ]
+      },
+      "sha256": "dbf5c02c7ceb70d7e862adcc8e4e95a64ff5d963cd33643a535a20ae68b73547",
+      "type": "registry:ui",
+      "url": "https://ui.shadcn.com/r/styles/radix-maia/alert-dialog.json"
+    },
+    {
+      "name": "badge",
+      "package_versions": {
+        "dependencies": [
+          "cn"
+        ],
+        "registryDependencies": []
+      },
+      "sha256": "438132df20760299a6feacf5c0be1a02ee5977d144909f1b6546a847336827db",
+      "type": "registry:ui",
+      "url": "https://ui.shadcn.com/r/styles/radix-maia/badge.json"
+    },
+    {
+      "name": "button",
+      "package_versions": {
+        "dependencies": [
+          "cn"
+        ],
+        "registryDependencies": []
+      },
+      "sha256": "4e998ded2b303c117ad6f6366fc98b7aaf6c780f638ed1d999d6138e510cff0e",
+      "type": "registry:ui",
+      "url": "https://ui.shadcn.com/r/styles/radix-maia/button.json"
+    },
+    {
+      "name": "card",
+      "package_versions": {
+        "dependencies": [
+          "cn"
+        ],
+        "registryDependencies": []
+      },
+      "sha256": "bffaa74e7b801056c5e545868eb27b031e2792054864b283fa96f238fcc32965",
+      "type": "registry:ui",
+      "url": "https://ui.shadcn.com/r/styles/radix-maia/card.json"
+    },
+    {
+      "name": "field",
+      "package_versions": {
+        "dependencies": [
+          "cn"
+        ],
+        "registryDependencies": [
+          "label",
+          "separator"
+        ]
+      },
+      "sha256": "3d9d362c6408369cae62443a5e0c92c90e0e8ddd291aceed8916c786c3fe526f",
+      "type": "registry:ui",
+      "url": "https://ui.shadcn.com/r/styles/radix-maia/field.json"
+    },
+    {
+      "name": "font-dm-sans",
+      "package_versions": {
+        "dependencies": [],
+        "registryDependencies": []
+      },
+      "sha256": "8de4f05edcc2f2790474f55e660360e29fc1eebe479ba12e349c3b413cda269f",
+      "type": "registry:font",
+      "url": "https://ui.shadcn.com/r/styles/radix-maia/font-dm-sans.json"
+    },
+    {
+      "name": "font-heading-outfit",
+      "package_versions": {
+        "dependencies": [],
+        "registryDependencies": []
+      },
+      "sha256": "6701689cce06ad34ae8132afd92af10f40d8d2e389b6a6f895819fd8631054d7",
+      "type": "registry:font",
+      "url": "https://ui.shadcn.com/r/styles/radix-maia/font-heading-outfit.json"
+    },
+    {
+      "name": "input",
+      "package_versions": {
+        "dependencies": [
+          "cn"
+        ],
+        "registryDependencies": []
+      },
+      "sha256": "c4e47a619c19c8ec0b564b83a814cf330ca27ab79c534b71b89e780544d0410f",
+      "type": "registry:ui",
+      "url": "https://ui.shadcn.com/r/styles/radix-maia/input.json"
+    },
+    {
+      "name": "label",
+      "package_versions": {
+        "dependencies": [
+          "cn"
+        ],
+        "registryDependencies": []
+      },
+      "sha256": "c41f883505dac0d7e3bccc9ccf24025ecd6dfb6b97b355d81c7652140c811893",
+      "type": "registry:ui",
+      "url": "https://ui.shadcn.com/r/styles/radix-maia/label.json"
+    },
+    {
+      "name": "scroll-area",
+      "package_versions": {
+        "dependencies": [
+          "cn"
+        ],
+        "registryDependencies": []
+      },
+      "sha256": "93d9153a95e4bdce8cb8e7ceb4cfed5133ba33757e96db787ab78538230ac789",
+      "type": "registry:ui",
+      "url": "https://ui.shadcn.com/r/styles/radix-maia/scroll-area.json"
+    },
+    {
+      "name": "select",
+      "package_versions": {
+        "dependencies": [
+          "cn"
+        ],
+        "registryDependencies": []
+      },
+      "sha256": "c72bbd5802e90c557190789be71baeddf665d46dbe5f557d4fd9dbf41fa36852",
+      "type": "registry:ui",
+      "url": "https://ui.shadcn.com/r/styles/radix-maia/select.json"
+    },
+    {
+      "name": "separator",
+      "package_versions": {
+        "dependencies": [
+          "cn"
+        ],
+        "registryDependencies": []
+      },
+      "sha256": "0a29ef104317f86bc53a162504a393c5de3e27933cb73973885f4f69a96073b6",
+      "type": "registry:ui",
+      "url": "https://ui.shadcn.com/r/styles/radix-maia/separator.json"
+    },
+    {
+      "name": "sheet",
+      "package_versions": {
+        "dependencies": [
+          "cn"
+        ],
+        "registryDependencies": [
+          "button"
+        ]
+      },
+      "sha256": "e9c1243a0bb211f9523c41914ec8ccdd1e2aa7fca621b6af15c04dbff69a2e65",
+      "type": "registry:ui",
+      "url": "https://ui.shadcn.com/r/styles/radix-maia/sheet.json"
+    },
+    {
+      "name": "sidebar",
+      "package_versions": {
+        "dependencies": [
+          "cn"
+        ],
+        "registryDependencies": [
+          "button",
+          "separator",
+          "sheet",
+          "tooltip",
+          "input",
+          "use-mobile",
+          "skeleton"
+        ]
+      },
+      "sha256": "91a089a9e6d2a7ef8d8de4bf4cf94e4923725b527d9384218206a6e8e1e2426b",
+      "type": "registry:ui",
+      "url": "https://ui.shadcn.com/r/styles/radix-maia/sidebar.json"
+    },
+    {
+      "name": "tabs",
+      "package_versions": {
+        "dependencies": [
+          "cn"
+        ],
+        "registryDependencies": []
+      },
+      "sha256": "204bb4e7597b0862a811e2c3ed4fd994171dcd133caa1e4a9143afb88525ced1",
+      "type": "registry:ui",
+      "url": "https://ui.shadcn.com/r/styles/radix-maia/tabs.json"
+    },
+    {
+      "name": "tooltip",
+      "package_versions": {
+        "dependencies": [
+          "cn"
+        ],
+        "registryDependencies": []
+      },
+      "sha256": "6edb4cf96819cc813c6d2a7e6399f15747709bf010d879d5fde12e1f4eca6e56",
+      "type": "registry:ui",
+      "url": "https://ui.shadcn.com/r/styles/radix-maia/tooltip.json"
+    },
+    {
+      "name": "utils",
+      "package_versions": {
+        "dependencies": [
+          "cn"
+        ],
+        "registryDependencies": []
+      },
+      "sha256": "2ffb7ba744ca7ad534dc33a6fe7431320d4b1c4b57b8150320e0d000d4f83368",
+      "type": "registry:lib",
+      "url": "https://ui.shadcn.com/r/styles/radix-maia/utils.json"
     }
   ],
   "schema_version": 1,
