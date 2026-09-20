@@ -1254,6 +1254,8 @@ export interface components {
         };
         /** LeaseResponse */
         LeaseResponse: {
+            /** Execution Generation */
+            execution_generation?: number | null;
             /** Expires Monotonic Ns */
             expires_monotonic_ns: number;
             /** Generation */
