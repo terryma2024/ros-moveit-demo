@@ -5684,3 +5684,78 @@ remaining work is:
 
 No part of 1-5 is implemented in this round. Recording it here so the next step starts from a measured
 constraint rather than from the dispatch's assumption.
+
+### CP-163 correction - the baseline gate I cited does not exist
+
+CP-163 compared this tree's expert-validation failures against "gate `1cbe68b6` (baseline)". **No such
+gate directory exists.** I wrote that id from memory instead of reading it back, which is exactly the
+kind of citation a ledger must not contain. The real baseline runs are
+`87941f8f9723419aa6234a1b77aea329` (round 40: detached worktree of the base commit `5b8d1231`, same
+interpreter, same ROS-sourced environment) and the pre-round-40 `09c06a8758214575aa5dcd5d30b0fce7`.
+
+The numeric comparison in CP-163 was also not like-for-like, and the junit XMLs show why: on the
+baseline the two service-side modules failed to **collect** at all (59 cases collected, 21 of them the
+demo file), so "8 failed / 48 passed" and "5 failed / 72 passed" describe different collections. What
+survives, and is what the conclusion actually rested on:
+
+- every failing test *name* this tree reports also fails on the baseline run (`test_live_fixed_supervisor...`
+  both parametrisations, `test_missing_fixed_channel_preserves_child_and_durably_fences_recovery`,
+  `test_cancel_command_replays_durably_and_conflicting_target_never_contacts_owner` both
+  parametrisations, and the two control tests);
+- the causes are structural host properties, read in the source rather than inferred:
+  `operator_recovery.py:52` raises `RECOVERY_PROC_UNAVAILABLE` when `/proc` is not a directory, and a
+  control socket whose path exceeds `sun_path` cannot be bound or addressed on Darwin at all.
+
+Two of those five control tests are now **fixed** rather than pre-existing, by the change below.
+
+## CP-168: the service's control path is portable, and a real coordinator answers a cancel on macOS
+
+Round 2 of dispatch 6954bbb9's second task. Before any campaign could be driven by the service, three
+places on the control path turned out to be Linux-only - the same family as the identity reader, and
+each one a hard stop on this host.
+
+**1. The client could not connect.** `expert_validation/control.py` addressed its peer only through
+`/proc/self/fd/<dirfd>/<name>`, which pins the parent directory on Linux and does not exist on Darwin
+(no `connectat`, and `/dev/fd/<dirfd>/<name>` is `ENOENT` - the demo package recorded that probe as
+CP-UQ226). `_resolve_connect_target` now keeps the Linux indirection where it exists and otherwise
+addresses the socket by its own path, after the same directory-mode and socket-mode checks, and refuses
+a path that does not fit `sun_path` **by name** (`COORDINATOR_SOCKET_PATH_TOO_LONG`) instead of
+truncating into whichever socket happens to sit at the truncated path. The check runs before anything is
+opened, so the refusal is about addressability rather than about what is or is not there.
+
+**2. The server could not bind.** `parallel_batch/web_control.py` bound through the same `/proc`
+indirection (`:82`), so a real coordinator could not create its endpoint here at all. It now binds by
+its own path on Darwin (`_bind_target`, same refusal code), keeping the fd form on Linux.
+
+**3. The peer-uid check could not run.** The server read Linux's `SO_PEERCRED`. `socket.SO_PEERCRED`
+does not exist on this host at all, so the check raised and every connection was dropped - which is why
+the client saw `PARTIAL_FRAME` with a socket that was bound and listening. A probe on this host settled
+the replacement: `getsockopt(SOL_LOCAL, LOCAL_PEERCRED, 76)` returns 76 bytes of `xucred` with
+`cr_version` 0 at offset 0 and `cr_uid` at offset 4 (matching `os.getuid()`). `_peer_uid` now implements
+both platforms, validates the Darwin version field, and **refuses** on a platform it does not know
+(`CONTROL_PEER_UID_UNSUPPORTED`) rather than skipping the check.
+
+**A measurement that shaped the tests:** under the registered evidence root, a socket nested two levels
+deep (`<base>/so101upstream-<pid>-0/control/control.sock`) is **106** bytes against Darwin's 104, so
+even a "short" root fails if it is nested. The portable tests therefore bind directly inside a short
+root with a short name, which is also the shape any real macOS control endpoint will need.
+
+RED, then GREEN, on the control suite:
+
+| test | before | after |
+| --- | --- | --- |
+| `test_real_control_transport_works_from_a_short_private_directory` (new) | failed, `COORDINATOR_SOCKET_DISCONNECTED` | **passes** |
+| `test_real_client_cancel_reaches_the_upstream_durable_coordinator` | failed, `FileNotFoundError` at `web_control.py:82` | **passes** |
+| `test_real_control_transport_preserves_a_long_private_batch_socket` | failed (Linux-only by construction) | **skipped** on Darwin with the reason and the refusal test that replaces it |
+| whole file | `3 failed, 19 passed` | **21 passed, 1 skipped**, exit 0 (gate `a01d4aa30a9d41f39cbe3f6ad687120e`) |
+
+The second row is the substantive one: a **real `BatchCoordinator` with a real durable journal, a real
+`FixedCoordinatorControlServer`, and the service's own client** now complete a cancel round trip on this
+host, and the test still asserts what it always asserted - `state STOPPING`, `batch_cleanup_complete
+False`, `WEB_CANCEL_REQUESTED` durable, both leases refused, exactly one `BATCH_STOPPING` in the journal.
+
+**Not fixed, and not mine to fix here:** the demo package's own `test_parallel_batch_web_control.py`
+reports 21 failures on the baseline and the same 21 after this change (identical test ids; verified from
+the junit XMLs of gates `87941f8f` and `23ff4b00404f4c9e9894952483a27356`). They bind sockets under
+`pytest`'s long `tmp_path`, which is exactly the >104-byte case this platform cannot address; the server
+itself is proven usable here by the teleop-side test above.

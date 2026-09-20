@@ -6,8 +6,10 @@ from dataclasses import dataclass
 import hashlib
 import json
 import os
+from pathlib import Path
 import socket
 import stat
+import sys
 from typing import Callable, Literal, Mapping
 
 from .coordinator import CoordinatorBinding
@@ -32,6 +34,16 @@ _REPLY_FIELDS = _REQUEST_FIELDS | {
     "assigned_ros_domains_clear",
     "cleanup_receipt_sha256",
 }
+
+
+#: ``sun_path`` capacity in bytes, including the terminating NUL: 104 on Darwin (probed on this
+#: host: 103 binds, 104 fails with "AF_UNIX path too long"), 108 on Linux.
+_SUN_PATH_CAPACITY_BYTES = 104 if sys.platform == "darwin" else 108
+
+#: The Linux indirection that pins a socket's parent directory and addresses paths longer than
+#: ``sun_path``. Darwin has no ``connectat`` and no usable ``/dev/fd/<dirfd>`` entry, so it cannot
+#: be used there at all.
+_PROC_FD_DIRECTORY = Path("/proc/self/fd")
 
 
 class ControlProtocolError(RuntimeError):
@@ -108,6 +120,21 @@ class BatchCleanupAuthorization:
     owned_descendants_gone: bool
     assigned_ros_domains_clear: bool
     receipt_sha256: str
+
+
+def _resolve_connect_target(socket_path: Path) -> str | None:
+    """The path to connect to directly, or ``None`` to use the Linux ``/proc/self/fd`` indirection.
+
+    Linux keeps that indirection, which pins the parent directory and reaches a path longer than
+    ``sun_path``. Darwin must address the socket by its own path, so a path that does not fit is
+    refused *by name*, before anything is contacted: truncating or guessing would connect to whichever
+    socket happens to sit at the truncated path.
+    """
+    if _PROC_FD_DIRECTORY.is_dir():
+        return None
+    if len(os.fsencode(socket_path)) >= _SUN_PATH_CAPACITY_BYTES:
+        raise ControlProtocolError("COORDINATOR_SOCKET_PATH_TOO_LONG")
+    return str(socket_path)
 
 
 def _recv_exact(peer: socket.socket, length: int) -> bytes:
@@ -214,6 +241,9 @@ class CoordinatorControlClient:
     ) -> dict:
         wire = {**request, "control_token": binding.control_token}
         frame = encode_frame(wire, max_frame_bytes=self._max_frame_bytes)
+        # Addressability is a property of this platform and this path, so it is settled before
+        # anything is opened or contacted.
+        direct_target = _resolve_connect_target(binding.control_socket)
         try:
             parent_fd = os.open(
                 binding.control_socket.parent,
@@ -237,9 +267,13 @@ class CoordinatorControlClient:
                 raise ControlProtocolError("COORDINATOR_SOCKET_MODE")
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
                 peer.settimeout(timeout_s)
-                # Pin the actual bound parent, as upstream parallel IPC does.
-                # The socket remains inside batch_root even beyond sun_path.
-                peer.connect(f"/proc/self/fd/{parent_fd}/{binding.control_socket.name}")
+                # Pin the actual bound parent where the platform allows it, as upstream parallel
+                # IPC does; otherwise address the socket by its own path after the mode checks.
+                peer.connect(
+                    f"{_PROC_FD_DIRECTORY}/{parent_fd}/{binding.control_socket.name}"
+                    if direct_target is None
+                    else direct_target
+                )
                 peer.sendall(frame)
                 # The upstream frame reader checks EOF for a one-request frame.
                 peer.shutdown(socket.SHUT_WR)
