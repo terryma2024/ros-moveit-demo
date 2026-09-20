@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-26
+latest_checkpoint: CP-27
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -730,3 +730,20 @@ Remaining in Task 8: the same port for the other captured primitives - `label` (
 builds on `radix-ui`, a dependency this project does not yet have, so it needs either that
 dependency or a dependency-free equivalent), `select`, `field`, `sheet` and `sidebar`. Each needs
 the same explicit v3 conversion the input just had; guessing them in bulk would be the wrong move.
+
+## CP-27: the label primitive is ported without widening the dependency closure
+
+`src/components/ui/label.tsx` ports the captured `radix-maia` label. The registry imports the
+`radix-ui` umbrella package; this project already depends on the scoped `@radix-ui/react-label`
+(confirmed present in `node_modules`), so the primitive is behaviourally identical while the
+import stays inside the existing closure - no new dependency, and `package.json`/`bun.lock` are
+untouched. Classes are kept as the registry writes them (`data-slot`, `text-sm`, `font-medium`,
+`select-none`, the `group-data-[disabled=true]:` and `peer-disabled:` pairs).
+
+GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` **42 files / 184 tests**; commit gated
+on the suite. The tests assert the data slot and `htmlFor` binding, that clicking the label focuses
+its control, and that the disabled selector is preserved.
+
+Remaining in Task 8: `select`, `field`, `sheet` and `sidebar`, each needing the explicit v4-to-v3
+conversion. `sheet` and `sidebar` are the largest and pull in portal/sidebar machinery, so they
+should be taken one at a time with their own behaviour tests rather than in bulk.
