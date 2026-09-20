@@ -2001,3 +2001,19 @@ Retained evidence (deletion candidates, nothing deleted): the registered root
 `operator/`, `registry/`, `build-FV6UHHX5`, `web-fixture-1789891339`, `ctest-tmp-1SlpBurM`,
 `preset-preview-8f09f448`, `release-n5JyZLog`, `release2-Q3EIoiMD` and the `pytest-*`/`bun-*`
 invocation directories.
+
+## CP-88: undeclared Radix dependencies in the ported primitives, now declared
+
+Auditing the Radix closure the way the plan asks ("删除未使用 legacyRadix package 仅在逐组件 imports
+确认之后") turned up the opposite problem: **no** unused Radix package, but several **undeclared** ones.
+`input.tsx`, `label.tsx`, `select.tsx` and `sheet.tsx` import `@radix-ui/react-label`,
+`@radix-ui/react-select` and `@radix-ui/react-dialog`, which worked only because they are hoisted
+transitively through the `radix-ui` umbrella - a fragile arrangement that a lockfile update or a
+hoisting change could break without any source edit.
+
+Fixed by declaring them at the versions the tree actually resolved:
+`@radix-ui/react-label 2.1.15`, `@radix-ui/react-select 2.3.7`, `@radix-ui/react-dialog 1.1.6`. Then
+`bun install` (lockfile updated), `bun run build` exit 0, `NODE_ENV=test bun run test` green.
+
+That closes the plan's dependency-closure item for the primitives this task ported: the imports they use
+are now part of the declared, locked closure rather than an accident of hoisting.
