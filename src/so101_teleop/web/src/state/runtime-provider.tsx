@@ -38,10 +38,16 @@ export function RuntimeProvider({
   children,
   teleop = null,
   validation = null,
+  heartbeatMs,
 }: {
   children: ReactNode;
   teleop?: DomainRuntime | null;
   validation?: DomainRuntime | null;
+  /**
+   * Renewal cadence for both domains. The heartbeat belongs to the runtime, so a page switch never
+   * stops it and only this provider unmounting does.
+   */
+  heartbeatMs?: number;
 }) {
   const [notices, setNotices] = useState<string[]>([]);
   const [registered, setRegistered] = useState<{ teleop: DomainRuntime | null; validation: DomainRuntime | null }>({
@@ -55,16 +61,21 @@ export function RuntimeProvider({
     for (const runtime of [teleop, validation]) {
       if (!runtime) continue;
       started.push(runtime);
-      void runtime.start().catch((error: unknown) => {
-        setNotices((current) => [...current, `DOMAIN_UNAVAILABLE: ${String(error)}`]);
-      });
+      void runtime
+        .start()
+        .then(() => {
+          if (heartbeatMs !== undefined) runtime.startHeartbeat(heartbeatMs);
+        })
+        .catch((error: unknown) => {
+          setNotices((current) => [...current, `DOMAIN_UNAVAILABLE: ${String(error)}`]);
+        });
     }
     return () => {
       // The provider owns the runtimes for the whole app, so disposal happens only when the
       // provider itself unmounts — never on a page switch.
       for (const runtime of started) runtime.dispose();
     };
-  }, [teleop, validation]);
+  }, [teleop, validation, heartbeatMs]);
 
   const value = useMemo<RuntimeRegistry>(
     () => ({
