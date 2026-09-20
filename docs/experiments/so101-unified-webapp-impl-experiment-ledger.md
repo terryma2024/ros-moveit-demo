@@ -2201,3 +2201,33 @@ mutation without headers     CONTROLLER_INSTANCE_REQUIRED
 That is the plan's L2 "单服务与路由" row: one listener, the installed bundle served, direct navigation
 to each page working, and API/artifact namespaces excluded from the SPA fallback - all from an
 installed copied prefix rather than a dev server.
+
+## CP-96: first real browser measurement - the phone teleop page overflows by 12 px
+
+With CP-95 serving the installed copied prefix, the plan's viewport acceptance was measured in a real
+browser (system Chrome via Playwright, evidence root `installed-visual-7qWJSsGi` with
+`desktop.png`/`phone.png`):
+
+| viewport | path | horizontal overflow |
+| --- | --- | --- |
+| 1400x900 | `/` | 0 |
+| 1400x900 | `/tasks` | 0 |
+| 1400x900 | `/expert-validation` | 0 |
+| 390x844 | `/` | **12 px** |
+| 390x844 | `/tasks` | 0 |
+| 390x844 | `/expert-validation` | 0 |
+
+Every page renders (`#root` has children) and the desktop viewport is clean, but the teleop page
+**fails the plan's "两个指定视口无页面水平溢出" requirement at 390x844** by 12 px. This is a real,
+measured acceptance gap, recorded rather than papered over.
+
+Likely cause, from the CSS contract rather than guesswork: `unified-layout.css` provides
+`.teleop-joint-table { max-width: 100%; overflow-x: auto }` and `.unified-main { min-width: 0 }` for
+exactly this, but the teleop page's own markup has not been moved onto those classes - Task 9's layout
+work covered the shell, the validation grid and the map, while the teleop page's dense content (joint
+table, wide rows) still lays out with its own classes. Wrapping that content in `.teleop-joint-table`
+inside the `min-width: 0` main column is the fix direction.
+
+**Deliberately not done:** clamping overflow with `overflow-x: hidden` on the shell. The plan forbids
+removing overflow by clipping ("不靠裁剪/拉伸消除消除"), so masking the 12 px would trade a visible defect
+for a hidden one.
