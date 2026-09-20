@@ -2,6 +2,7 @@ import type { Capabilities, ExecutionMode } from "@/api/expert-validation-types"
 import { workerOption, type QualificationView } from "@/api/qualification-view";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export type SetupState = {
   pointCount: number;
@@ -66,10 +67,10 @@ export function CampaignSetup({
   return (
     <section aria-label="Campaign setup" className="space-y-3 rounded-lg border border-border bg-card p-4 text-card-foreground">
       <h2 className="text-lg font-semibold">Campaign setup</h2>
-      <label className="block">Catalog seed
+      <Label className="block">Catalog seed
         <Input aria-label="Catalog seed" readOnly value="20260911" className="ml-2 w-auto" />
-      </label>
-      <label className="block">Final point count
+      </Label>
+      <Label className="block">Final point count
         <Input
           aria-label="Final point count"
           type="number"
@@ -79,8 +80,8 @@ export function CampaignSetup({
           onChange={(event) => onChange({ ...state, pointCount: Number(event.target.value) }, "pointCount")}
           className="ml-2 w-20 bg-muted px-2"
         />
-      </label>
-      <label className="block">Execution mode
+      </Label>
+      <Label className="block">Execution mode
         <select
           aria-label="Execution mode"
           value={state.executionMode}
@@ -98,10 +99,10 @@ export function CampaignSetup({
             <option key={mode} value={mode}>{mode}</option>
           ))}
         </select>
-      </label>
+      </Label>
       {!adaptive ? (
         <>
-          <label className="block">Worker count
+          <Label className="block">Worker count
             <select
               aria-label="Worker count"
               value={state.workerCount}
@@ -126,7 +127,7 @@ export function CampaignSetup({
                 </option>
               ))}
             </select>
-          </label>
+          </Label>
           <p>共享队列 · 每 worker 一次一任务</p>
           <p aria-live="polite">
             {availability
