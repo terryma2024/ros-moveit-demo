@@ -107,6 +107,23 @@ class InstanceRegistry:
         record.connected = True
         return ChannelBinding(instance_id=instance_id, revision=record.revision, domain=record.domain)
 
+    def acquire_binding(self, instance_id: str, proof: str, *, channel_revision: int) -> ChannelBinding:
+        """Resolve the live channel of an instance that is asking to become the controller.
+
+        Design section 5.1: registration grants no control, and the acquire path validates the
+        instance's live channel before the domain controller is bound to it. Nothing here claims
+        the controller; the caller does that once the domain lease exists.
+        """
+
+        record = self._require_instance(instance_id)
+        if not secrets.compare_digest(_digest(proof), record.proof_hash):
+            raise MutationError(f"INSTANCE_PROOF_MISMATCH: {instance_id}")
+        binding = ChannelBinding(
+            instance_id=instance_id, revision=channel_revision, domain=record.domain
+        )
+        self._require_live(binding)
+        return binding
+
     def disconnect(self, binding: ChannelBinding) -> None:
         record = self._instances.get(binding.instance_id)
         if record is None or record.revision != binding.revision:
