@@ -8,6 +8,7 @@
  */
 import {
   InstanceClient,
+  authorityHeaders,
   type ChannelBinding,
   type ControllerAuthority,
   type DomainName,
@@ -60,6 +61,9 @@ export function createHttpTransport(
   const endpoints = options.endpoints ?? DOMAIN_ENDPOINTS[domain];
   let socket: WebSocket | null = null;
   let epoch = "unknown";
+  // The server checks instance authority on renewal, so the transport has to hold the authority the
+  // runtime adopted; without it a renewal is refused with CONTROLLER_INSTANCE_REQUIRED.
+  let authority: ControllerAuthority | null = null;
 
   return {
     register: (name: DomainName): Promise<InstanceProof> => client.register(name),
@@ -107,10 +111,16 @@ export function createHttpTransport(
         socket = null;
       };
     },
+    setAuthority(next: ControllerAuthority | null): void {
+      authority = next;
+    },
     async renew(): Promise<void> {
       const response = await fetchImpl(`${baseUrl}${endpoints.renewPath}`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...(authority ? authorityHeaders(authority) : {}),
+        },
         body: JSON.stringify(endpoints.renewBody),
       });
       if (!response.ok) throw new Error(`LEASE_RENEW_FAILED: ${response.status}`);
