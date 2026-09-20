@@ -14,7 +14,7 @@ import sys
 import time
 
 from .adaptive import AdaptiveStartRequest
-from .coordinator import CoordinatorStartRequest
+from .coordinator import CONTROL_SOCKET_ROOT, CoordinatorStartRequest
 from .control import ControlProtocolError, CoordinatorControlClient
 from .coordinator_events import (
     AcceptedCoordinatorCursor,
@@ -59,6 +59,31 @@ FIXED_COORDINATOR_FLAGS = (
     "--point-id",
     "--provenance-binding",
 )
+
+
+#: Darwin's ``sun_path`` is 104 bytes including the terminating NUL, and it has no ``bindat``/``connectat``
+#: indirection to reach a longer path. A batch root under a validation evidence root is far longer than
+#: that, so the endpoint cannot live inside it there. The canonical root itself lives in the contract
+#: module, so the composer and the validator cannot disagree about where an endpoint may be.
+_DARWIN_SUN_PATH_BYTES = 104
+
+
+def control_socket_path(batch_root: Path, campaign_id: str) -> Path:
+    """Where the launched coordinator's control endpoint lives on this platform.
+
+    Linux keeps it inside the batch root: the client pins the parent directory through
+    ``/proc/self/fd``, so the path may exceed ``sun_path``. Darwin cannot address such a path at all -
+    the first live macOS launch of a service-driven campaign died binding
+    ``<evidence>/campaigns/<campaign>/<batch>/control/control.sock``, which is 200 bytes - so the
+    endpoint lives in a short canonical private directory instead. The directory is created privately
+    by the endpoint, which verifies ownership and mode before it binds.
+    """
+    if sys.platform == "darwin":
+        candidate = CONTROL_SOCKET_ROOT / f"{campaign_id}-{Path(batch_root).name}.sock"
+        if len(os.fsencode(candidate)) >= _DARWIN_SUN_PATH_BYTES:  # pragma: no cover - defensive
+            raise ValueError("CONTROL_SOCKET_PATH_TOO_LONG")
+        return candidate
+    return Path(batch_root) / "control" / "control.sock"
 
 
 def fixed_coordinator_argv(
@@ -234,7 +259,7 @@ class ExpertValidationSupervisor:
             )
             token = secrets.token_hex(32)
             token_sha = hashlib.sha256(token.encode("utf-8")).hexdigest()
-            control_socket = batch_root / "control" / "control.sock"
+            control_socket = control_socket_path(batch_root, request.campaign_id)
             environment.update({
                 "SO101_FIXED_CONTROL_TOKEN": token,
                 "SO101_FIXED_CONTROL_CAMPAIGN_ID": request.campaign_id,

@@ -5856,3 +5856,65 @@ runs the artefact the way production does.
 
 Gates after the fix: adapter file **5 passed** (gate `aTOa2jQm`); adapter + parity + control **30 passed,
 1 skipped** (gate `y40936k4`); task-owned helpers alive **0**; `git diff --check` clean.
+
+## CP-171: the service now drives the macOS campaign - and three live-only defects fell out of it
+
+The service was built from the current commit, served from the task's copied install, and driven only
+through its own HTTP API: capabilities, a document instance, its live channel, the validation lease, a
+manifest, a preflight and the campaign. The chain now completes and the campaign process really runs:
+
+```
+health 200 -> capabilities 200 -> instance 200 -> channel 101 -> lease 200 -> manifest 200
+          -> preflight 200 (admitted: true) -> start 200 -> campaign projection 200 (running)
+```
+
+The batch root then holds `broker-ready.json`, `start-guard.json`, `supervisor/`, a 41 KB
+`campaign.log` with the real ROS station starting up, and the adapter's closing document with
+`request.broker_image_used: false` - i.e. the service launched **this** platform's coordinator, with
+this platform's typed refusals, rather than a runner that refuses the host.
+
+**Three defects were only visible on this path**, and each one killed the run at a different stage:
+
+1. **Nothing ran the lease-expiry loop in the unified composition.** `UnifiedLifecycle` calls
+   `validation.start_maintenance()`; no class implemented it, so the `getattr` returned `None` and
+   expired leases stayed `ACTIVE` forever. Measured in the live store:
+   `expires_monotonic_ns 1979185746783791` against `monotonic now 1979295264158958` - **109 s past its
+   own deadline and still ACTIVE** - and every later acquire was refused `LEASE_ALREADY_HELD`, with
+   `/health` still reporting validation "ready" because the failure flag is only set by an exception in
+   a task that never ran. Implemented (`start_maintenance`/`stop_maintenance`/`_maintain_leases`, with
+   the failure path cancelling the owned work and `health` reporting `validation_maintenance_failed`),
+   and proven live: a lease acquired at generation 3 and left alone went to `EXPIRED` in the store
+   while the service stayed up (`lease-expiry-proof.json`, verdict `PASS`).
+2. **Nothing created the control socket's directory.** The service names
+   `<batch_root>/control/control.sock` and creates only the batch root; the first live launch died with
+   `FileNotFoundError` on `os.open(self.path.parent)` - after the service had already recorded the
+   start. The endpoint now creates the directory and still verifies ownership and mode before binding.
+3. **The control path cannot be addressed on Darwin at all.** `sun_path` is 104 bytes and there is no
+   `/proc/self/fd` indirection here, while a batch root under a validation evidence root makes that
+   path ~200 bytes: the launch died with `CONTROL_SOCKET_PATH_TOO_LONG`, and relaxing it was refused
+   by both contracts (`CONTROL_SOCKET_OUTSIDE_BATCH_ROOT`). The endpoint now lives in a short canonical
+   private directory on Darwin (`coordinator.CONTROL_SOCKET_ROOT`, 0700, owned, verified by the client
+   before every use) and inside the batch root on Linux, unchanged; the composer and both validators
+   share one function so they cannot disagree.
+
+Tests: `test_unified_lease_maintenance.py` (new, 5 - the lifecycle hook, the production hook being
+synchronous on purpose, repeated expiry, the fail-closed stop, and health), parity +2 (the endpoint
+creates its private directory; a non-private directory is still refused), the adapter +2 (the control
+path fits and stays distinct per batch; the contract accepts the platform endpoint and still refuses an
+outside path), and the supervisor's pinned socket assertion split by platform instead of changed.
+Gates: adapter + parity + control **28 passed, 1 skipped**; the full affected set **58 passed, 1
+skipped, 2 failed** - both failures pre-existing and reproduced on the pristine baseline.
+
+**What is not claimed:** the campaign has not yet reached `W2_CAMPAIGN_PASS` through the service.
+Twice it was cancelled by the service's own lease path, once because the driver never renewed the lease
+and once because its renewals were refused after three successes (3 x `200`, 15 x `409`; the driver's
+renewal cadence and generation adoption are suspects, and the lease row ends `EXPIRED`). That is a
+driver/harness defect, not a product one, and it is the next thing to fix before the completion
+evidence: a campaign that finishes, the `N=1` retry verdict CP-166 already records as structurally
+excluded, and fresh Chrome observation.
+
+Housekeeping, recorded rather than done quietly: two stale `/private/tmp/so101-ipc-501/b-*` directories
+(uid 501, 0700, one `broker.sock` each, created inside this run by campaigns the *service* cancelled,
+whose own cleanup therefore never ran) were inventoried and removed, with the before-state written to
+`ipc-residue-removed.json` and `ipc-residue-removed-2.json`. The endpoint's own socket directory was
+left empty by `close()`, which is the behaviour CP-169 pinned.

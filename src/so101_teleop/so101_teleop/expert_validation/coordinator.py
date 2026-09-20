@@ -3,13 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
 import re
+import sys
 from types import MappingProxyType
 from typing import Mapping
 
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+#: Where a control endpoint may live when it cannot live inside the batch root. Linux addresses the
+#: socket through ``/proc/self/fd/<dirfd>``, so it keeps the endpoint inside the batch root whatever
+#: its length. Darwin has ``sun_path`` at 104 bytes and no such indirection, and a batch root under a
+#: validation evidence root is roughly twice that, so the endpoint lives here instead.
+CONTROL_SOCKET_ROOT = Path(f"/private/tmp/so101-control-{os.getuid()}")
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 
 
@@ -18,6 +26,21 @@ def _absolute_normalized(name: str, value: Path) -> Path:
     if not path.is_absolute() or path != path.resolve(strict=False):
         raise ValueError(f"{name}_ABSOLUTE_NORMALIZED")
     return path
+
+
+def require_private_control_socket(socket_path: Path, batch_root: Path) -> None:
+    """The control endpoint must live where only this task can reach it.
+
+    Inside the batch root is the Linux form, and the parent directory's mode is what makes it private
+    there. On Darwin the batch root is too long to address at all, so the endpoint lives in the short
+    canonical private directory instead: the same property, expressed the only way this platform
+    allows. Anything else is still refused.
+    """
+    if socket_path.is_relative_to(batch_root):
+        return
+    if sys.platform == "darwin" and socket_path.parent == CONTROL_SOCKET_ROOT:
+        return
+    raise ValueError("CONTROL_SOCKET_OUTSIDE_BATCH_ROOT")
 
 
 @dataclass(frozen=True)
@@ -69,8 +92,7 @@ class CoordinatorStartRequest:
         object.__setattr__(self, "environment", MappingProxyType(dict(self.environment)))
         batch_root = _absolute_normalized("BATCH_ROOT", self.batch_root)
         control_socket = _absolute_normalized("CONTROL_SOCKET", self.control_socket)
-        if not control_socket.is_relative_to(batch_root):
-            raise ValueError("CONTROL_SOCKET_OUTSIDE_BATCH_ROOT")
+        require_private_control_socket(control_socket, batch_root)
         object.__setattr__(self, "batch_root", batch_root)
         object.__setattr__(self, "control_socket", control_socket)
         if _SHA256.fullmatch(self.control_token_sha256) is None:
@@ -135,8 +157,7 @@ class CoordinatorBinding:
             raise ValueError("COORDINATOR_EPOCH_POSITIVE")
         root = _absolute_normalized("BATCH_ROOT", self.batch_root)
         socket_path = _absolute_normalized("CONTROL_SOCKET", self.control_socket)
-        if not socket_path.is_relative_to(root):
-            raise ValueError("CONTROL_SOCKET_OUTSIDE_BATCH_ROOT")
+        require_private_control_socket(socket_path, root)
         object.__setattr__(self, "batch_root", root)
         object.__setattr__(self, "control_socket", socket_path)
         if not isinstance(self.control_token, str) or not self.control_token:

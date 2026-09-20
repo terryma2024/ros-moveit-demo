@@ -85,6 +85,10 @@ setup(
     entry_points={
         "console_scripts": [
             "so101_parallel_batch = so101_demo.cli.mujoco_parallel_batch:main",
+            # The macOS counterpart of the fixed coordinator: the entry point the unified service
+            # launches on this platform, because so101_parallel_batch refuses it outright.
+            "so101_macos_service_campaign = "
+            "so101_demo.cli.macos_service_campaign:main",
             "so101_parallel_batch_cleanup = "
             "so101_demo.cli.parallel_batch_cleanup:main",
             "so101_parallel_perception_broker = so101_demo.cli.parallel_perception_broker:main",
