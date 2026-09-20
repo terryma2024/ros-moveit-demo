@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-56
+latest_checkpoint: CP-57
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1288,3 +1288,26 @@ so **no product source was touched** (`git status` stayed clean throughout).
 All fixture outputs stay in the registered root as evidence. Remaining in Task 11: the per-test TEMP
 provenance run and the copied-install Chrome gate; the latter needs a complete `so101_demo_py` release
 closure.
+
+## CP-57: the CTest suite runs with its TEMP inside the registered root
+
+The plan requires proving that the tests the ament gate launches resolve their temporary directory
+inside a registered scratch, not the system temp. Measured on the CP-50 overlay:
+
+```
+rosgate env TMPDIR=<root>/ctest-tmp-1SlpBurM TMP=... TEMP=... \
+  ctest --test-dir <build>/so101_teleop -R test_unified --output-on-failure
+```
+
+**Exit 0**, and afterwards the scratch contained `pytest-of-matianyi/pytest-1 .. pytest-9` with 21
+files - i.e. every unified test that used `tmp_path` created it under the registered root rather than
+in `/var/folders`. Combined with CP-50's check that every CTest command uses the registered
+interpreter, both halves of the provenance requirement now hold for the unified subset.
+
+Evidence classification per AGENTS.md: the fixture copies (`build-FV6UHHX5`, `web-fixture-1789891339`,
+`ctest-tmp-1SlpBurM`, the `pytest-*` invocation directories and `preset-preview-8f09f448`) are all
+retained under the registered root and are **deletion candidates** once the task is signed off; none
+is deleted here.
+
+Still open in Task 11: the copied-install Chrome gate, which needs a complete `so101_demo_py` release
+closure rather than the source shim.
