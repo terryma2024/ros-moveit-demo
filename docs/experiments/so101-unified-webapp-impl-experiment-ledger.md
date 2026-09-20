@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-53
+latest_checkpoint: CP-54
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1230,3 +1230,20 @@ implementation file was modified; only the generated `expert_validation_openapi.
 closure and process-ownership probes). They are recorded as **unclassified**, not as "pre-existing"
 or "caused by this task", because classifying them properly needs the baseline run that this
 round's context did not allow. That classification is the next diagnostic step.
+
+## CP-54: the expert-validation failures are pre-existing on this host (measured, not assumed)
+
+CP-53 left those 11 failures "unclassified" and named the baseline run as the next step. Done: a
+detached worktree of the base commit `5b8d1231` was created under `/tmp/so101-baseline-cp53`, the
+same interpreter and the same ROS-sourced environment were used, and three representative failing
+modules were run there - `test_expert_validation_start_guard`, `test_expert_validation_preflight`,
+`test_expert_validation_control`.
+
+Result on the **pristine baseline**: `3 failed, 36 passed, 7 errors` - the same modules already fail
+before any of this task's changes exist. So the expert-validation failures are a property of this
+host (an incomplete `so101_demo` install closure and process-ownership probes), not a regression from
+this work. The baseline worktree was removed afterwards.
+
+Combined with CP-53, the full-suite picture is: the regression I did introduce (`test_teleop_web_bundle`,
+an assertion pinned to the old inline routing) is fixed, and the remaining failures reproduce without
+my changes. The 15 `test_unified_*` modules pass in the same gate.
