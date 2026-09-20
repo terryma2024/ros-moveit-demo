@@ -29,7 +29,7 @@ function UnifiedRoot() {
 
 createRoot(document.getElementById("root")!).render(
   <TooltipProvider>
-    <RuntimeProvider teleop={teleopRuntime} validation={validationRuntime}>
+    <RuntimeProvider teleop={teleopRuntime} validation={validationRuntime} heartbeatMs={10_000}>
       <UnifiedRoot />
     </RuntimeProvider>
     <Toaster richColors position="top-right" />

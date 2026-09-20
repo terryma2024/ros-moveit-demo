@@ -123,3 +123,31 @@ test("browser back and forward update the page without remounting the provider",
   expect(await screen.findByText("teleop")).toBeTruthy();
   expect(teleopTransport.register).toHaveBeenCalledTimes(1);
 });
+
+test("the provider starts the runtime heartbeat once and a page switch does not restart it", async () => {
+  vi.useFakeTimers();
+  try {
+    const teleopTransport = transport();
+    const runtime = new DomainRuntime("teleop", teleopTransport);
+    const { rerender } = render(
+      <RuntimeProvider teleop={runtime} heartbeatMs={1000}>
+        <Page name="one" />
+      </RuntimeProvider>,
+    );
+    await vi.runOnlyPendingTimersAsync();
+    await vi.advanceTimersByTimeAsync(2000);
+    const renewals = (teleopTransport.renew as ReturnType<typeof vi.fn>).mock.calls.length;
+    expect(renewals).toBeGreaterThanOrEqual(2);
+    // Switching pages re-renders the provider's children only; the heartbeat keeps its cadence.
+    rerender(
+      <RuntimeProvider teleop={runtime} heartbeatMs={1000}>
+        <Page name="two" />
+      </RuntimeProvider>,
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    expect((teleopTransport.renew as ReturnType<typeof vi.fn>).mock.calls.length).toBe(renewals + 1);
+    expect(teleopTransport.close).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});
