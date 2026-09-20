@@ -2035,3 +2035,19 @@ than assuming symmetry:
 So unlike the JavaScript side there is nothing to declare here. Recorded as a checked result rather
 than an unexamined assumption - the interesting outcome of an audit can be "clean", but only if it was
 actually run.
+
+## CP-90: packaging audited, and the finding is now permanently guarded
+
+Continued the audit pattern with the installed script list: compared `scripts/*.py` on disk against
+`install(PROGRAMS ...)` in `CMakeLists.txt`. Result at this commit: **8 on disk, 8 installed, no drift
+in either direction** - which matters because the unified entry point this task added
+(`so101_unified_web_server.py`) is only reachable by an operator if it is in that list.
+
+Because an audit that passes once is worth little on its own, the check is now a test:
+`test_every_script_is_installed_and_every_install_entry_exists` asserts both directions, so a script
+added to disk without being installed - or an install entry with no file, which would break the install
+step - fails locally. It sits beside the pytest-registration guard, giving the package two packaging
+drift guards.
+
+GREEN: `pyrgate test_unified_launch.py` **7 passed** (5 original checks plus the registration guard and
+this one). Commit follows this entry.
