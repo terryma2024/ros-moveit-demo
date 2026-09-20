@@ -633,6 +633,10 @@ def run(argv: list[str] | None = None) -> int:
             owner_birth_identity=ready.broker_birth_identity)
         document["endpoint"] = {"path": str(endpoint.path),
                                 "mode": oct(os.stat(endpoint.path).st_mode & 0o777)}
+        # Per-batch freshness, recorded so a reader can see it rather than infer it: the campaign
+        # root is freshly created per run and the Broker generation starts at one for a fresh campaign.
+        document["campaign_root"] = str(campaign_root)
+        document["broker_generation"] = int(getattr(ready, "generation", 1) or 1)
 
         # Two real workers, spawned by the supervisor, each acknowledging registration first.
         workers = []
