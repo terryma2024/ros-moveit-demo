@@ -4680,3 +4680,25 @@ script had just used successfully, with an empty server log - so the server exit
 and I have not yet established why. No stray servers were left behind (checked and cleaned). The next round
 should start by running the known-good `flow7.sh` unchanged to see whether the harness broke with my sed
 edits or the environment changed under it, and only then capture the renewal body.
+
+### CP-146 addendum - my "no servers running" checks were wrong, and five servers had leaked
+
+Cleaning up after the failed captures found **five** `so101_unified_web_server` processes still alive
+(pids 51981, 52784, 52907, 53478, 53657), accumulated across the live runs of the last several rounds. All
+are now killed.
+
+The important part is why I did not know. Every recent checkpoint ends with a cleanup line produced by
+`pgrep -fc "so101_unified_web_server"`, and that check **silently returns 0 on this host** for these
+command lines - the same macOS `pgrep -f` truncation I hit in an earlier round when it failed to match a
+`ros2 launch` process whose arguments are long. So the claim "no servers running" that I repeated for many
+rounds was not evidence of anything; it was a broken instrument reporting a comfortable answer, and I
+repeated it without ever cross-checking with a method that works. The check that found them was
+`ps -eo pid,args | grep -c '[s]o101_unified_web_server'`.
+
+Two consequences to carry forward. First, the honest status of the last several rounds' process hygiene is
+"unknown, probably leaking", not "clean" - and the leaked servers are also the most likely reason the last
+two capture attempts could not bind a port, which means the harness failure I recorded above is probably
+mine as well. Second, this is the **fourth** time in this task that a tool of mine produced a confident
+wrong answer (a test that could not fail, `[ -f <dir> ]` skipping an overlay, `pgrep -af` flooding and
+mis-matching, and now `pgrep -fc` reporting zero); the countermeasure that has worked every time is to
+confirm with a second, differently-shaped check before believing a convenient result.
