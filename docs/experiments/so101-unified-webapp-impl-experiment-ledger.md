@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-67
+latest_checkpoint: CP-68
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1571,3 +1571,25 @@ Two concrete reasons it was not closed in this session, both real:
 So this is recorded as an open deviation with its exact cause and cost, not glossed over. The route
 *behaviour* it exposes is covered by the unified app's own tests and by the CTest run; what is missing
 is the removal of the duplicate definition, which is a refactor with its own test migration.
+
+## CP-68: obstacle 1 of CP-67 removed - the bind policy is a leaf module
+
+CP-67 recorded that `api.py` cannot import the unified routers at module level because
+`unified/app.py` imports `validate_bind_address` from `so101_teleop.api`, and `expert_validation/api.py`
+does too - a cycle. That obstacle is gone:
+
+- `so101_teleop/bind_policy.py` now holds the rule (`APPROVED_SHARED_RANGE = "100.64.0.0/10"`, loopback
+  or that range accepted, anything else `BIND_ADDRESS_UNSAFE`);
+- `api.py` imports it and re-exports it, so `so101_teleop.api.validate_bind_address` still works for
+  every existing caller - verified by identity (`legacy is leaf`) and by the refusal behaviour;
+- `unified/app.py` imports it directly, which removes the cycle: `api.py` may now import the unified
+  routers.
+
+GREEN: `pyrgate test_unified_api.py test_api.py` **21 passed** - both the unified factory tests and the
+legacy factory tests, which is the pair that had to keep working through this change. Commit follows
+this entry.
+
+Obstacle 2 from CP-67 remains and is unchanged: `test_api.py` builds `create_app(Service())` with a
+stub service in eight places, so delegating the legacy factory to the unified routers still requires
+those stubs to satisfy the port contracts (including the authority dependency) - a test migration of
+the CP-48/CP-49 shape.
