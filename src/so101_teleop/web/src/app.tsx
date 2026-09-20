@@ -121,18 +121,10 @@ export function App() {
     return () => { active = false; };
   }, [backend]);
 
-  useEffect(() => {
-    if (!lease) return;
-    const timer = window.setInterval(async () => {
-      const result = await client.post("/control/lease/renew", {}, lease, snapshot.simulation_session_id);
-      if (!result.succeeded) {
-        setLease(""); dispatch({ type: "plan-cleared" });
-        setNotice(`${result.code}: ${result.message ?? "lease renewal failed"}`);
-        toast.error(result.code, { description: result.message ?? "lease renewal failed" });
-      }
-    }, 10000);
-    return () => window.clearInterval(timer);
-  }, [lease, snapshot.simulation_session_id]);
+  // Lease renewal is owned by the domain runtime, not by this page: unmounting the page must not
+  // stop a heartbeat, and the runtime presents the instance authority the server requires. A
+  // renewal that fails is reported through the runtime's own state (see DomainRuntime), so this
+  // effect no longer starts a second interval.
 
   const record = (operation: string, result: CommandResult) => {
     setEvents((current) => [{ at: new Date().toISOString(), operation, code: result.code, message: result.message }, ...current].slice(0, 100));
