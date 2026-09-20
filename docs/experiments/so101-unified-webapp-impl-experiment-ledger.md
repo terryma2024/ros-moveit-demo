@@ -5540,3 +5540,45 @@ Note for the record: the count went 14 (before this round), 17 (after CP-161's R
 rounds that failed before their own teardown, including 5 from my own probes and RED runs). Every
 increase is attributable to a test or probe whose cleanup path was skipped by a failure - which is the
 defect, not an accident.
+
+## CP-164: EXP-A4 - the proven-owned inventory is terminated, and the gates leave nothing behind
+
+Termination was planned from evidence and applied with the same routine the product now uses.
+`cleanup-a4-plan.json` re-derived ownership for every candidate (argv runs a test script inside this
+task's worktree) rather than trusting the earlier inventory file, and `cleanup-a4-applied.json` holds one
+`CleanupReceipt` per group:
+
+| group | members | term | kill | clear | elapsed |
+| --- | --- | --- | --- | --- | --- |
+| 15615 | 15616 | yes | no | **yes** | 0.042 s |
+| 15844 | 15844, 15845 | yes | no | **yes** | 0.043 s |
+| 15900 | 15901 | yes | no | **yes** | 0.044 s |
+| 16055 | 16055, 16056 | yes | no | **yes** | 0.045 s |
+| 16617 | 16617, 16618 | yes | **yes** | **yes** | 3.038 s |
+| 84354 | 84355 | yes | no | **yes** | 0.011 s |
+| 84402 | 84403 | yes | no | **yes** | 0.043 s |
+| 98671 | 98672 | yes | no | **yes** | 0.010 s |
+| 98737 | 98738 | yes | no | **yes** | 0.043 s |
+
+**Twelve processes in nine groups, all cleared, zero survivors.** Group `16617` is the interesting row:
+it is the `--ignore-term` leader and runner from the failed-spawn RED run, the exact shape that would have
+survived forever under the old code, and it is the only one that needed the SIGKILL escalation - which
+arrived after the 3 s bound, exactly as designed. Inventory after termination: **0 task-owned helpers**,
+`cleanup-a4-inventory-after.json`; the two stale empty `ipc/so101bridge-*` directories are left in place
+and reported as deletion candidates, not removed.
+
+**Fresh gates on the committed fix** (`74096aec`, tree clean, `git diff --check` clean):
+
+| gate | command | result |
+| --- | --- | --- |
+| focused, plain source | `pygate test_process_identity, test_owned_group, test_unified_bridge, test_unified_bridge_cleanup` | **22 passed**, exit 0 |
+| focused, ROS-sourced | `pyrgate test_process_owner_group_cleanup, test_expert_validation_process_owner{,_integration}, adaptive_owner, store` | **26 passed**, exit 0 |
+| package | `pyrgate test_expert_validation_package_layout, test_package_layout, test_unified_gate, test_launch_contract` | **37 passed**, exit 0 (59.9 s, includes the real CMake configure) |
+| frontend | `buntest` | **46 files / 206 tests passed**, exit 0 |
+
+After every one of those gates the inventory re-ran: **0 helpers**. `cleanup-a4-inventory-post-gates.json`.
+Ports 8791-8845 are free. So the three paths the dispatch names are each covered by a fresh run whose
+after-state is empty - normal (`stop_after_cleanup` over a SIGTERM-ignoring group), exception (the spawn
+barrier refusing, with the group cleared anyway) and the bridge stop the service itself calls. The live
+*cancel* residue (a campaign cancelled mid-batch) is part of the service-driven campaign gate and is not
+claimed here.
