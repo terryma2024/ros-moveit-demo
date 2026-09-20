@@ -11,9 +11,16 @@ from .compose import compose_services
 
 
 def installed_web_assets(module_file: str | Path | None = None) -> Path | None:
-    """Return the installed bundle directory, or None when it is not present."""
+    """Return the installed bundle directory, or None when it is not present.
+
+    The bundle lives at ``<prefix>/share/so101_teleop/web``. From an installed *module*
+    (``<prefix>/lib/python3.X/site-packages/so101_teleop/unified/main.py``) that is three levels up,
+    while from the installed *script* (``<prefix>/lib/so101_teleop/so101_unified_web_server.py``) it is
+    two - so the ancestors are walked rather than a fixed offset assumed. Getting this wrong made an
+    installed deployment serve 503 for every page while the bundle sat right there.
+    """
     base = Path(module_file or __file__).resolve()
-    for parent in (base.parents[1], base.parents[2]):
+    for parent in base.parents[:6]:
         candidate = parent / "share" / "so101_teleop" / "web"
         if (candidate / "index.html").is_file():
             return candidate
