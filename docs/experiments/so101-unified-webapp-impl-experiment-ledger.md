@@ -2320,3 +2320,56 @@ Two things follow, and both are the point of this checkpoint:
 
 This is the third time in the session that checking a claim beat trusting it - after CP-73 (production
 code) and CP-83 (a test migration) - and the first time the wrong party was my own instrument.
+
+## CP-101: contrast re-measured correctly - text passes, control boundaries do not
+
+Ran the method CP-100 specified. The probe paints each colour into a 1x1 canvas, reads the pixel back
+as sRGB, and converts to WCAG relative luminance; `oklch()` never gets parsed by hand. One further
+correction was needed inside that method: the first version painted every colour onto a *cleared*
+canvas, so the dark theme's alpha-declared `--border: oklch(1 0 0 / 10%)` read back as opaque white and
+produced a nonsense `19.38` for "border on background". The final version paints the backdrop first and
+then the colour on top, so alpha composites the way it does on screen.
+
+Gate: `gates/0c82ced035e944dea5bb077ec2892714` (exit 0, 4.9 s, registered root, exact interpreter
+`/Users/matianyi/ros2_jazzy/.venv/bin/python`, per-invocation scratch). Evidence root
+`installed-contrast6-XXXXXXXX`. Served from the copied-install prefix `release3-VdNDNZIB/copied-install`,
+Chrome via Playwright at 1400x900, theme switched with the real control.
+
+| pair (token) | light | dark |
+| --- | --- | --- |
+| foreground / background | 19.72 `#090b0c` on `#ffffff` | 18.99 `#f9fbfb` on `#090b0c` |
+| card-foreground / card | 19.72 | 16.73 |
+| muted-foreground / background | 4.61 `#67787c` on `#ffffff` | 8.08 |
+| muted-foreground / card | 4.61 | 7.12 |
+| primary-foreground / primary | 6.28 `#eff6ff` on `#1447e6` | 8.11 |
+| primary / background | 6.83 | 2.24 |
+| sidebar-foreground / sidebar | 18.99 | 16.73 |
+| border / background | 1.25 `#e3e7e8` | 1.25 `#222324` |
+| input / background | 1.25 `#e3e7e8` | 1.49 `#2e3030` |
+
+**What this supports.** Every text pair clears WCAG AA (4.5:1) in both themes; all but
+`muted-foreground` clear AAA (7:1). The tightest value is light-theme `muted-foreground` at 4.61 - above
+the line, but with no margin, so a future darkening of that token would silently drop the theme below AA.
+
+**What this does not support.** `border` and `input` sit at 1.25:1 in light and 1.25-1.49:1 in dark,
+i.e. below the 3:1 that WCAG 1.4.11 asks of a boundary that is the only thing identifying a control.
+`input.tsx` uses `border-input bg-input` - one token for fill and edge - so a light-theme text field is
+a `#e3e7e8` fill on a `#ffffff` page with no other edge. This is measured, not inferred, and it is
+reported rather than fixed: both values come from the upstream maia/radix registry items the plan told
+me to port, changing them is a design decision, and it would invalidate the visual and contrast gates
+already recorded. Recommendation for follow-up work: give `--input` a fill or edge at >=3:1 against
+`--background` (light needs roughly `#949494`; dark `#2e3030` -> about `#5c5f5f`), then re-run this gate.
+
+**Non-claims.** Only token pairs were measured, not per-element rendered styles; `--ring` (focus
+indicator) contrast was not measured in this run and remains unquantified. A full WCAG audit was not
+performed.
+
+Two side observations from the same run. `/tasks` does expose the theme control - the control list is
+`Menu, Teleop, Expert Validation, Dark theme, Open Teleop, Acquire lease, ...` - but it lives inside the
+`Menu` sheet, so a role query waits for visibility and times out until the sheet is open; that is what
+failed the intermediate attempt, not a missing control. And the alpha-compositing bug is the second
+instrument error in two checkpoints (CP-100 was a parser, this one a compositor), both caught by asking
+whether the number could possibly be right: a near-white border on a near-black theme was the tell.
+
+Superseded evidence, retained as deletion candidates: `installed-contrast2-*`, `installed-contrast3-*`,
+`installed-contrast4-*`, `installed-contrast5-*` (all earlier, wrong-method probes).
