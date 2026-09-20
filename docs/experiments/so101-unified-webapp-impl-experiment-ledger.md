@@ -5973,3 +5973,34 @@ host by three frozen declarations (retry requires N=1, the v4 composition requir
 platform refuses other worker counts), and the service's own preflight adds a 4-point floor. Nothing in
 this round moves that; the request-API entry the earlier §7 verdict named as the alternative does not
 change the platform guard.
+
+### CP-172 addendum - the campaign finished on its own, with exact cleanup, and reported INCOMPLETE
+
+The run that the Chrome capture observed did not get cancelled: the adapter's closing document has
+`control_stop: null`, which means no control cancel ever arrived and the campaign ended by itself. The
+renewal ledger is clean too - **16 successful renewals, 0 refusals**, against 3-then-permanent-refusal
+before the fix - so the authority held for the whole run.
+
+```
+campaign_status      W2_CAMPAIGN_INCOMPLETE
+campaign_exit_code   7                (the W2 CLI's own "not a pass" code)
+cleanup              {complete: true, directory_removed: true, registry_empty: true,
+                      workers_reaped: [true, true]}
+served               {count: 0, devices: [], duplicates_refused: 0,
+                      lane_stats: {executed: 7, max_concurrent: 1, rejected: 0}}
+admission            {admitted: [], refused: []}
+```
+
+So this is the first service-driven macOS campaign that ran to its own end: both workers registered and
+were reaped, the MPS lane booted and executed **7** inferences on a single concurrency lane, cleanup is
+exact on all three of its own facts, and no process was left behind. It is nonetheless not a pass, and
+the campaign's own document says why: **nothing was served or admitted** - zero requests reached the
+one-time table, so the verdict cannot be `W2_CAMPAIGN_PASS`. That is now the next question (the workers
+register and take leases, and the broker lane works, but the worker requests never arrive for
+admission), and it is a composition-side question rather than a service-side one.
+
+Also worth recording against the dispatch's cleanup criterion: the *service-driven* path has now
+produced a live cleanup receipt of the same shape the Stage A gate asks for
+(`workers_reaped [true, true]`, `directory_removed`, `registry_empty`), and the adapter's stop receipt
+(`clear: true`, `survivors: []`) covers the case where a cancel does arrive - as it did in the earlier
+runs, when the service's own lease expiry ended the campaign on purpose.
