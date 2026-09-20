@@ -3119,3 +3119,69 @@ With that green, background job `bash-26` was dispatched to run the same campaig
 document, same four points, same model paths, no `--skip-models`, worker deadline 240 s, everything
 written under a fresh evidence root. Its outcome is not known at the time of writing and is not claimed
 here.
+
+## CP-114: a real exact-W2 campaign ran on this host - control plane proven, point execution not reached
+
+Background job `bash-28` ran the campaign for real: 2026-09-20T11:25:45Z to 11:28:32Z, about 2m47s, on
+the installed prefix from `bash-25`, with the model artifacts verified in CP-113. The verdict is
+`W2_CAMPAIGN_INCOMPLETE` (`campaign_rc=7`), and the value is in *which* half came out green.
+
+**The macOS accelerator guard passes in production.** This is the same composition CP-110 corrected me
+about, now observed rather than argued:
+
+```text
+start-guard.json: status PASS   reason MPS_HEADROOM_OK   admission_kind unified-memory-proxy
+                  available_bytes 12665536512   cutoff 1073741824
+```
+
+12.7 GB of MPS headroom against the 1 GiB floor the v4 document sets, admitted through the unified memory
+proxy. The guard phase ran in its own process exactly as the CLI documents, and it did not refuse.
+
+**Exact W2 spawned, with identities.** Two workers, real PIDs and birth identities, two slots:
+
+```text
+w1  pid 43253  slot-0  ACTIVE  birth_identity 1789903556559359
+w2  pid 43254  slot-1  ACTIVE  birth_identity 1789903556799539
+```
+
+**The Broker came up with every bootstrap check satisfied**, and its lane behaved as designed:
+
+```text
+fallback_pinned_before_import true   fallback_rechecked_after_import true   lane_is_single true
+memory_fraction_set_before_load true   spawn_context spawn
+broker_pid 43243   driver_allocated_memory_bytes 4039852032   current_allocated_memory_bytes 946177536
+lane: executed 7   max_concurrent 1   peak_depth 1   rejected 0
+```
+
+**Owned cleanup completed and nothing foreign was touched**, which is the control row's ownership half:
+
+```text
+cleanup: complete true   directory_removed true   registry_empty true   workers_reaped [true, true]
+inventory at start: clean true   owned_processes []   live_endpoints []   claim_held false
+handler_errors []   cancelled_ids []   fault_trace []
+```
+
+**What did not happen is point execution**, and this checkpoint does not dress it up:
+
+```text
+served: count 0   devices []   duplicates_refused 0        (lane still executed 7)
+per_slot_pick_place: w1 and w2 each  point_results 0   manifests 0   contacts []   executed_points []
+                                      failure_codes []   evidence_root .../w{1,2}-station/pick
+```
+
+So the campaign's control plane ran end to end - guard, claim, broker, two exact-W2 workers, seven lane
+executions, then a clean owned teardown - while zero points were picked, zero manifests were written and
+no failure code explains it. An `INCOMPLETE` verdict with an empty `failure_codes` and empty
+`handler_errors` is exactly the shape that must not be reported as success, and it also is not yet a
+diagnosis: the next question is why seven requests were served through the lane while `served.count`
+stayed at zero, which is where the point pipeline stops. That is the next round's work, not this one's
+conclusion.
+
+### Two of my own traps, one of them a repeat
+
+`bash-26` died in 0.1 s with rc 127: I launched the script outside `gate-env.sh`, so `$TEST_PYTHON` was
+empty and the line became ` -m so101_demo.cli...` - "command not found" for a command that had no
+program name. Then `bash-27` died the same way I documented in CP-104: I added `set -u` to a script that
+sources ROS, and `setup.bash: line 11: COLCON_TRACE: unbound variable` killed it before the campaign
+started. Writing the trap down did not stop me re-introducing it two rounds later, so `bash-28` now
+guards its inputs with explicit `[ -n ]`/`[ -x ]`/`[ -d ]` tests and no `set -u` at all.
