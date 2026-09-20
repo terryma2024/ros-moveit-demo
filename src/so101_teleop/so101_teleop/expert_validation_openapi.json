@@ -1157,6 +1157,31 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "InstanceProofResponse": {
+        "additionalProperties": false,
+        "description": "Server-issued document instance. The proof is returned once, to its own document.",
+        "properties": {
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "instance_id": {
+            "title": "Instance Id",
+            "type": "string"
+          },
+          "proof": {
+            "title": "Proof",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instance_id",
+          "proof",
+          "domain"
+        ],
+        "title": "InstanceProofResponse",
+        "type": "object"
+      },
       "JointSample": {
         "properties": {
           "age_s": {

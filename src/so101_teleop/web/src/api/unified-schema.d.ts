@@ -1200,6 +1200,18 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /**
+         * InstanceProofResponse
+         * @description Server-issued document instance. The proof is returned once, to its own document.
+         */
+        InstanceProofResponse: {
+            /** Domain */
+            domain: string;
+            /** Instance Id */
+            instance_id: string;
+            /** Proof */
+            proof: string;
+        };
         /** JointSample */
         JointSample: {
             /**
@@ -2062,7 +2074,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["InstanceProofResponse"];
                 };
             };
             /** @description Validation Error */

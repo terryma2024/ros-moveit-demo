@@ -105,6 +105,16 @@ class QualificationViewResponse(BaseModel):
     approval_sha256: str | None
 
 
+class InstanceProofResponse(BaseModel):
+    """Server-issued document instance. The proof is returned once, to its own document."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    instance_id: str
+    proof: str
+    domain: str
+
+
 class CapabilitiesResponse(_ValidationCapabilitiesResponse):
     """Capability payload: the original read-only fields plus worker qualification.
 
@@ -186,7 +196,7 @@ def require_authority(domain) -> "callable":
 def instance_router(services: UnifiedServices) -> APIRouter:
     router = APIRouter()
 
-    @router.post("/control/instances", tags=["control"])
+    @router.post("/control/instances", tags=["control"], response_model=InstanceProofResponse)
     async def register_instance(body: dict):
         registry = services.instances
         if registry is None:
