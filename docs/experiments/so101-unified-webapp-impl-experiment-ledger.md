@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-80
+latest_checkpoint: CP-81
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1839,3 +1839,21 @@ the request and the business conflict is unchanged. `pyrgate test_api.py` **12 p
 Remaining: four mutation/superseded cases in the same file (lines ~108, ~128, ~158, ~173 at this
 commit), each now a mechanical application of the same fixture, and then the legacy route table can be
 deleted.
+
+## CP-81: eight of eleven migrated; two cases left
+
+`test_unreachable_tcp_target_is_a_conflict_not_service_outage` now runs on the authority fixture and
+still asserts the service's own `409 MOVEIT_IK_FAILED_-31`, so a reached-and-admitted mutation keeps
+its business answer.
+
+`test_regular_server_reports_validation_unavailable` was the superseded case. Rather than deleting the
+test, it now asserts the **new** contract while keeping its original intent: the unified capabilities
+route answers with `available: False` and `reason: VALIDATION_SERVER_REQUIRED` *and* the read-only
+per-N qualification view for N2..8, all `UNKNOWN` before the provider is integrated. That is the
+assertion the plan actually requires at that route, and it is stronger than the body it replaces.
+
+GREEN: `pyrgate test_api.py` **12 passed**. Commit follows this entry.
+
+Two `create_app(` uses remain in the file (the camera-preset POST half and
+`test_task_routes_are_separate_and_typed`), both now a mechanical application of `AuthorityFixture`.
+After them, `api.create_app`'s route table can be deleted and CP-67's deviation is closed.
