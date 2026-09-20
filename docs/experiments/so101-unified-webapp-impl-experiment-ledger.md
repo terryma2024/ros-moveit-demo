@@ -2293,3 +2293,30 @@ Two honest limits on this checkpoint: the keyboard probe reports that focus land
 rather than proving a specific tab order, and the map check cannot run here because there is no
 manifest. Both are stated rather than implied, and the browser-side checks the plan asks for that need
 a populated validation run stay in the live gate.
+
+## CP-100: the contrast probe was wrong, not the design - recorded so it is not repeated
+
+Attempted the plan's "light/dark 对比" check by reading `getComputedStyle(...).color/backgroundColor` and
+computing WCAG ratios in the page. It reported:
+
+```
+light: bodyText 2.13, headingText 2.13, cardSurface 2.13
+dark:  bodyText 1.18, headingText 1.18, cardSurface 1.15
+```
+
+**Those numbers are invalid, and are not a product finding.** The theme declares its colours in
+`oklch()`, and the probe parsed the numeric parts positionally - so `oklch(1 0 0)` (white) was read as
+`rgb(1, 0, 0)` (near-black). The reported ratios therefore measure my parser, not the interface. The
+underlying values are white background with `oklch(0.148 ...)` foreground in light mode and the
+corresponding dark pair, which is nowhere near 2:1.
+
+Two things follow, and both are the point of this checkpoint:
+
+1. **No accessibility claim is made either way.** The contrast requirement stays open until it is
+   measured correctly.
+2. **The correct method for the next attempt** is one of: resolve `oklch()` to sRGB before computing
+   (e.g. paint the colour into a canvas and read the pixel back), or sample painted pixels from a
+   screenshot. Either avoids the positional-parse trap.
+
+This is the third time in the session that checking a claim beat trusting it - after CP-73 (production
+code) and CP-83 (a test migration) - and the first time the wrong party was my own instrument.
