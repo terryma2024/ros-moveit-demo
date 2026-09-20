@@ -5062,3 +5062,35 @@ failure would print a reason - or it spawned and `_read_identity` could not matc
 the barrier is a platform-identity problem rather than a missing runtime. The first is the documented
 `ROS_DRIVER_NOT_PROVISIONED` gap; the second would be a defect in the barrier's host handling. Looking at the
 run's evidence root distinguishes them in one step, and that is where the next round starts.
+
+### CP-155: the barrier refusal is a wrong interpreter, not a missing driver
+
+The campaign's own coordinator log answers the question the addendum left open, and the answer is not the
+ROS driver:
+
+```text
+.../install/lib/so101_demo_py/so101_parallel_batch
+  File "/Applications/Xcode.app/.../Python3.framework/Versions/3.9/lib/python3.9/importlib/...",
+  File ".../so101_demo/cli/mujoco_parallel_batch.py", line ..., in <module>
+    import yaml
+ModuleNotFoundError: No module named 'yaml'
+```
+
+The spawned runner is executed by **Xcode's system Python 3.9**, which has no PyYAML, so it dies during
+import; the service then waits ten seconds for a process identity that never appears and refuses with
+`EXEC_BARRIER_ACK_MISSING`. The barrier is doing its job - it refused a start whose execution never came up -
+and the cause is the **installed console script's interpreter**, not a missing ROS driver.
+
+Why this happened is visible in what I rebuilt and what I did not: every `colcon build --packages-select
+so101_teleop` in the last rounds refreshed the service's own files, while `so101_demo_py` - and with it the
+`so101_parallel_batch` console script the campaign spawns - came from the **copied Stage A install**, whose
+entry-point wrapper carries a shebang from whatever interpreter produced it. So the service and its runner
+have been running under different Pythons for several rounds, and nothing noticed until a campaign tried to
+start.
+
+**The fix is one build, and it is the same class as the earlier install findings:** rebuild `so101_demo_py`
+into this task's prefix with the registered interpreter
+(`colcon build --packages-select so101_demo_py --merge-install --build-base ... --install-base ...`), so the
+console scripts' shebangs point at the venv that has PyYAML, the demo package and the underlay. Then the same
+page sequence should carry the campaign past the barrier - and `FULL_RESTART retries` with its
+"Retry selected with FULL_RESTART" control is already rendered, so the last §7 row is one campaign away.
