@@ -3822,3 +3822,46 @@ instances unusable, the second makes the whole mutation surface unreachable. Nei
 problem, a budget problem, or a retired-chain problem - they are the unified service's own authority
 model, found by driving it the way a page drives it. §7's functional row is what surfaced them, which is
 the strongest argument in this ledger for running live acceptance rather than trusting green unit suites.
+
+## CP-128: the spec answers the claim question - no operator decision needed, it is an implementation gap
+
+CP-127 left three candidate readings and asked for a decision. That was premature: the repository's own
+design document settles it, in section 5.1, line 102:
+
+> 实例登记不授予控制。用户显式 acquire 时，既有域 lease endpoint 在同一服务端事务中验证该实例的活跃通道，
+> 并绑定该域唯一 controller。
+
+Registering an instance grants no control. When the user explicitly acquires, **the existing domain lease
+endpoint, in the same server-side transaction, verifies the instance's live channel and binds that
+domain's single controller.** So the second of my three readings is the spec's answer: acquire *is* the
+bootstrap step, and the binding belongs inside it - not in the channel handshake, and not in a claim
+message that was never implemented. Line 100 adds the other half: registration yields a read-only
+instance, and the page's channel has to be live for the acquire to be validated. Line 123 keeps
+`require_bound` where it belongs, on renew and on the ordinary mutations.
+
+**So the deadlock is an implementation gap against a written contract, not an open design question.** The
+gap is precise:
+
+| place | today | per spec |
+| --- | --- | --- |
+| `/control/lease` and `/expert-validation/lease` | generic mutation dependency → `require_bound` → `CONTROLLER_NOT_BOUND` | verify instance + domain + **live channel** in the same transaction, then `registry.claim(binding, lease)` and issue the lease |
+| renew and every other mutation | `require_bound` | unchanged - `require_bound` is right there |
+| the four authority headers | required | still required on acquire; they carry the instance identity, not a pre-existing binding |
+
+**The work, specified for the next round:**
+
+1. RED first, and this time reach the real code path: build a composed app, `POST /control/instances`,
+   open the instance channel with `TestClient.websocket_connect` so a binding genuinely exists, then
+   `POST` the lease with the four headers and assert it is not `CONTROLLER_NOT_BOUND`. A second instance
+   acquiring the same domain must still be refused `CONTROLLER_ALREADY_BOUND` - the exclusivity is the
+   point of the binding, and the test that proves acquire works must not also prove exclusivity is gone.
+2. Then the implementation: an acquire-path authority resolution that looks up the instance, checks the
+   domain by identity, requires a live channel binding and the matching revision and proof, and calls
+   `claim` inside the lease transaction; the lease routes use that instead of the generic mutation
+   dependency, while renew keeps the old one.
+3. Then the live flow again: the same script should walk register → channel → lease → manifest →
+   preflight → campaign → the single-point retry, which is the last §7 row.
+
+This checkpoint exists mostly to record that the blocker I reported a round ago was not a blocker. The
+spec was in the repository the whole time and answered the question in one line; I read the code, the
+tests and the frontend before reading the design.
