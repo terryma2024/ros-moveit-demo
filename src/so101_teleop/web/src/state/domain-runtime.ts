@@ -293,6 +293,9 @@ export class DomainRuntime {
         if (!this.validateRenewal(next as LeaseIdentity)) {
           throw new Error(this.lastRenewalError ?? "LEASE_RENEWAL_INVALID");
         }
+        // Validating is not enough: the server advanced the generation with this renewal, so the
+        // authority has to follow it or the next mutation is refused as stale.
+        this.adoptLease(next as LeaseIdentity);
       }
     } catch (error) {
       this.lastRenewalError = String(error);
