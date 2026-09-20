@@ -29,8 +29,8 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-08
-next_experiment: Task 10 budget adapter, then Task 12A live-fixture code, then Tasks 7-9 frontend, then Task 11 build gates
+latest_checkpoint: CP-09
+next_experiment: Tasks 7, 8, 9 frontend (root providers, preset smart merge, unified shell), then Task 11 build/installed gates, then the operation guide
 ```
 
 ## CP-01: Registration, host probe and deviations
@@ -277,3 +277,61 @@ Validation"), and the three generated `.d.ts` files after `bun install --frozen-
    touches the validation package. Making that import lazy is a candidate follow-up, not done.
 3. `rosgate <cmd...>` runs an arbitrary command through `record_gate` under the sourced
    workspace; the three OpenAPI exports were produced through it.
+
+## CP-09: Tasks 10 and 12A, plus two pre-existing defects repaired
+
+**Task 10 (budget adapter)** - `unified/budget_adapter.py`, `test/teleop/test_unified_budget_adapter.py`
+(registered `test_unified_budget_adapter`), lifecycle start gate. GREEN: 15 tests (plain gate).
+Covers the plan's literal exact-N test, every N disabled while the provider is UNKNOWN,
+AVAILABLE requiring a promoted profile and approval hash, a provider answering for a different
+N refused, a v1 contract refused, a provider exception becoming UNKNOWN with a reason, and the
+retry N1 context staying separate. Commit `f2871ac1`. The frontend half of Task 10
+(`qualification-view.ts`) is deferred to Task 7, which the plan makes the file's creator.
+
+**Task 12A (live fixture authorization, code only)** - `live-sim.ts` now requires
+`SO101_UNIFIED_LIVE_AUTHORIZATION` (a non-secret operator JSON with scope, runtime identities,
+deadline, owned-process rule; proof-shaped keys rejected) *before* stack inspection, and the
+fixture spawns only `so101_unified_web_server.py`. Added the `unified` Playwright project
+depending on the reviewed `r01-sequential` producer and `web/e2e/unified/live-sim.spec.ts`.
+`test/teleop/test_unified_{live_fixture,launch}.py` registered. Commit `9690b7f8`.
+
+Two plan/source conflicts were resolved in favour of the newer reviewed source and recorded in
+the tests themselves:
+- The plan's RED test asserts `SO101_VALIDATION_PROVENANCE_BINDING` appears in the fixture. The
+  reviewed source deliberately *retired* provenance bindings as runtime authority ("The retired
+  provenance binding is gone..."). The binding was not reintroduced; a test now pins that
+  decision in both directions.
+- The plan names four Playwright projects (`sequential`/`parallel`/`adaptive`/`unified`). The
+  branch has eight, owned by the parallel-budget task. Renaming or deleting them would break
+  another task's live workflow, so the unified project was added and the existing names kept.
+
+**Pre-existing defect 1 (repaired, out of plan)**: `bun run build` failed on pristine HEAD -
+`expert-validation-types.ts` imports `Schemas["CapabilitiesResponse"]` and
+`Schemas["StartGuardPolicyResponse"]`, which no exported schema defines. Proven pre-existing by
+building a detached `git worktree` of HEAD, which produced the identical five TypeScript errors.
+Repaired by registering the capabilities route with a `CapabilitiesResponse` model that keeps the
+reviewed name, widens `extra` to `allow`, requires `worker_qualifications`, and still nests
+`StartGuardPolicyResponse`; regenerated the three schemas and three `.d.ts` files; added the
+required qualification list to the app test fixture. Commit `768328f0`.
+
+**Pre-existing defect 2 (gate-level, not a product bug)**: this harness exports
+`NODE_ENV=production`, so React loads its production build and every component test fails with
+`act(...) is not supported in production builds of React` (77 failures). With `NODE_ENV=test`
+the whole frontend suite passes: **30 files / 126 tests**. `buntest` in the gate recipe sets it
+and must never be used for `run build`.
+
+### Running gates (current recipe)
+
+`pygate <paths>` - plain source gate. `pyrgate <paths>` - ROS-sourced pytest gate (required for
+anything importing the validation package, because `expert_validation/__init__` pulls `catalog`
+→ `ament_index_python`). `rosgate <cmd...>` - ROS-sourced arbitrary command.
+`bungate <...>` - Bun in `web/`. `buntest` - `NODE_ENV=test bun run test`. All of them go through
+`record_gate.py` and land in `<root>/gates/<uuid>/`.
+
+### Remaining work
+
+Tasks 7, 8, 9 (frontend root providers/instance transport, the frozen preset plus theme smart
+merge, the unified shell and two-page layouts), Task 11 (CMake dependency list, full
+configure/build, copied-install Chrome gate), and Task 12B/C (measurement, live runs, the
+Chinese operation guide). Task 11's colcon stages need a complete `so101_demo_py` closure; the
+source shim is only for source-mode tests and must not be used for the installed gate.
