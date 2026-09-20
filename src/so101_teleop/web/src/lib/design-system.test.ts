@@ -52,7 +52,9 @@ test("the lock captures every radix-maia item it needs, with the font items incl
     expect(entry.url).toContain("/r/styles/radix-maia/");
     expect(entry.sha256).toMatch(/^[a-f0-9]{64}$/);
   }
-  expect(lock.blocked_reason).toContain("PENDING_PRODUCT_MERGE");
+  // The marker always names exactly what is still outstanding.
+  expect(lock.blocked_reason).toMatch(/^PENDING_[A-Z_]+:/);
+  expect(lock.blocked_reason).toContain("primitive");
   expect(lock.fonts).toHaveLength(2);
   for (const font of lock.fonts) {
     expect(font.family).toBeTruthy();
