@@ -3038,3 +3038,47 @@ no hard-coded 3, no forced 8, no silent downgrade. What it does not close is the
 that the spawned runtime actually has that many slots and that control scope - and that still needs a
 real batch, as do the 4-point/20-point sets, batch-level lease/cancel/recovery/cleanup with the N1
 FULL_RESTART retry, and physics.
+
+## CP-112: the point-set row, measured against the installed catalog
+
+§7 asks for the small 4-point set and the 20-point total, with the 20 containing the four fixed
+anchors. Gate `4943672b007347e78dc1c42505fdb8a9` (exit 0, 4.2 s) ran that against the catalog installed
+from `bash-25`'s prefix:
+
+```text
+baseline catalog: 20 points   catalog_id ai_station_baseline_v1   seed 20260911
+anchors: task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm
+API bounds: minimum_points 4   maximum_points 20
+total=4  -> selected 4,  distinct 4,  anchors 4/4,  selection sha256 1ead871a96f2fd04...
+total=20 -> selected 20, distinct 20, anchors 4/4,  selection sha256 33374bb01c31f342...
+4-point set is a subset of the 20-point set: True
+deterministic across calls: True
+total=0, 3, 21, 40 -> REFUSED CatalogError: TOTAL_POINTS_RANGE
+```
+
+Three properties are load-bearing rather than decorative. The selections are exact - asking for four
+gets four distinct points, not four with a substitute - and the 20-point set provably contains all four
+anchors, which is the "20 点包含既定固定 4 点" clause. The 4-point set is a genuine subset of the
+20-point set, so the small set is not a different experiment wearing the same name. And out-of-range
+totals are refused with `TOTAL_POINTS_RANGE` rather than clamped to the nearest legal value, which is
+the same fail-closed shape the worker-count row showed: the bounds are enforced, not approximated. The
+catalog seed (`20260911`) and the two selection hashes are recorded so a later run can prove it selected
+the same points rather than merely the same number of them.
+
+### §7 matrix, current
+
+| row | status |
+| --- | --- |
+| guard, probe lifecycle, CPU, RAM | done - 82 unit tests, plus a live installed probe (bounded 0.18 s, WARN for unknown CPU busy, fail-closed) |
+| budget-free default entry | done - no budget object in the environment; entry refuses only on the non-budget evidence root |
+| unknown / WARN presentation | done - 14 unit tests plus the live capabilities payload (`UNKNOWN` + `BUDGET_PROVIDER_NOT_READY`) |
+| installed | done - full closure build, console scripts, launch, config, web assets, retirement entry exit 2, default composition serving |
+| history | done - 103 passed over history and batch contracts |
+| functional (exact N, no forced 8, no downgrade) | plan level done - W2 admitted, W1/3/4/6/8 and a hand-edited YAML all refused `PLATFORM_WORKER_COUNT_UNSUPPORTED` before composition; live slot count still open |
+| points (4 and 20) | done at catalog level - this checkpoint |
+| control (lease/cancel/recovery/cleanup, N1 FULL_RESTART) | unit level green; batch level open |
+| physics | open |
+
+Everything still open needs a real batch: `so101_parallel_batch` requires a perception broker image,
+YOLO weights and a grounded manifest, so it is a live run needing an operator-granted window and the
+matching provenance binding. The last three rounds deliberately did not start one.
