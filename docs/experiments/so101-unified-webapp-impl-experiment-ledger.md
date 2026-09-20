@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-32
+latest_checkpoint: CP-33
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -851,3 +851,21 @@ GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` **45 files / 190 tes
 Remaining in Task 8: `sidebar` itself, the last item; with the shell's navigation now provided by
 the sheet, the sidebar can be introduced only if the shell genuinely needs it, and the plan is
 explicit that new items are introduced only where a page needs them.
+
+## CP-33: a page now consumes the ported primitives
+
+`CampaignSetup` uses the ported design-system `Input` for the catalog seed and the final point
+count, and its section surface plus select/inputs all read tokens instead of a raw palette. A check
+over the file now finds zero `bg|text|border-<palette>-<shade>` classes. Behaviour is unchanged:
+the same `aria-label`s, the same read-only seed, the same min/max on the point count, and the same
+existing component tests pass untouched.
+
+GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` **45 files / 190 tests**. Commit
+follows this entry.
+
+Note for the next round: `Input`, `Sheet` and `Field` are now used by the product, while `Label` and
+`Select` are ported but not yet consumed - `CampaignSetup` still uses a native `<select>` for the
+worker count because its nine existing tests query native `<option>` elements, so switching it to
+the radix select needs those tests rewritten in the same change. `sidebar` remains unported, and
+with the sheet providing the shell's navigation the plan's rule ("introduce new items only where a
+page needs them") argues for leaving it out unless a page actually requires it.
