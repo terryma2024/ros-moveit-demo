@@ -5119,3 +5119,41 @@ coordinator log named the real failure, and checking one line of the artifact I 
 from "fixing" a file that was already right. The second is the pattern this task keeps meeting: the service's
 own surfaces are exercised end to end, while the processes it *spawns* have been running under an interpreter
 nobody chose deliberately - and only a live campaign start could reveal it.
+
+## CP-156: the runner starts now - and refuses the macOS document
+
+The interpreter fix worked, and the next refusal is one layer further in and much more specific:
+
+```text
+spawned runner log: {"message": "CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION", "status": "ERROR"}
+```
+
+Before the fix the runner died on `import yaml` under Apple's Python 3.9 and the barrier refused with
+`EXEC_BARRIER_ACK_MISSING`; now it starts, parses its arguments and refuses the **document**: the service
+hands the same `parallel_config_path` to the start guard and to the runner, and on macOS those need
+different schemas.
+
+- the **start guard** must have schema 4 (the macOS MPS document); with schema 3 it refuses every preflight
+  `GPU_TARGET_UNAVAILABLE` (CP-153, fixed by loading the document the host can execute);
+- the **runner** (`so101_parallel_batch`) must have schema 2/3; given schema 4 it refuses
+  `CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION`, which is the same asymmetry CP-122 measured from the other
+  direction.
+
+So the service's execution path predates the v4/W2 work: on Linux both halves agree on v3, and on macOS
+nothing satisfies both. The macOS path exists and is proven - `cli/macos_w2_campaign.py` ran exact-W2
+campaigns on this host with 8/8 points `SUCCEEDED` (CP-118) - but the service spawns `so101_parallel_batch`
+with a v3-era argv and cannot use it.
+
+**The fix is a feature, not a patch**, and it belongs to the live/production work rather than to this
+acceptance: the service's spawn would have to drive the W2 campaign composition for a v4 document (as the
+CLI does, including its own guard process and broker bootstrap) instead of the v3 runner. That is the same
+boundary CP-110 recorded as "macOS validation through the unified service is not a supported combination
+today", now with the precise reason named.
+
+**Status of the §7 acceptance, stated once more and finally:** every row is met with measured evidence
+(guard/CPU/RAM, budget-free entry, unknown/WARN presentation, installed surface, history, functional at plan
+level plus live exact-W2 via the campaign CLI, points, physics with 8/8 points, control cleanup/cancel,
+retry contract and authority behaviour) - and the two live items that remain, the campaign through the
+service and its single-point `FULL_RESTART_RETRY`, are blocked by the service's execution path not
+supporting the macOS document. Closing that is implementing a runner path that exists in the CLI, and it is
+Stage C work.
