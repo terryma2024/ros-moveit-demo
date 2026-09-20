@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-43
+latest_checkpoint: CP-44
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1044,3 +1044,21 @@ drop the capability refusal and the expiry check, which is why it is not done ye
 
 GREEN: `NODE_ENV=test bun run test` **45 files / 197 tests**; `bun run build` exit 0. Commit follows
 this entry.
+
+## CP-44: the runtime now covers both things the page effect owned
+
+`startHeartbeat` accepts either a fixed interval or a provider callback evaluated each time the next
+tick is armed, so the validation cadence `(lease_duration_s - lease_renewal_margin_s)` can be derived
+from capabilities; an invalid value stops the heartbeat and records `LEASE_CAPABILITIES_INVALID`
+instead of renewing on a guess. `validateRenewal` now also refuses a renewal whose
+`expires_monotonic_ns` did not strictly increase (`LEASE_EXPIRY_NOT_EXTENDED`). `LeaseIdentity` gained
+the optional expiry field, and the heartbeat is a self-rescheduling timeout rather than an interval
+so a capability change takes effect on the next tick.
+
+GREEN: `NODE_ENV=test bun run test` **45 files / 199 tests**; `bun run build` exit 0. Commit follows
+this entry.
+
+With CP-42, CP-43 and this checkpoint, every responsibility of the validation page's renewal effect
+is now owned and tested by the runtime: identity and generation validation, expiry extension,
+capability-derived cadence, invalid-capability refusal, the in-flight indicator, and the error
+record. Deleting that effect is now a mechanical edit plus the page's notice/indicator wiring.
