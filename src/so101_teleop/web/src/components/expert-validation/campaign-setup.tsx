@@ -1,6 +1,7 @@
 import type { Capabilities, ExecutionMode } from "@/api/expert-validation-types";
 import { workerOption, type QualificationView } from "@/api/qualification-view";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export type SetupState = {
   pointCount: number;
@@ -63,20 +64,20 @@ export function CampaignSetup({
       ? (availability.reason_codes ?? []).join(", ") || "EXACT_N_UNQUALIFIED"
       : null;
   return (
-    <section aria-label="Campaign setup" className="space-y-3 rounded-lg border border-slate-700 bg-slate-900 p-4">
+    <section aria-label="Campaign setup" className="space-y-3 rounded-lg border border-border bg-card p-4 text-card-foreground">
       <h2 className="text-lg font-semibold">Campaign setup</h2>
       <label className="block">Catalog seed
-        <input aria-label="Catalog seed" readOnly value="20260911" className="ml-2 bg-slate-800 px-2" />
+        <Input aria-label="Catalog seed" readOnly value="20260911" className="ml-2 w-auto" />
       </label>
       <label className="block">Final point count
-        <input
+        <Input
           aria-label="Final point count"
           type="number"
           min={capabilities?.minimum_points ?? 4}
           max={capabilities?.maximum_points ?? 20}
           value={state.pointCount}
           onChange={(event) => onChange({ ...state, pointCount: Number(event.target.value) }, "pointCount")}
-          className="ml-2 w-20 bg-slate-800 px-2"
+          className="ml-2 w-20 bg-muted px-2"
         />
       </label>
       <label className="block">Execution mode
@@ -91,7 +92,7 @@ export function CampaignSetup({
               workerCount: executionMode === "SEQUENTIAL" ? 1 : executionMode === "PARALLEL" ? 2 : 8,
             }, "executionMode");
           }}
-          className="ml-2 bg-slate-800 px-2"
+          className="ml-2 bg-muted px-2"
         >
           {(capabilities?.execution_modes ?? ["SEQUENTIAL", "PARALLEL", "ADAPTIVE"]).map((mode) => (
             <option key={mode} value={mode}>{mode}</option>
@@ -106,7 +107,7 @@ export function CampaignSetup({
               value={state.workerCount}
               disabled={!capabilities || state.executionMode === "SEQUENTIAL"}
               onChange={(event) => onChange({ ...state, workerCount: Number(event.target.value) }, "workerCount")}
-              className="ml-2 bg-slate-800 px-2"
+              className="ml-2 bg-muted px-2"
             >
               {fixedWorkerCounts.map((count) => (
                 <option
