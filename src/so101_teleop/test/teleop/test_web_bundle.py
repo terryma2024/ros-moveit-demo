@@ -142,6 +142,13 @@ def test_installed_web_source_contract_contains_task_page_and_exact_three() -> N
     task_app = (PACKAGE_ROOT / "web/src/task-app.tsx").read_text(encoding="utf-8")
     assert '"three": "0.184.0"' in package
     assert '"@types/three": "0.184.0"' in package
-    assert 'location.pathname === "/tasks"' in main
+    # Routing moved from an inline pathname ternary to the History-API router the root provider
+    # owns; the contract is unchanged (the legacy /tasks route still renders TaskApp), so the
+    # assertion follows the new source of truth instead of the old literal.
+    router = (PACKAGE_ROOT / "web/src/state/runtime-provider.tsx").read_text(encoding="utf-8")
+    assert "usePageRouting" in main
+    assert "TaskApp" in main
+    assert 'pathname === "/tasks"' in router
+    assert 'return "tasks"' in router
     assert "LiveSensor" in task_app
     assert "EvidenceBrowser" in task_app
