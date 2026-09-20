@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, test, vi, beforeEach } from "vitest";
 import { DomainRuntime, type DomainTransport } from "@/state/domain-runtime";
@@ -62,7 +62,14 @@ function renderWithRuntime(app: React.ReactElement, renewLease: (lease: Lease) =
       };
     },
     setAuthority: () => undefined,
-    post: async () => ({ code: "OK" }),
+    // The acquire now goes through this transport, so it has to answer with a lease rather than a
+    // placeholder: the page adopts whatever the transport returns.
+    post: async () => ({
+      lease_id: "L-acquired",
+      service_session_id: "s1",
+      generation: 1,
+      expires_monotonic_ns: 10 ** 15,
+    }),
     close: () => undefined,
   };
   const runtime = new DomainRuntime("validation", transport);
@@ -454,4 +461,45 @@ test("worker choices follow a narrower server capability without invented counts
   await act(async () => {});
   const workers = screen.getByRole("combobox", { name: "Worker count" }) as HTMLSelectElement;
   expect(Array.from(workers.options).map(option => option.value)).toEqual(["1","2","4"]);
+});
+
+test("acquiring a lease presents instance authority through the runtime transport", async () => {
+  const posted: string[] = [];
+  const transport: DomainTransport = {
+    register: async (domain) => ({ instance_id: `i-${domain}`, proof: `p-${domain}`, domain }),
+    connect: async (proof) => ({ instance_id: proof.instance_id, revision: 1, domain: proof.domain }),
+    snapshot: async () => ({ sequence: 0, serviceEpoch: "e1", executionGeneration: 1, payload: null }),
+    subscribe: () => () => undefined,
+    renew: async () => undefined,
+    setAuthority: () => undefined,
+    post: async (path) => {
+      posted.push(path);
+      return {
+        lease_id: "L1",
+        service_session_id: "s1",
+        generation: 1,
+        expires_monotonic_ns: 10 ** 15,
+      };
+    },
+    close: () => undefined,
+  };
+  const runtime = new DomainRuntime("validation", transport);
+  render(
+    <RuntimeProvider validation={runtime}>
+      <ExpertValidationApp api={fakeApi()} />
+    </RuntimeProvider>,
+  );
+  await act(async () => {
+    runtime.adoptAuthority({
+      instanceId: "i-validation",
+      proof: "p",
+      channelRevision: 1,
+      executionGeneration: 1,
+    });
+  });
+  const button = await screen.findByRole("button", { name: /acquire lease/i });
+  await userEvent.click(button);
+  // The runtime transport is the only path that carries the four authority headers; the page used to
+  // send the acquire through its own bare client, where they do not exist.
+  await waitFor(() => expect(posted).toContain("/expert-validation/lease"));
 });
