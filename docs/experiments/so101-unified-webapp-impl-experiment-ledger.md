@@ -2130,3 +2130,37 @@ non-symlink release overlay the plan requires - which is blocked at the MuJoCo u
 This checkpoint therefore strengthens the L2 evidence without overclaiming it: the code imports and
 serves from a composed prefix, and the artifact that would make it an *installed* claim cannot be built
 on this host.
+
+## CP-94: L2 copied-install provenance verified - the blocked artifact is now built
+
+CP-58/61/62 recorded the release overlay as blocked because `--packages-up-to so101_demo_py
+so101_teleop` pulls the MuJoCo chain. Reading `so101_teleop/package.xml` showed something the earlier
+attempts had not: **`so101_teleop` declares no MuJoCo dependency at all** - the chain arrives through
+`so101_demo_py -> so101_mujoco_support`, and colcon only needs that package *present* for the selected
+build, not built.
+
+So the overlay was built with `--packages-select` (no `--symlink-install`) instead:
+
+```
+colcon build --packages-select so101_demo_py so101_teleop --cmake-clean-cache ...  -> exit 0
+```
+
+and it is a **genuine installed prefix**, which the checks confirm:
+
+| Check | Result |
+| --- | --- |
+| `.../site-packages/so101_teleop/unified/app.py` | regular file, 35 967 bytes - not a symlink |
+| `.../site-packages/so101_demo/cli/mujoco_parallel_batch.py` | present in the installed package |
+| copy `install` to `copied-install`, source **that** prefix, import the factory | origin is `.../copied-install/.../unified/app.py` - **`from_copied_prefix: True`** |
+| app construction from the copied prefix | **59 routes**, and **`rclpy` still not loaded** |
+
+This also confirms CP-93's explanation: the earlier `so101_demo.cli...` failure was the symlink
+overlay's egg-link plus a hand-set `PYTHONPATH`, not a missing module - the module installs fine in a
+real build.
+
+So the L2 row of the delivery table moves from "partly" to: **copied-install provenance verified** -
+installed modules resolve to the copied prefix, the unified factory builds the full route table there,
+and the web-process ROS-free property holds in the installed artifact. What remains blocked is the
+Chrome/browser half of the L2 gate (it needs a live service and system Chrome) and the full
+`--packages-up-to` closure with the approved MuJoCo underlay, which this two-package overlay does not
+require.
