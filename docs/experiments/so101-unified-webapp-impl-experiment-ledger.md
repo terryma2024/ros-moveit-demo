@@ -5637,3 +5637,50 @@ falling back to `so101_parallel_batch` - which refuses this host anyway
 
 Nothing of B is implemented yet in this round: the comparison and the decision are recorded here so the
 next step is execution rather than re-derivation.
+
+## CP-166: the single-point N=1 retry is structurally excluded on macOS - the chain, in code
+
+Before writing any of EXP-B1's decision into code I checked whether the second half of the dispatch's
+second task can exist on this host at all. It cannot, and the exclusion is three frozen declarations
+deep rather than a missing feature:
+
+1. `parallel_batch/contracts.py:1294-1297` (and the v2 twin at `:1586-1589`): a
+   `FULL_RESTART_RETRY` batch is admitted only when `len(point_ids) == 1 and worker_count == 1`,
+   otherwise `RETRY_SINGLE_POINT_N1`. **The retry is N=1 by contract.** There is no W2 form of it.
+2. `parallel_batch/w2_composition.py:215-219`: the v4 composition - the only execution contract that
+   runs on this host - refuses any `worker_count != EXACT_W2_WORKERS` with
+   `PLATFORM_WORKER_COUNT_UNSUPPORTED`, and `exact_w2_slots(...)` builds two slots. **The v4 macOS
+   path is exactly W2 by construction.**
+3. `parallel_batch/contracts.py:1905`: the platform capability declaration refuses non-W2 worker
+   counts on this host, and the accepted §7 matrix records that refusal as correct behaviour
+   ("W2 admitted, W1/3/4/6/8 and a hand-edited YAML all refused"), not as a gap.
+
+So `N=1` (required by the retry) and `N=2` (required by the macOS composition) cannot both hold, and the
+retry is unreachable on this host through *any* entry - CLI, service API, or hand-written YAML. Dispatch
+6954bbb9's premise that the request-API entry would unblock it does not survive contact with the
+platform guard; the earlier §7 verdict ("needs a CUDA/Linux host or the request-API entry") is only half
+right, and the request-API half is now measured rather than assumed. Making it exist here would mean
+adding an N=1 v4 composition and relaxing a platform capability declaration the design deliberately
+froze to prevent downgrades - a design change, and one the operator has not authorised.
+
+**What remains implementable, and is the plan for the next step.** The other half of the task - a real,
+service-driven macOS MPS campaign - is unaffected: the launch branch the service needs is the typed one
+from CP-165, and the campaign it launches is exact W2, which is what this host can actually run. So the
+remaining work is:
+
+1. the macOS entry point hosts the closed control endpoint at `SO101_FIXED_CONTROL_SOCKET` (the wire
+   CP-165 identified), acknowledging its own durable stop transition and refusing to claim cleanup facts
+   it has not proven;
+2. the service composes a typed macOS execution branch that launches
+   `python -m so101_demo.cli.macos_w2_campaign` and refuses every other combination rather than falling
+   back to a runner that refuses this host;
+3. a teleop-side parity test pins the endpoint's field sets, frame limit and refusals against
+   `expert_validation/control.py`;
+4. a fresh service-API-driven W2 campaign, clean-preflight first, with fresh Chrome observation of the
+   service's own pages while it runs;
+5. the retry half is reported as structurally unreachable on macOS, with the three code sites above and
+   the options that would change it (Linux/CUDA host, or an authorised design change adding an N=1 v4
+   composition).
+
+No part of 1-5 is implemented in this round. Recording it here so the next step starts from a measured
+constraint rather than from the dispatch's assumption.
