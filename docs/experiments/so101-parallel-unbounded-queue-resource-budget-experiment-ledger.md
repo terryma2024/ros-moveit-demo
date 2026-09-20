@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ296 (scene attach anomaly narrowed; half of it was my probe)
+latest_checkpoint: CP-UQ297 (counted-series GUI block verified on its first batch)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -14589,3 +14589,46 @@ CLI attach is used by the Gazebo backend (`backends/gazebo/execute.py:335`), whi
 `ATTACH_MOVEIT`/`DETACH_MOVEIT` on all four points of both slots in every batch so far.
 
 _Ledger source HEAD: `59812065`; no evidence deleted._
+
+### CP-UQ297 — series 04 closed, and the counted series' GUI block checked on its first batch
+
+Series 04 finished with five `W2_CAMPAIGN_PASS` batches, cleanup complete in each. Read through the
+verifier: `fr4-02`, `-03`, `-04`, `-05` are clean on every protocol, slot, physical and phase check
+with `gui=4/4 distinct=4 done=4 phases=4` on both slots, and are held back only by the GUI block that
+Task 14 bullet 2 asks for. `fr4-01` remains the capture-broken one. The counted series
+`task14-five-batches-05` started at 01:28:11Z on worktree HEAD `8e1c8b5a`, which the series summary
+records in its own header, and its first batch's block is on disk. I checked it while the batch runs,
+because a defect in the block would cost five batches rather than one:
+
+| Piece | What is on disk |
+| --- | --- |
+| `pre-windows.json` | two windows, neither MuJoCo: Chrome `about:blank` (pid 24567) and Ghostty (pid 1312). Zero station windows before the start — the "no duplicate stack before starting" half of bullet 2 |
+| `pre-ipc.txt` | the private IPC base is empty, nothing left listening |
+| `during-captures.jsonl` | two entries, one per slot: window 4925 `ros2_control_node` pid 51937 and window 4917 pid 51928, both `MuJoCo : so101_task_scene`, both 320,83 1280x752, `captured_at 2026-09-20T09:29:12+0800`, sha256 `83cc0eb1…` and `b6183821…`, each with the exact capture command |
+| `during/window-*.png` | two images, 141 KB and 182 KB, different sizes from one instant, so two different windows rather than one copied twice |
+| `pre-desktop/`, `mid-action-desktop/` | one desktop snapshot each, taken through the skill's `--desktop` path, with its `manifest.json` recording mode, session type and timestamp |
+
+I opened two of them instead of trusting sizes. The window capture shows the live viewer (`Status
+Running`, `Steps 5753`, `Sim Time 11.506 s`, cup and target ring on the table) for window 4917, and the
+mid-action desktop snapshot shows the same window in place with the menu-bar clock reading
+`9月20日 周日 09:29`, which matches the recorded `captured_at`. The window identity in the record — id,
+owner process, owner pid, title, geometry, time — is exactly what bullet 2 asks to save.
+
+**One thing the pre-check caught that I am not hiding.** `pre-processes.txt` is not empty: two
+long-lived `static_transform_publisher` processes (pids 1541 and 1542, `base→camera_link` and
+`camera_link→task_camera_frame`, started long before this series) are still in the process table, next
+to the tmux server. They are not mine to stop — the plan forbids stopping processes that this task does
+not own — and every batch has passed with them present, so they are recorded as environment residue,
+not as a duplicate stack created by the batches. The `pre-ipc.txt` emptiness is what shows the
+per-campaign state is clean.
+
+The readback also needed one correction of its own: the desktop snapshots sit two levels below the GUI
+directory, because the skill writes `<output-root>/<timestamp>-<hex>/desktop.png`. My verifier globbed
+one level and would have reported `NO_DESKTOP_SNAPSHOT` for every batch, which would have been a false
+negative on all five. It now accepts both depths, and I checked the two real paths exist before the
+series could be affected by it.
+
+Task 14 stands at **0/5 countable with the first counted batch in flight**.
+`LINUX_REGRESSION_DEFERRED` retained; verdict stays **PARTIAL**.
+
+_Ledger source HEAD: `8e1c8b5a`; no evidence deleted._
