@@ -635,12 +635,18 @@ def run(argv: list[str] | None = None) -> int:
                                 "mode": oct(os.stat(endpoint.path).st_mode & 0o777)}
         # Per-batch freshness, recorded so a reader can see it rather than infer it: the campaign
         # root is freshly created per run and the Broker generation starts at one for a fresh campaign.
-        document["campaign_root"] = str(campaign_root)
+        document["campaign_root"] = str(getattr(campaign_root, "campaign_path", campaign_root))
         # Identities, not a defaulted counter: the Broker's pid and birth identity are facts the ready
         # receipt carries, and two batches can be compared by them without inventing a generation
         # number this composition does not actually maintain.
-        document["broker_identity"] = {"pid": getattr(ready, "broker_pid", None),
-                                       "birth_identity": getattr(ready, "broker_birth_identity", None)}
+        broker_pid = getattr(ready, "broker_pid", None)
+        document["broker_identity"] = {
+            "pid": broker_pid,
+            "birth_identity": getattr(ready, "broker_birth_identity", None),
+            # Recorded so the identity is not misread as a separate Broker process: in this
+            # composition the MPS Broker lives in the campaign process itself (CP-UQ283).
+            "in_campaign_process": broker_pid == os.getpid(),
+        }
 
         # Two real workers, spawned by the supervisor, each acknowledging registration first.
         workers = []
