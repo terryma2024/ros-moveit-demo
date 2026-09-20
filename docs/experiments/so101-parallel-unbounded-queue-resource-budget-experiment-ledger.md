@@ -14181,3 +14181,18 @@ Task 14 remains 0/5 - every point still fails at `TERMINAL_CAPTURE_FAILED` - and
 `LINUX_REGRESSION_DEFERRED` stands.
 
 _Ledger source HEAD: `3d9556f6`; no evidence deleted._
+
+### CP-UQ290 addendum — per-batch freshness, recorded as identities rather than a counter
+
+The campaign document now also carries `campaign_root` (freshly created per run) and
+`broker_identity {pid, birth_identity}` from the Broker's own ready receipt. My first version of this
+recorded a `broker_generation` read with `getattr(..., 1)` - a **defaulted** value that would have
+looked like a fact in the evidence. It was replaced in the same round: this composition does not
+maintain a generation counter, so recording one would have been an invented number, and identities are
+what a reader can actually compare between batches.
+
+`freshness-fields-02`: campaign suite at 18 passed.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `b3f258d9`; no evidence deleted._
