@@ -269,3 +269,30 @@ test("a renewal that does not extend the expiry is refused", async () => {
   expect(runtime.lastRenewalError).toBe("LEASE_EXPIRY_NOT_EXTENDED");
   expect(runtime.lease()).toBeNull();
 });
+
+test("a renewed lease returned by the transport is validated and adopted", async () => {
+  const snapshot: RuntimeSnapshot = { sequence: 1, serviceEpoch: "e1", executionGeneration: 1, payload: null };
+  const { transport } = makeTransport(snapshot);
+  transport.renew = vi.fn(async () => ({
+    lease_id: "l1",
+    service_session_id: "s1",
+    generation: 2,
+    expires_monotonic_ns: 200,
+  }));
+  const runtime = new DomainRuntime("validation", transport);
+  await runtime.start();
+  runtime.adoptAuthority({ instanceId: "i", proof: "p", channelRevision: 1, executionGeneration: 1 });
+  runtime.adoptLease({ lease_id: "l1", service_session_id: "s1", generation: 1, expires_monotonic_ns: 100 });
+  await runtime.renew();
+  expect(runtime.lease()?.generation).toBe(2);
+  expect(runtime.lastRenewalError).toBeNull();
+  // A renewal that does not extend the lease is refused and clears the state.
+  transport.renew = vi.fn(async () => ({
+    lease_id: "l1",
+    service_session_id: "s1",
+    generation: 2,
+    expires_monotonic_ns: 200,
+  }));
+  await expect(runtime.renew()).rejects.toThrow("STALE_LEASE_GENERATION");
+  expect(runtime.lease()).toBeNull();
+});

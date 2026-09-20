@@ -14,7 +14,7 @@ import {
   type DomainName,
   type InstanceProof,
 } from "@/api/instance-client";
-import type { DomainTransport, RuntimeSnapshot } from "@/state/domain-runtime";
+import type { DomainTransport, LeaseIdentity, RuntimeSnapshot } from "@/state/domain-runtime";
 
 export type DomainEndpoints = {
   snapshotPath: string;
@@ -114,7 +114,7 @@ export function createHttpTransport(
     setAuthority(next: ControllerAuthority | null): void {
       authority = next;
     },
-    async renew(): Promise<void> {
+    async renew(): Promise<Partial<LeaseIdentity> | void> {
       const response = await fetchImpl(`${baseUrl}${endpoints.renewPath}`, {
         method: "POST",
         headers: {
@@ -124,6 +124,13 @@ export function createHttpTransport(
         body: JSON.stringify(endpoints.renewBody),
       });
       if (!response.ok) throw new Error(`LEASE_RENEW_FAILED: ${response.status}`);
+      const payload = (await response.json().catch(() => null)) as Partial<LeaseIdentity> | null;
+      // The validation endpoint answers with the renewed lease; the teleop endpoint answers with a
+      // CommandResult. Only a lease-shaped body is handed back for validation.
+      if (payload && typeof payload.lease_id === "string" && typeof payload.generation === "number") {
+        return payload;
+      }
+      return undefined;
     },
     post: (path: string, body: Record<string, unknown>, authority: ControllerAuthority) =>
       client.post(path, body, authority),
