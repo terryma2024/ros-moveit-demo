@@ -4903,3 +4903,37 @@ rather than diagnosis.
 **A note on cleanup:** the live server again ignored SIGTERM and needed `kill -9`, which is the behaviour
 CP-146 recorded; the host is clean afterwards, checked with the working method rather than the broken
 `pgrep`.
+
+## CP-152: the campaign did not start, and the two refusals that stopped it are both named
+
+Driving the page through acquire -> generate -> check -> **start** on a fresh server got the clicks in
+(the page shows its point chips `P01..P10`), but no campaign POST was issued, and the run before it - 
+against a **server left over from the previous driver run** - produced two refusals worth keeping:
+
+```text
+POST /expert-validation/lease            409 {"code":"LEASE_ALREADY_HELD"}
+POST /expert-validation/manifests        409 {"code":"CONTROLLER_INSTANCE_MISMATCH",
+                                               "message":"validation is controlled by e24b533b3cff..."}
+PUT  /expert-validation/lease/undefined  409 CONTROLLER_INSTANCE_MISMATCH
+```
+
+**Finding one is mine, and it is about the experiment rather than the product.** Reusing a live server means
+reusing its state: the previous page had acquired the lease and the controller stayed bound to its instance,
+so a *second* page is correctly refused `LEASE_ALREADY_HELD`, and every later mutation of the new instance
+is refused `CONTROLLER_INSTANCE_MISMATCH` because the domain is controlled by the first. A clean run needs a
+fresh server per page - which is what the earlier harnesses did with their own evidence roots, and what I
+stopped doing when I started reusing a server to save a rebuild.
+
+**Finding two is a real defect and it is in my client fix.** `PUT /expert-validation/lease/undefined`: the
+renewal interpolated a lease id that was not there. `domain-transport.ts`'s `renewTarget` guards `lease ===
+null` but not "a lease object without a `lease_id`", and something adopted such an object - most plausibly a
+partial lease from the app's state after the failed acquire in the same run. A renewal that builds a URL out
+of `undefined` should be impossible by construction, so the guard belongs on the *shape* of the lease, not
+only on its absence, and the adopt path should refuse a lease without an id.
+
+**And the start click itself.** On the clean run the page answered Start with its own notice - "Lease renewed;
+check resources again" - i.e. it wanted a *fresh* preflight because the heartbeat had renewed the lease in
+between, which is the app's own rule working. My driver clicked check, waited, then start, and lost that
+race; the retry loop I added (check -> start, up to four times) then hit finding one on the dirty server.
+The next run should be: **fresh server, one page, check and start back to back**, and only then look for a
+retry control.
