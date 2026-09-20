@@ -3550,3 +3550,36 @@ Every row is done except the live half of the N1 retry, which is unreachable on 
 above: guard/probe/CPU/RAM, budget-free entry, unknown/WARN presentation, installed, history, functional
 (live exact W2), points (4 and 20), physics (8/8 SUCCEEDED with per-point artifacts), control
 cleanup/ownership, control cancel (live, named ids), control retry **contract**.
+
+## Stage B replacement acceptance - consolidated verdict (read this instead of the checkpoints)
+
+The operator replaced Stage B with the successor design's section 7 acceptance. This is the one-page
+version: every row, its status, and the evidence that backs it. Checkpoints CP-103 to CP-122 carry the
+reasoning; this carries the result.
+
+| §7 row | verdict | evidence |
+| --- | --- | --- |
+| guard: PASS/WARN/FAIL, floor, illegal config, timeout, single flight | **met** | 82 tests pass at this commit, gate `727fe308b5c34f92b697c8fb0429d1a7`; live installed probe gate `fae864e88d9246a4b7cf303fda0ae2cc` (0.176 s against a 2 s deadline, real 10.0 cores / 11.8 GiB, unknown CPU busy degrades to WARN, every unmet check fails closed) |
+| probe lifecycle: bounded 2 s, unreapable blocks, restart by exact identity | **met** | same 82-test gate; the live probe's `require_before_spawn` re-check returned FAIL at 0.178 s without upgrading |
+| CPU effective capacity | **met** | same gate |
+| RAM effective capacity and floor | **met** | same gate; live headroom 12.7-16.1 GB against the 1 GiB floor in three real runs |
+| budget-free default entry | **met** | gate `054328b1607546229cd5f0f4c7b24f7f`: environment greps clean for budget/measurement/authorization/approval; the only refusal is on the non-budget evidence root |
+| unknown/WARN never shown as green or as certification | **met** | 14 tests, gate `2c44e416ee9b4e27956f9f196e442756`; live capabilities payload returns `worker_qualifications: UNKNOWN + BUDGET_PROVIDER_NOT_READY` and `start_guard: null` |
+| history: v1/v2 readable, not executable | **met** | 103 tests, gate `de939abaae0446c3a59779417839e317` |
+| installed: real console, launch, config, default composition | **met** | full closure build (3 packages, rc 0); gate `eaf70b3f4a37429d9bcbd14cc0b936b1` (console scripts, config, launch, web assets; retired entry prints `MEASUREMENT_ENTRY_RETIRED` and exits 2); gate `6807ad9b37104f29b6ea4f13f0d7fb1e` (installed server serves `/`, `/tasks`, `/expert-validation` 200, unknown asset 404, ready 503 without a ROS domain) |
+| functional: exact N, no hard-coded 3, no forced 8, no downgrade | **met** | gate `9a11267476044e1484ebee9e5e00da88`: W2 admitted, W1/3/4/6/8 and a hand-edited YAML all refused `PLATFORM_WORKER_COUNT_UNSUPPORTED` at construction; gate `c127bd88d3964817a15b793c0dd6c144`: the exact-W2 plan resolves mps/darwin_private_path_unix/cgl with the 1 GiB floor; live: two workers, four points and four manifests per slot in every passing run |
+| points: 4-point and 20-point sets, anchors included | **met** | gate `4943672b007347e78dc1c42505fdb8a9`: 4 and 20 both exact and distinct, 4/4 anchors in each, 4-point subset of 20-point, out-of-range refused `TOTAL_POINTS_RANGE`, selections deterministic with the catalog seed recorded |
+| control: cleanup and ownership | **met** | `workers_reaped [true, true]`, `directory_removed`, `registry_empty` in every run; zero pre/post residue in the last three runs; the one leak found is documented with its ownership boundary in CP-119 |
+| control: cancel | **met** | live run with `--cancel-second-worker-after-served 4`: `cancelled_ids` names all three cancelled requests, served 9 instead of 12, no handler errors, handlers joined, cleanup complete, verdict PASS |
+| control: lease/ack/result | **met** | per-worker `lease.json`, `ack.json`, `result.json` and per-attempt admission records (`CONSUMED`) in every run |
+| control: single-point N1 `FULL_RESTART_RETRY` | **contract met, live unreachable here** | gate `d6826d40660f4e88a8b4f328fb96827b`: admitted only for exactly one point at N=1; three other combinations refused `RETRY_SINGLE_POINT_N1` at construction. Live: `so101_parallel_batch` refuses schema 4 (`CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION`) and its v3 path refuses this host (`GPU_TARGET_UNAVAILABLE`); the campaign CLI that does run here has no retry option. Needs a CUDA/Linux host or the request-API entry |
+| physics: real controller joints, MoveIt shadow, sim pose/contact, screenshots | **met** | live clean run: 8/8 points `SUCCEEDED`, four contacts per slot, `exit_code 0`, station `phase READY` with actions/controllers/services; per point a `dynamic-execute-manifest.json` (734 KB), `viewer.png` (732 KB), `rgb.png`, `full-cloud.ply` (4.6 MB), `cup-cloud.ply`, `point-cloud-preview.png` and the two logs |
+
+**One row short, and it is an environment limit rather than unfinished work.** Nothing in the unified
+webapp or in the acceptance itself prevents the N1 retry; the two entries that exist on this host cannot
+express it, and the entry that can is on the other platform. That is a decision for the operator - run it
+on Linux, or through the request API - not something to fix by bending the runtime.
+
+**What is deliberately not claimed anywhere in this table:** `resource qualified`, any promotion, any
+five-consecutive-success business verdict, or that macOS validation through the unified service is
+supported. The retired per-N budget chain is `NOT_APPLICABLE_SUPERSEDED` and no number here resurrects it.
