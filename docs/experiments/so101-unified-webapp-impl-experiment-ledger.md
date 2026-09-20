@@ -5356,3 +5356,61 @@ raises, **no process of that child's group may still exist**. The remedy is
 `killpg(SIGTERM) -> bounded wait -> killpg(SIGKILL) -> wait/reap -> fresh identity scan (pgid + start
 marker)`, with a durable recovery fence and a structured reason when even that cannot confirm the tree is
 gone - never a bare raise with a live process behind it.
+
+## CP-161: the root cause chain, at last, and it starts with a Linux-only identity reader
+
+The RED test earned its keep by failing on something upstream of what it was written to assert:
+
+```text
+test_process_owner_group_cleanup.py::test_stopping_owned_execution_clears_its_process_group
+  -> CoordinatorOwnershipError: EXEC_BARRIER_ACK_MISSING
+     process_owner.py:224  raise CoordinatorOwnershipError("EXEC_BARRIER_ACK_MISSING") from last_error
+```
+
+The helper it spawned was alive and healthy; the barrier still never matched it. The reason is four lines
+above:
+
+```text
+process_owner.py:78  def _read_identity(pid):
+process_owner.py:80      stat = Path(f"/proc/{pid}/stat").read_text()
+process_owner.py:82      command_line = Path(f"/proc/{pid}/cmdline").read_bytes()
+process_owner.py:83-84   except (FileNotFoundError, ...): raise PROCESS_IDENTITY_MISMATCH
+```
+
+**`/proc` does not exist on macOS.** Every identity read raises, `_await_identity` retries for ten seconds
+and then reports `EXEC_BARRIER_ACK_MISSING` - so on this host `ExecutionProcessOwner.spawn()` cannot succeed
+for *any* child, and the error name has been pointing at the wrong layer all along: it is an identity
+reader, not a missing acknowledgement.
+
+That completes the causal chain the orphans came from, and every link is a line of code:
+
+1. `_read_identity` is Linux-only, so on macOS `spawn()` raises at the barrier on every attempt;
+2. `spawn()`'s failure path does `process.terminate()` - **the leader only** - so any descendant of the
+   child survives. That is the shape of the four leaked `descendant_helper.py` / `process_tree_helper.py`
+   processes: their PGID leader is gone and they are still running;
+3. `stop_owned` signals one pid, and on timeout raises `STOP_NOT_CONFIRMED` **with the child still alive**,
+   so a child that handles `SIGTERM` slowly (the ten `noros_child_helper.py` session leaders, each with its
+   own signal handling and sockets) becomes an orphan on the path that reports failure;
+4. and every test that errors before its own `finally` never reaches even that stop path - which is why the
+   orphan count tracks this host's erroring tests.
+
+This also reframes CP-156's live result with the benefit of hindsight: the service's campaign start did see
+the runner's own `CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION`, but the barrier refusal it reported would have
+happened on this host **regardless of the document**, because the identity read cannot work here. Fixing the
+document routing alone would not have produced a running campaign.
+
+**Fix plan, in dependency order (RED first for each):**
+
+- `EXP-A5` (new, upstream of A3): make `_read_identity` cross-platform while keeping exact identity - pid,
+  start marker, pgid, state and argv hash - via a macOS-capable source (for instance `ps -o
+  pid=,pgid=,state=,lstart=,command=`) and fail closed when identity genuinely cannot be read. The existing
+  tests already pin the semantics (`identity_matches`, PID-reuse refusal, drift refusal), so this is a
+  portable re-implementation rather than a redesign.
+- `EXP-A3` (unchanged in intent): one owner per child, spawn into a verifiable group, and cleanup as
+  `killpg(SIGTERM) -> bounded wait -> killpg(SIGKILL) -> wait/reap -> fresh identity scan` in one `finally`,
+  including `spawn()`'s own failure path and `stop_owned`'s timeout, with a durable recovery fence instead of
+  a bare raise over a live process.
+- `EXP-A4`: only then terminate the proven-owned orphans and run the normal/cancel/fault gates.
+
+The two RED tests written this round stand as the acceptance for the fix: the group-cleanup assertion
+(`test_process_owner_group_cleanup.py`) and, once identity works, the same assertion for the bridge child.
