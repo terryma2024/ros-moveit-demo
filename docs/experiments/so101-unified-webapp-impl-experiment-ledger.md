@@ -4710,3 +4710,35 @@ immediately. Afterwards the authoritative check reports zero matches and none of
 graceful path these servers take on SIGTERM hangs - which is itself worth knowing before the next live run,
 because a deployed service that cannot be stopped politely is a deployment problem, not just a test-harness
 one.
+
+## CP-147: the second renewal path was a spec violation, and removing it is the fix
+
+CP-146 found the page renewing a stored lease on reload through a client with no authority. Reading the
+design settles what should happen instead, and it is not "route that call through the wrapper":
+
+```text
+design section 5.1, line 92:  本地存储只恢复只读投影，不恢复执行许可
+                              (local storage restores only the read-only projection, never execution
+                               permission)
+```
+
+The effect in question did the opposite: on mount it read a lease out of `sessionStorage`, renewed it, and
+adopted the result as live authority. Two independent reasons that cannot work - it rebuilds execution
+permission from storage, which the design forbids, and the renewal it issues carries no instance authority
+because it goes through the page's bare client. So the fix is **deletion**, not rewiring: the effect is
+gone and the page's reattach path is the explicit Acquire control, which is what the authority model
+requires anyway.
+
+RED first, and it reproduced the violation exactly: with a stored lease in `sessionStorage`, mounting the
+page called `renewLease` once (`Number of calls: 1`). After the removal the new test passes, and the two
+tests that encoded the old behaviour were **deleted rather than adjusted** - "reload reattaches the
+persisted lease by renewing it instead of abandoning it" and "a stored lease that no longer renews is
+dropped for a fresh acquire" were asserting the behaviour the design forbids, so keeping them in any form
+would have preserved the defect behind a green suite. Committed `6993a4e7`; frontend suite **46 files, 207
+tests passed**, bundle builds.
+
+One thing this round does *not* answer, and I am leaving it visible rather than implying it is solved: the
+runtime's own renewal now adopts the lease (CP-145's fix), so the generation should follow the server after
+a renewal - but I have not re-run the live sequence since, and the live `2 != 1` was measured *before* both
+this deletion and the adoption fix were in the same bundle. The next live run is what settles it, and the
+campaign start is one click behind it.
