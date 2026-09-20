@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ294 (counted Task 14 series with a per-batch GUI snapshot block)
+latest_checkpoint: CP-UQ295 (Task 14 readback tool and its interim result)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -14494,3 +14494,48 @@ at **1/5 recorded (fr4-02, supporting) with the counted series starting now**;
 verdict remains **PARTIAL**.
 
 _Ledger source HEAD: `529b6043`; no evidence deleted._
+
+### CP-UQ295 — a readback that recomputes the verdict, and what it says so far
+
+The series summary line is convenient and, as CP-UQ293 showed, fallible: one of its records was never
+written. So the verdict now comes from `verify-task14.py` (in the implementation directory), which
+re-derives every Task 14 condition from the artifacts and trusts no summary file. Per batch it reads
+the campaign result document and checks `status`, `cleanup.complete`/`directory_removed`/
+`registry_empty`/`workers_reaped`, `served.count`, `served.devices`, the refusal and handler-error
+counts, `handlers_joined`, both worker leases (two slots, both `ACTIVE`, distinct PIDs and birth
+identities) and both worker result documents (three `broker.infer` requests each, all `OK`, all on
+`mps`, no duplicate result). Per slot it counts the four point results, requires `SUCCEEDED` with no
+failure code, four `viewer.png` files with four distinct hashes, four `DONE` manifests, and four
+manifests whose `state_trace` contains all seven required phases. Per batch it then requires the GUI
+block: zero MuJoCo windows before the start, zero after the end, at least two independent during-action
+window captures with distinct hashes, and at least one desktop snapshot. Only if all of that holds is
+the batch countable, and the series count stops at the first batch that is not.
+
+Run against series 04, it prints something the summary could not:
+
+| Batch | Verdict | Detail |
+| --- | --- | --- |
+| `task14-fr4-01` | not countable | points `FAILED`/`SUCCEEDED` mixed, `gui=1/4`, and no GUI block |
+| `task14-fr4-02` | not countable | every physical check passes — `gui=4/4 distinct=4 done=4 phases=4` on both slots — and the only problem is `NO_GUI_BLOCK` |
+| `task14-fr4-03` | not countable | identical: clean except `NO_GUI_BLOCK` |
+| `task14-fr4-04` | running | `NO_CAMPAIGN_RESULT` |
+
+Two facts from that run are worth keeping on their own. First, the seven-phase trace is complete in
+**all four points of all three batches** — `phases=4` on every slot, so `VERIFY_PHYSICAL_GRASP`,
+`ATTACH_MOVEIT`, `DETACH_MOVEIT`, `OPEN_GRIPPER`, `WAIT_RELEASE_SETTLE`, `VALIDATE_FINAL_PLACEMENT`
+and `SYNC_WORLD_OBJECT` all appear, not just on the batch I inspected by hand. Second, the epochs are
+per batch and per slot: `task14-fr4-02-w1` with `expected_reset_epoch` 1, 2, 3, 4 and
+`task14-fr4-02-w2` likewise, and the same pattern under `-03`, which is the "independent new epoch per
+batch" requirement read out of the manifests rather than asserted.
+
+The readback also forced one correction in my own tooling: I first read `simulation_session_id` from
+the point result documents, where it does not exist, and got `(None, 1..4)` for every batch — a
+plausible-looking freshness record that proved nothing. The session id and expected epoch live in the
+execution manifest. The verifier now reads them there, and the difference is visible in the table
+above because the epochs carry their session ids.
+
+Task 14 stands at **0/5 countable**: two batches are clean on every physical and protocol check and
+are held back only by the GUI block, which series 05 supplies. `LINUX_REGRESSION_DEFERRED` retained;
+verdict stays **PARTIAL**.
+
+_Ledger source HEAD: `bdae6767`; no evidence deleted._
