@@ -75,17 +75,59 @@ class TaskApiService:
         self.unsubscribed = queue
 
 
-def unified_app_for(service=None, *, static_dir=None, capture_dir=None, task_service=None):
+def unified_app_for(service=None, *, static_dir=None, capture_dir=None, task_service=None,
+                    instances=None, arbiter=None, safety=None):
     """Build the unified app around a stub port; the migration target for these tests (CP-75)."""
     from so101_teleop.unified.app import create_unified_app
     from so101_teleop.unified.ports import UnifiedServices
 
     return create_unified_app(
-        UnifiedServices(teleop=service, tasks=task_service, validation=None),
+        UnifiedServices(
+            teleop=service,
+            tasks=task_service,
+            validation=None,
+            arbiter=arbiter,
+            instances=instances,
+            safety=safety,
+        ),
         static_dir=static_dir,
         capture_dir=capture_dir,
         bind_address="127.0.0.1",
     )
+
+
+class AuthorityFixture:
+    """A real instance binding, so a migrated mutation case can carry instance authority.
+
+    This is the fixture CP-75 specified: a real store, arbiter and registry in a temporary
+    directory, an instance registered, a channel connected and a lease claimed.
+    """
+
+    def __init__(self, tmp_path) -> None:
+        from so101_teleop.unified.arbiter import GlobalMutationArbiter
+        from so101_teleop.unified.contracts import Domain, LeaseIdentity
+        from so101_teleop.unified.instances import InstanceRegistry
+        from so101_teleop.unified.intent_store import IntentStore
+
+        self.store = IntentStore.open(tmp_path / "unified-state")
+        self.arbiter = GlobalMutationArbiter(self.store, clock_ns=lambda: 1)
+        self.registry = InstanceRegistry(
+            self.arbiter, service_epoch="e1", origin="http://testserver", clock_ns=lambda: 1
+        )
+        proof = self.registry.register(Domain.TELEOP)
+        binding = self.registry.connect(proof.instance_id, proof.proof, origin="http://testserver")
+        self.authority = self.registry.claim(binding, LeaseIdentity("l1", "s1", 1, 10 ** 15))
+
+    def headers(self) -> dict:
+        return {
+            "X-SO101-Instance-ID": self.authority.instance_id,
+            "X-SO101-Instance-Proof": self.authority.proof,
+            "X-SO101-Channel-Revision": str(self.authority.channel_revision),
+            "X-SO101-Execution-Generation": str(self.authority.execution_generation),
+        }
+
+    def close(self) -> None:
+        self.store.close()
 
 
 def test_unsafe_bind_is_rejected():
