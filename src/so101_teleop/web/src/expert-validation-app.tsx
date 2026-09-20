@@ -171,38 +171,44 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
       setNotice("LEASE_CAPABILITIES_INVALID");
       return;
     }
-    const timer = setTimeout(() => {
-      setLeaseRenewing(true);
-      api.renewLease(lease).then((next) => {
-        if (disposed) return;
-        // The renewal identity, generation and expiry rule lives in the domain runtime; this page
-        // only keeps its own scheduling and notices until the runtime heartbeat owns the cadence.
-        const accepted = runtime
-          ? runtime.validateRenewal({
-              lease_id: next.lease_id,
-              service_session_id: next.service_session_id,
-              generation: next.generation,
-              expires_monotonic_ns: next.expires_monotonic_ns,
-            })
-          : next.lease_id === lease.lease_id
-            && next.service_session_id === lease.service_session_id
-            && next.generation > lease.generation
-            && next.expires_monotonic_ns > lease.expires_monotonic_ns;
-        if (!accepted) {
-          throw new Error(runtime?.lastRenewalError ?? "LEASE_RENEWAL_INVALID");
-        }
-        setLeaseRenewing(false);
-        replaceLease(next);
-        setNotice("Lease renewed; check resources again");
-      }).catch((error: unknown) => {
-        if (disposed) return;
-        setLeaseRenewing(false);
+    // The renewal loop belongs to the domain runtime: it owns the cadence, presents the instance
+    // authority, validates the returned lease and keeps the adopted state. This page only adopts its
+    // lease into the runtime and turns the published outcome into its own notices.
+    runtime?.adoptLease({
+      lease_id: lease.lease_id,
+      service_session_id: lease.service_session_id,
+      generation: lease.generation,
+      expires_monotonic_ns: lease.expires_monotonic_ns,
+    });
+    const unsubscribe = runtime?.onRenewal((outcome) => {
+      setLeaseRenewing(false);
+      if (!outcome.ok) {
         replaceLease();
-        reportError(error);
-      });
-    }, (duration - margin) * 1_000);
-    return () => { disposed = true; clearTimeout(timer); };
-  }, [api, lease, capabilities]);
+        setNotice(outcome.error ?? "LEASE_RENEWAL_FAILED");
+        reportError(new Error(outcome.error ?? "LEASE_RENEWAL_FAILED"));
+        return;
+      }
+      const renewed = runtime.lease();
+      if (renewed) {
+        replaceLease({
+          ...lease,
+          lease_id: renewed.lease_id,
+          service_session_id: renewed.service_session_id,
+          generation: renewed.generation,
+          ...(renewed.expires_monotonic_ns !== undefined
+            ? { expires_monotonic_ns: renewed.expires_monotonic_ns }
+            : {}),
+        });
+      }
+      setNotice("Lease renewed; check resources again");
+    });
+    runtime?.startHeartbeat(() => (duration - margin) * 1_000);
+    return () => {
+      disposed = true;
+      unsubscribe?.();
+      runtime?.stopHeartbeat();
+    };
+  }, [api, lease, capabilities, runtime]);
 
   useEffect(() => {
     let disposed = false;

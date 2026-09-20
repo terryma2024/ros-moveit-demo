@@ -2,6 +2,8 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, test, vi, beforeEach } from "vitest";
+import { DomainRuntime, type DomainTransport } from "@/state/domain-runtime";
+import { RuntimeProvider } from "@/state/runtime-provider";
 
 import { ExpertValidationApp, type ExpertValidationApi } from "./expert-validation-app";
 import type { Lease, Manifest } from "@/api/expert-validation-types";
@@ -33,6 +35,48 @@ function frozenManifest(count = 4, manifestId = "manifest-4"): Manifest {
         green: { ...golden.palette.green, icon: "passed" }, red: { ...golden.palette.red, icon: "failed" } },
     },
   };
+}
+
+/**
+ * Render the app inside a root provider whose validation transport finishes renewals through the
+ * test's own `renewLease` spy. Renewal is owned by the runtime, so the tests must drive the runtime
+ * rather than expect the page to hold a timer.
+ */
+function renderWithRuntime(app: React.ReactElement, renewLease: (lease: Lease) => Promise<Lease>, cadenceMs = 20_000) {
+  let lease: Lease | null = null;
+  const transport: DomainTransport = {
+    register: async (domain) => ({ instance_id: `i-${domain}`, proof: `p-${domain}`, domain }),
+    connect: async (proof) => ({ instance_id: proof.instance_id, revision: 1, domain: proof.domain }),
+    snapshot: async () => ({ sequence: 0, serviceEpoch: "e1", executionGeneration: 1, payload: null }),
+    subscribe: () => () => undefined,
+    renew: async () => {
+      const current = lease ?? (runtime.lease() as unknown as Lease | null);
+      if (!current) return undefined;
+      const next = await renewLease(current);
+      lease = next;
+      return {
+        lease_id: next.lease_id,
+        service_session_id: next.service_session_id,
+        generation: next.generation,
+        expires_monotonic_ns: next.expires_monotonic_ns,
+      };
+    },
+    setAuthority: () => undefined,
+    post: async () => ({ code: "OK" }),
+    close: () => undefined,
+  };
+  const runtime = new DomainRuntime("validation", transport);
+  const view = render(
+    <RuntimeProvider validation={runtime}>
+      {app}
+    </RuntimeProvider>,
+  );
+  // The provider starts the runtime asynchronously; the heartbeat cadence matches the page's margin.
+  void Promise.resolve().then(() => {
+    runtime.adoptAuthority({ instanceId: "i-validation", proof: "p", channelRevision: 1, executionGeneration: 1 });
+    runtime.startHeartbeat(cadenceMs);
+  });
+  return { ...view, runtime };
 }
 
 function fakeApi(overrides: Partial<ExpertValidationApi> = {}): ExpertValidationApi {
@@ -221,7 +265,7 @@ describe("ExpertValidationApp", () => {
       const startCampaign = vi.fn(base.startCampaign);
       const renewLease = vi.fn(async (current: Lease) => ({ ...current, generation: current.generation + 1, expires_monotonic_ns: current.expires_monotonic_ns + 30_000_000_000 }));
       const api = { ...base, preflight, startCampaign, renewLease };
-      const { unmount } = render(<ExpertValidationApp api={api} />);
+      const { unmount } = renderWithRuntime(<ExpertValidationApp api={api} />, renewLease);
       await act(async () => {});
       await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Acquire lease" })); });
       await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Generate points" })); });
@@ -245,8 +289,9 @@ describe("ExpertValidationApp", () => {
   test("failed renewal disables execution and allows a fresh lease request", async () => {
     vi.useFakeTimers();
     try {
-      const api = { ...fakeApi(), renewLease: async () => { throw new Error("LEASE_EXPIRED"); } };
-      render(<ExpertValidationApp api={api} />);
+      const renewLease = async (): Promise<Lease> => { throw new Error("LEASE_EXPIRED"); };
+      const api = { ...fakeApi(), renewLease };
+      renderWithRuntime(<ExpertValidationApp api={api} />, renewLease);
       await act(async () => {});
       await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Acquire lease" })); });
       await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Generate points" })); });
