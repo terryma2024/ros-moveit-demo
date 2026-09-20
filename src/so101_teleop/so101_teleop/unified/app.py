@@ -14,7 +14,7 @@ import inspect
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -155,14 +155,21 @@ def _authority_from_headers(request: Request) -> RequestAuthority:
 
 
 def require_authority(domain) -> "callable":
-    """FastAPI dependency: instance authority first, then the live controller binding."""
+    """FastAPI dependency: instance authority first, then the live controller binding.
 
-    async def dependency(request: Request) -> RequestAuthority:
-        instance_id = request.headers.get(INSTANCE_ID_HEADER)
-        proof = request.headers.get(INSTANCE_PROOF_HEADER)
-        revision = request.headers.get(CHANNEL_REVISION_HEADER)
-        generation = request.headers.get(EXECUTION_GENERATION_HEADER)
-        if not (instance_id and proof and revision and generation):
+    The four headers are declared as real parameters, not read off the raw request, so they are part
+    of the OpenAPI contract and the generated client can carry them. A missing header is refused with
+    the same structured code as before.
+    """
+
+    async def dependency(
+        request: Request,
+        instance_id: str | None = Header(default=None, alias=INSTANCE_ID_HEADER),
+        proof: str | None = Header(default=None, alias=INSTANCE_PROOF_HEADER),
+        channel_revision: str | None = Header(default=None, alias=CHANNEL_REVISION_HEADER),
+        execution_generation: str | None = Header(default=None, alias=EXECUTION_GENERATION_HEADER),
+    ) -> RequestAuthority:
+        if not (instance_id and proof and channel_revision and execution_generation):
             raise HTTPException(
                 status_code=409,
                 detail={
@@ -174,8 +181,8 @@ def require_authority(domain) -> "callable":
             domain=domain,
             instance_id=instance_id,
             proof=proof,
-            channel_revision=int(revision),
-            execution_generation=int(generation),
+            channel_revision=int(channel_revision),
+            execution_generation=int(execution_generation),
         )
         registry = getattr(request.app.state.services, "instances", None)
         if registry is None:
