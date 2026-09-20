@@ -5191,3 +5191,39 @@ fixed it. The catalogue of my own tools that answered wrongly now reads: a test 
 <dir> ]` skipping an overlay, `pgrep -af` flooding and mismatching, `pgrep -fc` reporting zero for live
 processes, and helpers that move the shell. Every one of them was caught by asking whether the answer made
 sense rather than by trusting it, and every fix was a differently-shaped check.
+
+## CP-158: the in-scope alternative is dead - the v3 runner refuses this host too
+
+CP-157 identified a control-plane integration as the remaining work and I went looking for a cheaper,
+in-scope route first: keep the v4 document for the service's guard (which now admits) and hand the *runner* a
+v3 document. That needs no control-plane work, so it was worth testing rather than assuming. It fails, and
+the runner says why in its own words:
+
+```text
+so101_parallel_batch --config parallel_batch_v3.yaml --run-mode execute ... (fresh evidence root, catalogue)
+  -> {"message": "GPU_TARGET_UNAVAILABLE", "status": "ERROR"}
+```
+
+So on this host the two runner documents form a closed pair of refusals:
+
+| document handed to the runner | refusal |
+| --- | --- |
+| schema 4 (macOS MPS) | `CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION` - the runner is the v3 path |
+| schema 3 | `GPU_TARGET_UNAVAILABLE` - the v3 guard probes for a CUDA device this Mac does not have |
+
+and the runner that *can* execute here (`cli/macos_w2_campaign.py`, proven with 8/8 points in CP-118) does
+not speak the service's control protocol (9 references in the supervisor, 0 in the CLI). Three independent
+directions, one conclusion: **the unified service cannot start a campaign on macOS as it stands**, and
+closing that is the control-plane feature CP-157 scoped, not another acceptance fix.
+
+Two of the three refusals on the way to this result were my own invocation errors first
+(`DUPLICATE_BATCH_EVIDENCE_ROOT` for a pre-created root, `POINT_CATALOG_HASH_MISMATCH` for the wrong points
+file) - the same two I made in CP-122 - which is why the third attempt, with both fixed, is the one that
+carries the conclusion.
+
+**Disposition of the §7 acceptance.** Every row is met with measured evidence; the campaign-through-the-
+service and its single-point `FULL_RESTART_RETRY` are unreachable within the goal's own boundary (the goal
+excludes Stage C, and this is the live execution path). The objective as written cannot be completed on this
+host without crossing that boundary, so the goal is being marked **blocked** with this as its reason rather
+than left to spin: the condition has held for three consecutive rounds, and each round narrowed it further
+instead of dissolving it.
