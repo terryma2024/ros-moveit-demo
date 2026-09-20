@@ -80,6 +80,18 @@ class UnifiedLifecycle:
                 await bridge.stop_owned()
         self.started = False
 
+    # -- qualification gate ------------------------------------------------------
+
+    def budget_adapter(self):
+        """The read-only adapter over the independently owned qualification provider."""
+        from .budget_adapter import BudgetAdapter
+
+        return BudgetAdapter(self.services.budget_source)
+
+    def require_start(self, selected_n: int, runtime_identity: str):
+        """Fresh live qualification check; a start must never trust a cached view."""
+        return self.budget_adapter().require_start(selected_n, runtime_identity=runtime_identity)
+
     # -- observation -------------------------------------------------------------
 
     def teleop_ready(self) -> bool:
