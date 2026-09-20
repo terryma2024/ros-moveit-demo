@@ -29,15 +29,10 @@ from .task_artifacts import ArtifactAccessError
 from .task_gateway import TaskGatewayError
 
 
-def validate_bind_address(address: str) -> str:
-    try:
-        parsed = ipaddress.ip_address(address)
-    except ValueError as error:
-        raise ValueError("BIND_ADDRESS_UNSAFE") from error
-    if not (parsed.is_loopback or (isinstance(parsed, ipaddress.IPv4Address) and
-                                   parsed in ipaddress.ip_network("100.64.0.0/10"))):
-        raise ValueError("BIND_ADDRESS_UNSAFE")
-    return address
+# The rule lives in a leaf module so the unified factory can import it without a cycle.
+from .bind_policy import validate_bind_address
+
+__all__ = ["create_app", "validate_bind_address"]
 
 
 def create_app(
