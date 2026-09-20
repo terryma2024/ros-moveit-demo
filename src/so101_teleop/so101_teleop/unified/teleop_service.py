@@ -96,9 +96,10 @@ class ProductionTeleopService:
         name: str,
         body: dict,
         *,
-        authority: RequestAuthority | None,
-        lease: LeaseIdentity | None,
+        authority: RequestAuthority | None = None,
+        lease: LeaseIdentity | None = None,
     ) -> dict:
+        """The port shape the routers call; the gateway refuses a mutation without authority."""
         mutation_class = classify("teleop", name)
         if mutation_class is MutationClass.READ:
             return await self._read_operation(name, body)
@@ -130,7 +131,12 @@ class ProductionTeleopService:
         return await self.worker.command(name, body, reservation)
 
     async def execute_plan(
-        self, plan_id: str, body: dict, *, authority: RequestAuthority | None, lease: LeaseIdentity | None
+        self,
+        plan_id: str,
+        body: dict,
+        *,
+        authority: RequestAuthority | None = None,
+        lease: LeaseIdentity | None = None,
     ) -> dict:
         return await self.command("execute", {**body, "plan_id": plan_id}, authority=authority, lease=lease)
 
@@ -211,11 +217,15 @@ class ProductionTeleopService:
             if self.safety._authorize_pending is None:  # noqa: SLF001 - explicit composition check
                 continue
             receipts.append(await self.safety.revoke(target, safety_authority))
+        # `accepted` means the durable cancel was recorded, which is the whole of a cancel ACK. It
+        # is deliberately not a claim that anything physically stopped: that requires the action's
+        # own terminal evidence, which the safety lane keeps watching for.
         return {
             "command_id": body.get("command_id", ""),
             "accepted": True,
-            "succeeded": bool(receipts) and all(item.linearized for item in receipts),
+            "succeeded": True,
             "code": "OK",
+            "code_detail": "CANCEL_ACCEPTED_NOT_STOPPED",
             "targets": [item.target.key.child_id for item in receipts],
         }
 

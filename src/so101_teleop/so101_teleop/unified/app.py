@@ -57,7 +57,7 @@ from so101_teleop.models import (
 from so101_teleop.task_artifacts import ArtifactAccessError
 from so101_teleop.task_gateway import TaskGatewayError
 
-from .contracts import LeaseIdentity, MutationError, RequestAuthority
+from .contracts import Domain, LeaseIdentity, MutationError, RequestAuthority
 from .lifecycle import UnifiedLifecycle
 from .ports import UnknownBudgetSource, UnifiedServices
 
@@ -178,7 +178,9 @@ def require_authority(domain) -> "callable":
                 },
             )
         authority = RequestAuthority(
-            domain=domain,
+            # The registry compares domains by identity, so the enum member is required here; a
+            # plain string silently produced INSTANCE_DOMAIN_MISMATCH at runtime.
+            domain=Domain(domain),
             instance_id=instance_id,
             proof=proof,
             channel_revision=int(channel_revision),
@@ -320,9 +322,12 @@ def teleop_router(services: UnifiedServices) -> APIRouter:
         if service is None:
             return unavailable("TELEOP_UNAVAILABLE", "teleop domain is not available")
         result = await service.command(name, body)
-        if getattr(result, "succeeded", False):
-            return result
-        code = getattr(result, "code", "")
+        # A port implementation may answer with either a typed result or a plain mapping, so the
+        # success test has to read the payload rather than an attribute of the object.
+        payload = result.model_dump() if hasattr(result, "model_dump") else dict(result)
+        if payload.get("succeeded"):
+            return JSONResponse(status_code=200, content=payload)
+        code = str(payload.get("code", ""))
         status = 409 if code.startswith(
             (
                 "PLAN_", "LEASE_", "SERVER_", "CHECKPOINT_", "OVERRIDE_", "SESSION_",
@@ -330,7 +335,7 @@ def teleop_router(services: UnifiedServices) -> APIRouter:
                 "BACKEND_CAPABILITY_", "CONTROLLER_", "GLOBAL_MUTATION_", "BLOCKED",
             )
         ) else 503
-        return JSONResponse(status_code=status, content=result.model_dump())
+        return JSONResponse(status_code=status, content=payload)
 
     @router.get("/snapshot", response_model=TelemetrySnapshot)
     async def snapshot():
@@ -357,13 +362,14 @@ def teleop_router(services: UnifiedServices) -> APIRouter:
         if owner() is None:
             return unavailable("TELEOP_UNAVAILABLE", "teleop domain is not available")
         result = await services.teleop.execute_plan(plan_id, body)
-        if not getattr(result, "succeeded", False):
-            code = getattr(result, "code", "")
+        payload = result.model_dump() if hasattr(result, "model_dump") else dict(result)
+        if not payload.get("succeeded"):
+            code = str(payload.get("code", ""))
             status = 409 if code.startswith(
                 ("PLAN_", "LEASE_", "SERVER_", "SESSION_", "READINESS_", "COMMAND_", "CONTROLLER_")
             ) else 503
-            return JSONResponse(status_code=status, content=result.model_dump())
-        return result
+            return JSONResponse(status_code=status, content=payload)
+        return JSONResponse(status_code=200, content=payload)
 
     @router.post("/plans/{plan_id}/execute-all")
     async def execute_all(plan_id: str, body: dict, authority: RequestAuthority = mutation):

@@ -158,6 +158,7 @@ if(BUILD_TESTING)
   so101_add_pytest_test(test_unified_live_fixture test/teleop/test_unified_live_fixture.py)
   so101_add_pytest_test(test_unified_launch test/teleop/test_unified_launch.py)
   so101_add_pytest_test(test_unified_web_dependencies test/test_unified_web_dependencies.py)
+  so101_add_pytest_test(test_unified_cancel_integration test/teleop/test_unified_cancel_integration.py)
 endif()
 
 ament_package()
