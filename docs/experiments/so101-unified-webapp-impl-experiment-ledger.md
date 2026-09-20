@@ -3619,3 +3619,42 @@ Two of my own errors are worth noting together because they are the same error: 
 reachable entry here (CP-122) and I guessed the route name instead of reading the OpenAPI document the
 server was already serving. The document costs one `curl`; I had run that same `curl` in earlier rounds
 and only grepped it for guard and worker routes.
+
+## CP-124: the retry endpoint is real and cannot be driven by fabricated authority
+
+CP-123 established the route exists. This measures what it does when called. Gate
+`468815bf6ed5433db5d85bdb8c65a2f6` (exit 0, 4.8 s), installed unified server, three POSTs to
+`/expert-validation/campaigns/stageb-retry-probe/full-restart-retries`:
+
+```text
+1) no authority headers at all                -> 409 {"code":"CONTROLLER_INSTANCE_REQUIRED",
+                                                     "message":"this mutation needs instance authority headers"}
+2) all four authority headers, fabricated     -> 409 CONTROLLER_INSTANCE_REQUIRED  (identical body)
+   instance id and proof
+3) same fabricated authority, two-point body   -> 409 CONTROLLER_INSTANCE_REQUIRED  (identical body)
+```
+
+Three things follow, and the second and third are the interesting ones.
+
+The endpoint is a **mutation under the same authority contract as everything else** - it does not get a
+free pass for being a retry. Fabricating the four headers is not enough: the instance id and proof have
+to be a **server-issued** pair bound to a lease, so `X-SO101-Instance-ID: probe-instance` with
+`X-SO101-Proof: probe-proof` is refused exactly like no headers at all. That is the Stage A design doing
+what it claims - authority cannot be invented client-side, not even for a single-point retry.
+
+And **authority is checked before the payload**: the two-point body got the same authority refusal rather
+than a shape error, so an unauthenticated caller learns nothing about which payload shapes are legal.
+Check order is a real security property and it is ordered correctly here.
+
+What remains for the last §7 row is therefore the honest remainder: driving the endpoint with **real**
+authority means the full live flow - obtain a server-issued instance and proof, acquire a lease, have a
+running campaign, then post the single-point retry - which needs the station runtime behind the unified
+service. Everything up to that boundary is measured: the route (CP-123), the request schema and its six
+required fields (CP-123), the single-point/N1 contract at the runtime layer (CP-121), and the authority
+behaviour above. What is missing is the live campaign, not the entry, not the contract, and not the
+authority model.
+
+One naming note for whoever reads the error next: `CONTROLLER_INSTANCE_REQUIRED` covers both "no headers"
+and "headers that are not a server-issued instance". The message says "needs instance authority headers",
+which describes the first case more precisely than the second. Behaviourally correct, textually narrow;
+recorded rather than changed during acceptance.
