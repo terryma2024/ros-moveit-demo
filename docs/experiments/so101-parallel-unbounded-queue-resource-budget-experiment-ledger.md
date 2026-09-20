@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ288 (5/5 PASS series) + Appendix C; attach anomaly open
+latest_checkpoint: CP-UQ289 (report state) + Appendix C
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -14098,3 +14098,33 @@ candidates - a next session can pick it up from the request that is refused.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `6447149e`; no evidence deleted._
+
+## CP-UQ289 — Report state as of the extended budget
+
+```yaml
+checkpoint_id: CP-UQ289
+verdict: PARTIAL (unchanged)
+platform: complete and provably repeatable on macOS exact W2
+task14: 0/5 - a counted batch needs a passing point, and every point fails at TERMINAL_CAPTURE_FAILED
+linux_regression: DEFERRED_ENVIRONMENT
+independent_verdict: OWED (gpt-5.6-sol/high unavailable here)
+```
+
+Since CP-UQ286 (the refreshed final report) the following changed, and this is the short list to read
+with it:
+
+| Item | Where |
+| --- | --- |
+| **5/5 consecutive FULL_RESTART campaigns, all `W2_CAMPAIGN_PASS`, each with per-slot pick-place** | CP-UQ288, Appendix C |
+| the admission deadline defect (300 s bound vs a ~9-minute campaign) that made every consume expire | CP-UQ287 |
+| the duplicate probe made opt-in, so the happy path is reachable again | CP-UQ286 addendum 4, CP-UQ287 |
+| admission-level cancellation evidence (`CANCELLED`, results forfeit) | CP-UQ286 addendum 1 |
+| the admission rule, per-slot summary and verdict extracted into tested functions | CP-UQ285 addendum 2, CP-UQ286 addendum 3 |
+| two threads closed with their defects named rather than left as mysteries: the stall probe and the MoveIt attach anomaly | CP-UQ284 addendum 2, CP-UQ288 addendum 3 |
+| Screen Recording still denied - probed again as `task16-capture-probe-15` | this checkpoint |
+
+Nothing about the verdict changes: the macOS platform half is done and repeatable, the task half cannot
+be counted while the GUI capture fails closed, and Linux remains deferred. No evidence has been deleted,
+nothing pushed or published, and no unrun gate has been reported as PASS, SKIP or N/A.
+
+_Ledger source HEAD: (this commit's parent); no evidence deleted._
