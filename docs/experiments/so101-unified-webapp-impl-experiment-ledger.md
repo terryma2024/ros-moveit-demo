@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-58
+latest_checkpoint: CP-59
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1343,3 +1343,36 @@ equivalent approved MuJoCo staging prefix) is provisioned, and that is a host pr
 this task's authority - not a defect in the unified work and not something to work around by
 substituting a fake prefix. Everything up to that boundary is verified; the gate is blocked with a
 named, reproducible reason.
+
+## CP-59: the missing cancel-integration test exists, and it found three real defects
+
+CP-50 recorded that `test_unified_cancel_integration` was never written, so the plan's headline
+safety property had no test. Written now and registered (the CMake drift guard from CP-36 enforces
+that). Only the innermost `WorkerPort` is test-owned: the request travels through the real app
+factory, the real admission gateway, the real arbiter, the real safety lane and the real routes, with
+an instance registered, a channel connected and a real claim - so this is the production cancel path,
+not a toy.
+
+The test asserts the plan's window directly: while the parent holds its reservation with the gripper
+step blocked, `/execution/cancel` is accepted, the durable `cancel_requested` is recorded, **the
+reservation is not released**, and the parent's final phase is not COMPLETE.
+
+Getting there exposed three real defects, each fixed rather than worked around:
+
+1. `INSTANCE_DOMAIN_MISMATCH` on every real mutation: `require_authority` passed the plain string
+   `"teleop"` where the registry compares `Domain` members by identity. The schema-only API tests
+   never reached that comparison. Fixed with `Domain(domain)`.
+2. `TypeError: command() missing 2 required keyword-only arguments`: `ProductionTeleopService.command`
+   did not match the `TeleopPort` shape the routers call. Authority and lease are now optional; the
+   gateway still refuses any mutation without them.
+3. Two response-shape bugs in the teleop router: it called `.model_dump()` on a port implementation
+   that answers with a plain mapping, and it decided success via `getattr(result, "succeeded")`, which
+   is always False for a dict - so an accepted cancel came back as HTTP 503. It now reads the payload.
+
+The cancel response also now states the distinction explicitly: `succeeded: true` with
+`code_detail: "CANCEL_ACCEPTED_NOT_STOPPED"`, since acceptance is not physical stopping.
+
+GREEN: `pyrgate` on the new test passes; the API, launch (with its drift guard) and cancel-integration
+modules pass together (17 tests); the frontend suite is unaffected. Commit `1bce0b11`.
+
+With this, every name on the plan's Task 11 registration list exists.
