@@ -4493,3 +4493,39 @@ return 200 from a real browser on an arbitrary port with no environment variable
 once the generation advances; preflight is the current frontier. Eight defects have been found on this
 path, every one of them in the client-server seam and every one invisible until a real page drove a real
 server.
+
+## CP-142: preflight wants the model layout; and a second lease POST arrives with no authority
+
+Capturing bodies instead of statuses named both refusals in one pass:
+
+```text
+POST /expert-validation/campaigns/preflight -> 409 {"code":"VALIDATION_MODELS_NOT_CONFIGURED"}
+POST /expert-validation/lease               -> 409 {"code":"CONTROLLER_INSTANCE_REQUIRED",
+                                                     "message":"this mutation needs instance authority headers"}
+```
+
+**The first is my launch, not the code.** `production.py:713-714` refuses preflight when
+`self.layout.yolo_weights_path is None or self.layout.grounded_... is None` - the validation layout needs
+the perception model paths, which the campaign CLI took as `--yolo-weights`/`--grounded-root` and the
+service takes from its environment. The artifacts exist (`model-artifacts/models/yolo/best.pt` and the
+grounded manifest whose hashes earlier runs recorded); the server I have been serving simply was not told
+about them. So preflight is one environment configuration away, and the next round should find the exact
+variable names the layout reads rather than guessing them.
+
+**The second is a real question about renewal.** The page sends a *second* POST to
+`/expert-validation/lease` with no authority headers at all, and the transport's renewal block is the
+obvious candidate: `domain-transport.ts:26-33` maps the validation domain's `renewPath` to the same
+`/expert-validation/lease` and `domain-transport.ts:118-121` posts to it with a `headers:` object that I
+have not yet read to the end. Two readings are possible and the code decides between them: renewal carries
+authority from `setAuthority` and this request came from somewhere else (for instance a page effect
+acquiring without a runtime), or renewal genuinely sends none and renewal is broken exactly like acquire
+was - a ninth defect of the same family.
+
+**What is certain:** the sequence still walks register -> channel -> acquire -> manifest, and stops at
+preflight for a configuration reason, with one unexplained unauthenticated lease POST alongside it. Both
+are one read or one environment change away, and neither is a measurement problem.
+
+**A note on method that keeps paying.** Two rounds in a row the decisive move was to capture the
+*response body* rather than the status: `GENERATED_MANIFEST_INVALID` turned out to be the page's own code
+hiding a `STALE_EXECUTION_GENERATION` from the server, and now `VALIDATION_MODELS_NOT_CONFIGURED` replaced
+a bare 409. A status tells you something failed; the body tells you who refused and why.
