@@ -14039,3 +14039,32 @@ Scope: this is **standalone** shadow evidence, not per-batch shadow evidence; th
 latter and it remains tied to a counted batch. Task 14 stays 0/5 and `LINUX_REGRESSION_DEFERRED` stands.
 
 _Ledger source HEAD: `71f64a90`; no evidence deleted._
+
+### CP-UQ288 addendum 2 — the attach path, in canonical order, still reports a mismatch
+
+`moveit-shadow-04`, station `READY`, canonical order (the launch's own sequence):
+
+```text
+setup              exit 0   attached_ids []                     <- the task scene applies
+observe_initial    exit 0   attached_ids []
+attach             exit 1   SCENE_APPLY_FAILED                  <- move_group refused the apply
+observe_attached   exit 1   attached_ids ["plastic_cup"]  attached_links {}  SCENE_READBACK_MISMATCH
+detach             exit 0   attached_ids []
+observe_detached   exit 0   attached_ids []
+```
+
+Read against the code rather than guessed: `task_scene._apply` returns `SCENE_APPLY_FAILED` when
+MoveIt's `ApplyPlanningScene` answers `success == False`, and the readback's mismatch comes from the
+comparison at `task_scene.py:199`. So the sequence is: the scene applies, **move_group refuses the
+attach**, a follow-up readback nevertheless shows `plastic_cup` among the attached ids with an empty
+link map, and detach succeeds and clears it.
+
+That is a real, reproducible anomaly in the attach path on this station, and it is **open**: I have not
+read what `attach` sends (link name, touch links) nor compared it with what this move_group accepts, and
+guessing is exactly what this ledger has learned not to do. It is recorded with its shape and its code
+references so the next session can start from the predicate rather than from a symptom.
+
+The plan's MoveIt-shadow requirement stays where it was: this is standalone evidence, the requirement
+wants it per counted batch, and Task 14 remains **0/5** with `LINUX_REGRESSION_DEFERRED` in force.
+
+_Ledger source HEAD: `47b6ba20`; no evidence deleted._
