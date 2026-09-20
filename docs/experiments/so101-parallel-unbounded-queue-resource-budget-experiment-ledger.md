@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ299 (Task 14 five_batch_stability=5/5)
+latest_checkpoint: CP-UQ300 (final checks: two test defects caught and fixed, suite at baseline)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -14726,3 +14726,71 @@ pick-place gap (real per-point pick-place inside the leased workers, phase-compl
 Task 14 (5/5). Task 14's five boxes in the plan are ticked, each naming the run and field that carries it.
 
 _Ledger source HEAD: `02e54dce`; no evidence deleted._
+
+### CP-UQ300 — the final checks, the two defects they caught, and why Task 14 still stands
+
+Running the ordinary package suite as the plan's final check (`task16-final-suite-01`, 3527 tests) gave
+`233 failed, 3294 passed, 8 skipped`. Against the recorded baseline run (`source-gate-after-path-fix-01`,
+3419 tests, 234 failures) the failure *sets* differed by three tests, so the count alone was not enough:
+
+- failing now, not in the baseline: `test_parallel_ipc_v4::test_a_full_bounded_queue_answers_queue_full_instead_of_dropping`
+  and `test_parallel_start_guard_composition::test_v4_policy_merges_a_healthy_accelerator_snapshot`;
+- failing in the baseline, passing now: the queue test's sibling and one moveit-expert test.
+
+**Defect one, a stale assertion of mine.** `test_v4_policy_merges_a_healthy_accelerator_snapshot`
+asserted `"probe" in result.checks` and, on Darwin, `result.status == FAIL`. That was true while the
+Darwin helper was the NVML probe; commit `cc992945` ("give the guard helper a v4 CPU/RAM branch") then
+gave this platform its own vocabulary — `cpu_capacity`, `cpu_busy`, `ram`, no `gpu` check, because the
+MPS proxy admission replaces it — which the branch's docstring states outright. The merge logic was
+never wrong: `_merge_accelerator` copies the helper's checks into the result and lets any FAIL decide.
+The test was pinning a key name instead of the property, so it was rewritten to assert the property that
+matters: the helper's checks survive the merge, and a healthy accelerator read does not mask a helper
+refusal — the second half now driven by the **real** helper with a RAM floor above any real machine
+(`ram_minimum_bytes=1 << 62`), so the refusal comes from the code path under test rather than a double.
+
+**Defect two, a load-sensitive wait of mine.** `test_a_full_bounded_queue_answers_queue_full_instead_of_dropping`
+gave the accept loop a single stimulus and five seconds. Under the full suite it lost that race while its
+sibling won the same race that the baseline had lost — the two swapping places is what flakiness looks
+like from the outside. It is now given twenty seconds and re-poked every two seconds with a fresh
+connection; the assertion is unchanged. The module passes five consecutive repetitions, and the whole
+module is green (`33 passed`).
+
+**Both fixes are test-only, which is what keeps Task 14 valid.**
+`git diff --name-only 8e1c8b5a..HEAD -- src/so101_demo_py/src/` is empty: no product line changed after
+the counted series froze, so the 5/5 above still describes the code that ran, and no old acceptance was
+invalidated by these edits. The two test files were committed as `9c05cfdf`.
+
+After the fixes, the same suite gives `231 failed, 3297 passed, 8 skipped`, and the failure set is a
+**subset of the recorded baseline with zero new entries** (three baseline failures now pass). The honest
+reading of that number: the ordinary package suite is not green on this host, and it was not green before
+this task either — 231 pre-existing environmental failures in families this ledger already named
+(`PATH_OWNER` and the model runtime 63, `UNIX_TRANSPORT_UNAVAILABLE`/`IPC_BASE` 57, `/data/work` paths
+EROFS 28, container and perception infrastructure, and socket paths that do not fit the deep gate
+`TMPDIR`). Collection equality is therefore met in the only sense available here: the collected set grew
+by the tests this task added, and nothing that used to pass now fails.
+
+The rest of the final readback, all of it read-only: `git diff --check` clean and the worktree clean;
+module origins resolve to the worktree sources through `source-packages/so101_demo` (a symlink, so the
+counted batches ran the frozen commit) with zero canonical `moveit-demo/install` prefixes in the
+environment; no station process of any signature left; the private IPC base empty and no socket bound;
+the suites this task owns green — `test_macos_w2_campaign.py`, `test_macos_w2_broker_port.py` and
+`test_parallel_worker_runtime.py` together `83 passed`, the v4 guard and IPC files `48 passed`.
+
+**Evidence accounting.** Retained in the task root: the counted series `task14-five-batches-05` (summary,
+`readback.txt`, `readback.json`, five GUI blocks) and the supporting series `task14-five-batches-04`; the
+five `task14-fr5-0N/campaign/` trees with 40 point runs; `tcc-user-verify-20260920/` with the operator's
+still and recording; the gate runs cited here (`task16-final-suite-01/02`, `task16-v4-guard-0N`,
+`task16-*-rep-0N`, `task16-owned-suites-01`, `task16-campaign-suites-01`); and the earlier task evidence
+unchanged. Deletion candidates, none removed: `task14-gui-ritual-smoke/` (the pre-series smoke test), the
+superseded `task14-fr4-06` plan whose waiter was cancelled before starting, and the many failed
+`moveit-shadow-0N` probe runs. Nothing was archived out of the task root and nothing was deleted.
+
+**State.** Task 14 `five_batch_stability = 5/5`. `MACOS_MPS_W2_PASS` is not written: Task 16 reserves that
+judgement for `gpt-5.6-sol/high`, which this session cannot invoke, so it remains owed and the tracked
+verdict remains **PARTIAL**, with `LINUX_REGRESSION_DEFERRED` retained. In the plan, Task 14's five boxes
+and Task 16's summary and evidence-accounting boxes are ticked, each naming its artifact; Task 16's
+final-gate box, its independent-verdict box and its commit box are left unticked with notes, because the
+OpenAPI/build/served-byte hashes were derived in the earlier task-11/12 gates rather than re-derived now,
+the independent verdict is owed, and the review part of that box does not exist yet.
+
+_Ledger source HEAD: `9c05cfdf`; no evidence deleted._
