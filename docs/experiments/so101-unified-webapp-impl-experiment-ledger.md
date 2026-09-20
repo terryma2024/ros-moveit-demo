@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-29
+latest_checkpoint: CP-30
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -790,3 +790,21 @@ data slot, the token classes, and that no standalone v4 `size-*`/alpha class sur
 Remaining in Task 8: the same hand-port for `field` (238 lines, declares
 `registryDependencies: ["label","separator"]` - both now available in some form), `sheet` and
 `sidebar`.
+
+## CP-30: field ported onto the existing label and separator
+
+`src/components/ui/field.tsx` (238 lines) ports the captured field item. Its registryDependencies
+were already satisfied in this project, so the registry's own `@/registry/radix-maia/ui/label` and
+`.../ui/separator` imports point at `@/components/ui/label` (ported in CP-27) and the existing
+`@/components/ui/separator`; `cn` resolves to `@/lib/utils`; the v4 alpha/size/radius utilities are
+converted the same way as the other ports. The component's data slots (`field`, `field-group`,
+`field-label`, `field-description`, `field-error`, ...) are the registry's own.
+
+GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` **44 files / 188 tests**; commit gated
+on the suite. Tests assert the five data slots render, that the description uses
+`text-muted-foreground` and the error uses `text-destructive`, and that no standalone v4
+`size-*`/`rounded-4xl`/alpha class survives anywhere in the subtree.
+
+Remaining in Task 8: `sheet` and `sidebar` - the two largest items, both pulling in portal and
+sidebar machinery; each should get its own behaviour tests, and the sidebar in particular has to
+respect the shell's navigation semantics from Task 9.
