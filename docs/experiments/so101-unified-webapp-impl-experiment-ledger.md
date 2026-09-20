@@ -3658,3 +3658,57 @@ One naming note for whoever reads the error next: `CONTROLLER_INSTANCE_REQUIRED`
 and "headers that are not a server-issued instance". The message says "needs instance authority headers",
 which describes the first case more precisely than the second. Behaviourally correct, textually narrow;
 recorded rather than changed during acceptance.
+
+## CP-125: a real defect found by the live flow - and my first regression test could not fail
+
+The live API flow for the retry row got further than expected: step 1 works, and step 2 exposed a genuine
+defect in the unified service.
+
+```text
+POST /control/instances {"domain": "validation"}
+  -> 200 {"instance_id": "1ccfc000...", "proof": "o23jaHs1...", "domain": "validation"}
+POST /expert-validation/lease  (with the four authority headers, proof header spelled correctly)
+  -> 409 {"code": "INSTANCE_DOMAIN_MISMATCH", "message": "INSTANCE_DOMAIN_MISMATCH: 1ccfc000..."}
+```
+
+The cause is in the code and it is unconditional for HTTP-registered instances:
+
+- `app.py` `register_instance` passes `body.get("domain")` - a plain `str` - into
+  `registry.register(domain)`.
+- `instances.py:92` `register(self, domain: Domain)` stores it **without coercion**
+  (`_InstanceRecord(..., domain=domain, ...)`).
+- `instances.py:122-125, 167-171` compare `record.domain is not authority.domain`, and the mutation
+  dependency builds its side as `Domain(domain)`, an enum member. For a `StrEnum`, `"validation" ==
+  Domain.VALIDATION` is true but `"validation" is Domain.VALIDATION` is false, so the identity check
+  fails every time.
+
+So an instance obtained the documented way - `POST /control/instances` with a JSON body - can never
+authorise a mutation. That is the same defect class Stage A fixed on the header side (`app.py:182`'s
+comment names it: "a plain string silently produced INSTANCE_DOMAIN_MISMATCH at runtime"); the
+registration side was left unconverted, and no unit test covered the HTTP registration path, because the
+tests register through `registry.register(Domain.VALIDATION)` directly.
+
+**My first regression test was worthless and I am recording that rather than hiding it.** I wrote a test
+that registers over HTTP and then posts to `/expert-validation/lease`, asserting only that the response
+is not an `INSTANCE_DOMAIN_MISMATCH`. It **passed on the unfixed code** - the red run came back green -
+because the test app has no validation service, so the route answered `503 SERVICE_NOT_COMPOSED` before
+any authority check ran, and a tolerant assertion accepts a 503 as easily as a success. A test that
+cannot fail is not evidence, and the fix I applied after it was validated only by re-running that same
+vacuous test.
+
+Both changes are therefore **reverted**: `app.py` is back to its committed state and the test file is
+deleted, so the tree carries no unverified fix and no fake regression test. The defect stands documented
+with its live reproduction and its code path.
+
+**The fix and its test, specified so the next attempt starts from a known-good plan:**
+
+1. The test must reach `require_bound`. The cancel-integration harness already does this: build
+   `IntentStore` + `GlobalMutationArbiter` + `InstanceRegistry`, compose a `ProductionTeleopService` with
+   the stub worker it defines, put them in `UnifiedServices`, and drive `/control/lease` through
+   `TestClient`. Register the instance **over HTTP** in that composed app, then assert the lease response
+   is not `INSTANCE_DOMAIN_MISMATCH` - and, because the service is composed, also that it is not a 503.
+2. Only then the fix: coerce at the boundary (`domain = Domain(body.get("domain"))` inside the existing
+   `try`), keeping the registry's identity contract intact rather than relaxing the comparison, since the
+   identity comparison is what makes a cross-domain instance useless to an attacker.
+
+That is the next round's work, bounded and with a failing test as the first deliverable.
