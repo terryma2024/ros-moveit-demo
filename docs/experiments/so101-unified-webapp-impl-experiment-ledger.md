@@ -4702,3 +4702,11 @@ mine as well. Second, this is the **fourth** time in this task that a tool of mi
 wrong answer (a test that could not fail, `[ -f <dir> ]` skipping an overlay, `pgrep -af` flooding and
 mis-matching, and now `pgrep -fc` reporting zero); the countermeasure that has worked every time is to
 confirm with a second, differently-shaped check before believing a convenient result.
+
+The killing itself took two attempts and is worth one line: all eleven survivors **ignored SIGTERM** (a
+`kill` that returned success, with the process list unchanged two seconds later), and `kill -9` reaped them
+immediately. Afterwards the authoritative check reports zero matches and none of the ports the runs used
+(8791 through 8823) is still bound. So the residue was real, it was not merely slow to exit, and the
+graceful path these servers take on SIGTERM hangs - which is itself worth knowing before the next live run,
+because a deployed service that cannot be stopped politely is a deployment problem, not just a test-harness
+one.
