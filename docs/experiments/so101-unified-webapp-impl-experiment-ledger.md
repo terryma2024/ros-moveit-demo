@@ -4095,3 +4095,42 @@ and the campaign controls stop being inert.
 every channel request, which turns the whole authority model into a dead end for real clients. And the
 `websockets` I used for verification was installed task-locally with `pip install --target`, so the
 shared venv on this host is untouched.
+
+## CP-134: the gap is page-wide - neither page uses the runtime that carries authority
+
+CP-133 blamed the validation page. Looking for the correct template shows the teleop page is wired the
+same way, so the finding is broader and simpler to state:
+
+```text
+task-app.tsx:16                const client = new TaskApiClient();            <- bare client
+expert-validation-app.tsx:46   const defaultClient = new ExpertValidationClient();  <- bare client
+```
+
+Both pages construct their own API clients and mutate through them. The authority-carrying path is
+`DomainRuntime` (`state/domain-runtime.ts`), which the `RuntimeProvider` hands to components as
+`useDomainRuntime(domain)`, and which is where the four headers actually come from:
+
+```text
+domain-runtime.ts:162  mutationHeaders(): ControllerAuthority | null
+domain-runtime.ts:296  async post(path, body) { if (!this.authorityValue) throw ...;
+                                                return await this.transport.post(path, body, this.authorityValue) }
+```
+
+So the transport layer, the runtime, the reconnect protocol and the header plumbing all exist and have
+unit tests; what was never done is pointing either page at them. The pages talk to the server as if
+authority were not required, which is why the real client cannot mutate anything while every unit suite
+stays green - the suites inject `api` doubles and never touch a runtime.
+
+**The first thing to read next round**, before writing any test: where `DomainRuntime` gets its *initial*
+authority (`domain-runtime.ts` sets `authorityValue` at `:66` and again via `adoptAuthority` at `:157`).
+The acquire call is the bootstrap case - it has a proof and a live channel and no controller yet - so the
+fix has to make `post` available in exactly that state, and the shape of that state decides whether the
+page change is one wiring line or a small protocol addition. Reading it first is the lesson from CP-125
+through CP-133: three of the four defects in this seam were found by reading the code the tests never
+exercised, and the fourth by a test that could not fail.
+
+**What is now established about the whole acceptance**, in one place: every §7 row except the live N1
+retry is met with evidence; the retry needs a campaign; a campaign needs a client that can acquire; and
+acquiring needs (1) a declared websocket dependency, (2) the server-side claim, now implemented, and
+(3) the pages actually using the runtime transport. Items (1) and (2) are done or verified; item (3) is
+this checkpoint's finding and the next round's work.
