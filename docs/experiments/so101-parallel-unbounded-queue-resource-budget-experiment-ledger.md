@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ287 (clean campaign PASS)
+latest_checkpoint: CP-UQ288 (5/5 PASS series) + Appendix C
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -13950,5 +13950,56 @@ Batch 1 of this series is the first **PASS with per-slot pick-place** in the who
 two slots. As with every batch, the points themselves still fail closed at
 `TERMINAL_CAPTURE_FAILED` (TCC), so this is evidence about the **campaign contract**, not a counted
 Task 14 batch: **0/5** stands, `LINUX_REGRESSION_DEFERRED` stands.
+
+_Ledger source HEAD: (this commit's parent); no evidence deleted._
+
+## CP-UQ288 — Five consecutive FULL_RESTART campaigns, all PASS, each with per-slot pick-place
+
+```yaml
+checkpoint_id: CP-UQ288
+last_valid_experiment: EXP-UQ288-FIVE-PASS-SERIES
+result: 5/5 W2_CAMPAIGN_PASS, served 12 each, cleanup complete each, zero processes left at the end
+task14: 0/5 - unchanged: the points themselves still fail closed at TERMINAL_CAPTURE_FAILED (TCC)
+linux_regression: DEFERRED_ENVIRONMENT
+```
+
+```text
+batch 1: exit=0 status=W2_CAMPAIGN_PASS served=12 cleanup=True
+    w1: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+    w2: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+batch 2: exit=0 status=W2_CAMPAIGN_PASS served=12 cleanup=True
+    w1: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+    w2: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+batch 3: exit=0 status=W2_CAMPAIGN_PASS served=12 cleanup=True
+    w1: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+    w2: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+batch 4: exit=0 status=W2_CAMPAIGN_PASS served=12 cleanup=True
+    w1: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+    w2: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+batch 5: exit=0 status=W2_CAMPAIGN_PASS served=12 cleanup=True
+    w1: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+    w2: manifests=4 executed=4 points=4 failures=['TERMINAL_CAPTURE_FAILED']
+```
+
+## Appendix C — the PASS-capable series (cite this one for the campaign contract)
+
+| batch | exit | verdict | served | cleanup | w1 executed | w2 executed | point failures |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 0 | W2_CAMPAIGN_PASS | 12 | True | 4 points | 4 points | TERMINAL_CAPTURE_FAILED (all) |
+| 2 | 0 | W2_CAMPAIGN_PASS | 12 | True | 4 points | 4 points | TERMINAL_CAPTURE_FAILED (all) |
+| 3 | 0 | W2_CAMPAIGN_PASS | 12 | True | 4 points | 4 points | TERMINAL_CAPTURE_FAILED (all) |
+| 4 | 0 | W2_CAMPAIGN_PASS | 12 | True | 4 points | 4 points | TERMINAL_CAPTURE_FAILED (all) |
+| 5 | 0 | W2_CAMPAIGN_PASS | 12 | True | 4 points | 4 points | TERMINAL_CAPTURE_FAILED (all) |
+
+Each batch: a fresh claim, campaign IPC root, Broker generation, both station roots and both Worker
+sessions; six probe requests plus six real `broker.infer` calls admitted by the one-time table;
+eight executed pick-place point-runs with MoveIt trajectories and MuJoCo contacts; exact cleanup.
+Three appendices now record the same series as the code changed - **A** (pre-fix, inference leg void),
+**B** (post-fix, verdict INCOMPLETE because the admission deadline expired), **C** (post-deadline-fix,
+PASS). They are kept in order rather than rewritten, because the difference between them is the
+history of two real defects.
+
+What this does not change: every point still fails at `TERMINAL_CAPTURE_FAILED`, so Task 14 remains
+**0/5**, `five_batch_stability` is not claimed, and `LINUX_REGRESSION_DEFERRED` stands.
 
 _Ledger source HEAD: (this commit's parent); no evidence deleted._
