@@ -8,7 +8,7 @@ executor: DeepSeek Harness TUI (dst) inline, per plan model/executor rules
 worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
 branch: codex/so101-unified-webapp
 base_commit: 5b8d1231e97e10f650ac1d626e8dff801a7d21ea
-current_commit: ad84703433a1718e4c6c35174490aa3f5d84cbd1
+current_commit: ad1a861a4e42158e11970587aaf979fa4cde0191
 spec: docs/superpowers/specs/2026-09-18-so101-unified-webapp-shadcn-design.md
 spec_sha256: 4e11f3a385e8d078523ee3c3b3b11d2ec372215188cfbdabdea824c35dd54fa1
 plan: docs/superpowers/plans/2026-09-18-so101-unified-webapp-shadcn-implementation.md
@@ -29,8 +29,8 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-04
-next_experiment: Task 3 safety lane and goal registry
+latest_checkpoint: CP-06
+next_experiment: Task 5 parent sequencer and admission gateway
 ```
 
 ## CP-01: Registration, host probe and deviations
@@ -120,3 +120,47 @@ deadline).
 Deviation from the plan's staging list: `unified/intent_store.py` is included in this commit because
 the plan's own Task 2 text requires the execution generation and lease fences to live in the store's
 independent tables. The plan's list omits it.
+
+## CP-05: Task 3 - isolated safety lane
+
+Delivered `unified/goals.py`, `unified/safety.py`, cancellation receipt types in
+`unified/contracts.py` and `test/teleop/test_unified_safety.py` (registered `test_unified_safety`).
+
+RED: 10 failed / 2 passed, exit 1 (the lane could not unpack its own shutdown sentinel and the
+late-ACK fixture never prepared a child; both were fixture/implementation defects fixed forward).
+GREEN: 12 passed, exit 0. Covered: delivery then stop-evidence wait, durable `cancel_requested`
+before any goal is touched with later children refused, arm and gripper cancelled independently by
+real UUID, duplicate cancels merged into one delivery, late ACK cancelled safely without discarding
+the goal record, foreign authority refused before delivery, browser authority without an instance
+refused, delivery timeout and accepted-without-stop-proof both blocking, safe queue full refusing
+instead of queueing behind normal mutations, revoke without a pending authorizer refused, and
+revoke linearization without a goal handle. Commit `ccb00db4`.
+
+## CP-06: Task 4 - closed IPC and non-web child
+
+Delivered `unified/{ipc,child_runtime,bridge,ros_child}.py`,
+`test/e2e/unified_child_harness.py`, `test/e2e/noros_child_helper.py` and three test modules
+(`test_unified_ipc`, `test_unified_bridge`, `test_unified_two_channel`).
+
+IPC GREEN: 11 passed. Two-channel GREEN: 6 passed. Bridge GREEN: 7 passed. The two-channel tests run
+the production `ChildRuntime` socket servers against the production `BridgeClient` over real Unix
+sockets, with only the leaf `ActionDriver` test-owned; the proxy can only hold/release normal-channel
+bytes and never touches the safety socket. Proven: safety revoke wins over a delayed normal packet
+with `submit_count == 0`, submit wins exactly once and a repeated token never double-submits, cancel
+targets the accepted UUID and keeps the reservation, expired queued mutations never dispatch,
+repeated revokes do not undo the tombstone, the web-death latch cancels known pending goals and
+refuses new work, and wrong epoch/token never reaches the child. Bridge tests spawn a real
+ROS-free child process: fixed argv, live identity recomputation, owner-identity drift refusing to
+signal, crash making the bridge unready, safety cancel over the independent socket, and a subprocess
+proof that importing the web modules never loads `rclpy`.
+
+Platform fact recorded: Darwin caps `AF_UNIX` paths at 104 bytes, so the harness allocates a short
+socket scratch directory under `SO101_IPC_SOCKET_BASE` (registered root) and the child refuses an
+over-long socket path explicitly.
+
+Deviation: `unified/ros_child.py` imports the existing ROS worker lazily and its
+`RclpyActionDriver.submit/cancel/terminal` intentionally fail with `ROS_DRIVER_NOT_PROVISIONED` on
+this host. The socket, protocol, runtime, ownership and cancellation layers are verified; the ROS
+driver wiring cannot be verified on macOS and is not claimed as working. `server.py` was not
+modified in this task: the application-logic migration belongs to Task 5, and changing ROS worker
+code that cannot be exercised here would be an unverifiable edit. Commit `ad1a861a`.
