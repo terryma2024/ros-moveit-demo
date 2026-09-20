@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-64
+latest_checkpoint: CP-65
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1497,3 +1497,19 @@ With CP-63's item A, the two halves the page still owns are now both observable 
 renewal (CP-47) and telemetry (this checkpoint). The remaining edit in `app.tsx` is therefore the same
 subtractive shape as the renewal swap: delete the `/snapshot` poll and the `/telemetry` socket, feed
 the page's view from `onSnapshot`, and keep its RTT and notice presentation.
+
+## CP-65: the teleop page no longer owns a telemetry subscription (item A complete)
+
+`app.tsx`'s telemetry effect now delegates: when a domain runtime is present it subscribes to
+`onSnapshot`, seeds itself from `runtime.projection()`, and returns without ever creating the 2 s
+`setInterval` poll or the `/telemetry` WebSocket. The page's RTT and notice presentation is unchanged,
+and the page-scoped poll/socket remains only as the no-provider fallback that unit tests exercise -
+the same pattern CP-45 used for renewal.
+
+GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` **45 files / 202 tests**. Commit follows
+this entry.
+
+With CP-40 (teleop renewal), CP-49 (validation renewal) and this checkpoint, **no page owns a
+telemetry or renewal subscription any more**. Switching pages cannot close a socket, stop a poll,
+release a lease or stop a renewal, which is what the design's root-provider requirement actually
+demanded. Task 9's effect migration is complete.
