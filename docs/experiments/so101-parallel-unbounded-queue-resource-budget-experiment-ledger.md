@@ -14219,3 +14219,27 @@ after:   campaign_root: "/private/tmp/so101-ipc-501/b-80a979ee4ed7"
 retained.
 
 _Ledger source HEAD: `6dc1e2e4`; no evidence deleted._
+
+## CP-UQ291 — Evidence classification, refreshed
+
+```text
+evidence root entries      : 466
+task14 campaign runs       : 165
+task16 probe/gate runs     : 53
+capture probes (all denied): 29
+```
+
+- **retained**: the implementation run directory, the station install, the verified model artifacts,
+  every appendix-cited series (`task14-fr-0N`, `task14-fr2-0N`, `task14-fr3-0N`), the evidence-rich
+  and clean-pass runs, the fault probes that are cited in the matrix, and this ledger;
+- **archived**: the pre-fix series (Appendix A), the task0/task1 baselines, superseded gates, and
+  everything recorded as INVALID this session;
+- **deletion candidates, none deleted**: per-run `tmp/` trees, `test-byproducts/`, the clobbered
+  summary file kept as a record of that mishap, and the transient IPC roots already removed under
+  `/private/tmp/so101-ipc-501`.
+
+Screen Recording was probed again as `task16-capture-probe-16` and is still denied; the capture
+probes themselves are retained as the record of an external blocker, not as failures of this
+branch's work. Task 14 remains 0/5 and `LINUX_REGRESSION_DEFERRED` stands.
+
+_Ledger source HEAD: (this commit's parent); no evidence deleted._
