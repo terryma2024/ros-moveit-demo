@@ -16,6 +16,20 @@ class Domain(StrEnum):
 
 
 @dataclass(frozen=True)
+class InstanceProof:
+    instance_id: str
+    proof: str
+    domain: "Domain"
+
+
+@dataclass(frozen=True)
+class ChannelBinding:
+    instance_id: str
+    revision: int
+    domain: "Domain"
+
+
+@dataclass(frozen=True)
 class RequestAuthority:
     domain: Domain
     instance_id: str

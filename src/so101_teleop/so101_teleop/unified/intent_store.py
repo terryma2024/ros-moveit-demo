@@ -55,6 +55,14 @@ from .contracts import (
 
 SCHEMA_VERSION = 1
 LOCK_FILE_NAME = "service.lock"
+
+LEASE_CLAIMING = "CLAIMING"
+LEASE_RENEWING = "RENEWING"
+LEASE_BOUND = "BOUND"
+LEASE_FAILED = "FAILED"
+LEASE_UNKNOWN = "UNKNOWN"
+#: States that keep the durable admission fence closed until an explicit recovery.
+OPEN_LEASE_STATES = (LEASE_CLAIMING, LEASE_RENEWING, LEASE_FAILED, LEASE_UNKNOWN)
 DATABASE_FILE_NAME = "intents.sqlite3"
 
 _SCHEMA = """
@@ -84,6 +92,19 @@ CREATE TABLE IF NOT EXISTS parents (
   blocked_reason TEXT,
   cancel_requested INTEGER NOT NULL DEFAULT 0,
   revocation_revision INTEGER NOT NULL DEFAULT 0,
+  created_ns INTEGER NOT NULL,
+  updated_ns INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS execution_generations (
+  domain TEXT PRIMARY KEY,
+  generation INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS lease_operations (
+  claim_id TEXT PRIMARY KEY,
+  domain TEXT NOT NULL,
+  state TEXT NOT NULL,
+  lease_json TEXT,
+  reason TEXT,
   created_ns INTEGER NOT NULL,
   updated_ns INTEGER NOT NULL
 );
@@ -207,6 +228,9 @@ class IntentStore:
             if unconverged:
                 self._mark_blocked_locked("UNCLEANED_INTENT_AFTER_RESTART")
                 return
+            if self.open_lease_fences():
+                self._mark_blocked_locked("UNRESOLVED_LEASE_FENCE_AFTER_RESTART")
+                return
             state = self._global_state_locked()[0]
             if state in RESERVING_STATES:
                 self._mark_blocked_locked("UNCLEANED_RESERVATION_AFTER_RESTART")
@@ -275,11 +299,13 @@ class IntentStore:
 
     def require_idle(self) -> None:
         state, reason = self._global_state_locked()
-        if state == IDLE:
-            return
         if state == BLOCKED:
             raise MutationError(f"BLOCKED: {reason or 'unspecified'}")
-        raise MutationError(f"GLOBAL_MUTATION_BUSY: {state}")
+        if state != IDLE:
+            raise MutationError(f"GLOBAL_MUTATION_BUSY: {state}")
+        fences = self.open_lease_fences()
+        if fences:
+            raise MutationError(f"LEASE_FENCE_OPEN: {', '.join(fences)}")
 
     def insert_parent(self, spec: OperationSpec) -> Reservation:
         operation_id = uuid.uuid4().hex
@@ -541,6 +567,96 @@ class IntentStore:
             children=tuple(children),
             blocked_reason=parent["blocked_reason"],
         )
+
+    # -- execution generations and lease fences ----------------------------------
+
+    def execution_generation(self, domain) -> int:
+        row = self._query_one(
+            "SELECT generation FROM execution_generations WHERE domain = ?", (str(domain),)
+        )
+        return int(row["generation"]) if row is not None else 0
+
+    def bump_execution_generation_locked(self, domain) -> int:
+        """Advance the domain generation inside the caller's transaction."""
+        generation = self.execution_generation(domain) + 1
+        self._connection.execute(
+            "INSERT INTO execution_generations (domain, generation) VALUES (?, ?)"
+            " ON CONFLICT(domain) DO UPDATE SET generation = excluded.generation",
+            (str(domain), generation),
+        )
+        return generation
+
+    def open_lease_fence(self, domain, state: str) -> str:
+        claim_id = uuid.uuid4().hex
+        with self.immediate_transaction():
+            now = self._now_ns()
+            self._connection.execute(
+                "INSERT INTO lease_operations (claim_id, domain, state, created_ns, updated_ns)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (claim_id, str(domain), state, now, now),
+            )
+        return claim_id
+
+    def record_lease_identity(self, claim_id: str, lease) -> None:
+        self._connection.execute(
+            "UPDATE lease_operations SET lease_json = ?, updated_ns = ? WHERE claim_id = ?",
+            (json.dumps(asdict(lease), sort_keys=True), self._now_ns(), claim_id),
+        )
+
+    def finish_lease_fence_locked(self, claim_id: str, state: str, *, expect: str) -> None:
+        row = self._query_one("SELECT state FROM lease_operations WHERE claim_id = ?", (claim_id,))
+        if row is None:
+            raise MutationError(f"UNKNOWN_LEASE_FENCE: {claim_id}")
+        if row["state"] != expect:
+            raise MutationError(
+                f"LEASE_FENCE_STATE_CHANGED: {claim_id} is {row['state']}, expected {expect}"
+            )
+        self._connection.execute(
+            "UPDATE lease_operations SET state = ?, updated_ns = ? WHERE claim_id = ?",
+            (state, self._now_ns(), claim_id),
+        )
+
+    def fail_lease_fence(self, claim_id: str, reason: str) -> None:
+        """Keep an unresolved fence and block the service; never auto-retry the lease."""
+        with self.immediate_transaction():
+            row = self._query_one("SELECT state, reason FROM lease_operations WHERE claim_id = ?", (claim_id,))
+            if row is None:
+                raise MutationError(f"UNKNOWN_LEASE_FENCE: {claim_id}")
+            if row["state"] in OPEN_LEASE_STATES and row["reason"]:
+                return
+            self._connection.execute(
+                "UPDATE lease_operations SET state = ?, reason = ?, updated_ns = ? WHERE claim_id = ?",
+                (LEASE_FAILED, reason, self._now_ns(), claim_id),
+            )
+            self._mark_blocked_locked(f"LEASE_FENCE_FAILED: {reason}")
+
+    def open_lease_fences(self) -> tuple[str, ...]:
+        placeholders = ", ".join("?" for _ in OPEN_LEASE_STATES)
+        rows = self._query_all(
+            f"SELECT claim_id FROM lease_operations WHERE state IN ({placeholders}) ORDER BY created_ns",
+            OPEN_LEASE_STATES,
+        )
+        return tuple(row["claim_id"] for row in rows)
+
+    def open_renew_fence(self, domain) -> str | None:
+        row = self._query_one(
+            "SELECT claim_id FROM lease_operations WHERE domain = ? AND state = ?"
+            " ORDER BY created_ns LIMIT 1",
+            (str(domain), LEASE_RENEWING),
+        )
+        return row["claim_id"] if row is not None else None
+
+    def lease_operation(self, claim_id: str) -> dict | None:
+        row = self._query_one("SELECT * FROM lease_operations WHERE claim_id = ?", (claim_id,))
+        if row is None:
+            return None
+        return {
+            "claim_id": row["claim_id"],
+            "domain": row["domain"],
+            "state": row["state"],
+            "lease": json.loads(row["lease_json"]) if row["lease_json"] else None,
+            "reason": row["reason"],
+        }
 
     # -- helpers -----------------------------------------------------------------
 
