@@ -4823,3 +4823,43 @@ hardcodes `executionGeneration: 0`. So the fix is:
 **I am recording this rather than patching it in the last minutes of a round**, because the last time I
 changed a generation line on a hunch (CP-141) it produced exactly this defect. The next round starts by
 reverting my own wrong fix, then wires the real value - and both steps are small.
+
+## CP-150: the generation now comes from the server, and the client stops guessing
+
+CP-149 named the defect (my own CP-141 conflated the lease's renewal generation with the domain's
+execution generation) and this round fixed it in the direction the design implies: **the client is told,
+not guessing.**
+
+**The revert is in** (`d64903cc`): `adoptLease` no longer touches `executionGeneration`, and the two tests
+that encoded the conflated model are deleted rather than adjusted - one of them asserted precisely the
+wrong behaviour, and a test that defends a defect is worse than no test. The one test worth keeping was
+rewritten to assert the separated model: the transport learns the *lease*, and the authority's generation
+stays where the server put it, with the design line quoted in the comment.
+
+**And the server now exposes the number the client must present.** Nothing did before: the registry's
+`execution_generation` was reachable only from inside the process, the lease's `generation` is a different
+counter, and the campaign projection's `current_generation` is a third one that does not exist before a
+campaign does - which is exactly why the client had been sending 0 and then, after my wrong fix, one too
+many. The acquire is the binding that advances the generation, so its response is the honest place to
+report it:
+
+```text
+expert_validation/api.py   LeaseResponse.execution_generation: int | None = None
+unified/app.py             _claim_acquired(...) now returns the claimed generation
+                           both lease routes put it into the response payload
+```
+
+`unified_openapi.json` and `unified-schema.d.ts` were regenerated with the repository's own tooling
+(`python -m so101_teleop.openapi_export --unified`, then `bun run generate:api:unified`) and both now carry
+the field; the export sync test, the unified API suite and the acquire suite pass together (19 tests), and
+the whole unified selection is 146 passed. Committed in two parts: `d64903cc` (revert) and the server change
+with its generated artifacts.
+
+**Two notes worth keeping.** The export step needs the ROS environment - running it with the bare venv
+fails on `ament_index_python`, which is the same underlay rule the live runs follow. And the server change
+touched a **closed** response model on purpose: `LeaseResponse` is a `ClosedModel`, so the new field is
+declared rather than smuggled, and the generated client types carry it.
+
+**What remains:** the client adopts `execution_generation` from the acquire response into its authority
+(the app's acquire handler is the place, with the runtime's `adoptAuthority`), then a live run - and the
+sequence should reach Start validation.
