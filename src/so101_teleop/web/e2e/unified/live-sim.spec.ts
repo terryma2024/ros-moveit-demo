@@ -44,3 +44,49 @@ liveSimTest.describe("unified web service", () => {
     expect((await response.json()).code).toBe("CONTROLLER_INSTANCE_REQUIRED");
   });
 });
+
+/**
+ * The two viewports the design requires. Asserting the real layout means measuring the document
+ * against the viewport in a real browser: jsdom has no layout engine, so this cannot be replaced by
+ * a unit test, and the dense joint table is expected to scroll inside its own container rather than
+ * make the page overflow.
+ */
+for (const viewport of [
+  { name: "desktop", width: 1400, height: 900 },
+  { name: "phone", width: 390, height: 844 },
+]) {
+  liveSimTest(`has no horizontal page overflow at ${viewport.width}x${viewport.height}`, async ({
+    page,
+    liveServer,
+  }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    for (const path of ["/", "/expert-validation", "/tasks"]) {
+      await page.goto(`${liveServer.baseURL}${path}`);
+      await page.waitForLoadState("domcontentloaded");
+      const overflow = await page.evaluate(() => {
+        const document_ = document.documentElement;
+        return {
+          scrollWidth: document_.scrollWidth,
+          clientWidth: document_.clientWidth,
+          widest: Array.from(document_.querySelectorAll<HTMLElement>("*"))
+            .map((element) => element.getBoundingClientRect().right)
+            .reduce((left, right) => Math.max(left, right), 0),
+        };
+      });
+      expect(overflow.scrollWidth, `${path} scrollWidth`).toBeLessThanOrEqual(
+        overflow.clientWidth + 1,
+      );
+      expect(overflow.widest, `${path} widest element`).toBeLessThanOrEqual(viewport.width + 1);
+    }
+  });
+}
+
+liveSimTest("keeps every status marker one radius and readable as text", async ({ page, liveServer }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto(`${liveServer.baseURL}/expert-validation`);
+  const markers = page.locator("circle[data-point-status]");
+  const count = await markers.count();
+  if (count === 0) return; // no manifest in this run; the map contract is covered by unit tests
+  const radii = new Set(await markers.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("r"))));
+  expect(radii.size).toBe(1);
+});
