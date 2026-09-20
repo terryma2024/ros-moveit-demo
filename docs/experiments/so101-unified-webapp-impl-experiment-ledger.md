@@ -4994,3 +4994,45 @@ preflight is admitted *as a request* and refuses admission with a named code, th
 (generations 1 -> 2 -> 3 observed, then `LEASE_EXPIRED` once the run's driver stopped renewing), and the
 campaign POST is correctly never attempted while preflight is unadmitted. Every one of those is a measurement
 rather than a guess, and the remaining blocker is one function's choice of loader and accelerator.
+
+## CP-154: preflight admits, the retry control exists, and the last blocker is the execution barrier
+
+The guard fix (CP-153's specified work) changed the campaign path from "cannot be attempted" to
+"attempted and refused for a runtime reason":
+
+```text
+POST /expert-validation/campaigns/preflight  200 {"receipt_id":"preflight-16f628...","admitted":true,...}
+POST /expert-validation/campaigns/preflight  200 {"receipt_id":"preflight-7f0ba1...","admitted":true,...}
+POST /expert-validation/campaigns            409 {"code":"EXEC_BARRIER_ACK_MISSING"}
+PUT  /expert-validation/lease/{id}           200 (generation 2)
+POST /expert-validation/campaigns/preflight  409 STALE_LEASE_GENERATION
+POST /expert-validation/campaigns            409 STALE_LEASE_GENERATION
+POST /expert-validation/campaigns/preflight  409 VALIDATION_RECOVERY_REQUIRED
+```
+
+**`admitted: true`** is the line that matters: with the macOS document loaded and the Darwin accelerator
+composed, the start guard passes on this host, and the page now renders the whole campaign surface - its
+own buttons include **"Retry selected with FULL_RESTART"** - with the campaign view reading
+`UNKNOWN · RUNNING · sequence`, `Broker healthy`, `Point execution results`, `FULL_RESTART retries`.
+
+**The refusal that remains is named and it is the documented gap.** `EXEC_BARRIER_ACK_MISSING` means the
+campaign start waits for an execution-barrier acknowledgement that nothing provides, which is the same
+missing piece Stage A recorded as `ROS_DRIVER_NOT_PROVISIONED` in `ros_child.py`: the sockets, protocol,
+ownership, renewal and cancel paths are all verified, and the ROS driver that would acknowledge and execute
+is not wired. The two refusals after it are the app's own correctness showing through - a preflight receipt
+is bound to a lease generation, so a renewal invalidates it (`STALE_LEASE_GENERATION`), and a failed start
+leaves a recovery fence (`VALIDATION_RECOVERY_REQUIRED`) rather than silently retrying.
+
+**So the §7 acceptance stands as follows.** Every row is met with measured evidence except the live
+campaign and its single-point `FULL_RESTART_RETRY`, and the reason is now a *provisioning* gap rather than
+an authority, client, contract or configuration one: the service can admit a campaign on this host, the page
+offers the retry, the retry endpoint's contract and authority behaviour are measured (CP-121/123/124), and
+what is missing is the ROS execution driver behind the barrier. Closing that is implementing
+`RclpyActionDriver` (a Stage C / live-runtime task, explicitly listed as not-yet-possible in the operation
+guide) - not another acceptance step.
+
+**The full accounting of this task's defect hunt, for the record:** thirteen defects found, twelve fixed,
+all in the client-server seam, all invisible to the unit suites, and one of them (`adoptLease` conflating
+the lease generation with the execution generation) introduced by me and found by the live run that followed
+it. Every fix kept the frontend suite (46 files, 206 tests), the unified selection (148 tests) and the
+project's own guard tests green.
