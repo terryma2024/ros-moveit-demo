@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-49
+latest_checkpoint: CP-50
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1153,3 +1153,29 @@ With CP-40 (teleop) and this checkpoint (validation), **both pages are migrated*
 cannot stop a heartbeat, renewal carries the required instance authority, the lease identity,
 generation and expiry are validated in one place, and a failed renewal still disables execution and
 allows a fresh lease request exactly as before.
+
+## CP-50: Task 11's isolated configure and build are GREEN
+
+Ran the plan's Stage A build through `rosgate` into a fresh, previously nonexistent base
+(`build-FV6UHHX5` under the registered root):
+
+```
+colcon --log-base <root>/colcon-log build --build-base <root>/build --install-base <root>/install \
+  --packages-select so101_teleop --symlink-install --cmake-clean-cache \
+  --cmake-args -DBUILD_TESTING=ON -DPython3_EXECUTABLE=<TEST_PYTHON> -DPYTHON_EXECUTABLE=<TEST_PYTHON>
+```
+
+**Exit 0.** The web bundle built through Bun as part of it. `ctest --show-only=json-v1` then reports
+**69 registered tests, 15 of them `test_unified_*`**: admission, api, arbiter, bridge,
+budget_adapter, gate, instances, ipc, launch, lifecycle, live_fixture, parents, safety, two_channel,
+web_dependencies. Crucially, **every** test command's Python is the registered
+`/Users/matianyi/ros2_jazzy/.venv/bin/python` - the plan's ACTUAL_CTEST_PYTHON_MISMATCH condition does
+not fire - and the registration-drift guard passes, so the CMake list and the files on disk agree.
+
+One honest gap against the plan's 16-name list: **`test_unified_cancel_integration` does not exist.**
+The plan assigns that file to Task 6 (`ProductionHarness`, real factory + real routes + a barrier
+driver) and it was never written, because the ProductionHarness depends on the composed factory
+runtime that this host cannot fully exercise. The other 15 names are all present.
+
+Still open in Task 11: the three incremental rebuild proofs, the `colcon test` run over the installed
+overlay with per-test TEMP provenance, and the copied-install Chrome gate.
