@@ -2253,3 +2253,27 @@ So the fix is narrow and named: that cluster must be allowed to shrink and wrap 
 rather than `shrink-0`, and `.unified-topbar` already declares `flex-wrap: wrap` for exactly this. It was
 **not** applied in this checkpoint because the fix belongs with a re-measurement, and my remaining
 budget in this round would not allow both honestly.
+
+## CP-98: phone overflow fixed - both required viewports are now clean
+
+CP-97 localised the 12 px to `connection-header.tsx`'s `flex shrink-0 items-center gap-3` cluster. The
+first fix attempt simply dropped `shrink-0` - and the existing test
+`keeps title, mode badge and lease action in a stable cluster before metadata` failed, correctly:
+`shrink-0` there is a deliberate contract, not an oversight. So the constraint is that the cluster must
+stay a stable cluster *and* not widen a 390 px page.
+
+Resolved by keeping the contract and adding the missing constraints:
+`flex min-w-0 max-w-full shrink-0 flex-wrap items-center gap-3` - it still refuses to be squeezed, but it
+may now wrap inside the available width instead of pushing the document wider.
+
+Verified by rebuilding the release overlay, re-copying it, and re-measuring in system Chrome from the
+copied prefix (evidence `installed-visual2-VYVx9ZQf`):
+
+| viewport | `/` | `/tasks` | `/expert-validation` |
+| --- | --- | --- | --- |
+| 1400x900 | 0 | 0 | 0 |
+| 390x844 | **0** | 0 | 0 |
+
+**Both required viewports are now free of horizontal overflow**, all pages render, and the frontend
+suite is green (**45 files / 202 tests**) with the cluster test still passing. Commits: the fix and this
+checkpoint.
