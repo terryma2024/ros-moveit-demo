@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-24
+latest_checkpoint: CP-25
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -687,3 +687,22 @@ Two self-inflicted test defects were caught by the suite in this round (a wrong 
 name, and a comment mentioning `@theme` tripping a "no v4 syntax" assertion). Both are fixed, and
 the second is now comment-stripped the same way the theme test does it. The commit was gated on the
 full suite this time.
+
+## CP-25: the last hardcoded palette surfaces are merged
+
+`alert-dialog.tsx`, `button.tsx` and `card.tsx` were the only primitives still naming a raw
+palette. They now read the tokens: dialog and card surfaces use `border-border bg-card
+text-card-foreground`, descriptions use `text-muted-foreground`, and the button's four business
+variants map to `bg-primary`, `bg-secondary`, `bg-destructive` and the outlined
+`border-input`/`hover:bg-accent` - every variant and size is kept, along with the focus ring,
+`disabled:opacity-50` and the existing props. A new test walks every `components/ui/*.tsx` and
+fails on any `bg|text|border|ring|fill|stroke-<palette>-<shade>` class, so the sweep cannot
+silently regress. One baseline assertion in `tcp-panel.test.tsx` that pinned `bg-sky-600` was
+updated to `bg-primary`.
+
+GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` **40 files / 178 tests**. Commit
+`37cbb968`.
+
+Remaining in Task 8: importing the *new* primitives the plan needs beyond the 12 that already exist
+(sidebar, sheet, field, select, input, label) from the captured registry items, which is additive
+work rather than a merge of existing behaviour.
