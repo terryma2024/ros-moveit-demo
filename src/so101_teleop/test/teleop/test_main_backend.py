@@ -96,74 +96,19 @@ def test_selected_backend_is_frozen_after_successful_probe():
     assert selected.profile.backend == "gazebo_py"
 
 
-def test_gazebo_python_camera_uses_profile_allowlist(monkeypatch, tmp_path):
-    events = []
-    profile = SimpleNamespace(
-        backend="gazebo_py",
-        operations={BackendOperation.CAMERA_PRESET: object()},
-        camera_presets=("overview", "top", "side", "gripper", "cup"),
-    )
-    backend = SimpleNamespace(profile=profile)
 
-    class Worker:
-        def __init__(self, selected):
-            events.append(("worker", selected))
 
-        def start(self):
-            pass
+def test_deprecated_main_delegates_to_the_unified_entry(monkeypatch):
+    """The legacy console entry must not raise a second web listener.
 
-        def stop(self):
-            pass
-
-    monkeypatch.setattr(main_module, "validate_bind_address", lambda address: address)
-    monkeypatch.setattr(main_module, "select_backend", lambda environment: backend)
-    monkeypatch.setattr(main_module, "RosTelemetryWorker", Worker)
-    monkeypatch.setattr(
-        main_module,
-        "BackendCameraController",
-        lambda names, selected: events.append(("camera", names, selected)) or object(),
-    )
-    monkeypatch.setattr(main_module, "TeleopService", lambda *args, **kwargs: object())
-    monkeypatch.setattr(main_module, "installed_web_assets", lambda: tmp_path)
-    monkeypatch.setattr(main_module, "create_app", lambda *args, **kwargs: "app")
-    monkeypatch.setitem(sys.modules, "uvicorn", SimpleNamespace(run=lambda *args, **kwargs: None))
+    It used to build the ROS worker and call ``uvicorn.run(create_app(...))`` on its own port. In the
+    unified design the ROS lifecycle belongs to the child process, so the entry now delegates and this
+    test pins that: the unified entry point is called, and nothing else is started here.
+    """
+    calls = []
+    unified = importlib.import_module("so101_teleop.unified.main")
+    monkeypatch.setattr(unified, "main", lambda: calls.append("unified"))
 
     main_module.main()
 
-    assert ("camera", profile.camera_presets, backend) in events
-
-
-def test_server_lifecycle_stops_ros_worker_when_uvicorn_returns(monkeypatch, tmp_path):
-    events = []
-
-    class Worker:
-        def __init__(self, backend):
-            events.append(("construct", backend))
-
-        def start(self):
-            events.append(("start",))
-
-        def stop(self):
-            events.append(("stop",))
-
-    backend = SimpleNamespace(profile=SimpleNamespace(operations={}))
-    monkeypatch.setenv("SO101_CAMERA_VIEWS", str(tmp_path / "camera.yaml"))
-    monkeypatch.setattr(main_module, "validate_bind_address", lambda address: address)
-    monkeypatch.setattr(main_module, "select_backend", lambda environment: backend)
-    monkeypatch.setattr(main_module, "RosTelemetryWorker", Worker)
-    monkeypatch.setattr(main_module, "load_camera_presets", lambda path: {})
-    monkeypatch.setattr(main_module, "CameraController", lambda presets: object())
-    monkeypatch.setattr(main_module, "TeleopService", lambda *args, **kwargs: object())
-    monkeypatch.setattr(main_module, "installed_web_assets", lambda: tmp_path)
-    monkeypatch.setattr(main_module, "create_app", lambda *args, **kwargs: "app")
-    monkeypatch.setitem(sys.modules, "uvicorn", SimpleNamespace(
-        run=lambda *args, **kwargs: events.append(("serve",))))
-
-    main_module.main()
-
-    assert events == [
-        ("construct", backend),
-        ("start",),
-        ("serve",),
-        ("stop",),
-    ]
+    assert calls == ["unified"]
