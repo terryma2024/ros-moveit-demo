@@ -1,6 +1,6 @@
 {
   "base": "radix",
-  "blocked_reason": "PENDING_PRODUCT_MERGE: the preset manifest and all 18 radix-maia registry items (utils, the two font items and every listed primitive) are captured with verified sha256 hashes, but the token/primitives smart merge into this Tailwind 3.4.17 project and the self-hosted font files have not been applied yet.",
+  "blocked_reason": "PENDING_PRIMITIVE_MERGE: the preset manifest, all 18 radix-maia registry items, the theme token set and the two self-hosted fonts are captured and applied; the per-primitive smart merge that preserves business variants, ARIA, events, disabled reasons and testids remains.",
   "bun": "1.3.14",
   "cli": {
     "package": "shadcn",
@@ -21,22 +21,30 @@
   },
   "fonts": [
     {
+      "bytes": 36932,
       "family": "'DM Sans Variable', sans-serif",
-      "file": null,
+      "file": "public/fonts/dm-sans-variable.woff2",
       "item": "font-dm-sans",
-      "license": null,
+      "license": "SIL Open Font License 1.1",
+      "license_file": "public/fonts/LICENSES.txt",
+      "media_type": "font/woff2",
       "provider": "google",
-      "sha256": "8de4f05edcc2f2790474f55e660360e29fc1eebe479ba12e349c3b413cda269f",
-      "source_url": "DM_Sans"
+      "sha256": "9fea608a947e67020c33cad9a6fe3d60c54119dfb8cff87768a8117a15ed7543",
+      "source_url": "https://cdn.jsdelivr.net/npm/@fontsource-variable/dm-sans/files/dm-sans-latin-wght-normal.woff2",
+      "variable": null
     },
     {
+      "bytes": 32292,
       "family": "'Outfit Variable', sans-serif",
-      "file": null,
+      "file": "public/fonts/outfit-variable.woff2",
       "item": "font-heading-outfit",
-      "license": null,
+      "license": "SIL Open Font License 1.1",
+      "license_file": "public/fonts/LICENSES.txt",
+      "media_type": "font/woff2",
       "provider": "google",
-      "sha256": "6701689cce06ad34ae8132afd92af10f40d8d2e389b6a6f895819fd8631054d7",
-      "source_url": "Outfit"
+      "sha256": "6c18d579fd87c3776be068b762cbc83fde3acb543d49eabd3ade842eb987e887",
+      "source_url": "https://cdn.jsdelivr.net/npm/@fontsource-variable/outfit/files/outfit-latin-wght-normal.woff2",
+      "variable": null
     }
   ],
   "node": "25.9.0",
