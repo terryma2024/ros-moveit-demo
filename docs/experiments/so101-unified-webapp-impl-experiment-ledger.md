@@ -29,8 +29,8 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-14
-next_experiment: finish the Task 8 registry capture (component items + self-hosted fonts) and the theme/primitives smart merge, then the Task 9 page-effect migration, then Task 11 configure/build
+latest_checkpoint: CP-15
+next_experiment: finish the Task 8 registry capture and theme merge, the Task 9 page-effect migration and viewport checks, then Task 11 configure/build and the copied-install gate
 ```
 
 ## CP-01: Registration, host probe and deviations
@@ -477,3 +477,15 @@ Python checks and the copied-install Chrome gate.
 
 Both changes are in one commit because the CMake dependency list is exactly what the new lock
 file satisfies.
+
+## CP-15: exact-N selection consumes the qualification view
+
+`CampaignSetup` accepts the read-only `qualifications: QualificationView[]` from Task 10. When
+present it is authoritative: an exact N whose view is unknown or unpromoted is disabled in the
+selector and its provider reason is shown, while an AVAILABLE promoted N stays selectable. The
+existing `worker_count_availability` contract is still honoured, so an unqualified N cannot be
+enabled by satisfying only one of the two. The component never lowers N, never substitutes
+ADAPTIVE, and has no K or max-points-per-worker input.
+
+GREEN: `bun run build` exit 0, two new component tests plus the whole suite pass. Commit
+`497ac784`.
