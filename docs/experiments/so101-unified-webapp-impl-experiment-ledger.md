@@ -4165,3 +4165,44 @@ should therefore be cheap and precise - render the app with a runtime whose tran
 requests it is asked to send, and assert that the acquire (and later the retry) arrives with the four
 headers. That is a test that can fail today and pass after one wiring change, and after CP-125's lesson I
 will check that it fails for the right reason before touching anything.
+
+## CP-135: the page already holds the runtime - acquire is the one mutation that ignores it
+
+CP-134 said neither page uses the authority-carrying runtime. For the validation page that is too broad,
+and the correction makes the fix smaller and safer:
+
+```text
+expert-validation-app.tsx:3    import { useOptionalDomainRuntime } from "@/state/runtime-provider";
+expert-validation-app.tsx:104  const runtime = useOptionalDomainRuntime("validation");
+expert-validation-app.tsx:174  // The renewal loop belongs to the domain runtime: it owns the cadence,
+                               // presents the instance ...
+expert-validation-app.tsx:177  runtime?.adoptLease({ ... })
+expert-validation-app.tsx:183  runtime?.onRenewal(...)
+expert-validation-app.tsx:205  runtime?.startHeartbeat(...)
+expert-validation-app.tsx:356  onAcquireLease={() => { void api.acquireLease(sessionId)... }}   <- bare client
+```
+
+So the component **already consumes the runtime** for the renewal loop, lease adoption, renewal notices
+and the heartbeat cadence - and the acquire is the one mutation still going through the bare client. The
+existing test file proves the same thing from the other side: it renders the app inside
+`<RuntimeProvider validation={runtime}>` with a recording `DomainTransport`, and has a test about renewal
+replacing stale preflight authority. The runtime, the provider and the transport are all exercised; the
+acquire path simply does not use them.
+
+**The fix is therefore a few lines at `onAcquireLease`**: send the acquire through the runtime that is
+already in scope (its `post` carries the four headers from `start()`, and its authority is
+`instanceId/proof/channelRevision/0` at that moment), then adopt the returned lease the way renewal
+already does. No protocol change, no new abstraction, no new client.
+
+**I also removed a test I had just written, and the reason matters.** The RED I wrote passed a `runtime`
+*prop* into the app and asserted the acquire used it. That prop does not exist, and the app does not need
+it: it reads the runtime from context, exactly like the renewal code. The test rendered in the wrong
+environment first (`document is not defined`, no jsdom directive) and would have been rewritten against a
+prop-shaped fiction even after that was fixed. Deleting it costs one round; keeping it would have encoded
+a wrong design and, worse, a test that "fails" for a reason unrelated to the defect - the same trap as
+CP-125.
+
+The RED test that should exist builds on the harness already in `expert-validation-app.test.tsx`: render
+inside `RuntimeProvider` with a transport whose `post` records its calls, click Acquire lease, and assert
+the recorder saw `/expert-validation/lease`. That fails today because the click goes to the bare client,
+and it passes once the handler uses the runtime in scope.
