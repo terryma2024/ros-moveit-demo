@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-70
+latest_checkpoint: CP-71
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1631,3 +1631,20 @@ comment now says so where the next reader will look.
 
 GREEN: `pyrgate test_api.py test_unified_api.py test_unified_route_parity.py` all pass together, which
 is the trio that constrains this area. Commit follows this entry.
+
+## CP-71: re-verified in the gate after the API, CMake and guard changes
+
+Three commits since CP-66 touched `api.py`, `unified/app.py` and the CMake registration list
+(CP-68's bind-policy extraction, CP-69's route-parity guard, CP-70's status note), so the overlay was
+reconfigured from clean and the gate re-run:
+
+```
+colcon build ... --cmake-clean-cache --cmake-args -DBUILD_TESTING=ON ...  -> exit 0
+ctest --test-dir <build>/so101_teleop -R test_unified --output-on-failure    -> 100% tests passed out of 17
+```
+
+`ctest --show-only` confirms **17 unified modules registered**, including `test_unified_route_parity`,
+so the new guard really runs in the ament gate rather than only in a direct pytest invocation.
+
+Nothing regressed across those three commits, and this is the current best evidence line for the whole
+task: a clean reconfigure, a successful build, and every unified module green in the real gate.
