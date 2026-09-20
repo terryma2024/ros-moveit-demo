@@ -14270,3 +14270,21 @@ the campaign, and the probe that ran when it should have been off). The suite is
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `a7e9c302`; no evidence deleted._
+
+### CP-UQ291 addendum 2 — the harness is documented for whoever picks this up
+
+`impl-macos-mps-w2-01/README.md` now describes the runners, the probes, the validated environment chain
+and the four rules this harness learned by paying for them:
+
+1. never pre-create or reuse a run root - the gate refuses and a summary can be clobbered;
+2. always launch stations through `station_environment()`, or the canonical prefix wins again;
+3. record the raw frame that arrived, not a code derived from it - that is what finally located the
+   handler scope defect;
+4. re-indent nested blocks as a whole; sed-style patching of an indented block cost two runs.
+
+Screen Recording was probed again (`task16-capture-probe-17`) and is still denied, so the note that any
+per-point `viewer.png` fails closed - an external blocker, never a pass - is part of that file too.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `68983a17`; no evidence deleted._
