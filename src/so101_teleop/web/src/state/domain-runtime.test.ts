@@ -197,3 +197,30 @@ test("a renewal that changes identity or stalls the generation is refused", asyn
   expect(runtime.validateRenewal({ lease_id: "l1", service_session_id: "s1", generation: 5 })).toBe(false);
   expect(runtime.lastRenewalError).toBe("LEASE_NOT_HELD");
 });
+
+test("the runtime exposes whether a renewal is in flight", async () => {
+  const snapshot: RuntimeSnapshot = { sequence: 1, serviceEpoch: "e1", executionGeneration: 1, payload: null };
+  const { transport } = makeTransport(snapshot);
+  let release: () => void = () => undefined;
+  transport.renew = vi.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+  );
+  const runtime = new DomainRuntime("validation", transport);
+  await runtime.start();
+  runtime.adoptAuthority({
+    instanceId: "i1",
+    proof: "p1",
+    channelRevision: 1,
+    executionGeneration: 1,
+  });
+  expect(runtime.renewing).toBe(false);
+  const pending = runtime.renew();
+  expect(runtime.renewing).toBe(true);
+  release();
+  await pending;
+  expect(runtime.renewing).toBe(false);
+  runtime.dispose();
+});
