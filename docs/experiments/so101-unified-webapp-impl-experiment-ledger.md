@@ -3773,3 +3773,52 @@ test: one that could not fail, one that failed for the wrong reason (a string wh
 required), and this one. The two failures were cheap and instructive - a test that cannot fail is worse
 than no test, and one that fails for the wrong reason teaches the wrong lesson - but they cost two
 round-trips that a look at how the existing suites construct their authority would have saved.
+
+## CP-127: beyond the fixed bug - nothing in production can ever bind a controller
+
+CP-126 fixed the domain binding and the live flow moved on to `CONTROLLER_NOT_BOUND: validation`. I
+followed that one too, and it is not a next step to script. It is a deadlock, and the proof is four
+greps deep.
+
+```text
+instances.py:167  def require_bound(self, authority)          # the gate every mutation passes
+instances.py:172  bound = self._controllers[str(authority.domain)]
+instances.py:173  if bound is None: raise CONTROLLER_NOT_BOUND
+instances.py:136  def claim(self, binding, lease)             # the only writer of _controllers
+```
+
+and then the two facts that close it:
+
+```text
+grep '.claim(' across the whole package   ->  every hit is in src/so101_teleop/test/...
+grep 'claim' in unified/app.py            ->  no route, no message, nothing
+```
+
+The websocket channel does not claim either: `instance_channel` calls `registry.connect(...)`, answers
+with the binding, and then sits in `await websocket.receive_text()` **discarding every message**. The
+frontend matches its server: `instance-client.ts` registers, opens the channel, and carries the four
+authority headers on mutations - it never asks to claim, because there is nothing to ask.
+
+So the sequence is closed on itself: the API's mutation dependency requires a bound controller, the
+validation domain's `acquire_lease` is itself a mutation (it goes through `require_bound` at
+`compose.py:137/146`), and `acquire_lease` does not claim - it delegates straight to
+`self.lease_service.acquire(...)`. A client therefore needs a bound controller to obtain the lease that
+would let it become the controller, and no production code path writes the binding. Every mutation on the
+unified service is unreachable, on both sides of the wire, and the unit tests never noticed because they
+call `registry.claim(...)` directly - which is exactly the same blind spot that hid the domain defect one
+checkpoint earlier.
+
+**Three candidate readings, and I am deliberately not picking one.** The binding could be meant to happen
+in the channel handshake (the handler would claim with a lease the client must already hold); or
+`acquire_lease` could be the one mutation exempt from `require_bound`, since it is the bootstrap step;
+or a claim message was intended on the channel and never implemented. The design's section 5 covers root
+providers, instances and reconnect, and it is the authority model itself that decides between these -
+changing it on my own reading would be exactly the kind of unverified change CP-125 taught me to revert.
+This needs the spec's answer or the operator's, not my guess.
+
+**What is certain, and what it means for the acceptance.** The two defects found in two consecutive rounds
+are both in the same layer and both invisible to the existing tests: the first made server-issued
+instances unusable, the second makes the whole mutation surface unreachable. Neither is a measurement
+problem, a budget problem, or a retired-chain problem - they are the unified service's own authority
+model, found by driving it the way a page drives it. §7's functional row is what surfaced them, which is
+the strongest argument in this ledger for running live acceptance rather than trusting green unit suites.
