@@ -484,9 +484,10 @@ test("acquiring a lease presents instance authority through the runtime transpor
     close: () => undefined,
   };
   const runtime = new DomainRuntime("validation", transport);
+  // No api prop: the page uses its own client, which is the case this test is about.
   render(
     <RuntimeProvider validation={runtime}>
-      <ExpertValidationApp api={fakeApi()} />
+      <ExpertValidationApp />
     </RuntimeProvider>,
   );
   await act(async () => {
@@ -497,9 +498,14 @@ test("acquiring a lease presents instance authority through the runtime transpor
       executionGeneration: 1,
     });
   });
-  const button = await screen.findByRole("button", { name: /acquire lease/i });
-  await userEvent.click(button);
+  const acquire = await screen.findByRole("button", { name: /acquire lease/i });
+  await userEvent.click(acquire);
   // The runtime transport is the only path that carries the four authority headers; the page used to
-  // send the acquire through its own bare client, where they do not exist.
+  // send its mutations through its own bare client, where they do not exist.
   await waitFor(() => expect(posted).toContain("/expert-validation/lease"));
+  // Every mutation, not just the acquire: generating the manifest was refused the same way until the
+  // whole mutating surface went through the runtime.
+  const generate = screen.getByRole("button", { name: /generate points/i });
+  await act(async () => { fireEvent.click(generate); });
+  await waitFor(() => expect(posted).toContain("/expert-validation/manifests"));
 });
