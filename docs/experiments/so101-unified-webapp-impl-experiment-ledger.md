@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-35
+latest_checkpoint: CP-36
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -905,3 +905,17 @@ ported radix `Select` would move the qualification assertion (an unknown exact N
 jsdom, because radix mounts its listbox in a portal that jsdom cannot render, and the plan requires
 preserving test selectors rather than trading a real assertion for a cosmetic one. The ported
 `Select` remains available for controls that need it.
+
+## CP-36: registration drift is now impossible to miss
+
+`test_unified_launch.py` gained a two-way guard: every `test_unified_*.py` on disk must be
+registered in `CMakeLists.txt` with the same path, and every `so101_add_pytest_test(test_unified_...)`
+entry must point at a file that exists. An unregistered module silently never runs in the ament
+gate, and a registration pointing at a missing file breaks configure, so both directions matter.
+`pyrgate` on the module exits 0.
+
+This also closes a plan-level worry: the plan requires 16 registered names in the configure gate and
+demanded that "新增追溯 tests ... 追加其真实文件名后才 stage". The guard makes any future addition
+that forgets registration fail locally instead of only in the C++-free ament run.
+
+Commit follows this entry.
