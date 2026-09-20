@@ -43,7 +43,9 @@ export const DOMAIN_ENDPOINTS: Record<DomainName, DomainEndpoints> = {
     renewPath: "/expert-validation/lease",
     renewBody: {},
     renewTarget: (lease) =>
-      lease === null
+      // The guard is on the shape, not only on absence: a partial lease once produced
+      // PUT /expert-validation/lease/undefined, which no server can act on.
+      lease === null || typeof lease.lease_id !== "string" || lease.lease_id === ""
         ? null
         : {
             method: "PUT",
