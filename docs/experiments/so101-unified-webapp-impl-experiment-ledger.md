@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-37
+latest_checkpoint: CP-38
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -936,3 +936,18 @@ This is the runtime half of Task 9's effect migration. The remaining half is mec
 live page code (`app.tsx`, `expert-validation-app.tsx`): delete their page-scoped telemetry/renew
 effects and consume the runtime instead, which needs a careful read of both effects before editing
 rather than a quick substitution.
+
+## CP-38: the provider now drives renewal, so the runtime path is live
+
+`RuntimeProvider` accepts an optional `heartbeatMs` and starts each domain runtime's heartbeat after
+a successful `start()`; `main.tsx` passes 10s. Because the interval lives in the runtime, a page
+switch only re-renders the provider's children and the cadence is untouched - the test proves
+renewals keep their rhythm across a re-render and that nothing calls `transport.close`.
+
+GREEN: `NODE_ENV=test bun run test` **45 files / 193 tests**; `bun run build` exit 0. Commit follows
+this entry.
+
+Honest status of the migration: the runtime path is now live and additive, but the pages still have
+their *own* renew effects, so renewal is currently performed twice. Removing the page-level effects
+is the remaining half; it touches live page code and needs a careful read of both effects, so it is
+left for a round with room to verify it properly rather than rushed.
