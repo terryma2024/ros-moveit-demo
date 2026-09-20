@@ -3272,3 +3272,64 @@ the contact stage) instead of a claim.
 For completeness on the two traps from CP-114: the recovery was one environment line, and the reason the
 earlier three rounds could not have found it is that they never ran a station - the loader error only
 exists once a worker tries to initialise hardware.
+
+## CP-117: the pick-place failure was contamination from the previous run, and both runs left residue
+
+CP-116 reported `W2_CAMPAIGN_PASS` with every point `FAILED` / `DYNAMIC_WORKFLOW_FAILED` and no contacts.
+The chain is now traced end to end, and it is an environment story rather than a pick-place defect.
+
+**Perception was fine.** The per-point evidence directory carries a real perception result:
+
+```text
+rgbd-perception.log: [INFO] [rgbd_cup_pose]: {"fitted_radius_m": 0.03938055, "output_frame_id": "world",
+  "position_xyz": [0.01949905, -0.28040477, 0.16499999], "status": "OK"}
+```
+
+**The workflow died on execution, with a duplicate-server warning repeating throughout:**
+
+```text
+[WARN] [so101_dynamic_cup_pick_place.action_client]: Ignoring unexpected goal response.
+       There may be more than one action server for the ...
+[WARN] ... Ignoring unexpected result response. There may be more than one action server for the ...
+status=ERROR failure=MOVEIT_EXECUTION_FAILED
+```
+
+**And there were indeed two more action servers alive: the previous run's.** Two orphaned processes
+(`ppid 1`), started 7:29 and 7:28 minutes before I inspected them - i.e. during the *earlier* run - named
+their own run in their command lines:
+
+```text
+ros2 launch so101_demo_py so101_mujoco_task_station.launch.py headless:=false
+  session_id:=stageb-live-03-w2
+  task_evidence_root:=/tmp/.../stageB-live3-JH66dW1j/campaign/w2-station
+```
+
+`stageb-live-03` is `bash-28`, the run whose verdict said `cleanup.complete: true` and
+`workers_reaped: [true, true]`. Its two station launchers outlived that verdict and were still serving
+actions while `stageb-live-04` started its own stations on the same domains. So the duplicate action
+server is not a hypothesis any more: the two orphans are identified by run, and their lifetime brackets
+the failing run. The `MOVEIT_EXECUTION_FAILED` and the empty contacts follow from goals being answered by
+the wrong server.
+
+I am not claiming the pick-place worked before this either - it has not been shown to succeed in this
+task yet - only that the failure observed in `stageb-live-04` has a sufficient, evidenced cause that is
+outside the demo code, and that a clean re-run is the way to find out what remains.
+
+**Cleanup, done and verified.** The two launchers ignored a `SIGINT` for longer than six seconds and then
+exited; they were gone by the time an explicit `SIGTERM` was attempted, which reported "No such process".
+Twelve further orphans of mine were also reaped: `src/so101_teleop/test/e2e/noros_child_helper.py`
+processes, in pairs, `ppid 1`, the oldest 3h26m old - residue from the unified-server gates of earlier
+rounds whose traps did not reach the children. All twelve are gone, and no `ros2 launch`, MuJoCo or
+station process remains on the host.
+
+Two lessons, both about my own process rather than the product. A campaign verdict's `cleanup.complete`
+is a claim about the processes that verdict knows about, and I read it as a claim about the host - the
+same "trust the instrument" mistake in a new dress. And my own gates have been leaking child helpers for
+hours without anyone noticing, because none of them checked for residue afterwards. The next live run
+should be preceded by an explicit residue check, and followed by one.
+
+**Next action, not yet taken:** a clean `stageb-live-05` campaign on the now-empty host, same command as
+`bash-29`. With the duplicate servers gone, its outcome - pass or `MOVEIT_EXECUTION_FAILED` again - is
+what actually tests whether anything remains in the pick-place path. Also worth reading before it: what
+the campaign's cleanup is specified to reap, so the next report can say whether the surviving launchers
+were a bug in that cleanup or a component it deliberately does not own.
