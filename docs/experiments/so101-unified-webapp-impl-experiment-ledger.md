@@ -29,8 +29,8 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-11
-next_experiment: Task 9 layouts and shell (no network needed), then Task 11 static CMake dependencies, then retry Task 8 registry access through a node-run CLI or the correct registry URL shape
+latest_checkpoint: CP-12
+next_experiment: Task 9 unified shell/layout CSS and the page migration that consumes the runtimes, then Task 11 static CMake dependencies, then retry Task 8 registry access
 ```
 
 ## CP-01: Registration, host probe and deviations
@@ -404,3 +404,16 @@ CMake test also asserts `design-system.lock.json`, so that assertion stays unmet
 produces the lock. Next attempt should run the pinned CLI under the repository's own Node
 (`NODE_USE_ENV_PROXY=1 npx -y shadcn@4.21.0 ...`) or discover the correct registry URL shape from
 the CLI source, and must still fail closed rather than substitute `latest`.
+
+## CP-12: Task 9 first increment - map display contract
+
+`TopViewMap` markers now carry `data-point-status` and a `<title>` element with the readable
+business state, so a state is never conveyed by colour alone, and a test pins the display
+contract: one marker radius across PASSED/EXECUTING/FAILED/INDETERMINATE/INVALID_BLOCKED, the
+state names present as text, and `preserveAspectRatio="xMidYMid meet"` on the accessible image.
+The existing geometry (`projectXY`, `pixels_per_m`, cup footprint, target tolerance) is
+untouched. `bun run build` exit 0 and **34 files / 151 tests**. Commit `d8c0d56c`.
+
+Still open in Task 9: `components/unified/app-shell.tsx`, `styles/unified-layout.css` (the plan's
+grid rules), the Sidebar/Sheet navigation, wiring the pages to the root runtimes and the
+qualification view, and the 1400x900 / 390x844 no-overflow checks.
