@@ -377,22 +377,32 @@ def test_a_full_bounded_queue_answers_queue_full_instead_of_dropping(campaign, m
 
         monkeypatch.setattr(server._queue, "put_nowait", always_full)
         refused_before = server.refused_connects
-        # The accept loop will see the next connection and hit the full queue.
-        second = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        second.settimeout(10.0)
+        # Each extra connection is a fresh stimulus for the accept loop, and the budget is generous:
+        # a loaded machine can delay that loop past a fixed five-second wait, which is how this test
+        # failed once in a full-suite run while its sibling failed in the other direction. The
+        # assertion is unchanged - the accept loop must still refuse a connection it cannot queue.
+        deadline = time.monotonic() + 20
+        extra: list[socket.socket] = []
+        last_poke = 0.0
         try:
-            second.connect(str(endpoint.path))
-            deadline = time.monotonic() + 5
             while server.refused_connects == refused_before and time.monotonic() < deadline:
+                if time.monotonic() - last_poke > 2:
+                    poke = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                    poke.settimeout(10.0)
+                    try:
+                        poke.connect(str(endpoint.path))
+                        extra.append(poke)
+                    except OSError:
+                        poke.close()
+                    last_poke = time.monotonic()
                 time.sleep(0.05)
-        except OSError:
-            pass
-        monkeypatch.setattr(server._queue, "put_nowait", real_put)
+        finally:
+            monkeypatch.setattr(server._queue, "put_nowait", real_put)
 
         assert server.refused_connects >= refused_before + 1, (
             "the accept loop must refuse a connection it cannot queue")
         assert QUEUE_FULL in server.rejections
-        for sock in (connection, second):
+        for sock in [connection, *extra]:
             try:
                 sock.close()
             except OSError:

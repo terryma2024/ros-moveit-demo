@@ -217,8 +217,8 @@ def test_no_active_path_imports_the_retired_budget_chain():
 # --------------------------------------------------------------------------------------
 
 
-def _mps_policy(floor=1 << 30):
-    return StartGuardPolicy(mps_minimum_headroom_bytes=floor)
+def _mps_policy(floor=1 << 30, **overrides):
+    return StartGuardPolicy(mps_minimum_headroom_bytes=floor, **overrides)
 
 
 def _healthy_mps_snapshot():
@@ -263,12 +263,27 @@ def test_v4_policy_merges_a_healthy_accelerator_snapshot(tmp_path, scope):
     result = guard.begin_epoch(scope)
     assert result.checks["mps_headroom"].reason == "MPS_HEADROOM_OK"
     assert result.checks["mps_headroom"].cutoff == 1 << 30
-    # The helper's own probe check is still present, so a resource refusal is not masked.
-    assert "probe" in result.checks
-    if sys.platform == "darwin":
-        # On this host the NVML-backed helper still refuses, and the v4 guard reports FAIL:
-        # the accelerator PASS never overrides a helper refusal.
-        assert result.status == FAIL
+    # The helper's own checks survive the merge. The Darwin helper reports the CPU/RAM vocabulary
+    # (`cpu_capacity`/`cpu_busy`/`ram`) instead of the NVML `probe` check, because the MPS proxy
+    # admission replaces the GPU check on this platform: asserting the old key name would pin a
+    # vocabulary this platform no longer produces instead of the property the merge guarantees.
+    assert {"cpu_capacity", "cpu_busy", "ram"} <= set(result.checks), sorted(result.checks)
+    assert result.checks.get("mps_accelerator") is None
+
+
+def test_v4_policy_does_not_mask_a_refusing_helper(tmp_path, scope):
+    """A healthy accelerator read never upgrades a helper that refuses on its own checks."""
+
+    # The refusal is produced by the real helper, not by a double: the RAM floor is set above any
+    # real machine, so the helper's own check must fail while the accelerator read stays healthy.
+    coordinator = probe_module.ProbeCoordinator(tmp_path / "sg")
+    guard = probe_module.EpochStartGuard(
+        coordinator, _mps_policy(ram_minimum_bytes=1 << 62),
+        accelerator=lambda **_: _healthy_mps_snapshot())
+    result = guard.begin_epoch(scope)
+    assert result.checks["mps_headroom"].reason == "MPS_HEADROOM_OK"
+    assert result.checks["ram"].reason == "RAM_BELOW_MINIMUM"
+    assert result.status == FAIL
 
 
 def test_v4_policy_refuses_a_snapshot_below_the_fixed_floor(tmp_path, scope):
