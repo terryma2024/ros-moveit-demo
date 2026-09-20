@@ -45,6 +45,7 @@ install(DIRECTORY config docs launch
 )
 install(
   PROGRAMS
+    scripts/so101_unified_web_server.py
     scripts/so101_teleop_server.py
     scripts/so101_expert_validation_server.py
     scripts/so101_expert_validation_recover.py
@@ -138,6 +139,8 @@ if(BUILD_TESTING)
   so101_add_pytest_test(test_unified_api test/teleop/test_unified_api.py)
   so101_add_pytest_test(test_unified_lifecycle test/teleop/test_unified_lifecycle.py)
   so101_add_pytest_test(test_unified_budget_adapter test/teleop/test_unified_budget_adapter.py)
+  so101_add_pytest_test(test_unified_live_fixture test/teleop/test_unified_live_fixture.py)
+  so101_add_pytest_test(test_unified_launch test/teleop/test_unified_launch.py)
 endif()
 
 ament_package()

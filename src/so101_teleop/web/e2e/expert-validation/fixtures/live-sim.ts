@@ -85,6 +85,9 @@ export function validateLiveSimPreconditions(
   if (env.SO101_ENABLE_LIVE_SIM_E2E !== "1") {
     throw new LiveSimGateError("LIVE_SIM_OPT_IN_REQUIRED");
   }
+  // An opt-in flag is not an authorization: the operator's bound authorization document is
+  // read before anything is spawned.
+  requireUnifiedLiveAuthorization(env);
   const hostname = deps.hostname ?? os.hostname();
   const expectedHost = env.SO101_LIVE_SIM_HOST ?? "AI-STATION-001";
   if (hostname !== expectedHost) {
@@ -138,6 +141,68 @@ export function validateLiveSimPreconditions(
     sourceCommit: env.SO101_DEBUG_SOURCE_COMMIT ?? "unknown",
     installPrefix,
     serviceStateRoot,
+  };
+}
+
+export type UnifiedLiveAuthorization = {
+  scope: string;
+  runtimeIdentities: string[];
+  deadline: string;
+  ownedProcessRule: string;
+  resourceReferences: string[];
+};
+
+/**
+ * The operator's explicit live authorization. It is a non-secret JSON document naming the
+ * scope, the selected runtime identities and a deadline. It is required *in addition to*
+ * the opt-in flag: no environment variable alone grants the right to stop an existing
+ * service, to start a stack, or to promote a resource profile. Instance proofs must never
+ * be persisted here, so a proof-shaped field is rejected outright.
+ */
+export function requireUnifiedLiveAuthorization(
+  env: NodeJS.ProcessEnv = process.env,
+): UnifiedLiveAuthorization {
+  const path = env.SO101_UNIFIED_LIVE_AUTHORIZATION ?? "";
+  if (!path || !existsSync(path)) {
+    throw new LiveSimGateError("LIVE_SIM_UNIFIED_AUTHORIZATION_REQUIRED");
+  }
+  let document: Record<string, unknown>;
+  try {
+    document = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+  } catch (error) {
+    throw new LiveSimGateError(`LIVE_SIM_UNIFIED_AUTHORIZATION_UNREADABLE:${String(error)}`);
+  }
+  for (const key of Object.keys(document)) {
+    if (/proof/i.test(key)) {
+      throw new LiveSimGateError("LIVE_SIM_AUTHORIZATION_MUST_NOT_CARRY_PROOFS");
+    }
+  }
+  const scope = typeof document.scope === "string" ? document.scope : "";
+  if (!scope.includes("unified")) {
+    throw new LiveSimGateError("LIVE_SIM_AUTHORIZATION_SCOPE_MISMATCH");
+  }
+  const deadline = typeof document.deadline === "string" ? document.deadline : "";
+  const expires = Date.parse(deadline);
+  if (!deadline || Number.isNaN(expires)) {
+    throw new LiveSimGateError("LIVE_SIM_AUTHORIZATION_DEADLINE_REQUIRED");
+  }
+  if (expires <= Date.now()) {
+    throw new LiveSimGateError("LIVE_SIM_AUTHORIZATION_EXPIRED");
+  }
+  const runtimeIdentities = Array.isArray(document.runtime_identities)
+    ? document.runtime_identities.map((entry) => String(entry))
+    : [];
+  if (runtimeIdentities.length === 0) {
+    throw new LiveSimGateError("LIVE_SIM_AUTHORIZATION_RUNTIME_IDENTITIES_REQUIRED");
+  }
+  return {
+    scope,
+    runtimeIdentities,
+    deadline,
+    ownedProcessRule: String(document.owned_process_rule ?? ""),
+    resourceReferences: Array.isArray(document.resource_references)
+      ? document.resource_references.map((entry) => String(entry))
+      : [],
   };
 }
 
@@ -256,8 +321,10 @@ export const liveSimTest = base.extend<{ liveServer: LiveServer }>({
     );
     const sitePackages = prefixes.map((entry) => join(entry, "lib/python3.12/site-packages"));
     const libraryPaths = prefixes.map((entry) => join(entry, "lib"));
+    // One installed launcher: the unified server. The deprecated per-domain scripts only
+    // delegate to it, so a live acceptance can never raise a second web listener.
     const entry = join(
-      preconditions.installPrefix, "so101_teleop/lib/so101_teleop/so101_expert_validation_server.py",
+      preconditions.installPrefix, "so101_teleop/lib/so101_teleop/so101_unified_web_server.py",
     );
     // A deployed service wins: the acceptance must not start a second stack while the
     // task-owned service is already running (the plan's SO101_LIVE_SERVICE_BASE_URL).
