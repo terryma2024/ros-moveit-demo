@@ -599,6 +599,11 @@ observed:
   - The gate runner creates its scratch root at 0700 explicitly, because a group-writable ancestor makes the private-base checks refuse a shard's own tree.
   - Gate result PASS: expected_count 3542 equal to actual_count 3542, all shards clean, cleanup all_children_reaped, 63.7 s.
 decision: KEEP
+correction:
+  - 2026-09-20, after the ledger commit landed: the gate was run once more at 2fe6900e, the
+    commit this ledger is recorded in. Result PASS with the same 3542 expected and actual
+    nodes, an empty source_status and a clean child audit, 64.7 s. The earlier PASS at
+    eb813563 stands and is unchanged; only the docs-only commit separates the two.
 ```
 
 ### Re-qualified four-point pass
