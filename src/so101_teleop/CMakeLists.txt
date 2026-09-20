@@ -23,6 +23,18 @@ file(GLOB_RECURSE SO101_TELEOP_WEB_SOURCES CONFIGURE_DEPENDS
   ${SO101_TELEOP_WEB_ROOT}/src/*.tsx
   ${SO101_TELEOP_WEB_ROOT}/e2e/*.ts
 )
+# Styles, local font assets, the component manifest and the design-system lock are real build
+# inputs: changing any of them must rebuild the bundle.
+file(GLOB_RECURSE SO101_TELEOP_WEB_STYLES CONFIGURE_DEPENDS
+  ${SO101_TELEOP_WEB_ROOT}/src/*.css
+)
+file(GLOB_RECURSE SO101_TELEOP_WEB_PUBLIC CONFIGURE_DEPENDS
+  ${SO101_TELEOP_WEB_ROOT}/public/*
+)
+list(APPEND SO101_TELEOP_WEB_SOURCES
+  ${SO101_TELEOP_WEB_STYLES}
+  ${SO101_TELEOP_WEB_PUBLIC}
+)
 add_custom_command(
   OUTPUT ${SO101_TELEOP_WEB_INDEX}
   COMMAND ${CMAKE_COMMAND} -E env "PATH=${SO101_TELEOP_BUN_BIN}:$ENV{PATH}" ${BUN_EXECUTABLE} install --frozen-lockfile
@@ -30,7 +42,11 @@ add_custom_command(
   WORKING_DIRECTORY ${SO101_TELEOP_WEB_ROOT}
   DEPENDS ${SO101_TELEOP_WEB_ROOT}/package.json ${SO101_TELEOP_WEB_ROOT}/bun.lock
     ${SO101_TELEOP_WEB_ROOT}/vite.config.ts ${SO101_TELEOP_WEB_ROOT}/tailwind.config.ts
-    ${SO101_TELEOP_WEB_ROOT}/postcss.config.cjs ${SO101_TELEOP_WEB_SOURCES}
+    ${SO101_TELEOP_WEB_ROOT}/postcss.config.cjs
+    ${SO101_TELEOP_WEB_ROOT}/index.html
+    ${SO101_TELEOP_WEB_ROOT}/components.json
+    ${SO101_TELEOP_WEB_ROOT}/design-system.lock.json
+    ${SO101_TELEOP_WEB_SOURCES}
   VERBATIM
 )
 add_custom_target(so101_teleop_web ALL DEPENDS ${SO101_TELEOP_WEB_INDEX})
@@ -141,6 +157,7 @@ if(BUILD_TESTING)
   so101_add_pytest_test(test_unified_budget_adapter test/teleop/test_unified_budget_adapter.py)
   so101_add_pytest_test(test_unified_live_fixture test/teleop/test_unified_live_fixture.py)
   so101_add_pytest_test(test_unified_launch test/teleop/test_unified_launch.py)
+  so101_add_pytest_test(test_unified_web_dependencies test/test_unified_web_dependencies.py)
 endif()
 
 ament_package()
