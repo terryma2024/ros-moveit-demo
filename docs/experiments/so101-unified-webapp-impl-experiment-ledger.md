@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-25
+latest_checkpoint: CP-26
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -706,3 +706,27 @@ GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` **40 files / 178 tes
 Remaining in Task 8: importing the *new* primitives the plan needs beyond the 12 that already exist
 (sidebar, sheet, field, select, input, label) from the captured registry items, which is additive
 work rather than a merge of existing behaviour.
+
+## CP-26: the captured registry is Tailwind v4, and one primitive is ported
+
+Reading the captured `registry:ui` sources settles the plan's open review question with evidence:
+the `radix-maia` items are written for **Tailwind v4**. `input.tsx` uses `rounded-4xl` (no v3
+equivalent), `bg-input/30` and `ring-ring/50` (v4 alpha composition of a `var()` colour), and both
+items import `cn` from the bare specifier `"cn"` rather than this project's `@/lib/utils`.
+
+Decision taken (mechanical and explicit, recorded rather than implied): **keep Tailwind 3.4.17 and
+convert**, rather than perform the v4 upgrade. `src/components/ui/input.tsx` is the ported item:
+`rounded-4xl` -> `rounded-md` (the token radius), `bg-input/30` -> `bg-input`, `ring-ring/50` ->
+`ring-ring`, `ring-[3px]` -> `ring-2`, `aria-invalid:ring-destructive/20` -> solid
+`aria-invalid:ring-destructive`, and the import rebound to `@/lib/utils`. Everything else is kept
+verbatim: `data-slot`, the `file:` variants, `placeholder`, `focus-visible:border-ring`,
+`disabled:*` and the invalid semantics.
+
+GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` **41 files / 181 tests**; commit gated
+on the suite. The three new tests assert the data slot and ordinary props, the token classes with
+no v4-only leftovers, and that disabled/invalid state stays declared for assistive technology.
+
+Remaining in Task 8: the same port for the other captured primitives - `label` (which the registry
+builds on `radix-ui`, a dependency this project does not yet have, so it needs either that
+dependency or a dependency-free equivalent), `select`, `field`, `sheet` and `sidebar`. Each needs
+the same explicit v3 conversion the input just had; guessing them in bulk would be the wrong move.
