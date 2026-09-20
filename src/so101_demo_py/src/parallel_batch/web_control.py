@@ -16,9 +16,14 @@ import secrets
 import socket
 import stat
 import struct
+import sys
 import threading
 
 from so101_demo.runtime.parallel_ipc import IpcError, encode_frame, receive_frame
+from so101_demo.runtime.unix_address import (
+    DARWIN_SUN_PATH_CAPACITY_BYTES,
+    LINUX_SUN_PATH_CAPACITY_BYTES,
+)
 
 from .contracts import BatchKindV2, BatchRequest, BatchRequestV2
 
@@ -30,6 +35,60 @@ _UNSIGNED_FIELDS = {
     "coordinator_epoch", "operation",
 }
 _REQUEST_FIELDS = _UNSIGNED_FIELDS | {"request_sha256", "control_token"}
+
+
+#: ``sun_path`` capacity including the terminating NUL; see ``runtime.unix_address``.
+_SUN_PATH_CAPACITY_BYTES = (
+    DARWIN_SUN_PATH_CAPACITY_BYTES if sys.platform == "darwin" else LINUX_SUN_PATH_CAPACITY_BYTES
+)
+
+#: The Linux indirection that pins a bound socket's parent directory. Darwin has no ``bindat`` and
+#: ``/dev/fd/<dirfd>/<name>`` returns ENOENT there (proved in the retained probe recorded as
+#: CP-UQ226), so the endpoint must be bound by its own path instead.
+_PROC_FD_DIRECTORY = Path("/proc/self/fd")
+
+
+def _bind_target(path: Path, parent_fd: int) -> str:
+    """The address to bind, or a refusal when this platform cannot address it.
+
+    A path that does not fit ``sun_path`` is refused by name rather than truncated: binding a
+    truncated path would create the endpoint somewhere else entirely while reporting success.
+    """
+    if _PROC_FD_DIRECTORY.is_dir():
+        return f"{_PROC_FD_DIRECTORY}/{parent_fd}/{path.name}"
+    if len(os.fsencode(path)) >= _SUN_PATH_CAPACITY_BYTES:
+        raise WebControlError("CONTROL_SOCKET_PATH_TOO_LONG")
+    return str(path)
+
+
+#: Darwin's peer-credential request: ``getsockopt(SOL_LOCAL, LOCAL_PEERCRED, struct xucred)``.
+#: Probed on this host: the call returns 76 bytes, ``cr_version`` 0 at offset 0 and ``cr_uid`` at
+#: offset 4. Linux's ``SO_PEERCRED`` does not exist here at all, so the check has to be written per
+#: platform instead of assuming one.
+_DARWIN_SOL_LOCAL = 0
+_DARWIN_LOCAL_PEERCRED = 1
+_DARWIN_XUCRED_BYTES = 76
+_DARWIN_XUCRED_VERSION = 0
+_DARWIN_XUCRED_UID_OFFSET = 4
+
+
+def _peer_uid(connection: socket.socket) -> int:
+    """The uid of the connected peer, or a refusal - never a skipped check."""
+    if sys.platform == "darwin":
+        raw = connection.getsockopt(
+            _DARWIN_SOL_LOCAL, _DARWIN_LOCAL_PEERCRED, _DARWIN_XUCRED_BYTES
+        )
+        if len(raw) < _DARWIN_XUCRED_UID_OFFSET + 4:
+            raise WebControlError("CONTROL_PEER_UID")
+        if struct.unpack_from("<I", raw, 0)[0] != _DARWIN_XUCRED_VERSION:
+            raise WebControlError("CONTROL_PEER_UID")
+        return struct.unpack_from("<I", raw, _DARWIN_XUCRED_UID_OFFSET)[0]
+    if sys.platform.startswith("linux"):
+        _, uid, _ = struct.unpack(
+            "3i", connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
+        )
+        return uid
+    raise WebControlError("CONTROL_PEER_UID_UNSUPPORTED")
 
 
 class WebControlError(RuntimeError):
@@ -79,7 +138,7 @@ class FixedCoordinatorControlServer:
             if parent.st_uid != os.getuid() or stat.S_IMODE(parent.st_mode) != 0o700:
                 raise WebControlError("CONTROL_SOCKET_DIRECTORY_MODE")
             # bind never unlinks an existing endpoint or accepts an alias root.
-            self._socket.bind(f"/proc/self/fd/{self._parent_fd}/{self.path.name}")
+            self._socket.bind(_bind_target(self.path, self._parent_fd))
             value = os.stat(self.path.name, dir_fd=self._parent_fd, follow_symlinks=False)
             self._bound_identity = (value.st_dev, value.st_ino)
             os.chmod(self.path.name, 0o600, dir_fd=self._parent_fd)
@@ -171,10 +230,7 @@ class FixedCoordinatorControlServer:
                 return
             with connection:
                 try:
-                    _, uid, _ = struct.unpack(
-                        "3i", connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
-                    )
-                    if uid != os.getuid():
+                    if _peer_uid(connection) != os.getuid():
                         raise WebControlError("CONTROL_PEER_UID")
                     request = receive_frame(connection, deadline_s=0.5, max_frame_bytes=65536)
                     reply = self._reply(request)

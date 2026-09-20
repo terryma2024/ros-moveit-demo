@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import sys
 import threading
 
 import pytest
@@ -126,8 +127,15 @@ def test_control_does_not_coerce_reply_identity_integers(tmp_path, changes, erro
         )
 
 
+@pytest.mark.skipif(
+    sys.platform == "darwin",
+    reason="Darwin has no connectat and no usable /dev/fd/<dirfd>, so a path beyond sun_path cannot "
+           "be addressed at all; the refusal is pinned by "
+           "test_control_transport_refuses_a_path_it_cannot_address and the portable round trip by "
+           "test_real_control_transport_works_from_a_short_private_directory",
+)
 def test_real_control_transport_preserves_a_long_private_batch_socket(tmp_path):
-    """The bound socket stays inside the durable batch even beyond sun_path."""
+    """The bound socket stays inside the durable batch even beyond sun_path (Linux indirection)."""
     root = tmp_path / ("long-owned-batch-" + "x" * 100)
     root.mkdir(mode=0o700)
     binding = _binding(root)
@@ -214,7 +222,9 @@ def test_real_client_cancel_reaches_the_upstream_durable_coordinator(tmp_path):
         def discover(self, *_args):
             raise AssertionError("Control must not discover attempt outcomes")
 
-    root = (tmp_path / "real-upstream-batch").resolve()
+    # A short root, with the endpoint directly inside it: the server binds its own path here, and
+    # Darwin's sun_path is 104 bytes including the NUL, so nesting it deeper would not fit.
+    root = _short_private_root("u").resolve()
     journal = CoordinatorJournal.create(root / "coordinator", "batch-a")
     try:
         request = BatchRequest("batch-a", RunMode.EXECUTE, ("p1", "p2"), 2, 2, root)
@@ -223,12 +233,11 @@ def test_real_client_cancel_reaches_the_upstream_durable_coordinator(tmp_path):
         coordinator = BatchCoordinator(journal, request, config=config, result_port=UnusedResultPort())
         coordinator.register_worker("w1", generation=1)
         coordinator.register_worker("w2", generation=1)
-        control_root = root / "control"
-        control_root.mkdir(mode=0o700)
+        control_root = root
         token = "9a" * 32
         binding = CoordinatorBinding(
             campaign_id="campaign-a", batch_id="batch-a", batch_root=root,
-            control_socket=control_root / "control.sock", coordinator_epoch=journal.coordinator_epoch,
+            control_socket=control_root / "c.sock", coordinator_epoch=journal.coordinator_epoch,
             control_token=token, control_token_sha256=hashlib.sha256(token.encode()).hexdigest(),
         )
         server = FixedCoordinatorControlServer(
@@ -343,3 +352,103 @@ def test_adaptive_cancel_targets_wrapper_and_rejects_binding_mismatch(tmp_path):
     bad = replace(status, wrapper_pid=999)
     with pytest.raises(ControlProtocolError, match="ADAPTIVE_WRAPPER_IDENTITY_MISMATCH"):
         AdaptiveWrapperControl(owner, lambda: bad).status(owned)
+
+
+def _short_private_root(label: str) -> Path:
+    """A directory whose full socket path fits ``sun_path`` on this platform.
+
+    ``tmp_path`` under a gate is around 120 bytes, and Darwin's ``sun_path`` is 104 including the
+    terminating NUL, so any test that binds a real control socket here has to start from a short
+    canonical root - the same reason the demo package's Darwin address strategy exists.
+    """
+    base = Path(os.environ.get("SO101_IPC_SOCKET_BASE") or "/private/tmp")
+    label = label[:4]  # the registered base is already long; every byte here is spent from sun_path
+    root = base / f"{label}{os.getpid()}-{len(list(base.glob(f'{label}*')))}"
+    root.mkdir(mode=0o700, parents=False, exist_ok=True)
+    os.chmod(root, 0o700)
+    return root
+
+
+def _serve_one_control_reply(peer: socket.socket, observed: dict, errors: list) -> threading.Thread:
+    def serve():
+        try:
+            peer.settimeout(3)
+            with peer.accept()[0] as connection:
+                connection.settimeout(3)
+                frame = bytearray()
+                while len(frame) < 4:
+                    frame.extend(connection.recv(4 - len(frame)))
+                size = int.from_bytes(frame, "big")
+                while len(frame) < size + 4:
+                    part = connection.recv(size + 4 - len(frame))
+                    if not part:
+                        raise AssertionError("Client sent a partial frame")
+                    frame.extend(part)
+                observed.update(json.loads(frame[4:]))
+                reply = _reply(
+                    observed, state="STOPPING", batch_terminal=False,
+                    batch_cleanup_complete=False, owned_descendants_gone=False,
+                    assigned_ros_domains_clear=False, cleanup_receipt_sha256=None,
+                )
+                payload = json.dumps(reply, sort_keys=True, separators=(",", ":")).encode()
+                connection.sendall(len(payload).to_bytes(4, "big") + payload)
+        except BaseException as error:  # noqa: BLE001 - reported through the test, never swallowed
+            errors.append(error)
+
+    thread = threading.Thread(target=serve)
+    thread.start()
+    return thread
+
+
+def test_real_control_transport_works_from_a_short_private_directory(tmp_path):
+    """The client must reach a real control socket on this host, not only where ``/proc`` exists.
+
+    The transport used to address its peer exclusively through ``/proc/self/fd/<dirfd>/<name>``,
+    which pins the parent on Linux and simply does not exist on Darwin - so on this host the client
+    could not talk to any coordinator at all, however correctly that coordinator was serving.
+    """
+    root = _short_private_root("control")
+    binding = _binding(root)
+    assert len(os.fsencode(binding.control_socket)) <= 104, binding.control_socket
+
+    peer = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    observed: dict = {}
+    errors: list = []
+    try:
+        peer.bind(str(binding.control_socket))
+        os.chmod(binding.control_socket, 0o600)
+        peer.listen(1)
+        thread = _serve_one_control_reply(peer, observed, errors)
+        try:
+            result = CoordinatorControlClient().cancel(command_id="cancel-portable-1", binding=binding)
+            assert result.state == "STOPPING" and result.batch_cleanup_complete is False
+            with pytest.raises(CleanupNotAuthorized, match="BATCH_NOT_TERMINAL"):
+                authorize_coordinator_stop(result, binding)
+        finally:
+            thread.join(timeout=5)
+        assert not thread.is_alive() and errors == []
+        assert observed["control_token"] == "secret-token"
+        assert observed["campaign_id"] == "campaign-a"
+        assert observed["batch_id"] == "batch-a"
+        assert observed["operation"] == "CANCEL_BATCH"
+        unsigned = {key: value for key, value in observed.items()
+                    if key not in {"request_sha256", "control_token"}}
+        canonical = json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+        assert observed["request_sha256"] == hashlib.sha256(canonical).hexdigest()
+    finally:
+        peer.close()
+
+
+def test_control_transport_refuses_a_path_it_cannot_address(tmp_path):
+    """A path this platform cannot address is refused by name, never truncated or guessed."""
+    root = tmp_path / ("too-long-" + "y" * 100)
+    root.mkdir(mode=0o700)
+    binding = _binding(root)
+    if sys.platform != "darwin":
+        # Linux addresses it through /proc/self/fd, so the refusal here is the missing peer instead.
+        with pytest.raises(ControlProtocolError, match="COORDINATOR_SOCKET_UNAVAILABLE"):
+            CoordinatorControlClient().cancel(command_id="cancel-too-long", binding=binding)
+        return
+    assert len(os.fsencode(binding.control_socket)) >= 104
+    with pytest.raises(ControlProtocolError, match="COORDINATOR_SOCKET_PATH_TOO_LONG"):
+        CoordinatorControlClient().cancel(command_id="cancel-too-long", binding=binding)
