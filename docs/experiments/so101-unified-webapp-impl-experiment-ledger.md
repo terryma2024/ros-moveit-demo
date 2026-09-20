@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-39
+latest_checkpoint: CP-40
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -971,3 +971,19 @@ This is why the page loops were not deleted in CP-38: removing them first would 
 refused rather than duplicated. With the transport fixed, removing the two page-level renewal
 effects is now a safe, small change - and the duplicate-renewal note in CP-38 is superseded once it
 lands.
+
+## CP-40: the teleop page no longer renews its own lease
+
+`app.tsx`'s page-scoped `setInterval` that POSTed `/control/lease/renew` every 10s is gone, replaced
+by a comment stating where renewal now lives. Renewal is owned by `DomainRuntime` (CP-37), driven by
+the root provider (CP-38) and carries the required instance authority (CP-39), so unmounting the
+teleop page can no longer stop a heartbeat - and renewal is no longer performed twice.
+
+GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` **45 files / 194 tests**. Commit follows
+this entry. This supersedes the duplicate-renewal caveat recorded in CP-38.
+
+Still open in the same class of work: `expert-validation-app.tsx` keeps its own renewal effect
+(lines ~161-190, margin-based, with its own failure handling and lease replacement). It is a richer
+loop than the teleop one - it validates the returned lease identity and generation and rewrites the
+runtime's short-lived lease state - so removing it needs the runtime/validation transport to expose
+the same failure semantics first, rather than deleting the loop and losing that check.
