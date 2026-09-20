@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-65
+latest_checkpoint: CP-66
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1513,3 +1513,31 @@ With CP-40 (teleop renewal), CP-49 (validation renewal) and this checkpoint, **n
 telemetry or renewal subscription any more**. Switching pages cannot close a socket, stop a poll,
 release a lease or stop a renewal, which is what the design's root-provider requirement actually
 demanded. Task 9's effect migration is complete.
+
+## CP-66: closing verification - everything this task owns is green in the real gate
+
+Final consolidated run after the last rounds of change (CP-59's Python fixes, CP-64/CP-65's telemetry
+work):
+
+```
+colcon build --packages-select so101_teleop --symlink-install ...   -> exit 0, 1 package finished [0.57s]
+ctest --test-dir <build>/so101_teleop -R test_unified ...           -> 100% tests passed out of 16
+```
+
+Plus, independently: `NODE_ENV=test bun run test` **45 files / 202 tests** and `bun run build` exit 0;
+`pyrgate` over the API, launch (with its drift guard) and cancel-integration modules 17 passed.
+
+### Session summary at CP-66
+
+| Area | State |
+| --- | --- |
+| Tasks 0-6, 10, 12A, 7A/7B | implemented, committed, green |
+| Task 8 | manifest + all 18 radix-maia items captured with sha256; 31/31 tokens applied v3-compatibly; fonts self-hosted with licences; 5 primitives ported (4 consumed); v4/v3 decision recorded |
+| Task 9 | map contract, shell + layout rules, qualification-driven exact-N selector, layout/routing/viewport contracts, and the full effect migration (renewal + telemetry) - no page owns a subscription |
+| Task 11 | isolated configure/build green; 16/16 unified modules in the ament gate; registration, interpreter and TEMP provenance verified; dependency graph + incremental edge + three rebuild proofs |
+| Defects | 2 pre-existing repaired (broken `bun run build`, `NODE_ENV` harness artifact); 1 of mine found and fixed; 3 real defects found by the new cancel-integration test and fixed; 11 remaining failures measured as pre-existing on pristine `5b8d1231` |
+| Blocked / out of authority | copied-install Chrome gate (approved MuJoCo underlay absent; only host copy is the excluded stale fork); Task 12B/C measurement and live runs (separately authorised); independent GPT-6 Astra review of the guide |
+
+Branch `codex/so101-unified-webapp`, tree clean at this commit. All 66 checkpoints, reproductions,
+gate recipes and evidence paths are in this ledger; the registered evidence root retains every run,
+with the deletion candidates listed in CP-63 and nothing deleted.
