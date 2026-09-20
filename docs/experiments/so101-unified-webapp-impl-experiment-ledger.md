@@ -5791,3 +5791,48 @@ the supervisor's argv (run mode, exact-W2, weight and manifest digests, a v4 doc
 points), hosts this endpoint at `SO101_FIXED_CONTROL_SOCKET`, and runs the W2 campaign with
 `PYTORCH_ENABLE_MPS_FALLBACK=0` set in-process so the launcher does not re-exec and change its own argv;
 then the live campaign and the Chrome observation.
+
+## CP-170: the typed macOS entry point exists, and the service's argv is pinned to it
+
+`cli/macos_service_campaign.py` (new, demo package) is the entry point a service can own on this
+platform. It refuses to be a pass-through: `validate()` checks the run mode, the exact-W2 worker count
+(both the request's and the document's), the config schema, the yolo weights digest, the grounded
+manifest digest, the presence of a selection, and the campaign identity, control socket, token and
+epoch the service put in the environment - each refusal named, none of them guessed. The container
+broker image is **recorded** as unused rather than silently dropped, because "the MPS broker runs in
+this process" is a decision a reader should see.
+
+It then runs the real campaign as an **owned child in its own process group** and stops it as a group:
+SIGTERM, bounded wait, SIGKILL, bounded wait, then a fresh `psutil`-based group read, returning a
+receipt with survivors instead of claiming success. The child is given
+`PYTORCH_ENABLE_MPS_FALLBACK=0`, which is what keeps the campaign launcher from re-executing itself: a
+re-exec replaces the kernel argv with `python -m <module>`, and the service's spawn barrier compares
+exactly that argv. Control is served by CP-169's endpoint from a state provider that reports the
+campaign's own `cleanup.complete` and the stop receipt's survivors, and nothing else.
+
+**The service side is pinned rather than duplicated.** The argv construction moved out of
+`build_start_request` into `supervisor.fixed_coordinator_argv(...)` next to a new constant
+`FIXED_COORDINATOR_FLAGS`, and the adapter's test asserts both directions: every flag the supervisor
+sends must be accepted by the adapter's parser, and the parser must accept nothing else. A flag added
+on one side without the other now fails a test instead of a live launch. The extraction is
+behaviour-preserving - the same argv, in the same order, including the `ros2 run` fallback.
+
+`test_expert_validation_macos_service_campaign.py` (new, teleop side, 4 tests) covers exactly that, the
+full refusal table, the group stop over a SIGTERM-ignoring child with a forked descendant (receipt
+`clear`, survivors empty, the descendant gone), and that cleanup is claimed only when the campaign's own
+result says so. Gate `WFWGMEwT`: **49 passed, 1 skipped** together with the control, parity, process
+owner and store suites; the registration guard then passed too (gate `jruZzoTt`).
+
+**Live-run inputs, resolved for the next step** (the ledger's `~model-artifacts` is shorthand for the
+*other* task's registered root; read-only use, nothing written there):
+
+| input | path | digest |
+| --- | --- | --- |
+| yolo weights | `/private/tmp/so101-debug-unbounded-queue-w2-mac-mini-3eed4ddd-a50c-4c21-b78f-60be2216ef9d/model-artifacts/models/yolo/best.pt` | `f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781` (6001316 bytes) |
+| grounded manifest | `…/model-artifacts/models/grounded/manifest.json` | `b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05` (3626 bytes) |
+| v4 document | `src/so101_demo_py/config/mujoco/parallel_batch_v4_macos_mps_w2.yaml` | `worker_count: 2`, mps, `darwin_private_path_unix`, cgl |
+
+Both digests match what the earlier live campaign used. What remains is the live step itself: point
+`SO101_VALIDATION_COORDINATOR` at the adapter, let the unified service take a real campaign through
+preflight and its own API, and observe it - with the Chrome evidence the dispatch asks for - and then
+the retry half, which CP-166 records as structurally excluded here.
