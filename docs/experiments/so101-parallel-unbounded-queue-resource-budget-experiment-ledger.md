@@ -14819,3 +14819,57 @@ wildcard, and the only files in this run's commits are the ledger, the plan and 
 defects the final gate exposed.
 
 _Ledger source HEAD: `227e2c74`; no evidence deleted._
+
+### CP-UQ302 — integrated into `main` by rebase, then published
+
+The operator asked for the branch to be merged into `main` with a rebase and pushed, and chose to leave
+the already-published feature branch at its pre-rebase tip rather than force-push it. That is what was
+done, and this checkpoint is the record of the exact refs.
+
+Before touching anything: `origin/main` was three commits ahead of the branch's merge base and the branch
+was 612 commits ahead of that base. The three main-only commits are documentation for a different
+follow-up task (the unified webapp design, plan and reviews) and touch eight files none of which the
+branch has ever touched, so `git merge-tree --write-tree origin/main HEAD` reported zero conflicts before
+the rebase was attempted.
+
+```text
+git rebase origin/main                 # 612/612 replayed, no conflict, "Successfully rebased"
+git push origin HEAD:main              # 4fbf3614..9c92ad24  HEAD -> main      (fast-forward, no force)
+```
+
+Refs afterwards:
+
+```text
+origin/main                                                    9c92ad24e90bab040e146577d3c404f3f29a0f6a
+local codex/so101-unbounded-queue-resource-budget              9c92ad24e90bab040e146577d3c404f3f29a0f6a
+origin/codex/so101-unbounded-queue-resource-budget             78d6d209e22d435dec7cd2cb8229d30c8f3c6f71  (left as published)
+```
+
+The published feature branch is therefore deliberately *not* reconciled with its rebased local
+counterpart: reconciling it would mean a force-push, which the repository rules forbid and which the
+operator declined. It stays as the pre-rebase lineage of the same content, and future work continues from
+`main`.
+
+**The rebase changed no content.** `git diff --stat 78d6d209 HEAD` lists exactly the eight main-only
+documentation files (1948 insertions) and nothing else, which is the whole footprint of inheriting
+`origin/main`'s three commits. The replayed commits keep their subjects and diffs; only their hashes
+changed. Because every checkpoint in this ledger names the `HEAD` it was written at, here is the mapping
+for the eight most recent ones, pre-rebase on the left:
+
+```text
+78d6d209 -> 9c92ad24   CP-UQ301
+227e2c74 -> e09a21ad   Task 16 plan status
+85958600 -> 40d68f7b   CP-UQ300
+9c05cfdf -> 768b8a89   the two test fixes
+bf727059 -> 42e353e1   CP-UQ299
+02e54dce -> cb47f2c6   Task 14 boxes ticked
+036f1d63 -> 3a36c682   CP-UQ298
+61fd443a -> 4a28c120   CP-UQ297
+```
+
+The 604 older checkpoints were not individually mapped — their content is identical and their subjects
+unchanged, and the tree-level diff above is the evidence for that claim rather than a per-commit table.
+The `github` remote was not touched: this work has no branch ref there, and the operator asked for
+`origin` only. No force push, no `main` merge commit, no pull request, and no evidence deleted.
+
+_Ledger source HEAD: `9c92ad24` (post-rebase); pre-rebase equivalent `78d6d209`; no evidence deleted._
