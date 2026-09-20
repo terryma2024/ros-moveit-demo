@@ -10,6 +10,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import "@/styles/unified-layout.css";
 
 export type ShellPage = "teleop" | "validation" | "tasks";
@@ -69,22 +70,45 @@ export function AppShell({
       <nav className="unified-sidebar" aria-label="Primary">
         <div className="flex items-center justify-between gap-2">
           <span className="font-semibold">SO-101</span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            aria-expanded={navOpen}
-            aria-controls="unified-navigation"
-            onClick={() => setNavOpen((open) => !open)}
-          >
-            Menu
-          </Button>
+          {/* Narrow screens use the design system's own Sheet; wide screens keep the list
+              permanently visible, so a collapsed menu is a small-viewport behaviour rather than
+              a hidden attribute that would also hide the entries from assistive technology. */}
+          <span className="md:hidden">
+            <Sheet open={navOpen} onOpenChange={setNavOpen}>
+              <SheetTrigger asChild>
+                <Button type="button" variant="outline" size="sm" aria-label="Menu">
+                  Menu
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" aria-label="Navigation">
+                <SheetHeader>
+                  <SheetTitle>SO-101</SheetTitle>
+                  <SheetDescription>Teleop and Expert Validation</SheetDescription>
+                </SheetHeader>
+                <ul className="space-y-2">
+                  {PAGES.map((entry) => (
+                    <li key={entry.page}>
+                      <Button
+                        type="button"
+                        variant={page === entry.page ? "secondary" : "outline"}
+                        className="w-full justify-start"
+                        aria-current={page === entry.page ? "page" : undefined}
+                        onClick={() => navigate(entry.path)}
+                      >
+                        {entry.label}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </SheetContent>
+            </Sheet>
+          </span>
         </div>
         <Separator className="my-3" />
         <ul
           id="unified-navigation"
-          className="unified-nav space-y-2"
-          data-collapsed={navOpen ? "false" : "true"}
+          className="unified-nav hidden space-y-2 md:block"
+          data-collapsed="false"
         >
           {PAGES.map((entry) => (
             <li key={entry.page}>
