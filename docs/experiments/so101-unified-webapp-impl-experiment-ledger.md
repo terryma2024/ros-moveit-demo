@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-59
+latest_checkpoint: CP-60
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1376,3 +1376,21 @@ GREEN: `pyrgate` on the new test passes; the API, launch (with its drift guard) 
 modules pass together (17 tests); the frontend suite is unaffected. Commit `1bce0b11`.
 
 With this, every name on the plan's Task 11 registration list exists.
+
+## CP-60: CP-59's new test and fixes verified in the rebuilt overlay
+
+The overlay from CP-50 predated CP-59, so the incremental rebuild was run and the gate re-executed:
+
+```
+colcon build --packages-select so101_teleop --symlink-install ...   -> exit 0, 1 package finished [39.9s]
+ctest --test-dir <build>/so101_teleop -R test_unified -R ...        -> 100% tests passed out of 16
+```
+
+**16 unified tests now pass in the real ament/CTest gate**, up from 15: the cancel-integration module
+is registered and green there, so the plan's full registration list is satisfied *in the gate*, not
+merely on disk. The Python fixes from CP-59 (`Domain(domain)`, the port-compatible `command`
+signature, payload-based success detection) are all covered by that run.
+
+Task 11 is now complete except for the copied-install Chrome gate, which CP-58 established cannot run
+on this host because `MUJOCO_STAGE_ROOT` is absent (a host prerequisite, with the exact CMake error
+retained).
