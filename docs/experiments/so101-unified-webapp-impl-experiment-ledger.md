@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-33
+latest_checkpoint: CP-34
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -869,3 +869,19 @@ worker count because its nine existing tests query native `<option>` elements, s
 the radix select needs those tests rewritten in the same change. `sidebar` remains unported, and
 with the sheet providing the shell's navigation the plan's rule ("introduce new items only where a
 page needs them") argues for leaving it out unless a page actually requires it.
+
+## CP-34: the label primitive is consumed by the form
+
+All four field labels in `CampaignSetup` (catalog seed, final point count, execution mode, worker
+count) now use the ported design-system `Label` instead of a raw `<label>`. The nesting is
+unchanged, so implicit label association, the existing `aria-label`s and every `getByLabelText`
+query behave exactly as before.
+
+GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` **45 files / 190 tests**. Commit
+follows this entry.
+
+Consumption status of the ported set: `Input`, `Sheet`, `Field` and `Label` are now used by the
+product; `Select` is ported but not yet consumed. `CampaignSetup` keeps a native `<select>` for the
+worker count because its existing tests query native `<option>` elements and jsdom cannot render the
+radix listbox portal - switching it means rewriting those assertions in the same change and moving
+the open/select interaction to the browser gate, which is the honest next step for that component.
