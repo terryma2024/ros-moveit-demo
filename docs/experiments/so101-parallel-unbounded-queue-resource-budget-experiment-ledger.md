@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ290 (per-point evidence in the document)
+latest_checkpoint: CP-UQ291 (+ TCC grant options)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -14288,3 +14288,28 @@ per-point `viewer.png` fails closed - an external blocker, never a pass - is par
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `68983a17`; no evidence deleted._
+
+### CP-UQ291 addendum 3 — the TCC grant, stated once more with the options that exist
+
+Screen Recording was probed again (`task16-capture-probe-18`) and is still denied. For whoever can act
+on it, the three options that exist, in the order I would try them:
+
+1. **System Settings -> Privacy & Security -> Screen & System Audio Recording**: make sure the entry for
+   `tmux` (the live responsibility process, `/opt/homebrew/bin/tmux`) is present **and its toggle is on**.
+   Adding it with "+" does not always enable it - and this is the most likely reason the restart did not
+   help: the restart was real (pid 10775 vs the earlier 59433) and the binary's code identity did not
+   change, so an enabled grant would have applied.
+2. **Add `/usr/sbin/screencapture` explicitly** and enable it. TCC normally attributes the request to the
+   responsible process, but an explicit entry for the binary is honoured, and it is a one-line change to
+   try.
+3. **Run the work from an app that already holds the grant** (for example a terminal that has it), rather
+   than from this tmux session. The responsibility chain is what matters, not the command.
+
+None of these can be done from inside the session, and I will not report the capture as passing, or the
+batch as counted, until one of them works. Everything else about Task 14 is ready: a single campaign run
+produces two ready stations, six real inferences, eight executed pick-place runs and exact cleanup, and
+the five-batch series does it five times over (Appendix C).
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `9eca560d`; no evidence deleted._
