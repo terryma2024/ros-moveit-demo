@@ -8,7 +8,7 @@ executor: DeepSeek Harness TUI (dst) inline, per plan model/executor rules
 worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
 branch: codex/so101-unified-webapp
 base_commit: 5b8d1231e97e10f650ac1d626e8dff801a7d21ea
-current_commit: ad1a861a4e42158e11970587aaf979fa4cde0191
+current_commit: da05a69d51b63f88945f599c12a0e5a3376d9123
 spec: docs/superpowers/specs/2026-09-18-so101-unified-webapp-shadcn-design.md
 spec_sha256: 4e11f3a385e8d078523ee3c3b3b11d2ec372215188cfbdabdea824c35dd54fa1
 plan: docs/superpowers/plans/2026-09-18-so101-unified-webapp-shadcn-implementation.md
@@ -29,8 +29,8 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-06
-next_experiment: Task 5 parent sequencer and admission gateway
+latest_checkpoint: CP-07
+next_experiment: Task 6 single factory, lifecycle, routers and OpenAPI export
 ```
 
 ## CP-01: Registration, host probe and deviations
@@ -164,3 +164,61 @@ this host. The socket, protocol, runtime, ownership and cancellation layers are 
 driver wiring cannot be verified on macOS and is not claimed as working. `server.py` was not
 modified in this task: the application-logic migration belongs to Task 5, and changing ROS worker
 code that cannot be exercised here would be an unverifiable edit. Commit `ad1a861a`.
+
+## CP-07: Task 5 - parent operations and admission
+
+Delivered `unified/{parents,admission,teleop_service}.py`, `unified/arbiter.py` and
+`unified/intent_store.py` additions, a minimal `so101_teleop/server.py` gate hook, and
+`test/teleop/test_unified_{parents,admission}.py` (registered `test_unified_parents`,
+`test_unified_admission`).
+
+GREEN: 12 parent tests + 8 admission tests passed, and the full backend set
+(`test_unified_gate`, `arbiter`, `instances`, `safety`, `ipc`, `bridge`, `two_channel`,
+`parents`, `admission`) passes in one gated invocation, exit 0. Covered: the exact
+arm-then-gripper barrier from the plan with a Validation start refused in the middle, cancel
+between the arm terminal and the gripper dispatch never dispatching the gripper, a failed
+arm never dispatching the gripper, missing cleanup proof blocking the parent, home as one
+parent across planning/arm/gripper, workflow pause keeping the reservation and resume
+requiring authority, a workflow physical terminal settling, an authority-guard failure
+blocking instead of releasing, duplicate execute-all returning the recorded parent and
+payload drift refused; plus a complete per-entry operation classification table, read
+entries never taking a reservation, motion without instance authority refused, safety
+entries refused from the reservation path, teleop-refuses-validation and
+validation-refuses-teleop/tasks in both directions, and resume that cannot be minted from a
+parent id.
+
+`server.py` gained an optional admission hook (`bind_admission`, `_admission_gate`) wired
+into the two existing choke points `_mutation_gate` and `task_mutation_gate`, with the
+operation name carried in a `contextvars.ContextVar`. Because those modules import `rclpy`
+at module level, the regression check runs through a ROS-sourced gate:
+
+Executable gate recipe (recreate `operator/gate-env.sh` from this description if the `/tmp`
+root is gone): export `SO101_TASK_ROOT`, `SO101_GATE_POLICY`, `SO101_GATE_POLICY_SHA256`,
+`TEST_PYTHON=/Users/matianyi/ros2_jazzy/.venv/bin/python`, `BUN=/opt/homebrew/bin/bun`,
+`SO101_IPC_SOCKET_BASE="$SO101_TASK_ROOT/ipc"`, `PYTHONNOUSERSITE=1`,
+`PYTHONDONTWRITEBYTECODE=1`, and prepend the worktree `src/so101_teleop` and
+`src/so101_demo_py` to `PYTHONPATH`; `pygate <paths>` runs `record_gate.py --root
+$SO101_TASK_ROOT --python $TEST_PYTHON -- $TEST_PYTHON -m pytest -p no:cacheprovider <paths>`
+with a fresh `pytest-XXXXXXXX` invocation directory; `pyrgate` does the same after sourcing
+`~/ros2_jazzy/install/setup.bash`, `extra_ws/install/setup.bash`,
+`so101_isolated_ws/install/setup.bash` and the venv, and must pass
+`-p no:launch_testing -p no:launch_ros -p no:launch_pytest` (ROS's `launch_testing` pytest
+plugin otherwise hijacks module collection and reports a misleading import error).
+
+Verified with that recipe: `pyrgate src/so101_teleop/test/teleop/test_server_safety.py`
+exits 0, so the existing Teleop gate behavior is unchanged by the new hook.
+
+Deviations from the plan's Task 5 staging list: `service.py`, `task_service.py`,
+`expert_validation/service.py` and `expert_validation/production.py` are **not** modified.
+`TaskService` already routes every mutation through `teleop.task_mutation_gate`, so the hook
+covers it once `server.TeleopService` is the bound service; the plan's full
+`ProductionTeleopService` swap of `service.py` belongs with Task 6's factory composition and
+is not claimed done. `unified/arbiter.py` and `unified/intent_store.py` are included because
+`resume_parent`, `lookup_command`, `parent_record`/`child_record` and the hold registry are
+required by the new modules. `ProductionTeleopService` is exercised by three tests driving a
+real gateway, arbiter, safety lane and parent sequencer with a fake `WorkerPort`; its ROS
+transport is not claimed.
+
+Known limitation to carry forward: for `SHORT_WRITE` entries the gateway takes a short
+reservation that is settled at the end of the gate call, so the reservation covers admission
+but not the write itself. A later task must move that settle to the operation's completion.
