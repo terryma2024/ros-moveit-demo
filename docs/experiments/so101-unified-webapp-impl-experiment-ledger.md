@@ -1946,3 +1946,24 @@ contract and the OpenAPI export all pass in the ament gate after the duplicate r
 
 This is the current end state of the task: one route table, one web entry point, one lifecycle owner,
 and every test this work added or migrated green in the real gate.
+
+## CP-86: the plan's fixture-bound incremental proof exists as a real test
+
+The plan asks for the incremental rebuild evidence to be reproducible through a pytest integration
+test bound to a registered fixture path (``SO101_TEST_WEB_FIXTURE``), not only as a manual
+demonstration. That test now exists in `test_unified_web_dependencies.py`:
+
+- it **skips** unless `SO101_TEST_WEB_FIXTURE` names a registered fixture directory, so it can never
+  rebuild the implementation source;
+- it edits a token inside the *fixture's copy* of `theme.css`, rebuilds with the project's Bun through
+  `subprocess.run(..., check=True)`, and asserts the emitted stylesheet hash changes.
+
+Measured both ways:
+
+```
+SO101_TEST_WEB_FIXTURE=<root>/web-fixture-1789891339  -> 4 passed (the rebuild really ran)
+(no fixture registered)                              -> 4 passed, 1 skipped
+```
+
+Commit follows this entry. Together with CP-48's content proofs and CP-55's edge contrast, this closes
+the plan's incremental-rebuild item in a form a later run can reproduce with one environment variable.
