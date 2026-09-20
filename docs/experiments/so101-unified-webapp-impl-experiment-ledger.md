@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-28
+latest_checkpoint: CP-29
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -769,3 +769,24 @@ substitution sweep. The same warnings apply to `field` (238 lines, and it declar
 `registryDependencies: ["label", "separator"]`), `sheet` and `sidebar`. Next round should port one
 item by hand, reusing the `input`/`label` conversions as the pattern, and only then wire the new
 primitives into the pages.
+
+## CP-29: select ported by hand with the three conversions CP-28 identified
+
+`src/components/ui/select.tsx` (198 lines) is the captured `radix-maia` select ported properly:
+the umbrella `radix-ui` import became `import * as SelectPrimitive from
+"@radix-ui/react-select"` (keeping `.Root/.Group/.Value/...`), the site-internal
+`IconPlaceholder` became the lucide icon its own `lucide` prop names (`ChevronDownIcon`,
+`CheckIcon`, `ChevronUpIcon` - lucide is already this project's icon library), and the v4 classes
+were converted (`bg-input/30` -> solid tokens, `rounded-4xl` -> `rounded-md`, `ring-[3px]` ->
+`ring-2`, `size-*` -> `h-* w-*`). Structure, roles, data slots and keyboard behaviour are the
+registry's own.
+
+GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` **43 files / 186 tests**; commit gated
+on the suite. Two jsdom limits are documented in the test rather than papered over: radix renders
+its listbox into a portal and calls `scrollIntoView`, so the open/select interaction is asserted in
+the browser gate (Task 11), not in jsdom; the test asserts the closed render, the `select-trigger`
+data slot, the token classes, and that no standalone v4 `size-*`/alpha class survives.
+
+Remaining in Task 8: the same hand-port for `field` (238 lines, declares
+`registryDependencies: ["label","separator"]` - both now available in some form), `sheet` and
+`sidebar`.
