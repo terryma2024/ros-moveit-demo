@@ -35,6 +35,10 @@ from .bind_policy import validate_bind_address
 __all__ = ["create_app", "validate_bind_address"]
 
 
+#: Kept only so the legacy per-domain tests can keep exercising their closures. Production must go
+#: through the unified factory; the plan requires this route table to disappear once those tests are
+#: migrated (see the implementation ledger, CP-67 through CP-69, and the parity guard in
+#: test/teleop/test_unified_route_parity.py).
 def create_app(
     service,
     static_dir: str | Path | None = None,
