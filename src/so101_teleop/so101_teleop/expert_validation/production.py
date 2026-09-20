@@ -264,19 +264,31 @@ class _LazyStartGuard:
 
     def _compose(self):
         if self._guard is None:
-            from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
+            from so101_demo.parallel_batch.contracts import ParallelRuntimeConfigV4
             from so101_demo.parallel_batch.start_guard_probe import (
                 compose_default_start_guard)
+            from so101_demo.parallel_batch.w2_composition import (
+                load_execution_config_for_schema)
 
             discovered = (self._config_path
                           or self._environment.get("SO101_VALIDATION_PARALLEL_CONFIG"))
             if not discovered:
                 raise ValueError("START_GUARD_CONFIG_REQUIRED")
-            config = load_parallel_runtime_config_v3(Path(discovered))
-            self._guard = compose_default_start_guard(config.start_guard)
+            # The document decides which guard this host can run. Loading everything as v3 both rejected
+            # the schema-4 macOS document and built an NVML probe, which refuses every preflight with
+            # GPU_TARGET_UNAVAILABLE on a host with no CUDA device.
+            config = load_execution_config_for_schema(Path(discovered))
+            accelerator = None
+            if isinstance(config, ParallelRuntimeConfigV4):
+                from so101_demo.parallel_batch.accelerator_probe import DarwinMpsAcceleratorProbe
+
+                accelerator = DarwinMpsAcceleratorProbe().probe
+                self._selector = "MPS:default"
+            else:
+                self._selector = (
+                    f"{config.gpu_device.selector_kind}:{config.gpu_device.selector}")
+            self._guard = compose_default_start_guard(config.start_guard, accelerator=accelerator)
             self._policy = config.start_guard
-            self._selector = (
-                f"{config.gpu_device.selector_kind}:{config.gpu_device.selector}")
         return self._guard
 
     @property
