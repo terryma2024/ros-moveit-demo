@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-78
+latest_checkpoint: CP-79
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1808,3 +1808,18 @@ GREEN: `pyrgate test_api.py` **12 passed**.
 Migration progress: helper in place; 4 of 11 cases on the unified app (both static-asset cases, the
 health projection, the artifact escape); the four mutation cases still need the authority fixture;
 the superseded validation-unavailable assertion is still to be dropped.
+
+## CP-79: five of eleven migrated; the remaining five are all mutation cases
+
+`test_task_websocket_uses_independent_ordered_event_stream` now runs on the unified app - the tasks
+event stream is served by the same `TasksPort`, so only the construction changed. `pyrgate test_api.py`
+**12 passed**. Commit `db361492`.
+
+Counted the remaining `create_app(` uses in that file: they are
+`test_execute_returns_conflict_for_stale_plan`, `test_unreachable_tcp_target_is_a_conflict_not_service_outage`,
+the POST half of `test_camera_presets_are_listed_and_apply_uses_command_boundary`,
+`test_regular_server_reports_validation_unavailable` (whose assertion is superseded and should be
+dropped) and `test_task_routes_are_separate_and_typed`. **Every one of them is a mutation or a
+superseded contract**, so the next step is the authority fixture described in CP-75 - the one
+`test_unified_cancel_integration.py` already demonstrates - after which `api.create_app` can be
+deleted.
