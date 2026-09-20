@@ -387,7 +387,23 @@ export function ExpertValidationApp({ api: providedApi = defaultClient }: { api?
           ? describeStartGuard(receipt.start_guard, capabilities?.start_guard_policy)
           : undefined}
         onChange={changeSetup}
-        onAcquireLease={() => { void api.acquireLease(sessionId).then(replaceLease).catch(reportError); }}
+        onAcquireLease={() => {
+          void api
+            .acquireLease(sessionId)
+            .then((acquired) => {
+              // The acquire is the binding that advances the domain's execution generation, and the
+              // response reports the value every later mutation has to present. Nothing else tells the
+              // client: guessing 0, or the lease's renewal generation, is refused STALE_EXECUTION_GENERATION.
+              const generation = (acquired as { execution_generation?: number | null })
+                .execution_generation;
+              const headers = runtime?.mutationHeaders();
+              if (typeof generation === "number" && headers) {
+                runtime?.adoptAuthority({ ...headers, executionGeneration: generation });
+              }
+              replaceLease(acquired);
+            })
+            .catch(reportError);
+        }}
         onGenerate={() => { void generateManifest().catch(reportError); }}
         onPreflight={() => { void runPreflight().catch(reportError); }}
         onStart={() => { void start().catch(reportError); }}

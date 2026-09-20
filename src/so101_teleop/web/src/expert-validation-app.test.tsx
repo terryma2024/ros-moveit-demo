@@ -443,6 +443,8 @@ test("acquiring a lease presents instance authority through the runtime transpor
         service_session_id: "s1",
         generation: 1,
         expires_monotonic_ns: 10 ** 15,
+        // The server reports the domain execution generation on acquire; the client must present it.
+        execution_generation: 2,
       };
     },
     close: () => undefined,
@@ -472,6 +474,8 @@ test("acquiring a lease presents instance authority through the runtime transpor
   const generate = screen.getByRole("button", { name: /generate points/i });
   await act(async () => { fireEvent.click(generate); });
   await waitFor(() => expect(posted).toContain("/expert-validation/manifests"));
+  // And the authority now presents the generation the acquire response reported.
+  expect(runtime.mutationHeaders()?.executionGeneration).toBe(2);
 });
 
 test("a stored lease does not restore execution permission", async () => {
