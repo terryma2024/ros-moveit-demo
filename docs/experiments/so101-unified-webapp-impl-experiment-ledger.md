@@ -2277,3 +2277,19 @@ copied prefix (evidence `installed-visual2-VYVx9ZQf`):
 **Both required viewports are now free of horizontal overflow**, all pages render, and the frontend
 suite is green (**45 files / 202 tests**) with the cluster test still passing. Commits: the fix and this
 checkpoint.
+
+## CP-99: theme, keyboard reachability and live regions checked in a real browser
+
+Continued the browser evidence from the installed copied prefix (evidence `installed-a11y-*`):
+
+| check | result |
+| --- | --- |
+| theme switch | `light -> dark` on click, `document.documentElement.dataset.theme` changes - light is the default, as designed |
+| keyboard | pressing Tab from load reaches the primary navigation (the focused element is inside it), so the shell's entries are operable without a mouse |
+| live regions | **2** elements matching `[aria-live], [role="status"]` present - the shell has a screen-reader announcement surface |
+| map markers | **0** - the live instance has no campaign/manifest loaded, because validation is unavailable on this host. The marker contract (one radius, status as text) is covered by unit tests and by the live spec, which skips when no manifest exists |
+
+Two honest limits on this checkpoint: the keyboard probe reports that focus lands in the navigation
+rather than proving a specific tab order, and the map check cannot run here because there is no
+manifest. Both are stated rather than implied, and the browser-side checks the plan asks for that need
+a populated validation run stay in the live gate.
