@@ -5094,3 +5094,28 @@ into this task's prefix with the registered interpreter
 console scripts' shebangs point at the venv that has PyYAML, the demo package and the underlay. Then the same
 page sequence should carry the campaign past the barrier - and `FULL_RESTART retries` with its
 "Retry selected with FULL_RESTART" control is already rendered, so the last §7 row is one campaign away.
+
+#### CP-155 correction - the shebang is fine; something executed the wrapper with system python
+
+I checked before believing the diagnosis, and the diagnosis was wrong: the installed runner's first line is
+
+```text
+#!/Users/matianyi/ros2_jazzy/.venv/bin/python
+```
+
+which is exactly the interpreter that has PyYAML. So the console script is packaged correctly, and CP-155's
+"stale shebang" reading is withdrawn. What the traceback actually shows is that something ran that wrapper
+**through Xcode's Python 3.9** - the frames name the wrapper file, but the interpreter in the traceback is
+3.9 - so the failure is in how the service *spawns* the runner, not in how the runner was installed.
+
+That sharpens the next question to one thing worth reading: `process_owner`'s spawn argv. If it resolves
+`python3` from `PATH` (this host's `python3` is Xcode's 3.9) instead of using the interpreter the service
+itself runs under, then every spawned runner dies on its first import no matter how the console script is
+packaged - and the fix is to spawn with `sys.executable` (or to exec the console script directly so its
+shebang is honoured). The barrier's ten-second identity wait then correctly refuses.
+
+**Two things this pair of checkpoints is worth for the record.** The first is the method again: the
+coordinator log named the real failure, and checking one line of the artifact I was about to blame kept me
+from "fixing" a file that was already right. The second is the pattern this task keeps meeting: the service's
+own surfaces are exercised end to end, while the processes it *spawns* have been running under an interpreter
+nobody chose deliberately - and only a live campaign start could reveal it.
