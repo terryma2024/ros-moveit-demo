@@ -116,3 +116,33 @@ describe("TopViewMap", () => {
     expect(onSelect).toHaveBeenNthCalledWith(2, "task_start");
   });
 });
+
+describe("TopViewMap unified display contract", () => {
+  test("every business state keeps one marker radius and exposes its state as text", () => {
+    const states = ["PASSED", "EXECUTING", "FAILED", "INDETERMINATE", "INVALID_BLOCKED"] as const;
+    const { container } = render(
+      <TopViewMap
+        manifest={fixture}
+        campaign={{
+          points: fixture.points.map((point, index) => ({
+            point_id: point.id,
+            status: states[index % states.length],
+          })),
+        }}
+        onSelect={() => undefined}
+      />,
+    );
+    const markers = Array.from(
+      container.querySelectorAll<SVGCircleElement>("circle[data-point-status]"),
+    );
+    expect(markers).toHaveLength(fixture.points.length);
+    expect(new Set(markers.map((marker) => marker.getAttribute("r"))).size).toBe(1);
+    expect(container.textContent).toContain("INDETERMINATE");
+    expect(container.textContent).toContain("INVALID_BLOCKED");
+    expect(
+      screen
+        .getByRole("img", { name: "Expert validation top view" })
+        .getAttribute("preserveAspectRatio"),
+    ).toBe("xMidYMid meet");
+  });
+});

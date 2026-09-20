@@ -209,11 +209,15 @@ export function TopViewMap({ manifest, campaign, selectedPointId, onSelect }: Pr
               />
             ) : null}
             <circle
+              data-point-status={point.status}
               r={manifest.marker_radius_px}
               fill={style.fill}
               stroke={style.stroke}
               strokeWidth={point.active_worker_id ? 5 : 2}
-            />
+            >
+              {/* The business state is readable text, not colour alone. */}
+              <title>{`${manifestPoint.display_id}: ${point.status}`}</title>
+            </circle>
             <PointIcon icon={style.icon} />
           </g>
           <text x={manifestPoint.projected_px[0] + 15} y={manifestPoint.projected_px[1] + 4}
