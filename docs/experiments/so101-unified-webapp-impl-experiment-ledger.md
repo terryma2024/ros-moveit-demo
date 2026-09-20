@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-48
+latest_checkpoint: CP-49
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1136,3 +1136,20 @@ CP-42..CP-47 stands untouched.
 Next round: rewrite those two tests to mount the provider and drive the runtime (`startHeartbeat` +
 `onRenewal`), then re-apply the page edit. Doing it in that order keeps the tree green at every step,
 which is the rule this session has held to throughout.
+
+## CP-49: Task 9's effect migration is complete
+
+The two renewal tests now render the app inside a `RuntimeProvider` through a `renderWithRuntime`
+helper whose validation transport finishes renewals via the test's own `renewLease` spy, and the page
+edit landed on top of them: `expert-validation-app.tsx` no longer schedules a timer. It adopts its
+lease into the runtime, calls `runtime.startHeartbeat(() => (duration - margin) * 1000)`, and turns the
+published outcome into its own notices and `leaseRenewing` indicator. No page owns a renewal timer,
+and no validation logic lives in a page.
+
+GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` **45 files / 201 tests**, including the
+two rewritten renewal tests; tree clean. Commit `006f299f`.
+
+With CP-40 (teleop) and this checkpoint (validation), **both pages are migrated**: switching pages
+cannot stop a heartbeat, renewal carries the required instance authority, the lease identity,
+generation and expiry are validated in one place, and a failed renewal still disables execution and
+allows a fresh lease request exactly as before.
