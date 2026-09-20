@@ -75,6 +75,19 @@ class TaskApiService:
         self.unsubscribed = queue
 
 
+def unified_app_for(service=None, *, static_dir=None, capture_dir=None, task_service=None):
+    """Build the unified app around a stub port; the migration target for these tests (CP-75)."""
+    from so101_teleop.unified.app import create_unified_app
+    from so101_teleop.unified.ports import UnifiedServices
+
+    return create_unified_app(
+        UnifiedServices(teleop=service, tasks=task_service, validation=None),
+        static_dir=static_dir,
+        capture_dir=capture_dir,
+        bind_address="127.0.0.1",
+    )
+
+
 def test_unsafe_bind_is_rejected():
     """Permitting wildcard/LAN bind would expose simulation control outside Tailscale."""
     with pytest.raises(ValueError, match="BIND_ADDRESS_UNSAFE"):
@@ -130,7 +143,7 @@ def test_vite_assets_referenced_by_index_are_served_from_symlink_install(tmp_pat
     source = tmp_path / "chunk.js"; source.write_text("console.log('ok')")
     (assets / "chunk.js").symlink_to(source)
     (dist / "index.html").write_text('<script type="module" src="/assets/chunk.js"></script>')
-    client = TestClient(create_app(Service(), dist))
+    client = TestClient(unified_app_for(Service(), static_dir=dist))
     assert client.get("/assets/chunk.js").status_code == 200
     assert client.get("/assets/chunk.js").headers["content-type"].startswith("text/javascript")
 
