@@ -2761,3 +2761,31 @@ Consequences, stated plainly:
 | installed | **blocked** - stale fork revision, fix path above |
 | history, points, control | pending |
 | physics | pending, needs the station or the complete underlay plus an operator window |
+
+## CP-107: the diagnosis was testable, and it holds - pinned revision has the header
+
+CP-106 named the cause as a stale fork revision. That claim is checkable in one step and I checked it
+rather than leaving it as an inference. The repository pins the fork as a submodule, the submodule was
+not initialised in this worktree, and initialising it fetched exactly the revision the repo expects:
+
+```text
+git submodule update --init third_party/mujoco_ros2_control
+  -> checked out 'e4c0241aee52a40727681bd5872c09bf814e941a'
+e4c0241 2026-09-16 14:19:34 +0800  fix: republish paused MuJoCo snapshots
+```
+
+and that revision contains the missing file:
+
+```text
+mujoco_ros2_control_plugins/include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugin_capabilities.hpp
+```
+
+So the account is confirmed end to end: the header the build needs exists in the revision the
+repository pins (2026-09-16) and in no overlay on this host, because the overlay that is present is an
+external workspace at `738e304` (2026-08-12) that predates the `mujoco_ros2_control_plugins` package
+entirely. Different day, different tree, not a missing dependency and not a source defect.
+
+With that settled the fix is mechanical: build the pinned submodule into its own overlay with the
+staged MuJoCo SDK, then source it ahead of the stale external one and rebuild the closure. Background
+job `bash-22` is doing that first half now, into fresh bases inside this task's registered root, and it
+reads back whether the plugin header lands in the install rather than assuming it did.
