@@ -189,28 +189,11 @@ export function ExpertValidationApp({ api: providedApi = defaultClient }: { api?
     setNotice(error instanceof Error ? error.message : String(error));
   };
 
-  // A page reload must not abandon the lease: the campaign outlives the tab's
-  // React state, so reattach by renewing the lease persisted in this session.
-  useEffect(() => {
-    const stored = storedLease(sessionId);
-    if (!stored) return;
-    let disposed = false;
-    api.renewLease(stored).then((renewed) => {
-      if (disposed) return;
-      if (renewed.lease_id !== stored.lease_id
-        || renewed.service_session_id !== stored.service_session_id
-        || renewed.generation <= stored.generation) {
-        throw new Error("LEASE_RENEWAL_INVALID");
-      }
-      replaceLease(renewed);
-    }).catch((error: unknown) => {
-      if (disposed) return;
-      sessionStorage.removeItem(LEASE_STORAGE_KEY);
-      reportError(error);
-    });
-    return () => { disposed = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, sessionId]);
+  // A page reload deliberately does not restore execution permission: design section 5.1 says local
+  // storage restores only the read-only projection ("本地存储只恢复只读投影，不恢复执行许可"), and the
+  // authority model agrees - rebuilding a lease from storage produced neither a live channel nor a
+  // server-confirmed generation, and the renewal it attempted carried no instance authority at all.
+  // Reattaching to a running campaign is an explicit acquire, which is what the Acquire control is.
 
   useEffect(() => {
     if (!lease || !capabilities) return;

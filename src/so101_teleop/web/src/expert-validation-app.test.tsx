@@ -389,43 +389,7 @@ describe("ExpertValidationApp", () => {
     expect(await screen.findByText("W8 -> W6: WORKER_START_FAILED")).toBeTruthy();
   });
 
-  test("reload reattaches the persisted lease by renewing it instead of abandoning it", async () => {
-    const sessionId = "session-reload";
-    sessionStorage.setItem("so101-expert-validation-service-session", sessionId);
-    const stored: Lease = {
-      lease_id: "lease-a", service_session_id: sessionId, generation: 3,
-      expires_monotonic_ns: 40_000_000_000,
-    };
-    sessionStorage.setItem("so101-expert-validation-lease", JSON.stringify(stored));
-    const base = fakeApi();
-    const renewLease = vi.fn(base.renewLease);
-    const acquireLease = vi.fn(base.acquireLease);
-    render(<ExpertValidationApp api={{ ...base, renewLease, acquireLease }} />);
 
-    await vi.waitFor(() => expect(renewLease).toHaveBeenCalledOnce());
-    expect(renewLease.mock.calls[0][0]).toMatchObject({ lease_id: "lease-a", generation: 3 });
-    expect(acquireLease).not.toHaveBeenCalled();
-    await vi.waitFor(() => expect(
-      (screen.getByRole("button", { name: "Acquire lease" }) as HTMLButtonElement).disabled,
-    ).toBe(true));
-  });
-
-  test("a stored lease that no longer renews is dropped for a fresh acquire", async () => {
-    const sessionId = "session-stale";
-    sessionStorage.setItem("so101-expert-validation-service-session", sessionId);
-    const stored: Lease = {
-      lease_id: "lease-gone", service_session_id: sessionId, generation: 1,
-      expires_monotonic_ns: 1,
-    };
-    sessionStorage.setItem("so101-expert-validation-lease", JSON.stringify(stored));
-    const base = fakeApi();
-    const renewLease = vi.fn(async () => { throw new Error("LEASE_EXPIRED"); });
-    render(<ExpertValidationApp api={{ ...base, renewLease }} />);
-
-    await vi.waitFor(() => expect(screen.getByText(/LEASE_EXPIRED/)).toBeTruthy());
-    expect(sessionStorage.getItem("so101-expert-validation-lease")).toBeNull();
-    expect((screen.getByRole("button", { name: "Acquire lease" }) as HTMLButtonElement).disabled).toBe(false);
-  });
 });
 
 
@@ -508,4 +472,27 @@ test("acquiring a lease presents instance authority through the runtime transpor
   const generate = screen.getByRole("button", { name: /generate points/i });
   await act(async () => { fireEvent.click(generate); });
   await waitFor(() => expect(posted).toContain("/expert-validation/manifests"));
+});
+
+test("a stored lease does not restore execution permission", async () => {
+  // Design section 5.1: local storage restores only the read-only projection, never execution
+  // permission. Renewing a stored lease on mount did exactly the opposite, and it did it through a
+  // client that carries no instance authority.
+  sessionStorage.setItem("so101-expert-validation-service-session", "s-stored");
+  sessionStorage.setItem(
+    "so101-expert-validation-lease",
+    JSON.stringify({
+      lease_id: "l-stored",
+      service_session_id: "s-stored",
+      generation: 1,
+      expires_monotonic_ns: 10 ** 15,
+    }),
+  );
+  const base = fakeApi();
+  const renewLease = vi.fn(base.renewLease);
+  render(<ExpertValidationApp api={{ ...base, renewLease }} />);
+  await act(async () => {});
+  await act(async () => {});
+  expect(renewLease).not.toHaveBeenCalled();
+  sessionStorage.clear();
 });
