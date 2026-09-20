@@ -14128,3 +14128,20 @@ be counted while the GUI capture fails closed, and Linux remains deferred. No ev
 nothing pushed or published, and no unrun gate has been reported as PASS, SKIP or N/A.
 
 _Ledger source HEAD: (this commit's parent); no evidence deleted._
+
+### CP-UQ289 addendum — clean sweep after the campaign changes
+
+```text
+post-pass-regression-01   188 passed, 0 failed
+   suites: campaign, broker port, W2 composition, contracts, inference registry, permission-only IPC
+```
+
+Everything this session changed in the campaign CLI - the admission rule, the verdict, the extended
+admission deadline, the opt-in duplicate probe, the fault traces - is green alongside the suites that
+did not change. (The two suites with pre-existing environmental failures, `test_parallel_batch_resources.py`
+and `test_parallel_ros_runtime.py`, are deliberately not in this set; their failures were A/B-pinned
+earlier as unrelated to this branch's work.)
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `68162463`; no evidence deleted._
