@@ -125,3 +125,25 @@ def test_every_script_is_installed_and_every_install_entry_exists():
     on_disk = {path.name for path in (package / "scripts").glob("*.py")}
     assert sorted(on_disk - installed) == [], "scripts that are never installed"
     assert sorted(installed - on_disk) == [], "install entries with no file"
+
+
+def test_installed_assets_are_found_from_both_installed_layouts(tmp_path):
+    """A fixed offset found the bundle from the script but not from the module, which silently made an
+    installed deployment serve 503 for every page. Both layouts must resolve."""
+    from so101_teleop.unified.main import installed_web_assets
+
+    prefix = tmp_path / "prefix"
+    share = prefix / "share" / "so101_teleop" / "web"
+    share.mkdir(parents=True)
+    (share / "index.html").write_text("<html>shell</html>")
+
+    script = prefix / "lib" / "so101_teleop" / "so101_unified_web_server.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("# entry point")
+    module = prefix / "lib" / "python3.11" / "site-packages" / "so101_teleop" / "unified" / "main.py"
+    module.parent.mkdir(parents=True)
+    module.write_text("# module")
+
+    assert installed_web_assets(script) == share
+    assert installed_web_assets(module) == share
+    assert installed_web_assets(tmp_path / "elsewhere" / "main.py") is None
