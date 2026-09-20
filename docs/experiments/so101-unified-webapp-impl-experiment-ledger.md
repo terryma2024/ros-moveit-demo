@@ -2231,3 +2231,25 @@ inside the `min-width: 0` main column is the fix direction.
 **Deliberately not done:** clamping overflow with `overflow-x: hidden` on the shell. The plan forbids
 removing overflow by clipping ("不靠裁剪/拉伸消除消除"), so masking the 12 px would trade a visible defect
 for a hidden one.
+
+## CP-97: the 12 px overflow is localised to one element
+
+Element-level measurement at 390x844 on `/` (evidence `installed-overflow-*`), reporting every element
+whose right edge passes the viewport:
+
+| element | right | width |
+| --- | --- | --- |
+| `div.flex.shrink-0.items-center.gap-3` | **402** | 358 |
+| `button.inline-flex.items-center.justify-center.rounded-md.text-sm.font-medium` | 402 | 105 |
+| `button.relative.inline-flex.h-[calc(100%-1px)]...` (tab triggers) | 430, 492, 594 | 79, 62, 102 |
+
+Reading it properly: the tab triggers reach 594 px but sit inside the `TabsList` that already carries
+`overflow-x-auto`, so they scroll inside their own container and are **not** the page-overflow cause.
+The page's 12 px comes from the single `div.flex.shrink-0.items-center.gap-3` whose right edge is 402 on
+a 390 px viewport - a `shrink-0` cluster (the topbar's health/theme controls alongside the title), which
+cannot shrink and therefore pushes the document 12 px wide.
+
+So the fix is narrow and named: that cluster must be allowed to shrink and wrap (`min-w-0`, `flex-wrap`)
+rather than `shrink-0`, and `.unified-topbar` already declares `flex-wrap: wrap` for exactly this. It was
+**not** applied in this checkpoint because the fix belongs with a re-measurement, and my remaining
+budget in this round would not allow both honestly.
