@@ -385,3 +385,30 @@ test("the transport is told the authority, so renewal can present it", async () 
   runtime.adoptLease({ lease_id: "l", service_session_id: "s", generation: 1, expires_monotonic_ns: 10 ** 15 });
   expect(setAuthority.mock.calls.at(-1)?.[0]).toMatchObject({ executionGeneration: 1 });
 });
+
+test("the runtime adopts the lease its own renewal returned", async () => {
+  const transport = {
+    register: async () => ({ instance_id: "i", proof: "p", domain: "validation" as const }),
+    connect: async () => ({ instance_id: "i", revision: 1, domain: "validation" as const }),
+    snapshot: async () => ({ sequence: 0, serviceEpoch: "e", executionGeneration: 1, payload: null }),
+    subscribe: () => () => undefined,
+    // A renewal must extend the expiry as well as the generation, or the runtime refuses it.
+    renew: async () => ({
+      lease_id: "l",
+      service_session_id: "s",
+      generation: 2,
+      expires_monotonic_ns: 2 * 10 ** 15,
+    }),
+    setAuthority: () => undefined,
+    setLease: () => undefined,
+    post: vi.fn(async () => ({})),
+    close: () => undefined,
+  };
+  const runtime = new DomainRuntime("validation", transport as never);
+  await runtime.start();
+  runtime.adoptLease({ lease_id: "l", service_session_id: "s", generation: 1, expires_monotonic_ns: 10 ** 15 });
+  await runtime.renew();
+  // The renewal advances the generation server-side, so the authority has to follow it; otherwise the
+  // next mutation is refused with STALE_EXECUTION_GENERATION: 2 != 1.
+  expect(runtime.mutationHeaders()?.executionGeneration).toBe(2);
+});
