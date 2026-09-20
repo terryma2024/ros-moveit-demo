@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-60
+latest_checkpoint: CP-61
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1394,3 +1394,26 @@ signature, payload-based success detection) are all covered by that run.
 Task 11 is now complete except for the copied-install Chrome gate, which CP-58 established cannot run
 on this host because `MUJOCO_STAGE_ROOT` is absent (a host prerequisite, with the exact CMake error
 retained).
+
+## CP-61: the release closure advances one dependency at a time; the next stop is a missing header
+
+CP-58 stopped at `mujoco_vendor`. CP-61 probed for the host artifacts it wanted and found them, so the
+closure was retried twice more - each time getting one package further, which is exactly the
+"incomplete dependency closure" diagnosis rather than a source problem:
+
+| Attempt | Environment | Result |
+| --- | --- | --- |
+| CP-58 | (none) | `mujoco_vendor` fails: `MUJOCO_STAGE_ROOT must contain include/mujoco/mujoco.h` |
+| CP-61a | `MUJOCO_STAGE_ROOT=<ros2_jazzy>/mujoco_vendor_macos_ws/mujoco_stage` | `mujoco_vendor` fails one check later: `MUJOCO_SOURCE_ROOT must contain simulate/simulate.h` |
+| CP-61b | plus `MUJOCO_SOURCE_ROOT=<...>/mujoco_vendor_macos_ws/src/mujoco` | **`mujoco_vendor` finishes**; `so101_mujoco_support` then fails to compile: `fatal error: 'mujoco_ros2_control_plugins/mujoco_ros2_control_plugin_capabilities.hpp' file not found`; `so101_teleop` aborted behind it |
+
+So the release overlay is not blocked by one missing variable but by an incomplete **C++ dependency
+closure**: the approved MuJoCo/`mujoco_ros2_control` underlay that provides
+`mujoco_ros2_control_plugins` is not installed on this host (`<ros2_jazzy>/ws_mujoco_ros2_control_fork`
+exists as a workspace but its install prefix was not found under the searched roots). Building that
+underlay is outside this task's authority - the `.envrc.example` deliberately filters the stale fork
+prefix out of the environment - so the copied-install Chrome gate stays blocked, now with a precise
+reason at a different layer than CP-58 recorded.
+
+Everything this task owns still builds green on its own (`--packages-select so101_teleop`, CP-50) and
+its 16 unified modules pass in that overlay (CP-60).
