@@ -5036,3 +5036,29 @@ all in the client-server seam, all invisible to the unit suites, and one of them
 the lease generation with the execution generation) introduced by me and found by the live run that followed
 it. Every fix kept the frontend suite (46 files, 206 tests), the unified selection (148 tests) and the
 project's own guard tests green.
+
+### CP-154 addendum - where the barrier refusal comes from
+
+`EXEC_BARRIER_ACK_MISSING` is raised in one place, and it is specific:
+
+```text
+process_owner.py:216  def _await_identity(self, pid, argv):
+                        expected_hash = _canonical_hash(argv)
+                        deadline = time.monotonic() + 10.0
+                        while ...: identity = _read_identity(pid)
+                                   if identity.state != "Z" and identity.argv_sha256 == expected_hash: return
+                        raise CoordinatorOwnershipError("EXEC_BARRIER_ACK_MISSING")
+```
+
+So the campaign start *did* spawn (or try to spawn) a runner and then waited ten seconds for that process to
+appear with the argv it expected; nothing matched. That narrows the next check to a bounded question: did the
+service spawn anything at all, and if so what did it print? The run's own evidence root is the place to look
+(`$EVIDENCE_ROOT/flow15`), and the runner JournalRoot the request names is where a spawned runner would have
+written.
+
+**Two readings, and the evidence decides between them.** Either the spawn failed outright - the runner needs
+the demo runtime, the model paths and the underlay, all of which the service's environment now has, so a
+failure would print a reason - or it spawned and `_read_identity` could not match it on macOS, in which case
+the barrier is a platform-identity problem rather than a missing runtime. The first is the documented
+`ROS_DRIVER_NOT_PROVISIONED` gap; the second would be a defect in the barrier's host handling. Looking at the
+run's evidence root distinguishes them in one step, and that is where the next round starts.
