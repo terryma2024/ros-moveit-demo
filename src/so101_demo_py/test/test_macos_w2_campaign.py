@@ -442,3 +442,38 @@ def test_campaign_verdict_requires_the_happy_path_and_no_refusals() -> None:
         {"refused": [{"reason": "DUPLICATE_REQUEST"}]},
     ):
         assert campaign_status(**{**good, **change}) == "W2_CAMPAIGN_INCOMPLETE", change
+
+
+def test_campaign_cli_exposes_the_fault_switches_with_safe_defaults() -> None:
+    """The fault-injection switches are an interface: the runners pass them by name.
+
+    A renamed or re-defaulted flag would silently turn a probe into a normal run - the failure mode
+    this session hit twice - so the names and the off-by-default values are pinned here.
+    """
+
+    from so101_demo.cli.macos_w2_campaign import build_parser
+
+    parser = build_parser()
+    options = parser.parse_args([
+        "--config", "/tmp/config.yaml", "--campaign-id", "c", "--batch-id", "b",
+        "--evidence-root", "/tmp/evidence", "--yolo-weights", "/tmp/y.pt",
+        "--grounded-root", "/tmp/g",
+    ])
+
+    assert options.duplicate_probe is False
+    assert options.tamper_snapshot_sha is False
+    assert options.cancel_second_worker_after_served == 0
+    assert options.stall_serve_after == 0
+    assert options.worker_deadline_s == 240.0
+    assert options.crash_broker_after_served == 0
+
+    armed = parser.parse_args([
+        "--config", "/tmp/config.yaml", "--campaign-id", "c", "--batch-id", "b",
+        "--evidence-root", "/tmp/evidence", "--yolo-weights", "/tmp/y.pt",
+        "--grounded-root", "/tmp/g", "--duplicate-probe", "--tamper-snapshot-sha",
+        "--cancel-second-worker-after-served", "4", "--stall-serve-after", "2",
+        "--worker-deadline-s", "4",
+    ])
+    assert armed.duplicate_probe is True and armed.tamper_snapshot_sha is True
+    assert armed.cancel_second_worker_after_served == 4
+    assert armed.stall_serve_after == 2 and armed.worker_deadline_s == 4.0
