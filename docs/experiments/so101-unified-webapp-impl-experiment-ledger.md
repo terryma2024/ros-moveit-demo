@@ -1967,3 +1967,37 @@ SO101_TEST_WEB_FIXTURE=<root>/web-fixture-1789891339  -> 4 passed (the rebuild r
 
 Commit follows this entry. Together with CP-48's content proofs and CP-55's edge contrast, this closes
 the plan's incremental-rebuild item in a form a later run can reproduce with one environment variable.
+
+## CP-87: delivery breakdown (the plan's final handoff requirement)
+
+The plan ends by requiring delivery to be reported in categories, each with source, install, runtime and
+exit evidence - explicitly *not* collapsed into one success claim. State at `841d9639`:
+
+| Category | Status | Evidence |
+| --- | --- | --- |
+| Code | delivered | 22 task commits, all inside `src/so101_teleop/`; scope audited in CP-72 |
+| Source tests | green | `pyrgate` 32 + 33 passed over the affected surface (CP-84); frontend `NODE_ENV=test bun run test` **45 files / 202 tests** |
+| Installed / L2 | partly | isolated `colcon build` exit 0 and **19 modules at 100%** in the ament gate (CP-85); the copied-install Chrome gate is blocked (below) |
+| Build provenance | verified | every CTest command uses `/Users/matianyi/ros2_jazzy/.venv/bin/python`; TEMP resolves inside the registered root with 21 fixture files (CP-50, CP-57) |
+| Dependency graph / incremental | verified | generated rules list the CSS, fonts, `components.json` and the lock; edge fires on touch and is a no-op otherwise; content edits change the bundle (CP-52, CP-55, CP-56, CP-86) |
+| Resource qualification | **not measured** | the plan requires Stage B with its own authorisation and a fresh R; this session consumed the budget provider read-only and every N stays UNKNOWN (CP-22, Task 10) |
+| Live physical | **not run** | Stage C is separately authorised; fixtures, the unified live spec and the authorization gate are prepared but no live acceptance is claimed (CP-35, Task 12A) |
+| Visual | **not run** | the 1400x900 / 390x844 checks are written into `web/e2e/unified/live-sim.spec.ts` and only execute in that gate; the layout contract is pinned statically (CP-16, CP-35) |
+
+Blocking conditions, each with a reproduction rather than an assertion:
+
+1. **Copied-install Chrome gate** - `MUJOCO_STAGE_ROOT`/`MUJOCO_SOURCE_ROOT` are required and, once
+   supplied, `mujoco_vendor` builds and `so101_mujoco_support` then needs
+   `mujoco_ros2_control_plugins`, which exists on this host only in
+   `<ros2_jazzy>/ws_mujoco_ros2_control_fork/install` - the prefix `.envrc.example` deliberately strips
+   as a stale fork (CP-58, CP-61, CP-62). Substituting it was refused as a policy violation.
+2. **Stage B/C** - separately authorised by the plan itself; not started.
+3. **Guide review** - the plan requires an independent GPT-6 Astra / High review before the guide's
+   commit; that model is unavailable in this session, so the guide is committed as an unreviewed draft
+   and reported as such (CP-17).
+
+Retained evidence (deletion candidates, nothing deleted): the registered root
+`/tmp/so101-debug-so101-unified-webapp-impl-20260920` with `gates/` (~90 recorded invocations),
+`operator/`, `registry/`, `build-FV6UHHX5`, `web-fixture-1789891339`, `ctest-tmp-1SlpBurM`,
+`preset-preview-8f09f448`, `release-n5JyZLog`, `release2-Q3EIoiMD` and the `pytest-*`/`bun-*`
+invocation directories.
