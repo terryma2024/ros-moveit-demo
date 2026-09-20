@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-57
+latest_checkpoint: CP-58
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1311,3 +1311,35 @@ is deleted here.
 
 Still open in Task 11: the copied-install Chrome gate, which needs a complete `so101_demo_py` release
 closure rather than the source shim.
+
+## CP-58: the copied-install gate is blocked by a host dependency, not by this task's code
+
+Task 11's last item needs a release overlay built with `--packages-up-to so101_demo_py so101_teleop`
+and then copied to an immutable prefix. Attempted it into a fresh base (`release-n5JyZLog`):
+
+```
+colcon build --build-base <release>/build --install-base <release>/install \
+  --packages-up-to so101_demo_py so101_teleop --cmake-clean-cache --cmake-args -DBUILD_TESTING=ON ...
+```
+
+**Exit 1: `0 packages finished`.** The classification matters more than the exit code, and the log is
+unambiguous about where it failed:
+
+```
+--- stderr: mujoco_vendor
+CMake Error at CMakeLists.txt:16 (message):
+  MUJOCO_STAGE_ROOT must contain include/mujoco/mujoco.h
+Failed   <<< mujoco_vendor [2.99s, exited with code 1]
+Aborted  <<< so101_teleop [41.5s]
+```
+
+The failure is in **`mujoco_vendor`, during CMake configure, because a host-provided staging root is
+absent** - and `so101_teleop` is only *aborted* as a downstream consequence. This is precisely the
+"incomplete dependency closure" case: `so101_teleop` on its own configures and builds green (CP-50,
+exit 0) because it does not need `mujoco_vendor`, while the release closure does.
+
+So the copied-install Chrome gate cannot be executed on this host until `MUJOCO_STAGE_ROOT` (or an
+equivalent approved MuJoCo staging prefix) is provisioned, and that is a host prerequisite outside
+this task's authority - not a defect in the unified work and not something to work around by
+substituting a fake prefix. Everything up to that boundary is verified; the gate is blocked with a
+named, reproducible reason.
