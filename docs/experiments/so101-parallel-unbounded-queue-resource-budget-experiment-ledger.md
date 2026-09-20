@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ292 (per-point phase evidence)
+latest_checkpoint: CP-UQ293 (Screen Recording grant observed; Task 14 recount restarts at 1/5)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -14368,3 +14368,73 @@ So the only thing between the current state and a counted batch remains the per-
 i.e. the TCC grant. Task 14 stays **0/5**; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `c50e8009`; no evidence deleted._
+
+### CP-UQ293 — the Screen Recording grant arrived; Task 14 recount restarts at 1/5
+
+**The external blocker is gone.** Two independent observations, both fresh:
+
+- Live probe at 09:11 local: `/usr/sbin/screencapture -x <task_root>/task14-tcc-reprobe-011146.png`
+  exited `0` and wrote 579,715 bytes. The same command family was denied for the whole preceding
+  campaign series, so this is a state change, not a re-reading of an old result.
+- First capture taken from inside a running batch: `task14-fr4-01` slot w1, point
+  `04-cup_test_right_5cm`, `viewer.png`, sha256
+  `c62bfad1a5a053efff69c2efc8ad54183f86dfdcd0e710c5abc180cad4834a49`, 1392x864. I opened it rather than
+  trusting the byte count: it is the real `MuJoCo : so101_task_scene` window, title bar included, with
+  `Status Running`, `Steps 177998`, `Sim Time 355.996 s`, `Contacts 1` and the `Model loaded in
+  0.36 seconds` status line. Same file name and same path as every earlier `TERMINAL_CAPTURE_FAILED`
+  attempt, so the only variable that changed is the grant.
+
+The transition is visible inside a single batch: in `task14-fr4-01` both workers' points
+`01-task_start`, `02-cup_test_forward_5cm` and `03-cup_test_left_5cm` failed with
+`TERMINAL_CAPTURE_FAILED` (no `viewer.png`), and point `04-cup_test_right_5cm` succeeded on both
+workers with its own image. The grant landed at roughly 09:00 local, i.e. during that batch's last
+point. Nothing in the worktree changed across that boundary.
+
+**Consequence for Task 14, counted the strict way.** `task14-fr4-01` has partial GUI evidence, so it
+is not a countable batch, and Task 14's fourth bullet is explicit that an environment fix may not
+carry the sequence across a failed or invalid batch ("环境修复即使没有代码变更也不能跨过失败/无效批次继续
+累计"). The sequence therefore restarts at **1/5 with `task14-fr4-02`**, the first batch in which all
+four points on both workers carry their own fresh capture:
+
+| Batch | Status | served | cleanup | Per-point GUI evidence | Counted |
+| --- | --- | --- | --- | --- | --- |
+| `task14-fr4-01` | `W2_CAMPAIGN_PASS` | 12 | complete | w1 1/4, w2 1/4 (`TERMINAL_CAPTURE_FAILED` x3 each) | no — sequence break |
+| `task14-fr4-02` | `W2_CAMPAIGN_PASS` | 12 | complete | w1 4/4, w2 4/4, all points `SUCCEEDED` | **1/5** |
+| `task14-fr4-03` | running when this was written | — | — | 3/4 per worker captured so far, all `SUCCEEDED` | pending |
+
+One subtlety worth writing down, because it would otherwise be read as a contradiction: the batch-level
+verdict does **not** include the point-level capture status. `task14-fr4-01` reports
+`W2_CAMPAIGN_PASS` even though six of its eight points have no image. The batch verdict asks for
+cleanup, two worker result documents, both workers `ACTIVE`, `served.count >= 6`, `mps` as the only
+device and zero refusals; the per-point `viewer.png` is Task 14's own requirement, checked here at the
+point level. A green batch status is therefore necessary but not sufficient for a counted batch, and
+this checkpoint counts refuses to use it as sufficient.
+
+**Harness defect, mine, recorded rather than smoothed over.** The series summary file
+(`task14-five-batches-04/summary-20260920T005425Z.txt`) contains batch 2's record and no batch 1
+record. `stat` shows the file was born at 09:00:47, which is batch 1's append redirect creating the
+file, and it is 175 bytes, which is exactly batch 2's three lines. So batch 1's tally helper created
+the file and then produced no output at all: it raised before its first `print`, most plausibly on a
+JSON file still being flushed as the batch's subprocesses shut down, with the traceback going to the
+series' stderr rather than into the summary. Two consequences: the append-only property held (nothing
+was overwritten, the birth time proves the file was not recreated), and batch 1's outcome is recorded
+from its own artifacts instead — `campaign-result.json` plus four `point-result.json` per worker read
+directly, which is what the table above reports. The tally helper in `run-batch-06.sh` additionally
+counts `gui=n/n` and `distinct_gui`, so from here the GUI evidence is counted from the filesystem
+rather than asserted.
+
+A reading note for whoever re-reads these summaries: `cat summary-*.txt` prints the same record twice,
+because the glob also matches the `summary-latest.txt` symlink. That is the reading, not a duplicate
+append.
+
+**Added for the fifth countable batch.** `run-batch-06.sh` runs `task14-fr4-06` after the current
+series exits (it waits on the series runner's name, not a recycled PID) and appends its record to the
+same summary file. So the countable series is `fr4-02` = 1/5, `fr4-03` = 2/5, `fr4-04` = 3/5,
+`fr4-05` = 4/5, `fr4-06` = 5/5. No source change is involved in any of this: the grant is an
+environment fix and the recount is the plan's own continuity rule, not a relaxation of it.
+
+Task 14 is **1/5 recorded, 2/5 in flight**; `five_batch_stability` is not written.
+`LINUX_REGRESSION_DEFERRED` retained. Task 16's independent verdict remains owed to
+`gpt-5.6-sol/high`, and the tracked verdict stays **PARTIAL**.
+
+_Ledger source HEAD: `18cb4a9d`; no evidence deleted._
