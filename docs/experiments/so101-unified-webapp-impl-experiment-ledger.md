@@ -4606,3 +4606,40 @@ consistent.
 post the single-point `FULL_RESTART_RETRY`. Ten defects have been found and nine fixed on this path, all in
 the client-server seam, all invisible to the unit suites. The distance to §7's last row is now measured in
 single steps rather than in unknowns.
+
+## CP-145: the renewal now works - and the client still presents the old generation
+
+Two fixes landed this round, both RED first, and the live run shows the first one working and the second
+one not yet sufficient.
+
+**Defect #10 fixed (lease-aware renewal).** `DomainEndpoints` grew an optional
+`renewTarget(lease)`, the transport keeps the lease the runtime adopts (`setLease`), and the validation
+domain now renews at `PUT /expert-validation/lease/{id}` with `{service_session_id, generation}`. The new
+suite fails on the unfixed code (wrong URL, and a request sent with no lease held) and passes after; the
+frontend suite is 46 files / 208 tests. Live, the renewal is now a real one:
+
+```text
+POST /expert-validation/campaigns/preflight   200 OK     <- the first preflight is admitted
+PUT  /expert-validation/lease/lease-9c84c801... 200 OK   <- renewal, correct verb and id
+POST /expert-validation/campaigns/preflight   409 Conflict
+     {"code":"STALE_EXECUTION_GENERATION","message":"STALE_EXECUTION_GENERATION: 2 != 1"}
+```
+
+**Defect #11: the authority does not follow a renewal.** The server advanced its generation to 2 with that
+PUT; the client's next preflight still presented 1. I fixed the first half of this - `DomainRuntime.renew()`
+now calls `adoptLease(next)` after `validateRenewal` passes, so a *validated* renewal updates the
+authority - but the live run is unchanged, which points at the other half: the live renewal payload is
+being **refused by the runtime's own `validateRenewal`** (`domain-runtime.ts:113`), the runtime drops its
+lease state and reports a failed outcome, and the app's renewal listener then never adopts the new
+generation. My unit fixture passes that validation; the server's real payload evidently does not.
+
+**So the next step is the same trick that has worked three rounds running: capture the body.** The renewal
+response from the live PUT, and the `lastRenewalError` the runtime recorded, will name which condition
+`validateRenewal` rejects - a changed lease id or session, an expiry that did not extend, or a generation
+that did not strictly increase. Guessing between those three is exactly what I should not do.
+
+**Also worth noting about the shape of this defect:** the runtime has *two* renewal paths with different
+opinions - it validates a lease the transport returned, and separately the app adopts `runtime.lease()`
+into it again through an effect. The second can write a stale generation back over a fresh one, which may
+be what the live run is showing even after my fix. The next round should read the app's effect and the
+runtime's `lease()`/`onRenewal` contract together rather than treating them as independent.
