@@ -210,7 +210,13 @@ def instance_router(services: UnifiedServices) -> APIRouter:
         registry = services.instances
         if registry is None:
             return unavailable("SERVICE_NOT_COMPOSED", "instance registry unavailable")
-        domain = body.get("domain")
+        # The registry stores the domain and later compares it by identity, so the body value
+        # must become the enum member here. A plain string registered an instance that every
+        # mutation then rejected with INSTANCE_DOMAIN_MISMATCH (see the live API flow).
+        try:
+            domain = Domain(body.get("domain"))
+        except (TypeError, ValueError) as error:
+            return unavailable("INSTANCE_DOMAIN_INVALID", str(error), 400)
         try:
             proof = registry.register(domain)
         except (KeyError, ValueError) as error:
