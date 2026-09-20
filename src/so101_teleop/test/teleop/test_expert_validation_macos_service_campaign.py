@@ -209,3 +209,34 @@ def test_the_adapter_reports_only_what_the_campaign_can_show(tmp_path, monkeypat
     finally:
         campaign.stop()
         campaign.close()
+
+
+def test_the_adapter_runs_as_the_script_the_service_launches(tmp_path):
+    """The service launches a *script path*, not a module.
+
+    A relative import in the adapter works under pytest - which imports it as a module - and fails at
+    the first live launch with "attempted relative import with no known parent package". The only test
+    that can see that is one that runs the file the way the supervisor does.
+    """
+    adapter_path = DEMO_ROOT / "src/cli/macos_service_campaign.py"
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = os.pathsep.join(
+        [
+            str(Path(os.environ["SO101_TASK_ROOT"]) / "pyshim"),
+            str(DEMO_ROOT / "src"),
+            environment.get("PYTHONPATH", ""),
+        ]
+    )
+    service_argv = _request(tmp_path, config_path=tmp_path / "missing.yaml")
+    completed = subprocess.run(
+        [sys.executable, str(adapter_path), *service_argv[2:]],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=str(tmp_path),
+    )
+    assert completed.returncode == 1, completed.stderr
+    assert "ModuleNotFoundError" not in completed.stderr, completed.stderr
+    document = json.loads(completed.stdout)
+    assert document["status"] == "REFUSED" and document["refusal"] == "CONFIG_MISSING"

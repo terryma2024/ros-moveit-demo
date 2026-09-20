@@ -34,7 +34,12 @@ import subprocess
 import sys
 import time
 
-from ..parallel_batch.macos_control_endpoint import MacosFixedControlEndpoint
+# The service launches its coordinator as a *script* (``[sys.executable, <path>, ...flags]``), not as a
+# module: a relative import here fails at the first live launch with "attempted relative import with no
+# known parent package", which a test that imports this file as a module cannot see. Absolute imports
+# need ``so101_demo`` to be importable, which the service guarantees - it imports that package itself to
+# resolve its layout, and the child inherits the same path.
+from so101_demo.parallel_batch.macos_control_endpoint import MacosFixedControlEndpoint
 
 #: The exact-W2 worker count this platform runs, and the reason for the refusal below.
 EXACT_W2_WORKERS = 2
@@ -104,8 +109,8 @@ def validate(arguments, *, environment=None) -> dict:
         )
     if not arguments.config.is_file():
         raise ServiceCampaignError("CONFIG_MISSING", str(arguments.config))
-    from ..parallel_batch.contracts import ContractError, ParallelRuntimeConfigV4
-    from ..parallel_batch.w2_composition import (
+    from so101_demo.parallel_batch.contracts import ContractError, ParallelRuntimeConfigV4
+    from so101_demo.parallel_batch.w2_composition import (
         CompositionError,
         load_execution_config_for_schema,
     )
