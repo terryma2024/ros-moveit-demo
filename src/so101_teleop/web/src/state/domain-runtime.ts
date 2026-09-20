@@ -52,6 +52,7 @@ export class DomainRuntime {
   private heartbeat: ReturnType<typeof setTimeout> | null = null;
   private leaseValue: LeaseIdentity | null = null;
   private readonly renewalListeners = new Set<(outcome: { ok: boolean; error: string | null }) => void>();
+  private readonly snapshotListeners = new Set<(snapshot: RuntimeSnapshot) => void>();
 
   constructor(
     readonly domain: DomainName,
@@ -69,6 +70,9 @@ export class DomainRuntime {
       executionGeneration: 0,
     };
     this.current = await this.transport.snapshot();
+    // The first value is published too: a page that subscribes needs an initial view, and it must
+    // not have to fetch one of its own.
+    if (this.current) this.publish(this.current);
     this.unsubscribe = this.transport.subscribe((event) => {
       void this.accept(event);
     });
@@ -137,6 +141,18 @@ export class DomainRuntime {
     return () => this.renewalListeners.delete(listener);
   }
 
+  /**
+   * Observe accepted snapshots.
+   *
+   * Telemetry and campaign projections belong to the runtime, so a page subscribes here for its
+   * view instead of opening its own poll or WebSocket - which is what stops a page switch from
+   * dropping a subscription.
+   */
+  onSnapshot(listener: (snapshot: RuntimeSnapshot) => void): () => void {
+    this.snapshotListeners.add(listener);
+    return () => this.snapshotListeners.delete(listener);
+  }
+
   /** Adopt the authority the server returned when control was explicitly acquired. */
   adoptAuthority(authority: ControllerAuthority): void {
     this.authorityValue = authority;
@@ -164,6 +180,7 @@ export class DomainRuntime {
     }
     if (event.sequence <= current.sequence) return;
     this.current = event;
+    this.publish(event);
     this.drain();
   }
 
@@ -181,10 +198,15 @@ export class DomainRuntime {
     this.fetching = true;
     try {
       this.current = await this.transport.snapshot();
+      if (this.current) this.publish(this.current);
     } finally {
       this.fetching = false;
     }
     this.drain();
+  }
+
+  private publish(snapshot: RuntimeSnapshot): void {
+    for (const listener of this.snapshotListeners) listener(snapshot);
   }
 
   private drain(): void {
