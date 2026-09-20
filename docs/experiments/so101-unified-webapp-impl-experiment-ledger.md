@@ -222,3 +222,16 @@ transport is not claimed.
 Known limitation to carry forward: for `SHORT_WRITE` entries the gateway takes a short
 reservation that is settled at the end of the gate call, so the reservation covers admission
 but not the write itself. A later task must move that settle to the operation's completion.
+
+## Evidence accounting at CP-07
+
+`gates/` holds 11 recorded invocations: 7 green runs (Task 0 gate suite, Task 1, Task 2,
+Task 3, Task 4, the final nine-module backend run, and the ROS-sourced
+`test_server_safety.py` run) plus 4 nonzero records. The four nonzero records are the
+ROS-sourced debugging sequence for `test_server_safety.py`: first the missing ROS underlay
+(`ModuleNotFoundError: control_msgs`), then ROS's `launch_testing` pytest plugin hijacking
+module collection and reporting a misleading `so101_demo.parallel_batch` import error. The
+final run of that same command exits 0 and supersedes them; the failure records are retained,
+not deleted. Every task commit is backed by a green gated invocation of that task's own test
+modules. Test modules delivered: gate 15, arbiter 15, instances 12, safety 12, ipc 8,
+bridge 7, two_channel 6, parents 12, admission 8 (95 test functions).
