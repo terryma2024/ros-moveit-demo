@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import sys
 import time
 
 from .adaptive import AdaptiveStartRequest
@@ -146,8 +147,11 @@ class ExpertValidationSupervisor:
             )
         if isinstance(receipt.execution_config, FixedExecutionConfig):
             config = receipt.execution_config
+            # The runner must be executed by the interpreter this service runs under: naming
+            # /usr/bin/python3 literally pointed at Apple's Python 3.9 on macOS, where the runner died
+            # on `import yaml` and the execution barrier refused the start after its ten-second wait.
             argv = [
-                "/usr/bin/python3"
+                sys.executable
                 if request.coordinator_executable_path is not None
                 else "ros2",
             ]

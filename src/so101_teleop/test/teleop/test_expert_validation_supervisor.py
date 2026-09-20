@@ -384,3 +384,17 @@ def test_all_success_retry_is_explicitly_not_applicable(tmp_path):
         }
     finally:
         store.close()
+
+def test_the_runner_is_spawned_with_an_interpreter_that_has_its_dependencies(tmp_path):
+    """The spawn argv used to name /usr/bin/python3 literally.
+
+    On macOS that is Apple's Python 3.9, which has no PyYAML, so the runner died during import and the
+    execution barrier refused the start with EXEC_BARRIER_ACK_MISSING after its ten-second wait - an
+    interpreter problem wearing a runtime problem's clothes.
+    """
+    _supervisor_, store, request = _bound_without_execution(tmp_path)
+    try:
+        assert request.argv[0] in (sys.executable, "ros2"), request.argv[:2]
+        assert request.argv[0] != "/usr/bin/python3", request.argv[:2]
+    finally:
+        store.close()
