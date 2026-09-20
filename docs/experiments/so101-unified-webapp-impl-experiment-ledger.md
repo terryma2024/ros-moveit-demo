@@ -4863,3 +4863,43 @@ declared rather than smuggled, and the generated client types carry it.
 **What remains:** the client adopts `execution_generation` from the acquire response into its authority
 (the app's acquire handler is the place, with the runtime's `adoptAuthority`), then a live run - and the
 sequence should reach Start validation.
+
+## CP-151: the whole pre-campaign sequence is green, renewal included
+
+The client now presents the generation the server reported, and the sequence that has been failing for
+eight rounds is clean end to end:
+
+```text
+POST /control/instances                       200 OK
+POST /control/instances                       200 OK
+POST /expert-validation/lease                 200 OK      <- acquire
+POST /expert-validation/manifests             200 OK      <- manifest
+POST /expert-validation/campaigns/preflight   200 OK      <- preflight admitted
+PUT  /expert-validation/lease/lease-196a...   200 OK      <- renewal, correct verb and id
+POST /expert-validation/campaigns/preflight   200 OK      <- and still admitted after the renewal
+page failures recorded: []                                  (the script records every >=400)
+```
+
+The last line is the one that matters: before this round the second preflight was refused
+`STALE_EXECUTION_GENERATION: 3 != 2` because the client was presenting a number it had guessed. Now it
+presents the number the acquire response reported, the renewal no longer disturbs it (CP-149's separation,
+which the design states at line 104), and the page records **no failed requests at all**.
+
+That closes the chain this task has been chasing: register -> channel -> acquire -> manifest -> preflight,
+with a renewal in the middle, from a real browser, with no environment variable telling the client
+anything about generations.
+
+**Fixed this round, in the order the discipline requires:** the revert of my own wrong fix (`d64903cc`),
+the server reporting the value it owns (`de062a89` plus regenerated `unified_openapi.json` and
+`unified-schema.d.ts`), and the client adopting it (`886eb821`) - each with a test that failed first for the
+right reason, the whole frontend suite at 46 files / 205 tests, and the unified selection at 146 passed.
+
+**What is left is one click and one request:** Start validation (which now has an admitted preflight to
+build on), then the single-point `FULL_RESTART_RETRY` - the last open row of the §7 acceptance. The
+harness for both exists (`flow9.sh` rebuilds the server and the bundle, sets the four model/config
+variables and the task-local websocket library, and drives the page), so the next round is measurement
+rather than diagnosis.
+
+**A note on cleanup:** the live server again ignored SIGTERM and needed `kill -9`, which is the behaviour
+CP-146 recorded; the host is clean afterwards, checked with the working method rather than the broken
+`pgrep`.
