@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-30
+latest_checkpoint: CP-31
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -808,3 +808,26 @@ on the suite. Tests assert the five data slots render, that the description uses
 Remaining in Task 8: `sheet` and `sidebar` - the two largest items, both pulling in portal and
 sidebar machinery; each should get its own behaviour tests, and the sidebar in particular has to
 respect the shell's navigation semantics from Task 9.
+
+## CP-31: sheet ported, and the button gained the variants it needs
+
+`src/components/ui/sheet.tsx` (146 lines) is the captured sheet: the umbrella `radix-ui` import
+became the scoped `@radix-ui/react-dialog` namespace, the site-internal `IconPlaceholder` became
+`XIcon` from lucide, the registry's button import points at this project's button, and the v4
+utilities were converted.
+
+The port surfaced a real gap rather than a workaround: the registry's sheet uses
+`variant="ghost"` and `size="icon-sm"`, which this project's button did not have. The captured
+button item declares six variants (`default`, `outline`, `secondary`, `ghost`, `destructive`,
+`link`) and six sizes (`default`, `xs`, `sm`, `lg`, `icon`, `icon-sm`), so the missing ones were
+merged into `src/components/ui/button.tsx` in v3-equivalent form, keeping the existing set intact.
+The registry's v4-only refinements (`has-data-[icon=...]` padding, `dark:` alpha variants) are
+omitted on purpose and that omission is written into the file.
+
+GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` **45 files / 190 tests**; commit gated
+on the suite. The sheet test asserts the trigger renders and that no v4-only utility survives in
+the file; the open/portal interaction is deferred to the browser gate, as with select. A second
+test renders all six variants and all six sizes to prove the merged button surface is complete.
+
+Remaining in Task 8: `sidebar`, the last item, which also has to respect the shell's navigation
+semantics from Task 9.
