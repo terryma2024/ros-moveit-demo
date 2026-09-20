@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-66
+latest_checkpoint: CP-67
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1541,3 +1541,33 @@ Plus, independently: `NODE_ENV=test bun run test` **45 files / 202 tests** and `
 Branch `codex/so101-unified-webapp`, tree clean at this commit. All 66 checkpoints, reproductions,
 gate recipes and evidence paths are in this ledger; the registered evidence root retains every run,
 with the deletion candidates listed in CP-63 and nothing deleted.
+
+## CP-67: one plan requirement I did not implement - the legacy factory still duplicates routes
+
+Reviewing the plan's Task 6 file list against what actually changed turned up a substantive deviation
+that has not been recorded until now:
+
+The plan requires the old per-domain factories to stop carrying their own route tables - "router核心把
+existing closures 抽成 teleop_router / tasks_router / validation_router ... 旧 create_app wrappers
+仅供原分域测试调用这些同源 routers" - and forbids maintaining a second copy of the routes.
+
+**As implemented, `so101_teleop/api.py:create_app` still defines its own inline route closures**
+(health, snapshot, capabilities, every control route, the tasks routes, the static mounts). The unified
+app in `unified/app.py` has the real router table and is what the entry point and the OpenAPI export
+use, so there is one *serving* route table and one *documented* one - but the legacy closures remain a
+second, hand-maintained copy that can drift. `api.py` is imported only by `test_api.py` today.
+
+Two concrete reasons it was not closed in this session, both real:
+
+1. **Import cycle.** `unified/app.py` imports `validate_bind_address` from `so101_teleop.api`, and
+   `expert_validation/api.py` also imports it, so a module-level `from .unified.app import
+   teleop_router` inside `api.py` is circular. Closing the gap needs either the shared helper moved to
+   a leaf module or a lazy import inside `create_app`.
+2. **Test coverage.** `test_api.py` builds `create_app(Service())` with a stub service in eight places
+   and asserts the current response shapes; delegating to the unified routers requires those stubs to
+   satisfy the port contracts (including the authority dependency), which is a test rewrite of the
+   same shape as CP-48/CP-49, not a one-line change.
+
+So this is recorded as an open deviation with its exact cause and cost, not glossed over. The route
+*behaviour* it exposes is covered by the unified app's own tests and by the CTest run; what is missing
+is the removal of the duplicate definition, which is a refactor with its own test migration.
