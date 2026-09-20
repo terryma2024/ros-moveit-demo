@@ -90,10 +90,12 @@ Validation 地图按 accepted manifest 的真实几何绘制：桌面边界、�
 
 ## 现在还不能做的事
 
-下面这些事情没有完成或需要单独授权，不要按已完成来操作：
+下面这些事情没有做完、没有做到位，或需要单独授权。不要按已完成来操作：
 
-- 本机没有完成 Task 11 的完整 configure/安装门控和 copied-install Chrome 验收，页面级浏览器证据（1400×900 与 390×844 无横向溢出、键盘焦点、读屏状态）还没有产出。
-- preset 的组件级 registry 数据和自托管字体没有抓到：固定的 CLI 在本环境里连不上 `ui.shadcn.com`（curl 能拿到 200，bun 和 node 都报 other side closed），所以 `design-system.lock.json` 里只记了已验证的 preset manifest，字体列表为空，并写明 `PENDING_REGISTRY_ITEMS`。
+- Task 11 的 configure/安装门控、copied-install 来源校验和页面级浏览器验收已经产出：1400×900 与 390×844 都没有横向溢出，键盘能到达控件，读屏 live region 在位，明暗两套主题都跑过。这不是完整的无障碍审计。只测了设计令牌之间的颜色对，没有逐元素测量渲染结果，focus 指示环 `--ring` 的对比度没有测。
+- 明暗两套配色的文字都过 AA，最紧的是浅色 `muted-foreground` 的 4.61:1。`--border` 和 `--input` 与背景只有 1.25:1，低于 WCAG 1.4.11 对控件边界的 3:1 要求，`input.tsx` 用 `border-input bg-input` 一个令牌同时当填充和描边，浅色输入框就是白底上的 `#e3e7e8` 色块。这两个值取自上游 maia/radix registry，改动属于设计决策，本轮没有改。
+- 没有做完整的 release closure（`--packages-up-to so101_demo_py so101_teleop`）。本机唯一一份 MuJoCo underlay 在 `<ros2_jazzy>/ws_mujoco_ros2_control_fork/install`，`.envrc.example` 特意没把它加进环境。
+- preset 的 18 个 radix-maia registry 条目和自托管字体（dm-sans、outfit，见 `public/fonts/`）已经落盘，`design-system.lock.json` 里剩下的阻塞原因是 `PENDING_PRIMITIVE_MERGE`，也就是组件级合并还没做。
 - `ros_child.py` 的 ROS driver 还没有可运行的接线，`RclpyActionDriver` 会明确报 `ROS_DRIVER_NOT_PROVISIONED`；socket、协议、runtime、ownership 和取消路径已经验证，ROS 部分没有。
 - 新 R 的资源测量、资格判定和 profile promotion 属于 Stage B，live 服务替换属于 Stage C，都需要单独授权，本指南不代替这些授权。
 - 真实机械臂动作仍需要独立的急停、限速、限位与净空授权。默认停在 plan-only。
