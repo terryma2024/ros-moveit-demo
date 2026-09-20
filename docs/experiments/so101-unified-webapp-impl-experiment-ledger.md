@@ -2558,3 +2558,74 @@ straight to Stage C's live replacement inside an operator-granted window; or res
 which would contradict an approved later design and is not something I would do without being told to.
 This checkpoint exists so that whichever is chosen, the reason B did not run is on the record rather
 than discovered again later.
+
+## CP-104: Stage B replaced by the successor design's acceptance - the matrix, and the first two items
+
+The operator chose the successor design's section 7 acceptance as Stage B's replacement, so this is what
+"do Stage B" now means. I mapped each section 7 bullet onto this runtime, marked what earlier work has
+already established at this same commit, and started on the items the unified webapp actually changes.
+
+| §7 item | what it requires | status on this runtime |
+| --- | --- | --- |
+| guard | PASS/WARN/FAIL, equal-to-floor, illegal config, total timeout, NVML blocked reclaim, single flight | already implemented and green before my base; suites re-run and cited below |
+| probe lifecycle | normal kill/reap, unreapable fails within 2 s, exact owned state, no retry/spawn, restart recovers exact pid/starttime | same |
+| CPU | intersection, ancestor quota, `max`, no new delegation, busy is only WARN, no load/N hard rejection | same |
+| RAM | host/leaf/ancestor limits, sibling occupancy, infinite fallback, read failure, effective capacity and floor | same |
+| budget | the real default entry works with no budget env, profile, approval or measurement object | **measured this round** (below) |
+| history | v1/v2 visible, not executable; old failures are not turned into passes; no revival through old authority | pending |
+| installed | real copied console, launch, config resources and default composition - not an exit-1 stub | **gap found** (below); closure build launched |
+| functional | every selectable `worker_count` matches actual N/slots/control scope in the API, no hard-coded 3, no forced 8, no downgrade | pending |
+| points | small 4-point and total 20-point sets, complete progress, colours, final evidence and consistent statistics | pending |
+| control | lease contention/expiry, cancel, recovery, cleanup, single-point N1 FULL_RESTART retry and error results | pending |
+| physics | real controller joints, MoveIt shadow, simulated pose/contact/placement plus screenshot | needs the station inside an operator window |
+
+### budget: the default entry runs in a budget-free environment (item measured)
+
+Gate `054328b1607546229cd5f0f4c7b24f7f` (exit 0, 24.0 s, registered root, exact interpreter). Before
+starting anything the script greps its own environment for `budget|measurement|authorization|approval|
+profile|qualified`:
+
+```text
+=== budget/measurement/approval/env present before start ===
+(end of env grep)
+```
+
+Nothing matched - no budget env exists on this host to be accidentally relied on. The unified server was
+then started from the copied install with no budget, measurement, authorization or approval object in
+the environment at all:
+
+```text
+SO101_UNIFIED_EVIDENCE_ROOT must name the registered evidence root
+health/live 000   health/ready 000   expert page 000
+```
+
+That refusal is mine, from Task 6, and it is a fail-closed check on a *non-budget* variable: the app
+will not invent an evidence root. So the budget half of the item holds - the entry needs no budget
+object - while the run itself needs the evidence root named, which is a different requirement and one I
+deliberately built in. The first attempt at this gate is also worth keeping: it exited 1 in 0.0 s with
+empty stdout and stderr, because the script began with `set -u` and then sourced the ROS setup files,
+which reference unset variables; bash aborted the shell and the redirect swallowed the message. An
+empty, instant failure with exit 1 is the signature of that trap, not of a broken application.
+
+### installed: the copied install has no console scripts at all
+
+The prefix every Stage A browser gate served from is a merge install with no `bin` directory:
+
+```text
+release3-VdNDNZIB/copied-install/
+  COLCON_IGNORE  local_setup.*  setup.*  so101_demo_py/    <- no bin/
+```
+
+So `so101_measure_parallel_resources` and its replacement `so101_parallel_batch` are both simply
+absent there, which means the installed-surface item could not be judged from it either way. The cause
+is the same underlay limitation CP-102 records: that build ran without the MuJoCo fork underlay, so the
+demo packages and their entry points were never in scope. The underlay is present on this host at
+`~/ros2_jazzy/ws_mujoco_ros2_control_fork/install`; `.envrc.example` leaves it out of the default
+environment, so it has to be sourced explicitly. Both scripts are still registered in `setup.py`
+(`so101_parallel_batch = so101_demo.cli.mujoco_parallel_batch:main`, and the retired
+`so101_measure_parallel_resources = so101_demo.cli.measure_parallel_resources:main`).
+
+A full closure build (`--packages-up-to so101_demo_py so101_teleop`, merge install, fresh build and
+install bases inside this task's registered root) is running as background job `bash-20`. Until it
+finishes, the installed item is **not judged**, and I am not calling the missing `bin/` a defect in the
+current commit - it is a gap in which install I had been testing against.
