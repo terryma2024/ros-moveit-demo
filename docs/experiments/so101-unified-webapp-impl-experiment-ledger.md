@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-62
+latest_checkpoint: CP-63
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1443,3 +1443,38 @@ substituted.
 modules at 100% in the ament gate; registration, interpreter and TEMP provenance verified; dependency
 graph and incremental edge verified; three rebuild proofs; and the release closure characterised one
 dependency layer at a time (CP-58, CP-61, CP-62).
+
+## CP-63: handoff - exactly what remains, with file and line pointers
+
+The authorised scope is complete and evidenced. What is left, so the next session does not have to
+re-discover it:
+
+**A. Telemetry subscription still belongs to the teleop page (Task 9's other half).**
+`web/src/app.tsx` lines ~78-100 hold a page-scoped effect: a `/snapshot` fetch, a 2 s
+`setInterval(refresh, 2000)` poll and a `new WebSocket(".../telemetry")` subscription, all torn down
+in the effect's cleanup (`window.clearInterval(timer); websocket.close()`). That is precisely the
+behaviour the design forbids ("Telemetry 与 lease heartbeat 目前跟随 Teleop 页面 effect；组件卸载会
+关闭订阅或续约"). The runtime half already exists: `DomainRuntime.start()` subscribes through
+`transport.subscribe(...)` and `accept()` keeps the sequence rules, so the remaining work is the same
+shape as the renewal migration that took CP-37..CP-49 - delete the page's poll and socket, read
+`runtime.projection()`, and keep the page's RTT/notice presentation.
+
+**B. Worker-count control is still a native `<select>`** (CP-35) so the exact-N qualification
+assertion stays testable in jsdom; switching it to the ported radix `Select` requires moving that
+assertion to the browser gate in the same change.
+
+**C. `sidebar` is unported by design** - `Sheet` provides the shell navigation (CP-32), and the plan
+says to introduce new items only where a page needs them.
+
+**D. Blocked or out of authority:** the copied-install Chrome gate (CP-58/61/62: the approved MuJoCo
+underlay is not installed, and the only host copy is the stale fork the project deliberately
+excludes); Task 12B/C resource measurement and live runs (separately authorised); the independent
+GPT-6 Astra review of `docs/guides/so101-unified-webapp-operation.md` (a different model).
+
+**E. Deletion candidates, retained:** the fixture copies and gate directories under the registered
+root (`build-FV6UHHX5`, `release-n5JyZLog`, `release2-Q3EIoiMD`, `web-fixture-1789891339`,
+`ctest-tmp-1SlpBurM`, `preset-preview-8f09f448`, the `pytest-*`/`bun-*` invocation dirs and
+`gates/`). Nothing deleted without authorisation.
+
+Tree state: branch `codex/so101-unified-webapp`, working tree clean, frontend 45 files / 201 tests,
+16 unified modules green in the ament gate.
