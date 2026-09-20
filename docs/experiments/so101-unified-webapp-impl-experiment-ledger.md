@@ -29,8 +29,8 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-12
-next_experiment: Task 9 unified shell/layout CSS and the page migration that consumes the runtimes, then Task 11 static CMake dependencies, then retry Task 8 registry access
+latest_checkpoint: CP-13
+next_experiment: Task 9 page migration onto AppShell and the root runtimes, then Task 11 static CMake dependencies, then retry Task 8 registry access
 ```
 
 ## CP-01: Registration, host probe and deviations
@@ -417,3 +417,30 @@ untouched. `bun run build` exit 0 and **34 files / 151 tests**. Commit `d8c0d56c
 Still open in Task 9: `components/unified/app-shell.tsx`, `styles/unified-layout.css` (the plan's
 grid rules), the Sidebar/Sheet navigation, wiring the pages to the root runtimes and the
 qualification view, and the 1400x900 / 390x844 no-overflow checks.
+
+## CP-13: Task 9 shell and layout rules
+
+`components/unified/app-shell.tsx`, `components/unified/app-shell.test.tsx` and
+`styles/unified-layout.css` (imported by `index.css`). The shell owns theme, the two primary
+entries, a separate domain-health strip and the global-owner reason. Tasks stays a compatibility
+route: it renders under the shell but is not a third primary entry, and there is no shared
+business lease in the shell.
+
+The layout CSS implements the plan's approved grid verbatim (`.validation-layout` 3fr/2fr with
+`minmax(0, ...)`, `.validation-map svg { width: 100%; height: auto; max-width: none }`,
+`.point-results` three columns falling to two at 1100px and one at 360px, single-column
+validation below 760px) plus the shell/sidebar/teleop-joint-table rules.
+
+GREEN: `bun run build` exit 0, `NODE_ENV=test bun run test` **35 files / 156 tests**. Covered:
+navigation between the two entries without rebuilding the shell (the same content node stays
+mounted), Tasks as a compatibility route rather than a primary entry, the collapsible
+narrow-screen navigation (always present on wide screens via a media query rather than a
+permanent `hidden` attribute, which had made the entries unreachable for assistive technology),
+domain health and the global owner reason rendered outside the page content, and a light-default
+theme that flips and applies to the document even when storage is unavailable or partial.
+Commit `195606f7`.
+
+Still open in Task 9: rendering the pages through `AppShell` in `main.tsx`, migrating the page
+effects onto the root runtimes, consuming the qualification view in `CampaignSetup`, and the
+1400x900 / 390x844 no-horizontal-overflow checks. Task 8 remains blocked on registry access as
+recorded in CP-11.
