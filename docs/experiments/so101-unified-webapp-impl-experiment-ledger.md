@@ -2373,3 +2373,102 @@ whether the number could possibly be right: a near-white border on a near-black 
 
 Superseded evidence, retained as deletion candidates: `installed-contrast2-*`, `installed-contrast3-*`,
 `installed-contrast4-*`, `installed-contrast5-*` (all earlier, wrong-method probes).
+
+## CP-102: Stage A close-out - final verification, evidence inventory, open items
+
+The authorisation covers Stage A only (Tasks 0-11 plus 12A). Stage B and Stage C were not
+authorised and were not started. The user confirmed stopping here, so this checkpoint records the
+delivered state rather than more work.
+
+### Final verification on the committed tree
+
+The last commit that touched product code is `d49e692b` (the teleop action cluster wrap fix). Every
+commit after it is `docs/` only, so re-running the suites on the committed tree is the same test as
+re-running them on the tree that was already measured. Both were re-run anyway:
+
+| gate | argv | result |
+| --- | --- | --- |
+| frontend | `bun run test` | `Test Files 45 passed (45)`, `Tests 202 passed (202)`, exit 0 |
+| unified Python | `pytest src/so101_teleop/test/teleop -k unified` | `139 passed, 394 deselected`, exit 0 |
+
+Timestamps, because they matter for honesty: the last frontend gate before this checkpoint ran at
+16:31:50 and the code commit landed at 16:32:07, so the "already verified" claim rested on a run that
+finished 17 seconds *before* the commit. That gap is now closed by runs at 18:36 on the committed
+tree, not by assuming the tree was unchanged.
+
+One thing to record rather than bury. The frontend gate at 18:36:07 printed all 202 tests passing and
+then exited `-6` (SIGABRT): bun's `test` script died in Node's CJS/ESM interop inside
+`node_modules/debug/src/node.js`, after the suite had finished. The identical command re-run at
+18:36:31 exited 0 with the same 45/202. So the suite is green and the abort is an intermittent
+teardown crash in the toolchain, not a failing test - but a non-zero exit with a passing report is
+exactly the shape of result that gets misread later, in either direction, so it is written down.
+
+### Evidence inventory
+
+Registered root: `/tmp/so101-debug-so101-unified-webapp-impl-20260920`, 555 MB total, 281 gate runs.
+
+Retained (each is cited by at least one checkpoint):
+
+| path | size | what it holds |
+| --- | --- | --- |
+| `operator/` | 64 KB | gate policy and its sha256, `gate-env.sh` helpers, preset init, pointer files |
+| `registry/` | 112 KB | the 18 radix-maia registry items and their hashes |
+| `gates/` | 40 MB | 281 runs: argv, exit code, elapsed, policy hash, exact interpreter, per-run scratch, stdout/stderr |
+| `release3-VdNDNZIB/` | 100 MB | isolated release plus `copied-install`, the prefix every Stage A browser gate served from |
+| `build-FV6UHHX5/` | 31 MB | the clean configure/build tree and its log |
+| `web-fixture-1789891339/` | 253 MB | the web fixture and validation-service runs |
+| `installed-visual2-VYVx9ZQf/` | 472 KB | post-fix screenshots, both required viewports |
+| `installed-contrast6-aKi6u8sS/` | 376 KB | the CP-101 contrast run |
+| `installed-a11y-WDcvpGxr/`, `installed-evidence-6nYVWbyB/`, `ctest-tmp-1SlpBurM/`, `preset-preview-8f09f448/` | ~580 KB | a11y tree, evidence query, ctest scratch, preset preview |
+
+Deletion candidates, listed but not deleted (deletion needs explicit authorisation):
+
+| path | size | why it is superseded |
+| --- | --- | --- |
+| 173 `bun-*` dirs | 0 B | per-invocation scratch, already emptied |
+| 71 `pytest-*` dirs | 416 KB | per-invocation scratch and junit files |
+| 28 `scratch-*` dirs | 7.7 MB | intermediate build scratch |
+| `release-n5JyZLog/`, `release2-Q3EIoiMD/` | 117 MB | earlier releases; `release3` is the one the gates and pointer file reference |
+| 12 `installed-*` dirs | 3.9 MB | superseded contrast/serve/overflow/visual runs, including `installed-contrast{,2,3,4,5}-*` from the wrong-method probes |
+
+Nothing was archived to `/data/work/so101-evidence/`. That rule applies on `ai-station`; this work ran
+on the macOS host, where the registered root is `/tmp`.
+
+### What is delivered
+
+Branch `codex/so101-unified-webapp` in `.worktrees/so101-unified-webapp`, based on `5b8d1231`, tree
+clean. One FastAPI app with one factory, one lifecycle owner, one route table and one port; server-
+verified instances and lease binding with the four authority headers on every mutation; a global
+mutation arbiter over SQLite with `BEGIN IMMEDIATE`, `synchronous=FULL`, exclusive `flock` and
+fingerprint idempotency; a separate safety lane for cancel that reports accepted as accepted rather
+than as stopped; a non-web ROS child over dual AF_UNIX sockets with per-child tombstones and a closed
+Pydantic IPC allowlist; `rclpy` never imported by a web module; Tailwind 3.4.17 with the maia/radix
+tokens converted to v3-equivalent classes; self-hosted dm-sans and outfit. 17 unified test modules,
+19 modules at 100% in the ament gate, the frontend suite above, and an operator guide at
+`docs/guides/so101-unified-webapp-operation.md`.
+
+### Open items, and who owns each
+
+- **Stage B and Stage C.** Resource measurement, qualification, profile promotion, live service
+  replacement, live Chrome and physical acceptance. Not authorised; not started. This is the only
+  substantial work left in the plan.
+- **Full release closure.** `--packages-up-to so101_demo_py so101_teleop` was not run: the host's only
+  MuJoCo underlay sits in `<ros2_jazzy>/ws_mujoco_ros2_control_fork/install`, which `.envrc.example`
+  deliberately leaves out of the environment. Not a source problem; an underlay problem.
+- **Guide review.** `AGENTS.md` asks for an independent GPT-6 Astra / High review of guides and
+  designs. That model is not available in this session, so the guide remains an unreviewed draft and
+  no review is claimed. This is a tooling limitation, not a finding about the guide.
+- **Contrast follow-up.** `--border`/`--input` at 1.25:1 against the page is measured and unfixed by
+  choice (upstream design values change the visual gates). Recommendation and target values are in
+  CP-101.
+- **`ros_child` ROS driver.** `RclpyActionDriver` still reports `ROS_DRIVER_NOT_PROVISIONED`; the
+  sockets, protocol, runtime, ownership and cancel paths are verified, the ROS driver wiring is not.
+- **`--ring` focus-indicator contrast.** Unmeasured, therefore unclaimed.
+
+### The habits that earned their keep
+
+Three checkpoints this session existed only because a claim was checked instead of trusted: CP-73 and
+CP-83 caught my own edits not applying, and CP-100/CP-101 caught my own measurement instruments lying.
+The second category is the one worth remembering. Both instrument failures produced confident, precise,
+plausible numbers, and the only thing that exposed them was asking whether the number could be true -
+a 1.18:1 body text ratio, and a near-white border on a near-black theme.
