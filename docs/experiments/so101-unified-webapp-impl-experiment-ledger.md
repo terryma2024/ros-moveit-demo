@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-46
+latest_checkpoint: CP-47
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1095,3 +1095,20 @@ With this, the runtime owns the complete renewal round trip - cadence, authority
 identity/generation/expiry validation and the resulting lease state - so the page's remaining
 `scheduled setTimeout` can be replaced by `runtime.startHeartbeat(() => (duration - margin) * 1000)`
 and its own validation branch deleted. That swap is the last edit in Task 9's migration.
+
+## CP-47: renewal outcomes are published, so the page needs no timer
+
+`DomainRuntime.onRenewal(listener)` reports each renewal's outcome (`{ok, error}`), with the listener
+receiving the recorded reason on failure. The listener set is cleared on `dispose` through the normal
+teardown path, and a test proves the success outcome, the failure outcome with its
+`LEASE_RENEW_FAILED` reason, and that unsubscribing stops delivery.
+
+GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` **45 files / 201 tests**. Commit follows
+this entry.
+
+Every responsibility of the validation page's renewal effect is now owned by the runtime *and*
+observable from it: cadence, authority, request, identity/generation/expiry validation, adopted lease
+state, in-flight indicator, error record and outcome notification. The final edit is purely
+subtractive in the page - replace the `setTimeout` scheduling with
+`runtime.startHeartbeat(() => (duration - margin) * 1000)`, adopt the lease into the runtime, and feed
+the page's notices from `onRenewal`.
