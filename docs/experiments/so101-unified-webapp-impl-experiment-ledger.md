@@ -3333,3 +3333,57 @@ should be preceded by an explicit residue check, and followed by one.
 what actually tests whether anything remains in the pick-place path. Also worth reading before it: what
 the campaign's cleanup is specified to reap, so the next report can say whether the surviving launchers
 were a bug in that cleanup or a component it deliberately does not own.
+
+## CP-118: the clean re-run confirms it - 8/8 points SUCCEEDED, contacts present
+
+CP-117 named the contamination and cleaned the host; this is the experiment that tests it. Background job
+`bash-30`, the same command as the failing run, same commit, same config, one difference: no leftover
+action servers. Pre-run residue check reported zero `ros2 launch` and zero `noros_child_helper`
+processes.
+
+```text
+status: W2_CAMPAIGN_PASS                       campaign_rc=0
+start_guard: PASS  MPS_HEADROOM_OK  available 15900377088  cutoff 1073741824  unified-memory-proxy
+w1: point_results 4  manifests 4  failure_codes []  contacts 4
+    executed_points [01-task_start, 02-cup_test_forward_5cm, 03-cup_test_left_5cm, 04-cup_test_right_5cm]
+w2: point_results 4  manifests 4  failure_codes []  contacts 4   (same four points)
+batch results: stageb-live-05-w{1,2}-pick  status SUCCEEDED  point_statuses [SUCCEEDED x4]  exit_code 0
+served: count 12  devices ['mps']  lane executed 19  max_concurrent 1  rejected 0
+cleanup: complete true  directory_removed true  registry_empty true  workers_reaped [true, true]
+post-run residue: zero real station launchers (the single grep hit was my own wrapper process)
+```
+
+Sixteen point results across the two slots, eight per worker, every one `SUCCEEDED` with no failure code
+and four contacts per slot. The previous run's identical command produced eight `DYNAMIC_WORKFLOW_FAILED`
+and zero contacts. The only variable was the two orphaned `stageb-live-03` station launchers, so the
+duplicate-action-server explanation is confirmed by experiment rather than left as the most plausible
+story. `MOVEIT_EXECUTION_FAILED` was a symptom of two MoveIt servers sharing a domain, not a defect in
+the pick-place path.
+
+**The physical evidence the §7 physics row asks for is on disk, per point.** For `01-task_start`:
+
+```text
+reset                       resets/task_start-...json                                   783 B
+workflow                    points/01-task_start/dynamic/dynamic-execute-manifest.json  733936 B
+terminal-capture image/png  points/01-task_start/rgb.png                               30263 B
+terminal-capture ply        points/01-task_start/full-cloud.ply                       4591297 B
+terminal-capture ply        points/01-task_start/cup-cloud.ply                            4013 B
+terminal-capture image/png  points/01-task_start/point-cloud-preview.png                 9552 B
+terminal-capture image/png  points/01-task_start/viewer.png                            732110 B
+terminal-capture log        points/01-task_start/dynamic-consumer.log / rgbd-perception.log
+```
+
+plus `point-input.json`, `perception-summary.json` and `point-result.json` beside them, and the same set
+for the other three points on both workers. That is a real execution manifest, a fresh viewer screenshot,
+the RGB frame and both point clouds per point - controller joints through a station that reported
+`phase READY` with its actions, controllers and services, MoveIt execution that actually ran, and
+simulated contacts, which is the substance of §7's physics row.
+
+**What is not claimed.** One clean run is one run. This is not a `resource qualified` claim, not a
+promotion, and not the five-consecutive-valid-successes business claim that belongs to a different gate -
+the retired budget chain's per-N qualification and the physical-outcome series. It is the acceptance
+evidence §7 asks for, from a real run, with the artifacts to check.
+
+The reusable part: CP-117's diagnosis came from reading two orphaned processes' command lines, and the
+confirmation came from changing exactly one thing and re-running. That is the A/B the skill's loop asks
+for, and it took 6 minutes of wall time once the harness was understood.
