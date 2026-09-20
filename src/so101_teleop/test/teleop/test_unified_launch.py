@@ -110,3 +110,18 @@ def test_every_unified_test_module_is_registered_and_every_registration_exists()
     assert missing_file == [], f"registered test files that do not exist: {missing_file}"
     for name, rel in registered.items():
         assert on_disk.get(name) == rel, (name, rel, on_disk.get(name))
+
+
+def test_every_script_is_installed_and_every_install_entry_exists():
+    """Packaging drift guard, the same shape as the pytest-registration one.
+
+    A script on disk that is not in `install(PROGRAMS ...)` never reaches an installed prefix, and an
+    entry pointing at a missing file breaks the install step. Both directions are checked.
+    """
+    package = PACKAGE
+    cmake = (package / "CMakeLists.txt").read_text()
+    block = cmake[cmake.index("install(\n  PROGRAMS"):]
+    installed = set(re.findall(r"scripts/([A-Za-z0-9_]+\.py)", block[: block.index(")")]))
+    on_disk = {path.name for path in (package / "scripts").glob("*.py")}
+    assert sorted(on_disk - installed) == [], "scripts that are never installed"
+    assert sorted(installed - on_disk) == [], "install entries with no file"
