@@ -3,7 +3,7 @@ import json
 from fastapi.testclient import TestClient
 import pytest
 
-from so101_teleop.api import create_app, validate_bind_address
+from so101_teleop.api import validate_bind_address
 from so101_teleop.models import CommandResult, ServerMode, TelemetrySnapshot
 from so101_teleop.models import CaptureResponse, TaskEvent, TaskRunSummary
 from so101_teleop.task_artifacts import ManifestArtifactStore
@@ -136,11 +136,18 @@ def test_unsafe_bind_is_rejected():
         validate_bind_address("0.0.0.0")
 
 
-def test_execute_returns_conflict_for_stale_plan():
+def test_execute_returns_conflict_for_stale_plan(tmp_path):
     """Returning 2xx for a stale plan would let the browser mistake rejection for execution."""
-    client = TestClient(create_app(Service()))
-
-    response = client.post("/plans/p1/execute", json={"command_id": "execute-1"})
+    authority = AuthorityFixture(tmp_path)
+    try:
+        client = TestClient(
+            unified_app_for(Service(), instances=authority.registry, arbiter=authority.arbiter)
+        )
+        response = client.post(
+            "/plans/p1/execute", json={"command_id": "execute-1"}, headers=authority.headers()
+        )
+    finally:
+        authority.close()
 
     assert response.status_code == 409
     assert response.json()["code"] == "PLAN_STALE_SCENE"
@@ -192,7 +199,7 @@ def test_validation_capabilities_report_the_exact_n_view_without_a_validation_se
 
 def test_missing_web_assets_return_machine_readable_service_unavailable():
     """A missing production bundle must be diagnosable instead of looking like a lost route."""
-    client = TestClient(create_app(Service()))
+    client = TestClient(unified_app_for(Service()))
 
     response = client.get("/")
 
