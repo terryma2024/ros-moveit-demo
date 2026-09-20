@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-69
+latest_checkpoint: CP-70
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1615,3 +1615,19 @@ passes with the new registration. Commit follows this entry.
 
 This is the honest intermediate state: the refactor the plan asks for is still open, with one obstacle
 cleared and the other named, and a guard that makes any drift visible in the meantime.
+
+## CP-70: the legacy factory's status is now explicit in the code
+
+`api.py` carries a comment above `create_app` stating that it is kept only so the legacy per-domain
+tests keep exercising their closures, that production must go through the unified factory, and that
+the plan requires this route table to disappear once those tests are migrated - with pointers to
+CP-67..CP-69 and to the parity guard.
+
+No behaviour changed. I deliberately did **not** make the legacy factory delegate to the unified
+routers, because the unified mutations require instance authority and the legacy tests post without it:
+delegating would either break eight tests or require a legacy bypass, and the plan forbids a legacy
+bypass outright. The remaining work is therefore a test migration, exactly as CP-67 recorded, and the
+comment now says so where the next reader will look.
+
+GREEN: `pyrgate test_api.py test_unified_api.py test_unified_route_parity.py` all pass together, which
+is the trio that constrains this area. Commit follows this entry.
