@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-52
+latest_checkpoint: CP-53
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1208,3 +1208,25 @@ What is still missing is the *end-to-end* form the plan asks for: build, change 
 task-owned fixture tree, rebuild and show the bundle hash changed; the same for a font file and for
 `components.json`, with stdout/exit/mtime/hash retained. The dependency graph is evidence that the
 mechanism works, not a substitute for those three runs, and it is recorded that way.
+
+## CP-53: the full CTest run found one regression of mine, now fixed
+
+Ran all 69 registered tests in the built overlay: **83% passed, 12 failed, 408 s**. Critically, **none
+of the 15 `test_unified_*` modules failed** - the work this task added is green in the real gate.
+
+One of the 12 was **my regression**, not a pre-existing failure: `test_teleop_web_bundle` asserts the
+literal `location.pathname === "/tasks"` in `main.tsx`, which the Task 7 rewrite replaced with the
+History-API router owned by the root provider. The behaviour is unchanged (the legacy `/tasks` route
+still renders `TaskApp`), so the assertion now follows the new source of truth - it checks that
+`main.tsx` uses `usePageRouting` and renders `TaskApp`, and that `runtime-provider.tsx` maps the
+`/tasks` pathname to the `tasks` page. `pygate test_web_bundle.py` passes; commit follows this entry.
+
+The other 11 failures are in expert-validation modules (`start_guard`, `adaptive_owner`, `control`,
+`e2e_installed_port`, `preflight`, `process_owner`, `process_owner_integration`, `supervisor`,
+`operator_recovery`) plus two timeouts (`expert_validation_package_layout`,
+`production_projection`). They are outside everything this task touched - no expert-validation
+implementation file was modified; only the generated `expert_validation_openapi.json` and the new
+`unified/*` modules - and they match this host's known gaps (an incomplete `so101_demo` install
+closure and process-ownership probes). They are recorded as **unclassified**, not as "pre-existing"
+or "caused by this task", because classifying them properly needs the baseline run that this
+round's context did not allow. That classification is the next diagnostic step.
