@@ -14794,3 +14794,28 @@ OpenAPI/build/served-byte hashes were derived in the earlier task-11/12 gates ra
 the independent verdict is owed, and the review part of that box does not exist yet.
 
 _Ledger source HEAD: `9c05cfdf`; no evidence deleted._
+
+### CP-UQ301 — publication, on an explicit operator instruction
+
+The plan says this task must not push. The operator then said "commit & push", which is the authority
+that lifts that clause for this one action, so the branch is now published and the fact is recorded here
+rather than left implicit.
+
+Nothing needed committing when the instruction arrived: the working tree was already clean at
+`227e2c74`, every change of this run having been committed as its own scoped commit (the last four being
+`9c05cfdf` for the two test fixes, then the CP-UQ299 and CP-UQ300 ledger checkpoints and the plan's
+Task 16 status). The push itself was a plain fast-forward:
+
+```text
+git push origin codex/so101-unbounded-queue-resource-budget
+   bf1b6091..227e2c74  codex/so101-unbounded-queue-resource-budget -> codex/so101-unbounded-queue-resource-budget
+```
+
+`origin/codex/so101-unbounded-queue-resource-budget` and local `HEAD` are both
+`227e2c7424fa8ee08ebd657ae2af590d821ea3bc`, with zero commits left unpublished. No force was used, there
+is no `github` branch ref for this work so the `github` remote was not touched, `main` was not merged,
+and no pull request was opened. The scoped-commit discipline held throughout: nothing was staged with a
+wildcard, and the only files in this run's commits are the ledger, the plan and the two test files whose
+defects the final gate exposed.
+
+_Ledger source HEAD: `227e2c74`; no evidence deleted._
