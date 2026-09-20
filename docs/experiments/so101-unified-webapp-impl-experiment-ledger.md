@@ -29,8 +29,8 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-09
-next_experiment: Tasks 7, 8, 9 frontend (root providers, preset smart merge, unified shell), then Task 11 build/installed gates, then the operation guide
+latest_checkpoint: CP-10
+next_experiment: finish Task 7 (migrate page effects into the runtimes, single execute-all POST, pages consume the provider), then Tasks 8, 9, then Task 11
 ```
 
 ## CP-01: Registration, host probe and deviations
@@ -335,3 +335,28 @@ merge, the unified shell and two-page layouts), Task 11 (CMake dependency list, 
 configure/build, copied-install Chrome gate), and Task 12B/C (measurement, live runs, the
 Chinese operation guide). Task 11's colcon stages need a complete `so101_demo_py` closure; the
 source shim is only for source-mode tests and must not be used for the installed gate.
+
+## CP-10: Task 7 part A - root runtimes, instance transport, qualification view
+
+Delivered `web/src/api/{instance-client.ts,domain-transport.ts,qualification-view.ts}` and
+`web/src/state/{domain-runtime.ts,runtime-provider.tsx}` with their four test modules, and
+rewired `main.tsx` to build the two runtimes once and mount `RuntimeProvider` around a
+History-API page switch. `unified/app.py` now types `/control/instances` with
+`InstanceProofResponse` so the client type is generated rather than hand-written.
+
+GREEN: `bun run build` exit 0 and **34 files / 149 tests** (up from 30/126) with `NODE_ENV=test`.
+Covered: the plan's literal sequence-gap test (a gap re-snapshots and never posts), contiguous
+and stale events, an epoch change forcing a snapshot and advancing the execution generation,
+events buffered while a snapshot is in flight with a bounded buffer, posting without authority
+refused, `dispose` closing the transport, registration not touching storage, a rejected
+handshake surfacing the server code, all four authority headers on a mutation, every unknown
+N disabled before provider integration, only an available promoted N selectable, points 4..20,
+page-path mapping, and navigation inside one provider neither re-registering nor closing the
+runtime.
+
+Remaining in Task 7 (not claimed): moving the telemetry/renew effects out of `app.tsx` and
+`expert-validation-app.tsx` into the runtimes, replacing the two-POST `TeleopApiClient.executeAll`
+with one `POST /plans/{id}/execute-all`, and having the three page components and the existing
+`client.ts`/`task-client.ts`/`expert-validation-client.ts`/state stores consume the provider.
+Until that lands the pages keep their current effects and the runtimes only own instance
+authority, subscription and recovery.
