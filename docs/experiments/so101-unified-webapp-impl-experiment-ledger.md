@@ -4053,3 +4053,45 @@ much more specific than "needs a station": the UI cannot acquire because of a pa
 a handshake mismatch, and both are in this task's own deliverable rather than in the environment. The
 N1 retry row still needs a campaign, which needs a client that can acquire - so these two layers come
 first, and they are fixes, not requests for a window.
+
+## CP-133: layer two located - the validation page never uses the authority transport
+
+CP-132 left the question of why the page's acquire arrives without the four headers. The answer is one
+file and one line, on the client side:
+
+```text
+expert-validation-app.tsx:46   const defaultClient = new ExpertValidationClient();
+expert-validation-app.tsx:99   export function ExpertValidationApp({ api = defaultClient } ...)
+expert-validation-client.ts:51 private post<T>(path, body) {
+                                 headers: { "content-type": "application/json" }   <- and nothing else
+                               }
+```
+
+Every mutation the validation page issues goes through that bare client, so it carries no instance
+identity at all. Meanwhile the authority-carrying path exists and is used elsewhere:
+`api/domain-transport.ts:48` `createHttpTransport(...)` builds a transport on top of `InstanceClient`
+(`:60`), and `state/domain-runtime.ts` consumes it. The validation page simply does not use it.
+
+So this is not a missing header on one call - **the page as wired never participates in the authority
+model**, which is why `acquireLease` (`expert-validation-client.ts:62`) and `retry`
+(`expert-validation-app.tsx:373`) would both be refused the same way. The server side is behaving
+exactly as designed: `require_channel`/`require_authority` refuse a mutation with no instance, and the
+page never presents one.
+
+**Why this matters more than the two fixes before it.** CP-126 (registration stored a string) and CP-129
+(no production path claimed a controller) were server-side. This one says the *client* half of the
+authority model was never connected for one of the two domains, and the unit suites could not see it
+because they instantiate the app with an `api` double. Three defects, one seam: server registration,
+server claim, client wiring - all of them invisible until a real page talked to a real server.
+
+**The fix direction** (next round, RED first): give the validation page the same transport the teleop
+provider uses - `createHttpTransport` with an `InstanceClient` - so its mutations carry the four headers
+from a live channel, with the acquire call being the first one that must pass. The observable acceptance
+is what this round could not get: clicking Acquire lease on the real page succeeds, the lease appears,
+and the campaign controls stop being inert.
+
+**Two packaging notes for whoever deploys next.** The websocket dependency of CP-132 needs declaring
+(`python3-websockets` or `uvicorn[standard]`); server-side, uvicorn 0.34.3 without one answers 404 to
+every channel request, which turns the whole authority model into a dead end for real clients. And the
+`websockets` I used for verification was installed task-locally with `pip install --target`, so the
+shared venv on this host is untouched.
