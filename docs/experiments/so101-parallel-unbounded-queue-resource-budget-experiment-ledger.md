@@ -14257,3 +14257,16 @@ Still denied: Screen Recording (`task16-capture-probe-16`). Still true: Task 14 
 reported as PASS, SKIP or N/A.
 
 _Ledger source HEAD: `77332922`; no evidence deleted._
+
+### CP-UQ291 addendum — the fault switches are an interface, and are now pinned
+
+`cli-flags-01`: the campaign parser is asserted to expose `--duplicate-probe`,
+`--tamper-snapshot-sha`, `--cancel-second-worker-after-served`, `--stall-serve-after`,
+`--worker-deadline-s` and `--crash-broker-after-served`, with their off/safe defaults **and** their
+armed values. The runners pass these by name, and a rename or a re-defaulted value would silently turn a
+probe into an ordinary run - which is the failure this session hit twice (the flags that did not reach
+the campaign, and the probe that ran when it should have been off). The suite is now at 19 tests.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `a7e9c302`; no evidence deleted._
