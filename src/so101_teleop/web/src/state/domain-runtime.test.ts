@@ -224,3 +224,48 @@ test("the runtime exposes whether a renewal is in flight", async () => {
   expect(runtime.renewing).toBe(false);
   runtime.dispose();
 });
+
+test("the cadence can be derived from capabilities and refuses an invalid one", async () => {
+  vi.useFakeTimers();
+  try {
+    const snapshot: RuntimeSnapshot = { sequence: 1, serviceEpoch: "e1", executionGeneration: 1, payload: null };
+    const { transport } = makeTransport(snapshot);
+    const runtime = new DomainRuntime("validation", transport);
+    await runtime.start();
+    runtime.adoptAuthority({ instanceId: "i", proof: "p", channelRevision: 1, executionGeneration: 1 });
+    let calls = 0;
+    runtime.startHeartbeat(() => {
+      calls += 1;
+      // The page's rule: renew at (duration - margin) seconds.
+      const duration = 30;
+      const margin = 10;
+      return (duration - margin) * 1000;
+    });
+    await vi.advanceTimersByTimeAsync(20_000);
+    // The provider is consulted to schedule, then again when the next tick is armed.
+    expect(calls).toBeGreaterThanOrEqual(1);
+    expect(transport.renew).toHaveBeenCalledTimes(1);
+    runtime.dispose();
+    // An invalid capability pair stops the heartbeat instead of renewing on a guess.
+    const other = new DomainRuntime("validation", makeTransport(snapshot).transport);
+    await other.start();
+    other.adoptAuthority({ instanceId: "i", proof: "p", channelRevision: 1, executionGeneration: 1 });
+    other.startHeartbeat(() => 0);
+    expect(other.heartbeatRunning()).toBe(false);
+    expect(other.lastRenewalError).toBe("LEASE_CAPABILITIES_INVALID");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a renewal that does not extend the expiry is refused", async () => {
+  const snapshot: RuntimeSnapshot = { sequence: 1, serviceEpoch: "e1", executionGeneration: 1, payload: null };
+  const runtime = new DomainRuntime("validation", makeTransport(snapshot).transport);
+  await runtime.start();
+  runtime.adoptLease({ lease_id: "l", service_session_id: "s", generation: 1, expires_monotonic_ns: 100 });
+  expect(
+    runtime.validateRenewal({ lease_id: "l", service_session_id: "s", generation: 2, expires_monotonic_ns: 100 }),
+  ).toBe(false);
+  expect(runtime.lastRenewalError).toBe("LEASE_EXPIRY_NOT_EXTENDED");
+  expect(runtime.lease()).toBeNull();
+});
