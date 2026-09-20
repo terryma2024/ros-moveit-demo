@@ -4134,3 +4134,34 @@ retry is met with evidence; the retry needs a campaign; a campaign needs a clien
 acquiring needs (1) a declared websocket dependency, (2) the server-side claim, now implemented, and
 (3) the pages actually using the runtime transport. Items (1) and (2) are done or verified; item (3) is
 this checkpoint's finding and the next round's work.
+
+### CP-134 addendum - the open question answers itself, and the fix is wiring, not protocol
+
+The "first thing to read next round" was where `DomainRuntime` gets its initial authority. The answer was
+in the same file, four lines below the method I had already read:
+
+```text
+domain-runtime.ts:62  /** Read-only registration and subscription. It never acquires control. */
+domain-runtime.ts:63  async start(): Promise<void> {
+                        this.proof = await this.transport.register(this.domain);
+                        this.binding = await this.transport.connect(this.proof);
+                        this.authorityValue = {
+                          instanceId: this.binding.instance_id,
+                          proof: this.proof.proof,
+                          channelRevision: this.binding.revision,
+                          executionGeneration: 0,
+                        };
+                        this.current = await this.transport.snapshot();
+```
+
+So the runtime already reaches exactly the state the acquire path needs - a registered instance, a live
+channel, and the four headers set - and `executionGeneration: 0` is honest for a client that has not
+acquired anything yet. `post()` works in that state (its only precondition is `authorityValue` being
+non-null), and `mutationHeaders()` exposes the same values. Nothing about the protocol is missing.
+
+That makes the remaining fix a **wiring change, not a protocol addition**: have the pages mutate through
+the runtime they are already rendered inside, instead of through a bare client instance. The RED test
+should therefore be cheap and precise - render the app with a runtime whose transport records the
+requests it is asked to send, and assert that the acquire (and later the retry) arrives with the four
+headers. That is a test that can fail today and pass after one wiring change, and after CP-125's lesson I
+will check that it fails for the right reason before touching anything.
