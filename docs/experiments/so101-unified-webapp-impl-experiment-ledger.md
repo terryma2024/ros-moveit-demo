@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-41
+latest_checkpoint: CP-42
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1005,3 +1005,19 @@ header still yields `CONTROLLER_INSTANCE_REQUIRED`, and a present-but-unbound au
 
 GREEN: `pyrgate test_unified_api.py` exit 0; frontend suite and build re-verified after regenerating
 the clients. Commit `08eb6818`.
+
+## CP-42: the runtime owns the lease identity and validates renewals
+
+`DomainRuntime` gained `adoptLease`, `lease()` and `validateRenewal(next)`, plus a `LeaseIdentity`
+type mirroring the server contract. The check the validation page performs today now lives in the
+runtime and is unit-tested: a renewal that changes the lease id or session, or that does not strictly
+increase the generation, is refused, the runtime drops its lease state and records
+`LEASE_IDENTITY_MISMATCH` / `STALE_LEASE_GENERATION` / `LEASE_NOT_HELD` in `lastRenewalError`.
+
+GREEN: `NODE_ENV=test bun run test` **45 files / 196 tests**; `bun run build` exit 0. Commit follows
+this entry.
+
+This unblocks the last Task 9 migration step: `expert-validation-app.tsx` can now hand its lease to
+the runtime, call `validateRenewal` where it currently does the identity/generation comparison, and
+let the runtime's heartbeat own the interval - which then allows the page effect to be deleted
+without losing the check. That deletion is the remaining edit.
