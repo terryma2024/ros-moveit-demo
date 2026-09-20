@@ -6105,3 +6105,49 @@ underlay question this task family already tracks.
 
 Round state: no service, station or worker processes left; **0 task-owned helpers**; **0 IPC residue**;
 tree clean.
+
+## CP-175: final disposition for dispatch 6954bbb9 - everything implementable is done, two live outcomes are unreachable here
+
+**Verified on the committed tree** (gate `vP0jEbVr`, exit 0): the focused set across identity, owned-group
+cleanup, process owner + integration, bridge cleanup, control, the macOS parity and service-campaign
+suites, lease maintenance and lease projection - **69 passed, 1 skipped**. Machine clean: 0 task-owned
+helpers, 0 IPC residue, no station/service/worker processes, tree clean, `git diff --check` clean.
+
+**The dispatch's first task is complete.** The root cause (a Linux-only identity reader plus a
+leader-only stop whose failure path masked its own error) is fixed with RED-first tests, exact identity
+preserved, fail-closed throughout; the proven-owned inventory went 27 -> 0 through the product's own
+`terminate_group`, and normal, exception and bridge-stop paths each leave nothing behind.
+
+**The dispatch's second task is complete as an execution path and blocked as a live outcome.** What
+exists and was driven through the service's own API: the typed fail-closed adapter, the service's control
+protocol served by the macOS campaign, launch / cancel / cleanup through the API, the lease lifecycle
+correct end to end (16 renewals, 0 refusals), a campaign that ran to its own verdict with exact cleanup
+(`workers_reaped [true, true]`, `directory_removed`, `registry_empty`), and fresh Chrome observation.
+
+What cannot be produced on this host, each measured rather than argued:
+
+1. **`N=1 FULL_RESTART_RETRY`** - four frozen declarations make it impossible here: the retry contract
+   admits only one point at N=1 (`contracts.py:1294/1586`), the v4 composition - the only execution
+   contract this host runs - refuses any worker count but exact W2 (`w2_composition.py:215-219`), the
+   platform capability declaration refuses other counts (`contracts.py:1905`, accepted as correct in the
+   §7 matrix), and the service's own preflight requires at least four points (`preflight.py:183`). The
+   request-API entry the earlier §7 verdict named as the alternative does not change any of them.
+2. **`W2_CAMPAIGN_PASS`** - the worker stations never become ready, and CP-174 localised it to one
+   service: the three `ros2_control` spawners wait on `/controller_manager/list_controllers` for the
+   station's whole life, while `ros2_control_node` starts and logs `[controller_manager]: Loading
+   hardware 'RobotSystem'`. `motion_stack_ready` with 20 s, 60 s and 120 s all return
+   `MOTION_STACK_CONTROLLER_NOT_ACTIVE` with `observed: null`. And the ROS 2 graph is only
+   *intermittently* visible to a client here: the same setup showed 9 nodes in one run and 0 in the
+   next, so even the spawner's discovery of that service is not dependable. That is a host/underlay
+   property - the §7 `installed` row already records it as blocked on the pinned fork revision.
+3. **Store projection for the macOS campaign** - the projection is built from a coordinator journal
+   (`coordinator_events.py:223`) that the v4 composition does not write (CP-172), so points stay `UNRUN`
+   in the service even while the campaign works. Closing that is a design decision, not a fix.
+
+These conditions have been unchanged for three consecutive rounds (44, 45, 46), and none of them is
+within what this dispatch authorises: the station bring-up lives in the demo composition's ROS underlay,
+the worker-count declarations are frozen platform contracts, and the projection gap needs a design
+choice. Reporting them as the blocking condition is the honest end state; the ledger carries the
+measurements, the code sites and the exact next experiment for the station question
+(`ros2 service list | grep -i list_controllers` alongside `ros2_control_node`'s stderr, with the caveat
+that the graph must be visible to the client at that moment).
