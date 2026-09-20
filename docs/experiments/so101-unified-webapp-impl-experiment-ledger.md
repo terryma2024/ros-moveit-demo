@@ -3082,3 +3082,40 @@ the same points rather than merely the same number of them.
 Everything still open needs a real batch: `so101_parallel_batch` requires a perception broker image,
 YOLO weights and a grounded manifest, so it is a live run needing an operator-granted window and the
 matching provenance binding. The last three rounds deliberately did not start one.
+
+## CP-113: the campaign harness composes on this host, and the live run is dispatched
+
+The remaining §7 rows need a real exact-W2 campaign, so before launching one I established that the
+harness composes here at all. `so101_macos_w2_campaign` is not installed as a console script - it is run
+as a module - and it needs two model inputs plus a v4 document. Both inputs exist on this host and were
+verified by size before use:
+
+```text
+~model-artifacts/models/yolo/best.pt                 6001316 bytes
+~model-artifacts/models/grounded/manifest.json          3626 bytes
+```
+
+Gate `64fc2e8a3c774f41a2ef7c99b970cea9` (exit 0, 4.0 s) ran the CLI with `--skip-models`, which the help
+text defines as "compose and pre-flight only; never a pass". It reported exactly that:
+
+```text
+status COMPOSED_ONLY   stage compose   schema_version 4   worker_count 2
+mujoco_gl cgl   requested_device mps   mps_minimum_headroom_bytes 1073741824   fraction 0.8
+ros_domain_ids [181, 182]
+slots: slot-0 <- task_start, slot-1 <- cup_test_forward_5cm, idle_slots []
+model_provenance: yolo plastic-cup-yolo11n-seg-v1 imgsz 640
+                  yolo_weights_sha256  f281d25258493e2c...
+                  grounded_manifest_sha256 b55bb601d311407d...
+snapshot_root and supervisor receipt path both inside this task's registered root
+```
+
+Two things are worth noting precisely. `COMPOSED_ONLY` is not a pass and the CLI says so in its own
+vocabulary, so this checkpoint claims composition, not acceptance. And the slot table already shows the
+exact-W2 discipline in the live path: four points were requested and two slots were created, with the
+pair assigned and the rest left unassigned rather than shrinking the requested point set or quietly
+widening N - the "points < N stays idle, never lowers N" clause, seen here at two slots.
+
+With that green, background job `bash-26` was dispatched to run the same campaign for real: same
+document, same four points, same model paths, no `--skip-models`, worker deadline 240 s, everything
+written under a fresh evidence root. Its outcome is not known at the time of writing and is not claimed
+here.
