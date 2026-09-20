@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-54
+latest_checkpoint: CP-55
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1247,3 +1247,21 @@ this work. The baseline worktree was removed afterwards.
 Combined with CP-53, the full-suite picture is: the regression I did introduce (`test_teleop_web_bundle`,
 an assertion pinned to the old inline routing) is fixed, and the remaining failures reproduce without
 my changes. The 15 `test_unified_*` modules pass in the same gate.
+
+## CP-55: the incremental rebuild edge is live (measured as a contrast)
+
+CP-52 showed from the generated rules that `theme.css`, the fonts, `components.json` and
+`design-system.lock.json` are prerequisites of `web/dist/index.html`. This checkpoint measured the
+behaviour instead of the declaration, using the existing dev build tree from CP-50:
+
+1. `touch src/styles/theme.css` (mtime only) then `cmake --build <build> --target so101_teleop_web`
+   - **exit 0 and Bun ran**: `bun install v1.3.14` followed by `[100%] Built target so101_teleop_web`
+   (gate `00cb6258...`). The dependency edge fired.
+2. The same command again immediately - **exit 0, no Bun invocation**, only
+   `[100%] Built target so101_teleop_web` (gate `6e288097...`). Correctly a no-op.
+
+`web/dist/index.html` hashed `534e477a6ca7f8f3` before and after - as expected, because a `touch`
+changes no content, so Vite emits identical bytes. That makes the result precise rather than
+overstated: **the rebuild edge is proven live**; the plan's stronger form (edit a token in a
+task-owned fixture tree and show the bundle *bytes* change) still needs a real content edit in an
+isolated fixture tree, and that remains open along with the font and `components.json` variants.
