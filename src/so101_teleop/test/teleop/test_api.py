@@ -211,33 +211,50 @@ def test_vite_assets_referenced_by_index_are_served_from_symlink_install(tmp_pat
     assert client.get("/assets/chunk.js").headers["content-type"].startswith("text/javascript")
 
 
-def test_camera_presets_are_listed_and_apply_uses_command_boundary():
+def test_camera_presets_are_listed_and_apply_uses_command_boundary(tmp_path):
+    authority = AuthorityFixture(tmp_path)
     service = Service()
-    client = TestClient(create_app(service))
-
-    assert client.get("/gazebo/camera/presets").json() == {"presets": ["overview", "top"]}
-    response = client.post(
-        "/gazebo/camera/presets/overview",
-        json={"command_id": "camera-1", "lease_id": "lease-a", "session_id": "sim-a"},
-    )
+    try:
+        client = TestClient(
+            unified_app_for(service, instances=authority.registry, arbiter=authority.arbiter)
+        )
+        assert client.get("/gazebo/camera/presets").json() == {"presets": ["overview", "top"]}
+        response = client.post(
+            "/gazebo/camera/presets/overview",
+            json={"command_id": "camera-1", "lease_id": "lease-a", "session_id": "sim-a"},
+            headers=authority.headers(),
+        )
+    finally:
+        authority.close()
 
     assert response.status_code == 409
     assert service.commands[-1][0] == "camera_preset"
     assert service.commands[-1][1]["preset"] == "overview"
 
 
-def test_task_routes_are_separate_and_typed():
+def test_task_routes_are_separate_and_typed(tmp_path):
+    authority = AuthorityFixture(tmp_path)
     tasks = TaskApiService()
-    client = TestClient(create_app(Service(), task_service=tasks))
-    response = client.post("/tasks/runs", json={
-        "schema_version": 1,
-        "points": [{
-            "id": "free-a", "label": "Free A",
-            "cup_position_world_m": [0.02, -0.30, 0.165],
-        }],
-        "session_id": "sim-a", "lease_id": "lease-a",
-        "command_id": "start-1",
-    })
+    try:
+        client = TestClient(
+            unified_app_for(
+                Service(),
+                task_service=tasks,
+                instances=authority.registry,
+                arbiter=authority.arbiter,
+            )
+        )
+        response = client.post("/tasks/runs", json={
+            "schema_version": 1,
+            "points": [{
+                "id": "free-a", "label": "Free A",
+                "cup_position_world_m": [0.02, -0.30, 0.165],
+            }],
+            "session_id": "sim-a", "lease_id": "lease-a",
+            "command_id": "start-1",
+        }, headers=authority.headers())
+    finally:
+        authority.close()
     assert response.status_code == 200
     assert response.json()["run_id"] == "run-1"
     assert tasks.calls[0][0] == "start"
