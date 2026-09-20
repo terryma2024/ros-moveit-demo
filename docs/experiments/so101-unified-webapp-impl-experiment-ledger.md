@@ -4643,3 +4643,40 @@ opinions - it validates a lease the transport returned, and separately the app a
 into it again through an effect. The second can write a stale generation back over a fresh one, which may
 be what the live run is showing even after my fix. The next round should read the app's effect and the
 runtime's `lease()`/`onRenewal` contract together rather than treating them as independent.
+
+## CP-146: the second renewal path, and a capture harness that stopped starting
+
+Reading the app for CP-145's open question turned up the other half without needing the live body: the
+page has **two** renewal paths, and only one of them was ever fixed.
+
+```text
+expert-validation-app.tsx:191-196   // A page reload must not abandon the lease: the campaign outlives
+                                    // the tab's React state, so reattach by renewing the lease persisted
+                                    // in this session.
+                                    const stored = storedLease(sessionId); ...
+                                    api.renewLease(stored).then((renewed) => { ... })
+```
+
+`api.renewLease` is the **client's** PUT through the bare `ExpertValidationClient`, which carries no
+authority headers - my `withRuntimeMutations` wrapper overrides the POST-shaped mutations (acquire,
+manifest, preflight, start, retry) and deliberately left `renewLease` alone, assuming renewal belonged to
+the runtime. The runtime does renew through the transport (that is defect #10's fix, and it is the PUT that
+returned 200 in CP-145's live log), but the app *also* renews by itself on reload through a client that has
+no authority at all. With the server enforcing authority on renewal, that call cannot succeed; and the
+app's `lease` state, which drives the effect that adopts into the runtime, then keeps whatever generation
+it had while the server has moved on. That is a sufficient explanation for CP-145's `2 != 1`, and it is the
+same defect as CP-139 - one call site fixed, the same contract broken at the next one - now on the renewal
+side.
+
+**Two things for the next round, both small:** route `renewLease` through the wrapper as well (it is a
+lease-shaped mutation that needs authority and the held lease id), and decide which of the two renewal
+paths is authoritative rather than letting both write different generations into the same state. The
+design's own answer is in the runtime's hands - it owns the cadence - so the app's reload path should be
+either removed or made to adopt the runtime's lease instead of renewing independently.
+
+**And my capture harness stopped starting servers, which I am recording rather than papering over.**
+Two attempts to record the live lease traffic both failed with `ERR_CONNECTION_REFUSED` on a port the same
+script had just used successfully, with an empty server log - so the server exited before logging anything
+and I have not yet established why. No stray servers were left behind (checked and cleaned). The next round
+should start by running the known-good `flow7.sh` unchanged to see whether the harness broke with my sed
+edits or the environment changed under it, and only then capture the renewal body.
