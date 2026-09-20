@@ -39,6 +39,76 @@ from .preflight import (
 )
 
 
+#: Every flag the service hands a fixed coordinator, in the order it hands them over. A coordinator
+#: entry point that cannot accept exactly these cannot be launched by this service, so the list is a
+#: constant rather than an inline literal: the macOS entry point's parser and this tuple are pinned to
+#: each other by a test, and a flag added here without being accepted there fails that test instead of
+#: failing a live run.
+FIXED_COORDINATOR_FLAGS = (
+    "--points",
+    "--config",
+    "--batch-id",
+    "--worker-count",
+    "--evidence-root",
+    "--broker-image",
+    "--yolo-weights",
+    "--yolo-weights-sha256",
+    "--grounded-root",
+    "--grounded-manifest-sha256",
+    "--run-mode",
+    "--point-id",
+    "--provenance-binding",
+)
+
+
+def fixed_coordinator_argv(
+    *,
+    executable_path,
+    points_path,
+    config_path,
+    batch_id: str,
+    worker_count: int,
+    evidence_root,
+    broker_image_id: str,
+    yolo_weights_path,
+    yolo_weights_sha256: str,
+    grounded_root,
+    grounded_manifest_sha256: str,
+    selected_point_ids,
+    provenance_binding_path=None,
+) -> list[str]:
+    """The one argv this service launches a fixed coordinator with.
+
+    The runner must be executed by the interpreter this service runs under: naming
+    ``/usr/bin/python3`` literally pointed at Apple's Python 3.9 on macOS, where the runner died on
+    ``import yaml`` and the execution barrier refused the start after its ten-second wait.
+    """
+    if executable_path is not None:
+        argv = [sys.executable, str(executable_path)]
+    else:
+        argv = ["ros2", "run", "so101_demo_py", "so101_parallel_batch"]
+    argv.extend(
+        [
+            "--points", str(points_path),
+            "--config", str(config_path),
+            "--batch-id", batch_id,
+            "--worker-count", str(worker_count),
+            "--evidence-root", str(evidence_root),
+            "--broker-image", broker_image_id,
+            "--yolo-weights", str(yolo_weights_path),
+            "--yolo-weights-sha256", yolo_weights_sha256,
+            "--grounded-root", str(grounded_root),
+            "--grounded-manifest-sha256", grounded_manifest_sha256,
+            "--run-mode", "execute",
+        ]
+    )
+    for point_id in selected_point_ids:
+        argv.extend(("--point-id", point_id))
+    if provenance_binding_path is not None:
+        argv.extend(("--provenance-binding", str(provenance_binding_path)))
+    return argv
+
+
 class ExpertValidationSupervisor:
     def __init__(
         self, *, store, process_owner, preflight_engine: PreflightEngine, execution_port=None
@@ -147,35 +217,21 @@ class ExpertValidationSupervisor:
             )
         if isinstance(receipt.execution_config, FixedExecutionConfig):
             config = receipt.execution_config
-            # The runner must be executed by the interpreter this service runs under: naming
-            # /usr/bin/python3 literally pointed at Apple's Python 3.9 on macOS, where the runner died
-            # on `import yaml` and the execution barrier refused the start after its ten-second wait.
-            argv = [
-                sys.executable
-                if request.coordinator_executable_path is not None
-                else "ros2",
-            ]
-            if request.coordinator_executable_path is not None:
-                argv.append(str(request.coordinator_executable_path))
-            if request.coordinator_executable_path is None:
-                argv.extend(("run", "so101_demo_py", "so101_parallel_batch"))
-            argv.extend([
-                "--points", str(request.points_path),
-                "--config", str(request.parallel_config_path),
-                "--batch-id", batch_id,
-                "--worker-count", str(config.worker_count),
-                "--evidence-root", str(batch_root),
-                "--broker-image", request.broker_image_id,
-                "--yolo-weights", str(request.yolo_weights_path),
-                "--yolo-weights-sha256", request.yolo_weights_sha256,
-                "--grounded-root", str(request.grounded_root),
-                "--grounded-manifest-sha256", request.grounded_sam_manifest_sha256,
-                "--run-mode", "execute",
-            ])
-            for point_id in selected:
-                argv.extend(("--point-id", point_id))
-            if request.provenance_binding_path is not None:
-                argv.extend(("--provenance-binding", str(request.provenance_binding_path)))
+            argv = fixed_coordinator_argv(
+                executable_path=request.coordinator_executable_path,
+                points_path=request.points_path,
+                config_path=request.parallel_config_path,
+                batch_id=batch_id,
+                worker_count=config.worker_count,
+                evidence_root=batch_root,
+                broker_image_id=request.broker_image_id,
+                yolo_weights_path=request.yolo_weights_path,
+                yolo_weights_sha256=request.yolo_weights_sha256,
+                grounded_root=request.grounded_root,
+                grounded_manifest_sha256=request.grounded_sam_manifest_sha256,
+                selected_point_ids=selected,
+                provenance_binding_path=request.provenance_binding_path,
+            )
             token = secrets.token_hex(32)
             token_sha = hashlib.sha256(token.encode("utf-8")).hexdigest()
             control_socket = batch_root / "control" / "control.sock"
