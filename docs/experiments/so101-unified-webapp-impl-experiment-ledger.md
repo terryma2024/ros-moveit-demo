@@ -3997,3 +3997,59 @@ Everything else in the matrix is met with evidence, and the three defects found 
 (`INSTANCE_DOMAIN_MISMATCH` on registration, the missing claim, and the response-shape refusal that
 looked like a 500) were all in the client-server pair and all invisible to the unit suites until the live
 flow was driven.
+
+## CP-132: two layers under the UI blockage - a missing websocket dependency, then a handshake mismatch
+
+The validation page is reachable and renders fully (`domains: {teleop: unavailable, tasks: unavailable,
+validation: ready}`; buttons: Acquire lease, Generate points, Check resources, Start validation; worker
+count 1..8; no HTTP errors). Clicking Acquire lease did not acquire, and the two layers under that are
+both real findings.
+
+**Layer one: the server cannot serve a websocket at all, and nothing declares that it must.**
+
+```text
+package.xml deps: python3-fastapi, python3-uvicorn        # no websocket implementation anywhere
+venv:            uvicorn 0.34.3, websockets ABSENT, wsproto ABSENT
+server log:      WARNING: No supported WebSocket library detected. Please use "pip install
+                 'uvicorn[standard]'", or install 'websockets' or 'wsproto'
+                 GET /control/instances/<id>/channel HTTP/1.1  404 Not Found
+```
+
+The design requires a live channel before any client can acquire control (section 5.1), and the declared
+dependency set cannot open one. So on a deployment built from `package.xml` as written, no page can ever
+become the controller - the same deadlock CP-129 fixed in Python, one layer down in packaging. This is
+the failure mode a live acceptance run exists to find: every unit test passes, every route exists in the
+OpenAPI document, and the product cannot be driven.
+
+Verified in a way that touches nothing shared: `pip install --target <evidence-root>/pylibs websockets`
+(task-local), then the server started with that on `PYTHONPATH`. The transport then works -
+
+```text
+websockets visible 17.1
+WebSocket /control/instances/4c5ccbb784224607b493a737dcd135cc/channel [accepted]
+WebSocket /control/instances/4e7483715de44ebe98b05d75a0031a19/channel [accepted]
+```
+
+so the fix is to declare the dependency (`python3-websockets`, or `uvicorn[standard]`).
+
+**Layer two, and it is new: the channel is accepted and the acquire still arrives without authority.**
+
+```text
+POST /control/instances          200 OK      (twice - the page registers, then re-registers)
+WebSocket .../channel            [accepted]  (twice)
+POST /expert-validation/lease    409 Conflict   -> "CONTROLLER_INSTANCE_REQUIRED"
+```
+
+`CONTROLLER_INSTANCE_REQUIRED` means at least one of the four authority headers was absent from the
+page's own request. Since the channel is accepted, the handshake *response* is the suspect: the server
+answers `{instance_id, revision, domain}` and `instance-client.ts` has to turn that into a channel
+revision for later mutations. Either the client reads a field name the server does not send, or it needs
+something the server only sends on a different path. That is the next defect to hunt, and it is in the
+same seam as the previous three - client and server disagreeing about a contract that both sides' tests
+consider satisfied.
+
+**Where that leaves the acceptance.** The remaining rows are unchanged in substance but the reason is now
+much more specific than "needs a station": the UI cannot acquire because of a packaging omission and then
+a handshake mismatch, and both are in this task's own deliverable rather than in the environment. The
+N1 retry row still needs a campaign, which needs a client that can acquire - so these two layers come
+first, and they are fixes, not requests for a window.
