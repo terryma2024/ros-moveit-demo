@@ -1,3 +1,16 @@
+/* Self-hosted display fonts: no runtime request to an external font host. */
+@font-face {
+  font-family: "DM Sans Variable";
+  src: url("/fonts/dm-sans-variable.woff2") format("woff2");
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Outfit";
+  src: url("/fonts/outfit-variable.woff2") format("woff2");
+  font-display: swap;
+}
+
 /* Design-system tokens, generated from the captured pinned preset manifest
    (sha256 242969b2ed2d4ced3c35fdbc07605fd47758b3893f00f972f5af98df322a60df).
    Plain custom properties: Tailwind 3.4.17 consumes them via var(), so no v4-only

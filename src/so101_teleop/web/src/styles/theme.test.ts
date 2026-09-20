@@ -50,6 +50,25 @@ test("display fonts carry a CJK fallback and do not need runtime font requests",
   expect(css).not.toMatch(/@import\s+url\(/);
 });
 
+test("the display fonts are self-hosted, hashed and licensed", () => {
+  const lock = JSON.parse(readFileSync(new URL("../../design-system.lock.json", import.meta.url), "utf8"));
+  const { createHash } = require("node:crypto") as typeof import("node:crypto");
+  expect(lock.fonts).toHaveLength(2);
+  for (const font of lock.fonts) {
+    const bytes = readFileSync(new URL(`../../${font.file}`, import.meta.url));
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe(font.sha256);
+    expect(bytes.subarray(0, 4).toString("latin1")).toBe("wOF2");
+    expect(font.license).toContain("SIL Open Font License");
+    expect(readFileSync(new URL(`../../${font.license_file}`, import.meta.url), "utf8")).toContain(
+      "SIL OPEN FONT LICENSE",
+    );
+  }
+  // The browser loads the local files; nothing is fetched from a font host at runtime.
+  expect(css).toContain('url("/fonts/dm-sans-variable.woff2")');
+  expect(css).toContain('url("/fonts/outfit-variable.woff2")');
+  expect(css).toContain('format("woff2")');
+});
+
 test("the theme is plain v3-compatible CSS and is part of the bundle", () => {
   // Comments may name the v4 syntax; the declarations must not use it.
   expect(css.replace(/\/\*[\s\S]*?\*\//g, "")).not.toContain("@theme");
