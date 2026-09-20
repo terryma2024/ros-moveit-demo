@@ -77,6 +77,15 @@ async def _clears_its_process_group(tmp_path):
             f"descendant {descendant.pid} survived the stop of group {os.getpgid(owner.pid) if _alive(owner.pid) else 'gone'}"
         )
     finally:
+        # This test may not leak either: the owner's own stop path is what is under test, so the
+        # teardown goes around it and kills the child's whole group directly.
+        owner_key = rig.owner_process.owner
+        if owner_key is not None and _alive(owner_key.pid):
+            try:
+                os.killpg(owner_key.pgid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+            rig.owner_process.process.wait(timeout=5)
         if descendant is not None and _alive(descendant.pid):
             try:
                 os.kill(descendant.pid, signal.SIGKILL)
