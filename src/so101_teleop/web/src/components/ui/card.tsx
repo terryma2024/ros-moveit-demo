@@ -3,7 +3,7 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 function Card({ className, ...props }: React.ComponentProps<"div">) {
-  return <div data-slot="card" className={cn("rounded-xl border border-slate-700 bg-slate-900 p-5 text-slate-100 shadow", className)} {...props} />
+  return <div data-slot="card" className={cn("rounded-xl border border-border bg-card p-5 text-card-foreground shadow", className)} {...props} />
 }
 
 function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
@@ -15,7 +15,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"h2">) {
 }
 
 function CardDescription({ className, ...props }: React.ComponentProps<"p">) {
-  return <p data-slot="card-description" className={cn("text-sm text-slate-400", className)} {...props} />
+  return <p data-slot="card-description" className={cn("text-sm text-muted-foreground", className)} {...props} />
 }
 
 function CardContent({ className, ...props }: React.ComponentProps<"div">) {
