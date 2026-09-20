@@ -353,7 +353,17 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
           ? describeStartGuard(receipt.start_guard, capabilities?.start_guard_policy)
           : undefined}
         onChange={changeSetup}
-        onAcquireLease={() => { void api.acquireLease(sessionId).then(replaceLease).catch(reportError); }}
+        onAcquireLease={() => {
+          // The acquire is a mutation like any other, so it has to present instance authority. The
+          // runtime already holds it (start() registers the instance and binds the channel), while
+          // the page's own client carries no authority headers at all.
+          const request = runtime
+            ? runtime
+                .post("/expert-validation/lease", { service_session_id: sessionId })
+                .then((payload) => payload as Lease)
+            : api.acquireLease(sessionId);
+          void request.then(replaceLease).catch(reportError);
+        }}
         onGenerate={() => { void generateManifest().catch(reportError); }}
         onPreflight={() => { void runPreflight().catch(reportError); }}
         onStart={() => { void start().catch(reportError); }}
