@@ -127,6 +127,7 @@ if(BUILD_TESTING)
   so101_add_pytest_test(test_expert_validation_supervisor test/teleop/test_expert_validation_supervisor.py)
   so101_add_pytest_test(test_expert_validation_v2_contract test/teleop/test_expert_validation_v2_contract.py)
   so101_add_pytest_test(test_unified_gate test/test_unified_gate.py)
+  so101_add_pytest_test(test_unified_arbiter test/teleop/test_unified_arbiter.py)
 endif()
 
 ament_package()
