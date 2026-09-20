@@ -29,8 +29,8 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-13
-next_experiment: Task 9 page migration onto AppShell and the root runtimes, then Task 11 static CMake dependencies, then retry Task 8 registry access
+latest_checkpoint: CP-14
+next_experiment: finish the Task 8 registry capture (component items + self-hosted fonts) and the theme/primitives smart merge, then the Task 9 page-effect migration, then Task 11 configure/build
 ```
 
 ## CP-01: Registration, host probe and deviations
@@ -444,3 +444,36 @@ Still open in Task 9: rendering the pages through `AppShell` in `main.tsx`, migr
 effects onto the root runtimes, consuming the qualification view in `CampaignSetup`, and the
 1400x900 / 390x844 no-horizontal-overflow checks. Task 8 remains blocked on registry access as
 recorded in CP-11.
+
+## CP-14: shell becomes the app frame; design-system lock; web build inputs
+
+**Task 9** - `main.tsx` now renders every page inside `AppShell`, so a page switch replaces only
+the page content and the root providers stay mounted. Build 0, suite green. Commit `6a477c92`.
+
+**Task 8 partial** - `design-system.lock.json` plus `src/lib/design-system.test.ts` (the plan's
+RED test, extended so the lock can never overclaim). The lock records only verified facts:
+
+- `cli.version = 4.21.0`, verified by running the pinned CLI (`bunx shadcn@4.21.0 --version`);
+- the decoded preset exactly as the CLI's own request URL encodes it
+  (`maia / mist / blue / mist / lucide / dm-sans / outfit / large / subtle / default`, `radix` base);
+- one `registry` entry that is the real preset manifest fetched from
+  `https://ui.shadcn.com/init?...preset=b311momZs0...`, with `sha256 =
+  242969b2ed2d4ced3c35fdbc07605fd47758b3893f00f972f5af98df322a60df`, its `type`
+  (`registry:base`), and the manifest's own dependency lists;
+- the product's real toolchain (`tailwindcss 3.4.17`, bun 1.3.14, node 25.9.0).
+
+The lock deliberately records `fonts: []` and a `blocked_reason` naming
+`PENDING_REGISTRY_ITEMS`: neither the per-component maia items nor the font files could be
+fetched (see CP-11), and inventing them is not acceptable. A second test asserts the lock claims
+no component set or font it has not captured and contains no `latest`/guessed version.
+
+**Task 11 partial** - `CMakeLists.txt` now globs `src/*.css` and `public/*` with
+`CONFIGURE_DEPENDS` and depends on `index.html`, `components.json` and
+`design-system.lock.json`; `test/test_unified_web_dependencies.py` (registered
+`test_unified_web_dependencies`) asserts those inputs, that every declared dependency exists, and
+that the bundle is built by Bun with the frozen lockfile. `pygate` exit 0. Still open in Task 11:
+the three real incremental rebuild proofs, the full configure/build, the 16 registered-test
+Python checks and the copied-install Chrome gate.
+
+Both changes are in one commit because the CMake dependency list is exactly what the new lock
+file satisfies.
