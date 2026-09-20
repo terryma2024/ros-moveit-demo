@@ -5294,3 +5294,42 @@ group whose owner did not outlive the test.
 - `EXP-B2`: implement the chosen route and drive a fresh campaign through the **service API**, then a single
   failed point's `N=1 FULL_RESTART_RETRY`, with projection, durable store, child identity and evidence
   documents aligned, and fresh Chrome evidence from this round.
+
+## CP-160: A2 root cause confirmed in code - a leader-only stop, and teardown that some paths never reach
+
+The hypothesis from CP-159 holds, and the two halves are visible in specific lines.
+
+**Half one: the owner stops the leader, not the process group.**
+
+```text
+unified/bridge.py:125-129   subprocess.Popen(..., start_new_session=True)   <- the child is a session/group leader
+unified/bridge.py:155       async def stop_owned(self, *, timeout_s: float = 5.0)
+unified/bridge.py:163       os.kill(self.owner.pid, signal.SIGTERM)        <- only the pid
+unified/bridge.py:165-170   poll with await asyncio.sleep(0.02)
+```
+
+No `killpg`, no bounded wait -> kill escalation, no descendant scan. The child is deliberately spawned into its own
+session (that is why the ten `noros_child_helper.py` orphans are session leaders with `PGID=SID=own pid`), and
+`noros_child_helper.py` installs its own signal handling, so a graceful-shutdown path that does not complete
+leaves the process alive with nothing left to reap it. Any *descendant* of such a child survives even a
+successful stop, which is what the four foreign-PGID orphans (`descendant_helper.py`,
+`process_tree_helper.py`, with `PGID` leaders that no longer exist) look like.
+
+**Half two: teardown that some paths never reach.** `test_unified_bridge.py` calls
+`await rig.owner_process.stop_owned()` inside `finally` blocks at :144 and :169, and there are five `finally`
+blocks in the file; but the expert-validation suites on this host report 10 failures and 7 errors per run
+(measured twice in CP-36's stretch, identical with and without a code change). A test that errors before its
+own cleanup - or in a fixture - never calls `stop_owned`, so its child is exactly the kind of orphan this
+inventory shows, and the count of orphans tracks the count of erroring tests rather than anything else.
+
+So the "first bad boundary" is the **owner's stop contract**: it signals one pid, with no group escalation and
+no post-condition, and it is only reached on the paths that happen to wrap it in `finally`. The fix that
+follows from the dispatch's A3 is therefore: stop the **group**, escalate `terminate -> bounded wait -> kill`,
+then `wait/reap`, then a **fresh descendant scan by exact identity** (pgid + start time), and fail closed with
+a recovery fence when anything remains - plus a child-side guarantee that does not depend on the child
+cooperating, because a test killed mid-flight must not be able to leak a process.
+
+**RED plan (next):** spawn the real owner through the existing `Rig`, stop it, and assert that **no process in
+the child's process group survives** - with a child that deliberately ignores `SIGTERM` (a test-owned helper
+flag if one exists, otherwise a small addition to the helper, which is test-owned by definition). Real exit
+codes and resident PID identities get recorded for the failure, not a shell gate that always passes.
