@@ -63,12 +63,14 @@ export class DomainRuntime {
   async start(): Promise<void> {
     this.proof = await this.transport.register(this.domain);
     this.binding = await this.transport.connect(this.proof);
-    this.authorityValue = {
+    // Through adoptAuthority, not a direct assignment: the transport builds its own renewal request
+    // from the authority it was given, and leaving it out made every renewal POST unauthenticated.
+    this.adoptAuthority({
       instanceId: this.binding.instance_id,
       proof: this.proof.proof,
       channelRevision: this.binding.revision,
       executionGeneration: 0,
-    };
+    });
     this.current = await this.transport.snapshot();
     // The first value is published too: a page that subscribes needs an initial view, and it must
     // not have to fetch one of its own.
@@ -90,7 +92,7 @@ export class DomainRuntime {
     // adopted the authority has to present the generation that belongs to it. Leaving the value
     // `start()` set (0) made every mutation after the acquire fail with STALE_EXECUTION_GENERATION.
     if (lease !== null && this.authorityValue !== null) {
-      this.authorityValue = { ...this.authorityValue, executionGeneration: lease.generation };
+      this.adoptAuthority({ ...this.authorityValue, executionGeneration: lease.generation });
     }
   }
 
