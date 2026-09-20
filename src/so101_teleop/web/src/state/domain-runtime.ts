@@ -51,6 +51,7 @@ export class DomainRuntime {
   private disposed = false;
   private heartbeat: ReturnType<typeof setTimeout> | null = null;
   private leaseValue: LeaseIdentity | null = null;
+  private readonly renewalListeners = new Set<(outcome: { ok: boolean; error: string | null }) => void>();
 
   constructor(
     readonly domain: DomainName,
@@ -122,6 +123,18 @@ export class DomainRuntime {
     this.leaseValue = next;
     this.lastRenewalError = null;
     return true;
+  }
+
+  /**
+   * Observe renewal outcomes.
+   *
+   * The runtime owns the renewal loop, so presentation code (notices, an indicator) subscribes here
+   * instead of scheduling its own timer. Listeners are told whether the lease was accepted and, when
+   * it was not, the recorded reason.
+   */
+  onRenewal(listener: (outcome: { ok: boolean; error: string | null }) => void): () => void {
+    this.renewalListeners.add(listener);
+    return () => this.renewalListeners.delete(listener);
   }
 
   /** Adopt the authority the server returned when control was explicitly acquired. */
@@ -248,8 +261,13 @@ export class DomainRuntime {
           throw new Error(this.lastRenewalError ?? "LEASE_RENEWAL_INVALID");
         }
       }
+    } catch (error) {
+      this.lastRenewalError = String(error);
+      throw error;
     } finally {
       this.renewing = false;
+      const outcome = { ok: this.lastRenewalError === null, error: this.lastRenewalError };
+      for (const listener of this.renewalListeners) listener(outcome);
     }
   }
 

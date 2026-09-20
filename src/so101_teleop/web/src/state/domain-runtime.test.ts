@@ -296,3 +296,33 @@ test("a renewed lease returned by the transport is validated and adopted", async
   await expect(runtime.renew()).rejects.toThrow("STALE_LEASE_GENERATION");
   expect(runtime.lease()).toBeNull();
 });
+
+test("renewal outcomes are observable without the page scheduling anything", async () => {
+  const snapshot: RuntimeSnapshot = { sequence: 1, serviceEpoch: "e1", executionGeneration: 1, payload: null };
+  const { transport } = makeTransport(snapshot);
+  transport.renew = vi.fn(async () => ({
+    lease_id: "l1",
+    service_session_id: "s1",
+    generation: 2,
+    expires_monotonic_ns: 200,
+  }));
+  const runtime = new DomainRuntime("validation", transport);
+  await runtime.start();
+  runtime.adoptAuthority({ instanceId: "i", proof: "p", channelRevision: 1, executionGeneration: 1 });
+  runtime.adoptLease({ lease_id: "l1", service_session_id: "s1", generation: 1, expires_monotonic_ns: 100 });
+  const seen: Array<{ ok: boolean; error: string | null }> = [];
+  const unsubscribe = runtime.onRenewal((outcome) => seen.push(outcome));
+  await runtime.renew();
+  expect(seen).toEqual([{ ok: true, error: null }]);
+  expect(runtime.renewing).toBe(false);
+  transport.renew = vi.fn(async () => {
+    throw new Error("LEASE_RENEW_FAILED: 503");
+  });
+  await expect(runtime.renew()).rejects.toThrow("LEASE_RENEW_FAILED");
+  expect(seen[1].ok).toBe(false);
+  expect(seen[1].error).toContain("LEASE_RENEW_FAILED");
+  unsubscribe();
+  await runtime.renew().catch(() => undefined);
+  expect(seen).toHaveLength(2);
+  runtime.dispose();
+});
