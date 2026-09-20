@@ -97,6 +97,13 @@ export function useRuntimeRegistry(): RuntimeRegistry {
   return value;
 }
 
+/** Like `useDomainRuntime`, but for code that must also render outside a provider (unit tests). */
+export function useOptionalDomainRuntime(domain: DomainName): DomainRuntime | null {
+  const registry = useContext(RuntimeContext);
+  if (!registry) return null;
+  return (domain === "validation" ? registry.validation : registry.teleop) ?? null;
+}
+
 export function useDomainRuntime(domain: DomainName): DomainRuntime {
   const registry = useRuntimeRegistry();
   const runtime = domain === "validation" ? registry.validation : registry.teleop;
