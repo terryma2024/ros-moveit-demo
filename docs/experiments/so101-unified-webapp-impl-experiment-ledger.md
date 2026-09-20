@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-38
+latest_checkpoint: CP-39
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -951,3 +951,23 @@ Honest status of the migration: the runtime path is now live and additive, but t
 their *own* renew effects, so renewal is currently performed twice. Removing the page-level effects
 is the remaining half; it touches live page code and needs a careful read of both effects, so it is
 left for a round with room to verify it properly rather than rushed.
+
+## CP-39: a blocking defect found before it could ship - renewal without authority
+
+Checking what the page-side effect removal would actually require exposed a real defect in the
+runtime renewal path added in CP-37/CP-38: `createHttpTransport.renew()` posted to
+`/control/lease/renew` **without the four instance authority headers**, and the server refuses any
+lease renewal that lacks them. The runtime heartbeat was therefore live but would have been refused
+in production.
+
+Fixed: `DomainTransport` gained an optional `setAuthority(authority | null)`; the HTTP transport
+holds the authority and merges `authorityHeaders()` into the renewal request; `DomainRuntime`
+propagates the authority it adopts. A test asserts the renewal request carries all four headers.
+
+GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` **45 files / 194 tests**. Commit follows
+this entry.
+
+This is why the page loops were not deleted in CP-38: removing them first would have left renewal
+refused rather than duplicated. With the transport fixed, removing the two page-level renewal
+effects is now a safe, small change - and the duplicate-renewal note in CP-38 is superseded once it
+lands.
