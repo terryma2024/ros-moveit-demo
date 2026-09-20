@@ -1290,6 +1290,17 @@
       "LeaseResponse": {
         "additionalProperties": false,
         "properties": {
+          "execution_generation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Generation"
+          },
           "expires_monotonic_ns": {
             "title": "Expires Monotonic Ns",
             "type": "integer"

@@ -184,6 +184,11 @@ class LeaseResponse(ClosedModel):
     service_session_id: str
     generation: int
     expires_monotonic_ns: int
+    #: The domain's execution generation after this acquire bound the controller. The lease's own
+    #: ``generation`` counts renewals and is a different number (design section 5.1): a client that
+    #: presents the renewal generation is refused STALE_EXECUTION_GENERATION, and nothing else told it
+    #: which value the server holds.
+    execution_generation: int | None = None
 
 
 class LeaseReleaseResponse(ClosedModel):

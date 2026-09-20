@@ -242,11 +242,15 @@ def require_channel(domain) -> "callable":
     return dependency
 
 
-def _claim_acquired(registry, binding, result) -> None:
-    """Bind the domain controller once the domain's own lease endpoint has issued a lease."""
+def _claim_acquired(registry, binding, result) -> int | None:
+    """Bind the domain controller once the domain's own lease endpoint has issued a lease.
+
+    Returns the execution generation the binding produced, which the client has to present on every
+    later mutation; ``None`` means nothing was claimed.
+    """
 
     if registry is None:
-        return
+        return None
     if hasattr(result, "model_dump"):
         payload = result.model_dump()
     elif isinstance(result, dict):
@@ -261,11 +265,12 @@ def _claim_acquired(registry, binding, result) -> None:
     else:
         return
     if not isinstance(payload, dict):
-        return
+        return None
     if "lease_id" not in payload or "expires_monotonic_ns" not in payload:
-        return
+        return None
+    authority = None
     try:
-        registry.claim(
+        authority = registry.claim(
             binding,
             LeaseIdentity(
                 payload["lease_id"],
@@ -279,6 +284,7 @@ def _claim_acquired(registry, binding, result) -> None:
         # acquire is refused with the same structured code the registry uses, never a 500.
         code = str(error).split(":", 1)[0]
         raise HTTPException(status_code=409, detail={"code": code, "message": str(error)}) from error
+    return authority.execution_generation
 
 
 def instance_router(services: UnifiedServices) -> APIRouter:
@@ -480,7 +486,9 @@ def teleop_router(services: UnifiedServices) -> APIRouter:
     @router.post("/control/lease")
     async def acquire_lease(body: dict, binding: ChannelBinding = Depends(require_channel("teleop"))):
         result = await command("lease", body)
-        _claim_acquired(getattr(services, "instances", None), binding, result)
+        generation = _claim_acquired(getattr(services, "instances", None), binding, result)
+        if generation is not None and isinstance(result, dict):
+            result["execution_generation"] = generation
         return result
 
     @router.post("/control/lease/renew")
@@ -700,7 +708,9 @@ def validation_router(services: UnifiedServices) -> APIRouter:
         body: LeaseAcquireRequest, binding: ChannelBinding = Depends(require_channel("validation"))
     ):
         result = await guarded(lambda service: _invoke(service.acquire_lease, body.model_dump()))
-        _claim_acquired(getattr(services, "instances", None), binding, result)
+        generation = _claim_acquired(getattr(services, "instances", None), binding, result)
+        if generation is not None and isinstance(result, dict):
+            result["execution_generation"] = generation
         return result
 
     @router.put("/expert-validation/lease/{lease_id}", response_model=LeaseResponse)
