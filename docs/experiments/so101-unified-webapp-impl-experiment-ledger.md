@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-16
+latest_checkpoint: CP-17
 next_experiment: Task 8 registry capture and theme merge, Task 9 page-effect migration plus the 1400x900/390x844 browser checks, then Task 11 configure/build and the copied-install gate
 ```
 
@@ -506,3 +506,23 @@ GREEN: `bun run build` exit 0, `NODE_ENV=test bun run test` **37 files / 165 tes
 This is a static contract, not the browser evidence the plan asks for: the 1400x900 and 390x844
 no-horizontal-overflow checks and the light/dark contrast and focus checks still need a real
 browser run (Task 11's installed Chrome gate or a local `bun run dev` capture).
+
+## CP-17: the operation guide
+
+`docs/guides/so101-unified-webapp-operation.md` (Chinese, written with the project-local
+`humanizer-zh` skill, filed under `docs/guides/` per AGENTS.md). It documents only what is
+implemented and verified: the single launcher and the two deprecating shims, bind-address policy,
+`/health/live` versus `/health/ready`, the instance/authority headers and why a copied lease
+grants nothing, the refusal codes a user will actually see, the isolated safety lane and the fact
+that an accepted cancel is not a physical stop, the single-parent execute-all/home/workflow
+lifecycle with explicit resume, explicit recovery instead of automatic takeover, exact-N worker
+qualification with no K input, and how evidence and marker semantics are read.
+
+It also has an explicit "not done yet" section listing the unfinished gates (installed Chrome
+viewport evidence, the pending preset registry and fonts, the unprovisioned ROS driver, and the
+separately authorized Stage B/C measurement and live replacement), plus a symptom-to-check table.
+Commit `2a83b1d4`-class docs commit follows this entry.
+
+The plan asks for an independent Astra/high review of the guide before its scoped commit. That
+review is a GPT-6 Astra task and is **not** performed in this session; the guide is committed as
+an unreviewed draft and the missing review is recorded here rather than silently skipped.
