@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-74
+latest_checkpoint: CP-75
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1715,3 +1715,39 @@ only remaining consumers) and then delete the table. `test_api.py`'s stub servic
 the unified `TeleopPort` and its mutations would have to carry instance authority, which is a focused
 test migration rather than a behavioural change - and the parity guard from CP-69 keeps the two tables
 from drifting while it waits.
+
+## CP-75: the final deviation's migration, classified so it can be executed directly
+
+CP-67's deviation is down to one item: migrate `test_api.py` off `api.create_app`, then delete the
+legacy route table. Classified the eleven tests in that file by what each actually needs, so the next
+session can execute the migration instead of re-discovering it:
+
+**Read-only cases that port to the unified app unchanged in substance** (they only need a stub
+service): `test_health_and_snapshot_remain_available_without_web_assets`,
+`test_missing_web_assets_return_machine_readable_service_unavailable`,
+`test_vite_assets_referenced_by_index_are_served_from_symlink_install`,
+`test_task_artifact_route_rejects_manifest_escape`,
+`test_task_websocket_uses_independent_ordered_event_stream`, `test_unsafe_bind_is_rejected` (already
+pure), and the GET half of `test_camera_presets_are_listed_and_apply_uses_command_boundary`.
+
+**Cases that must change because the unified contract differs, not because they are wrong:**
+- `test_regular_server_reports_validation_unavailable` asserts
+  `{"available": False, "reason": "VALIDATION_SERVER_REQUIRED"}`; the unified route answers with
+  `worker_qualifications` instead (already covered by `test_unified_api.py`), so this assertion is
+  superseded and should be dropped rather than adapted.
+- The mutation cases - `test_execute_returns_conflict_for_stale_plan`,
+  `test_unreachable_tcp_target_is_a_conflict_not_service_outage`, the POST half of the camera-preset
+  test, and `test_task_routes_are_separate_and_typed` - need the four instance authority headers. The
+  fixture they need is the one `test_unified_cancel_integration.py` already builds: a real
+  `IntentStore` + `GlobalMutationArbiter` + `InstanceRegistry` in `tmp_path`, a registered instance, a
+  connected channel and a `claim`, with the stub service passed as `TeleopPort`.
+
+**Recipe:** build that fixture once in `test_api.py`, construct the app with
+`create_unified_app(UnifiedServices(teleop=stub, tasks=stub_tasks, instances=registry, arbiter=arbiter,
+safety=lane), static_dir=..., capture_dir=...)`, add the header helper, drop the superseded
+validation-unavailable assertion, then delete `api.create_app` (its route table, not the module - the
+bind policy and the `WorkerCountAvailability` re-export stay). `test_unified_route_parity.py` then
+still passes, because it only requires legacy routes to be a subset of unified ones.
+
+No code changed in this checkpoint: the value is the classification, which is what made the renewal
+migration (CP-37..CP-49) go smoothly after four rounds of preparation.
