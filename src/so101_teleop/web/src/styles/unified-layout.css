@@ -1,0 +1,97 @@
+/* The approved unified layout. Coordinates and sizes come from real geometry, never from the
+   design sketch: the map keeps one proportional projection and the page scrolls instead of
+   pushing controls out of reach. */
+
+.unified-shell {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.unified-sidebar {
+  border-right: 1px solid hsl(var(--border, 215 28% 20%));
+  padding: 1rem;
+}
+
+.unified-main {
+  min-width: 0;
+  padding: 1rem 1.25rem 2rem;
+}
+
+.unified-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.validation-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 1.25rem;
+}
+
+.validation-map {
+  min-width: 0;
+  width: 100%;
+}
+
+.validation-map svg {
+  width: 100%;
+  height: auto;
+  max-width: none;
+}
+
+.point-results {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.teleop-joint-table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+@media (max-width: 1100px) {
+  .point-results {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* The navigation is always present on wide screens and collapses only on narrow ones, so a
+   collapsed menu is a narrow-screen behaviour rather than a permanent hidden attribute. */
+@media (min-width: 901px) {
+  .unified-nav[data-collapsed="true"] {
+    display: block;
+  }
+}
+
+@media (max-width: 900px) {
+  .unified-nav[data-collapsed="true"] {
+    display: none;
+  }
+
+  .unified-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .unified-sidebar {
+    border-right: none;
+    border-bottom: 1px solid hsl(var(--border, 215 28% 20%));
+  }
+}
+
+@media (max-width: 760px) {
+  .validation-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 360px) {
+  .point-results {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
