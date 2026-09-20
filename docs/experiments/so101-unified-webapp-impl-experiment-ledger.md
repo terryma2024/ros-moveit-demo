@@ -4402,3 +4402,51 @@ Note for the record: this is the sixth defect in the same client-server seam, an
 under-scoped on the first attempt (registration-only, acquire-only, and now attention-only in the
 registration form). The pattern is consistent enough to name: **when a contract is enforced by the server,
 fix the whole client path that must satisfy it, not the call that happened to fail first.**
+
+## CP-140: one mechanism for the whole mutating surface - and the refusal moves to the manifest
+
+The general fix is in, tested and committed (`1316cbc0`). `expert-validation-app.tsx` now wraps the
+page's own client once:
+
+```text
+withRuntimeMutations(client, runtime): Object.create(client) + Object.assign(overrides)
+  acquireLease    -> POST /expert-validation/lease
+  createManifest  -> POST /expert-validation/manifests
+  preflight       -> POST /expert-validation/campaigns/preflight
+  startCampaign   -> POST /expert-validation/campaigns
+  retry           -> POST /expert-validation/campaigns/{id}/full-restart-retries
+```
+
+Two design points worth keeping. The wrapper applies **only to the page's default client**: a caller
+that injects an `api` keeps full control of it, which is what the existing component tests rely on, and
+it is also the honest boundary - the page owns what it constructs. And the delegation is
+`Object.create(client)`, not `{...client}`: my first attempt spread the instance, which copies own
+properties only and loses every prototype method - the test caught it immediately as
+`api.capabilities is not a function`. That is the difference between wrapping an object and cloning its
+shape, and it is exactly the kind of thing a test that exercises the real path finds.
+
+**Tests.** The authority test now renders the page with no `api` prop, so it exercises the default client,
+and asserts the recording transport sees both `/expert-validation/lease` and
+`/expert-validation/manifests`. Whole frontend suite: **45 files, 203 tests passed**.
+
+**Live.** Bundle rebuilt (1.54 s) and the same page sequence driven again. The acquire is unchanged, and
+the manifest attempt now reports a different refusal:
+
+```text
+before this fix:  409 POST /expert-validation/manifests   page code: CONTROLLER_INSTANCE_REQUIRED
+after this fix:   409 POST /expert-validation/manifests   page code: GENERATED_MANIFEST_INVALID
+```
+
+`CONTROLLER_INSTANCE_REQUIRED` is gone from the sequence, which means the mutation now arrives with
+authority and the server is judging the *request* rather than the identity. `GENERATED_MANIFEST_INVALID`
+is the next layer, and it is where the manifest's own requirements live - plausibly because generating the
+four-point catalogue needs the domain runtime behind the validation service, which is the same
+environment boundary the physics row already records, but that is a hypothesis and the next round should
+read the code that raises it rather than assume.
+
+**Where the acceptance stands.** The authority chain is complete and measured end to end on this host:
+register -> channel -> acquire -> any mutation, all carrying the four headers, from a real browser, on an
+arbitrary port, with no environment variables. Seven defects have been found in that chain, every one of
+them invisible to the unit suites and visible the moment a real page talked to a real server. What stands
+between this and the last §7 row is now the manifest and the campaign - the runtime layers, not the
+authority ones.
