@@ -2629,3 +2629,68 @@ A full closure build (`--packages-up-to so101_demo_py so101_teleop`, merge insta
 install bases inside this task's registered root) is running as background job `bash-20`. Until it
 finishes, the installed item is **not judged**, and I am not calling the missing `bin/` a defect in the
 current commit - it is a gap in which install I had been testing against.
+
+## CP-105: guard/CPU/RAM re-run, the unknown-state rule, and the install precondition
+
+### A-D: guard, probe lifecycle, CPU and RAM suites pass at this commit
+
+Gate `727fe308b5c34f92b697c8fb0429d1a7` (exit 0, 6.9 s): `test_parallel_start_guard.py`,
+`test_parallel_start_guard_probe.py` and `test_parallel_start_guard_composition.py` together report
+**82 passed** on the current commit, through the ROS-sourced pytest helper with the registered
+interpreter. That covers the first four §7 rows - PASS/WARN/FAIL and equal-to-floor, the 2 s bounded
+probe lifecycle and single flight, CPU capacity, and RAM capacity/floor - at the same commit the
+unified webapp sits on, rather than by citing the earlier campaign's numbers.
+
+### The unknown-state rule: measured through the unified web surface
+
+§7 requires that partial unknown information is never shown as all-green and that a WARN is never
+shown as a resource qualification. On this runtime that rule has teeth, because the per-N budget
+source is *absent by design*: `unified/compose.py:125` falls back to `UnknownBudgetSource()` whenever
+no source is injected, and no production call site injects one - only tests do. So the API's
+`worker_qualifications` payload is genuinely unknown, and the question is what the client does with it.
+
+The answer is in the code and in the tests:
+
+- `api/qualification-view.ts` defines the view as UNKNOWN and keeps the option disabled, with the
+  comment that "the UI must never lower N, substitute ADAPTIVE, or present demo numbers as
+  qualification".
+- `components/expert-validation/start-guard-summary.ts` renders a WARN as a warning, keeps a FAIL's own
+  reasons, and reads a missing result as unknown rather than as a pass; it "never authorizes anything".
+- Gate `2c44e416ee9b4e27956f9f196e442756` (exit 0, 0.3 s) runs the two suites: **14 passed**, including
+  the parameterised `unknown N%d stays disabled` cases for N2..N8 and the "reads as unknown when the
+  server has not checked yet" case.
+
+So the retirement left the unified client in the correct posture: the retired chain's absence surfaces
+as disabled options and unknown text, not as a stale green.
+
+### installed: the first closure build failed on an environment precondition, not on source
+
+Background job `bash-20` finished in 44 s with `BUILD_RC=1` and a diagnosis that names its own cause:
+
+```text
+--- stderr: mujoco_vendor
+CMake Error at CMakeLists.txt:16 (message):
+  MUJOCO_STAGE_ROOT must contain include/mujoco/mujoco.h
+Starting >>> mujoco_vendor
+Aborted  <<< so101_teleop
+Summary: 0 packages finished
+```
+
+Sourcing the fork underlay is not sufficient for the vendor package: it needs a staged MuJoCo SDK and a
+MuJoCo source tree. Nothing was compiled, nothing failed a test, and no source file is implicated -
+this is the "incomplete underlay" case that must be separated from a source regression, so it is
+recorded as an environment precondition rather than as a build failure of the change.
+
+Both inputs turn out to exist on this host, which is why the second attempt can run at all:
+
+| input | path | readback |
+| --- | --- | --- |
+| stage root headers | `~/.venv/lib/python3.11/site-packages/mujoco/include/mujoco/` | `mujoco.h` present |
+| stage root library | `~/.venv/lib/python3.11/site-packages/mujoco/libmujoco.3.12.0.dylib` | copied to `lib/libmujoco.dylib` |
+| source root | `~/ros2_jazzy/mujoco_vendor_macos_ws/src/mujoco` | `simulate/simulate.h` present |
+
+The second build (background job `bash-21`) stages those two roots inside this task's evidence root,
+passes them as `-DMUJOCO_STAGE_ROOT`/`-DMUJOCO_SOURCE_ROOT`, and builds `--packages-up-to so101_demo_py
+so101_teleop` as a merge install into fresh bases under the registered root. It also runs the retired
+console script from the resulting prefix and records its exit code, which is the installed half of the
+§7 row that the Stage A prefix could not answer.
