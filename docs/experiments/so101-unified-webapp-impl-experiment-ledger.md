@@ -2991,3 +2991,50 @@ misread as product defects this session - `set -u` aborting a ROS source, `pgrep
 `[ -f <dir> ]` skipping an overlay, and now a v3 composition judging a v4 policy - were all my
 instrument operating outside the conditions the code assumes. Before reporting a gap, check that the
 component was invoked the way its own callers invoke it.
+
+## CP-111: the platform and worker-count rows, measured on the installed system
+
+The functional row had a contract-level argument and nothing executed. It now has two runs against the
+installed prefix, and the second of them is the one that matters, because it shows the refusal happens
+before anything can be spawned.
+
+**One exact-W2 campaign plan, composed for real.** Gate `c127bd88d3964817a15b793c0dd6c144` (exit 0):
+
+```text
+accelerator mps · selector default · requested_device mps · allow_cpu_fallback False
+ipc_transport darwin_private_path_unix · mujoco_gl cgl · worker_count 2 · start_guard_timeout_s 2.0
+mps_minimum_headroom_bytes 1073741824 (1 GiB) · mps_process_memory_fraction 0.8
+slots: slot-0 <- p1, slot-1 <- p2, idle_slots []
+assert_no_host_platform_calls: OK (no NVML or /proc/self/fd dependency claimed on Darwin)
+```
+
+That is the Darwin combination the v4 document's own header describes, resolved rather than read:
+mps with the private-path transport and cgl, the 1 GiB MPS headroom floor carried into the plan, and the
+platform-claim assertion passing on a Mac that has no NVML to call.
+
+**Every other worker count is refused by the parser, not by a spawn check.** Gate
+`9a11267476044e1484ebee9e5e00da88` (exit 0):
+
+```text
+worker_count=2: ADMITTED  plan.worker_count=2 slots=['slot-0', 'slot-1']
+worker_count=1: REFUSED ContractError: PLATFORM_WORKER_COUNT_UNSUPPORTED
+worker_count=3: REFUSED ContractError: PLATFORM_WORKER_COUNT_UNSUPPORTED
+worker_count=4: REFUSED ContractError: PLATFORM_WORKER_COUNT_UNSUPPORTED
+worker_count=6: REFUSED ContractError: PLATFORM_WORKER_COUNT_UNSUPPORTED
+worker_count=8: REFUSED ContractError: PLATFORM_WORKER_COUNT_UNSUPPORTED
+yaml worker_count: 4 -> REFUSED ContractError: PLATFORM_WORKER_COUNT_UNSUPPORTED
+v3 document -> worker_count=2 transport=proc_fd_unix gl=egl accelerator=cuda
+```
+
+Two properties are worth separating. The refusal comes out of the config's own construction
+(`contracts.py:1905`, `__post_init__`), so it fires for both routes a caller could take - a mutated
+object and a hand-edited YAML - and it fires before `compose_w2_campaign` is ever called, which means no
+partial batch, no slot table and no spawn can exist behind it. And the v3 document resolves to the Linux
+combination pinned at exact W2 with no worker-count field to smuggle, so there is no path by which a
+Linux document borrows a Darwin count or a Darwin document borrows a Linux one.
+
+This closes the plan-level half of the §7 functional row: exact N, the slot count that goes with it, and
+no hard-coded 3, no forced 8, no silent downgrade. What it does not close is the same row's live half -
+that the spawned runtime actually has that many slots and that control scope - and that still needs a
+real batch, as do the 4-point/20-point sets, batch-level lease/cancel/recovery/cleanup with the N1
+FULL_RESTART retry, and physics.
