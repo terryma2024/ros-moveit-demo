@@ -2472,3 +2472,89 @@ CP-83 caught my own edits not applying, and CP-100/CP-101 caught my own measurem
 The second category is the one worth remembering. Both instrument failures produced confident, precise,
 plausible numbers, and the only thing that exposed them was asking whether the number could be true -
 a 1.18:1 body text ratio, and a near-white border on a near-black theme.
+
+## CP-103: Stage B as written was superseded before it could run, and ai-station is occupied
+
+Two findings, both from read-only checks, both of which change what "do Stage B" can mean. I did not
+start the campaign.
+
+### 1. The measurement chain Stage B names has been deliberately deleted
+
+Stage B (plan line 1019) says to measure the current full runtime R "按独立预算计划" - per the
+resource-budget plan - with each tier's exact N, 20 points, five normal runs and fault envelope. That
+machinery is gone from the tree my branch is built on, removed on purpose:
+
+```text
+src/so101_demo_py/src/cli/measure_parallel_resources.py
+    RETIREMENT_MESSAGE = "MEASUREMENT_ENTRY_RETIRED"
+    def main(argv=None) -> int:
+        """Report retirement on stdout and exit 2. Never measures, never authorizes."""
+```
+
+Its docstring names the reason: "the lightweight start guard design (2026-09-19) removed the per-N
+budget chain: the measurement runtime, its sealed authorizations, its qualification/approval documents
+and the authority environment are gone." `parallel_batch/resources.py:2747` matches, raising
+`MEASUREMENT_AUTHORIZATION_RETIRED`. The commit that did it is `e62c86f5` ("refactor: retire certified
+budget runtime"), an ancestor of this branch, so the retirement is not something I could sidestep by
+rebasing.
+
+The superseding design states the consequence for this plan in one row of a table:
+
+```text
+Stage C / Task13 每 N calibration/qualification | NOT_APPLICABLE_SUPERSEDED | 不再运行认证测量
+```
+
+and records that the operator cancelled the swap/PSI measurement, budget and qualification gates on
+2026-09-18, one day before that design. Its section 2 is titled "真正删除预算链" - actually delete the
+budget chain, not disable it.
+
+So Stage B is not blocked in the sense of "temporarily in the way". Measured against the current,
+approved design it is `NOT_APPLICABLE_SUPERSEDED`: the sealed authorizations it needs do not exist,
+the qualification and approval documents it must produce have no readers, and the entry point it must
+call exits 2 by design. I found no authorization document anywhere that could be reused either - the
+only surviving traces are deleted test factories and the budget ledger's by-reference mention of
+`authorizations/n1-calibration-20260918.json`.
+
+What replaces it is the successor design's own acceptance list, section 7: start-guard PASS/WARN/FAIL
+and probe lifecycle, CPU/RAM effective capacity, a real default entry point that needs no budget
+env/profile/approval/measurement object, history readable but not executable, an installed copied
+console and launch, per-`worker_count` actual N and control scope matching the API, the 4-point and
+20-point sets, lease/cancel/recovery/cleanup plus the single-point N1 FULL_RESTART retry, real physics
+against controller joints, MoveIt shadow and simulated pose/contact, with a real colcon/CTest and
+package gate behind it and no `resource qualified` claim anywhere.
+
+### 2. ai-station is reachable again, and busy with someone else's task
+
+Access works after the operator's fix, and the host answers:
+
+```text
+HOSTNAME=ai-station   NPROC=32   up 6:16, load average 19.09 10.41 4.63
+repo /home/matianyi/Projects/ros-moveit-demo  main  bbe2492d  (untracked bootstrap ledger)
+tmux: dst (created today 14:41, attached) - a DeepSeek Harness task, 4/8 follow-ups done
+live stack: gz sim, move_group, rviz2, ros2_control_node; a colcon build is in flight (pid 486973)
+```
+
+That `dst` pane is executing another approved task - the ai-station bootstrap / four-fixed-point
+pick-place work, currently rebuilding overlays and about to re-run its four-point qualification. Its
+evidence family is `/data/work/so101-evidence/ai-station-bootstrap/`.
+
+This is the situation the plan's conflict gate covers, and its instruction is unambiguous: a foreign
+or budget task's services stay refused, wait for an explicit window, do not delete the conflict check
+and do not clean up by old PID. Plan-execution authority does not authorise stopping them. A resource
+measurement taken on a host at load 19 with a foreign live stack would also be meaningless, which is a
+second, independent reason not to start one - and it is the same reason the previous campaign recorded
+its macOS continuation rather than the ai-station one.
+
+One earlier trap worth recording, since it cost real output: listing processes with `pgrep -af` on this
+host matched a linker command line and dumped tens of kilobytes of library paths into the session. The
+narrower `ps -eo pcpu,etime,pid,comm` plus per-pattern `pgrep -c` gives the same ownership picture in a
+dozen lines.
+
+### Open decision
+
+Stage B cannot be executed as written. The three real options are: accept `NOT_APPLICABLE_SUPERSEDED`
+and treat the successor design's section 7 acceptance as B's replacement for the unified runtime; go
+straight to Stage C's live replacement inside an operator-granted window; or restore the retired chain,
+which would contradict an approved later design and is not something I would do without being told to.
+This checkpoint exists so that whichever is chosen, the reason B did not run is on the record rather
+than discovered again later.
