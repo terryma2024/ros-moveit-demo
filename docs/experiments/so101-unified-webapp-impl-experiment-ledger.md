@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-45
+latest_checkpoint: CP-46
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1078,3 +1078,20 @@ What is left of Task 9's migration is now only the scheduling: the page still ow
 `setTimeout` at `(lease_duration_s - lease_renewal_margin_s)`, while the runtime can already compute
 that cadence (CP-44). Swapping that scheduling to `runtime.startHeartbeat(() => ...)` - and giving the
 provider a per-domain cadence rather than one `heartbeatMs` for both domains - is the final edit.
+
+## CP-46: the runtime adopts and validates the lease a renewal returns
+
+`DomainTransport.renew()` now returns the renewed lease when the endpoint answers with a lease-shaped
+body (the validation endpoint does; the teleop endpoint answers with a `CommandResult` and returns
+nothing). `DomainRuntime.renew()` validates that body through `validateRenewal`, adopts it on
+success, and throws `lastRenewalError` on refusal so a caller cannot keep operating on an identity
+the server did not confirm. A test proves the adopted generation advances, and that a non-extending
+renewal is refused and clears the lease.
+
+GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` **45 files / 200 tests**. Commit follows
+this entry.
+
+With this, the runtime owns the complete renewal round trip - cadence, authority headers, the request,
+identity/generation/expiry validation and the resulting lease state - so the page's remaining
+`scheduled setTimeout` can be replaced by `runtime.startHeartbeat(() => (duration - margin) * 1000)`
+and its own validation branch deleted. That swap is the last edit in Task 9's migration.
