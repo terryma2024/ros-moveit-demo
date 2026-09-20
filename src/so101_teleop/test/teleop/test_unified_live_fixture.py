@@ -82,6 +82,16 @@ def test_unified_live_spec_exists_and_uses_the_shared_fixture():
     assert "/health/ready" in spec
 
 
+def test_unified_live_spec_checks_the_two_required_viewports():
+    spec = (PACKAGE / "web/e2e/unified/live-sim.spec.ts").read_text()
+    # The two viewports the design requires must be measured in a real browser, not jsdom.
+    assert "width: 1400, height: 900" in spec
+    assert "width: 390, height: 844" in spec
+    assert "setViewportSize" in spec
+    assert "scrollWidth" in spec and "clientWidth" in spec
+    assert "circle[data-point-status]" in spec
+
+
 def test_provenance_binding_is_not_reintroduced_as_runtime_authority():
     """The plan asked for SO101_VALIDATION_PROVENANCE_BINDING; a later reviewed change
     removed provenance bindings from runtime authority. The reviewed behavior wins, and
