@@ -1873,3 +1873,29 @@ after that the parity guard becomes unnecessary and should be removed with it, l
 in the package.
 
 Commit follows this entry.
+
+## CP-83: correction - CP-82 overclaimed, and here is the real state
+
+CP-82 stated that no test constructs the legacy app any more, based on `grep -c "create_app("`
+returning 2 and my assuming both were the helper's own docstring. **That was wrong.** Checking with
+`grep -n` showed lines 141 and 195 still calling `create_app(Service())`:
+`test_execute_returns_conflict_for_stale_plan` and
+`test_missing_web_assets_return_machine_readable_service_unavailable`. My earlier replacements for
+those two had silently not matched, because both tests carry a docstring line between the `def` and the
+`client = ...` line and my patterns assumed there was none - and I had not verified that the
+replacement took effect.
+
+Fixed properly this time, and verified rather than assumed:
+
+- both cases now build the unified app (`unified_app_for`, with `AuthorityFixture` for the execute
+  case's mutation and the four headers);
+- the now-unused `create_app` import was removed from the test module;
+- `grep -c "create_app(" test_api.py` is **0**;
+- `pyrgate test_api.py` **12 passed**.
+
+Lesson recorded because it is the second time this session that a narrated claim outran the evidence:
+verify a substitution actually applied (grep the result) instead of trusting the edit script, exactly
+as CP-73 showed for a claim about production code.
+
+So `api.create_app` genuinely has no callers now. The remaining step is to delete its route table and
+update `test_unified_route_parity.py`, after which the package has one route table.
