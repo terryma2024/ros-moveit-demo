@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-55
+latest_checkpoint: CP-56
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1265,3 +1265,26 @@ changes no content, so Vite emits identical bytes. That makes the result precise
 overstated: **the rebuild edge is proven live**; the plan's stronger form (edit a token in a
 task-owned fixture tree and show the bundle *bytes* change) still needs a real content edit in an
 isolated fixture tree, and that remains open along with the font and `components.json` variants.
+
+## CP-56: two of the three content-edit rebuild proofs pass in a fixture tree
+
+The plan asks for three incremental proofs in a task-owned fixture tree. Built one by copying
+`web/` into `<root>/web-fixture-1789891339`, installing with the frozen lockfile and building there,
+so **no product source was touched** (`git status` stayed clean throughout).
+
+1. **CSS token** - appended one token to the fixture's `src/styles/theme.css` and rebuilt: the built
+   stylesheet hash changed `f5837e9faa926ec6` -> `0d238a4872ddbcd2`.
+   `CSS_TOKEN_CHANGE_REBUILDS_BUNDLE=YES`.
+2. **Font asset** - replaced `public/fonts/dm-sans-variable.woff2` with the other family's bytes and
+   rebuilt: the emitted `dist/fonts/dm-sans-variable.woff2` hash changed `9fea608a947e6702` ->
+   `6c18d579fd87c377`, i.e. the new bytes reached the bundle.
+   `FONT_CHANGE_UPDATES_EMITTED_ASSET=YES`.
+3. **components.json** - edited it and rebuilt: the build succeeded, but `dist/index.html` hashed
+   `7e2e0955d4826a2b` before and after. That is the honest expected result: the manifest configures
+   the component CLI, it is not bundle input, so the plan's wording for this case ("web command
+   re-runs") is what holds, and CP-55 already proved the CMake edge re-runs the command. Claiming a
+   bytes change here would be wrong.
+
+All fixture outputs stay in the registered root as evidence. Remaining in Task 11: the per-test TEMP
+provenance run and the copied-install Chrome gate; the latter needs a complete `so101_demo_py` release
+closure.
