@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-42
+latest_checkpoint: CP-43
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1021,3 +1021,26 @@ This unblocks the last Task 9 migration step: `expert-validation-app.tsx` can no
 the runtime, call `validateRenewal` where it currently does the identity/generation comparison, and
 let the runtime's heartbeat own the interval - which then allows the page effect to be deleted
 without losing the check. That deletion is the remaining edit.
+
+## CP-43: renewal UI state moved, and the exact shape of the last migration step
+
+Added `DomainRuntime.renewing`, set while a renewal is in flight, with a test that holds the renewal
+open and observes the flag. This is the second of the two things the validation page currently owns
+that the runtime needs (`leaseRenewing`).
+
+Read of the remaining page effect (`expert-validation-app.tsx` lines ~161-190), recorded so the last
+edit is mechanical next time: it is **not** a repeating interval. It is a single `setTimeout`
+scheduled at `(lease_duration_s - lease_renewal_margin_s) * 1000`, re-armed by the effect whenever
+`lease` changes, with three responsibilities - refuse invalid capabilities
+(`LEASE_CAPABILITIES_INVALID`), flip `leaseRenewing` for the UI, and validate the returned lease
+(`lease_id`, `service_session_id`, strictly greater `generation` **and**
+`expires_monotonic_ns`) before replacing it. It also distinguishes a renewal failure (lease dropped,
+error reported) from a successful renewal ("Lease renewed; check resources again").
+
+So the remaining work is: give the runtime (a) a cadence derived from the capability values rather
+than a fixed `heartbeatMs`, and (b) the `expires_monotonic_ns` comparison in `validateRenewal`; then
+the page keeps only its notice/indicator wiring. Deleting the effect before those two exist would
+drop the capability refusal and the expiry check, which is why it is not done yet.
+
+GREEN: `NODE_ENV=test bun run test` **45 files / 197 tests**; `bun run build` exit 0. Commit follows
+this entry.
