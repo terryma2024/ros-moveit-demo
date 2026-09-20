@@ -204,3 +204,27 @@ def test_task_websocket_uses_independent_ordered_event_stream():
         "status": "RUNNING",
         "failure_code": None,
     }
+
+
+def test_the_stub_service_satisfies_the_unified_read_only_port():
+    """First step of CP-75's migration, proving the recipe before rewriting the rest.
+
+    The existing `Service` stub is exercised through the unified factory, which is what the legacy
+    tests will move to. Only read-only routes are involved here; the mutation cases need the instance
+    authority fixture described in CP-75.
+    """
+    from so101_teleop.unified.app import create_unified_app
+    from so101_teleop.unified.ports import UnifiedServices
+
+    app = create_unified_app(
+        UnifiedServices(teleop=Service(), tasks=None, validation=None),
+        bind_address="127.0.0.1",
+    )
+    with TestClient(app) as client:
+        assert client.get("/health").json()["teleop"]["ok"] is True
+        assert client.get("/snapshot").json()["simulation_session_id"] == "sim-a"
+        assert client.get("/gazebo/camera/presets").json() == {"presets": ["overview", "top"]}
+        # A mutation still refuses without instance authority on this composed app.
+        response = client.post("/gripper/execute", json={"command_id": "c1"})
+        assert response.status_code == 409
+        assert response.json()["code"] == "CONTROLLER_INSTANCE_REQUIRED"
