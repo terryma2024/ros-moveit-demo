@@ -11,6 +11,7 @@ from so101_teleop.expert_validation.models import (
     PreflightReceipt,
 )
 from so101_teleop.expert_validation.process_owner import ExecutionProcessOwner
+from so101_teleop.owned_group import terminate_group
 from so101_teleop.expert_validation.store import SupervisorStore
 
 
@@ -53,17 +54,21 @@ def test_real_process_identity_restart_reconnect_and_cleanup_gate(tmp_path):
     cleanup_allowed = False
     first_owner = ExecutionProcessOwner(cleanup_checker=lambda _owned: cleanup_allowed)
     running = first_owner.spawn(request)
-    _wait(root / "handshake.json")
+    try:
+        _wait(root / "handshake.json")
 
-    restarted_owner = ExecutionProcessOwner(cleanup_checker=lambda _owned: cleanup_allowed)
-    assert restarted_owner.reconnect(running) == running
-    assert restarted_owner.poll(running).running
-    cleanup_allowed = True
-    restarted_owner.stop_after_cleanup(running)
-    assert not restarted_owner.poll(running).running
-    # Reap the child retained by the pre-restart owner in this in-process
-    # restart simulation.
-    assert not first_owner.poll(running).running
+        restarted_owner = ExecutionProcessOwner(cleanup_checker=lambda _owned: cleanup_allowed)
+        assert restarted_owner.reconnect(running) == running
+        assert restarted_owner.poll(running).running
+        cleanup_allowed = True
+        restarted_owner.stop_after_cleanup(running)
+        assert not restarted_owner.poll(running).running
+        # Reap the child retained by the pre-restart owner in this in-process
+        # restart simulation.
+        assert not first_owner.poll(running).running
+    finally:
+        # This test used to leak the whole group whenever an assertion failed before the stop.
+        terminate_group(pgid=running.pgid, leader_pid=running.pid, timeout_s=1.0)
 
 
 def test_leader_exit_is_not_mistaken_for_descendant_cleanup(tmp_path):

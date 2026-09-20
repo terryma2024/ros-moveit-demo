@@ -11,8 +11,6 @@ import asyncio
 import contextlib
 import hashlib
 import json
-import os
-import signal
 import subprocess
 import time
 from dataclasses import dataclass
@@ -30,6 +28,13 @@ from .contracts import (
 )
 from .ipc import DEFAULT_MAX_BYTES, IpcReply, IpcRequest, SafetyPacket
 from .safety import SafetyLane
+from ..owned_group import terminate_group
+from ..process_identity import (
+    ProcessIdentityError,
+    argv_matches,
+    command_fingerprint,
+    read_identity,
+)
 
 
 @dataclass(frozen=True)
@@ -61,10 +66,6 @@ class BridgeLaunch:
         ]
 
 
-def _hash_argv(argv: list[str]) -> str:
-    return hashlib.sha256("\0".join(argv).encode()).hexdigest()
-
-
 def _hash_environment(environment: dict[str, str]) -> str:
     return hashlib.sha256(
         json.dumps(environment, sort_keys=True).encode()
@@ -73,39 +74,41 @@ def _hash_environment(environment: dict[str, str]) -> str:
 
 def process_start_marker(pid: int) -> int:
     """A start marker that survives PID reuse; platform specific, never guessed."""
-    stat_path = Path(f"/proc/{pid}/stat")
-    if stat_path.exists():
-        fields = stat_path.read_text().rsplit(")", 1)[-1].split()
-        return int(fields[19])
-    completed = subprocess.run(
-        ["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True, check=False
-    )
-    if completed.returncode != 0 or not completed.stdout.strip():
-        raise MutationError(f"PROCESS_IDENTITY_UNREADABLE: {pid}")
-    return int(hashlib.sha256(completed.stdout.strip().encode()).hexdigest()[:12], 16)
+    try:
+        return read_identity(pid).start_marker
+    except ProcessIdentityError as error:
+        raise MutationError(f"PROCESS_IDENTITY_UNREADABLE: {pid}") from error
 
 
 def identity_for(pid: int, argv: list[str], environment: dict[str, str]) -> OwnerKey:
+    """Record what the kernel reports about ``pid``, after checking it is the process we launched."""
+    try:
+        identity = read_identity(pid)
+    except ProcessIdentityError as error:
+        raise MutationError(f"PROCESS_IDENTITY_UNREADABLE: {pid}") from error
+    if not argv_matches(identity, argv):
+        raise MutationError(f"PROCESS_ARGV_MISMATCH: pid {pid} is not running the launch argv")
     return OwnerKey(
         pid=pid,
-        pgid=os.getpgid(pid),
-        started_ticks=process_start_marker(pid),
-        argv_sha256=_hash_argv(argv),
+        pgid=identity.pgid,
+        started_ticks=identity.start_marker,
+        argv_sha256=command_fingerprint(argv),
         environment_sha256=_hash_environment(environment),
     )
 
 
 def identity_matches(owner: OwnerKey) -> bool:
+    """Re-prove every recorded field, not just liveness, before anything may be signalled."""
     try:
-        os.kill(owner.pid, 0)
-    except ProcessLookupError:
+        identity = read_identity(owner.pid)
+    except ProcessIdentityError:
         return False
-    except PermissionError:
-        return False
-    try:
-        return process_start_marker(owner.pid) == owner.started_ticks
-    except MutationError:
-        return False
+    return (
+        identity.live
+        and identity.pgid == owner.pgid
+        and identity.start_marker == owner.started_ticks
+        and identity.command_sha256 == owner.argv_sha256
+    )
 
 
 class BridgeProcessOwner:
@@ -153,21 +156,36 @@ class BridgeProcessOwner:
         return self._ready_document.get("service_epoch") is not None
 
     async def stop_owned(self, *, timeout_s: float = 5.0) -> None:
-        """Signal only the exact process this service started, after re-proving identity."""
+        """Stop the exact group this service started, after re-proving the owner's identity.
+
+        The child leads its own session, so its group is the set of helpers it forked; signalling
+        only its pid left those helpers behind, and refusing to escalate left the child itself
+        behind while reporting a failure. Both are now the same call: terminate the group, escalate
+        once, and confirm from a fresh platform scan before this owner forgets the process.
+        """
         if self.process is None or self.owner is None:
             return
         if not identity_matches(self.owner):
             raise MutationError(
                 f"OWNER_IDENTITY_DRIFT: pid {self.owner.pid} no longer matches the recorded start marker"
             )
-        os.kill(self.owner.pid, signal.SIGTERM)
-        deadline = time.monotonic() + timeout_s
-        while time.monotonic() < deadline:
-            if self.process.poll() is not None:
-                self.process = None
-                return
-            await asyncio.sleep(0.02)
-        raise MutationError(f"STOP_NOT_CONFIRMED: pid {self.owner.pid} did not exit in time")
+        owner = self.owner
+        receipt = terminate_group(
+            pgid=owner.pgid, leader_pid=owner.pid, timeout_s=timeout_s
+        )
+        self._reap_owned(owner.pid)
+        if not receipt.clear:
+            raise MutationError(f"STOP_NOT_CONFIRMED: {receipt.describe()}")
+        self.process = None
+        self.owner = None
+
+    def _reap_owned(self, pid: int) -> None:
+        """Collect the child if it is still ours to collect; a survivor is reported, not awaited."""
+        process = self.process
+        if process is None or process.pid != pid:
+            return
+        with contextlib.suppress(Exception):
+            process.wait(timeout=1.0)
 
     def socket_paths(self) -> tuple[Path, Path]:
         root = Path(self.launch.socket_root)
