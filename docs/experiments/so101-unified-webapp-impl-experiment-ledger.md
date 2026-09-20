@@ -4937,3 +4937,19 @@ between, which is the app's own rule working. My driver clicked check, waited, t
 race; the retry loop I added (check -> start, up to four times) then hit finding one on the dirty server.
 The next run should be: **fresh server, one page, check and start back to back**, and only then look for a
 retry control.
+
+### CP-152 addendum - the undefined renewal id is fixed, RED first
+
+The real defect from that run is closed: `renewTarget` now refuses a lease whose `lease_id` is missing or
+empty, not merely a missing lease, so a partial lease cannot produce `PUT .../lease/undefined`. RED first -
+with a partial lease adopted, `renew()` must not fetch a URL containing `undefined`, and it did before the
+guard. Targeted suite 25 passed, whole frontend **46 files / 206 tests**, committed and pushed.
+
+The other finding was mine and is about the experiment: **a live server carries state between runs**, so the
+second page was correctly refused `LEASE_ALREADY_HELD` and its mutations `CONTROLLER_INSTANCE_MISMATCH`.
+Every earlier harness started a fresh server with its own evidence root; I stopped doing that to save a
+rebuild and paid for it with a misleading run.
+
+**The next run is specified:** fresh server, one page, acquire -> generate -> **check and start back to
+back** (the heartbeat renews every 10 s and invalidates a preflight, which the page says in its own notice),
+then look for the retry control. That is the last step to the §7 row.
