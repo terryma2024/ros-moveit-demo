@@ -806,6 +806,82 @@ export interface components {
             /** Yolo Executor Count */
             yolo_executor_count?: (1 | 2 | 4) | null;
         };
+        /**
+         * CapabilitiesResponse
+         * @description Capability payload: the original read-only fields plus worker qualification.
+         *
+         *     The model keeps the reviewed contract name that the generated TypeScript client already
+         *     imports, widens ``extra`` to ``allow`` so unknown read-only fields survive, and requires
+         *     the per-N qualification list so it is a real, reachable part of the schema.
+         */
+        CapabilitiesResponse: {
+            /**
+             * Adaptive Default Ladder
+             * @default [
+             *       8,
+             *       6,
+             *       4,
+             *       2,
+             *       1
+             *     ]
+             */
+            adaptive_default_ladder: number[];
+            /** Available */
+            available: boolean;
+            /**
+             * Default Execution Mode
+             * @default SEQUENTIAL
+             * @enum {string}
+             */
+            default_execution_mode: "SEQUENTIAL" | "PARALLEL" | "ADAPTIVE";
+            /**
+             * Execution Modes
+             * @default []
+             */
+            execution_modes: ("SEQUENTIAL" | "PARALLEL" | "ADAPTIVE")[];
+            /**
+             * Fixed Worker Counts
+             * @default [
+             *       1,
+             *       2,
+             *       3,
+             *       4,
+             *       5,
+             *       6,
+             *       7,
+             *       8
+             *     ]
+             */
+            fixed_worker_counts: number[];
+            /**
+             * Lease Duration S
+             * @default 30
+             */
+            lease_duration_s: number;
+            /**
+             * Lease Renewal Margin S
+             * @default 10
+             */
+            lease_renewal_margin_s: number;
+            /**
+             * Maximum Points
+             * @default 20
+             */
+            maximum_points: number;
+            /**
+             * Minimum Points
+             * @default 4
+             */
+            minimum_points: number;
+            start_guard?: components["schemas"]["StartGuardStatus"] | null;
+            start_guard_policy?: components["schemas"]["StartGuardPolicyResponse"] | null;
+            /** Worker Count Availability */
+            worker_count_availability?: components["schemas"]["WorkerCountAvailability"][];
+            /** Worker Qualifications */
+            worker_qualifications: components["schemas"]["QualificationViewResponse"][];
+        } & {
+            [key: string]: unknown;
+        };
         /** CaptureResponse */
         CaptureResponse: {
             /** Artifact Ids */
@@ -1223,16 +1299,6 @@ export interface components {
             start_guard?: components["schemas"]["StartGuardStatus"] | null;
         };
         /**
-         * QualificationCapabilities
-         * @description Capability payload: worker qualification plus the original read-only fields.
-         */
-        QualificationCapabilities: {
-            /** Worker Qualifications */
-            worker_qualifications: components["schemas"]["QualificationViewResponse"][];
-        } & {
-            [key: string]: unknown;
-        };
-        /**
          * QualificationViewResponse
          * @description Pydantic mirror of the budget provider's read-only view; generated into the schema.
          */
@@ -1351,6 +1417,28 @@ export interface components {
             status: "PASS" | "WARN" | "FAIL";
             /** Unit */
             unit: string;
+        };
+        /**
+         * StartGuardPolicyResponse
+         * @description The enforced policy, so a client can display the cutoffs it was judged against.
+         *
+         *     ``mps_minimum_headroom_bytes`` is present only for the schema-v4 macOS MPS combination. It is
+         *     the fixed unified-memory floor, reported so a client can show the cutoff that refused a start;
+         *     it is not a capacity certification and it does not scale with the worker count.
+         */
+        StartGuardPolicyResponse: {
+            /** Cpu Busy Warn Fraction */
+            cpu_busy_warn_fraction: number;
+            /** Gpu Minimum Bytes */
+            gpu_minimum_bytes: number;
+            /** Mps Minimum Headroom Bytes */
+            mps_minimum_headroom_bytes?: number | null;
+            /** Ram Minimum Bytes */
+            ram_minimum_bytes: number;
+            /** Ram Minimum Fraction */
+            ram_minimum_fraction: number;
+            /** Timeout S */
+            timeout_s: number;
         };
         /**
          * StartGuardStatus
@@ -1570,6 +1658,24 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** WorkerCountAvailability */
+        WorkerCountAvailability: {
+            /** Profile Sha256 */
+            profile_sha256?: string | null;
+            /** Qualification Sha256 */
+            qualification_sha256?: string | null;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            /** Selectable */
+            selectable: boolean;
+            /** Status */
+            status: string;
+            /** Worker Count */
+            worker_count: number;
         };
         /** WorkerProjectionResponse */
         WorkerProjectionResponse: {

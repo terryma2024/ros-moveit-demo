@@ -898,6 +898,130 @@
         "title": "CampaignStartRequest",
         "type": "object"
       },
+      "CapabilitiesResponse": {
+        "additionalProperties": true,
+        "description": "Capability payload: the original read-only fields plus worker qualification.\n\nThe model keeps the reviewed contract name that the generated TypeScript client already\nimports, widens ``extra`` to ``allow`` so unknown read-only fields survive, and requires\nthe per-N qualification list so it is a real, reachable part of the schema.",
+        "properties": {
+          "adaptive_default_ladder": {
+            "default": [
+              8,
+              6,
+              4,
+              2,
+              1
+            ],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Adaptive Default Ladder",
+            "type": "array"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "default_execution_mode": {
+            "default": "SEQUENTIAL",
+            "enum": [
+              "SEQUENTIAL",
+              "PARALLEL",
+              "ADAPTIVE"
+            ],
+            "title": "Default Execution Mode",
+            "type": "string"
+          },
+          "execution_modes": {
+            "default": [],
+            "items": {
+              "enum": [
+                "SEQUENTIAL",
+                "PARALLEL",
+                "ADAPTIVE"
+              ],
+              "type": "string"
+            },
+            "title": "Execution Modes",
+            "type": "array"
+          },
+          "fixed_worker_counts": {
+            "default": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Fixed Worker Counts",
+            "type": "array"
+          },
+          "lease_duration_s": {
+            "default": 30.0,
+            "title": "Lease Duration S",
+            "type": "number"
+          },
+          "lease_renewal_margin_s": {
+            "default": 10.0,
+            "title": "Lease Renewal Margin S",
+            "type": "number"
+          },
+          "maximum_points": {
+            "default": 20,
+            "title": "Maximum Points",
+            "type": "integer"
+          },
+          "minimum_points": {
+            "default": 4,
+            "title": "Minimum Points",
+            "type": "integer"
+          },
+          "start_guard": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StartGuardStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "start_guard_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StartGuardPolicyResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "worker_count_availability": {
+            "items": {
+              "$ref": "#/components/schemas/WorkerCountAvailability"
+            },
+            "title": "Worker Count Availability",
+            "type": "array"
+          },
+          "worker_qualifications": {
+            "items": {
+              "$ref": "#/components/schemas/QualificationViewResponse"
+            },
+            "title": "Worker Qualifications",
+            "type": "array"
+          }
+        },
+        "required": [
+          "available",
+          "worker_qualifications"
+        ],
+        "title": "CapabilitiesResponse",
+        "type": "object"
+      },
       "CaptureResponse": {
         "additionalProperties": false,
         "properties": {
@@ -2121,24 +2245,6 @@
         "title": "PreflightResponse",
         "type": "object"
       },
-      "QualificationCapabilities": {
-        "additionalProperties": true,
-        "description": "Capability payload: worker qualification plus the original read-only fields.",
-        "properties": {
-          "worker_qualifications": {
-            "items": {
-              "$ref": "#/components/schemas/QualificationViewResponse"
-            },
-            "title": "Worker Qualifications",
-            "type": "array"
-          }
-        },
-        "required": [
-          "worker_qualifications"
-        ],
-        "title": "QualificationCapabilities",
-        "type": "object"
-      },
       "QualificationViewResponse": {
         "additionalProperties": false,
         "description": "Pydantic mirror of the budget provider's read-only view; generated into the schema.",
@@ -2494,6 +2600,52 @@
           "unit"
         ],
         "title": "StartGuardCheck",
+        "type": "object"
+      },
+      "StartGuardPolicyResponse": {
+        "additionalProperties": false,
+        "description": "The enforced policy, so a client can display the cutoffs it was judged against.\n\n``mps_minimum_headroom_bytes`` is present only for the schema-v4 macOS MPS combination. It is\nthe fixed unified-memory floor, reported so a client can show the cutoff that refused a start;\nit is not a capacity certification and it does not scale with the worker count.",
+        "properties": {
+          "cpu_busy_warn_fraction": {
+            "title": "Cpu Busy Warn Fraction",
+            "type": "number"
+          },
+          "gpu_minimum_bytes": {
+            "title": "Gpu Minimum Bytes",
+            "type": "integer"
+          },
+          "mps_minimum_headroom_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mps Minimum Headroom Bytes"
+          },
+          "ram_minimum_bytes": {
+            "title": "Ram Minimum Bytes",
+            "type": "integer"
+          },
+          "ram_minimum_fraction": {
+            "title": "Ram Minimum Fraction",
+            "type": "number"
+          },
+          "timeout_s": {
+            "title": "Timeout S",
+            "type": "number"
+          }
+        },
+        "required": [
+          "timeout_s",
+          "cpu_busy_warn_fraction",
+          "ram_minimum_bytes",
+          "ram_minimum_fraction",
+          "gpu_minimum_bytes"
+        ],
+        "title": "StartGuardPolicyResponse",
         "type": "object"
       },
       "StartGuardStatus": {
@@ -3101,6 +3253,63 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "WorkerCountAvailability": {
+        "additionalProperties": false,
+        "properties": {
+          "profile_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Sha256"
+          },
+          "qualification_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qualification Sha256"
+          },
+          "reason_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "selectable": {
+            "title": "Selectable",
+            "type": "boolean"
+          },
+          "status": {
+            "minLength": 1,
+            "title": "Status",
+            "type": "string"
+          },
+          "worker_count": {
+            "maximum": 8.0,
+            "minimum": 2.0,
+            "title": "Worker Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "worker_count",
+          "selectable",
+          "status"
+        ],
+        "title": "WorkerCountAvailability",
         "type": "object"
       },
       "WorkerProjectionResponse": {
