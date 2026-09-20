@@ -32,7 +32,7 @@ export type DomainTransport = {
   subscribe(handler: (snapshot: RuntimeSnapshot) => void): () => void;
   /** Optional: tell the transport which authority to present on renewal. */
   setAuthority?(authority: ControllerAuthority | null): void;
-  renew(): Promise<void>;
+  renew(): Promise<Partial<LeaseIdentity> | void>;
   post(path: string, body: Record<string, unknown>, authority: ControllerAuthority): Promise<unknown>;
   close(): void;
 };
@@ -240,7 +240,14 @@ export class DomainRuntime {
     if (this.disposed || !this.authorityValue) return;
     this.renewing = true;
     try {
-      await this.transport.renew();
+      const next = await this.transport.renew();
+      if (next && typeof next === "object" && typeof next.lease_id === "string") {
+        // A renewed lease must extend the identity this document already holds; otherwise the
+        // renewal is refused and the lease state dropped rather than silently accepted.
+        if (!this.validateRenewal(next as LeaseIdentity)) {
+          throw new Error(this.lastRenewalError ?? "LEASE_RENEWAL_INVALID");
+        }
+      }
     } finally {
       this.renewing = false;
     }
