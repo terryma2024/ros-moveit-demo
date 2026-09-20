@@ -32,27 +32,62 @@ describe("Execute All", () => {
     }
   });
 
-  it("executes the arm plan before q6 and returns both results", async () => {
-    const fetcher = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ code: "OK", succeeded: true })))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ code: "OK", succeeded: true })));
+  it("sends one composite parent request instead of two independent POSTs", async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          operation_id: "op-1",
+          phase: "COMPLETE",
+          blocked_reason: null,
+          children: [
+            { child_id: "arm", goal_uuid: "g-arm", succeeded: true, stopped_confirmed: true, cleanup_confirmed: true },
+            { child_id: "gripper", goal_uuid: "g-grip", succeeded: true, stopped_confirmed: true, cleanup_confirmed: true },
+          ],
+        }),
+      ),
+    );
     const client = new TeleopApiClient(fetcher, () => "command-id");
 
     const result = await client.executeAll("p1", -0.04, "lease-a", "sim-a");
 
-    expect(result.arm.code).toBe("OK");
-    expect(result.gripper?.code).toBe("OK");
-    expect(fetcher.mock.calls[0][0]).toBe("/plans/p1/execute");
-    expect(fetcher.mock.calls[1][0]).toBe("/gripper/execute");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][0]).toBe("/plans/p1/execute-all");
+    expect(result.operation_id).toBe("op-1");
+    expect(result.children.map((child) => child.child_id)).toEqual(["arm", "gripper"]);
   });
 
-  it("does not execute q6 when arm execution fails", async () => {
-    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: "PLAN_STALE_TARGET", succeeded: false })));
+  it("carries the instance authority headers when the document holds them", async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ operation_id: "op-2", phase: "BLOCKED", blocked_reason: null, children: [] })),
+    );
+    const client = new TeleopApiClient(fetcher, () => "command-id");
+
+    await client.executeAll("p1", -0.04, "lease-a", "sim-a", {
+      instanceId: "i1",
+      proof: "p1",
+      channelRevision: 2,
+      executionGeneration: 3,
+    });
+
+    const [, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(init.headers).toMatchObject({
+      "X-SO101-Instance-ID": "i1",
+      "X-SO101-Channel-Revision": "2",
+      "X-SO101-Execution-Generation": "3",
+    });
+  });
+
+  it("never retries a non-complete parent with a second request", async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ operation_id: "op-3", phase: "BLOCKED", blocked_reason: "CLEANUP_NOT_CONFIRMED", children: [] }),
+      ),
+    );
     const client = new TeleopApiClient(fetcher, () => "command-id");
 
     const result = await client.executeAll("p1", -0.04, "lease-a", "sim-a");
 
-    expect(result.gripper).toBeUndefined();
+    expect(result.phase).toBe("BLOCKED");
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });

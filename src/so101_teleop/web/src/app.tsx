@@ -160,10 +160,24 @@ export function App() {
 
   const executeAll = async () => {
     if (!state.plan.id) return;
-    const result = await client.executeAll(state.plan.id, state.target.joints["6"], lease, snapshot.simulation_session_id);
-    record("/execution/all:arm", result.arm);
-    if (result.gripper) record("/execution/all:gripper", result.gripper);
-    dispatch({ type: "plan-cleared" });
+    // One composite parent request: the server keeps a single reservation across the arm and
+    // gripper steps. A parent that is not COMPLETE stays visible as its own blocked/partial
+    // record instead of being retried here.
+    const projection = await client.executeAll(
+      state.plan.id,
+      state.target.joints["6"],
+      lease,
+      snapshot.simulation_session_id,
+    );
+    record("/plans/execute-all", {
+      command_id: projection.operation_id,
+      accepted: true,
+      succeeded: projection.phase === "COMPLETE",
+      code: projection.phase === "COMPLETE" ? "OK" : projection.phase,
+      message: projection.blocked_reason ?? "",
+      snapshot_revision: snapshot.revision,
+    } as CommandResult);
+    if (projection.phase === "COMPLETE") dispatch({ type: "plan-cleared" });
   };
 
   const workflowCommand = async (operation: string, body: Record<string, unknown> = {}) => {
