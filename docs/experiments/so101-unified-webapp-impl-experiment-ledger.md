@@ -4307,3 +4307,58 @@ only visible when a real client talked to a real server:
 become a code-level fix rather than a deployment variable - deriving it from the actual bind address and
 port is the obvious shape - and that is worth a RED test of its own, because a default that silently
 disables the entire authority model is worse than a wrong port.
+
+## CP-138: the origin is fixed in code, verified live, and a registration miss surfaced
+
+**RED, for the right reason.** Two tests, one of which already passed:
+
+```text
+test_origin_defaults_to_the_served_address   'http://127.0.0.1:8000' == 'http://127.0.0.1:8801'  FAILED
+test_explicit_origin_still_wins              passed
+```
+
+**The fix** is one line at the boundary that knows the address - `unified/main.py`'s `build_app`, which
+receives the parsed `--host` and `--port`:
+
+```python
+environment.setdefault("SO101_UNIFIED_ORIGIN", f"http://{args.host}:{args.port}")
+```
+
+An explicit `SO101_UNIFIED_ORIGIN` still wins, so the deployment override survives; the default is now
+whatever this process actually serves. Committed `e4b24aee`, whole unified suite **146 passed** (139
+before, plus the new suites of the last rounds).
+
+**Verified live with no environment override at all**: rebuilt `so101_teleop` into the task-owned prefix
+(42 s), started it on port 8803 with `SO101_UNIFIED_ORIGIN` unset, and drove the real page:
+
+```text
+POST /control/instances        200 OK   (twice)
+WebSocket .../channel          [accepted] (twice)
+POST /expert-validation/lease  200 OK          <- acquired, with no configuration
+page JSON: {"codes": [], "httpErrors": ["503 /snapshot"], ...}
+```
+
+So the authority model now works from a real browser, on an arbitrary port, with no environment
+variables - which is what "the client half works" should mean.
+
+**And a miss of mine surfaced, which is the more useful lesson.** The regression set I ran this round
+included `test_unified_launch.py` for the first time in several rounds, and it failed:
+
+```text
+test_every_unified_test_module_is_registered_and_every_registration_exists
+  -> unregistered unified tests: ['test_unified_acquire_binding', 'test_unified_instance_domain_binding',
+                                  'test_unified_origin_default']
+```
+
+Both earlier "registrations" had been appended as bare paths, which became **extra arguments to an
+existing `so101_add_pytest_test(test_unified_api ...)` call** and registered nothing - so two of the
+suites I wrote in rounds 12 and 15 would never have run in the ament gate. The guard test exists for
+exactly this and I had simply not been running it. Fixed with four proper
+`so101_add_pytest_test(<name> <path>)` calls (lines 155-158), after which `test_unified_launch.py`,
+`test_unified_origin_default.py`, `test_unified_acquire_binding.py` and
+`test_unified_instance_domain_binding.py` together report 15 passed.
+
+The lesson is about my own habits rather than the code: a "scoped" regression list is only as good as the
+guards it happens to include, and I had been choosing those lists by hand for twenty rounds. From here the
+default check is the whole `-k unified` selection (five seconds), which is what would have caught this in
+the round it happened.
