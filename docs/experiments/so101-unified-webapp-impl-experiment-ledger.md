@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-20
+latest_checkpoint: CP-21
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -589,3 +589,34 @@ So the reachable registry surface here serves the legacy `new-york` style, while
 the remaining Task 8 work needs either (a) a CLI HTTP path that survives this proxy, or (b) the
 registry route discovered from a working network — guessing further is not a good use of rounds,
 and the lock keeps its honest `PENDING_REGISTRY_ITEMS` marker meanwhile.
+
+## CP-21: Task 8 registry unblocked - the style segment is the manifest's own name
+
+**The blocker is solved.** The registry style segment is `radix-maia` - the `name` field of the
+preset manifest - not the decoded style `maia`. The template found in the package is
+`r/styles/{style}/{name}.json` with `style = radix-maia`:
+
+```
+https://ui.shadcn.com/r/styles/radix-maia/utils.json   -> 200
+```
+
+Fetched all 18 needed items successfully (evidence retained in
+`<root>/registry/<name>.json`): `utils`, `font-dm-sans`, `font-heading-outfit`, `button`, `card`,
+`sidebar`, `sheet`, `field`, `select`, `input`, `label`, `badge`, `alert-dialog`, `tooltip`,
+`separator`, `tabs`, `scroll-area`. Each has a verified sha256 recorded in
+`web/design-system.lock.json`; the two `registry:font` items record family, provider, import,
+variable, subsets and dependency (e.g. DM Sans Variable via `@fontsource-variable/dm-sans`).
+
+The lock's `blocked_reason` is now the narrower, accurate
+`PENDING_PRODUCT_MERGE`: the data is captured, but the token/primitives smart merge into this
+Tailwind 3.4.17 project and the self-hosted font files are not applied yet. The lock test asserts
+all 17 required item names, the real per-item URL and hash, both font entries, and that no version
+is guessed.
+
+GREEN: `NODE_ENV=test bun run test` all green. Commit `aefc5e34`.
+
+Next for Task 8: apply the captured foundation tokens to `index.css`/`tailwind.config.ts` as a
+v3-compatible smart merge (the captured `cssVars` are v4 oklch values, so the review decision in
+the plan about a v4 upgrade versus a v3 equivalent conversion has to be taken explicitly), merge
+the primitives while preserving business variants/ARIA/testids, and self-host the fonts with
+licences.
