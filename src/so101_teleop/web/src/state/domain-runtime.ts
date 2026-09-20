@@ -10,6 +10,13 @@ import type { TelemetrySnapshot } from "@/api/types";
 import type { CampaignProjection } from "@/api/expert-validation-types";
 import type { ChannelBinding, ControllerAuthority, DomainName, InstanceProof } from "@/api/instance-client";
 
+/** The lease identity a domain holds. Mirrors the server's `LeaseIdentity` field for field. */
+export type LeaseIdentity = {
+  lease_id: string;
+  service_session_id: string;
+  generation: number;
+};
+
 export type RuntimeSnapshot = {
   sequence: number;
   serviceEpoch: string;
@@ -42,6 +49,7 @@ export class DomainRuntime {
   private fetching = false;
   private disposed = false;
   private heartbeat: ReturnType<typeof setInterval> | null = null;
+  private leaseValue: LeaseIdentity | null = null;
 
   constructor(
     readonly domain: DomainName,
@@ -62,6 +70,48 @@ export class DomainRuntime {
     this.unsubscribe = this.transport.subscribe((event) => {
       void this.accept(event);
     });
+  }
+
+  /**
+   * Adopt the domain lease this document holds.
+   *
+   * The lease identity belongs to the runtime so a renewal can be validated against it without any
+   * page owning that check.
+   */
+  adoptLease(lease: LeaseIdentity | null): void {
+    this.leaseValue = lease;
+  }
+
+  lease(): LeaseIdentity | null {
+    return this.leaseValue;
+  }
+
+  /**
+   * Validate a renewal against the lease this document holds.
+   *
+   * A renewal that changes the lease id or session, or that does not strictly increase the
+   * generation, is refused: the runtime drops its lease state and records why, so the caller cannot
+   * keep operating on an identity the server did not confirm.
+   */
+  validateRenewal(next: LeaseIdentity): boolean {
+    const current = this.leaseValue;
+    if (!current) {
+      this.lastRenewalError = "LEASE_NOT_HELD";
+      return false;
+    }
+    if (next.lease_id !== current.lease_id || next.service_session_id !== current.service_session_id) {
+      this.lastRenewalError = "LEASE_IDENTITY_MISMATCH";
+      this.leaseValue = null;
+      return false;
+    }
+    if (next.generation <= current.generation) {
+      this.lastRenewalError = "STALE_LEASE_GENERATION";
+      this.leaseValue = null;
+      return false;
+    }
+    this.leaseValue = next;
+    this.lastRenewalError = null;
+    return true;
   }
 
   /** Adopt the authority the server returned when control was explicitly acquired. */
