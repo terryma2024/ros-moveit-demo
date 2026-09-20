@@ -4362,3 +4362,43 @@ The lesson is about my own habits rather than the code: a "scoped" regression li
 guards it happens to include, and I had been choosing those lists by hand for twenty rounds. From here the
 default check is the whole `-k unified` selection (five seconds), which is what would have caught this in
 the round it happened.
+
+## CP-139: acquire was one call site - the page's other mutations still bypass the runtime
+
+Driving the whole sequence through the real page (acquire -> generate -> check -> start) shows the
+acquire fix holding and the same defect waiting at the next mutation:
+
+```text
+Acquire lease      no new errors;   server: POST /expert-validation/lease  200 OK
+Generate points    page gains CONTROLLER_INSTANCE_REQUIRED;  net: 409 POST /expert-validation/manifests
+Check resources    skipped: disabled
+Start validation   skipped: disabled
+allNet: ["503 GET /snapshot", "409 POST /expert-validation/manifests"]
+```
+
+So `createManifest` is refused exactly the way `acquireLease` was, because it too goes through
+`ExpertValidationClient`'s bare `post()` (`expert-validation-client.ts:51`, headers `content-type` only).
+Everything after a manifest is disabled as a consequence, which is why the campaign cannot even be
+created - and therefore why the N1 retry row is still out of reach: not for want of a station, and not for
+want of authority, but because only **one** of the page's mutations was rewired.
+
+**The lesson is about the shape of my fix, not the fix.** CP-136 routed `onAcquireLease` through the
+runtime - the smallest change that made the acceptance-critical call work - and the very next mutation
+exposed that the defect was never specific to acquire. The general fix is where the design points anyway:
+give the client its authority once, for every mutation, instead of patching call sites one at a time.
+
+**Specified for the next round:**
+
+1. RED: extend the runtime-harness test to click Generate points (and then Check resources and Start
+   validation) and assert the recording transport sees `/expert-validation/manifests`, the preflight and
+   the campaign creation - the same shape as the acquire test, which is already in place.
+2. Then the fix, general rather than per-call: make `ExpertValidationClient` take an optional authority
+   provider (the runtime's `mutationHeaders()`) and attach the four headers to every mutating request,
+   leaving reads alone. The per-call acquire wiring then becomes one use of the general mechanism, and
+   the retry call (`expert-validation-app.tsx:373`) starts working without being touched.
+3. Then the sequence again through the page, and the single-point N1 `FULL_RESTART_RETRY` after it.
+
+Note for the record: this is the sixth defect in the same client-server seam, and the third whose fix I
+under-scoped on the first attempt (registration-only, acquire-only, and now attention-only in the
+registration form). The pattern is consistent enough to name: **when a contract is enforced by the server,
+fix the whole client path that must satisfy it, not the call that happened to fail first.**
