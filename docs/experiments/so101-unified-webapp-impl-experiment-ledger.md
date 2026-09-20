@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-68
+latest_checkpoint: CP-69
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1593,3 +1593,25 @@ Obstacle 2 from CP-67 remains and is unchanged: `test_api.py` builds `create_app
 stub service in eight places, so delegating the legacy factory to the unified routers still requires
 those stubs to satisfy the port contracts (including the authority dependency) - a test migration of
 the CP-48/CP-49 shape.
+
+## CP-69: the CP-67 duplication is now detected, not just documented
+
+CP-67 recorded that `api.py` keeps a second route table the plan wants removed, and CP-68 cleared the
+import obstacle to removing it. The remaining obstacle is a test migration, so until that lands the
+duplication is now **detected** rather than merely written down:
+
+`test/teleop/test_unified_route_parity.py` (registered, so the CMake drift guard from CP-36 enforces
+its presence) asserts
+
+- every `(method, path)` the legacy factory serves also exists in the unified app - a route added to
+  the old factory alone fails here instead of shipping only on the legacy surface;
+- the unified app *adds* rather than replaces: `/plans/{plan_id}/execute-all`, `/health/live`,
+  `/health/ready`, `/control/instances` and `/control/instances/handoff` are all present, while the
+  legacy surface is a real non-empty subset (`/gripper/execute`, `/snapshot`);
+- the legacy factory still answers its own routes (`/gazebo/camera/presets` returns 200).
+
+GREEN: `pyrgate test_unified_route_parity.py` **3 passed**; the launch module's drift guard still
+passes with the new registration. Commit follows this entry.
+
+This is the honest intermediate state: the refactor the plan asks for is still open, with one obstacle
+cleared and the other named, and a guard that makes any drift visible in the meantime.
