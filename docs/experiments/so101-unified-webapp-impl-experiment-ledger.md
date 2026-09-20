@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-63
+latest_checkpoint: CP-64
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1478,3 +1478,22 @@ root (`build-FV6UHHX5`, `release-n5JyZLog`, `release2-Q3EIoiMD`, `web-fixture-17
 
 Tree state: branch `codex/so101-unified-webapp`, working tree clean, frontend 45 files / 201 tests,
 16 unified modules green in the ament gate.
+
+## CP-64: telemetry snapshots are now observable from the runtime (item A, step 1)
+
+`DomainRuntime.onSnapshot(listener)` publishes every accepted snapshot - including the initial one
+fetched during `start()`, which a page needs as its first view - and never republishes a stale
+sequence. A test asserts the initial publish, the publish on a contiguous event, the silence on a
+duplicate, and that unsubscribing stops delivery.
+
+GREEN: `NODE_ENV=test bun run test` **45 files / 202 tests**; `bun run build` exit 0. Commit follows
+this entry.
+
+The first attempt failed honestly: `start()`'s initial snapshot was not published because only
+`resnapshot()` had been wired, and the test caught it. Publishing the initial value is the correct
+behaviour for the page's use, so the code was fixed rather than the assertion relaxed.
+
+With CP-63's item A, the two halves the page still owns are now both observable from the runtime -
+renewal (CP-47) and telemetry (this checkpoint). The remaining edit in `app.tsx` is therefore the same
+subtractive shape as the renewal swap: delete the `/snapshot` poll and the `/telemetry` socket, feed
+the page's view from `onSnapshot`, and keep its RTT and notice presentation.
