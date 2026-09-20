@@ -22,6 +22,8 @@ export type DomainTransport = {
   connect(proof: InstanceProof): Promise<ChannelBinding>;
   snapshot(): Promise<RuntimeSnapshot>;
   subscribe(handler: (snapshot: RuntimeSnapshot) => void): () => void;
+  /** Optional: tell the transport which authority to present on renewal. */
+  setAuthority?(authority: ControllerAuthority | null): void;
   renew(): Promise<void>;
   post(path: string, body: Record<string, unknown>, authority: ControllerAuthority): Promise<unknown>;
   close(): void;
@@ -65,6 +67,7 @@ export class DomainRuntime {
   /** Adopt the authority the server returned when control was explicitly acquired. */
   adoptAuthority(authority: ControllerAuthority): void {
     this.authorityValue = authority;
+    this.transport.setAuthority?.(authority);
   }
 
   mutationHeaders(): ControllerAuthority | null {

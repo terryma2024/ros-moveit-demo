@@ -79,3 +79,33 @@ test("every mutation carries the four authority headers", async () => {
   expect(authorityHeaders({ instanceId: "i1", proof: "p1", channelRevision: 2, executionGeneration: 7 }))
     .toHaveProperty("X-SO101-Instance-Proof", "p1");
 });
+
+test("renewal carries the instance authority headers the server checks", async () => {
+  const { createHttpTransport } = await import("./domain-transport");
+  const calls: Array<[string, RequestInit]> = [];
+  const fetchImpl = async (input: string, init?: RequestInit) => {
+    calls.push([input, init ?? {}]);
+    if (input.endsWith("/health/live")) {
+      return jsonResponse({ service_epoch: "e1" });
+    }
+    return jsonResponse({ ok: true });
+  };
+  const transport = createHttpTransport("teleop", {
+    baseUrl: "http://127.0.0.1:8000",
+    fetchImpl: fetchImpl as unknown as typeof fetch,
+  });
+  transport.setAuthority?.({
+    instanceId: "i1",
+    proof: "p1",
+    channelRevision: 2,
+    executionGeneration: 3,
+  });
+  await transport.renew();
+  const [, init] = calls[calls.length - 1];
+  expect(init.headers).toMatchObject({
+    "X-SO101-Instance-ID": "i1",
+    "X-SO101-Instance-Proof": "p1",
+    "X-SO101-Channel-Revision": "2",
+    "X-SO101-Execution-Generation": "3",
+  });
+});
