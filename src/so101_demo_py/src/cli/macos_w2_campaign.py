@@ -166,6 +166,10 @@ def summarize_per_slot_pick_place(*, evidence_root: Path, workers=("w1", "w2")) 
                                  "planning_scene_readback": entry.get("planning_scene_readback"),
                                  "release_marker_sequence": entry.get("release_marker_sequence"),
                                  "transition_count": entry.get("transition_count"),
+                                 # The point's state sequence, which is where the approach, grasp,
+                                 # lift, place and release phases are itemised for this point.
+                                 "state_trace": list(entry.get("state_trace") or ()),
+                                 "planned_states": sorted((entry.get("resolved_targets") or {}).keys()),
                                  "final_cup_position_world_m": sample.get("cup_position_world_m"),
                                  "final_cup_orientation_world_xyzw": sample.get("cup_orientation_world_xyzw"),
                                  "left_right_contacts": [sample.get("left_contact_count"),
