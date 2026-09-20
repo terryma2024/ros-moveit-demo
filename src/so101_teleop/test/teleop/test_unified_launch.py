@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 PACKAGE = Path(__file__).parents[2]
@@ -85,3 +86,27 @@ def test_legacy_entry_modules_are_not_reachable_from_the_unified_module():
     unified_source = (PACKAGE / "so101_teleop/unified/main.py").read_text()
     assert "so101_teleop.main" not in unified_source
     assert "expert_validation.main" not in unified_source
+
+
+def test_every_unified_test_module_is_registered_and_every_registration_exists():
+    """A test file that is not registered silently never runs, and a registration that points at a
+    missing file breaks the build. Both directions are checked here."""
+    package = PACKAGE
+    cmake = (package / "CMakeLists.txt").read_text()
+    registered = dict(
+        re.findall(r"so101_add_pytest_test\((test_unified_[a-z_]+) ([^)]+)\)", cmake)
+    )
+    on_disk = {
+        f"test_unified_{path.stem.removeprefix('test_unified_')}": str(
+            path.relative_to(package)
+        )
+        for path in package.rglob("test_unified_*.py")
+    }
+    missing_registration = sorted(set(on_disk) - set(registered))
+    missing_file = sorted(
+        name for name, rel in registered.items() if not (package / rel).is_file()
+    )
+    assert missing_registration == [], f"unregistered unified tests: {missing_registration}"
+    assert missing_file == [], f"registered test files that do not exist: {missing_file}"
+    for name, rel in registered.items():
+        assert on_disk.get(name) == rel, (name, rel, on_disk.get(name))
