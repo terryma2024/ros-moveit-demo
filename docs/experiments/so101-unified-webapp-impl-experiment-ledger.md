@@ -3424,3 +3424,50 @@ effect is that every remaining request of the second Worker is cancelled and its
 property under test is that cancellation is delivered and observed as a controlled outcome - not that the
 campaign passes, since the CLI itself says a refused request makes the verdict INCOMPLETE by
 construction. Its result is not known at the time of writing and is not claimed here.
+
+## CP-120: cancellation is delivered, named, and leaves nothing behind
+
+`bash-31` ran the same exact-W2 campaign with `--cancel-second-worker-after-served 4`, whose documented
+effect is to cancel every remaining request of the second Worker. Result:
+
+```text
+status: W2_CAMPAIGN_PASS                        campaign_rc=0
+cancelled_ids: ['w2-att-00-yolo', 'w2-att-01-yolo', 'w2-att-02-yolo']
+fault_trace []   handler_errors []   handlers_joined true
+w1: 4 points, 4 manifests, 0 failure codes, 4 contacts
+w2: 4 points, 4 manifests, 0 failure codes, 4 contacts
+served: count 9   (the same run without injection served 12)
+        devices ['mps']   lane executed 16   max_concurrent 1   rejected 0
+cleanup: complete true  workers_reaped [true, true]
+start_guard PASS  MPS_HEADROOM_OK  available 16129097728 / cutoff 1073741824
+pre-run residue 0/0   post-run residue 0/0      <- this time nothing leaked
+```
+
+Three things this establishes for the §7 control row. Cancellation is **delivered against named
+requests** - the three cancelled ids are recorded by name, not inferred from a lower count, though the
+count corroborates it: nine served instead of twelve, exactly the three. It is a **controlled outcome**
+rather than a corrupted run - no handler errors, handlers joined, both workers still produced their four
+points and four contacts, and the verdict stayed PASS. And the teardown was clean with zero residue on
+both sides of the run, which is the residue-bracket doing its job after CP-117's lesson.
+
+Also worth stating for the record: this run's shutdown was clean *because the run completed normally*, so
+the workers reached their own teardown and reaped their stations. That is consistent with CP-119's
+boundary - the leak needs an abnormally-terminated worker, not merely a cancelled request - and it is a
+small piece of evidence in favour of the diagnosis rather than against it.
+
+### §7 matrix, current
+
+| row | status |
+| --- | --- |
+| guard, probe lifecycle, CPU, RAM | done - 82 unit tests, live installed probe, and a live run whose guard passed at 15.9-16.1 GB headroom |
+| budget-free default entry | done - no budget object present; entry refuses only on the non-budget evidence root |
+| unknown / WARN presentation | done - 14 unit tests plus the live capabilities payload |
+| installed | done - full closure, console scripts, launch, config, web assets, retirement entry exit 2, serving |
+| history | done - 103 passed over history and batch contracts |
+| functional (exact N) | done - W2 only by construction, and live: two workers, four points and four manifests per slot |
+| points (4 and 20) | done - catalog selections exact, anchor-complete, out-of-range refused |
+| control: cleanup / ownership | done live - `workers_reaped [true, true]`, zero pre/post residue, plus the CP-119 boundary documented |
+| control: cancel | done live - this checkpoint |
+| control: lease / ack / result | evidenced - per-worker `lease.json`, `ack.json`, `result.json` in every run, admission table consumed once |
+| control: N1 FULL_RESTART single-point retry | **open** - needs a `so101_parallel_batch` N1 run with the retry path |
+| physics | done live - 8/8 points SUCCEEDED, 4 contacts per slot, per-point execution manifest, viewer screenshot, RGB frame and both point clouds |
