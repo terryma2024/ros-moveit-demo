@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-18
+latest_checkpoint: CP-19
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -544,3 +544,21 @@ operation guide, including the missing independent Astra review). The two gate h
 full recipe are described in CP-07 and CP-09; the registered evidence root is
 `/tmp/so101-debug-so101-unified-webapp-impl-20260920` with `operator/preset-init.json` and
 `preset-preview-8f09f448/` as the Task 8 artifacts.
+
+## CP-19: the preset registry really is remote (negative result, closes a hypothesis)
+
+Probed the cached pinned package at `~/.bun/install/cache/shadcn@4.21.0@@@1` to test whether the
+preset and its component items ship inside the npm package, which would have made Task 8
+reachable without the web registry. They do not:
+
+- `dist/tailwind.css` (16 KB) is the generic v4 `@theme inline` base plus custom variants, not the
+  preset's tokens;
+- `dist/preset/index.js` and `dist/registry/index.js` are the machinery only: the only preset
+  data present is the style list `["nova","vega","maia","lyra","mira","luma","sera","rhea"]`;
+- the pinned id `b311momZs0` appears nowhere in the package.
+
+So the resolved preset object and the per-component items are fetched from `ui.shadcn.com`, which
+is exactly the path that fails for the CLI here while succeeding for curl. Task 8's remaining work
+therefore needs either a CLI HTTP path that works against this proxy or a curl-driven capture of
+the correct maia registry URL shape. No product change in this checkpoint; the hypothesis is
+recorded so the next round does not repeat it.
