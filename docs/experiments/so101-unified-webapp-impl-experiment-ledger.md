@@ -2051,3 +2051,19 @@ drift guards.
 
 GREEN: `pyrgate test_unified_launch.py` **7 passed** (5 original checks plus the registration guard and
 this one). Commit follows this entry.
+
+## CP-91: the published bundle is verified, not just the sources
+
+Checked the installed artifact rather than the source tree: `web/dist/fonts/` contains
+`dm-sans-variable.woff2`, `outfit-variable.woff2` and `LICENSES.txt`, and the built stylesheet
+references both font URLs and carries the design tokens (including the independent `--state-success`).
+That matters because a font that never reaches `dist/fonts` would make every `@font-face` URL 404 in
+production, and a theme that never reaches the stylesheet would silently drop the captured design
+system - neither of which any source-level test would catch.
+
+The check is now a test (`test_the_published_bundle_ships_self_hosted_fonts_and_tokens`), which skips
+when the bundle has not been built in that checkout. `pyrgate test_unified_live_fixture.py`
+**8 passed**.
+
+This is the third guard added by auditing rather than assuming, alongside the packaging drift guard
+(CP-90) and the pytest-registration guard (CP-36).
