@@ -4953,3 +4953,44 @@ rebuild and paid for it with a misleading run.
 **The next run is specified:** fresh server, one page, acquire -> generate -> **check and start back to
 back** (the heartbeat renews every 10 s and invalidates a preflight, which the page says in its own notice),
 then look for the retry control. That is the last step to the §7 row.
+
+## CP-153: the campaign is refused by the start guard, and the reason is the v3/v4 split
+
+The full preflight body names it, and it is the same finding CP-110 measured from the other side:
+
+```json
+{"receipt_id":"preflight-46dad1...","admitted":false,"manifest_id":"manifest-46d4cb...",
+ "execution_mode":"SEQUENTIAL","execution_config":{"execution_mode":"SEQUENTIAL","worker_count":1},
+ "resource_observations":{"logical_cpu_count":10,"requested_worker_count":1,
+   "start_guard_status":"FAIL",
+   "start_guard":{"status":"FAIL","cleanup_state":"CLEAR","gpu_uuid":null,
+     "checks":{"probe":{"status":"FAIL","reason":"GPU_TARGET_UNAVAILABLE"}}}},
+ "reason_codes":["GPU_TARGET_UNAVAILABLE"]}
+```
+
+The manifest is created (20 points, the pinned catalogue hash), the preflight call is accepted and answered
+- and admission is refused because the **start guard probes for a CUDA device** and this is a Mac. That guard
+is the v3 composition: it is what a v3 document asks for, and it is what `_LazyStartGuard` builds
+(`compose_default_start_guard(config.start_guard)` with no accelerator, loading through
+`load_parallel_runtime_config_v3`).
+
+So the campaign cannot start on macOS through the unified service for a reason that is now precisely stated
+rather than suspected: **the service serves the Linux/CUDA document, and the macOS document it would need is
+the schema-4 one its loader refuses** (`UNKNOWN_CONFIG_FIELD`, CP-143). Both halves are already built
+elsewhere in the tree - `w2_composition.load_execution_config` accepts v3 *or* v4, and
+`accelerator_probe.DarwinMpsAcceleratorProbe` supplies the accelerator a v4 policy requires - so this is an
+integration gap in the service's own guard composition, not a missing capability.
+
+**The fix, specified for the next round (RED first):** make the service's guard composition v4-aware - load
+the execution document with a loader that accepts both, and pass the Darwin accelerator when the policy
+carries `mps_minimum_headroom_bytes`, exactly as `cli/macos_w2_campaign.py:441-470` already does in its own
+process. The RED test is a preflight that admits on this host with the v4 document, or - cheaper and
+narrower - a unit test that composing the guard for a v4/macOS document produces a guard whose probe does not
+require NVML. Only then is the campaign startable, and only then does the retry control exist to exercise the
+last §7 row.
+
+**What this round established, in order:** the manifest is created (20 points, catalogue hash pinned), the
+preflight is admitted *as a request* and refuses admission with a named code, the renewal cycle works
+(generations 1 -> 2 -> 3 observed, then `LEASE_EXPIRED` once the run's driver stopped renewing), and the
+campaign POST is correctly never attempted while preflight is unadmitted. Every one of those is a measurement
+rather than a guess, and the remaining blocker is one function's choice of loader and accelerator.
