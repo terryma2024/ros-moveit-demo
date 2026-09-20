@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-22
+latest_checkpoint: CP-23
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -645,3 +645,26 @@ Commit `5591de0e`.
 Still open in Task 8: self-hosting the two font files with licences (the lock records the
 `registry:font` items and their `@fontsource-variable/*` dependencies), and the per-primitive smart
 merge that preserves business variants, ARIA, events, disabled reasons and testids.
+
+## CP-23: self-hosted fonts, hashes and licences
+
+Downloaded the two captured `registry:font` families as variable woff2 from the packages the
+registry items themselves name (`@fontsource-variable/dm-sans`, `@fontsource-variable/outfit`,
+via the jsdelivr CDN) into `public/fonts/`, verified the `wOF2` magic bytes, and recorded in the
+lock for each: relative file, family, provider, CSS variable, source URL, sha256, byte length,
+media type, licence and licence file. `public/fonts/LICENSES.txt` carries both upstream SIL Open
+Font License 1.1 texts in full. `theme.css` gained local `@font-face` rules, so the browser never
+requests an external font host. The lock marker is now `PENDING_PRIMITIVE_MERGE`, which names the
+one thing actually left in Task 8.
+
+GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` **38 files / 172 tests**. Commits
+`a1417525` and `c4c8a3c3`.
+
+Process note: `a1417525` was committed before the full suite was read, and the suite caught a stale
+assertion of mine (the old `PENDING_PRODUCT_MERGE` marker) within the same round; `c4c8a3c3` fixes
+it and the marker assertion now matches the `PENDING_<WORK>:` shape generally instead of one exact
+string. The lesson recorded for the next round: gate the commit on the suite result, not on the
+build alone.
+
+Remaining in Task 8: the per-primitive smart merge that preserves business variants, ARIA, events,
+disabled reasons and testids.
