@@ -4573,3 +4573,36 @@ every one of the eight defects before it, one layer further in.
 document and confirm preflight passes; and fix the validation renewal (RED first) so the transport renews
 the lease it actually holds - which also matters for the acceptance, because a lease that cannot be
 renewed will expire during a campaign.
+
+## CP-144: preflight passes - the sequence is green up to the campaign
+
+Pointing `SO101_VALIDATION_PARALLEL_CONFIG` at the active v3 document was the last configuration step:
+
+```text
+POST /control/instances                       200 OK   (twice)
+POST /expert-validation/lease                 200 OK
+POST /expert-validation/manifests             200 OK
+POST /expert-validation/campaigns/preflight   200 OK   <- admitted
+POST /expert-validation/lease                 422      <- the renewal defect, unchanged
+```
+
+**The whole pre-campaign sequence now returns 200 from a real browser**: register, acquire, manifest,
+preflight. The v2 document the service defaulted to was rejected by the v3 loader exactly as the design
+says it should be (CP-143), and the model layout variables (`SO101_VALIDATION_YOLO_WEIGHTS`,
+`SO101_VALIDATION_GROUNDED_ROOT`, both hashes) let preflight's availability check pass. The only refusal
+left in the sequence is the renewal, which is defect #10 and is unrelated to starting a campaign.
+
+**Defect #10, specified so the next round can fix it directly.** The renewal is built from a static pair
+(`domain-transport.ts:26-33`: `renewPath: "/expert-validation/lease"`, `renewBody: {}`) while the
+validation domain renews at `PUT /expert-validation/lease/{lease_id}` with
+`{service_session_id, generation}`. Interpolating a lease id needs more than a static string: either
+`DomainEndpoints` grows a lease-aware URL builder and `renew()` takes the lease it is renewing, or the
+transport keeps the adopted lease alongside the authority it already keeps. Either way the RED test is
+small and honest - call `renew()` on a transport with a validation lease adopted and assert the request is
+`PUT .../lease/{id}` with the two fields - and the runtime's `renew()`/heartbeat is the caller to keep
+consistent.
+
+**Where this leaves the acceptance.** Two steps remain: fix the renewal, then click Start validation and
+post the single-point `FULL_RESTART_RETRY`. Ten defects have been found and nine fixed on this path, all in
+the client-server seam, all invisible to the unit suites. The distance to §7's last row is now measured in
+single steps rather than in unknowns.
