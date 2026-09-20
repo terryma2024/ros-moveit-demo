@@ -481,6 +481,18 @@ class IntentStore:
             (PHASE_PAUSED, self._now_ns(), operation_id),
         )
 
+    def resume_parent_locked(self, operation_id: str) -> None:
+        """Re-activate a paused parent for an explicitly authorized continuation."""
+        parent = self._require_parent(operation_id)
+        if parent["cancel_requested"]:
+            raise MutationError(f"INTENT_REVOKED: {operation_id} was cancelled")
+        if parent["phase"] != PHASE_PAUSED:
+            raise MutationError(f"PARENT_NOT_PAUSED: {operation_id} is {parent['phase']}")
+        self._connection.execute(
+            "UPDATE parents SET phase = ?, updated_ns = ? WHERE operation_id = ?",
+            (PHASE_ACTIVE, self._now_ns(), operation_id),
+        )
+
     def settle_locked(
         self, operation_id: str, *, cleanup_confirmed: bool
     ) -> "_SettleOutcome":

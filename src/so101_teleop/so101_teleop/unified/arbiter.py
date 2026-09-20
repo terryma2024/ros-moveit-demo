@@ -27,6 +27,7 @@ class GlobalMutationArbiter:
     def __init__(self, store: IntentStore, *, clock_ns: Callable[[], int]) -> None:
         self.store = store
         self.clock_ns = clock_ns
+        self._held: set[str] = set()
         store.set_clock(clock_ns)
 
     # -- admission ---------------------------------------------------------------
@@ -39,6 +40,11 @@ class GlobalMutationArbiter:
                 return repeated
             self.store.require_idle()
             return self.store.insert_parent(spec)
+
+    def lookup_command(self, spec: OperationSpec) -> Reservation | None:
+        """Return the recorded reservation for this command id, refusing payload drift."""
+        with self.store.immediate_transaction():
+            return self.store.repeat(spec.command_id, self.store.fingerprint(spec))
 
     # -- parent lifecycle --------------------------------------------------------
 
@@ -59,6 +65,10 @@ class GlobalMutationArbiter:
         with self.store.immediate_transaction():
             return self.store.cancel_parent(operation_id)
 
+    def resume_parent(self, operation_id: str) -> None:
+        with self.store.immediate_transaction():
+            self.store.resume_parent_locked(operation_id)
+
     def pause(self, operation_id: str) -> None:
         with self.store.immediate_transaction():
             self.store.pause(operation_id)
@@ -70,6 +80,13 @@ class GlobalMutationArbiter:
         if outcome.code:
             raise MutationError(outcome.code)
         return outcome.projection
+
+    def hold(self, operation_id: str) -> None:
+        """Record that an admitted entry owns this reservation until it settles."""
+        self._held.add(operation_id)
+
+    def held(self) -> tuple[str, ...]:
+        return tuple(sorted(self._held))
 
     # -- observation -------------------------------------------------------------
 
