@@ -169,3 +169,31 @@ test("a failed renewal is recorded and never retried with a new lease generation
     vi.useRealTimers();
   }
 });
+
+test("a renewed lease is validated against the identity this document holds", async () => {
+  const snapshot: RuntimeSnapshot = { sequence: 1, serviceEpoch: "e1", executionGeneration: 1, payload: null };
+  const { transport } = makeTransport(snapshot);
+  const runtime = new DomainRuntime("validation", transport);
+  await runtime.start();
+  runtime.adoptLease({ lease_id: "l1", service_session_id: "s1", generation: 1 });
+  expect(runtime.validateRenewal({ lease_id: "l1", service_session_id: "s1", generation: 2 })).toBe(true);
+  expect(runtime.lease()?.generation).toBe(2);
+  expect(runtime.lastRenewalError).toBeNull();
+});
+
+test("a renewal that changes identity or stalls the generation is refused", async () => {
+  const snapshot: RuntimeSnapshot = { sequence: 1, serviceEpoch: "e1", executionGeneration: 1, payload: null };
+  const { transport } = makeTransport(snapshot);
+  const runtime = new DomainRuntime("validation", transport);
+  await runtime.start();
+  runtime.adoptLease({ lease_id: "l1", service_session_id: "s1", generation: 4 });
+  expect(runtime.validateRenewal({ lease_id: "l2", service_session_id: "s1", generation: 5 })).toBe(false);
+  expect(runtime.lastRenewalError).toBe("LEASE_IDENTITY_MISMATCH");
+  expect(runtime.lease()).toBeNull();
+  runtime.adoptLease({ lease_id: "l1", service_session_id: "s1", generation: 4 });
+  expect(runtime.validateRenewal({ lease_id: "l1", service_session_id: "s1", generation: 4 })).toBe(false);
+  expect(runtime.lastRenewalError).toBe("STALE_LEASE_GENERATION");
+  expect(runtime.lease()).toBeNull();
+  expect(runtime.validateRenewal({ lease_id: "l1", service_session_id: "s1", generation: 5 })).toBe(false);
+  expect(runtime.lastRenewalError).toBe("LEASE_NOT_HELD");
+});
