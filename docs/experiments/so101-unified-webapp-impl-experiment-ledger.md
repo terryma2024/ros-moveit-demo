@@ -3865,3 +3865,50 @@ gap is precise:
 This checkpoint exists mostly to record that the blocker I reported a round ago was not a blocker. The
 spec was in the repository the whole time and answered the question in one line; I read the code, the
 tests and the frontend before reading the design.
+
+## CP-129: acquire now binds the controller - RED, implementation, GREEN, regressions
+
+CP-128 read design section 5.1 and said what had to change. This is the change, in the required order.
+
+**RED**, with the refusal named by the test:
+
+```text
+{"code":"CONTROLLER_NOT_BOUND","message":"CONTROLLER_NOT_BOUND: teleop"}   3 failed in 0.47s
+gate pytest-iCz47vpa (exit 1)
+```
+
+The suite does what a page does: register over HTTP, make the channel live with
+`registry.connect` (the same state the channel websocket handler establishes), then acquire with the
+four headers. Three assertions: acquire binds; a second instance is still refused
+`CONTROLLER_ALREADY_BOUND`; acquiring with no live channel is refused `CHANNEL_NOT_LIVE`.
+
+**The implementation**, three pieces and nothing else:
+
+- `instances.py`: `acquire_binding(instance_id, proof, *, channel_revision)` - resolves the instance,
+  compares the proof hash in constant time, then `_require_live` on the binding, which is where the
+  "active channel" and the revision match are enforced. It deliberately does **not** claim.
+- `app.py`: `require_channel(domain)`, the acquire-path dependency. Same four headers, same
+  `CONTROLLER_INSTANCE_REQUIRED` refusal when they are missing, but it validates a live channel
+  instead of a claimed controller.
+- `app.py`: `_claim_acquired(registry, binding, result)` binds the domain controller once the domain's
+  own lease endpoint has issued the lease, reading the lease out of whatever shape the router
+  returned, and translating a registry refusal into the same structured 409 the rest of the API uses.
+
+Both lease routes were rewired - `/control/lease` and `/expert-validation/lease` - while renew, release
+and every ordinary mutation keep `require_bound`, which is where the spec puts it.
+
+**GREEN and no regressions.** The new suite: **3 passed** (gate pytest-VgWCCH52). The six suites that
+own this surface - api, instances, admission, cancel integration, parents, instance domain binding -
+report **45 passed** (gate pytest-36dnJ3C2). The suite is registered in `CMakeLists.txt` for the ament
+gate. Committed as `ee03e298` and pushed; tree clean.
+
+Two of my own stumbles on the way, both worth one line. `_claim_acquired` first returned early because
+the routers hand back a `JSONResponse` rather than a mapping, so nothing was claimed and the positive
+test still failed - the response body had to be read. And the exclusivity refusal initially escaped as
+an unhandled `MutationError` (a 500), which the test caught because it asserted the *code* and not merely
+a non-200.
+
+**The live flow's next step is now the channel.** The script must open
+`/control/instances/{id}/channel` before acquiring, or the correct answer is `CHANNEL_NOT_LIVE`. That
+needs a websocket client against the live server; the venv's availability is being checked, and the
+alternative is the same assertion through `TestClient`, which the new suite already does in-process.
