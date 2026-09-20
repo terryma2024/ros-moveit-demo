@@ -156,6 +156,51 @@ def test_the_endpoint_refuses_a_wrong_token_and_leaves_the_campaign_alone():
         endpoint.close()
 
 
+def test_the_endpoint_creates_its_private_directory(tmp_path):
+    """The service names `<batch_root>/control/control.sock`; nothing had created that directory.
+
+    The first live launch of the adapter died exactly here with ``FileNotFoundError`` on
+    ``os.open(self.path.parent)`` - after the service had already recorded the start - so the endpoint
+    owns creating the directory, privately, and still verifies it before binding.
+    """
+    campaign = StubCampaign()
+    root = _short_private_root("p").resolve()
+    endpoint, binding = _endpoint(root, campaign)
+    nested = root / "batch" / "control"
+    endpoint.path = nested / "control.sock"
+    binding = type(binding)(
+        campaign_id=binding.campaign_id,
+        batch_id=binding.batch_id,
+        batch_root=root,
+        control_socket=endpoint.path,
+        coordinator_epoch=binding.coordinator_epoch,
+        control_token=binding.control_token,
+        control_token_sha256=binding.control_token_sha256,
+    )
+    assert not nested.exists()
+    try:
+        endpoint.start()
+        assert nested.is_dir()
+        assert oct(os.stat(nested).st_mode & 0o777) == "0o700"
+        result = CoordinatorControlClient().cancel(command_id="cancel-nested", binding=binding)
+        assert result.state == "STOPPING"
+    finally:
+        endpoint.close()
+
+
+def test_the_endpoint_refuses_a_directory_that_is_not_private(tmp_path):
+    campaign = StubCampaign()
+    root = _short_private_root("p")
+    endpoint, _binding = _endpoint(root, campaign)
+    os.chmod(root, 0o755)
+    try:
+        with pytest.raises(Exception, match="CONTROL_SOCKET_DIRECTORY_MODE|PERMISSION|Permission"):
+            endpoint.start()
+    finally:
+        endpoint.close()
+        os.chmod(root, 0o700)
+
+
 def test_the_endpoint_never_replaces_an_existing_endpoint():
     campaign = StubCampaign()
     root = _short_private_root("p")

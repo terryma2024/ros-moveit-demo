@@ -101,6 +101,12 @@ class MacosFixedControlEndpoint:
     def start(self) -> None:
         if self._thread is not None or self._closed.is_set():
             raise MacosControlError("CONTROL_SERVER_ALREADY_STARTED_OR_CLOSED")
+        # The service names the endpoint inside the batch root and creates the batch root, not this
+        # directory; the first live launch died here after the service had already recorded the start.
+        # It is created private, and the checks below still verify ownership and mode rather than
+        # trusting that mkdir did what was asked.
+        if not self.path.parent.is_dir():
+            self.path.parent.mkdir(mode=0o700, parents=True)
         self._parent_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         self._socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:

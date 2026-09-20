@@ -98,10 +98,16 @@ class UnifiedLifecycle:
         return self.accepting_mutations and self.services.teleop is not None
 
     def health(self) -> dict:
+        validation = self.services.validation
         return {
             "service_epoch": self.service_epoch,
             "started": self.started,
             "accepting_mutations": self.accepting_mutations,
+            # A lease-expiry loop that died leaves the domain unable to issue another lease, so it is
+            # reported next to the other domain errors rather than only in a log line.
+            "validation_maintenance_failed": bool(
+                getattr(validation, "maintenance_failed", False)
+            ),
             "teleop_error": self.teleop_error,
             "validation_error": self.validation_error,
         }

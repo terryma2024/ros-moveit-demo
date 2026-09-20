@@ -11,7 +11,10 @@ import pytest
 
 from so101_teleop.expert_validation.models import CleanupReceipt
 from so101_teleop.expert_validation.control import ControlProtocolError
-from so101_teleop.expert_validation.coordinator import CoordinatorStartRequest
+from so101_teleop.expert_validation.coordinator import (
+    CONTROL_SOCKET_ROOT,
+    CoordinatorStartRequest,
+)
 from so101_teleop.expert_validation.lease import ValidationLeaseService
 from so101_teleop.expert_validation.process_owner import ExecutionProcessOwner
 from so101_teleop.expert_validation.preflight import PreflightEngine, PreflightRejected
@@ -80,7 +83,13 @@ def test_fixed_owner_request_has_random_identity_bound_control_credentials(tmp_p
         ).hexdigest()
         assert binding.campaign_id == "campaign-1" and binding.batch_id == "b001"
         assert binding.coordinator_epoch == 1
-        assert binding.control_socket == request.batch_root / "control" / "control.sock"
+        if sys.platform == "darwin":
+            # Darwin's sun_path is 104 bytes and it has no /proc indirection, so an endpoint inside a
+            # batch root this deep cannot be bound at all; it lives in the short canonical private
+            # root instead, whose mode (0700, owned) the control suite verifies before every use.
+            assert binding.control_socket.parent == CONTROL_SOCKET_ROOT
+        else:
+            assert binding.control_socket == request.batch_root / "control" / "control.sock"
         assert request.environment["SO101_FIXED_CONTROL_TOKEN"] == binding.control_token
         assert request.environment["SO101_FIXED_CONTROL_CAMPAIGN_ID"] == "campaign-1"
         assert request.environment["SO101_FIXED_CONTROL_EPOCH"] == "1"

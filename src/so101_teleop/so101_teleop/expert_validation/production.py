@@ -6,6 +6,7 @@ import asyncio
 from dataclasses import asdict, dataclass
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 import subprocess
@@ -387,9 +388,15 @@ class _HostResourceProbe:
 class ProductionExpertValidationService(ExpertValidationService):
     """API-complete facade over the durable supervisor composition."""
 
+    #: How often the lease-expiry loop runs. A lease is short-lived by design, so this is the delay
+    #: between its deadline passing and its state becoming EXPIRED.
+    MAINTENANCE_INTERVAL_S = 0.25
+
     def __init__(self, *, layout: ProductionRuntimeLayout, registry, artifacts, **kwargs):
         super().__init__(**kwargs)
         self.layout = layout
+        self._maintenance_task: asyncio.Task | None = None
+        self.maintenance_failed = False
         self._current_source_config_sha256 = lambda: current_manifest_source_hash(self.layout)
         self.registry = registry
         self.artifacts = artifacts
@@ -505,10 +512,54 @@ class ProductionExpertValidationService(ExpertValidationService):
         )
 
     def close(self) -> None:
+        self.stop_maintenance()
         self.store.close()
 
+    # -- lease maintenance ---------------------------------------------------------------
+    #
+    # ``create_expert_validation_app`` runs this loop inside its own lifespan. The unified service
+    # mounts the validation *routes* without that lifespan and asks the service for a
+    # ``start_maintenance`` hook instead; no implementation provided one, so nothing ever expired a
+    # lease there and an expired lease stayed ACTIVE in the store - which refuses every later acquire
+    # with LEASE_ALREADY_HELD, for good, on a domain a session has walked away from.
+
+    def start_maintenance(self) -> None:
+        """Start the expiry loop. Synchronous on purpose: the lifecycle awaits a returned coroutine,
+        so an ``async def`` here would block startup for as long as the loop runs."""
+        if self._maintenance_task is not None and not self._maintenance_task.done():
+            return
+        self.maintenance_failed = False
+        self._maintenance_task = asyncio.get_running_loop().create_task(self._maintain_leases())
+
+    def stop_maintenance(self) -> None:
+        if self._maintenance_task is not None:
+            self._maintenance_task.cancel()
+            self._maintenance_task = None
+
+    async def _maintain_leases(self) -> None:
+        """Expire due leases until expiry itself stops working, then stop and say so."""
+        while True:
+            try:
+                self.lease_service.expire_due()
+            except Exception:  # noqa: BLE001 - a domain that cannot expire leases must stay visible
+                logging.getLogger(__name__).exception("LEASE_MAINTENANCE_FAILED")
+                self.maintenance_failed = True
+                supervisor = getattr(self, "supervisor", None)
+                cancel = getattr(supervisor, "cancel_for_reason", None)
+                if cancel is not None:
+                    try:
+                        cancel("LEASE_MAINTENANCE_FAILED")
+                    except Exception:  # noqa: BLE001 - the failure is already recorded
+                        logging.getLogger(__name__).exception("LEASE_OWNER_CANCEL_FAILED")
+                return
+            await asyncio.sleep(self.MAINTENANCE_INTERVAL_S)
+
     def health(self):
-        return {"ok": True, "service": "expert-validation"}
+        return {
+            "ok": True,
+            "service": "expert-validation",
+            "lease_maintenance_failed": self.maintenance_failed,
+        }
 
     def capabilities(self):
         capability = self.registry.require("moveit_expert", "validate_pick_place")

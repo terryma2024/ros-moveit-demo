@@ -240,3 +240,74 @@ def test_the_adapter_runs_as_the_script_the_service_launches(tmp_path):
     assert "ModuleNotFoundError" not in completed.stderr, completed.stderr
     document = json.loads(completed.stdout)
     assert document["status"] == "REFUSED" and document["refusal"] == "CONFIG_MISSING"
+
+
+def test_the_control_socket_can_be_addressed_on_this_platform():
+    """A service-driven campaign died binding a 200-byte control path Darwin cannot address.
+
+    Linux keeps the endpoint inside the batch root because its client pins the parent through
+    ``/proc/self/fd``. Darwin has neither that indirection nor room for such a path, so the endpoint
+    has to live somewhere short - and the client's own mode checks still require a private directory.
+    """
+    import sys
+
+    from so101_teleop.expert_validation.coordinator import CONTROL_SOCKET_ROOT
+    from so101_teleop.expert_validation.supervisor import control_socket_path
+
+    batch_root = Path("/private/tmp/so101-debug-task/stageC-accept/campaigns/campaign-x/bc7b5")
+    campaign_id = "campaign-9937d7c939b446108e92fb8733c36323"
+    standard = batch_root / "control" / "control.sock"
+    chosen = control_socket_path(batch_root, campaign_id)
+    if sys.platform == "darwin":
+        assert chosen != standard
+        assert len(os.fsencode(chosen)) < 104, f"{chosen} cannot be bound on Darwin"
+        assert chosen.parent == CONTROL_SOCKET_ROOT
+        assert campaign_id in chosen.name and batch_root.name in chosen.name, (
+            "two batches must not share one endpoint"
+        )
+    else:
+        assert chosen == standard, "the Linux path stays inside the batch root"
+
+
+def test_the_contract_accepts_the_platform_endpoint_and_still_refuses_the_rest(tmp_path):
+    """Both contracts validate the socket's privacy, so the composer and the validator must agree."""
+    from so101_teleop.expert_validation.coordinator import CONTROL_SOCKET_ROOT
+
+    accepted = _parse(_request(tmp_path))
+    batch_root = tmp_path / "batch"
+    batch_root.mkdir(parents=True, exist_ok=True)
+    from so101_teleop.expert_validation.supervisor import control_socket_path
+
+    chosen = control_socket_path(batch_root, "campaign-a")
+    from so101_teleop.expert_validation.coordinator import CoordinatorStartRequest
+
+    request = CoordinatorStartRequest(
+        campaign_id="campaign-a",
+        batch_id="b001",
+        execution_mode="PARALLEL",
+        worker_count=2,
+        max_points_per_worker=None,
+        argv=accepted.argv if hasattr(accepted, "argv") else (sys.executable, str(HELPER)),
+        environment={},
+        batch_root=batch_root,
+        control_socket=chosen,
+        control_token_sha256="a" * 64,
+        coordinator_epoch=1,
+    )
+    assert request.control_socket == Path(chosen).resolve(strict=False)
+    if sys.platform == "darwin":
+        assert chosen.parent == CONTROL_SOCKET_ROOT
+    with pytest.raises(ValueError, match="CONTROL_SOCKET_OUTSIDE_BATCH_ROOT"):
+        CoordinatorStartRequest(
+            campaign_id="campaign-a",
+            batch_id="b001",
+            execution_mode="PARALLEL",
+            worker_count=2,
+            max_points_per_worker=None,
+            argv=(sys.executable, str(HELPER)),
+            environment={},
+            batch_root=batch_root,
+            control_socket=(tmp_path / "elsewhere" / "control.sock").resolve(),
+            control_token_sha256="a" * 64,
+            coordinator_epoch=1,
+        )
