@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
@@ -57,7 +58,7 @@ from so101_teleop.models import (
 from so101_teleop.task_artifacts import ArtifactAccessError
 from so101_teleop.task_gateway import TaskGatewayError
 
-from .contracts import Domain, LeaseIdentity, MutationError, RequestAuthority
+from .contracts import ChannelBinding, Domain, LeaseIdentity, MutationError, RequestAuthority
 from .lifecycle import UnifiedLifecycle
 from .ports import UnknownBudgetSource, UnifiedServices
 
@@ -200,6 +201,84 @@ def require_authority(domain) -> "callable":
         return authority
 
     return dependency
+
+
+def require_channel(domain) -> "callable":
+    """FastAPI dependency for the acquire path: a live channel, not a claimed controller.
+
+    The four headers are the same ones every mutation carries; what differs is the check. Acquiring
+    is the step that creates the binding, so it may not require one that already exists.
+    """
+
+    async def dependency(
+        request: Request,
+        instance_id: str | None = Header(default=None, alias=INSTANCE_ID_HEADER),
+        proof: str | None = Header(default=None, alias=INSTANCE_PROOF_HEADER),
+        channel_revision: str | None = Header(default=None, alias=CHANNEL_REVISION_HEADER),
+        execution_generation: str | None = Header(default=None, alias=EXECUTION_GENERATION_HEADER),
+    ):
+        if not (instance_id and proof and channel_revision and execution_generation):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "CONTROLLER_INSTANCE_REQUIRED",
+                    "message": "this mutation needs instance authority headers",
+                },
+            )
+        registry = getattr(request.app.state.services, "instances", None)
+        if registry is None:
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "SERVICE_NOT_COMPOSED", "message": "instance registry unavailable"},
+            )
+        try:
+            return registry.acquire_binding(
+                instance_id, proof, channel_revision=int(channel_revision)
+            )
+        except MutationError as error:
+            code = str(error).split(":", 1)[0]
+            raise HTTPException(status_code=409, detail={"code": code, "message": str(error)}) from error
+
+    return dependency
+
+
+def _claim_acquired(registry, binding, result) -> None:
+    """Bind the domain controller once the domain's own lease endpoint has issued a lease."""
+
+    if registry is None:
+        return
+    if hasattr(result, "model_dump"):
+        payload = result.model_dump()
+    elif isinstance(result, dict):
+        payload = result
+    elif hasattr(result, "body"):
+        # The routers hand back a JSONResponse on both success and refusal, so the lease has to be
+        # read out of the response body rather than out of a returned mapping.
+        try:
+            payload = json.loads(result.body)
+        except Exception:  # noqa: BLE001 - an unreadable body simply means there is nothing to bind
+            return
+    else:
+        return
+    if not isinstance(payload, dict):
+        return
+    if "lease_id" not in payload or "expires_monotonic_ns" not in payload:
+        return
+    try:
+        registry.claim(
+            binding,
+            LeaseIdentity(
+                payload["lease_id"],
+                payload["service_session_id"],
+                int(payload["generation"]),
+                int(payload["expires_monotonic_ns"]),
+            ),
+        )
+    except MutationError as error:
+        # The domain already issued its lease, but the controller belongs to another instance: the
+        # acquire is refused with the same structured code the registry uses, never a 500.
+        code = str(error).split(":", 1)[0]
+        raise HTTPException(status_code=409, detail={"code": code, "message": str(error)}) from error
 
 
 def instance_router(services: UnifiedServices) -> APIRouter:
@@ -399,8 +478,10 @@ def teleop_router(services: UnifiedServices) -> APIRouter:
         }
 
     @router.post("/control/lease")
-    async def acquire_lease(body: dict, authority: RequestAuthority = mutation):
-        return await command("lease", body)
+    async def acquire_lease(body: dict, binding: ChannelBinding = Depends(require_channel("teleop"))):
+        result = await command("lease", body)
+        _claim_acquired(getattr(services, "instances", None), binding, result)
+        return result
 
     @router.post("/control/lease/renew")
     async def renew_lease(body: dict, authority: RequestAuthority = mutation):
@@ -615,8 +696,12 @@ def validation_router(services: UnifiedServices) -> APIRouter:
         return payload
 
     @router.post("/expert-validation/lease", response_model=LeaseResponse)
-    async def acquire_lease(body: LeaseAcquireRequest, authority: RequestAuthority = mutation):
-        return await guarded(lambda service: _invoke(service.acquire_lease, body.model_dump()))
+    async def acquire_lease(
+        body: LeaseAcquireRequest, binding: ChannelBinding = Depends(require_channel("validation"))
+    ):
+        result = await guarded(lambda service: _invoke(service.acquire_lease, body.model_dump()))
+        _claim_acquired(getattr(services, "instances", None), binding, result)
+        return result
 
     @router.put("/expert-validation/lease/{lease_id}", response_model=LeaseResponse)
     async def renew_lease(
