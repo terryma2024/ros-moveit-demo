@@ -4529,3 +4529,47 @@ are one read or one environment change away, and neither is a measurement proble
 *response body* rather than the status: `GENERATED_MANIFEST_INVALID` turned out to be the page's own code
 hiding a `STALE_EXECUTION_GENERATION` from the server, and now `VALIDATION_MODELS_NOT_CONFIGURED` replaced
 a bare 409. A status tells you something failed; the body tells you who refused and why.
+
+## CP-143: preflight reads a retired config document, and renewal posts to the wrong endpoint
+
+With the model layout configured (`SO101_VALIDATION_YOLO_WEIGHTS`,
+`SO101_VALIDATION_GROUNDED_ROOT`, and the two hashes - the names are in `production.py:205-243`), the
+sequence advanced again and both refusals moved:
+
+```text
+POST /expert-validation/lease                200 OK
+POST /expert-validation/manifests            200 OK
+POST /expert-validation/campaigns/preflight  409 {"code":"UNKNOWN_CONFIG_FIELD: ['allow_cpu_fallback',
+                                                 'attempt_start_ack_timeout_s', 'available_ram_base_gib',
+                                                 'available_ram_per_worker_gib', 'backend', ... ]"}
+POST /expert-validation/lease                422 {"detail":[{"loc":["body","service_session_id"],
+                                                 "msg":"Field required","input":{}}]}
+```
+
+**Preflight is reading a retired document.** `available_ram_base_gib` and `available_ram_per_worker_gib`
+are budget-era fields - v2, the schema the successor design retired. `production.py` defaults
+`SO101_VALIDATION_PARALLEL_CONFIG` to `parallel_batch_v1.yaml`, and the v3 loader that parses it rejects
+those fields exactly as `CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION` did in CP-122. So the service needs to
+be pointed at the **v3** document (`parallel_batch_v3.yaml`) that the successor design made the active
+budget-free contract. That is configuration again, not code - and it is the last thing between the page
+and a campaign.
+
+**The 422 is a real defect, and it is the first one this round that is not mine.** The renewal call
+arrives with an **empty body** at the *acquire* endpoint:
+
+```text
+domain-transport.ts:26-33   validation: { renewPath: "/expert-validation/lease", renewBody: {} }
+domain-transport.ts:118-121 renew() -> POST ${baseUrl}${renewPath}  with renewBody
+```
+
+but the validation domain's renewal is `PUT /expert-validation/lease/{lease_id}` with
+`{service_session_id, generation}` (`expert_validation/api.py`, `renew_campaign`-style route). A static
+`renewPath` cannot interpolate a lease id, so the transport's validation renewal is structurally pointed
+at the wrong verb and the wrong URL. Note what *did* change: the request now carries authority (the
+previous round's fix), so the server judged the body rather than the identity - the same signature as
+every one of the eight defects before it, one layer further in.
+
+**Two things for the next round, both specified:** point `SO101_VALIDATION_PARALLEL_CONFIG` at the v3
+document and confirm preflight passes; and fix the validation renewal (RED first) so the transport renews
+the lease it actually holds - which also matters for the acceptance, because a lease that cannot be
+renewed will expire during a campaign.
