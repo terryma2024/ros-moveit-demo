@@ -61,5 +61,13 @@ export default defineConfig({
       testMatch: "**/live-sim/08-five-consecutive.spec.ts",
       dependencies: ["live-preflight"],
     },
+    {
+      // The unified single-service acceptance: one owned launcher, one web port, both domain
+      // surfaces on the same origin. It consumes the R01 producer instead of producing another
+      // one, so it can never be the first acceptance of a fresh runtime.
+      name: "unified",
+      testMatch: "**/unified/live-sim.spec.ts",
+      dependencies: ["r01-sequential"],
+    },
   ],
 });
