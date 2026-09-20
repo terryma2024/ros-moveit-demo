@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ298 (independent Screen Recording corroboration and its tooling)
+latest_checkpoint: CP-UQ299 (Task 14 five_batch_stability=5/5)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -14671,3 +14671,58 @@ batches in flight; Task 14 is **2/5 countable**. `LINUX_REGRESSION_DEFERRED` ret
 **PARTIAL**.
 
 _Ledger source HEAD: `61fd443a`; no evidence deleted._
+
+### CP-UQ299 — Task 14 reaches `five_batch_stability = 5/5`
+
+The counted series `task14-five-batches-05` finished at 02:03:18Z with five consecutive countable
+batches. `verify-task14.py` (recomputed from the artifacts, not from the runner's summary) reports:
+
+```text
+batch      started (UTC)      finished (UTC)     status            served  cleanup  points/slot  gui/slot  phases  GUI window generations
+fr5-01     01:28:11           01:35:17           W2_CAMPAIGN_PASS  12      complete 4            4/4       4/4     4925/4917 @09:29:12
+fr5-02     01:35:23           01:42:14           W2_CAMPAIGN_PASS  12      complete 4            4/4       4/4     4950/4939 @09:36:24
+fr5-03     01:42:19           01:49:25           W2_CAMPAIGN_PASS  12      complete 4            4/4       4/4     4971/4961 @09:43:20
+fr5-04     01:49:30           01:56:22           W2_CAMPAIGN_PASS  12      complete 4            4/4       4/4     4984/4983 @09:50:32
+fr5-05     01:56:27           02:03:18           W2_CAMPAIGN_PASS  12      complete 4            4/4       4/4     5009/5005 @09:57:28
+consecutive_countable_batches: 5/5     plans_identical_across_batches: true     campaign_paths_distinct: true
+```
+
+Per slot, per batch, the readback found: four `point-result.json` all `SUCCEEDED` with no failure code,
+four `viewer.png` with four distinct hashes, four execution manifests `DONE` with `failure: null`, four
+manifests whose `state_trace` contains all seven required phases, and a session id of its own
+(`task14-fr5-0N-w1` / `-w2`) with `expected_reset_epoch` 1, 2, 3, 4. That is 5 batches × 2 slots × 4
+points = 40 point executions, each with its own manifest, point result and phase trace; the "one 20-point
+batch" substitute the plan forbids was never used.
+
+Per batch, from the campaign document: `served.count 12` on `devices ['mps']` with `lane.max_concurrent 1`
+and `lane.rejected 0`, zero server refusals, zero handler errors, three `broker.infer` requests per slot
+all `OK`, both slots `ACTIVE` with distinct PIDs and birth identities, `station_record.ready` with all
+three controllers `active` and all three actions and services resolving on distinct ROS domains
+(181/182), and `cleanup {complete, directory_removed, registry_empty: true, workers_reaped: [true, true]}`.
+Per batch, from the GUI block: zero MuJoCo windows before the start, zero after the end, no station
+process signature in either process record, an empty private IPC base before the start, two independent
+window-level captures during the action with full identity (window id, owner process, owner PID, title,
+geometry, timestamp, sha256, exact command) and three desktop snapshots through the skill. The five window
+generations are all different, which is the per-batch freshness statement in identity form rather than as
+a counter.
+
+Artifacts: `task14-five-batches-05/summary-<timestamp>.txt` (append-only series record),
+`task14-five-batches-05/readback.txt` and `readback.json` (the recomputed verdict, machine-readable), and
+per batch `gui-<run>/` beside it plus `task14-fr5-0N/campaign/...` inside it. The verifier's own defects
+were found and fixed before they could produce a false verdict — the GUI directory is looked up beside the
+series summary rather than beside the run root, the desktop snapshots sit two levels down because of the
+skill's output convention, and the pre/post process records are filtered to station signatures so that
+this session's own command lines (which all contain the task path) are not mistaken for a leftover stack.
+
+Two honest boundaries. First, `MACOS_MPS_W2_PASS` is **not** written: Task 16 assigns that judgement to
+`gpt-5.6-sol/high`, which this session cannot invoke, so the tracked verdict stays `PARTIAL` with the
+independent verdict recorded as owed — the macOS evidence is complete, the independent judgement is not
+mine to make. Second, `LINUX_REGRESSION_DEFERRED` is retained in full: no Linux gate was run, no
+CUDA/NVML/EGL/package-CTest/Linux-W2 result was fabricated, and the one real open anomaly
+(`scene_setup attach`'s world REMOVE, CP-UQ296) belongs to the Gazebo path, which is that deferred side.
+
+With this, the two things this run was resumed to close are closed: the CP-UQ271 spawned-worker
+pick-place gap (real per-point pick-place inside the leased workers, phase-complete in 40 point runs) and
+Task 14 (5/5). Task 14's five boxes in the plan are ticked, each naming the run and field that carries it.
+
+_Ledger source HEAD: `02e54dce`; no evidence deleted._
