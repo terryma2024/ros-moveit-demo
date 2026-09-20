@@ -326,3 +326,21 @@ test("renewal outcomes are observable without the page scheduling anything", asy
   expect(seen).toHaveLength(2);
   runtime.dispose();
 });
+
+test("accepted snapshots are observable so a page needs no subscription of its own", async () => {
+  const snapshot: RuntimeSnapshot = { sequence: 4, serviceEpoch: "e1", executionGeneration: 1, payload: null };
+  const { transport } = makeTransport(snapshot);
+  const runtime = new DomainRuntime("teleop", transport);
+  const seen: number[] = [];
+  const unsubscribe = runtime.onSnapshot((event) => seen.push(event.sequence));
+  await runtime.start();
+  expect(seen).toEqual([4]);
+  await runtime.accept({ ...snapshot, sequence: 5 });
+  expect(seen).toEqual([4, 5]);
+  await runtime.accept({ ...snapshot, sequence: 5 });
+  expect(seen).toEqual([4, 5]);
+  unsubscribe();
+  await runtime.accept({ ...snapshot, sequence: 6 });
+  expect(seen).toEqual([4, 5]);
+  runtime.dispose();
+});
