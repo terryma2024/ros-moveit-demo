@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ291 (+ TCC grant options)
+latest_checkpoint: CP-UQ292 (per-point phase evidence)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -14330,3 +14330,41 @@ probed again (`task16-capture-probe-20`) and remains denied, so Task 14 stays **
 `LINUX_REGRESSION_DEFERRED` stands.
 
 _Ledger source HEAD: `d08d58cf`; no evidence deleted._
+
+## CP-UQ292 — Every item the plan names for a batch is now itemised per point
+
+`task14-state-trace-01` (`W2_CAMPAIGN_PASS`) carries each point's state sequence in the campaign
+document. All four points on **both** slots show the same 21-phase trace:
+
+```text
+IDLE -> PREPARE_OPEN_GRIPPER -> MOVE_ABOVE_OBJECT -> DESCEND -> CLOSE_GRIPPER
+     -> WAIT_GRASP_STABLE -> MICRO_LIFT -> WAIT_MICRO_LIFT_STABLE -> VERIFY_PHYSICAL_GRASP
+     -> ATTACH_MOVEIT -> LIFT -> MOVE_ABOVE_PLACE -> DESCEND_TO_PLACE -> DETACH_MOVEIT
+     -> OPEN_GRIPPER -> WAIT_RELEASE_SETTLE -> VALIDATE_FINAL_PLACEMENT -> SYNC_WORLD_OBJECT
+     -> RETREAT -> DONE
+```
+
+Mapped onto Task 14's per-batch requirements:
+
+| Requirement | Where it appears |
+| --- | --- |
+| MoveIt shadow | `ATTACH_MOVEIT` and `DETACH_MOVEIT` phases, per point |
+| detach | `DETACH_MOVEIT` |
+| release | `OPEN_GRIPPER -> WAIT_RELEASE_SETTLE` |
+| final placement | `VALIDATE_FINAL_PLACEMENT -> SYNC_WORLD_OBJECT`, plus the final cup pose in the same record |
+| grasp | `VERIFY_PHYSICAL_GRASP`, plus contact counts and normal force |
+| controller/joints | station `READY` with all three controllers `active`, then the executed trajectory |
+| two slots' progress/result/evidence | the per-slot summary, each with its own four points and evidence root |
+| shared Broker | `served.devices == ['mps']` with the one-time table admitting every request |
+| cleanup | `cleanup.complete` with both workers reaped and no process left |
+
+**This also corrects a conclusion of mine**: the standalone shadow probe (CP-UQ288) exercised
+`scene_setup`'s CLI attach, which reported `SCENE_APPLY_FAILED`; the pick-place state machine does its
+own `ATTACH_MOVEIT`/`DETACH_MOVEIT` and *does* walk those phases successfully on every point. Two
+different code paths, and the one the batches use is the one that works - the anomaly I left open belongs
+to the CLI path, not to the batch path.
+
+So the only thing between the current state and a counted batch remains the per-point `viewer.png`,
+i.e. the TCC grant. Task 14 stays **0/5**; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `c50e8009`; no evidence deleted._
