@@ -6067,3 +6067,41 @@ service's 4-point floor.
 
 Machine after the round: no service, station or worker processes; **0 task-owned helpers**; **0 IPC
 residue** (the campaign's own `directory_removed`); tree clean.
+
+## CP-174: the station failure is one missing service, measured from outside the campaign
+
+CP-173 left two candidates for `STATION_NOT_READY`. Three standalone experiments, each starting the
+station exactly as a Worker does (`default_task_station_config` + `station_environment`, on the
+worker's own domain), separate them - and the answer is neither of the candidates I had:
+
+1. **The station comes up on this host.** `move_group` reaches "You can start planning now!", and with
+   a healthy ROS 2 daemon the graph shows **9 nodes** - `/controller_manager`, `/move_group`,
+   `/move_group/moveit`, … - and **16** `/controller_manager/*` services. Discovery works here; my
+   first probe simply read a stale daemon, which is why an earlier experiment saw zero nodes on every
+   domain. That correction matters: without it I would have recorded "discovery is broken on this host",
+   which is false.
+2. **The motion stack never finishes spawning controllers.** The three `ros2_control` spawners sit on
+   `waiting for service /controller_manager/list_controllers to become available...` for the whole
+   station lifetime and only exit with `KeyboardInterrupt received! Exiting....` when the station is
+   torn down. `joint_state_broadcaster` is therefore never spawned, let alone activated.
+3. **The product's own readiness probe is right, and it is not a timing problem.**
+   `motion_stack_ready` was given **20 s, 60 s and 120 s** against that live station and returned
+   `{ready: false, phase: CONTROLLERS, failure_code: MOTION_STACK_CONTROLLER_NOT_ACTIVE,
+   evidence: {dependency: joint_state_broadcaster, observed: null}}` every time. The worker's 150 s
+   budget in `macos_w2_worker.py:66` is not the constraint.
+
+So the campaign's refusal follows from one concrete fact: on this host, with this underlay,
+`/controller_manager/list_controllers` never becomes available to the spawner. Everything above it is
+working - the service launched and controlled the campaign, the lease lifecycle held (16 renewals, 0
+refusals), the campaign cleaned up exactly (`workers_reaped [true, true]`, `directory_removed`,
+`registry_empty`) - and everything below it belongs to the controller-manager bring-up the §7
+`installed` row already records as blocked on the pinned fork revision.
+
+**Next concrete check, not a guess:** while the station is up, `ros2 service list | grep -i
+list_controllers` (a bare name check rather than the truncated first four) and the `ros2_control_node`
+stderr, to decide between "the service is offered but the spawner cannot reach it" and "the controller
+manager never offers it". Both are inside the demo composition's ROS bring-up; the second is the
+underlay question this task family already tracks.
+
+Round state: no service, station or worker processes left; **0 task-owned helpers**; **0 IPC residue**;
+tree clean.
