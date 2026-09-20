@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ295 (Task 14 readback tool and its interim result)
+latest_checkpoint: CP-UQ296 (scene attach anomaly narrowed; half of it was my probe)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -14539,3 +14539,53 @@ are held back only by the GUI block, which series 05 supplies. `LINUX_REGRESSION
 verdict stays **PARTIAL**.
 
 _Ledger source HEAD: `bdae6767`; no evidence deleted._
+
+### CP-UQ296 — the open `scene_setup attach` anomaly, split into one probe defect and one real candidate
+
+I had left this as "two candidates left". Reading the code against the recorded probe output splits it
+cleanly, and half of it was mine.
+
+The probe record (`moveit-shadow-04`, run at 08:16) is: `attach` exit 1 `SCENE_APPLY_FAILED`;
+`observe_attached` exit 1 `SCENE_READBACK_MISMATCH` with `attached_ids: ["plastic_cup"]` and
+`attached_links: {}`; `detach` and `observe_detached` exit 0; and from the same log the station's own
+`scene_setup` reporting `phase READ_BACK, success true` with `world_ids ["pedestal", "plastic_cup",
+"table"]` and `primitive_counts {"pedestal": 1, "plastic_cup": 13, "table": 1}`.
+
+**Half one, a defect in my probe.** `attached_links` in the evidence is not what MoveIt reported; it is
+the *expected* mapping, `dict(sorted(expected_attached.items()))` (`task_scene.py:193`). An empty
+mapping therefore means `expected_cup_attachment` was `None`, and the CLI's plain `observe` operation
+always passes `None` (`application/scene_setup.py:34-35`) — it expects the cup in the **world**. So
+"attach, then `observe`" can never pass: `observe` is not an attached-state check at all. Only the
+`attach` operation itself observes with `expected_cup_attachment="gripper"`, internally. My probe asked
+the tool a question it does not answer, and read the refusal as a product failure.
+
+**Half two, real, and narrowed.** `attach_task_object` (`task_scene.py:320-342`) sends the attached
+object *and* an explicit `world` REMOVE of the same id:
+
+```python
+scene.robot_state.attached_collision_objects = [attached]   # object.id = plastic_cup, ADD
+scene.world.collision_objects = [remove]                    # same id, REMOVE
+```
+
+and it sets `scene.is_diff` and `scene.robot_state.is_diff` but never `scene.world.is_diff` — a
+property that appears nowhere in `src/` or `test/`. The attach that works on every point of every
+batch is a different one: `micro_lift.py:187-201` sends the attached object alone, with no world
+operation, and it succeeds. Two candidates survive, and they are distinguishable:
+
+1. The explicit REMOVE conflicts with MoveIt's implicit world-to-attached transfer of an object with
+   the same id, so `/apply_planning_scene` answers `success: false` while the attached object is still
+   applied — which is exactly what the readback shows.
+2. The missing `world.is_diff` makes MoveIt process that world message as a replacement rather than a
+   diff; the REMOVE then targets an object that no longer exists, and the same call would also drop
+   `table` and `pedestal` from the world.
+
+The probe that separates them: run `scene_setup attach` against a live station and immediately read
+`WORLD_OBJECT_NAMES | ROBOT_STATE_ATTACHED_OBJECTS`. If `table` and `pedestal` are still there,
+candidate 1 holds; if they are gone, candidate 2 does. I am not running it now, and not editing the
+file either: a source change mid-series would mix code across the counted batches, which Task 14's own
+rules forbid. Worth knowing that this path is not on the macOS W2 acceptance route in any case — the
+CLI attach is used by the Gazebo backend (`backends/gazebo/execute.py:335`), which is Linux and stays
+`DEFERRED_ENVIRONMENT`, while the macOS batches attach through the phase machine and complete
+`ATTACH_MOVEIT`/`DETACH_MOVEIT` on all four points of both slots in every batch so far.
+
+_Ledger source HEAD: `59812065`; no evidence deleted._
