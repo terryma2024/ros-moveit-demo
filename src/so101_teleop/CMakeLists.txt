@@ -133,6 +133,8 @@ if(BUILD_TESTING)
   so101_add_pytest_test(test_unified_ipc test/teleop/test_unified_ipc.py)
   so101_add_pytest_test(test_unified_bridge test/teleop/test_unified_bridge.py)
   so101_add_pytest_test(test_unified_two_channel test/teleop/test_unified_two_channel.py)
+  so101_add_pytest_test(test_unified_parents test/teleop/test_unified_parents.py)
+  so101_add_pytest_test(test_unified_admission test/teleop/test_unified_admission.py)
 endif()
 
 ament_package()

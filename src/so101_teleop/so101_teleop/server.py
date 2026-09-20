@@ -9,6 +9,7 @@ makes controller/MoveIt unavailability a fail-closed API result.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import importlib
 import json
 import math
@@ -569,6 +570,8 @@ class TeleopService:
         self._camera = camera
         self._backend = backend
         self._task_active = lambda: False
+        self._admission_hook = None
+        self._current_operation = contextvars.ContextVar("so101_teleop_operation", default=None)
         self._parameters=Path(os.environ.get("SO101_TELEOP_PARAMETERS", "/tmp/so101-teleop-parameters.json"))
         self._workflow: dict[str, tuple[Path, str]] = {}
     async def health(self):
@@ -598,6 +601,17 @@ class TeleopService:
             not body.get("session_id") or body["session_id"] == snapshot.simulation_session_id)
     def bind_task_active(self, predicate) -> None:
         self._task_active = predicate
+    def bind_admission(self, hook) -> None:
+        """Attach the unified admission hook; every mutation gate then runs through it."""
+        self._admission_hook = hook
+    def _admission_gate(self, body, operation: str):
+        if self._admission_hook is None or operation is None:
+            return None
+        refusal = self._admission_hook.check(body, operation)
+        if refusal is None:
+            return None
+        code, message = refusal
+        return self._result(body, False, code, message)
     def _base_mutation_gate(self, body):
         if self._worker.snapshot().mode is not ServerMode.READY: return self._result(body,False,"READINESS_NOT_SATISFIED","fresh ROS, TF and controller evidence required")
         if not self._lease_ok(body): return self._result(body,False,"LEASE_REQUIRED","valid lease required")
@@ -611,11 +625,13 @@ class TeleopService:
                 body, False, "TASK_BATCH_ACTIVE",
                 "the task owner has exclusive mutation access",
             )
-        return None
+        return self._admission_gate(body, self._current_operation.get())
     def task_mutation_gate(self, body, capability: str):
         if not getattr(self._backend.capabilities(), capability, False):
             return self._backend_unavailable(body, capability)
-        return self._base_mutation_gate(body)
+        if gate := self._base_mutation_gate(body):
+            return gate
+        return self._admission_gate(body, self._current_operation.get() or capability)
     def _required_capability(self, name: str) -> str | None:
         if name.startswith("workflow_"):
             operation = name.removeprefix("workflow_")
@@ -673,6 +689,7 @@ class TeleopService:
     async def execute_plan(self, plan_id: str, body: dict):
         return await self.command("execute", {**body, "plan_id": plan_id})
     async def command(self, name: str, body: dict):
+        self._current_operation.set(name)
         command_id=body.get("command_id", "")
         if not command_id: return self._result(body, False, "COMMAND_ID_REQUIRED", "command_id is required")
         if name in ("execute", "cancel") and not (
