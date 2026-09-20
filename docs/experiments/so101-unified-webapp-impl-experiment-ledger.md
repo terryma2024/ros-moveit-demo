@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-40
+latest_checkpoint: CP-41
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -987,3 +987,21 @@ Still open in the same class of work: `expert-validation-app.tsx` keeps its own 
 loop than the teleop one - it validates the returned lease identity and generation and rewrites the
 runtime's short-lived lease state - so removing it needs the runtime/validation transport to expose
 the same failure semantics first, rather than deleting the loop and losing that check.
+
+## CP-41: the authority headers are part of the published contract (gap found and closed)
+
+Checking the plan's requirement that "authority headers 与 new parent/instance schemas 全生成" against
+the generated document showed the headers were **missing**: the routes read them from
+`Request.headers`, so FastAPI emitted `parameters: []` for every mutation and the generated client
+had no way to know they exist.
+
+Fixed by declaring them as real `Header(alias=...)` parameters in the shared `require_authority`
+dependency. All four now appear on every mutation route in the unified, teleop and validation
+documents, the three TypeScript clients were regenerated, and a new test asserts the four names on
+`/gripper/execute`, `/plan/joints`, `/robot/home` and `/tasks/runs` plus the presence of the
+`InstanceProofResponse` and `QualificationViewResponse` schemas. Behaviour is unchanged: a missing
+header still yields `CONTROLLER_INSTANCE_REQUIRED`, and a present-but-unbound authority still yields
+`SERVICE_NOT_COMPOSED` or the registry's own refusal code.
+
+GREEN: `pyrgate test_unified_api.py` exit 0; frontend suite and build re-verified after regenerating
+the clients. Commit `08eb6818`.
