@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ289 (report state) + Appendix C
+latest_checkpoint: CP-UQ290 (per-point evidence in the document)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -14145,3 +14145,39 @@ earlier as unrelated to this branch's work.)
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `68162463`; no evidence deleted._
+
+## CP-UQ290 — The plan's per-batch evidence items are now carried in the campaign document itself
+
+`task14-evidence-rich-01` (`W2_CAMPAIGN_PASS`) adds, per executed point, the items the plan names - taken
+from each point's own manifest instead of requiring a directory walk:
+
+```text
+w1 | executed 4
+   planning_scene_readback : {"attached_object_ids": [], "world_primitive_counts":
+                              {"pedestal": 1, "plastic_cup": 13, "table": 1}}
+   release_marker_sequence : 7643      transition_count: 19
+   final_cup_position_world_m : [-0.07787, -0.24770, 0.16483]
+w2 | executed 4
+   planning_scene_readback : (identical)
+   release_marker_sequence : 8663      transition_count: 19
+   final_cup_position_world_m : [-0.07785, -0.24771, 0.16483]
+```
+
+Three readings, kept precise:
+
+- **placement agrees across slots** to ~2e-5 m: two independent stations performed the same task and
+  put the cup in the same place, which is the cross-slot consistency a W2 batch should show;
+- **the release marker and the 19 state transitions** are per point, so the detach/release half of the
+  requirement is visible in the campaign result without walking the tree;
+- **the planning-scene readback is the manifest's recorded readback**, and it shows no attached objects
+  at that moment - it is *not* a per-phase attach/detach record. Saying otherwise would overstate it,
+  and the standalone shadow probe (CP-UQ288) is where the attach/detach transition was actually
+  observed.
+
+`per-slot-summary-03`: 18 passed, including a manifest that lacks the new fields (they read as `None`
+rather than raising, so an older or partial evidence file cannot break the summary).
+
+Task 14 remains 0/5 - every point still fails at `TERMINAL_CAPTURE_FAILED` - and
+`LINUX_REGRESSION_DEFERRED` stands.
+
+_Ledger source HEAD: `3d9556f6`; no evidence deleted._
