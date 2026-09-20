@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-27
+latest_checkpoint: CP-28
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -747,3 +747,25 @@ its control, and that the disabled selector is preserved.
 Remaining in Task 8: `select`, `field`, `sheet` and `sidebar`, each needing the explicit v4-to-v3
 conversion. `sheet` and `sidebar` are the largest and pull in portal/sidebar machinery, so they
 should be taken one at a time with their own behaviour tests rather than in bulk.
+
+## CP-28: the select port needs real work, not a regex (reverted, tree clean)
+
+Attempted a mechanical port of the captured `select` item (224 lines) and it failed typecheck in
+three distinct ways, so the file was reverted and the tree is clean again (`bun run build` exit 0
+after the revert). The failure modes are the useful output:
+
+1. `import { Select as SelectPrimitive } from "radix-ui"` uses the umbrella package's namespace
+   object. Rebinding it to the scoped `@radix-ui/react-select` must be
+   `import * as SelectPrimitive from "@radix-ui/react-select"`; a named import has no `.Root`,
+   `.Group`, `.Value` members.
+2. The item imports an internal site component, `IconPlaceholder` from
+   `@/app/(create)/components/icon-placeholder`, which does not exist in this project. A faithful
+   port has to substitute the project's own icons (`lucide-react` is already a dependency) and
+   check which indicator slots each one fills.
+3. Alpha modifiers and `size-*` utilities need the v4-to-v3 conversion already applied to `input`.
+
+So `select` is a real porting job - import strategy, icon substitution and a class pass - not a
+substitution sweep. The same warnings apply to `field` (238 lines, and it declares
+`registryDependencies: ["label", "separator"]`), `sheet` and `sidebar`. Next round should port one
+item by hand, reusing the `input`/`label` conversions as the pattern, and only then wire the new
+primitives into the pages.
