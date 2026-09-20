@@ -6,7 +6,7 @@ export function ConnectionHeader({ mode, session, revision, leaseHeld, rttMs, on
 
   return (
     <header className="flex min-w-0 flex-wrap items-center gap-3 border-b border-slate-700 pb-4">
-      <div aria-label="Primary connection actions" className="flex shrink-0 items-center gap-3">
+      <div aria-label="Primary connection actions" className="flex min-w-0 max-w-full shrink-0 flex-wrap items-center gap-3">
         <h1 className="text-2xl font-bold">SO-101 Teleop</h1>
         <Badge className="border-sky-700 bg-sky-900 text-sky-100 hover:bg-sky-900">{mode}</Badge>
         <Button size="sm" variant={leaseHeld ? "outline" : "secondary"} disabled={leaseHeld} onClick={onAcquire}>
