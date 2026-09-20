@@ -3387,3 +3387,40 @@ evidence §7 asks for, from a real run, with the artifacts to check.
 The reusable part: CP-117's diagnosis came from reading two orphaned processes' command lines, and the
 confirmation came from changing exactly one thing and re-running. That is the A/B the skill's loop asks
 for, and it took 6 minutes of wall time once the harness was understood.
+
+## CP-119: the orphaned station was a lifecycle boundary, not a mystery - and the cancel probe is dispatched
+
+CP-117 left a question open: were the surviving `ros2 launch` stations a bug in the campaign's cleanup,
+or a component that cleanup does not own? The code answers it, and the answer is neither of the two
+phrasings I offered.
+
+- The station is owned as a **process group** by the worker runtime:
+  `runtime/task_stack.py` has `OwnedProcessGroup` and `PersistentTaskStack` with `_killpg(identity.pgid,
+  ...)`, sequencing SIGINT then SIGTERM with a 5 s `terminate_timeout_s`, and
+  `runtime/parallel_worker_runtime.py` exposes `stop(expected)` with the same timeouts and `finally`
+  paths around its run loop.
+- The campaign supervisor's `terminate_all()` walks **`self.receipt.children`** - the two worker PIDs it
+  registered, matched by exact process identity and birth identity - and reports `workers_reaped` from
+  those same entries (`campaign_supervisor.py:597`, `macos_w2_campaign.py:724-729`).
+
+So the station is owned, but by the *worker*, and the supervisor's receipt covers only the workers. A
+worker that reaches its own teardown stops its station; a worker that dies abnormally - killed after the
+terminate timeout, or crashing before `finally` - leaks the station process group, and the supervisor
+cannot see it because the station never appears in its receipt. That is exactly the observed shape:
+`workers_reaped [true, true]` from the supervisor while two station launchers lived on, one per slot,
+each naming its own run. The verdict was accurate about the children it owns and silent about the ones it
+does not, which is why `cleanup.complete: true` and a dirty host were both true at once.
+
+I am recording this as a boundary rather than a defect: whether a worker should be terminated in a way
+that always runs its own teardown (SIGTERM with a longer budget before SIGKILL, or a station reaper in the
+supervisor's receipt) is a design call for the parallel-validation side, not something this acceptance
+task should change while measuring. What this task does is insist that every live run now brackets itself
+with a residue check, which is why `bash-30` and the run below both print `ros2 launch` and helper counts
+before and after.
+
+With that answered, background job `bash-31` is running the first **fault-injection** campaign for the §7
+control row: the same exact-W2 command with `--cancel-second-worker-after-served 4`, whose documented
+effect is that every remaining request of the second Worker is cancelled and its results are forfeit. The
+property under test is that cancellation is delivered and observed as a controlled outcome - not that the
+campaign passes, since the CLI itself says a refused request makes the verdict INCOMPLETE by
+construction. Its result is not known at the time of writing and is not claimed here.
