@@ -2789,3 +2789,104 @@ With that settled the fix is mechanical: build the pinned submodule into its own
 staged MuJoCo SDK, then source it ahead of the stale external one and rebuild the closure. Background
 job `bash-22` is doing that first half now, into fresh bases inside this task's registered root, and it
 reads back whether the plugin header lands in the install rather than assuming it did.
+
+## CP-108: the installed row is measured and green - and two of my own builds were wasted on a one-line bug
+
+### The bug first, because it nearly became a wrong conclusion
+
+Closure builds three and four both failed with the same missing
+`mujoco_ros2_control_plugins/mujoco_ros2_control_plugin_capabilities.hpp`. I had a fresh overlay that
+contained that header, and it was not being used. The CMake cache said why:
+
+```text
+mujoco_ros2_control_plugins_DIR:PATH=.../ros2_jazzy/ws_mujoco_ros2_control_fork/install/share/mujoco_ros2_control_plugins/cmake
+```
+
+the *stale* external fork. The cause was in my build script, not in any package:
+
+```sh
+for ov in ... "$FORK"; do [ -f "$ov" ] && source "$ov"; done    # $FORK was the install *directory*
+```
+
+`[ -f <directory> ]` is false, so the loop skipped the overlay silently, kept the stale one from the
+parent chain, and CMake resolved the old package. One character of wrong test produced two failures
+that looked exactly like a dependency problem. The corrected script passes `setup.bash`, prints every
+source it performs, and pins the package explicitly:
+
+```sh
+-Dmujoco_ros2_control_plugins_DIR="$FORKROOT/share/mujoco_ros2_control_plugins/cmake"
+```
+
+and the cache now reads back the fresh overlay. CP-107's finding still stands - the pinned revision
+does contain the header - but the honest sequence is that my overlay was never sourced in those two
+builds, so the stale package, not the stale revision, was what bit.
+
+### The closure build, finally
+
+Background job `bash-25`, colcon exit 0, `--base-paths src` (which also stops colcon from walking into
+`third_party/mujoco_ros2_control`, where `mujoco_3d_lidar` fails against MuJoCo 3.12 because the
+submodule still includes `mujoco/mjtnum.h` - the rename ai-station is porting right now):
+
+```text
+Finished <<< so101_mujoco_support [30.1s]
+Finished <<< so101_teleop        [48.1s]
+Finished <<< so101_demo_py       [2.28s]
+BUILD_RC=0
+```
+
+### installed: measured, both halves
+
+Gate `eaf70b3f4a37429d9bcbd14cc0b936b1` (exit 0, 5.2 s) on the resulting prefix. Console scripts are
+real, and they live at `lib/<pkg>/` rather than `bin/` - my first read said "bin total: 0" and that was
+my wrong expectation, not an empty install:
+
+```text
+lib/so101_demo_py/so101_parallel_batch          lib/so101_demo_py/so101_parallel_batch_cleanup
+lib/so101_demo_py/so101_measure_parallel_resources   lib/so101_demo_py/so101_parallel_perception_broker
+lib/so101_teleop/so101_unified_web_server.py    lib/so101_teleop/so101_expert_validation_server.py
+```
+
+The retired entry was executed rather than inspected, and does what §7 asks - an explicit retirement,
+not a silent different mode and not an exit-1 stub:
+
+```text
+{"authorizes_execution": false, "detail": "the per-N certified measurement runtime was removed by the
+ lightweight start guard design; use `so101_parallel_batch` for real execution, ...",
+ "error": "MEASUREMENT_ENTRY_RETIRED", "readonly": true, "replacement": "so101_parallel_batch"}
+retired_rc=2
+```
+
+The replacement exposes a real CLI (`--points --config --batch-id [--worker-count] [--contract-version]
+[--batch-kind] [--adaptive-workers] [--fallback-worker-counts] ...`). Installed resources are present in
+both places §7 names: `share/so101_demo_py/config/mujoco/*.yaml` plus its launch files, and
+`share/so101_teleop/web/{index.html,assets,fonts}`.
+
+Gate `6807ad9b37104f29b6ea4f13f0d7fb1e` (exit 0, 4.9 s) then ran the installed default composition:
+
+```text
+health/live 200   health/ready 503   / 200   /tasks 200   /expert-validation 200   unknown asset 404
+worker_qualifications: [{"selected_n": 2, "status": "UNKNOWN", "reasons": ["BUDGET_PROVIDER_NOT_READY"],
+                         "runtime_identity": "uncomposed-runtime", ...}]
+start_guard: null
+```
+
+`ready` is 503 because no ROS domain exists in that shell, which is the domain-readiness behaviour the
+plan wants; the capabilities payload advertises `fixed_worker_counts`, `worker_count_availability`,
+`start_guard`, `start_guard_policy`, `minimum_points`/`maximum_points` and the adaptive ladder. And the
+retired per-N budget surfaces as **UNKNOWN with a reason**, with the guard reading as not-yet-checked -
+the §7 rule about never dressing partial unknown up as green, confirmed on the installed system rather
+than only in unit tests.
+
+### Matrix after this round
+
+| §7 row | status |
+| --- | --- |
+| guard, probe lifecycle, CPU, RAM | done - 82 passed |
+| budget-free entry | done - budget-free env confirmed; refusal is on the non-budget evidence root |
+| unknown/WARN presentation | done - 14 unit tests, plus the live capabilities payload above |
+| installed | **done** - console scripts, launch, config, web assets, retirement error exit 2, default composition serving |
+| history | done - 103 passed over `test_parallel_history.py` + `test_parallel_batch_contracts.py`, gate `de939abaae0446c3a59779417839e317` |
+| functional (actual N per worker_count) | contract half done; a real spawn needs the simulation stack |
+| points (4 and 20) | pending - needs a real batch |
+| control (lease/cancel/recovery/cleanup/N1 FULL_RESTART) | pending - unit level green, batch level pending |
+| physics | pending - needs the station or a granted window |
