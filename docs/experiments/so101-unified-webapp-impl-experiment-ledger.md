@@ -3931,3 +3931,34 @@ So the next round's live step is: serve the fixed build, open the application in
 the UI, and watch the same four-header flow the API script was imitating. If the page acquires and the
 subsequent mutation is accepted, the authority model is proven end to end; if it does not, the failure
 will be in the client-server pair, which is exactly where I have been finding real defects.
+
+## CP-130: the UI acquire A/B did not run, for two of my own reasons, and there is a simpler route
+
+The plan was an A/B in the real page: the installed server (pre-fix) against the source server (fixed),
+clicking the acquire control in Chrome on both. It produced no comparison, for two reasons that are both
+mine.
+
+**One: the source-tree server cannot import its ROS dependencies under the environment I built.**
+`ModuleNotFoundError: No module named 'ament_index_python'` arrives while importing the expert-validation
+catalog, so the fixed server never reached `/health/live`; the old one started and shut down cleanly. I
+was juggling `PYTHONPATH` to make the source package win over the installed one while the underlay stayed
+visible, and lost the underlay in the process. `--static-dir` exists on the server
+(`unified/main.py:36`), so serving the installed assets from the source tree is possible - it is the
+*interpreter path* that is fragile, not the assets.
+
+**Two: my background-subshell pattern holds the harness's stdout open, so the command hung for seven
+minutes and was killed.** `( ... ) &` inherits the script's stdout even when the inner command redirects;
+the tool waits for every writer of the pipe to close, and the servers were still writing to it. That is
+why an A/B that should take two minutes timed out. It is a harness bug of mine, not a product problem:
+the fix is to redirect the subshell itself, not just its inner command. No servers were left behind - I
+checked and killed nothing because nothing was left, which is the one thing that went right.
+
+**The simpler route, and what I will do instead.** Rather than fight `PYTHONPATH`, rebuild the install
+with the fix (`colcon build --packages-select so101_teleop` into this task's own prefix, a minute or so)
+and run the page against the **installed** server exactly as every other browser gate in this task has
+done. One interpreter, one overlay, no precedence tricks, and the artifact under test is the installed
+one rather than a source tree wearing an install's assets.
+
+The A/B itself is still worth running once that works: the old prefix is on disk, and "the page acquires
+on the fixed build and not on the unfixed one" is the cleanest possible statement of what these three
+rounds have been about.
