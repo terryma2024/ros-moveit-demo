@@ -2944,3 +2944,50 @@ and the N1 FULL_RESTART retry, and physics. A real batch is not something this r
 responsibly: `so101_parallel_batch` requires a perception broker image, YOLO weights and a grounded
 manifest, so it is a live run needing an operator-granted window and the matching provenance binding,
 and `bash-25`'s prefix is the first one that contains the entry point at all.
+
+## CP-110: correction - CP-109's "gap" was my probe outside its composition
+
+CP-109 reported that the macOS accelerator composition is missing an accelerator and called it a gap.
+That framing is wrong, and it is wrong in a way I have now hit four times this session, so it goes on
+the record rather than being quietly edited out.
+
+What the production code actually does, read after the claim was written:
+
+```text
+cli/macos_w2_campaign.py:441  # The guard runs in its own process. Its probe imports torch.mps, and the
+                              # broker bootstrap below requires torch to be unimported ...
+cli/macos_w2_campaign.py:446  from ..parallel_batch.accelerator_probe import DarwinMpsAcceleratorProbe, ...
+cli/macos_w2_campaign.py:452  snapshot = DarwinMpsAcceleratorProbe().probe(deadline_monotonic_ns=now + 2s)
+cli/macos_w2_campaign.py:453  evaluation = evaluate_accelerator_snapshot(snapshot,
+                                  StartGuardPolicy(mps_minimum_headroom_bytes=plan.mps_minimum_headroom_bytes))
+                              -> writes start-guard.json, prints it, and returns 4 (REFUSED) unless PASS
+```
+
+So the Darwin/MPS guard is wired, accelerator and all, in the campaign CLI, and it is deliberately kept
+in a separate interpreter because the probe imports `torch.mps`. What I exercised was
+`compose_default_start_guard(policy)` - the **v3** composition, whose probe is the NVML/CUDA one - and I
+handed it a schema-v4 policy. Of course it reported `MPS_ACCELERATOR_PROBE_MISSING`: I called the CUDA
+composition with a Darwin policy. That is my error, not a hole in the product, and the honest statement
+is the opposite of the one CP-109 made.
+
+What survives from that round, all of it measured on the installed system rather than reasoned about:
+
+- The guard probe is real and bounded: 0.176-0.178 s against a 2 s policy deadline, reading 10.0 cores
+  and 12,619,333,632 bytes (11.8 GiB) of actual host capacity.
+- An unmeasured busy CPU degrades to `WARN` with `CPU_BUSY_UNKNOWN`; it does not fail the start and it is
+  not dressed up as PASS.
+- Every unmet check fails closed: the v3 composition on this host returns `probe: FAIL
+  GPU_TARGET_UNAVAILABLE` (`INDEX:0` with no CUDA device), and a schema-v4 policy handed to it returns
+  `mps_accelerator: FAIL MPS_ACCELERATOR_PROBE_MISSING`. Neither refusal is upgraded on a second call
+  (`require_before_spawn` also FAIL, 0.178 s, gate `fae864e88d9246a4b7cf303fda0ae2cc`).
+- The v3 path is the one the expert-validation service composes, and the plans point
+  `SO101_VALIDATION_PARALLEL_CONFIG` at `parallel_batch_v{1,2}.yaml`, not at the v4 document. So the
+  unified service running the v3 guard is the intended composition, and the v4/MPS document belongs to
+  the W2 campaign CLI. macOS validation through the unified service is therefore simply not a supported
+  combination today - which is consistent with `LINUX_REGRESSION_DEFERRED` and is not a defect.
+
+The reusable lesson, stated plainly because the pattern is now four for four: the failures I have
+misread as product defects this session - `set -u` aborting a ROS source, `pgrep -af` matching a linker,
+`[ -f <dir> ]` skipping an overlay, and now a v3 composition judging a v4 policy - were all my
+instrument operating outside the conditions the code assumes. Before reporting a gap, check that the
+component was invoked the way its own callers invoke it.
