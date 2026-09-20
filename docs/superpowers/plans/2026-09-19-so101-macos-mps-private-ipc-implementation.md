@@ -294,11 +294,11 @@ $TEST_PYTHON -m pytest -q \
 
 **Files:** No intended source edits; evidence and ledger only unless a genuine defect returns to the owning task.
 
-- [ ] 冻结同一 commit、exact W2、点集、参数、成功契约和 lifecycle；每个 batch 使用独立新 epoch 和新 campaign IPC 路径。
-- [ ] 每次启动前核验无重复 stack/claim/controller goal。使用 fresh GUI snapshot/action/snapshot，保存窗口 identity 和时间；不得复用旧截图。
-- [ ] 每批都证明 MoveIt shadow、controller/joints、MuJoCo pose/contact/detach/release、final placement、两个 slot 的 progress/result/evidence、shared Broker 和 cleanup。
-- [ ] 连续性按实际 batch 结果计算：任何 VALID 失败、INVALID、提前终止、旧 epoch、缺 slot、缺物理证据或 cleanup 不完整都会立即中断序列，下一次有效 batch 从 1/5 重新累计。环境修复即使没有代码变更也不能跨过失败/无效批次继续累计；任何代码变更还会使相关旧验收失效。
-- [ ] 五个独立完整成功批次后才记录 `five_batch_stability=5/5`。一个 20 点 batch 不能替代五次。
+- [x] 冻结同一 commit、exact W2、点集、参数、成功契约和 lifecycle；每个 batch 使用独立新 epoch 和新 campaign IPC 路径。（证据：`task14-five-batches-05` 的 `fr5-01..05` 五个 batch 的 `plan` 逐字段相同——`config_sha256 2f9d7a87fe57a0440cdfd139c2ac42b7af86002edfcc2ed2ef3077568dc6b06b`、`worker_count 2`、`accelerator mps`、`allow_cpu_fallback false`、`ipc_transport darwin_private_path_unix`、`mujoco_gl cgl`、同一 model provenance——而每个 batch 各有自己的 `campaign_root`（readback `campaign_paths_distinct: true`），两个 slot 每个 batch 都是新的 session（`task14-fr5-0N-w1`/`-w2`）配 `expected_reset_epoch` 1..4；`task14-five-batches-05/readback.json`）
+- [x] 每次启动前核验无重复 stack/claim/controller goal。使用 fresh GUI snapshot/action/snapshot，保存窗口 identity 和时间；不得复用旧截图。（证据：每 batch 的 `gui-<run>/` —— `pre-windows.json` 零个 MuJoCo 窗口、`pre-processes.txt` 无 station 进程、`pre-ipc.txt` 私有 IPC 基目录为空；动作期间每个 station 窗口一张独立窗口级截图，`during-captures.jsonl` 记录 window id/owner/owner_pid/title/几何/`captured_at`/sha256 与确切命令，五代窗口 id 互不相同（4925/4917、4950/4939、4971/4961、4984/4983、5009/5005，owner PID 亦然）；`post-windows.json` 再为零；另有 `pre-desktop`/`mid-action-desktop`/`post-desktop` 三张桌面快照与 skill manifest；每 batch 另有 8 张 per-point `viewer.png`，sha256 互不相同）
+- [x] 每批都证明 MoveIt shadow、controller/joints、MuJoCo pose/contact/detach/release、final placement、两个 slot 的 progress/result/evidence、shared Broker 和 cleanup。（证据：`worker_results[*].station_record.ready` 三个 controller 全 `active`、三个 action 与三个 service 全 true、`exit_code 0`；每个点 manifest 的 `state_trace` 含 `VERIFY_PHYSICAL_GRASP`/`ATTACH_MOVEIT`/`DETACH_MOVEIT`/`OPEN_GRIPPER`/`WAIT_RELEASE_SETTLE`/`VALIDATE_FINAL_PLACEMENT`/`SYNC_WORLD_OBJECT` 七个相位，5 batch × 2 slot × 4 点全部 `phases=4`；`per_slot_pick_place` 每 slot 4 个 point_result 与 contacts（`max_normal_force_n`、最终杯子位姿、release marker）；`served.count 12`、`devices ['mps']`、`lane.max_concurrent 1`；`cleanup.complete/directory_removed/registry_empty/workers_reaped [true,true]`）
+- [x] 连续性按实际 batch 结果计算：任何 VALID 失败、INVALID、提前终止、旧 epoch、缺 slot、缺物理证据或 cleanup 不完整都会立即中断序列，下一次有效 batch 从 1/5 重新累计。环境修复即使没有代码变更也不能跨过失败/无效批次继续累计；任何代码变更还会使相关旧验收失效。（证据：`task14-fr4-01` 六个点缺 GUI 证据（每 slot 3/4 `TERMINAL_CAPTURE_FAILED`），虽属环境修复（TCC 授权在 batch 中途生效）仍按本条规定不计入，序列从 `fr4-02` 重新起算并在补齐 per-batch GUI 证据块后改用 `fr5-01..05` 作为计数序列；readback 在遇到第一个不可计 batch 时即停止累计（`consecutive_countable_batches`））
+- [x] 五个独立完整成功批次后才记录 `five_batch_stability=5/5`。一个 20 点 batch 不能替代五次。（证据：`task14-five-batches-05/readback.json` 的 `five_batch_stability: "5/5"`，五个 batch 各自独立启动（`started`/`finished` 与各自 `campaign_root` 不同），合计 5 × 2 slot × 4 点 = 40 次点执行，每次都有自己的 manifest、point_result 与相位轨迹，不是单次 20 点 batch）
 
 ### Task 15：Linux 回归 checkpoint（本轮只登记，不执行）
 
