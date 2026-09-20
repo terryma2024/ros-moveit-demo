@@ -14243,3 +14243,17 @@ probes themselves are retained as the record of an external blocker, not as fail
 branch's work. Task 14 remains 0/5 and `LINUX_REGRESSION_DEFERRED` stands.
 
 _Ledger source HEAD: (this commit's parent); no evidence deleted._
+
+### CP-UQ289 addendum — two more entries for the "read this first" list
+
+| Item | Where |
+| --- | --- |
+| the plan's per-batch evidence items (planning-scene readback, release marker, transition count, final cup pose, cross-slot agreement to ~2e-5 m) are carried in the campaign document itself | CP-UQ290 |
+| per-batch freshness recorded as `campaign_root` and `broker_identity {pid, birth_identity, in_campaign_process}` - identities rather than a defaulted counter, with the in-process flag there so the pid cannot be misread as a separate Broker process | CP-UQ290 addenda 1-2 |
+| evidence classification refreshed against the current tree: 466 entries, 165 campaign runs, 53 probe/gate runs, 29 denied capture probes | CP-UQ291 |
+
+Still denied: Screen Recording (`task16-capture-probe-16`). Still true: Task 14 **0/5**,
+`LINUX_REGRESSION_DEFERRED`, nothing pushed or published, no evidence deleted, and no unrun gate
+reported as PASS, SKIP or N/A.
+
+_Ledger source HEAD: `77332922`; no evidence deleted._
