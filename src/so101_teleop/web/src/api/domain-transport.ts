@@ -16,11 +16,23 @@ import {
 } from "@/api/instance-client";
 import type { DomainTransport, LeaseIdentity, RuntimeSnapshot } from "@/state/domain-runtime";
 
+export type RenewTarget = {
+  method: string;
+  path: string;
+  body: Record<string, unknown>;
+};
+
 export type DomainEndpoints = {
   snapshotPath: string;
   eventsPath: string;
   renewPath: string;
   renewBody: Record<string, unknown>;
+  /**
+   * Optional lease-aware renewal. A domain that renews a specific lease by id cannot express that
+   * with a static path, and the validation domain renews exactly that way; returning null means
+   * there is nothing to renew.
+   */
+  renewTarget?: (lease: LeaseIdentity | null) => RenewTarget | null;
 };
 
 export const DOMAIN_ENDPOINTS: Record<DomainName, DomainEndpoints> = {
@@ -30,6 +42,17 @@ export const DOMAIN_ENDPOINTS: Record<DomainName, DomainEndpoints> = {
     eventsPath: "/expert-validation/events",
     renewPath: "/expert-validation/lease",
     renewBody: {},
+    renewTarget: (lease) =>
+      lease === null
+        ? null
+        : {
+            method: "PUT",
+            path: `/expert-validation/lease/${encodeURIComponent(lease.lease_id)}`,
+            body: {
+              service_session_id: lease.service_session_id,
+              generation: lease.generation,
+            },
+          },
   },
 };
 
@@ -64,6 +87,7 @@ export function createHttpTransport(
   // The server checks instance authority on renewal, so the transport has to hold the authority the
   // runtime adopted; without it a renewal is refused with CONTROLLER_INSTANCE_REQUIRED.
   let authority: ControllerAuthority | null = null;
+  let heldLease: LeaseIdentity | null = null;
 
   return {
     register: (name: DomainName): Promise<InstanceProof> => client.register(name),
@@ -114,14 +138,21 @@ export function createHttpTransport(
     setAuthority(next: ControllerAuthority | null): void {
       authority = next;
     },
+    setLease(next: LeaseIdentity | null): void {
+      heldLease = next;
+    },
     async renew(): Promise<Partial<LeaseIdentity> | void> {
-      const response = await fetchImpl(`${baseUrl}${endpoints.renewPath}`, {
-        method: "POST",
+      const target = endpoints.renewTarget
+        ? endpoints.renewTarget(heldLease)
+        : { method: "POST", path: endpoints.renewPath, body: endpoints.renewBody };
+      if (target === null) return undefined;
+      const response = await fetchImpl(`${baseUrl}${target.path}`, {
+        method: target.method,
         headers: {
           "content-type": "application/json",
           ...(authority ? authorityHeaders(authority) : {}),
         },
-        body: JSON.stringify(endpoints.renewBody),
+        body: JSON.stringify(target.body),
       });
       if (!response.ok) throw new Error(`LEASE_RENEW_FAILED: ${response.status}`);
       const payload = (await response.json().catch(() => null)) as Partial<LeaseIdentity> | null;

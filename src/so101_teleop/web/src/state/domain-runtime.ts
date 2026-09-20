@@ -32,6 +32,8 @@ export type DomainTransport = {
   subscribe(handler: (snapshot: RuntimeSnapshot) => void): () => void;
   /** Optional: tell the transport which authority to present on renewal. */
   setAuthority?(authority: ControllerAuthority | null): void;
+  /** Optional: the lease this runtime holds, so a domain that renews by id can present it. */
+  setLease?(lease: LeaseIdentity | null): void;
   renew(): Promise<Partial<LeaseIdentity> | void>;
   post(path: string, body: Record<string, unknown>, authority: ControllerAuthority): Promise<unknown>;
   close(): void;
@@ -91,6 +93,7 @@ export class DomainRuntime {
     // Binding the controller advances the execution generation server-side, so once a lease is
     // adopted the authority has to present the generation that belongs to it. Leaving the value
     // `start()` set (0) made every mutation after the acquire fail with STALE_EXECUTION_GENERATION.
+    this.transport.setLease?.(lease);
     if (lease !== null && this.authorityValue !== null) {
       this.adoptAuthority({ ...this.authorityValue, executionGeneration: lease.generation });
     }
