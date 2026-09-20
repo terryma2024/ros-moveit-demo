@@ -660,6 +660,17 @@ class IntentStore:
 
     # -- helpers -----------------------------------------------------------------
 
+    def parent_record(self, operation_id: str) -> dict | None:
+        row = self._query_one("SELECT * FROM parents WHERE operation_id = ?", (operation_id,))
+        return dict(row) if row is not None else None
+
+    def child_record(self, operation_id: str, child_id: str) -> dict | None:
+        row = self._query_one(
+            "SELECT * FROM children WHERE operation_id = ? AND child_id = ?",
+            (operation_id, child_id),
+        )
+        return dict(row) if row is not None else None
+
     def _require_parent(self, operation_id: str) -> sqlite3.Row:
         parent = self._query_one("SELECT * FROM parents WHERE operation_id = ?", (operation_id,))
         if parent is None:

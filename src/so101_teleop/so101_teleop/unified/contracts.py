@@ -129,6 +129,23 @@ class CancelIntent:
 
 
 @dataclass(frozen=True)
+class CancelReceipt:
+    key: "ActionKey"
+    accepted: bool
+    terminal: "ActionTerminal | None"
+    blocked_reason: str | None
+
+
+@dataclass(frozen=True)
+class IntentCancelReceipt:
+    target: "RevokeTarget"
+    linearized: bool
+    submitted: bool
+    terminal: "ActionTerminal | None"
+    blocked_reason: str | None
+
+
+@dataclass(frozen=True)
 class ParentProjection:
     operation_id: str
     phase: str
