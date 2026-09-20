@@ -48,6 +48,11 @@ def build_app(args, environment: dict[str, str] | None = None):
     if environment.get("SO101_TELEOP_OLD_PORT") and environment.get("SO101_VALIDATION_OLD_PORT"):
         if environment["SO101_TELEOP_OLD_PORT"] == environment["SO101_VALIDATION_OLD_PORT"]:
             raise SystemExit("SO101_PORT_CONFLICT: legacy ports must not collide")
+    # The registry refuses a channel handshake whose origin is not the service origin, so the
+    # default has to be the address this process actually serves on. Leaving it at the historical
+    # http://127.0.0.1:8000 made every handshake ORIGIN_REJECTED on any other port, which silently
+    # removed every client's authority. An explicit SO101_UNIFIED_ORIGIN still wins.
+    environment.setdefault("SO101_UNIFIED_ORIGIN", f"http://{args.host}:{args.port}")
     services = compose_services(environment)
     static_dir = args.static_dir or installed_web_assets()
     return create_unified_app(

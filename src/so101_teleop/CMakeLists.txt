@@ -152,9 +152,10 @@ if(BUILD_TESTING)
   so101_add_pytest_test(test_unified_two_channel test/teleop/test_unified_two_channel.py)
   so101_add_pytest_test(test_unified_parents test/teleop/test_unified_parents.py)
   so101_add_pytest_test(test_unified_admission test/teleop/test_unified_admission.py)
-  so101_add_pytest_test(test_unified_api test/teleop/test_unified_api.py
-  test/teleop/test_unified_instance_domain_binding.py
-  test/teleop/test_unified_acquire_binding.py)
+  so101_add_pytest_test(test_unified_api test/teleop/test_unified_api.py)
+  so101_add_pytest_test(test_unified_instance_domain_binding test/teleop/test_unified_instance_domain_binding.py)
+  so101_add_pytest_test(test_unified_acquire_binding test/teleop/test_unified_acquire_binding.py)
+  so101_add_pytest_test(test_unified_origin_default test/teleop/test_unified_origin_default.py)
   so101_add_pytest_test(test_unified_lifecycle test/teleop/test_unified_lifecycle.py)
   so101_add_pytest_test(test_unified_budget_adapter test/teleop/test_unified_budget_adapter.py)
   so101_add_pytest_test(test_unified_live_fixture test/teleop/test_unified_live_fixture.py)
