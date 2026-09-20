@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ297 (counted-series GUI block verified on its first batch)
+latest_checkpoint: CP-UQ298 (independent Screen Recording corroboration and its tooling)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -14632,3 +14632,42 @@ Task 14 stands at **0/5 countable with the first counted batch in flight**.
 `LINUX_REGRESSION_DEFERRED` retained; verdict stays **PARTIAL**.
 
 _Ledger source HEAD: `8e1c8b5a`; no evidence deleted._
+
+### CP-UQ298 — the Screen Recording grant, corroborated from a second session with better tooling
+
+The operator verified capture from a separate `dst` tmux session and left two scripts, both of which I
+read and one of which I re-ran rather than taking on trust:
+
+- `~/dsh-verify-screen-permission.sh` — a three-way judgement: `CGPreflightScreenCaptureAccess()` for
+  the TCC state, the real `screencapture -x` exit code and artifact for the actual permission, and a
+  content triage (distinct colours and strong-edge density) that rejects a "succeeded but only
+  wallpaper" capture. `--record N` additionally records N seconds of video.
+- `~/dsh-tccd-dump.sh` — dumps `log show` for `tccd` and ScreenCapture events from a process derived by
+  the tmux server, so it escapes the harness sandbox that refuses `log show` ("Cannot run while
+  sandboxed"). That is the tool to reach for if the permission regresses and the responsible process
+  has to be identified again.
+
+My re-run, at 09:42, printed `CGPreflightScreenCaptureAccess: True`, `screencapture exit=0`, a
+460,678-byte 1920x1080 PNG, content triage `不同颜色=3975 强边缘占比=3.1%`, and `PASS: 截屏可用`. The
+artifact shows the same desktop at the same minute (menu-bar clock `9月20日 周日 09:42`) with Chrome in
+front, so it is a live frame of this machine, not a stored one. This is a strictly better check than
+the single `screencapture -x` line I used when the grant first appeared, and it is the one to run before
+any future GUI evidence in this task family.
+
+Two artifacts are preserved for the record under `tcc-user-verify-20260920/` in the task root:
+`user-still.png` (460,678 bytes, sha256 `da216d8e…`, 09:42) and `user-rec.mov` (73,986 bytes, sha256
+`a3620599…`, 09:35), the latter showing the operator's recording path also works — relevant because
+video pre-flight is what a CUA or video-based acceptance would need. One honest note: the verification
+script starts by deleting its own `still.png` (`rm -f`), so running it replaced the operator's earlier
+still with the 09:42 one; the video from 09:35 is untouched, and nothing in the task's own registered
+evidence root was removed.
+
+This corroborates the state change recorded in CP-UQ293 from an independent session and with an
+independent method. It does not by itself evidence Task 14: the counted batches' GUI evidence remains
+the per-point `viewer.png` files plus the per-batch snapshot block, all of it inside the task root.
+
+Series 05 stands at batch 1 countable, batch 2 complete and countable, with the remaining three
+batches in flight; Task 14 is **2/5 countable**. `LINUX_REGRESSION_DEFERRED` retained; verdict stays
+**PARTIAL**.
+
+_Ledger source HEAD: `61fd443a`; no evidence deleted._
