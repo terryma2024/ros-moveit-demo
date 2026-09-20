@@ -43,6 +43,7 @@ from so101_demo.parallel_batch.resources import (
 PACKAGE = Path(__file__).resolve().parents[1]
 CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v1.yaml'
 CLI_CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v3.yaml'
+V2_CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v2.yaml'
 _ROOT_IDS = itertools.count()
 _ROOTS = {}
 
@@ -85,6 +86,13 @@ def config():
     return load_parallel_runtime_config_v3(CLI_CONFIG_PATH)
 
 
+@pytest.fixture
+def legacy_config():
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v2
+
+    return load_parallel_runtime_config_v2(V2_CONFIG_PATH)
+
+
 @pytest.fixture(autouse=True)
 def production_claim_records_are_never_mutated_by_unit_tests():
     paths = tuple(
@@ -110,14 +118,21 @@ def production_claim_records_are_never_mutated_by_unit_tests():
     assert after == before
 
 
-def allocator(tmp_path, config, probe=None, environment=None, suffix='batch'):
+_COMPOSED_START_GUARD = object()
+
+
+def allocator(
+    tmp_path, config, probe=None, environment=None, suffix='batch', start_guard=_COMPOSED_START_GUARD
+):
     return WorkerResourceAllocator(
         config,
         resource_root(tmp_path, suffix),
         probe=probe or FakeProbe(),
         base_environment=environment or {},
         claim_root=claim_root(),
-        start_guard=_start_guard_for(config),
+        start_guard=(
+            _start_guard_for(config) if start_guard is _COMPOSED_START_GUARD else start_guard
+        ),
     )
 
 
@@ -1441,11 +1456,14 @@ def test_admission_records_the_start_guard_decision(tmp_path, config):
         ResourceSnapshot(32, -1.0, 12.0),
     ],
 )
-def test_malformed_resource_probe_values_fail_closed(tmp_path, config, snapshot):
+def test_malformed_resource_probe_values_fail_closed(tmp_path, legacy_config, snapshot):
+    # The formula-budget path is the one that reads the injected probe. A v3 or v4
+    # config decides through the start guard instead, which probes the host itself,
+    # so an injected snapshot never reaches allocation there.
     probe = FakeProbe()
     probe.resources = snapshot
     with pytest.raises(ResourceAllocationError, match='INVALID_RESOURCE_SNAPSHOT'):
-        allocator(tmp_path, config, probe).allocate()
+        allocator(tmp_path, legacy_config, probe, start_guard=None).allocate()
 
 
 def test_existing_ros_domain_fails_before_any_directory_is_created(tmp_path, config):
