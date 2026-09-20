@@ -5,7 +5,7 @@ success_contract: A built and provenance-verified ai-station overlay plus four F
 worktree: /home/matianyi/Projects/ros-moveit-demo
 branch: main
 base_commit: 4fbf361438a5bfb0aab32d6ba1c852ea8411bf0c
-current_commit: eb8135635c29e7ec4ee6d289c6a4bfcd3ce1cc4c
+current_commit: c880872c3a016c38718f07296801f34b004bc787
 evidence_root: /data/work/so101-evidence/ai-station-bootstrap/four-point-20260920
 confirmed_conclusions:
   - This host is a fresh install, not the machine described by the setup document; the guide is a target-state recipe here, not a record of current state (EXP-001).
@@ -14,7 +14,7 @@ disproven_routes:
   - `so101_mujoco_rgbd_batch` as the four-point driver on this Linux host; its `MacViewerCapture` shells out to `/usr/bin/swift` and `/usr/sbin/screencapture` and is called unconditionally from `RosTaskBatchRuntime.capture_terminal` (EXP-001).
 open_hypotheses:
   - Whether the pinned mujoco_ros2_control fork builds and runs on this host's toolchain without source changes.
-latest_checkpoint: CP-005
+latest_checkpoint: CP-006
 next_experiment: NONE
 ---
 
@@ -650,4 +650,57 @@ open_risks:
   - The fork branch so101-lidar-mujoco-numeric-header is local only. It must be pushed to Gitee before another machine can materialise the pinned commit, and the fork's main still trails the pin.
   - Linux v4 stays DEFERRED_ENVIRONMENT by design; only the v3 combination runs on Linux.
 next_command: git -C third_party/mujoco_ros2_control push origin so101-lidar-mujoco-numeric-header
+```
+
+## EXP-034 - author identity, fork main merge and publication
+
+```yaml
+experiment_id: EXP-034
+status: VALID
+prior_experiment: EXP-033
+hypothesis: The five superproject commits, the fork port and the parent-repo doc commit can carry the requested identity, and the fork port can be merged to the fork's main and published without changing any runtime content.
+prediction: Every commit is authored and committed by zjumty <zjumty@gmail.com>, the pinned fork commit's tree is unchanged by the re-authoring, the fork main contains the pin, and all three repositories publish by fast-forward.
+single_variable: Commit identity and publication state
+lifecycle: FULL_RESTART
+commands:
+  - command: git commit --amend --no-edit --author="zjumty <zjumty@gmail.com>" (fork), then rebase --interactive with an amend exec over the five superproject commits
+    exit_code: 0
+  - command: git merge --ff-only so101-lidar-mujoco-numeric-header on fork main
+    exit_code: 0
+  - command: git push origin main (fork), git push origin main (superproject), git push origin master (parent)
+    exit_code: 0
+observed:
+  - The earlier commits carried zjumty <zjumty@aliyun.com>, which was this session's guess; the requested identity is zjumty <zjumty@gmail.com> and every commit is now authored and committed by it.
+  - Re-authoring changed the fork commit hash from e37ffd29 to f89033c5 with an unchanged tree; the superproject delta between the pre-rewrite tip 13e4bdff and the post-rewrite tip c880872c is exactly the six pin locations and nothing else.
+  - Fork main fast-forwarded from 71bc9346 to f89033c5, so the lock's release ref now equals its pinned commit.
+  - The stock installer reports FORK_RELEASE_REF_MATCHES_PIN ref=main commit=f89033c5..., rebuilds 4 packages and passes 241 tests with 0 failures.
+  - Pushed: fork main 71bc934..f89033c, superproject main 5b8d1231..c880872c, parent master 6ec788a..d6e968d. All three were fast-forwards and no branch was force-pushed.
+  - The gate at the pushed HEAD c880872c is PASS with 3542 expected and actual nodes, an empty source_status and a clean child audit, 65.4 s.
+  - A task_start runtime smoke run at the pushed pin reaches DONE with 19 transitions, the cup at (-0.07856, -0.24748, 0.16493), table_contact true, no fingertip contacts and 14 live captures.
+inferred:
+  - EXP-033 remains the four-point qualification for this runtime: the re-authoring changed commit identifiers only, and the fork and project source trees that produced the built overlays are byte-identical.
+conclusion: The requested identity is in place, the fork port is merged to the fork's main and all three repositories are published by fast-forward.
+decision: KEEP
+next_experiment: NONE
+```
+
+## CP-006 - publication
+
+```yaml
+checkpoint_id: CP-006
+last_valid_experiment: EXP-034
+current_hypothesis: NONE
+working_tree_status: all three worktrees clean; superproject main at c880872c, fork submodule main at f89033c5, parent master at d6e968d
+owned_processes: NONE
+preserved_processes: pre-existing GNOME X11 desktop session on DISPLAY=:1 and the user's own desktop applications
+confirmed_conclusions:
+  - Every commit in this task is authored and committed by zjumty <zjumty@gmail.com> (EXP-034).
+  - The fork's main contains the pinned commit, so the installer reports a matching release ref (EXP-034).
+  - All three repositories are published on Gitee by fast-forward, and the pushed superproject HEAD passes the ordinary gate (EXP-034).
+disproven_routes:
+  - Keeping the release-ref gate at pointer equality was unnecessary; containment plus the explicit ahead report covered both the divergent and the merged case (EXP-031, EXP-034).
+open_risks:
+  - The fork branch so101-lidar-mujoco-numeric-header was left local; its commit is reachable through fork main, so nothing depends on it.
+  - The GitHub mirror remote is not configured in this clone, so github/main was not updated.
+next_command: NONE
 ```
