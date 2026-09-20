@@ -242,6 +242,51 @@ def require_channel(domain) -> "callable":
     return dependency
 
 
+def _lease_identity(result):
+    """Read a lease out of a router reply, defensively: an unreadable body means nothing to bind.
+
+    The routers hand back a JSONResponse on both success and refusal, so the lease has to be read out
+    of the response body rather than out of a returned mapping.
+    """
+    if hasattr(result, "model_dump"):
+        payload = result.model_dump()
+    elif isinstance(result, dict):
+        payload = result
+    elif hasattr(result, "body"):
+        try:
+            payload = json.loads(result.body)
+        except Exception:  # noqa: BLE001 - an unreadable body simply means there is nothing to bind
+            return None
+    else:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if "lease_id" not in payload or "expires_monotonic_ns" not in payload:
+        return None
+    return LeaseIdentity(
+        payload["lease_id"],
+        payload["service_session_id"],
+        int(payload["generation"]),
+        int(payload["expires_monotonic_ns"]),
+    )
+
+
+def _record_renewal(registry, authority, result) -> None:
+    """Project a renewed lease onto the controller, or the authority dies one duration after acquire.
+
+    The binding records the acquisition's expiry, and every later mutation - this renewal included -
+    is checked against it. Without this, a client that keeps renewing on time still loses the domain
+    exactly one lease duration after it acquired, and then cannot even renew again: measured live, the
+    row was still ACTIVE with 20 s left while every renewal was refused LEASE_EXPIRED.
+    """
+    if registry is None or authority is None:
+        return
+    lease = _lease_identity(result)
+    if lease is None:
+        return
+    registry.renew_locked(authority, lease)
+
+
 def _claim_acquired(registry, binding, result) -> int | None:
     """Bind the domain controller once the domain's own lease endpoint has issued a lease.
 
@@ -251,34 +296,11 @@ def _claim_acquired(registry, binding, result) -> int | None:
 
     if registry is None:
         return None
-    if hasattr(result, "model_dump"):
-        payload = result.model_dump()
-    elif isinstance(result, dict):
-        payload = result
-    elif hasattr(result, "body"):
-        # The routers hand back a JSONResponse on both success and refusal, so the lease has to be
-        # read out of the response body rather than out of a returned mapping.
-        try:
-            payload = json.loads(result.body)
-        except Exception:  # noqa: BLE001 - an unreadable body simply means there is nothing to bind
-            return
-    else:
-        return
-    if not isinstance(payload, dict):
+    lease = _lease_identity(result)
+    if lease is None:
         return None
-    if "lease_id" not in payload or "expires_monotonic_ns" not in payload:
-        return None
-    authority = None
     try:
-        authority = registry.claim(
-            binding,
-            LeaseIdentity(
-                payload["lease_id"],
-                payload["service_session_id"],
-                int(payload["generation"]),
-                int(payload["expires_monotonic_ns"]),
-            ),
-        )
+        authority = registry.claim(binding, lease)
     except MutationError as error:
         # The domain already issued its lease, but the controller belongs to another instance: the
         # acquire is refused with the same structured code the registry uses, never a 500.
@@ -717,7 +739,11 @@ def validation_router(services: UnifiedServices) -> APIRouter:
     async def renew_lease(
         lease_id: str, body: LeaseMutationRequest, authority: RequestAuthority = mutation
     ):
-        return await guarded(lambda service: _invoke(service.renew_lease, lease_id, body.model_dump()))
+        result = await guarded(lambda service: _invoke(service.renew_lease, lease_id, body.model_dump()))
+        # The renewal the domain just granted has to reach the controller's projection, or the next
+        # mutation is checked against the acquisition's expiry and refused.
+        _record_renewal(getattr(services, "instances", None), authority, result)
+        return result
 
     @router.delete("/expert-validation/lease/{lease_id}", response_model=LeaseReleaseResponse)
     async def release_lease(

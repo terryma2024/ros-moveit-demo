@@ -5918,3 +5918,58 @@ Housekeeping, recorded rather than done quietly: two stale `/private/tmp/so101-i
 whose own cleanup therefore never ran) were inventoried and removed, with the before-state written to
 `ipc-residue-removed.json` and `ipc-residue-removed-2.json`. The endpoint's own socket directory was
 left empty by `close()`, which is the behaviour CP-169 pinned.
+
+## CP-172: a renewal that never reached the controller - and what the service can and cannot project
+
+**The defect, measured before it was understood.** An isolated probe renewed one lease every 10 s and
+printed both the response and the store row. Renewals succeeded at 10 s and 20 s, and at 30 s the
+service refused with `LEASE_EXPIRED: lease-…` **while the row was `ACTIVE` with 19.99 s left on it**
+(`renew_probe2`). The refusal could not come from the lease: `LeaseConflict("LEASE_EXPIRED")` needs
+`now >= expiry`. The message with the lease id identifies the site - `InstanceRegistry._require_lease_fresh`
+- and it checks the lease recorded on the **controller binding**, not the store row.
+
+The chain, end to end: the unified app binds the controller on acquire (`_claim_acquired`) with the
+acquired `expires_monotonic_ns`; the validation renewal route (`PUT /expert-validation/lease/{id}`)
+validated authority against that projection and then dropped the renewed lease. So a client renewing
+perfectly on time still lost the domain exactly one lease duration after acquisition, could not renew
+again, and the maintenance loop then cancelled the campaign - which is why every live campaign attempt
+in CP-171 died 30-60 s in.
+
+**The fix** is the projection the teleop path already had: `_lease_identity()` (extracted from
+`_claim_acquired`, one parser for both) plus `_record_renewal(...)` calling
+`registry.renew_locked(authority, lease)` on the renewal route. `renew_locked` already refuses a lease
+whose id does not match the bound one and keeps the later of the two expiries, so a renewal can only
+move the projection forwards. `test_unified_lease_projection.py` (new, 2 tests) pins it with a clock the
+test moves: a renewal at t=50 must move the projection from 100 to 200, a *further* renewal at t=150 -
+past the acquisition expiry, inside the renewed one - must succeed, and the projection may never go
+backwards. RED before the fix (`assert 100 == 200`), GREEN after; acquire/maintenance suites unchanged.
+
+**The campaign now survives the boundary.** With the projection fixed, a service-driven campaign ran
+past 90 s with both workers registered - `w1-ack.json`, `w2-ack.json`, `w1-lease.json`, `w2-lease.json`,
+both snapshot frames, `broker-ready.json`, `start-guard.json` - and four live processes (adapter,
+campaign, two workers). No earlier attempt reached the worker stage.
+
+**Fresh Chrome observation, and what it shows.** The UI was opened on the running service and captured
+(`stageC-campaign-2d615a66/visual/20260921T003507-7f4366fdc2ec/desktop.png`, sha256 `fd4ed90e…`). It is
+an explicit **desktop** capture, not a window capture: the window-level path raises the target through
+Accessibility first and that was refused in this session, so the request was widened deliberately and
+recorded rather than quietly substituted. The image shows the real page: the campaign setup panel, the
+controls, and the campaign card for `campaign-844a6c47eee6453dbd59ed0a0aeb56f8` reading
+`PARALLEL / STARTED / sequence 1`, `Broker healthy`, and **all four points `UNRUN`**.
+
+**The projection gap that image documents.** Those points stay `UNRUN` because the campaign projection
+is built from a *coordinator journal* (`CoordinatorEventReader(journal, binding)`,
+`coordinator_events.py:223`) and the macOS v4 composition does not write one: it records its own
+evidence (worker acks and leases, frames, `campaign-result.json`). So on this host the service can
+**launch and control** a macOS campaign and cannot **project** its points, attempts or results. That is
+a structural integration gap, not a bug in this round's fixes, and it is the piece that stands between
+"a campaign ran because the service launched it" and the dispatch's
+`store projection / raw evidence` consistency criterion. Closing it means either teaching the macOS
+composition to emit the upstream cursor the projection consumes, or giving the macOS path its own
+reader - both design-sized, neither attempted here.
+
+Unchanged and still open from CP-166: the single-point `N=1 FULL_RESTART_RETRY` is excluded on this
+host by three frozen declarations (retry requires N=1, the v4 composition requires exact W2, the
+platform refuses other worker counts), and the service's own preflight adds a 4-point floor. Nothing in
+this round moves that; the request-API entry the earlier §7 verdict named as the alternative does not
+change the platform guard.
