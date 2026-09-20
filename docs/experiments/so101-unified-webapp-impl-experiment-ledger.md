@@ -3712,3 +3712,64 @@ with its live reproduction and its code path.
    identity comparison is what makes a cross-domain instance useless to an attacker.
 
 That is the next round's work, bounded and with a failing test as the first deliverable.
+
+## CP-126: the instance-domain defect is fixed, with a test that actually fails first
+
+CP-125 ended with a defect and a specification for proving it. Both are now done in the required order.
+
+**RED, with the cause named in the failure itself.** The test registers an instance over HTTP and then
+builds the authority exactly as the HTTP dependency does - `RequestAuthority(domain=Domain(domain), ...)`
+from the headers - and calls `registry.require_bound`. That is the difference from my previous attempt,
+which used `registry.claim()` and therefore compared the record's own domain against itself:
+
+```text
+Failed: an instance registered over HTTP was rejected by its own registry:
+        INSTANCE_DOMAIN_MISMATCH: a29f3b893f6240bf95643a518e4688f6 (record domain type: str)
+2 failed in 0.43s                                    gate pytest-fffvSWx7 (exit 1)
+```
+
+`record domain type: str` is the defect stated by the test rather than by me.
+
+**The fix** is the boundary coercion, leaving the registry's identity comparison alone - relaxing the
+comparison would make a cross-domain instance usable, which is the property the identity check exists to
+enforce:
+
+```python
+try:
+    domain = Domain(body.get("domain"))
+except (TypeError, ValueError) as error:
+    return unavailable("INSTANCE_DOMAIN_INVALID", str(error), 400)
+try:
+    proof = registry.register(domain)
+```
+
+**GREEN, and no regressions.** The new test passes (2 passed, gate pytest-ixcFlSy8), and
+`test_unified_api.py` + `test_unified_instances.py` + `test_unified_admission.py` together report
+**30 passed**, gate pytest-wKIieRcT. The test is registered in `src/so101_teleop/CMakeLists.txt` so the
+ament gate collects it. Committed as `7d50891e` and pushed; the tree was clean before the commit and is
+clean after.
+
+**And the live flow confirms it, which is the part that matters.** Same flow, run against the source tree
+so it carries the fix (gate `a52323cc47eb4fc2bc0eacda5ccb43eb`):
+
+```text
+POST /control/instances {"domain":"validation"} -> 200 {"instance_id":"1111bb66...","proof":"RYdYQ0a2..."}
+POST /expert-validation/lease  (four authority headers) -> 409 {"code":"CONTROLLER_NOT_BOUND",
+                                                               "message":"CONTROLLER_NOT_BOUND: validation"}
+```
+
+The refusal changed from `INSTANCE_DOMAIN_MISMATCH` to `CONTROLLER_NOT_BOUND`, and the second is the
+correct next gate rather than a symptom: the instance is registered and its domain matches, and what the
+service now wants is a **bound controller** for the validation domain before it will issue a lease. That
+is the design's own sequence - a server-issued instance, then a claimed binding, then a lease - and the
+flow simply has not performed the binding step yet.
+
+So the live path is now: register (works), bind the controller (next), lease, manifest, preflight,
+campaign, retry. Each of those is a step I can drive; the binding appears to happen through the instance
+channel, which is a second interaction to script.
+
+**Worth recording about method.** Between CP-125 and this checkpoint I wrote three versions of the same
+test: one that could not fail, one that failed for the wrong reason (a string where a `LeaseIdentity` was
+required), and this one. The two failures were cheap and instructive - a test that cannot fail is worse
+than no test, and one that fails for the wrong reason teaches the wrong lesson - but they cost two
+round-trips that a look at how the existing suites construct their authority would have saved.
