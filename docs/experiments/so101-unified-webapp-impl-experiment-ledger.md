@@ -4783,3 +4783,43 @@ a `CONTROLLER_ALREADY_BOUND` could easily be below the fold. Count the `POST /co
 `POST /expert-validation/lease` and any `PUT` lines; if there are two acquires, the fix belongs in the page
 (one runtime, one instance, one acquire) rather than in the server, and if there is one acquire then
 something else bumps and I need to find it before touching anything.
+
+## CP-149: the generation I "fixed" in CP-141 is the wrong counter - and the spec says so
+
+The full server log of one run settles the arithmetic, and it acquits the server:
+
+```text
+instances: 2 registrations   channels: 2 accepted   acquires: 1   renewals: 0
+POST /expert-validation/manifests -> 409 STALE_EXECUTION_GENERATION: 3 != 2
+instances.py:204   f"STALE_EXECUTION_GENERATION: {authority.execution_generation} != {bound.execution_generation}"
+```
+
+The message is *sent != expected*, so the client sent **3** and the server expected **2** - the client is
+**ahead**, not behind. One acquire bumped the domain generation 1 -> 2 and the server has stayed there; the
+client is presenting a 3 it should never have had.
+
+It got that 3 from me. CP-141 made `DomainRuntime.adoptLease` set
+`executionGeneration = lease.generation`, on the reasoning that a lease's generation advances with the
+binding. The design separates those two counters explicitly, at line 104:
+
+> 服务器维护独立单调 `execution_generation`：controller 初次绑定和显式交接时推进…… Validation 现有 lease
+> renewal generation 仍用于续约和当前 lease 请求校验，**不改变**运行中 action 的 execution generation
+
+The lease's renewal generation is a *different number* from the domain's execution generation, and I
+conflated them. Before that change the client always sent 0 (`0 != 1`); after it the client sends the lease
+generation (now `3 != 2`). Neither is right, and the reason both are wrong is the same: the client has been
+guessing a value it should be told.
+
+**The correct source is the server's domain generation, and the client already receives it.** The runtime
+snapshot type carries `executionGeneration`, and the validation projection the page subscribes to carries
+`current_generation` (`CampaignProjectionResponse`) - while the transport's snapshot parsing currently
+hardcodes `executionGeneration: 0`. So the fix is:
+
+1. revert CP-141's conflation in `adoptLease` and delete the test that encoded it (that test asserts the
+   wrong model and would defend the defect);
+2. take the authority's `executionGeneration` from the projection's `current_generation` in the transport's
+   snapshot handling, and let `adoptAuthority` publish it to the transport.
+
+**I am recording this rather than patching it in the last minutes of a round**, because the last time I
+changed a generation line on a hunch (CP-141) it produced exactly this defect. The next round starts by
+reverting my own wrong fix, then wires the real value - and both steps are small.
