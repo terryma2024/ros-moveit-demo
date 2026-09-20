@@ -3,6 +3,7 @@ import { toast } from "sonner";
 
 import { TeleopApiClient } from "@/api/client";
 import { isTelemetrySnapshot } from "@/api/telemetry-client";
+import { useOptionalDomainRuntime } from "@/state/runtime-provider";
 import type { BackendCapabilities, BackendCapabilityMap, CommandResult, Pose6D, ReplayableTarget, TelemetrySnapshot } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -51,6 +52,7 @@ export function App() {
   const [state, dispatch] = useReducer(reduceTeleop, undefined, initialTeleopState);
   const [lease, setLease] = useState("");
   const [workflow, setWorkflow] = useState<any>();
+  const runtime = useOptionalDomainRuntime("teleop");
   const [notice, setNotice] = useState("Acquire a control lease before planning.");
   const [shot, setShot] = useState("");
   const [events, setEvents] = useState<EventEntry[]>([]);
@@ -83,6 +85,20 @@ export function App() {
         if (active) { setRttMs(performance.now() - started); acceptSnapshot(next); }
       } catch { if (active) setNotice("Telemetry API unavailable"); }
     };
+    if (runtime) {
+      // Telemetry belongs to the domain runtime: it owns the subscription, so switching pages can no
+      // longer close the socket or stop the poll. This page only renders what the runtime publishes.
+      const unsubscribe = runtime.onSnapshot((snapshot) => {
+        if (active && snapshot.payload && isTelemetrySnapshot(snapshot.payload)) {
+          acceptSnapshot(snapshot.payload as LiveSnapshot);
+        }
+      });
+      const current = runtime.projection();
+      if (current?.payload && isTelemetrySnapshot(current.payload)) {
+        acceptSnapshot(current.payload as LiveSnapshot);
+      }
+      return () => { active = false; unsubscribe(); };
+    }
     refresh();
     const timer = window.setInterval(refresh, 2000);
     const protocol = location.protocol === "https:" ? "wss" : "ws";
@@ -97,7 +113,7 @@ export function App() {
       }
     };
     return () => { active = false; window.clearInterval(timer); websocket.close(); };
-  }, [acceptSnapshot]);
+  }, [acceptSnapshot, runtime]);
 
   useEffect(() => {
     let active = true;
