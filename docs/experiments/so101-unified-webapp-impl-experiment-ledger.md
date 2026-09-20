@@ -3962,3 +3962,38 @@ one rather than a source tree wearing an install's assets.
 The A/B itself is still worth running once that works: the old prefix is on disk, and "the page acquires
 on the fixed build and not on the unfixed one" is the cleanest possible statement of what these three
 rounds have been about.
+
+## CP-131: the page-level acquire needs a live domain, not just a fixed build
+
+The rebuilt prefix works and the A/B infrastructure finally behaves: both prefixes serve `/health/live`
+200, and the copy carries the fix (`grep -c acquire_binding` -> 1 in the copied
+`site-packages/so101_teleop/unified/instances.py`). The environment mistakes of CP-130 are gone - the
+copy-and-rebuild route needs no `PYTHONPATH` tricks, and each server sources **its own** prefix, which
+was the missing overlay that produced `ModuleNotFoundError: No module named 'so101_teleop.unified'`.
+
+What the run then shows is a different boundary, and it is not mine to fix:
+
+```text
+OLD prefix: {"clicked": null, "codes": [], "snippet": "", "consoleErrors": ["... 503 ...", "... 503 ..."]}
+NEW prefix: {"clicked": null, "codes": [], "snippet": "", "consoleErrors": ["... 503 ...", "... 503 ..."]}
+```
+
+The page body is empty and there is no acquire control to click, because the teleop domain is
+unavailable without a ROS stack and the application renders nothing in that state. The 503s are the
+domain gates doing their job. So "acquire through the real page" - my own suggestion one round ago as
+the *better* route - needs the same thing the last §7 row needs: a station actually running the demo
+runtime behind the service.
+
+That closes the loop on this task's remaining gap, and it is now uniform and honest: **every open item in
+the §7 acceptance needs one thing, a live station with the demo runtime.** The list is short and specific:
+
+| open item | why it needs the station |
+| --- | --- |
+| the single-point N1 `FULL_RESTART_RETRY`, live | the retry is a mutation on a real campaign; the entry exists and is guarded (CP-121/123/124) but a campaign cannot be created without the runtime behind the validation domain |
+| acquire through the real page | the page renders no controls while the teleop domain is 503 (this checkpoint) |
+| the physics row's business half | already measured to the boundary of a real run (8/8 `SUCCEEDED`, contacts, artifacts) - what remains for a *business* claim is the five-consecutive-success series, which belongs to a different gate |
+
+Everything else in the matrix is met with evidence, and the three defects found on the way
+(`INSTANCE_DOMAIN_MISMATCH` on registration, the missing claim, and the response-shape refusal that
+looked like a 500) were all in the client-server pair and all invisible to the unit suites until the live
+flow was driven.
