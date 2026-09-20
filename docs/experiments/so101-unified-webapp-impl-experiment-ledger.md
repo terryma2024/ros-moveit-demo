@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-47
+latest_checkpoint: CP-48
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1112,3 +1112,27 @@ state, in-flight indicator, error record and outcome notification. The final edi
 subtractive in the page - replace the `setTimeout` scheduling with
 `runtime.startHeartbeat(() => (duration - margin) * 1000)`, adopt the lease into the runtime, and feed
 the page's notices from `onRenewal`.
+
+## CP-48: the page swap needs its two tests updated first (attempted, reverted, tree green)
+
+Attempted the final subtractive edit in `expert-validation-app.tsx` - replace the `setTimeout` with
+`runtime.startHeartbeat(() => (duration - margin) * 1000)`, adopt the lease into the runtime, and feed
+notices from `onRenewal`. It compiled, but two existing tests failed, and they failed for a real
+reason rather than a fixture detail:
+
+- `renewal at the server margin replaces stale preflight authority before start`
+- `failed renewal disables execution and allows a fresh lease request`
+
+Both render `ExpertValidationApp` **without a provider**, so `runtime` is null and no heartbeat
+exists; they assert that the page itself calls `api.renewLease` at the margin and advances the lease
+generation. Under the migrated design that work happens in the runtime's transport, so those tests
+must drive a `RuntimeProvider` with a fake validation runtime whose transport delegates to
+`api.renewLease`.
+
+The page edit was reverted (`git checkout --`) and the tree is green again: `bun run build` exit 0,
+`NODE_ENV=test bun run test` **45 files / 201 tests**, clean status. The runtime-side work from
+CP-42..CP-47 stands untouched.
+
+Next round: rewrite those two tests to mount the provider and drive the runtime (`startHeartbeat` +
+`onRenewal`), then re-apply the page edit. Doing it in that order keeps the tree green at every step,
+which is the rule this session has held to throughout.
