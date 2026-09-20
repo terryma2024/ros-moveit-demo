@@ -5333,3 +5333,26 @@ cooperating, because a test killed mid-flight must not be able to leak a process
 the child's process group survives** - with a child that deliberately ignores `SIGTERM` (a test-owned helper
 flag if one exists, otherwise a small addition to the helper, which is test-owned by definition). Real exit
 codes and resident PID identities get recorded for the failure, not a shell gate that always passes.
+
+### CP-160 addendum - the stop path reports the failure and leaves the process alive
+
+The full body shows the second half of the boundary, and it is worse than "leader only":
+
+```text
+bridge.py:163   os.kill(self.owner.pid, signal.SIGTERM)
+bridge.py:164-169   poll until the deadline; on success clear self.process and return
+bridge.py:170   raise MutationError(f"STOP_NOT_CONFIRMED: pid ... did not exit in time")
+```
+
+There is no kill escalation and no descendant scan: when the child does not exit within `timeout_s`, the owner
+**raises and returns the child to the caller still running**. The failure is reported honestly and then
+nothing is done about it - so a child that handles `SIGTERM` slowly (or ignores it while blocked on its
+sockets) becomes an orphan precisely on the path that claims to have failed closed. The identity re-proof at
+the top (`identity_matches`, raising `OWNER_IDENTITY_DRIFT`) is the good part of this contract and must
+survive the fix; what is missing is the remedy.
+
+That gives the fix its exact shape, and it is what the RED test must pin: after `stop_owned()` returns or
+raises, **no process of that child's group may still exist**. The remedy is
+`killpg(SIGTERM) -> bounded wait -> killpg(SIGKILL) -> wait/reap -> fresh identity scan (pgid + start
+marker)`, with a durable recovery fence and a structured reason when even that cannot confirm the tree is
+gone - never a bare raise with a live process behind it.
