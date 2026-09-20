@@ -3185,3 +3185,47 @@ program name. Then `bash-27` died the same way I documented in CP-104: I added `
 sources ROS, and `setup.bash: line 11: COLCON_TRACE: unbound variable` killed it before the campaign
 started. Writing the trap down did not stop me re-introducing it two rounds later, so `bash-28` now
 guards its inputs with explicit `[ -n ]`/`[ -x ]`/`[ -d ]` tests and no `set -u` at all.
+
+## CP-115: why no points were picked - the station cannot load its hardware plugin
+
+CP-114 left one question: seven lane executions, zero point results, no failure code. The answer is in
+the worker stations' own log lines, and it is a loader failure rather than a logic failure.
+
+```text
+[ros2_control_node-4] [ERROR] [controller_manager]: Caught exception of type : N9pluginlib20LibraryLoadExceptionE
+  while loading hardware: Failed to load library
+  /tmp/.../stageB-fork-wbs3hj2h/install/lib/libmujoco_ros2_control.dylib.
+  Reason: tried: '<closure5>/install/lib/libmujoco.3.4.0.dylib' (no such file),
+                 '<fork>/install/lib/libmujoco.3.4.0.dylib' (no such file),
+                 '~/ros2_jazzy/so101_isolated_ws/install/so101_mujoco_support/lib/libmujoco.3.4.0.dylib' (no such file)
+[controller_manager]: Could not load and initialize hardware.
+```
+
+So `libmujoco_ros2_control.dylib` is found - the plugin file itself is there and `otool -L` shows its own
+id as `@rpath/libmujoco_ros2_control.dylib` - but the MuJoCo library it was linked against is **version
+3.4.0**, and every path the loader tried for it is empty. The venv on this host ships MuJoCo **3.12.0**,
+which is what I staged for the closure build; nothing on the host provides 3.4.0 any more. That is why the
+controller manager never initialised, why no joint ever moved, and why the campaign correctly reported
+`INCOMPLETE` instead of inventing a result. It is also why `failure_codes` was empty: the failure is
+below the batch's own error vocabulary, in the hardware plugin's dynamic loading.
+
+Two independent confirmations that this is a host artifact gap and not application code:
+
+- The three attempted paths are exactly the three prefixes in my composition - the closure install, the
+  fork overlay, and the isolated workspace's `so101_mujoco_support/lib` - and the third one, which is
+  where the earlier campaign's stations must have found it, no longer contains the file.
+- `.envrc.example` is explicit about the shape of the intended fix: it strips the stale
+  `ws_mujoco_ros2_control_fork/install` prefix out of `PATH`, `PYTHONPATH`, `LD_LIBRARY_PATH` and
+  `DYLD_LIBRARY_PATH`, and then appends a `dylib_farm` directory to `DYLD_LIBRARY_PATH`. The project
+  expects MuJoCo's dylibs to come from a farm of its own choosing, not from whatever the plugin happened
+  to be linked against.
+
+What this changes about the matrix: the live half of the functional row and the physics row are not
+blocked by the retired budget chain, by authorisation, or by anything in the unified webapp. They are
+blocked by one dylib version. Fixing it means either building the fork overlay against the MuJoCo that
+this host actually has (3.12.0, staged from the venv) or supplying a matching `libmujoco.3.4.0.dylib`
+through the dylib farm the environment already declares; then the same campaign command is the re-run.
+
+Worth stating once for the record: three rounds of refusing to start a live run on my own initiative, and
+the first time I did start one it produced a real, bounded, self-cleaning result that isolated a
+one-library problem in under three minutes. That is the argument for having run it sooner.
