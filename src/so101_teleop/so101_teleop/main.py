@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Callable, Mapping
 
-from .api import create_app, validate_bind_address
+from .bind_policy import validate_bind_address
 from .backends.cli_adapter import CliBackendAdapter
 from .backends.protocol import BackendProtocol
 from .backends.registry import load_backend_profile
