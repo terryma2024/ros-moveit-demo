@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-72
+latest_checkpoint: CP-73
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1667,3 +1667,28 @@ since the base:
 
 That is the plan's "先 `git diff --check`、回读 `git diff --cached --name-only` 并与本清单逐项相等"
 discipline, verified after the fact rather than asserted.
+
+## CP-73: a second web listener path existed; it is gone, and my CP-70 comment was wrong
+
+Checking CP-70's own claim ("kept only so the legacy per-domain tests keep exercising their closures")
+turned up that it was **inaccurate**: `so101_teleop/main.py:main()` still built the ROS worker and
+called `uvicorn.run(create_app(...))` on `SO101_TELEOP_PORT`, i.e. a second web entry point with its own
+port - precisely what the unified design removes, and what the plan forbids ("一个 Web 入口/监听端口",
+"兼容 entrypoint 只委托统一入口，不再分别启动 Web"). `server.py` also imported `create_app`.
+
+Fixed: `main()` prints a deprecation notice and delegates to `so101_teleop.unified.main`; the ROS
+worker construction and the `uvicorn.run(create_app(...))` call are gone, so **no production path
+builds the legacy app any more** and the CP-70 comment is now true rather than aspirational.
+
+Two tests asserted the removed lifecycle (`test_gazebo_python_camera_uses_profile_allowlist`,
+`test_server_lifecycle_stops_ros_worker_when_uvicorn_returns` - they monkeypatched `create_app`,
+`RosTelemetryWorker` and `uvicorn.run` to check start/serve/stop ordering). They are obsolete by design:
+in the unified service the ROS lifecycle belongs to the child process, not the web entry. They were
+replaced by `test_deprecated_main_delegates_to_the_unified_entry`, which pins the actual contract - the
+deprecated entry calls the unified entry and starts nothing itself.
+
+GREEN: `pyrgate test_main_backend.py test_launch_contract.py` **12 passed**; the launch module's
+registration/drift guard still passes. Commit `2b6c2cec`.
+
+Remaining for CP-67's deviation is now only the legacy `create_app` route table itself, which no
+production path reaches.
