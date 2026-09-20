@@ -4258,3 +4258,52 @@ and that `connect` reached the server - but the client-side promise resolves onl
 is narrow: does `DomainRuntime.start()` ever resolve in the page, and who awaits it - the provider or
 nobody? A rejected `start()` would leave exactly this state: instance registered, channel accepted on the
 server, and no authority on the client.
+
+## CP-137: the page acquires - the missing piece was the server's expected origin
+
+CP-136 ended on "the runtime holds no authority". The cause is one default value, and it is the same
+class of defect as the four before it: a contract that both sides believe they satisfy.
+
+```text
+compose.py:77           origin = environment.get("SO101_UNIFIED_ORIGIN", "http://127.0.0.1:8000")
+instance-client.ts:67   const origin = options.origin ?? this.baseUrl;    // the page's real origin
+instances.py connect()  if origin != self.origin: raise MutationError("ORIGIN_REJECTED: ...")
+```
+
+The server's expected origin defaults to `http://127.0.0.1:8000` no matter which port it is actually
+serving on, while the page sends its own origin. So every channel handshake is rejected unless the
+deployment happens to run on 8000 or sets `SO101_UNIFIED_ORIGIN` - and the failure is invisible at the
+transport layer: the websocket is **accepted**, the server sends `{"code": "ORIGIN_REJECTED"}` as the
+handshake reply, the client's `connect()` rejects with that code, `start()` rejects, the provider turns it
+into a notice, and the runtime never gets an authority. That is exactly the state CP-136 observed.
+
+**Confirmed end to end.** Same page, same bundle, same task-local `websockets`, one change - the server
+started with `SO101_UNIFIED_ORIGIN=http://127.0.0.1:8801`:
+
+```text
+POST /control/instances           200 OK        (twice - the page registers, then re-registers)
+WebSocket .../channel             [accepted]    (twice)
+POST /expert-validation/lease     200 OK        <- the acquire succeeds
+page JSON: {"changed": false, "codes": [], "httpErrors": ["503 /snapshot"], ...}
+```
+
+No error codes in the page at all: the previous run's `CONTROLLER_INSTANCE_REQUIRED` notice is gone. The
+`503 /snapshot` is the snapshot route correctly reporting that the domain runtime is not behind it, which
+is the same environment limit the physics row already records and is unrelated to authority.
+
+**So the client half of the authority model now works on this host**, through the real page, with the
+real server, websocket and all. Five defects have been found in this seam across eight rounds, each one
+only visible when a real client talked to a real server:
+
+| # | defect | where |
+| --- | --- | --- |
+| 1 | registration stored the domain as a string, so every instance was a domain mismatch | server, `app.py` |
+| 2 | nothing in production claimed a domain controller | server, `instances.py` / `app.py` |
+| 3 | no websocket implementation was declared, so every channel 404'd | packaging, `package.xml` |
+| 4 | the page mutated through a bare client that carries no authority | client, `expert-validation-app.tsx` |
+| 5 | the server's expected origin defaulted to port 8000 regardless of the served port | config, `compose.py:77` |
+
+**What remains for the last §7 row is now only the campaign and the retry.** The origin still needs to
+become a code-level fix rather than a deployment variable - deriving it from the actual bind address and
+port is the obvious shape - and that is worth a RED test of its own, because a default that silently
+disables the entire authority model is worse than a wrong port.
