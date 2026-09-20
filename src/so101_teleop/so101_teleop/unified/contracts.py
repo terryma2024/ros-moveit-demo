@@ -153,6 +153,19 @@ class ParentProjection:
     blocked_reason: str | None
 
 
+@dataclass(frozen=True)
+class QualificationView:
+    """Read-only worker qualification for one exact N, owned by the budget provider."""
+
+    selected_n: int
+    status: str
+    reasons: tuple[str, ...]
+    runtime_identity: str
+    contract_version: int
+    profile_sha256: str | None
+    approval_sha256: str | None
+
+
 class MutationError(RuntimeError):
     """A refused mutation. ``str(error)`` starts with a stable machine-readable code."""
 

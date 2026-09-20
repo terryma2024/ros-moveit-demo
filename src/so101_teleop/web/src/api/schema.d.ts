@@ -317,8 +317,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Task Artifact */
-        get: operations["task_artifact_tasks_artifacts__artifact_id__get"];
+        /** Artifact */
+        get: operations["artifact_tasks_artifacts__artifact_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -336,8 +336,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Task Capture */
-        post: operations["task_capture_tasks_captures_post"];
+        /** Capture */
+        post: operations["capture_tasks_captures_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -353,8 +353,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Task Rendered Image */
-        post: operations["task_rendered_image_tasks_captures__capture_id__rendered_image_post"];
+        /** Rendered Image */
+        post: operations["rendered_image_tasks_captures__capture_id__rendered_image_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -370,8 +370,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Task Shutdown */
-        post: operations["task_shutdown_tasks_environment_shutdown_post"];
+        /** Shutdown */
+        post: operations["shutdown_tasks_environment_shutdown_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -385,8 +385,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Task Presets */
-        get: operations["task_presets_tasks_presets_get"];
+        /** Presets */
+        get: operations["presets_tasks_presets_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -404,8 +404,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Task Reachability */
-        post: operations["task_reachability_tasks_reachability_post"];
+        /** Reachability */
+        post: operations["reachability_tasks_reachability_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -419,11 +419,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Task Runs */
-        get: operations["task_runs_tasks_runs_get"];
+        /** Runs */
+        get: operations["runs_tasks_runs_get"];
         put?: never;
-        /** Task Start */
-        post: operations["task_start_tasks_runs_post"];
+        /** Start */
+        post: operations["start_tasks_runs_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -437,8 +437,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Task Status */
-        get: operations["task_status_tasks_runs__run_id__get"];
+        /** Status */
+        get: operations["status_tasks_runs__run_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -456,8 +456,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Task Cancel */
-        post: operations["task_cancel_tasks_runs__run_id__cancel_post"];
+        /** Cancel */
+        post: operations["cancel_tasks_runs__run_id__cancel_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -473,8 +473,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Task Recovery */
-        post: operations["task_recovery_tasks_runs__run_id__recovery_post"];
+        /** Recovery */
+        post: operations["recovery_tasks_runs__run_id__recovery_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -502,6 +502,54 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ArtifactProjectionResponse */
+        ArtifactProjectionResponse: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Attempt Id */
+            attempt_id?: string | null;
+            /** Batch Id */
+            batch_id: string;
+            /** Campaign Id */
+            campaign_id: string;
+            /** Media Type */
+            media_type: string;
+            /** Pool Generation */
+            pool_generation?: number | null;
+            /** Role */
+            role: string;
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Worker Generation */
+            worker_generation?: number | null;
+            /** Worker Id */
+            worker_id?: string | null;
+        };
+        /** AttemptProjectionResponse */
+        AttemptProjectionResponse: {
+            /** Attempt Id */
+            attempt_id?: string | null;
+            /** Batch Id */
+            batch_id?: string | null;
+            /** Generation */
+            generation: number;
+            /**
+             * Kind
+             * @default FIRST_PASS
+             * @enum {string}
+             */
+            kind: "FIRST_PASS" | "FULL_RESTART_RETRY";
+            /** Reason */
+            reason?: string | null;
+            /** Status */
+            status: string;
+            /** Worker Generation */
+            worker_generation?: number | null;
+            /** Worker Id */
+            worker_id?: string | null;
+        };
         /** BackendCapabilitiesResponse */
         BackendCapabilitiesResponse: {
             /**
@@ -553,6 +601,210 @@ export interface components {
             workflow_start: boolean;
             /** Workflow Stop */
             workflow_stop: boolean;
+        };
+        /** BrokerProjectionResponse */
+        BrokerProjectionResponse: {
+            /** Available */
+            available: boolean;
+            /** Reason */
+            reason?: string | null;
+        };
+        /** CampaignCancelRequest */
+        CampaignCancelRequest: {
+            /** Command Id */
+            command_id: string;
+            /** Lease Generation */
+            lease_generation: number;
+            /** Lease Id */
+            lease_id: string;
+            /** Service Session Id */
+            service_session_id: string;
+        };
+        /** CampaignConfiguration */
+        CampaignConfiguration: {
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: 3;
+            /**
+             * Execution Mode
+             * @enum {string}
+             */
+            execution_mode: "SEQUENTIAL" | "PARALLEL" | "ADAPTIVE";
+            /** Fallback Worker Counts */
+            fallback_worker_counts?: number[] | null;
+            /** Initial Points Per Worker */
+            initial_points_per_worker?: number | null;
+            /** Lease Generation */
+            lease_generation: number;
+            /** Lease Id */
+            lease_id: string;
+            /** Manifest Id */
+            manifest_id: string;
+            /** Max Infra Attempts Per Point */
+            max_infra_attempts_per_point?: number | null;
+            /** Preferred Worker Count */
+            preferred_worker_count?: number | null;
+            /** Service Session Id */
+            service_session_id: string;
+            /** Worker Count */
+            worker_count?: number | null;
+            /** Worker Start Timeout S */
+            worker_start_timeout_s?: number | null;
+            /** Yolo Executor Count */
+            yolo_executor_count?: (1 | 2 | 4) | null;
+        };
+        /** CampaignProjectionResponse */
+        CampaignProjectionResponse: {
+            /**
+             * Batch Cleanup Complete
+             * @default false
+             */
+            batch_cleanup_complete: boolean;
+            /** Batch Id */
+            batch_id?: string | null;
+            broker?: components["schemas"]["BrokerProjectionResponse"] | null;
+            /** Campaign Id */
+            campaign_id: string;
+            /** Coverage Complete */
+            coverage_complete?: boolean | null;
+            /** Current Generation */
+            current_generation?: number | null;
+            /**
+             * Evaluated
+             * @default 0
+             */
+            evaluated: number;
+            /**
+             * Evaluation Coverage
+             * @default 0
+             */
+            evaluation_coverage: number;
+            /** Execution Complete */
+            execution_complete?: boolean | null;
+            /**
+             * Execution Coverage
+             * @default 0
+             */
+            execution_coverage: number;
+            /** Execution Mode */
+            execution_mode?: ("SEQUENTIAL" | "PARALLEL" | "ADAPTIVE") | null;
+            /**
+             * Execution Started
+             * @default 0
+             */
+            execution_started: number;
+            /**
+             * Fallback History
+             * @default []
+             */
+            fallback_history: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Indeterminate
+             * @default 0
+             */
+            indeterminate: number;
+            /**
+             * Infra Attempts
+             * @default 0
+             */
+            infra_attempts: number;
+            /**
+             * Levels Used
+             * @default []
+             */
+            levels_used: number[];
+            /** Manifest Id */
+            manifest_id?: string | null;
+            /**
+             * Not Executed
+             * @default 0
+             */
+            not_executed: number;
+            /** Owner Kind */
+            owner_kind?: ("COORDINATOR" | "ADAPTIVE_WRAPPER") | null;
+            /**
+             * Points
+             * @default []
+             */
+            points: components["schemas"]["PointProjectionResponse"][];
+            /** Qualification Passed */
+            qualification_passed?: boolean | null;
+            /** Qualified Success Rate */
+            qualified_success_rate?: number | null;
+            /**
+             * Requested
+             * @default 0
+             */
+            requested: number;
+            /**
+             * Resource Observations
+             * @default {}
+             */
+            resource_observations: {
+                [key: string]: unknown;
+            };
+            /** Sequence */
+            sequence: number;
+            /** Status */
+            status?: string | null;
+            /**
+             * Valid Failed
+             * @default 0
+             */
+            valid_failed: number;
+            /**
+             * Valid Succeeded
+             * @default 0
+             */
+            valid_succeeded: number;
+            /**
+             * Workers
+             * @default []
+             */
+            workers: components["schemas"]["WorkerProjectionResponse"][];
+        };
+        /** CampaignStartRequest */
+        CampaignStartRequest: {
+            /** Command Id */
+            command_id: string;
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: 3;
+            /**
+             * Execution Mode
+             * @enum {string}
+             */
+            execution_mode: "SEQUENTIAL" | "PARALLEL" | "ADAPTIVE";
+            /** Fallback Worker Counts */
+            fallback_worker_counts?: number[] | null;
+            /** Initial Points Per Worker */
+            initial_points_per_worker?: number | null;
+            /** Lease Generation */
+            lease_generation: number;
+            /** Lease Id */
+            lease_id: string;
+            /** Manifest Id */
+            manifest_id: string;
+            /** Max Infra Attempts Per Point */
+            max_infra_attempts_per_point?: number | null;
+            /** Preferred Worker Count */
+            preferred_worker_count?: number | null;
+            /** Preflight Receipt Id */
+            preflight_receipt_id: string;
+            /** Service Session Id */
+            service_session_id: string;
+            /** Worker Count */
+            worker_count?: number | null;
+            /** Worker Start Timeout S */
+            worker_start_timeout_s?: number | null;
+            /** Yolo Executor Count */
+            yolo_executor_count?: (1 | 2 | 4) | null;
         };
         /** CaptureResponse */
         CaptureResponse: {
@@ -619,6 +871,236 @@ export interface components {
              */
             velocity_rad_s: number;
         };
+        /** LeaseAcquireRequest */
+        LeaseAcquireRequest: {
+            /** Service Session Id */
+            service_session_id: string;
+        };
+        /** LeaseMutationRequest */
+        LeaseMutationRequest: {
+            /** Generation */
+            generation: number;
+            /** Service Session Id */
+            service_session_id: string;
+        };
+        /** LeaseReleaseResponse */
+        LeaseReleaseResponse: {
+            /** Lease Id */
+            lease_id: string;
+            /** Released */
+            released: boolean;
+        };
+        /** LeaseResponse */
+        LeaseResponse: {
+            /** Expires Monotonic Ns */
+            expires_monotonic_ns: number;
+            /** Generation */
+            generation: number;
+            /** Lease Id */
+            lease_id: string;
+            /** Service Session Id */
+            service_session_id: string;
+        };
+        /** ManifestCreateRequest */
+        ManifestCreateRequest: {
+            /** Total Points */
+            total_points: number;
+        };
+        /** ManifestPointResponse */
+        ManifestPointResponse: {
+            /** Display Id */
+            display_id: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Position World M */
+            position_world_m: [
+                number,
+                number,
+                number
+            ];
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "anchor" | "generated";
+            /** Stratum */
+            stratum: string;
+        };
+        /** ManifestResponse */
+        ManifestResponse: {
+            /** Catalog Seed */
+            catalog_seed?: number | null;
+            /** Catalog Sha256 */
+            catalog_sha256?: string | null;
+            /** Geometry Sha256 */
+            geometry_sha256?: string | null;
+            /** Manifest Id */
+            manifest_id: string;
+            /** Manifest Sha256 */
+            manifest_sha256?: string | null;
+            /**
+             * Point Count
+             * @default 0
+             */
+            point_count: number;
+            /**
+             * Points
+             * @default []
+             */
+            points: components["schemas"]["ManifestPointResponse"][];
+            /** Sampler Id */
+            sampler_id?: string | null;
+            /** Sampler Version */
+            sampler_version?: number | null;
+            /** Selection Sha256 */
+            selection_sha256?: string | null;
+            /** Source Commit */
+            source_commit?: string | null;
+            source_hashes?: components["schemas"]["ManifestSourceHashes"] | null;
+            /**
+             * Stale
+             * @default false
+             */
+            stale: boolean;
+            top_view?: components["schemas"]["ManifestTopViewResponse"] | null;
+        };
+        /** ManifestSourceHashes */
+        ManifestSourceHashes: {
+            /** Adaptive Config */
+            adaptive_config: string;
+            /** Anchors */
+            anchors: string;
+            /** Catalog */
+            catalog: string;
+            /** Dynamic Policy */
+            dynamic_policy: string;
+            /** Execution Policy */
+            execution_policy: string;
+            /** Parallel Config */
+            parallel_config: string;
+            /** Placement Policy */
+            placement_policy: string;
+            /** Scene */
+            scene: string;
+            /** Target Mesh */
+            target_mesh: string;
+            /** Task Scene */
+            task_scene: string;
+        };
+        /** ManifestTopViewResponse */
+        ManifestTopViewResponse: {
+            /** Cup Footprint Radius Px */
+            cup_footprint_radius_px: number;
+            geometry: components["schemas"]["MapGeometryResponse"];
+            /** Marker Radius Px */
+            marker_radius_px: number;
+            palette: components["schemas"]["MapPaletteResponse"];
+            /** Points */
+            points: components["schemas"]["MapPointResponse"][];
+            projection: components["schemas"]["MapProjectionResponse"];
+            /** Target Tolerance Radius Px */
+            target_tolerance_radius_px: number;
+        };
+        /** MapGeometryResponse */
+        MapGeometryResponse: {
+            /** Base Bounds */
+            base_bounds: [
+                number,
+                number,
+                number,
+                number
+            ];
+            /** Candidate Bounds */
+            candidate_bounds: [
+                number,
+                number,
+                number,
+                number
+            ];
+            /** Cup Radius M */
+            cup_radius_m: number;
+            /** Table Bounds */
+            table_bounds: [
+                number,
+                number,
+                number,
+                number
+            ];
+            /** Target Bounds */
+            target_bounds: [
+                number,
+                number,
+                number,
+                number
+            ];
+            /** Target Center */
+            target_center: [
+                number,
+                number
+            ];
+            /** Target Tolerance Radius M */
+            target_tolerance_radius_m: number;
+        };
+        /** MapPaletteResponse */
+        MapPaletteResponse: {
+            blue: components["schemas"]["MapPaletteStyle"];
+            green: components["schemas"]["MapPaletteStyle"];
+            red: components["schemas"]["MapPaletteStyle"];
+        };
+        /** MapPaletteStyle */
+        MapPaletteStyle: {
+            /** Fill */
+            fill: string;
+            /**
+             * Icon
+             * @enum {string}
+             */
+            icon: "pending" | "passed" | "failed";
+            /** Stroke */
+            stroke: string;
+        };
+        /** MapPointResponse */
+        MapPointResponse: {
+            /** Display Id */
+            display_id: string;
+            /** Id */
+            id: string;
+            /** Position World M */
+            position_world_m: [
+                number,
+                number,
+                number
+            ];
+            /** Projected Px */
+            projected_px: [
+                number,
+                number
+            ];
+        };
+        /** MapProjectionResponse */
+        MapProjectionResponse: {
+            /** Bounds M */
+            bounds_m: [
+                number,
+                number,
+                number,
+                number
+            ];
+            /** Height Px */
+            height_px: number;
+            /** Offset X Px */
+            offset_x_px: number;
+            /** Offset Y Px */
+            offset_y_px: number;
+            /** Padding Px */
+            padding_px: number;
+            /** Pixels Per M */
+            pixels_per_m: number;
+            /** Width Px */
+            width_px: number;
+        };
         /** PhysicalOutcomeEvidence */
         PhysicalOutcomeEvidence: {
             /**
@@ -655,6 +1137,39 @@ export interface components {
             /** World Object Synchronized */
             world_object_synchronized?: boolean | null;
         };
+        /** PointProjectionResponse */
+        PointProjectionResponse: {
+            /** Active Worker Id */
+            active_worker_id?: string | null;
+            /**
+             * Artifact Ids
+             * @default []
+             */
+            artifact_ids: string[];
+            /**
+             * Artifacts
+             * @default []
+             */
+            artifacts: components["schemas"]["ArtifactProjectionResponse"][];
+            /**
+             * Attempts
+             * @default []
+             */
+            attempts: components["schemas"]["AttemptProjectionResponse"][];
+            /** Display Id */
+            display_id?: string | null;
+            /** Point Id */
+            point_id: string;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Retry Eligible
+             * @default false
+             */
+            retry_eligible: boolean;
+            /** Status */
+            status: string;
+        };
         /** Pose6D */
         Pose6D: {
             /** Frame Id */
@@ -673,6 +1188,69 @@ export interface components {
             yaw_rad: number;
             /** Z M */
             z_m: number;
+        };
+        /** PreflightResponse */
+        PreflightResponse: {
+            /** Admitted */
+            admitted: boolean;
+            /**
+             * Execution Config
+             * @default {}
+             */
+            execution_config: {
+                [key: string]: unknown;
+            };
+            /** Execution Mode */
+            execution_mode?: ("SEQUENTIAL" | "PARALLEL" | "ADAPTIVE") | null;
+            /** Expires At Monotonic Ns */
+            expires_at_monotonic_ns?: number | null;
+            /** Manifest Id */
+            manifest_id?: string | null;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            /** Receipt Id */
+            receipt_id: string;
+            /**
+             * Resource Observations
+             * @default {}
+             */
+            resource_observations: {
+                [key: string]: unknown;
+            };
+            start_guard?: components["schemas"]["StartGuardStatus"] | null;
+        };
+        /**
+         * QualificationCapabilities
+         * @description Capability payload: worker qualification plus the original read-only fields.
+         */
+        QualificationCapabilities: {
+            /** Worker Qualifications */
+            worker_qualifications: components["schemas"]["QualificationViewResponse"][];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * QualificationViewResponse
+         * @description Pydantic mirror of the budget provider's read-only view; generated into the schema.
+         */
+        QualificationViewResponse: {
+            /** Approval Sha256 */
+            approval_sha256: string | null;
+            /** Contract Version */
+            contract_version: number;
+            /** Profile Sha256 */
+            profile_sha256: string | null;
+            /** Reasons */
+            reasons: string[];
+            /** Runtime Identity */
+            runtime_identity: string;
+            /** Selected N */
+            selected_n: number;
+            /** Status */
+            status: string;
         };
         /** ReachabilityResponse */
         ReachabilityResponse: {
@@ -735,11 +1313,79 @@ export interface components {
                 number
             ];
         };
+        /** RetryRequest */
+        RetryRequest: {
+            /** Command Id */
+            command_id: string;
+            /** Confirmation */
+            confirmation: string;
+            /** Lease Generation */
+            lease_generation: number;
+            /** Lease Id */
+            lease_id: string;
+            /** Point Ids */
+            point_ids: string[];
+            /** Service Session Id */
+            service_session_id: string;
+        };
         /**
          * ServerMode
          * @enum {string}
          */
         ServerMode: "STARTING" | "READ_ONLY" | "READY" | "BUSY" | "DEGRADED";
+        /**
+         * StartGuardCheck
+         * @description One check of the shared startup guard, in the units the decision used.
+         */
+        StartGuardCheck: {
+            /** Cutoff */
+            cutoff?: number | null;
+            /** Observed */
+            observed?: number | string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "PASS" | "WARN" | "FAIL";
+            /** Unit */
+            unit: string;
+        };
+        /**
+         * StartGuardStatus
+         * @description The server's own decision. A client cannot supply or overwrite it.
+         *
+         *     ``admission_kind`` labels what the accelerator check actually measured. On the macOS MPS
+         *     combination it is ``unified-memory-proxy``: a host unified-memory figure, not a device-level
+         *     free-VRAM reading. Leaving it null is honest for a snapshot that carries no accelerator check.
+         */
+        StartGuardStatus: {
+            /** Admission Kind */
+            admission_kind?: string | null;
+            /**
+             * Checks
+             * @default {}
+             */
+            checks: {
+                [key: string]: components["schemas"]["StartGuardCheck"];
+            };
+            /**
+             * Cleanup State
+             * @default CLEAR
+             * @enum {string}
+             */
+            cleanup_state: "CLEAR" | "PROBE_CLEANUP_BLOCKED";
+            /** Gpu Uuid */
+            gpu_uuid?: string | null;
+            /** Observed Monotonic S */
+            observed_monotonic_s?: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "PASS" | "WARN" | "FAIL";
+        };
         /** TaskArtifactSummary */
         TaskArtifactSummary: {
             /** Artifact Id */
@@ -924,6 +1570,30 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** WorkerProjectionResponse */
+        WorkerProjectionResponse: {
+            /** Current Point Id */
+            current_point_id?: string | null;
+            /** Generation */
+            generation: number;
+            /** Heartbeat Deadline Monotonic S */
+            heartbeat_deadline_monotonic_s?: number | null;
+            /**
+             * Lease Count
+             * @default 0
+             */
+            lease_count: number;
+            /** Max Points Per Worker */
+            max_points_per_worker?: number | null;
+            /** Quarantine Reason */
+            quarantine_reason?: string | null;
+            /** Recovery Result */
+            recovery_result?: string | null;
+            /** State */
+            state: string;
+            /** Worker Id */
+            worker_id: string;
         };
     };
     responses: never;
@@ -1512,7 +2182,7 @@ export interface operations {
             };
         };
     };
-    task_artifact_tasks_artifacts__artifact_id__get: {
+    artifact_tasks_artifacts__artifact_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1543,7 +2213,7 @@ export interface operations {
             };
         };
     };
-    task_capture_tasks_captures_post: {
+    capture_tasks_captures_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1576,7 +2246,7 @@ export interface operations {
             };
         };
     };
-    task_rendered_image_tasks_captures__capture_id__rendered_image_post: {
+    rendered_image_tasks_captures__capture_id__rendered_image_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1611,7 +2281,7 @@ export interface operations {
             };
         };
     };
-    task_shutdown_tasks_environment_shutdown_post: {
+    shutdown_tasks_environment_shutdown_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1644,7 +2314,7 @@ export interface operations {
             };
         };
     };
-    task_presets_tasks_presets_get: {
+    presets_tasks_presets_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1664,7 +2334,7 @@ export interface operations {
             };
         };
     };
-    task_reachability_tasks_reachability_post: {
+    reachability_tasks_reachability_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1697,7 +2367,7 @@ export interface operations {
             };
         };
     };
-    task_runs_tasks_runs_get: {
+    runs_tasks_runs_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1717,7 +2387,7 @@ export interface operations {
             };
         };
     };
-    task_start_tasks_runs_post: {
+    start_tasks_runs_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1750,7 +2420,7 @@ export interface operations {
             };
         };
     };
-    task_status_tasks_runs__run_id__get: {
+    status_tasks_runs__run_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1781,7 +2451,7 @@ export interface operations {
             };
         };
     };
-    task_cancel_tasks_runs__run_id__cancel_post: {
+    cancel_tasks_runs__run_id__cancel_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1816,7 +2486,7 @@ export interface operations {
             };
         };
     };
-    task_recovery_tasks_runs__run_id__recovery_post: {
+    recovery_tasks_runs__run_id__recovery_post: {
         parameters: {
             query?: never;
             header?: never;
