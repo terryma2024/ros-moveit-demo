@@ -113,9 +113,14 @@ def test_unreachable_tcp_target_is_a_conflict_not_service_outage():
 
 def test_health_and_snapshot_remain_available_without_web_assets():
     """Missing frontend assets must not hide server health from remote diagnosis."""
-    client = TestClient(create_app(Service()))
+    client = TestClient(unified_app_for(Service()))
 
-    assert client.get("/health").json() == {"ok": True}
+    # The unified /health aggregates the domains and keeps the Teleop fields as a nested
+    # compatibility projection, so the assertion follows that contract instead of the old flat body.
+    health = client.get("/health").json()
+    assert health["ok"] is True
+    assert health["teleop"]["ok"] is True
+    assert set(health["domains"]) == {"teleop", "tasks", "validation"}
     assert client.get("/snapshot").json()["simulation_session_id"] == "sim-a"
 
 
@@ -198,7 +203,7 @@ def test_task_artifact_route_rejects_manifest_escape(tmp_path):
             "metadata": {},
         }],
     }))
-    client = TestClient(create_app(Service(), task_service=tasks))
+    client = TestClient(unified_app_for(Service(), task_service=tasks))
     response = client.get("/tasks/artifacts/bad-id")
     assert response.status_code == 404
     assert response.json()["code"] == "ARTIFACT_NOT_FOUND"
