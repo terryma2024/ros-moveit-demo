@@ -5582,3 +5582,58 @@ after-state is empty - normal (`stop_after_cleanup` over a SIGTERM-ignoring grou
 barrier refusing, with the group cleared anyway) and the bridge stop the service itself calls. The live
 *cancel* residue (a campaign cancelled mid-batch) is part of the service-driven campaign gate and is not
 claimed here.
+
+## CP-165: EXP-B1 - what the service actually needs from a macOS campaign, and the path chosen
+
+Dispatch 6954bbb9's second task needs a macOS MPS campaign the unified service can really drive,
+including the single-point `N=1 FULL_RESTART_RETRY`. Before choosing how, I read both ends of the
+existing contract rather than assuming. What the service requires of a launched campaign is narrower
+than "speak the whole control protocol":
+
+- `supervisor.build_start_request` computes `batch_root / "control" / "control.sock"`, mints a token,
+  puts the token, campaign id, epoch and socket path in the child's environment, and records only the
+  token's sha256 in the binding (`supervisor.py:181-197`).
+- The child is expected to **create that socket**. The live supervisor test asserts
+  `binding.control_socket.exists()`, which is exactly what fails on this host today.
+- The wire is closed and shared: the service's client field sets (`expert_validation/control.py`,
+  `_REQUEST_FIELDS`, `_REPLY_FIELDS`) match the demo server's (`parallel_batch/web_control.py`).
+- The server's reply is deliberately modest: it reports `state`, `batch_terminal` and
+  `batch_cleanup_complete` from the coordinator's own summary and leaves `owned_descendants_gone`,
+  `assigned_ros_domains_clear` and `cleanup_receipt_sha256` **False/None** - "acknowledgement is not a
+  recovery or batch cleanup receipt". So the endpoint acknowledges a durable stop transition; it never
+  manufactures cleanup evidence, and `stop_after_cleanup`'s authorization conjunction cannot be
+  satisfied by it.
+- On failure, `cancel_for_reason` records a recovery fence and re-raises, so a campaign that cannot
+  answer a cancel is not silently tolerated.
+
+**Why the existing server cannot simply be reused on macOS.** `FixedCoordinatorControlServer` takes a
+`coordinator` whose `.request` is a `BatchRequest`/`BatchRequestV2` and reads
+`coordinator.journal.coordinator_epoch`; the macOS composition (`MacosW2Campaign`) is a v4-native
+object with no such journal and refuses any plan whose accelerator is not `mps`. Its only production
+starter is the Linux container CLI (`cli/mujoco_parallel_batch.py:2723`); nothing on this host serves
+the endpoint, which is why the service's fixed path can start nothing here.
+
+**Comparison, and the decision.**
+
+| | A: typed adapter in the service | B: the macOS entry point speaks the control protocol |
+| --- | --- | --- |
+| new wire surface | none in the child; the service maps its expectations onto a CLI that cannot answer | none either: the child implements the *existing* closed wire |
+| who owns the stop transition | the service would have to infer it, or keep a local `cleanup_checker` predicate | the campaign acknowledges its own durable stop, as the Linux server does |
+| parity risk | low, but the service loses the child's acknowledgement | real: two implementations of one wire, so it needs a parity test that fails on drift |
+| live evidence | cannot satisfy the live supervisor test that requires the socket to exist | satisfies it by construction |
+| effort | medium (service-side composition branch only) | medium (endpoint host + a typed launch branch) |
+
+**Decision: B, plus the typed launch branch in the service's composition.** The child implements the
+closed wire that already exists (same request and reply field sets, same frame encoding, same token
+check), because that keeps one client and gives the campaign's own acknowledgement instead of an
+inference. The fail-closed half of B is a **parity test on the teleop side** that pins the macOS
+endpoint's field sets, frame limits and refusals against `expert_validation/control.py`, so a drift
+between the two implementations fails a test rather than a live run. The service-side branch is what
+makes the launch typed: a macOS execution-config variant that composes the v4 document the existing
+`load_execution_config_for_schema` path already accepts on this host, launches
+`python -m so101_demo.cli.macos_w2_campaign` for it, and refuses every other combination rather than
+falling back to `so101_parallel_batch` - which refuses this host anyway
+(`CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION`, then `GPU_TARGET_UNAVAILABLE`).
+
+Nothing of B is implemented yet in this round: the comparison and the decision are recorded here so the
+next step is execution rather than re-derivation.
