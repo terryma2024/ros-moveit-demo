@@ -146,9 +146,17 @@ def test_execute_returns_conflict_for_stale_plan():
     assert response.json()["code"] == "PLAN_STALE_SCENE"
 
 
-def test_unreachable_tcp_target_is_a_conflict_not_service_outage():
-    client = TestClient(create_app(Service()))
-    response = client.post("/plan/tcp", json={"command_id": "tcp-1"})
+def test_unreachable_tcp_target_is_a_conflict_not_service_outage(tmp_path):
+    authority = AuthorityFixture(tmp_path)
+    try:
+        client = TestClient(
+            unified_app_for(Service(), instances=authority.registry, arbiter=authority.arbiter)
+        )
+        response = client.post(
+            "/plan/tcp", json={"command_id": "tcp-1"}, headers=authority.headers()
+        )
+    finally:
+        authority.close()
     assert response.status_code == 409
     assert response.json()["code"] == "MOVEIT_IK_FAILED_-31"
 
@@ -166,12 +174,20 @@ def test_health_and_snapshot_remain_available_without_web_assets():
     assert client.get("/snapshot").json()["simulation_session_id"] == "sim-a"
 
 
-def test_regular_server_reports_validation_unavailable():
-    client = TestClient(create_app(Service()))
-    assert client.get("/expert-validation/capabilities").json() == {
-        "available": False,
-        "reason": "VALIDATION_SERVER_REQUIRED",
-    }
+def test_validation_capabilities_report_the_exact_n_view_without_a_validation_service():
+    """Superseded contract, kept as a test rather than deleted.
+
+    The old flat `{"available": False, "reason": "VALIDATION_SERVER_REQUIRED"}` body was the
+    standalone-server placeholder. The unified route answers with the read-only per-N qualification
+    view instead, and the plan requires every exact N to be visible there, so the assertion follows
+    the new contract.
+    """
+    client = TestClient(unified_app_for(Service()))
+    body = client.get("/expert-validation/capabilities").json()
+    assert body["available"] is False
+    assert body["reason"] == "VALIDATION_SERVER_REQUIRED"
+    assert [view["selected_n"] for view in body["worker_qualifications"]] == list(range(2, 9))
+    assert all(view["status"] == "UNKNOWN" for view in body["worker_qualifications"])
 
 
 def test_missing_web_assets_return_machine_readable_service_unavailable():
