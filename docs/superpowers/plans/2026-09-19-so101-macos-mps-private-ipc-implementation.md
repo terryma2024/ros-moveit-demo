@@ -319,11 +319,11 @@ required_gates: schema-v3 CUDA/NVML; schema-v4 CUDA+proc_fd_unix; EGL; real Brok
 
 **Files:** Modify ledger; optionally update persistent guide only if user-facing operation changed, using `humanizer-zh`. Do not publish.
 
-- [ ] 汇总每个 task 的 RED/GREEN、fresh package/web、真实 MPS/IPC、W2 slots、恢复、5/5、GUI/物理和 cleanup 原始证据；逐项对照设计 §9.1。
-- [ ] 运行 final scoped `git diff --check`、普通 pytest collection equality、source/install/module origins、OpenAPI/build/served-byte hash、ownership/process/endpoint/controller absence readback。
-- [ ] 由 `gpt-5.6-sol/high` 基于最新完整证据判定：只有全部 macOS 项满足才写 `MACOS_MPS_W2_PASS`；否则写 `PARTIAL`/`FAIL` 和精确缺口。无论结果如何保留 `LINUX_REGRESSION_DEFERRED`。
-- [ ] 记录 retained、archived、deletion candidates；不删除任何证据。
-- [ ] 本地提交本任务的 scoped 代码、测试、设计/计划/审查和 ledger。不得 merge main、push origin/github 或启动后续 UI 重构。
+- [x] 汇总每个 task 的 RED/GREEN、fresh package/web、真实 MPS/IPC、W2 slots、恢复、5/5、GUI/物理和 cleanup 原始证据；逐项对照设计 §9.1。（证据：逐项对照见 `CP-UQ274` 的 requirement 表，本轮新增的 5/5、GUI 块与物理/协议原始证据见 `CP-UQ299`/`CP-UQ300`；task-11/12 的 fresh package/web/OpenAPI/served-byte 证据仍以 `task11-web-*`、`task12-package-gate-01`、`task12-copied-install-01/02`、`task12-served-bytes-01` 为准）
+- [ ] 运行 final scoped `git diff --check`、普通 pytest collection equality、source/install/module origins、OpenAPI/build/served-byte hash、ownership/process/endpoint/controller absence readback。（部分已执行，故不勾选：`git diff --check` 干净、collection equality 与基线比较（231 失败全部落在记录的既有环境失败集合内、无新增）、module origins 指向 worktree 源、以及 ownership/process/endpoint/controller 缺席读回均已在本轮完成并记入 `CP-UQ300`；OpenAPI/build/served-byte hash 只在 task-11/12 gate 中取得，本轮未重新推导，故该条整体保持未勾选）
+- [ ] 由 `gpt-5.6-sol/high` 基于最新完整证据判定：只有全部 macOS 项满足才写 `MACOS_MPS_W2_PASS`；否则写 `PARTIAL`/`FAIL` 和精确缺口。无论结果如何保留 `LINUX_REGRESSION_DEFERRED`。（未勾选：本会话无法调用 `gpt-5.6-sol/high`，独立判定仍然 OWED；因此未写 `MACOS_MPS_W2_PASS`，跟踪判定保持 `PARTIAL`，`LINUX_REGRESSION_DEFERRED` 原样保留）
+- [x] 记录 retained、archived、deletion candidates；不删除任何证据。（证据：`CP-UQ300` 的 evidence accounting 段落列出保留项（计数序列、支撑序列、40 次点执行、操作者 TCC 佐证、各 gate 运行）、无归档项与删除候选（`task14-gui-ritual-smoke`、已取消的 `task14-fr4-06` 计划、失败的 `moveit-shadow-0N` 探针）；未删除任何证据）
+- [ ] 本地提交本任务的 scoped 代码、测试、设计/计划/审查和 ledger。不得 merge main、push origin/github 或启动后续 UI 重构。（代码/测试/计划/ledger 均已本地 scoped 提交，最新为 `85958600`，且全程未 merge main、未 push origin/github、未启动 UI 重构；但该条还包含"审查"，独立审查尚未产生，故保持未勾选）
 
 ## 完成定义
 
