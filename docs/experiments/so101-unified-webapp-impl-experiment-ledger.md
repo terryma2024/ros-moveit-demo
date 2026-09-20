@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-81
+latest_checkpoint: CP-82
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1857,3 +1857,19 @@ GREEN: `pyrgate test_api.py` **12 passed**. Commit follows this entry.
 Two `create_app(` uses remain in the file (the camera-preset POST half and
 `test_task_routes_are_separate_and_typed`), both now a mechanical application of `AuthorityFixture`.
 After them, `api.create_app`'s route table can be deleted and CP-67's deviation is closed.
+
+## CP-82: every legacy API case now runs on the unified app
+
+The last two cases migrated: the camera-preset POST half and `test_task_routes_are_separate_and_typed`,
+both on `AuthorityFixture` with the four headers. `grep -c "create_app("` in `test_api.py` is down to
+**2**, and both are inside `unified_app_for`'s own docstring/helper region - i.e. **no test constructs
+the legacy app any more**. `pyrgate test_api.py` **12 passed**, including the task start case asserting
+`tasks.calls[0][0] == "start"` and the preset case asserting the service received
+`("camera_preset", {"preset": "overview"})`.
+
+So `api.create_app` now has **no callers at all**. The remaining step to close CP-67's deviation is to
+delete its route table and update `test_unified_route_parity.py`, which currently compares against it -
+after that the parity guard becomes unnecessary and should be removed with it, leaving one route table
+in the package.
+
+Commit follows this entry.
