@@ -2694,3 +2694,70 @@ passes them as `-DMUJOCO_STAGE_ROOT`/`-DMUJOCO_SOURCE_ROOT`, and builds `--packa
 so101_teleop` as a merge install into fresh bases under the registered root. It also runs the retired
 console script from the resulting prefix and records its exit code, which is the installed half of the
 §7 row that the Stage A prefix could not answer.
+
+## CP-106: the installed item is blocked by a stale fork revision, and that is the whole story
+
+The second closure build (background job `bash-21`, exit 0 for the job, `BUILD_RC=2` for colcon) got one
+stage further and stopped at a compile error instead of a configuration error:
+
+```text
+In file included from src/simulation_evidence_plugin.cpp:3:
+include/so101_mujoco_support/simulation_evidence_plugin.hpp:17:
+#include <mujoco_ros2_control_plugins/mujoco_ros2_control_plugin_capabilities.hpp>
+1 error generated.
+Failed   <<< so101_mujoco_support [25.1s, exited with code 2]
+Aborted  <<< so101_teleop
+Summary: 1 package finished [47.4s]     # mujoco_vendor now builds
+```
+
+The staging worked - `mujoco_vendor` is the one package that finished, and CMake reported
+`MUJOCO_STAGE_ROOT`/`MUJOCO_SOURCE_ROOT` as unused by `so101_mujoco_support`, which is expected since
+only the vendor consumes them. So the fix from CP-105 is real and the next failure is a different kind.
+
+The required header does not exist anywhere on this host:
+
+```text
+find ~/ros2_jazzy -name mujoco_ros2_control_plugin_capabilities.hpp   ->  no results
+find <fork>/install -name mujoco_ros2_control_plugin_capabilities.hpp ->  no results
+find <fork>/src     -name mujoco_ros2_control_plugin_capabilities.hpp ->  no results
+```
+
+Why it is missing is pinned in the repository itself:
+
+```text
+.gitmodules            path = third_party/mujoco_ros2_control
+                       url  = git@gitee.com:zjumty/mujoco_ros2_control.git
+git submodule status   -e4c0241aee52a40727681bd5872c09bf814e941a  third_party/mujoco_ros2_control
+local fork checkout    738e304  2026-08-12  feat: add per-physics-step plugin hook
+```
+
+The leading `-` means the submodule is not initialised in this worktree at all, and the fork overlay I
+sourced is an *external* workspace at `738e304` - three weeks older than the revision the repository
+pins. The plugin-capabilities header came in somewhere after that revision, so no amount of re-sourcing
+or include-path fiddling can satisfy the include; the underlay itself is the wrong revision. This is
+also consistent with what ai-station is doing right now: the task running there lists "port
+mujoco_3d_lidar to MuJoCo 3.12 (`mjtnum.h` -> `mjtype.h`) in the fork submodule" and "rebuild overlays"
+among its own follow-ups, i.e. the fork is being moved forward on the other host while this one still
+has the old checkout.
+
+Consequences, stated plainly:
+
+- The §7 `installed` row stays **not judged** on macOS. What it needs is an overlay built from the
+  pinned submodule revision `e4c0241a` (initialise `third_party/mujoco_ros2_control`, build that
+  workspace, source it ahead of the external `738e304` overlay, then rebuild the closure).
+- Nothing about the current commit is implicated. `so101_mujoco_support` does not compile against any
+  underlay present on this host, and did not before this task started either.
+- The `physics` row and the live part of `functional`/`points`/`control` depend on the same complete
+  underlay, so they move together with it rather than separately.
+
+### Where the replacement acceptance stands
+
+| §7 row | status |
+| --- | --- |
+| guard, probe lifecycle, CPU, RAM | **done** at this commit - gate `727fe308b5c34f92b697c8fb0429d1a7`, 82 passed |
+| budget | **done** - gate `054328b1607546229cd5f0f4c7b24f7f`; budget-free environment confirmed, entry refuses only on the non-budget evidence root |
+| unknown/WARN presentation | **done** - gate `2c44e416ee9b4e27956f9f196e442756`, 14 passed; retired per-N source surfaces as disabled options and unknown text |
+| functional (no hard-coded 3, no forced 8) | contract half **done**: `worker_count` is an API field with its own bounds, the guard is composed from runtime config in `expert_validation/production.py`, and no production call site injects a budget source; actual-N behaviour needs the complete underlay |
+| installed | **blocked** - stale fork revision, fix path above |
+| history, points, control | pending |
+| physics | pending, needs the station or the complete underlay plus an operator window |
