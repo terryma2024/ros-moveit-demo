@@ -2890,3 +2890,57 @@ than only in unit tests.
 | points (4 and 20) | pending - needs a real batch |
 | control (lease/cancel/recovery/cleanup/N1 FULL_RESTART) | pending - unit level green, batch level pending |
 | physics | pending - needs the station or a granted window |
+
+## CP-109: a real guard probe on the installed system, and one integration gap it exposed
+
+The §7 guard row had only unit-test evidence. It now has a live one: a driver composed the installed
+guard from the installed v4 macOS config and ran one fresh probe.
+
+Gate `fae864e88d9246a4b7cf303fda0ae2cc` (exit 0, 4.2 s), installed prefix from `bash-25`:
+
+```text
+config: parallel_batch_v4_macos_mps_w2.yaml  loader v4  schema 4  worker_count 2  accelerator mps:default
+[without accelerator] 0.176s -> status=FAIL
+    cpu_capacity:    PASS  observed=10.0 cores                    reason=CPU_CAPACITY_OK
+    cpu_busy:        WARN  observed=None fraction                 reason=CPU_BUSY_UNKNOWN
+    ram:             PASS  observed=12619333632 bytes (11.8 GiB)   reason=RAM_OK
+    mps_accelerator: FAIL  observed=the Darwin combination requires an accelerator probe
+                                                                  reason=MPS_ACCELERATOR_PROBE_MISSING
+require_before_spawn: 0.178s -> FAIL
+```
+
+Three things this establishes. The probe is real and bounded: 0.176 s against a policy whose deadline is
+2 s, reading actual host capacity rather than a fixture. A busy-but-unmeasured CPU degrades to **WARN**
+with `CPU_BUSY_UNKNOWN` instead of failing the start, which is the behaviour §7 asks for. And a missing
+accelerator **fails closed** - it does not silently pass the Darwin combination - while
+`require_before_spawn` on the same scope returns FAIL at 0.178 s, so the refusal is not quietly upgraded
+on a second look.
+
+The gap it exposed is worth naming rather than filing under "expected": the schema-v4 policy carries
+`mps_minimum_headroom_bytes`, so the Darwin combination *requires* an accelerator object, and
+`expert_validation/production.py`'s `_LazyStartGuard._compose` calls
+`compose_default_start_guard(config.start_guard)` with no accelerator and loads its config through
+`load_parallel_runtime_config_v3`. Two consequences follow directly from the source:
+
+- A v4 document cannot be loaded by that path at all - the v3 loader rejects its closed field set, which
+  is exactly the `UNKNOWN_CONFIG_FIELD` error this round hit first, listing `accelerator`,
+  `ipc_transport`, `mujoco_gl` and the rest.
+- Even with a v3 document, that composition produces the `MPS_ACCELERATOR_PROBE_MISSING` FAIL above on a
+  Darwin host, i.e. the guard would refuse every start.
+
+So on macOS the unified/expert-validation service as composed cannot pass the v4 start guard, and on a
+Linux host the same composition is the v3 path that §7 describes as "the version still executed on
+Linux". Whether macOS validation through the unified service is intended to be supported now, or is
+deliberately deferred with the Linux regression, is a decision for the operator - what is not open is
+the mechanism: the accelerator factory exists in `parallel_batch/accelerator_probe.py`
+(`DarwinMpsPorts`, `parse_vm_stat`, `AcceleratorProbe` protocol) but no production call site passes one.
+
+### Matrix after this round
+
+Rows done: guard/CPU/RAM (unit + live probe), budget-free entry, unknown/WARN presentation, installed,
+history. Rows still open, all of them needing a real batch rather than more unit tests: functional
+actual-N per `worker_count`, the 4-point and 20-point sets, batch-level lease/cancel/recovery/cleanup
+and the N1 FULL_RESTART retry, and physics. A real batch is not something this round could start
+responsibly: `so101_parallel_batch` requires a perception broker image, YOLO weights and a grounded
+manifest, so it is a live run needing an operator-granted window and the matching provenance binding,
+and `bash-25`'s prefix is the first one that contains the entry point at all.
