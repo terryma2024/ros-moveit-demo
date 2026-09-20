@@ -3508,3 +3508,45 @@ Every row is now done except the live half of the N1 retry: guard/probe/CPU/RAM,
 unknown/WARN presentation, installed, history, functional (live exact W2), points (4 and 20), physics
 (8/8 SUCCEEDED with per-point artifacts), control cleanup/ownership (with the CP-119 lifecycle boundary),
 control cancel (live, named ids), and control retry contract (this checkpoint).
+
+## CP-122: the N1 retry has no reachable live entry on this host, and three refusals say why
+
+Trying to run the last open §7 row - a live N1 `FULL_RESTART_RETRY` through `so101_parallel_batch` - the
+CLI refused three times, each time with a named, fail-closed error and each time because my invocation
+was wrong rather than because the code was:
+
+```text
+bash-32  {"message": "DUPLICATE_BATCH_EVIDENCE_ROOT", "status": "ERROR"}        rc 1
+bash-33  {"message": "POINT_CATALOG_HASH_MISMATCH",   "status": "ERROR"}        rc 1
+bash-34  {"message": "CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION", "status": "ERROR"}  rc 1
+```
+
+The first was mine: I pre-created the evidence root, and the CLI requires a fresh one. The second was
+mine again: I passed `rgbd_task_points.yaml`, which is the *worker's* pick-place points file, where the
+batch's `--points` is the expert-validation catalog. The third is the interesting one, and it is not a
+mistake to fix: `so101_parallel_batch` refuses a **schema-4** document outright. Its v3 contract is the
+active budget-free execution path, while the schema-4 macOS MPS document belongs to the campaign CLI -
+which is exactly the split CP-105 and CP-110 already recorded from the other direction
+(`CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION` is the same clause the v3 loader enforced).
+
+That has a consequence for this host that I should state plainly rather than work around. The batch CLI is
+the v3 path, and a v3 document on this Mac is refused by its own start guard with
+`probe: FAIL GPU_TARGET_UNAVAILABLE` (`INDEX:0`, no CUDA device - CP-110). The campaign CLI is the path
+that works here, and it exposes no batch-kind or retry option at all; its flags are about worker counts,
+fault injection and model paths. So **a live N1 `FULL_RESTART_RETRY` is not reachable on macOS through
+either entry**, and the honest status of that row is: contract measured (CP-121), live execution
+unreachable here, with two candidate routes that are somebody's decision rather than mine -
+a Linux host for the v3 path, or the Web/API request path, since `web_control.py:47` accepts
+`FULL_RESTART_RETRY` as a request kind for the allocator and that is a different entry from both CLIs.
+
+I am not going to bend the runtime to make this row turn green. The row asks for a single-point N1 retry
+with a FULL_RESTART lifecycle, the contract that guarantees the shape is measured and fail-closed, and the
+execution path that would exercise it needs either a CUDA host or the API entry - both outside what this
+acceptance task should change while measuring.
+
+### §7 matrix, closing state
+
+Every row is done except the live half of the N1 retry, which is unreachable on this host for the reason
+above: guard/probe/CPU/RAM, budget-free entry, unknown/WARN presentation, installed, history, functional
+(live exact W2), points (4 and 20), physics (8/8 SUCCEEDED with per-point artifacts), control
+cleanup/ownership, control cancel (live, named ids), control retry **contract**.
