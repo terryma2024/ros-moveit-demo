@@ -39,7 +39,7 @@ from std_msgs.msg import Empty, String
 from tf2_ros import Buffer, TransformListener
 from tf2_msgs.msg import TFMessage
 from ros_gz_interfaces.msg import Contacts
-from .api import create_app, validate_bind_address
+from .bind_policy import validate_bind_address
 from .backends.protocol import (
     BackendEnvelope,
     BackendProtocol,
