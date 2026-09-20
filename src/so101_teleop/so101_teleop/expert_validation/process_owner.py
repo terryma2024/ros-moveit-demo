@@ -14,6 +14,15 @@ from typing import Callable
 
 from .adaptive import AdaptiveStartRequest
 from .coordinator import CoordinatorStartRequest
+from ..owned_group import terminate_group
+from ..process_identity import (
+    ProcessIdentityError,
+    argv_matches,
+    command_fingerprint,
+    group_has_live_descendants,
+    identity_alive,
+    read_identity,
+)
 
 
 class CoordinatorOwnershipError(RuntimeError):
@@ -72,40 +81,28 @@ class _ProcessIdentity:
     pgid: int
     started_ticks: int
     state: str
-    argv_sha256: str
+    argv: tuple[str, ...]
+    command_sha256: str
 
 
 def _read_identity(pid: int) -> _ProcessIdentity:
+    """The exact, platform-specific identity read, with this module's error contract."""
     try:
-        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
-        tail = stat[stat.rfind(")") + 2 :].split()
-        command_line = Path(f"/proc/{pid}/cmdline").read_bytes()
-    except (FileNotFoundError, ProcessLookupError, PermissionError, OSError) as error:
+        identity = read_identity(pid)
+    except ProcessIdentityError as error:
         raise CoordinatorOwnershipError("PROCESS_IDENTITY_MISMATCH") from error
-    argv = tuple(
-        item.decode("utf-8", errors="surrogateescape")
-        for item in command_line.rstrip(b"\0").split(b"\0")
-    )
     return _ProcessIdentity(
-        pid=pid,
-        pgid=int(tail[2]),
-        started_ticks=int(tail[19]),
-        state=tail[0],
-        argv_sha256=_canonical_hash(argv),
+        pid=identity.pid,
+        pgid=identity.pgid,
+        started_ticks=identity.start_marker,
+        state=identity.state,
+        argv=identity.argv,
+        command_sha256=identity.command_sha256,
     )
 
 
 def _group_has_live_descendants(pgid: int, leader_pid: int) -> bool:
-    for stat_path in Path("/proc").glob("[0-9]*/stat"):
-        try:
-            document = stat_path.read_text(encoding="utf-8")
-            pid = int(document.split(" ", 1)[0])
-            tail = document[document.rfind(")") + 2 :].split()
-            if pid != leader_pid and int(tail[2]) == pgid and tail[0] != "Z":
-                return True
-        except (FileNotFoundError, ProcessLookupError, PermissionError, OSError, ValueError):
-            continue
-    return False
+    return group_has_live_descendants(pgid, leader_pid)
 
 
 class ExecutionProcessOwner:
@@ -170,9 +167,8 @@ class ExecutionProcessOwner:
         self._children[process.pid] = process
         try:
             identity = self._await_identity(process.pid, request.argv)
-        except Exception:
-            process.terminate()
-            process.wait(timeout=self._stop_timeout_s)
+        except Exception as error:
+            receipt = self._abandon(process, request, error)
             raise
         environment_hash = _canonical_hash(dict(request.environment))
         if isinstance(request, CoordinatorStartRequest):
@@ -182,7 +178,7 @@ class ExecutionProcessOwner:
                 pid=process.pid,
                 pgid=identity.pgid,
                 started_ticks=identity.started_ticks,
-                argv_sha256=identity.argv_sha256,
+                argv_sha256=command_fingerprint(request.argv),
                 environment_sha256=environment_hash,
                 control_socket=request.control_socket,
                 coordinator_epoch=request.coordinator_epoch,
@@ -195,7 +191,7 @@ class ExecutionProcessOwner:
                 pid=process.pid,
                 pgid=identity.pgid,
                 started_ticks=identity.started_ticks,
-                argv_sha256=identity.argv_sha256,
+                argv_sha256=command_fingerprint(request.argv),
                 environment_sha256=environment_hash,
                 runner_pid=runner_pid,
                 runner_batch_id=runner_batch_id,
@@ -210,13 +206,24 @@ class ExecutionProcessOwner:
         return owned
 
     def _await_identity(self, pid: int, argv: tuple[str, ...]) -> _ProcessIdentity:
-        expected_hash = _canonical_hash(argv)
+        """Wait until the child is provably the process that was asked for.
+
+        The kernel's argv is authoritative, and a launcher may legitimately rewrite the head of it:
+        a shebang script becomes ``[interpreter, script, ...]`` and an interpreter that re-execs
+        itself reports the binary rather than the path it was invoked through. So every argument
+        after ``argv[0]`` must match exactly, and the child must lead its own group, because that
+        group is what a later cleanup signals.
+        """
         deadline = time.monotonic() + 10.0
         last_error = None
         while time.monotonic() < deadline:
             try:
                 identity = _read_identity(pid)
-                if identity.state != "Z" and identity.argv_sha256 == expected_hash:
+                if (
+                    identity.state != "Z"
+                    and identity.pgid == pid
+                    and argv_matches(identity, argv)
+                ):
                     return identity
             except CoordinatorOwnershipError as error:
                 last_error = error
@@ -243,6 +250,44 @@ class ExecutionProcessOwner:
                 raise CoordinatorOwnershipError("RUNNER_BINDING_MISMATCH") from error
         raise CoordinatorOwnershipError("RUNNER_BINDING_ACK_MISSING")
 
+    def _reap(self, pid: int) -> int | None:
+        """Collect the child if this owner still holds it; never block on a survivor."""
+        child = self._children.pop(pid, None)
+        if child is None:
+            return None
+        try:
+            return child.wait(timeout=self._stop_timeout_s)
+        except Exception:
+            return None
+
+    def _abandon(self, process, request, error: Exception):
+        """Clear the group created for a failed spawn, then re-raise the original failure.
+
+        The pid of a process spawned with ``start_new_session=True`` is its own group id, so the
+        cleanup does not depend on reading an identity - which is exactly what failed here. If the
+        group cannot be cleared, that is recorded as a recovery fence rather than hidden behind the
+        original error, because the operator has to see a live orphan.
+        """
+        receipt = terminate_group(
+            pgid=process.pid, leader_pid=process.pid, timeout_s=self._stop_timeout_s
+        )
+        self._reap(process.pid)
+        if receipt.clear:
+            return receipt
+        reason = f"SPAWN_ORPHANED_OWNED_GROUP: {receipt.describe()}"
+        if self._store is not None:
+            try:
+                self._store.record_recovery_fence(
+                    request.campaign_id,
+                    request.batch_id,
+                    reason=reason,
+                    command_id="spawn-" + str(process.pid),
+                )
+                return receipt
+            except Exception:
+                reason = f"{reason} (recovery fence could not be recorded)"
+        raise CoordinatorOwnershipError(f"{type(error).__name__}: {error} / {reason}") from error
+
     def reconnect(self, binding: OwnedExecution) -> OwnedExecution:
         self._verify(binding)
         if self._active is not None and self._active != binding and self.poll(self._active).running:
@@ -251,14 +296,27 @@ class ExecutionProcessOwner:
         return binding
 
     def _verify(self, owned: OwnedExecution) -> _ProcessIdentity:
+        """Prove the live process is the recorded owner: pid, group, start marker and command.
+
+        The command is compared through :func:`command_fingerprint`, which ignores ``argv[0]``: an
+        interpreter that re-execs itself is still the same process, and on this platform that
+        re-exec legitimately rewrites the launcher it reports.
+        """
         identity = _read_identity(owned.pid)
         if (
             identity.state == "Z"
             or identity.pgid != owned.pgid
             or identity.started_ticks != owned.started_ticks
-            or identity.argv_sha256 != owned.argv_sha256
+            or identity.command_sha256 != owned.argv_sha256
         ):
-            raise CoordinatorOwnershipError("PROCESS_IDENTITY_MISMATCH")
+            # The refusal names the field that drifted; a bare code cannot be audited.
+            raise CoordinatorOwnershipError(
+                "PROCESS_IDENTITY_MISMATCH: "
+                f"pid {owned.pid} state {identity.state!r} "
+                f"pgid {identity.pgid} != {owned.pgid} "
+                f"start {identity.started_ticks} != {owned.started_ticks} "
+                f"command {identity.command_sha256[:12]} != {owned.argv_sha256[:12]}"
+            )
         return identity
 
     def poll(self, owned: OwnedExecution) -> ProcessStatus:
@@ -275,15 +333,7 @@ class ExecutionProcessOwner:
     @staticmethod
     def identity_alive(pid: int, started_ticks: int, argv_sha256: str) -> bool:
         """Prove whether a durable owner record still names a live process."""
-        try:
-            identity = _read_identity(pid)
-        except CoordinatorOwnershipError:
-            return False
-        return (
-            identity.state != "Z"
-            and identity.started_ticks == started_ticks
-            and identity.argv_sha256 == argv_sha256
-        )
+        return identity_alive(pid, started_ticks, argv_sha256)
 
     def request_status(self, owned: OwnedExecution) -> ProcessStatus:
         return self.poll(owned)
@@ -315,12 +365,15 @@ class ExecutionProcessOwner:
         if not authorized:
             raise CoordinatorOwnershipError("CLEANUP_NOT_CONFIRMED")
         self._verify(owned)
-        os.killpg(owned.pgid, signal.SIGTERM)
-        deadline = time.monotonic() + self._stop_timeout_s
-        while time.monotonic() < deadline:
-            state = self.poll(owned)
-            if not state.running and not state.descendants_alive:
-                self._active = None
-                return
-            time.sleep(0.01)
-        raise CoordinatorOwnershipError("OWNED_GROUP_STOP_TIMEOUT")
+        receipt = terminate_group(
+            pgid=owned.pgid, leader_pid=owned.pid, timeout_s=self._stop_timeout_s
+        )
+        try:
+            if not receipt.clear:
+                raise CoordinatorOwnershipError(
+                    f"OWNED_GROUP_STOP_TIMEOUT: {receipt.describe()}"
+                )
+        finally:
+            # Whatever the outcome, this owner stops holding a handle it no longer owns.
+            self._reap(owned.pid)
+        self._active = None

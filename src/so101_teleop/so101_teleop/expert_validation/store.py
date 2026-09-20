@@ -15,6 +15,7 @@ import time
 import uuid
 
 from .coordinator import CoordinatorBinding, CoordinatorStartRequest
+from ..process_identity import command_fingerprint
 
 from .models import (
     BatchBinding,
@@ -370,7 +371,9 @@ class SupervisorStore:
                 owner_kind=owner_kind,
                 spawn_token="spawn-" + uuid.uuid4().hex,
                 expected_executable=executable,
-                argv_sha256=_sha(tuple(request.argv)),
+                # The durable fingerprint is the requested command line without its launcher: the
+                # kernel may rewrite argv[0] when an interpreter re-execs itself.
+                argv_sha256=command_fingerprint(request.argv),
                 environment_sha256=_sha(dict(request.environment)),
                 source_commit="UNKNOWN",
                 install_prefix=Path(executable).parent,

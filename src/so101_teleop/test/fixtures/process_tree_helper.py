@@ -25,6 +25,11 @@ def main() -> int:
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--batch-id", default="b001")
     parser.add_argument("--leader-exits", action="store_true")
+    parser.add_argument(
+        "--ignore-term",
+        action="store_true",
+        help="survive SIGTERM/SIGINT the way a stuck helper does, so only SIGKILL can clear it",
+    )
     arguments = parser.parse_args()
     arguments.root.mkdir(parents=True, exist_ok=True)
 
@@ -34,23 +39,34 @@ def main() -> int:
         nonlocal stopped
         stopped = True
 
-    signal.signal(signal.SIGINT, stop)
-    signal.signal(signal.SIGTERM, stop)
+    if arguments.ignore_term:
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        # Announce readiness only now: a test that signals before this point would measure how fast
+        # the interpreter starts rather than whether the escalation under test works.
+        _write(
+            arguments.root / f"{arguments.batch_id}.{arguments.mode}.ready.json",
+            {"pid": os.getpid(), "ignoring": ["SIGTERM", "SIGINT"]},
+        )
+    else:
+        signal.signal(signal.SIGINT, stop)
+        signal.signal(signal.SIGTERM, stop)
 
     child = None
     if arguments.mode in {"coordinator", "wrapper"}:
-        child = subprocess.Popen(
-            [
-                sys.executable,
-                __file__,
-                "--mode",
-                "runner",
-                "--root",
-                str(arguments.root),
-                "--batch-id",
-                arguments.batch_id,
-            ]
-        )
+        child_argv = [
+            sys.executable,
+            __file__,
+            "--mode",
+            "runner",
+            "--root",
+            str(arguments.root),
+            "--batch-id",
+            arguments.batch_id,
+        ]
+        if arguments.ignore_term:
+            child_argv.append("--ignore-term")
+        child = subprocess.Popen(child_argv)
         _write(
             arguments.root / "handshake.json",
             {

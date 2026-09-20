@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import shutil
 import signal
@@ -14,8 +15,15 @@ from pathlib import Path
 
 import pytest
 
+from so101_teleop.owned_group import terminate_group
 from so101_teleop.unified.arbiter import GlobalMutationArbiter
-from so101_teleop.unified.bridge import BridgeClient, BridgeLaunch, BridgeProcessOwner, identity_for
+from so101_teleop.unified.bridge import (
+    BridgeClient,
+    BridgeLaunch,
+    BridgeProcessOwner,
+    identity_for,
+    identity_matches,
+)
 from so101_teleop.unified.contracts import (
     Domain,
     MutationError,
@@ -62,14 +70,14 @@ def socket_root(tmp_path: Path) -> Path:
 
 
 class Rig:
-    def __init__(self, tmp_path: Path) -> None:
+    def __init__(self, tmp_path: Path, launch_class: type[HelperLaunch] = HelperLaunch) -> None:
         self.root = socket_root(tmp_path)
         self.store = IntentStore.open(tmp_path / "state")
         self.arbiter = GlobalMutationArbiter(self.store, clock_ns=lambda: 1)
         self.lane = SafetyLane(
             GoalRegistry(), self.arbiter, limits=SafetyLimits(0.5, 0.5, 4), authorize=lambda a, k: None
         )
-        self.launch = HelperLaunch(
+        self.launch = launch_class(
             ros_python=Path(sys.executable),
             install_prefix=Path(sys.prefix),
             runtime_id=RUNTIME_ID,
@@ -91,6 +99,24 @@ class Rig:
         )
 
     async def close(self) -> None:
+        """Close the rig without leaving the child it started behind.
+
+        Two tests in this file never call ``stop_owned`` (one asserts a refusal before any stop, one
+        kills the leader itself), and both leaked a live child on every run. The rig owns the
+        process, so its close is where that has to end - not in each test's own finally.
+        """
+        owner = self.owner_process
+        handle = owner.process
+        pgid = owner.owner.pgid if owner.owner is not None else (handle.pid if handle else None)
+        if handle is not None and handle.poll() is None:
+            if owner.owner is not None and identity_matches(owner.owner):
+                with contextlib.suppress(Exception):
+                    await owner.stop_owned()
+            # A successful stop clears the owner's process and owner fields, so never re-read them.
+            if handle.poll() is None and pgid is not None:
+                terminate_group(pgid=pgid, leader_pid=handle.pid, timeout_s=1.0)
+                with contextlib.suppress(Exception):
+                    handle.wait(timeout=5)
         await self.lane.close()
         self.store.close()
         shutil.rmtree(self.root, ignore_errors=True)

@@ -10,9 +10,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import json
 import os
 import signal
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
@@ -26,6 +29,35 @@ from so101_teleop.unified.contracts import (  # noqa: E402
     PendingChildKey,
     DispatchToken,
 )
+
+
+DESCENDANT_FILE_NAME = "descendant.json"
+STUBBORN_HELPER = Path(__file__).resolve().parents[1] / "fixtures/stubborn_helper.py"
+
+
+def _fork_stubborn_descendant(socket_root: Path, *, timeout_s: float = 15.0) -> int:
+    """Start a descendant the owner never tracks, in the owner's own process group.
+
+    It ignores ``SIGTERM`` only after it has announced readiness, and this waits for that
+    announcement, so the escalation under test is the only thing that can end it.
+    """
+    ready = Path(socket_root) / "descendant-ready.json"
+    process = subprocess.Popen(
+        [sys.executable, str(STUBBORN_HELPER), str(ready)],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline and not ready.is_file():
+        time.sleep(0.02)
+    if not ready.is_file():
+        process.kill()
+        raise RuntimeError("STUBBORN_DESCENDANT_NOT_READY")
+    (Path(socket_root) / DESCENDANT_FILE_NAME).write_text(
+        json.dumps({"pid": process.pid, "pgid": os.getpgrp()}, sort_keys=True) + "\n"
+    )
+    return process.pid
 
 
 class NoRosDriver:
@@ -81,11 +113,17 @@ async def run(args) -> int:
         service_token=args.service_token,
     )
     await server.start()
+    if args.fork_descendant:
+        _fork_stubborn_descendant(Path(args.socket_root))
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
-    for name in ("SIGTERM", "SIGINT"):
-        with contextlib.suppress(NotImplementedError):
-            loop.add_signal_handler(getattr(signal, name), stop.set)
+    if args.ignore_term:
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+    else:
+        for name in ("SIGTERM", "SIGINT"):
+            with contextlib.suppress(NotImplementedError):
+                loop.add_signal_handler(getattr(signal, name), stop.set)
     if args.exit_after_s is not None:
         loop.call_later(args.exit_after_s, stop.set)
     await stop.wait()
@@ -105,6 +143,12 @@ def main() -> int:
     parser.add_argument("--normal-queue-limit", type=int, default=2)
     parser.add_argument("--exit-after-s", type=float, default=None)
     parser.add_argument("--crash-immediately", action="store_true")
+    parser.add_argument("--fork-descendant", action="store_true")
+    parser.add_argument(
+        "--ignore-term",
+        action="store_true",
+        help="survive SIGTERM/SIGINT the way a stuck child does, so only SIGKILL can clear it",
+    )
     args = parser.parse_args()
     if args.crash_immediately:
         os._exit(9)
