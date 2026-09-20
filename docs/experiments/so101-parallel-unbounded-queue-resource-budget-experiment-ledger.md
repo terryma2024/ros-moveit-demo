@@ -14196,3 +14196,26 @@ what a reader can actually compare between batches.
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `b3f258d9`; no evidence deleted._
+
+### CP-UQ290 addendum 2 — the freshness fields, verified live and then corrected twice
+
+`task14-freshness-01` (`W2_CAMPAIGN_PASS`) showed the fields, and two things needed fixing in the same
+round:
+
+```text
+before:  campaign_root: CampaignIpcRoot(base_path=PosixPath('/private/tmp/so101-ipc-501'),
+                         campaign_path=PosixPath('.../b-80a979ee4ed7'), uid=501, ...)
+         broker_identity: {pid: 40445, birth_identity: 1789864374891572}
+after:   campaign_root: "/private/tmp/so101-ipc-501/b-80a979ee4ed7"
+         broker_identity: {pid: 40445, birth_identity: ..., in_campaign_process: true}
+```
+
+1. a dataclass repr is not a readable path, so the campaign root is now recorded as the path string;
+2. **`in_campaign_process` is new on purpose**: the pid in `broker_identity` is the campaign's own, and
+   without that flag a reader could reasonably read it as a separate Broker process - which is exactly
+   the structural fact this session established (CP-UQ283) and one that has already misled me once.
+
+`freshness-fields-03`: campaign suite at 18 passed. Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED`
+retained.
+
+_Ledger source HEAD: `6dc1e2e4`; no evidence deleted._
