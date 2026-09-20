@@ -4450,3 +4450,46 @@ arbitrary port, with no environment variables. Seven defects have been found in 
 them invisible to the unit suites and visible the moment a real page talked to a real server. What stands
 between this and the last §7 row is now the manifest and the campaign - the runtime layers, not the
 authority ones.
+
+## CP-141: the manifest is created - the sequence reaches preflight
+
+`GENERATED_MANIFEST_INVALID` was not a server code at all: it is raised by the page itself
+(`expert-validation-app.tsx:371`, `if (value.point_count !== count || value.stale) throw ...`). Capturing
+the server's own body gave the real reason:
+
+```text
+POST /expert-validation/manifests -> 409  {"code":"STALE_EXECUTION_GENERATION",
+                                           "message":"STALE_EXECUTION_GENERATION: 0 != 1"}
+```
+
+`DomainRuntime.start()` sets the authority with `executionGeneration: 0`, and binding the controller
+advances the generation server-side - but `adoptLease` only stored the lease (`domain-runtime.ts:87`) and
+never touched the authority. So every mutation after the acquire presented generation 0 and was refused as
+stale: the acquire itself worked because it *is* the binding, and everything after it could not.
+
+**Fixed, RED first**: a test asserting that adopting a lease with generation 1 leaves
+`mutationHeaders().executionGeneration === 1` failed with `expected +0 to be 1`, and `adoptLease` now
+advances the authority's generation to the adopted lease's (committed `e261a687`). Whole frontend suite:
+**45 files, 204 tests passed**.
+
+**Verified live**, bundle rebuilt, same page sequence:
+
+```text
+POST /expert-validation/lease       200 OK
+POST /expert-validation/manifests   200 OK        <- the manifest is created now
+POST /expert-validation/campaigns/preflight   409 Conflict
+POST /expert-validation/lease       409 Conflict  <- a second acquire/renew attempt
+```
+
+The sequence now walks register -> channel -> acquire -> manifest -> **preflight**, which is the furthest
+it has ever reached, and stops there. The next question is one capture away: the flow script records
+status and path but not the body, and the body is what names the reason. The same trick that found
+`STALE_EXECUTION_GENERATION` should be used on the preflight refusal before any code is touched - and the
+second 409 on `/expert-validation/lease` says something about the lease the page is holding at that moment,
+which is worth reading in the same pass rather than guessing.
+
+**The chain in one line**, for the record: register -> channel -> acquire all present the four headers and
+return 200 from a real browser on an arbitrary port with no environment variables; the manifest follows
+once the generation advances; preflight is the current frontier. Eight defects have been found on this
+path, every one of them in the client-server seam and every one invisible until a real page drove a real
+server.
