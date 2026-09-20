@@ -40,6 +40,17 @@ function fakeApi(overrides: Partial<ExpertValidationApi> = {}): ExpertValidation
     async capabilities() {
       return {
         available: true,
+        // The unified capabilities contract requires the per-N qualification view; until the
+        // budget provider is integrated every exact N reports the fail-closed UNKNOWN view.
+        worker_qualifications: [2, 3, 4, 5, 6, 7, 8].map((selected_n) => ({
+          selected_n,
+          status: "UNKNOWN",
+          reasons: ["BUDGET_PROVIDER_NOT_READY"],
+          runtime_identity: "test-runtime",
+          contract_version: 2,
+          profile_sha256: null,
+          approval_sha256: null,
+        })),
         execution_modes: ["SEQUENTIAL", "PARALLEL", "ADAPTIVE"],
         default_execution_mode: "SEQUENTIAL",
         minimum_points: 4,

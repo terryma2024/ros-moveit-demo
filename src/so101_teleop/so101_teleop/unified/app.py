@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict
 from so101_teleop.api import validate_bind_address
 from so101_teleop.expert_validation.api import (
     CampaignCancelRequest,
+    CapabilitiesResponse as _ValidationCapabilitiesResponse,
     CampaignConfiguration,
     CampaignProjectionResponse,
     CampaignStartRequest,
@@ -104,8 +105,13 @@ class QualificationViewResponse(BaseModel):
     approval_sha256: str | None
 
 
-class QualificationCapabilities(BaseModel):
-    """Capability payload: worker qualification plus the original read-only fields."""
+class CapabilitiesResponse(_ValidationCapabilitiesResponse):
+    """Capability payload: the original read-only fields plus worker qualification.
+
+    The model keeps the reviewed contract name that the generated TypeScript client already
+    imports, widens ``extra`` to ``allow`` so unknown read-only fields survive, and requires
+    the per-N qualification list so it is a real, reachable part of the schema.
+    """
 
     model_config = ConfigDict(extra="allow")
 
@@ -561,7 +567,7 @@ def validation_router(services: UnifiedServices) -> APIRouter:
 
     mutation = Depends(require_authority("validation"))
 
-    @router.get("/expert-validation/capabilities", response_model=QualificationCapabilities)
+    @router.get("/expert-validation/capabilities", response_model=CapabilitiesResponse)
     async def capabilities():
         service = owner()
         if service is None:
