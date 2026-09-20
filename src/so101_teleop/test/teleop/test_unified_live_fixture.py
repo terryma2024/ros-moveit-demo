@@ -100,3 +100,30 @@ def test_provenance_binding_is_not_reintroduced_as_runtime_authority():
     fixture = FIXTURE.read_text()
     assert "SO101_VALIDATION_PROVENANCE_BINDING" not in fixture
     assert "retired provenance binding" in fixture
+
+
+def test_the_published_bundle_ships_self_hosted_fonts_and_tokens():
+    """The installed artifact, not just the sources: a font that never reaches `dist/fonts` would make
+    every `@font-face` URL 404 in production, and a theme that never reaches the stylesheet would
+    silently drop the captured design system."""
+    import re
+
+    web = PACKAGE / "web"
+    dist = web / "dist"
+    if not (dist / "index.html").is_file():
+        import pytest
+
+        pytest.skip("the web bundle has not been built in this checkout")
+
+    shipped = {path.name for path in (dist / "fonts").glob("*.woff2")}
+    assert {"dm-sans-variable.woff2", "outfit-variable.woff2"} <= shipped, sorted(shipped)
+    assert (dist / "fonts/LICENSES.txt").is_file(), "licences must ship with the fonts"
+
+    stylesheets = list((dist / "assets").glob("*.css"))
+    assert stylesheets, "no stylesheet in the bundle"
+    css = "\n".join(path.read_text() for path in stylesheets)
+    for reference in ("fonts/dm-sans-variable.woff2", "fonts/outfit-variable.woff2"):
+        assert reference in css, reference
+    # The tokens reach the bundle too, including the independent success colour.
+    assert re.search(r"--(primary|background)\s*:", css), "no design token in the built CSS"
+    assert "--state-success" in css
