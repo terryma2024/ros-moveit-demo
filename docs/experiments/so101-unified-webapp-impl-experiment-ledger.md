@@ -4742,3 +4742,44 @@ runtime's own renewal now adopts the lease (CP-145's fix), so the generation sho
 a renewal - but I have not re-run the live sequence since, and the live `2 != 1` was measured *before* both
 this deletion and the adoption fix were in the same bundle. The next live run is what settles it, and the
 campaign start is one click behind it.
+
+## CP-148: the refusal moved earlier - the server is one generation ahead of the client
+
+With every fix of the last rounds in one bundle, the live sequence fails *earlier* than before, which is
+progress with a clear shape:
+
+```text
+POST /control/instances             200 OK
+POST /control/instances             200 OK      <- the page registers twice
+POST /expert-validation/lease       200 OK
+POST /expert-validation/manifests   409 {"code":"STALE_EXECUTION_GENERATION",
+                                         "message":"STALE_EXECUTION_GENERATION: 3 != 2"}
+```
+
+The manifest now carries generation 2 while the server expects 3, so the server's generation advanced
+**twice** (1 -> 2 -> 3) while the client only ever saw 2. The server-side rule is right, and I checked it
+rather than assuming:
+
+```text
+instances.py claim_locked:  generation = self.store.execution_generation(domain)
+                            if existing is None:
+                                generation = self.store.bump_execution_generation_locked(domain)
+```
+
+- the bump happens only when **no** controller exists yet, which is exactly the design's "advances at first
+  binding and at explicit handoff". A re-acquire by the same instance reuses the generation, so a single
+  acquire cannot produce 3.
+
+**So something claimed twice, and the page does register twice.** The most likely reading is the double
+registration of the last few rounds (a duplicate mount, or the module-level runtimes plus a provider that
+starts them again): each instance's acquire binds a controller, the second binding bumps the generation,
+and the first instance's authority is then one behind and every mutation it sends is stale. That fits the
+numbers exactly, and it also explains why the acquire itself succeeds: the *first* acquire owns the
+generation the client holds.
+
+**The next check is bounded and cheap, and it is a logging change rather than a code change**: dump the
+**whole** server log of one run rather than a tail - I have been reading `tail -8` and a second acquire or
+a `CONTROLLER_ALREADY_BOUND` could easily be below the fold. Count the `POST /control/instances`,
+`POST /expert-validation/lease` and any `PUT` lines; if there are two acquires, the fix belongs in the page
+(one runtime, one instance, one acquire) rather than in the server, and if there is one acquire then
+something else bumps and I need to find it before touching anything.
