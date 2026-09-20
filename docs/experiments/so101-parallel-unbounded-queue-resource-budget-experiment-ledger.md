@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ288 (5/5 PASS series) + Appendix C
+latest_checkpoint: CP-UQ288 (5/5 PASS series) + Appendix C; attach anomaly open
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -14068,3 +14068,33 @@ The plan's MoveIt-shadow requirement stays where it was: this is standalone evid
 wants it per counted batch, and Task 14 remains **0/5** with `LINUX_REGRESSION_DEFERRED` in force.
 
 _Ledger source HEAD: `47b6ba20`; no evidence deleted._
+
+### CP-UQ288 addendum 3 — the attach anomaly: one cause eliminated, then the thread closed
+
+Reading the attach path and the model rather than guessing:
+
+```text
+application/scene_setup.py:37   scene.attach_task_object(geometry, "plastic_cup", "gripper")
+control/planning_scene/task_scene.py:320
+    attached.link_name   = "gripper"
+    attached.touch_links = ["gripper", "jaw"]
+    world.collision_objects = [REMOVE plastic_cup]      (same diff, is_diff = True)
+URDF links (assets/mujoco/so101.urdf): world base shoulder upper_arm lower_arm wrist gripper jaw so101_tcp
+```
+
+So the most obvious explanation - a link name the model does not have - is **eliminated**: `gripper`
+and `jaw` both exist. The remaining candidates are in what move_group accepts, not in what the caller
+names: a diff that both removes an object from the world and attaches it in the same request, or a
+REMOVE naming an object that is not currently in the scene (which would make `ApplyPlanningScene`
+answer `success == False` for the whole diff). Distinguishing them needs move_group-side logging that
+this composition does not capture.
+
+**Closing the thread here**, for the same reason the stall probe was closed: the plan's MoveIt-shadow
+requirement is tied to a counted batch, no counted batch is possible while the GUI capture is denied,
+and I would rather record a bounded, well-described open anomaly than keep spending rounds on a
+secondary path. It is left with its shape, its predicates, the eliminated cause, and the two remaining
+candidates - a next session can pick it up from the request that is refused.
+
+Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
+
+_Ledger source HEAD: `6447149e`; no evidence deleted._
