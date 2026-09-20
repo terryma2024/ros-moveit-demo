@@ -362,3 +362,26 @@ test("adopting a lease advances the authority generation the server expects", ()
   // has to present the lease's generation; starting() set 0 and nothing advanced it.
   expect(runtime.mutationHeaders()?.executionGeneration).toBe(1);
 });
+
+test("the transport is told the authority, so renewal can present it", async () => {
+  const setAuthority = vi.fn();
+  const transport = {
+    register: async () => ({ instance_id: "i", proof: "p", domain: "validation" as const }),
+    connect: async () => ({ instance_id: "i", revision: 1, domain: "validation" as const }),
+    snapshot: async () => ({ sequence: 0, serviceEpoch: "e", executionGeneration: 1, payload: null }),
+    subscribe: () => () => undefined,
+    renew: async () => undefined,
+    setAuthority,
+    post: vi.fn(async () => ({})),
+    close: () => undefined,
+  };
+  const runtime = new DomainRuntime("validation", transport as never);
+  await runtime.start();
+  // Renewal is the transport's own request, built from the authority it was given; start() used to
+  // assign the runtime's copy directly and leave the transport with none, so every renewal POST
+  // arrived unauthenticated.
+  expect(setAuthority).toHaveBeenCalled();
+  expect(setAuthority.mock.calls.at(-1)?.[0]).toMatchObject({ instanceId: "i", channelRevision: 1 });
+  runtime.adoptLease({ lease_id: "l", service_session_id: "s", generation: 1, expires_monotonic_ns: 10 ** 15 });
+  expect(setAuthority.mock.calls.at(-1)?.[0]).toMatchObject({ executionGeneration: 1 });
+});
