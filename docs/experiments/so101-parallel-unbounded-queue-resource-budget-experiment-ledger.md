@@ -41,7 +41,7 @@ open_hypotheses:
   - CORRECTION (CP-UQ32): that question was answered during the offline units - the AF_UNIX transport
     moved to the dirfd `/proc/self/fd/<fd>/<name>` form and the suite runs green; this entry is kept as
     history and is no longer an open question.
-latest_checkpoint: CP-UQ293 (Screen Recording grant observed; Task 14 recount restarts at 1/5)
+latest_checkpoint: CP-UQ294 (counted Task 14 series with a per-batch GUI snapshot block)
 superseding_dispatch: b82d10b8-32bf-47b4-9aa9-9bbec17d3a6b (lightweight start guard)
 superseding_plan: docs/superpowers/plans/2026-09-19-so101-parallel-validation-lightweight-start-guard-implementation.md
   SHA-256 d75597a73f7d211eb31c4e75e3e6cb2f696d86dc953405f393962747c814b141
@@ -14438,3 +14438,59 @@ Task 14 is **1/5 recorded, 2/5 in flight**; `five_batch_stability` is not writte
 `gpt-5.6-sol/high`, and the tracked verdict stays **PARTIAL**.
 
 _Ledger source HEAD: `18cb4a9d`; no evidence deleted._
+
+### CP-UQ294 — the counted Task 14 series, and the two platform facts that shape its GUI block
+
+**Why there is a second series.** Task 14 bullet 2 (plan line 298) asks each batch for a fresh GUI
+snapshot/action/snapshot with the window identity and time saved, and line 26 names the project's
+`gui-capture` skill for it. `task14-fr4-02` and `-03` carry their per-point `viewer.png` files but no
+snapshot block taken around the action, so under that bullet they are not countable. The counted
+series is therefore `task14-five-batches-05`, runs `task14-fr5-01..05`, and adds exactly that block.
+No source line changed for this: same commit, same config, same point set. Series 04's batches remain
+as supporting evidence, and the extra batch I had queued earlier (`task14-fr4-06`) was cancelled
+before it ever started — the gated waiter was stopped by its exact PID (50337) after its command line
+was read back, so it consumed no GUI time and left no residue.
+
+**The block, validated live before committing a single batch to it.** All of this was measured
+against a running series-04 batch, in `task14-gui-ritual-smoke/`:
+
+| Step | Result |
+| --- | --- |
+| skill `--list-windows` | two station windows: id 4874 owner `ros2_control_node` pid 50592 and id 4872 owner pid 50602, both titled `MuJoCo : so101_task_scene`, both 320,83 1280x752 |
+| `/usr/sbin/screencapture -x -l 4874` | rc 0, 182,597 bytes, 1392x864, sha256 `6d5441df939dd0ff72890f8b625fbb4dfa902b1ea7c1095e38418246abace366` |
+| the same image, opened | live viewer: `Status Running`, `Steps 20937`, `Sim Time 41.874 s`, cup and gripper mid-scene — a mid-action frame, distinct from every terminal frame |
+| skill `--desktop` | `manifest.json` with `captured_at 20260920T091546`, `capture_mode desktop`, `session_type aqua` |
+
+**Fact 1: `osascript` has no Accessibility grant on this host.** Asking System Events for the station
+process's windows returns `windows: [{error: "“osascript”不允许辅助访问。"}]`. The consequence is
+specific: the skill's window-level path raises the target through Accessibility before capturing, so
+that path cannot run here. Its CoreGraphics-based inventory still works, and the pixels are taken with
+the same primitive the skill uses for a window capture, `/usr/sbin/screencapture -x -l ID`, without the
+raise. I am recording the deviation rather than dressing it up: the identity comes from the skill's
+inventory, the pixels from the skill's own capture primitive, and the raise is skipped because it is
+denied. Granting Accessibility to the live responsibility process would close the gap, and until then
+nobody should read "captured with gui-capture" as "captured through the skill's raise path".
+
+**Fact 2: the skill's error message looked like TCC but was PATH.** `capture-gui.sh --desktop` first
+failed with `FileNotFoundError: 'screencapture'`, and this shell has no `/usr/sbin` on PATH
+(`command -v screencapture` prints nothing). Prepending `/usr/sbin:/sbin` fixed it. Worth writing down
+precisely because a `screencapture` failure in this task family has meant TCC denial for several
+rounds, and here it did not.
+
+**What each counted batch now records.** Before the start: the window inventory, a desktop snapshot, a
+process check and the private IPC base listing — the inventory asserting zero MuJoCo windows, which is
+the "no duplicate stack before starting" half of bullet 2. During the action: one window-level capture
+per station window, each with an identity record (window id, owner, owner pid, title, geometry,
+`captured_at`, sha256, the exact command) plus one mid-action desktop snapshot. After the batch: the
+same inventory and desktop snapshot again, now asserting zero MuJoCo windows, with the process check
+and IPC listing to match — the cleanup half. The campaign's own eight per-point `viewer.png` files
+stay the per-point evidence, and the summary line counts them (`gui=n/n`, `distinct_gui`) together with
+each worker's session id and reset epochs, so freshness is read from the filesystem rather than
+asserted in prose.
+
+The series is gated behind series 04 by waiting on the runner's name rather than a PID. Task 14 stands
+at **1/5 recorded (fr4-02, supporting) with the counted series starting now**;
+`five_batch_stability` is still not written, `LINUX_REGRESSION_DEFERRED` retained, and the tracked
+verdict remains **PARTIAL**.
+
+_Ledger source HEAD: `529b6043`; no evidence deleted._
