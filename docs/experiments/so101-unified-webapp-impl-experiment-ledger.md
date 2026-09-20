@@ -3471,3 +3471,40 @@ small piece of evidence in favour of the diagnosis rather than against it.
 | control: lease / ack / result | evidenced - per-worker `lease.json`, `ack.json`, `result.json` in every run, admission table consumed once |
 | control: N1 FULL_RESTART single-point retry | **open** - needs a `so101_parallel_batch` N1 run with the retry path |
 | physics | done live - 8/8 points SUCCEEDED, 4 contacts per slot, per-point execution manifest, viewer screenshot, RGB frame and both point clouds |
+
+## CP-121: the N1 FULL_RESTART retry contract, measured - one point and N=1 or nothing
+
+The last open §7 row is the single-point `FULL_RESTART` retry. Its contract is now measured on the
+installed prefix rather than read: gate `d6826d40660f4e88a8b4f328fb96827b` (exit 0, 3.9 s).
+
+```text
+RunMode members: DRY_RUN/PLAN_ONLY/EXECUTE      BatchKindV2: FIRST_PASS, FULL_RESTART_RETRY, ADAPTIVE_POOL
+retry 2 points N=1: REFUSED ContractError: RETRY_SINGLE_POINT_N1
+retry 1 point  N=2: REFUSED ContractError: RETRY_SINGLE_POINT_N1
+retry 2 points N=2: REFUSED ContractError: RETRY_SINGLE_POINT_N1
+retry 1 point  N=1: ADMITTED kind=FULL_RESTART_RETRY points=1 N=1
+```
+
+The retry kind is admitted for exactly one point at exactly N=1 and refused for every other combination,
+at construction time, with a named code - so no partial batch, slot table or spawn can exist behind a
+malformed retry, which is the same fail-closed shape the worker-count and point-range checks showed. That
+is the contract half of the row, done.
+
+**The live half is still open, and now precisely specified.** A real N1 retry means invoking
+`so101_parallel_batch` itself (not the campaign CLI) with `--worker-count 1`, exactly one `--point-id`,
+`--batch-kind FULL_RESTART_RETRY`, the v3/v4 config, a `--points` file, and the broker/model arguments it
+requires; the points-file schema and the run-mode spelling are the two things to read next.
+
+**One incidental finding worth its own line, because it cost two runs.** The request contract takes the
+`RunMode` **member**, not its string: `RunMode.DRY_RUN` is accepted while `"EXECUTE"`, `"execute"`,
+`"DRY_RUN"` and `"dry_run"` are all rejected with `ContractError: ENUM: run_mode`. A caller that reads the
+enum's values and passes the value gets a refusal that names the field but not the expected form. Not a
+defect, and not something to change during acceptance - recorded so the next caller does not repeat my two
+wasted invocations.
+
+### §7 matrix, final state for this round
+
+Every row is now done except the live half of the N1 retry: guard/probe/CPU/RAM, budget-free entry,
+unknown/WARN presentation, installed, history, functional (live exact W2), points (4 and 20), physics
+(8/8 SUCCEEDED with per-point artifacts), control cleanup/ownership (with the CP-119 lifecycle boundary),
+control cancel (live, named ids), and control retry contract (this checkpoint).
