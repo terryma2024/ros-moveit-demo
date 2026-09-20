@@ -15,6 +15,7 @@ export type LeaseIdentity = {
   lease_id: string;
   service_session_id: string;
   generation: number;
+  expires_monotonic_ns?: number;
 };
 
 export type RuntimeSnapshot = {
@@ -48,7 +49,7 @@ export class DomainRuntime {
   private pending: RuntimeSnapshot[] = [];
   private fetching = false;
   private disposed = false;
-  private heartbeat: ReturnType<typeof setInterval> | null = null;
+  private heartbeat: ReturnType<typeof setTimeout> | null = null;
   private leaseValue: LeaseIdentity | null = null;
 
   constructor(
@@ -106,6 +107,15 @@ export class DomainRuntime {
     }
     if (next.generation <= current.generation) {
       this.lastRenewalError = "STALE_LEASE_GENERATION";
+      this.leaseValue = null;
+      return false;
+    }
+    if (
+      current.expires_monotonic_ns !== undefined &&
+      next.expires_monotonic_ns !== undefined &&
+      next.expires_monotonic_ns <= current.expires_monotonic_ns
+    ) {
+      this.lastRenewalError = "LEASE_EXPIRY_NOT_EXTENDED";
       this.leaseValue = null;
       return false;
     }
@@ -183,20 +193,33 @@ export class DomainRuntime {
    * explicit `dispose` (the root provider unmounting) ends it. Renewal never takes the ordinary
    * mutation path, so a long arm action cannot starve it.
    */
-  startHeartbeat(intervalMs: number): void {
+  startHeartbeat(intervalMs: number | (() => number)): void {
     if (this.disposed || this.heartbeat !== null) return;
-    this.heartbeat = setInterval(() => {
-      void this.renew().catch((error: unknown) => {
-        // A failed renewal is reported through the transport; it must never be silently retried
-        // with a new lease generation.
-        this.lastRenewalError = String(error);
-      });
-    }, intervalMs);
+    const schedule = () => {
+      if (this.disposed) return;
+      const delay = typeof intervalMs === "function" ? intervalMs() : intervalMs;
+      if (!Number.isFinite(delay) || delay <= 0) {
+        // Capability-derived cadences can be invalid; refusing is safer than renewing on a guess.
+        this.lastRenewalError = "LEASE_CAPABILITIES_INVALID";
+        this.heartbeat = null;
+        return;
+      }
+      this.heartbeat = setTimeout(() => {
+        void this.renew()
+          .catch((error: unknown) => {
+            this.lastRenewalError = String(error);
+          })
+          .finally(() => {
+            if (!this.disposed) schedule();
+          });
+      }, delay);
+    };
+    schedule();
   }
 
   stopHeartbeat(): void {
     if (this.heartbeat !== null) {
-      clearInterval(this.heartbeat);
+      clearTimeout(this.heartbeat);
       this.heartbeat = null;
     }
   }
