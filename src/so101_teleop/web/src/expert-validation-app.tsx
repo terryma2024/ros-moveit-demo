@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useOptionalDomainRuntime } from "@/state/runtime-provider";
+import type { DomainRuntime } from "@/state/domain-runtime";
 
 import { ExpertValidationClient } from "@/api/expert-validation-client";
 import type {
@@ -17,6 +18,7 @@ import type {
 import { CampaignProgress, type CampaignView } from "@/components/expert-validation/campaign-progress";
 import { CampaignSetup, type SetupState } from "@/components/expert-validation/campaign-setup";
 import { describeStartGuard } from "./components/expert-validation/start-guard-summary";
+import { createCommandId } from "@/lib/command-id";
 import { PointEvidence } from "@/components/expert-validation/point-evidence";
 import { RetryPanel } from "@/components/expert-validation/retry-panel";
 import { TopViewMap, type MapPointState } from "@/components/expert-validation/top-view-map";
@@ -96,12 +98,61 @@ function storedLease(sessionId: string): Lease | undefined {
   }
 }
 
-export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValidationApi }) {
+/**
+ * Every mutation the page issues has to present instance authority, and the runtime is the only thing
+ * that holds it: a registered instance, a live channel and its revision. The page's own client sends no
+ * authority headers at all, so each mutating call goes through the runtime transport instead of through
+ * the client - one mechanism rather than one patched call site.
+ */
+function withRuntimeMutations(
+  client: ExpertValidationApi,
+  runtime: DomainRuntime | null,
+): ExpertValidationApi {
+  if (!runtime) return client;
+  const through = <T,>(path: string, body: Record<string, unknown>) =>
+    runtime.post(path, body) as Promise<T>;
+  // Object.create keeps the client's prototype methods (capabilities, getManifest, the campaign
+  // watcher); a spread would copy only own properties and lose every read.
+  const wrapped = Object.create(client) as ExpertValidationApi;
+  Object.assign(wrapped, {
+    acquireLease: (serviceSessionId: string) =>
+      through<Lease>("/expert-validation/lease", { service_session_id: serviceSessionId }),
+    createManifest: (totalPoints: number) =>
+      through<Manifest>("/expert-validation/manifests", { total_points: totalPoints }),
+    preflight: (input: PreflightInput, lease: LeaseAuthority) =>
+      through<PreflightReceipt>("/expert-validation/campaigns/preflight", { ...input, ...lease }),
+    startCampaign: (input: StartCampaignInput, lease: LeaseAuthority) =>
+      through<CampaignProjection>("/expert-validation/campaigns", {
+        ...input,
+        ...lease,
+        command_id: createCommandId(),
+      }),
+    retry: (
+      campaignId: string,
+      pointIds: string[],
+      lease: LeaseAuthority,
+      confirmation: string,
+    ) =>
+      through<CampaignProjection>(
+        `/expert-validation/campaigns/${encodeURIComponent(campaignId)}/full-restart-retries`,
+        { ...lease, command_id: createCommandId(), point_ids: pointIds, confirmation },
+      ),
+  });
+  return wrapped;
+}
+
+export function ExpertValidationApp({ api: providedApi = defaultClient }: { api?: ExpertValidationApi }) {
   const [capabilities, setCapabilities] = useState<Capabilities>();
   const [lease, setLease] = useState<Lease>();
   const leaseRef = useRef<Lease>();
   const receiptGeneration = useRef<number>();
   const runtime = useOptionalDomainRuntime("validation");
+  // The wrapper is for the page's own client: a caller that injects an api keeps full control of it,
+  // which is also what the component tests rely on.
+  const api = useMemo(
+    () => (providedApi === defaultClient ? withRuntimeMutations(providedApi, runtime) : providedApi),
+    [providedApi, runtime],
+  );
   const [leaseRenewing, setLeaseRenewing] = useState(false);
   const [manifest, setManifest] = useState<Manifest>();
   const manifestRequestGeneration = useRef(0);
@@ -353,17 +404,7 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
           ? describeStartGuard(receipt.start_guard, capabilities?.start_guard_policy)
           : undefined}
         onChange={changeSetup}
-        onAcquireLease={() => {
-          // The acquire is a mutation like any other, so it has to present instance authority. The
-          // runtime already holds it (start() registers the instance and binds the channel), while
-          // the page's own client carries no authority headers at all.
-          const request = runtime
-            ? runtime
-                .post("/expert-validation/lease", { service_session_id: sessionId })
-                .then((payload) => payload as Lease)
-            : api.acquireLease(sessionId);
-          void request.then(replaceLease).catch(reportError);
-        }}
+        onAcquireLease={() => { void api.acquireLease(sessionId).then(replaceLease).catch(reportError); }}
         onGenerate={() => { void generateManifest().catch(reportError); }}
         onPreflight={() => { void runPreflight().catch(reportError); }}
         onStart={() => { void start().catch(reportError); }}
