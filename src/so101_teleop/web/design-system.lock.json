@@ -1,0 +1,56 @@
+{
+  "base": "radix",
+  "blocked_reason": "PENDING_REGISTRY_ITEMS: the pinned CLI cannot fetch ui.shadcn.com in this environment (bun and node both report 'other side closed' while curl receives 200), and every probed maia registry URL shape returns 404, so the per-component items, the self-hosted font files and their licenses are not captured yet.",
+  "bun": "1.3.14",
+  "cli": {
+    "package": "shadcn",
+    "version": "4.21.0"
+  },
+  "decoded": {
+    "baseColor": "mist",
+    "chartColor": "mist",
+    "font": "dm-sans",
+    "fontHeading": "outfit",
+    "iconLibrary": "lucide",
+    "menuAccent": "subtle",
+    "menuColor": "default",
+    "radius": "large",
+    "rtl": false,
+    "style": "maia",
+    "theme": "blue"
+  },
+  "fonts": [],
+  "node": "25.9.0",
+  "preset": "b311momZs0",
+  "registry": [
+    {
+      "name": "radix-maia",
+      "package_versions": {
+        "dependencies": [
+          "shadcn@latest",
+          "class-variance-authority",
+          "cn",
+          "tw-animate-css",
+          "radix-ui",
+          "lucide-react"
+        ],
+        "registryDependencies": [
+          "utils",
+          "font-dm-sans",
+          "font-heading-outfit"
+        ],
+        "shadcn": "4.21.0",
+        "tailwindcss": "3.4.17"
+      },
+      "sha256": "242969b2ed2d4ced3c35fdbc07605fd47758b3893f00f972f5af98df322a60df",
+      "type": "registry:base",
+      "url": "https://ui.shadcn.com/init?base=radix&style=maia&baseColor=mist&theme=blue&iconLibrary=lucide&font=dm-sans&rtl=false&menuAccent=subtle&menuColor=default&radius=large&chartColor=mist&fontHeading=outfit&preset=b311momZs0&template=vite&track=1"
+    }
+  ],
+  "schema_version": 1,
+  "tailwind": {
+    "compiler": "postcss",
+    "from": "3.4.17",
+    "selected": "3.4.17"
+  }
+}
