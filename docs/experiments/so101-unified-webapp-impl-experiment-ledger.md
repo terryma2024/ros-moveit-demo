@@ -2017,3 +2017,21 @@ Fixed by declaring them at the versions the tree actually resolved:
 
 That closes the plan's dependency-closure item for the primitives this task ported: the imports they use
 are now part of the declared, locked closure rather than an accident of hoisting.
+
+## CP-89: Python-side dependency closure audited - no gap
+
+After CP-88 found undeclared JavaScript dependencies, the same audit was run on the Python side rather
+than assuming symmetry:
+
+- the new `unified/*` modules import `fastapi` and `pydantic` (both declared as
+  `python3-fastapi` / `python3-pydantic` in `package.xml`) plus standard library only
+  (`asyncio`, `fcntl`, `sqlite3`, `secrets`, `signal`, `subprocess`, `hashlib`, `json`, `pathlib`,
+  `contextlib`, `dataclasses`, `enum`, `inspect`, `stat`, `os`, `argparse`);
+- `uvicorn` is imported lazily in exactly one place, `unified/main.py:60`, and `python3-uvicorn` is
+  declared;
+- no ROS import appears in any `unified/*` module, which is the load-bearing property the whole design
+  rests on.
+
+So unlike the JavaScript side there is nothing to declare here. Recorded as a checked result rather
+than an unexamined assumption - the interesting outcome of an audit can be "clean", but only if it was
+actually run.
