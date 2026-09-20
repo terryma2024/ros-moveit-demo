@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useOptionalDomainRuntime } from "@/state/runtime-provider";
+
 import { ExpertValidationClient } from "@/api/expert-validation-client";
 import type {
   CampaignProjection,
@@ -99,6 +101,7 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
   const [lease, setLease] = useState<Lease>();
   const leaseRef = useRef<Lease>();
   const receiptGeneration = useRef<number>();
+  const runtime = useOptionalDomainRuntime("validation");
   const [leaseRenewing, setLeaseRenewing] = useState(false);
   const [manifest, setManifest] = useState<Manifest>();
   const manifestRequestGeneration = useRef(0);
@@ -172,9 +175,21 @@ export function ExpertValidationApp({ api = defaultClient }: { api?: ExpertValid
       setLeaseRenewing(true);
       api.renewLease(lease).then((next) => {
         if (disposed) return;
-        if (next.lease_id !== lease.lease_id || next.service_session_id !== lease.service_session_id
-          || next.generation <= lease.generation || next.expires_monotonic_ns <= lease.expires_monotonic_ns) {
-          throw new Error("LEASE_RENEWAL_INVALID");
+        // The renewal identity, generation and expiry rule lives in the domain runtime; this page
+        // only keeps its own scheduling and notices until the runtime heartbeat owns the cadence.
+        const accepted = runtime
+          ? runtime.validateRenewal({
+              lease_id: next.lease_id,
+              service_session_id: next.service_session_id,
+              generation: next.generation,
+              expires_monotonic_ns: next.expires_monotonic_ns,
+            })
+          : next.lease_id === lease.lease_id
+            && next.service_session_id === lease.service_session_id
+            && next.generation > lease.generation
+            && next.expires_monotonic_ns > lease.expires_monotonic_ns;
+        if (!accepted) {
+          throw new Error(runtime?.lastRenewalError ?? "LEASE_RENEWAL_INVALID");
         }
         setLeaseRenewing(false);
         replaceLease(next);
