@@ -29,8 +29,8 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-17
-next_experiment: Task 8 registry capture and theme merge, Task 9 page-effect migration plus the 1400x900/390x844 browser checks, then Task 11 configure/build and the copied-install gate
+latest_checkpoint: CP-18
+next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
 ## CP-01: Registration, host probe and deviations
@@ -526,3 +526,21 @@ Commit `2a83b1d4`-class docs commit follows this entry.
 The plan asks for an independent Astra/high review of the guide before its scoped commit. That
 review is a GPT-6 Astra task and is **not** performed in this session; the guide is committed as
 an unreviewed draft and the missing review is recorded here rather than silently skipped.
+
+## CP-18: back/forward routing pinned
+
+A test now drives a real `popstate` after an out-of-band `history.pushState` and asserts the shell
+follows the browser: the page changes to validation and back to teleop while the runtime is
+registered exactly once and never closed. This covers the plan's "direct refresh/back/switch"
+requirement at the routing layer. `bun run build` exit 0, `NODE_ENV=test bun run test`
+**37 files / 166 tests**. Commit `c38a3aa2`.
+
+## Session status at CP-18 (for the next round)
+
+The account of what is and is not done lives in CP-11 (Task 8 registry blocker with exact
+reproductions and retained evidence), CP-14 (the lock file's verified contents and the CMake web
+inputs), CP-16 (the pinned layout contract, explicitly not browser evidence) and CP-17 (the
+operation guide, including the missing independent Astra review). The two gate helpers and the
+full recipe are described in CP-07 and CP-09; the registered evidence root is
+`/tmp/so101-debug-so101-unified-webapp-impl-20260920` with `operator/preset-init.json` and
+`preset-preview-8f09f448/` as the Task 8 artifacts.
