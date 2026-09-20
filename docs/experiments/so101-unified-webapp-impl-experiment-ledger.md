@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-76
+latest_checkpoint: CP-77
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1772,3 +1772,22 @@ GREEN: `pyrgate test_api.py test_unified_route_parity.py` all pass together. Com
 So the remaining migration is mechanical: move the other read-only cases onto this shape, add the
 authority fixture for the four mutation cases, drop the superseded validation-unavailable assertion,
 then delete `api.create_app`.
+
+## CP-77: the migration has started - static-asset cases now run on the unified app
+
+Added `unified_app_for(service, *, static_dir, capture_dir, task_service)` to `test_api.py` as the
+single construction helper the rest of the migration will use, and moved the two cases whose contract
+is *identical* on both apps onto it:
+
+- `test_missing_web_assets_return_machine_readable_service_unavailable` (503 `WEB_ASSETS_NOT_BUILT`);
+- `test_vite_assets_referenced_by_index_are_served_from_symlink_install` (`/assets/chunk.js` 200 with a
+  JavaScript content type from the symlinked dist).
+
+GREEN: `pyrgate test_api.py` **12 passed**. Commit follows this entry.
+
+Also noted for the remaining moves, so the next round does not have to rediscover it:
+`test_health_and_snapshot_remain_available_without_web_assets` asserts
+`client.get("/health").json() == {"ok": True}`, which the unified `/health` deliberately changes (it
+adds `domains`, `global_state`, `blocked_reason` and nests the Teleop health under `teleop`). Moving
+that case therefore includes updating its assertion to the aggregate shape - a contract change the
+plan asks for, not a regression.
