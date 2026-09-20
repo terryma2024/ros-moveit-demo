@@ -410,8 +410,14 @@ def test_per_slot_summary_reads_a_synthetic_evidence_tree(tmp_path: Path) -> Non
     assert w1["manifests"] == 2 and w1["point_results"] == 1
     assert w1["executed_points"] == ["01-task_start"]
     assert w1["failure_codes"] == ["TERMINAL_CAPTURE_FAILED"]
-    assert w1["contacts"] == [{"point": "01-task_start", "simulation_step": 33,
-                               "table_contact": True, "max_normal_force_n": 0.233}]
+    contact = w1["contacts"][0]
+    assert contact["point"] == "01-task_start" and contact["simulation_step"] == 33
+    assert contact["table_contact"] is True and contact["max_normal_force_n"] == 0.233
+    # the plan's named items travel too, and a manifest that does not carry them reads as None
+    # rather than raising - the summary must survive an older or partial evidence file
+    assert contact["planning_scene_readback"] is None
+    assert contact["release_marker_sequence"] is None
+    assert contact["final_cup_position_world_m"] is None
     # a slot with nothing on disk is reported, not omitted and not an exception
     assert summary["w2"]["manifests"] == 0 and summary["w2"]["executed_points"] == []
 

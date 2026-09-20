@@ -158,7 +158,18 @@ def summarize_per_slot_pick_place(*, evidence_root: Path, workers=("w1", "w2")) 
                 contacts.append({"point": point,
                                  "simulation_step": sample.get("simulation_step"),
                                  "table_contact": sample.get("table_contact"),
-                                 "max_normal_force_n": sample.get("maximum_normal_force_n")})
+                                 "max_normal_force_n": sample.get("maximum_normal_force_n"),
+                                 # The items the plan names for each batch, taken from the manifest so a
+                                 # reader sees them in the campaign document rather than by walking
+                                 # directories: the planning-scene shadow, the release marker sequence,
+                                 # the detach/transition count and where the cup ended up.
+                                 "planning_scene_readback": entry.get("planning_scene_readback"),
+                                 "release_marker_sequence": entry.get("release_marker_sequence"),
+                                 "transition_count": entry.get("transition_count"),
+                                 "final_cup_position_world_m": sample.get("cup_position_world_m"),
+                                 "final_cup_orientation_world_xyzw": sample.get("cup_orientation_world_xyzw"),
+                                 "left_right_contacts": [sample.get("left_contact_count"),
+                                                         sample.get("right_contact_count")]})
         failure_codes = set()
         for result in points:
             try:
