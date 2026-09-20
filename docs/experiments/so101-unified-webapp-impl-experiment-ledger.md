@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-51
+latest_checkpoint: CP-52
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1193,3 +1193,18 @@ web_dependencies) passes there.
 Still open in Task 11: the three incremental rebuild proofs, a full `colcon test` over the package
 (69 tests, only the unified subset has been run in-gate), the per-test TEMP provenance run, and the
 copied-install Chrome gate.
+
+## CP-52: the build graph really tracks the new web inputs
+
+Read the rules CMake generated for the web target
+(`build/so101_teleop/CMakeFiles/so101_teleop_web.dir/build.make`) rather than trusting the CMake
+source: `src/styles/theme.css`, `public/fonts/dm-sans-variable.woff2`, `components.json` and
+`design-system.lock.json` each appear exactly once as explicit prerequisites of
+`web/dist/index.html`, alongside 120 tracked `web/src` and `web/public` paths. So editing a token,
+replacing a font or changing the component manifest invalidates the bundle target - the mechanism the
+plan's three incremental proofs are meant to demonstrate is in place in the generated graph.
+
+What is still missing is the *end-to-end* form the plan asks for: build, change a CSS token in a
+task-owned fixture tree, rebuild and show the bundle hash changed; the same for a font file and for
+`components.json`, with stdout/exit/mtime/hash retained. The dependency graph is evidence that the
+mechanism works, not a substitute for those three runs, and it is recorded that way.
