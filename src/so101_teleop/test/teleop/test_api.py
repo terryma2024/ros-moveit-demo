@@ -211,7 +211,7 @@ def test_task_artifact_route_rejects_manifest_escape(tmp_path):
 
 def test_task_websocket_uses_independent_ordered_event_stream():
     tasks = TaskApiService()
-    client = TestClient(create_app(Service(), task_service=tasks))
+    client = TestClient(unified_app_for(Service(), task_service=tasks))
     with client.websocket_connect("/tasks/events") as websocket:
         event = websocket.receive_json()
     assert event == {
