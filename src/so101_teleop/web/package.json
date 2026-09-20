@@ -10,6 +10,7 @@
     "dev": "vite",
     "generate:api": "openapi-typescript ../so101_teleop/openapi.json -o src/api/schema.d.ts",
     "generate:api:validation": "openapi-typescript ../so101_teleop/expert_validation_openapi.json -o src/api/expert-validation-schema.d.ts",
+    "generate:api:unified": "openapi-typescript ../so101_teleop/unified_openapi.json -o src/api/unified-schema.d.ts",
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "test:e2e": "playwright test --config playwright.config.ts",

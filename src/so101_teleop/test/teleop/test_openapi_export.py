@@ -74,3 +74,45 @@ def test_validation_openapi_is_deterministic_and_separate(tmp_path):
     assert schema["info"]["title"] == "SO-101 Expert Validation"
     assert "/expert-validation/campaigns/preflight" in schema["paths"]
     assert "/tasks/runs" in schema["paths"]
+
+
+def test_unified_export_is_one_schema_and_the_views_are_projections(tmp_path):
+    import json
+
+    from so101_teleop.openapi_export import (
+        export_openapi,
+        export_unified_openapi,
+        export_validation_openapi,
+    )
+
+    unified_path = export_unified_openapi(tmp_path / "unified.json")
+    teleop_path = export_openapi(tmp_path / "teleop.json")
+    validation_path = export_validation_openapi(tmp_path / "validation.json")
+    unified = json.loads(unified_path.read_text())
+    teleop = json.loads(teleop_path.read_text())
+    validation = json.loads(validation_path.read_text())
+
+    assert unified["info"]["title"] == "SO-101 Unified"
+    assert "/tasks/runs" in unified["paths"]
+    assert "/expert-validation/campaigns" in unified["paths"]
+    assert "/plans/{plan_id}/execute-all" in unified["paths"]
+
+    for view in (teleop, validation):
+        assert set(view["paths"]) <= set(unified["paths"])
+        for path, item in view["paths"].items():
+            assert item == unified["paths"][path], path
+    assert "/expert-validation/campaigns" not in teleop["paths"]
+    assert "/plan/tcp" in teleop["paths"]
+    assert "/tasks/runs" in validation["paths"]
+    assert "/expert-validation/campaigns" in validation["paths"]
+
+    operation_ids = [
+        operation["operationId"]
+        for path in unified["paths"].values()
+        for operation in path.values()
+        if isinstance(operation, dict) and "operationId" in operation
+    ]
+    assert len(operation_ids) == len(set(operation_ids))
+
+    again = export_unified_openapi(tmp_path / "unified-again.json")
+    assert unified_path.read_bytes() == again.read_bytes()
