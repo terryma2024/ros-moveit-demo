@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-79
+latest_checkpoint: CP-80
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1822,4 +1822,20 @@ the POST half of `test_camera_presets_are_listed_and_apply_uses_command_boundary
 dropped) and `test_task_routes_are_separate_and_typed`. **Every one of them is a mutation or a
 superseded contract**, so the next step is the authority fixture described in CP-75 - the one
 `test_unified_cancel_integration.py` already demonstrates - after which `api.create_app` can be
+deleted.
+
+## CP-80: the authority fixture exists and the first mutation case runs on it
+
+`test_api.py` gained `AuthorityFixture`: a real `IntentStore`, `GlobalMutationArbiter` and
+`InstanceRegistry` in the test's temporary directory, with an instance registered, a channel connected
+at `http://testserver` and a lease claimed, plus a `headers()` helper producing the four authority
+headers. `unified_app_for` now passes `instances`/`arbiter`/`safety` through, so a migrated mutation
+case is a composed app rather than a stub-only one.
+
+`test_execute_returns_conflict_for_stale_plan` is the first mutation case on that shape: it posts with
+authority and still gets the service's own `409 PLAN_STALE_SCENE`, proving the authority layer admits
+the request and the business conflict is unchanged. `pyrgate test_api.py` **12 passed**.
+
+Remaining: four mutation/superseded cases in the same file (lines ~108, ~128, ~158, ~173 at this
+commit), each now a mechanical application of the same fixture, and then the legacy route table can be
 deleted.
