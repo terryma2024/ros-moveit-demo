@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-21
+latest_checkpoint: CP-22
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -620,3 +620,28 @@ v3-compatible smart merge (the captured `cssVars` are v4 oklch values, so the re
 the plan about a v4 upgrade versus a v3 equivalent conversion has to be taken explicitly), merge
 the primitives while preserving business variants/ARIA/testids, and self-host the fonts with
 licences.
+
+## CP-22: the captured preset tokens are applied as v3-compatible variables
+
+`src/styles/theme.css` is generated from the captured pinned manifest (the file records the
+manifest sha256 in its header) and imported by `index.css` ahead of the Tailwind layers. It holds
+all 31 light and 31 dark foundation tokens - background, card, foreground, muted, border, input,
+ring, primary, secondary, accent, destructive, popover, the four sidebar groups and the five chart
+colours - as plain custom properties plus the radius.
+
+Two deliberate decisions, both recorded rather than implied:
+
+1. **No v4 upgrade.** The declarations are plain `:root` / `[data-theme="dark"]` custom
+   properties consumed through `var()`, so Tailwind 3.4.17 and the existing compiler are
+   unchanged. The plan's `@theme`-based v4 path was not taken, so there is no mixed v4/v3 output.
+2. **Business outcome colours are independent of primary.** `--state-success` is its own colour,
+   `--state-pending` maps to primary, `--state-failure` maps to destructive; blue is never used as
+   success. Display fonts declare CJK fallbacks (`PingFang SC`, `Noto Sans CJK SC`) and no runtime
+   `@import url(...)` font request is introduced.
+
+GREEN: `bun run build` exit 0; `NODE_ENV=test bun run test` all green with 5 new theme tests.
+Commit `5591de0e`.
+
+Still open in Task 8: self-hosting the two font files with licences (the lock records the
+`registry:font` items and their `@fontsource-variable/*` dependencies), and the per-primitive smart
+merge that preserves business variants, ARIA, events, disabled reasons and testids.
