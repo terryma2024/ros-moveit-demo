@@ -3912,3 +3912,22 @@ a non-200.
 `/control/instances/{id}/channel` before acquiring, or the correct answer is `CHANNEL_NOT_LIVE`. That
 needs a websocket client against the live server; the venv's availability is being checked, and the
 alternative is the same assertion through `TestClient`, which the new suite already does in-process.
+
+### CP-129 addendum - the websocket client is not in the venv, and that points at a better route
+
+The check the checkpoint says is running has an answer: `import websockets` raises in the registered
+interpreter, so there is no websocket client to drive the live channel from a script. Two ways forward,
+and the second is better than the first:
+
+1. add a websocket client to the task environment, or
+2. **drive the channel the way a user does - through the real page in Chrome.** The frontend already
+   registers the instance, opens the channel and carries the four headers on mutations
+   (`instance-client.ts`), and this task already has a working headless-Chrome harness for the served
+   install. That makes the live step faithful by construction instead of approximating the page with a
+   script, and it exercises the client and the server together, which is where both defects of the last
+   three rounds lived.
+
+So the next round's live step is: serve the fixed build, open the application in Chrome, acquire through
+the UI, and watch the same four-header flow the API script was imitating. If the page acquires and the
+subsequent mutation is accepted, the authority model is proven end to end; if it does not, the failure
+will be in the client-server pair, which is exactly where I have been finding real defects.
