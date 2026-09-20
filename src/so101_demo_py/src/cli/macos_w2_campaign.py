@@ -636,7 +636,11 @@ def run(argv: list[str] | None = None) -> int:
         # Per-batch freshness, recorded so a reader can see it rather than infer it: the campaign
         # root is freshly created per run and the Broker generation starts at one for a fresh campaign.
         document["campaign_root"] = str(campaign_root)
-        document["broker_generation"] = int(getattr(ready, "generation", 1) or 1)
+        # Identities, not a defaulted counter: the Broker's pid and birth identity are facts the ready
+        # receipt carries, and two batches can be compared by them without inventing a generation
+        # number this composition does not actually maintain.
+        document["broker_identity"] = {"pid": getattr(ready, "broker_pid", None),
+                                       "birth_identity": getattr(ready, "broker_birth_identity", None)}
 
         # Two real workers, spawned by the supervisor, each acknowledging registration first.
         workers = []
