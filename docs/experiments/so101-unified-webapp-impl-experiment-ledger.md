@@ -3229,3 +3229,46 @@ through the dylib farm the environment already declares; then the same campaign 
 Worth stating once for the record: three rounds of refusing to start a live run on my own initiative, and
 the first time I did start one it produced a real, bounded, self-cleaning result that isolated a
 one-library problem in under three minutes. That is the argument for having run it sooner.
+
+## CP-116: the campaign passes - and the pick-place itself does not, which is the honest result
+
+CP-115 named the blocker; the fix was to put the MuJoCo the plugin needs on the loader path. Background
+job `bash-29`, 2026-09-20T11:29:44Z to 11:32:18Z (2m34s), same command as before plus
+`DYLD_LIBRARY_PATH` containing `~/ros2_jazzy/extra_ws/install/opt/mujoco_vendor/lib`:
+
+```text
+status: W2_CAMPAIGN_PASS          campaign_rc=0
+w1: point_results 4  manifests 4   failure_codes ['DYNAMIC_WORKFLOW_FAILED']  contacts 0
+w2: point_results 4  manifests 4   failure_codes ['DYNAMIC_WORKFLOW_FAILED']  contacts 0
+served: count 12  devices ['mps']  lane executed 19  max_concurrent 1  rejected 0
+admission: w1-att-00..02-yolo CONSUMED (one-time table working)
+cleanup: complete true  directory_removed true  registry_empty true  workers_reaped [true, true]
+handlers_joined true   server_rejections []   fault_trace []   cancelled_ids []
+workers: w1 pid 43644 slot-0, w2 pid 43646 slot-1 (birth identities recorded)
+```
+
+Evidence written under the run root: `campaign-result.json`, per-worker `w{1,2}-lease.json`,
+`w{1,2}-ack.json`, `w{1,2}-result.json`, `w{1,2}-frame.npy`, plus `start-guard.json`,
+`broker-ready.json` and the supervisor's claim lock and owner receipt. The worker results name the
+installed binary they ran
+(`<closure5>/install/lib/so101_demo_py/so101_mujoco_rgbd_batch`) and per-attempt inference results
+`status OK` on device `mps`.
+
+**What this establishes.** The exact-W2 control plane runs for real on this host: two workers spawned
+with identities, twelve inference requests served through the single MPS lane with no duplicate
+admission, four point results and four manifests per slot - eight in total - then a complete owned
+teardown with both workers reaped and no foreign process touched. That is the live half of the §7
+functional row and the ownership/cleanup half of the control row, on the installed prefix, with
+evidence on disk rather than in prose.
+
+**What it does not establish, stated as plainly as the PASS.** Every point reports
+`DYNAMIC_WORKFLOW_FAILED` and `contacts` is empty for both slots. The physical pick-place did not
+succeed - the gripper never touched a cup. `W2_CAMPAIGN_PASS` is the campaign harness's verdict about its
+own control plane, not a business success, and the plan says exactly this in two places: plan is not
+execution is not physical success, and a qualification campaign is not a five-run physical PASS. The
+physics row therefore stays **open**, with a concrete next question (why the dynamic workflow fails at
+the contact stage) instead of a claim.
+
+For completeness on the two traps from CP-114: the recovery was one environment line, and the reason the
+earlier three rounds could not have found it is that they never ran a station - the loader error only
+exists once a worker tries to initialise hardware.
