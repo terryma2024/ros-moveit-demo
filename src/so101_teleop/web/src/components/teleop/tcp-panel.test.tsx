@@ -38,7 +38,7 @@ describe("TcpPanel", () => {
     expect(group.dataset.slot).toBe("button-group");
     expect(world.getAttribute("aria-pressed")).toBe("true");
     expect(tool.getAttribute("aria-pressed")).toBe("false");
-    expect(world.className).toContain("bg-sky-600");
+    expect(world.className).toContain("bg-primary");
     expect(group.className).not.toMatch(/(?:^|\s)gap-/);
     tool.focus();
     await user.keyboard("{Enter}");
