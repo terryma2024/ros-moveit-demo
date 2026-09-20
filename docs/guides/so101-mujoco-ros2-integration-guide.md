@@ -47,16 +47,28 @@ URDF/SRDF 提供关节语义、TF、MoveIt group 和 controller 映射；MJCF �
 |---|---|
 | submodule | `third_party/mujoco_ros2_control` |
 | fork | `git@gitee.com:zjumty/mujoco_ros2_control.git` |
-| candidate label | `so101-0.1.0-r1-candidate` |
-| gitlink commit | `aeff7e5a84044f07b8a334e3a15bfc3aa9c8aa5c` |
+| release ref | `main` |
+| gitlink commit | `f89033c548591c9b4e7c2c5f76653562b22ff600` |
 | upstream tag | `0.1.0` |
 | upstream commit | `57fc6744844902d4532160b403fa95840c1d6f96` |
 | local lineage | `f19a8cc3af61feccacb22a9f0d16cc972e3b2c08` (`so101-0.0.3-r11`) |
 | lock | `src/so101_demo_py/config/mujoco/dependency-lock.yaml` |
+| MuJoCo vendor | Linux `ros-jazzy-mujoco-vendor` 0.1.0（MuJoCo 3.12.0）；macOS 从 3.4.0 源码构建 |
 
 lock 同时固定接口 SHA-256 与跨平台安装产物清单。`scripts/check_backend_integration.py` 验证
 两份 lock 一致、`.gitmodules`/origin URL、clean submodule、gitlink/HEAD/commit，以及 upstream
-0.1.0 与本地 r11 双祖先。candidate label 不创建 Git tag；跨平台验收后才切换到最终 release tag。
+0.1.0 与本地 r11 双祖先。
+
+lock 里的 `tag` 是 release ref，`commit` 是精确 pin。fork 会先在集成分支上推进 pin，release ref
+停在原处，所以两者相等不是这份 lock 的常态。安装器要求的是包含关系：release ref 必须是 pinned
+commit 的祖先。pin 与 release ref 分叉时拒绝构建；pin 在 release ref 之前时打印
+`FORK_PIN_AHEAD_OF_RELEASE_REF` 和逐条 `FORK_PIN_COMMIT`，让日志保留实际构建的提交，而不是静默通过。
+
+`mujoco_3d_lidar` 通过 `include/mujoco_3d_lidar/mujoco_numeric_types.hpp` 读取 `mjtNum`、
+`mjMINVAL` 和 `mjtByte`。MuJoCo 3.8.0 及更早版本把这些类型放在 `mujoco/mjtnum.h`，3.9.0 起改放
+`mujoco/mjtype.h`，`mjtnum.h` 被删除。wrapper 在 `mjtype.h` 存在时用它，否则回退到 `mjtnum.h`，
+因此同一个 extension 既能对 macOS 的 3.4.0 源码构建，也能对 Linux vendor 的 3.12.0 编译。
+
 不要跟随浮动 branch，不要覆盖 `/opt/ros/jazzy`，也不要仅凭包名存在就宣称 provenance 成立。
 
 ### 2.1 安装 fork overlay
@@ -73,8 +85,8 @@ zsh scripts/install-mujoco-ros2-control.zsh --init-submodule
 1. 当前 checkout 是含已提交 gitlink 的 superproject；
 2. `.gitmodules`、lock、gitlink、submodule `HEAD` 四者一致；
 3. submodule clean，origin URL 正确，官方 0.1.0 与本地 r11 都是 fork commit 的祖先；
-4. candidate 阶段不存在同名 release tag；最终阶段 tag 精确解析到 locked commit；
-5. 独立 build source 位于 locked commit 且保持 clean；
+4. release ref 包含 pinned commit；分叉时 fail closed，pin 领先时打印差异提交；
+5. 独立 build source 位于 locked commit 且保持 clean；lock 换 pin 后，clean 的 build source 会自动重新指向新 commit，dirty 的仍然拒绝；
 6. `mujoco_3d_lidar`、msgs、plugins、core 四个 fork package 实际被发现、构建并测试。
 
 默认输出位于 `$SO101_WORKSPACE_DIR/ws_mujoco_ros2_control_fork/{build,install,log}`。
@@ -386,6 +398,10 @@ fork runtime，必须重新判断是否需要跑完整资格化，不能沿用�
 | GUI 退出崩溃 | viewer/CameraPlugin context 的创建、使用或析构跨线程 | macOS 确认 main-thread UI/context 路径；worker 只消费已注册 context，并走 rendering capability cleanup。 |
 | 500 Hz 证据只有约 100 Hz | 只用 base `update()` 的 controller cadence 采样 | 让证据 plugin 额外实现 `MuJoCoROS2ControlSimulationObserver::on_physics_step()` 并验证逐 step 序列。 |
 | Gazebo execute 失败 | 策略/控制链的实际失败 | 保留第一失败 phase 和 evidence；不跳过，也不计入 MuJoCo 门控。 |
+| `mujoco/mjtnum.h: No such file or directory` | MuJoCo 3.9.0 起把数值类型移到 `mjtype.h` 并删除 `mjtnum.h` | 源码头文件不要直接 include `mjtnum.h`，改用 `mujoco_numeric_types.hpp`。 |
+| `fork release tag does not resolve to locked commit` | 旧安装器要求 release ref 与 pin 指针相等 | 现在的安装器改判包含关系；确认 lock 的 `tag` 是 pin 的祖先，不是无关分支。 |
+| `superproject gitlink commit ... does not match lock` | 换了 pin 但 gitlink 只 staged 未提交 | 先提交 superproject 的 gitlink 与两份 lock，再跑安装器。 |
+| `build source is not at locked commit` | lock 换 pin 后 build source 仍停在旧 commit | 现在的安装器会自动重新 checkout；若提示 dirty，先处理该 workspace 的改动。 |
 
 ## 11. 关键文件
 

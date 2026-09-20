@@ -1,11 +1,13 @@
 import hashlib
 import os
 import re
+import shutil
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import pytest
 import yaml
 
 
@@ -31,7 +33,7 @@ INTEGRATION_GUIDE = (
 )
 UPSTREAM_010_COMMIT = "57fc6744844902d4532160b403fa95840c1d6f96"
 LOCAL_R11_COMMIT = "f19a8cc3af61feccacb22a9f0d16cc972e3b2c08"
-CANDIDATE_COMMIT = "e4c0241aee52a40727681bd5872c09bf814e941a"
+CANDIDATE_COMMIT = "f89033c548591c9b4e7c2c5f76653562b22ff600"
 CANDIDATE_LABEL = "main"
 MUJOCO_340_COMMIT = "e55fff5dea6f1d5dd7963ca52eecc41d05ad0922"
 MUJOCO_GLFW_PATCH_SHA256 = (
@@ -450,3 +452,175 @@ def test_macos_dylib_farm_links_source_overlays_and_rejects_ambiguous_names(
 
     assert rejected.returncode != 0
     assert "ambiguous dylib basename: libalpha.dylib" in rejected.stderr
+
+
+
+MUJOCO_HEADER_INCLUDE = re.compile(r"#include\s*<(mujoco/[A-Za-z0-9_./]+\.h)>")
+FORK_SOURCE_SUFFIXES = {".h", ".hpp", ".hh", ".cpp", ".cc", ".cxx"}
+LIDAR_ROOT = SUBMODULE / "mujoco_extensions" / "mujoco_3d_lidar"
+LIDAR_NUMERIC_TYPES = (
+    LIDAR_ROOT / "include" / "mujoco_3d_lidar" / "mujoco_numeric_types.hpp"
+)
+# MuJoCo keeps mjtNum/mjMINVAL/mjtByte in mjtnum.h up to 3.8.0 and in mjtype.h
+# from 3.9.0. The numeric type header is the one sanctioned place for the
+# version-dependent include.
+MUJOCO_NUMERIC_HEADER_SWITCH = "mujoco_numeric_types.hpp"
+GUARDED_MUJOCO_HEADER = "mujoco/mjtnum.h"
+
+
+def _mujoco_vendor_include_dir() -> Path | None:
+    """Return the include directory of the installed MuJoCo vendor package."""
+    try:
+        from ament_index_python.packages import get_package_prefix
+    except ImportError:
+        return None
+    try:
+        prefix = Path(get_package_prefix("mujoco_vendor"))
+    except Exception:
+        return None
+    include_dir = prefix / "opt" / "mujoco_vendor" / "include"
+    return include_dir if include_dir.is_dir() else None
+
+
+def _fork_sources() -> list[Path]:
+    if not (SUBMODULE / ".git").exists():
+        return []
+    return sorted(
+        path
+        for path in SUBMODULE.rglob("*")
+        if path.is_file()
+        and path.suffix in FORK_SOURCE_SUFFIXES
+        and ".git" not in path.parts
+    )
+
+
+def test_lidar_extension_selects_the_mujoco_numeric_header_by_availability() -> None:
+    header = LIDAR_NUMERIC_TYPES.read_text(encoding="utf-8")
+    assert "__has_include(<mujoco/mjtype.h>)" in header
+    assert "#include <mujoco/mjtype.h>" in header
+    assert "#include <mujoco/mjtnum.h>" in header
+
+    for source in (
+        LIDAR_ROOT / "include" / "mujoco_3d_lidar" / "3dlidar.h",
+        LIDAR_ROOT / "src" / "3dlidar.cpp",
+    ):
+        text = source.read_text(encoding="utf-8")
+        assert f"#include <mujoco_3d_lidar/{MUJOCO_NUMERIC_HEADER_SWITCH}>" in text, source
+        assert f"#include <{GUARDED_MUJOCO_HEADER}>" not in text, source
+
+
+def test_fork_sources_only_include_mujoco_headers_the_vendor_can_supply() -> None:
+    include_dir = _mujoco_vendor_include_dir()
+    if include_dir is None:
+        pytest.skip("the installed mujoco_vendor ships no include directory here")
+    sources = _fork_sources()
+    if not sources:
+        pytest.skip("the mujoco_ros2_control submodule is not initialized here")
+
+    available = {
+        path.relative_to(include_dir).as_posix() for path in include_dir.rglob("*.h")
+    }
+    assert available, "the vendored MuJoCo ships no headers"
+
+    missing: dict[str, list[str]] = {}
+    for source in sources:
+        for header in MUJOCO_HEADER_INCLUDE.findall(
+            source.read_text(encoding="utf-8", errors="ignore")
+        ):
+            if header not in available and not (
+                header == GUARDED_MUJOCO_HEADER and source == LIDAR_NUMERIC_TYPES
+            ):
+                missing.setdefault(header, []).append(
+                    source.relative_to(REPOSITORY_ROOT).as_posix()
+                )
+    assert not missing, (
+        "fork sources include MuJoCo headers that the pinned vendor version does "
+        f"not ship: {missing}"
+    )
+
+
+def test_lidar_extension_headers_compile_against_the_vendored_mujoco(
+    tmp_path: Path,
+) -> None:
+    include_dir = _mujoco_vendor_include_dir()
+    if include_dir is None:
+        pytest.skip("the installed mujoco_vendor ships no include directory here")
+    compiler = shutil.which("g++") or shutil.which("c++")
+    if compiler is None:
+        pytest.skip("no C++ compiler is available here")
+
+    translation_unit = tmp_path / "lidar_include_check.cpp"
+    translation_unit.write_text(
+        "#include <mujoco_3d_lidar/3dlidar.h>\nint main() { return 0; }\n",
+        encoding="utf-8",
+    )
+    completed = subprocess.run(
+        [
+            compiler,
+            "-std=c++17",
+            "-fsyntax-only",
+            f"-I{LIDAR_ROOT / 'include'}",
+            f"-I{include_dir}",
+            str(translation_unit),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_locked_fork_commit_is_contained_in_the_named_release_ref() -> None:
+    """The lock names a release ref and an exact commit.
+
+    The fork advances its pin along integration branches while the release ref
+    stays where it is, so the contract the installer must enforce is containment
+    of the release ref in the pinned commit, not pointer equality.
+    """
+    lock = yaml.safe_load(LOCK.read_text(encoding="utf-8"))
+    release_ref = lock["fork"]["tag"]
+    locked_commit = lock["fork"]["commit"]
+
+    resolved = subprocess.run(
+        ["git", "-C", str(SUBMODULE), "rev-list", "-n", "1", release_ref],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if resolved.returncode != 0:
+        pytest.skip(f"fork release ref {release_ref} is unavailable in this checkout")
+
+    contained = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(SUBMODULE),
+            "merge-base",
+            "--is-ancestor",
+            resolved.stdout.strip(),
+            locked_commit,
+        ],
+        check=False,
+    )
+    assert contained.returncode == 0, (
+        f"locked fork commit {locked_commit} is not contained in release ref "
+        f"{release_ref} ({resolved.stdout.strip()})"
+    )
+
+
+def test_installer_reports_a_pin_that_is_ahead_of_the_release_ref() -> None:
+    installer = INSTALLER.read_text(encoding="utf-8")
+
+    assert "FORK_PIN_AHEAD_OF_RELEASE_REF" in installer
+    assert "commits_ahead=" in installer
+    assert "is not contained in fork ref" in installer
+    assert "fork release tag does not resolve to locked commit" not in installer
+
+
+def test_installer_repoints_a_stale_build_source_to_the_locked_commit() -> None:
+    installer = INSTALLER.read_text(encoding="utf-8")
+
+    assert "BUILD_SOURCE_REPOINTED" in installer
+    assert "cannot be re-pointed" in installer
+    # A dirty build source stays a hard failure.
+    assert "build source must be clean at locked fork commit" in installer

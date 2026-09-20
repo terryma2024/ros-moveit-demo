@@ -135,12 +135,36 @@ verify_source_identity() {
     git -C "${source_dir}" show-ref --verify --quiet "refs/tags/${fork_tag}" &&
       fail "candidate label must not resolve as a release tag"
   else
-    local tagged_commit
-    tagged_commit=$(git -C "${source_dir}" rev-list -n 1 "${fork_tag}") ||
-      fail "fork release tag is unavailable: ${fork_tag}"
-    [[ ${tagged_commit} == ${fork_commit} ]] ||
-      fail "fork release tag does not resolve to locked commit"
+    verify_release_ref_contains_pin
   fi
+}
+
+# The lock names a release ref and an exact commit. The fork lands integration
+# work on side branches and moves the lock's commit forward while the release
+# ref stays where it is, so pointer equality between the two is not the contract
+# that holds. What must hold is that the release ref is contained in the pinned
+# commit: the pin is the release ref plus reviewed commits, never an unrelated
+# branch. A divergent pin is refused, and a pin that is ahead is reported with
+# its commit list instead of passing silently.
+verify_release_ref_contains_pin() {
+  local release_commit ahead_count
+  release_commit=$(git -C "${source_dir}" rev-list -n 1 "${fork_tag}") ||
+    fail "fork release ref is unavailable: ${fork_tag}"
+
+  if [[ ${release_commit} == ${fork_commit} ]]; then
+    print -- "FORK_RELEASE_REF_MATCHES_PIN ref=${fork_tag} commit=${fork_commit}"
+    return 0
+  fi
+
+  git -C "${source_dir}" merge-base --is-ancestor "${release_commit}" "${fork_commit}" ||
+    fail "locked commit ${fork_commit} is not contained in fork ref ${fork_tag} (${release_commit})"
+
+  ahead_count=$(git -C "${source_dir}" rev-list --count "${release_commit}..${fork_commit}")
+  print -u2 -- "FORK_PIN_AHEAD_OF_RELEASE_REF ref=${fork_tag} ref_commit=${release_commit} pin=${fork_commit} commits_ahead=${ahead_count}"
+  git -C "${source_dir}" log --oneline --no-decorate "${release_commit}..${fork_commit}" |
+    while IFS= read -r line; do
+      print -u2 -- "FORK_PIN_COMMIT ${line}"
+    done
 }
 
 prepare_build_source() {
@@ -148,6 +172,17 @@ prepare_build_source() {
     mkdir -p "${build_source_dir:h}"
     git clone --shared --no-checkout "${source_dir}" "${build_source_dir}"
     git -C "${build_source_dir}" checkout --detach "${fork_commit}"
+  elif [[ $(git -C "${build_source_dir}" rev-parse HEAD) != ${fork_commit} ]]; then
+    # The lock moved to a different fork commit. The build source is a shared
+    # clone owned by this installer, so re-point it instead of stopping; a dirty
+    # build source is still refused because its contents would be unknown.
+    local stale_changes
+    stale_changes=$(git -C "${build_source_dir}" status --porcelain --untracked-files=all)
+    [[ -z ${stale_changes} ]] ||
+      fail "build source is dirty and cannot be re-pointed to ${fork_commit}: ${build_source_dir}"
+    git -C "${build_source_dir}" checkout --detach "${fork_commit}" ||
+      fail "build source cannot be checked out at locked commit: ${fork_commit}"
+    print -- "BUILD_SOURCE_REPOINTED commit=${fork_commit}"
   fi
   [[ $(git -C "${build_source_dir}" rev-parse HEAD) == ${fork_commit} ]] ||
     fail "build source is not at locked commit: ${build_source_dir}"
