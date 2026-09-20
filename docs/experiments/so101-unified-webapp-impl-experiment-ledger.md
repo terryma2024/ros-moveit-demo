@@ -5227,3 +5227,70 @@ excludes Stage C, and this is the live execution path). The objective as written
 host without crossing that boundary, so the goal is being marked **blocked** with this as its reason rather
 than left to spin: the condition has held for three consecutive rounds, and each round narrowed it further
 instead of dissolving it.
+
+## CP-159: dispatch 6954bbb9 accepted - scene restored, orphans inventoried, plan frozen
+
+**Receipt.** `dispatch-6954bbb9-d3ce-487e-bd77-3506344d388b.receipt` created atomically
+(`O_CREAT|O_EXCL`, mode 0600) in the registered evidence root before any other task action, containing the
+dispatch UUID and one newline; read back exactly. The dispatch authorises the control-plane runner
+integration that CP-157/CP-158 had classified as Stage C; it does **not** authorise hardware, evidence
+deletion, cleanup of processes without proven ownership, merge, or push - so from this checkpoint on,
+commits are local only.
+
+**Scene (verified, not assumed).**
+
+```text
+worktree   /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
+branch     codex/so101-unified-webapp
+HEAD       8ff2ace42c87cddeefa53a29d8c125cce408a97f   (matches the dispatch's required starting point)
+status     clean
+bun        1.3.14 at /opt/homebrew/bin/bun
+python     task interpreter /Users/matianyi/ros2_jazzy/.venv/bin/python = 3.11.15
+           system python3 = 3.14.6 at /opt/homebrew/bin/python3
+           (the Xcode 3.9 that the campaign runner used until CP-156 was a literal in the spawn argv,
+            not the PATH interpreter; the shared venv is untouched.)
+evidence   /tmp/so101-debug-so101-unified-webapp-impl-20260920  (single registered root)
+```
+
+**Last trusted conclusion is CP-158**, unchanged and not prettified: every §7 row has measured evidence, and
+the service cannot start a campaign on this host because the v4 document the guard needs is refused by the
+v3-era runner while a v3 document is refused by that runner's own guard, and the macOS-capable campaign CLI
+does not speak the service's control protocol (9 references in the supervisor, 0 in the CLI).
+
+**A1 inventory** (fresh, before any signal; file `cleanup-a1-inventory.txt` in the evidence root; the 14-pid
+list is an observation, not a whitelist):
+
+```text
+noros_child_helper.py   52315 52317 63256 63258 84509 84511 84614 84616 98253 98255
+descendant_helper.py    84355 98672
+process_tree_helper.py  84403 98738
+```
+
+All 14: `PPID=1`, argv resolves into **this task's** worktree test helpers, cwd is the task worktree (12) or
+the task's ctest build dir `build-FV6UHHX5/build/so101_teleop` (2), elapsed 1.5-7 h, i.e. accumulated across
+this session's rounds. Ten are session leaders (PGID=SID=own pid); four (84355, 84403, 98672, 98738) carry a
+foreign PGID/SID whose leader is already gone, which is the first hint for A2: those were spawned into a
+group whose owner did not outlive the test.
+
+**PLANNED experiments (frozen before implementation):**
+
+- `EXP-A1`: decide ownership strictly (argv prefix + cwd + evidence-root path + start time), then keep the
+  inventory as evidence. No broad `pkill -f`.
+- `EXP-A2`: test the five competing hypotheses for the first bad boundary, each with a minimal experiment:
+  helper's own `finally` missing a reap; `ExecutionProcessOwner` waiting only for the leader rather than the
+  session/process group; cancel/exception/timeout or spawn-barrier failure skipping descendants; pytest
+  interruption skipping fixture teardown; and Linux-only descendant logic silently degrading on a host
+  without `/proc`. RED first, with real exit codes and resident PID identities.
+- `EXP-A3`: fix so every child has one owner, spawns into a verifiable session/group, and cleanup runs
+  `terminate -> bounded wait -> kill -> wait/reap -> fresh descendant scan` in one `finally` on all paths,
+  failing closed with a recovery fence rather than claiming an empty registry means an empty process tree.
+- `EXP-A4`: only after GREEN, terminate the proven-owned orphans, then run fresh normal/cancel/fault gates
+  plus the package and frontend gates and `git diff --check`.
+- `EXP-B1`: freeze the interface facts (guard needs schema 4 on Darwin/MPS; v3 runner refuses schema 4 and
+  its own guard refuses this host for schema 3; the macOS CLI has the live 8/8 evidence but no control
+  protocol) and compare the two candidate integrations - a typed fail-closed macOS execution adapter the
+  supervisor selects for schema 4, versus teaching the W2 CLI the existing control protocol - choosing on
+  size and semantic completeness and recording the reasoning before writing code.
+- `EXP-B2`: implement the chosen route and drive a fresh campaign through the **service API**, then a single
+  failed point's `N=1 FULL_RESTART_RETRY`, with projection, durable store, child identity and evidence
+  documents aligned, and fresh Chrome evidence from this round.
