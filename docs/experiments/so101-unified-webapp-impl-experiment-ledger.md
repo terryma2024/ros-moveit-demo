@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-73
+latest_checkpoint: CP-74
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1692,3 +1692,26 @@ registration/drift guard still passes. Commit `2b6c2cec`.
 
 Remaining for CP-67's deviation is now only the legacy `create_app` route table itself, which no
 production path reaches.
+
+## CP-74: the whole affected set is green after the entry delegation
+
+CP-73 changed a production entry point and deleted two tests, so the affected surface was re-run as
+one gate rather than trusting the two-module check:
+
+```
+pyrgate test_unified_api test_unified_lifecycle test_unified_launch test_unified_route_parity \
+        test_unified_cancel_integration test_unified_live_fixture test_api test_main_backend \
+        test_launch_contract test_openapi_export
+-> 64 passed
+```
+
+Plus the frontend suite (`NODE_ENV=test bun run test`) re-run green. Nothing regressed: the unified
+factory tests, the legacy factory tests, the registration/drift guards, the cancel-integration test,
+the launch contract and the OpenAPI export all pass together after the deprecated entry was made to
+delegate.
+
+Remaining for CP-67's deviation: migrate `test_api.py` off `api.create_app` (the legacy route table's
+only remaining consumers) and then delete the table. `test_api.py`'s stub service would have to satisfy
+the unified `TeleopPort` and its mutations would have to carry instance authority, which is a focused
+test migration rather than a behavioural change - and the parity guard from CP-69 keeps the two tables
+from drifting while it waits.
