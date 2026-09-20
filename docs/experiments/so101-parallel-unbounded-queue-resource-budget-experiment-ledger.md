@@ -14313,3 +14313,20 @@ the five-batch series does it five times over (Appendix C).
 Task 14 remains 0/5; `LINUX_REGRESSION_DEFERRED` retained.
 
 _Ledger source HEAD: `9eca560d`; no evidence deleted._
+
+### CP-UQ291 addendum 4 — the five-batch evidence re-read from disk
+
+Rather than trusting the appendix I wrote, the five `task14-fr3-0N` campaign documents were re-read from
+the evidence root:
+
+```text
+batch 1..5:  W2_CAMPAIGN_PASS  served=12  executed_points=8  cleanup=True
+all five retained: True
+```
+
+Each batch's own document reports the verdict, the twelve served requests and the eight executed
+pick-place point-runs, and all five files are still where they were written. Screen Recording was
+probed again (`task16-capture-probe-20`) and remains denied, so Task 14 stays **0/5** and
+`LINUX_REGRESSION_DEFERRED` stands.
+
+_Ledger source HEAD: `d08d58cf`; no evidence deleted._
