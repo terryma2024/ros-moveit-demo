@@ -1085,11 +1085,21 @@ def test_schema_v4_auto_transport_resolves_per_platform():
         config = contracts.parse_parallel_runtime_config_v4(document)
         assert config.ipc_transport is contracts.IpcTransport.DARWIN_PRIVATE_PATH_UNIX
     else:
+        # The Linux combination drops the Darwin-only MPS fields; leaving them in makes the
+        # document a cross-combination, which the parser refuses by design.
         document["accelerator"] = {"kind": "cuda", "selector": "INDEX:0"}
         document["requested_device"] = "cuda"
+        document["allow_cpu_fallback"] = False
         document["mujoco_gl"] = "egl"
+        # The field set is fixed, so the Darwin-only slot stays present and is null on Linux.
+        document["mps_process_memory_fraction"] = None
+        document["start_guard"]["mps_minimum_headroom_bytes"] = None
         config = contracts.parse_parallel_runtime_config_v4(document)
         assert config.ipc_transport is contracts.IpcTransport.PROC_FD_UNIX
+        assert config.mps_process_memory_fraction is None
+        assert config.start_guard.mps_minimum_headroom_bytes is None
+        assert config.requested_device == "cuda"
+        assert config.mujoco_gl == "egl"
 
 
 def test_schema_v4_manifest_records_resolved_platform_values():

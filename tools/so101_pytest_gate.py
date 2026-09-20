@@ -724,7 +724,14 @@ def run_gate(arguments: argparse.Namespace) -> dict[str, object]:
     workers = validate_worker_count(arguments.workers)
     run_root = arguments.evidence_root.resolve() / "scratch" / arguments.run_id
     validate_process_path_budget(run_root, process_id_chars=arguments.process_id_chars)
-    run_root.mkdir(mode=0o700, parents=True, exist_ok=False)
+    # Create every level explicitly at 0700. ``mkdir(parents=True)`` applies the mode to the
+    # final component only, so an intermediate ``scratch`` would inherit the caller's umask,
+    # and a group-writable ancestor makes the private-base checks refuse a shard's own tree.
+    scratch_root = run_root.parent
+    scratch_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(scratch_root, 0o700)
+    run_root.mkdir(mode=0o700, parents=False, exist_ok=False)
+    os.chmod(run_root, 0o700)
     summary_path = run_root / "summary.json"
     source_commit = _git(repo_root, "rev-parse", "HEAD")
     if (

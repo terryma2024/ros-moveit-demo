@@ -1,17 +1,22 @@
-"""The Darwin private-path Unix address strategy and its exact cleanup contract.
+"""The private-path Unix address strategy and its exact cleanup contract.
 
-Task 4 of the macOS MPS / private IPC plan. The Linux transport addresses its sockets through
-``/proc/self/fd/<dirfd>/<name>``, which pins the parent directory against replacement. Darwin has
-no ``bindat``/``connectat`` and ``/dev/fd/<dirfd>/<name>`` returns ``ENOENT`` (proved in the
-retained probe recorded as CP-UQ226), so the macOS transport instead uses a canonical private
-directory whose access control is the filesystem itself:
+Task 4 of the macOS MPS / private IPC plan. The production Linux transport addresses its sockets
+through ``/proc/self/fd/<dirfd>/<name>``, which pins the parent directory against replacement.
+Darwin has no ``bindat``/``connectat`` and ``/dev/fd/<dirfd>/<name>`` returns ``ENOENT`` (proved
+in the retained probe recorded as CP-UQ226), so the macOS transport instead uses a canonical
+private directory whose access control is the filesystem itself:
 
-    /private/tmp/so101-ipc-<uid>/          owned by the user, mode 0700, not a symlink
+    <private-tmp>/so101-ipc-<uid>/         owned by the user, mode 0700, not a symlink
       b-<random-short-id>/                 fresh per campaign, mode 0700
         coordinator.sock                   mode 0600
         broker.sock
         w1.sock
         w2.sock
+
+``<private-tmp>`` is the platform's shared sticky directory: ``/private/tmp`` on Darwin, where
+``/tmp`` is a symlink to it, and ``/tmp`` on Linux. Both are root-owned and sticky, which is the
+property the strategy needs from its parent. The socket path capacity differs as well, so it is
+selected per platform rather than assumed.
 
 The v4 design deliberately does **not** authenticate the client: being able to reach the socket
 is the access check. That makes the filesystem contract the whole security boundary, so every
@@ -24,13 +29,35 @@ import os
 import secrets
 import socket
 import stat
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping, Protocol, Sequence
 
-#: The canonical private base. Never `$TMPDIR`, never the long evidence root, never `/tmp`
-#: (which is a symlink on Darwin) and never a user-supplied directory.
-PRIVATE_TMP = Path("/private/tmp")
+def _platform_private_tmp() -> Path:
+    """The platform's root-owned sticky shared directory.
+
+    Darwin keeps shared temporary paths under ``/private/tmp`` and makes ``/tmp`` a symlink to
+    it. Linux has a real ``/tmp``. The strategy needs a parent that another user can neither
+    write to nor rename our entry inside, and both directories provide that.
+    """
+
+    return Path("/private/tmp") if sys.platform == "darwin" else Path("/tmp")
+
+
+def default_sun_path_capacity_bytes() -> int:
+    """The kernel's ``sun_path`` capacity for this platform."""
+
+    return (
+        DARWIN_SUN_PATH_CAPACITY_BYTES
+        if sys.platform == "darwin"
+        else LINUX_SUN_PATH_CAPACITY_BYTES
+    )
+
+
+#: The canonical private base. Never `$TMPDIR`, never the long evidence root and never a
+#: user-supplied directory. `_platform_private_tmp()` picks the platform's sticky directory.
+PRIVATE_TMP = _platform_private_tmp()
 
 #: Darwin's `sun_path` is 104 bytes including the terminating NUL (probed on this host: 103
 #: bytes bind, 104 fails with "AF_UNIX path too long"). Linux retains its own 108.
@@ -177,7 +204,8 @@ def require_safe_ancestors(path: Path, *, uid: int | None = None) -> None:
     This is the property the Linux dirfd transport gets from its inherited descriptor and the
     Darwin transport has to get from the filesystem: nobody else may be able to swap the
     directory a socket is bound into. An ancestor is acceptable when it is not group- or
-    other-writable, or when it is a root-owned sticky directory (``/private/tmp`` and ``/``).
+    other-writable, or when it is a root-owned sticky directory (``/private/tmp``, ``/tmp``
+    and ``/``).
 
     A per-user path under a shared sticky parent is still safe, because the sticky bit stops
     another user from renaming or removing a directory they do not own.
@@ -269,13 +297,15 @@ class DarwinPrivatePathUnixAddress:
     """The v4 Darwin strategy: a canonical private directory and exact unlinking."""
 
     def __init__(self, *, uid: int | None = None, base_path: Path | None = None,
-                 capacity_bytes: int = DARWIN_SUN_PATH_CAPACITY_BYTES,
+                 capacity_bytes: int | None = None,
                  register_pid: bool = True) -> None:
         self._uid = os.getuid() if uid is None else int(uid)
         self._base_path = Path(base_path) if base_path is not None else (
             PRIVATE_TMP / f"so101-ipc-{self._uid}"
         )
-        self._capacity = int(capacity_bytes)
+        self._capacity = int(
+            default_sun_path_capacity_bytes() if capacity_bytes is None else capacity_bytes
+        )
         self._register_pid = bool(register_pid)
         self._registry: dict[Path, RegisteredEndpoint] = {}
 

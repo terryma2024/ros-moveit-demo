@@ -518,6 +518,10 @@ def test_missing_cgroup_membership_uses_unconstrained_host_root(monkeypatch):
     assert module._read_own_cgroup_path() == "/"
 
 
+@pytest.mark.skipif(
+    sys.platform != "darwin",
+    reason="read_meminfo only falls back to Darwin host commands on Darwin",
+)
 def test_missing_proc_meminfo_uses_macos_host_statistics(monkeypatch, tmp_path):
     """The guard retains real RAM capacity on macOS without Linux procfs."""
 
@@ -556,6 +560,10 @@ def test_missing_proc_meminfo_uses_macos_host_statistics(monkeypatch, tmp_path):
     assert observed.available_bytes == 48 * 16384
 
 
+@pytest.mark.skipif(
+    sys.platform != "darwin",
+    reason="read_meminfo only falls back to Darwin host commands on Darwin",
+)
 def test_macos_meminfo_uses_sysconf_when_sysctl_is_denied(monkeypatch, tmp_path):
     """A sandbox denial cannot erase host RAM that sysconf reports directly."""
 

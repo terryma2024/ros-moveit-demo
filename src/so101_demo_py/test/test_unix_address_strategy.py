@@ -25,6 +25,7 @@ from so101_demo.runtime.unix_address import (
     DIRECTORY_MODE,
     ENDPOINT_NAMES,
     NOT_OWNED,
+    PRIVATE_TMP,
     SOCKET_MODE,
     CampaignIpcRoot,
     DarwinPrivatePathUnixAddress,
@@ -37,11 +38,10 @@ from so101_demo.runtime.unix_address import (
     require_safe_ancestors,
 )
 
-PRIVATE_TMP = Path("/private/tmp")
-
 #: The canonical base is short on purpose. pytest's own temp path is ~200 bytes, which no
-#: Darwin AF_UNIX socket path can ever fit, so any test that binds a real socket uses a
-#: per-test directory directly under `/private/tmp/so101-ipc-<uid>` and removes it afterwards.
+#: AF_UNIX socket path can ever fit, so any test that binds a real socket uses a per-test
+#: directory directly under the platform's sticky base and removes it afterwards. `PRIVATE_TMP`
+#: comes from the module so the suite follows the platform instead of hardcoding Darwin's.
 CANONICAL_BASE = PRIVATE_TMP / f"so101-ipc-{os.getuid()}"
 SHORT_PREFIX = f"so101-ipc-test-{os.getuid()}-"
 
@@ -115,11 +115,14 @@ def _owned_private_dir(path: Path) -> Path:
 
 
 def test_canonical_base_is_the_private_short_path_for_this_uid():
-    """The default base is /private/tmp/so101-ipc-<uid>, never $TMPDIR or a long root."""
+    """The default base is <private-tmp>/so101-ipc-<uid>, never $TMPDIR or a long root."""
 
     default = DarwinPrivatePathUnixAddress()
     assert default.base_path == PRIVATE_TMP / f"so101-ipc-{os.getuid()}"
-    assert str(default.base_path).startswith("/private/tmp/so101-ipc-")
+    assert default.base_path.parent == PRIVATE_TMP
+    # The short base is what keeps a real socket path inside `sun_path` on both platforms.
+    assert default.base_path.parent.parent == Path("/")
+    assert str(default.base_path) != os.environ.get("TMPDIR", "")
 
 
 def test_private_tmp_is_root_owned_and_sticky():
@@ -430,9 +433,18 @@ def test_cleanup_reports_a_socket_it_no_longer_owns_instead_of_deleting_it(tmp_p
     endpoint = address.bind_endpoint(root, "coordinator", owner_pid=os.getpid(),
                                      owner_birth_identity=7)
     os.unlink(endpoint.path)
+    # ext4 hands the just-freed inode straight back to the next bind, which would make the
+    # replacement indistinguishable from the registered endpoint. Hold the freed inode with a
+    # placeholder so the case really does put a different file at the same path.
+    placeholder = endpoint.path.with_name(endpoint.path.name + ".inode-hold")
+    placeholder.write_bytes(b"hold")
     replacement = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     replacement.bind(str(endpoint.path))
     os.chmod(endpoint.path, SOCKET_MODE)
+    replacement_metadata = os.lstat(endpoint.path)
+    assert (replacement_metadata.st_dev, replacement_metadata.st_ino) != (
+        endpoint.device, endpoint.inode
+    ), "the replacement reused the registered inode; the case cannot discriminate"
     try:
         result = address.cleanup_registered_endpoint(endpoint)
         assert result.outcome == NOT_OWNED
@@ -440,6 +452,7 @@ def test_cleanup_reports_a_socket_it_no_longer_owns_instead_of_deleting_it(tmp_p
         assert endpoint.path.exists(), "an unknown object must never be unlinked"
     finally:
         replacement.close()
+        placeholder.unlink(missing_ok=True)
         address.cleanup_campaign(root)
 
 

@@ -48,9 +48,6 @@ from so101_demo.runtime.unix_address import (
     require_root_owned_sticky_directory,
 )
 
-PRIVATE_TMP_PATH = Path("/private/tmp")
-
-
 @pytest.fixture
 def private_root():
     """A short private base under the canonical sticky parent, removed on teardown."""

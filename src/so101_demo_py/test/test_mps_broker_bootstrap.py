@@ -148,6 +148,17 @@ class FakeTorch:
         self.backends = backends
 
 
+def _warm_input(model_id: str) -> object:
+    """A stand-in for the real MPS warm-up tensor.
+
+    The default warm-up moves a real frame onto the ``mps`` device, which only exists on a
+    machine with an MPS backend. These cases assert the bootstrap decisions, and the fake
+    models already report their own device strings, so the warm-up value stays a sentinel.
+    """
+
+    return f"warm-input:{model_id}"
+
+
 def _bootstrap(fake, *, models=None, fraction=0.8, lane_capacity=8, environ=None):
     return MpsBrokerBootstrap(
         models=models if models is not None else (("yolo", FakeModule),),
@@ -155,6 +166,7 @@ def _bootstrap(fake, *, models=None, fraction=0.8, lane_capacity=8, environ=None
         lane_capacity=lane_capacity,
         environ=environ if environ is not None else {FALLBACK_ENV: "0"},
         torch_module=lambda: fake,
+        warmup_inputs=_warm_input,
     )
 
 
