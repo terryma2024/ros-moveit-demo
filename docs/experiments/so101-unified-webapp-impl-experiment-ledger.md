@@ -29,8 +29,8 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-15
-next_experiment: finish the Task 8 registry capture and theme merge, the Task 9 page-effect migration and viewport checks, then Task 11 configure/build and the copied-install gate
+latest_checkpoint: CP-16
+next_experiment: Task 8 registry capture and theme merge, Task 9 page-effect migration plus the 1400x900/390x844 browser checks, then Task 11 configure/build and the copied-install gate
 ```
 
 ## CP-01: Registration, host probe and deviations
@@ -489,3 +489,20 @@ ADAPTIVE, and has no K or max-points-per-worker input.
 
 GREEN: `bun run build` exit 0, two new component tests plus the whole suite pass. Commit
 `497ac784`.
+
+## CP-16: the approved layout is a pinned contract
+
+`src/styles/unified-layout.test.ts` asserts the reviewed layout rules so a later edit cannot
+silently drop them: the 60/40 `minmax(0, 3fr) / minmax(0, 2fr)` validation split, a map that
+fills its column (`width: 100%`) with no small `max-width` and an auto height, point results
+stepping 3 -> 2 columns at 1100px -> 1 column at 360px, the single-column validation layout below
+760px, the dense joint table scrolling inside its own `overflow-x: auto` container rather than
+overflowing the page, the navigation collapsing only below the 901px breakpoint, and the
+stylesheet being imported by `index.css` so it is part of the bundle.
+
+GREEN: `bun run build` exit 0, `NODE_ENV=test bun run test` **37 files / 165 tests**. Commit
+`aae538a5`.
+
+This is a static contract, not the browser evidence the plan asks for: the 1400x900 and 390x844
+no-horizontal-overflow checks and the light/dark contrast and focus checks still need a real
+browser run (Task 11's installed Chrome gate or a local `bun run dev` capture).
