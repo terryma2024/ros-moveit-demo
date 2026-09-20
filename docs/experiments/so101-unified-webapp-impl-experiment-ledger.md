@@ -2099,3 +2099,34 @@ artifacts this task produces are demonstrably installed correctly.
 
 This is the honest shape of the install-layer status: **packaging verified, dependency closure absent**,
 with both reasons reproducible from the commands above.
+
+## CP-93: the installed-prefix import works, and its provenance is exactly why L2 is still blocked
+
+Acted on CP-92's finding by building the remaining closure member
+(`colcon build --packages-select so101_demo_py`, **exit 0**) and then importing the way an installed
+system does - sourcing the overlay rather than hand-setting `PYTHONPATH`:
+
+```
+source <dev-build>/install/setup.bash   (on top of the ROS workspace)
+python -c "import so101_demo, so101_demo.cli.mujoco_parallel_batch, so101_teleop.unified.app"
+-> so101_demo: <worktree>/src/so101_demo_py/src/__init__.py
+-> unified app: <worktree>/src/so101_teleop/so101_teleop/unified/app.py
+-> routes: 59 | rclpy loaded: False
+-> INSTALLED_PREFIX_IMPORT_OK
+```
+
+Two things are true at once, and both matter:
+
+1. **The import chain is now proven end to end** - `so101_demo`, its CLI batch module, the
+   `expert_validation` package and the unified factory all import, the app builds 59 routes, and
+   `rclpy` is still not loaded, which is the design's load-bearing property.
+2. **The origins are the source tree, not the prefix.** This overlay is `--symlink-install`, so
+   ament_python links the packages back to `src/` (and `so101_demo_py` installs as an egg-link). CP-92's
+   hand-set `PYTHONPATH` failure was the same fact seen from the other side: an egg-link only resolves
+   when the prefix is sourced, not when its `site-packages` is merely prepended.
+
+So the imported-module provenance is *development*, not *installed*, and a real L2 gate needs the
+non-symlink release overlay the plan requires - which is blocked at the MuJoCo underlay (CP-58/61/62).
+This checkpoint therefore strengthens the L2 evidence without overclaiming it: the code imports and
+serves from a composed prefix, and the artifact that would make it an *installed* claim cannot be built
+on this host.
