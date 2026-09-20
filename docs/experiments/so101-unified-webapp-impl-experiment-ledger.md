@@ -29,7 +29,7 @@ confirmed_conclusions:
 disproven_routes: []
 open_hypotheses:
   - Unified arbiter/instance/IPC design can be implemented and unit-verified without ROS on macOS
-latest_checkpoint: CP-61
+latest_checkpoint: CP-62
 next_experiment: Task 11 configure/build unless the Task 8 registry path is unblocked first; Task 9's page-effect migration and browser viewport checks remain
 ```
 
@@ -1417,3 +1417,29 @@ reason at a different layer than CP-58 recorded.
 
 Everything this task owns still builds green on its own (`--packages-select so101_teleop`, CP-50) and
 its 16 unified modules pass in that overlay (CP-60).
+
+## CP-62: the only host copy of the missing underlay is the one the project deliberately excludes
+
+CP-61 stopped at `fatal error: 'mujoco_ros2_control_plugins/mujoco_ros2_control_plugin_capabilities.hpp'
+file not found`. The header does exist on this host - but in exactly one place:
+
+```
+<ros2_jazzy>/ws_mujoco_ros2_control_fork/install/include/mujoco_ros2_control_plugins/...
+```
+
+and that prefix carries a `COLCON_IGNORE` marker and is the very path `.envrc.example` removes from
+`AMENT_PREFIX_PATH`, `COLCON_PREFIX_PATH`, `CMAKE_PREFIX_PATH`, `PATH`, `PYTHONPATH`, `LD_LIBRARY_PATH`
+and `DYLD_LIBRARY_PATH`, with the comment "sourced last so ros2 pkg/run cannot select a stale
+standalone fork workspace". The sanctioned source is the project's own install overlay, which does not
+exist in this worktree and would need the same closure to build.
+
+So the copied-install Chrome gate is blocked by a policy boundary, not by an oversight: completing it
+would require either building the approved underlay or knowingly linking against the stale fork the
+project excludes. The second is not mine to do, and the first is outside this task's authority. The
+gate therefore stays blocked with this precise, reproducible reason, and no fake or stale prefix was
+substituted.
+
+**Task 11's authorised scope ends here, fully evidenced:** isolated configure+build green; 16 unified
+modules at 100% in the ament gate; registration, interpreter and TEMP provenance verified; dependency
+graph and incremental edge verified; three rebuild proofs; and the release closure characterised one
+dependency layer at a time (CP-58, CP-61, CP-62).
