@@ -1,11 +1,13 @@
 import hashlib
 import os
 import re
+import shutil
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import pytest
 import yaml
 
 
@@ -31,7 +33,7 @@ INTEGRATION_GUIDE = (
 )
 UPSTREAM_010_COMMIT = "57fc6744844902d4532160b403fa95840c1d6f96"
 LOCAL_R11_COMMIT = "f19a8cc3af61feccacb22a9f0d16cc972e3b2c08"
-CANDIDATE_COMMIT = "6591771de32c4d2e66bcb5076b3a851cfe6a9833"
+CANDIDATE_COMMIT = "85d2a5c42686a3d6b0d909a047a4188b24edd257"
 CANDIDATE_LABEL = "main"
 MUJOCO_340_COMMIT = "e55fff5dea6f1d5dd7963ca52eecc41d05ad0922"
 MUJOCO_GLFW_PATCH_SHA256 = (
@@ -185,109 +187,39 @@ def test_integration_guide_reads_back_all_four_fork_package_prefixes() -> None:
         assert f"ros2 pkg prefix {package}" in guide
 
 
-def test_macos_environment_defaults_to_ubuntu_ros_prefix() -> None:
+def test_macos_environment_uses_the_fixed_runtime_contract() -> None:
     envrc = ENVRC_EXAMPLE.read_text(encoding="utf-8")
     dylib_farm = DYLIB_FARM.read_text(encoding="utf-8")
 
-    assert 'ros_underlay="${SO101_ROS_UNDERLAY:-/opt/ros/jazzy}"' in envrc
-    assert '"$ros_underlay/setup.bash"' in envrc
-    assert 'ros_underlay="${SO101_ROS_UNDERLAY:-/opt/ros/jazzy}"' in dylib_farm
-    assert 'default_prefixes="${ros_underlay}:' in dylib_farm
+    assert "ros_root=/opt/ros2_jazzy" in envrc
+    assert '"$ros_root/install/setup.bash"' in envrc
+    assert 'dylib_farm="$ros_root/dylib_farm/current"' in envrc
+    assert '${HOME}/ros2_jazzy' not in envrc
+    assert '/opt/ros/jazzy' not in envrc
+    assert 'SO101_ROS_ROOT:-/opt/ros2_jazzy' in dylib_farm
+    assert '${ros_workspace}/dylib_farm' in dylib_farm
 
 
-def test_macos_environment_keeps_project_install_authoritative(tmp_path: Path) -> None:
-    project_root = tmp_path / "moveit-demo"
-    ros_workspace = tmp_path / "ros2_jazzy"
-    ros_underlay = tmp_path / "ros_underlay"
-    stale_fork = ros_workspace / "ws_mujoco_ros2_control_fork" / "install"
-    project_root.mkdir()
-    (project_root / ".envrc").write_text(
-        ENVRC_EXAMPLE.read_text(encoding="utf-8"), encoding="utf-8"
+def test_macos_environment_sources_the_project_overlay_last() -> None:
+    envrc = ENVRC_EXAMPLE.read_text(encoding="utf-8")
+    setup_block = envrc.split("for setup in", maxsplit=1)[1].split("; do", maxsplit=1)[0]
+
+    expected_order = (
+        '"$ros_root/install/setup.bash"',
+        '"$ros_root/extra_ws/install/setup.bash"',
+        '"/opt/data/so101/runtime/fork/current/setup.bash"',
+        '"/opt/data/so101/workspace/install/setup.bash"',
     )
-
-    prefixes = [
-        ros_underlay,
-        ros_workspace / "extra_ws" / "install",
-        stale_fork,
-        ros_workspace / "so101_isolated_ws" / "install",
-        project_root / "install",
-    ]
-    for prefix in prefixes:
-        prefix.mkdir(parents=True)
-        setup = (
-            f'export AMENT_PREFIX_PATH="{prefix}'
-            '${AMENT_PREFIX_PATH:+:$AMENT_PREFIX_PATH}"\n'
-        )
-        if prefix == project_root / "install":
-            setup = (
-                f'export AMENT_PREFIX_PATH="{stale_fork}'
-                '${AMENT_PREFIX_PATH:+:$AMENT_PREFIX_PATH}"\n' + setup
-            )
-        (prefix / "setup.bash").write_text(setup, encoding="utf-8")
-
-    result = subprocess.run(
-        [
-            "bash",
-            "-c",
-            'watch_file() { :; }; source_env() { source "$1"; }; '
-            'source "$1"; printf "%s" "$AMENT_PREFIX_PATH"',
-            "bash",
-            str(project_root / ".envrc"),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        env={
-            "HOME": str(tmp_path),
-            "PATH": "/usr/bin:/bin",
-            "SO101_ROS_UNDERLAY": str(ros_underlay),
-            "SO101_ROS_WORKSPACE": str(ros_workspace),
-        },
-    )
-    resolved_prefixes = result.stdout.split(":")
-
-    assert resolved_prefixes[0] == str(project_root / "install")
-    assert str(stale_fork) not in resolved_prefixes
+    positions = [setup_block.index(item) for item in expected_order]
+    assert positions == sorted(positions)
 
 
-def test_macos_environment_keeps_dylib_farm_as_fallback(tmp_path: Path) -> None:
-    project_root = tmp_path / "moveit-demo"
-    ros_workspace = tmp_path / "ros2_jazzy"
-    project_install = project_root / "install"
-    dylib_farm = ros_workspace / "macos_dylib_farm" / "current"
-    project_install.mkdir(parents=True)
-    dylib_farm.mkdir(parents=True)
-    (project_root / ".envrc").write_text(
-        ENVRC_EXAMPLE.read_text(encoding="utf-8"), encoding="utf-8"
-    )
-    (project_install / "setup.bash").write_text(
-        f'export DYLD_LIBRARY_PATH="{project_install / "lib"}'
-        '${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"\n',
-        encoding="utf-8",
-    )
+def test_macos_environment_replaces_inherited_dyld_paths_with_the_fixed_farm() -> None:
+    envrc = ENVRC_EXAMPLE.read_text(encoding="utf-8")
 
-    result = subprocess.run(
-        [
-            "bash",
-            "-c",
-            'watch_file() { :; }; source_env() { source "$1"; }; '
-            'source "$1"; printf "%s" "$DYLD_LIBRARY_PATH"',
-            "bash",
-            str(project_root / ".envrc"),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        env={
-            "HOME": str(tmp_path),
-            "PATH": "/usr/bin:/bin",
-            "SO101_ROS_WORKSPACE": str(ros_workspace),
-        },
-    )
-    resolved_paths = result.stdout.split(":")
-
-    assert resolved_paths[0] == str(project_install / "lib")
-    assert resolved_paths[-1] == str(dylib_farm)
+    assert "unset DYLD_LIBRARY_PATH" in envrc
+    assert 'export DYLD_LIBRARY_PATH="$dylib_farm"' in envrc
+    assert '${DYLD_LIBRARY_PATH:+' not in envrc
 
 
 def test_mujoco_installer_accepts_source_overlay_underlay() -> None:
@@ -320,6 +252,39 @@ def test_installer_builds_a_clean_locked_fork_without_patch_application() -> Non
     assert '--base-paths "${build_source_dir}"' in installer
     assert "status --porcelain --untracked-files=all" in installer
     assert "build source must be clean" in installer
+
+
+def test_installer_treats_main_as_a_branch_label_not_a_release_tag() -> None:
+    installer = INSTALLER.read_text(encoding="utf-8")
+
+    assert 'if [[ ${fork_tag} == main ]]; then' in installer
+    assert 'elif [[ ${fork_tag} == *-candidate ]]; then' in installer
+
+
+def test_installer_accepts_a_validated_local_lodepng_source() -> None:
+    installer = INSTALLER.read_text(encoding="utf-8")
+
+    assert "SO101_LODEPNG_SOURCE_DIR" in installer
+    assert "FETCHCONTENT_SOURCE_DIR_LODEPNG" in installer
+    assert "lodepng source must be clean" in installer
+    assert "so101-locked-commit.txt" in installer
+    assert "SO101_TEST_DYLIB_FARM" in installer
+    assert 'export DYLD_LIBRARY_PATH="${test_dylib_farm}"' in installer
+    assert 'export DYLD_FALLBACK_LIBRARY_PATH="${test_dylib_farm}"' in installer
+
+
+def test_installer_crosses_macos_sip_boundaries_with_explicit_python() -> None:
+    installer = INSTALLER.read_text(encoding="utf-8")
+
+    assert "SO101_PYTHON" in installer
+    assert "SO101_COLCON" in installer
+    assert "SO101_ROS2" in installer
+    assert "SO101_CTEST" in installer
+    assert '"${python_command}" "${colcon_command}" --log-base' in installer
+    assert '"${python_command}" "${colcon_command}" test-result' in installer
+    assert '"${python_command}" "${ros2_command}" pkg prefix' in installer
+    assert '"${python_command}" "${ros2_command}" interface show' in installer
+    assert '"${ctest_command}" --test-dir "${build_base}/${package_name}"' in installer
 
 
 def test_macos_plugin_install_rpath_resolves_the_copied_vendor() -> None:
@@ -419,9 +384,12 @@ def test_macos_mujoco_vendor_installer_replays_patch_from_clean_340_source() -> 
     assert '-DPython3_EXECUTABLE="${python_command}"' in installer
 
 
-def test_macos_dylib_farm_links_source_overlays_and_rejects_ambiguous_names(
+def test_macos_dylib_farm_links_source_overlays_with_later_prefix_precedence(
     tmp_path: Path,
 ) -> None:
+    zsh = shutil.which("zsh")
+    if zsh is None:
+        pytest.skip("zsh is required for the macOS dylib farm script")
     ros_root = tmp_path / "ros2_jazzy"
     first_prefix = ros_root / "first/install"
     second_prefix = ros_root / "second/install"
@@ -431,6 +399,12 @@ def test_macos_dylib_farm_links_source_overlays_and_rejects_ambiguous_names(
     second_library = second_prefix / "beta/lib/libbeta.dylib"
     first_library.write_bytes(b"alpha")
     second_library.write_bytes(b"beta")
+    for library_name in (
+        "libcontrol_toolbox.dylib",
+        "libhardware_interface.dylib",
+        "librosidl_typesupport_c.dylib",
+    ):
+        (first_prefix / "alpha/lib" / library_name).write_bytes(library_name.encode())
 
     environment = os.environ.copy()
     environment["SO101_ROS_ROOT"] = str(ros_root)
@@ -438,7 +412,7 @@ def test_macos_dylib_farm_links_source_overlays_and_rejects_ambiguous_names(
         (str(first_prefix), str(second_prefix))
     )
     completed = subprocess.run(
-        [str(DYLIB_FARM)],
+        [zsh, str(DYLIB_FARM)],
         check=True,
         capture_output=True,
         env=environment,
@@ -446,18 +420,24 @@ def test_macos_dylib_farm_links_source_overlays_and_rejects_ambiguous_names(
     )
     farm = Path(completed.stdout.strip())
 
+    assert (ros_root / "dylib_farm/current").resolve() == farm
     assert (farm / "libalpha.dylib").resolve() == first_library
     assert (farm / "libbeta.dylib").resolve() == second_library
 
     conflicting_library = second_prefix / "beta/lib/libalpha.dylib"
     conflicting_library.write_bytes(b"conflict")
-    rejected = subprocess.run(
-        [str(DYLIB_FARM)],
-        check=False,
+    replaced = subprocess.run(
+        [zsh, str(DYLIB_FARM)],
+        check=True,
         capture_output=True,
         env=environment,
         text=True,
     )
+    replaced_farm = Path(replaced.stdout.strip())
 
-    assert rejected.returncode != 0
-    assert "ambiguous dylib basename: libalpha.dylib" in rejected.stderr
+    assert replaced_farm != farm
+    assert (ros_root / "dylib_farm/current").resolve() == replaced_farm
+    assert (replaced_farm / "libalpha.dylib").resolve() == conflicting_library
+    override_manifest = (replaced_farm / ".overrides.tsv").read_text(encoding="utf-8")
+    assert str(first_library) in override_manifest
+    assert str(conflicting_library) in override_manifest

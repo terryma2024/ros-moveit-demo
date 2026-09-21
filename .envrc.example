@@ -1,65 +1,37 @@
 #!/usr/bin/env bash
-# macOS ROS 2 Jazzy environment. Copy to .envrc, then run: direnv allow
+# Developer shell for the fixed Apple Silicon ROS 2 Jazzy runtime.
+# Runtime launches should use scripts/so101-macos.zsh.
 
-project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ros_workspace="${SO101_ROS_WORKSPACE:-${SO101_ROS_ROOT:-$HOME/ros2_jazzy}}"
-ros_underlay="${SO101_ROS_UNDERLAY:-/opt/ros/jazzy}"
+ros_root=/opt/ros2_jazzy
 
-export VIRTUAL_ENV="$ros_workspace/.venv"
-unset PYTHONHOME
-export PATH="$VIRTUAL_ENV/bin:$PATH"
+export VIRTUAL_ENV="$ros_root/.venv"
+unset PYTHONHOME PYTHONPATH AMENT_PREFIX_PATH CMAKE_PREFIX_PATH COLCON_PREFIX_PATH
+unset DYLD_LIBRARY_PATH DYLD_FALLBACK_LIBRARY_PATH DYLD_INSERT_LIBRARIES
+export PATH="$VIRTUAL_ENV/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+export PYTHONNOUSERSITE=1
+export TMPDIR=/tmp
+export TMP=/tmp
+export TEMP=/tmp
+export ROS_HOME=/opt/data/so101/ros-home
+export ROS_LOG_DIR=/opt/data/so101/ros-logs
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 
 for setup in \
-  "$ros_underlay/setup.bash" \
-  "$ros_workspace/extra_ws/install/setup.bash" \
-  "$ros_workspace/so101_isolated_ws/install/setup.bash" \
-  "$project_root/install/setup.bash"; do
-  if [[ -f "$setup" ]]; then
-    watch_file "$setup"
-    source_env "$setup"
+  "$ros_root/install/setup.bash" \
+  "$ros_root/extra_ws/install/setup.bash" \
+  "/opt/data/so101/runtime/fork/current/setup.bash" \
+  "/opt/data/so101/workspace/install/setup.bash"; do
+  if [[ ! -f "$setup" ]]; then
+    log_error "missing fixed SO-101 setup: $setup; run scripts/so101-macos.zsh prepare"
+    return 1
   fi
+  watch_file "$setup"
+  source_env "$setup"
 done
 
-# The project install contains the locked MuJoCo fork packages and is sourced
-# last so ros2 pkg/run cannot select a stale standalone fork workspace.
-stale_mujoco_fork_prefix="$ros_workspace/ws_mujoco_ros2_control_fork/install"
-remove_stale_mujoco_fork() {
-  local path_list="$1"
-  local filtered=""
-  local entry
-  local path_entries=()
-  IFS=: read -r -a path_entries <<< "$path_list"
-  for entry in "${path_entries[@]}"; do
-    if [[ "$entry" == "$stale_mujoco_fork_prefix" || \
-          "$entry" == "$stale_mujoco_fork_prefix/"* ]]; then
-      continue
-    fi
-    filtered="${filtered:+$filtered:}$entry"
-  done
-  printf '%s' "$filtered"
-}
-for path_variable in \
-  AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH \
-  PATH PYTHONPATH LD_LIBRARY_PATH DYLD_LIBRARY_PATH; do
-  path_value="${!path_variable:-}"
-  if [[ -n "$path_value" ]]; then
-    export "$path_variable=$(remove_stale_mujoco_fork "$path_value")"
-  fi
-done
-unset -f remove_stale_mujoco_fork
-unset path_variable path_value stale_mujoco_fork_prefix
-
-dylib_farm="$ros_workspace/macos_dylib_farm/current"
-if [[ -d "$dylib_farm" ]]; then
-  export DYLD_LIBRARY_PATH="${DYLD_LIBRARY_PATH:+$DYLD_LIBRARY_PATH:}$dylib_farm"
+dylib_farm="$ros_root/dylib_farm/current"
+if [[ ! -d "$dylib_farm" ]]; then
+  log_error "missing fixed SO-101 dylib farm: $dylib_farm; run scripts/so101-macos.zsh prepare"
+  return 1
 fi
-
-if command -v brew >/dev/null 2>&1; then
-  llvm_prefix="$(brew --prefix llvm@19 2>/dev/null || true)"
-  [[ -n "$llvm_prefix" ]] && export PATH="$llvm_prefix/bin:$PATH"
-
-  qt5_prefix="$(brew --prefix qt@5 2>/dev/null || true)"
-  if [[ -n "$qt5_prefix" ]]; then
-    export CMAKE_PREFIX_PATH="$qt5_prefix${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
-  fi
-fi
+export DYLD_LIBRARY_PATH="$dylib_farm"
