@@ -49,8 +49,8 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-T5-SOURCE-STORE
-next_experiment: EXP-MSC-107 (Task 5 finish: canonical reducer wiring in coordinator_events/supervisor/production)
+latest_checkpoint: CP-MSC-T5-READER-DEFERRED
+next_experiment: EXP-MSC-107 (Task 5 finish: canonical event payloads from the producers, then the reader migration)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -1438,3 +1438,40 @@ mid-batch, and survives a store reopen without counting an attempt twice.
   `test_reader_verifies_real_sealed_directory_manifest_and_merges_deltas`, are the remaining work.
 - Unchanged open items: none of the previously recorded boundaries is promoted by this
   checkpoint.
+
+## CP-MSC-T5-READER-DEFERRED: why the reader migration needs the producers first
+
+Attempted the last Task 5 step - making `CoordinatorEventReader` derive its projection from the
+canonical reducer instead of merging `payload.delta` - and measured what it costs. The reader was
+migrated and its own tests were inverted successfully
+(`task2/task5-reader-red-20260921T221839Z` 1 failed / 3 passed ->
+`task2/task5-reader-green-3-20260921T221935Z` 25 passed), but the wider gate showed the migration
+cannot land alone:
+
+`task2/task5-gate-2-20260921T221944Z`: 10 failed / 52 passed. Beyond the two pre-existing
+control-socket failures, the new ones are all *producer* fixtures that still write delta-only
+journals: `POINT_PROJECTION_INVALID` twice (the fixed projection expects every selected point to
+appear, and with deltas gone only leased points do), `UPSTREAM_PROJECTION_INVALID` once, and
+`404 == 200` twice - plus two cancel cases whose control socket is never created because the test
+aborts earlier.
+
+Decision: the reader change was reverted (tree back to `2253aeb7`, verified green:
+`task2/task5-restored-20260921T222029Z` 59 passed / 4 failed, every failure being the known
+`/private/tmp/so101-control-501/campaign-1-b001.sock` platform class). The canonical path itself is
+already in place and committed: `CoordinatorJournalSource` (verify-only), `CanonicalCampaignReducer`
+and `SupervisorStore.accept_projection_batch()`.
+
+Remaining Task 5 work, now sized precisely:
+
+1. make the fixed projection tolerant of points that have no canonical event yet (seed the request's
+   selected point ids as `UNRUN`) and of a missing worker map;
+2. rewrite the delta-only fixture journals (~8 append sites in
+   `test/teleop/test_expert_validation_production_projection.py`, plus the live-supervisor cases in
+   `test/teleop/test_expert_validation_supervisor.py`) to write canonical payloads
+   (`CAMPAIGN_STARTED` identity, `POINT_LEASED {point_id, attempt_id, worker_id, slot_id}`,
+   `RESULT_COMMITTED {point_id, attempt_id, outcome, result_sha256, response}`,
+   `BATCH_TERMINAL {business_terminal}`, `CLEANUP_COMMITTED`);
+3. then delete `_merge_projection_delta` and switch the reader to `CanonicalCampaignReducer`.
+
+Evidence retained: the migration attempt and its revert are both recorded; nothing was deleted and
+no product guarantee was weakened.
