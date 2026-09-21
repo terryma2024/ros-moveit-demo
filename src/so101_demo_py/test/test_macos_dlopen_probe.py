@@ -167,13 +167,17 @@ def test_frozen_semantics_allow_only_the_manifest_vendor_dyld_delta(tmp_path: Pa
     module = _module()
     ros_farm = tmp_path / "ros-dylib-farm"
     vendor = tmp_path / "closure/opt/mujoco_vendor/lib"
+    closure_library = tmp_path / "closure/lib"
     ros_farm.mkdir()
     vendor.mkdir(parents=True)
+    closure_library.mkdir()
     base = {
         "PATH": "/usr/bin:/bin",
         "PYTHONNOUSERSITE": "1",
         "LANG": "C.UTF-8",
-        "DYLD_LIBRARY_PATH": str(ros_farm),
+        "DYLD_LIBRARY_PATH": os.pathsep.join(
+            (str(closure_library), str(ros_farm))
+        ),
     }
     n = module.FrozenSemanticLaunchContract(
         argv=(
@@ -193,7 +197,9 @@ def test_frozen_semantics_allow_only_the_manifest_vendor_dyld_delta(tmp_path: Pa
         argv=n.argv,
         environment={
             **base,
-            "DYLD_LIBRARY_PATH": os.pathsep.join((str(ros_farm), str(vendor))),
+            "DYLD_LIBRARY_PATH": os.pathsep.join(
+                (str(closure_library), str(ros_farm), str(vendor))
+            ),
         },
         python_executable=n.python_executable,
         ros2_script=n.ros2_script,
@@ -340,9 +346,11 @@ def test_gate_a_bindings_keep_ros_farm_and_only_positive_adds_vendor(
     module = _module()
     ros_farm = tmp_path / "control-set/filtered-ros-dylib-farm"
     vendor = tmp_path / "control-set/closure/opt/mujoco_vendor/lib"
+    closure_library = tmp_path / "control-set/closure/lib"
     scene = tmp_path / "control-set/closure/share/so101_demo_py/scene.xml"
     ros_farm.mkdir(parents=True)
     vendor.mkdir(parents=True)
+    closure_library.mkdir()
     scene.parent.mkdir(parents=True)
     scene.write_text("<mujoco/>", encoding="utf-8")
     semantic = module.FrozenSemanticLaunchContract(
@@ -357,7 +365,9 @@ def test_gate_a_bindings_keep_ros_farm_and_only_positive_adds_vendor(
         environment={
             "PATH": "/usr/bin:/bin",
             "PYTHONNOUSERSITE": "1",
-            "DYLD_LIBRARY_PATH": str(ros_farm),
+            "DYLD_LIBRARY_PATH": os.pathsep.join(
+                (str(closure_library), str(ros_farm))
+            ),
         },
         python_executable=Path("/venv/bin/python"),
         ros2_script=Path("/ros/bin/ros2"),
@@ -385,9 +395,11 @@ def test_gate_a_bindings_keep_ros_farm_and_only_positive_adds_vendor(
         manifest=manifest,
     )
 
-    assert negative.expanded_environment["DYLD_LIBRARY_PATH"] == str(ros_farm)
+    assert negative.expanded_environment["DYLD_LIBRARY_PATH"] == os.pathsep.join(
+        (str(closure_library), str(ros_farm))
+    )
     assert positive.expanded_environment["DYLD_LIBRARY_PATH"] == os.pathsep.join(
-        (str(ros_farm), str(vendor))
+        (str(closure_library), str(ros_farm), str(vendor))
     )
 
 

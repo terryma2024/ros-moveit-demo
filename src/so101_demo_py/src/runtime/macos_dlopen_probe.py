@@ -379,6 +379,13 @@ class ObservationClass(StrEnum):
     INVALID = "INVALID"
 
 
+def _closure_library_directory(vendor_library_directory: Path) -> Path:
+    vendor = Path(vendor_library_directory)
+    if vendor.parts[-3:] != ("opt", "mujoco_vendor", "lib"):
+        raise GateAControlError("CONTROL_SEMANTIC_INVALID", "vendor directory")
+    return vendor.parents[2] / "lib"
+
+
 @dataclass(frozen=True, slots=True)
 class FrozenSemanticLaunchContract:
     argv: tuple[str, ...]
@@ -395,6 +402,7 @@ class FrozenSemanticLaunchContract:
         ros2_script = Path(self.ros2_script)
         ros_library = Path(self.ros_library_directory)
         vendor = Path(self.vendor_library_directory)
+        closure_library = _closure_library_directory(vendor)
         for value in (python_executable, ros2_script, ros_library, vendor):
             if not value.is_absolute():
                 raise GateAControlError("CONTROL_SEMANTIC_INVALID", str(value))
@@ -404,9 +412,10 @@ class FrozenSemanticLaunchContract:
         if any(not isinstance(key, str) or not isinstance(value, str) for key, value in values.items()):
             raise GateAControlError("CONTROL_SEMANTIC_INVALID", "environment")
         dyld = {key: value for key, value in values.items() if key.startswith("DYLD_")}
+        baseline = os.pathsep.join((str(closure_library), str(ros_library)))
         allowed_library_paths = {
-            str(ros_library),
-            os.pathsep.join((str(ros_library), str(vendor))),
+            baseline,
+            os.pathsep.join((baseline, str(vendor))),
         }
         if (
             set(dyld) != {"DYLD_LIBRARY_PATH"}
@@ -464,14 +473,20 @@ def validate_np_semantic_delta(
     n = dict(negative.environment)
     p = dict(positive.environment)
     n_dyld = {key: value for key, value in n.items() if key.startswith("DYLD_")}
+    baseline = os.pathsep.join(
+        (
+            str(_closure_library_directory(negative.vendor_library_directory)),
+            str(negative.ros_library_directory),
+        )
+    )
     if n_dyld != {
-        "DYLD_LIBRARY_PATH": str(negative.ros_library_directory)
+        "DYLD_LIBRARY_PATH": baseline
     }:
         raise GateAControlError("CONTROL_SEMANTIC_DIFF", "negative ROS baseline")
     expected = dict(n)
     expected["DYLD_LIBRARY_PATH"] = os.pathsep.join(
         (
-            str(negative.ros_library_directory),
+            baseline,
             str(negative.vendor_library_directory),
         )
     )
@@ -682,7 +697,7 @@ class GateARunBinding:
             if control == "P":
                 environment["DYLD_LIBRARY_PATH"] = os.pathsep.join(
                     (
-                        str(manifest.semantic.ros_library_directory),
+                        environment["DYLD_LIBRARY_PATH"],
                         str(manifest.semantic.vendor_library_directory),
                     )
                 )
@@ -1094,7 +1109,12 @@ def build_control_set_manifest(
         excluded_basenames=excluded_basenames,
     )
     semantic_environment = dict(base_environment)
-    semantic_environment["DYLD_LIBRARY_PATH"] = str(filtered_farm.directory)
+    semantic_environment["DYLD_LIBRARY_PATH"] = os.pathsep.join(
+        (
+            str(preliminary_closure.install_root / "lib"),
+            str(filtered_farm.directory),
+        )
+    )
     closure = build_runtime_closure_identity(
         install_root=install_root,
         source_commit=source_commit,
