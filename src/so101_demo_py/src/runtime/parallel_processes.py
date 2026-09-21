@@ -60,8 +60,8 @@ def read_proc_identity(pid: int) -> OwnedProcess | None:
     raise SupervisorError("MANIFEST_CONTEXT_REQUIRED")
 
 
-def _parse_proc_stat_start_time(document: str) -> int:
-    """Read field 22 without treating spaces in the parenthesized comm as fields."""
+def _parse_proc_stat_fields(document: str) -> list[str]:
+    """Split fields after comm without treating its spaces or parentheses as fields."""
     if not isinstance(document, str):
         raise ValueError("PROC_STAT")
     close = document.rfind(")")
@@ -70,6 +70,22 @@ def _parse_proc_stat_start_time(document: str) -> int:
     fields = document[close + 1:].split()
     if len(fields) <= 19:
         raise ValueError("PROC_STAT")
+    return fields
+
+
+def _parse_proc_stat_state(document: str) -> str:
+    """Read field 3 (state) from a Linux proc stat document."""
+
+    state = _parse_proc_stat_fields(document)[0]
+    if len(state) != 1:
+        raise ValueError("PROC_STAT")
+    return state
+
+
+def _parse_proc_stat_start_time(document: str) -> int:
+    """Read field 22 without treating spaces in the parenthesized comm as fields."""
+
+    fields = _parse_proc_stat_fields(document)
     value = int(fields[19])
     if value <= 0:
         raise ValueError("PROC_STAT")
@@ -96,6 +112,8 @@ def _proc_values(pid: int) -> tuple[int, tuple[str, ...], int]:
         return _portable_process_values(pid)
     try:
         stat_document = (Path("/proc") / str(pid) / "stat").read_text()
+        if _parse_proc_stat_state(stat_document) == "Z":
+            return 0, (), 0
         pgid = os.getpgid(pid)
         cmdline = _normalize_cmdline(
             item.decode("utf-8", errors="strict")
@@ -142,6 +160,9 @@ def _proc_group_members(pgid: int) -> tuple[int, ...]:
             if entry.stat().st_uid != os.getuid():
                 continue
             candidate = int(entry.name)
+            stat_document = (entry / "stat").read_text()
+            if _parse_proc_stat_state(stat_document) == "Z":
+                continue
             if os.getpgid(candidate) == pgid and os.getsid(candidate) == pgid:
                 members.append(candidate)
         except (OSError, ProcessLookupError, ValueError):
