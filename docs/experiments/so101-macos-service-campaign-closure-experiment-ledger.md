@@ -49,7 +49,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-LEGACY-CONTROLLER-RERUN
+latest_checkpoint: CP-MSC-GATE-A-5X
 next_experiment: EXP-MSC-106 (Task 5 continued: projection source, store transaction, production wiring)
 ```
 
@@ -1336,3 +1336,45 @@ requires.
 Evidence: `<RUN_ROOT>/task5-runtime-reverify/` - `n-control-farm/` (756 links), `n_control.sh`,
 `n-control-launch.log`, `n-control-readiness.json` (N); `station-launch*.log`,
 `readiness*.json`, `launch-rc-2.txt` (P).
+
+## CP-MSC-GATE-A-5X: five consecutive FULL_RESTART readiness records
+
+Run on operator instruction after the runtime re-verification. Five independent rounds, each with
+a fresh `ROS_DOMAIN_ID`, a fresh station session and a new launch, all against the same frozen
+closure (source `427054ba`, submodule `85d2a5c`, fixed `/opt` overlays; the worktree was not
+modified while the gate ran).
+
+| round | ROS_DOMAIN_ID | readiness | controllers/services/actions | task-owned residue after stop |
+| --- | --- | --- | --- | --- |
+| 1 | 211 | `SO101_MACOS_RUNTIME_COMPLETE_PASS`, rc 0 | 3 active / 3 / 3 | 0 |
+| 2 | 212 | `SO101_MACOS_RUNTIME_COMPLETE_PASS`, rc 0 | 3 active / 3 / 3 | 0 |
+| 3 | 213 | `SO101_MACOS_RUNTIME_COMPLETE_PASS`, rc 0 | 3 active / 3 / 3 | 0 |
+| 4 | 214 | `SO101_MACOS_RUNTIME_COMPLETE_PASS`, rc 0 | 3 active / 3 / 3 | 0 |
+| 5 | 215 | `SO101_MACOS_RUNTIME_COMPLETE_PASS`, rc 0 | 3 active / 3 / 3 | 0 |
+
+Per-round controller attestation (`vmmap` on the live `ros2_control_node`, digests of every
+`libmujoco*` image): identical bytes in every round -
+`libmujoco.3.4.0.dylib fefba57c...`, `libmujoco_ros2_control.dylib da3d80e3...`,
+`libmujoco_ros2_control_macos_ui_dispatcher.dylib 71d8fe71...`,
+`libmujoco_ros2_control_msgs__rosidl_generator_c.dylib 067345f0...` - while PID and birth
+identity differ per round (`20050/332015996795585248`, `20557/218061876105551678`,
+`21049/292049847928934763`, ...). That is the design's "one stable closure, five unique
+run/attestation identities".
+
+Caveat recorded rather than smoothed over: the stop path sent SIGINT and, after an 8 s grace
+window, SIGTERM, so every round's launch wrapper recorded `launch_rc=143` (SIGTERM) instead of
+the `launch_rc=0` seen in the earlier 20 s-grace run. Zero task-owned residue was verified after
+every round either way; "clean shutdown rc=0" is therefore **not** claimed for these five rounds,
+only "bounded shutdown with empty residue".
+
+Result: `gate_a_status = CURRENT_PRODUCT_GATE_PASSED` for the readiness requirement (5/5 valid,
+stable closure, unique run/attestation, zero residue), with the shutdown-signal caveat above.
+
+Evidence: `<RUN_ROOT>/five-restart-gate/` - `rounds.jsonl`, `round{1..5}-readiness.json`,
+`round{1..5}-launch.log`, `round{1..5}-launch-rc.txt`, `round{1..5}-attestation.json`,
+`run-five.sh`, `attest.py`.
+
+Also recorded on operator report (not independently re-measured here): the ordinary package gate
+and the second physical Mac were reported as resolved by another writer after this dispatch's
+runs; their evidence lives in the runtime-contract ledger and is not restated as this
+checkpoint's own measurement.
