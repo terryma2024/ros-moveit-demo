@@ -6,13 +6,13 @@ termination, or evidence deletion.
 
 ```yaml
 task_id: so101-macos-service-campaign-closure
-goal: close service-driven macOS W2, W1 and single-point retry with qualified N1/N2 budgets
-success_contract: design section 14, with candidate and production evidence kept separate
-executor: DeepSeek Harness TUI (dst) inline on mac-mini, per plan and dispatch executor rules
+goal: close service-driven macOS W2, W1 and single-point retry with lightweight StartGuard protection
+success_contract: design section 16, with candidate and production evidence kept separate
+executor: Gate A Codex dispatch a50dcb6c-1eba-43d5-a2ea-2725a18e3a27 inline on mac-mini through CP-MSC-A1; paused dst resumes only after reviewer release
 worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
 branch: codex/so101-unified-webapp
 base_commit: 6d5069026fbd322076f58d0d4b9504891abeb861
-current_commit: see CP-MSC-A (Task 2 + its defect repair; no submodule commit was required)
+current_commit: 62a7431690bef974718e55dbcfb54a36ffc6af6b before the CP-MSC-A1 ledger commit
 upstream: origin/codex/so101-unified-webapp (ahead 23, no push authorized)
 evidence_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
 dispatch_receipt: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/dispatch.receipt
@@ -42,8 +42,141 @@ disproven_routes:
   - The shipped macOS UI dispatcher deadlocks controller construction (EXP-MSC-002B, EXP-MSC-003B)
 open_hypotheses:
   - Product C++ root cause for the campaign's STATION_NOT_READY stays UNCONFIRMED; the working hypothesis is an overlay/dylib-closure defect in the environment that campaign used
-latest_checkpoint: CP-MSC-A
-next_experiment: NONE (Gate A stopped for Sol/High review)
+latest_checkpoint: CP-MSC-A1
+next_experiment: NONE - Task 1 stops on INVALID_CONTROL for independent review; Task 2 remains forbidden
+```
+
+## CP-MSC-A1-TAKEOVER: current-product Gate A writer handoff
+
+```yaml
+checkpoint_id: CP-MSC-A1-TAKEOVER
+recorded_at: 2026-09-21T12:31:32+0800
+dispatch_id: a50dcb6c-1eba-43d5-a2ea-2725a18e3a27
+previous_writer: dst-so101-macos-closure (paused and preserved; no capture, message, signal, or service action by this dispatch)
+current_writer: Gate A Codex dispatch a50dcb6c-1eba-43d5-a2ea-2725a18e3a27
+worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
+branch: codex/so101-unified-webapp
+source_commit: 3def7ac4f0c22e6e03cc7e72d6224ca3d7bd0975
+submodule_commit: e4c0241aee52a40727681bd5872c09bf814e941a
+working_tree_status_at_takeover: clean
+legacy_ledger_sha256: fa25d1fc9651a05ddbfe27d273a457a97f61ce5b109e71b3c19c8cf1632565a4
+task_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
+gate_a_run_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/gate-a-resolution/a50dcb6c-1eba-43d5-a2ea-2725a18e3a27
+legacy_attribution: LEGACY_PROVENANCE_UNRECOVERABLE
+legacy_checkpoint: CP-MSC-A=UNCONFIRMED (preserved verbatim below)
+model_tool_deviation: >-
+  Repository defaults route plan execution through dst, but the reviewed Task 1 plan and this
+  dispatch explicitly assign Task 1 inline to a separate Codex session while requiring the dst
+  session to remain paused. The narrower Task 1 dispatch controls this handoff.
+preserved_processes:
+  - dst-so101-macos-closure process tree (paused writer; untouched)
+  - pid 62670 so101_teleop.expert_validation.main (foreign service; untouched)
+owned_processes: NONE
+next_experiment: EXP-MSC-A1-001
+```
+
+```yaml
+experiment_id: EXP-MSC-A1-001
+status: INVALID
+prior_experiment: EXP-MSC-003B
+hypothesis: >-
+  The frozen current product has an install-rpath-only MuJoCo closure gap: N without DYLD fails
+  for the exact manifest vendor before ROS plugin instance initialization, while P with only the
+  manifest vendor directory added to DYLD_LIBRARY_PATH passes the full task station.
+prediction: >-
+  The deterministic reducer returns CONFIRMED_RPATH only for a valid N missing-vendor observation
+  and a valid P PASS observation; if N and P both pass it returns CURRENT_CLOSURE_ALREADY_VALID.
+single_variable: P adds only the manifest-bound MuJoCo vendor directory to DYLD_LIBRARY_PATH
+lifecycle: ISOLATED_STACK
+preconditions:
+  - worktree and submodule match the recorded takeover identities
+  - one frozen merged closure and one GateAControlSetManifest are shared by N and P
+  - each run uses a fresh valid ROS_DOMAIN_ID, session, run binding, ROS home/log and temp directory
+  - no task-owned station process is running before either control
+success_criteria:
+  - N and P each classify under the reviewed required/allowed-absent table
+  - the reducer chooses exactly one plan-authorized route
+  - each control has stable controller process identity and zero task-owned cleanup residue
+failure_criteria:
+  - CURRENT_NON_RPATH_FAILURE from a valid classified control pair
+invalid_criteria:
+  - manifest, semantic, binding, collector, process identity, timeout, cleanup or substitution invariant fails
+provenance:
+  source_commit: 62a7431690bef974718e55dbcfb54a36ffc6af6b
+  submodule_commit: e4c0241aee52a40727681bd5872c09bf814e941a
+  install_overlay: gate-a-resolution/a50dcb6c-1eba-43d5-a2ea-2725a18e3a27/control-set/closure
+  runtime_executable: control-set/closure/lib/so101_demo_py/so101_diagnose_macos_station
+  ros_domain_id: N=83; P=175
+  gz_partition: NOT_APPLICABLE_MUJOCO
+  manifest_sha256: 2765ab9f236793ec9c67ec84bfc8a06b8fa4f277ff442437b64cd63b2f36567c
+commands:
+  - command: build and freeze task-owned N/P merged closure per reviewed Task 1 Step 3
+    exit_code: 0 after preserving a Python 3.14 selection failure and sandboxed lodepng fetch failure
+  - command: run N direct dlopen and FULL_TASK_STATION
+    exit_code: direct=1; station=1
+  - command: run P direct dlopen and FULL_TASK_STATION with the single authorized DYLD variable
+    exit_code: direct=1; station=1
+observed:
+  - The copied closure and exact installer alias froze successfully; all other external Ament hook symlinks were dereferenced into the copied closure while the original build tree was retained.
+  - N and P direct dlopen both failed first on @rpath/libhardware_interface.dylib, before the MuJoCo vendor edge could be isolated.
+  - N and P station launch both failed before a controller runtime existed because ros2/rclpy could not resolve @rpath/librosidl_typesupport_c.dylib after the required DYLD sanitization.
+  - Both reports classified INVALID with STATION_CONTROLLER_PROCESS_MISSING; cleanup was complete, residue_pids and IPC residue were empty.
+  - The deterministic reducer returned INVALID_CONTROL / NOT_EXCLUDED; decision SHA-256 is 9a6395b645150fbb19d040ee1ec7ff5da876e0a3412cc15f7a6c95ab8e31232f.
+inferred:
+  - The reviewed N/P environment does not provide a loadable ROS host-underlay closure, so this control pair cannot distinguish a MuJoCo install-rpath defect from broader missing ROS dylib search paths.
+conclusion: INVALID_CONTROL; no current-product root-cause claim and no RPATH product edit are authorized
+evidence:
+  - /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/gate-a-resolution/a50dcb6c-1eba-43d5-a2ea-2725a18e3a27
+decision: stop Task 1 at CP-MSC-A1 for independent review
+next_experiment: NONE - Task 2 and five-run readiness remain forbidden
+```
+
+## CP-MSC-A1: current-product Gate A stopped on invalid controls
+
+```yaml
+checkpoint_id: CP-MSC-A1
+recorded_at: 2026-09-21T13:31:54+0800
+dispatch_id: a50dcb6c-1eba-43d5-a2ea-2725a18e3a27
+code_commits:
+  - 5dcf028b0be8f7ac5c10d9ef316487e066cede75 test(so101): freeze macOS Gate A controls
+  - 62a7431690bef974718e55dbcfb54a36ffc6af6b fix(so101): accept precreated Gate A run directories
+source_commit: 62a7431690bef974718e55dbcfb54a36ffc6af6b
+submodule_commit: e4c0241aee52a40727681bd5872c09bf814e941a
+legacy_attribution: LEGACY_PROVENANCE_UNRECOVERABLE
+legacy_checkpoint: CP-MSC-A=UNCONFIRMED (preserved verbatim below)
+experiment: EXP-MSC-A1-001
+current_boundary_verdict: INVALID_CONTROL
+controller_verdict: NOT_EXCLUDED
+negative_class: INVALID
+positive_class: INVALID
+reason: one or both controls violate required invariants
+first_unresolved_direct_dependency: '@rpath/libhardware_interface.dylib'
+first_unresolved_station_dependency: '@rpath/librosidl_typesupport_c.dylib'
+invalid_reason: STATION_CONTROLLER_PROCESS_MISSING
+cleanup_complete: true
+owned_processes: NONE - fresh filtered host scan has zero matches
+task_owned_ipc_residue: NONE - fresh socket scan is empty
+targeted_test_gate: 80 passed, 2 pre-existing Lark deprecation warnings, exit 0
+git_diff_check: exit 0
+preserved_processes:
+  - pid 62670 so101_teleop.expert_validation.main (foreign service; alive and untouched)
+  - tmux session dst-so101-macos-closure (present, paused, and untouched)
+rpath_route_started: false
+five_consecutive_full_restart_runs: NOT_RUN
+task_2_started: false
+writer_release: effective after this checkpoint ledger commit and writer-release evidence marker
+evidence_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
+retained_runs:
+  - gate-a-resolution/a50dcb6c-1eba-43d5-a2ea-2725a18e3a27 (all control, build, test, invalid-attempt, and cleanup evidence)
+archived_runs: NONE
+deletion_candidates:
+  - control-set/vendor-workspace/build
+  - control-set/mujoco-build
+  - control-set/station-build
+  - control-set/closure-build-staging
+  - per-invocation tests/red/*/tmp and tests/green/*/tmp trees
+deletions_performed: NONE
+next_command: NONE - release writer and wait for independent review; do not start Task 2
 ```
 
 ## CP-MSC-000: registration, frozen base and baseline (Task 0 Steps 1-3)
