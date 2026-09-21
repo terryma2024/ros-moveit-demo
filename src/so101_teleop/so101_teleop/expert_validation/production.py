@@ -36,6 +36,9 @@ from .preflight import (
     CampaignStartRequest,
     FIXED_WORKER_COUNTS,
     FixedExecutionConfig,
+    MACOS_EXECUTION_PROFILES,
+    MACOS_WORKER_COUNTS,
+    UNSUPPORTED_ON_MACOS,
 )
 from .process_owner import CoordinatorOwnershipError, ExecutionProcessOwner, OwnedCoordinator
 from .service import ExpertValidationService, ServiceConflict
@@ -253,60 +256,109 @@ class ProductionRuntimeLayout:
         )
 
 
+class _GuardAdmission:
+    """The guard wiring one execution document needs. Cacheable; it holds no verdict.
+
+    ``(profile, config_sha256, accelerator, selector)`` is the composition key. The
+    ``EpochStartGuard`` itself is built on first use, so reading the policy or the selector of a
+    document performs no I/O beyond loading that document and starts no probe process.
+    """
+
+    def __init__(self, *, document, accelerator) -> None:
+        self.document = document
+        self.profile = None if document.profile is None else document.profile.profile
+        self.config_sha256 = document.config_sha256
+        self.accelerator_kind = document.accelerator
+        self.selector = document.selector
+        self.policy = document.config.start_guard
+        self.accelerator = accelerator
+        self._guard = None
+
+    @property
+    def composition_key(self) -> tuple:
+        return (self.profile, self.config_sha256, self.accelerator_kind, self.selector)
+
+    @property
+    def guard(self):
+        if self._guard is None:
+            from so101_demo.parallel_batch.start_guard_probe import (
+                compose_default_start_guard)
+
+            self._guard = compose_default_start_guard(
+                self.policy, accelerator=self.accelerator)
+        return self._guard
+
+    def begin_epoch(self, scope):
+        """One fresh observation for this request/spawn epoch; never a stored verdict."""
+
+        return self.guard.begin_epoch(scope)
+
+    def require_before_spawn(self, scope):
+        return self.guard.require_before_spawn(scope)
+
+
 class _LazyStartGuard:
-    """Compose the shared guard on first use; constructing the service does no config I/O."""
+    """Compose the shared guard per execution document; the composition is cached, verdicts are not."""
 
     def __init__(self, environment: Mapping[str, str], config_path=None) -> None:
         self._environment = dict(environment)
         self._config_path = config_path
-        self._guard = None
-        self._policy = None
-        self._selector = None
+        self._admissions: dict[tuple, _GuardAdmission] = {}
 
-    def _compose(self):
-        if self._guard is None:
-            from so101_demo.parallel_batch.contracts import ParallelRuntimeConfigV4
-            from so101_demo.parallel_batch.start_guard_probe import (
-                compose_default_start_guard)
-            from so101_demo.parallel_batch.w2_composition import (
-                load_execution_config_for_schema)
+    def admission(self, config_path=None) -> _GuardAdmission:
+        """The cached composition for one document, keyed by its profile and real bytes."""
 
-            discovered = (self._config_path
-                          or self._environment.get("SO101_VALIDATION_PARALLEL_CONFIG"))
-            if not discovered:
-                raise ValueError("START_GUARD_CONFIG_REQUIRED")
-            # The document decides which guard this host can run. Loading everything as v3 both rejected
-            # the schema-4 macOS document and built an NVML probe, which refuses every preflight with
-            # GPU_TARGET_UNAVAILABLE on a host with no CUDA device.
-            config = load_execution_config_for_schema(Path(discovered))
-            accelerator = None
-            if isinstance(config, ParallelRuntimeConfigV4):
-                from so101_demo.parallel_batch.accelerator_probe import DarwinMpsAcceleratorProbe
+        from .preflight import describe_execution_document
 
-                accelerator = DarwinMpsAcceleratorProbe().probe
-                self._selector = "MPS:default"
-            else:
-                self._selector = (
-                    f"{config.gpu_device.selector_kind}:{config.gpu_device.selector}")
-            self._guard = compose_default_start_guard(config.start_guard, accelerator=accelerator)
-            self._policy = config.start_guard
-        return self._guard
+        discovered = (config_path or self._config_path
+                      or self._environment.get("SO101_VALIDATION_PARALLEL_CONFIG"))
+        if not discovered:
+            raise ValueError("START_GUARD_CONFIG_REQUIRED")
+        # The document decides which guard this host can run. Loading everything as v3 both
+        # rejected the schema-4 macOS document and built an NVML probe, which refuses every
+        # preflight with GPU_TARGET_UNAVAILABLE on a host with no CUDA device.
+        document = describe_execution_document(Path(discovered))
+        key = self._composition_key(document)
+        admission = self._admissions.get(key)
+        if admission is None:
+            admission = _GuardAdmission(
+                document=document, accelerator=_accelerator_for_document(document))
+            self._admissions[key] = admission
+        return admission
+
+    @staticmethod
+    def _composition_key(document) -> tuple:
+        profile = None if document.profile is None else document.profile.profile
+        return (profile, document.config_sha256, document.accelerator, document.selector)
 
     @property
     def policy(self):
-        self._compose()
-        return self._policy
+        return self.admission().policy
 
     @property
     def gpu_selector(self):
-        self._compose()
-        return self._selector
+        return self.admission().selector
 
-    def begin_epoch(self, scope):
-        return self._compose().begin_epoch(scope)
+    def begin_epoch(self, scope, config_path=None):
+        """A fresh probe for the document this request names; the composition may be reused."""
 
-    def require_before_spawn(self, scope):
-        return self._compose().require_before_spawn(scope)
+        return self.admission(config_path).begin_epoch(scope)
+
+    def require_before_spawn(self, scope, config_path=None):
+        return self.admission(config_path).require_before_spawn(scope)
+
+
+def _accelerator_for_document(document):
+    """The accelerator probe the document's combination asks for; ``None`` keeps the v3 path."""
+
+    if document.accelerator == "mps":
+        from so101_demo.parallel_batch.accelerator_probe import select_accelerator_probe
+
+        selection = select_accelerator_probe("mps")
+        if selection is None:  # pragma: no cover - the table above only asks for MPS
+            raise RuntimeError("MPS_ACCELERATOR_PROBE_MISSING")
+        return selection.probe.probe
+    return None
 
 
 class _HostResourceProbe:
@@ -315,6 +367,16 @@ class _HostResourceProbe:
     def __init__(self, start_guard=None, gpu_selector=None) -> None:
         self._start_guard = start_guard
         self._gpu_selector = gpu_selector
+        self._epochs = 0
+
+    def _admission(self, request):
+        """The composition for this request's document, when the guard is the lazy composer."""
+
+        resolve = getattr(self._start_guard, "admission", None)
+        if resolve is None:
+            return None
+        config_path = getattr(request, "parallel_config_path", None)
+        return resolve(config_path)
 
     def probe(self, _request, config):
         observations: dict[str, object] = {"logical_cpu_count": os.cpu_count() or 0}
@@ -324,9 +386,17 @@ class _HostResourceProbe:
         if self._start_guard is None:
             reasons.append("START_GUARD_UNAVAILABLE")
             return not reasons, tuple(reasons), observations
+        try:
+            admission = self._admission(_request)
+        except Exception as error:
+            observations["probe_error"] = type(error).__name__
+            reasons.append("RESOURCE_PROBE_FAILED")
+            return not reasons, tuple(reasons), observations
         selector = getattr(config, "gpu_device", None)
         if selector is not None:
             gpu_selector = f"{selector.selector_kind}:{selector.selector}"
+        elif admission is not None:
+            gpu_selector = self._gpu_selector or admission.selector
         else:
             gpu_selector = self._gpu_selector or getattr(
                 self._start_guard, "gpu_selector", None)
@@ -336,15 +406,18 @@ class _HostResourceProbe:
         try:
             from so101_demo.parallel_batch.start_guard import GuardScope
 
+            # Every request is its own epoch: a previous verdict is never reused.
+            self._epochs += 1
             scope = GuardScope(
                 batch_id="web-preflight",
-                epoch=1,
+                epoch=self._epochs,
                 owner_pid=os.getpid(),
                 owner_starttime_ticks=1,
                 gpu_selector=gpu_selector,
                 worker_count=workers,
             )
-            result = self._start_guard.require_before_spawn(scope)
+            result = (admission.begin_epoch(scope) if admission is not None
+                      else self._start_guard.begin_epoch(scope))
         except Exception as error:
             observations["probe_error"] = type(error).__name__
             reasons.append("RESOURCE_PROBE_FAILED")
@@ -562,13 +635,16 @@ class ProductionExpertValidationService(ExpertValidationService):
         }
 
     def capabilities(self):
+        lease = self.lease_service.capabilities
+        document = self._execution_document()
+        if document is not None and document.profile is not None:
+            return self._macos_capabilities(document, lease)
         capability = self.registry.require("moveit_expert", "validate_pick_place")
         available_modes = tuple(
             mode
             for mode in capability.execution_modes
             if capability.mode_availability[mode].available
         )
-        lease = self.lease_service.capabilities
         return {
             "available": bool(available_modes),
             "execution_modes": available_modes,
@@ -576,6 +652,67 @@ class ProductionExpertValidationService(ExpertValidationService):
             "worker_count_availability": self._worker_count_availability(),
             "start_guard_policy": self._start_guard_policy(),
             "default_execution_mode": capability.default_execution_mode,
+            "lease_duration_s": lease.duration_s,
+            "lease_renewal_margin_s": lease.renewal_margin_s,
+        }
+
+    def _execution_document(self):
+        """The execution document this service would run, or ``None`` when it cannot be read."""
+
+        from .preflight import describe_execution_document
+
+        path = Path(self.layout.parallel_config_path)
+        try:
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError:
+            return None
+        cached = getattr(self, "_document_cache", None)
+        if cached is not None and cached[0] == (str(path), digest):
+            return cached[1]
+        try:
+            document = describe_execution_document(path)
+        except Exception:  # noqa: BLE001 - an unreadable document advertises nothing
+            return None
+        self._document_cache = ((str(path), digest), document)
+        return document
+
+    def _macos_capabilities(self, document, lease):
+        """The platform-bound document: fixed W1/W2, and no budget or qualification authority.
+
+        The StartGuard policy is still displayed, because a client has to be able to show the
+        cutoffs a start is judged against; the note next to it says what it is not.
+        """
+
+        from .api import START_GUARD_NOT_A_QUALIFICATION, WorkerCountAvailability
+
+        profile = document.profile
+        availability = tuple(
+            WorkerCountAvailability(
+                worker_count=count,
+                selectable=count in MACOS_WORKER_COUNTS,
+                status="SUPPORTED" if count in MACOS_WORKER_COUNTS else UNSUPPORTED_ON_MACOS,
+                reason_codes=() if count in MACOS_WORKER_COUNTS else (UNSUPPORTED_ON_MACOS,),
+                profile_sha256=None,
+                qualification_sha256=None,
+            )
+            for count in FIXED_WORKER_COUNTS
+        )
+        return {
+            "available": True,
+            "platform": profile.platform,
+            "execution_modes": ("SEQUENTIAL", "PARALLEL"),
+            "default_execution_mode": profile.execution_mode,
+            "fixed_worker_counts": FIXED_WORKER_COUNTS,
+            "worker_count_availability": availability,
+            "support_matrix": tuple(row.to_document() for row in MACOS_EXECUTION_PROFILES),
+            "execution_profile": profile.profile,
+            "execution_schema_version": document.schema_version,
+            "execution_config_sha256": document.config_sha256,
+            # No budget provider and no per-N qualification is consulted for the macOS matrix.
+            "worker_qualifications": (),
+            "adaptive_default_ladder": (),
+            "start_guard_policy": self._start_guard_policy(),
+            "start_guard_note": START_GUARD_NOT_A_QUALIFICATION,
             "lease_duration_s": lease.duration_s,
             "lease_renewal_margin_s": lease.renewal_margin_s,
         }
@@ -698,11 +835,30 @@ class ProductionExpertValidationService(ExpertValidationService):
             document["selection_sha256"],
         )
 
+    def _execution_document_binding(self, body):
+        """The document and real hash a request executes.
+
+        A request that names a macOS profile executes *that* profile's installed document: its
+        own bytes, its own hash and its own worker count. Nothing is inferred from the
+        selected-point count, and there is no fallback to a document the request did not name.
+        """
+
+        from .preflight import resolve_execution_document
+
+        profile = body.get("execution_profile")
+        if profile is None:
+            return (Path(self.layout.parallel_config_path),
+                    _sha256(self.layout.parallel_config_path))
+        document = resolve_execution_document(
+            Path(self.layout.parallel_config_path).parent, profile)
+        return (document.path, document.config_sha256)
+
     def _campaign_request(self, body) -> CampaignStartRequest:
         mode = body["execution_mode"]
         adaptive = mode == "ADAPTIVE"
         batch_id = ("a" if adaptive else "b") + uuid.uuid4().hex[:4]
         selection = self._selection(body["manifest_id"])
+        config_path, config_sha256 = self._execution_document_binding(body)
         resource_document = json.dumps(
             {"mode": mode, "worker_count": body.get("worker_count")},
             sort_keys=True,
@@ -720,7 +876,7 @@ class ProductionExpertValidationService(ExpertValidationService):
             execution_mode=mode,
             evidence_root=self.store.root.parent,
             points_path=self.layout.points_path,
-            parallel_config_path=self.layout.parallel_config_path,
+            parallel_config_path=config_path,
             adaptive_config_path=self.layout.adaptive_config_path,
             worker_count=(
                 body.get("preferred_worker_count", 8)
@@ -747,8 +903,10 @@ class ProductionExpertValidationService(ExpertValidationService):
             ),
             adaptive_cleanup_executable_sha256=_sha256(self.layout.cleanup_executable),
             adaptive_wrapper_sha256=_sha256(self.layout.adaptive_wrapper),
-            parallel_config_sha256=_sha256(self.layout.parallel_config_path),
+            parallel_config_sha256=config_sha256,
             adaptive_config_sha256=_sha256(self.layout.adaptive_config_path),
+            execution_profile=body.get("execution_profile"),
+            batch_kind=body.get("batch_kind"),
             yolo_weights_sha256=self.layout.yolo_weights_sha256,
             grounded_sam_manifest_sha256=self.layout.grounded_manifest_sha256,
             broker_image_id=self.layout.broker_image_id,
@@ -775,7 +933,14 @@ class ProductionExpertValidationService(ExpertValidationService):
             raise ServiceConflict(availability.reason or "EXECUTION_MODE_UNAVAILABLE")
         if self.layout.yolo_weights_path is None or self.layout.grounded_root is None:
             raise ServiceConflict("VALIDATION_MODELS_NOT_CONFIGURED")
-        request = self._campaign_request(body)
+        from .preflight import PreflightRejected
+
+        try:
+            request = self._campaign_request(body)
+        except PreflightRejected as error:
+            # A named profile whose installed document is missing or unsupported is a stable
+            # refusal, never a silent fallback to a document the request did not name.
+            raise ServiceConflict(str(error)) from error
         receipt = await self.supervisor.preflight(request)
         self._pending[receipt.receipt_id] = (request, receipt, dict(body))
         return {
@@ -788,6 +953,9 @@ class ProductionExpertValidationService(ExpertValidationService):
             "start_guard": receipt.resource_observations.get("start_guard"),
             "reason_codes": receipt.reason_codes,
             "expires_at_monotonic_ns": receipt.expires_at_monotonic_ns,
+            "execution_profile": receipt.execution_profile,
+            "execution_schema_version": receipt.schema_version,
+            "execution_batch_kind": receipt.batch_kind,
         }
 
     async def start_campaign_api(self, body):
