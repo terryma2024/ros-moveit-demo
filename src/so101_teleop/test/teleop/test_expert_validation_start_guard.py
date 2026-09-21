@@ -6,6 +6,7 @@ supply or override a status, and history projections never probe.
 """
 
 import dataclasses
+import hashlib
 import json
 import shutil
 import sys
@@ -28,6 +29,18 @@ from so101_teleop.expert_validation.production import (
 
 WORKTREE = Path(__file__).resolve().parents[4]
 V3_CONFIG = WORKTREE / "src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
+MACOS_CONFIG_DIR = WORKTREE / "src/so101_demo_py/config/mujoco"
+
+#: (document basename, schema_version, execution_mode, worker_count, batch_kind) per profile.
+MACOS_PROFILES = {
+    "MPS_W2_FIRST_PASS": (
+        "parallel_batch_v4_macos_mps_w2.yaml", 4, "PARALLEL", 2, "FIRST_PASS"),
+    "MPS_W1_FULL_RESTART_RETRY": (
+        "parallel_batch_v5_macos_mps_w1_retry.yaml", 5, "SEQUENTIAL", 1,
+        "FULL_RESTART_RETRY"),
+    "MPS_W1_FIRST_PASS": (
+        "parallel_batch_v6_macos_mps_w1_first_pass.yaml", 6, "SEQUENTIAL", 1, "FIRST_PASS"),
+}
 
 
 def _local_check(self, policy, scope, *, nvml=None, busy=None):
@@ -113,13 +126,25 @@ def service(tmp_path, monkeypatch):
     config = file("parallel.yaml")
     shutil.copyfile(V3_CONFIG, config)
     config.chmod(0o644)
-    layout = ProductionRuntimeLayout(
+    layout = _layout(
+        tmp_path,
+        demo_prefix=demo_prefix,
+        copied_share=copied_share,
+        parallel_config=config,
+        runtime=runtime,
+        file=file,
+    )
+    yield from _created_service(tmp_path, monkeypatch, layout)
+
+
+def _layout(tmp_path, *, demo_prefix, copied_share, parallel_config, runtime, file):
+    return ProductionRuntimeLayout(
         source_root=tmp_path.resolve(),
         source_commit="a" * 40,
         demo_prefix=demo_prefix,
         points_path=(copied_share
                      / "config/mujoco/moveit_expert_validation_points_v1.yaml").resolve(),
-        parallel_config_path=config,
+        parallel_config_path=parallel_config,
         adaptive_config_path=(copied_share
                               / "config/mujoco/parallel_adaptive_workers_v1.yaml").resolve(),
         coordinator_executable=file("so101_parallel_batch"),
@@ -136,15 +161,73 @@ def service(tmp_path, monkeypatch):
         adaptive_fault_injection=None,
         adaptive_performance_tiers=(),
     )
+
+
+def _created_service(tmp_path, monkeypatch, layout):
     monkeypatch.setattr(ProductionRuntimeLayout, "discover",
                         classmethod(lambda _cls, _environment: layout))
     evidence = (tmp_path / "evidence").resolve()
-    evidence.mkdir()
+    evidence.mkdir(exist_ok=True)
     created = create_production_service(evidence, environment={})
     try:
         yield created
     finally:
         created.close()
+
+
+def _macos_layout(tmp_path, monkeypatch, basenames):
+    """A layout whose config directory holds exactly the named installed documents."""
+
+    from ament_index_python.packages import get_package_share_directory
+
+    monkeypatch.setenv("SO101_TASK_ROOT", str(tmp_path / "task-root"))
+    runtime = tmp_path / "runtime"
+    config_dir = runtime / "config" / "mujoco"
+    config_dir.mkdir(parents=True)
+
+    def file(name, content="approved\n"):
+        path = runtime / name
+        path.write_text(content, encoding="utf-8")
+        path.chmod(0o700)
+        return path.resolve()
+
+    for basename in basenames:
+        target = config_dir / basename
+        shutil.copyfile(MACOS_CONFIG_DIR / basename, target)
+        target.chmod(0o644)
+    share = Path(get_package_share_directory("so101_demo_py")).resolve()
+    demo_prefix = _copied_prefix(share, (tmp_path / "demo-prefix").resolve())
+    copied_share = demo_prefix / "share/so101_demo_py"
+    return _layout(
+        tmp_path,
+        demo_prefix=demo_prefix,
+        copied_share=copied_share,
+        parallel_config=(config_dir / basenames[0]).resolve(),
+        runtime=runtime,
+        file=file,
+    )
+
+
+@pytest.fixture
+def macos_service(tmp_path, monkeypatch):
+    """The installed macOS composition: the three profile documents sit in the config directory.
+
+    A request names its profile and the service loads that document - its own real profile and
+    config hash - instead of assuming the one document the layout happened to configure.
+    """
+
+    layout = _macos_layout(
+        tmp_path, monkeypatch, tuple(item[0] for item in MACOS_PROFILES.values()))
+    yield from _created_service(tmp_path, monkeypatch, layout)
+
+
+@pytest.fixture
+def macos_w2_only_service(tmp_path, monkeypatch):
+    """A macOS service with only the W2 document installed: no W1 campaign can be invented."""
+
+    layout = _macos_layout(
+        tmp_path, monkeypatch, (MACOS_PROFILES["MPS_W2_FIRST_PASS"][0],))
+    yield from _created_service(tmp_path, monkeypatch, layout)
 
 
 class _Client:
@@ -435,3 +518,242 @@ class _SchemaOnly:
             raise RuntimeError("schema-only service")
 
         return _call
+
+
+# --------------------------------------------------------------------------------------
+# The macOS W1/W2 support matrix on the installed service
+#
+# The platform binding is a property of the execution document, not of a budget or
+# qualification authority: the service loads the profile's own v4/v5/v6 YAML, binds its real
+# config hash, runs the Darwin MPS probe and never enters the CUDA/NVML branch.
+# --------------------------------------------------------------------------------------
+
+
+def _macos_preflight_body(client, lease, profile, **changes):
+    _basename, _schema, mode, workers, batch_kind = MACOS_PROFILES[profile]
+    body = _preflight_body(
+        client, lease, execution_mode=mode, worker_count=workers,
+        execution_profile=profile, batch_kind=batch_kind)
+    body.update(changes)
+    return body
+
+
+def _passing_mps_probe(calls):
+    """The Darwin accelerator probe contract: one snapshot inside the caller's deadline."""
+
+    from so101_demo.parallel_batch.accelerator_probe import AcceleratorSnapshot
+
+    def probe(_self, *, deadline_monotonic_ns):
+        calls.append(deadline_monotonic_ns)
+        return AcceleratorSnapshot(
+            kind="mps", selector="default", available_bytes=8 << 30,
+            recommended_max_memory_bytes=16 << 30, current_allocated_memory_bytes=0,
+            driver_allocated_memory_bytes=0, metric_source="unified-memory-proxy:test")
+
+    return probe
+
+
+def test_macos_capabilities_expose_only_w1_and_w2(macos_service):
+    import hashlib
+
+    client = _Client(macos_service)
+    payload = client.get("/expert-validation/capabilities").json()
+
+    assert payload["platform"] == "macos"
+    assert list(payload["execution_modes"]) == ["SEQUENTIAL", "PARALLEL"]
+    assert payload["available"] is True
+
+    availability = {item["worker_count"]: item for item in payload["worker_count_availability"]}
+    assert set(availability) == {1, 2, 3, 4, 5, 6, 7, 8}
+    for count in (1, 2):
+        assert availability[count]["selectable"] is True, count
+        assert availability[count]["status"] == "SUPPORTED", count
+        assert availability[count]["reason_codes"] == []
+    for count in (3, 4, 5, 6, 7, 8):
+        entry = availability[count]
+        assert entry["selectable"] is False, count
+        assert entry["status"] == "UNSUPPORTED_ON_MACOS", count
+        assert list(entry["reason_codes"]) == ["UNSUPPORTED_ON_MACOS"], count
+        assert entry["profile_sha256"] is None, count
+        assert entry["qualification_sha256"] is None, count
+
+    rows = {row["profile"]: row for row in payload["support_matrix"]}
+    assert set(rows) == set(MACOS_PROFILES)
+    for profile, (basename, schema, mode, workers, batch_kind) in MACOS_PROFILES.items():
+        row = rows[profile]
+        assert (row["schema_version"], row["execution_mode"], row["worker_count"],
+                row["batch_kind"]) == (schema, mode, workers, batch_kind), profile
+        assert row["accelerator"] == "mps" and row["selectable"] is True
+        assert row["profile_sha256"] is None and row["qualification_sha256"] is None
+
+    configured = MACOS_CONFIG_DIR / MACOS_PROFILES["MPS_W2_FIRST_PASS"][0]
+    assert payload["execution_profile"] == "MPS_W2_FIRST_PASS"
+    assert payload["execution_schema_version"] == 4
+    assert payload["execution_config_sha256"] == hashlib.sha256(
+        configured.read_bytes()).hexdigest()
+
+    # No budget/qualification authority takes part, and the display says what the guard is not.
+    assert payload["worker_qualifications"] == []
+    assert "not a resource qualification proof" in payload["start_guard_note"]
+    assert payload["start_guard_policy"]["mps_minimum_headroom_bytes"] == 1 << 30
+    assert payload["start_guard_policy"]["timeout_s"] == 2.0
+
+
+def test_macos_capability_reads_never_probe(macos_service, monkeypatch):
+    calls = []
+
+    def counting_check(self, policy, scope):
+        calls.append(scope)
+        return _local_check(self, policy, scope)
+
+    monkeypatch.setattr(ProbeCoordinator, "check", counting_check)
+    client = _Client(macos_service)
+    assert client.get("/expert-validation/capabilities").status_code == 200
+    assert calls == []
+
+
+@pytest.mark.parametrize("profile", list(MACOS_PROFILES))
+def test_a_macos_preflight_uses_the_profiles_own_document_and_the_mps_probe(
+        macos_service, monkeypatch, profile):
+    """Real coordinator, real helper, real CPU/RAM reads; only the accelerator read is pinned."""
+
+    import hashlib
+
+    from so101_demo.parallel_batch.accelerator_probe import DarwinMpsAcceleratorProbe
+
+    basename, schema, mode, workers, batch_kind = MACOS_PROFILES[profile]
+    document = MACOS_CONFIG_DIR / basename
+    calls = []
+    monkeypatch.setattr(DarwinMpsAcceleratorProbe, "probe", _passing_mps_probe(calls))
+
+    client = _Client(macos_service)
+    lease = _lease(client)
+    response = client.post("/expert-validation/campaigns/preflight",
+                           json=_macos_preflight_body(client, lease, profile))
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["admitted"] is True, payload
+    assert payload["execution_mode"] == mode
+    assert payload["execution_config"]["worker_count"] == workers
+    observations = payload["resource_observations"]
+    assert observations["execution_profile"] == profile
+    assert observations["execution_schema_version"] == schema
+    assert observations["execution_batch_kind"] == batch_kind
+    assert observations["execution_config_sha256"] == hashlib.sha256(
+        document.read_bytes()).hexdigest()
+
+    guard = payload["start_guard"]
+    assert guard["status"] in ("PASS", "WARN"), guard
+    assert guard["cleanup_state"] == "CLEAR"
+    assert guard["admission_kind"] == "unified-memory-proxy"
+    assert set(guard["checks"]) == {"cpu_capacity", "cpu_busy", "ram", "mps_headroom"}
+    assert guard["checks"]["mps_headroom"]["cutoff"] == 1 << 30
+    assert "gpu" not in guard["checks"]
+    assert calls and all(isinstance(value, int) and value > 0 for value in calls)
+
+
+@pytest.mark.parametrize("profile", list(MACOS_PROFILES))
+def test_a_macos_preflight_never_reads_nvml(macos_service, monkeypatch, profile):
+    """Only the probe process boundary is replaced; the Darwin branch runs the real decision.
+
+    All three installed documents take the same MPS half: none of them may fall into the
+    CUDA/NVML branch the schema-v3 guard uses.
+    """
+
+    from so101_demo.parallel_batch import start_guard_probe as probe_module
+    from so101_demo.parallel_batch.accelerator_probe import DarwinMpsAcceleratorProbe
+
+    class ExplodingNvml:
+        def devices(self):
+            raise AssertionError("NVML must not be read for a macOS profile")
+
+    ports = dataclasses.replace(guard_module.host_ports(), nvml=ExplodingNvml())
+    monkeypatch.setattr(guard_module, "host_ports", lambda: ports)
+    calls = []
+    monkeypatch.setattr(DarwinMpsAcceleratorProbe, "probe", _passing_mps_probe(calls))
+
+    def local_v4_check(self, policy, scope, *, accelerator=None):
+        started = time.monotonic()
+        result = probe_module._v4_cpu_ram_result(
+            policy, scope, started + policy.timeout_s, started)
+        return probe_module.ProbeCoordinator._merge_accelerator(
+            self, result, policy, accelerator)
+
+    monkeypatch.setattr(ProbeCoordinator, "check", local_v4_check)
+    client = _Client(macos_service)
+    lease = _lease(client)
+    payload = client.post("/expert-validation/campaigns/preflight",
+                          json=_macos_preflight_body(client, lease, profile)).json()
+
+    assert payload["admitted"] is True, payload
+    assert payload["start_guard"]["admission_kind"] == "unified-memory-proxy"
+    assert "gpu" not in payload["start_guard"]["checks"]
+    assert "mps_headroom" in payload["start_guard"]["checks"]
+    assert calls, "the MPS accelerator probe must run"
+
+
+def test_a_macos_service_refuses_more_than_two_workers_and_adaptive(macos_service):
+    client = _Client(macos_service)
+    lease = _lease(client)
+
+    oversized_body = _macos_preflight_body(
+        client, lease, "MPS_W2_FIRST_PASS", worker_count=8)
+    oversized = client.post("/expert-validation/campaigns/preflight", json=oversized_body)
+    assert oversized.status_code == 200, oversized.text
+    assert oversized.json()["admitted"] is False
+    assert "UNSUPPORTED_ON_MACOS" in oversized.json()["reason_codes"]
+
+    # A v4 document claiming W1 is the same refusal one layer down: the document the request
+    # names decides, and exact-W2 cannot honour a one-worker claim.
+    from so101_teleop.expert_validation.preflight import (
+        PreflightEngine, UNSUPPORTED_ON_MACOS)
+
+    class _AdmitsAnyResource:
+        def probe(self, _request, _config):
+            return True, (), {}
+
+    v4_document = MACOS_CONFIG_DIR / MACOS_PROFILES["MPS_W2_FIRST_PASS"][0]
+    request = dataclasses.replace(
+        macos_service._campaign_request(oversized_body),
+        execution_profile="MPS_W1_FIRST_PASS", batch_kind="FIRST_PASS",
+        execution_mode="SEQUENTIAL", worker_count=1,
+        parallel_config_path=v4_document,
+        parallel_config_sha256=hashlib.sha256(v4_document.read_bytes()).hexdigest())
+    receipt = PreflightEngine(_AdmitsAnyResource()).preflight(request)
+    assert receipt.admitted is False
+    assert UNSUPPORTED_ON_MACOS in receipt.reason_codes
+
+    # ADAPTIVE is not part of the macOS support matrix at all.
+    adaptive = client.post(
+        "/expert-validation/campaigns/preflight",
+        json=_preflight_body(
+            client, lease, execution_mode="ADAPTIVE", worker_count=None,
+            preferred_worker_count=8, fallback_worker_counts=[6, 4, 2, 1],
+            initial_points_per_worker=3, worker_start_timeout_s=120.0,
+            max_infra_attempts_per_point=5, yolo_executor_count=2))
+    assert adaptive.status_code == 200, adaptive.text
+    payload = adaptive.json()
+    assert payload["admitted"] is False
+    assert "UNSUPPORTED_ON_MACOS" in payload["reason_codes"]
+
+    # An unadmitted receipt can never start a campaign.
+    started = client.post(
+        "/expert-validation/campaigns",
+        json={**oversized_body, "command_id": "start-1",
+              "preflight_receipt_id": oversized.json()["receipt_id"]})
+    assert started.status_code == 409, started.text
+
+
+def test_a_macos_service_refuses_a_profile_it_has_no_installed_document_for(
+        macos_w2_only_service):
+    """A W1 request on a W2-only install is a stable refusal, never an invented document."""
+
+    client = _Client(macos_w2_only_service)
+    lease = _lease(client)
+    response = client.post(
+        "/expert-validation/campaigns/preflight",
+        json=_macos_preflight_body(client, lease, "MPS_W1_FIRST_PASS"))
+
+    assert response.status_code == 409, response.text
+    assert response.json()["code"] == "EXECUTION_DOCUMENT_MISSING"

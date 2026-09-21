@@ -15,9 +15,19 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_validator
 
-from .preflight import FIXED_WORKER_COUNTS
+from .preflight import FIXED_WORKER_COUNTS, MACOS_EXECUTION_PROFILES
 from so101_teleop.api import validate_bind_address
 from so101_teleop.task_artifacts import ArtifactAccessError
+
+
+#: The exact text every platform-bound capability document carries beside the guard policy.
+#: The guard is a startup check; it is not a capacity certification and must not be shown as one.
+START_GUARD_NOT_A_QUALIFICATION = (
+    "The StartGuard policy and status describe one bounded startup check only; they are not a "
+    "resource qualification proof and they do not certify macOS capacity."
+)
+
+_PROFILE_ROWS = {row.profile: row for row in MACOS_EXECUTION_PROFILES}
 
 
 class ClosedModel(BaseModel):
@@ -51,9 +61,17 @@ class CampaignConfiguration(ClosedModel):
     worker_start_timeout_s: float | None = Field(default=None, gt=0)
     max_infra_attempts_per_point: int | None = Field(default=None, ge=1)
     yolo_executor_count: Literal[1, 2, 4] | None = None
+    #: The macOS routing key. A request that names a profile must name the exact combination its
+    #: installed document declares; one that names nothing is never completed by inference.
+    execution_profile: Literal[
+        "MPS_W2_FIRST_PASS", "MPS_W1_FULL_RESTART_RETRY", "MPS_W1_FIRST_PASS"
+    ] | None = None
+    batch_kind: Literal["FIRST_PASS", "FULL_RESTART_RETRY"] | None = None
 
     @model_validator(mode="after")
     def validate_mode(self):
+        if self.execution_profile is not None or self.batch_kind is not None:
+            self._validate_profile_claim()
         fixed = (self.worker_count,)
         adaptive = (
             self.preferred_worker_count,
@@ -81,6 +99,22 @@ class CampaignConfiguration(ClosedModel):
             if self.yolo_executor_count != 2:
                 raise ValueError("ADAPTIVE_YOLO_EXECUTOR_COUNT")
         return self
+
+    def _validate_profile_claim(self) -> None:
+        """The claim is the matrix row or nothing: half a key and a cross key are both refused.
+
+        The worker count is deliberately *not* checked here. ``N>2`` is a platform-support
+        refusal, so it is decided where the document is loaded and answered with the stable
+        ``UNSUPPORTED_ON_MACOS`` reason instead of a shape error.
+        """
+
+        if self.execution_profile is None or self.batch_kind is None:
+            raise ValueError("EXECUTION_PROFILE_CLAIM")
+        row = _PROFILE_ROWS.get(self.execution_profile)
+        if row is None or row.batch_kind != self.batch_kind:
+            raise ValueError("EXECUTION_PROFILE_CLAIM")
+        if row.execution_mode != self.execution_mode:
+            raise ValueError("EXECUTION_PROFILE_MODE")
 
 
 class CampaignStartRequest(CampaignConfiguration):
@@ -143,9 +177,31 @@ class StartGuardStatus(ClosedModel):
 
 
 class WorkerCountAvailability(ClosedModel):
-    worker_count: int = Field(ge=2, le=FIXED_WORKER_COUNTS[-1])
+    worker_count: int = Field(ge=1, le=FIXED_WORKER_COUNTS[-1])
     selectable: bool
     status: str = Field(min_length=1)
+    reason_codes: tuple[str, ...] = ()
+    profile_sha256: str | None = None
+    qualification_sha256: str | None = None
+
+
+class ExecutionProfileResponse(ClosedModel):
+    """One row of the platform-bound support matrix, as the server would execute it.
+
+    The row names the exact routing key a request must claim and carries no budget profile and
+    no qualification hash: macOS supports W1 and W2, and that is the whole statement.
+    """
+
+    profile: str = Field(min_length=1)
+    schema_version: int = Field(ge=1)
+    execution_mode: Literal["SEQUENTIAL", "PARALLEL"]
+    worker_count: int = Field(ge=1, le=2)
+    batch_kind: Literal["FIRST_PASS", "FULL_RESTART_RETRY"]
+    accelerator: str = "mps"
+    selector: str = "MPS:default"
+    platform: str = "macos"
+    selectable: bool = True
+    status: str = "SUPPORTED"
     reason_codes: tuple[str, ...] = ()
     profile_sha256: str | None = None
     qualification_sha256: str | None = None
@@ -177,6 +233,15 @@ class CapabilitiesResponse(ClosedModel):
     start_guard: StartGuardStatus | None = None
     lease_duration_s: float = 30.0
     lease_renewal_margin_s: float = 10.0
+    #: Present only for a platform-bound composition (macOS). It is the complete answer for this
+    #: host, so no budget provider or per-N qualification view takes part in it.
+    platform: str | None = None
+    support_matrix: tuple[ExecutionProfileResponse, ...] = ()
+    execution_profile: str | None = None
+    execution_schema_version: int | None = None
+    execution_config_sha256: str | None = None
+    start_guard_note: str | None = None
+    worker_qualifications: tuple[dict[str, object], ...] = ()
 
 
 class LeaseResponse(ClosedModel):
@@ -294,6 +359,10 @@ class PreflightResponse(ClosedModel):
     start_guard: StartGuardStatus | None = None
     reason_codes: tuple[str, ...] = ()
     expires_at_monotonic_ns: int | None = None
+    #: The resolved platform profile this receipt bound, when the document is a macOS one.
+    execution_profile: str | None = None
+    execution_schema_version: int | None = None
+    execution_batch_kind: str | None = None
 
 
 class AttemptProjectionResponse(ClosedModel):

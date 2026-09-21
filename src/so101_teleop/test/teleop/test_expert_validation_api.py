@@ -437,3 +437,151 @@ def test_capabilities_expose_exact_n_availability_without_quota(tmp_path):
         assert item['reason_codes'] == ['CAPABILITIES_NOT_LOADED']
         assert item['status'] == 'UNKNOWN'
         assert item['profile_sha256'] is None and item['qualification_sha256'] is None
+
+
+# --------------------------------------------------------------------------------------
+# The macOS W1/W2 support matrix on the API surface
+#
+# The request carries the routing key `(execution_profile, batch_kind)`; the API refuses a
+# claim that contradicts its own mode/worker count before any service call, and the
+# capability document can express a W1 (one-worker) entry, which the schema-v3 DTO could not.
+# --------------------------------------------------------------------------------------
+
+
+def test_the_api_accepts_a_closed_profile_claim():
+    from so101_teleop.expert_validation.api import CampaignConfiguration
+
+    claim = CampaignConfiguration(
+        contract_version=3, service_session_id="s", lease_id="l", lease_generation=1,
+        manifest_id="m", execution_mode="SEQUENTIAL", worker_count=1,
+        execution_profile="MPS_W1_FIRST_PASS", batch_kind="FIRST_PASS",
+    )
+    assert claim.execution_profile == "MPS_W1_FIRST_PASS"
+    assert claim.batch_kind == "FIRST_PASS"
+
+    w2 = CampaignConfiguration(
+        contract_version=3, service_session_id="s", lease_id="l", lease_generation=1,
+        manifest_id="m", execution_mode="PARALLEL", worker_count=2,
+        execution_profile="MPS_W2_FIRST_PASS", batch_kind="FIRST_PASS",
+    )
+    assert w2.execution_profile == "MPS_W2_FIRST_PASS"
+
+    retry = CampaignConfiguration(
+        contract_version=3, service_session_id="s", lease_id="l", lease_generation=1,
+        manifest_id="m", execution_mode="SEQUENTIAL", worker_count=1,
+        execution_profile="MPS_W1_FULL_RESTART_RETRY", batch_kind="FULL_RESTART_RETRY",
+    )
+    assert retry.batch_kind == "FULL_RESTART_RETRY"
+
+
+def test_the_api_refuses_a_claim_that_contradicts_its_mode_or_worker_count():
+    from pydantic import ValidationError
+
+    from so101_teleop.expert_validation.api import CampaignConfiguration
+
+    base = dict(contract_version=3, service_session_id="s", lease_id="l", lease_generation=1,
+                manifest_id="m")
+    # A W2 profile cannot be claimed while asking for the W1 mode.
+    with pytest.raises(ValidationError, match="EXECUTION_PROFILE_MODE"):
+        CampaignConfiguration(**base, execution_mode="SEQUENTIAL", worker_count=1,
+                              execution_profile="MPS_W2_FIRST_PASS", batch_kind="FIRST_PASS")
+    # W1 first-pass and W1 retry are different rows of the matrix, not one profile.
+    with pytest.raises(ValidationError, match="EXECUTION_PROFILE_CLAIM"):
+        CampaignConfiguration(**base, execution_mode="SEQUENTIAL", worker_count=1,
+                              execution_profile="MPS_W1_FIRST_PASS",
+                              batch_kind="FULL_RESTART_RETRY")
+    with pytest.raises(ValidationError, match="EXECUTION_PROFILE_CLAIM"):
+        CampaignConfiguration(**base, execution_mode="SEQUENTIAL", worker_count=1,
+                              execution_profile="MPS_W1_FIRST_PASS")
+    with pytest.raises(ValidationError, match="EXECUTION_PROFILE_CLAIM"):
+        CampaignConfiguration(**base, execution_mode="SEQUENTIAL", worker_count=1,
+                              batch_kind="FIRST_PASS")
+    with pytest.raises(ValidationError):
+        CampaignConfiguration(**base, execution_mode="SEQUENTIAL", worker_count=1,
+                              execution_profile="MPS_W8_FIRST_PASS", batch_kind="FIRST_PASS")
+    # N>2 is a platform-support refusal, not a shape error: the API carries it to preflight,
+    # which refuses it with the stable UNSUPPORTED_ON_MACOS reason.
+    oversized = CampaignConfiguration(
+        **base, execution_mode="PARALLEL", worker_count=8,
+        execution_profile="MPS_W2_FIRST_PASS", batch_kind="FIRST_PASS")
+    assert oversized.worker_count == 8
+
+
+def test_the_preflight_route_refuses_a_cross_profile_claim(tmp_path):
+    response = _client(tmp_path).post(
+        "/expert-validation/campaigns/preflight",
+        json={
+            "contract_version": 3, "service_session_id": "s", "lease_id": "l",
+            "lease_generation": 1, "manifest_id": "m", "execution_mode": "SEQUENTIAL",
+            "worker_count": 1, "execution_profile": "MPS_W2_FIRST_PASS",
+            "batch_kind": "FIRST_PASS",
+        },
+    )
+    assert response.status_code == 422, response.text
+
+
+def test_the_preflight_route_forwards_a_closed_profile_claim(tmp_path):
+    response = _client(tmp_path).post(
+        "/expert-validation/campaigns/preflight",
+        json={
+            "contract_version": 3, "service_session_id": "s", "lease_id": "l",
+            "lease_generation": 1, "manifest_id": "m", "execution_mode": "SEQUENTIAL",
+            "worker_count": 1, "execution_profile": "MPS_W1_FIRST_PASS",
+            "batch_kind": "FIRST_PASS",
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["admitted"] is True
+    assert payload["execution_config"]["worker_count"] == 1
+
+
+def test_the_capability_document_models_w1_w2_and_the_no_qualification_note():
+    from so101_teleop.expert_validation.api import (
+        CapabilitiesResponse,
+        ExecutionProfileResponse,
+        START_GUARD_NOT_A_QUALIFICATION,
+        WorkerCountAvailability,
+    )
+
+    payload = CapabilitiesResponse(
+        available=True,
+        execution_modes=("SEQUENTIAL", "PARALLEL"),
+        platform="macos",
+        execution_profile="MPS_W2_FIRST_PASS",
+        execution_schema_version=4,
+        execution_config_sha256="a" * 64,
+        support_matrix=(
+            ExecutionProfileResponse(
+                profile="MPS_W2_FIRST_PASS", schema_version=4, execution_mode="PARALLEL",
+                worker_count=2, batch_kind="FIRST_PASS"),
+            ExecutionProfileResponse(
+                profile="MPS_W1_FULL_RESTART_RETRY", schema_version=5,
+                execution_mode="SEQUENTIAL", worker_count=1,
+                batch_kind="FULL_RESTART_RETRY"),
+            ExecutionProfileResponse(
+                profile="MPS_W1_FIRST_PASS", schema_version=6, execution_mode="SEQUENTIAL",
+                worker_count=1, batch_kind="FIRST_PASS"),
+        ),
+        worker_count_availability=(
+            WorkerCountAvailability(worker_count=1, selectable=True, status="SUPPORTED"),
+            WorkerCountAvailability(worker_count=2, selectable=True, status="SUPPORTED"),
+            WorkerCountAvailability(
+                worker_count=3, selectable=False, status="UNSUPPORTED_ON_MACOS",
+                reason_codes=("UNSUPPORTED_ON_MACOS",)),
+        ),
+        start_guard_note=START_GUARD_NOT_A_QUALIFICATION,
+    )
+
+    document = payload.model_dump()
+    assert document["platform"] == "macos"
+    assert document["worker_count_availability"][0]["worker_count"] == 1
+    assert document["worker_count_availability"][2]["status"] == "UNSUPPORTED_ON_MACOS"
+    rows = {row["profile"]: row for row in document["support_matrix"]}
+    assert set(rows) == {
+        "MPS_W2_FIRST_PASS", "MPS_W1_FULL_RESTART_RETRY", "MPS_W1_FIRST_PASS"}
+    assert (rows["MPS_W2_FIRST_PASS"]["schema_version"],
+            rows["MPS_W2_FIRST_PASS"]["worker_count"],
+            rows["MPS_W2_FIRST_PASS"]["batch_kind"]) == (4, 2, "FIRST_PASS")
+    assert "not a resource qualification proof" in document["start_guard_note"]
+    assert list(document["worker_qualifications"]) == []

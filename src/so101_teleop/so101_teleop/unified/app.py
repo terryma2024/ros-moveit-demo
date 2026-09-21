@@ -37,6 +37,7 @@ from so101_teleop.expert_validation.api import (
     ManifestResponse,
     PreflightResponse,
     RetryRequest,
+    START_GUARD_NOT_A_QUALIFICATION,
     _error,
     _invoke,
     _reject_legacy_execution_contract,
@@ -719,11 +720,7 @@ def validation_router(services: UnifiedServices) -> APIRouter:
                 ],
             }
         payload = dict(await _invoke(service.capabilities))
-        payload.setdefault(
-            "worker_qualifications",
-            [_qualification_payload(services.budget_source, n) for n in range(2, 9)],
-        )
-        return payload
+        return _published_capabilities(payload, services.budget_source)
 
     @router.post("/expert-validation/lease", response_model=LeaseResponse)
     async def acquire_lease(
@@ -860,6 +857,25 @@ def _qualification_payload(source, selected_n: int) -> dict:
         "profile_sha256": view.profile_sha256,
         "approval_sha256": view.approval_sha256,
     }
+
+
+def _published_capabilities(payload: dict, budget_source) -> dict:
+    """The capability document a client may read, without consulting an authority it need not.
+
+    A platform-bound document (the macOS W1/W2 support matrix) is a complete statement about
+    this host: what it supports is the platform matrix, not an upstream per-N qualification.
+    Only a composition that does not declare a matrix is completed from the budget provider.
+    """
+
+    if payload.get("support_matrix"):
+        payload["worker_qualifications"] = []
+        payload.setdefault("start_guard_note", START_GUARD_NOT_A_QUALIFICATION)
+        return payload
+    if "worker_qualifications" not in payload:
+        payload["worker_qualifications"] = [
+            _qualification_payload(budget_source, n) for n in range(2, 9)
+        ]
+    return payload
 
 
 def _mount_static(app: FastAPI, static_dir, capture_dir) -> None:
