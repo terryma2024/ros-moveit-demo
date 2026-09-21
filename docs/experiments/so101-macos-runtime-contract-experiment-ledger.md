@@ -168,11 +168,11 @@
   failing parallel-runtime groups reported 468 passed and 1 skipped.
 - Authoritative macOS gate: fixed ROS Python, all four overlays, fixed dylib farm,
   `TMPDIR/TMP/TEMP=/opt/data/tmp`, a fresh short basetemp, and
-  `pytest -n 8 --dist loadscope src/so101_demo_py/test`. The ordinary gate excludes the eleven
+  `pytest -n 8 --dist loadscope src/so101_demo_py/test`. The ordinary gate excludes the twelve
   tests marked `explicit_ml` and does not collect `benchmark_test/`.
 - Result: after aligning the nine Torch/GroundingDINO cases discovered by the Linux environment,
-  the final fresh `package-gate-n8-final-015` completed with 3651 passed, 9 skipped, zero failed in
-  40.48 seconds;
+  the final fresh `package-gate-n8-cross-platform-017` completed with 3650 passed, 9 skipped, zero
+  failed in 40.73 seconds;
   pytest exit 0. Its JUnit, complete log, preflight, exit code, elapsed time, and basetemp record are
   retained under the run evidence directory.
 - Expanded diagnostic: `package-gate-n8-all-007` deliberately overrode the marker filter. It
@@ -219,3 +219,10 @@
   the ROS launch-testing collector return only one skip and no tests (pytest exit 5); Torch import
   is therefore delayed to the two tensor tests while the module-level marker remains available at
   collection. Both failed scratch trees are retained as deletion candidates.
+- The next complete Linux run reached the test boundary: 3544 passed, 22 skipped, 45 failed, and
+  49 errors. The errors were missing MuJoCo and Darwin-private-path fixtures. The failures grouped
+  into macOS-only MPS/install contracts, Linux transport assertions using Darwin path rules, a
+  leaked live child from the oversized-cmdline procfs test, two missing Darwin platform patches,
+  one Linux v4 document retaining MPS-only fields, an unmarked Torch checkpoint test, and an
+  unpopulated locked submodule. These are environment/platform test boundaries, not represented as
+  Linux acceptance. Scratch `linux-pytest-n8-003` is retained as a deletion candidate.

@@ -1088,6 +1088,8 @@ def test_schema_v4_auto_transport_resolves_per_platform():
         document["accelerator"] = {"kind": "cuda", "selector": "INDEX:0"}
         document["requested_device"] = "cuda"
         document["mujoco_gl"] = "egl"
+        document["mps_process_memory_fraction"] = None
+        document["start_guard"].pop("mps_minimum_headroom_bytes")
         config = contracts.parse_parallel_runtime_config_v4(document)
         assert config.ipc_transport is contracts.IpcTransport.PROC_FD_UNIX
 

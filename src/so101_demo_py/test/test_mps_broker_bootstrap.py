@@ -17,6 +17,9 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.skipif(
+    sys.platform != "darwin", reason="MPS broker bootstrap is macOS-only")
+
 from so101_demo.runtime.mps_broker_bootstrap import (
     FALLBACK_ENV,
     MPS_DEVICE,

@@ -229,7 +229,7 @@ def test_domain_claim_owner_has_a_portable_process_birth_identity():
 
 
 @pytest.mark.skipif(sys.platform == 'darwin', reason='Linux procfs resource-probe boundary')
-def test_oversized_cmdline_process_is_classified_not_refused():
+def test_oversized_cmdline_process_is_classified_not_refused(tmp_path):
     """A same-UID process with a huge argv must not make the whole probe fail closed.
 
     RED before the repair: SystemResourceProbe.ros_domain_in_use raised
@@ -257,15 +257,25 @@ def test_oversized_cmdline_process_is_classified_not_refused():
                 break
             time.sleep(0.01)
         assert len(cmdline) > 4096
-        probe = SystemResourceProbe()
+        # Freeze this one process into a synthetic proc root, then reap it before scanning.
+        # A live test child must not race unrelated resource probes in other xdist workers.
+        process = tmp_path / "proc" / str(child.pid)
+        process.mkdir(parents=True)
+        for name in ("stat", "comm", "environ"):
+            (process / name).write_bytes(Path(f"/proc/{child.pid}/{name}").read_bytes())
+        (process / "cmdline").write_bytes(cmdline)
+        child.terminate()
+        child.wait(timeout=10)
+        probe = SystemResourceProbe(proc_root=tmp_path / "proc")
         # The oversized-cmdline process is not a ROS/parallel-batch claimant.
         assert probe.ros_domain_in_use(213) is False
         report = probe.process_scan_report()
         assert report["unclassified_unreadable_policy"] == "fail_closed"
         del ResourceAllocationError
     finally:
-        child.terminate()
-        child.wait(timeout=10)
+        if child.poll() is None:
+            child.terminate()
+            child.wait(timeout=10)
 
 
 def test_claim_root_is_stable_per_test_and_isolated_between_tests(monkeypatch):
@@ -1657,7 +1667,16 @@ def test_short_external_ipc_root_preserves_long_durable_evidence_root(tmp_path, 
 
         assert worker.worker_root.is_relative_to(root)
         assert worker.socket_path == ipc_root / "1/s"
-        assert len(os.fsencode(worker.socket_path)) <= 107
+        from so101_demo.runtime.parallel_ipc import (
+            UNIX_SOCKADDR_CAPACITY_BYTES,
+            transport_address,
+        )
+        descriptor = os.open(worker.socket_namespace, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            address = transport_address(worker.socket_path, descriptor)
+        finally:
+            os.close(descriptor)
+        assert len(os.fsencode(address)) + 1 <= UNIX_SOCKADDR_CAPACITY_BYTES
         assert not (root / "ipc").exists()
     finally:
         resource_allocator.close()
