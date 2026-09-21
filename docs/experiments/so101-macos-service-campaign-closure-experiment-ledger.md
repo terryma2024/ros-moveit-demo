@@ -12,7 +12,7 @@ executor: dst-so101-macos-closure (DeepSeek Harness TUI, tmux) resumed by explic
 worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
 branch: codex/so101-unified-webapp
 base_commit: 6d5069026fbd322076f58d0d4b9504891abeb861
-current_commit: 0342ab9b (Task 6 owner tree; see CP-MSC-T6)
+current_commit: da661d0a (Task 8 macOS W1/W2 matrix; see CP-MSC-T7-T8)
 upstream: origin/codex/so101-unified-webapp (in sync at resume; this session does not push)
 evidence_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
 dispatch_receipt: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/dispatch.receipt
@@ -49,9 +49,9 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-T6
+latest_checkpoint: CP-MSC-T7-T8
 review_pending: CP-MSC-02 (Tasks 2-6, GPT-5.6 Sol/high - not available in this session; packet below)
-next_experiment: EXP-MSC-109 (Task 7: v5/v6 profiles, W1 composition and fresh per-spawn StartGuard)
+next_experiment: EXP-MSC-110 (Task 9: candidate/production execution contexts and atomic retry admission)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -1735,3 +1735,82 @@ Evidence index: `task2/task5-gate-4-20260921T222822Z`, `task2/task5-expert-valid
 `task6/interop/demo_writer_interop.py`.
 
 Retained: everything. Deleted or archived: nothing.
+
+## CP-MSC-T7-T8: three closed macOS profiles, fresh per-spawn guards, and a W1/W2-only service
+
+```yaml
+checkpoint_id: CP-MSC-T7-T8
+recorded_at: 2026-09-21T23:27:00+0800
+commits: 6b36868c (feat(so101): add closed macOS W1 profiles and spawn guards)
+         da661d0a (feat(teleop): limit macOS validation to W1 and W2)
+gates: task2/task7-gate-owner-20260921T232552Z - 300 passed
+       task2/task8-gate-owner-20260921T232621Z - 80 passed / 1 failed (pre-existing, NVML-less host)
+```
+
+### Task 7: v4/v5/v6, W1 composition and fresh guards
+
+macOS now has exactly three admissible combinations, resolved by one shared closed table
+(`APPROVED_EXECUTION_ROUTES` / `resolve_execution_route`): v4 `MPS_W2_FIRST_PASS` (N=2,
+`FIRST_PASS`), v5 `MPS_W1_FULL_RESTART_RETRY` (N=1, `FULL_RESTART_RETRY`), v6
+`MPS_W1_FIRST_PASS` (N=1, `FIRST_PASS`). Everything else is refused before any spawn with a typed
+reason: other worker counts (`PLATFORM_WORKER_COUNT_UNSUPPORTED`), adaptive
+(`ADAPTIVE_UNSUPPORTED_ON_MACOS`), profile/schema crossover (`PROFILE_SCHEMA_MISMATCH`),
+profile/batch-kind crossover (`PROFILE_BATCH_KIND_MISMATCH`), and a routing key that could only
+have come from the selected-point count (`PROFILE_FROM_SELECTED_POINTS`). The frozen v4 document is
+byte-pinned (sha256 `2f9d7a87...c6b06b`) and the v5/v6 documents differ from it only in
+`schema_version`, `worker_count` and `ros_domain_ids` - verified independently by diffing all three
+documents field by field.
+
+StartGuard is per-spawn by construction: the adapter probes before creating any campaign child, and
+`CampaignSupervisor` probes between `begin_spawn` and `Popen` for each Worker, so a stored PASS can
+never admit a later spawn and a stored FAIL can never block a healthy one. The CLI's `exec` handover
+uses a one-shot pipe created by that same process; the on-disk `start-guard.json` is audit only, and
+a torch import left over from the guard phase refuses the handover (`GUARD_PHASE_IMPORT_SURVIVED`).
+The guard's probe, thresholds and verdict algorithm are unchanged, and the schema-v4-only wording
+narrowed to every approved Darwin/MPS profile while Linux v3 still cannot carry MPS headroom.
+
+Evidence: RED `task2/task7-red-1-20260921T230221Z` (collection errors) and
+`task2/task7-red-2-20260921T230229Z` (79 failed / 173 passed, every failure inside the new tests);
+GREEN gate above; full demo suite `task2/task7-green-full4-20260921T232158Z` (181 failed / 3627
+passed) versus `git archive HEAD` baseline `task2/task7-baseline-full3-20260921T231410Z` (200
+failed / 3476 passed) with an empty live-only failure set.
+
+Disclosures: one new test initially imported the Worker *script* as a module, which consumed pytest's
+argv and overwrote `test/test_single_point_input.py` with an ACK payload; the file was restored from
+HEAD byte-for-byte (verified: no diff, sha256 `ccc4b9df...b79471`) and the stray `-p` file removed.
+One existing test outside the plan's Task 7 list, `test_owner_records.py`, had its stubs moved to the
+adapter's new `resolve_request` seam; the asserted behaviour is unchanged.
+
+### Task 8: the service only offers W1 and W2
+
+Capabilities publish the same three rows with their real execution mode, worker count, batch kind
+and document hash. N=3..8 remain visible but non-selectable as `UNSUPPORTED_ON_MACOS` with
+`profile_sha256 = qualification_sha256 = null`, the adaptive ladder and worker qualifications are
+empty, and the platform payload carries a note that the StartGuard is start protection rather than a
+qualification proof. The unified app no longer consults `budget_source` when composing that payload.
+Preflight binds each request to the installed document it names, uses that profile's own MPS probe
+and scope, never enters CUDA/NVML on macOS, refuses N>2/ADAPTIVE/crossovers/stale hashes/missing
+documents, and requires an explicit routing key for a macOS document. `_LazyStartGuard` caches only
+the composition keyed by `(profile, config_sha256, accelerator, selector)`; every request runs a
+fresh epoch probe and no verdict is stored.
+
+Evidence: RED `task2/task8-red-1-20260921T230340Z` (31 failed / 47 passed, all missing contract);
+GREEN gate above; full teleop suite 29 failed / 633 passed before (`task2/task8-baseline-full-20260921T225921Z`)
+and 27 failed / 668 passed after (`task2/task8-green-full-3-20260921T231446Z`) with zero new
+failures and two previously failing guard-document tests now passing. A pure HEAD-archive baseline
+with a private shim (`task2/task8-head-archive-baseline2-20260921T231410Z`, 3 failed / 45 passed)
+proves the remaining failure predates the change.
+
+### Handed to Task 9 (explicitly deferred, not forgotten)
+
+1. `production.py::_restored_request()` still rebuilds a restored campaign from the layout's
+   configured document; the durable preflight receipt now carries
+   `execution_profile`/`schema_version`/`batch_kind`, so Task 9 must bind the restored request to the
+   receipt's own profile.
+2. `expert_validation_openapi.json` and `web/src/api/expert-validation-schema.d.ts` are stale after
+   the new DTO fields; Task 9 step 3 regenerates both.
+
+Retained: all Task 7/8 invocations under `task2/task7-*`, `task2/task8-*`, plus the archive
+baselines and shims. Deletion candidates (nothing deleted): `task2/task8-head-archive/`,
+`task2/task8-scratch/`, superseded intermediate greens `task2/task8-green-1..6`,
+`task2/task7-green-1..2`, `task2/task7-impl-*`.
