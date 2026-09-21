@@ -7,18 +7,18 @@ success_contract: on matianyideMacBook-Air.local, prepare and full doctor pass, 
 worktree: /tmp/so101-debug-macos-runtime-contract-second-mac-2oruml/repo
 branch: codex/so101-unified-webapp
 base_commit: d8416d15e69d1e2a025f7735360d89ff4cccda66
-current_commit: d8416d15e69d1e2a025f7735360d89ff4cccda66 plus the recorded macOS runtime worktree patch
+current_commit: c521d4f96d356aef7da0157a08c7371a87e29972
 evidence_root: /tmp/so101-debug-macos-runtime-contract-second-mac-2oruml
 confirmed_conclusions:
   - Terry-Mac-mini.local passed the earlier /tmp runtime contract in RUN-002
   - matianyideMacBook-Air.local passed the current /opt/data/tmp worktree patch in EXP-MRC-007
+  - ai-station passed the ordinary non-ML Linux package gate with eight pytest workers in RUN-006
 disproven_routes:
   - a transferred submodule origin outside the approved remote allowlist is rejected by prepare
   - a user-home-only bun installation is invisible to the clean fixed runtime PATH
 open_hypotheses:
-  - RUN-006 must finish the Linux eight-worker non-ML parity gate
   - the current /opt/data/tmp patch still needs a fresh Mac mini prepare, doctor, READY, and cleanup run before a same-patch two-host claim
-latest_checkpoint: CP-MRC-SECOND-MAC-SCOPED-PASS
+latest_checkpoint: CP-MRC-LINUX-PARITY-PASS
 next_experiment: EXP-MRC-MAC-MINI-CURRENT-PATCH
 ```
 
@@ -221,7 +221,7 @@ next_experiment: EXP-MRC-MAC-MINI-CURRENT-PATCH
 ## RUN-006 — Linux eight-worker parity gate
 
 - Date: 2026-09-21 Asia/Shanghai
-- Status: `RUNNING_ENVIRONMENT_ALIGNMENT`
+- Status: `PASS_LINUX_NON_ML_PACKAGE_GATE`
 - Branch: `codex/so101-unified-webapp`
 - Evidence root: `/data/work/so101-evidence/macos-parallel-compat-linux/20260921-a50dcb6c-n8-001`
 - Scope: on `ai-station`, verify the same ordinary non-ML `src/so101_demo_py/test/` boundary with
@@ -255,6 +255,29 @@ next_experiment: EXP-MRC-MAC-MINI-CURRENT-PATCH
   headless SSH. The exact `@notty` spelling is now classified as the same non-ROS transport; other
   SSH command shapes remain fail-closed. Full and focused failed runs are retained under scratches
   `linux-pytest-n8-004` and `linux-pytest-n8-005`.
+- Commit `de91458d` reduced the complete gate to one failure: 3527 passed, 135 skipped, and
+  `test_external_cleanup_retires_only_owned_worker_and_releases_claim` failed after process
+  retirement timed out. Linux identity reads already treated an exited zombie as absent because
+  its procfs command line was empty, but the process-group scan still counted that same zombie as
+  a live member. This disagreed with the macOS `psutil` path and made an external cleaner wait for
+  a child it could not reap. Scratch `linux-pytest-n8-006` retains the complete failed run.
+- Commit `c521d4f9` makes both Linux procfs readers exclude zombie processes and adds a real
+  unreaped-zombie regression test. The source was rebuilt into isolated build and install roots
+  `build-c521d4f9` and `install-c521d4f9`; the locked submodule was restored from the registered
+  bundle at exact commit `85d2a5c42686a3d6b0d909a047a4188b24edd257`.
+- Authoritative Linux gate: the exact test Python was
+  `/data/work/so101-evidence/macos-parallel-compat-linux/20260921-a50dcb6c-n8-001/venv/bin/python`.
+  Before pytest, it proved `tempfile.gettempdir()` resolved to the new scratch
+  `scratch/linux-pytest-n8-007/tmp`. The command used `-n 8 --dist loadscope`, collected only
+  `src/so101_demo_py/test/`, and retained the ordinary `not explicit_ml` marker filter.
+- Final result: **3529 passed, 135 skipped, zero failed** in 25.37 seconds; pytest exit 0. The four
+  Python fork warnings did not change the result. Readback resolved `so101_demo_py` to
+  `install-c521d4f9/so101_demo_py`, and the imported Python package to the matching isolated build.
+- Retained: the complete durable evidence root, all seven scratch runs, isolated worktrees,
+  builds, installs, full logs, JUnit documents, preflight/readback records, and the submodule bundle.
+- Archived: none.
+- Deletion candidates only: `scratch/linux-pytest-n8-001` through
+  `scratch/linux-pytest-n8-007`, after readback. Nothing was deleted.
 
 ## RUN-007 — Second physical Mac reproduction
 
@@ -403,5 +426,26 @@ open_risks:
   - RUN-006 Linux eight-worker parity is still running
   - runtime READY does not prove pick-place motion behavior
   - current /opt/data/tmp patch has not been rerun on Terry-Mac-mini.local
+next_command: rerun prepare, full doctor, READY, exact-window evidence, and cleanup on Terry-Mac-mini.local with the current patch
+```
+
+```yaml
+checkpoint_id: CP-MRC-LINUX-PARITY-PASS
+last_valid_experiment: RUN-006
+current_hypothesis: the ordinary non-ML package gate is portable across macOS and Linux; only the fresh same-patch Mac mini runtime rerun remains open
+working_tree_status: c521d4f96d356aef7da0157a08c7371a87e29972 passed and was pushed to origin/codex/so101-unified-webapp
+owned_processes: NONE
+preserved_processes: no user process or ROS stack was modified by the Linux package gate
+confirmed_conclusions:
+  - macOS passed 3654 tests with 10 platform skips under the fixed runtime and eight workers
+  - ai-station passed 3529 tests with 135 platform or unavailable-feature skips under eight workers
+  - Linux process identity and group membership now agree that an unreaped zombie is no longer running
+disproven_routes:
+  - treating a zombie process-group entry as a live external-cleanup target
+  - sourcing the stale worktree-local macOS install overlay
+open_risks:
+  - explicit ML tests remain outside the user-authorized acceptance gate
+  - runtime READY does not prove pick-place motion behavior
+  - the current /opt/data/tmp patch has not been rerun on Terry-Mac-mini.local after RUN-007
 next_command: rerun prepare, full doctor, READY, exact-window evidence, and cleanup on Terry-Mac-mini.local with the current patch
 ```
