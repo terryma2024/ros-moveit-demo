@@ -33,7 +33,7 @@ confirmed_conclusions:
   - CONF-010 EXP-001 三个 Dockerfile 补 `COPY scripts/run_so101_adaptive_batch.zsh /scripts/run_so101_adaptive_batch.zsh` 并放开同名 dockerignore 后，镜像重建退出码 0；容器内 rclpy/torch 2.13.0+cu130/torchvision 0.28.0+cu130/ultralytics 8.4.115/open3d 0.19.0 全部导入成功，`torch.cuda.is_available()` 为 True，RTX 5060 Ti 上 512x512 CUDA matmul 有限值通过
   - CONF-011 EXP-003 YOLO-Seg 一体化运行 RUN_EXIT=0、status=DONE、transition_count=19；感知唯一候选 plastic_cup，confidence 0.9687、mask 4260 px、容器内 CUDA 推理 47.83 ms、world center (0.02011, -0.28047, 0.16500)
   - CONF-012 EXP-006 同一命令第二次 FULL_RESTART 复现完全相同的感知数值（0.9687、4260 px、48.44 ms），并成功经 `camera_preset --backend mujoco table_corner_sw` 读回 `matched=true`
-  - CONF-013 EXP-007 `tools/so101_pytest_gate.py` 的普通 gate 在本机需要 perception venv 提供 torch，且需要仓库根可导入 `tools`；裸 `colcon test` 会在收集期因 `No module named 'torch'` 失败，这是本机既有的解释器分工门，不是本轮修改引入
+  - CONF-013 EXP-007 仓库自带 `tools/so101_pytest_gate.py` 普通 gate 在 7c1a2f50 上 PASS：8 shard 全 rc=0、collection 3544/3544、70.7 s、无残留自有进程；裸 `colcon test` 在本机收集期缺 torch 与 `tools`，属既有解释器分工门
 disproven_routes:
   - DISPROVED-001 在 GNOME 会话锁定时用 `$gui-capture --window-id/--desktop` 代替 Viewer 视觉证据：SHOT 只得到锁屏像素，SHA 完全相同
   - DISPROVED-002 用 CPU smoke 代替推理镜像的 CUDA 预检
@@ -47,9 +47,9 @@ next_experiment: NONE
 ```yaml
 checkpoint_id: CP-003
 last_valid_experiment: EXP-007
-current_hypothesis: 两篇导读都已各完成一次真实 execute 运行；剩余工作只是包级 gate 与提交
-working_tree_status: 修改 6 个 Dockerfile/dockerignore，新增 1 个回归测试与 1 个账本
-owned_processes: NONE
+current_hypothesis: CLOSED；两篇导读各完成多次 FULL_RESTART execute 运行，包级 gate 全绿
+working_tree_status: 干净；修复、回归测试与账本已提交为 7c1a2f50
+owned_processes: NONE；无残留 ROS 进程、容器或构建
 preserved_processes: 用户 GNOME 会话（当前锁定）、dst tmux session 未触碰
 confirmed_conclusions:
   - CONF-001 至 CONF-013 见头部
@@ -387,14 +387,15 @@ next_experiment: EXP-007
 
 ```yaml
 experiment_id: EXP-007
-status: PLANNED
+status: VALID
 prior_experiment: EXP-006
 hypothesis: 补齐构建上下文后，包级普通 gate 对本轮修改没有新增失败
 prediction: 普通 gate 全绿；此前裸 colcon test 的 torch/tools 收集失败被解释为解释器分工门
 single_variable: 本轮新增 test_image_build_context.py 与 6 个 Dockerfile/dockerignore 改动
 lifecycle: FULL_RESTART
 preconditions:
-  - 修改已提交，工作树干净
+  - 修改已提交（7c1a2f50），工作树干净
+  - 证据根改为 0755，避免 unix_address 策略把组可写祖先判为不安全
 success_criteria:
   - tools/so101_pytest_gate.py 退出码 0，无失败、无错误
 failure_criteria:
@@ -402,18 +403,27 @@ failure_criteria:
 invalid_criteria:
   - 用 CPU/venv 之外的 interpreter 冒充 ROS gate
 provenance:
-  source_commit: PENDING（本轮修改提交后填写）
+  source_commit: 7c1a2f50b53249ca9aeb1a495bb910c78664f765
   install_overlay: /home/matianyi/Projects/ros-moveit-demo/install
-  runtime_executable: /home/matianyi/Projects/ros-moveit-demo/install/so101_demo_py
+  runtime_executable: /usr/bin/python3（ROS Jazzy 解释器，PYTHONPATH 追加 /data/work/venvs/so101-grounded-sam/lib/python3.12/site-packages）
   ros_domain_id: 231
   gz_partition: so101-guides-20260921
 commands:
-  - command: PENDING
-    exit_code: PENDING
-observed: []
-inferred: []
-conclusion: PENDING
-evidence: []
-decision: PENDING
+  - command: PYTHONNOUSERSITE=1 colcon test --packages-select so101_demo_py --event-handlers console_direct+ --pytest-args '-q'
+    exit_code: 2
+  - command: python3 tools/so101_pytest_gate.py --workers 8 --evidence-root <root> --run-id g2-7c1a2f50 --process-id-chars 4 --expected-source-commit 7c1a2f50b53249ca9aeb1a495bb910c78664f765 --python /usr/bin/python3
+    exit_code: 0
+observed:
+  - OBSERVED 裸 colcon test 在收集期失败两次：先是 `No module named 'torch'`（test_grounding_dino_domain_retention.py 顶层 import torch），再把 venv 加进 PYTHONPATH 后是 `No module named 'tools'`（test_pytest_full_gate_runner.py 需要仓库根可导入）
+  - OBSERVED 仓库自带 gate PASS：source_commit=7c1a2f50、source_status=[]、8 个 shard 全部 rc=0、collection actual_count=3544 == expected_count=3544、collection_sha256=40ba8446…df40、total_elapsed_s=70.7、cleanup.owned_processes_remaining=[]
+  - OBSERVED 第一次用 `--run-id g7c1a2f50` 的 gate 运行失败于 test_unix_address_strategy.py::test_a_symlinked_base_refuses_to_be_created_through，原因是证据根 0775 组可写；改成 0755 后通过，unix_address 策略本身未被修改
+inferred:
+  - INFERRED 本机普通 gate 必须走 tools/so101_pytest_gate.py 并显式提供 torch 与仓库根，这不是本轮改动引入
+conclusion: 本轮 Dockerfile/测试改动的包级普通 gate 全绿
+evidence:
+  - /data/work/so101-evidence/perception-guides-run/20260921-e7354314/package-gate/gate-summary.json
+  - /data/work/so101-evidence/perception-guides-run/20260921-e7354314/package-gate/package-gate-runner.log
+  - /data/work/so101-evidence/perception-guides-run/20260921-e7354314/scratch/g2-7c1a2f50
+decision: KEEP
 next_experiment: NONE
 ```
