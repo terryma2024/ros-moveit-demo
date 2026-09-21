@@ -69,7 +69,7 @@ def test_station_phases_are_the_closed_design_set() -> None:
     ]
 
 
-def test_only_the_two_closed_modes_resolve() -> None:
+def test_only_the_three_closed_modes_resolve() -> None:
     module = _diagnostic_module()
     assert (
         module.resolve_mode("MINIMAL_CONTROLLER_MANAGER")
@@ -78,6 +78,10 @@ def test_only_the_two_closed_modes_resolve() -> None:
     assert (
         module.resolve_mode("ROBOT_SYSTEM_CONTROLLER_MANAGER")
         is module.StationMode.ROBOT_SYSTEM_CONTROLLER_MANAGER
+    )
+    assert (
+        module.resolve_mode("FULL_TASK_STATION")
+        is module.StationMode.FULL_TASK_STATION
     )
     with pytest.raises(module.StationDiagnosticError) as error:
         module.resolve_mode("ARBITRARY_CONTROLLER_MANAGER")
@@ -105,6 +109,38 @@ def test_minimal_mode_never_loads_the_robot_system(tmp_path: Path) -> None:
     assert any("mujoco_plugins.yaml" in argument for argument in robot_system)
     assert any("ros2_controllers.yaml" in argument for argument in robot_system)
     assert any(argument == "simulation_session_id:=session-a" for argument in robot_system)
+
+
+def test_full_task_station_argv_is_fixed_and_uses_validated_binding_values(
+    tmp_path: Path,
+) -> None:
+    module = _diagnostic_module()
+    scene = tmp_path / "closure/share/so101_demo_py/assets/mujoco/scene.xml"
+    scene.parent.mkdir(parents=True)
+    scene.write_text("<mujoco/>", encoding="utf-8")
+    evidence = tmp_path / "run/evidence"
+
+    argv = module.full_task_station_argv(
+        session_id="gate-a-session-1",
+        task_evidence_root=evidence,
+        scene=scene,
+        readiness_timeout_s=90.0,
+    )
+
+    assert argv == (
+        "ros2",
+        "launch",
+        "so101_demo_py",
+        "so101_mujoco_task_station.launch.py",
+        "headless:=false",
+        "sensor_rendering:=true",
+        "include_teleop:=false",
+        "session_id:=gate-a-session-1",
+        f"task_evidence_root:={evidence}",
+        "readiness_timeout_s:=90.0",
+        f"mujoco_scene:={scene}",
+        "mujoco_initial_keyframe:=task_start",
+    )
 
 
 # --------------------------------------------------------------------------------------
@@ -381,6 +417,27 @@ def test_cli_requires_a_closed_mode_and_rejects_arbitrary_launch_argv() -> None:
     )
     assert options.mode is module.StationMode.MINIMAL_CONTROLLER_MANAGER
     assert options.timeout_s == 12.5
+
+
+def test_full_task_station_cli_requires_manifest_binding_and_control() -> None:
+    module = _diagnostic_module()
+
+    with pytest.raises(SystemExit):
+        module.parse_arguments(["--mode", "FULL_TASK_STATION"])
+
+    options = module.parse_arguments(
+        [
+            "--mode",
+            "FULL_TASK_STATION",
+            "--control-set-manifest",
+            "/tmp/manifest.json",
+            "--run-binding",
+            "/tmp/binding.json",
+            "--control",
+            "N",
+        ]
+    )
+    assert options.control == "N"
 
 
 def test_cli_rejects_a_negative_timeout() -> None:

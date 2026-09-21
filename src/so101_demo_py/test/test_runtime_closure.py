@@ -58,6 +58,16 @@ def _install_tree(root: Path) -> Path:
     return root
 
 
+def _install_tree_with_vendor_alias(root: Path) -> Path:
+    install = _install_tree(root)
+    vendor = install / "opt" / "mujoco_vendor" / "lib"
+    vendor.mkdir(parents=True)
+    target = vendor / "libmujoco.3.4.0.dylib"
+    target.write_bytes(b"mujoco-3.4.0")
+    (vendor / "libmujoco.dylib").symlink_to(target.name)
+    return install
+
+
 def _closure(module, install: Path, *, environment=None, forbidden=()):
     from collections.abc import Mapping
 
@@ -355,6 +365,104 @@ def test_symlinked_install_root_and_symlinked_files_are_refused(tmp_path: Path) 
     assert file_error.value.code == "CLOSURE_SYMLINK"
 
 
+def test_only_the_pinned_mujoco_vendor_alias_is_accepted(tmp_path: Path) -> None:
+    module = _closure_module()
+    install = _install_tree_with_vendor_alias(tmp_path / "install")
+
+    closure = _closure(module, install)
+
+    assert closure.install_root == install.resolve()
+    assert [item.relative_path for item in closure.dylib_alias_inventory] == [
+        "opt/mujoco_vendor/lib/libmujoco.dylib"
+    ]
+    alias = closure.dylib_alias_inventory[0]
+    assert alias.link_text == "libmujoco.3.4.0.dylib"
+    assert alias.target_relative_path == (
+        "opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib"
+    )
+    assert alias.target_sha256 == next(
+        item.sha256
+        for item in closure.library_inventory
+        if item.relative_path == alias.target_relative_path
+    )
+
+
+@pytest.mark.parametrize(
+    ("damage", "link_text"),
+    [
+        ("absolute", "/tmp/libmujoco.3.4.0.dylib"),
+        ("escape", "../libmujoco.3.4.0.dylib"),
+        ("dangling", "missing.dylib"),
+        ("cycle", "libmujoco.dylib"),
+        ("wrong", "libmujoco.3.3.0.dylib"),
+    ],
+)
+def test_mujoco_alias_rejects_invalid_link_shapes(
+    tmp_path: Path, damage: str, link_text: str
+) -> None:
+    module = _closure_module()
+    install = _install_tree_with_vendor_alias(tmp_path / "install")
+    alias = install / "opt/mujoco_vendor/lib/libmujoco.dylib"
+    alias.unlink()
+    alias.symlink_to(link_text)
+
+    with pytest.raises(module.RuntimeClosureError) as error:
+        _closure(module, install)
+
+    assert error.value.code == "CLOSURE_SYMLINK", damage
+
+
+def test_alias_target_and_alias_replacement_are_detected(tmp_path: Path) -> None:
+    module = _closure_module()
+    install = _install_tree_with_vendor_alias(tmp_path / "install")
+    expected = _closure(module, install)
+    target = install / "opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib"
+    target.write_bytes(b"replacement")
+
+    with pytest.raises(module.RuntimeClosureError) as target_error:
+        module.verify_runtime_closure(
+            expected,
+            install_root=install,
+            source_commit=SOURCE_COMMIT,
+            mujoco_ros2_control_commit=SUBMODULE_COMMIT,
+            environment={"DYLD_LIBRARY_PATH": "/x"},
+        )
+    assert target_error.value.code == "CLOSURE_INVENTORY_DRIFT"
+
+    target.write_bytes(b"mujoco-3.4.0")
+    alias = install / "opt/mujoco_vendor/lib/libmujoco.dylib"
+    alias.unlink()
+    alias.write_bytes(b"materialized")
+    with pytest.raises(module.RuntimeClosureError) as alias_error:
+        module.verify_runtime_closure(
+            expected,
+            install_root=install,
+            source_commit=SOURCE_COMMIT,
+            mujoco_ros2_control_commit=SUBMODULE_COMMIT,
+            environment={"DYLD_LIBRARY_PATH": "/x"},
+        )
+    assert alias_error.value.code == "CLOSURE_SYMLINK"
+
+
+def test_extra_file_and_directory_symlinks_remain_closed(tmp_path: Path) -> None:
+    module = _closure_module()
+    install = _install_tree_with_vendor_alias(tmp_path / "install")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "extra.dylib").write_bytes(b"extra")
+    (install / "lib/extra.dylib").symlink_to(outside / "extra.dylib")
+
+    with pytest.raises(module.RuntimeClosureError) as file_error:
+        _closure(module, install)
+    assert file_error.value.code == "CLOSURE_SYMLINK"
+
+    (install / "lib/extra.dylib").unlink()
+    (install / "share/linked").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(module.RuntimeClosureError) as directory_error:
+        _closure(module, install)
+    assert directory_error.value.code == "CLOSURE_SYMLINK"
+
+
 def test_replacement_race_is_refused(tmp_path: Path, monkeypatch) -> None:
     module = _closure_module()
     install = _install_tree(tmp_path / "install")
@@ -455,6 +563,86 @@ def test_attestation_requires_at_least_one_process_identity(tmp_path: Path) -> N
             observed_ros_domain_id=41,
         )
     assert error.value.code == "ATTESTATION_PROCESS_IDENTITIES"
+
+
+def _process_attestation_tree(tmp_path: Path):
+    install = _install_tree_with_vendor_alias(tmp_path / "install")
+    executable = install / "lib/mujoco_ros2_control/ros2_control_node"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o755)
+    return install, executable
+
+
+def test_controller_process_attestation_requires_the_real_role_and_both_images(
+    tmp_path: Path,
+) -> None:
+    module = _closure_module()
+    install, executable = _process_attestation_tree(tmp_path)
+    closure = _closure(module, install)
+    plugin = install / "lib/libmujoco_ros2_control.dylib"
+    vendor = install / "opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib"
+
+    attestation = module.build_runtime_process_attestation(
+        closure=closure,
+        install_root=install,
+        role="controller_runtime",
+        pid=9123,
+        birth_identity_before=77,
+        birth_identity_after=77,
+        executable=executable,
+        loaded_images=(plugin, vendor),
+        required_relative_paths=(
+            "lib/libmujoco_ros2_control.dylib",
+            "opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib",
+        ),
+    )
+
+    assert attestation.role == "controller_runtime"
+    assert attestation.executable == executable.resolve()
+    assert {item.relative_path for item in attestation.loaded_images} == {
+        "lib/libmujoco_ros2_control.dylib",
+        "opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib",
+    }
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_code"),
+    [
+        ("wrong-role", "PROCESS_ATTESTATION_ROLE"),
+        ("identity-drift", "PROCESS_ATTESTATION_IDENTITY_DRIFT"),
+        ("launcher", "PROCESS_ATTESTATION_EXECUTABLE"),
+        ("empty-images", "PROCESS_ATTESTATION_REQUIRED_IMAGE_MISSING"),
+    ],
+)
+def test_controller_process_attestation_rejects_wrong_child_or_incomplete_readback(
+    tmp_path: Path, mutation: str, expected_code: str
+) -> None:
+    module = _closure_module()
+    install, executable = _process_attestation_tree(tmp_path)
+    closure = _closure(module, install)
+    plugin = install / "lib/libmujoco_ros2_control.dylib"
+    vendor = install / "opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib"
+    outside = tmp_path / "ros2-launch"
+    outside.write_text("#!/bin/sh\n", encoding="utf-8")
+    outside.chmod(0o755)
+
+    with pytest.raises(module.RuntimeClosureError) as error:
+        module.build_runtime_process_attestation(
+            closure=closure,
+            install_root=install,
+            role="task-station" if mutation == "wrong-role" else "controller_runtime",
+            pid=9123,
+            birth_identity_before=77,
+            birth_identity_after=78 if mutation == "identity-drift" else 77,
+            executable=outside if mutation == "launcher" else executable,
+            loaded_images=() if mutation == "empty-images" else (plugin, vendor),
+            required_relative_paths=(
+                "lib/libmujoco_ros2_control.dylib",
+                "opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib",
+            ),
+        )
+    assert error.value.code == expected_code
 
 
 # --------------------------------------------------------------------------------------

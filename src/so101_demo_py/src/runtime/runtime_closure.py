@@ -37,7 +37,10 @@ from ..parallel_batch.resource_identity import canonical_sha256
 if TYPE_CHECKING:  # pragma: no cover - typing only, avoids an import cycle with task_stack
     from .task_stack import OwnedProcessIdentity
 
-CLOSURE_SCHEMA_VERSION = 1
+CLOSURE_SCHEMA_VERSION = 2
+
+MUJOCO_DYLIB_ALIAS_RELATIVE_PATH = "opt/mujoco_vendor/lib/libmujoco.dylib"
+MUJOCO_DYLIB_ALIAS_LINK_TEXT = "libmujoco.3.4.0.dylib"
 
 LIBRARY_MARKERS = (".dylib", ".so")
 CONFIG_SUFFIXES = frozenset(
@@ -106,6 +109,56 @@ class FileDigest:
             "size_bytes": self.size_bytes,
         }
 
+    @classmethod
+    def from_document(cls, document: Mapping[str, object]) -> "FileDigest":
+        return cls(
+            relative_path=str(document["relative_path"]),
+            sha256=str(document["sha256"]),
+            size_bytes=int(document["size_bytes"]),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class DylibAliasIdentity:
+    """The one closed, installer-produced MuJoCo dylib alias."""
+
+    relative_path: str
+    link_text: str
+    target_relative_path: str
+    target_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.relative_path != MUJOCO_DYLIB_ALIAS_RELATIVE_PATH:
+            raise RuntimeClosureError("CLOSURE_SYMLINK", self.relative_path)
+        if self.link_text != MUJOCO_DYLIB_ALIAS_LINK_TEXT:
+            raise RuntimeClosureError("CLOSURE_SYMLINK", self.link_text)
+        link = Path(self.link_text)
+        if link.is_absolute() or len(link.parts) != 1 or self.link_text in {".", ".."}:
+            raise RuntimeClosureError("CLOSURE_SYMLINK", self.link_text)
+        expected_target = (
+            Path(self.relative_path).parent / self.link_text
+        ).as_posix()
+        if self.target_relative_path != expected_target:
+            raise RuntimeClosureError("CLOSURE_SYMLINK", self.target_relative_path)
+        _require_sha256("dylib_alias_target_sha256", self.target_sha256)
+
+    def as_document(self) -> dict[str, str]:
+        return {
+            "relative_path": self.relative_path,
+            "link_text": self.link_text,
+            "target_relative_path": self.target_relative_path,
+            "target_sha256": self.target_sha256,
+        }
+
+    @classmethod
+    def from_document(cls, document: Mapping[str, object]) -> "DylibAliasIdentity":
+        return cls(
+            relative_path=str(document["relative_path"]),
+            link_text=str(document["link_text"]),
+            target_relative_path=str(document["target_relative_path"]),
+            target_sha256=str(document["target_sha256"]),
+        )
+
 
 def _require_commit(name: str, value: object, *, missing_code: str) -> str:
     if not isinstance(value, str) or not value:
@@ -133,15 +186,21 @@ def _inventory_document(entries: Sequence[FileDigest]) -> list[dict[str, object]
 class RuntimeClosureIdentity:
     """The identity that must be equal across every restart of the station."""
 
+    install_root: Path
     source_commit: str
     mujoco_ros2_control_commit: str
     install_inventory_sha256: str
     executable_inventory: tuple[FileDigest, ...]
     library_inventory: tuple[FileDigest, ...]
     config_inventory: tuple[FileDigest, ...]
+    dylib_alias_inventory: tuple[DylibAliasIdentity, ...]
     normalized_environment_sha256: str
 
     def __post_init__(self) -> None:
+        if not isinstance(self.install_root, Path) or not self.install_root.is_absolute():
+            raise RuntimeClosureError(
+                "CLOSURE_INSTALL_ROOT_INVALID", str(self.install_root)
+            )
         _require_commit(
             "source_commit", self.source_commit, missing_code="CLOSURE_SOURCE_COMMIT_MISSING"
         )
@@ -158,18 +217,63 @@ class RuntimeClosureIdentity:
                 not isinstance(entry, FileDigest) for entry in entries
             ):
                 raise RuntimeClosureError(f"CLOSURE_{name.upper()}_INVALID", name)
+        if not isinstance(self.dylib_alias_inventory, tuple) or any(
+            not isinstance(entry, DylibAliasIdentity)
+            for entry in self.dylib_alias_inventory
+        ):
+            raise RuntimeClosureError("CLOSURE_DYLIB_ALIAS_INVENTORY_INVALID")
 
     def as_document(self) -> dict[str, object]:
         return {
             "schema_version": CLOSURE_SCHEMA_VERSION,
+            "install_root": str(self.install_root),
             "source_commit": self.source_commit,
             "mujoco_ros2_control_commit": self.mujoco_ros2_control_commit,
             "install_inventory_sha256": self.install_inventory_sha256,
             "executable_inventory": _inventory_document(self.executable_inventory),
             "library_inventory": _inventory_document(self.library_inventory),
             "config_inventory": _inventory_document(self.config_inventory),
+            "dylib_alias_inventory": [
+                entry.as_document()
+                for entry in sorted(
+                    self.dylib_alias_inventory,
+                    key=lambda item: item.relative_path,
+                )
+            ],
             "normalized_environment_sha256": self.normalized_environment_sha256,
         }
+
+    @classmethod
+    def from_document(cls, document: Mapping[str, object]) -> "RuntimeClosureIdentity":
+        if int(document.get("schema_version", -1)) != CLOSURE_SCHEMA_VERSION:
+            raise RuntimeClosureError(
+                "CLOSURE_SCHEMA_VERSION", str(document.get("schema_version"))
+            )
+
+        def inventory(name: str) -> tuple[FileDigest, ...]:
+            raw = document.get(name)
+            if not isinstance(raw, list):
+                raise RuntimeClosureError(f"CLOSURE_{name.upper()}_INVALID")
+            return tuple(FileDigest.from_document(item) for item in raw)
+
+        raw_aliases = document.get("dylib_alias_inventory")
+        if not isinstance(raw_aliases, list):
+            raise RuntimeClosureError("CLOSURE_DYLIB_ALIAS_INVENTORY_INVALID")
+        return cls(
+            install_root=Path(str(document["install_root"])),
+            source_commit=str(document["source_commit"]),
+            mujoco_ros2_control_commit=str(document["mujoco_ros2_control_commit"]),
+            install_inventory_sha256=str(document["install_inventory_sha256"]),
+            executable_inventory=inventory("executable_inventory"),
+            library_inventory=inventory("library_inventory"),
+            config_inventory=inventory("config_inventory"),
+            dylib_alias_inventory=tuple(
+                DylibAliasIdentity.from_document(item) for item in raw_aliases
+            ),
+            normalized_environment_sha256=str(
+                document["normalized_environment_sha256"]
+            ),
+        )
 
     @property
     def sha256(self) -> str:
@@ -276,6 +380,100 @@ class RuntimeAttestation:
         return canonical_sha256(self.as_document())
 
 
+@dataclass(frozen=True, slots=True)
+class RuntimeProcessAttestation:
+    """Per-process loaded-image proof for the pre-bound controller role."""
+
+    role: str
+    pid: int
+    birth_identity: int
+    executable: Path
+    loaded_images: tuple[FileDigest, ...]
+
+    def __post_init__(self) -> None:
+        if self.role != "controller_runtime":
+            raise RuntimeClosureError("PROCESS_ATTESTATION_ROLE", self.role)
+        if self.pid <= 0 or self.birth_identity <= 0:
+            raise RuntimeClosureError(
+                "PROCESS_ATTESTATION_IDENTITY", f"{self.pid}/{self.birth_identity}"
+            )
+        if not self.executable.is_absolute():
+            raise RuntimeClosureError(
+                "PROCESS_ATTESTATION_EXECUTABLE", str(self.executable)
+            )
+        if not self.loaded_images:
+            raise RuntimeClosureError("PROCESS_ATTESTATION_IMAGES", "empty")
+
+    def as_document(self) -> dict[str, object]:
+        return {
+            "role": self.role,
+            "pid": self.pid,
+            "birth_identity": self.birth_identity,
+            "executable": str(self.executable),
+            "loaded_images": _inventory_document(self.loaded_images),
+        }
+
+
+def build_runtime_process_attestation(
+    *,
+    closure: RuntimeClosureIdentity,
+    install_root: Path,
+    role: str,
+    pid: int,
+    birth_identity_before: int,
+    birth_identity_after: int,
+    executable: Path,
+    loaded_images: Sequence[Path],
+    required_relative_paths: Sequence[str],
+) -> RuntimeProcessAttestation:
+    """Validate a stable real controller child and its required closure images."""
+
+    if role != "controller_runtime":
+        raise RuntimeClosureError("PROCESS_ATTESTATION_ROLE", role)
+    if birth_identity_before != birth_identity_after:
+        raise RuntimeClosureError(
+            "PROCESS_ATTESTATION_IDENTITY_DRIFT",
+            f"{birth_identity_before} != {birth_identity_after}",
+        )
+    root = _validated_install_root(install_root)
+    if root != closure.install_root:
+        raise RuntimeClosureError("CLOSURE_INSTALL_ROOT_MISMATCH", str(root))
+    executable_path = Path(executable).resolve(strict=True)
+    if not executable_path.is_relative_to(root):
+        raise RuntimeClosureError(
+            "PROCESS_ATTESTATION_EXECUTABLE", str(executable_path)
+        )
+    known = closure.inventory
+    known_names = {Path(value.relative_path).name for value in known.values()}
+    observed: dict[str, FileDigest] = {}
+    for raw_path in loaded_images:
+        path = Path(raw_path).resolve(strict=True)
+        if not path.is_relative_to(root):
+            if path.name in known_names:
+                raise RuntimeClosureError("LOADED_IMAGE_OUTSIDE_INSTALL", str(path))
+            continue
+        relative = path.relative_to(root).as_posix()
+        expected = known.get(relative)
+        if expected is None:
+            continue
+        digest = _digest_regular_file(path, relative_path=relative)
+        if digest.sha256 != expected.sha256 or digest.size_bytes != expected.size_bytes:
+            raise RuntimeClosureError("LOADED_IMAGE_DIGEST_MISMATCH", relative)
+        observed[relative] = digest
+    missing = sorted(set(required_relative_paths) - set(observed))
+    if missing:
+        raise RuntimeClosureError(
+            "PROCESS_ATTESTATION_REQUIRED_IMAGE_MISSING", ",".join(missing)
+        )
+    return RuntimeProcessAttestation(
+        role=role,
+        pid=int(pid),
+        birth_identity=int(birth_identity_before),
+        executable=executable_path,
+        loaded_images=tuple(observed[key] for key in sorted(observed)),
+    )
+
+
 # --------------------------------------------------------------------------------------
 # Readers
 # --------------------------------------------------------------------------------------
@@ -334,8 +532,44 @@ def _digest_regular_file(path: Path, *, relative_path: str) -> FileDigest:
     )
 
 
-def _walk_install_files(root: Path) -> tuple[tuple[FileDigest, int], ...]:
+def _read_allowed_dylib_alias(
+    root: Path, path: Path, *, relative_path: str
+) -> tuple[str, os.stat_result]:
+    """Read the exact installer alias without following it or trusting a stale target."""
+
+    if relative_path != MUJOCO_DYLIB_ALIAS_RELATIVE_PATH:
+        raise RuntimeClosureError("CLOSURE_SYMLINK", relative_path)
+    try:
+        before = os.lstat(path)
+        link_text = os.readlink(path)
+    except OSError as error:
+        raise RuntimeClosureError("CLOSURE_SYMLINK", f"{path}: {error}") from error
+    if not stat.S_ISLNK(before.st_mode) or link_text != MUJOCO_DYLIB_ALIAS_LINK_TEXT:
+        raise RuntimeClosureError("CLOSURE_SYMLINK", str(path))
+    link = Path(link_text)
+    if link.is_absolute() or len(link.parts) != 1 or link_text in {".", ".."}:
+        raise RuntimeClosureError("CLOSURE_SYMLINK", link_text)
+    target = path.parent / link_text
+    try:
+        target_relative = target.relative_to(root).as_posix()
+        target_stat = os.lstat(target)
+    except (OSError, ValueError) as error:
+        raise RuntimeClosureError("CLOSURE_SYMLINK", f"{path}: {error}") from error
+    if (
+        target_relative
+        != "opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib"
+        or stat.S_ISLNK(target_stat.st_mode)
+        or not stat.S_ISREG(target_stat.st_mode)
+    ):
+        raise RuntimeClosureError("CLOSURE_SYMLINK", str(path))
+    return link_text, before
+
+
+def _walk_install_files(
+    root: Path,
+) -> tuple[tuple[tuple[FileDigest, int], ...], tuple[DylibAliasIdentity, ...]]:
     collected: list[tuple[FileDigest, int]] = []
+    pending_aliases: list[tuple[str, str, os.stat_result]] = []
     for current_root, directory_names, file_names in os.walk(root, followlinks=False):
         current = Path(current_root)
         for name in sorted(directory_names):
@@ -350,10 +584,44 @@ def _walk_install_files(root: Path) -> tuple[tuple[FileDigest, int], ...]:
         for name in sorted(file_names):
             path = current / name
             relative_path = path.relative_to(root).as_posix()
+            if path.is_symlink():
+                link_text, before = _read_allowed_dylib_alias(
+                    root, path, relative_path=relative_path
+                )
+                pending_aliases.append((relative_path, link_text, before))
+                continue
+            if relative_path == MUJOCO_DYLIB_ALIAS_RELATIVE_PATH:
+                raise RuntimeClosureError("CLOSURE_SYMLINK", str(path))
             digest = _digest_regular_file(path, relative_path=relative_path)
             mode = os.stat(path, follow_symlinks=False).st_mode
             collected.append((digest, mode))
-    return tuple(collected)
+    by_path = {digest.relative_path: digest for digest, _mode in collected}
+    aliases: list[DylibAliasIdentity] = []
+    for relative_path, link_text, before in pending_aliases:
+        path = root / relative_path
+        target_relative = (Path(relative_path).parent / link_text).as_posix()
+        target = by_path.get(target_relative)
+        try:
+            after = os.lstat(path)
+            after_text = os.readlink(path)
+        except OSError as error:
+            raise RuntimeClosureError("CLOSURE_SYMLINK", f"{path}: {error}") from error
+        if (
+            target is None
+            or (before.st_dev, before.st_ino, before.st_mtime_ns)
+            != (after.st_dev, after.st_ino, after.st_mtime_ns)
+            or after_text != link_text
+        ):
+            raise RuntimeClosureError("CLOSURE_SYMLINK", str(path))
+        aliases.append(
+            DylibAliasIdentity(
+                relative_path=relative_path,
+                link_text=link_text,
+                target_relative_path=target_relative,
+                target_sha256=target.sha256,
+            )
+        )
+    return tuple(collected), tuple(aliases)
 
 
 def _classify(entry: FileDigest, mode: int) -> str:
@@ -371,7 +639,8 @@ def collect_install_inventory(install_root: Path) -> tuple[FileDigest, ...]:
     """Every regular file under the copied install prefix, as relative-path digests."""
 
     root = _validated_install_root(install_root)
-    return tuple(digest for digest, _mode in _walk_install_files(root))
+    collected, _aliases = _walk_install_files(root)
+    return tuple(digest for digest, _mode in collected)
 
 
 def _validated_install_root(
@@ -443,7 +712,7 @@ def build_runtime_closure_identity(
         missing_code="CLOSURE_SUBMODULE_COMMIT_MISSING",
     )
     root = _validated_install_root(install_root, forbidden_roots)
-    collected = _walk_install_files(root)
+    collected, aliases = _walk_install_files(root)
     if not collected:
         raise RuntimeClosureError("CLOSURE_INVENTORY_EMPTY", str(root))
     buckets: dict[str, list[FileDigest]] = {
@@ -456,6 +725,7 @@ def build_runtime_closure_identity(
         if category in buckets:
             buckets[category].append(digest)
     return RuntimeClosureIdentity(
+        install_root=root,
         source_commit=source_commit,
         mujoco_ros2_control_commit=mujoco_ros2_control_commit,
         install_inventory_sha256=canonical_sha256(
@@ -464,6 +734,7 @@ def build_runtime_closure_identity(
         executable_inventory=tuple(buckets["executable"]),
         library_inventory=tuple(buckets["library"]),
         config_inventory=tuple(buckets["config"]),
+        dylib_alias_inventory=aliases,
         normalized_environment_sha256=normalized_environment_sha256(environment),
     )
 
@@ -485,6 +756,12 @@ def verify_runtime_closure(
         raise RuntimeClosureError(
             "CLOSURE_SOURCE_COMMIT_MISMATCH",
             f"expected {expected.source_commit}, observed {source_commit}",
+        )
+    observed_root = _validated_install_root(install_root, forbidden_roots)
+    if observed_root != expected.install_root:
+        raise RuntimeClosureError(
+            "CLOSURE_INSTALL_ROOT_MISMATCH",
+            f"expected {expected.install_root}, observed {observed_root}",
         )
     if mujoco_ros2_control_commit != expected.mujoco_ros2_control_commit:
         raise RuntimeClosureError(
