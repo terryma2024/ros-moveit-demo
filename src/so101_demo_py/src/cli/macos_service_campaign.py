@@ -40,6 +40,14 @@ import time
 # need ``so101_demo`` to be importable, which the service guarantees - it imports that package itself to
 # resolve its layout, and the child inherits the same path.
 from so101_demo.parallel_batch.macos_control_endpoint import MacosFixedControlEndpoint
+from so101_demo.runtime.owner_records import (
+    ROOT_VARIABLE as OWNER_ROOT_VARIABLE,
+    OwnerContext,
+    OwnerRecordError,
+    OwnerSpawnRecorder,
+    owner_context_from_environment,
+    spawner_token_from_environment,
+)
 
 #: The exact-W2 worker count this platform runs, and the reason for the refusal below.
 EXACT_W2_WORKERS = 2
@@ -193,26 +201,104 @@ def campaign_argv(arguments) -> list[str]:
     return argv
 
 
+def adapter_owner_context(arguments, *, environment=None) -> OwnerContext | None:
+    """The owner context this adapter records its CAMPAIGN spawn under, or ``None`` when inert.
+
+    ``SO101_OWNER_TREE_ROOT`` is the switch: without it this adapter owns no tree and spawns exactly
+    as it did before owner records existed. With it, the campaign identity this adapter already
+    validated fills in whatever the environment did not carry, because the service sets the root for
+    the process it launches while the campaign id, the batch id and the epoch are facts this adapter
+    must have anyway to serve the control endpoint. A root with an identity that cannot be used is
+    *inert*, not a refusal: refusing would take a campaign down over an evidence path.
+    """
+
+    environment = os.environ if environment is None else environment
+    context = owner_context_from_environment(environment)
+    if context is not None:
+        return context
+    raw_root = environment.get(OWNER_ROOT_VARIABLE)
+    if not isinstance(raw_root, str) or not raw_root.strip():
+        return None
+    try:
+        return OwnerContext(
+            root=Path(raw_root),
+            campaign_id=str(environment.get("SO101_FIXED_CONTROL_CAMPAIGN_ID") or ""),
+            batch_id=str(arguments.batch_id or ""),
+            generation=int(environment.get("SO101_FIXED_CONTROL_EPOCH") or 1),
+            parent_spawn_token=spawner_token_from_environment(environment),
+        )
+    except (OwnerRecordError, TypeError, ValueError):
+        return None
+
+
 class OwnedCampaign:
     """The campaign child, owned exactly: one process group, cleared as a group, never one pid."""
 
-    def __init__(self, argv: list[str], *, log_path: Path) -> None:
+    def __init__(
+        self,
+        argv: list[str],
+        *,
+        log_path: Path,
+        owner_context: OwnerContext | None = None,
+        owner_confirm_deadline_s: float = 2.0,
+    ) -> None:
         environment = dict(os.environ)
         # Keep the launcher from re-executing: a re-exec rewrites the kernel argv the service checks.
         environment["PYTORCH_ENABLE_MPS_FALLBACK"] = "0"
+        recorder = None
+        if owner_context is not None:
+            # The intent is durable before Popen, and the campaign child is handed its own token plus
+            # this adapter's token, so the campaign, its Workers and their stations all land in the
+            # same owner tree.
+            recorder = OwnerSpawnRecorder.begin(
+                context=owner_context,
+                role="CAMPAIGN",
+                argv=argv,
+                parent_spawn_token=spawner_token_from_environment(os.environ),
+                own_session=True,
+            )
+            environment = recorder.child_environment(environment)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         self._log = open(log_path, "xb", buffering=0)
-        self.process = subprocess.Popen(
-            argv,
-            env=environment,
-            start_new_session=True,
-            stdin=subprocess.DEVNULL,
-            stdout=self._log,
-            stderr=subprocess.STDOUT,
-            close_fds=True,
-        )
+        try:
+            self.process = subprocess.Popen(
+                argv,
+                env=environment,
+                start_new_session=True,
+                stdin=subprocess.DEVNULL,
+                stdout=self._log,
+                stderr=subprocess.STDOUT,
+                close_fds=True,
+            )
+        except BaseException as error:
+            self._log.close()
+            self._abandon(recorder, error)
+            raise
+        self.record = recorder
+        if recorder is not None:
+            try:
+                recorder.confirm(self.process.pid, deadline_s=owner_confirm_deadline_s)
+            except OwnerRecordError as error:
+                # A child whose kernel identity can never be read back is not one this adapter may
+                # claim to own, so the record is abandoned and the failure is reported rather than
+                # a campaign running under a record that does not name it.
+                self._log.close()
+                self._abandon(recorder, error)
+                raise
         self.pgid = self.process.pid  # start_new_session makes the child its own group leader
         self.log_path = log_path
+
+    @staticmethod
+    def _abandon(recorder: OwnerSpawnRecorder | None, error: BaseException) -> None:
+        """Mark the record of a campaign that never started. The original failure still propagates."""
+
+        if recorder is None:
+            return
+        reason = error.code if isinstance(error, OwnerRecordError) else "SPAWN_FAILED"
+        try:
+            recorder.abandon(reason)
+        except (OwnerRecordError, OSError):
+            pass
 
     def poll(self) -> int | None:
         return self.process.poll()
@@ -290,9 +376,19 @@ def main(argv: list[str] | None = None) -> int:
     document["request"] = validated
 
     result_path = arguments.evidence_root / "campaign-result.json"
-    campaign = OwnedCampaign(
-        campaign_argv(arguments), log_path=arguments.evidence_root / "campaign.log"
-    )
+    try:
+        campaign = OwnedCampaign(
+            campaign_argv(arguments),
+            log_path=arguments.evidence_root / "campaign.log",
+            owner_context=adapter_owner_context(arguments),
+        )
+    except OwnerRecordError as error:
+        # A durable owner record that cannot be written or confirmed refuses the campaign by name:
+        # a campaign running with an unusable record is exactly what the recovery path must not see.
+        document.update(status="REFUSED", stage="campaign_spawn",
+                        refusal=error.code, detail=error.detail)
+        print(json.dumps(document, indent=2, sort_keys=True))
+        return 1
     stop_record: dict = {}
 
     def state() -> dict:

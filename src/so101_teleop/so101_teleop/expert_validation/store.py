@@ -17,6 +17,7 @@ import uuid
 from .coordinator import CoordinatorBinding, CoordinatorStartRequest
 from ..process_identity import command_fingerprint
 
+from .owner_tree import ConfirmedOwnerProcess, OwnerIntent, OwnerRecord
 from .models import (
     BatchBinding,
     CampaignBinding,
@@ -136,12 +137,49 @@ CREATE TABLE IF NOT EXISTS recovery_fences (
   batch_id TEXT NOT NULL REFERENCES campaign_batches(batch_id),
   reason TEXT NOT NULL, command_id TEXT NOT NULL, created_at_ns INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS owner_intents (
+  spawn_token TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL,
+  batch_id TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('ADAPTER','CAMPAIGN','BROKER','WORKER','STATION')),
+  generation INTEGER NOT NULL,
+  parent_spawn_token TEXT,
+  expected_executable TEXT NOT NULL,
+  argv_sha256 TEXT NOT NULL,
+  own_session INTEGER NOT NULL,
+  created_at_ns INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS owner_processes (
+  spawn_token TEXT PRIMARY KEY REFERENCES owner_intents(spawn_token),
+  pid INTEGER NOT NULL, pgid INTEGER NOT NULL, started_ticks INTEGER NOT NULL,
+  command_sha256 TEXT NOT NULL, confirmed_at_ns INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS owner_cleanup_receipts (
+  campaign_id TEXT NOT NULL, batch_id TEXT NOT NULL, generation INTEGER NOT NULL,
+  receipt_sha256 TEXT NOT NULL, receipt_json TEXT NOT NULL, recorded_at_ns INTEGER NOT NULL,
+  PRIMARY KEY (campaign_id, batch_id, generation)
+);
 CREATE TABLE IF NOT EXISTS operator_recoveries (
   campaign_id TEXT PRIMARY KEY REFERENCES recovery_fences(campaign_id),
   command_id TEXT NOT NULL UNIQUE,
   receipt_json TEXT NOT NULL, receipt_sha256 TEXT NOT NULL
 );
 """
+
+
+def _owner_intent_from_row(row) -> OwnerIntent:
+    return OwnerIntent(
+        campaign_id=row["campaign_id"],
+        batch_id=row["batch_id"],
+        role=row["role"],
+        generation=row["generation"],
+        spawn_token=row["spawn_token"],
+        parent_spawn_token=row["parent_spawn_token"],
+        expected_executable=row["expected_executable"],
+        argv_sha256=row["argv_sha256"],
+        own_session=bool(row["own_session"]),
+        created_at_ns=row["created_at_ns"],
+    )
 
 
 class SupervisorStore:
@@ -439,6 +477,145 @@ class SupervisorStore:
                 raise StoreConflict("EXECUTION_OWNER_INTENT_CONFLICT") from error
         return intent.spawn_token
 
+
+    # -- persistent owner tree: intent before spawn, confirmation after readback ---------------
+
+    def record_owner_intent(self, intent: OwnerIntent) -> OwnerIntent:
+        """Persist one spawn intent before its real spawn.
+
+        The intent table is the only thing a recovery may trust about a spawn that never
+        confirmed: it must therefore exist *before* ``Popen``, and a duplicate token may never be
+        overwritten by a different intent.
+        """
+        if not isinstance(intent, OwnerIntent):
+            raise StoreConflict("OWNER_INTENT_INVALID")
+        with self._transaction():
+            try:
+                self._connection.execute(
+                    "INSERT INTO owner_intents VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        intent.spawn_token,
+                        intent.campaign_id,
+                        intent.batch_id,
+                        intent.role,
+                        intent.generation,
+                        intent.parent_spawn_token,
+                        intent.expected_executable,
+                        intent.argv_sha256,
+                        1 if intent.own_session else 0,
+                        intent.created_at_ns,
+                    ),
+                )
+            except sqlite3.IntegrityError as error:
+                try:
+                    existing = self.owner_intent(intent.spawn_token)
+                except Exception:
+                    existing = None
+                if existing != intent:
+                    raise StoreConflict("OWNER_INTENT_CONFLICT") from error
+        return intent
+
+    def owner_intent(self, spawn_token: str) -> OwnerIntent | None:
+        row = self._connection.execute(
+            "SELECT * FROM owner_intents WHERE spawn_token=?", (spawn_token,)
+        ).fetchone()
+        return None if row is None else _owner_intent_from_row(row)
+
+    def confirm_owner_process(self, confirmed: ConfirmedOwnerProcess) -> ConfirmedOwnerProcess:
+        """Persist the readback identity of a spawned process.
+
+        Confirmation is only accepted for an intent that is already durable: an unconfirmed spawn
+        is exactly the case recovery must refuse to guess about.
+        """
+        if not isinstance(confirmed, ConfirmedOwnerProcess):
+            raise StoreConflict("OWNER_CONFIRMATION_INVALID")
+        with self._transaction():
+            if self.owner_intent(confirmed.spawn_token) is None:
+                raise StoreConflict("OWNER_INTENT_MISSING")
+            try:
+                self._connection.execute(
+                    "INSERT INTO owner_processes VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        confirmed.spawn_token,
+                        confirmed.pid,
+                        confirmed.pgid,
+                        confirmed.started_ticks,
+                        confirmed.command_sha256,
+                        confirmed.confirmed_at_ns,
+                    ),
+                )
+            except sqlite3.IntegrityError as error:
+                raise StoreConflict("OWNER_CONFIRMATION_CONFLICT") from error
+        return confirmed
+
+    def owner_tree(
+        self, campaign_id: str, batch_id: str, generation: int | None = None
+    ) -> tuple[OwnerRecord, ...]:
+        """Every durable intent of one campaign/batch, oldest first, with its confirmation."""
+        query = (
+            "SELECT i.*, p.pid AS confirmed_pid, p.pgid AS confirmed_pgid, "
+            "p.started_ticks AS confirmed_started_ticks, "
+            "p.command_sha256 AS confirmed_command_sha256, "
+            "p.confirmed_at_ns AS confirmed_at_ns "
+            "FROM owner_intents i LEFT JOIN owner_processes p "
+            "ON p.spawn_token = i.spawn_token "
+            "WHERE i.campaign_id=? AND i.batch_id=?"
+        )
+        parameters: list[object] = [campaign_id, batch_id]
+        if generation is not None:
+            query += " AND i.generation=?"
+            parameters.append(generation)
+        query += " ORDER BY i.created_at_ns, i.spawn_token"
+        records = []
+        for row in self._connection.execute(query, tuple(parameters)):
+            intent = _owner_intent_from_row(row)
+            if row["confirmed_pid"] is None:
+                records.append(OwnerRecord(intent=intent, confirmed=None))
+                continue
+            records.append(
+                OwnerRecord(
+                    intent=intent,
+                    confirmed=ConfirmedOwnerProcess(
+                        spawn_token=intent.spawn_token,
+                        pid=row["confirmed_pid"],
+                        pgid=row["confirmed_pgid"],
+                        started_ticks=row["confirmed_started_ticks"],
+                        command_sha256=row["confirmed_command_sha256"],
+                        confirmed_at_ns=row["confirmed_at_ns"],
+                    ),
+                )
+            )
+        return tuple(records)
+
+    def owner_cleanup_receipt(
+        self, campaign_id: str, batch_id: str, generation: int
+    ) -> dict | None:
+        row = self._connection.execute(
+            "SELECT receipt_json, receipt_sha256 FROM owner_cleanup_receipts "
+            "WHERE campaign_id=? AND batch_id=? AND generation=?",
+            (campaign_id, batch_id, generation),
+        ).fetchone()
+        return None if row is None else dict(json.loads(row["receipt_json"]))
+
+    def record_owner_cleanup_receipt(self, receipt) -> None:
+        """Index a fsynced leaf-first cleanup receipt. A generation is committed once."""
+        document = receipt.as_document()
+        with self._transaction():
+            try:
+                self._connection.execute(
+                    "INSERT INTO owner_cleanup_receipts VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        receipt.campaign_id,
+                        receipt.batch_id,
+                        receipt.generation,
+                        receipt.receipt_sha256,
+                        json.dumps(document, sort_keys=True, separators=(",", ":")),
+                        time.time_ns(),
+                    ),
+                )
+            except sqlite3.IntegrityError as error:
+                raise StoreConflict("OWNER_RECEIPT_CONFLICT") from error
+
     def _validate_fixed_binding(self, binding: CoordinatorBinding) -> None:
         batch = self.batch(binding.batch_id)
         if (
@@ -463,8 +640,24 @@ class SupervisorStore:
         return binding
 
     def record_recovery_fence(
-        self, campaign_id: str, batch_id: str, *, reason: str, command_id: str
+        self,
+        campaign_id: str,
+        batch_id: str,
+        *,
+        reason: str,
+        command_id: str,
+        generation: int | None = None,
     ) -> None:
+        """Record one campaign-scoped fence, optionally for an exact owner-tree generation.
+
+        The row is campaign-scoped and its reason already names the generation the reaper
+        concluded, so ``generation`` is validated for interface parity with the directory sink and
+        deliberately not stored; every caller that predates it is unchanged.
+        """
+        if generation is not None and (
+            type(generation) is not int or isinstance(generation, bool) or generation < 1
+        ):
+            raise StoreConflict("RECOVERY_FENCE_GENERATION_INVALID")
         with self._transaction():
             batch = self.batch(batch_id)
             if batch is None or batch.campaign_id != campaign_id:

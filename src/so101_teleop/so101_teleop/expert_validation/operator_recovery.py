@@ -17,6 +17,13 @@ import time
 import yaml
 
 from .models import _identifier
+from .owner_tree import (
+    CompositeOwnerRecords,
+    DirectoryOwnerRecords,
+    OwnerParentBinding,
+    OwnerTreeError,
+    OwnerTreeRecovery,
+)
 from .store import StoreConflict, SupervisorStore, _json
 
 
@@ -106,8 +113,51 @@ def _private_directory(path):
         raise RecoveryError("RECOVERY_OUTPUT_NOT_PRIVATE")
 
 
+def _owner_parent_binding(context, command_id):
+    """Who reclaims which tree, for the generation the fenced batch was actually bound to."""
+
+    fence = context["fence"]
+    batch_id = fence["batch_id"]
+    batch = next(
+        (entry for entry in context["batches"] if entry["batch_id"] == batch_id), None
+    )
+    if batch is None:
+        raise RecoveryError("RECOVERY_FENCE_BATCH_NOT_FOUND")
+    epoch = batch.get("coordinator_epoch")
+    generation = epoch if type(epoch) is int and not isinstance(epoch, bool) and epoch >= 1 else 1
+    return OwnerParentBinding(
+        campaign_id=context["campaign"]["campaign_id"],
+        batch_id=batch_id,
+        generation=generation,
+        recovery_owner=command_id,
+    )
+
+
+def _reclaim_owner_tree(*, store, context, command_id, owner_tree_root):
+    """Reclaim the durable owner tree leaf first, then answer with its committed receipt.
+
+    The source is both durable halves of one tree: the service's own rows and the demo-side
+    ``<root>/<campaign>/<batch>/`` documents. An identity that cannot be re-proven is never
+    signalled, and an unresolved tree refuses the whole recovery rather than resolving a fence
+    over an owner process nobody can account for.
+    """
+
+    binding = _owner_parent_binding(context, command_id)
+    source = CompositeOwnerRecords(store, DirectoryOwnerRecords(root=Path(owner_tree_root)))
+    recovery = OwnerTreeRecovery(store=source, receipt_root=Path(owner_tree_root))
+    receipt = recovery.recover_leaf_first(parent_binding=binding)
+    if not receipt.fence_released:
+        unresolved = "; ".join(
+            sorted(f"{entry.get('role')}: {entry.get('reason')}" for entry in receipt.unresolved)
+        )
+        raise RecoveryError(
+            f"RECOVERY_OWNER_TREE_UNRESOLVED generation {receipt.generation}: {unresolved}"
+        )
+    return receipt
+
+
 def recover(*, store, campaign_id, command_id, parallel_config, inspector=None,
-            source_commit, apply=False):
+            source_commit, apply=False, owner_tree_root=None):
     _identifier("campaign_id", campaign_id)
     _identifier("command_id", command_id)
     # The commit is DEBUG metadata on the recovery receipt; it can never refuse one.
@@ -141,6 +191,14 @@ def recover(*, store, campaign_id, command_id, parallel_config, inspector=None,
             type(owner[name]) is not int or owner[name] <= 0 for name in ("pid", "pgid", "started_ticks")
     ) for owner in owners)):
         raise RecoveryError("RECOVERY_OWNER_UNACKNOWLEDGED")
+    # Reclaiming is an apply-only action: the preview below observes and writes nothing. It runs
+    # before the runtime inventory because the inventory would otherwise refuse the very live
+    # owners this reaper is allowed to stop - and only those whose recorded identity still matches.
+    tree_receipt = None
+    if apply and owner_tree_root is not None:
+        tree_receipt = _reclaim_owner_tree(
+            store=store, context=context, command_id=command_id, owner_tree_root=owner_tree_root
+        )
     inspector = inspector or RuntimeInspector()
     try:
         checks = inspector.inspect(owners, domains, batch_ids)
@@ -151,6 +209,8 @@ def recover(*, store, campaign_id, command_id, parallel_config, inspector=None,
               "source_commit": source_commit, "operator_uid": os.getuid(),
               "tool_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
               "parallel_config_sha256": config_sha, "observed_at_ns": time.time_ns(), "checks": checks}
+    if tree_receipt is not None:
+        report["owner_tree"] = tree_receipt.as_document()
     if not apply:
         return {"status": "RECOVERY_ELIGIBLE_PREVIEW", "report": report}
     parent = store.root / "operator-recovery"
@@ -182,6 +242,12 @@ def recover(*, store, campaign_id, command_id, parallel_config, inspector=None,
                "fence_sha256": context["fence_sha256"], "binding_sha256": context["binding_sha256"],
                "status": "OPERATOR_RECOVERED_ABORTED", "execution_success": False,
                "upstream_cleanup_claimed": False}
+    if tree_receipt is not None:
+        # The reclaim was fsynced and indexed before this receipt exists; the fence may only be
+        # resolved now that nothing about the tree is left unproven.
+        receipt["owner_tree_receipt_sha256"] = tree_receipt.receipt_sha256
+        receipt["owner_tree_reclaimed"] = [entry["role"] for entry in tree_receipt.reclaimed]
+        receipt["owner_tree_fence_released"] = tree_receipt.fence_released
     for prefix, path in (("report", report_path), ("backup", backup), ("config", config_path)):
         receipt[f"{prefix}_path"] = str(path)
         receipt[f"{prefix}_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -196,6 +262,8 @@ def main(argv=None):
     parser.add_argument("--parallel-config", type=Path, required=True,
                         help="Must byte-match the original preflight config; domain scope is derived, not supplied")
     parser.add_argument("--source-commit", required=True)
+    parser.add_argument("--owner-tree-root", type=Path, default=None,
+                        help="Durable owner-tree root to reclaim leaf first before resolving the fence")
     parser.add_argument("--apply", action="store_true", help="Default is eligibility preview; requires Web service offline")
     options = parser.parse_args(argv)
     store = None
@@ -205,10 +273,10 @@ def main(argv=None):
         store = SupervisorStore.open(options.store_root)
         result = recover(store=store, campaign_id=options.campaign_id, command_id=options.command_id,
                          parallel_config=options.parallel_config, source_commit=options.source_commit,
-                         apply=options.apply)
+                         apply=options.apply, owner_tree_root=options.owner_tree_root)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
-    except (RecoveryError, StoreConflict, OSError, ValueError, sqlite3.Error) as error:
+    except (RecoveryError, OwnerTreeError, StoreConflict, OSError, ValueError, sqlite3.Error) as error:
         print(str(error), file=sys.stderr)
         return 1
     finally:

@@ -1416,9 +1416,12 @@ def create_production_service(
     environment = dict(os.environ if environment is None else environment)
     layout = ProductionRuntimeLayout.discover(environment)
     state_root = (Path(evidence_root) / "validation-service").resolve()
+    # The owner tree is the service's own durable spawn record, and the root the demo-side
+    # spawn boundaries inherit: it is created by the first record, never up front.
+    owner_tree_root = (Path(evidence_root) / "owner-tree").resolve()
     store = SupervisorStore.open(state_root)
     try:
-        owner = ExecutionProcessOwner(store=store)
+        owner = ExecutionProcessOwner(store=store, owner_tree_root=owner_tree_root)
         if admission_factory is None:
             start_guard = default_admission_factory(
                 environment, config_path=layout.parallel_config_path)
