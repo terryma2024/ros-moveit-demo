@@ -96,6 +96,47 @@ def build_worker_leases(*, plan, batch_id: str, evidence_root: Path,
     return leases
 
 
+def open_campaign_journal(*, evidence_root: Path, campaign_id: str, batch_id: str):
+    """Open the batch's standard journal and commit CAMPAIGN_STARTED before anything runs.
+
+    The macOS W1/W2 compositions reuse the existing `CoordinatorJournal`: the coordinator is the
+    single writer, every returned event is already fsynced *and* covered by a published committed
+    watermark, and the projection side reads that prefix instead of polling terminal files.
+    """
+
+    from ..parallel_batch.journal import CoordinatorJournal
+
+    journal = CoordinatorJournal.create(Path(evidence_root) / "journal", batch_id)
+    try:
+        journal.append_committed(
+            "CAMPAIGN_STARTED",
+            f"{campaign_id}/CAMPAIGN_STARTED",
+            {
+                "campaign_id": campaign_id,
+                "batch_id": batch_id,
+                "schema_version": journal.schema_version,
+            },
+        )
+    except BaseException:
+        journal.close()
+        raise
+    return journal
+
+
+def commit_campaign_terminal(journal, *, outcome: str, cleanup_complete: bool) -> None:
+    """Commit BATCH_TERMINAL, and CLEANUP_COMMITTED only when cleanup is proven complete."""
+
+    journal.append_committed(
+        "BATCH_TERMINAL", f"{journal.batch_id}/BATCH_TERMINAL", {"outcome": str(outcome)}
+    )
+    if cleanup_complete:
+        journal.append_committed(
+            "CLEANUP_COMMITTED",
+            f"{journal.batch_id}/CLEANUP_COMMITTED",
+            {"cleanup_complete": True},
+        )
+
+
 def lease_worker_execution(*, queue, binding, worker_id: str, slot_id: str,
                            evidence_root: Path, input_sha256: str,
                            deadline_s: float = 240.0, generation: int = 1,
@@ -536,6 +577,7 @@ def run(argv: list[str] | None = None) -> int:
 
     import numpy as np
 
+    journal = None
     supervisor.acquire_claim()
     supervisor.note_heartbeat(owner_pid=os.getpid())
     try:
@@ -558,6 +600,15 @@ def run(argv: list[str] | None = None) -> int:
         # --- the composed campaign runs: endpoint, two workers, one-time admission --------
         campaign_root = address.create_campaign_root()
         document["campaign_root"] = str(campaign_root.campaign_path)
+        journal = open_campaign_journal(
+            evidence_root=arguments.evidence_root,
+            campaign_id=plan.campaign_id, batch_id=arguments.batch_id)
+        document["journal"] = {
+            "batch_id": arguments.batch_id,
+            "segment": str(journal.segment_path),
+            "watermark": journal.read_watermark().as_document(arguments.batch_id)
+            if journal.read_watermark() else None,
+        }
         models = bootstrap.loaded_models
         served: list[dict] = []
 
@@ -791,6 +842,14 @@ def run(argv: list[str] | None = None) -> int:
         return 0 if document["status"] == "W2_CAMPAIGN_PASS" else 7
     finally:
         supervisor.terminate_all()
+        if journal is not None:
+            try:
+                commit_campaign_terminal(
+                    journal, outcome=str(document.get("status", "UNKNOWN")),
+                    cleanup_complete=bool(document.get("cleanup", {}).get("complete")))
+                document["journal_terminal"] = True
+            finally:
+                journal.close()
         supervisor.release_claim()
         bootstrap.lane.shutdown()
 

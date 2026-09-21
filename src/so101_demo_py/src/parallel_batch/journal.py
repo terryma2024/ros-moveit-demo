@@ -90,11 +90,50 @@ class JournalEvent:
 
 @dataclass(frozen=True)
 class JournalReplay:
-    """Verified events and the most recently preserved torn-tail evidence."""
+    """Verified events and the most recently preserved torn-tail evidence.
+
+    ``unconfirmed_durability`` is only set by the committed-prefix reader: it means the journal
+    holds bytes after the published watermark (a flushed-but-unfsynced frame, a partial tail, or
+    frames written by an owner that exited). Those bytes are never projected, truncated or
+    appended to; a recovery owner has to bind them explicitly.
+    """
 
     events: tuple[JournalEvent, ...]
     damaged_tail_path: Path | None = None
     schema_version: int = 1
+    unconfirmed_durability: bool = False
+
+
+@dataclass(frozen=True)
+class CommittedWatermark:
+    """The durable (writer_epoch, sequence, event_sha256) the live projector may trust."""
+
+    writer_epoch: int
+    sequence: int
+    event_sha256: str
+
+    def __post_init__(self):
+        if type(self.writer_epoch) is not int or self.writer_epoch < 1:
+            raise ValueError('watermark writer_epoch must be a positive integer')
+        if type(self.sequence) is not int or self.sequence < 1:
+            raise ValueError('watermark sequence must be a positive integer')
+        if (not isinstance(self.event_sha256, str) or len(self.event_sha256) != 64
+                or any(character not in '0123456789abcdef' for character in self.event_sha256)):
+            raise ValueError('watermark event_sha256 must be a sha256 hex digest')
+
+    def as_document(self, batch_id):
+        return {
+            'batch_id': batch_id,
+            'writer_epoch': self.writer_epoch,
+            'sequence': self.sequence,
+            'event_sha256': self.event_sha256,
+        }
+
+
+#: Event types that close the batch's event stream. `BATCH_TERMINAL` may only be followed by the
+#: cleanup event, and nothing may follow `CLEANUP_COMMITTED` (design section 9/10).
+_TERMINAL_EVENT = 'BATCH_TERMINAL'
+_FINAL_EVENT = 'CLEANUP_COMMITTED'
 
 
 class JournalCorruption(RuntimeError):
@@ -125,6 +164,7 @@ class CoordinatorJournal:
         self._by_key = {}
         self._terminal = _ZERO_HASH
         self._damaged_tail_path = None
+        self._watermark = None
 
     @classmethod
     def create(cls, root, batch_id, schema_version=1):
@@ -362,6 +402,114 @@ class CoordinatorJournal:
             self._events.append(event)
             self._by_key[idempotency_key] = event
             return deepcopy(event)
+
+    @property
+    def watermark_path(self):
+        return self.root / 'committed-watermark.json'
+
+    def read_watermark(self):
+        """Read the published committed watermark, or ``None`` when none was published yet."""
+
+        with self._mutex:
+            return self._read_watermark_unlocked()
+
+    def _read_watermark_unlocked(self):
+        path = self.watermark_path
+        if not path.exists():
+            return None
+        try:
+            document = json.loads(path.read_bytes())
+            if (not isinstance(document, dict) or document.get('batch_id') != self.batch_id
+                    or set(document) != {
+                        'batch_id', 'writer_epoch', 'sequence', 'event_sha256'}):
+                raise ValueError('invalid watermark document')
+            return CommittedWatermark(
+                writer_epoch=document['writer_epoch'],
+                sequence=document['sequence'],
+                event_sha256=document['event_sha256'])
+        except (ValueError, KeyError, TypeError) as exc:
+            raise JournalCorruption('invalid committed watermark') from exc
+
+    def _assert_append_allowed(self, event_type, idempotency_key):
+        """Refuse any event after the batch's terminal or cleanup event."""
+
+        if idempotency_key in self._by_key:
+            return
+        if any(event.type == _FINAL_EVENT for event in self._events):
+            raise JournalCorruption('journal is closed after CLEANUP_COMMITTED')
+        if (any(event.type == _TERMINAL_EVENT for event in self._events)
+                and event_type != _FINAL_EVENT):
+            raise JournalCorruption('journal is terminal; only cleanup may follow')
+
+    def append_committed(self, event_type, idempotency_key, payload):
+        """Append one event, fsync it, publish its watermark, and only then return.
+
+        The returned event is the ACK point: a caller that sees it knows both durability barriers
+        succeeded. A repeat of an already committed key returns the original event without moving
+        the watermark backwards.
+        """
+
+        with self._mutex:
+            self._require_owner()
+            self._assert_append_allowed(event_type, idempotency_key)
+            event = self.append(event_type, idempotency_key, payload)
+            current = self._read_watermark_unlocked()
+            if current is not None:
+                if current.sequence == event.sequence:
+                    if current.event_sha256 != event.frame_sha256:
+                        self._failed = True
+                        raise JournalCorruption('watermark disagrees with the committed frame')
+                    return event
+                if current.sequence > event.sequence:
+                    return event
+            watermark = CommittedWatermark(
+                writer_epoch=event.coordinator_epoch,
+                sequence=event.sequence,
+                event_sha256=event.frame_sha256)
+            try:
+                _atomic_write(self.watermark_path,
+                              _canonical(watermark.as_document(self.batch_id)))
+            except BaseException:
+                # The frame is durable but unwatermarked. Fail closed: the owner must not keep
+                # issuing ACKs it cannot prove, and the prefix reader will treat these bytes as
+                # unconfirmed rather than committed.
+                self._failed = True
+                raise
+            self._watermark = watermark
+            return event
+
+    @classmethod
+    def read_committed_prefix(cls, root, batch_id, watermark):
+        """Return only the events the published watermark covers, and never beyond it.
+
+        Anything after the watermark - a flushed-but-unfsynced frame, complete unwatermarked
+        frames, or a partial tail - is reported through ``unconfirmed_durability`` instead of
+        being returned, truncated or appended to. Tampered, chained-gapped or unverifiable
+        history still raises.
+        """
+
+        if not isinstance(watermark, CommittedWatermark):
+            raise JournalCorruption('a CommittedWatermark is required')
+        journal = cls(root, batch_id)
+        with journal._mutex:
+            events, _terminal, _last_epoch, tail = journal._read_history()
+            boundary = None
+            for index, event in enumerate(events):
+                if (event.coordinator_epoch == watermark.writer_epoch
+                        and event.sequence == watermark.sequence):
+                    if event.frame_sha256 != watermark.event_sha256:
+                        raise JournalCorruption('watermark frame hash mismatch')
+                    boundary = index
+                    break
+            if boundary is None:
+                raise JournalCorruption('watermark does not match committed history')
+            prefix = events[:boundary + 1]
+            unconfirmed = bool(tail) or len(events) > len(prefix)
+            return JournalReplay(
+                tuple(deepcopy(prefix)),
+                damaged_tail_path=journal._damaged_tail_path,
+                schema_version=journal._recorded_schema_version,
+                unconfirmed_durability=unconfirmed)
 
     def replay(self):
         """Validate authoritative frames under the lock, without reading projections."""

@@ -471,3 +471,173 @@ def test_v2_journal_records_schema_two_and_stays_readable(tmp_path):
     ]
     with pytest.raises(ValueError):
         CoordinatorJournal(v2_root, "batch-2", schema_version=3)
+
+
+# --------------------------------------------------------------------------------------
+# Task 4: committed watermark and the live committed prefix
+# --------------------------------------------------------------------------------------
+
+
+def test_append_committed_publishes_a_watermark_after_the_frame(tmp_path):
+    from so101_demo.parallel_batch.journal import CommittedWatermark
+
+    journal = CoordinatorJournal.create(tmp_path, 'batch-a')
+    try:
+        event = journal.append_committed('POINT_LEASED', 'lease-1', {'point_id': 'p1'})
+        watermark = CommittedWatermark(
+            writer_epoch=event.coordinator_epoch,
+            sequence=event.sequence,
+            event_sha256=event.frame_sha256,
+        )
+        document = json.loads((tmp_path / 'committed-watermark.json').read_text())
+        assert document['writer_epoch'] == event.coordinator_epoch
+        assert document['sequence'] == event.sequence
+        assert document['event_sha256'] == event.frame_sha256
+        assert journal.read_watermark() == watermark
+    finally:
+        journal.close()
+
+
+def test_append_committed_is_idempotent_and_never_moves_backwards(tmp_path):
+    journal = CoordinatorJournal.create(tmp_path, 'batch-a')
+    try:
+        first = journal.append_committed('POINT_LEASED', 'lease-1', {'point_id': 'p1'})
+        second = journal.append_committed('RESULT_COMMITTED', 'result-1', {'point_id': 'p1'})
+        repeat = journal.append_committed('POINT_LEASED', 'lease-1', {'point_id': 'p1'})
+        assert repeat.frame_sha256 == first.frame_sha256
+        assert journal.read_watermark().sequence == second.sequence
+        assert journal.read_watermark().event_sha256 == second.frame_sha256
+    finally:
+        journal.close()
+
+
+def test_read_committed_prefix_excludes_frames_beyond_the_watermark(tmp_path):
+    from so101_demo.parallel_batch.journal import CommittedWatermark
+
+    journal = CoordinatorJournal.create(tmp_path, 'batch-a')
+    try:
+        committed = journal.append_committed('POINT_LEASED', 'lease-1', {'point_id': 'p1'})
+        watermark = journal.read_watermark()
+        # A frame that reached the file but has no published watermark yet: it is written with the
+        # plain append, which is exactly the flush-before-fsync window the design forbids serving.
+        journal.append('ATTEMPT_STARTED', 'attempt-1', {'point_id': 'p1'})
+    finally:
+        journal.close()
+
+    prefix = CoordinatorJournal.read_committed_prefix(tmp_path, 'batch-a', watermark)
+    assert [event.idempotency_key for event in prefix.events] == ['lease-1']
+    assert prefix.events[0].frame_sha256 == committed.frame_sha256
+    assert prefix.unconfirmed_durability is True
+
+    strict = CoordinatorJournal.read_only_replay(tmp_path, 'batch-a')
+    assert [event.idempotency_key for event in strict.events] == ['lease-1', 'attempt-1']
+
+
+def test_read_committed_prefix_reports_a_partial_tail_without_truncating(tmp_path):
+    journal = CoordinatorJournal.create(tmp_path, 'batch-a')
+    try:
+        journal.append_committed('POINT_LEASED', 'lease-1', {'point_id': 'p1'})
+        watermark = journal.read_watermark()
+        segment = journal.segment_path
+    finally:
+        journal.close()
+
+    with segment.open('ab') as stream:
+        stream.write(struct.pack('>Q', 4096) + b'abcd')
+    before = segment.read_bytes()
+
+    prefix = CoordinatorJournal.read_committed_prefix(tmp_path, 'batch-a', watermark)
+    assert [event.idempotency_key for event in prefix.events] == ['lease-1']
+    assert prefix.unconfirmed_durability is True
+    assert segment.read_bytes() == before  # nothing truncated, nothing appended
+    assert not (tmp_path / 'events' / 'torn-tail-2.bin').exists()
+
+    with pytest.raises(JournalCorruption):
+        CoordinatorJournal.read_only_replay(tmp_path, 'batch-a')
+
+
+def test_read_committed_prefix_rejects_a_tampered_committed_frame(tmp_path):
+    path, _event, _epoch = seed(tmp_path)
+    journal = CoordinatorJournal.create(tmp_path, 'batch-a')
+    try:
+        journal.append_committed('RESULT_COMMITTED', 'result-1', {'point_id': 'p1'})
+        watermark = journal.read_watermark()
+    finally:
+        journal.close()
+
+    rewrite_frame(path, 1, lambda value: value.__setitem__('payload', {'point_id': 'pX'}))
+    with pytest.raises(JournalCorruption):
+        CoordinatorJournal.read_committed_prefix(tmp_path, 'batch-a', watermark)
+
+
+def test_read_committed_prefix_rejects_a_sequence_gap(tmp_path):
+    journal = CoordinatorJournal.create(tmp_path, 'batch-a')
+    try:
+        journal.append_committed('POINT_LEASED', 'lease-1', {'point_id': 'p1'})
+        journal.append_committed('RESULT_COMMITTED', 'result-1', {'point_id': 'p1'})
+        watermark = journal.read_watermark()
+        segment = journal.segment_path
+    finally:
+        journal.close()
+
+    rewrite_frame(segment, 2, lambda value: value.__setitem__('sequence', 4))
+    with pytest.raises(JournalCorruption):
+        CoordinatorJournal.read_committed_prefix(tmp_path, 'batch-a', watermark)
+
+
+def test_terminal_event_closes_the_journal_for_later_events(tmp_path):
+    journal = CoordinatorJournal.create(tmp_path, 'batch-a')
+    try:
+        journal.append_committed('BATCH_TERMINAL', 'terminal-1', {'status': 'TERMINAL'})
+        journal.append_committed('CLEANUP_COMMITTED', 'cleanup-1', {'cleanup_complete': True})
+        with pytest.raises(JournalCorruption):
+            journal.append_committed('POINT_LEASED', 'late-1', {'point_id': 'p9'})
+    finally:
+        journal.close()
+
+
+def test_epoch_takeover_keeps_the_previous_prefix_readable(tmp_path):
+    journal = CoordinatorJournal.create(tmp_path, 'batch-a')
+    try:
+        journal.append_committed('POINT_LEASED', 'lease-1', {'point_id': 'p1'})
+        first_watermark = journal.read_watermark()
+        first_epoch = journal.coordinator_epoch
+    finally:
+        journal.close()
+
+    successor = CoordinatorJournal.create(tmp_path, 'batch-a')
+    try:
+        assert successor.coordinator_epoch > first_epoch
+        successor.append_committed('ATTEMPT_STARTED', 'attempt-1', {'point_id': 'p1'})
+        new_watermark = successor.read_watermark()
+        assert new_watermark.writer_epoch > first_watermark.writer_epoch
+        assert new_watermark.sequence > first_watermark.sequence
+    finally:
+        successor.close()
+
+    old_prefix = CoordinatorJournal.read_committed_prefix(tmp_path, 'batch-a', first_watermark)
+    assert [event.idempotency_key for event in old_prefix.events] == ['lease-1']
+    new_prefix = CoordinatorJournal.read_committed_prefix(tmp_path, 'batch-a', new_watermark)
+    assert [event.idempotency_key for event in new_prefix.events] == ['lease-1', 'attempt-1']
+    assert new_prefix.unconfirmed_durability is False
+
+
+def test_read_committed_prefix_refuses_an_unknown_or_rewound_watermark(tmp_path):
+    from so101_demo.parallel_batch.journal import CommittedWatermark
+
+    journal = CoordinatorJournal.create(tmp_path, 'batch-a')
+    try:
+        journal.append_committed('POINT_LEASED', 'lease-1', {'point_id': 'p1'})
+        watermark = journal.read_watermark()
+    finally:
+        journal.close()
+
+    with pytest.raises(JournalCorruption):
+        CoordinatorJournal.read_committed_prefix(
+            tmp_path, 'batch-a',
+            CommittedWatermark(watermark.writer_epoch, watermark.sequence, 'f' * 64))
+    with pytest.raises(JournalCorruption):
+        CoordinatorJournal.read_committed_prefix(
+            tmp_path, 'batch-a',
+            CommittedWatermark(watermark.writer_epoch, watermark.sequence + 5,
+                               watermark.event_sha256))
