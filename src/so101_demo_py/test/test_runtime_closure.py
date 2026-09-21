@@ -495,11 +495,21 @@ def test_darwin_loaded_image_probe_ignores_blank_vmmap_lines(
     module = _closure_module()
     library = tmp_path / "libexample.dylib"
     library.write_bytes(b"example")
+    inaccessible = Path("/private/var/db/analyticsd/events.allowlist")
     output = (
         "Process: Python [123]\n\n"
+        "__DATA 2000-3000 [ 4K 4K 0K 0K] r--/r-- SM=COW  "
+        f"{inaccessible}\n"
         "__TEXT 1000-2000 [ 4K 4K 0K 0K] r-x/r-x SM=COW  "
         f"{library}\n\n"
     )
+    real_is_file = module.Path.is_file
+
+    def is_file(path):
+        if path == inaccessible:
+            raise PermissionError(str(path))
+        return real_is_file(path)
+
     monkeypatch.setattr(
         module.subprocess,
         "run",
@@ -507,6 +517,7 @@ def test_darwin_loaded_image_probe_ignores_blank_vmmap_lines(
             returncode=0, stdout=output, stderr=""
         ),
     )
+    monkeypatch.setattr(module.Path, "is_file", is_file)
 
     assert module._darwin_loaded_images(123) == (library,)
 

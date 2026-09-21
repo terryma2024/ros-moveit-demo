@@ -937,8 +937,11 @@ def _darwin_loaded_images(pid: int) -> tuple[Path, ...]:
         if not candidate.startswith("/"):
             continue
         path = Path(candidate)
-        if path.is_file():
-            paths.add(path)
+        try:
+            if path.is_file():
+                paths.add(path)
+        except OSError:
+            continue
     return tuple(sorted(paths))
 
 
