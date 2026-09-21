@@ -242,9 +242,12 @@ def station_robot_description(
     from ..runtime.launch_composition import _render_mujoco_robot_description
 
     share = Path(share_root)
+    resolved_scene = (
+        Path(scene) if scene is not None else share / "assets" / "mujoco" / "scene.xml"
+    )
     return _render_mujoco_robot_description(
         share,
-        Path(scene) if scene is not None else share / "assets" / "mujoco" / "scene.xml",
+        str(resolved_scene),
         headless=headless,
         sensor_rendering=sensor_rendering,
         sim_speed_factor=sim_speed_factor,
