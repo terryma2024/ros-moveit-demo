@@ -31,6 +31,14 @@ FAIL = "FAIL"
 #: tests can drive the same code path without a real delay.
 CPU_BUSY_WINDOW_S = 0.100
 
+#: The resolved MPS selector every approved Darwin/MPS profile (v4, v5, v6) binds into its guard
+#: scope. It is the only accelerator selector those profiles admit.
+MPS_GUARD_SELECTOR = "MPS:default"
+
+#: The campaign-level guard epoch. Per-spawn epochs the supervisor takes start at 1, so a campaign
+#: preflight can never be mistaken for a spawn admission.
+CAMPAIGN_GUARD_EPOCH = 0
+
 _CGROUP_ROOT = Path("/sys/fs/cgroup")
 _MEMINFO_PATH = Path("/proc/meminfo")
 _PROC_STAT_PATH = Path("/proc/stat")
@@ -91,11 +99,12 @@ def _require_identifier(name: str, value: object) -> str:
 class StartGuardPolicy:
     """Closed policy. Configuration cannot enlarge the deadline past the design's 2 s.
 
-    ``mps_minimum_headroom_bytes`` belongs to the schema-v4 Darwin combination only. It is a
-    fixed positive byte count that blocks a plainly short-of-memory start; it does not scale
-    with the worker count, the model count or the point count, and it is not a capacity
-    certification. It stays ``None`` for every other platform, so a v3 document cannot carry
-    an MPS threshold and a Linux v4 document cannot silently acquire one.
+    ``mps_minimum_headroom_bytes`` belongs to every approved Darwin/MPS profile (schema v4 W2
+    first-pass, schema v5 W1 full-restart retry and schema v6 W1 first-pass) and to no other
+    platform. It is a fixed positive byte count that blocks a plainly short-of-memory start; it
+    does not scale with the worker count, the model count or the point count, and it is not a
+    capacity certification. It stays ``None`` for every other platform, so a v3 document still
+    cannot carry an MPS threshold and a Linux document cannot silently acquire one.
     """
 
     timeout_s: float = 2.0
@@ -142,9 +151,10 @@ def _require_gpu_selector(value: object) -> str:
             raise ValueError("gpu_selector INDEX must be a non-negative integer")
         return value
     if kind == "MPS":
-        # Schema v4's Darwin combination has no CUDA UUID or index: the accelerator is the
-        # unified-memory MPS device, and the closed contract only ever resolves it to `default`.
-        # The two CUDA forms above stay byte-identical, so v3 behaviour is untouched.
+        # Every approved Darwin/MPS profile (schema v4/v5/v6) has no CUDA UUID or index: the
+        # accelerator is the unified-memory MPS device, and the closed contract only ever resolves
+        # it to `default`. The two CUDA forms above stay byte-identical, so v3 behaviour is
+        # untouched.
         if body != "default":
             raise ValueError("gpu_selector MPS must be the resolved default accelerator")
         return value

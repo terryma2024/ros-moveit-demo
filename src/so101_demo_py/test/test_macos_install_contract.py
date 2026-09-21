@@ -128,6 +128,65 @@ def test_task_station_install_contract_and_fork_versions_are_complete() -> None:
     assert {ET.parse(path).getroot().findtext("version") for path in package_files} == {"0.1.0"}
 
 
+#: The three approved macOS execution profiles, and the document each one is shipped as.
+MACOS_PROFILES = {
+    "parallel_batch_v4_macos_mps_w2.yaml": (4, 2, ("MPS_W2_FIRST_PASS", "FIRST_PASS")),
+    "parallel_batch_v5_macos_mps_w1_retry.yaml": (
+        5, 1, ("MPS_W1_FULL_RESTART_RETRY", "FULL_RESTART_RETRY")),
+    "parallel_batch_v6_macos_mps_w1_first_pass.yaml": (
+        6, 1, ("MPS_W1_FIRST_PASS", "FIRST_PASS")),
+}
+
+
+def test_the_three_macos_profile_documents_are_installed_and_closed() -> None:
+    """Every approved profile ships as its own document; N>2 and adaptive ship as none."""
+
+    config_root = REPOSITORY_ROOT / "src/so101_demo_py/config/mujoco"
+    for name, (schema_version, worker_count, _) in MACOS_PROFILES.items():
+        path = config_root / name
+        assert path.is_file(), name
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        assert document["schema_version"] == schema_version
+        assert document["worker_count"] == worker_count
+        assert len(document["execution"]["ros_domain_ids"]) == worker_count
+        assert document["accelerator"] == {"kind": "mps", "selector": "default"}
+        assert document["requested_device"] == "mps"
+        assert document["allow_cpu_fallback"] is False
+        assert document["ipc_transport"] == "darwin_private_path_unix"
+        assert document["mujoco_gl"] == "cgl"
+        assert document["start_guard"]["mps_minimum_headroom_bytes"] > 0
+        # No profile document carries a budget, qualification or adaptive *field*: the prose may
+        # name what is refused, the schema may not admit it.
+        keys = set(document)
+        for section in ("accelerator", "execution", "start_guard"):
+            keys |= set(document[section])
+        for forbidden in ("budget", "qualification", "promotion", "adaptive", "profile"):
+            assert not [key for key in keys if forbidden in key], f"{name}: {forbidden}"
+
+    assert not (config_root / "parallel_batch_v7_macos_mps_w4.yaml").exists()
+
+
+def test_the_v4_document_bytes_are_frozen_by_the_w1_work() -> None:
+    """v5/v6 are new files: the frozen v4 document is not rewritten."""
+
+    digest = hashlib.sha256(
+        (REPOSITORY_ROOT / "src/so101_demo_py/config/mujoco"
+         / "parallel_batch_v4_macos_mps_w2.yaml").read_bytes()).hexdigest()
+    assert digest == "2f9d7a87fe57a0440cdfd139c2ac42b7af86002edfcc2ed2ef3077568dc6b06b"
+
+
+def test_setup_installs_the_w1_public_entries() -> None:
+    """The W1 entry points are console scripts, exactly like the W2 one."""
+
+    setup = DEMO_SETUP.read_text(encoding="utf-8")
+
+    assert '"so101_macos_service_campaign = ' in setup
+    assert '"so101_macos_n1_retry = so101_demo.cli.macos_n1_retry:main"' in setup
+    assert '"so101_macos_n1_first_pass = so101_demo.cli.macos_n1_first_pass:main"' in setup
+    for module in ("macos_n1_retry", "macos_n1_first_pass"):
+        assert (REPOSITORY_ROOT / f"src/so101_demo_py/src/cli/{module}.py").is_file()
+
+
 def test_installer_builds_exact_upgrade_package_set_and_checks_new_artifacts() -> None:
     installer = INSTALLER.read_text(encoding="utf-8")
     package_block = re.search(

@@ -363,3 +363,122 @@ def test_v4_helper_measures_cpu_and_ram_without_an_nvidia_probe() -> None:
     assert result.checks["ram"].unit == "bytes"
     assert result.checks["ram"].status is PASS
     assert result.status is PASS
+
+
+# --------------------------------------------------------------------------------------
+# Fresh per-spawn admissions and the one-shot handover (Task 7, design section 7)
+# --------------------------------------------------------------------------------------
+
+
+def _healthy_mps_snapshot():
+    from so101_demo.parallel_batch.accelerator_probe import AcceleratorSnapshot
+
+    return AcceleratorSnapshot(
+        kind="mps", selector="default", available_bytes=8 << 30,
+        recommended_max_memory_bytes=16 << 30, current_allocated_memory_bytes=0,
+        driver_allocated_memory_bytes=0, metric_source="unified-memory-proxy:vm_stat+torch.mps")
+
+
+def test_the_campaign_guard_always_probes_and_never_reads_a_verdict_file(tmp_path):
+    """Every campaign start takes a fresh observation; the audit file is not an input."""
+
+    policy = StartGuardPolicy(mps_minimum_headroom_bytes=1 << 30)
+    first = probe_module.run_campaign_start_guard(
+        policy=policy, batch_id="b-n1", worker_count=1, state_root=tmp_path / "state",
+        probe=lambda **_: _healthy_mps_snapshot())
+    assert first.scope.epoch == probe_module.CAMPAIGN_GUARD_EPOCH == 0
+    assert first.scope.batch_id == "b-n1" and first.scope.worker_count == 1
+    assert first.scope.gpu_selector == "MPS:default"
+    assert first.status in ("PASS", "WARN"), first.checks
+
+    (tmp_path / "start-guard.json").write_text('{"status": "PASS", "epoch": 0}')
+    second = probe_module.run_campaign_start_guard(
+        policy=policy, batch_id="b-n1", worker_count=1, state_root=tmp_path / "state",
+        probe=lambda **_: _healthy_mps_snapshot())
+    assert second.checks["mps_headroom"].reason == "MPS_HEADROOM_OK"
+
+    # The probe module owns no verdict file: the audit copy belongs to the caller.
+    source = Path(probe_module.__file__).read_text(encoding="utf-8")
+    assert "start-guard.json" not in source
+
+
+def test_the_probe_request_shape_is_shared_by_all_three_darwin_profiles(tmp_path):
+    """One helper path serves v4, v5 and v6: the discriminator is the fixed floor, nothing else."""
+
+    import json as _json
+
+    from so101_demo.parallel_batch.contracts import (
+        load_parallel_runtime_config_v4,
+        load_parallel_runtime_config_v5,
+        load_parallel_runtime_config_v6,
+    )
+
+    package = Path(__file__).resolve().parents[1]
+    policies = [
+        load_parallel_runtime_config_v4(
+            package / "config/mujoco/parallel_batch_v4_macos_mps_w2.yaml").start_guard,
+        load_parallel_runtime_config_v5(
+            package / "config/mujoco/parallel_batch_v5_macos_mps_w1_retry.yaml").start_guard,
+        load_parallel_runtime_config_v6(
+            package / "config/mujoco/parallel_batch_v6_macos_mps_w1_first_pass.yaml").start_guard,
+    ]
+    captured = []
+
+    class _Sentinel(Exception):
+        pass
+
+    scope = GuardScope(batch_id="profiles", epoch=1, owner_pid=os.getpid(),
+                       owner_starttime_ticks=1, gpu_selector="MPS:default", worker_count=1)
+    coordinator = probe_module.ProbeCoordinator(tmp_path)
+    coordinator._spawn = lambda request, deadline: (  # noqa: SLF001 - the request is the subject
+        captured.append(_json.loads(request.decode())) or (_ for _ in ()).throw(_Sentinel())
+    )
+    for policy in policies:
+        with pytest.raises(_Sentinel):
+            coordinator.check(policy, scope)
+
+    assert [entry["policy"]["mps_minimum_headroom_bytes"] for entry in captured] == [
+        1 << 30, 1 << 30, 1 << 30]
+    for entry in captured:
+        assert set(entry) == {"policy", "scope", "request_started_monotonic_s",
+                              "deadline_monotonic_s"}
+        assert "execution_profile" not in entry and "schema_version" not in entry
+        assert set(entry["policy"]) == {
+            "timeout_s", "cpu_busy_warn_fraction", "ram_minimum_bytes", "ram_minimum_fraction",
+            "gpu_minimum_bytes", "mps_minimum_headroom_bytes"}
+
+
+def test_a_v5_policy_takes_the_darwin_helper_half_and_demands_the_mps_admission(tmp_path):
+    """The helper half is shared; the accelerator admission stays mandatory for v5/v6 too."""
+
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v5
+
+    package = Path(__file__).resolve().parents[1]
+    policy = load_parallel_runtime_config_v5(
+        package / "config/mujoco/parallel_batch_v5_macos_mps_w1_retry.yaml").start_guard
+    coordinator = probe_module.ProbeCoordinator(tmp_path)
+    scope = GuardScope(batch_id="v5", epoch=1, owner_pid=os.getpid(), owner_starttime_ticks=1,
+                       gpu_selector="MPS:default", worker_count=1)
+
+    result = coordinator.check(policy, scope)
+    assert result.status == "FAIL"
+    assert result.checks["mps_accelerator"].reason == "MPS_ACCELERATOR_PROBE_MISSING"
+    assert {"cpu_capacity", "cpu_busy", "ram"} <= set(result.checks)
+    assert "gpu" not in result.checks, "the Darwin half must not fabricate an NVIDIA device"
+    assert result.snapshot is None
+
+
+def test_the_handover_document_is_closed_and_carries_the_scope(tmp_path):
+    """The one-shot payload is exactly the admission, its scope and its validity stamp."""
+
+    policy = StartGuardPolicy(mps_minimum_headroom_bytes=1 << 30)
+    result = probe_module.run_campaign_start_guard(
+        policy=policy, batch_id="b-n1", worker_count=1, state_root=tmp_path / "state",
+        probe=lambda **_: _healthy_mps_snapshot())
+    document = probe_module.guard_handover_document(result)
+
+    assert set(document) == {"status", "scope", "cleanup_state", "recorded_monotonic_s",
+                             "checks"}
+    assert document["scope"]["batch_id"] == "b-n1"
+    assert document["scope"]["epoch"] == probe_module.CAMPAIGN_GUARD_EPOCH
+    assert document["scope"]["gpu_selector"] == "MPS:default"

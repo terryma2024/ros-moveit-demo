@@ -29,7 +29,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .start_guard import (
+    CAMPAIGN_GUARD_EPOCH,
     FAIL,
+    MPS_GUARD_SELECTOR,
     PASS,
     WARN,
     GuardCheck,
@@ -46,8 +48,9 @@ from .start_guard import (
     probe_snapshot,
 )
 
-# Imported for the schema-v4 accelerator hook. The import is a module reference only: the MPS
-# vocabulary stays in accelerator_probe, so schema v3 never pays for it and never consults it.
+# Imported for the approved Darwin/MPS accelerator hook. The import is a module reference only:
+# the MPS vocabulary stays in accelerator_probe, so schema v3 never pays for it and never
+# consults it.
 from . import accelerator_probe as _accelerator_probe
 
 CLEAR = "CLEAR"
@@ -798,7 +801,7 @@ class EpochStartGuard:
 
     The result is never accepted from outside this object, is only reused while the scope is
     unchanged and the observation is still inside the policy deadline, and a FAIL is refused
-    rather than downgraded.
+    rather than downgraded. The spawn-time form below never reuses anything at all.
     """
 
     def __init__(self, coordinator: ProbeCoordinator, policy: StartGuardPolicy, *,
@@ -862,14 +865,234 @@ class EpochStartGuard:
             raise StartGuardRefused(result)
         return result
 
+    def require_fresh_spawn(self, scope: GuardScope) -> GuardResult:
+        """One brand-new observation for one spawn; no earlier result is ever reused.
+
+        Design section 7: a preflight result is not reusable across a spawn epoch, a Worker or a
+        retry. This is the form the campaign adapter and every spawn boundary use, so "fresh" is
+        the only thing that can admit a start.
+        """
+
+        if not isinstance(scope, GuardScope):
+            raise ValueError("scope must be a GuardScope")
+        return self.begin_epoch(scope)
+
+    def require_fresh_startable(self, scope: GuardScope) -> GuardResult:
+        """The fail-closed fresh form: probe now, refuse on FAIL or a blocked cleanup."""
+
+        result = self.require_fresh_spawn(scope)
+        if result.status == FAIL or result.cleanup_state != CLEAR:
+            raise StartGuardRefused(result)
+        return result
+
 
 def compose_default_start_guard(policy: StartGuardPolicy, *,
                                 state_root: Path | None = None,
                                 accelerator: object | None = None) -> EpochStartGuard:
     """The installed composition: one task-level state root, one shared lock.
 
-    ``accelerator`` selects the schema-v4 admission check. It is left ``None`` for schema v3,
+    ``accelerator`` selects the Darwin/MPS admission check. It is left ``None`` for schema v3,
     whose guard remains the NVML-backed snapshot guard.
     """
 
     return EpochStartGuard(ProbeCoordinator(state_root), policy, accelerator=accelerator)
+
+
+# --------------------------------------------------------------------------------------
+# the approved Darwin/MPS composition: a fresh check per campaign and per spawn
+# --------------------------------------------------------------------------------------
+
+#: "Build the real probe" as opposed to "no probe at all", which is a refusal by construction.
+UNSET_PROBE = object()
+_UNSET = UNSET_PROBE
+
+
+def darwin_guard_scope(*, batch_id: str, worker_count: int,
+                       epoch: int = CAMPAIGN_GUARD_EPOCH, owner_pid: int | None = None,
+                       owner_starttime_ticks: int | None = None,
+                       gpu_selector: str = MPS_GUARD_SELECTOR) -> GuardScope:
+    """The scope an approved Darwin/MPS admission binds.
+
+    Design section 7: the result binds ``(batch_id, epoch, owner_pid, owner_birth,
+    MPS:default, worker_count)``. The owner facts default to *this* process, which is also the
+    process that survives the guard-to-broker ``exec``: the PID and its birth identity are the
+    same on both sides, so a scope computed before the handover can be re-derived afterwards and
+    is checked, not assumed.
+    """
+
+    if owner_pid is None:
+        owner_pid = os.getpid()
+    if owner_starttime_ticks is None:
+        identity = read_process_identity(owner_pid)
+        owner_starttime_ticks = 0 if identity is None else identity.start_time_ticks
+    return GuardScope(batch_id=batch_id, epoch=epoch, owner_pid=owner_pid,
+                      owner_starttime_ticks=owner_starttime_ticks, gpu_selector=gpu_selector,
+                      worker_count=worker_count)
+
+
+def compose_darwin_start_guard(policy: StartGuardPolicy, *, state_root: Path | None = None,
+                               probe: object = _UNSET) -> EpochStartGuard:
+    """The Darwin/MPS guard composition: the accelerator probe is mandatory.
+
+    ``probe`` defaults to the real :class:`~so101_demo.parallel_batch.accelerator_probe.
+    DarwinMpsAcceleratorProbe`. ``probe=None`` composes a guard *without* one, which is a refusal
+    by construction (`MPS_ACCELERATOR_PROBE_MISSING`) and is how the fail-closed branch is
+    exercised without importing torch.
+    """
+
+    if policy.mps_minimum_headroom_bytes is None:
+        raise ValueError("MPS_MINIMUM_HEADROOM_BYTES")
+    if probe is _UNSET:
+        probe = _accelerator_probe.DarwinMpsAcceleratorProbe()
+    return EpochStartGuard(ProbeCoordinator(state_root), policy, accelerator=probe)
+
+
+def run_campaign_start_guard(*, policy: StartGuardPolicy, batch_id: str, worker_count: int,
+                             probe: object = _UNSET, state_root: Path | None = None,
+                             epoch: int = CAMPAIGN_GUARD_EPOCH) -> GuardResult:
+    """One fresh campaign-level admission, before any campaign child process exists.
+
+    The observation is always taken here: no verdict file, of any status or epoch, is consulted.
+    The result is returned rather than raised so the caller can record the refusal as evidence.
+    """
+
+    guard = compose_darwin_start_guard(policy, state_root=state_root, probe=probe)
+    scope = darwin_guard_scope(batch_id=batch_id, worker_count=worker_count, epoch=epoch)
+    return guard.require_fresh_spawn(scope)
+
+
+# --------------------------------------------------------------------------------------
+# the one-shot handover across `exec`
+# --------------------------------------------------------------------------------------
+
+#: The environment variable naming the inherited read end of the handover pipe.
+GUARD_RESULT_FD_VARIABLE = "SO101_START_GUARD_RESULT_FD"
+
+
+class GuardHandoverRefused(RuntimeError):
+    """The admission could not be taken from this process's own inherited pipe."""
+
+    def __init__(self, reason: str, detail: str = "") -> None:
+        super().__init__(f"{reason}: {detail}" if detail else reason)
+        self.reason = reason
+        self.detail = detail
+
+
+def guard_handover_document(result: GuardResult) -> dict:
+    """The one-shot payload: the admission, the scope it binds and when it was recorded."""
+
+    if not isinstance(result, GuardResult):
+        raise ValueError("result must be a GuardResult")
+    return {
+        "status": result.status,
+        "scope": {
+            "batch_id": result.scope.batch_id,
+            "epoch": result.scope.epoch,
+            "owner_pid": result.scope.owner_pid,
+            "owner_starttime_ticks": result.scope.owner_starttime_ticks,
+            "gpu_selector": result.scope.gpu_selector,
+            "worker_count": result.scope.worker_count,
+        },
+        "cleanup_state": result.cleanup_state,
+        "recorded_monotonic_s": time.monotonic(),
+        "checks": {
+            name: {"status": check.status, "reason": check.reason, "observed": check.observed,
+                   "cutoff": check.cutoff, "unit": check.unit}
+            for name, check in result.checks.items()
+        },
+    }
+
+
+def publish_guard_handover(write_fd: int, result: GuardResult) -> None:
+    """Write the admission once and close the write end. Nothing else may use this pipe."""
+
+    payload = json.dumps(guard_handover_document(result), sort_keys=True).encode()
+    try:
+        offset = 0
+        while offset < len(payload):
+            offset += os.write(write_fd, payload[offset:])
+    finally:
+        try:
+            os.close(write_fd)
+        except OSError:  # pragma: no cover - already closed is the desired state
+            pass
+
+
+def _handover_scope_matches(document: object, scope: GuardScope) -> bool:
+    if not isinstance(document, dict):
+        return False
+    recorded = document.get("scope")
+    if not isinstance(recorded, dict):
+        return False
+    return (
+        recorded.get("batch_id") == scope.batch_id
+        and recorded.get("epoch") == scope.epoch
+        and recorded.get("owner_pid") == scope.owner_pid
+        and recorded.get("owner_starttime_ticks") == scope.owner_starttime_ticks
+        and recorded.get("gpu_selector") == scope.gpu_selector
+        and recorded.get("worker_count") == scope.worker_count
+    )
+
+
+def consume_guard_handover(read_fd: int, *, scope: GuardScope, max_age_s: float,
+                           clock=time.monotonic,
+                           forbidden_modules: tuple[str, ...] = ("torch",)) -> GuardResult:
+    """Read the admission once from this process's own inherited pipe and validate it.
+
+    Nothing is ever read from disk: the broker phase may only run on the result this process's
+    guard phase wrote into the pipe it created. The result must match the scope (including the
+    owner birth identity and the epoch) and still be inside ``max_age_s``. A module named in
+    ``forbidden_modules`` - by default ``torch`` - must not be imported any more, which is what
+    makes the guard phase's accelerator import unable to survive the ``exec``.
+    """
+
+    if not isinstance(scope, GuardScope):
+        raise ValueError("scope must be a GuardScope")
+    for name in forbidden_modules:
+        if name in sys.modules:
+            raise GuardHandoverRefused(
+                "GUARD_PHASE_IMPORT_SURVIVED",
+                f"{name} is still imported: the broker phase must follow a fresh exec")
+    try:
+        chunks = []
+        while True:
+            data = os.read(read_fd, 65536)
+            if not data:
+                break
+            chunks.append(data)
+    except OSError as error:
+        raise GuardHandoverRefused("GUARD_HANDOVER_CLOSED", str(error)) from error
+    finally:
+        try:
+            os.close(read_fd)
+        except OSError:
+            pass
+    try:
+        document = json.loads(b"".join(chunks).decode())
+    except (UnicodeDecodeError, ValueError) as error:
+        raise GuardHandoverRefused("GUARD_HANDOVER_INVALID", str(error)) from error
+    if not _handover_scope_matches(document, scope):
+        raise GuardHandoverRefused(
+            "GUARD_HANDOVER_SCOPE_MISMATCH",
+            f"recorded {document.get('scope')!r} does not name {scope!r}")
+    recorded = document.get("recorded_monotonic_s")
+    if isinstance(recorded, bool) or not isinstance(recorded, (int, float)):
+        raise GuardHandoverRefused("GUARD_HANDOVER_INVALID", "recorded_monotonic_s")
+    if (clock() - float(recorded)) > float(max_age_s) or float(recorded) - clock() > max_age_s:
+        raise GuardHandoverRefused(
+            "GUARD_HANDOVER_EXPIRED",
+            f"recorded at {recorded} is outside the {max_age_s} s validity window")
+    if document.get("status") == FAIL or document.get("cleanup_state") != CLEAR:
+        raise GuardHandoverRefused(
+            "GUARD_HANDOVER_NOT_ADMITTED",
+            f"status={document.get('status')!r} cleanup={document.get('cleanup_state')!r}")
+    checks = {
+        str(name): GuardCheck(status=str(payload["status"]), reason=str(payload["reason"]),
+                              observed=payload.get("observed"), cutoff=payload.get("cutoff"),
+                              unit=str(payload["unit"]))
+        for name, payload in dict(document.get("checks") or {}).items()
+    }
+    return GuardResult(scope=scope, status=str(document["status"]),
+                       started_monotonic_s=float(recorded), completed_monotonic_s=float(recorded),
+                       checks=checks, snapshot=None,
+                       cleanup_state=str(document["cleanup_state"]))

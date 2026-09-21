@@ -648,14 +648,37 @@ def test_the_adapter_entry_point_refuses_by_name_when_the_record_cannot_be_writt
         "build_parser",
         lambda: types.SimpleNamespace(parse_args=lambda _argv: arguments),
     )
-    monkeypatch.setattr(adapter, "validate", lambda _arguments: {"campaign_id": "svc-campaign"})
+    # The route is resolved from the document and the fresh start guard runs before any campaign
+    # child exists (Task 7), so both are stubbed here: this test is about the owner record that
+    # cannot be written, not about the admission.
+    monkeypatch.setattr(
+        adapter,
+        "resolve_request",
+        lambda *_args, **_kwargs: adapter.AdapterRoute(
+            config=types.SimpleNamespace(start_guard=object()),
+            route=types.SimpleNamespace(worker_count=1),
+            module=adapter.CAMPAIGN_MODULE,
+            record={"campaign_id": "svc-campaign"},
+        ),
+    )
+
+    def admitted_guard(**kwargs):
+        from so101_demo.parallel_batch.start_guard import PASS, GuardCheck, GuardResult
+        from so101_demo.parallel_batch.start_guard_probe import darwin_guard_scope
+
+        return GuardResult(
+            scope=darwin_guard_scope(batch_id=kwargs["batch_id"],
+                                     worker_count=kwargs["worker_count"]),
+            status=PASS, started_monotonic_s=0.0, completed_monotonic_s=0.0,
+            checks={"probe": GuardCheck(PASS, "PROBE_OK", None, None, "state")},
+            snapshot=None, cleanup_state="CLEAR")
 
     def failing_campaign(*_args, **_kwargs):
         raise OwnerRecordError("OWNER_RECORD_UNWRITABLE", "the owner root is not writable")
 
     monkeypatch.setattr(adapter, "OwnedCampaign", failing_campaign)
 
-    assert adapter.main(["ignored"]) == 1
+    assert adapter.main(["ignored"], guard=admitted_guard) == 1
     document = json.loads(capsys.readouterr().out)
     assert document["status"] == "REFUSED"
     assert document["stage"] == "campaign_spawn"

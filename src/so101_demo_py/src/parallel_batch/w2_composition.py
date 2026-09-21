@@ -28,8 +28,12 @@ from .contracts import (
     IpcTransport,
     ParallelRuntimeConfigV3,
     ParallelRuntimeConfigV4,
+    ParallelRuntimeConfigV5,
+    ParallelRuntimeConfigV6,
     load_parallel_runtime_config_v3,
     load_parallel_runtime_config_v4,
+    load_parallel_runtime_config_v5,
+    load_parallel_runtime_config_v6,
     require_v3_execution,
     require_v4_execution,
 )
@@ -51,7 +55,7 @@ class CompositionError(RuntimeError):
 
 
 def load_execution_config(path: Path):
-    """Load the active execution document: v3 unchanged, v4 added, nothing else widened."""
+    """Load the active execution document: v3 unchanged, v4/v5/v6 added, nothing else widened."""
 
     import yaml
 
@@ -66,6 +70,10 @@ def load_execution_config(path: Path):
         return load_parallel_runtime_config_v3(Path(path))
     if version == 4:
         return load_parallel_runtime_config_v4(Path(path))
+    if version == 5:
+        return load_parallel_runtime_config_v5(Path(path))
+    if version == 6:
+        return load_parallel_runtime_config_v6(Path(path))
     raise ContractError("CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION")
 
 
@@ -76,23 +84,29 @@ def load_execution_config_for_schema(path: Path, *, platform: str | None = None)
     the Linux `cuda + proc_fd_unix` combination may only be executed on Linux. This is what keeps
     "the Linux v4 combination is retained in the contract but not executed in this task" honest:
     asking for it here fails loudly instead of silently attempting an impossible launch.
+
+    The rule is the same for every approved Darwin/MPS profile: v4 (W2 first-pass), v5 (W1 retry)
+    and v6 (W1 first-pass) all take this MPS path, and a Linux host refuses all three. The v3
+    branch is untouched and remains host-agnostic.
     """
 
     config = load_execution_config(path)
-    if not isinstance(config, ParallelRuntimeConfigV4):
+    if isinstance(config, ParallelRuntimeConfigV3):
         return config
-    host = sys.platform if platform is None else platform
-    darwin_combination = config.accelerator.kind is AcceleratorKind.MPS
-    if darwin_combination and host != "darwin":
-        raise CompositionError(
-            "PLATFORM_HOST_MISMATCH",
-            f"the MPS combination cannot be executed on {host!r}",
-        )
-    if not darwin_combination and host == "darwin":
-        raise CompositionError(
-            "PLATFORM_HOST_MISMATCH",
-            f"the CUDA/NVML combination cannot be executed on {host!r}",
-        )
+    if isinstance(config, (ParallelRuntimeConfigV4, ParallelRuntimeConfigV5,
+                           ParallelRuntimeConfigV6)):
+        host = sys.platform if platform is None else platform
+        darwin_combination = config.accelerator.kind is AcceleratorKind.MPS
+        if darwin_combination and host != "darwin":
+            raise CompositionError(
+                "PLATFORM_HOST_MISMATCH",
+                f"the MPS combination cannot be executed on {host!r}",
+            )
+        if not darwin_combination and host == "darwin":
+            raise CompositionError(
+                "PLATFORM_HOST_MISMATCH",
+                f"the CUDA/NVML combination cannot be executed on {host!r}",
+            )
     return config
 
 
@@ -211,6 +225,12 @@ def compose_w2_campaign(*, config, config_path: Path, campaign_id: str, batch_id
                         broker_birth_identity: int | None = None) -> W2CampaignPlan:
     """Resolve one exact-W2 campaign. Refuses anything that is not exact W2."""
 
+    if isinstance(config, (ParallelRuntimeConfigV5, ParallelRuntimeConfigV6)):
+        # No cross-profile reuse: a W1 document is not a shrunken W2 request.
+        raise CompositionError(
+            "CONFIG_SCHEMA_MISMATCH",
+            f"exact W2 requires a v4 document, not {type(config).__name__}",
+        )
     if not isinstance(config, (ParallelRuntimeConfigV3, ParallelRuntimeConfigV4)):
         raise CompositionError("CONFIG_TYPE", type(config).__name__)
     if not isinstance(campaign_id, str) or not campaign_id:
