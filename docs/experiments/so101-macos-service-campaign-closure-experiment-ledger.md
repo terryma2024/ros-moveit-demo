@@ -50,6 +50,7 @@ open_hypotheses:
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
 latest_checkpoint: CP-MSC-T6
+review_pending: CP-MSC-02 (Tasks 2-6, GPT-5.6 Sol/high - not available in this session; packet below)
 next_experiment: EXP-MSC-109 (Task 7: v5/v6 profiles, W1 composition and fresh per-spawn StartGuard)
 ```
 
@@ -1662,3 +1663,75 @@ itself; only the operator-recovery path does, after the receipt is fsynced, inde
 
 Retained: all invocations above plus `task2/task6-*`, `task6/`, `task6/interop/`,
 `task6/baseline-head/`, `task6-full-suite-comparison.txt`. Deleted or archived: nothing.
+
+## CP-MSC-02 review packet: Tasks 2-6, prepared for an external reviewer
+
+```yaml
+checkpoint_id: CP-MSC-02-PACKET
+recorded_at: 2026-09-21T23:00:00+0800
+scope: plan Tasks 2-6
+reviewer_required_by_plan: GPT-5.6 Sol / high
+reviewer_status: NOT PERFORMED - no such model or tool is reachable from this execution session
+```
+
+This session cannot invoke the plan's reviewer model, so the review is recorded as pending rather
+than silently treated as done. Nothing below is a substitute for it; it is the fact set a reviewer
+needs, with the points that most deserve adversarial reading.
+
+Commits under review (local, unpushed, branch `codex/so101-unified-webapp`):
+
+```text
+16dbbedc feat(teleop): reduce committed campaign events transactionally   (Task 5 slice)
+87e38a80 feat(teleop): project canonical campaign events without reading deltas
+0342ab9b feat(teleop): recover macOS ownership leaf first                  (Task 6)
+```
+
+Files and interfaces produced:
+
+- Task 2: `parallel_batch/selection.py`, `parallel_batch/queue.py`; Task 3:
+  `parallel_batch/single_point_input.py`; Task 4: committed watermark in
+  `parallel_batch/journal.py`.
+- Task 5: `expert_validation/reducer.py` (`CanonicalCampaignReducer`, `projection_document`),
+  `expert_validation/projection_source.py` (verify-only source),
+  `SupervisorStore.accept_projection_batch()` in one SQLite transaction, and a **dual-format**
+  `CoordinatorEventReader`: canonical journals reduce through the reducer and never read
+  `payload.delta`, legacy snapshot journals keep the verified delta projection, and a journal that
+  mixes both vocabularies fails closed with `JOURNAL_FORMAT_MIXED`.
+- Task 6: `expert_validation/owner_tree.py` (`OwnerIntent`, `ConfirmedOwnerProcess`, `OwnerRecord`,
+  `OwnerCleanupReceipt`, `OwnerTreeRecovery.recover_leaf_first()`, `DirectoryOwnerRecords`,
+  `CompositeOwnerRecords`), `so101_demo.runtime.owner_records` (stdlib-only durable writer), and
+  wiring at the adapter, campaign supervisor, worker and station boundaries.
+
+Points that deserve adversarial review:
+
+1. **Dual-format reader (Task 5).** The canonical path is the design's target; the legacy path is
+   kept because the fixed coordinator still publishes snapshot deltas. A pure canonical reader was
+   measured to break production (`task2/task5-canonical-reader-1-20260921T222237Z`, 17 failed / 20
+   passed) and was reverted; the real journal is reproduced in `task2/task5-repro/repro.py`. A
+   reviewer should decide whether the compatibility bridge is acceptable until the coordinator
+   emits canonical frames, or whether the producer must be migrated first.
+2. **Canonical `RESULT_COMMITTED` still needs `identity`+`response`.** The production artifact
+   import (`register_committed_attempt`) authorizes from that reference and re-verifies the sealed
+   manifest; a canonical event without it fails closed (`RESULT_REFERENCE_INVALID`). Canonical
+   emission must carry the same evidence - recorded as a producer-task dependency.
+3. **Leaf-first reaper ordering (Task 6).** The reaper runs before the operator-recovery inventory
+   on the apply path (the inventory refuses live recorded owners). Trade-off recorded in
+   `CP-MSC-T6`: a later apply failure can leave a reclaimed, receipted tree with the fence still
+   unresolved. Reviewers should confirm the refusal message
+   (`RECOVERY_OWNER_TREE_UNRESOLVED generation <g>: ROLE: REASON`) and the receipt fields are
+   enough for an operator to reconstruct what happened.
+4. **Unproven identity is never signalled.** Unconfirmed intent, recycled pid, re-birth, zombie and
+   surviving group all become `unresolved`; no receipt is committed and the fence stays. The
+   duplicate reaper returns the committed receipt without a second signal.
+5. **Intent-first invariant.** The reaper treats an empty tree as clean *because* an intent is
+   written before `Popen`; the tests assert that ordering at every boundary. A reviewer should check
+   the invariant holds for the `abandon` path too (an abandoned spawn stays unconfirmed, keeping the
+   fence).
+
+Evidence index: `task2/task5-gate-4-20260921T222822Z`, `task2/task5-expert-validation-suite-1-20260921T222622Z`,
+`task2/task5-baseline-7b-20260921T222725Z`, `task2/task6-gate-final-20260921T225419Z`,
+`task6/task6-red-20260921T225533Z`, `task2/task6-teleop-wire-7-green-final-20260921T225142Z`,
+`task2/task6-demo-22-final-20260921T225228Z`, `task2/task6-full-suite-comparison.txt`,
+`task6/interop/demo_writer_interop.py`.
+
+Retained: everything. Deleted or archived: nothing.
