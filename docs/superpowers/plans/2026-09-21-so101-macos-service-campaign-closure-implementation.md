@@ -150,6 +150,10 @@ launcher 冒充、wrong child、PID/birth/executable drift 全部拒绝。`reduc
 表驱动 RED 覆盖 N-pass/P-fail、相同/不同 loader failure、timeout、missing marker、错误或缺失
 process attestation、identity drift、cleanup residue、semantic diff，以及默认未列组合。
 
+现有 closure inventory 的 symlink 拒绝合同保持不变：测试继续要求任意 file 或 directory symlink
+返回 `CLOSURE_SYMLINK`，本轮 N/P/F manifest 只收录真实目录和 regular files。不得通过解析、复制
+目标内容或忽略链接来绕过该门禁。
+
 测试先按设计中的 required/allowed-absent 表实现单轮分类优先级：invariant/collector/identity/timeout/
 cleanup 先于 missing-vendor、PASS 和 NON_RPATH。至少固定下面两个相邻用例，防止只按错误字符串
 归因：
@@ -298,6 +302,7 @@ source "$CLOSURE_ROOT/setup.zsh"
 export DIAGNOSTIC_EXE="$CLOSURE_ROOT/lib/so101_demo_py/so101_diagnose_macos_station"
 test -x "$DIAGNOSTIC_EXE"
 head -n 1 "$DIAGNOSTIC_EXE" >"$GATEA_RUN_ROOT/control-set/diagnostic-shebang.txt"
+test -z "$(find "$CLOSURE_ROOT" -type l -print -quit)"
 ```
 
 `RuntimeClosureIdentity.install_root` 必须精确写 `$CLOSURE_ROOT`。运行任何 control 前保存 bootstrap
@@ -328,7 +333,8 @@ shasum -a 256 "$GATEA_RUN_ROOT/control-set/bootstrap-readback.json" \
   >"$GATEA_RUN_ROOT/control-set/bootstrap-readback.sha256"
 ```
 
-从这个 committed HEAD 生成 manifest，递归冻结 `$CLOSURE_ROOT` 全部 regular files、symlinks 与 SHA；
+从这个 committed HEAD 生成 manifest，递归冻结 `$CLOSURE_ROOT` 全部 regular files 与 SHA，并
+fail closed 拒绝任意 symlink；
 plugin、vendor 与 Python package 必须都在同一 root。N/P 共用
 `FrozenSemanticLaunchContract`；每轮另写 `GateARunBinding`，保存验证后的 expanded argv/env：
 
@@ -540,12 +546,14 @@ source "$F_CLOSURE_ROOT/setup.zsh"
 export F_DIAGNOSTIC_EXE="$F_CLOSURE_ROOT/lib/so101_demo_py/so101_diagnose_macos_station"
 test -x "$F_DIAGNOSTIC_EXE"
 head -n 1 "$F_DIAGNOSTIC_EXE" >"$GATEA_RUN_ROOT/fixed/diagnostic-shebang.txt"
+test -z "$(find "$F_CLOSURE_ROOT" -type l -print -quit)"
 otool -l "$F_CLOSURE_ROOT/lib/libmujoco_ros2_control.dylib" \
   >"$GATEA_RUN_ROOT/fixed/plugin-otool-l.txt"
 rg -F '@loader_path/../opt/mujoco_vendor/lib' "$GATEA_RUN_ROOT/fixed/plugin-otool-l.txt"
 ```
 
-生成新的 `$GATEA_RUN_ROOT/fixed/manifest.json`，递归冻结 `$F_CLOSURE_ROOT` 完整 tree，并断言
+生成新的 `$GATEA_RUN_ROOT/fixed/manifest.json`，递归冻结 `$F_CLOSURE_ROOT` 的真实目录与全部
+regular files、拒绝任意 symlink，并断言
 `RuntimeClosureIdentity.install_root == F_CLOSURE_ROOT`。随后执行 installed Python readback：
 
 ```bash
