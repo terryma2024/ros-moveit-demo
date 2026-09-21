@@ -400,7 +400,8 @@ def test_service_drives_real_broker_and_honors_local_generation_fence(tmp_path, 
     config = load_parallel_runtime_config(Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
     f = fixture_runtime(tmp_path, monkeypatch)
     service = PerceptionService(f.runtime, config, generation=3)
-    service.start()
+    # run_next is the synchronous service seam; do not start competing executor threads.
+    f.runtime.start()
     assert service.submit(f.req, f.snapshot).accepted
     response = service.run_next()
     assert response.outcome is ModelOutcome.QUALIFIED
@@ -713,7 +714,7 @@ def test_service_preserves_initiating_runtime_failure_before_health_fanout(
     f = fixture_runtime(
         tmp_path, monkeypatch, failure=RuntimeError('diagnostic CUDA sentinel'))
     service = PerceptionService(f.runtime, config, generation=1)
-    service.start()
+    f.runtime.start()
 
     assert service.submit(f.req, f.snapshot).accepted
     response = service.run_next()
@@ -734,7 +735,7 @@ def test_service_never_repolls_a_delivered_qualified_response_past_its_deadline(
     f = fixture_runtime(tmp_path, monkeypatch)
     now = [1.0]
     service = PerceptionService(f.runtime, config, generation=1, clock=lambda: now[0])
-    service.start()
+    f.runtime.start()
     assert service.submit(f.req, f.snapshot).accepted
     assert service.run_next().outcome is ModelOutcome.QUALIFIED
 
@@ -802,7 +803,7 @@ def test_service_preserves_empty_rejection_and_isolates_queue_deadline(tmp_path,
     f = fixture_runtime(tmp_path, monkeypatch)
     now = [1.]
     service = PerceptionService(f.runtime, config, generation=1, clock=lambda: now[0])
-    service.start()
+    f.runtime.start()
     detector = f.runtime.detectors[f.req.model_id][0].detector
     detector.detect = lambda frame, query: DetectionBatch('fake', 'a' * 64, 'cuda', 0., 3, 2, ())
     assert service.submit(f.req, f.snapshot).accepted
