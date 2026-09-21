@@ -49,8 +49,8 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-T4
-next_experiment: EXP-MSC-104 (Task 5: canonical reducer and transactional projection)
+latest_checkpoint: CP-MSC-RUNTIME-REVERIFY
+next_experiment: EXP-MSC-105 (Task 5: canonical reducer and transactional projection)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -1191,3 +1191,41 @@ takeover keeps the previous prefix readable and advances the watermark monotonic
   runtime closure, and a second physical Mac is still NOT RUN.
 
 Decision: `TASK_4_COMMITTED_WATERMARKS_GREEN_ON_SCOPED_GATES`; next is Task 5.
+
+## CP-MSC-RUNTIME-REVERIFY: blocked runtime points re-verified on the fixed contract
+
+Recorded on operator instruction ("另外一个 agent 已经修复过了 ... 重新验证之前的 block 点，并继续执行任务")
+after the Gate A Codex dispatch rebuilt the fixed overlays at the current commit (fork overlay
+re-linked 20:06, new dylib farm run `20260921T120726Z-46314` at 20:07, 767 libraries, full doctor
+PASS). Nothing in this section rewrites an earlier verdict, and none of the still-open items below
+is promoted to "passed".
+
+### Re-verified blocked points
+
+| blocked point | how it was re-verified | result |
+| --- | --- | --- |
+| `@rpath/libhardware_interface.dylib` / `@rpath/librosidl_typesupport_c.dylib` loader chain (CP-MSC-A1 `INVALID_CONTROL`) | `scripts/so101-macos.zsh doctor --base` then `doctor --json`, both through the sanctioned entry with no caller environment | `SO101_MACOS_RUNTIME_BASE_PASS` (rc 0) and `status=PASS` (rc 0): Darwin/arm64, CPython 3.11.15, farm manifest `055ace69e50c05512c14b75fcb29e214c8052cc1a5c87300abe56f85451997d0`, required dylibs really loaded, fixed package prefixes (`mujoco_ros2_control` from `/opt/data/so101/runtime/fork/current`, the three project packages from `/opt/data/so101/workspace/install`) |
+| task station never READY (design section 4) | two consecutive `scripts/so101-macos.zsh launch so101_demo_py so101_mujoco_task_station.launch.py headless:=false sensor_rendering:=true include_teleop:=false` runs on fresh domains, each followed by `scripts/so101-macos.zsh run so101_demo_py motion_stack_ready --timeout-s 90` | both runs `SO101_MACOS_RUNTIME_COMPLETE_PASS` with `ready: true`: `joint_state_broadcaster`/`arm_controller`/`gripper_controller` active, the three MoveIt services and the three actions available; the launch log shows `MujocoSystemInterface` loading from the task-owned fork overlay and all controllers switching |
+| launch-owner exit-code capture (runtime ledger RUN-002 marked it unavailable) | run 2 sent SIGINT to the recorded launch owner (pid 49891) and the wrapper persisted its status | `launch_rc=0 finished_at=20:12:31`; the whole tree exited and both residue scans are empty |
+| ownership and cleanup | recorded PIDs only (49891 owner; 50011/50012/50016 children), tmux session closed, `ps` scans before and after | no task-owned residue; the three preserved foreign processes (pid 1541/1542 TF publishers, pid 62670 other-task service) are untouched |
+
+Evidence (registered root, new subdirectory): `<RUN_ROOT>/task5-runtime-reverify/` -
+`doctor-base.log`, `doctor.json`, `station-launch.log` + `readiness.json` (domain 226),
+`station-launch-2.log` + `readiness-2.json` + `launch-rc-2.txt` (domain 224).
+
+### Still open after this re-verification (unchanged, not claimed)
+
+- The **five consecutive strict Gate A runs** required by plan Task 1 Step 5 were not performed
+  here; this section records **two** fresh-domain READY samples plus clean shutdown, which is a
+  re-verification of the runtime boundary, not the 5x gate.
+- The ordinary `src/so101_demo_py/test` package gate now **completes** instead of being
+  interrupted, but it is **not GREEN**: the Gate A Codex dispatch's run in its own evidence root
+  (`/tmp/so101-debug-macos-runtime-contract-54f5d922-.../tests/ordinary-so101-demo-002/result.txt`)
+  reports `probe_rc=0 pytest_rc=1 elapsed_seconds=96` with 208 failed / 3453 passed / 8 skipped.
+  Those failures are not classified by this checkpoint.
+- A second physical Mac is still **NOT_RUN**; two poisoned-environment profiles on this host do not
+  substitute for it.
+- The legacy C++ controller root cause remains **UNCONFIRMED**.
+- The Task 2/3/4 open boundaries recorded in CP-MSC-T2/T3/T4 are unchanged.
+
+Decision: `RUNTIME_BLOCKED_POINTS_REVERIFIED_ON_CURRENT_HOST`; continue with plan Task 5.
