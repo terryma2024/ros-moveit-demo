@@ -49,8 +49,8 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-GATE-A-5X
-next_experiment: EXP-MSC-106 (Task 5 continued: projection source, store transaction, production wiring)
+latest_checkpoint: CP-MSC-T5-SOURCE-STORE
+next_experiment: EXP-MSC-107 (Task 5 finish: canonical reducer wiring in coordinator_events/supervisor/production)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -1378,3 +1378,63 @@ Also recorded on operator report (not independently re-measured here): the ordin
 and the second physical Mac were reported as resolved by another writer after this dispatch's
 runs; their evidence lives in the runtime-contract ledger and is not restated as this
 checkpoint's own measurement.
+
+## CP-MSC-T5-SOURCE-STORE: verification-only source and the projection transaction
+
+```yaml
+checkpoint_id: CP-MSC-T5-SOURCE-STORE
+recorded_at: 2026-09-21T22:20:00+0800
+parent_source_at_test: 70987f98
+submodule_commit: 85d2a5c42686a3d6b0d909a047a4188b24edd257
+install_overlay: /opt/data/so101/workspace/install (source tree prepended for source-mode gates)
+runtime_executable: /opt/ros2_jazzy/.venv/bin/python (3.11.15)
+ros_domain_id: NOT_APPLICABLE_OFFLINE
+gz_partition: NOT_APPLICABLE_OFFLINE
+```
+
+### Delivered
+
+- New `expert_validation/projection_source.py`: `VerifiedEvent`, `VerifiedEventBatch`,
+  `ProjectionSource` protocol and `CoordinatorJournalSource.read_after()`. The source reuses the
+  existing journal verification (contiguous hash chain, binding/epoch check, sealed-manifest
+  verification) and returns verified events with the cursor - it derives **no** projection state
+  and never merges `payload.delta`.
+- `expert_validation/store.py`: `projection_state` / `projection_events` / `projection_attempts`
+  tables, `accept_projection_batch()` (idempotency, reducer state, attempt registration and the
+  accepted cursor inside one `BEGIN IMMEDIATE` transaction; `PROJECTION_CURSOR_MISMATCH` on a
+  stale expected cursor; attempt ids may span the lease/start/result events of one point but can
+  never be reused for another point) and `read_projection_state()` plus `ProjectionSnapshot`.
+  `accept_upstream_cursor` now shares the same `_accept_cursor_locked` body.
+- `expert_validation/reducer.py`: `PointState.from_document`, `AttemptState.from_document`,
+  `CampaignReducerState.from_document` so a persisted state round-trips exactly.
+- `src/so101_teleop/CMakeLists.txt`: `so101_add_pytest_test(test_expert_validation_reducer ...)`.
+
+### RED -> GREEN
+
+- Store RED `task2/task5-store-red-20260921T221445Z` (1 failed / 10 passed: the new transaction
+  test) -> GREEN `task2/task5-store-green-3-20260921T221531Z` (21 passed over store+reducer).
+- Source RED `task2/task5-source-red-20260921T221557Z` (1 failed / 4 passed) -> GREEN
+  `task2/task5-source-green-7-20260921T221732Z` (26 passed over source+reducer+store).
+- Task 5 gate `task2/task5-gate-20260921T221742Z`: 46 passed, 2 failed - both being the
+  pre-existing `test_cancel_command_replays_durably_and_conflicting_target_never_contacts_owner`
+  cases already classified against a pristine `121435df` extraction; no new failure.
+- Retained intermediate runs (implementation defects inside this increment, none weakening a
+  product guarantee): `task5-store-green-20260921T221504Z` (missing `dataclass` import),
+  `task5-store-green-2-...` (attempt dedupe rejected the second event of the same attempt),
+  `task5-source-green-{1..6}` (sealed-manifest reference missing from the test event, missing
+  `@classmethod`, doubled decorator, missing call argument, epoch attribute name).
+
+Covered behaviour: the source passes a `delta` payload through unchanged and exposes no
+`projected_state`/`projected_point_states`; the canonical reducer derives the point terminal from
+the verified result; a projection batch commits state, attempts and cursor atomically, replays
+idempotently, refuses a mismatched expected cursor, rolls back completely when the reducer raises
+mid-batch, and survives a store reopen without counting an attempt twice.
+
+### Still open in Task 5 (not claimed)
+
+- `coordinator_events.py` still merges `payload.delta` for its existing consumers
+  (`supervisor.py`, `production.py`): the migration to `CoordinatorJournalSource` +
+  `CanonicalCampaignReducer` + `accept_projection_batch`, and the update of
+  `test_reader_verifies_real_sealed_directory_manifest_and_merges_deltas`, are the remaining work.
+- Unchanged open items: none of the previously recorded boundaries is promoted by this
+  checkpoint.
