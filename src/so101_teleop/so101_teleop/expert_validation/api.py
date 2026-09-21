@@ -132,6 +132,10 @@ class CampaignCancelRequest(ClosedModel):
 class RetryRequest(CampaignCancelRequest):
     point_ids: tuple[str, ...] = Field(min_length=1)
     confirmation: str
+    #: Which of the two mutually exclusive execution contexts authorizes this retry. A candidate
+    #: context id may only be presented here as ``CANDIDATE``; a production retry never accepts one.
+    context_kind: Literal["CANDIDATE", "PRODUCTION"] | None = None
+    context_id: str | None = None
 
 
 class StartGuardCheck(ClosedModel):
@@ -419,6 +423,20 @@ class BrokerProjectionResponse(ClosedModel):
     reason: str | None = None
 
 
+class RetryHistoryResponse(ClosedModel):
+    """One admitted retry, as history. The first-pass counters above never change because of it."""
+
+    campaign_id: str
+    batch_id: str
+    point_id: str
+    original_batch_id: str
+    original_result_sha256: str
+    command_id: str
+    binding_sha256: str
+    state: Literal["ADMITTED", "CLEANED"]
+    cleanup_receipt_sha256: str | None = None
+
+
 class CampaignProjectionResponse(ClosedModel):
     campaign_id: str
     manifest_id: str | None = None
@@ -449,6 +467,9 @@ class CampaignProjectionResponse(ClosedModel):
     current_generation: int | None = None
     infra_attempts: int = 0
     resource_observations: dict[str, object] = {}
+    #: Retries appended after the first pass. Read-only history: it never rewrites the point
+    #: statuses or the counters that describe what the first pass actually did.
+    retry_history: tuple[RetryHistoryResponse, ...] = ()
 
 
 async def _invoke(method, *args):
@@ -647,7 +668,10 @@ def create_expert_validation_app(
         if body.confirmation != "CONFIRM FULL_RESTART RETRIES":
             return JSONResponse(status_code=409, content={"code": "CONFIRMATION_REQUIRED"})
         try:
-            return await _invoke(service.retry_campaign, campaign_id, body.model_dump())
+            # The declared context kind decides which endpoint runs this; a context of the other
+            # kind is refused by name rather than silently reinterpreted.
+            method = getattr(service, "retry_campaign_api", service.retry_campaign)
+            return await _invoke(method, campaign_id, body.model_dump(exclude_none=True))
         except Exception as error:
             return _error(error)
 

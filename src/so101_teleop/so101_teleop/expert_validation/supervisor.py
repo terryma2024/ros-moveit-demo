@@ -22,6 +22,12 @@ from .coordinator_events import (
     CoordinatorEventReader,
     ReadOnlyCoordinatorJournal,
 )
+from .execution_context import (
+    CandidateExecutionContext,
+    ProductionExecutionContext,
+    retry_batch_root,
+)
+from .owner_tree import OwnerIntent
 from .process_owner import CoordinatorOwnershipError, ExecutionProcessOwner, OwnedCoordinator
 from .store import StoreConflict
 from .models import (
@@ -29,6 +35,7 @@ from .models import (
     CampaignBinding,
     CleanupReceipt,
     PreflightReceipt,
+    RetryStartRequest,
 )
 from .preflight import (
     CampaignPreflightReceipt,
@@ -218,10 +225,20 @@ class ExpertValidationSupervisor:
             )
         return {"campaign_id": request.campaign_id, "batch_id": request.batch_id}
 
-    async def _spawn(self, request):
+    async def _spawn(self, request, *, owner_intent=None):
+        """Spawn through the process owner, reusing the intent the admission transaction wrote.
+
+        A spawn boundary that cannot adopt that intent (the typed test launcher) is still used, but
+        then the admitted intent simply stays unconfirmed - never a second intent for one spawn.
+        """
+
         if hasattr(self.process_owner, "spawn_and_wait"):
             result = self.process_owner.spawn_and_wait(request)
             return await result if inspect.isawaitable(result) else result
+        if owner_intent is not None and "owner_intent" in inspect.signature(
+            self.process_owner.spawn
+        ).parameters:
+            return self.process_owner.spawn(request, owner_intent=owner_intent)
         return self.process_owner.spawn(request)
 
     def _batch_root(self, request: CampaignStartRequest, batch_id: str) -> Path:
@@ -339,56 +356,103 @@ class ExpertValidationSupervisor:
             return replace(owner_request, argv=tuple(port.fixed_argv(owner_request)))
         return replace(owner_request, argv=tuple(port.adaptive_argv(owner_request)))
 
-    async def start_retries(self, campaign_id: str, point_ids: tuple[str, ...]):
-        if not point_ids:
-            return {"status": "LIVE_RETRY_NOT_APPLICABLE_ALL_SUCCEEDED"}
-        original = self._requests[campaign_id]
-        if not self.store.retry_items(campaign_id):
-            self.store.enqueue_retries(campaign_id, point_ids)
-        while True:
-            item = self.store.next_retry(campaign_id)
-            if item is None:
-                break
-            batch_id = f"retry-{item.ordinal + 1:03d}"
-            batch_root = self._batch_root(original, batch_id)
-            if item.state == "RUNNING":
-                # A prior attempt reached spawn for this queue entry. Reconcile
-                # the durable journal; never re-execute and never skip ahead.
-                receipt_sha256 = self._reconcile_retry_batch(
-                    original, batch_id, batch_root
-                )
-                self.store.record_cleanup_and_advance_retry(
-                    CleanupReceipt(campaign_id, batch_id, item.point_id, receipt_sha256)
-                )
-                continue
-            batch = BatchBinding(
-                batch_id=batch_id,
-                campaign_id=campaign_id,
-                batch_kind="FULL_RESTART_RETRY",
-                point_id=item.point_id,
-                journal_root=batch_root,
-                coordinator_epoch=1,
+    async def start_candidate_retry(self, *, request, context):
+        """The candidate endpoint: only a candidate context may authorize this spawn."""
+
+        if not isinstance(context, CandidateExecutionContext):
+            raise RuntimeError("RETRY_CANDIDATE_CONTEXT_REQUIRED")
+        return await self._start_admitted_retry(request, context)
+
+    async def start_production_retry(self, *, request, context):
+        """The production endpoint: only an installed context may authorize this spawn."""
+
+        if not isinstance(context, ProductionExecutionContext):
+            raise RuntimeError("RETRY_PRODUCTION_CONTEXT_REQUIRED")
+        return await self._start_admitted_retry(request, context)
+
+    async def _start_admitted_retry(self, request, context):
+        """Admit one retry (one transaction), then spawn exactly that admitted owner once.
+
+        The owner intent is written by that transaction, before any process exists, and the spawn
+        boundary reuses it: the intent the tree can later confirm is the one the command was
+        consumed with. A spawn that fails therefore leaves the intent in place, unconfirmed, and the
+        command row stays IN_PROGRESS, so the retry can never be replayed.
+        """
+
+        if not isinstance(request, RetryStartRequest):
+            raise RuntimeError("RETRY_REQUEST_INVALID")
+        original = self._requests.get(request.campaign_id)
+        if original is None:
+            raise RuntimeError("RETRY_ORIGINAL_REQUEST_UNKNOWN")
+        batch_root = self._batch_root(original, request.batch_id)
+        if batch_root != retry_batch_root(
+            request.evidence_root, request.campaign_id, request.batch_id
+        ):
+            raise RuntimeError("RETRY_BATCH_ROOT_MISMATCH")
+        receipt = type("RetryReceipt", (), {
+            "execution_config": FixedExecutionConfig("SEQUENTIAL", 1)})()
+        owner_request = self._owner_request(
+            original, receipt, request.batch_id, batch_root, point_ids=(request.point_id,)
+        )
+        intent = OwnerIntent.for_argv(
+            campaign_id=request.campaign_id,
+            batch_id=request.batch_id,
+            role="ADAPTER",
+            generation=request.owner_generation,
+            spawn_token="spawn-" + secrets.token_hex(16),
+            argv=owner_request.argv,
+            parent_spawn_token=None,
+            own_session=True,
+        )
+        binding = self.store.admit_retry(
+            request=request, context=context, spawn_intent=intent
+        )
+        try:
+            result = await self._spawn(owner_request, owner_intent=intent)
+        except BaseException as error:
+            # The intent and the fence stay: nothing may guess whether a process exists.
+            self.store.record_recovery_fence(
+                request.campaign_id,
+                request.batch_id,
+                reason=f"RETRY_SPAWN_FAILED: {error}",
+                command_id=request.command_id,
             )
-            self.store.bind_retry_batch(batch)
-            # Manual business-failure retry stays an independent single-point N1 batch.
-            config = FixedExecutionConfig("SEQUENTIAL", 1)
-            receipt = type("RetryReceipt", (), {"execution_config": config})()
-            owner_request = self._owner_request(
-                original, receipt, batch_id, batch_root, point_ids=(item.point_id,)
+            raise
+        if isinstance(result, dict):
+            if not result.get("cleanup_complete"):
+                raise RuntimeError("RETRY_CLEANUP_INCOMPLETE")
+            receipt_sha256 = result.get("receipt_sha256", "0" * 64)
+        else:
+            receipt_sha256 = await self._await_fixed_retry_cleanup(
+                result, original, request.batch_id, batch_root
             )
-            result = await self._spawn(owner_request)
-            if isinstance(result, dict):
-                if not result.get("cleanup_complete"):
-                    raise RuntimeError("RETRY_CLEANUP_INCOMPLETE")
-                receipt_sha256 = result.get("receipt_sha256", "0" * 64)
-            else:
-                receipt_sha256 = await self._await_fixed_retry_cleanup(
-                    result, original, batch_id, batch_root
-                )
-            self.store.record_cleanup_and_advance_retry(
-                CleanupReceipt(campaign_id, batch_id, item.point_id, receipt_sha256)
-            )
-        return {"status": "RETRIES_COMPLETE"}
+        self.store.record_cleanup_and_advance_retry(
+            CleanupReceipt(request.campaign_id, request.batch_id, request.point_id, receipt_sha256)
+        )
+        self.store.finish_command(request.command_id, binding.as_document())
+        return {
+            "status": "RETRIES_COMPLETE",
+            "campaign_id": request.campaign_id,
+            "batch_id": request.batch_id,
+            "point_id": request.point_id,
+            "binding_sha256": binding.binding_sha256,
+        }
+
+    def reconcile_retry(self, campaign_id: str):
+        """Close out a retry that already reached spawn; never re-execute and never skip ahead."""
+
+        original = self._requests.get(campaign_id)
+        if original is None:
+            raise RuntimeError("RETRY_ORIGINAL_REQUEST_UNKNOWN")
+        item = self.store.next_retry(campaign_id)
+        if item is None or item.state != "RUNNING":
+            return None
+        batch_root = self._batch_root(original, item.batch_id)
+        receipt_sha256 = self._reconcile_retry_batch(original, item.batch_id, batch_root)
+        self.store.record_cleanup_and_advance_retry(
+            CleanupReceipt(campaign_id, item.batch_id, item.point_id, receipt_sha256)
+        )
+        return receipt_sha256
 
     def _reconcile_retry_batch(
         self, request: CampaignStartRequest, batch_id: str, batch_root: Path

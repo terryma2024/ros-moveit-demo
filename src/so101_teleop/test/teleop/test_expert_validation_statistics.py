@@ -305,3 +305,72 @@ def test_adaptive_business_failure_does_not_imply_fallback():
 
     assert view.levels_used == (8,)
     assert view.status == "COMPLETED_WITH_FAILURES"
+
+
+# --------------------------------------------------------------------------------------
+# Task 9: a retry appends history and never rewrites first-pass results or statistics
+# --------------------------------------------------------------------------------------
+
+from so101_teleop.expert_validation.statistics import (  # noqa: E402
+    RetryHistoryEntry,
+    append_retry_history,
+    retry_history_document,
+)
+
+
+def _retry_entry(batch_id="retry-001", *, state="ADMITTED", receipt=None, point="task_start"):
+    return RetryHistoryEntry(
+        campaign_id="campaign-1",
+        batch_id=batch_id,
+        point_id=point,
+        original_batch_id="batch-1",
+        original_result_sha256="a" * 64,
+        command_id="cmd-" + batch_id,
+        binding_sha256="b" * 64,
+        state=state,
+        cleanup_receipt_sha256=receipt,
+    )
+
+
+def test_appending_retry_history_never_changes_first_pass_statistics():
+    summary = _fixed_summary({"task_start": PointStatus.FAILED})
+    view = summarize_first_pass(summary, [_point("task_start", PointStatus.FAILED)])
+    before = (view.requested, view.evaluated, view.valid_failed, view.valid_succeeded,
+              view.not_executed, view.points, view.qualified_success_rate)
+
+    history = append_retry_history((), _retry_entry())
+    history = append_retry_history(history, _retry_entry("retry-002", point="cup_test_left_5cm"))
+
+    assert [entry.batch_id for entry in history] == ["retry-001", "retry-002"]
+    after = (view.requested, view.evaluated, view.valid_failed, view.valid_succeeded,
+             view.not_executed, view.points, view.qualified_success_rate)
+    assert after == before
+    # The first-pass point keeps its retry eligibility: history is additive only.
+    assert view.points[0].status is PointStatus.FAILED
+
+
+def test_appending_the_same_retry_history_entry_twice_is_idempotent():
+    history = append_retry_history((), _retry_entry())
+    assert append_retry_history(history, _retry_entry()) == history
+
+
+def test_a_retry_history_entry_that_rewrites_a_committed_one_is_refused():
+    history = append_retry_history((), _retry_entry(state="ADMITTED"))
+    with pytest.raises(StatisticsProjectionError, match="RETRY_HISTORY_CONFLICT"):
+        append_retry_history(history, _retry_entry(state="CLEANED", receipt="c" * 64))
+
+
+def test_retry_history_document_carries_the_binding_and_its_own_cleanup_state():
+    admitted = retry_history_document(_retry_entry())
+    assert admitted["state"] == "ADMITTED" and admitted["cleanup_receipt_sha256"] is None
+    assert admitted["original_batch_id"] == "batch-1"
+    cleaned = retry_history_document(_retry_entry(state="CLEANED", receipt="c" * 64))
+    assert cleaned["state"] == "CLEANED"
+    assert cleaned["cleanup_receipt_sha256"] == "c" * 64
+
+
+def test_retry_history_entry_refuses_an_unknown_state_or_a_missing_binding():
+    with pytest.raises(StatisticsProjectionError, match="RETRY_HISTORY_STATE_INVALID"):
+        _retry_entry(state="RUNNING")
+    with pytest.raises(StatisticsProjectionError, match="RETRY_HISTORY_ID_INVALID"):
+        _retry_entry(batch_id="")

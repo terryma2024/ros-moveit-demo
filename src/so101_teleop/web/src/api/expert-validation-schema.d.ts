@@ -505,6 +505,8 @@ export interface components {
         };
         /** CampaignConfiguration */
         CampaignConfiguration: {
+            /** Batch Kind */
+            batch_kind?: ("FIRST_PASS" | "FULL_RESTART_RETRY") | null;
             /**
              * Contract Version
              * @constant
@@ -515,6 +517,8 @@ export interface components {
              * @enum {string}
              */
             execution_mode: "SEQUENTIAL" | "PARALLEL" | "ADAPTIVE";
+            /** Execution Profile */
+            execution_profile?: ("MPS_W2_FIRST_PASS" | "MPS_W1_FULL_RESTART_RETRY" | "MPS_W1_FIRST_PASS") | null;
             /** Fallback Worker Counts */
             fallback_worker_counts?: number[] | null;
             /** Initial Points Per Worker */
@@ -630,6 +634,11 @@ export interface components {
             resource_observations: {
                 [key: string]: unknown;
             };
+            /**
+             * Retry History
+             * @default []
+             */
+            retry_history: components["schemas"]["RetryHistoryResponse"][];
             /** Sequence */
             sequence: number;
             /** Status */
@@ -652,6 +661,8 @@ export interface components {
         };
         /** CampaignStartRequest */
         CampaignStartRequest: {
+            /** Batch Kind */
+            batch_kind?: ("FIRST_PASS" | "FULL_RESTART_RETRY") | null;
             /** Command Id */
             command_id: string;
             /**
@@ -664,6 +675,8 @@ export interface components {
              * @enum {string}
              */
             execution_mode: "SEQUENTIAL" | "PARALLEL" | "ADAPTIVE";
+            /** Execution Profile */
+            execution_profile?: ("MPS_W2_FIRST_PASS" | "MPS_W1_FULL_RESTART_RETRY" | "MPS_W1_FIRST_PASS") | null;
             /** Fallback Worker Counts */
             fallback_worker_counts?: number[] | null;
             /** Initial Points Per Worker */
@@ -717,11 +730,17 @@ export interface components {
              * @enum {string}
              */
             default_execution_mode: "SEQUENTIAL" | "PARALLEL" | "ADAPTIVE";
+            /** Execution Config Sha256 */
+            execution_config_sha256?: string | null;
             /**
              * Execution Modes
              * @default []
              */
             execution_modes: ("SEQUENTIAL" | "PARALLEL" | "ADAPTIVE")[];
+            /** Execution Profile */
+            execution_profile?: string | null;
+            /** Execution Schema Version */
+            execution_schema_version?: number | null;
             /**
              * Fixed Worker Counts
              * @default [
@@ -756,8 +775,17 @@ export interface components {
              * @default 4
              */
             minimum_points: number;
+            /** Platform */
+            platform?: string | null;
             start_guard?: components["schemas"]["StartGuardStatus"] | null;
+            /** Start Guard Note */
+            start_guard_note?: string | null;
             start_guard_policy?: components["schemas"]["StartGuardPolicyResponse"] | null;
+            /**
+             * Support Matrix
+             * @default []
+             */
+            support_matrix: components["schemas"]["ExecutionProfileResponse"][];
             /** Worker Count Availability */
             worker_count_availability?: components["schemas"]["WorkerCountAvailability"][];
             /** Worker Qualifications */
@@ -803,6 +831,65 @@ export interface components {
             source: string;
             /** Waypoint Index */
             waypoint_index?: number | null;
+        };
+        /**
+         * ExecutionProfileResponse
+         * @description One row of the platform-bound support matrix, as the server would execute it.
+         *
+         *     The row names the exact routing key a request must claim and carries no budget profile and
+         *     no qualification hash: macOS supports W1 and W2, and that is the whole statement.
+         */
+        ExecutionProfileResponse: {
+            /**
+             * Accelerator
+             * @default mps
+             */
+            accelerator: string;
+            /**
+             * Batch Kind
+             * @enum {string}
+             */
+            batch_kind: "FIRST_PASS" | "FULL_RESTART_RETRY";
+            /**
+             * Execution Mode
+             * @enum {string}
+             */
+            execution_mode: "SEQUENTIAL" | "PARALLEL";
+            /**
+             * Platform
+             * @default macos
+             */
+            platform: string;
+            /** Profile */
+            profile: string;
+            /** Profile Sha256 */
+            profile_sha256?: string | null;
+            /** Qualification Sha256 */
+            qualification_sha256?: string | null;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            /** Schema Version */
+            schema_version: number;
+            /**
+             * Selectable
+             * @default true
+             */
+            selectable: boolean;
+            /**
+             * Selector
+             * @default MPS:default
+             */
+            selector: string;
+            /**
+             * Status
+             * @default SUPPORTED
+             */
+            status: string;
+            /** Worker Count */
+            worker_count: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -863,6 +950,8 @@ export interface components {
         };
         /** LeaseResponse */
         LeaseResponse: {
+            /** Execution Generation */
+            execution_generation?: number | null;
             /** Expires Monotonic Ns */
             expires_monotonic_ns: number;
             /** Generation */
@@ -1164,6 +1253,8 @@ export interface components {
         PreflightResponse: {
             /** Admitted */
             admitted: boolean;
+            /** Execution Batch Kind */
+            execution_batch_kind?: string | null;
             /**
              * Execution Config
              * @default {}
@@ -1173,6 +1264,10 @@ export interface components {
             };
             /** Execution Mode */
             execution_mode?: ("SEQUENTIAL" | "PARALLEL" | "ADAPTIVE") | null;
+            /** Execution Profile */
+            execution_profile?: string | null;
+            /** Execution Schema Version */
+            execution_schema_version?: number | null;
             /** Expires At Monotonic Ns */
             expires_at_monotonic_ns?: number | null;
             /** Manifest Id */
@@ -1274,12 +1369,43 @@ export interface components {
                 number
             ];
         };
+        /**
+         * RetryHistoryResponse
+         * @description One admitted retry, as history. The first-pass counters above never change because of it.
+         */
+        RetryHistoryResponse: {
+            /** Batch Id */
+            batch_id: string;
+            /** Binding Sha256 */
+            binding_sha256: string;
+            /** Campaign Id */
+            campaign_id: string;
+            /** Cleanup Receipt Sha256 */
+            cleanup_receipt_sha256?: string | null;
+            /** Command Id */
+            command_id: string;
+            /** Original Batch Id */
+            original_batch_id: string;
+            /** Original Result Sha256 */
+            original_result_sha256: string;
+            /** Point Id */
+            point_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "ADMITTED" | "CLEANED";
+        };
         /** RetryRequest */
         RetryRequest: {
             /** Command Id */
             command_id: string;
             /** Confirmation */
             confirmation: string;
+            /** Context Id */
+            context_id?: string | null;
+            /** Context Kind */
+            context_kind?: ("CANDIDATE" | "PRODUCTION") | null;
             /** Lease Generation */
             lease_generation: number;
             /** Lease Id */

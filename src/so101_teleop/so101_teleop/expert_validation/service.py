@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import time
 import uuid
 
+from .execution_context import CandidateExecutionContext, ProductionExecutionContext
 from .lease import LeaseConflict
 
 
@@ -58,12 +59,88 @@ class ExpertValidationService:
         lease_service,
         current_source_config_sha256,
         clock_ns=time.time_ns,
+        monotonic_ns=time.monotonic_ns,
     ) -> None:
         self.store = store
         self.supervisor = supervisor
         self.lease_service = lease_service
         self._current_source_config_sha256 = current_source_config_sha256
         self._clock_ns = clock_ns
+        self._monotonic_ns = monotonic_ns
+        # The two execution contexts are kept apart on purpose: a context issued for one endpoint
+        # is not even looked up by the other, and presenting it there is a named refusal.
+        self._candidate_contexts: dict[str, CandidateExecutionContext] = {}
+        self._production_contexts: dict[str, ProductionExecutionContext] = {}
+
+    # -- execution contexts ------------------------------------------------------------------
+
+    def register_candidate_context(self, context: CandidateExecutionContext):
+        self._candidate_contexts[context.context_id] = context
+        return context
+
+    def register_production_context(self, context: ProductionExecutionContext):
+        self._production_contexts[context.context_id] = context
+        return context
+
+    def execution_context(self, context_id: str):
+        """Read back one issued context, either kind, or ``None``."""
+
+        return self._candidate_contexts.get(context_id) or self._production_contexts.get(
+            context_id
+        )
+
+    def candidate_context(self, context_id: str) -> CandidateExecutionContext:
+        context = self._candidate_contexts.get(context_id)
+        if context is None:
+            if context_id in self._production_contexts:
+                raise ServiceConflict("PRODUCTION_CONTEXT_ON_CANDIDATE_ENDPOINT")
+            raise ServiceConflict("EXECUTION_CONTEXT_UNKNOWN")
+        return context
+
+    def production_context(self, context_id: str) -> ProductionExecutionContext:
+        context = self._production_contexts.get(context_id)
+        if context is None:
+            if context_id in self._candidate_contexts:
+                raise ServiceConflict("CANDIDATE_CONTEXT_ON_PRODUCTION_ENDPOINT")
+            raise ServiceConflict("EXECUTION_CONTEXT_UNKNOWN")
+        # A production context outlives no lease: an expired one is refused rather than reused.
+        if context.is_expired(self._monotonic_ns()):
+            raise ServiceConflict("RETRY_CONTEXT_EXPIRED")
+        return context
+
+    def issue_candidate_context(self, **kwargs) -> CandidateExecutionContext:
+        """Only a live service composed for this host can issue a context."""
+
+        raise ServiceConflict("CANDIDATE_CONTEXT_UNAVAILABLE")
+
+    async def retry_campaign_api(self, campaign_id, body):
+        """The one retry route: the declared context kind decides which endpoint runs it.
+
+        A candidate context presented to the production endpoint (or the reverse) is refused by
+        name, so neither context can ever be spent on the other's surface.
+        """
+
+        kind = body.get("context_kind") or "PRODUCTION"
+        if kind == "CANDIDATE":
+            context_id = body.get("context_id")
+            if not context_id:
+                raise ServiceConflict("CANDIDATE_CONTEXT_REQUIRED")
+            return await self.retry_campaign_candidate(
+                campaign_id, body, self.candidate_context(context_id)
+            )
+        if kind != "PRODUCTION":
+            raise ServiceConflict("EXECUTION_CONTEXT_KIND_INVALID")
+        context_id = body.get("context_id")
+        if context_id is not None:
+            # A presented context must be this service's own production context.
+            self.production_context(context_id)
+        return await self.retry_campaign(campaign_id, body)
+
+    async def retry_campaign_candidate(self, campaign_id, body, context):
+        raise ServiceConflict("CANDIDATE_RETRY_UNAVAILABLE")
+
+    async def retry_campaign(self, campaign_id, body):
+        raise ServiceConflict("PRODUCTION_RETRY_UNAVAILABLE")
 
     def create_manifest(self, selection, *, source_config_sha256: str, frozen_context=None):
         manifest_id = "manifest-" + uuid.uuid4().hex

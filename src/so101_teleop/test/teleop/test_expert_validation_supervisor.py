@@ -366,33 +366,36 @@ def test_adaptive_uses_one_wrapper_request_without_k(tmp_path):
 
 
 def test_each_retry_is_a_new_n1_single_point_batch_after_prior_cleanup(tmp_path):
-    supervisor, owner, store = _supervisor(tmp_path)
+    """One admitted retry is one command, one context and exactly one N1 batch."""
+
+    from test_expert_validation_store import _retry_events, point_result_sha256
+
+    events = _retry_events("batch-1", outcomes={"p1": "FAILED", "p2": "FAILED"})
+    supervisor, store, first, context = _retry_supervisor(tmp_path, events=events)
     try:
-        request = _request(tmp_path, "SEQUENTIAL", campaign_id="campaign-retry")
-        asyncio.run(supervisor.start_first_pass(request))
-        owner.timeline.clear()
-        asyncio.run(supervisor.start_retries("campaign-retry", ("point_1", "point_2")))
-        assert owner.timeline == [
-            "start-retry-001-point_1-n1-kNone",
-            "cleanup-retry-001-point_1",
-            "start-retry-002-point_2-n1-kNone",
-            "cleanup-retry-002-point_2",
+        asyncio.run(supervisor.start_candidate_retry(request=first, context=context))
+        second = replace(
+            first, command_id="cmd-retry-2", batch_id="retry-002", point_id="p2",
+            original_result_sha256=point_result_sha256("p2"),
+        )
+        asyncio.run(
+            supervisor.start_candidate_retry(
+                request=second,
+                context=replace(context, command_id="cmd-retry-2", batch_id="retry-002"),
+            )
+        )
+        assert supervisor.process_owner.timeline == [
+            "start-retry-001-p1-n1-kNone",
+            "cleanup-retry-001-p1",
+            "start-retry-002-p2-n1-kNone",
+            "cleanup-retry-002-p2",
         ]
-        assert store.next_retry("campaign-retry") is None
+        assert store.next_retry("campaign-1") is None
+        assert [item.state for item in store.retry_items("campaign-1")] == [
+            "COMPLETE", "COMPLETE"]
     finally:
         store.close()
 
-
-def test_all_success_retry_is_explicitly_not_applicable(tmp_path):
-    supervisor, _owner, store = _supervisor(tmp_path)
-    try:
-        request = _request(tmp_path, "SEQUENTIAL", campaign_id="campaign-success")
-        asyncio.run(supervisor.start_first_pass(request))
-        assert asyncio.run(supervisor.start_retries("campaign-success", ())) == {
-            "status": "LIVE_RETRY_NOT_APPLICABLE_ALL_SUCCEEDED"
-        }
-    finally:
-        store.close()
 
 def test_the_runner_is_spawned_with_an_interpreter_that_has_its_dependencies(tmp_path):
     """The spawn argv used to name /usr/bin/python3 literally.
@@ -407,3 +410,235 @@ def test_the_runner_is_spawned_with_an_interpreter_that_has_its_dependencies(tmp
         assert request.argv[0] != "/usr/bin/python3", request.argv[:2]
     finally:
         store.close()
+
+
+# --------------------------------------------------------------------------------------
+# Task 9: a retry is admitted in one transaction, spawned once, and never replayed
+# --------------------------------------------------------------------------------------
+
+from so101_teleop.expert_validation.execution_context import (  # noqa: E402
+    ProductionExecutionContext,
+)
+from so101_teleop.process_identity import command_fingerprint  # noqa: E402
+
+
+class RefusingOwner:
+    """A spawn boundary that fails after the admission transaction committed."""
+
+    def __init__(self, error="EXEC_BARRIER_ACK_MISSING"):
+        self.error = error
+        self.requests = []
+
+    async def spawn_and_wait(self, request):
+        self.requests.append(request)
+        raise RuntimeError(self.error)
+
+
+def _retry_supervisor(tmp_path, *, owner=None, events=None):
+    from test_expert_validation_store import _retry_events, _retry_fixture
+
+    store, request, context, _intent = _retry_fixture(
+        tmp_path, events=events or _retry_events("batch-1")
+    )
+    supervisor = ExpertValidationSupervisor(
+        store=store,
+        process_owner=owner or Owner(),
+        preflight_engine=PreflightEngine(Resources()),
+    )
+    supervisor._requests["campaign-1"] = _request(
+        tmp_path, "SEQUENTIAL", campaign_id="campaign-1", batch_id="batch-1",
+        manifest_id="manifest-1",
+    )
+    return supervisor, store, request, context
+
+
+def test_admitted_retry_spawns_once_and_names_the_real_argv_in_its_intent(tmp_path):
+    supervisor, store, request, context = _retry_supervisor(tmp_path)
+    try:
+        result = asyncio.run(
+            supervisor.start_candidate_retry(request=request, context=context))
+        assert result["status"] == "RETRIES_COMPLETE"
+        assert result["batch_id"] == "retry-001"
+        assert [entry["batch_id"] for entry in store.retry_admissions("campaign-1")] == [
+            "retry-001"]
+        assert len(supervisor.process_owner.requests) == 1
+        spawned = supervisor.process_owner.requests[0]
+        assert spawned.selected_point_ids == ("p1",)
+        assert spawned.worker_count == 1
+        assert spawned.batch_id == "retry-001"
+        tree = store.owner_tree("campaign-1", "retry-001")
+        assert len(tree) == 1
+        assert tree[0].intent.role == "ADAPTER"
+        assert tree[0].intent.argv_sha256 == command_fingerprint(spawned.argv)
+        assert tree[0].confirmed is None, "the test port spawns no process to read back"
+        assert store.retry_items("campaign-1")[0].state == "COMPLETE"
+        assert store.batch("retry-001").cleanup_receipt_sha256 == "d" * 64
+        command = store._connection.execute(
+            "SELECT state FROM commands WHERE command_id = ?", (request.command_id,)
+        ).fetchone()
+        assert command["state"] == "COMPLETE"
+    finally:
+        store.close()
+
+
+def test_spawn_failure_after_the_transaction_keeps_the_intent_and_the_command(tmp_path):
+    supervisor, store, request, context = _retry_supervisor(
+        tmp_path, owner=RefusingOwner())
+    try:
+        with pytest.raises(RuntimeError, match="EXEC_BARRIER_ACK_MISSING"):
+            asyncio.run(supervisor.start_candidate_retry(request=request, context=context))
+
+        # The intent is durable and unconfirmed: nothing may guess that no process exists.
+        tree = store.owner_tree("campaign-1", "retry-001")
+        assert len(tree) == 1 and tree[0].confirmed is None
+        # The fence stands, and it names the retry batch the intent belongs to.
+        fence = store.recovery_fence("campaign-1")
+        assert fence["batch_id"] == "retry-001"
+        assert "RETRY_SPAWN_FAILED" in fence["reason"]
+        # The command is not replayable: neither a repeat nor a second admission.
+        assert store._connection.execute(
+            "SELECT state FROM commands WHERE command_id = ?", (request.command_id,)
+        ).fetchone()["state"] == "IN_PROGRESS"
+        with pytest.raises(StoreConflict, match="RETRY_COMMAND_ALREADY_CONSUMED"):
+            store.admit_retry(
+                request=request, context=context,
+                spawn_intent=store.owner_tree("campaign-1", "retry-001")[0].intent,
+            )
+    finally:
+        store.close()
+
+
+def test_each_context_is_refused_on_the_other_retry_endpoint(tmp_path):
+    supervisor, store, request, candidate = _retry_supervisor(tmp_path)
+    try:
+        production = ProductionExecutionContext(
+            context_id="production-context-1",
+            service_session_id="session-1",
+            lease_id="lease-1",
+            lease_generation=1,
+            install_prefix=request.install_prefix,
+            install_binding_sha256="a" * 64,
+            execution_profile=candidate.execution_profile,
+            schema_version=candidate.schema_version,
+            batch_kind=candidate.batch_kind,
+            worker_count=candidate.worker_count,
+            campaign_id=request.campaign_id,
+            batch_id=request.batch_id,
+            manifest_id=candidate.manifest_id,
+            config_sha256=candidate.config_sha256,
+            runtime_closure_sha256=candidate.runtime_closure_sha256,
+            evidence_root=request.evidence_root,
+            owner_generation=request.owner_generation,
+            command_id=request.command_id,
+            issued_at_monotonic_ns=1_000,
+            expires_at_monotonic_ns=10_000_000_000_000,
+        )
+        with pytest.raises(RuntimeError, match="RETRY_PRODUCTION_CONTEXT_REQUIRED"):
+            asyncio.run(
+                supervisor.start_production_retry(request=request, context=candidate))
+        with pytest.raises(RuntimeError, match="RETRY_CANDIDATE_CONTEXT_REQUIRED"):
+            asyncio.run(
+                supervisor.start_candidate_retry(request=request, context=production))
+        assert supervisor.process_owner.requests == []
+        assert store.retry_admission(request.command_id) is None
+        assert store.next_retry("campaign-1").state == "QUEUED"
+    finally:
+        store.close()
+
+
+def test_a_retry_without_an_admission_context_never_spawns(tmp_path):
+    supervisor, store, request, _context = _retry_supervisor(tmp_path)
+    try:
+        with pytest.raises(RuntimeError, match="RETRY_PRODUCTION_CONTEXT_REQUIRED"):
+            asyncio.run(supervisor.start_production_retry(request=request, context=None))
+        with pytest.raises(RuntimeError, match="RETRY_CANDIDATE_CONTEXT_REQUIRED"):
+            asyncio.run(supervisor.start_candidate_retry(request=request, context=None))
+        assert supervisor.process_owner.requests == []
+        assert store.retry_items("campaign-1")[0].state == "QUEUED"
+    finally:
+        store.close()
+
+
+def test_an_interrupted_retry_is_reconciled_and_never_replayed(tmp_path):
+    """A queue entry that reached spawn is reconciled from its journal, never re-executed."""
+
+    from test_expert_validation_store import _retry_events
+
+    events = _retry_events("batch-1", outcomes={"p1": "FAILED", "p2": "FAILED"})
+    supervisor, store, request, context = _retry_supervisor(tmp_path, events=events)
+    try:
+        asyncio.run(supervisor.start_candidate_retry(request=request, context=context))
+        # A retry batch that never confirmed its owner has no knowable outcome.
+        store._connection.execute(
+            "DELETE FROM owner_processes WHERE spawn_token = ?",
+            (store.owner_tree("campaign-1", "retry-001")[0].intent.spawn_token,),
+        )
+        store._connection.execute(
+            "UPDATE retry_queue SET state = 'RUNNING' WHERE batch_id = 'retry-001'")
+        with pytest.raises(RuntimeError, match="COMMAND_OUTCOME_UNKNOWN"):
+            supervisor.reconcile_retry("campaign-1")
+        assert [entry["batch_id"] for entry in store.retry_admissions("campaign-1")] == [
+            "retry-001"]
+    finally:
+        store.close()
+
+
+def test_the_retry_route_refuses_each_context_on_the_other_endpoint(tmp_path):
+    """The route dispatches on the declared kind, and neither registry answers for the other."""
+
+    from so101_teleop.expert_validation.service import ExpertValidationService, ServiceConflict
+
+    supervisor, store, request, candidate = _retry_supervisor(tmp_path)
+    try:
+        production = _production_context_for(candidate, request)
+        service = ExpertValidationService(
+            store=store, supervisor=supervisor, lease_service=None,
+            current_source_config_sha256=lambda: "a" * 64,
+        )
+        service.register_candidate_context(candidate)
+        service.register_production_context(production)
+
+        with pytest.raises(ServiceConflict, match="CANDIDATE_CONTEXT_ON_PRODUCTION_ENDPOINT"):
+            asyncio.run(service.retry_campaign_api("campaign-1", {
+                "command_id": "cmd-retry-1", "context_kind": "PRODUCTION",
+                "context_id": candidate.context_id, "point_ids": ["p1"],
+            }))
+        with pytest.raises(ServiceConflict, match="PRODUCTION_CONTEXT_ON_CANDIDATE_ENDPOINT"):
+            asyncio.run(service.retry_campaign_api("campaign-1", {
+                "command_id": "cmd-retry-1", "context_kind": "CANDIDATE",
+                "context_id": production.context_id, "point_ids": ["p1"],
+            }))
+        with pytest.raises(ServiceConflict, match="EXECUTION_CONTEXT_UNKNOWN"):
+            asyncio.run(service.retry_campaign_api("campaign-1", {
+                "command_id": "cmd-retry-1", "context_kind": "CANDIDATE",
+                "context_id": "candidate-nobody", "point_ids": ["p1"],
+            }))
+        assert service.execution_context(production.context_id) == production
+        assert store.retry_admission(request.command_id) is None
+    finally:
+        store.close()
+
+
+def _production_context_for(candidate, request):
+    return ProductionExecutionContext(
+        context_id="production-context-1",
+        service_session_id="session-1",
+        lease_id="lease-1",
+        lease_generation=1,
+        install_prefix=request.install_prefix,
+        install_binding_sha256="a" * 64,
+        execution_profile=candidate.execution_profile,
+        schema_version=candidate.schema_version,
+        batch_kind=candidate.batch_kind,
+        worker_count=candidate.worker_count,
+        campaign_id=request.campaign_id,
+        batch_id=request.batch_id,
+        manifest_id=candidate.manifest_id,
+        config_sha256=candidate.config_sha256,
+        runtime_closure_sha256=candidate.runtime_closure_sha256,
+        evidence_root=request.evidence_root,
+        owner_generation=request.owner_generation,
+        command_id=request.command_id,
+        issued_at_monotonic_ns=1_000,
+        expires_at_monotonic_ns=10_000_000_000_000,
+    )

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from so101_demo.parallel_batch.adaptive_contracts import (
     AdaptiveBatchSummary,
@@ -133,6 +133,108 @@ class BrokerProjection:
             raise StatisticsProjectionError("BROKER_AVAILABILITY_INVALID")
         if self.reason is not None and (not isinstance(self.reason, str) or not self.reason):
             raise StatisticsProjectionError("BROKER_REASON_INVALID")
+
+
+@dataclass(frozen=True, slots=True)
+class RetryHistoryEntry:
+    """One admitted retry, as history: it never rewrites the first pass it refers to."""
+
+    campaign_id: str
+    batch_id: str
+    point_id: str
+    original_batch_id: str
+    original_result_sha256: str
+    command_id: str
+    binding_sha256: str
+    state: str
+    cleanup_receipt_sha256: str | None = None
+
+    def __post_init__(self) -> None:
+        for name in (
+            "campaign_id",
+            "batch_id",
+            "point_id",
+            "original_batch_id",
+            "command_id",
+        ):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value:
+                raise StatisticsProjectionError("RETRY_HISTORY_ID_INVALID")
+        for name in ("original_result_sha256", "binding_sha256"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or len(value) != 64:
+                raise StatisticsProjectionError("RETRY_HISTORY_HASH_INVALID")
+        if self.state not in RETRY_HISTORY_STATES:
+            raise StatisticsProjectionError("RETRY_HISTORY_STATE_INVALID")
+        if self.state == "CLEANED" and self.cleanup_receipt_sha256 is None:
+            raise StatisticsProjectionError("RETRY_HISTORY_RECEIPT_REQUIRED")
+        if self.cleanup_receipt_sha256 is not None and (
+            not isinstance(self.cleanup_receipt_sha256, str)
+            or len(self.cleanup_receipt_sha256) != 64
+        ):
+            raise StatisticsProjectionError("RETRY_HISTORY_HASH_INVALID")
+
+
+#: The only two states one retry history entry may be in: admitted, then cleaned up.
+RETRY_HISTORY_STATES = ("ADMITTED", "CLEANED")
+
+
+def retry_history_document(entry: RetryHistoryEntry) -> dict[str, object]:
+    return {
+        "campaign_id": entry.campaign_id,
+        "batch_id": entry.batch_id,
+        "point_id": entry.point_id,
+        "original_batch_id": entry.original_batch_id,
+        "original_result_sha256": entry.original_result_sha256,
+        "command_id": entry.command_id,
+        "binding_sha256": entry.binding_sha256,
+        "state": entry.state,
+        "cleanup_receipt_sha256": entry.cleanup_receipt_sha256,
+    }
+
+
+def retry_history_entry(admission: Mapping) -> RetryHistoryEntry:
+    """One durable admission row as history. The first-pass facts are untouched by construction."""
+
+    return RetryHistoryEntry(
+        campaign_id=str(admission["campaign_id"]),
+        batch_id=str(admission["batch_id"]),
+        point_id=str(admission["point_id"]),
+        original_batch_id=str(admission["original_batch_id"]),
+        original_result_sha256=str(admission["original_result_sha256"]),
+        command_id=str(admission["command_id"]),
+        binding_sha256=str(admission["binding_sha256"]),
+        state="CLEANED" if admission.get("cleanup_receipt_sha256") else "ADMITTED",
+        cleanup_receipt_sha256=admission.get("cleanup_receipt_sha256"),
+    )
+
+
+def append_retry_history(
+    history: Iterable[RetryHistoryEntry], entry: RetryHistoryEntry
+) -> tuple[RetryHistoryEntry, ...]:
+    """Append one entry; re-appending the same fact is idempotent, changing it is not history.
+
+    A committed retry is a durable fact. Appending it twice is the same history, while appending a
+    *different* entry for the same command would rewrite what already happened, so it is refused
+    rather than merged.
+    """
+
+    entries = tuple(history)
+    if any(not isinstance(existing, RetryHistoryEntry) for existing in entries):
+        raise StatisticsProjectionError("RETRY_HISTORY_INVALID")
+    if not isinstance(entry, RetryHistoryEntry):
+        raise StatisticsProjectionError("RETRY_HISTORY_INVALID")
+    for existing in entries:
+        if (
+            existing.campaign_id == entry.campaign_id
+            and existing.batch_id == entry.batch_id
+            and existing.point_id == entry.point_id
+            and existing.command_id == entry.command_id
+        ):
+            if existing == entry:
+                return entries
+            raise StatisticsProjectionError("RETRY_HISTORY_CONFLICT")
+    return (*entries, entry)
 
 
 @dataclass(frozen=True, slots=True)
