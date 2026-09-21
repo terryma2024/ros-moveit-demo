@@ -237,6 +237,8 @@ def full_task_station_argv(
     task_evidence_root: Path,
     scene: Path,
     readiness_timeout_s: float = 90.0,
+    python_executable: Path,
+    ros2_script: Path,
 ) -> tuple[str, ...]:
     """Return the reviewed fixed full-station argv; no arbitrary launch tokens exist."""
 
@@ -244,12 +246,18 @@ def full_task_station_argv(
         raise StationDiagnosticError("STATION_SESSION_ID_REQUIRED")
     evidence = Path(task_evidence_root)
     scene_path = Path(scene)
-    if not evidence.is_absolute() or not scene_path.is_absolute():
+    python_path = Path(python_executable)
+    ros2_path = Path(ros2_script)
+    if not all(
+        path.is_absolute()
+        for path in (evidence, scene_path, python_path, ros2_path)
+    ):
         raise StationDiagnosticError("STATION_BINDING_INVALID", "absolute paths required")
     if readiness_timeout_s <= 0.0:
         raise StationDiagnosticError("STATION_BINDING_INVALID", "readiness timeout")
     return (
-        "ros2",
+        str(python_path),
+        str(ros2_path),
         "launch",
         "so101_demo_py",
         "so101_mujoco_task_station.launch.py",
@@ -790,8 +798,10 @@ def run_full_task_station_control(
     from ..runtime.macos_dlopen_probe import (
         GateAControlObservation,
         GateARunBinding,
+        _closure_dylib_basenames,
         load_binding,
         load_manifest,
+        verify_filtered_ros_dylib_farm,
         write_json,
     )
     from ..runtime.runtime_closure import (
@@ -826,9 +836,15 @@ def run_full_task_station_control(
         task_evidence_root=binding.task_evidence_root,
         scene=manifest.scene_path,
         readiness_timeout_s=90.0,
+        python_executable=manifest.semantic.python_executable,
+        ros2_script=manifest.semantic.ros2_script,
     )
     if binding.expanded_argv != expected_argv:
         raise StationDiagnosticError("STATION_SEMANTIC_DRIFT", "argv")
+    verify_filtered_ros_dylib_farm(
+        manifest.ros_dylib_farm,
+        excluded_basenames=_closure_dylib_basenames(manifest.closure),
+    )
     verify_runtime_closure(
         manifest.closure,
         install_root=manifest.install_root,

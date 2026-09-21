@@ -9,6 +9,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import sys
 from collections.abc import Mapping, Sequence
@@ -24,7 +25,10 @@ from .runtime_closure import (
     verify_runtime_closure,
 )
 
-CONTROL_SCHEMA_VERSION = 1
+CONTROL_SCHEMA_VERSION = 2
+_REQUIRED_ROS_DYLIB_BASENAMES = frozenset(
+    {"libhardware_interface.dylib", "librosidl_typesupport_c.dylib"}
+)
 _SESSION_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 _ALL_PHASES = (
     "PLUGIN_RESOLVED",
@@ -56,6 +60,293 @@ class GateAControlError(RuntimeError):
         self.code = code
         self.detail = detail
         super().__init__(f"{code}: {detail}" if detail else code)
+
+
+@dataclass(frozen=True, slots=True)
+class FilteredDylibFarmEntry:
+    basename: str
+    target_path: Path
+    target_sha256: str
+    size_bytes: int
+
+    def __post_init__(self) -> None:
+        if (
+            not self.basename
+            or Path(self.basename).name != self.basename
+            or not self.basename.endswith(".dylib")
+        ):
+            raise GateAControlError("CONTROL_ROS_DYLIB_FARM_INVALID", self.basename)
+        target = Path(self.target_path)
+        if not target.is_absolute():
+            raise GateAControlError(
+                "CONTROL_ROS_DYLIB_FARM_INVALID", str(self.target_path)
+            )
+        if len(self.target_sha256) != 64 or any(
+            character not in "0123456789abcdef"
+            for character in self.target_sha256
+        ):
+            raise GateAControlError(
+                "CONTROL_ROS_DYLIB_FARM_INVALID", self.basename
+            )
+        if self.size_bytes < 0:
+            raise GateAControlError(
+                "CONTROL_ROS_DYLIB_FARM_INVALID", self.basename
+            )
+        object.__setattr__(self, "target_path", target)
+
+    def as_document(self) -> dict[str, object]:
+        return {
+            "basename": self.basename,
+            "target_path": str(self.target_path),
+            "target_sha256": self.target_sha256,
+            "size_bytes": self.size_bytes,
+        }
+
+    @classmethod
+    def from_document(
+        cls, document: Mapping[str, object]
+    ) -> "FilteredDylibFarmEntry":
+        return cls(
+            basename=str(document["basename"]),
+            target_path=Path(str(document["target_path"])),
+            target_sha256=str(document["target_sha256"]),
+            size_bytes=int(document["size_bytes"]),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class FilteredRosDylibFarmIdentity:
+    source_farm: Path
+    source_directory: Path
+    directory: Path
+    entries: tuple[FilteredDylibFarmEntry, ...]
+
+    def __post_init__(self) -> None:
+        for value in (self.source_farm, self.source_directory, self.directory):
+            if not isinstance(value, Path) or not value.is_absolute():
+                raise GateAControlError(
+                    "CONTROL_ROS_DYLIB_FARM_INVALID", str(value)
+                )
+        if not self.entries:
+            raise GateAControlError("CONTROL_ROS_DYLIB_FARM_INVALID", "empty")
+        names = tuple(entry.basename for entry in self.entries)
+        if names != tuple(sorted(names)) or len(names) != len(set(names)):
+            raise GateAControlError(
+                "CONTROL_ROS_DYLIB_FARM_INVALID", "inventory order"
+            )
+
+    @property
+    def inventory(self) -> dict[str, FilteredDylibFarmEntry]:
+        return {entry.basename: entry for entry in self.entries}
+
+    @property
+    def sha256(self) -> str:
+        return canonical_sha256(self.as_document())
+
+    def as_document(self) -> dict[str, object]:
+        return {
+            "source_farm": str(self.source_farm),
+            "source_directory": str(self.source_directory),
+            "directory": str(self.directory),
+            "entries": [entry.as_document() for entry in self.entries],
+        }
+
+    @classmethod
+    def from_document(
+        cls, document: Mapping[str, object]
+    ) -> "FilteredRosDylibFarmIdentity":
+        entries = document.get("entries")
+        if not isinstance(entries, list):
+            raise GateAControlError(
+                "CONTROL_ROS_DYLIB_FARM_INVALID", "entries"
+            )
+        return cls(
+            source_farm=Path(str(document["source_farm"])),
+            source_directory=Path(str(document["source_directory"])),
+            directory=Path(str(document["directory"])),
+            entries=tuple(FilteredDylibFarmEntry.from_document(item) for item in entries),
+        )
+
+
+def _source_farm_snapshot(
+    source_farm: Path,
+) -> tuple[Path, Path, tuple[int, int, int, int], str | None]:
+    source = Path(source_farm)
+    if not source.is_absolute():
+        raise GateAControlError("CONTROL_ROS_DYLIB_FARM_INVALID", str(source))
+    try:
+        before = os.lstat(source)
+        link_text = os.readlink(source) if source.is_symlink() else None
+        directory = source.resolve(strict=True)
+    except OSError as error:
+        raise GateAControlError(
+            "CONTROL_ROS_DYLIB_FARM_INVALID", f"{source}: {error}"
+        ) from error
+    if not directory.is_dir():
+        raise GateAControlError(
+            "CONTROL_ROS_DYLIB_FARM_INVALID", str(directory)
+        )
+    identity = (before.st_dev, before.st_ino, before.st_mtime_ns, before.st_size)
+    return source, directory, identity, link_text
+
+
+def _verify_source_farm_snapshot(
+    source: Path,
+    directory: Path,
+    identity: tuple[int, int, int, int],
+    link_text: str | None,
+) -> None:
+    try:
+        after = os.lstat(source)
+        after_link = os.readlink(source) if source.is_symlink() else None
+        after_directory = source.resolve(strict=True)
+    except OSError as error:
+        raise GateAControlError(
+            "CONTROL_ROS_DYLIB_FARM_DRIFT", f"{source}: {error}"
+        ) from error
+    after_identity = (
+        after.st_dev,
+        after.st_ino,
+        after.st_mtime_ns,
+        after.st_size,
+    )
+    if (
+        after_identity != identity
+        or after_link != link_text
+        or after_directory != directory
+    ):
+        raise GateAControlError("CONTROL_ROS_DYLIB_FARM_DRIFT", str(source))
+
+
+def build_filtered_ros_dylib_farm(
+    *,
+    source_farm: Path,
+    output_directory: Path,
+    excluded_basenames: set[str] | frozenset[str],
+) -> FilteredRosDylibFarmIdentity:
+    source, source_directory, source_identity, source_link = _source_farm_snapshot(
+        source_farm
+    )
+    output = Path(output_directory)
+    if not output.is_absolute() or output.exists() or output.is_symlink():
+        raise GateAControlError("CONTROL_ROS_DYLIB_FARM_INVALID", str(output))
+    excluded = frozenset(excluded_basenames)
+    entries: list[FilteredDylibFarmEntry] = []
+    for library in sorted(source_directory.iterdir(), key=lambda path: path.name):
+        if not library.name.endswith(".dylib"):
+            continue
+        if library.name in excluded:
+            continue
+        if not library.is_symlink():
+            raise GateAControlError(
+                "CONTROL_ROS_DYLIB_FARM_INVALID", str(library)
+            )
+        try:
+            target = library.resolve(strict=True)
+        except OSError as error:
+            raise GateAControlError(
+                "CONTROL_ROS_DYLIB_FARM_INVALID", f"{library}: {error}"
+            ) from error
+        if not target.is_file():
+            raise GateAControlError(
+                "CONTROL_ROS_DYLIB_FARM_INVALID", str(target)
+            )
+        payload = target.read_bytes()
+        entries.append(
+            FilteredDylibFarmEntry(
+                basename=library.name,
+                target_path=target,
+                target_sha256=hashlib.sha256(payload).hexdigest(),
+                size_bytes=len(payload),
+            )
+        )
+    _verify_source_farm_snapshot(
+        source, source_directory, source_identity, source_link
+    )
+    names = {entry.basename for entry in entries}
+    missing = _REQUIRED_ROS_DYLIB_BASENAMES - names
+    if missing:
+        raise GateAControlError(
+            "CONTROL_ROS_DYLIB_FARM_INVALID",
+            f"missing required: {','.join(sorted(missing))}",
+        )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    staging = output.with_name(f".{output.name}.{secrets.token_hex(8)}.tmp")
+    staging.mkdir()
+    try:
+        for entry in entries:
+            (staging / entry.basename).symlink_to(entry.target_path)
+        os.replace(staging, output)
+    except BaseException:
+        if staging.exists():
+            shutil.rmtree(staging)
+        raise
+    identity = FilteredRosDylibFarmIdentity(
+        source_farm=source,
+        source_directory=source_directory,
+        directory=output,
+        entries=tuple(entries),
+    )
+    verify_filtered_ros_dylib_farm(identity, excluded_basenames=excluded)
+    return identity
+
+
+def verify_filtered_ros_dylib_farm(
+    identity: FilteredRosDylibFarmIdentity,
+    *,
+    excluded_basenames: set[str] | frozenset[str],
+) -> None:
+    if not isinstance(identity, FilteredRosDylibFarmIdentity):
+        raise GateAControlError(
+            "CONTROL_ROS_DYLIB_FARM_INVALID", type(identity).__name__
+        )
+    try:
+        if identity.source_farm.resolve(strict=True) != identity.source_directory:
+            raise GateAControlError(
+                "CONTROL_ROS_DYLIB_FARM_DRIFT", str(identity.source_farm)
+            )
+    except OSError as error:
+        raise GateAControlError(
+            "CONTROL_ROS_DYLIB_FARM_DRIFT", f"{identity.source_farm}: {error}"
+        ) from error
+    directory = identity.directory
+    if directory.is_symlink() or not directory.is_dir():
+        raise GateAControlError("CONTROL_ROS_DYLIB_FARM_DRIFT", str(directory))
+    expected = identity.inventory
+    actual = {path.name: path for path in directory.iterdir()}
+    if set(actual) != set(expected):
+        raise GateAControlError(
+            "CONTROL_ROS_DYLIB_FARM_DRIFT", "inventory names"
+        )
+    if set(expected).intersection(excluded_basenames):
+        raise GateAControlError(
+            "CONTROL_ROS_DYLIB_FARM_INVALID", "excluded basename present"
+        )
+    missing = _REQUIRED_ROS_DYLIB_BASENAMES - set(expected)
+    if missing:
+        raise GateAControlError(
+            "CONTROL_ROS_DYLIB_FARM_INVALID",
+            f"missing required: {','.join(sorted(missing))}",
+        )
+    for basename, entry in expected.items():
+        link = actual[basename]
+        try:
+            if not link.is_symlink() or os.readlink(link) != str(entry.target_path):
+                raise GateAControlError(
+                    "CONTROL_ROS_DYLIB_FARM_DRIFT", basename
+                )
+            target = link.resolve(strict=True)
+            payload = target.read_bytes()
+        except OSError as error:
+            raise GateAControlError(
+                "CONTROL_ROS_DYLIB_FARM_DRIFT", f"{link}: {error}"
+            ) from error
+        if (
+            target != entry.target_path
+            or len(payload) != entry.size_bytes
+            or hashlib.sha256(payload).hexdigest() != entry.target_sha256
+        ):
+            raise GateAControlError("CONTROL_ROS_DYLIB_FARM_DRIFT", basename)
 
 
 class CurrentBoundaryVerdict(StrEnum):
@@ -92,24 +383,49 @@ class ObservationClass(StrEnum):
 class FrozenSemanticLaunchContract:
     argv: tuple[str, ...]
     environment: Mapping[str, str]
+    python_executable: Path
+    ros2_script: Path
+    ros_library_directory: Path
     vendor_library_directory: Path
 
     def __post_init__(self) -> None:
         if not self.argv or any(not isinstance(value, str) or not value for value in self.argv):
             raise GateAControlError("CONTROL_SEMANTIC_INVALID", "argv")
+        python_executable = Path(self.python_executable)
+        ros2_script = Path(self.ros2_script)
+        ros_library = Path(self.ros_library_directory)
         vendor = Path(self.vendor_library_directory)
-        if not vendor.is_absolute():
-            raise GateAControlError("CONTROL_SEMANTIC_INVALID", str(vendor))
+        for value in (python_executable, ros2_script, ros_library, vendor):
+            if not value.is_absolute():
+                raise GateAControlError("CONTROL_SEMANTIC_INVALID", str(value))
+        if self.argv[:2] != (str(python_executable), str(ros2_script)):
+            raise GateAControlError("CONTROL_SEMANTIC_INVALID", "ros2 interpreter")
         values = dict(self.environment)
         if any(not isinstance(key, str) or not isinstance(value, str) for key, value in values.items()):
             raise GateAControlError("CONTROL_SEMANTIC_INVALID", "environment")
+        dyld = {key: value for key, value in values.items() if key.startswith("DYLD_")}
+        allowed_library_paths = {
+            str(ros_library),
+            os.pathsep.join((str(ros_library), str(vendor))),
+        }
+        if (
+            set(dyld) != {"DYLD_LIBRARY_PATH"}
+            or dyld["DYLD_LIBRARY_PATH"] not in allowed_library_paths
+        ):
+            raise GateAControlError("CONTROL_SEMANTIC_INVALID", "ROS dylib baseline")
         object.__setattr__(self, "environment", values)
+        object.__setattr__(self, "python_executable", python_executable)
+        object.__setattr__(self, "ros2_script", ros2_script)
+        object.__setattr__(self, "ros_library_directory", ros_library)
         object.__setattr__(self, "vendor_library_directory", vendor)
 
     def as_document(self) -> dict[str, object]:
         return {
             "argv": list(self.argv),
             "environment": dict(sorted(self.environment.items())),
+            "python_executable": str(self.python_executable),
+            "ros2_script": str(self.ros2_script),
+            "ros_library_directory": str(self.ros_library_directory),
             "vendor_library_directory": str(self.vendor_library_directory),
         }
 
@@ -124,6 +440,9 @@ class FrozenSemanticLaunchContract:
         return cls(
             argv=tuple(str(value) for value in raw_argv),
             environment={str(key): str(value) for key, value in raw_environment.items()},
+            python_executable=Path(str(document["python_executable"])),
+            ros2_script=Path(str(document["ros2_script"])),
+            ros_library_directory=Path(str(document["ros_library_directory"])),
             vendor_library_directory=Path(str(document["vendor_library_directory"])),
         )
 
@@ -136,12 +455,26 @@ def validate_np_semantic_delta(
         raise GateAControlError("CONTROL_SEMANTIC_DIFF", "argv")
     if negative.vendor_library_directory != positive.vendor_library_directory:
         raise GateAControlError("CONTROL_SEMANTIC_DIFF", "vendor directory")
+    if (
+        negative.python_executable != positive.python_executable
+        or negative.ros2_script != positive.ros2_script
+        or negative.ros_library_directory != positive.ros_library_directory
+    ):
+        raise GateAControlError("CONTROL_SEMANTIC_DIFF", "ROS bootstrap")
     n = dict(negative.environment)
     p = dict(positive.environment)
-    if any(key.startswith("DYLD_") for key in n):
-        raise GateAControlError("CONTROL_SEMANTIC_DIFF", "negative contains DYLD")
+    n_dyld = {key: value for key, value in n.items() if key.startswith("DYLD_")}
+    if n_dyld != {
+        "DYLD_LIBRARY_PATH": str(negative.ros_library_directory)
+    }:
+        raise GateAControlError("CONTROL_SEMANTIC_DIFF", "negative ROS baseline")
     expected = dict(n)
-    expected["DYLD_LIBRARY_PATH"] = str(negative.vendor_library_directory)
+    expected["DYLD_LIBRARY_PATH"] = os.pathsep.join(
+        (
+            str(negative.ros_library_directory),
+            str(negative.vendor_library_directory),
+        )
+    )
     if p != expected:
         raise GateAControlError("CONTROL_SEMANTIC_DIFF", "environment")
 
@@ -150,6 +483,7 @@ def validate_np_semantic_delta(
 class GateAControlSetManifest:
     gate_a_run_root: Path
     closure: RuntimeClosureIdentity
+    ros_dylib_farm: FilteredRosDylibFarmIdentity
     plugin_relative_path: str
     vendor_relative_path: str
     plugin_xml_relative_path: str
@@ -167,6 +501,16 @@ class GateAControlSetManifest:
                 "CONTROL_MANIFEST_INVALID",
                 "install root must be a strict descendant of the Gate A run root",
             )
+        farm_directory = self.ros_dylib_farm.directory.resolve(strict=False)
+        if farm_directory == root or not farm_directory.is_relative_to(root):
+            raise GateAControlError(
+                "CONTROL_MANIFEST_INVALID",
+                "ROS dylib farm must be a strict descendant of the Gate A run root",
+            )
+        if self.semantic.ros_library_directory != self.ros_dylib_farm.directory:
+            raise GateAControlError(
+                "CONTROL_MANIFEST_INVALID", "ROS dylib farm semantic path"
+            )
         inventory = self.closure.inventory
         for relative in (
             self.plugin_relative_path,
@@ -182,6 +526,10 @@ class GateAControlSetManifest:
             raise GateAControlError("CONTROL_MANIFEST_ALIAS", str(len(aliases)))
         if aliases[0].target_relative_path != self.vendor_relative_path:
             raise GateAControlError("CONTROL_MANIFEST_ALIAS", self.vendor_relative_path)
+        excluded = _closure_dylib_basenames(self.closure)
+        verify_filtered_ros_dylib_farm(
+            self.ros_dylib_farm, excluded_basenames=excluded
+        )
         object.__setattr__(self, "gate_a_run_root", root)
         object.__setattr__(self, "tool_versions", dict(self.tool_versions))
 
@@ -210,6 +558,7 @@ class GateAControlSetManifest:
             "schema_version": CONTROL_SCHEMA_VERSION,
             "gate_a_run_root": str(self.gate_a_run_root),
             "closure": self.closure.as_document(),
+            "ros_dylib_farm": self.ros_dylib_farm.as_document(),
             "plugin_relative_path": self.plugin_relative_path,
             "vendor_relative_path": self.vendor_relative_path,
             "plugin_xml_relative_path": self.plugin_xml_relative_path,
@@ -231,6 +580,9 @@ class GateAControlSetManifest:
         return cls(
             gate_a_run_root=Path(str(document["gate_a_run_root"])),
             closure=RuntimeClosureIdentity.from_document(document["closure"]),
+            ros_dylib_farm=FilteredRosDylibFarmIdentity.from_document(
+                document["ros_dylib_farm"]
+            ),
             plugin_relative_path=str(document["plugin_relative_path"]),
             vendor_relative_path=str(document["vendor_relative_path"]),
             plugin_xml_relative_path=str(document["plugin_xml_relative_path"]),
@@ -239,6 +591,18 @@ class GateAControlSetManifest:
             semantic=FrozenSemanticLaunchContract.from_document(document["semantic"]),
             tool_versions={str(key): str(value) for key, value in tools.items()},
         )
+
+
+def _closure_dylib_basenames(closure: RuntimeClosureIdentity) -> frozenset[str]:
+    names = {
+        Path(entry.relative_path).name
+        for entry in closure.library_inventory
+        if Path(entry.relative_path).name.endswith(".dylib")
+    }
+    names.update(
+        Path(alias.relative_path).name for alias in closure.dylib_alias_inventory
+    )
+    return frozenset(names)
 
 
 def _strict_descendant(path: Path, root: Path, label: str) -> Path:
@@ -314,14 +678,13 @@ class GateARunBinding:
             expanded_argv = tuple(
                 _replace_tokens(value, replacements) for value in manifest.semantic.argv
             )
-            environment = {
-                key: value
-                for key, value in manifest.semantic.environment.items()
-                if not key.startswith("DYLD_")
-            }
+            environment = dict(manifest.semantic.environment)
             if control == "P":
-                environment["DYLD_LIBRARY_PATH"] = str(
-                    manifest.semantic.vendor_library_directory
+                environment["DYLD_LIBRARY_PATH"] = os.pathsep.join(
+                    (
+                        str(manifest.semantic.ros_library_directory),
+                        str(manifest.semantic.vendor_library_directory),
+                    )
                 )
             environment.update(
                 {
@@ -707,7 +1070,9 @@ def build_control_set_manifest(
     source_commit: str,
     submodule_commit: str,
     environment: Mapping[str, str],
+    ros_dylib_farm: Path,
 ) -> GateAControlSetManifest:
+    gate_root = Path(gate_a_run_root).resolve(strict=True)
     base_environment = {
         key: value
         for key in _SEMANTIC_ENVIRONMENT_KEYS
@@ -716,15 +1081,59 @@ def build_control_set_manifest(
     base_environment["PYTHONNOUSERSITE"] = "1"
     if any(key.startswith("DYLD_") for key in base_environment):
         raise GateAControlError("CONTROL_SEMANTIC_INVALID", "DYLD in base")
-    closure = build_runtime_closure_identity(
+    preliminary_closure = build_runtime_closure_identity(
         install_root=install_root,
         source_commit=source_commit,
         mujoco_ros2_control_commit=submodule_commit,
         environment=base_environment,
     )
+    excluded_basenames = _closure_dylib_basenames(preliminary_closure)
+    filtered_farm = build_filtered_ros_dylib_farm(
+        source_farm=ros_dylib_farm,
+        output_directory=gate_root / "control-set/filtered-ros-dylib-farm",
+        excluded_basenames=excluded_basenames,
+    )
+    semantic_environment = dict(base_environment)
+    semantic_environment["DYLD_LIBRARY_PATH"] = str(filtered_farm.directory)
+    closure = build_runtime_closure_identity(
+        install_root=install_root,
+        source_commit=source_commit,
+        mujoco_ros2_control_commit=submodule_commit,
+        environment=semantic_environment,
+    )
+    if (
+        closure.install_inventory_sha256
+        != preliminary_closure.install_inventory_sha256
+        or _closure_dylib_basenames(closure) != excluded_basenames
+    ):
+        raise GateAControlError(
+            "CONTROL_MANIFEST_INVALID", "closure changed while filtering ROS dylibs"
+        )
+    python_executable = Path(sys.executable)
+    if (
+        not python_executable.is_absolute()
+        or not python_executable.is_file()
+        or not os.access(python_executable, os.X_OK)
+    ):
+        raise GateAControlError(
+            "CONTROL_SEMANTIC_INVALID", f"python: {python_executable}"
+        )
+    ros2_value = shutil.which("ros2", path=base_environment.get("PATH"))
+    if ros2_value is None:
+        raise GateAControlError("CONTROL_SEMANTIC_INVALID", "ros2 not found")
+    ros2_script = Path(ros2_value)
+    if (
+        not ros2_script.is_absolute()
+        or not ros2_script.is_file()
+        or not os.access(ros2_script, os.X_OK)
+    ):
+        raise GateAControlError(
+            "CONTROL_SEMANTIC_INVALID", f"ros2: {ros2_script}"
+        )
     semantic = FrozenSemanticLaunchContract(
         argv=(
-            "ros2",
+            str(python_executable),
+            str(ros2_script),
             "launch",
             "so101_demo_py",
             "so101_mujoco_task_station.launch.py",
@@ -737,12 +1146,16 @@ def build_control_set_manifest(
             "mujoco_scene:=@MANIFEST_SCENE@",
             "mujoco_initial_keyframe:=task_start",
         ),
-        environment=base_environment,
+        environment=semantic_environment,
+        python_executable=python_executable,
+        ros2_script=ros2_script,
+        ros_library_directory=filtered_farm.directory,
         vendor_library_directory=closure.install_root / "opt/mujoco_vendor/lib",
     )
     return GateAControlSetManifest(
-        gate_a_run_root=Path(gate_a_run_root).resolve(strict=True),
+        gate_a_run_root=gate_root,
         closure=closure,
+        ros_dylib_farm=filtered_farm,
         plugin_relative_path="lib/libmujoco_ros2_control.dylib",
         vendor_relative_path="opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib",
         plugin_xml_relative_path=(
@@ -755,6 +1168,8 @@ def build_control_set_manifest(
         semantic=semantic,
         tool_versions={
             "python": sys.version.split()[0],
+            "python_executable": str(python_executable),
+            "ros2_script": str(ros2_script),
             "platform": sys.platform,
         },
     )
@@ -827,6 +1242,10 @@ def _prepare_run_root(run_root: Path) -> Path:
 def _execute_probe_child(
     manifest: GateAControlSetManifest, binding: GateARunBinding
 ) -> DirectDlopenObservation:
+    verify_filtered_ros_dylib_farm(
+        manifest.ros_dylib_farm,
+        excluded_basenames=_closure_dylib_basenames(manifest.closure),
+    )
     verify_runtime_closure(
         manifest.closure,
         install_root=manifest.install_root,
@@ -878,6 +1297,7 @@ def parse_arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--ros-domain-id", type=int)
     parser.add_argument("--install-root")
     parser.add_argument("--gate-a-run-root")
+    parser.add_argument("--ros-dylib-farm")
     parser.add_argument("--source-commit")
     parser.add_argument("--submodule-commit")
     parser.add_argument("--plugin")
@@ -904,6 +1324,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             options.install_root,
             options.source_commit,
             options.submodule_commit,
+            options.ros_dylib_farm,
             options.output,
         )
         if not all(required):
@@ -914,6 +1335,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             source_commit=options.source_commit,
             submodule_commit=options.submodule_commit,
             environment=os.environ,
+            ros_dylib_farm=Path(options.ros_dylib_farm),
         )
         write_json(Path(options.output), manifest.as_document())
         return 0
