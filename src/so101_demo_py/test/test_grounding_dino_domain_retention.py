@@ -3,7 +3,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-import torch
+
+torch = pytest.importorskip("torch")
+pytestmark = pytest.mark.explicit_ml
+
 from so101_demo.training.grounding_dino_domain_retention import (
     LAST_SWIN_STAGE_PREFIX,
     TRAINABLE_PREFIXES,
