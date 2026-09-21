@@ -12,7 +12,7 @@ executor: dst-so101-macos-closure (DeepSeek Harness TUI, tmux) resumed by explic
 worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
 branch: codex/so101-unified-webapp
 base_commit: 6d5069026fbd322076f58d0d4b9504891abeb861
-current_commit: e1817749e3013375b4a334efbe0746980f54d7bb (resume HEAD; see CP-MSC-A1-RESUME)
+current_commit: 87e38a8025c9e4a6a05762eeb3d149f5645eb8a0 (Task 5 canonical reader; see CP-MSC-T5-READER-DUAL-FORMAT)
 upstream: origin/codex/so101-unified-webapp (in sync at resume; this session does not push)
 evidence_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
 dispatch_receipt: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/dispatch.receipt
@@ -49,8 +49,8 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-T5-READER-DEFERRED
-next_experiment: EXP-MSC-107 (Task 5 finish: canonical event payloads from the producers, then the reader migration)
+latest_checkpoint: CP-MSC-T5-READER-DUAL-FORMAT
+next_experiment: EXP-MSC-108 (Task 6: persistent owner tree, leaf-first recovery and crash cleanup)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -1475,3 +1475,91 @@ Remaining Task 5 work, now sized precisely:
 
 Evidence retained: the migration attempt and its revert are both recorded; nothing was deleted and
 no product guarantee was weakened.
+
+## CP-MSC-T5-READER-DUAL-FORMAT: one journal, one format - and the delta merge survives only where it must
+
+```yaml
+checkpoint_id: CP-MSC-T5-READER-DUAL-FORMAT
+recorded_at: 2026-09-21T22:30:00+0800
+commit: 87e38a8025c9e4a6a05762eeb3d149f5645eb8a0
+supersedes: the remaining-work sizing in CP-MSC-T5-READER-DEFERRED items 2 and 3
+```
+
+### What the earlier sizing got wrong
+
+`CP-MSC-T5-READER-DEFERRED` assumed the blocker was delta-only *test fixtures*, so deleting
+`_merge_projection_delta` plus rewriting ~8 fixture append sites would finish Task 5. Measuring the
+real journal disproved that: the **fixed coordinator itself** publishes every fact inside
+`payload.delta`, so a reader that refuses deltas breaks production, not just fixtures.
+
+Measured with `task2/task5-canonical-reader-1-20260921T222237Z` (delta merge deleted, reader on the
+reducer): 17 failed / 20 passed. The new failures include two cancel-classification cases that
+return `404` because the whole production projection collapses to nothing, while
+`task2/task5-repro/repro.py` prints the real journal of a real `BatchCoordinator`:
+
+```text
+BATCH_STARTED          {"delta": {points: {point_1..4}, workers, broker_healthy, batch_cleanup_complete}}
+WORKER_REGISTERED      {"delta": {workers: {worker-01: {generation, state, lease, lease_count}}}}
+BATCH_STOPPING         {"delta": {terminal_reason: "WEB_CANCEL_REQUESTED", workers: ...}}
+BATCH_CLEANUP_COMPLETE {"delta": {batch_cleanup_complete: true, points: {point_1..4: {status, attempts, terminal}}}}
+```
+
+Every durable fact - status, attempts, terminal, the business terminal reason, cleanup - lives in the
+delta payload of a snapshot event. The legacy journal is therefore not a fixture artifact; it is the
+current producer contract. Canonical *emission* is producer work that no Task 5 change can supply,
+and fabricating canonical events out of snapshot documents would invent RESULT_COMMITTED evidence
+that no sealed attempt backs. That route was rejected.
+
+### What was implemented instead
+
+`CoordinatorEventReader.read_after()` classifies the journal before projecting it:
+
+- **canonical** - the history contains canonical-only frames (`CAMPAIGN_STARTED`, `POINT_LEASED`,
+  `POINT_TERMINAL`, `CLEANUP_COMMITTED`): the projection comes from `CanonicalCampaignReducer` plus
+  `projection_document()`, `payload.delta` is never read, and `ATTEMPT_STARTED`/`RESULT_COMMITTED`
+  are taken as canonical only when they carry canonical fields.
+- **legacy** - the history contains legacy-only frames (`BATCH_STARTED`, `LEASE_GRANTED`,
+  `BATCH_STOPPING`, `BATCH_CLEANUP_COMPLETE`, `BATCH_MANIFEST`, `POOL_STARTING`,
+  `POINT_RESULT_IMPORTED`): the existing verified snapshot projection is unchanged, so the fixed
+  coordinator keeps working.
+- **mixed** - both vocabularies in one journal fails closed with `JOURNAL_FORMAT_MIXED`; the reader
+  never blends a snapshot delta into canonical state.
+
+Supporting changes in the same commit:
+
+- the reducer learns worker facts from canonical lease/registration events (`WorkerState`:
+  generation, lease count, slot) and `projection_document()` derives the service-facing shape from
+  reducer state alone: `status`, `phase`, `attempts`, `terminal`, `active_attempt`,
+  `workers[wid].lease{point_id, attempt_id}`, `terminal_reason`, `batch_cleanup_complete`;
+- the fixed projection tolerates a selected point with no canonical event (it reports `UNRUN`) and a
+  worker document without a lifecycle enum, and refuses a canonical `RESULT_COMMITTED` that carries
+  no `identity` reference to its sealed attempt (`RESULT_REFERENCE_INVALID` instead of importing a
+  flat outcome);
+- worker lifecycle state is *derived* (`EXECUTING` while leased, `STOPPED` after cleanup,
+  otherwise `AVAILABLE`), never imported from a delta.
+
+### Evidence
+
+- `task2/task5-gate-4-20260921T222822Z`: the plan's Task 5 gate - 56 passed / 2 failed, both the
+  known `/private/tmp/so101-control-501/campaign-1-b001.sock` platform class.
+- `task2/task5-dualpath-2-20260921T222548Z`: 43 passed / 2 failed (same class) after the reader
+  redesign; `task2/task5-canonical-consumer-1-20260921T222805Z`: the canonical consumer cases.
+- `task2/task5-expert-validation-suite-1-20260921T222622Z`: whole expert-validation suite -
+  11 failed / 285 passed / 1 skipped. `task2/task5-baseline-7b-20260921T222725Z` runs the same seven
+  non-socket failures on `git archive HEAD` (7 failed / 48 passed), proving they predate this change.
+- New tests: canonical reduction and delta-ignoring (`test_canonical_journal_reduces_through_the_canonical_reducer`,
+  `test_canonical_frame_ignores_a_contradicting_delta`), `JOURNAL_FORMAT_MIXED`, legacy regression
+  guard, missing-start fail-closed, projection-document worker/terminal cases, and two canonical
+  consumer cases.
+
+### Dependency handed to the producer tasks (7+)
+
+A canonical `RESULT_COMMITTED` must still reference its sealed attempt (`identity` with
+`batch_id`/`worker_id`/`point_id`/`attempt_id`/generations plus `response{location, sha256, status}`)
+because `register_committed_attempt()` authorizes artifact import from that reference and re-verifies
+the sealed manifest. The canonical path therefore needs canonical emission to carry the same
+evidence, not only the flat outcome. Until the coordinator publishes canonical frames, production
+runs the legacy branch; no guarantee was weakened and no fallback was invented.
+
+Retained: every invocation above plus `task2/task5-repro/` and `task2/task5-baseline-head/`.
+Deleted or archived: nothing.
