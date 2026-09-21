@@ -58,6 +58,8 @@ def _request(binding, **changes):
 
 
 def _exchange(binding, document=None, *, frame=None):
+    from so101_demo.parallel_batch.web_control import _bind_target
+
     if frame is None:
         payload = json.dumps(document, sort_keys=True, separators=(",", ":")).encode()
         frame = len(payload).to_bytes(4, "big") + payload
@@ -67,7 +69,7 @@ def _exchange(binding, document=None, *, frame=None):
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
             connection.settimeout(2)
-            connection.connect(f"/proc/self/fd/{parent_fd}/control.sock")
+            connection.connect(_bind_target(binding.control_socket, parent_fd))
             connection.sendall(frame)
             connection.shutdown(socket.SHUT_WR)
             reply = bytearray()

@@ -24,6 +24,7 @@ from so101_demo.runtime.parallel_perception_runtime import (
     ParallelPerceptionRuntime, canonical_json, checked_path, frozen_options,
     normalize_batch, write_receipt,
 )
+from so101_demo.parallel_batch.resources import runtime_ipc_base
 
 
 def broker_argv():
@@ -70,7 +71,7 @@ def container_run_argv(batch_root, *, image_id, yolo_weights, grounded_root,
         batch_ipc = path_checker(
             runtime_ipc_root, owner=(uid, gid), mode=0o700, directory=True,
         )
-        expected_batch_ipc = Path(f'/run/user/{uid}/so101-{batch_id}')
+        expected_batch_ipc = runtime_ipc_base() / f'so101-{batch_id}'
         expected_runtime_name = (
             'broker' if broker_generation == 1 else f'broker-g{broker_generation}'
         )

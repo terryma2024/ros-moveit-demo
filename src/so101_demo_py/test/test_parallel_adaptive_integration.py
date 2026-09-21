@@ -1,5 +1,6 @@
 """Integration contracts for adaptive convergence, output, and supervision."""
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -305,7 +306,8 @@ def test_external_cleanup_retires_only_owned_worker_and_releases_claim(tmp_path)
     # The leaf must stay the batch id (cleanup_runtime validates it), so isolation comes
     # from a per-test parent: the previous fixed path collided with other tests that share
     # one scratch tree when the suite runs in parallel.
-    runtime_root = Path(os.environ["TMPDIR"]).parent / f"rt-{tmp_path.name}" / "a001"
+    key = hashlib.sha256(str(tmp_path).encode()).hexdigest()[:8]
+    runtime_root = Path(os.environ["TMPDIR"]) / f"rt-{os.getpid():x}-{key}" / "a001"
     runtime_root.mkdir(parents=True, mode=0o700)
     pool_root = runtime_root / "p/g01w01"
     pool_root.mkdir(parents=True, mode=0o700)
@@ -322,7 +324,8 @@ def test_external_cleanup_retires_only_owned_worker_and_releases_claim(tmp_path)
         pool_batch_id,
         manifest_path=pool_root / "owned-processes.json",
     )
-    worker = supervisor.start("worker", ["/usr/bin/sleep", "60"])
+    sleep_command = [sys.executable, "-c", "import time; time.sleep(60)"]
+    worker = supervisor.start("worker", sleep_command)
     worker_poll = supervisor._owned[worker.pid][1]
     reaped = threading.Event()
 
@@ -332,7 +335,7 @@ def test_external_cleanup_retires_only_owned_worker_and_releases_claim(tmp_path)
         reaped.set()
 
     threading.Thread(target=reap_worker, daemon=True).start()
-    sentinel = subprocess.Popen(["/usr/bin/sleep", "60"], start_new_session=True)
+    sentinel = subprocess.Popen(sleep_command, start_new_session=True)
     try:
         claim_root = runtime_root / "claims"
         claim_root.mkdir(mode=0o700)
@@ -364,7 +367,9 @@ def test_external_cleanup_retires_only_owned_worker_and_releases_claim(tmp_path)
         receipt = cleanup_runtime(runtime_root)
 
         assert reaped.wait(2.0)
-        assert not Path(f"/proc/{worker.pid}").exists()
+        from so101_demo.parallel_batch.start_guard_probe import read_process_identity
+
+        assert read_process_identity(worker.pid) is None
         assert sentinel.poll() is None
         assert receipt["cleanup_complete"] is True
         assert receipt["released_domain_ids"] == [215]
@@ -556,7 +561,8 @@ def test_cleanup_of_a_pool_that_failed_before_allocating_is_a_no_op(tmp_path):
     from so101_demo.cli.parallel_batch_cleanup import cleanup_runtime
     from so101_demo.parallel_batch.journal import CoordinatorJournal
 
-    runtime_root = Path(os.environ["TMPDIR"]).parent / f"rt-{tmp_path.name}" / "a001"
+    key = hashlib.sha256(str(tmp_path).encode()).hexdigest()[:8]
+    runtime_root = Path(os.environ["TMPDIR"]) / f"rt-{os.getpid():x}-{key}" / "a001"
     runtime_root.mkdir(parents=True, mode=0o700)
     pool_parent = runtime_root / "p"
     pool_parent.mkdir(mode=0o700)
@@ -590,4 +596,3 @@ def test_cleanup_of_a_pool_that_failed_before_allocating_is_a_no_op(tmp_path):
     assert receipt["worker_count"] == 0
     assert receipt["released_domain_ids"] == []
     assert failure_path.is_file(), "the failure marker is evidence and must survive cleanup"
-

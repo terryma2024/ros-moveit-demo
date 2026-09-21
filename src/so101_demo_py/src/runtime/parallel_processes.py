@@ -44,6 +44,16 @@ class OwnedProcess:
             raise SupervisorError("INCOMPLETE_MANIFEST")
 
 
+def _same_process_instance(actual: OwnedProcess, expected: OwnedProcess) -> bool:
+    """Compare the stable identity fields that survive an in-progress exit."""
+
+    return (
+        actual.pid == expected.pid
+        and actual.pgid == expected.pgid
+        and actual.start_time == expected.start_time
+    )
+
+
 def read_proc_identity(pid: int) -> OwnedProcess | None:
     """Read an identity fragment; batch/role are supplied from the owner manifest."""
 
@@ -66,11 +76,28 @@ def _parse_proc_stat_start_time(document: str) -> int:
     return value
 
 
+def _normalize_cmdline(values) -> tuple[str, ...]:
+    """Normalize only executable identity; retain every argument byte-for-byte."""
+
+    result = tuple(values)
+    if not result:
+        return ()
+    executable = result[0]
+    if os.path.isabs(executable):
+        try:
+            executable = str(Path(executable).resolve(strict=True))
+        except OSError:
+            pass
+    return (executable, *result[1:])
+
+
 def _proc_values(pid: int) -> tuple[int, tuple[str, ...], int]:
+    if not Path("/proc").is_dir():
+        return _portable_process_values(pid)
     try:
         stat_document = (Path("/proc") / str(pid) / "stat").read_text()
         pgid = os.getpgid(pid)
-        cmdline = tuple(
+        cmdline = _normalize_cmdline(
             item.decode("utf-8", errors="strict")
             for item in (Path("/proc") / str(pid) / "cmdline").read_bytes().split(b"\0")
             if item
@@ -81,9 +108,32 @@ def _proc_values(pid: int) -> tuple[int, tuple[str, ...], int]:
     return pgid, cmdline, start_time
 
 
+def _portable_process_values(pid: int) -> tuple[int, tuple[str, ...], int]:
+    """Read the same identity fields on hosts without Linux procfs."""
+
+    try:
+        import psutil
+    except ImportError:
+        return 0, (), 0
+    try:
+        process = psutil.Process(pid)
+        if process.status() == psutil.STATUS_ZOMBIE:
+            return 0, (), 0
+        pgid = os.getpgid(pid)
+        cmdline = _normalize_cmdline(process.cmdline())
+        start_time = int(round(process.create_time() * 1_000_000))
+    except (OSError, ProcessLookupError, psutil.Error, ValueError):
+        return 0, (), 0
+    if not cmdline or start_time <= 0:
+        return 0, (), 0
+    return pgid, cmdline, start_time
+
+
 def _proc_group_members(pgid: int) -> tuple[int, ...]:
     """Return same-user members of an exact numeric process group."""
 
+    if not Path("/proc").is_dir():
+        return _portable_group_members(pgid)
     members = []
     for entry in Path("/proc").iterdir():
         if not entry.name.isdecimal():
@@ -95,6 +145,27 @@ def _proc_group_members(pgid: int) -> tuple[int, ...]:
             if os.getpgid(candidate) == pgid and os.getsid(candidate) == pgid:
                 members.append(candidate)
         except (OSError, ProcessLookupError, ValueError):
+            continue
+    return tuple(sorted(members))
+
+
+def _portable_group_members(pgid: int) -> tuple[int, ...]:
+    """Return same-user session members through psutil on Darwin."""
+
+    try:
+        import psutil
+    except ImportError:
+        return ()
+    members = []
+    for process in psutil.process_iter(attrs=("pid", "uids")):
+        try:
+            candidate = process.info["pid"]
+            uids = process.info["uids"]
+            if uids is None or uids.real != os.getuid():
+                continue
+            if os.getpgid(candidate) == pgid and os.getsid(candidate) == pgid:
+                members.append(candidate)
+        except (OSError, ProcessLookupError, psutil.Error, ValueError):
             continue
     return tuple(sorted(members))
 
@@ -146,6 +217,12 @@ class ProcessSupervisor:
     def start(self, role: str, argv, *, environment: Mapping[str, str] | None = None) -> OwnedProcess:
         if role not in _ROLES or not isinstance(argv, (list, tuple)) or not argv:
             raise SupervisorError("UNOWNED_ROLE")
+        expected_cmdline = _normalize_cmdline(
+            os.fsdecode(item)
+            if isinstance(item, (bytes, os.PathLike))
+            else str(item)
+            for item in argv
+        )
         child = self._popen(
             list(argv),
             env=None if environment is None else dict(environment),
@@ -153,15 +230,15 @@ class ProcessSupervisor:
         )
         pid = child.pid
         pgid, cmdline, start_time = 0, (), 0
-        for attempt in range(8):
+        for attempt in range(100):
             pgid, cmdline, start_time = _proc_values(pid)
-            if pgid == pid and cmdline and start_time:
+            if pgid == pid and cmdline == expected_cmdline and start_time:
                 break
             if child.poll() is not None:
                 break
-            if attempt < 7:
+            if attempt < 99:
                 time.sleep(0.001)
-        if pgid != pid or not cmdline or not start_time:
+        if pgid != pid or cmdline != expected_cmdline or not start_time:
             # An incomplete identity is never process-group signal authority.
             # Reap only the exact Popen child created above.
             self._reap_failed_start(child)
@@ -269,7 +346,7 @@ class ProcessSupervisor:
                 # after the recorded leader has disappeared. The entire group
                 # may have exited and the number may now name unrelated work.
                 raise SupervisorError("RECOVERY_GROUP_OWNERSHIP_UNPROVEN")
-            if actual is not None and actual != expected:
+            if actual is not None and not _same_process_instance(actual, expected):
                 raise SupervisorError("PID_REUSE_OR_IDENTITY_MISMATCH")
 
             def poll(expected=expected):
@@ -318,7 +395,7 @@ class ProcessSupervisor:
         actual = self._identity_reader(expected.pid)
         if actual is None:
             raise SupervisorError("OWNED_PROCESS_ABSENT")
-        if actual != expected:
+        if not _same_process_instance(actual, expected):
             raise SupervisorError("PID_REUSE_OR_IDENTITY_MISMATCH")
 
     def _confirm_running_or_repoll_exit(
@@ -335,7 +412,7 @@ class ProcessSupervisor:
             if code is None:
                 raise SupervisorError("OWNED_PROCESS_ABSENT")
             return int(code)
-        if actual != expected:
+        if not _same_process_instance(actual, expected):
             raise SupervisorError("PID_REUSE_OR_IDENTITY_MISMATCH")
         return None
 
@@ -548,7 +625,7 @@ class ProcessSupervisor:
                 deadline = time.monotonic() + term_timeout_s
                 while poll() is None and time.monotonic() < deadline:
                     actual = self._identity_reader(expected.pid)
-                    if actual is not None and actual != expected:
+                    if actual is not None and not _same_process_instance(actual, expected):
                         raise SupervisorError("PID_REUSE_OR_IDENTITY_MISMATCH")
                     time.sleep(0.01)
                 if poll() is None:
@@ -557,7 +634,7 @@ class ProcessSupervisor:
                     deadline = time.monotonic() + kill_timeout_s
                     while poll() is None and time.monotonic() < deadline:
                         actual = self._identity_reader(expected.pid)
-                        if actual is not None and actual != expected:
+                        if actual is not None and not _same_process_instance(actual, expected):
                             raise SupervisorError("PID_REUSE_OR_IDENTITY_MISMATCH")
                         time.sleep(0.01)
             except OSError:
@@ -591,7 +668,7 @@ class ProcessSupervisor:
                 # Signal authority is released only after both observations agree.
                 time.sleep(0.01)
                 continue
-            if actual != expected:
+            if not _same_process_instance(actual, expected):
                 return False
             time.sleep(0.01)
         return False

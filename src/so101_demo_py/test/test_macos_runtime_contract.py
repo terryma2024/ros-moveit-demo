@@ -28,7 +28,7 @@ def contract_fixture(tmp_path: Path):
     physical_ros_root = tmp_path / "ros-source"
     logical_ros_root = filesystem_root / "opt/ros2_jazzy"
     data_root = filesystem_root / "opt/data"
-    temp_root = filesystem_root / "tmp"
+    temp_root = data_root / "tmp"
     repository_root = tmp_path / "checkout"
 
     logical_ros_root.parent.mkdir(parents=True)
@@ -111,7 +111,7 @@ def test_production_contract_has_no_required_external_environment() -> None:
     assert paths.ros_install == Path("/opt/ros2_jazzy/install")
     assert paths.python == Path("/opt/ros2_jazzy/.venv/bin/python")
     assert paths.data_root == Path("/opt/data")
-    assert paths.temp_root == Path("/tmp")
+    assert paths.temp_root == Path("/opt/data/tmp")
     assert paths.dylib_farm == Path("/opt/ros2_jazzy/dylib_farm/current")
 
 

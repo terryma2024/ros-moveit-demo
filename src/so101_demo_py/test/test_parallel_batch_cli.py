@@ -27,6 +27,25 @@ YOLO_SHA = "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781"
 GROUNDED_SHA = "b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05"
 
 
+def _scratch_root():
+    """Keep fixed-name integration fixtures short and isolated per xdist worker."""
+
+    root = Path(os.environ["TMPDIR"]) / f"p{os.getpid():x}"
+    root.mkdir(mode=0o700, exist_ok=True)
+    return root
+
+
+def _socket_fixture_root(tmp_path: Path, label: str) -> Path:
+    """Use pytest's normal path unless Darwin needs a shorter AF_UNIX address."""
+
+    if sys.platform != "darwin":
+        return tmp_path
+    suffix = hashlib.sha256(str(tmp_path).encode()).hexdigest()[:8]
+    root = _scratch_root() / f"{label}-{suffix}"
+    root.mkdir(mode=0o700, exist_ok=True)
+    return root
+
+
 class SyntheticAdmissionGate:
     """Offline test entry: admit every exact N without a real promoted profile."""
 
@@ -156,11 +175,12 @@ def verified(_spec):
 
 def _fixed_web_spec(tmp_path, monkeypatch, *, run_mode="dry_run"):
     from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+    from so101_demo.parallel_batch.resources import runtime_ipc_base
 
-    root = tmp_path / "batch"
+    root = _socket_fixture_root(tmp_path, "fw") / "batch"
     # Worker IPC uses the production short runtime namespace. The fixed Web
     # socket remains in the actual long durable batch root via pinned dirfd.
-    ipc_base = Path(f"/run/user/{os.getuid()}")
+    ipc_base = runtime_ipc_base()
     batch_id = "fw-" + hashlib.sha256(str(tmp_path).encode()).hexdigest()[:12]
     monkeypatch.setenv("SO101_PARALLEL_IPC_BASE", str(ipc_base))
     values = {
@@ -191,6 +211,7 @@ class _FixedWebProbe:
 
 def _cancel_fixed_cli(values, batch_id):
     import socket
+    from so101_demo.parallel_batch.web_control import _bind_target
 
     unsigned = {
         "schema_version": 1, "command_id": "cli-cancel-1", "campaign_id": "campaign-a",
@@ -205,7 +226,7 @@ def _cancel_fixed_cli(values, batch_id):
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
             peer.settimeout(2)
-            peer.connect(f"/proc/self/fd/{parent_fd}/{path.name}")
+            peer.connect(_bind_target(path, parent_fd))
             peer.sendall(len(payload).to_bytes(4, "big") + payload)
             peer.shutdown(socket.SHUT_WR)
             received = bytearray()
@@ -306,7 +327,7 @@ def test_fixed_cli_epoch_matches_real_journal_before_endpoint_or_worker_setup(tm
     # A short source-test root needs no external IPC. Retain its allocated
     # evidence and partial cleanup record; do not delete durable scratch.
     monkeypatch.delenv("SO101_PARALLEL_IPC_BASE")
-    root = Path(os.environ["TMPDIR"]).parent / "qe"
+    root = _scratch_root() / "qe"
     spec = replace(spec, request=replace(spec.request, evidence_root=root))
     monkeypatch.setenv("SO101_FIXED_CONTROL_SOCKET", str(root / "control/control.sock"))
     monkeypatch.setenv("SO101_FIXED_CONTROL_EPOCH", "2")
@@ -589,7 +610,7 @@ def test_explicit_resume_replays_started_dry_run_and_continues_remaining_point(t
         def socket_in_use(self, _path):
             return False
 
-    scratch = Path(os.environ['TMPDIR']).parent
+    scratch = _scratch_root()
     root = scratch / 'r'
     values = argv(
         root,
@@ -845,7 +866,7 @@ def test_default_production_composition_derives_real_dry_run_snapshot():
         def socket_in_use(self, _path):
             return False
 
-    scratch = Path(os.environ["TMPDIR"]).parent
+    scratch = _scratch_root()
     root = scratch / "pc"
     spec = prepare_batch(
         argv(
@@ -903,7 +924,7 @@ def test_physical_composition_prepares_and_supervises_one_external_broker(
         def start(self, role, command, **_kwargs):
             self.started.append((role, tuple(command)))
 
-    scratch = Path(os.environ["TMPDIR"]).parent
+    scratch = _scratch_root()
     root = scratch / "eb"
     supervisor = Supervisor()
     spec = prepare_batch(
@@ -950,7 +971,7 @@ def test_physical_composition_prepares_and_supervises_one_external_broker(
 
 def test_physical_broker_receives_validated_external_ipc_root(tmp_path, monkeypatch):
     from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, prepare_batch
-    from so101_demo.parallel_batch.resources import ResourceSnapshot
+    from so101_demo.parallel_batch.resources import ResourceSnapshot, runtime_ipc_base
     import so101_demo.cli.parallel_perception_broker as broker_cli
 
     class Probe:
@@ -972,7 +993,7 @@ def test_physical_broker_receives_validated_external_ipc_root(tmp_path, monkeypa
             return SimpleNamespace(role=role)
 
     batch_id = 't23-broker-call'
-    runtime_base = Path(f'/run/user/{os.getuid()}')
+    runtime_base = runtime_ipc_base()
     monkeypatch.setenv('SO101_PARALLEL_IPC_BASE', str(runtime_base))
     record = {
         **verified({}),
@@ -1034,7 +1055,7 @@ def test_physical_worker_launches_receive_exact_isolated_environments(tmp_path):
         def start(self, role, command, *, environment=None):
             self.calls.append((role, tuple(command), dict(environment or {})))
 
-    scratch = Path(os.environ["TMPDIR"]).parent
+    scratch = _scratch_root()
     spec = prepare_batch(
         argv(
             scratch / "e", worker_count="2",             point_id=("task_start", "sample_01_near_left"), run_mode="plan_only",
@@ -1079,7 +1100,7 @@ def test_broker_start_rejects_missing_image_id_and_mutable_tag_drift(tmp_path, m
         def socket_in_use(self, _path):
             return False
 
-    scratch = Path(os.environ["TMPDIR"]).parent
+    scratch = _scratch_root()
     base = prepare_batch(
         argv(scratch / "im", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
         provenance_verifier=verified,
@@ -1135,7 +1156,7 @@ def test_workers_cannot_start_until_broker_socket_and_ready_receipt_exist(tmp_pa
         def assert_healthy(self):
             self.health_checks += 1
 
-    scratch = Path(os.environ["TMPDIR"]).parent
+    scratch = _scratch_root()
     spec = prepare_batch(
         argv(scratch / "br", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
         provenance_verifier=lambda value: {
@@ -1214,7 +1235,7 @@ def test_broker_ready_rejects_regular_file_endpoint(tmp_path):
         processes = ()
         def assert_healthy(self): return None
 
-    scratch = Path(os.environ["TMPDIR"]).parent
+    scratch = _scratch_root()
     spec = prepare_batch(
         argv(scratch / "ns", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
         provenance_verifier=lambda value: {
@@ -1255,7 +1276,7 @@ def test_initial_broker_ready_uses_broker_startup_budget_not_heartbeat(tmp_path)
         def __call__(self): return self.value
         def sleep(self, _seconds): self.value += 10.0
 
-    scratch = Path(os.environ["TMPDIR"]).parent
+    scratch = _scratch_root()
     clock = Clock()
     spec = prepare_batch(
         argv(scratch / "s", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
@@ -1289,7 +1310,7 @@ def test_broker_container_cleanup_stops_only_exact_labeled_batch_container(tmp_p
         def ros_domain_in_use(self, _domain): return False
         def socket_in_use(self, _path): return False
 
-    scratch = Path(os.environ["TMPDIR"]).parent
+    scratch = _scratch_root()
     spec = prepare_batch(
         argv(scratch / "c", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
         provenance_verifier=lambda value: {
@@ -1577,7 +1598,7 @@ def test_broker_socket_appearing_between_readiness_checks_is_snapshotted_once(
                 "ready_sha256": message["payload"]["ready_sha256"],
             }}
 
-    scratch = Path(os.environ["TMPDIR"]).parent
+    scratch = _scratch_root()
     spec = prepare_batch(
         argv(scratch / "race", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
         provenance_verifier=lambda value: {
@@ -1615,13 +1636,13 @@ def test_broker_socket_appearing_between_readiness_checks_is_snapshotted_once(
     checks = 0
 
     def racing_lstat(path):
+        from so101_demo.runtime.parallel_ipc import transport_address
+
         nonlocal checks
         if path == composition.broker_socket_path:
             checks += 1
             if checks == 1:
-                listener.bind(
-                    f"/proc/self/fd/{directory_fd}/{composition.broker_socket_path.name}"
-                )
+                listener.bind(transport_address(composition.broker_socket_path, directory_fd))
                 composition.broker_socket_path.chmod(0o600)
                 raise FileNotFoundError(path)
         return original_lstat(path)
@@ -1655,7 +1676,7 @@ def test_composition_always_runs_fail_closed_cleanup_when_worker_start_raises(tm
             self.cleanup_facts = tuple(action() for action in actions.values())
             return all(self.cleanup_facts)
 
-    scratch = Path(os.environ["TMPDIR"]).parent
+    scratch = _scratch_root()
     spec = prepare_batch(
         argv(scratch / "ce", worker_count="1",              point_id=("task_start",), run_mode="dry_run"),
         provenance_verifier=verified,
@@ -1752,7 +1773,7 @@ def test_broker_transport_does_not_interpret_committed_start_event(tmp_path):
         def start(self, *_args, **_kwargs):
             return None
 
-    scratch = Path(os.environ["TMPDIR"]).parent
+    scratch = _scratch_root()
     root = scratch / "ba"
     spec = prepare_batch(
         argv(
@@ -1911,7 +1932,7 @@ def test_default_composition_constructs_physical_runtime_ports_lazily(mode):
         def socket_in_use(self, _path):
             return False
 
-    scratch = Path(os.environ["TMPDIR"]).parent
+    scratch = _scratch_root()
     root = scratch / ("pp" if mode == "plan_only" else "pe")
     side_effects = {
         name: (lambda *_args, **_kwargs: True)
@@ -2323,7 +2344,7 @@ def test_a_failing_guard_refuses_the_start_instead_of_allocating(tmp_path):
         probe_module.ProbeCoordinator.check = original
 
 
-def test_production_adaptive_factory_builds_an_internal_w8_pool(tmp_path):
+def test_production_adaptive_factory_builds_an_internal_w8_pool(tmp_path, monkeypatch):
     from dataclasses import replace
 
     from so101_demo.cli.mujoco_parallel_batch import prepare_batch
@@ -2334,6 +2355,9 @@ def test_production_adaptive_factory_builds_an_internal_w8_pool(tmp_path):
     from so101_demo.parallel_batch.adaptive_pool import (
         ProductionAdaptivePoolFactory,
     )
+    from so101_demo.parallel_batch.resources import runtime_ipc_base
+
+    monkeypatch.setenv('SO101_PARALLEL_IPC_BASE', str(runtime_ipc_base()))
 
     evidence_root = Path(
         "/data/work/so101-evidence/parallel-adaptive-worker/20260914-a01"
@@ -2392,7 +2416,7 @@ def test_worker_process_environment_is_the_exact_task8_whitelist(tmp_path):
 
     monkey = "SO101_TEST_SECRET_MUST_NOT_LEAK"
     os.environ[monkey] = "secret"
-    scratch = Path(os.environ["TMPDIR"]).parent
+    scratch = _scratch_root()
     spec = prepare_batch(
         argv(scratch / "x", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
         provenance_verifier=lambda value: {**verified(value), "image_id": "sha256:" + "b" * 64},
@@ -2426,7 +2450,7 @@ def test_broker_runtime_mount_cannot_see_worker_tokens_or_coordinator_sockets(tm
         def socket_in_use(self, _path):
             return False
 
-    scratch = Path(os.environ["TMPDIR"]).parent
+    scratch = _scratch_root()
     spec = prepare_batch(
         argv(scratch / "b", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
         provenance_verifier=lambda value: {**verified(value), "image_id": "sha256:" + "b" * 64},
@@ -2505,7 +2529,7 @@ def test_constructor_failure_releases_partial_allocator_journal_and_endpoints(tm
         def socket_in_use(self, _path):
             return False
 
-    scratch = Path(os.environ["TMPDIR"]).parent
+    scratch = _scratch_root()
     spec = prepare_batch(
         argv(scratch / "f", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
         provenance_verifier=lambda value: {**verified(value), "image_id": "sha256:" + "b" * 64},
@@ -2619,7 +2643,7 @@ def test_physical_start_revalidates_complete_provenance_before_process_side_effe
         "source_tree_sha256": "c" * 64, "source_dirty": False,
         "installed_console_sha256": "d" * 64, "installed_module_sha256": "e" * 64,
     }
-    scratch = Path(os.environ["TMPDIR"]).parent
+    scratch = _scratch_root()
     spec = prepare_batch(
         argv(scratch / "v", worker_count="1",              point_id=("task_start",), run_mode="plan_only"),
         provenance_verifier=lambda _value: record,
@@ -2685,7 +2709,8 @@ def test_worker_control_proxy_completes_real_authenticated_socket_round_trip(tmp
     from so101_demo.cli.mujoco_parallel_batch import _WorkerControlProxy
     from so101_demo.runtime.parallel_ipc import AuthenticatedUnixServer, WorkerTokenAuthority
 
-    authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=3)
+    authority = WorkerTokenAuthority(
+        _socket_fixture_root(tmp_path, "proxy"), coordinator_epoch=3)
     token = authority.issue("worker-01-control", 1)
     endpoint = authority.ipc_root / "worker-01-control.sock"
     calls = []
@@ -3060,7 +3085,7 @@ def test_broker_exit_restarts_fresh_generation_while_leases_remain_paused(tmp_pa
             self.retired.append(process)
             return True
 
-    scratch = Path(os.environ["TMPDIR"]).parent
+    scratch = _scratch_root()
     root = scratch / "f22br"
     spec = prepare_batch(
         argv(
@@ -3129,7 +3154,7 @@ def test_authenticated_worker_discovers_only_the_current_healthy_broker(tmp_path
         def socket_in_use(self, _path):
             return False
 
-    scratch = Path(os.environ["TMPDIR"]).parent
+    scratch = _scratch_root()
     root = scratch / "f22bd"
     spec = prepare_batch(
         argv(
@@ -3287,7 +3312,7 @@ def test_broker_recovery_deadline_failure_keeps_shared_dependency_reason(tmp_pat
             return False
 
     clock = Clock()
-    scratch = Path(os.environ["TMPDIR"]).parent
+    scratch = _scratch_root()
     spec = prepare_batch(
         argv(
             scratch / "f22dl",

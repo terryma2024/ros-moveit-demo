@@ -31,6 +31,7 @@ from ..parallel_batch.perception import (
     PerceptionPolicy,
     PoseAdmissionLatch,
 )
+from ..parallel_batch.start_guard_probe import read_process_identity
 from ..ros.rgbd_snapshot import RosRgbdSnapshotSource
 from .parallel_worker_runtime import (
     ExecutionCompletionReceipt,
@@ -290,15 +291,31 @@ def observe_worker_shutdown(session_id: str, *, timeout_s: float) -> ShutdownObs
         raise ValueError("SHUTDOWN_OBSERVATION_INPUT")
     marker = f"SO101_SESSION_ID={session_id}".encode()
     pids = []
-    for entry in Path("/proc").iterdir():
-        if not entry.name.isdecimal() or int(entry.name) == os.getpid():
-            continue
+    if Path("/proc").is_dir():
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdecimal() or int(entry.name) == os.getpid():
+                continue
+            try:
+                values = (entry / "environ").read_bytes().split(b"\0")
+            except OSError:
+                continue
+            if marker in values:
+                pids.append(int(entry.name))
+    else:
         try:
-            values = (entry / "environ").read_bytes().split(b"\0")
-        except OSError:
-            continue
-        if marker in values:
-            pids.append(int(entry.name))
+            import psutil
+        except ImportError:
+            psutil = None
+        if psutil is not None:
+            for process in psutil.process_iter(attrs=("pid",)):
+                if process.pid == os.getpid():
+                    continue
+                try:
+                    environment = process.environ()
+                except (OSError, psutil.Error):
+                    continue
+                if environment.get("SO101_SESSION_ID") == session_id:
+                    pids.append(process.pid)
 
     import rclpy
 
@@ -1568,7 +1585,7 @@ class ParallelRosRuntimePorts:
             self._close_pose_publisher()
             return False
         while time.monotonic() < deadline:
-            if not Path(f"/proc/{child.pid}").exists():
+            if read_process_identity(child.pid) is None:
                 self._close_pose_publisher()
                 return False
             try:

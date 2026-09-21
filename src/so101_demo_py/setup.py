@@ -81,7 +81,9 @@ setup(
     maintainer_email="zjumty@gmail.com",
     description="Unified SO-101 MuJoCo and Gazebo pick-place demonstration.",
     license="Apache-2.0",
-    extras_require={"test": ["pytest"]},
+    extras_require={
+        "test": ["pytest", "execnet==2.1.2", "pytest-xdist==3.8.0"]
+    },
     entry_points={
         "console_scripts": [
             "so101_parallel_batch = so101_demo.cli.mujoco_parallel_batch:main",

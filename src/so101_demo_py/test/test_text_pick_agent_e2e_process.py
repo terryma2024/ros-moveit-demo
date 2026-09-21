@@ -177,7 +177,10 @@ def _success_processes(workflow_id: str = "process-workflow"):
                 ),
             ),
             (
-                0.80,
+                # This is a successful-process fixture, not a timeout test. Leave enough room
+                # for the independently scheduled perception child when eight workers load the
+                # host; otherwise runtime completion can race ahead of its final event.
+                2.00,
                 _event(
                     workflow_id,
                     3,
