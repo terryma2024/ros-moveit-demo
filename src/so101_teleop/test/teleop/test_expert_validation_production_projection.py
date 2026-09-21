@@ -309,6 +309,62 @@ def test_uncommitted_worker_seal_is_not_scanned_or_exposed(tmp_path):
     assert point.get("artifacts", ()) == ()
 
 
+def _one_canonical_service(tmp_path, *, with_identity=False):
+    """A canonical journal: flat event fields, no `payload.delta` anywhere."""
+
+    root = tmp_path / "campaigns/campaign-a/batch-a"
+    who = AttemptIdentity("batch-a", 1, "worker-01", 1, "point-a", "lease-1", 1)
+    sealed = make_sealed_attempt(root / "workers/worker-01", who, succeeded=False)
+    manifest = sealed.path / "attempt_result_manifest.json"
+    digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    with CoordinatorJournal.create(root / "coordinator", "batch-a") as journal:
+        journal.append("CAMPAIGN_STARTED", "start", {
+            "campaign_id": "campaign-a", "batch_id": "batch-a",
+            "runtime_identity_sha256": "a" * 64, "config_sha256": "b" * 64,
+        })
+        journal.append("POINT_LEASED", "lease-1", {
+            "point_id": "point-a", "attempt_id": "lease-1", "worker_id": "worker-01",
+            "worker_generation": 1, "lease_generation": 1,
+        })
+        payload = {
+            "point_id": "point-a", "attempt_id": "lease-1", "outcome": "FAILED",
+            "result_sha256": digest,
+            "response": {"location": str(sealed.path), "status": "FAILED", "sha256": digest},
+        }
+        if with_identity:
+            payload["identity"] = {**asdict(who), "location": str(sealed.path)}
+        journal.append("RESULT_COMMITTED", "result", payload)
+    service = object.__new__(ProductionExpertValidationService)
+    service.store = CursorStore()
+    service.artifacts = ValidationArtifactRegistry()
+    service._campaigns = {"campaign-a": {"campaign_id": "campaign-a", "sequence": 0}}
+    service._campaign_requests = {"campaign-a": SimpleNamespace(
+        campaign_id="campaign-a", manifest_id="manifest-a", batch_id="batch-a",
+        execution_mode="SEQUENTIAL", evidence_root=tmp_path,
+        selection=SimpleNamespace(
+            point_ids=("point-a",), points=(SimpleNamespace(id="point-a", display_id="P01"),),
+        ),
+    )}
+    return service, sealed
+
+
+def test_canonical_result_without_a_sealed_reference_fails_closed(tmp_path):
+    service, _ = _one_canonical_service(tmp_path)
+    with pytest.raises(ServiceConflict, match="UPSTREAM_PROJECTION_INVALID"):
+        service.get_campaign("campaign-a")
+    assert service.store.accepted == []
+
+
+def test_canonical_result_with_the_sealed_reference_is_projected(tmp_path):
+    service, _ = _one_canonical_service(tmp_path, with_identity=True)
+    projected = service.get_campaign("campaign-a")
+    assert [(point["display_id"], point["status"]) for point in projected["points"]] == [
+        ("P01", "FAILED")
+    ]
+    assert projected["evaluated"] == 1
+    assert projected["execution_started"] == 0
+
+
 def test_get_campaign_projects_terminal_fixed_journal_and_persists_cursor(tmp_path):
     campaign_id = "campaign-a"
     batch_id = "batch-a"

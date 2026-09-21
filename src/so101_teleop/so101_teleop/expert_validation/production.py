@@ -929,7 +929,9 @@ class ProductionExpertValidationService(ExpertValidationService):
         if not isinstance(raw_points, Mapping):
             raise CoordinatorProjectionError("POINT_PROJECTION_INVALID")
         selected = tuple(request.selection.point_ids)
-        if set(raw_points) != set(selected):
+        # A canonical projection only carries points that already produced an event. A selected
+        # point with no event at all is UNRUN; any point outside the selection is a real defect.
+        if set(raw_points) - set(selected):
             raise CoordinatorProjectionError("POINT_PROJECTION_INVALID")
         raw_workers = state.get("workers", {})
         if not isinstance(raw_workers, Mapping):
@@ -956,7 +958,8 @@ class ProductionExpertValidationService(ExpertValidationService):
             if event.type != "ATTEMPT_STARTED":
                 continue
             identity = event.payload.get("identity")
-            if not isinstance(identity, Mapping) or identity.get("point_id") not in selected:
+            identity = identity if isinstance(identity, Mapping) else event.payload
+            if identity.get("point_id") not in selected:
                 raise CoordinatorProjectionError("ATTEMPT_PROJECTION_INVALID")
             execution_started_ids.add(identity["point_id"])
         display_ids = {point.id: point.display_id for point in request.selection.points}
@@ -965,6 +968,10 @@ class ProductionExpertValidationService(ExpertValidationService):
         for event in batch.events:
             if event.type != "RESULT_COMMITTED":
                 continue
+            if not isinstance(event.payload.get("identity"), Mapping):
+                # A canonical result event must still reference the sealed attempt it commits:
+                # the import is authorized by that reference, never by a flat outcome field.
+                raise CoordinatorProjectionError("RESULT_REFERENCE_INVALID")
             evidence = register_committed_attempt(event, binding, selected, self.artifacts)
             if evidence.identity in committed_identities:
                 raise CoordinatorProjectionError("DUPLICATE_COMMITTED_ATTEMPT")
@@ -972,8 +979,9 @@ class ProductionExpertValidationService(ExpertValidationService):
             evidence_by_point[evidence.identity.point_id].append(evidence)
         points = []
         point_statuses = {}
+        unrun_point: dict[str, object] = {"status": "UNRUN", "attempts": 0, "terminal": False}
         for point_id in selected:
-            raw_point = raw_points[point_id]
+            raw_point = raw_points.get(point_id, unrun_point)
             if not isinstance(raw_point, Mapping):
                 raise CoordinatorProjectionError("POINT_PROJECTION_INVALID")
             try:
@@ -1020,9 +1028,9 @@ class ProductionExpertValidationService(ExpertValidationService):
             lease = raw_worker.get("lease")
             if lease is not None and not isinstance(lease, Mapping):
                 raise CoordinatorProjectionError("WORKER_PROJECTION_INVALID")
-            generation = raw_worker.get("generation")
+            generation = raw_worker.get("generation", 1)
             lease_count = raw_worker.get("lease_count", 0)
-            worker_state = raw_worker.get("state")
+            worker_state = raw_worker.get("state", "ACTIVE")
             if (
                 type(generation) is not int or generation <= 0
                 or type(lease_count) is not int or lease_count < 0
@@ -1045,7 +1053,8 @@ class ProductionExpertValidationService(ExpertValidationService):
         if terminal_reason is not None and not isinstance(terminal_reason, str):
             raise CoordinatorProjectionError("BATCH_PROJECTION_INVALID")
         terminal = terminal_reason is not None and all(
-            raw_points[point_id].get("terminal", False) for point_id in selected
+            raw_points.get(point_id, unrun_point).get("terminal", False)
+            for point_id in selected
         )
         cleanup_complete = state.get("batch_cleanup_complete", False)
         if not isinstance(cleanup_complete, bool):
