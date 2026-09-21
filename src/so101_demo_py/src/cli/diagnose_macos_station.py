@@ -689,6 +689,34 @@ def _command_executable(command: str) -> Path:
     return path.resolve(strict=True)
 
 
+def _readiness_argv(manifest) -> tuple[str, ...]:
+    relative = "lib/so101_demo_py/motion_stack_ready"
+    if relative not in manifest.closure.inventory:
+        raise StationDiagnosticError("STATION_READINESS_EXECUTABLE_INVALID", relative)
+    candidate = manifest.install_root / relative
+    try:
+        executable = candidate.resolve(strict=True)
+    except OSError as error:
+        raise StationDiagnosticError(
+            "STATION_READINESS_EXECUTABLE_INVALID", str(candidate)
+        ) from error
+    if (
+        candidate.is_symlink()
+        or not executable.is_relative_to(manifest.install_root)
+        or not executable.is_file()
+        or not os.access(executable, os.X_OK)
+    ):
+        raise StationDiagnosticError(
+            "STATION_READINESS_EXECUTABLE_INVALID", str(candidate)
+        )
+    return (
+        str(manifest.semantic.python_executable),
+        str(executable),
+        "--timeout-s",
+        "90.0",
+    )
+
+
 def _phase_markers(log_text: str, *, ready: bool) -> tuple[str, ...]:
     checks = (
         ("PLUGIN_RESOLVED", "Loaded hardware 'RobotSystem' from plugin"),
@@ -897,13 +925,7 @@ def run_full_task_station_control(
             identities[controller_pid] = controller_birth_before
             controller_executable = _command_executable(controller_command)
             readiness = subprocess.run(
-                [
-                    sys.executable,
-                    "-m",
-                    "so101_demo.cli.motion_stack_ready",
-                    "--timeout-s",
-                    "90.0",
-                ],
+                _readiness_argv(manifest),
                 check=False,
                 capture_output=True,
                 text=True,
