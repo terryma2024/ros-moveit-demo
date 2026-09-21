@@ -352,4 +352,3 @@ class ProductionExecutionContext:
 #: The only two context types this design has.
 ExecutionContext = CandidateExecutionContext | ProductionExecutionContext
 CONTEXT_TYPES: tuple[type, ...] = (CandidateExecutionContext, ProductionExecutionContext)
-
