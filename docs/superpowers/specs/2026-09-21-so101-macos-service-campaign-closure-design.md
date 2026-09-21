@@ -171,6 +171,11 @@ interpreter 精确等于 `TEST_PYTHON`，diagnostic shebang 也与它匹配。P 
 `$CLOSURE_ROOT/opt/mujoco_vendor/lib`。旧 ledger 的 build script 只作只读参考；新
 vendor/build/log/install 只能写入本轮 `gate-a-resolution/$DISPATCH_ID/`。
 
+closure 继续沿用现有 fail-closed 合同：manifest 只接受真实目录与 regular files，并冻结每个
+regular file 的 SHA；`$CLOSURE_ROOT` 或 `$F_CLOSURE_ROOT` 中出现任意 symlink 都分类为
+`CLOSURE_SYMLINK` / `INVALID_CONTROL` 并停止，不允许解析、物化或忽略该链接。若仓库安装器在本轮
+生成 symlink，必须先修订并重新审查计划，不能把它临时纳入 control set。
+
 - N（negative）：删除所有 `DYLD_*`，先对 copied plugin 做
   `dlopen(RTLD_NOW | RTLD_LOCAL)`，再启动 bounded full-station diagnostic。
 - P（positive）：始终执行。使用同一 control set，只增加 task-owned MuJoCo vendor lib 目录的
