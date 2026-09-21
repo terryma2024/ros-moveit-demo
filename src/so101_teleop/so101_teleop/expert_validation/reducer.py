@@ -113,6 +113,8 @@ class PointState:
     phase: ExecutionPhase = ExecutionPhase.QUEUED
     attempt_id: str | None = None
     result_sha256: str | None = None
+    worker_id: str | None = None
+    slot_id: str | None = None
 
     @classmethod
     def from_document(cls, document: Mapping[str, object]) -> "PointState":
@@ -122,6 +124,8 @@ class PointState:
             phase=ExecutionPhase(str(document["phase"])),
             attempt_id=document.get("attempt_id"),
             result_sha256=document.get("result_sha256"),
+            worker_id=document.get("worker_id"),
+            slot_id=document.get("slot_id"),
         )
 
     def as_document(self) -> dict[str, object]:
@@ -131,6 +135,35 @@ class PointState:
             "phase": self.phase.value,
             "attempt_id": self.attempt_id,
             "result_sha256": self.result_sha256,
+            "worker_id": self.worker_id,
+            "slot_id": self.slot_id,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class WorkerState:
+    """What the canonical event stream knows about one worker."""
+
+    worker_id: str
+    worker_generation: int
+    lease_count: int = 0
+    slot_id: str | None = None
+
+    @classmethod
+    def from_document(cls, document: Mapping[str, object]) -> "WorkerState":
+        return cls(
+            worker_id=str(document["worker_id"]),
+            worker_generation=int(document.get("worker_generation", 1)),
+            lease_count=int(document.get("lease_count", 0)),
+            slot_id=document.get("slot_id"),
+        )
+
+    def as_document(self) -> dict[str, object]:
+        return {
+            "worker_id": self.worker_id,
+            "worker_generation": self.worker_generation,
+            "lease_count": self.lease_count,
+            "slot_id": self.slot_id,
         }
 
 
@@ -146,6 +179,9 @@ class CampaignReducerState:
     attempts: Mapping[str, AttemptState] = field(
         default_factory=lambda: MappingProxyType({})
     )
+    workers: Mapping[str, WorkerState] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
     batch_business_terminal: str | None = None
     batch_infrastructure_terminal: str | None = None
     batch_cleanup_complete: bool = False
@@ -156,6 +192,7 @@ class CampaignReducerState:
     def __post_init__(self) -> None:
         object.__setattr__(self, "points", MappingProxyType(dict(self.points)))
         object.__setattr__(self, "attempts", MappingProxyType(dict(self.attempts)))
+        object.__setattr__(self, "workers", MappingProxyType(dict(self.workers)))
 
     @classmethod
     def from_document(cls, document: Mapping[str, object]) -> "CampaignReducerState":
@@ -171,6 +208,10 @@ class CampaignReducerState:
             attempts={
                 attempt_id: AttemptState.from_document(attempt)
                 for attempt_id, attempt in dict(document.get("attempts", {})).items()
+            },
+            workers={
+                worker_id: WorkerState.from_document(worker)
+                for worker_id, worker in dict(document.get("workers", {})).items()
             },
             batch_business_terminal=document.get("batch_business_terminal"),
             batch_infrastructure_terminal=document.get("batch_infrastructure_terminal"),
@@ -193,6 +234,10 @@ class CampaignReducerState:
             "attempts": {
                 attempt_id: self.attempts[attempt_id].as_document()
                 for attempt_id in sorted(self.attempts)
+            },
+            "workers": {
+                worker_id: self.workers[worker_id].as_document()
+                for worker_id in sorted(self.workers)
             },
             "batch_business_terminal": self.batch_business_terminal,
             "batch_infrastructure_terminal": self.batch_infrastructure_terminal,
@@ -241,7 +286,7 @@ class CanonicalCampaignReducer:
         if event_type == "CAMPAIGN_STARTED":
             return self._restart(state, payload, sequence, event_hash)
         if event_type == "WORKER_REGISTERED":
-            return self._advance(state, sequence, event_hash)
+            return self._registered(state, payload, sequence, event_hash)
         if event_type == "POINT_LEASED":
             return self._lease(state, payload, sequence, event_hash)
         if event_type == "ATTEMPT_STARTED":
@@ -293,6 +338,12 @@ class CanonicalCampaignReducer:
     def _advance(self, state, sequence, event_hash) -> CampaignReducerState:
         return replace(state, last_sequence=sequence, last_event_sha256=event_hash)
 
+    def _registered(self, state, payload, sequence, event_hash) -> CampaignReducerState:
+        return replace(
+            self._advance(state, sequence, event_hash),
+            workers=_observe_worker(state, payload, leased=False),
+        )
+
     def _lease(self, state, payload, sequence, event_hash) -> CampaignReducerState:
         point_id = _require_id("point_id", payload.get("point_id"))
         attempt_id = _require_id("attempt_id", payload.get("attempt_id"))
@@ -301,7 +352,11 @@ class CanonicalCampaignReducer:
             raise ReducerError("REDUCER_ILLEGAL_TRANSITION", f"{point_id} is terminal")
         points = dict(state.points)
         points[point_id] = replace(
-            point, phase=ExecutionPhase.LEASED, attempt_id=attempt_id
+            point,
+            phase=ExecutionPhase.LEASED,
+            attempt_id=attempt_id,
+            worker_id=payload.get("worker_id"),
+            slot_id=payload.get("slot_id"),
         )
         attempts = dict(state.attempts)
         attempts[attempt_id] = AttemptState(
@@ -315,6 +370,7 @@ class CanonicalCampaignReducer:
             state,
             points=points,
             attempts=attempts,
+            workers=_observe_worker(state, payload, leased=True),
             last_sequence=sequence,
             last_event_sha256=event_hash,
         )
@@ -419,3 +475,93 @@ class CanonicalCampaignReducer:
             last_sequence=sequence,
             last_event_sha256=event_hash,
         )
+
+
+def _observe_worker(
+    state: CampaignReducerState, payload: Mapping[str, object], *, leased: bool
+) -> Mapping[str, WorkerState]:
+    """Record the leasing/registered worker. Canonical events carry no lifecycle enum."""
+
+    worker_id = payload.get("worker_id")
+    if not isinstance(worker_id, str) or not worker_id:
+        return state.workers
+    observed = state.workers.get(worker_id, WorkerState(worker_id=worker_id, worker_generation=1))
+    generation = payload.get("worker_generation")
+    if type(generation) is not int or generation <= 0:
+        generation = observed.worker_generation
+    slot_id = payload.get("slot_id")
+    workers = dict(state.workers)
+    workers[worker_id] = WorkerState(
+        worker_id=worker_id,
+        worker_generation=generation,
+        lease_count=observed.lease_count + (1 if leased else 0),
+        slot_id=slot_id if isinstance(slot_id, str) else observed.slot_id,
+    )
+    return workers
+
+
+def _worker_state(worker: WorkerState, leased: bool, cleaned_up: bool) -> str:
+    """Derive the consumer-facing worker state from canonical facts only."""
+
+    if leased:
+        return "EXECUTING"
+    if cleaned_up:
+        return "STOPPED"
+    return "AVAILABLE"
+
+
+def projection_document(state: CampaignReducerState) -> dict[str, object]:
+    """A read-only view of the canonical state for the service's existing consumers.
+
+    Every field is derived from the reducer state - never from a `payload.delta`. The shape keeps
+    the keys the fixed-coordinator projection reads: per point status/phase/attempts/terminal/
+    active attempt, the leasing worker, the batch business terminal and the cleanup flag.
+    """
+
+    attempts_by_point: dict[str, int] = {}
+    for attempt in state.attempts.values():
+        attempts_by_point[attempt.point_id] = attempts_by_point.get(attempt.point_id, 0) + 1
+    points: dict[str, dict[str, object]] = {}
+    active_lease: dict[str, tuple[str, str]] = {}
+    for point_id in sorted(state.points):
+        point = state.points[point_id]
+        if point.phase in (ExecutionPhase.LEASED, ExecutionPhase.RUNNING) and point.attempt_id:
+            active_lease[point.worker_id or ""] = (point_id, point.attempt_id)
+    workers: dict[str, dict[str, object]] = {}
+    for worker_id in sorted(state.workers):
+        worker = state.workers[worker_id]
+        lease = active_lease.get(worker_id)
+        workers[worker_id] = {
+            "worker_id": worker_id,
+            "generation": worker.worker_generation,
+            "state": _worker_state(worker, lease is not None, state.batch_cleanup_complete),
+            "lease_count": worker.lease_count,
+            "slot_id": worker.slot_id,
+            "lease": None if lease is None else {"point_id": lease[0], "attempt_id": lease[1]},
+        }
+    for point_id in sorted(state.points):
+        point = state.points[point_id]
+        terminal = point.phase is ExecutionPhase.TERMINAL
+        active_attempt = (
+            point.attempt_id
+            if point.phase in (ExecutionPhase.LEASED, ExecutionPhase.RUNNING)
+            else None
+        )
+        points[point_id] = {
+            "status": point.status.value,
+            "phase": point.phase.value,
+            "attempts": attempts_by_point.get(point_id, 0),
+            "terminal": terminal,
+            "active_attempt": active_attempt,
+            "attempt_id": point.attempt_id,
+            "result_sha256": point.result_sha256,
+            "worker_id": point.worker_id,
+            "slot_id": point.slot_id,
+        }
+    return {
+        "points": points,
+        "workers": workers,
+        "terminal_reason": state.batch_business_terminal,
+        "batch_cleanup_complete": state.batch_cleanup_complete,
+        "recovery_fence": state.recovery_fence,
+    }

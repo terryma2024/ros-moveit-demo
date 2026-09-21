@@ -266,3 +266,105 @@ def test_sequence_regression_is_refused() -> None:
     assert reducer.apply(state, _Event(
         "POINT_LEASED", {"point_id": "p1", "attempt_id": "a1"}, sequence=2)
     ).as_document() == state.as_document()
+
+
+# -- Task 5: the service-facing document is derived from canonical state, never from a delta ---
+
+
+def _leased(module, state, *, sequence=2, worker_id="worker-01", generation=1):
+    return module.CanonicalCampaignReducer().apply(
+        state,
+        _Event(
+            "POINT_LEASED",
+            {
+                "point_id": "point-a",
+                "attempt_id": "point-a-lease-1",
+                "worker_id": worker_id,
+                "worker_generation": generation,
+                "lease_generation": 1,
+            },
+            sequence=sequence,
+        ),
+    )
+
+
+def test_projection_document_reports_lease_worker_and_running_attempt():
+    module = _reducer_module()
+    state = _leased(module, _started(module))
+
+    document = module.projection_document(state)
+
+    point = document["points"]["point-a"]
+    assert point["status"] == "UNRUN"
+    assert point["phase"] == "LEASED"
+    assert point["attempts"] == 1
+    assert point["terminal"] is False
+    assert point["active_attempt"] == "point-a-lease-1"
+    worker = document["workers"]["worker-01"]
+    assert worker["generation"] == 1
+    assert worker["lease_count"] == 1
+    assert worker["state"] == "EXECUTING"
+    assert worker["lease"] == {"point_id": "point-a", "attempt_id": "point-a-lease-1"}
+    assert document["terminal_reason"] is None
+    assert document["batch_cleanup_complete"] is False
+
+
+def test_projection_document_reports_terminal_result_and_cleaned_up_worker():
+    module = _reducer_module()
+    state = _leased(module, _started(module))
+    state = module.CanonicalCampaignReducer().apply(
+        state,
+        _Event(
+            "ATTEMPT_STARTED",
+            {"point_id": "point-a", "attempt_id": "point-a-lease-1", "worker_id": "worker-01"},
+            sequence=3,
+        ),
+    )
+    state = module.CanonicalCampaignReducer().apply(
+        state,
+        _Event(
+            "RESULT_COMMITTED",
+            {
+                "point_id": "point-a",
+                "attempt_id": "point-a-lease-1",
+                "outcome": "FAILED",
+                "result_sha256": "d" * 64,
+            },
+            sequence=4,
+        ),
+    )
+    state = module.CanonicalCampaignReducer().apply(
+        state,
+        _Event("BATCH_TERMINAL", {"business_terminal": "POINTS_COMPLETE"}, sequence=5),
+    )
+    state = module.CanonicalCampaignReducer().apply(
+        state, _Event("CLEANUP_COMMITTED", {"cleanup_complete": True}, sequence=6)
+    )
+
+    document = module.projection_document(state)
+
+    point = document["points"]["point-a"]
+    assert point["status"] == "FAILED"
+    assert point["terminal"] is True
+    assert point["active_attempt"] is None
+    worker = document["workers"]["worker-01"]
+    assert worker["state"] == "STOPPED"
+    assert worker["lease"] is None
+    assert worker["lease_count"] == 1
+    assert document["terminal_reason"] == "POINTS_COMPLETE"
+    assert document["batch_cleanup_complete"] is True
+
+
+def test_projection_document_round_trips_worker_state_through_the_state_document():
+    module = _reducer_module()
+    state = _leased(module, _started(module), worker_id="worker-02", generation=3)
+
+    restored = module.CampaignReducerState.from_document(state.as_document())
+
+    assert restored.workers["worker-02"].as_document() == {
+        "worker_id": "worker-02",
+        "worker_generation": 3,
+        "lease_count": 1,
+        "slot_id": None,
+    }
+    assert restored == state

@@ -224,3 +224,163 @@ def test_projection_source_verifies_and_passes_deltas_through_unchanged(tmp_path
         state = reducer.apply(state, batch.events[1])
         assert state.points["p1"].status.value == "PASSED"
         assert state.points["p1"].phase.value == "TERMINAL"
+
+
+# --------------------------------------------------------------------------------------
+# Task 5: one journal has exactly one format; the canonical path never reads a delta
+# --------------------------------------------------------------------------------------
+
+
+def _canonical_start():
+    return {
+        "campaign_id": "campaign-a",
+        "batch_id": "batch-a",
+        "runtime_identity_sha256": "a" * 64,
+        "config_sha256": "b" * 64,
+    }
+
+
+def test_canonical_journal_reduces_through_the_canonical_reducer(tmp_path: Path) -> None:
+    sealed = tmp_path / "sealed" / "attempt_result_manifest.json"
+    sealed.parent.mkdir()
+    sealed.write_text('{"status":"PASSED"}', encoding="utf-8")
+    digest = hashlib.sha256(sealed.read_bytes()).hexdigest()
+
+    with CoordinatorJournal.create(tmp_path / "journal", "batch-a") as journal:
+        upstream = binding(journal, tmp_path)
+        reader = CoordinatorEventReader(journal, upstream)
+        journal.append("CAMPAIGN_STARTED", "start", _canonical_start())
+        journal.append(
+            "POINT_LEASED",
+            "lease-1",
+            {
+                "point_id": "task_start",
+                "attempt_id": "task_start-lease-1",
+                "worker_id": "worker-01",
+                "worker_generation": 1,
+                "lease_generation": 1,
+            },
+        )
+        journal.append(
+            "ATTEMPT_STARTED",
+            "attempt-1",
+            {
+                "point_id": "task_start",
+                "attempt_id": "task_start-lease-1",
+                "worker_id": "worker-01",
+            },
+        )
+        assert reader.read_after(reader.initial_cursor).projected_point_states == {
+            "task_start": "UNRUN"
+        }
+        journal.append(
+            "RESULT_COMMITTED",
+            "result-1",
+            {
+                "point_id": "task_start",
+                "attempt_id": "task_start-lease-1",
+                "outcome": "PASSED",
+                "result_sha256": digest,
+                "identity": {"point_id": "task_start"},
+                "response": {"location": str(sealed), "sha256": digest},
+            },
+        )
+        journal.append(
+            "BATCH_TERMINAL", "batch-terminal", {"business_terminal": "POINTS_COMPLETE"}
+        )
+        journal.append("CLEANUP_COMMITTED", "cleanup", {"cleanup_complete": True})
+
+        batch = reader.read_after(reader.initial_cursor)
+
+    point = batch.projected_state["points"]["task_start"]
+    assert point["status"] == "PASSED"
+    assert point["terminal"] is True
+    assert point["attempts"] == 1
+    assert batch.projected_point_states == {"task_start": "PASSED"}
+    worker = batch.projected_state["workers"]["worker-01"]
+    assert worker["state"] == "STOPPED"
+    assert worker["lease_count"] == 1
+    assert batch.projected_state["terminal_reason"] == "POINTS_COMPLETE"
+    assert batch.projected_state["batch_cleanup_complete"] is True
+
+
+def test_canonical_frame_ignores_a_contradicting_delta(tmp_path: Path) -> None:
+    sealed = tmp_path / "sealed" / "result.json"
+    sealed.parent.mkdir()
+    sealed.write_text('{"status":"PASSED"}', encoding="utf-8")
+    digest = hashlib.sha256(sealed.read_bytes()).hexdigest()
+    verified: list[Path] = []
+
+    def verify(reference, _binding) -> None:
+        path = Path(reference["location"])
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == reference["sha256"]
+        verified.append(path)
+
+    with CoordinatorJournal.create(tmp_path / "journal", "batch-a") as journal:
+        upstream = binding(journal, tmp_path)
+        reader = CoordinatorEventReader(journal, upstream, manifest_verifier=verify)
+        journal.append("CAMPAIGN_STARTED", "start", _canonical_start())
+        journal.append(
+            "RESULT_COMMITTED",
+            "result-1",
+            {
+                "point_id": "task_start",
+                "attempt_id": "task_start-lease-1",
+                "outcome": "PASSED",
+                "result_sha256": digest,
+                # A hostile or stale delta must never become the projected status.
+                "delta": {"points": {"task_start": {"status": "FAILED", "terminal": True}}},
+                "response": {"location": str(sealed), "sha256": digest},
+            },
+        )
+
+        batch = reader.read_after(reader.initial_cursor)
+
+    assert batch.projected_point_states == {"task_start": "PASSED"}
+    assert verified == [sealed]
+
+
+def test_journal_mixing_canonical_and_legacy_frames_fails_closed(tmp_path: Path) -> None:
+    with CoordinatorJournal.create(tmp_path / "journal", "batch-a") as journal:
+        upstream = binding(journal, tmp_path)
+        reader = CoordinatorEventReader(journal, upstream)
+        journal.append(
+            "BATCH_STARTED", "start", {"delta": {"points": {"task_start": {"status": "UNRUN"}}}}
+        )
+        journal.append("CAMPAIGN_STARTED", "canonical-start", _canonical_start())
+
+        with pytest.raises(CoordinatorProjectionError, match="JOURNAL_FORMAT_MIXED"):
+            reader.read_after(reader.initial_cursor)
+
+
+def test_legacy_delta_journal_still_projects_for_the_fixed_coordinator(tmp_path: Path) -> None:
+    with CoordinatorJournal.create(tmp_path / "journal", "batch-a") as journal:
+        upstream = binding(journal, tmp_path)
+        reader = CoordinatorEventReader(journal, upstream)
+        journal.append(
+            "BATCH_STARTED",
+            "start",
+            {"delta": {"points": {"task_start": {"status": "UNRUN", "attempts": 0}}}},
+        )
+        journal.append(
+            "LEASE_GRANTED", "lease", {"delta": {"points": {"task_start": {"attempts": 1}}}}
+        )
+
+        batch = reader.read_after(reader.initial_cursor)
+
+    assert batch.projected_point_states == {"task_start": "UNRUN"}
+    assert batch.projected_state["points"]["task_start"]["attempts"] == 1
+
+
+def test_canonical_journal_missing_its_start_event_is_not_projected(tmp_path: Path) -> None:
+    with CoordinatorJournal.create(tmp_path / "journal", "batch-a") as journal:
+        upstream = binding(journal, tmp_path)
+        reader = CoordinatorEventReader(journal, upstream)
+        journal.append(
+            "POINT_LEASED",
+            "lease-1",
+            {"point_id": "task_start", "attempt_id": "task_start-lease-1"},
+        )
+
+        with pytest.raises(CoordinatorProjectionError, match="REDUCER_STATE_REQUIRED"):
+            reader.read_after(reader.initial_cursor)
