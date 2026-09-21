@@ -107,9 +107,35 @@ plugin XML、loaded images、direct controller query 与 READY 结果。Expected
 只修改 submodule CMake 的 Apple `INSTALL_RPATH`，保留 `@loader_path`，并加入指向同一 prefix
 `opt/mujoco_vendor/lib` 的相对 loader path。不得改 node、dispatcher 或 hardware interface。
 先形成 submodule commit，再把它的完整 SHA 同步到两份 dependency lock 和
-`check_backend_integration.py` 的 candidate 常量；parent gitlink、两锁、candidate 断言和 submodule
-HEAD 必须一致，并继续证明 lineage/policy ancestry，不得放宽 provenance 测试。冻结这组来源后再
-重建 copied install，并在净化环境运行上一步测试和 diagnostic。
+`check_backend_integration.py` 的 candidate 常量；同时更新候选 SHA 测试，但继续证明
+lineage/policy ancestry，不得放宽 provenance 测试。随后必须先提交 parent gitlink、两锁、脚本和
+测试，使 `git ls-tree HEAD`、两锁、candidate 常量和 submodule HEAD 一致；这个 parent candidate
+commit 是 copied install 的冻结来源。不得在 parent 仍指向旧 gitlink 时构建或运行 GREEN。
+
+```bash
+git -C third_party/mujoco_ros2_control add -- mujoco_ros2_control/CMakeLists.txt
+git -C third_party/mujoco_ros2_control diff --cached --check
+git -C third_party/mujoco_ros2_control commit -m "fix(mujoco): close macOS vendor install rpath"
+git add -- third_party/mujoco_ros2_control \
+  src/so101_demo_py/config/mujoco/dependency-lock.yaml \
+  src/so101_demo_py/config/dependency-lock.yaml \
+  scripts/check_backend_integration.py \
+  src/so101_demo_py/test/test_macos_install_contract.py \
+  src/so101_demo_py/test/test_runtime_closure.py
+git diff --cached --check
+git commit -m "fix(so101): attest relocatable macOS station closure"
+git ls-tree HEAD third_party/mujoco_ros2_control
+git -C third_party/mujoco_ros2_control rev-parse HEAD
+rg -n '^  commit:' \
+  src/so101_demo_py/config/mujoco/dependency-lock.yaml \
+  src/so101_demo_py/config/dependency-lock.yaml
+rg -n 'CANDIDATE_COMMIT' \
+  scripts/check_backend_integration.py \
+  src/so101_demo_py/test/test_macos_install_contract.py
+```
+
+从该 committed HEAD 重建 copied install，再在净化环境运行测试和 diagnostic。GREEN 失败时只在
+Task 1 内做新的 scoped fix commit 并重建；不得 amend 已用于证据的 candidate，也不得进入 live。
 
 ```bash
 $TEST_PYTHON -m pytest -q \
@@ -129,23 +155,15 @@ closure；原 A/B 首坏边界翻转。
 active、三个 MoveIt service/action ready、fresh domain/session、自然退出且 task-owned residue 为零。
 VALID failure 中断序列；INVALID 终止批次并使用新 ID 重开。既有 READY 不计数。
 
-- [ ] **Step 6: 提交与 checkpoint**
+- [ ] **Step 6: 提交证据与 checkpoint**
 
-先在 submodule 提交 CMake 与其 scoped diff，再提交 parent gitlink、两个测试和 ledger。
+Step 4 已冻结产品、provenance 和测试来源；本步只提交五轮结果、cleanup accounting 与 checkpoint，
+不重复提交 submodule 或 parent gitlink。
 
 ```bash
-git -C third_party/mujoco_ros2_control add -- mujoco_ros2_control/CMakeLists.txt
-git -C third_party/mujoco_ros2_control diff --cached --check
-git -C third_party/mujoco_ros2_control commit -m "fix(mujoco): close macOS vendor install rpath"
-git add -- third_party/mujoco_ros2_control \
-  src/so101_demo_py/config/mujoco/dependency-lock.yaml \
-  src/so101_demo_py/config/dependency-lock.yaml \
-  scripts/check_backend_integration.py \
-  src/so101_demo_py/test/test_macos_install_contract.py \
-  src/so101_demo_py/test/test_runtime_closure.py \
-  docs/experiments/so101-macos-service-campaign-closure-experiment-ledger.md
+git add -- docs/experiments/so101-macos-service-campaign-closure-experiment-ledger.md
 git diff --cached --check
-git commit -m "fix(so101): attest relocatable macOS station closure"
+git commit -m "docs: record macOS station readiness gate"
 ```
 
 STOP at `CP-MSC-01` for Sol/high review。5/5 缺失时不进入 campaign live。
