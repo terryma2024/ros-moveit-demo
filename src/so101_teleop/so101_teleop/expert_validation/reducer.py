@@ -84,6 +84,17 @@ class AttemptState:
     infrastructure: InfrastructureOutcome
     result_sha256: str | None = None
 
+    @classmethod
+    def from_document(cls, document: Mapping[str, object]) -> "AttemptState":
+        return cls(
+            point_id=str(document["point_id"]),
+            attempt_id=str(document["attempt_id"]),
+            lifecycle=ExecutionPhase(str(document["lifecycle"])),
+            validity=AttemptValidity(str(document["validity"])),
+            infrastructure=InfrastructureOutcome(str(document["infrastructure"])),
+            result_sha256=document.get("result_sha256"),
+        )
+
     def as_document(self) -> dict[str, object]:
         return {
             "point_id": self.point_id,
@@ -102,6 +113,16 @@ class PointState:
     phase: ExecutionPhase = ExecutionPhase.QUEUED
     attempt_id: str | None = None
     result_sha256: str | None = None
+
+    @classmethod
+    def from_document(cls, document: Mapping[str, object]) -> "PointState":
+        return cls(
+            point_id=str(document["point_id"]),
+            status=PointStatus(str(document["status"])),
+            phase=ExecutionPhase(str(document["phase"])),
+            attempt_id=document.get("attempt_id"),
+            result_sha256=document.get("result_sha256"),
+        )
 
     def as_document(self) -> dict[str, object]:
         return {
@@ -135,6 +156,29 @@ class CampaignReducerState:
     def __post_init__(self) -> None:
         object.__setattr__(self, "points", MappingProxyType(dict(self.points)))
         object.__setattr__(self, "attempts", MappingProxyType(dict(self.attempts)))
+
+    @classmethod
+    def from_document(cls, document: Mapping[str, object]) -> "CampaignReducerState":
+        return cls(
+            campaign_id=str(document["campaign_id"]),
+            batch_id=str(document["batch_id"]),
+            runtime_identity_sha256=str(document["runtime_identity_sha256"]),
+            config_sha256=str(document["config_sha256"]),
+            points={
+                point_id: PointState.from_document(point)
+                for point_id, point in dict(document.get("points", {})).items()
+            },
+            attempts={
+                attempt_id: AttemptState.from_document(attempt)
+                for attempt_id, attempt in dict(document.get("attempts", {})).items()
+            },
+            batch_business_terminal=document.get("batch_business_terminal"),
+            batch_infrastructure_terminal=document.get("batch_infrastructure_terminal"),
+            batch_cleanup_complete=bool(document.get("batch_cleanup_complete", False)),
+            recovery_fence=bool(document.get("recovery_fence", False)),
+            last_sequence=int(document.get("last_sequence", 0)),
+            last_event_sha256=document.get("last_event_sha256"),
+        )
 
     def as_document(self) -> dict[str, object]:
         return {

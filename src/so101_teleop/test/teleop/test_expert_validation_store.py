@@ -247,3 +247,104 @@ def test_sensitive_control_store_database_is_private_before_any_binding(tmp_path
         assert stat.S_IMODE(store.root.stat().st_mode) == 0o700
     finally:
         store.close()
+
+
+# --------------------------------------------------------------------------------------
+# Task 5: one transaction for idempotency, reducer state, attempts and accepted cursor
+# --------------------------------------------------------------------------------------
+
+
+class _VerifiedEvent:
+    def __init__(self, event_type, payload, sequence, batch_id):
+        self.type = event_type
+        self.payload = payload
+        self.sequence = sequence
+        self.coordinator_epoch = 1
+        self.frame_sha256 = hashlib.sha256(f"{batch_id}:{sequence}".encode()).hexdigest()
+        self.batch_id = batch_id
+
+
+def _projection_events(batch_id, campaign_id="campaign-1"):
+    return (
+        _VerifiedEvent("CAMPAIGN_STARTED", {
+            "campaign_id": campaign_id, "batch_id": batch_id,
+            "runtime_identity_sha256": SHA_A, "config_sha256": SHA_B}, 1, batch_id),
+        _VerifiedEvent("POINT_LEASED", {"point_id": "p1", "attempt_id": "p1-attempt-1"}, 2, batch_id),
+        _VerifiedEvent("RESULT_COMMITTED", {
+            "point_id": "p1", "attempt_id": "p1-attempt-1",
+            "result_sha256": SHA_A, "outcome": "PASSED"}, 3, batch_id),
+    )
+
+
+def _projection_cursor(batch_id, frame=SHA_A):
+    return UpstreamCursor(
+        batch_id=batch_id, owner_kind="COORDINATOR", owner_epoch_or_generation=1,
+        segment_id="segment-1", event_id="event-3", frame_sha256=frame)
+
+
+def _reducer_module():
+    import importlib
+    return importlib.import_module("so101_teleop.expert_validation.reducer")
+
+
+def test_projection_batch_is_transactional_idempotent_and_resumable(tmp_path):
+    root = tmp_path.resolve()
+    store = SupervisorStore.open(root)
+    try:
+        _campaign, batch = _prepare(store, root)
+        events = _projection_events(batch.batch_id)
+        cursor = _projection_cursor(batch.batch_id)
+        reducer = _reducer_module().CanonicalCampaignReducer()
+
+        state = store.accept_projection_batch(
+            batch_id=batch.batch_id, expected_cursor=None, events=events,
+            next_cursor=cursor, reducer=reducer)
+        assert state.points["p1"].status.value == "PASSED"
+        assert len(state.attempts) == 1
+
+        replayed = store.accept_projection_batch(
+            batch_id=batch.batch_id, expected_cursor=cursor, events=events,
+            next_cursor=cursor, reducer=reducer)
+        assert len(replayed.attempts) == 1
+        assert replayed.as_document() == state.as_document()
+
+        with pytest.raises(StoreConflict, match="PROJECTION_CURSOR_MISMATCH"):
+            store.accept_projection_batch(
+                batch_id=batch.batch_id,
+                expected_cursor=replace(cursor, frame_sha256=SHA_B),
+                events=(), next_cursor=cursor, reducer=reducer)
+
+        _campaign2, batch2 = _prepare(
+            store, root, campaign_id="campaign-2", batch_id="batch-2", suffix="2")
+
+        class Exploding(_reducer_module().CanonicalCampaignReducer):
+            def apply(self, state, event):
+                if event.type == "RESULT_COMMITTED":
+                    raise RuntimeError("injected failure after the reducer, before the cursor")
+                return super().apply(state, event)
+
+        with pytest.raises(RuntimeError):
+            store.accept_projection_batch(
+                batch_id=batch2.batch_id, expected_cursor=None,
+                events=_projection_events(batch2.batch_id, campaign_id="campaign-2"),
+                next_cursor=_projection_cursor(batch2.batch_id), reducer=Exploding())
+        rolled_back = store.read_projection_state(batch2.batch_id)
+        assert rolled_back.state is None and rolled_back.cursor is None
+
+        snapshot = store.read_projection_state(batch.batch_id)
+        assert snapshot.state.as_document() == state.as_document()
+        assert snapshot.cursor == cursor
+    finally:
+        store.close()
+
+    reopened = SupervisorStore.open(root)
+    try:
+        recovered = reopened.read_projection_state(batch.batch_id)
+        assert recovered.state.as_document() == state.as_document()
+        assert recovered.cursor == cursor
+        after_restart = reopened.accept_projection_batch(
+            batch_id=batch.batch_id, expected_cursor=cursor, events=events,
+            next_cursor=cursor, reducer=_reducer_module().CanonicalCampaignReducer())
+        assert len(after_restart.attempts) == 1
+    finally:
+        reopened.close()

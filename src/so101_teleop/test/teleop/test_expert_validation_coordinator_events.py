@@ -172,3 +172,55 @@ def test_reader_verifies_real_sealed_directory_manifest_and_merges_deltas(
         "state": "STOPPED",
     }
     assert projected["batch_cleanup_complete"] is True
+
+
+# --------------------------------------------------------------------------------------
+# Task 5: a projection source adapts and verifies, it never merges payload.delta
+# --------------------------------------------------------------------------------------
+
+
+def test_projection_source_verifies_and_passes_deltas_through_unchanged(tmp_path: Path) -> None:
+    from so101_teleop.expert_validation.projection_source import (
+        CoordinatorJournalSource,
+        VerifiedEventBatch,
+    )
+    from so101_teleop.expert_validation.reducer import CanonicalCampaignReducer
+
+    sealed = tmp_path / "sealed" / "attempt_result_manifest.json"
+    sealed.parent.mkdir()
+    sealed.write_text('{"status": "PASSED"}', encoding="utf-8")
+    digest = hashlib.sha256(sealed.read_bytes()).hexdigest()
+
+    with CoordinatorJournal.create(tmp_path / "journal", "batch-a") as journal:
+        journal.append("CAMPAIGN_STARTED", "start", {
+            "campaign_id": "campaign-a", "batch_id": "batch-a",
+            "runtime_identity_sha256": "a" * 64, "config_sha256": "b" * 64,
+        })
+        journal.append("RESULT_COMMITTED", "result-1", {
+            "point_id": "p1", "attempt_id": "p1-attempt-1",
+            "result_sha256": "c" * 64, "outcome": "PASSED",
+            "response": {"location": str(sealed), "sha256": digest},
+            "delta": {"points": {"p1": {"status": "PASSED"}}},
+        })
+        upstream = binding(journal, tmp_path)
+        source = CoordinatorJournalSource(
+            journal, upstream, manifest_verifier=lambda *_args: None)
+
+        batch = source.read_after(AcceptedCoordinatorCursor.initial(upstream))
+
+        assert isinstance(batch, VerifiedEventBatch)
+        assert [event.type for event in batch.events] == ["CAMPAIGN_STARTED", "RESULT_COMMITTED"]
+        # The source only adapts and verifies: the delta travels through untouched and no
+        # projection state is derived here.
+        assert batch.events[1].payload["delta"] == {"points": {"p1": {"status": "PASSED"}}}
+        assert not hasattr(batch, "projected_state")
+        assert not hasattr(batch, "projected_point_states")
+        assert batch.next_cursor.sequence == 2
+        assert batch.next_cursor.frame_sha256 == batch.events[-1].frame_sha256
+
+        # The canonical reducer, not the source, derives the point terminal.
+        reducer = CanonicalCampaignReducer()
+        state = reducer.apply(None, batch.events[0])
+        state = reducer.apply(state, batch.events[1])
+        assert state.points["p1"].status.value == "PASSED"
+        assert state.points["p1"].phase.value == "TERMINAL"

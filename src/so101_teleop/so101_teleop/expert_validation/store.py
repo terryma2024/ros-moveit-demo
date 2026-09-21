@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 import fcntl
 import hashlib
 import json
@@ -28,6 +28,14 @@ from .models import (
     UpstreamCursor,
     ValidationManifest,
 )
+
+
+@dataclass(frozen=True)
+class ProjectionSnapshot:
+    """The durable reducer state and accepted cursor of one batch."""
+
+    state: object | None
+    cursor: object | None
 
 
 class StoreConflict(RuntimeError):
@@ -78,6 +86,22 @@ CREATE TABLE IF NOT EXISTS upstream_cursors (
   owner_kind TEXT NOT NULL CHECK (owner_kind IN ('COORDINATOR','ADAPTIVE_RUNNER')),
   owner_epoch_or_generation INTEGER NOT NULL, segment_id TEXT NOT NULL, event_id TEXT NOT NULL,
   frame_sha256 TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS projection_state (
+  batch_id TEXT PRIMARY KEY REFERENCES campaign_batches(batch_id),
+  state_json TEXT NOT NULL,
+  owner_epoch_or_generation INTEGER NOT NULL, segment_id TEXT NOT NULL,
+  event_id TEXT NOT NULL, frame_sha256 TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS projection_events (
+  batch_id TEXT NOT NULL REFERENCES campaign_batches(batch_id),
+  sequence INTEGER NOT NULL, frame_sha256 TEXT NOT NULL, attempt_id TEXT,
+  PRIMARY KEY (batch_id, sequence, frame_sha256)
+);
+CREATE TABLE IF NOT EXISTS projection_attempts (
+  batch_id TEXT NOT NULL REFERENCES campaign_batches(batch_id),
+  attempt_id TEXT NOT NULL, point_id TEXT,
+  PRIMARY KEY (batch_id, attempt_id)
 );
 CREATE TABLE IF NOT EXISTS owned_execution (
   batch_id TEXT PRIMARY KEY REFERENCES campaign_batches(batch_id),
@@ -642,6 +666,10 @@ class SupervisorStore:
 
     def accept_upstream_cursor(self, cursor: UpstreamCursor) -> None:
         with self._transaction():
+            self._accept_cursor_locked(cursor)
+
+    def _accept_cursor_locked(self, cursor: UpstreamCursor) -> None:
+        if True:
             row = self._connection.execute(
                 "SELECT * FROM upstream_cursors WHERE batch_id = ?", (cursor.batch_id,)
             ).fetchone()
@@ -675,6 +703,125 @@ class SupervisorStore:
                 "INSERT INTO upstream_cursors VALUES (?, ?, ?, ?, ?, ?)",
                 tuple(values.values()),
             )
+
+    def accept_projection_batch(
+        self,
+        *,
+        batch_id: str,
+        expected_cursor: UpstreamCursor | None,
+        events,
+        next_cursor: UpstreamCursor | None,
+        reducer,
+    ):
+        """Apply verified events, their attempts and the accepted cursor in one transaction.
+
+        Every step - idempotency, reducer state, attempt dedupe and cursor - commits or rolls
+        back together, so a failure after the reducer cannot leave a state that the cursor does
+        not describe. Replaying an already accepted event is idempotent and never counts an
+        attempt twice.
+        """
+
+        from .reducer import CampaignReducerState
+
+        with self._transaction():
+            row = self._connection.execute(
+                "SELECT * FROM projection_state WHERE batch_id = ?", (batch_id,)
+            ).fetchone()
+            stored_cursor = (
+                None
+                if row is None
+                else UpstreamCursor(
+                    batch_id=batch_id,
+                    owner_kind="COORDINATOR",
+                    owner_epoch_or_generation=row["owner_epoch_or_generation"],
+                    segment_id=row["segment_id"],
+                    event_id=row["event_id"],
+                    frame_sha256=row["frame_sha256"],
+                )
+            )
+            if expected_cursor != stored_cursor:
+                raise StoreConflict("PROJECTION_CURSOR_MISMATCH")
+            state = (
+                None
+                if row is None
+                else CampaignReducerState.from_document(json.loads(row["state_json"]))
+            )
+            for event in events:
+                if getattr(event, "batch_id", batch_id) != batch_id:
+                    raise StoreConflict("PROJECTION_BATCH_MISMATCH")
+                seen = self._connection.execute(
+                    "SELECT 1 FROM projection_events WHERE batch_id = ? AND sequence = ? "
+                    "AND frame_sha256 = ?",
+                    (batch_id, event.sequence, event.frame_sha256),
+                ).fetchone()
+                if seen is not None:
+                    continue
+                payload = event.payload if isinstance(event.payload, dict) else {}
+                attempt_id = getattr(event, "attempt_id", None) or payload.get("attempt_id")
+                point_id = getattr(event, "point_id", None) or payload.get("point_id")
+                if attempt_id is not None:
+                    recorded = self._connection.execute(
+                        "SELECT point_id FROM projection_attempts WHERE batch_id = ? "
+                        "AND attempt_id = ?",
+                        (batch_id, attempt_id),
+                    ).fetchone()
+                    if recorded is None:
+                        self._connection.execute(
+                            "INSERT INTO projection_attempts VALUES (?, ?, ?)",
+                            (batch_id, attempt_id, point_id),
+                        )
+                    elif (
+                        point_id is not None
+                        and recorded["point_id"] is not None
+                        and recorded["point_id"] != point_id
+                    ):
+                        # One attempt id may span lease/start/result events of the same point,
+                        # but it can never be reused for a different point.
+                        raise StoreConflict("PROJECTION_ATTEMPT_DUPLICATE")
+                state = reducer.apply(state, event)
+                self._connection.execute(
+                    "INSERT INTO projection_events VALUES (?, ?, ?, ?)",
+                    (batch_id, event.sequence, event.frame_sha256, attempt_id),
+                )
+            if next_cursor is not None:
+                payload = json.dumps(state.as_document(), sort_keys=True) if state else "{}"
+                if row is None:
+                    self._connection.execute(
+                        "INSERT INTO projection_state VALUES (?, ?, ?, ?, ?, ?)",
+                        (batch_id, payload, next_cursor.owner_epoch_or_generation,
+                         next_cursor.segment_id, next_cursor.event_id, next_cursor.frame_sha256),
+                    )
+                else:
+                    self._connection.execute(
+                        "UPDATE projection_state SET state_json = ?, owner_epoch_or_generation = ?,"
+                        " segment_id = ?, event_id = ?, frame_sha256 = ? WHERE batch_id = ?",
+                        (payload, next_cursor.owner_epoch_or_generation, next_cursor.segment_id,
+                         next_cursor.event_id, next_cursor.frame_sha256, batch_id),
+                    )
+                self._accept_cursor_locked(next_cursor)
+            return state
+
+    def read_projection_state(self, batch_id: str):
+        """Return the persisted reducer state and accepted cursor for one batch."""
+
+        from .reducer import CampaignReducerState
+
+        row = self._connection.execute(
+            "SELECT * FROM projection_state WHERE batch_id = ?", (batch_id,)
+        ).fetchone()
+        if row is None:
+            return ProjectionSnapshot(None, None)
+        return ProjectionSnapshot(
+            CampaignReducerState.from_document(json.loads(row["state_json"])),
+            UpstreamCursor(
+                batch_id=batch_id,
+                owner_kind="COORDINATOR",
+                owner_epoch_or_generation=row["owner_epoch_or_generation"],
+                segment_id=row["segment_id"],
+                event_id=row["event_id"],
+                frame_sha256=row["frame_sha256"],
+            ),
+        )
 
     def enqueue_retries(self, campaign_id: str, point_ids) -> None:
         points = tuple(point_ids)
