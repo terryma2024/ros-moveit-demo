@@ -12,3 +12,5 @@
 !src/so101_demo_py/setup.cfg
 !src/so101_demo_py/setup.py
 !src/so101_demo_py/src/
+!scripts/
+!scripts/run_so101_adaptive_batch.zsh

@@ -63,6 +63,10 @@ RUN --mount=type=cache,id=so101-pip-py312-cu130,target=/root/.cache/pip,sharing=
         --requirement /tmp/inference-requirements.lock
 
 COPY src/so101_demo_py /opt/so101_demo_py
+# setup.py packages ../../scripts/run_so101_adaptive_batch.zsh, which resolves to
+# /scripts/... relative to /opt/so101_demo_py. Without it the wheel build aborts
+# while copying data files, so the file must exist inside the image too.
+COPY scripts/run_so101_adaptive_batch.zsh /scripts/run_so101_adaptive_batch.zsh
 
 RUN python -m pip install --no-cache-dir --no-deps /opt/so101_demo_py \
     && install -d -m 1777 /opt/ultralytics /opt/torch-cache \

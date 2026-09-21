@@ -14,3 +14,5 @@
 !src/so101_demo_py/docker/
 !src/so101_demo_py/docker/grounding-dino-training/
 !src/so101_demo_py/docker/grounding-dino-training/Dockerfile
+!scripts/
+!scripts/run_so101_adaptive_batch.zsh
