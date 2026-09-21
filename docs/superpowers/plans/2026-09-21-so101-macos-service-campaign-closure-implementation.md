@@ -1293,9 +1293,10 @@ This local commit is not push/merge authorization.
 ### Task 17: Production Web + fresh Chrome acceptance
 
 **Files:**
-- Create: `src/so101_teleop/web/e2e/expert-validation/assertions/live-evidence.test.ts`
+- Create: `src/so101_teleop/web/src/api/campaign-live-evidence.test.ts`
 - Modify: `src/so101_teleop/web/src/api/live-evidence.test.ts`
 - Modify: `src/so101_teleop/web/e2e/expert-validation/live-sim/02-parallel.spec.ts`
+- Modify: `src/so101_teleop/web/e2e/expert-validation/live-sim/04-start-guard.spec.ts`
 - Modify: `src/so101_teleop/web/e2e/expert-validation/live-sim/06-fixed-n-execution.spec.ts`
 - Modify: `src/so101_teleop/web/e2e/expert-validation/live-sim/07-retry-full-restart.spec.ts`
 - Modify: `src/so101_teleop/web/e2e/expert-validation/assertions/live-evidence.ts`
@@ -1308,12 +1309,11 @@ This local commit is not push/merge authorization.
 
 - [ ] **Step 1: RED browser assertions against fixtures**
 
-Assert profile/status axes, selected-only execution, worker count 1/2, attempt identities, first-pass/retry separation, failure evidence selection, projection sequence/cursor, cleanup and disabled reasons. Put sealed-manifest/reducer assertion fixtures in the new Vitest file and API evidence fixtures in the existing unit file; do not import `liveSimTest` from either. Run from `src/so101_teleop/web`:
+Assert profile/status axes, selected-only execution, worker count 1/2, attempt identities, first-pass/retry separation, failure evidence selection, projection sequence/cursor, cleanup and disabled reasons. Put sealed-manifest/reducer assertion fixtures in the new `src/api/campaign-live-evidence.test.ts` file, which imports the reusable e2e assertion module, and API evidence fixtures in the existing unit file; do not import `liveSimTest` from either. Run each target separately from `src/so101_teleop/web` so one collected file cannot hide zero collection in the other:
 
 ```bash
-bun run test -- \
-  src/api/live-evidence.test.ts \
-  e2e/expert-validation/assertions/live-evidence.test.ts
+bun run test -- src/api/live-evidence.test.ts
+bun run test -- src/api/campaign-live-evidence.test.ts
 bunx tsc -b --pretty false
 ```
 
@@ -1321,7 +1321,7 @@ Expected RED is a missing field/assertion with nonzero unit-test collection, nev
 
 - [ ] **Step 2: Implement minimal API/UI assertion support and GREEN fixtures**
 
-Modify only the seven files listed for Task 17; do not add platform-specific state reconstruction. If a required API/UI field is absent, STOP and return to the owning Task 7, 10 or 13 with a reviewed plan amendment instead of editing an unlisted product file during acceptance. Regenerate OpenAPI/types only when that owning task changes the contract; then run `bunx tsc -b --pretty false`, `bun run test`, `bun run build` and contract/installed fixtures before returning to Task 17.
+Modify only the eight files listed for Task 17; do not add platform-specific state reconstruction. Update R04 without deleting or skipping it: on Darwin it requires approved N1/v6 and N2/v4 entries with matching profile/qualification hashes, requires N>2 and unapproved options to be disabled with stable reasons, and retains the independent lightweight start-guard assertions; preserve the Linux contract in platform-specific fixture cases. If a required API/UI field is absent, STOP and return to the owning Task 7, 10 or 13 with a reviewed plan amendment instead of editing an unlisted product file during acceptance. Regenerate OpenAPI/types only when that owning task changes the contract; then run `bunx tsc -b --pretty false`, `bun run test`, `bun run build` and contract/installed fixtures before returning to Task 17.
 
 - [ ] **Step 3: Start one production service in an approved exclusive window**
 
@@ -1329,7 +1329,7 @@ Fresh-read owner/process/port/lease state first. Start from copied install and D
 
 - [ ] **Step 4: Execute production W2 and W1/retry flows**
 
-W2 first pass proves selected-only real pick-place and projection. W1 first pass proves exact one Worker/20 points. Retry uses a real business FAILED point and `ProductionRetryContext`; only that point runs. For every flow verify controller/joint/TF, MuJoCo cup pose/contact/release, MoveIt shadow/world sync, raw journal/watermark, Web evidence and exact cleanup. Freeze `SO101_FUNCTIONAL_MANIFEST` to exactly two approved entries—N1/v6 and N2/v4—before execution. The run count is explicit: `parallel-resource` executes two campaigns through its dependencies (R01 then R02; R04 is read-only), `fixed-n-execution` executes two campaigns, and `retry-full-restart` executes one first-pass campaign plus one retry batch.
+W2 first pass proves selected-only real pick-place and projection. W1 first pass proves exact one Worker/20 points. Retry uses a real business FAILED point and `ProductionRetryContext`; only that point runs. For every flow verify controller/joint/TF, MuJoCo cup pose/contact/release, MoveIt shadow/world sync, raw journal/watermark, Web evidence and exact cleanup. Freeze `SO101_FUNCTIONAL_MANIFEST` to exactly two approved entries—N1/v6 and N2/v4—before execution. The run count is explicit: `parallel-resource` executes two campaigns through its dependencies (R01 then R02; its updated R04 reads capabilities/start-guard only), `fixed-n-execution` executes two campaigns, and `retry-full-restart` executes one first-pass campaign plus one retry batch.
 
 - [ ] **Step 5: Run Playwright projects and checkpoint**
 
