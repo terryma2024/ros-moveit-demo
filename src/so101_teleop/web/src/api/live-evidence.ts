@@ -3,8 +3,9 @@
  *
  * The verifier is deliberately offline and pure: it reads one evidence root produced by an
  * owned live run and refuses anything it cannot re-derive. A tampered hash, a missing
- * runtime slot, a policy DONE without independent physics, or an identity mismatch all
- * fail closed with the stable code QUALIFICATION_EVIDENCE_INVALID.
+ * runtime slot, a policy DONE without independent physics, an identity mismatch, or evidence
+ * for a point outside the declared selection (a count is not a selection) all fail closed with
+ * the stable code QUALIFICATION_EVIDENCE_INVALID.
  */
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
@@ -23,6 +24,11 @@ export type ExpectedLiveEvidence = {
   profileSha256: string;
   qualificationSha256: string;
   executionIdentitySha256: string;
+  /**
+   * The selected point ids. When given, the batch may carry evidence for exactly those points: a
+   * document that ran the same *number* of points but a different set is not this batch.
+   */
+  selectedPointIds?: string[];
 };
 
 type ManifestWorker = {
@@ -76,6 +82,21 @@ function requireEqual(actual: unknown, expected: unknown, detail: string): void 
   if (actual !== expected) throw new LiveEvidenceError("QUALIFICATION_EVIDENCE_INVALID", detail);
 }
 
+/** The selection is a set, not a count: the same ids, once each, in either order. */
+function requireSameSelection(actual: unknown, expected: string[], detail: string): void {
+  if (!Array.isArray(actual)) {
+    throw new LiveEvidenceError("QUALIFICATION_EVIDENCE_INVALID", detail);
+  }
+  const observed = [...new Set(actual.map((value) => String(value)))].sort();
+  const wanted = [...new Set(expected.map(String))].sort();
+  if (
+    observed.length !== wanted.length
+    || observed.some((value, index) => value !== wanted[index])
+  ) {
+    throw new LiveEvidenceError("QUALIFICATION_EVIDENCE_INVALID", detail);
+  }
+}
+
 export async function verifyV2LiveEvidence(
   batchRoot: string, expected: ExpectedLiveEvidence,
 ): Promise<void> {
@@ -83,6 +104,9 @@ export async function verifyV2LiveEvidence(
   requireEqual(manifest.schema_version, 2, "manifest schema");
   requireEqual(manifest.worker_count, expected.workerCount, "manifest worker count");
   requireEqual(manifest.selected_point_ids?.length, expected.pointCount, "manifest point count");
+  if (expected.selectedPointIds !== undefined) {
+    requireSameSelection(manifest.selected_point_ids, expected.selectedPointIds, "manifest selection");
+  }
   requireEqual(manifest.profile_sha256, expected.profileSha256, "manifest profile");
   requireEqual(manifest.qualification_sha256, expected.qualificationSha256, "manifest qualification");
   requireEqual(
@@ -117,6 +141,10 @@ export async function verifyV2LiveEvidence(
     throw new LiveEvidenceError("QUALIFICATION_EVIDENCE_INVALID", "points");
   }
   requireEqual(points.length, expected.pointCount, "point evidence count");
+  if (expected.selectedPointIds !== undefined) {
+    requireSameSelection(
+      points.map((point) => point.point_id), expected.selectedPointIds, "point evidence selection");
+  }
   for (const point of points) {
     if (typeof point.point_id !== "string" || !point.point_id) {
       throw new LiveEvidenceError("QUALIFICATION_EVIDENCE_INVALID", "point id");

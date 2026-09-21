@@ -117,6 +117,8 @@ function fakeApi(overrides: Partial<ExpertValidationApi> = {}): ExpertValidation
           { worker_count: 8, selectable: false, status: "NOT_MEASURED", reason_codes: ["BUDGET_PROFILE_UNAVAILABLE"] },
         ],
         adaptive_default_ladder: [8, 6, 4, 2, 1],
+        // A host without a platform-bound matrix: the per-N qualification view is authoritative.
+        support_matrix: [],
         lease_duration_s: 30,
         lease_renewal_margin_s: 10,
       };
@@ -157,7 +159,7 @@ function fakeApi(overrides: Partial<ExpertValidationApi> = {}): ExpertValidation
         points: [], workers: [], requested: 4, evaluated: 0, execution_started: 0,
         valid_succeeded: 0, valid_failed: 0, indeterminate: 0, not_executed: 4,
         evaluation_coverage: 0, execution_coverage: 0, levels_used: [],
-        fallback_history: [], infra_attempts: 0, resource_observations: {},
+        fallback_history: [], retry_history: [], infra_attempts: 0, resource_observations: {},
       };
     },
     async retry() { throw new Error("not expected"); },

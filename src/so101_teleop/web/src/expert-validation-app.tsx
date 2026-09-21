@@ -19,7 +19,6 @@ import { CampaignProgress, type CampaignView } from "@/components/expert-validat
 import {
   CampaignSetup,
   executionClaim,
-  type ExecutionClaim,
   type PlatformCapabilities,
   type SetupState,
 } from "@/components/expert-validation/campaign-setup";
@@ -303,7 +302,7 @@ export function ExpertValidationApp({ api: providedApi = defaultClient }: { api?
    * infers one from the number of selected points: the request has to claim the exact matrix row
    * the console selected. A host without a support matrix keeps the previous request untouched.
    */
-  const preflightInput = (): PreflightInput & Partial<ExecutionClaim> => {
+  const preflightInput = (): PreflightInput => {
     const base: PreflightInput = setup.executionMode === "ADAPTIVE"
       ? {
         contract_version: 3,

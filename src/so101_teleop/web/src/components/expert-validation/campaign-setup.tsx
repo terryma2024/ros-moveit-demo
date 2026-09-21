@@ -1,4 +1,5 @@
 import type {
+  CampaignConfiguration,
   Capabilities,
   ExecutionMode,
   StartGuardStatus,
@@ -14,44 +15,26 @@ export type SetupState = {
   workerCount: number;
 };
 
-export type ExecutionBatchKind = "FIRST_PASS" | "FULL_RESTART_RETRY";
+/**
+ * The published capability document. The generated schema is the authority for it - including the
+ * platform-bound `support_matrix`, `platform` and `start_guard_note` fields - so nothing here
+ * restates that shape.
+ */
+export type PlatformCapabilities = Capabilities;
 
 /**
- * One row of the platform-bound support matrix, exactly as the service publishes it
- * (`expert_validation/production.py::_macos_capabilities`). The row is the whole statement for
- * this host: it carries no budget profile and no qualification hash, and the routing key a
- * request has to claim is `(profile, batch_kind)`.
+ * One row of the platform-bound support matrix (`ExecutionProfileResponse`). The row is the whole
+ * statement for this host: it carries no budget profile and no qualification hash, and the routing
+ * key a request has to claim is `(profile, batch_kind)`.
  */
-export type SupportMatrixRow = {
-  profile: string;
-  schema_version: number;
-  execution_mode: ExecutionMode;
-  worker_count: number;
-  batch_kind: ExecutionBatchKind;
-  accelerator: string;
-  selector: string;
-  selectable: boolean;
-  status: string;
-  reason_codes: string[];
-  profile_sha256: string | null;
-  qualification_sha256: string | null;
-};
+export type SupportMatrixRow = Capabilities["support_matrix"][number];
 
-/**
- * The capability document plus the platform-bound fields. The generated TypeScript schema lags
- * behind the service until it is regenerated, so the new fields are declared here against the
- * documented shape instead of editing the generated file.
- */
-export type PlatformCapabilities = Capabilities & {
-  platform?: string | null;
-  support_matrix?: SupportMatrixRow[];
-  start_guard_note?: string | null;
-};
+export type ExecutionBatchKind = SupportMatrixRow["batch_kind"];
 
 /** The routing key a start or preflight request claims: never inferred, never half-filled. */
 export type ExecutionClaim = {
-  execution_profile: string;
-  batch_kind: ExecutionBatchKind;
+  execution_profile: NonNullable<CampaignConfiguration["execution_profile"]>;
+  batch_kind: NonNullable<CampaignConfiguration["batch_kind"]>;
 };
 
 /** The service's own note beside the guard policy, kept verbatim so the UI cannot soften it. */
@@ -109,7 +92,7 @@ export function platformSupportMatrix(
  * also declares an order, that order is kept so the selector matches the advertised document.
  */
 export function matrixExecutionModes(capabilities?: PlatformCapabilities): ExecutionMode[] {
-  const offered = new Set(
+  const offered = new Set<ExecutionMode>(
     platformSupportMatrix(capabilities)
       .filter((row) => row.selectable !== false)
       .map((row) => row.execution_mode),
@@ -144,7 +127,14 @@ export function executionClaim(
   batchKind: ExecutionBatchKind = "FIRST_PASS",
 ): ExecutionClaim | null {
   const row = matrixRowFor(capabilities, state, batchKind);
-  return row ? { execution_profile: row.profile, batch_kind: row.batch_kind } : null;
+  if (!row) return null;
+  // `ExecutionProfileResponse.profile` is a plain string in the generated schema while the request
+  // field is the closed profile union: the value is the server's own matrix row (the console never
+  // invents one), and a name the request contract does not define is refused 422 by the service.
+  return {
+    execution_profile: row.profile as ExecutionClaim["execution_profile"],
+    batch_kind: row.batch_kind,
+  };
 }
 
 type Props = {
