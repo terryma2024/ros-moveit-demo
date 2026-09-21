@@ -11,6 +11,16 @@ from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
 from ..application.qualification_stack import ros2_command
+from .runtime_closure import (
+    RuntimeAttestation,
+    RuntimeClosureError,
+    RuntimeClosureIdentity,
+    RunBinding,
+    build_runtime_attestation,
+    default_loaded_image_probe,
+    read_process_birth_identity,
+    verify_runtime_closure,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +39,10 @@ class PersistentStackConfig:
     headless: bool
     evidence_root: Path
     processes: tuple[StackProcessSpec, ...]
+    closure: RuntimeClosureIdentity | None = None
+    run_binding: RunBinding | None = None
+    install_root: Path | None = None
+    forbidden_roots: tuple[Path, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.session_id or not self.processes:
@@ -37,6 +51,24 @@ class PersistentStackConfig:
             raise ValueError("stack evidence root must be absolute")
         if len({spec.role for spec in self.processes}) != len(self.processes):
             raise ValueError("stack process roles must be unique")
+        if (self.closure is None) != (self.run_binding is None):
+            raise ValueError("stack closure and run binding must be provided together")
+        if self.closure is None:
+            if self.install_root is not None or self.forbidden_roots:
+                raise ValueError("install root requires an expected runtime closure")
+            return
+        if not isinstance(self.closure, RuntimeClosureIdentity):
+            raise ValueError("stack closure must be a RuntimeClosureIdentity")
+        if not isinstance(self.run_binding, RunBinding):
+            raise ValueError("stack run binding must be a RunBinding")
+        if self.install_root is None or not Path(self.install_root).is_absolute():
+            raise ValueError("stack install root must be absolute when a closure is bound")
+        if not isinstance(self.forbidden_roots, tuple):
+            raise ValueError("stack forbidden roots must be a tuple of absolute paths")
+        if self.run_binding.evidence_root != self.evidence_root:
+            raise ValueError("stack evidence root must match the run binding")
+        if self.run_binding.station_session_id != self.session_id:
+            raise ValueError("stack session id must match the run binding")
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +130,7 @@ class OwnedProcessGroup:
         interrupt_timeout_s: float = 20.0,
         terminate_timeout_s: float = 5.0,
         strict_identity: bool = True,
+        birth_identity_probe: Callable[[int], int] | None = None,
     ) -> None:
         self._popen = popen
         self._killpg = killpg
@@ -105,6 +138,7 @@ class OwnedProcessGroup:
         self._interrupt_timeout_s = interrupt_timeout_s
         self._terminate_timeout_s = terminate_timeout_s
         self._strict_identity = strict_identity
+        self._birth_identity_probe = birth_identity_probe
         self._children: list[tuple[OwnedProcessIdentity, object]] = []
 
     @property
@@ -122,6 +156,7 @@ class OwnedProcessGroup:
         spec: StackProcessSpec,
         *,
         environment: Mapping[str, str] | None = None,
+        birth_identity_probe: Callable[[int], int] | None = None,
     ) -> OwnedProcessIdentity:
         if any(identity.role == spec.role for identity, _child in self._children):
             raise RuntimeError(f"owned process role already exists: {spec.role}")
@@ -134,8 +169,15 @@ class OwnedProcessGroup:
             env=merged_environment,
         )
         try:
+            probe = birth_identity_probe or self._birth_identity_probe
             if self._strict_identity:
                 pgid, cmdline, start_time_ticks = self._identity_probe(int(child.pid))
+            elif probe is not None:
+                pgid, cmdline, start_time_ticks = (
+                    int(child.pid),
+                    spec.argv,
+                    int(probe(int(child.pid))),
+                )
             else:
                 pgid, cmdline, start_time_ticks = (
                     int(child.pid),
@@ -243,18 +285,30 @@ class PersistentTaskStack:
         killpg: Callable[[int, signal.Signals], None] = os.killpg,
         interrupt_timeout_s: float = 20.0,
         terminate_timeout_s: float = 5.0,
+        birth_identity_probe: Callable[[int], int] | None = None,
+        loaded_image_probe: Callable[[int], Sequence[Path]] | None = None,
     ) -> None:
+        self._birth_identity_probe = birth_identity_probe
+        self._loaded_image_probe = loaded_image_probe or default_loaded_image_probe
         self._group = OwnedProcessGroup(
             popen=popen,
             killpg=killpg,
             interrupt_timeout_s=interrupt_timeout_s,
             terminate_timeout_s=terminate_timeout_s,
             strict_identity=False,
+            birth_identity_probe=birth_identity_probe,
         )
+        self._attestation: RuntimeAttestation | None = None
 
     @property
     def started(self) -> bool:
         return self._group.started
+
+    @property
+    def attestation(self) -> RuntimeAttestation | None:
+        """The read-back attestation of the last successful start, if one was produced."""
+
+        return self._attestation
 
     def start(
         self,
@@ -264,12 +318,60 @@ class PersistentTaskStack:
     ) -> None:
         if self._group.started:
             raise RuntimeError("persistent stack is already started")
+        merged_environment = dict(os.environ)
+        if environment is not None:
+            merged_environment.update(environment)
+        if config.closure is not None:
+            verify_runtime_closure(
+                config.closure,
+                install_root=config.install_root,
+                source_commit=config.closure.source_commit,
+                mujoco_ros2_control_commit=config.closure.mujoco_ros2_control_commit,
+                environment=merged_environment,
+                forbidden_roots=config.forbidden_roots,
+            )
         try:
             for spec in config.processes:
-                self._group.start(spec, environment=environment)
+                self._group.start(
+                    spec,
+                    environment=environment,
+                    birth_identity_probe=(
+                        (self._birth_identity_probe or read_process_birth_identity)
+                        if config.closure is not None
+                        else None
+                    ),
+                )
         except BaseException:
             self.shutdown()
             raise
+        if config.closure is None:
+            return
+        try:
+            self._attestation = self._attest(config, merged_environment)
+        except BaseException:
+            self.shutdown()
+            raise
+
+    def _attest(
+        self, config: PersistentStackConfig, environment: Mapping[str, str]
+    ) -> RuntimeAttestation:
+        raw_domain = str(environment.get("ROS_DOMAIN_ID", "")).strip()
+        if not raw_domain.isdigit():
+            raise RuntimeClosureError(
+                "ATTESTATION_ROS_DOMAIN_UNAVAILABLE",
+                "ROS_DOMAIN_ID must be set for the station run",
+            )
+        images: list[Path] = []
+        for identity in self._group.manifest.processes:
+            images.extend(self._loaded_image_probe(identity.pid))
+        return build_runtime_attestation(
+            closure=config.closure,
+            run_binding=config.run_binding,
+            install_root=config.install_root,
+            process_identities=self._group.manifest.processes,
+            loaded_images=tuple(images),
+            observed_ros_domain_id=int(raw_domain),
+        )
 
     def process_pid(self, role: str) -> int:
         matches = [
@@ -336,6 +438,10 @@ def default_task_station_config(
     evidence_root: Path,
     *,
     include_teleop: bool = False,
+    closure: RuntimeClosureIdentity | None = None,
+    run_binding: RunBinding | None = None,
+    install_root: Path | None = None,
+    forbidden_roots: tuple[Path, ...] = (),
 ) -> PersistentStackConfig:
     command = ros2_command(
         "launch",
@@ -351,4 +457,8 @@ def default_task_station_config(
         False,
         evidence_root,
         (StackProcessSpec("task-station", tuple(command)),),
+        closure=closure,
+        run_binding=run_binding,
+        install_root=install_root,
+        forbidden_roots=forbidden_roots,
     )
