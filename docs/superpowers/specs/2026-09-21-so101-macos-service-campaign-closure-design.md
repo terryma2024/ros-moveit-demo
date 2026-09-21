@@ -92,9 +92,18 @@ Unified Web API
 - `RunBinding`：campaign、batch、fresh `ROS_DOMAIN_ID`、station session、evidence root、owner
   generation 和启动时间。
 - `RuntimeAttestation`：实际 PID/birth identity、加载 image/dylib、ROS domain 和前两层 hash。
+- `RuntimeProcessAttestation`：对 owner tree 中每个关键进程记录
+  `(role, pid, birth, executable, loaded_images[path, sha256])`。其中 `role=controller_runtime`
+  必须是启动树内真正承载 `/controller_manager` 的后代进程，不能用 diagnostic launcher、direct
+  dlopen probe 或同树其他 child 代替。
+
+process role 在 spawn intent 写入时绑定，随后用 owner ancestry、PID/birth、executable 与该 PID 的
+ROS phase evidence 确认；不得在结果出现后按 loaded image 反推 role。
 
 五次重启使用相同 closure identity，但每轮 binding 与 attestation 不同。READY 前必须验证实际
-加载来源；source tree、README 或单独的环境变量不构成 closure 证明。
+加载来源；source tree、README 或单独的环境变量不构成 closure 证明。`controller_runtime` 的
+loaded images 为空、plugin/vendor 任一路径或 SHA 不匹配、PID/birth/executable 在 probe 前后漂移、
+找错 child，或只证明 probe/launcher 加载成功时，该轮一律 `INVALID`。
 
 ### 5.2 三轴状态机
 
@@ -103,53 +112,95 @@ Gate A 不用一个枚举同时表达当前产品、controller 排除和历史�
 | 轴 | 合法值 | 含义 |
 | --- | --- | --- |
 | `current_boundary_verdict` | `UNCONFIRMED_CURRENT`、`CONFIRMED_RPATH`、`CURRENT_CLOSURE_ALREADY_VALID`、`CURRENT_NON_RPATH_FAILURE`、`INVALID_CONTROL` | 只判断本次 task-owned frozen bytes |
-| `controller_verdict` | `NOT_EXCLUDED`、`EXCLUDED_BEFORE_PLUGIN_INIT`、`CURRENT_CONTROLLER_PATH_OPERATIONAL` | 只判断当前 bytes 是否到达或通过 controller 路径 |
+| `controller_verdict` | `NOT_EXCLUDED`、`EXCLUDED_BEFORE_ROS_PLUGIN_INSTANCE_INIT`、`CURRENT_CONTROLLER_PATH_OPERATIONAL` | 只判断当前 bytes 是否到达或通过 controller 路径 |
 | `legacy_attribution` | `LEGACY_TRACEABLE`、`LEGACY_PROVENANCE_UNRECOVERABLE` | 只描述 foreign modified overlay 的历史可归因性 |
 
 派生的 Gate A 状态另行维护为 `OPEN` 或 `CURRENT_PRODUCT_GATE_PASSED`。legacy
 `CP-MSC-A=UNCONFIRMED` 与 `LEGACY_PROVENANCE_UNRECOVERABLE` 都不会被后续成功覆盖；当前产品
 是否通过只由 frozen current bytes 的 controls、attestation 和五次 readiness 决定。
 
-`EXCLUDED_BEFORE_PLUGIN_INIT` 的含义很窄：loader 已在 `DLOPEN_SUCCEEDED` 之前失败，且没有
-`PLUGIN_RESOLVED` 或 `HARDWARE_INITIALIZING` marker。它不能推广成“历史 controller 一定没有
-缺陷”。`CURRENT_CONTROLLER_PATH_OPERATIONAL` 要求当前 candidate 实际达到三个 controller
-active、三个 MoveIt service 和三个 action ready。
+`EXCLUDED_BEFORE_ROS_PLUGIN_INSTANCE_INIT` 的含义很窄：full station 因 manifest-bound vendor
+依赖缺失而失败，且没有任何 ROS plugin instance phase marker，例如 `PLUGIN_RESOLVED` 或
+`HARDWARE_INITIALIZING`。direct `dlopen` 可能执行 dylib initializer，但这不等于 ROS/pluginlib
+已经创建 hardware plugin instance，不能单靠 direct probe 写出该 verdict。这个值也不能推广成
+“历史 controller 一定没有缺陷”。`CURRENT_CONTROLLER_PATH_OPERATIONAL` 要求当前 candidate 实际
+达到三个 controller active、三个 MoveIt service 和三个 action ready。
 
 ### 5.3 固定 control-set 与 N/P/F controls
 
 每组 controls 先封存一个 `GateAControlSetManifest`，至少包含：parent/submodule commit、copied
 install inventory、controller executable、plugin、MuJoCo vendor dylib、plugin XML、robot/controller
-config 与 model hash、完整 argv、允许的环境键、ROS domain policy、diagnostic/tool version 和
-evidence 子目录。N/P 必须引用同一个 manifest hash；除了下述唯一环境变量差异，其他 bytes、
-argv、config 和 policy 必须相同。
+config 与 model hash、semantic argv/env、ROS domain policy、diagnostic/tool version 和 evidence
+子目录。N/P 必须引用同一个 manifest hash。
+
+manifest 把不可变语义与每轮 `RunBinding` 分开：semantic argv 固定 launch package/file、mode、
+`headless=false`、`sensor_rendering=true`、`include_teleop=false`、scene path/SHA、
+`mujoco_initial_keyframe=task_start`、readiness deadline 和 cleanup deadlines；semantic env 固定
+underlay/overlay、PATH、Python、locale 与 control policy。只有以下 typed substitution 可以逐轮变化：
+
+| substitution | 类型与约束 |
+| --- | --- |
+| `session_id` | safe session id；在本批内唯一 |
+| `ros_domain_id` | `0..232`；相对 foreign/task runs fresh |
+| `report_path`、`task_evidence_root` | 本轮 control 目录的 resolved descendant |
+| `ROS_HOME`、`ROS_LOG_DIR` | 本轮目录下的 resolved descendant |
+| `TMPDIR`、`TMP`、`TEMP` | 指向同一个本轮 tmp resolved path |
+
+每次 spawn 前先验证 substitution 类型与 containment，再把 expanded argv/env 原样写证据。比较 N/P
+时将这些已验证值归一化为 typed token；除此之外不允许忽略任何 argv/env 差异。P 的唯一实验变量
+仍是 manifest-bound vendor lib `DYLD_LIBRARY_PATH`。
+
+copied install 使用本轮 evidence 子目录中的 fresh、非 symlink、isolated colcon build：先构建
+`third_party/mujoco_ros2_control`，source 该 install，再构建 `so101_mujoco_support` 和
+`so101_demo_py`。按现有 `setup.cfg`，diagnostic 入口是
+`$STATION_INSTALL/so101_demo_py/lib/so101_demo_py/so101_diagnose_macos_station`，不是 `bin/`。
+bootstrap 必须回读 installed `so101_demo.__file__`、ament package prefix 和 Python interpreter；
+`python -m so101_demo.runtime.macos_dlopen_probe` 也必须绑定同一 installed site-packages。旧 ledger 的
+build script 只作只读参考，新 build/log/install 只能写入本轮 `gate-a-resolution/$DISPATCH_ID/`。
 
 - N（negative）：删除所有 `DYLD_*`，先对 copied plugin 做
   `dlopen(RTLD_NOW | RTLD_LOCAL)`，再启动 bounded full-station diagnostic。
-- P（positive）：使用同一 control set，只增加 task-owned MuJoCo vendor lib 目录的
+- P（positive）：始终执行。使用同一 control set，只增加 task-owned MuJoCo vendor lib 目录的
   `DYLD_LIBRARY_PATH`，重复 direct dlopen 与 full-station diagnostic。
 - F（fixed/current candidate）：N/P 确认 rpath 后，冻结只含计划内 CMake/provenance/test 变化的
   新 control set；不设置 `DYLD_LIBRARY_PATH`，重复 direct dlopen、full-station diagnostic 和
   loaded-image attestation。若当前 N 已证明 closure 完整，则 N 自身就是 F，不产生产品修改。
 
 direct probe 必须输出 `DLOPEN_STARTED`、`DLOPEN_SUCCEEDED` 或 `DLOPEN_FAILED`、原始 `dlerror`、
-plugin/vendor path 与 SHA。station diagnostic 继续输出 `PLUGIN_RESOLVED`、
+plugin/vendor path 与 SHA。它只验证 loader closure，不证明 ROS plugin instance 已创建。station
+diagnostic 继续输出 `PLUGIN_RESOLVED`、
 `SIMULATION_ENDPOINT_READY`、`HARDWARE_INITIALIZING`、`HARDWARE_READY`、
 `CONTROLLER_MANAGER_SERVICES_READY` 和 `CONTROLLERS_ACTIVE`。成功进程通过
-`RuntimeAttestation` 回读实际 loaded image 的绝对路径和 SHA；`DYLD_PRINT_*` 只能作辅助，不能
-替代 direct dlopen 或 loaded-image readback。
+`RuntimeProcessAttestation` 回读 `controller_runtime` 后代实际 loaded image 的绝对路径和 SHA；
+`DYLD_PRINT_*` 只能作辅助，不能替代 direct dlopen 或 per-process loaded-image readback。
+
+N/P 由一个全函数、无隐式 fallback 的 deterministic reducer 归并。输入先按单轮规则分类为
+`PASS`、`MISSING_VENDOR_BEFORE_ROS_PLUGIN_INSTANCE_INIT`、`NON_RPATH_FAILURE` 或 `INVALID`；任何
+未列入下表的组合默认 `INVALID_CONTROL`：
+
+```python
+def reduce_gate_a_controls(
+    negative: GateAControlObservation,
+    positive: GateAControlObservation,
+) -> GateADecision: ...
+```
 
 判定矩阵固定如下：
 
 | N | P | 判定 | 后续 |
 | --- | --- | --- | --- |
-| 精确 `@rpath/libmujoco.3.4.0.dylib` loader failure，未到 plugin init | direct dlopen 成功且 full station READY | `CONFIRMED_RPATH` + `EXCLUDED_BEFORE_PLUGIN_INIT` | 只允许最小 CMake install-rpath 修复，随后执行 F |
-| direct dlopen、loaded-image attestation 和 full station 均成功 | 不需要用于判定；如执行也必须与 N 一致 | `CURRENT_CLOSURE_ALREADY_VALID` + `CURRENT_CONTROLLER_PATH_OPERATIONAL` | 不改产品 bytes，N 作为 F 进入五次 readiness |
-| loader failure | 同一 loader failure | `INVALID_CONTROL` | 停止，修复 control-set/path/env 冻结；不得改 controller |
-| loader failure | direct dlopen 成功，但 station 在后续结构化 phase 失败 | `CURRENT_NON_RPATH_FAILURE` | 保存新的首坏 phase，停止并提交 owning-layer plan amendment |
-| 非 rpath failure，或 N/P 除授权变量外不一致 | 任意 | `CURRENT_NON_RPATH_FAILURE` 或 `INVALID_CONTROL` | 停止；现有 CMake allowlist 不授权修改 |
+| `MISSING_VENDOR_BEFORE_ROS_PLUGIN_INSTANCE_INIT` | `PASS` | `CONFIRMED_RPATH` + `EXCLUDED_BEFORE_ROS_PLUGIN_INSTANCE_INIT` | 只允许最小 CMake install-rpath 修复，随后执行 F |
+| `PASS` | `PASS` | `CURRENT_CLOSURE_ALREADY_VALID` + `CURRENT_CONTROLLER_PATH_OPERATIONAL` | 不改产品 bytes，N 作为 F 进入五次 readiness |
+| `MISSING_VENDOR_BEFORE_ROS_PLUGIN_INSTANCE_INIT` | `NON_RPATH_FAILURE` | `CURRENT_NON_RPATH_FAILURE` + `NOT_EXCLUDED` | 保存 P 的首坏 ROS phase，停止并提交 owning-layer plan amendment |
+| `NON_RPATH_FAILURE` | `PASS` 或同一 `NON_RPATH_FAILURE` | `CURRENT_NON_RPATH_FAILURE` + `NOT_EXCLUDED` | 保存 N 的首坏 ROS phase，停止并提交 owning-layer plan amendment |
+| `PASS` | 非 `PASS` | `INVALID_CONTROL` + `NOT_EXCLUDED` | P 与 N 的唯一变量模型被破坏；停止并修订 control plan |
+| 相同或不同 loader failure，但 P 未成为 `PASS` | 任意非 `PASS` | `INVALID_CONTROL` + `NOT_EXCLUDED` | vendor binding/control 无法证伪 rpath；停止并修订 control plan |
+| 任一 control timeout、缺 marker、缺/错 process attestation、identity drift、cleanup residue、semantic diff 或非法 substitution | 任意 | `INVALID_CONTROL` + `NOT_EXCLUDED` | 停止本批并修订 control plan |
+| 任意未列组合 | 任意 | `INVALID_CONTROL` + `NOT_EXCLUDED` | fail closed |
 
 `CONFIRMED_RPATH` 路径的 F 必须在无 `DYLD_LIBRARY_PATH` 时 direct dlopen 成功，且实际
-`libmujoco.3.4.0.dylib` 来自同一 copied prefix、SHA 与 manifest 一致。失败则修复未 GREEN，不能
+`controller_runtime` 后代加载的 plugin 与 `libmujoco.3.4.0.dylib` 都来自同一 copied prefix，路径和
+SHA 与 manifest 一致。只证明 diagnostic/probe 自身加载成功不算 GREEN。失败则修复未 GREEN，不能
 进入 readiness。`CURRENT_CLOSURE_ALREADY_VALID` 是另一条完整合法路径，不以“没有复现 foreign
 overlay”为由追加产品修改。
 
@@ -161,7 +212,14 @@ overlay”为由追加产品修改。
 - `joint_state_broadcaster`、`arm_controller`、`gripper_controller` 都是 `active`；
 - 三个 MoveIt service 与三个 action 可用；
 - controller、MoveIt 和 attestation 属于同一 `ROS_DOMAIN_ID` 与 copied install；
-- 退出后 task-owned station、ROS、IPC residue 为零。
+- READY 后由 diagnostic 主动发起有界正常 shutdown，再按 `SIGINT -> SIGTERM -> SIGKILL` 的既有
+  owner-tree deadline 收敛；persistent launch 不会自行退出，不得等待“自然退出”；
+- shutdown 后逐一核对所有 owned descendants 的 PID/birth 与 IPC，task-owned residue 为零。
+
+每轮都必须在 READY 时对真实 `controller_runtime` descendant 生成新的
+`RuntimeProcessAttestation`。其 executable、plugin image 和 vendor image 必须命中本轮 manifest；
+空 image 列表、probe/launcher attestation、wrong child 或 identity drift 都使该轮 `INVALID`，不能计入
+五连通过。
 
 只有 F 的 no-DYLD direct dlopen 与 loaded-image attestation 通过后，才运行连续五次 VALID
 `FULL_RESTART`。五轮必须使用相同 F closure identity，且 run binding/attestation 各自唯一。
@@ -189,7 +247,7 @@ resolution 期间保持只读；Codex 是代码、ledger 和 evidence 的唯一 
 
 新运行继续使用 ledger 已登记的 evidence root
 `/tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1`，只在其下
-创建 `gate-a-resolution/<dispatch-id>/`。旧 evidence 内容只读保留；不创建第二个 root，也不把
+创建 `gate-a-resolution/$DISPATCH_ID/`。旧 evidence 内容只读保留；不创建第二个 root，也不把
 新的日志写入旧实验子目录。
 
 Codex 在 `CP-MSC-A1` 提交 code、tests 和 ledger 后停止并退出，或写出明确 writer-release
@@ -382,8 +440,9 @@ binding；身份不明时不猜 PID、不盲杀，保留 fence。
 ### 13.2 Live
 
 - Gate A：`current_boundary_verdict` 经 N/P/F 矩阵闭合；F 的 direct dlopen 和 loaded-image
-  path/SHA 在无 `DYLD_LIBRARY_PATH` 时通过；五次连续 FULL_RESTART READY 且每轮无
-  task-owned residue。
+  path/SHA 在无 `DYLD_LIBRARY_PATH` 时通过；五次连续 FULL_RESTART 中，真实
+  `controller_runtime` descendant 的 per-process plugin/vendor path/SHA、PID/birth/executable 每轮
+  有效，READY 后有界 shutdown，且无 task-owned descendant/IPC residue。
 - W2：两个 Worker/两套 station，完整 selected set 各一次，raw journal、projection、物理结果和
   cleanup 一致。
 - W1 first-pass：一个 Worker 顺序执行完整 selected set，使用 v6，不带 retry 语义。
@@ -396,7 +455,7 @@ binding；身份不明时不猜 PID、不盲杀，保留 fence。
 ## 14. 迁移顺序
 
 1. 永久保留 legacy `CP-MSC-A=UNCONFIRMED`；暂停旧 dst，把同一 worktree 的 writer ownership
-   串行交给 Gate A Codex，并在已登记 root 下创建新的 `gate-a-resolution/<dispatch-id>/`。
+   串行交给 Gate A Codex，并在已登记 root 下创建新的 `gate-a-resolution/$DISPATCH_ID/`。
 2. 封存 control-set，执行 N/P/F 矩阵；沿 `CONFIRMED_RPATH` 或
    `CURRENT_CLOSURE_ALREADY_VALID` 路径完成 no-DYLD attestation 与 5/5 readiness，在
    `CP-MSC-A1` 提交并释放 writer。
@@ -440,7 +499,8 @@ loaded-image readback。只有 `CONFIRMED_RPATH` route 才授权修改 install-r
 - legacy `CP-MSC-A=UNCONFIRMED` 保持不变；`legacy_attribution` 已明确，且历史不可恢复状态没有被
   错写为当前产品缺陷。
 - `current_boundary_verdict` 是 `CONFIRMED_RPATH` 或 `CURRENT_CLOSURE_ALREADY_VALID`；F 在无
-  `DYLD_LIBRARY_PATH` 时 direct dlopen、loaded-image path/SHA 和 closure attestation 全部通过。
+  `DYLD_LIBRARY_PATH` 时 direct dlopen、真实 controller descendant 的 per-process loaded-image
+  path/SHA 和 closure attestation 全部通过。
 - 五次连续 FULL_RESTART READY/clean 通过，`controller_verdict` 为
   `CURRENT_CONTROLLER_PATH_OPERATIONAL`，Gate A 派生状态为 `CURRENT_PRODUCT_GATE_PASSED`。
 - macOS capabilities、Web 和服务端只支持 W1/W2，N>2 明确拒绝。
