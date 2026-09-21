@@ -171,10 +171,15 @@ interpreter 精确等于 `TEST_PYTHON`，diagnostic shebang 也与它匹配。P 
 `$CLOSURE_ROOT/opt/mujoco_vendor/lib`。旧 ledger 的 build script 只作只读参考；新
 vendor/build/log/install 只能写入本轮 `gate-a-resolution/$DISPATCH_ID/`。
 
-closure 继续沿用现有 fail-closed 合同：manifest 只接受真实目录与 regular files，并冻结每个
-regular file 的 SHA；`$CLOSURE_ROOT` 或 `$F_CLOSURE_ROOT` 中出现任意 symlink 都分类为
-`CLOSURE_SYMLINK` / `INVALID_CONTROL` 并停止，不允许解析、物化或忽略该链接。若仓库安装器在本轮
-生成 symlink，必须先修订并重新审查计划，不能把它临时纳入 control set。
+closure 保持 fail-closed，但显式接纳 pinned MuJoCo 安装产生的唯一 dylib alias：
+`opt/mujoco_vendor/lib/libmujoco.dylib -> libmujoco.3.4.0.dylib`。manifest 增加 closed
+`dylib_alias_inventory`，冻结 alias 相对路径、原始 link text、target 相对路径和 target SHA；target
+同时必须作为 regular file 出现在普通 inventory 中。validator 不跟随目录遍历中的 symlink，只对这
+一个 exact allowlist entry 使用 `lstat/readlink` 验证：link text 必须是无 `/` 且不等于 `.` 或 `..` 的单一相对
+basename，target 必须与 alias 同目录、位于 closure root 内、是 non-symlink regular file，且 SHA 与
+manifest 一致。absolute、escape、dangling、cycle、multi-hop、target replacement、alias replacement
+或任何其他 file/directory symlink 都返回 `CLOSURE_SYMLINK` / `INVALID_CONTROL`。每个 control spawn
+前重新验证 alias 与 target；不得物化、改写或忽略标准安装 alias。
 
 - N（negative）：删除所有 `DYLD_*`，先对 copied plugin 做
   `dlopen(RTLD_NOW | RTLD_LOCAL)`，再启动 bounded full-station diagnostic。
