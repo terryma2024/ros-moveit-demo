@@ -2286,7 +2286,9 @@ def _frozen_non_candidate_reason(
     if (
         comm == 'sshd'
         and len(argv) == 1
-        and re.fullmatch(r'sshd: [A-Za-z0-9._-]+@pts/[0-9]+', argv[0]) is not None
+        and re.fullmatch(
+            r'sshd: [A-Za-z0-9._-]+@(pts/[0-9]+|notty)', argv[0]
+        ) is not None
     ):
         return 'frozen_sshd_transport_non_candidate'
     return None
