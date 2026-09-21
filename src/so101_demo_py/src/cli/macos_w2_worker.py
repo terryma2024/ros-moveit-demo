@@ -182,29 +182,32 @@ try:
 
         from ament_index_python.packages import get_package_prefix as _prefix
 
-        share = Path(_prefix("so101_demo_py")) / "share/so101_demo_py"
+        from so101_demo.parallel_batch.single_point_input import pick_place_request
+
+        # One lease, one point. The installed catalog is never an input here: the lease document
+        # carries the single-point file it is allowed to execute and its digest, and a lease
+        # without one refuses pick-place instead of falling back to the whole catalog.
         batch_binary = Path(_prefix("so101_demo_py")) / "lib/so101_demo_py/so101_mujoco_rgbd_batch"
         pick_root = Path(station_arguments[1]) / "pick"
         pick_root.mkdir(parents=True, exist_ok=True)
-        pick_place = {"requested": True, "binary": str(batch_binary),
-                      "evidence_root": str(pick_root),
-                      "points": str(share / "config/mujoco/rgbd_task_points.yaml")}
-        if not batch_binary.is_file():
-            pick_place["error"] = "BATCH_BINARY_MISSING"
-        else:
-            mujoco_pid = station.wait_for_descendant("ros2_control_node", 120.0)
-            pick_place["mujoco_pid"] = mujoco_pid
+        mujoco_pid = station.wait_for_descendant("ros2_control_node", 120.0)
+        request = pick_place_request(
+            lease_document=lease_document, batch_binary=batch_binary,
+            session_id=station_arguments[0], evidence_root=pick_root, mujoco_pid=mujoco_pid)
+        pick_place = {**request, "evidence_root": str(pick_root), "mujoco_pid": mujoco_pid}
+        if request.get("requested"):
             completed = _subprocess.run(
-                [str(batch_binary),
-                 "--points", pick_place["points"],
-                 "--batch-id", f"{station_arguments[0]}-pick",
-                 "--session-id", station_arguments[0],
-                 "--evidence-root", str(pick_root),
-                 "--attach-existing-stack", "--mujoco-pid", str(mujoco_pid)],
-                capture_output=True, text=True, env=environment)
+                list(request["argv"]), capture_output=True, text=True, env=environment)
             pick_place["exit_code"] = completed.returncode
             pick_place["stdout_tail"] = (completed.stdout or "")[-400:]
             pick_place["stderr_tail"] = (completed.stderr or "")[-400:]
+            manifest = pick_root / "point-result.json"
+            if manifest.is_file():
+                import hashlib as _hashlib
+
+                pick_place["evidence_manifest_relative_path"] = "point-result.json"
+                pick_place["evidence_manifest_sha256"] = _hashlib.sha256(
+                    manifest.read_bytes()).hexdigest()
 
     with open(out_path + ".part", "w", encoding="utf-8") as handle:
         json.dump({"worker_id": worker_id, "pid": os.getpid(), "results": results,
