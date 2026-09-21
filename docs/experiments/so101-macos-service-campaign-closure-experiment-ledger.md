@@ -49,7 +49,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-T5-PARTIAL
+latest_checkpoint: CP-MSC-LEGACY-CONTROLLER-RERUN
 next_experiment: EXP-MSC-106 (Task 5 continued: projection source, store transaction, production wiring)
 ```
 
@@ -1290,3 +1290,49 @@ gz_partition: NOT_APPLICABLE_OFFLINE
 
 Decision: `TASK_5_REDUCER_GREEN_SLICE_COMMITTED`; continue Task 5 with the source/store/production
 migration.
+
+## CP-MSC-LEGACY-CONTROLLER-RERUN: the legacy controller boundary is loader/rpath, not C++
+
+Recorded on operator instruction to re-run the `legacy C++ controller root cause UNCONFIRMED`
+item and confirm whether it passes. Single variable between the two controls: whether the
+manifest-bound MuJoCo vendor library is reachable on the loader path. Everything else (source
+`427054ba`, submodule `85d2a5c`, the fixed `/opt` overlays, the same station launch file and
+arguments) is identical.
+
+| control | environment | observed |
+| --- | --- | --- |
+| **N** (vendor removed) | `DYLD_LIBRARY_PATH` = filtered farm built in the evidence root (756 of 767 entries kept as symlinks; the 11 `libmujoco*` entries excluded), otherwise the fixed overlays | `[controller_manager]: Caught exception ... LibraryLoadException while loading hardware: Failed to load library /opt/data/so101/runtime/fork/current/lib/libmujoco_ros2_control.dylib ... dlopen error: Library not loaded: @rpath/libmujoco.3.4.0.dylib` -> `Could not load and initialize hardware`; `motion_stack_ready` then fails with `MOTION_STACK_CONTROLLER_SERVICE_INVISIBLE` (the legacy symptom: no callable `/controller_manager/list_controllers`, spawners unable to activate) |
+| **P** (product path) | `scripts/so101-macos.zsh launch ...` with no caller environment (entry clears inherited `DYLD_*` and supplies the farm) | two fresh-domain runs `SO101_MACOS_RUNTIME_COMPLETE_PASS`, `ready: true`, three controllers active, three MoveIt services and three actions; launch owner exit `launch_rc=0` |
+
+Mechanism (read-only `otool` checks): the frozen plugin's `LC_RPATH` is
+`@loader_path` and `@loader_path/../opt/mujoco_vendor/lib`, but
+`/opt/data/so101/runtime/fork/current/opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib` does not
+exist, so the plugin cannot resolve its own `@rpath/libmujoco.3.4.0.dylib` dependency from its
+prefix; in this layout the vendor library must come from the loader environment, which the
+sanctioned entry supplies through the farm.
+
+Verdict for the legacy item:
+
+```text
+current_boundary_verdict = CONFIRMED_RPATH
+controller_verdict       = EXCLUDED_BEFORE_ROS_PLUGIN_INSTANCE_INIT
+current_controller_path  = CURRENT_CONTROLLER_PATH_OPERATIONAL (through the sanctioned entry)
+```
+
+`OBSERVED`: both the strict failure and the passing run stop/continue at the hardware *library
+load* boundary; the C++ controller/hardware startup code is never reached in N, so the legacy
+"stuck loading RobotSystem" symptom is a loader/rpath environment boundary, not a defect in the
+allowlisted controller-startup sources. The C++ root cause therefore stays **UNCONFIRMED as a
+C++ defect and is excluded as the failing layer**; no product edit is warranted by this pair.
+
+Caveats (explicit, not hidden): this is a single N/P pair, not the plan's five-run gate; N was
+emulated with a filtered farm instead of `macos_dlopen_probe --create-manifest/--reduce-controls`;
+the N wrapper's launch exit code was not captured because the tmux session closed during
+shutdown; cleanup is verified by PID scans (`NO_STATION_RESIDUE`, three preserved foreign
+processes untouched). The formal "strict no-loader-environment" gate is therefore still not
+passed - the product passes *with* its sanctioned environment, which is what the runtime contract
+requires.
+
+Evidence: `<RUN_ROOT>/task5-runtime-reverify/` - `n-control-farm/` (756 links), `n_control.sh`,
+`n-control-launch.log`, `n-control-readiness.json` (N); `station-launch*.log`,
+`readiness*.json`, `launch-rc-2.txt` (P).
