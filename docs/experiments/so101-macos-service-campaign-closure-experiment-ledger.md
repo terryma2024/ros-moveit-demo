@@ -8,25 +8,25 @@ termination, or evidence deletion.
 task_id: so101-macos-service-campaign-closure
 goal: close service-driven macOS W2, W1 and single-point retry with lightweight StartGuard protection
 success_contract: design section 16, with candidate and production evidence kept separate
-executor: Gate A Codex dispatch a50dcb6c-1eba-43d5-a2ea-2725a18e3a27 inline on mac-mini; user-authorized control repair resumed after CP-MSC-A1 without dst
+executor: dst-so101-macos-closure (DeepSeek Harness TUI, tmux) resumed by explicit operator handback; previous writer Gate A Codex dispatch a50dcb6c released at 2026-09-21T19:34:28+08:00
 worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
 branch: codex/so101-unified-webapp
 base_commit: 6d5069026fbd322076f58d0d4b9504891abeb861
-current_commit: e4cf6dcf003f09e755dc7d609a5e39af01c439a3 before the final CP-MSC-A1 ledger edit
-upstream: origin/codex/so101-unified-webapp (ahead 47 before the final ledger commit; no push authorized)
+current_commit: e1817749e3013375b4a334efbe0746980f54d7bb (resume HEAD; see CP-MSC-A1-RESUME)
+upstream: origin/codex/so101-unified-webapp (in sync at resume; this session does not push)
 evidence_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
 dispatch_receipt: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/dispatch.receipt
 dispatch_receipt_sha256: bea49ba76cf9d131529ca0b72d82bf8c9c6350d9eebc69fdefbe8ad19bc34b51
 handoff_sha256: 4e672949dba8b72e18ed85ae6ef103063c1ce537b974e735defd492a2bcfede9
 design: docs/superpowers/specs/2026-09-21-so101-macos-service-campaign-closure-design.md
-design_sha256: 0a5f5e0d8006016fb778d186f7029247b7fe828f0e1efaea34e4e96b00480015
+design_sha256: 8b7d0fc51821873c29feddc52c4f6a01e0fb3907f2158a22a036c5f533362832 (revised 2026-09-21; the pre-revision hash 0a5f5e0d... applies to the superseded design)
 plan: docs/superpowers/plans/2026-09-21-so101-macos-service-campaign-closure-implementation.md
-plan_sha256: 8fdce5b60eb1218726ab9eedd4fdf84da68e233e20f1f0ddadc00c4ba3f41538
+plan_sha256: 07811f599f2c39a1197283429b0d876635eb3234bf47492813990c7f0f66d24f (revised 2026-09-21; the pre-revision hash 8fdce5b6... applies to the superseded plan)
 execution_host: Terry-Mac-mini.local (macOS, arm64, user matianyi)
 run_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
-test_python: /Users/matianyi/ros2_jazzy/.venv/bin/python (Python 3.11.15, pytest 8.4.2, pydantic 2.13.4)
+test_python: /opt/ros2_jazzy/.venv/bin/python (Python 3.11.15, pytest 8.4.2, pydantic 2.13.4; /opt/ros2_jazzy is the fixed symlink to /Users/matianyi/ros2_jazzy)
 test_python_declared_by_plan: python3 (resolves to /opt/homebrew/bin/python3, Python 3.14.6, no pytest/pydantic; see D-1)
-ros_workspace: /Users/matianyi/ros2_jazzy (macOS source build; no /opt/ros/jazzy on this host)
+ros_workspace: /opt/ros2_jazzy (fixed contract; macOS source build, no /opt/ros/jazzy on this host)
 gate_recorder: src/so101_teleop/test/e2e/record_gate.py
 gate_policy: <RUN_ROOT>/operator/gate-policy.json
 gate_policy_sha256: 374439d0bbf02f74a428cfa444ab4e78c965e06063dd3ef32e5ee0c759f1b9fa
@@ -49,8 +49,8 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-A1-REPAIR-CHECKPOINT
-next_experiment: NONE
+latest_checkpoint: CP-MSC-A1-RESUME
+next_experiment: EXP-MSC-101 (Task 2 RED: immutable selection bindings and durable shared queue)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -874,3 +874,102 @@ explicitly rather than retroactively presenting it as part of the original dispa
 - Task 2 of the service-campaign closure plan was not started by this runtime-alignment work.
 
 Decision: `RUNTIME_LAUNCHER_ACCEPTED_CURRENT_HOST`; `ORIGINAL_STRICT_GATE_NOT_RERUN`.
+
+## CP-MSC-A1-RESUME: dst writer handback and Task 2 start
+
+Appended by the tmux `dst-so101-macos-closure` session on explicit operator instruction
+("继续完成你之前的目标"). It does not rewrite CP-MSC-A, CP-MSC-A1, CP-MSC-A1-FIX-TAKEOVER, or
+CP-MSC-A1-RUNTIME-ALIGNMENT; the legacy `CP-MSC-A=UNCONFIRMED` verdict stays as written.
+
+```yaml
+checkpoint_id: CP-MSC-A1-RESUME
+recorded_at: 2026-09-21T20:05:00+0800
+writer: dst-so101-macos-closure (resumed)
+previous_writer: Gate A Codex dispatch a50dcb6c-1eba-43d5-a2ea-2725a18e3a27
+writer_release_marker: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/gate-a-resolution/a50dcb6c-1eba-43d5-a2ea-2725a18e3a27/writer-release-runtime-alignment.json
+writer_release_marker_sha256: 8877a8db33ce4d942e62f1f7a9acca1026cd675659ccf5bf9c9df9199b12dc90
+worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
+branch: codex/so101-unified-webapp
+head_at_resume: e1817749e3013375b4a334efbe0746980f54d7bb
+head_vs_origin: in sync; this session does not push
+submodule_commit: 85d2a5c42686a3d6b0d909a047a4188b24edd257
+evidence_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
+runtime_contract_ledger: docs/experiments/so101-macos-runtime-contract-experiment-ledger.md
+runtime_contract_evidence_root: /tmp/so101-debug-macos-runtime-contract-54f5d922-9678-4cff-a340-dc4f59479a23 (separate root, read-only for this session)
+fixed_runtime_contract:
+  ros_root: /opt/ros2_jazzy (exact symlink to /Users/matianyi/ros2_jazzy)
+  ros_python: /opt/ros2_jazzy/.venv/bin/python (3.11.15)
+  project_overlay: /opt/data/so101/workspace/install
+  locked_fork_overlay: /opt/data/so101/runtime/fork/current (85d2a5c)
+  dylib_farm: /opt/ros2_jazzy/dylib_farm/current
+  launcher: "scripts/so101-macos.zsh (prepare | doctor --json | launch | run; no required env var, ROS_DOMAIN_ID optional 0..232)"
+confirmed_conclusions_at_resume:
+  - "OBSERVED: the fixed /opt runtime contract starts the current SO-101 MuJoCo task station on this Mac and reaches READY (3 controllers active, 3 MoveIt services, 3 actions); runtime-contract ledger RUN-002"
+  - "OBSERVED: scoped macOS runtime tests 35 passed and the locked fork suite 233 passed; runtime-contract ledger RUN-002"
+  - "OBSERVED: the earlier station READY and the loader-path failure pair remain legacy evidence only; the loader-path defect inference was already retracted in CP-MSC-CORR-1"
+open_items_not_passed:
+  - "original Gate A five consecutive strict no-DYLD FULL_RESTART attestation: NOT RERUN against the new closure"
+  - "ordinary src/so101_demo_py/test package gate: NOT GREEN (2881 passed, 136 failed, 8 skipped, interrupted at 83%; dominated by Linux-only parallel assumptions on Darwin)"
+  - "second physical Mac: NOT RUN"
+  - "legacy C++ controller root cause: UNCONFIRMED and permanently preserved as such"
+next_action: Task 2 of the revised plan - immutable selection bindings and a durable shared queue
+```
+
+### Task 2 environment for this session (registered before the first test)
+
+Source-mode gates run on the fixed contract with the source tree ahead of the installed copy:
+
+```bash
+export TASK_ROOT=/tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
+export TEST_PYTHON=/opt/ros2_jazzy/.venv/bin/python
+source /opt/ros2_jazzy/install/setup.zsh
+source /opt/ros2_jazzy/extra_ws/install/setup.zsh
+source /opt/data/so101/runtime/fork/current/setup.zsh
+source /opt/data/so101/workspace/install/setup.zsh
+export PYTHONPATH="$TASK_ROOT/pyshim:$TASK_WORKTREE/src/so101_teleop:$TASK_WORKTREE/src/so101_demo_py/src:$PYTHONPATH"
+export ROS_HOME="$TASK_ROOT/ros_home" ROS_LOG_DIR="$TASK_ROOT/ros_log"
+```
+
+```yaml
+experiment_id: EXP-MSC-101
+status: PLANNED
+prior_experiment: EXP-MSC-003B (legacy station READY) and runtime-contract ledger RUN-002
+hypothesis: >-
+  The current W2 composition statically assigns the first two selected points to the two slots,
+  so a selection whose interesting points are not first can never be executed; an immutable
+  selection binding plus one durable shared queue for all selected points is required before any
+  service-driven campaign can be claimed.
+prediction: >-
+  RED shows non-default selections (anchors plus P09/P14/P20) leaving points unleased or leasing
+  unselected ids under the current composition, and GREEN shows every selected id leased exactly
+  once across two slots with no unselected lease.
+single_variable: selection binding and queue implementation (NONE before RED)
+lifecycle: ISOLATED_STACK
+preconditions:
+  - worktree clean at e1817749 with submodule 85d2a5c
+  - fixed /opt runtime contract available for the source-mode gate
+success_criteria:
+  - first-pass binding enforces 4-20 points plus the four anchors; retry binding enforces exactly one business-failed point with its source hashes
+  - every selected point is leased exactly once by a two-slot drain; unselected ids never appear in a lease or a result
+  - duplicate lease requests, stale generations and crash recovery are fail closed
+failure_criteria:
+  - a selected point is never leased, or an unselected point is leased
+invalid_criteria:
+  - zero test collection, wrong interpreter or overlay, or the target module boundary never executes
+provenance:
+  source_commit: e1817749
+  submodule_commit: 85d2a5c
+  install_overlay: /opt/data/so101/workspace/install
+  runtime_executable: /opt/ros2_jazzy/.venv/bin/python
+  ros_domain_id: NOT_APPLICABLE_OFFLINE
+  gz_partition: NOT_APPLICABLE_OFFLINE
+commands:
+  - command: PENDING
+    exit_code: PENDING
+observed: []
+inferred: []
+conclusion: PENDING
+evidence: []
+decision: PENDING
+next_experiment: NONE
+```
