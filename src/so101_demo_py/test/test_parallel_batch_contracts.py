@@ -1242,3 +1242,343 @@ def test_the_retired_grounded_sam_manifest_digest_is_not_used_anywhere():
     for pattern in ("config/**/*.yaml", "config/**/*.json"):
         for path in package.glob(pattern):
             assert retired not in path.read_text(), path
+
+
+# --------------------------------------------------------------------------------------
+# Versions 5 and 6: the two closed macOS W1 profiles
+#
+# The support matrix is fixed by the design: W2 first-pass is v4, W1 full-restart retry is
+# v5, W1 first-pass is v6. Each document admits exactly one combination, the routing key is
+# `(schema_version, execution_profile, batch_kind, worker_count)`, and everything else is
+# refused with a typed error before any spawn.
+# --------------------------------------------------------------------------------------
+
+V5_CONFIG_PATH = PACKAGE / "config/mujoco/parallel_batch_v5_macos_mps_w1_retry.yaml"
+V6_CONFIG_PATH = PACKAGE / "config/mujoco/parallel_batch_v6_macos_mps_w1_first_pass.yaml"
+V4_CONFIG_SHA256 = "2f9d7a87fe57a0440cdfd139c2ac42b7af86002edfcc2ed2ef3077568dc6b06b"
+
+
+def _v5_document() -> dict:
+    return yaml.safe_load(V5_CONFIG_PATH.read_text())
+
+
+def _v6_document() -> dict:
+    return yaml.safe_load(V6_CONFIG_PATH.read_text())
+
+
+def test_the_frozen_v4_document_is_unchanged_by_the_w1_profiles():
+    """v5/v6 are new files: the v4 document's bytes are frozen, not rewritten."""
+
+    assert hashlib.sha256(V4_CONFIG_PATH.read_bytes()).hexdigest() == V4_CONFIG_SHA256
+    config = contracts_module().load_parallel_runtime_config_v4(V4_CONFIG_PATH)
+    assert config.worker_count == 2
+    assert config.ros_domain_ids == (181, 182)
+
+
+def contracts_module():
+    import so101_demo.parallel_batch.contracts as contracts
+
+    return contracts
+
+
+def test_schema_v5_resolves_the_single_w1_retry_profile():
+    """v5 admits W1 `FULL_RESTART_RETRY` and nothing else."""
+
+    contracts = contracts_module()
+
+    config = contracts.load_parallel_runtime_config_v5(V5_CONFIG_PATH)
+    assert isinstance(config, contracts.ParallelRuntimeConfigV5)
+    assert config.schema_version == 5
+    assert config.worker_count == 1
+    assert config.ros_domain_ids == (181,)
+    assert str(config.execution_profile) == "MPS_W1_FULL_RESTART_RETRY"
+    assert str(config.batch_kind) == "FULL_RESTART_RETRY"
+    assert config.accelerator.kind is contracts.AcceleratorKind.MPS
+    assert config.accelerator.resolved_selector == "default"
+    assert config.requested_device == "mps"
+    assert config.allow_cpu_fallback is False
+    assert config.ipc_transport is contracts.IpcTransport.DARWIN_PRIVATE_PATH_UNIX
+    assert config.mujoco_gl == "cgl"
+    assert config.mps_process_memory_fraction == 0.8
+    assert config.mps_minimum_headroom_bytes == 1 << 30
+    assert config.resolved_manifest()["schema_version"] == 5
+    assert config.resolved_manifest()["worker_count"] == 1
+
+
+def test_schema_v6_resolves_the_single_w1_first_pass_profile():
+    """v6 admits W1 `FIRST_PASS` and nothing else."""
+
+    contracts = contracts_module()
+
+    config = contracts.load_parallel_runtime_config_v6(V6_CONFIG_PATH)
+    assert isinstance(config, contracts.ParallelRuntimeConfigV6)
+    assert config.schema_version == 6
+    assert config.worker_count == 1
+    assert config.ros_domain_ids == (181,)
+    assert str(config.execution_profile) == "MPS_W1_FIRST_PASS"
+    assert str(config.batch_kind) == "FIRST_PASS"
+    assert config.mps_minimum_headroom_bytes == 1 << 30
+    assert config.resolved_manifest()["schema_version"] == 6
+    assert config.resolved_manifest()["worker_count"] == 1
+
+
+@pytest.mark.parametrize("version", [5, 6])
+@pytest.mark.parametrize("worker_count", [0, 2, 3, 4, 6, 8])
+def test_the_w1_profiles_are_exactly_one_worker(version, worker_count):
+    """Any other count is a different platform claim these documents do not make."""
+
+    contracts = contracts_module()
+
+    document = _v5_document() if version == 5 else _v6_document()
+    document["worker_count"] = worker_count
+    with pytest.raises(contracts.ContractError, match="PLATFORM_WORKER_COUNT_UNSUPPORTED"):
+        (contracts.parse_parallel_runtime_config_v5 if version == 5
+         else contracts.parse_parallel_runtime_config_v6)(document)
+
+
+@pytest.mark.parametrize("version", [5, 6])
+@pytest.mark.parametrize(
+    "key, value",
+    [
+        ("requested_device", "cpu"),
+        ("requested_device", "cuda"),
+        ("allow_cpu_fallback", True),
+        ("ipc_transport", "proc_fd_unix"),
+        ("ipc_transport", "auto_tcp"),
+        ("mujoco_gl", "egl"),
+        ("mujoco_gl", "osmesa"),
+        ("mps_process_memory_fraction", None),
+    ],
+)
+def test_the_w1_profiles_refuse_cpu_fallback_and_linux_transport(version, key, value):
+    """No CPU fallback, no CUDA device and no Linux transport on a W1 document."""
+
+    contracts = contracts_module()
+
+    document = _v5_document() if version == 5 else _v6_document()
+    document[key] = value
+    parser = (contracts.parse_parallel_runtime_config_v5 if version == 5
+              else contracts.parse_parallel_runtime_config_v6)
+    with pytest.raises(contracts.ContractError):
+        parser(document)
+
+
+@pytest.mark.parametrize("version", [5, 6])
+def test_the_w1_profiles_refuse_a_cuda_accelerator(version):
+    """The MPS combination is the only one either W1 profile admits."""
+
+    contracts = contracts_module()
+
+    document = _v5_document() if version == 5 else _v6_document()
+    document["accelerator"] = {"kind": "cuda", "selector": "INDEX:0"}
+    document["requested_device"] = "cuda"
+    document["ipc_transport"] = "proc_fd_unix"
+    document["mujoco_gl"] = "egl"
+    document["mps_process_memory_fraction"] = None
+    parser = (contracts.parse_parallel_runtime_config_v5 if version == 5
+              else contracts.parse_parallel_runtime_config_v6)
+    with pytest.raises(contracts.ContractError, match="PLATFORM_COMBINATION_UNSUPPORTED"):
+        parser(document)
+
+
+@pytest.mark.parametrize("version", [5, 6])
+def test_the_w1_profiles_are_closed_against_unknown_fields(version, tmp_path):
+    """An unknown top-level, execution or guard key is refused, including a profile key.
+
+    The profile is a property of the schema, not a document field: a file that tries to name
+    its own profile must not parse.
+    """
+
+    contracts = contracts_module()
+
+    base = _v5_document() if version == 5 else _v6_document()
+    for mutate, expected in (
+        (lambda d: d.update({"execution_profile": "MPS_W1_FIRST_PASS"}), "UNKNOWN_CONFIG_FIELD"),
+        (lambda d: d.update({"worker_profile": "MPS_W1_FIRST_PASS"}), "UNKNOWN_CONFIG_FIELD"),
+        (lambda d: d["execution"].update({"worker_count": 1}), "UNKNOWN_EXECUTION_FIELD"),
+        (lambda d: d["accelerator"].update({"device_index": 0}), "UNKNOWN_ACCELERATOR_FIELD"),
+        (lambda d: d["start_guard"].update({"mps_headroom_gib": 1}),
+         "UNKNOWN_START_GUARD_FIELD"),
+    ):
+        document = dict(base)
+        document["execution"] = dict(base["execution"])
+        document["accelerator"] = dict(base["accelerator"])
+        document["start_guard"] = dict(base["start_guard"])
+        mutate(document)
+        path = tmp_path / f"v{version}-drift.yaml"
+        path.write_text(yaml.safe_dump(document))
+        loader = (contracts.load_parallel_runtime_config_v5 if version == 5
+                  else contracts.load_parallel_runtime_config_v6)
+        with pytest.raises(contracts.ContractError, match=expected):
+            loader(path)
+
+
+def test_the_w1_profiles_share_every_closed_field_set_with_v4():
+    """v5/v6 add no field and remove none: the shape is the v4 shape at W1."""
+
+    contracts = contracts_module()
+    from dataclasses import fields
+
+    for schema in (contracts.ParallelRuntimeConfigV5, contracts.ParallelRuntimeConfigV6):
+        assert {item.name for item in fields(schema)} == {
+            item.name for item in fields(contracts.ParallelRuntimeConfigV4)}
+    assert contracts.V5_CONFIG_FIELDS == contracts.V4_CONFIG_FIELDS
+    assert contracts.V6_CONFIG_FIELDS == contracts.V4_CONFIG_FIELDS
+    assert contracts.EXECUTION_V5_FIELDS == contracts.EXECUTION_V4_FIELDS
+    assert contracts.EXECUTION_V6_FIELDS == contracts.EXECUTION_V4_FIELDS
+    assert contracts.START_GUARD_V5_FIELDS == contracts.START_GUARD_V4_FIELDS
+    assert contracts.START_GUARD_V6_FIELDS == contracts.START_GUARD_V4_FIELDS
+
+
+def test_the_w1_profiles_invent_no_budget_or_qualification_field():
+    """A W1 profile is a routing fact, not a capacity or qualification claim."""
+
+    contracts = contracts_module()
+    from dataclasses import fields
+
+    forbidden = ("budget", "qualification", "promotion", "forecast", "profile", "adaptive")
+    v4_fields = {item.name for item in fields(contracts.ParallelRuntimeConfigV4)}
+    for schema in (contracts.ParallelRuntimeConfigV5, contracts.ParallelRuntimeConfigV6):
+        names = {item.name for item in fields(schema)}
+        assert names == v4_fields, "a W1 profile adds no field, so it can invent no claim"
+        for name in names:
+            assert not any(token in name for token in forbidden), name
+
+
+def test_require_v5_and_v6_execution_are_version_exact():
+    """Execution admission stays version-exact for the new profiles too."""
+
+    contracts = contracts_module()
+
+    contracts.require_v5_execution(5, 5)
+    contracts.require_v6_execution(6, 6)
+    for require, request_version, config_version in (
+        (contracts.require_v5_execution, 5, 4),
+        (contracts.require_v5_execution, 4, 5),
+        (contracts.require_v5_execution, 6, 6),
+        (contracts.require_v6_execution, 6, 5),
+        (contracts.require_v6_execution, 5, 6),
+        (contracts.require_v6_execution, True, 6),
+    ):
+        with pytest.raises(contracts.ContractError,
+                           match="CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"):
+            require(request_version, config_version)
+
+
+@pytest.mark.parametrize(
+    "route, expected",
+    [
+        # the three admitted combinations, one line each
+        ((4, "MPS_W2_FIRST_PASS", "FIRST_PASS", 2), None),
+        ((5, "MPS_W1_FULL_RESTART_RETRY", "FULL_RESTART_RETRY", 1), None),
+        ((6, "MPS_W1_FIRST_PASS", "FIRST_PASS", 1), None),
+        # a v4 document claiming W1
+        ((4, "MPS_W1_FIRST_PASS", "FIRST_PASS", 1), "PROFILE_SCHEMA_MISMATCH"),
+        ((4, "MPS_W1_FULL_RESTART_RETRY", "FULL_RESTART_RETRY", 1), "PROFILE_SCHEMA_MISMATCH"),
+        # a v5 document claiming first-pass
+        ((5, "MPS_W1_FIRST_PASS", "FIRST_PASS", 1), "PROFILE_SCHEMA_MISMATCH"),
+        # a v6 document claiming retry
+        ((6, "MPS_W1_FULL_RESTART_RETRY", "FULL_RESTART_RETRY", 1), "PROFILE_SCHEMA_MISMATCH"),
+        # a profile whose batch kind is not the one it admits
+        ((5, "MPS_W1_FULL_RESTART_RETRY", "FIRST_PASS", 1), "PROFILE_BATCH_KIND_MISMATCH"),
+        ((6, "MPS_W1_FIRST_PASS", "FULL_RESTART_RETRY", 1), "PROFILE_BATCH_KIND_MISMATCH"),
+        ((4, "MPS_W2_FIRST_PASS", "FULL_RESTART_RETRY", 2), "PROFILE_BATCH_KIND_MISMATCH"),
+        # adaptive is not a macOS capability at all
+        ((5, "MPS_W1_FULL_RESTART_RETRY", "ADAPTIVE_POOL", 1), "ADAPTIVE_UNSUPPORTED_ON_MACOS"),
+        ((4, "MPS_W2_FIRST_PASS", "ADAPTIVE_POOL", 2), "ADAPTIVE_UNSUPPORTED_ON_MACOS"),
+        # N>2 and the unsupported W1 counts
+        ((4, "MPS_W2_FIRST_PASS", "FIRST_PASS", 4), "PLATFORM_WORKER_COUNT_UNSUPPORTED"),
+        ((5, "MPS_W1_FULL_RESTART_RETRY", "FULL_RESTART_RETRY", 2),
+         "PLATFORM_WORKER_COUNT_UNSUPPORTED"),
+        ((6, "MPS_W1_FIRST_PASS", "FIRST_PASS", 8), "PLATFORM_WORKER_COUNT_UNSUPPORTED"),
+        # an unknown profile
+        ((6, "MPS_W4_FIRST_PASS", "FIRST_PASS", 1), "EXECUTION_PROFILE_UNKNOWN"),
+        # a schema no profile is approved for
+        ((3, "MPS_W2_FIRST_PASS", "FIRST_PASS", 2), "CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"),
+        ((7, "MPS_W2_FIRST_PASS", "FIRST_PASS", 2), "CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"),
+    ],
+)
+def test_the_execution_routing_table_admits_exactly_three_combinations(route, expected):
+    """One accepted line per approved combination; every other key is refused by name."""
+
+    contracts = contracts_module()
+
+    schema_version, execution_profile, batch_kind, worker_count = route
+    if expected is None:
+        resolved = contracts.resolve_execution_route(
+            schema_version=schema_version, execution_profile=execution_profile,
+            batch_kind=batch_kind, worker_count=worker_count)
+        assert resolved.schema_version == schema_version
+        assert resolved.worker_count == worker_count
+        assert str(resolved.batch_kind) == batch_kind
+        return
+    with pytest.raises(contracts.ContractError, match=expected):
+        contracts.resolve_execution_route(
+            schema_version=schema_version, execution_profile=execution_profile,
+            batch_kind=batch_kind, worker_count=worker_count)
+
+
+def test_a_profile_is_never_inferred_from_the_selected_point_count():
+    """`None` is the shape an inference would produce, and it is refused by name."""
+
+    contracts = contracts_module()
+
+    with pytest.raises(contracts.ContractError, match="PROFILE_FROM_SELECTED_POINTS"):
+        contracts.resolve_execution_route(
+            schema_version=6, execution_profile=None, batch_kind="FIRST_PASS", worker_count=1)
+    with pytest.raises(contracts.ContractError, match="PROFILE_FROM_SELECTED_POINTS"):
+        contracts.resolve_execution_route(
+            schema_version=4, execution_profile="MPS_W2_FIRST_PASS", batch_kind="FIRST_PASS",
+            worker_count=None)
+    with pytest.raises(contracts.ContractError, match="EXECUTION_PROFILE_UNKNOWN"):
+        contracts.resolve_execution_route(
+            schema_version=6, execution_profile="W1", batch_kind="FIRST_PASS", worker_count=1)
+
+
+def test_the_routing_table_names_the_three_approved_profiles_only():
+    """The table is the support matrix: three rows, no N>2 and no adaptive row."""
+
+    contracts = contracts_module()
+
+    assert len(contracts.APPROVED_EXECUTION_ROUTES) == 3
+    assert {(route.schema_version, str(route.execution_profile))
+            for route in contracts.APPROVED_EXECUTION_ROUTES} == {
+        (4, "MPS_W2_FIRST_PASS"),
+        (5, "MPS_W1_FULL_RESTART_RETRY"),
+        (6, "MPS_W1_FIRST_PASS"),
+    }
+    assert {route.worker_count for route in contracts.APPROVED_EXECUTION_ROUTES} == {1, 2}
+    assert "ADAPTIVE_POOL" not in {str(route.batch_kind)
+                                   for route in contracts.APPROVED_EXECUTION_ROUTES}
+
+
+def test_the_w1_runtime_values_reuse_the_v4_freeze():
+    """v5/v6 restate the v4 functional freeze; only the schema and the count change."""
+
+    contracts = contracts_module()
+
+    for values, version in ((contracts.FROZEN_RUNTIME_VALUES_V5, 5),
+                            (contracts.FROZEN_RUNTIME_VALUES_V6, 6)):
+        shared = set(values) & set(contracts.FROZEN_RUNTIME_VALUES_V4)
+        assert len(shared) >= 30
+        for name in shared - {"schema_version", "worker_count"}:
+            assert values[name] == contracts.FROZEN_RUNTIME_VALUES_V4[name], name
+        assert values["schema_version"] == version
+        assert values["worker_count"] == 1
+    for config in (contracts.load_parallel_runtime_config_v5(V5_CONFIG_PATH),
+                   contracts.load_parallel_runtime_config_v6(V6_CONFIG_PATH)):
+        for name, expected in (contracts.FROZEN_RUNTIME_VALUES_V5.items()
+                               if config.schema_version == 5
+                               else contracts.FROZEN_RUNTIME_VALUES_V6.items()):
+            assert getattr(config, name) == expected, name
+
+
+def test_the_any_schema_loader_selects_the_w1_profiles():
+    """The history-side loader is not left behind by the new schemas."""
+
+    contracts = contracts_module()
+
+    assert isinstance(contracts.load_runtime_config_any_schema(V5_CONFIG_PATH),
+                      contracts.ParallelRuntimeConfigV5)
+    assert isinstance(contracts.load_runtime_config_any_schema(V6_CONFIG_PATH),
+                      contracts.ParallelRuntimeConfigV6)

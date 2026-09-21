@@ -96,6 +96,10 @@ setup(
             # launches on this platform, because so101_parallel_batch refuses it outright.
             "so101_macos_service_campaign = "
             "so101_demo.cli.macos_service_campaign:main",
+            # The two public W1 entry points. Each names exactly one approved profile, so the
+            # support matrix is a choice of program rather than a flag a caller can get wrong.
+            "so101_macos_n1_retry = so101_demo.cli.macos_n1_retry:main",
+            "so101_macos_n1_first_pass = so101_demo.cli.macos_n1_first_pass:main",
             "so101_parallel_batch_cleanup = "
             "so101_demo.cli.parallel_batch_cleanup:main",
             "so101_parallel_perception_broker = so101_demo.cli.parallel_perception_broker:main",

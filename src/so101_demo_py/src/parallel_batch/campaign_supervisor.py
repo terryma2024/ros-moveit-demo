@@ -29,7 +29,13 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
-from .start_guard_probe import ProcessIdentityRecord, read_process_identity
+from .start_guard import MPS_GUARD_SELECTOR
+from .start_guard_probe import (
+    ProcessIdentityRecord,
+    StartGuardRefused,
+    darwin_guard_scope,
+    read_process_identity,
+)
 from ..runtime.owner_records import (
     CONFIRMATION_UNREADABLE as OWNER_CONFIRMATION_UNREADABLE,
     ROLES as OWNER_RECORD_ROLES,
@@ -51,6 +57,12 @@ SPAWN_FAILED = "CHILD_SPAWN_FAILED"
 
 #: A child whose birth identity could not be read is not promoted: we could not signal it safely.
 IDENTITY_UNAVAILABLE = "CHILD_IDENTITY_UNAVAILABLE"
+
+#: A spawn the start guard refused before ``Popen``. Nothing was created.
+START_GUARD_REFUSED = "START_GUARD_REFUSED"
+
+#: A guard object that cannot prove freshness is not a guard.
+SPAWN_GUARD_INVALID = "SPAWN_GUARD_INVALID"
 
 #: The roles a campaign is allowed to own, and the slots each role may occupy.
 OWNED_ROLES: Mapping[str, int] = {"broker": 1, "worker": 2, "coordinator": 1}
@@ -258,7 +270,10 @@ class CampaignSupervisor:
                  identity_reader: Callable[[int], ProcessIdentityRecord | None]
                  = read_process_identity,
                  sleep: Callable[[float], None] = time.sleep,
-                 owner_environment: Mapping[str, str] | None = None) -> None:
+                 owner_environment: Mapping[str, str] | None = None,
+                 spawn_guard: object | None = None,
+                 guard_worker_count: int = 1,
+                 guard_selector: str = MPS_GUARD_SELECTOR) -> None:
         if not isinstance(campaign_id, str) or not campaign_id:
             raise CampaignBlocked("CAMPAIGN_ID")
         self.campaign_id = campaign_id
@@ -279,8 +294,18 @@ class CampaignSupervisor:
         #: explicit mapping (including an empty one) is used instead, which is how a caller keeps a
         #: campaign out of any owner tree.
         self._owner_environment = owner_environment
+        #: The fresh per-spawn admission (design section 7). ``None`` keeps the pre-Task-7
+        #: behaviour: a supervisor that was given no guard spawns exactly as it did before.
+        self._spawn_guard = spawn_guard
+        self._guard_worker_count = guard_worker_count
+        self._guard_selector = guard_selector
+        self._spawn_epoch = 0
         self._claim_descriptor: int | None = None
         self._receipt: OwnershipReceipt | None = None
+
+    @property
+    def spawn_guard(self) -> object | None:
+        return self._spawn_guard
 
     # -- paths ---------------------------------------------------------------------------
 
@@ -466,6 +491,14 @@ class CampaignSupervisor:
         """Spawn one owned child and promote it to ACTIVE only after its registered ACK."""
 
         intent = self.begin_spawn(role=role, slot=slot, argv=argv, nonce=nonce)
+        # The durable intent exists; the fresh admission runs now, before ``Popen``. A refused
+        # admission resolves the intent as failed and raises, so nothing is ever created.
+        try:
+            self._require_spawn_admission()
+        except CampaignBlocked as blocked:
+            self._update_child(replace(intent, status=FAILED, reason=blocked.reason,
+                                       recorded_monotonic_s=self._clock()))
+            raise
         ack_path = Path(ack_path)
         if ack_path.exists():
             ack_path.unlink()
@@ -552,8 +585,34 @@ class CampaignSupervisor:
         self._update_child(active)
         return active
 
-    # -- owner records -------------------------------------------------------------------
+    # -- the fresh per-spawn admission ----------------------------------------------------
 
+    def _require_spawn_admission(self) -> None:
+        """One fresh start-guard admission for this spawn, after the intent and before ``Popen``.
+
+        Design section 7: every Worker takes its own fresh check once its spawn intent is durable.
+        A previous result is never reused across a spawn epoch, a Worker or a retry, so the guard
+        is asked through ``require_fresh_startable`` only, and the scope it is asked about binds
+        this supervisor's real owner identity (PID plus birth identity), the campaign identity,
+        the current spawn epoch, the approved MPS selector and the exact worker count.
+        """
+
+        guard = self._spawn_guard
+        if guard is None:
+            return
+        requester = getattr(guard, "require_fresh_startable", None)
+        if not callable(requester):
+            raise CampaignBlocked(SPAWN_GUARD_INVALID, type(guard).__name__)
+        self._spawn_epoch += 1
+        scope = darwin_guard_scope(
+            batch_id=self.campaign_id, worker_count=self._guard_worker_count,
+            epoch=self._spawn_epoch, gpu_selector=self._guard_selector)
+        try:
+            requester(scope)
+        except StartGuardRefused as refusal:
+            raise CampaignBlocked(START_GUARD_REFUSED, refusal.reason) from refusal
+
+    # -- owner records --------------------------------------------------------------------
     def _owner_environment_document(self) -> Mapping[str, str]:
         return os.environ if self._owner_environment is None else self._owner_environment
 

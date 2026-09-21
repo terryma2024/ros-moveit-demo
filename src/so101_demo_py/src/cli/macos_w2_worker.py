@@ -93,6 +93,10 @@ if station_arguments and (station_ready or {}).get("exit_code") != 0:
     os.replace(out_path + ".part", out_path)
     raise SystemExit("STATION_NOT_READY")
 
+#: The profile and batch kind travel with the lease, so a Worker's own result document names the
+#: approved profile it executed instead of leaving that to the entry point that spawned it.
+lease_identity = {"execution_profile": None, "batch_kind": None, "schema_version": None}
+
 infer_results = []
 if lease_argument:
     # The Worker now speaks the production path: it reads the identity the entry point bound for it
@@ -105,6 +109,8 @@ if lease_argument:
     from so101_demo.runtime.parallel_ipc_v4 import V4PermissionOnlyClient as _V4Client
 
     lease_document = json.loads(Path(lease_argument[0]).read_text())
+    lease_identity = {name: lease_document.get(name)
+                      for name in ("execution_profile", "batch_kind", "schema_version")}
     authority = BrokerAuthority(healthy=True, generation=1, endpoint_path=endpoint)
     port_config = SimpleNamespace(
         broker_max_frame_bytes=8 * 1024 * 1024,
@@ -221,7 +227,8 @@ try:
     with open(out_path + ".part", "w", encoding="utf-8") as handle:
         json.dump({"worker_id": worker_id, "pid": os.getpid(), "results": results,
                    "station_record": station_record, "infer_results": infer_results,
-               "duplicate_result": duplicate_result, "pick_place": pick_place}, handle)
+               "duplicate_result": duplicate_result, "pick_place": pick_place,
+               **lease_identity}, handle)
         handle.flush()
         os.fsync(handle.fileno())
     os.replace(out_path + ".part", out_path)

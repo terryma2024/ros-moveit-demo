@@ -29,10 +29,14 @@ from .campaign_supervisor import ACTIVE, CampaignSupervisor
 from .inference_registry import InferenceRegistry
 from .input_snapshot import SnapshotRegistry, SnapshotStore
 from .pool_recovery import INFRASTRUCTURE_FAILURE, BrokerPoolRecovery, RecoveryFacts
+from .w1_composition import W1CampaignPlan, assert_no_host_platform_calls as assert_w1_platform
 from .w2_composition import W2CampaignPlan, assert_no_host_platform_calls
 
 #: Roles the composed campaign spawns. Exact W2: one broker, two workers.
 W2_ROLES = ("broker", "worker-0", "worker-1")
+
+#: Every plan this composition can drive: exact W2 (v4) and the two W1 profiles (v5, v6).
+ComposedPlan = W2CampaignPlan | W1CampaignPlan
 
 
 class MacosW2CampaignError(RuntimeError):
@@ -113,7 +117,7 @@ class CampaignOutcome:
     """The result of one composed run, with the evidence a checkpoint needs."""
 
     status: str
-    plan: W2CampaignPlan | None
+    plan: ComposedPlan | None
     ready_models: tuple[str, ...] = ()
     worker_states: tuple[tuple[str, str], ...] = ()
     served: int = 0
@@ -138,18 +142,23 @@ class CampaignOutcome:
 
 
 class MacosW2Campaign:
-    """One exact-W2 macOS MPS campaign, from pre-flight to exact cleanup."""
+    """One composed macOS MPS campaign: exact W2 (v4) or exactly one W1 Worker (v5/v6)."""
 
-    def __init__(self, *, plan: W2CampaignPlan, address, supervisor: CampaignSupervisor,
+    def __init__(self, *, plan: ComposedPlan, address, supervisor: CampaignSupervisor,
                  ports: CampaignPorts, registry: InferenceRegistry | None = None,
                  snapshots: SnapshotRegistry | None = None) -> None:
-        if not isinstance(plan, W2CampaignPlan):
+        if not isinstance(plan, (W2CampaignPlan, W1CampaignPlan)):
             raise MacosW2CampaignError("PLAN_TYPE", type(plan).__name__)
         if plan.accelerator != "mps":
             raise MacosW2CampaignError("PLAN_NOT_MPS", plan.accelerator)
         if plan.worker_count != len(plan.slots.slot_ids):
             raise MacosW2CampaignError("SLOT_COUNT_MISMATCH", str(plan.worker_count))
-        assert_no_host_platform_calls(plan)
+        # The host-boundary check is the plan's own: a W1 plan carries three approved profiles'
+        # worth of Darwin pins, an exact-W2 plan carries v4's.
+        if isinstance(plan, W1CampaignPlan):
+            assert_w1_platform(plan)
+        else:
+            assert_no_host_platform_calls(plan)
         self.plan = plan
         self.address = address
         self.supervisor = supervisor

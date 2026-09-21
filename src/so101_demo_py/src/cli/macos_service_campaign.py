@@ -28,6 +28,7 @@ import argparse
 import hashlib
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 import signal
 import subprocess
@@ -39,7 +40,24 @@ import time
 # known parent package", which a test that imports this file as a module cannot see. Absolute imports
 # need ``so101_demo`` to be importable, which the service guarantees - it imports that package itself to
 # resolve its layout, and the child inherits the same path.
+from so101_demo.parallel_batch.contracts import (
+    ContractError,
+    ExecutionProfile,
+    ParallelRuntimeConfigV4,
+    ParallelRuntimeConfigV5,
+    ParallelRuntimeConfigV6,
+    execution_route_for_schema,
+    resolve_execution_route,
+)
 from so101_demo.parallel_batch.macos_control_endpoint import MacosFixedControlEndpoint
+from so101_demo.parallel_batch.start_guard_probe import (
+    StartGuardRefused,
+    run_campaign_start_guard,
+)
+from so101_demo.parallel_batch.w2_composition import (
+    CompositionError,
+    load_execution_config_for_schema,
+)
 from so101_demo.runtime.owner_records import (
     ROOT_VARIABLE as OWNER_ROOT_VARIABLE,
     OwnerContext,
@@ -49,11 +67,32 @@ from so101_demo.runtime.owner_records import (
     spawner_token_from_environment,
 )
 
-#: The exact-W2 worker count this platform runs, and the reason for the refusal below.
+#: The exact-W2 worker count, kept for the refusal vocabulary this adapter has always used.
 EXACT_W2_WORKERS = 2
 
-#: The launcher this adapter drives.
+#: The launcher this adapter drives for exact W2. The two W1 routes are named by the table below.
 CAMPAIGN_MODULE = "so101_demo.cli.macos_w2_campaign"
+
+#: The closed dispatch table: ``(schema_version, execution_profile)`` -> the one entry point that
+#: executes it. There is no default entry, no generic ``--batch-kind`` fallback and no cross-profile
+#: reuse: a key that is not in this table is refused by name before anything is spawned.
+ROUTE_MODULES = {
+    (4, str(ExecutionProfile.MPS_W2_FIRST_PASS)): "so101_demo.cli.macos_w2_campaign",
+    (5, str(ExecutionProfile.MPS_W1_FULL_RESTART_RETRY)): "so101_demo.cli.macos_n1_retry",
+    (6, str(ExecutionProfile.MPS_W1_FIRST_PASS)): "so101_demo.cli.macos_n1_first_pass",
+}
+
+#: The config class each admitted schema must resolve to.
+ROUTE_CONFIG_CLASSES = {
+    4: ParallelRuntimeConfigV4,
+    5: ParallelRuntimeConfigV5,
+    6: ParallelRuntimeConfigV6,
+}
+
+#: Optional request declarations. The service's argv cannot carry them, so when the environment names
+#: them they are checked against the document instead of being silently ignored.
+BATCH_KIND_VARIABLE = "SO101_FIXED_CONTROL_BATCH_KIND"
+EXECUTION_PROFILE_VARIABLE = "SO101_FIXED_CONTROL_EXECUTION_PROFILE"
 
 #: Bounded stop: SIGTERM, then SIGKILL, then a fresh read of the group.
 STOP_TERM_TIMEOUT_S = 5.0
@@ -101,39 +140,70 @@ def _digest(path: Path) -> str:
     return digest.hexdigest()
 
 
-def validate(arguments, *, environment=None) -> dict:
-    """Refuse anything this platform cannot execute, by name, before anything is spawned.
+@dataclass(frozen=True)
+class AdapterRoute:
+    """The resolved dispatch key: the document, its closed route, the executing module and the
+    JSON-safe request record."""
 
-    Every refusal here is a fact about the request, not about the host's mood: the worker count is the
-    exact-W2 count this platform declares, the digests are the ones the service resolved from the
-    installed layout, and the campaign identity is the one the service minted with the control token.
+    config: object
+    route: object
+    module: str
+    record: dict
+
+
+def resolve_request(arguments, *, environment=None, platform=None) -> AdapterRoute:
+    """Resolve and refuse the request, by name, before anything is spawned.
+
+    The dispatch key is ``(schema_version, execution_profile, batch_kind, worker_count)``. The schema
+    and the profile come from the document, the batch kind is the one that profile admits (and is
+    checked against the request's own declaration when the service supplies one), and the worker
+    count is the one the request and the document must agree on. Every refusal here is a fact about
+    the request, not about the host's mood.
     """
     environment = os.environ if environment is None else environment
     if arguments.run_mode != "execute":
         raise ServiceCampaignError("RUN_MODE_UNSUPPORTED", str(arguments.run_mode))
-    if arguments.worker_count != EXACT_W2_WORKERS:
+    if arguments.worker_count not in (1, EXACT_W2_WORKERS):
         raise ServiceCampaignError(
             "PLATFORM_WORKER_COUNT_UNSUPPORTED", str(arguments.worker_count)
         )
     if not arguments.config.is_file():
         raise ServiceCampaignError("CONFIG_MISSING", str(arguments.config))
-    from so101_demo.parallel_batch.contracts import ContractError, ParallelRuntimeConfigV4
-    from so101_demo.parallel_batch.w2_composition import (
-        CompositionError,
-        load_execution_config_for_schema,
-    )
-
     try:
-        config = load_execution_config_for_schema(arguments.config)
+        config = load_execution_config_for_schema(arguments.config, platform=platform)
     except (ContractError, CompositionError, ValueError) as error:
         raise ServiceCampaignError("CONFIG_UNREADABLE", f"{type(error).__name__}: {error}") from error
-    if not isinstance(config, ParallelRuntimeConfigV4):
+    version = getattr(config, "schema_version", None)
+    expected_class = ROUTE_CONFIG_CLASSES.get(version)
+    if expected_class is None or not isinstance(config, expected_class):
+        raise ServiceCampaignError("CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION", str(version))
+    # The schema owns exactly one approved route; the profile and the batch kind come from that
+    # table rather than from the document, so a document cannot name its own profile.
+    try:
+        approved = execution_route_for_schema(version)
+    except ContractError as error:
         raise ServiceCampaignError(
-            "CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION", str(getattr(config, "schema_version", "?"))
+            "CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION", str(version)) from error
+    execution_profile = str(approved.execution_profile)
+    declared_profile = str(environment.get(EXECUTION_PROFILE_VARIABLE) or execution_profile)
+    if declared_profile != execution_profile:
+        raise ServiceCampaignError(
+            "PROFILE_SCHEMA_MISMATCH", f"request says {declared_profile} for schema v{version}"
         )
-    if getattr(config, "worker_count", None) != EXACT_W2_WORKERS:
+    # The argv the service launches cannot carry a batch kind - the flag set is fixed - so the
+    # profile's own kind is the request's, and a declaration the service *does* make in the
+    # environment has to agree with the document rather than override it.
+    declared_kind = str(environment.get(BATCH_KIND_VARIABLE) or approved.batch_kind)
+    try:
+        route = resolve_execution_route(
+            schema_version=version, execution_profile=execution_profile,
+            batch_kind=declared_kind, worker_count=arguments.worker_count)
+    except ContractError as error:
+        raise ServiceCampaignError(str(error), f"schema v{version} {execution_profile}") from error
+    module = ROUTE_MODULES.get((route.schema_version, str(route.execution_profile)))
+    if module is None:
         raise ServiceCampaignError(
-            "PLATFORM_WORKER_COUNT_UNSUPPORTED", f"config says {getattr(config, 'worker_count', '?')}"
+            "EXECUTION_ROUTE_UNSUPPORTED", f"{route.schema_version}/{route.execution_profile}"
         )
     if not arguments.yolo_weights.is_file():
         raise ServiceCampaignError("YOLO_WEIGHTS_MISSING", str(arguments.yolo_weights))
@@ -166,11 +236,16 @@ def validate(arguments, *, environment=None) -> dict:
     epoch = environment.get("SO101_FIXED_CONTROL_EPOCH", "1")
     if not str(epoch).isdigit() or int(epoch) <= 0:
         raise ServiceCampaignError("CONTROL_EPOCH_INVALID", str(epoch))
-    return {
+    record = {
         "campaign_id": campaign_id,
         "batch_id": arguments.batch_id,
         "coordinator_epoch": int(epoch),
         "control_socket": control_socket,
+        "schema_version": route.schema_version,
+        "execution_profile": str(route.execution_profile),
+        "batch_kind": str(route.batch_kind),
+        "worker_count": route.worker_count,
+        "campaign_module": module,
         # Recorded, not silently dropped: the in-process MPS broker makes a container image
         # meaningless here, and a reader should see that this was a decision rather than an omission.
         "broker_image": arguments.broker_image,
@@ -183,14 +258,28 @@ def validate(arguments, *, environment=None) -> dict:
         "grounded_manifest_sha256": observed_manifest,
         "selected_point_ids": list(arguments.point_id),
     }
+    return AdapterRoute(config=config, route=route, module=module, record=record)
 
 
-def campaign_argv(arguments) -> list[str]:
-    """The argv the existing macOS campaign CLI is driven with. Nothing else is added to it."""
+def validate(arguments, *, environment=None, platform=None) -> dict:
+    """The JSON-safe request record, resolved through the closed route table.
+
+    Kept as the adapter's validating entry point: it refuses by name and returns the record the
+    evidence documents quote.
+    """
+
+    return resolve_request(arguments, environment=environment, platform=platform).record
+
+
+def campaign_argv(arguments, module: str = CAMPAIGN_MODULE, *,
+                  campaign_id: str | None = None) -> list[str]:
+    """The argv one campaign entry point is driven with. Nothing else is added to it."""
+    if campaign_id is None:
+        campaign_id = os.environ["SO101_FIXED_CONTROL_CAMPAIGN_ID"]
     argv = [
-        sys.executable, "-m", CAMPAIGN_MODULE,
+        sys.executable, "-m", module,
         "--config", str(arguments.config),
-        "--campaign-id", os.environ["SO101_FIXED_CONTROL_CAMPAIGN_ID"],
+        "--campaign-id", campaign_id,
         "--batch-id", arguments.batch_id,
         "--evidence-root", str(arguments.evidence_root),
         "--yolo-weights", str(arguments.yolo_weights),
@@ -363,24 +452,63 @@ class OwnedCampaign:
         self._log.close()
 
 
-def main(argv: list[str] | None = None) -> int:
+def adapter_start_guard(route: AdapterRoute, arguments, *, guard=None,
+                       environment=None):
+    """One fresh start-guard admission before any campaign child process is created.
+
+    Design section 7: the campaign adapter runs a fresh check before it creates anything. The
+    probe wiring is composed for the document's own profile, and a previous preflight result is
+    never reused - there is no cache here to reuse. The returned document is the audit record.
+    """
+
+    from so101_demo.cli.macos_w2_campaign import guard_document
+
+    environment = os.environ if environment is None else environment
+    runner = guard or run_campaign_start_guard
+    policy = route.config.start_guard
+    try:
+        result = runner(policy=policy, batch_id=arguments.batch_id,
+                        worker_count=route.route.worker_count,
+                        state_root=Path(arguments.evidence_root) / "start-guard-state")
+    except StartGuardRefused as refusal:
+        result = refusal.result
+    document = guard_document(result)
+    root = Path(arguments.evidence_root)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "start-guard.json").write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
+    return document, result
+
+
+def main(argv: list[str] | None = None, *, guard=None, environment=None) -> int:
     arguments = build_parser().parse_args(sys.argv[1:] if argv is None else argv)
+    environment = os.environ if environment is None else environment
     document: dict = {"status": "PENDING"}
     try:
-        validated = validate(arguments)
+        route = resolve_request(arguments, environment=environment)
     except ServiceCampaignError as error:
         document.update(status="REFUSED", stage="validate",
                         refusal=error.reason, detail=error.detail)
         print(json.dumps(document, indent=2, sort_keys=True))
         return 1
-    document["request"] = validated
+    document["request"] = route.record
+
+    # The fresh admission runs before the campaign child exists. A FAIL is a refusal: nothing is
+    # spawned and the reason is written down.
+    audit, admission = adapter_start_guard(route, arguments, guard=guard, environment=environment)
+    document["start_guard"] = audit
+    if admission.status == "FAIL" or admission.cleanup_state != "CLEAR":
+        document.update(status="REFUSED", stage="start_guard", refusal=audit["reason"],
+                        start_guard=audit)
+        print(json.dumps(document, indent=2, sort_keys=True))
+        return 4
 
     result_path = arguments.evidence_root / "campaign-result.json"
     try:
         campaign = OwnedCampaign(
-            campaign_argv(arguments),
+            campaign_argv(arguments, route.module,
+                          campaign_id=route.record["campaign_id"]),
             log_path=arguments.evidence_root / "campaign.log",
-            owner_context=adapter_owner_context(arguments),
+            owner_context=adapter_owner_context(arguments, environment=environment),
         )
     except OwnerRecordError as error:
         # A durable owner record that cannot be written or confirmed refuses the campaign by name:
@@ -417,11 +545,11 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     endpoint = MacosFixedControlEndpoint(
-        campaign_id=validated["campaign_id"],
-        batch_id=validated["batch_id"],
-        coordinator_epoch=validated["coordinator_epoch"],
-        path=Path(validated["control_socket"]),
-        control_token=os.environ["SO101_FIXED_CONTROL_TOKEN"],
+        campaign_id=route.record["campaign_id"],
+        batch_id=route.record["batch_id"],
+        coordinator_epoch=route.record["coordinator_epoch"],
+        path=Path(route.record["control_socket"]),
+        control_token=environment["SO101_FIXED_CONTROL_TOKEN"],
         state_provider=state,
         request_stop=request_stop,
     )

@@ -330,3 +330,354 @@ def test_v4_probe_selection_keeps_cuda_on_the_v3_path():
     assert selection.admission_kind == "unified-memory-proxy"
     with pytest.raises(accelerator_probe.ProbeError, match="ACCELERATOR_KIND"):
         accelerator_probe.select_accelerator_probe("tpu")
+
+
+# --------------------------------------------------------------------------------------
+# Fresh per-spawn semantics (design section 7)
+#
+# The campaign adapter takes one fresh check before any campaign child exists; every Worker
+# takes its own fresh check after its spawn intent is durable and before ``Popen``. A result
+# is never reused across a spawn epoch, a Worker or a retry, and the guard result binds the
+# real owner identity: (batch_id, epoch, owner_pid, owner_birth, MPS:default, worker_count).
+# --------------------------------------------------------------------------------------
+
+
+class _ScriptedCoordinator(probe_module.ProbeCoordinator):
+    """A coordinator that answers from a script and records every fresh request."""
+
+    def __init__(self, state_root, statuses):
+        super().__init__(state_root)
+        self._statuses = list(statuses)
+        self.scopes = []
+
+    def check(self, policy, scope):  # noqa: D102 - the scripted answer is the subject
+        from so101_demo.parallel_batch.start_guard import GuardCheck, GuardResult
+
+        self.scopes.append(scope)
+        status = self._statuses[min(len(self.scopes) - 1, len(self._statuses) - 1)]
+        return GuardResult(
+            scope=scope, status=status, started_monotonic_s=time.monotonic(),
+            completed_monotonic_s=time.monotonic(),
+            checks={"probe": GuardCheck(status, "SCRIPTED", None, None, "state")},
+            snapshot=None, cleanup_state=probe_module.CLEAR)
+
+
+def test_a_preflight_result_never_admits_a_later_spawn(tmp_path, scope):
+    """The first spawn is admitted once; the next one takes its own fresh observation."""
+
+    coordinator = _ScriptedCoordinator(tmp_path / "state", ["PASS", "FAIL"])
+    guard = probe_module.EpochStartGuard(coordinator, StartGuardPolicy())
+
+    first = guard.require_fresh_startable(scope)
+    assert first.status == "PASS"
+    with pytest.raises(probe_module.StartGuardRefused) as excinfo:
+        guard.require_fresh_startable(scope)
+    assert excinfo.value.result.status == FAIL
+    assert len(coordinator.scopes) == 2, "a fresh request per spawn, never a cached verdict"
+
+
+def test_the_fresh_spawn_form_never_reuses_even_a_healthy_result(tmp_path, scope):
+    """`require_before_spawn` may share inside one epoch; a spawn admission may not."""
+
+    coordinator = _ScriptedCoordinator(tmp_path / "state", ["PASS"])
+    guard = probe_module.EpochStartGuard(coordinator, StartGuardPolicy())
+
+    guard.require_before_spawn(scope)
+    guard.require_before_spawn(scope)
+    assert len(coordinator.scopes) == 1, "the epoch form is the sharing one"
+
+    guard.require_fresh_startable(scope)
+    guard.require_fresh_startable(scope)
+    assert len(coordinator.scopes) == 3, "every spawn takes its own observation"
+
+
+def test_the_spawn_scope_binds_the_owner_birth_and_the_mps_selector():
+    """The guard scope is the real owner identity, not a defaulted counter."""
+
+    scope = probe_module.darwin_guard_scope(batch_id="b-n1", epoch=1, worker_count=1)
+    assert scope.batch_id == "b-n1"
+    assert scope.epoch == 1
+    assert scope.owner_pid == os.getpid()
+    assert scope.gpu_selector == "MPS:default"
+    assert scope.worker_count == 1
+    assert scope.owner_starttime_ticks == probe_module.read_process_identity(
+        os.getpid()).start_time_ticks
+
+    campaign = probe_module.darwin_guard_scope(batch_id="b-n1", worker_count=2)
+    assert campaign.epoch == probe_module.CAMPAIGN_GUARD_EPOCH
+    assert campaign.worker_count == 2
+
+
+def test_the_two_approved_w1_policies_demand_the_mps_probe(tmp_path, scope):
+    """A v5/v6 policy carries the same floor, so the admission is mandatory there too."""
+
+    from so101_demo.parallel_batch.contracts import (
+        load_parallel_runtime_config_v5,
+        load_parallel_runtime_config_v6,
+    )
+
+    package = Path(__file__).resolve().parents[1]
+    for name in ("parallel_batch_v5_macos_mps_w1_retry.yaml",
+                 "parallel_batch_v6_macos_mps_w1_first_pass.yaml"):
+        config = (load_parallel_runtime_config_v5 if "v5" in name
+                  else load_parallel_runtime_config_v6)(
+            package / "config/mujoco" / name)
+        missing = probe_module.EpochStartGuard(
+            probe_module.ProbeCoordinator(tmp_path / name), config.start_guard)
+        refused = missing.begin_epoch(scope)
+        assert refused.status == FAIL
+        assert refused.checks["mps_accelerator"].reason == "MPS_ACCELERATOR_PROBE_MISSING"
+
+        healthy = probe_module.EpochStartGuard(
+            probe_module.ProbeCoordinator(tmp_path / f"h-{name}"), config.start_guard,
+            accelerator=lambda **_: _healthy_mps_snapshot())
+        admitted = healthy.begin_epoch(scope)
+        assert admitted.checks["mps_headroom"].reason == "MPS_HEADROOM_OK"
+
+
+def test_a_v3_document_can_never_carry_the_mps_headroom(tmp_path):
+    """The Linux v3 contract still refuses the Darwin-only field by name."""
+
+    import yaml
+
+    from so101_demo.parallel_batch.contracts import ContractError, parse_parallel_runtime_config_v3
+
+    document = yaml.safe_load(V3_CONFIG.read_text())
+    document["start_guard"]["mps_minimum_headroom_bytes"] = 1 << 30
+    with pytest.raises(ContractError, match="UNKNOWN_START_GUARD_FIELD"):
+        parse_parallel_runtime_config_v3(document)
+    assert load_parallel_runtime_config_v3(V3_CONFIG).start_guard.mps_minimum_headroom_bytes is None
+
+
+# --------------------------------------------------------------------------------------
+# the supervisor's spawn-time guard
+# --------------------------------------------------------------------------------------
+
+
+ACK_CHILD = (
+    "import json, os, sys, time\n"
+    "ack_path = sys.argv[1]\n"
+    "payload = {'pid': os.getpid(), 'pgid': os.getpgid(0), 'argv': ['ack-child']}\n"
+    "temporary = ack_path + '.part'\n"
+    "with open(temporary, 'w', encoding='utf-8') as handle:\n"
+    "    json.dump(payload, handle)\n"
+    "    handle.flush()\n"
+    "    os.fsync(handle.fileno())\n"
+    "os.replace(temporary, ack_path)\n"
+    "time.sleep(float(sys.argv[2]))\n"
+)
+
+
+class _SpawnGuardDouble:
+    """Records every spawn admission and the durable state it was asked in."""
+
+    def __init__(self, statuses=("PASS",), *, observation=None, reason="SCRIPTED"):
+        self.statuses = list(statuses)
+        self.reason = reason
+        self.scopes = []
+        self.observations = []
+        self._observation = observation
+
+    def require_fresh_startable(self, scope):
+        from so101_demo.parallel_batch.start_guard import GuardCheck, GuardResult
+
+        self.scopes.append(scope)
+        if self._observation is not None:
+            self.observations.append(self._observation(scope))
+        status = self.statuses[min(len(self.scopes) - 1, len(self.statuses) - 1)]
+        result = GuardResult(
+            scope=scope, status=status, started_monotonic_s=0.0, completed_monotonic_s=0.0,
+            checks={"probe": GuardCheck(status, self.reason, None, None, "state")},
+            snapshot=None, cleanup_state=probe_module.CLEAR)
+        if status == FAIL:
+            raise probe_module.StartGuardRefused(result)
+        return result
+
+
+class _CountingPopen:
+    def __init__(self):
+        self.calls = 0
+
+    def __call__(self, argv, **kwargs):
+        self.calls += 1
+        return subprocess.Popen(argv, **kwargs)
+
+
+def _supervisor(tmp_path, *, spawn_guard=None, popen=None, **kwargs):
+    from so101_demo.parallel_batch.campaign_supervisor import CampaignSupervisor
+
+    return CampaignSupervisor(
+        "b-n1", state_root=tmp_path / "supervisor", ack_timeout_s=kwargs.pop("ack_timeout_s", 5.0),
+        spawn_guard=spawn_guard, guard_worker_count=kwargs.pop("guard_worker_count", 1),
+        popen=popen or subprocess.Popen, **kwargs)
+
+
+def test_every_spawn_takes_its_own_epoch_after_the_intent_and_before_popen(tmp_path):
+    """One fresh admission per Worker, requested after the durable intent and before Popen."""
+
+    import json as _json
+
+    recorder = _CountingPopen()
+    observations = []
+
+    def observe(scope):
+        receipt = _json.loads((tmp_path / "supervisor/owner-receipt.json").read_text())
+        children = receipt["children"]
+        return {
+            "epoch": scope.epoch,
+            "popen_calls": recorder.calls,
+            "spawning": [child["role"] for child in children if child["status"] == "SPAWNING"],
+        }
+
+    guard = _SpawnGuardDouble(("PASS", "PASS"), observation=observe)
+    supervisor = _supervisor(tmp_path, spawn_guard=guard, popen=recorder)
+    supervisor.acquire_claim()
+    try:
+        for slot in (0, 1):
+            ack = tmp_path / f"ack-{slot}.json"
+            record = supervisor.spawn(
+                role="worker", slot=slot,
+                argv=[sys.executable, "-c", ACK_CHILD, str(ack), "20"],
+                nonce=f"n-{slot}", ack_path=ack, ack_timeout_s=5.0)
+            assert record.status == "ACTIVE", record.reason
+    finally:
+        supervisor.terminate_all()
+        supervisor.release_claim()
+
+    assert len(guard.scopes) == 2, "one fresh admission per spawn"
+    first, second = guard.scopes
+    assert first.epoch == 1 and second.epoch == 2, (first.epoch, second.epoch)
+    assert first.batch_id == second.batch_id == "b-n1"
+    assert first.owner_pid == second.owner_pid == os.getpid()
+    assert first.owner_starttime_ticks == second.owner_starttime_ticks
+    assert first.gpu_selector == second.gpu_selector == "MPS:default"
+    assert first.worker_count == second.worker_count == 1
+    for observation in guard.observations:
+        # At the moment of each admission the intent exists and no child of *this* spawn has been
+        # created yet: the calls before it belong to the earlier, already-resolved spawn.
+        assert observation["popen_calls"] == observation["epoch"] - 1, observation
+        assert observation["spawning"] == ["worker"], observation
+
+
+def test_a_refused_spawn_guard_never_calls_popen_and_resolves_the_intent(tmp_path):
+    """A FAIL admission is a refusal: no child, and the durable intent is not left SPAWNING."""
+
+    import json as _json
+
+    from so101_demo.parallel_batch.campaign_supervisor import CampaignBlocked
+
+    recorder = _CountingPopen()
+    guard = _SpawnGuardDouble(("FAIL",))
+    supervisor = _supervisor(tmp_path, spawn_guard=guard, popen=recorder)
+    supervisor.acquire_claim()
+    try:
+        ack = tmp_path / "ack.json"
+        with pytest.raises(CampaignBlocked, match="START_GUARD_REFUSED"):
+            supervisor.spawn(role="worker", slot=0,
+                             argv=[sys.executable, "-c", ACK_CHILD, str(ack), "20"],
+                             nonce="n-0", ack_path=ack, ack_timeout_s=5.0)
+        # Read the receipt while the claim is still held: cleanup clears a resolved receipt.
+        receipt = _json.loads((tmp_path / "supervisor/owner-receipt.json").read_text())
+    finally:
+        supervisor.terminate_all()
+
+    assert recorder.calls == 0, "a refused admission must not spawn anything"
+    assert [child["status"] for child in receipt["children"]] == ["FAILED"]
+    assert receipt["children"][0]["reason"] == "START_GUARD_REFUSED"
+    assert receipt["children"][0]["pid"] is None
+    supervisor.release_claim()
+
+
+def test_a_spawn_without_a_guard_is_unchanged(tmp_path):
+    """The guard is opt-in: a supervisor that was given none spawns exactly as before."""
+
+    supervisor = _supervisor(tmp_path)
+    supervisor.acquire_claim()
+    try:
+        assert supervisor.spawn_guard is None
+        ack = tmp_path / "ack.json"
+        record = supervisor.spawn(role="worker", slot=0,
+                                  argv=[sys.executable, "-c", ACK_CHILD, str(ack), "20"],
+                                  nonce="n-0", ack_path=ack, ack_timeout_s=5.0)
+        assert record.status == "ACTIVE"
+    finally:
+        supervisor.terminate_all()
+        supervisor.release_claim()
+
+
+@pytest.mark.parametrize("reason", ["RAM_BELOW_MINIMUM", "MPS_HEADROOM_BELOW_MINIMUM",
+                                    "MPS_ACCELERATOR_PROBE_MISSING", "PROBE_CLEANUP_BLOCKED"])
+def test_a_refusing_admission_never_spawns_for_any_failure_kind(tmp_path, reason):
+    """RAM, MPS, probe and cleanup failures are all refusals: none of them reaches ``Popen``."""
+
+    from so101_demo.parallel_batch.campaign_supervisor import CampaignBlocked
+
+    recorder = _CountingPopen()
+    supervisor = _supervisor(tmp_path, spawn_guard=_SpawnGuardDouble(("FAIL",), reason=reason),
+                             popen=recorder)
+    supervisor.acquire_claim()
+    try:
+        ack = tmp_path / "ack.json"
+        with pytest.raises(CampaignBlocked, match="START_GUARD_REFUSED") as excinfo:
+            supervisor.spawn(role="worker", slot=0,
+                             argv=[sys.executable, "-c", ACK_CHILD, str(ack), "20"],
+                             nonce="n-0", ack_path=ack, ack_timeout_s=5.0)
+        assert excinfo.value.detail == reason
+    finally:
+        supervisor.terminate_all()
+        supervisor.release_claim()
+    assert recorder.calls == 0
+
+
+def test_a_cpu_warn_admission_still_spawns_exactly_once(tmp_path):
+    """CPU busy is a WARN, not a refusal: it does not block the start and does not duplicate it."""
+
+    recorder = _CountingPopen()
+    supervisor = _supervisor(tmp_path, spawn_guard=_SpawnGuardDouble(("WARN",), reason="CPU_BUSY"),
+                             popen=recorder)
+    supervisor.acquire_claim()
+    try:
+        ack = tmp_path / "ack.json"
+        record = supervisor.spawn(role="worker", slot=0,
+                                  argv=[sys.executable, "-c", ACK_CHILD, str(ack), "20"],
+                                  nonce="n-0", ack_path=ack, ack_timeout_s=5.0)
+        assert record.status == "ACTIVE"
+    finally:
+        supervisor.terminate_all()
+        supervisor.release_claim()
+    assert recorder.calls == 1, "a WARN admission spawns once, never twice"
+
+
+def test_a_w1_and_a_w2_campaign_cannot_hold_the_claim_at_the_same_time(tmp_path):
+    """One macOS service instance runs one campaign: the claim is the same MPS:DEFAULT flock."""
+
+    from so101_demo.parallel_batch.campaign_supervisor import CLAIM_IDENTITY, CampaignBlocked
+
+    assert CLAIM_IDENTITY == "MPS:DEFAULT"
+    w2 = _supervisor(tmp_path)
+    w2.acquire_claim()
+    try:
+        w1 = _supervisor(tmp_path, guard_worker_count=1)
+        assert w1.claim_identity == w2.claim_identity == "MPS:DEFAULT"
+        with pytest.raises(CampaignBlocked, match="CAMPAIGN_CLAIM_HELD"):
+            w1.acquire_claim()
+    finally:
+        w2.release_claim()
+
+
+def test_a_spawn_guard_without_the_fresh_admission_entry_is_refused(tmp_path):
+    """A guard that cannot prove freshness is not a guard; the spawn is refused by name."""
+
+    from so101_demo.parallel_batch.campaign_supervisor import CampaignBlocked
+
+    supervisor = _supervisor(tmp_path, spawn_guard=object())
+    supervisor.acquire_claim()
+    try:
+        ack = tmp_path / "ack.json"
+        with pytest.raises(CampaignBlocked, match="SPAWN_GUARD_INVALID"):
+            supervisor.spawn(role="worker", slot=0,
+                             argv=[sys.executable, "-c", ACK_CHILD, str(ack), "20"],
+                             nonce="n-0", ack_path=ack, ack_timeout_s=5.0)
+    finally:
+        supervisor.terminate_all()
+        supervisor.release_claim()

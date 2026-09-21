@@ -6,6 +6,7 @@ through the one-time table, that a broker failure runs the closed rebuild, and t
 snapshots are reported rather than deleted.
 """
 
+import json
 import time
 from pathlib import Path
 
@@ -566,3 +567,255 @@ def test_campaign_journal_publishes_committed_watermarks(tmp_path):
         tmp_path / "journal", "batch-composed", final)
     assert [event.type for event in replay.events] == [
         "CAMPAIGN_STARTED", "BATCH_TERMINAL", "CLEANUP_COMMITTED"]
+
+
+# --------------------------------------------------------------------------------------
+# Task 7: the typed route, the service adapter's dispatch, and the fresh pre-child guard
+#
+# The adapter is the seam the service launches. It accepts exactly the flags the supervisor
+# sends - no more - so its dispatch key has to be derived from those flags plus the config
+# document: (schema_version, execution_profile, batch_kind, worker_count). A key that is not
+# in the closed table is refused by name; there is no generic `--batch-kind` fallback and no
+# cross-profile reuse.
+# --------------------------------------------------------------------------------------
+
+V5_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v5_macos_mps_w1_retry.yaml"
+V6_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v6_macos_mps_w1_first_pass.yaml"
+
+ROUTES = (
+    (V4_CONFIG, 2, "MPS_W2_FIRST_PASS", "FIRST_PASS",
+     "so101_demo.cli.macos_w2_campaign"),
+    (V5_CONFIG, 1, "MPS_W1_FULL_RESTART_RETRY", "FULL_RESTART_RETRY",
+     "so101_demo.cli.macos_n1_retry"),
+    (V6_CONFIG, 1, "MPS_W1_FIRST_PASS", "FIRST_PASS",
+     "so101_demo.cli.macos_n1_first_pass"),
+)
+
+
+def _service_environment(tmp_path):
+    return {
+        "SO101_FIXED_CONTROL_CAMPAIGN_ID": "campaign-a",
+        "SO101_FIXED_CONTROL_SOCKET": str(tmp_path / "control.sock"),
+        "SO101_FIXED_CONTROL_TOKEN": "ab" * 32,
+        "SO101_FIXED_CONTROL_EPOCH": "1",
+    }
+
+
+def _service_argv(tmp_path, *, config_path, worker_count, point_ids=("p1",)):
+    """The argv the service's supervisor builds, with real files behind every path."""
+
+    from so101_demo.cli import macos_service_campaign as adapter
+
+    tmp_path = Path(tmp_path)
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    weights = tmp_path / "yolo.pt"
+    weights.write_bytes(b"weights")
+    grounded = tmp_path / "grounded"
+    grounded.mkdir(parents=True, exist_ok=True)
+    (grounded / "manifest.json").write_text('{"model": "grounded"}\n')
+    points = tmp_path / "points.yaml"
+    points.write_text("points: [p1, p2]\n")
+    return adapter, [
+        "--points", str(points), "--config", str(config_path), "--batch-id", "b001",
+        "--worker-count", str(worker_count), "--evidence-root", str(tmp_path / "batch"),
+        "--broker-image", "sha256:" + "a" * 64, "--yolo-weights", str(weights),
+        "--yolo-weights-sha256", adapter._digest(weights),
+        "--grounded-root", str(grounded),
+        "--grounded-manifest-sha256", adapter._digest(grounded / "manifest.json"),
+        "--run-mode", "execute",
+        *[item for point in point_ids for item in ("--point-id", point)],
+    ]
+
+
+def test_the_service_adapter_dispatches_each_approved_route_to_one_module(tmp_path):
+    """One line per approved combination; the module is selected, never guessed."""
+
+    for config_path, worker_count, profile, batch_kind, module in ROUTES:
+        adapter, argv = _service_argv(tmp_path / config_path.stem, config_path=config_path,
+                                      worker_count=worker_count)
+        arguments = adapter.build_parser().parse_args(argv)
+        record = adapter.validate(arguments, environment=_service_environment(tmp_path))
+
+        assert record["execution_profile"] == profile
+        assert record["batch_kind"] == batch_kind
+        assert record["worker_count"] == worker_count
+        assert record["campaign_module"] == module
+        assert record["schema_version"] in (4, 5, 6)
+
+
+def test_the_service_adapter_refuses_a_key_outside_the_table(tmp_path):
+    """A worker count, schema or profile the table does not name is refused by name."""
+
+    from so101_demo.cli.macos_service_campaign import ServiceCampaignError
+
+    environment = _service_environment(tmp_path)
+    for config_path, worker_count, reason in (
+        (V4_CONFIG, 1, "PLATFORM_WORKER_COUNT_UNSUPPORTED"),
+        (V4_CONFIG, 4, "PLATFORM_WORKER_COUNT_UNSUPPORTED"),
+        (V5_CONFIG, 2, "PLATFORM_WORKER_COUNT_UNSUPPORTED"),
+        (V6_CONFIG, 8, "PLATFORM_WORKER_COUNT_UNSUPPORTED"),
+    ):
+        adapter, argv = _service_argv(tmp_path / f"{config_path.stem}-{worker_count}",
+                                      config_path=config_path, worker_count=worker_count)
+        with pytest.raises(ServiceCampaignError, match=reason):
+            adapter.validate(adapter.build_parser().parse_args(argv), environment=environment)
+
+
+def test_the_service_adapter_refuses_a_declared_batch_kind_or_profile_that_disagrees(tmp_path):
+    """The request's own batch kind and profile, when declared, must match the document.
+
+    A v5 document claiming first-pass, a v6 document claiming retry and a v4 document claiming W1
+    are all refused here - the profile belongs to exactly one schema, and the batch kind to exactly
+    one profile.
+    """
+
+    from so101_demo.cli.macos_service_campaign import (
+        BATCH_KIND_VARIABLE,
+        EXECUTION_PROFILE_VARIABLE,
+        ServiceCampaignError,
+    )
+
+    for config_path, worker_count, overrides, reason in (
+        (V5_CONFIG, 1, {BATCH_KIND_VARIABLE: "FIRST_PASS"}, "PROFILE_BATCH_KIND_MISMATCH"),
+        (V6_CONFIG, 1, {BATCH_KIND_VARIABLE: "FULL_RESTART_RETRY"},
+         "PROFILE_BATCH_KIND_MISMATCH"),
+        (V6_CONFIG, 1, {EXECUTION_PROFILE_VARIABLE: "MPS_W1_FULL_RESTART_RETRY"},
+         "PROFILE_SCHEMA_MISMATCH"),
+        (V4_CONFIG, 2, {EXECUTION_PROFILE_VARIABLE: "MPS_W1_FIRST_PASS"},
+         "PROFILE_SCHEMA_MISMATCH"),
+        (V4_CONFIG, 2, {BATCH_KIND_VARIABLE: "ADAPTIVE_POOL"}, "ADAPTIVE_UNSUPPORTED_ON_MACOS"),
+    ):
+        adapter, argv = _service_argv(tmp_path / f"{config_path.stem}-{len(overrides)}",
+                                      config_path=config_path, worker_count=worker_count)
+        environment = {**_service_environment(tmp_path), **overrides}
+        with pytest.raises(ServiceCampaignError, match=reason):
+            adapter.validate(adapter.build_parser().parse_args(argv), environment=environment)
+
+
+def test_the_service_adapter_has_no_generic_batch_kind_or_profile_flag(tmp_path):
+    """The dispatch key cannot be overridden from the command line."""
+
+    adapter, _ = _service_argv(tmp_path, config_path=V4_CONFIG, worker_count=2)
+    accepted = {option for action in adapter.build_parser()._actions
+                for option in action.option_strings}
+
+    assert "--batch-kind" not in accepted
+    assert "--execution-profile" not in accepted
+    for flag in ("--batch-kind", "--execution-profile"):
+        with pytest.raises(SystemExit):
+            adapter.build_parser().parse_args([flag, "FIRST_PASS"])
+
+
+def test_the_service_adapter_refuses_a_v3_document_and_a_missing_w1_config(tmp_path):
+    """v3 is still not executable on this platform, and the W1 routes need their documents."""
+
+    from so101_demo.cli.macos_service_campaign import ServiceCampaignError
+
+    environment = _service_environment(tmp_path)
+    adapter, argv = _service_argv(tmp_path / "v3", config_path=PACKAGE / "config/mujoco/parallel_batch_v3.yaml",
+                                  worker_count=2)
+    with pytest.raises(ServiceCampaignError, match="CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"):
+        adapter.validate(adapter.build_parser().parse_args(argv), environment=environment)
+
+
+def test_the_adapter_runs_the_fresh_guard_before_it_creates_the_campaign_child(
+        tmp_path, monkeypatch, capsys):
+    """The campaign child is never created when the fresh admission refuses."""
+
+    from so101_demo.cli import macos_service_campaign as adapter
+    from so101_demo.parallel_batch.start_guard import FAIL, GuardCheck, GuardResult
+    from so101_demo.parallel_batch.start_guard_probe import darwin_guard_scope
+
+    created: list[str] = []
+
+    class _NeverCalledCampaign:
+        def __init__(self, *args, **kwargs) -> None:
+            created.append("campaign-child")
+
+    monkeypatch.setattr(adapter, "OwnedCampaign", _NeverCalledCampaign)
+
+    observed: list[dict] = []
+
+    def refusing_guard(*, policy, batch_id, worker_count, **kwargs):
+        observed.append({"policy_floor": policy.mps_minimum_headroom_bytes,
+                         "batch_id": batch_id, "worker_count": worker_count,
+                         "children_at_call": list(created)})
+        return GuardResult(
+            scope=darwin_guard_scope(batch_id=batch_id, worker_count=worker_count),
+            status=FAIL, started_monotonic_s=0.0, completed_monotonic_s=0.0,
+            checks={"mps_accelerator": GuardCheck(FAIL, "MPS_HEADROOM_BELOW_MINIMUM",
+                                                  1, 1 << 30, "bytes")},
+            snapshot=None, cleanup_state="CLEAR")
+
+    adapter, argv = _service_argv(tmp_path, config_path=V6_CONFIG, worker_count=1)
+    code = adapter.main(argv, guard=refusing_guard, environment=_service_environment(tmp_path))
+
+    assert code != 0
+    assert created == [], "no campaign child may exist when the admission refuses"
+    assert observed and observed[0]["children_at_call"] == []
+    assert observed[0]["policy_floor"] == 1 << 30
+    assert observed[0]["worker_count"] == 1
+    document = json.loads(capsys.readouterr().out)
+    assert document["status"] == "REFUSED"
+    assert document["stage"] == "start_guard"
+    assert document["refusal"] == "MPS_HEADROOM_BELOW_MINIMUM"
+
+
+def test_the_adapter_guard_is_only_asked_once_per_campaign(tmp_path, monkeypatch):
+    """One fresh check per campaign start, not one per request field."""
+
+    from so101_demo.cli import macos_service_campaign as adapter
+    from so101_demo.parallel_batch.start_guard import FAIL, GuardCheck, GuardResult
+    from so101_demo.parallel_batch.start_guard_probe import darwin_guard_scope
+
+    monkeypatch.setattr(adapter, "OwnedCampaign", lambda *a, **k: None)
+    calls: list[int] = []
+
+    def refusing_guard(*, policy, batch_id, worker_count, **kwargs):
+        calls.append(worker_count)
+        return GuardResult(
+            scope=darwin_guard_scope(batch_id=batch_id, worker_count=worker_count),
+            status=FAIL, started_monotonic_s=0.0, completed_monotonic_s=0.0,
+            checks={"probe": GuardCheck(FAIL, "RAM_BELOW_MINIMUM", 1, 1 << 30, "bytes")},
+            snapshot=None, cleanup_state="CLEAR")
+
+    adapter, argv = _service_argv(tmp_path, config_path=V5_CONFIG, worker_count=1)
+    adapter.main(argv, guard=refusing_guard, environment=_service_environment(tmp_path))
+    assert calls == [1]
+
+
+def test_the_composed_campaign_accepts_a_w1_plan(tmp_path):
+    """One composition drives both W1 profiles: one slot, one Worker, one domain."""
+
+    from so101_demo.parallel_batch.w1_composition import compose_w1_retry
+
+    plan = compose_w1_retry(
+        config=load_execution_config(V5_CONFIG), config_path=V5_CONFIG, campaign_id="b-w1",
+        batch_id="batch-w1", selected_point_ids=("p1",), evidence_root=tmp_path)
+    supervisor = CampaignSupervisor("b-w1", state_root=tmp_path / "supervisor")
+    campaign = MacosW2Campaign(plan=plan, address=object(), supervisor=supervisor,
+                               ports=CampaignPorts(model_factories={}))
+
+    assert campaign.plan.worker_count == 1
+    assert campaign.plan.slots.slot_ids == ("slot-0",)
+    assert campaign.plan.execution_profile == "MPS_W1_FULL_RESTART_RETRY"
+
+
+def test_the_n1_verdict_requires_the_single_worker_happy_path():
+    """A W1 pass is one Worker, three served requests on MPS and nothing refused."""
+
+    from so101_demo.cli.macos_n1_first_pass import campaign_status as n1_status
+
+    good = dict(cleanup_complete=True, results=[{}], workers=[{"status": "ACTIVE"}],
+                served={"count": 3, "devices": ["mps"]}, refused=[])
+    assert n1_status(**good) == "N1_CAMPAIGN_PASS"
+    for change in (
+        {"cleanup_complete": False},
+        {"results": []},
+        {"results": [{}, {}]},
+        {"workers": [{"status": "STOPPED"}]},
+        {"served": {"count": 2, "devices": ["mps"]}},
+        {"served": {"count": 3, "devices": []}},
+        {"refused": [{"reason": "DUPLICATE_REQUEST"}]},
+    ):
+        assert n1_status(**{**good, **change}) == "N1_CAMPAIGN_INCOMPLETE", change
