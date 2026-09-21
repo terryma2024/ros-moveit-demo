@@ -12,7 +12,7 @@ executor: dst-so101-macos-closure (DeepSeek Harness TUI, tmux) resumed by explic
 worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
 branch: codex/so101-unified-webapp
 base_commit: 6d5069026fbd322076f58d0d4b9504891abeb861
-current_commit: da661d0a (Task 8 macOS W1/W2 matrix; see CP-MSC-T7-T8)
+current_commit: d4a72649 (Task 10 web matrix builder; see CP-MSC-T9-T10)
 upstream: origin/codex/so101-unified-webapp (in sync at resume; this session does not push)
 evidence_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
 dispatch_receipt: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/dispatch.receipt
@@ -49,9 +49,9 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-T7-T8
+latest_checkpoint: CP-MSC-T9-T10
 review_pending: CP-MSC-02 (Tasks 2-6, GPT-5.6 Sol/high - not available in this session; packet below)
-next_experiment: EXP-MSC-110 (Task 9: candidate/production execution contexts and atomic retry admission)
+next_experiment: EXP-MSC-111 (Task 11: offline package gate and one-time candidate live gates)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -1814,3 +1814,120 @@ Retained: all Task 7/8 invocations under `task2/task7-*`, `task2/task8-*`, plus 
 baselines and shims. Deletion candidates (nothing deleted): `task2/task8-head-archive/`,
 `task2/task8-scratch/`, superseded intermediate greens `task2/task8-green-1..6`,
 `task2/task7-green-1..2`, `task2/task7-impl-*`.
+
+## CP-MSC-T9-T10: one-time execution contexts, atomic retry admission, and a W1/W2-only web
+
+```yaml
+checkpoint_id: CP-MSC-T9-T10
+recorded_at: 2026-09-22T08:29:00+0800
+commits: 7ea1ebdd feat(teleop): authorize one-time macOS retries
+         62dcbd10 style(teleop): drop the trailing blank line in the execution context module
+         0579297b feat(web): expose macOS W1 and W2 execution only
+         d4a72649 feat(web): build the functional manifest from the live support matrix
+gates: task2/task9-gate-owner-20260921T235353Z - 125 passed / 2 failed (pre-existing sockets)
+       task2/task10-gate2-20260922T082000Z - tsc rc=0, bun run test rc=0 (48 files / 248 tests), build rc=0
+```
+
+### Task 9: contexts and admission
+
+`CandidateExecutionContext` and `ProductionExecutionContext` are the only two ways to start a
+retry: the first binds a task/dispatch, profile, config hash, runtime closure, worker count, batch,
+evidence root, owner generation, a one-time command id, an expiry and a max-runs budget; the second
+is issued by the installed service against the allowed v4/v5/v6 profiles, the current copied-install
+binding, the service session and a live control lease. Neither carries budget, qualification or
+promotion fields, neither is accepted on the other's endpoint, and both refuse a profile that is not
+a row of the matrix.
+
+`SupervisorStore.admit_retry()` performs the whole admission in one SQLite transaction: it consumes
+the command, validates the original business `FAILED` result (never INFRA_FAILED, INDETERMINATE,
+INVALID or UNRUN), the original batch's terminal-clean state, the fence, the owner check, the
+profile/schema/batch-kind/worker-count/config/closure/root binding and the lease, then creates the
+retry binding and writes the `OwnerIntent`. A refused admission never consumes its command; a spawn
+failure after the transaction keeps the intent and the fence and the command cannot replay.
+
+Two gaps were closed while doing it. The restored-campaign gap Task 8 flagged: a restarted service
+now re-resolves the profile named by the campaign's own preflight receipt instead of the layout's
+configured document, and refuses a mode that contradicts the matrix row. The projection gap: the
+fixed read commits the canonical projection transactionally so admission reads the same durable
+state it validated (`_persist_canonical_projection`, idempotent, delta-only journals untouched).
+
+Deviations, recorded rather than hidden: `process_owner.py` was added to the plan's file list
+because the real spawn must adopt the intent the transaction committed - otherwise one spawn leaves
+either a permanently unconfirmed ADAPTER intent (recovery would refuse forever) or two records for
+one process group; and the unadmitted plural `start_retries` was removed in favour of one admitted
+point per command, which is what the retry selection binding has meant since Task 2 (design section
+8). `retry_history` is a new API field, regenerated in the OpenAPI document and the web types.
+
+### Task 10: the web selects W1/W2 and verifies the batch evidence
+
+Campaign setup derives its modes and worker counts from the support matrix alone, never consults a
+qualification view on a matrix host, shows N3-N8 as `UNSUPPORTED_ON_MACOS` without any hash, and
+computes the claimed `{execution_profile, batch_kind}` as a pure function of the selection - the
+point count is never an input, proven at component, request-payload and e2e-receipt level. Preflight
+and start requests carry that claim, so the service refuses an unnamed or crossed route instead of
+inferring one. The StartGuard copy separates a RAM/MPS hard refusal from a CPU-busy warning and
+states that it is not a qualification proof.
+
+The campaign evidence assertions now cover selected-only commits, contiguous sequence with a
+committed watermark, the sealed nine-file physical evidence set hashed against its manifest, and
+cleanup completion, with tamper cases for each.
+
+The functional-manifest builder no longer requires ADAPTIVE: on macOS it derives five runnable cases
+from the matrix (W2/N2, W1/N1 first-pass, and the W1/N1 full-restart single point), records the five
+routes the host cannot run with their reasons, fails loudly for an explicitly requested
+out-of-matrix case, and keeps the legacy case set A/B-identical.
+
+### Evidence
+
+- Task 9: RED `task2/task9-red-1-20260921T233343Z` (collection) and
+  `task9/task9-red-behavioural-20260921T234313Z` (10 failed / 46 passed against the HEAD product);
+  GREEN gate above; full teleop suite `task2/task9-green-full-4-20260921T235020Z` 750 passed / 27
+  failed with the failure set byte-identical to `task9/task9-baseline-full-20260921T234425Z`;
+  OpenAPI/TS regeneration `task9/openapi-generation-20260921T234737Z` (idempotent, sha256
+  `3d5c3f64...` and `989d5980...`).
+- Task 10: RED components 7F/9P, app 2F/21P, live-evidence 3F/9P, campaign-live-evidence 13F;
+  GREEN 16/16, 23/23, 12/12, 13/13; my own gate `task2/task10-gate-owner-20260921T234328Z`
+  (tsc/test/build rc=0, 235 tests); manifest follow-up `task2/task10-manifest-20260922T075500Z`
+  (RED `MODE_NOT_ADVERTISED: ADAPTIVE` rc=1, GREEN macOS and legacy rc=0, manifest read-back rc=0,
+  legacy A/B parity) and gate `task2/task10-gate2-20260922T082000Z` (248 tests).
+- Environment note: this shell exports `NODE_ENV=production`, which breaks React Testing Library
+  suite-wide at HEAD as well; every web gate is run with `NODE_ENV` unset. Recorded as a host
+  condition, not a product defect.
+- One line in `src/state/expert-validation-store.test.ts` (outside the Task 10 file list) adds the
+  now-required `retry_history` fixture field; included in `d4a72649` as the smallest honest fix.
+
+## CP-MSC-03 review packet: Tasks 7-9, prepared for an external reviewer
+
+```yaml
+checkpoint_id: CP-MSC-03-PACKET
+recorded_at: 2026-09-22T08:30:00+0800
+scope: plan Tasks 7-9
+reviewer_required_by_plan: GPT-5.6 Sol / high
+reviewer_status: NOT PERFORMED - no such model or tool is reachable from this execution session
+```
+
+Points that deserve adversarial review:
+
+1. **Removal of the unadmitted plural retry.** `ExpertValidationSupervisor.start_retries` and its
+   test were removed because a retry binding is exactly one point, and the route now refuses more
+   than one point per command with `RETRY_ONE_POINT_PER_COMMAND`. Confirm no other caller relied on
+   the plural path and that the replacement test covers the same timeline assertions.
+2. **`process_owner.py` outside the plan's file list.** The spawn adopts the admitted `OwnerIntent`
+   so one process group has one durable record. Confirm the no-root path is unchanged and that a
+   refused admission still consumes nothing.
+3. **Transactional projection commit on every fixed read** (`_persist_canonical_projection`).
+   Confirm it is idempotent, that a delta-only legacy journal is never given a canonical durable
+   state, and that admission cannot read a projection that was not committed.
+4. **Restored campaign profile binding.** Confirm the receipt's profile is authoritative, that a
+   receipt without a profile keeps the configured document, and that an unknown profile fails closed.
+5. **Guard semantics after Task 7.** The campaign and each Worker take a fresh admission; the
+   composition is cached by `(profile, config_sha256, accelerator, selector)` and no verdict is
+   stored; the `exec` handover uses a one-shot inherited pipe and refuses a surviving torch import.
+   Confirm no path spawns without an admission and that a stored PASS/FAIL file cannot decide.
+6. **Web routing claim.** Confirm the claim is a pure function of the selection (never the point
+   count) and that the request carries `execution_profile` + `batch_kind` on every matrix host.
+
+Retained: every invocation under `task2/task9-*`, `task9/`, `task2/task10-*`. Deleted or archived:
+nothing. An unregistered evidence directory `/tmp/so101-debug-task10/` was created by the Task 10
+worker before the accounting rule was enforced; it is retained as-is and every gate it contains was
+re-run under the registered root (`task2/task10-gate-owner-*`, `task2/task10-gate2-*`).
