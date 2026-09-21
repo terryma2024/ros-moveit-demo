@@ -415,6 +415,8 @@ test("server capability supplies all eight options and exact twenty-point N8 K3 
   await user.click(screen.getByRole("button", { name: "Generate points" }));
   await user.click(screen.getByRole("button", { name: "Check resources" }));
   expect(preflight).toHaveBeenCalledWith(expect.objectContaining({ contract_version: 3, execution_mode: "PARALLEL", worker_count: 8 }), expect.objectContaining({ lease_id: "lease-a", lease_generation: 1 }));
+  // A host that publishes no support matrix keeps the existing request: no routing key is invented.
+  expect(preflight.mock.calls[0][0]).not.toHaveProperty("execution_profile");
 });
 
 test("worker choices follow a narrower server capability without invented counts", async () => {
@@ -499,4 +501,153 @@ test("a stored lease does not restore execution permission", async () => {
   await act(async () => {});
   expect(renewLease).not.toHaveBeenCalled();
   sessionStorage.clear();
+});
+
+/**
+ * The macOS platform document (design section 6): three matrix rows and fixed W1/W2. The page
+ * claims the matrix row it selected; it never derives a profile from the point count, and it
+ * never lets a per-N qualification view decide what this host may run.
+ */
+function matrixRow(
+  profile: string,
+  schema_version: number,
+  execution_mode: "SEQUENTIAL" | "PARALLEL",
+  worker_count: number,
+  batch_kind: "FIRST_PASS" | "FULL_RESTART_RETRY",
+) {
+  return {
+    profile,
+    schema_version,
+    execution_mode,
+    worker_count,
+    batch_kind,
+    accelerator: "mps",
+    selector: "MPS:default",
+    platform: "macos",
+    selectable: true,
+    status: "SUPPORTED",
+    reason_codes: [] as string[],
+    profile_sha256: null,
+    qualification_sha256: null,
+  };
+}
+
+const macosCapabilities = {
+  available: true,
+  platform: "macos",
+  execution_modes: ["SEQUENTIAL", "PARALLEL"],
+  default_execution_mode: "PARALLEL",
+  minimum_points: 4,
+  maximum_points: 20,
+  fixed_worker_counts: [1, 2, 3, 4, 5, 6, 7, 8],
+  worker_count_availability: [
+    { worker_count: 1, selectable: true, status: "SUPPORTED", reason_codes: [], profile_sha256: null, qualification_sha256: null },
+    { worker_count: 2, selectable: true, status: "SUPPORTED", reason_codes: [], profile_sha256: null, qualification_sha256: null },
+    ...[3, 4, 5, 6, 7, 8].map((worker_count) => ({
+      worker_count,
+      selectable: false,
+      status: "UNSUPPORTED_ON_MACOS",
+      reason_codes: ["UNSUPPORTED_ON_MACOS"],
+      profile_sha256: null,
+      qualification_sha256: null,
+    })),
+  ],
+  support_matrix: [
+    matrixRow("MPS_W2_FIRST_PASS", 4, "PARALLEL", 2, "FIRST_PASS"),
+    matrixRow("MPS_W1_FULL_RESTART_RETRY", 5, "SEQUENTIAL", 1, "FULL_RESTART_RETRY"),
+    matrixRow("MPS_W1_FIRST_PASS", 6, "SEQUENTIAL", 1, "FIRST_PASS"),
+  ],
+  adaptive_default_ladder: [],
+  worker_qualifications: [],
+  lease_duration_s: 30,
+  lease_renewal_margin_s: 10,
+} as never;
+
+test("macOS claims the matrix profile and the point count never changes it", async () => {
+  const user = userEvent.setup();
+  const base = fakeApi();
+  const preflight = vi.fn(base.preflight);
+  const startCampaign = vi.fn(base.startCampaign);
+  render(<ExpertValidationApp api={fakeApi({
+    capabilities: async () => macosCapabilities,
+    preflight,
+    startCampaign,
+  })} />);
+  await act(async () => {});
+  await user.click(await screen.findByRole("button", { name: "Acquire lease" }));
+
+  fireEvent.change(screen.getByLabelText("Final point count"), { target: { value: "4" } });
+  await user.click(screen.getByRole("button", { name: "Generate points" }));
+  await user.click(screen.getByRole("button", { name: "Check resources" }));
+  expect(preflight.mock.calls[0][0]).toMatchObject({
+    execution_mode: "SEQUENTIAL",
+    worker_count: 1,
+    execution_profile: "MPS_W1_FIRST_PASS",
+    batch_kind: "FIRST_PASS",
+  });
+
+  // Twenty points instead of four: same routing key, because the point count is not an input.
+  fireEvent.change(screen.getByLabelText("Final point count"), { target: { value: "20" } });
+  await user.click(screen.getByRole("button", { name: "Generate points" }));
+  await user.click(screen.getByRole("button", { name: "Check resources" }));
+  expect(preflight.mock.calls[1][0]).toMatchObject({
+    execution_profile: "MPS_W1_FIRST_PASS",
+    batch_kind: "FIRST_PASS",
+  });
+
+  // W2 is the exact-W2 path: two parallel workers, still the same twenty points.
+  await user.selectOptions(screen.getByLabelText("Execution mode"), "PARALLEL");
+  await user.selectOptions(screen.getByLabelText("Worker count"), "2");
+  await user.click(screen.getByRole("button", { name: "Check resources" }));
+  expect(preflight.mock.calls[2][0]).toMatchObject({
+    execution_mode: "PARALLEL",
+    worker_count: 2,
+    execution_profile: "MPS_W2_FIRST_PASS",
+    batch_kind: "FIRST_PASS",
+  });
+
+  // The start request claims the same routing key as the receipt it presents: the service refuses
+  // a half key, a cross key and a document that names nothing at all.
+  await user.click(screen.getByRole("button", { name: "Start validation" }));
+  expect(startCampaign).toHaveBeenCalledTimes(1);
+  expect(startCampaign.mock.calls[0][0]).toMatchObject({
+    execution_profile: "MPS_W2_FIRST_PASS",
+    batch_kind: "FIRST_PASS",
+    preflight_receipt_id: "receipt-1",
+  });
+});
+
+test("macOS keeps N3 to N8 unselectable and refuses to preflight or start them", async () => {
+  const user = userEvent.setup();
+  const base = fakeApi();
+  const preflight = vi.fn(base.preflight);
+  render(<ExpertValidationApp api={fakeApi({
+    capabilities: async () => macosCapabilities,
+    preflight,
+  })} />);
+  await act(async () => {});
+
+  const modes = screen.getByRole("combobox", { name: "Execution mode" }) as HTMLSelectElement;
+  expect(Array.from(modes.options).map((option) => option.value))
+    .toEqual(["SEQUENTIAL", "PARALLEL"]);
+  await user.selectOptions(modes, "PARALLEL");
+  const workers = screen.getByRole("combobox", { name: "Worker count" }) as HTMLSelectElement;
+  for (const count of [3, 4, 5, 6, 7, 8]) {
+    const option = Array.from(workers.options).find((entry) => entry.value === String(count));
+    expect(option?.disabled, `N${count} must be disabled`).toBe(true);
+    expect(option?.text).toContain("UNSUPPORTED_ON_MACOS");
+  }
+  expect(screen.getByText("N8 unavailable · UNSUPPORTED_ON_MACOS")).toBeTruthy();
+
+  // The service would refuse this selection with UNSUPPORTED_ON_MACOS, so the console must not
+  // even offer it: no request may leave the page for an N outside the matrix.
+  await user.click(screen.getByRole("button", { name: "Acquire lease" }));
+  await user.click(screen.getByRole("button", { name: "Generate points" }));
+  fireEvent.change(workers, { target: { value: "3" } });
+  expect((screen.getByRole("button", { name: "Check resources" }) as HTMLButtonElement).disabled)
+    .toBe(true);
+  expect((screen.getByRole("button", { name: "Start validation" }) as HTMLButtonElement).disabled)
+    .toBe(true);
+  expect(screen.getByLabelText("Execution profile").textContent).toContain("UNSUPPORTED_ON_MACOS");
+  expect(preflight).not.toHaveBeenCalled();
 });

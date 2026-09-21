@@ -4,6 +4,14 @@ import { join } from "node:path";
 import { liveSimTest as test, expect, recordGate, requireGate, requireGateDetail } from "../fixtures/live-sim";
 import { readJournalEvents } from "../assertions/journal";
 import {
+  assertCampaignBatchEvidence,
+  assertRoutingClaim,
+  campaignJournalRoot,
+  committedAttempts,
+  readCampaignBatchEvidence,
+  type CampaignBatchExpectation,
+} from "../assertions/live-evidence";
+import {
   ExpertValidationPage,
   releaseAcquiredLeases,
 } from "../pages/expert-validation-page";
@@ -11,7 +19,20 @@ import {
 /**
  * R02: four-point PARALLEL exact N=2 live run; R04 (mid-run Chrome reload) is
  * embedded.  Requires the R01 gate receipt.
+ *
+ * On macOS this is the W2 route: the console claims the `MPS_W2_FIRST_PASS` matrix row (schema
+ * v4, PARALLEL, two workers), the service resolves that document from its own bytes, and the
+ * batch has to prove selected-only execution, the durability watermark, the sealed physical
+ * evidence set and its own cleanup.
  */
+
+const W2_ROUTE: CampaignBatchExpectation = {
+  batchKind: "FIRST_PASS",
+  executionProfile: "MPS_W2_FIRST_PASS",
+  schemaVersion: 4,
+  workerCount: 2,
+  selectedPointIds: [],
+};
 
 // The exclusive lease belongs to the deployed service, not to this spec: hand it back
 // even when the test fails, or the next spec is refused with 409 Conflict.
@@ -31,9 +52,36 @@ test("R02 parallel two-worker live run with mid-run reload @live-sim", async ({ 
   const app = new ExpertValidationPage(page);
   await app.goto();
   await app.acquireLease();
-  await app.generateManifest(4);
+  // The generated manifest and the preflight receipt are this spec's own expectation: the
+  // selection the console actually claimed, not a value re-read from the finished batch.
+  const [manifestResponse] = await Promise.all([
+    page.waitForResponse(
+      (candidate) =>
+        candidate.url().endsWith("/expert-validation/manifests")
+        && candidate.request().method() === "POST",
+    ),
+    app.generateManifest(4),
+  ]);
+  const generated = (await manifestResponse.json()) as { points?: Array<{ id: string }> };
+  const selectedPointIds = (generated.points ?? []).map((point) => point.id);
+  expect(selectedPointIds).toHaveLength(4);
+  const expectation: CampaignBatchExpectation = { ...W2_ROUTE, selectedPointIds };
+
   await app.configureParallel(2);
-  await app.runPreflight();
+  const [preflightResponse] = await Promise.all([
+    page.waitForResponse(
+      (candidate) =>
+        candidate.url().endsWith("/expert-validation/campaigns/preflight")
+        && candidate.request().method() === "POST",
+    ),
+    app.runPreflight(),
+  ]);
+  expect(preflightResponse.status()).toBe(200);
+  const receipt = (await preflightResponse.json()) as Record<string, unknown>;
+  assertRoutingClaim(receipt, expectation);
+  // The point count is not a routing input: four points claim the same W2 row as any other count.
+  expect(receipt.execution_profile).toBe("MPS_W2_FIRST_PASS");
+
   // The campaign id comes from this spec's own start response: the campaign list also holds the
   // campaigns of every spec that ran before it.
   const campaignId = await app.startValidation();
@@ -84,10 +132,39 @@ test("R02 parallel two-worker live run with mid-run reload @live-sim", async ({ 
     );
   }
 
-  const events = readJournalEvents(join(batchRoot, "coordinator"));
+  const events = readJournalEvents(campaignJournalRoot(batchRoot));
   expect(events.filter((event) => event.type === "BATCH_STARTED")).toHaveLength(1);
   expect(events.filter((event) => event.type === "RESULT_COMMITTED")).toHaveLength(4);
   expect(events.some((event) => event.type === "BATCH_CLEANUP_COMPLETE")).toBe(true);
+
+  // Selected-only execution: the projection carries one FIRST_PASS attempt per selected point and
+  // nothing else, and the batch's own evidence proves the same set.
+  expect(projection.points.map((point: any) => point.point_id).sort())
+    .toEqual([...selectedPointIds].sort());
+  for (const point of projection.points) {
+    const kinds = (point.attempts ?? []).map((attempt: any) => attempt.kind);
+    expect(kinds, `${point.display_id} attempts`).toEqual(["FIRST_PASS"]);
+    expect(kinds).not.toContain("FULL_RESTART_RETRY");
+  }
+
+  const evidence = readCampaignBatchEvidence(batchRoot);
+  assertCampaignBatchEvidence(evidence, { ...expectation, projection });
+  const commits = committedAttempts(evidence);
+  expect(commits.map((attempt) => attempt.pointId).sort()).toEqual([...selectedPointIds].sort());
+  expect(commits.every((attempt) => attempt.sealedDir.includes(batchRoot))).toBe(true);
+  writeFileSync(
+    join(liveServer.caseDir, "w2-campaign-evidence.json"),
+    JSON.stringify({
+      expectation,
+      watermark: evidence.watermark,
+      manifest: evidence.manifest,
+      commits,
+      projection_attempts: projection.points.map((point: any) => ({
+        point_id: point.point_id,
+        attempts: point.attempts,
+      })),
+    }, null, 2) + "\n",
+  );
 
   // The reload neither interrupted nor duplicated this campaign, and it left no other campaign
   // running.  The list also holds the campaigns of the specs that ran before this one, so the
