@@ -31,7 +31,7 @@ INTEGRATION_GUIDE = (
 )
 UPSTREAM_010_COMMIT = "57fc6744844902d4532160b403fa95840c1d6f96"
 LOCAL_R11_COMMIT = "f19a8cc3af61feccacb22a9f0d16cc972e3b2c08"
-CANDIDATE_COMMIT = "e4c0241aee52a40727681bd5872c09bf814e941a"
+CANDIDATE_COMMIT = "6591771de32c4d2e66bcb5076b3a851cfe6a9833"
 CANDIDATE_LABEL = "main"
 MUJOCO_340_COMMIT = "e55fff5dea6f1d5dd7963ca52eecc41d05ad0922"
 MUJOCO_GLFW_PATCH_SHA256 = (
@@ -320,6 +320,17 @@ def test_installer_builds_a_clean_locked_fork_without_patch_application() -> Non
     assert '--base-paths "${build_source_dir}"' in installer
     assert "status --porcelain --untracked-files=all" in installer
     assert "build source must be clean" in installer
+
+
+def test_macos_plugin_install_rpath_resolves_the_copied_vendor() -> None:
+    cmake = (
+        SUBMODULE / "mujoco_ros2_control" / "CMakeLists.txt"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        'INSTALL_RPATH "@loader_path;@loader_path/../opt/mujoco_vendor/lib"'
+        in cmake
+    )
 
 
 def test_fusion_contract_uses_portable_sha256() -> None:
