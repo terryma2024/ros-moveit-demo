@@ -11,7 +11,7 @@ readonly colcon_path="${ros_root}/.venv/bin/colcon"
 readonly ros2_script="${ros_root}/install/ros2cli/bin/ros2"
 readonly farm_path="${ros_root}/dylib_farm/current"
 readonly data_root=/opt/data
-readonly temp_root=/tmp
+readonly temp_root="${data_root}/tmp"
 readonly runtime_root="${data_root}/so101"
 readonly fork_runtime_root="${runtime_root}/runtime/fork"
 readonly fork_install="${fork_runtime_root}/current"
@@ -90,6 +90,7 @@ case "${1:-}" in
   prepare)
     shift
     (( $# == 0 )) || fail "prepare does not accept arguments"
+    mkdir -p -m 700 "${temp_root}" || fail "cannot create fixed temporary directory: ${temp_root}"
     clean_reexec __prepare
     ;;
   launch|run)

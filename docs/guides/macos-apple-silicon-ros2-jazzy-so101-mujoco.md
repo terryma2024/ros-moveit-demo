@@ -12,7 +12,7 @@
 | ROS 2 工作区根目录 | `/opt/ros2_jazzy` |
 | ROS 2 安装前缀 | `/opt/ros2_jazzy/install` |
 | ROS Python | `/opt/ros2_jazzy/.venv/bin/python` |
-| 临时目录 | `/tmp` |
+| 临时目录 | `/opt/data/tmp` |
 | SO-101 数据与构建目录 | `/opt/data` |
 | 动态库聚合目录 | `/opt/ros2_jazzy/dylib_farm/current` |
 | 锁定 MuJoCo fork overlay | `/opt/data/so101/runtime/fork/current` |
@@ -32,8 +32,8 @@ ls -ld /opt/ros2_jazzy
 readlink /opt/ros2_jazzy
 ```
 
-`/opt/data` 必须存在，并且当前用户可写。`/tmp` 在 macOS 上通常解析为 `/private/tmp`，这是
-系统的正常软链接行为；对外仍统一使用 `/tmp`。
+`/opt/data` 必须存在，并且当前用户可写。`prepare` 会创建权限为 `0700` 的
+`/opt/data/tmp`；后续的启动和测试都使用这个固定临时目录。
 
 ## 统一入口
 
@@ -171,6 +171,39 @@ scripts/install-mujoco-ros2-control.zsh
 ```
 
 日常使用不需要执行这段命令，`prepare` 会自动完成同样的工作。
+
+## 运行 `so101_demo_py` 全量测试
+
+测试仍使用固定 Python、固定临时目录和同一组 overlay。八进程并行门禁还需要项目 `test`
+extra 中锁定的 `pytest-xdist==3.8.0`：
+
+```zsh
+/opt/ros2_jazzy/.venv/bin/python -m pip install 'src/so101_demo_py[test]'
+
+source /opt/ros2_jazzy/install/setup.zsh
+source /opt/ros2_jazzy/extra_ws/install/setup.zsh
+source /opt/data/so101/runtime/fork/current/setup.zsh
+source /opt/data/so101/workspace/install/setup.zsh
+export DYLD_LIBRARY_PATH=/opt/ros2_jazzy/dylib_farm/current
+export TMPDIR=/opt/data/tmp TMP=/opt/data/tmp TEMP=/opt/data/tmp
+
+/opt/ros2_jazzy/.venv/bin/python -m pytest -n 8 --dist loadscope \
+  --basetemp=/opt/data/tmp/pytest-<unique-run-id> \
+  src/so101_demo_py/test \
+  --junitxml=/tmp/so101-demo-py-pytest.xml
+```
+
+每次运行都要为 `--basetemp` 换一个尚不存在的短路径，避免并行 worker 读到旧状态。普通
+package gate 默认排除标记为 `explicit_ml` 的 Torch/SAM 集成用例，并且只收集
+`src/so101_demo_py/test/`，不包含 `benchmark_test/`。需要单独检查 ML 用例时运行：
+
+```zsh
+/opt/ros2_jazzy/.venv/bin/python -m pytest -m explicit_ml \
+  src/so101_demo_py/test/test_sam_decoder_runtime.py
+```
+
+如果 pytest 在收集测试前就因 ROS overlay 或 dylib 导入失败退出，应先修复环境，不要把它记成
+代码回归。
 
 ## 在另一台 Mac 上验证
 

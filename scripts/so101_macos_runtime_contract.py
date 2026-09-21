@@ -74,7 +74,7 @@ class RuntimePaths:
         repository = Path(repository_root).resolve()
         ros_root = root / "opt/ros2_jazzy"
         data_root = root / "opt/data"
-        temp_root = root / "tmp"
+        temp_root = data_root / "tmp"
         runtime_root = data_root / "so101"
         project_install = runtime_root / "workspace/install"
         return cls(

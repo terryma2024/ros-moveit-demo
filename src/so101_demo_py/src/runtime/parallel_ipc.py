@@ -11,6 +11,7 @@ import secrets
 import socket
 import stat
 import struct
+import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -22,10 +23,10 @@ class IpcError(RuntimeError):
     """A frame, identity, authentication, or transport contract failed."""
 
 
-# Linux sun_path capacity in bytes, including the terminating NUL. The kernel sees the
-# sockaddr string, not the durable canonical path, so the dirfd transport below keeps
-# the kernel address short while manifests/audits keep the absolute durable path.
-UNIX_SOCKADDR_CAPACITY_BYTES = 108
+# sun_path capacity in bytes, including the terminating NUL. Linux addresses the socket
+# through a pinned parent descriptor. Darwin has no bindat/connectat equivalent, so it uses
+# the verified canonical path and its smaller kernel capacity.
+UNIX_SOCKADDR_CAPACITY_BYTES = 104 if sys.platform == "darwin" else 108
 _PROC_FD_ROOT = Path("/proc/self/fd")
 _TRANSPORT_PREFIX = "/proc/self/fd/"
 _MAX_FD_DIGITS = 10
@@ -34,6 +35,8 @@ _MAX_FD_DIGITS = 10
 def require_proc_fd_transport(proc_root: Path | None = None) -> None:
     """Fail closed when the Linux dirfd transport is unavailable."""
 
+    if proc_root is None and sys.platform == "darwin":
+        return
     target = _PROC_FD_ROOT if proc_root is None else Path(proc_root)
     try:
         metadata = target.stat()
@@ -47,11 +50,16 @@ def require_transport_basename(path: object) -> None:
     """Preflight without touching the parent: the basename must fit the kernel budget."""
 
     require_proc_fd_transport()
-    name = Path(path).name
+    candidate = Path(path)
+    name = candidate.name
     encoded = os.fsencode(name)
     if not encoded or name in {".", ".."} or b"\x00" in encoded:
         raise IpcError(f"UNIX_SOCKET_BASENAME_INVALID: {path}")
-    # Conservative reservation: unknown fd digits, the separator and the terminating NUL.
+    if sys.platform == "darwin":
+        if len(os.fsencode(candidate)) + 1 > UNIX_SOCKADDR_CAPACITY_BYTES:
+            raise IpcError(f"UNIX_SOCKET_PATH_TOO_LONG: {path}")
+        return
+    # Conservative Linux reservation: unknown fd digits, separator and terminating NUL.
     reserved = len(_TRANSPORT_PREFIX.encode("ascii")) + _MAX_FD_DIGITS + 1 + 1
     if reserved + len(encoded) > UNIX_SOCKADDR_CAPACITY_BYTES:
         raise IpcError(f"UNIX_SOCKET_PATH_TOO_LONG: {path}")
@@ -62,7 +70,23 @@ def transport_address(path: object, parent_fd: int) -> str:
 
     if type(parent_fd) is not int or parent_fd < 0:
         raise IpcError("UNIX_TRANSPORT_DESCRIPTOR")
-    address = f"{_TRANSPORT_PREFIX}{parent_fd}/{Path(path).name}"
+    candidate = Path(path)
+    if sys.platform == "darwin":
+        try:
+            held = os.fstat(parent_fd)
+            current = os.stat(candidate.parent, follow_symlinks=False)
+        except OSError as error:
+            raise IpcError("UNIX_TRANSPORT_DESCRIPTOR") from error
+        if (
+            not stat.S_ISDIR(current.st_mode)
+            or (held.st_dev, held.st_ino) != (current.st_dev, current.st_ino)
+        ):
+            raise IpcError("UNIX_TRANSPORT_PARENT")
+        address = str(candidate)
+        if len(os.fsencode(address)) + 1 > UNIX_SOCKADDR_CAPACITY_BYTES:
+            raise IpcError(f"UNIX_SOCKET_PATH_TOO_LONG: {path}")
+        return address
+    address = f"{_TRANSPORT_PREFIX}{parent_fd}/{candidate.name}"
     if len(os.fsencode(address)) + 1 > UNIX_SOCKADDR_CAPACITY_BYTES:
         raise IpcError(f"UNIX_SOCKET_PATH_TOO_LONG: {path}")
     return address

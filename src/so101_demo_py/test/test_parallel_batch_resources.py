@@ -18,6 +18,7 @@ import signal
 import shutil
 import subprocess
 import sys
+import tempfile
 from threading import Barrier, Event
 from types import SimpleNamespace
 
@@ -37,12 +38,26 @@ from so101_demo.parallel_batch.resources import (
     SystemResourceProbe,
     WorkerResourceAllocator,
     configured_runtime_ipc_root,
+    runtime_ipc_base,
 )
 
 
 PACKAGE = Path(__file__).resolve().parents[1]
 CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v1.yaml'
 CLI_CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v3.yaml'
+
+
+def _fd_path(fd):
+    """Resolve an open descriptor through procfs on Linux or F_GETPATH on Darwin."""
+
+    if Path('/proc/self/fd').is_dir():
+        return Path(f'/proc/self/fd/{fd}').resolve()
+    import ctypes
+
+    buffer = ctypes.create_string_buffer(1024)
+    result = fcntl.fcntl(fd, fcntl.F_GETPATH, buffer)
+    raw = result if isinstance(result, bytes) else buffer.raw
+    return Path(raw.split(b'\x00', 1)[0].decode()).resolve()
 _ROOT_IDS = itertools.count()
 _ROOTS = {}
 
@@ -88,7 +103,7 @@ def config():
 @pytest.fixture(autouse=True)
 def production_claim_records_are_never_mutated_by_unit_tests():
     paths = tuple(
-        Path(f'/run/user/{os.getuid()}/so101-parallel-domain-claims/domain-{domain}.lock')
+        runtime_ipc_base() / f'so101-parallel-domain-claims/domain-{domain}.lock'
         for domain in (181, 182, 183)
     )
 
@@ -168,7 +183,10 @@ def resource_root(tmp_path, suffix='batch'):
     """Keep UDS fixtures in this registered scratch tree without pytest's deep suffix."""
     key = str(tmp_path / suffix)
     if key not in _ROOTS:
-        _ROOTS[key] = Path(os.environ['TMPDIR']).parent / f'rr{next(_ROOT_IDS):x}'
+        _ROOTS[key] = (
+            Path(os.environ['TMPDIR'])
+            / f'rr{os.getpid():x}-{next(_ROOT_IDS):x}'
+        )
     return _ROOTS[key]
 
 
@@ -178,21 +196,29 @@ def claim_root():
     # cannot make a later, independent allocator case look unclean.
     node_id = os.environ.get('PYTEST_CURRENT_TEST', 'standalone').split(' (', 1)[0]
     suffix = hashlib.sha256(node_id.encode('utf-8')).hexdigest()[:12]
-    return Path(os.environ['TMPDIR']).parent / f'claims-{suffix}'
+    return Path(os.environ['TMPDIR']) / f'claims-{os.getpid():x}-{suffix}'
+
+
+def short_scratch(name):
+    """Return a short, process-isolated path below the configured temp root."""
+
+    return Path(os.environ['TMPDIR']) / f'{name}-{os.getpid():x}'
 
 
 @pytest.mark.skipif(sys.platform != 'darwin', reason='macOS /tmp is a system alias')
 def test_trusted_parent_accepts_the_root_owned_macos_tmp_alias(tmp_path):
     """The handoff's /tmp evidence root reaches the same trusted /private/tmp inode."""
 
-    relative = tmp_path.relative_to('/private/tmp')
-    alias_target = Path('/tmp') / relative / 'batch'
+    with tempfile.TemporaryDirectory(dir='/private/tmp') as directory:
+        private_root = Path(directory)
+        relative = private_root.relative_to('/private/tmp')
+        alias_target = Path('/tmp') / relative / 'batch'
 
-    descriptor = resources_api._open_trusted_parent(alias_target)
-    try:
-        assert os.fstat(descriptor).st_ino == tmp_path.stat().st_ino
-    finally:
-        os.close(descriptor)
+        descriptor = resources_api._open_trusted_parent(alias_target)
+        try:
+            assert os.fstat(descriptor).st_ino == private_root.stat().st_ino
+        finally:
+            os.close(descriptor)
 
 
 @pytest.mark.skipif(sys.platform != 'darwin', reason='macOS has no procfs stat')
@@ -202,6 +228,7 @@ def test_domain_claim_owner_has_a_portable_process_birth_identity():
     assert resources_api._process_starttime_ticks() > 0
 
 
+@pytest.mark.skipif(sys.platform == 'darwin', reason='Linux procfs resource-probe boundary')
 def test_oversized_cmdline_process_is_classified_not_refused():
     """A same-UID process with a huge argv must not make the whole probe fail closed.
 
@@ -261,7 +288,7 @@ def test_allocator_fixture_does_not_reuse_retained_cli_claim_namespace(
         pass
     monkeypatch.setattr(sys.modules[__name__], '_ROOT_IDS', itertools.count(12))
     monkeypatch.setattr(sys.modules[__name__], '_ROOTS', {})
-    retained = Path(os.environ['TMPDIR']).parent / 'rc'
+    retained = short_scratch('rc')
     retained.mkdir(mode=0o700, exist_ok=True)
     original = retained / 'retained-claim.json'
     original.write_bytes(b'{"role":"earlier-cli-claim"}\n')
@@ -287,7 +314,7 @@ def test_observational_policy_allocates_eight_without_headroom_rejection(
     target = resource_root(tmp_path, 'adaptive-eight')
     resource_allocator = WorkerResourceAllocator(
         config, target, probe=FakeProbe(cpu=1, ram=0.0, gpu=0.0),
-        claim_root=Path(os.environ['TMPDIR']).parent / 'adaptive-claims',
+        claim_root=short_scratch('adaptive-claims'),
         allocation_policy=policy, batch_id='a001',
         start_guard=_start_guard_for(config),
     )
@@ -307,7 +334,7 @@ def test_persistent_active_domain_record_rejects_reuse_after_lock_release(
     tmp_path, config
 ):
     policy = AllocationPolicy(1, (215,), False, True)
-    claims = Path(os.environ['TMPDIR']).parent / 'persistent-claims'
+    claims = short_scratch('persistent-claims')
     first = WorkerResourceAllocator(
         config, resource_root(tmp_path, 'first-active'), probe=FakeProbe(),
         claim_root=claims, allocation_policy=policy, batch_id='a001',
@@ -329,7 +356,7 @@ def test_verified_cleanup_releases_persistent_domain_for_a_new_batch(
     tmp_path, config
 ):
     policy = AllocationPolicy(1, (215,), False, True)
-    claims = Path(os.environ['TMPDIR']).parent / 'verified-release-claims'
+    claims = short_scratch('verified-release-claims')
     first = WorkerResourceAllocator(
         config, resource_root(tmp_path, 'release-first'), probe=FakeProbe(),
         claim_root=claims, allocation_policy=policy, batch_id='a001-g01-w01',
@@ -356,7 +383,7 @@ def test_verified_cleanup_releases_persistent_domain_for_a_new_batch(
 def test_prelaunch_allocation_failure_releases_persistent_claim(tmp_path, config):
     policy = AllocationPolicy(1, (215,), False, True)
     target = resource_root(tmp_path, 'prelaunch-failure')
-    claims = Path(os.environ['TMPDIR']).parent / 'rollback-claims'
+    claims = short_scratch('rollback-claims')
     socket_path = target / 'ipc/1/s'
     failing = WorkerResourceAllocator(
         config, target, probe=FakeProbe(sockets=(socket_path,)),
@@ -666,7 +693,7 @@ def test_domain_flocks_are_held_before_process_scan(tmp_path, config):
 
 
 def test_partial_domain_claim_does_not_publish_any_new_claim_record(tmp_path, config):
-    locks = claim_root().with_name('claims-partial')
+    locks = short_scratch('claims-partial')
     locks.mkdir(mode=0o700)
     first_record = locks / 'domain-181.lock'
     blocked_record = locks / 'domain-182.lock'
@@ -897,7 +924,8 @@ def test_worker_slots_have_unique_headless_egl_context_resources(tmp_path, confi
 
 
 def test_evidence_root_rejects_symlink_ancestor(tmp_path, config):
-    short = Path(os.environ['TMPDIR']).parent
+    short = short_scratch('symlink-parent')
+    short.mkdir(mode=0o700)
     real = short / 'real'
     real.mkdir(mode=0o700)
     link = short / 'link'
@@ -911,7 +939,7 @@ def test_evidence_root_rejects_symlink_ancestor(tmp_path, config):
 
 
 def test_evidence_root_rejects_unsafe_parent_mode(tmp_path, config):
-    unsafe = Path(os.environ['TMPDIR']).parent / 'unsafe'
+    unsafe = short_scratch('unsafe')
     unsafe.mkdir(mode=0o777)
     unsafe.chmod(0o777)
 
@@ -1038,7 +1066,7 @@ def test_concurrent_reader_never_observes_partial_manifest(tmp_path, config, mon
     original_write = os.write
 
     def paused_write(descriptor, payload):
-        target = Path(os.readlink(f'/proc/self/fd/{descriptor}'))
+        target = _fd_path(descriptor)
         if target.name.startswith('.resource_manifest.') and not write_started.is_set():
             written = original_write(descriptor, payload[:32])
             write_started.set()
@@ -1444,8 +1472,15 @@ def test_admission_records_the_start_guard_decision(tmp_path, config):
 def test_malformed_resource_probe_values_fail_closed(tmp_path, config, snapshot):
     probe = FakeProbe()
     probe.resources = snapshot
+    legacy_config = load_parallel_runtime_config(CONFIG_PATH)
     with pytest.raises(ResourceAllocationError, match='INVALID_RESOURCE_SNAPSHOT'):
-        allocator(tmp_path, config, probe).allocate()
+        WorkerResourceAllocator(
+            legacy_config,
+            resource_root(tmp_path, 'malformed-snapshot'),
+            probe=probe,
+            base_environment={},
+            claim_root=claim_root(),
+        ).allocate()
 
 
 def test_existing_ros_domain_fails_before_any_directory_is_created(tmp_path, config):
@@ -1606,7 +1641,7 @@ def test_socket_path_must_fit_linux_unix_domain_limit(tmp_path, config, monkeypa
 
 def test_short_external_ipc_root_preserves_long_durable_evidence_root(tmp_path, config):
     root = tmp_path / ("durable-" + "x" * 90)
-    ipc_root = Path(f"/run/user/{os.getuid()}/so101-test-{os.getpid()}")
+    ipc_root = tmp_path / "i"
     assert not ipc_root.exists()
     resource_allocator = WorkerResourceAllocator(
         config,
@@ -1630,7 +1665,7 @@ def test_short_external_ipc_root_preserves_long_durable_evidence_root(tmp_path, 
 
 
 def test_runtime_ipc_base_is_closed_to_same_user_runtime_directory():
-    expected = Path(f"/run/user/{os.getuid()}")
+    expected = runtime_ipc_base()
     assert configured_runtime_ipc_root(
         "b1234", {"SO101_PARALLEL_IPC_BASE": str(expected)}
     ) == expected / "so101-b1234"

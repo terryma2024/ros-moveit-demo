@@ -202,6 +202,7 @@ def test_server_contains_reply_disconnect_to_the_single_client(tmp_path):
         AuthenticatedUnixServer,
         WorkerTokenAuthority,
         encode_frame,
+        transport_address,
     )
 
     authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
@@ -236,7 +237,7 @@ def test_server_contains_reply_disconnect_to_the_single_client(tmp_path):
             server.path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
         )
         try:
-            connection.connect(f"/proc/self/fd/{parent_fd}/{server.path.name}")
+            connection.connect(transport_address(server.path, parent_fd))
         finally:
             os.close(parent_fd)
         connection.sendall(encode_frame(request()))
@@ -574,7 +575,7 @@ def test_server_handler_timeout_returns_structured_error(tmp_path):
     assert type(timeout["phase_started_monotonic_s"]) is float
 
 
-def test_server_eight_distinct_requests_enter_handlers_concurrently():
+def test_server_eight_distinct_requests_enter_handlers_concurrently(tmp_path):
     from so101_demo.runtime.parallel_ipc import (
         AuthenticatedUnixServer,
         UnixRpcClient,
@@ -582,8 +583,7 @@ def test_server_eight_distinct_requests_enter_handlers_concurrently():
         _StatelessBrokerDispatcher,
     )
 
-    root = Path(os.environ["TMPDIR"]) / "eight"
-    root.mkdir()
+    root = tmp_path
     metrics = _BrokerMetrics()
     ipc_root = root / "ipc"
     ipc_root.mkdir(mode=0o700)
@@ -655,15 +655,14 @@ def test_server_eight_distinct_requests_enter_handlers_concurrently():
     assert summary["transport_errors"].get("TRUNCATED_FRAME", 0) == 0
 
 
-def test_pending_mutation_same_key_executes_once_and_replays_terminal_result():
+def test_pending_mutation_same_key_executes_once_and_replays_terminal_result(tmp_path):
     from so101_demo.runtime.parallel_ipc import (
         AuthenticatedUnixServer,
         UnixRpcClient,
         WorkerTokenAuthority,
     )
 
-    root = Path(os.environ["TMPDIR"]) / "pending"
-    root.mkdir()
+    root = tmp_path
     worker_authority = WorkerTokenAuthority(root, coordinator_epoch=7)
     worker_authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
     worker_authority.bind_lease("worker-01", 2, request()["lease"])
@@ -718,14 +717,13 @@ def test_pending_mutation_same_key_executes_once_and_replays_terminal_result():
     assert replies[1] == {"value": [1, 2, 3]}
 
 
-def test_pending_mutation_failure_is_published_before_waiters_wake():
+def test_pending_mutation_failure_is_published_before_waiters_wake(tmp_path):
     from so101_demo.runtime.parallel_ipc import (
         IpcError,
         WorkerTokenAuthority,
     )
 
-    root = Path(os.environ["TMPDIR"]) / "failed"
-    root.mkdir()
+    root = tmp_path
     worker_authority = WorkerTokenAuthority(root, coordinator_epoch=7)
     worker_authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
     worker_authority.bind_lease("worker-01", 2, request()["lease"])
@@ -767,15 +765,14 @@ def test_pending_mutation_failure_is_published_before_waiters_wake():
     assert calls == ["called"]
 
 
-def test_default_server_remains_serial():
+def test_default_server_remains_serial(tmp_path):
     from so101_demo.runtime.parallel_ipc import (
         AuthenticatedUnixServer,
         UnixRpcClient,
         WorkerTokenAuthority,
     )
 
-    root = Path(os.environ["TMPDIR"]) / "serial"
-    root.mkdir()
+    root = tmp_path
     authority = WorkerTokenAuthority(root, coordinator_epoch=7)
     authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
     authority.bind_lease("worker-01", 2, request()["lease"])
@@ -830,10 +827,14 @@ def test_default_server_remains_serial():
 
 
 def test_client_rejects_wrong_response_schema_and_union(tmp_path):
-    from so101_demo.runtime.parallel_ipc import IpcError, UnixRpcClient, encode_frame
+    from so101_demo.runtime.parallel_ipc import (
+        IpcError,
+        UnixRpcClient,
+        encode_frame,
+        receive_frame,
+    )
 
-    root = Path(os.environ["TMPDIR"]).parent / "ipc-response"
-    root.mkdir(mode=0o700)
+    root = tmp_path
     path = root / "s"
     replies = [
         {"schema_version": 2, "kind": "response", "request_id": "request-1", "idempotency_key": "same-operation-1", "ok": True, "payload": {}, "error": None},
@@ -852,7 +853,7 @@ def test_client_rejects_wrong_response_schema_and_union(tmp_path):
         def serve():
             connection, _ = listener.accept()
             with connection:
-                connection.recv(65536)
+                receive_frame(connection, deadline_s=1.0)
                 connection.sendall(encode_frame(reply))
             listener.close()
         thread = threading.Thread(target=serve)
@@ -956,7 +957,7 @@ def test_child_identity_failure_never_signals_an_unverified_or_reused_group(monk
             events.append(("reap-child", timeout))
             return self.returncode
 
-    reads = iter(((0, (), 0),) + ((900, ("unrelated",), 99),) * 7)
+    reads = iter(((0, (), 0),) + ((900, ("unrelated",), 99),) * 99)
     monkeypatch.setattr(processes, "_proc_values", lambda _pid: next(reads))
     signals = []
     events = []
@@ -1390,5 +1391,7 @@ def test_supervisor_default_shutdown_requires_poll_and_proc_absence(tmp_path):
         "worker", (sys.executable, "-c", "import time; time.sleep(30)")
     )
     assert supervisor.shutdown(term_timeout_s=1.0, kill_timeout_s=1.0) is True
-    assert not Path(f"/proc/{owned.pid}").exists()
+    from so101_demo.parallel_batch.start_guard_probe import read_process_identity
+
+    assert read_process_identity(owned.pid) is None
     assert supervisor.processes == ()

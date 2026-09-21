@@ -137,6 +137,7 @@ def test_batch_specific_mounts_identity_and_gpu_groups(tmp_path, name):
 
 def test_explicit_same_user_batch_ipc_root_can_host_broker_runtime(tmp_path):
     from so101_demo.cli.parallel_perception_broker import container_run_argv
+    from so101_demo.parallel_batch.resources import runtime_ipc_base
 
     root = tmp_path / 'batch'
     root.mkdir(mode=0o700)
@@ -146,7 +147,7 @@ def test_explicit_same_user_batch_ipc_root_can_host_broker_runtime(tmp_path):
     weights.write_bytes(b'model')
     grounded = tmp_path / 'grounded'
     grounded.mkdir()
-    batch_ipc = Path(f'/run/user/{os.getuid()}/so101-batch-1')
+    batch_ipc = runtime_ipc_base() / 'so101-batch-1'
     runtime = batch_ipc / 'broker'
 
     argv = container_run_argv(
@@ -181,6 +182,7 @@ def test_external_broker_runtime_rejects_cross_batch_or_wrong_generation(
     tmp_path, runtime_ipc_root, runtime_root, generation
 ):
     from so101_demo.cli.parallel_perception_broker import container_run_argv
+    from so101_demo.parallel_batch.resources import runtime_ipc_base
 
     root = tmp_path / 'batch'
     root.mkdir(mode=0o700)
@@ -190,7 +192,7 @@ def test_external_broker_runtime_rejects_cross_batch_or_wrong_generation(
     weights.write_bytes(b'model')
     grounded = tmp_path / 'grounded'
     grounded.mkdir()
-    batch_ipc = Path(f'/run/user/{os.getuid()}') / runtime_ipc_root
+    batch_ipc = runtime_ipc_base() / runtime_ipc_root
 
     with pytest.raises(ValueError, match='RUNTIME_ROOT_OUTSIDE_BATCH_IPC'):
         container_run_argv(

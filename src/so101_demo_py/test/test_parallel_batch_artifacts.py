@@ -26,6 +26,20 @@ EXPECTED_FINAL_CUP_POSE_WORLD = (
 )
 
 
+def _fd_path(fd):
+    """Resolve an open descriptor through procfs on Linux or F_GETPATH on Darwin."""
+
+    if Path("/proc/self/fd").is_dir():
+        return Path(f"/proc/self/fd/{fd}").resolve()
+    import ctypes
+    import fcntl
+
+    buffer = ctypes.create_string_buffer(1024)
+    result = fcntl.fcntl(fd, fcntl.F_GETPATH, buffer)
+    raw = result if isinstance(result, bytes) else buffer.raw
+    return Path(raw.split(b"\x00", 1)[0].decode()).resolve()
+
+
 def identity(validation=False):
     """Build a complete identity from hand-picked generation and epoch values."""
     cls = ValidationIdentity if validation else AttemptIdentity
@@ -629,7 +643,7 @@ def test_file_and_directory_fsync_precede_rename_and_parent_follows(tmp_path, mo
     real_fsync, real_replace = os.fsync, os.replace
 
     def fsync(fd):
-        events.append(('fsync', Path(os.readlink(f'/proc/self/fd/{fd}'))))
+        events.append(('fsync', _fd_path(fd)))
         return real_fsync(fd)
 
     def rename(source, destination):
@@ -745,7 +759,7 @@ def test_retry_after_parent_fsync_failure_must_sync_parent_before_ack(tmp_path, 
     parent = work.path.parent
 
     def fail_after_publication(fd):
-        if (Path(os.readlink(f'/proc/self/fd/{fd}')) == parent
+        if (_fd_path(fd) == parent
                 and (parent / 'sealed').exists()):
             raise OSError('injected parent fsync failure')
         return real_fsync(fd)
@@ -758,7 +772,7 @@ def test_retry_after_parent_fsync_failure_must_sync_parent_before_ack(tmp_path, 
     synced = []
 
     def observe(fd):
-        synced.append(Path(os.readlink(f'/proc/self/fd/{fd}')))
+        synced.append(_fd_path(fd))
         return real_fsync(fd)
 
     monkeypatch.setattr(os, 'fsync', observe)
@@ -1051,7 +1065,7 @@ def test_adapter_requires_parent_durability_after_rename_failure(
         real_fsync = os.fsync
 
         def sync(fd):
-            path = Path(os.readlink(f'/proc/self/fd/{fd}'))
+            path = _fd_path(fd)
             if path == parent and location.exists():
                 if fail_parent:
                     raise OSError('injected publication-parent failure')

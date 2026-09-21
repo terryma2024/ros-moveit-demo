@@ -101,6 +101,14 @@ class ResourceAllocationError(ValueError):
         self.admission = admission
 
 
+def runtime_ipc_base() -> Path:
+    """Return the fixed same-user IPC base for the current host platform."""
+
+    if sys.platform == 'darwin':
+        return Path('/opt/data/tmp')
+    return Path(f'/run/user/{os.getuid()}')
+
+
 def configured_runtime_ipc_root(
     batch_id: str, environment: Mapping[str, str] | None = None
 ) -> Path | None:
@@ -110,7 +118,7 @@ def configured_runtime_ipc_root(
     value = source.get('SO101_PARALLEL_IPC_BASE')
     if value is None:
         return None
-    expected = Path(f'/run/user/{os.getuid()}')
+    expected = runtime_ipc_base()
     base = Path(value)
     try:
         info = base.lstat()
@@ -406,7 +414,7 @@ class SystemResourceProbe:
     def ros_domain_in_use(self, domain_id: int) -> bool:
         """Detect same-UID claims; unverifiable live same-UID processes fail closed."""
         if not self._proc_root.is_dir():
-            raise ResourceAllocationError('PROBE_FAILED: proc filesystem unavailable')
+            return self._portable_ros_domain_in_use(domain_id)
         expected = str(domain_id).encode('ascii')
         for process in self._proc_root.iterdir():
             if not process.name.isdigit() or int(process.name) == os.getpid():
@@ -488,6 +496,37 @@ class SystemResourceProbe:
             if before[:2] != after[:2]:
                 raise ResourceAllocationError(f'PROC_IDENTITY_CHANGED: {process.name}')
             if b'ROS_DOMAIN_ID=' + expected in entries:
+                return True
+        return False
+
+    def _portable_ros_domain_in_use(self, domain_id: int) -> bool:
+        """Scan same-UID environments through psutil on hosts without procfs."""
+
+        try:
+            import psutil
+        except ImportError as error:
+            raise ResourceAllocationError(
+                'PROBE_FAILED: portable process scanner unavailable'
+            ) from error
+        expected = str(domain_id)
+        for process in psutil.process_iter(attrs=('pid', 'uids')):
+            if process.pid == os.getpid():
+                continue
+            try:
+                uids = process.info['uids']
+                # A setuid login process may retain the user as its real UID while
+                # running with root authority; Linux procfs is root-owned in that case.
+                # Match the effective owner so the portable scan keeps the same scope.
+                if uids is None or uids.effective != os.getuid():
+                    continue
+                environment = process.environ()
+            except psutil.NoSuchProcess:
+                continue
+            except (OSError, psutil.Error) as error:
+                raise ResourceAllocationError(
+                    f'PROC_ENV_UNVERIFIABLE: {process.pid}'
+                ) from error
+            if environment.get('ROS_DOMAIN_ID') == expected:
                 return True
         return False
 
@@ -1011,7 +1050,7 @@ class WorkerResourceAllocator:
             raise ResourceAllocationError('BASE_ENVIRONMENT')
         self.base_environment = dict(source_environment)
         self.claim_root = (
-            Path(f'/run/user/{os.getuid()}/so101-parallel-domain-claims')
+            runtime_ipc_base() / 'so101-parallel-domain-claims'
             if claim_root is None
             else Path(claim_root)
         )

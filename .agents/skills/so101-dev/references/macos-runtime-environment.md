@@ -33,7 +33,7 @@ Linux/ai-station 不使用这里的命令。macOS 上的控制器行为、MoveIt
 | ROS 根目录 | `/opt/ros2_jazzy` |
 | ROS install | `/opt/ros2_jazzy/install` |
 | ROS Python | `/opt/ros2_jazzy/.venv/bin/python` |
-| 临时目录 | `/tmp` |
+| 临时目录 | `/opt/data/tmp` |
 | 工作数据根目录 | `/opt/data` |
 | 锁定 fork overlay | `/opt/data/so101/runtime/fork/current` |
 | 项目 overlay | `/opt/data/so101/workspace/install` |
@@ -49,7 +49,7 @@ Linux/ai-station 不使用这里的命令。macOS 上的控制器行为、MoveIt
 ```zsh
 uname -s
 uname -m
-ls -ld /opt/ros2_jazzy /opt/data /tmp
+ls -ld /opt/ros2_jazzy /opt/data /opt/data/tmp
 readlink /opt/ros2_jazzy
 scripts/so101-macos.zsh doctor --base
 ```
@@ -111,14 +111,28 @@ source /opt/ros2_jazzy/extra_ws/install/setup.zsh
 source /opt/data/so101/runtime/fork/current/setup.zsh
 source /opt/data/so101/workspace/install/setup.zsh
 export DYLD_LIBRARY_PATH=/opt/ros2_jazzy/dylib_farm/current
+export TMPDIR=/opt/data/tmp TMP=/opt/data/tmp TEMP=/opt/data/tmp
 
 /opt/ros2_jazzy/.venv/bin/python -c 'import rclpy; print(rclpy.__file__)'
 /opt/ros2_jazzy/.venv/bin/python -m pytest \
+  -n 8 --dist loadscope \
+  --basetemp=/opt/data/tmp/pytest-<unique-run-id> \
   src/so101_demo_py/test \
   --junitxml="$TASK_EVIDENCE/tests/so101_demo_py.xml"
 ```
 
+八进程门禁需要固定 venv 中安装 `pytest-xdist==3.8.0`。先用下面的命令核对；缺失时按项目的
+`test` extra 安装，不能借用系统 Python 或用户 site-packages：
+
+```zsh
+/opt/ros2_jazzy/.venv/bin/python -m pip show pytest-xdist
+/opt/ros2_jazzy/.venv/bin/python -m pip install 'src/so101_demo_py[test]'
+```
+
 `TASK_EVIDENCE` 必须位于本 task 已登记的唯一 evidence root。测试必须实际收集非零用例。
+普通门默认排除标记为 `explicit_ml` 的 Torch/SAM 集成用例；需要验证这些用例时，单独运行
+`python -m pytest -m explicit_ml src/so101_demo_py/test/test_sam_decoder_runtime.py`。普通门仍不得收集
+`benchmark_test/`。每次运行都要换一个尚不存在的 `--basetemp`，避免并行 worker 复用旧状态。
 pytest 收集前就因 `@rpath` 或模块导入失败时，记为 runner/environment failure，不记成代码
 RED；导入成功后出现 assertion failure 才按测试失败处理。只运行定向契约测试时，如果 ROS 的
 pytest plugin 干扰无关文件收集，可以为该次定向测试设置 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`；

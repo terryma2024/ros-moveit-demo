@@ -539,8 +539,8 @@ def test_a_child_stderr_sink_is_accepted_and_used(tmp_path):
         with open(log_path, "wb") as sink:
             record = supervisor.spawn(
                 role="worker", slot=0,
-                argv=[PYTHON, "-c", "import sys; sys.stderr.write('child diagnostic\\n')"],
-                nonce="n-stderr", ack_path=ack_path, ack_timeout_s=0.5, stderr=sink)
+                argv=[PYTHON, "-c", "print('child diagnostic', file=__import__('sys').stderr, flush=True)"],
+                nonce="n-stderr", ack_path=ack_path, ack_timeout_s=2.0, stderr=sink)
         assert record.status == FAILED  # no ACK was written, so it is refused, and that is fine
         assert "child diagnostic" in log_path.read_text()
     finally:

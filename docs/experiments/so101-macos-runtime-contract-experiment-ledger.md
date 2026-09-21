@@ -119,3 +119,88 @@
 - Retained: RED/GREEN logs under the registered evidence root.
 - Archived: none.
 - Deletion candidates: none added by this run. No evidence was deleted.
+
+## RUN-004 — Complete ordinary `so101_demo_py` pytest on macOS
+
+- Date: 2026-09-21 Asia/Shanghai
+- Source commit: `dc371162585b6d1f974bed8e0fc5716bf01c55f8`
+- Locked fork source: `85d2a5c42686a3d6b0d909a047a4188b24edd257`
+- Status: `FAIL`
+- Evidence: `/tmp/so101-debug-macos-runtime-contract-54f5d922-9678-4cff-a340-dc4f59479a23/tests/ordinary-so101-demo-002`
+- Preparation: `scripts/so101-macos.zsh prepare` rebuilt `so101_mujoco_support`,
+  `so101_teleop`, and `so101_demo_py` from the frozen source. Full doctor passed, including
+  all three required dylib loads and fixed package-prefix checks (`prepare_rc=0`, 83 seconds).
+- Command boundary: fixed ROS Python, all four fixed overlays, fixed dylib farm,
+  `PYTHONNOUSERSITE=1`, `TMPDIR/TMP/TEMP=/tmp`, and package scope
+  `src/so101_demo_py/test/`; `benchmark_test/` was not collected.
+- Result: 3669 tests collected, 3453 passed, 208 failed, 8 skipped in 93.84 seconds;
+  pytest exit 1. The run reached 100% without interruption. JUnit reports zero collection
+  errors and zero benchmark cases.
+- Failure concentration: 69 in `test_parallel_perception_runtime.py`, 51 in
+  `test_parallel_batch_resources.py`, 28 in `test_parallel_batch_cli.py`, 18 in
+  `test_parallel_batch_web_control.py`, 16 in `test_parallel_ipc.py`, 11 in
+  `test_parallel_batch_artifacts.py`, and 15 across five smaller parallel-runtime files.
+- Observed repeated boundaries: tests deriving a writable runtime root from
+  `Path(TMPDIR).parent` resolve to `/` under the fixed macOS contract; several durability and
+  process-identity tests read Linux `/proc`; many runtime/container cases fail closed with
+  `PATH_OWNER` or `IPC_BASE`; one wrapper invokes a Python without `yaml`. These observations
+  explain large failure clusters but do not prove that every one of the 208 failures has the
+  same platform-only cause.
+- Runtime impact: no ROS stack was launched; pytest exited and left no task-owned test process.
+- Retained: prepare log, source identity, preflight, complete pytest log, JUnit, parsed failure
+  summary, result, and post-test status under the registered evidence root.
+- Archived: none.
+- Deletion candidates: pytest temporary files created under `/tmp`; none deleted.
+
+## RUN-005 — Fixed macOS temporary directory and parallel-suite compatibility
+
+- Date: 2026-09-21 Asia/Shanghai
+- Source commit at start: `d8416d15e69d1e2a025f7735360d89ff4cccda66`
+- Status: `PASS_MACOS_NON_ML_PACKAGE_GATE`
+- Prior run: `RUN-004`
+- Evidence: `/tmp/so101-debug-macos-runtime-contract-54f5d922-9678-4cff-a340-dc4f59479a23/tests/macos-temp-and-parallel-compat-005`
+- Hypothesis result: changing the fixed macOS `TMPDIR`, `TMP`, and `TEMP` from `/tmp` to
+  `/opt/data/tmp` removed the read-only-root and pytest temporary-directory group mismatches. The
+  remaining Linux-only `/proc`, UNIX-socket, process-identity, and wrapper-Python assumptions were
+  repaired with platform-specific runtime boundaries rather than test-only path substitutions.
+- Regression sequence: the runtime-contract test was RED while it still expected `/tmp`, then
+  GREEN after the fixed contract moved to `/opt/data/tmp`. A focused rerun of the previously
+  failing parallel-runtime groups reported 468 passed and 1 skipped.
+- Authoritative macOS gate: fixed ROS Python, all four overlays, fixed dylib farm,
+  `TMPDIR/TMP/TEMP=/opt/data/tmp`, a fresh short basetemp, and
+  `pytest -n 8 --dist loadscope src/so101_demo_py/test`. The ordinary gate excludes the two tests
+  marked `explicit_ml` and does not collect `benchmark_test/`.
+- Result: the final fresh `package-gate-n8-final-011` completed with 3660 passed, 9 skipped,
+  zero failed in 60.47 seconds;
+  pytest exit 0. Its JUnit, complete log, preflight, exit code, elapsed time, and basetemp record are
+  retained under the run evidence directory.
+- Expanded diagnostic: `package-gate-n8-all-007` deliberately overrode the marker filter. It
+  reported 3659 passed, 9 skipped, and 3 timing-sensitive non-ML failures while co-scheduled with
+  the explicit ML workload. A fresh eight-worker focused rerun of those three cases then passed
+  3/3. Per user direction, explicit ML is outside this acceptance gate; the expanded run is not
+  represented as a passing full gate.
+- Final-gate repair: an intervening ordinary run exposed four long Darwin AF_UNIX fixture paths
+  and three high-load fixture races. The socket tests now select a short per-process root only on
+  Darwin, while Linux retains pytest's normal path. The success-process fixture no longer races
+  perception scheduling, and the stderr fixture gives its diagnostic child a bounded scheduling
+  window. The seven exact failures passed 7/7 with eight workers before the final full gate.
+- Runtime impact: no ROS stack was launched by this test-only A/B. Pytest-owned child processes
+  exited with their runs.
+- Retained: all RED/GREEN, focused, and package-gate evidence under the registered root.
+- Archived: none.
+- Deletion candidates only: basetemp trees recorded under `/opt/data/tmp`; none deleted.
+
+## RUN-006 — Linux eight-worker parity gate
+
+- Date: 2026-09-21 Asia/Shanghai
+- Status: `PLANNED_AFTER_MACOS_COMMIT_AND_PUSH`
+- Branch: `codex/so101-unified-webapp`
+- Evidence root: `/data/work/so101-evidence/macos-parallel-compat-linux/20260921-a50dcb6c-n8-001`
+- Scope: on `ai-station`, verify the same ordinary non-ML `src/so101_demo_py/test/` boundary with
+  eight pytest workers. Do not collect `benchmark_test/`.
+- Scratch contract: create one previously nonexistent directory below
+  `scratch/linux-pytest-n8-001/tmp`, export `TMPDIR`, `TMP`, and `TEMP` to it, and prove with the
+  exact test Python that `tempfile.gettempdir()` resolves inside that directory before pytest.
+- Retention: retain the full test log, JUnit, environment preflight, elapsed time, exit code, and
+  scratch-path record. Treat the scratch tree as a deletion candidate after readback; delete
+  nothing without explicit authorization.

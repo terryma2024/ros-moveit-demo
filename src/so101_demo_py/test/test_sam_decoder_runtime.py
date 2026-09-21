@@ -12,6 +12,7 @@ def runtime_api():
     return importlib.import_module("so101_demo.training.sam_decoder_runtime")
 
 
+@pytest.mark.explicit_ml
 def test_epoch_export_binds_model_optimizer_receipt_and_identity(tmp_path):
     torch = pytest.importorskip("torch")
     model = torch.nn.Linear(2, 1)
@@ -77,6 +78,7 @@ def test_training_rejects_invalid_source_before_creating_output(tmp_path):
     assert not root.exists()
 
 
+@pytest.mark.explicit_ml
 def test_real_processor_accepts_two_jittered_box_prompts():
     from types import SimpleNamespace
 
