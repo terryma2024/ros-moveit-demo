@@ -49,8 +49,8 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-RUNTIME-REVERIFY
-next_experiment: EXP-MSC-105 (Task 5: canonical reducer and transactional projection)
+latest_checkpoint: CP-MSC-T5-PARTIAL
+next_experiment: EXP-MSC-106 (Task 5 continued: projection source, store transaction, production wiring)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -1229,3 +1229,64 @@ Evidence (registered root, new subdirectory): `<RUN_ROOT>/task5-runtime-reverify
 - The Task 2/3/4 open boundaries recorded in CP-MSC-T2/T3/T4 are unchanged.
 
 Decision: `RUNTIME_BLOCKED_POINTS_REVERIFIED_ON_CURRENT_HOST`; continue with plan Task 5.
+
+## CP-MSC-T5-PARTIAL: Task 5 slice - the canonical reducer
+
+```yaml
+checkpoint_id: CP-MSC-T5-PARTIAL
+recorded_at: 2026-09-21T20:16:00+0800
+parent_source_at_test: 121435df (plus Task 2-4 commits)
+submodule_commit: 85d2a5c42686a3d6b0d909a047a4188b24edd257
+install_overlay: /opt/data/so101/workspace/install (source tree prepended for source-mode gates)
+runtime_executable: /opt/ros2_jazzy/.venv/bin/python (3.11.15)
+ros_domain_id: NOT_APPLICABLE_OFFLINE
+gz_partition: NOT_APPLICABLE_OFFLINE
+```
+
+### Delivered in this slice
+
+- New `src/so101_teleop/so101_teleop/expert_validation/reducer.py`:
+  `CanonicalCampaignReducer.apply()`, `CampaignReducerState`, `PointState`, `AttemptState`,
+  `PointStatus`, `ExecutionPhase`, `AttemptValidity`, `InfrastructureOutcome`, `ReducerError`.
+  One pure reducer over the four orthogonal axes (point status / execution phase / attempt
+  validity+infrastructure / batch business+infrastructure+cleanup+fence). `RESULT_COMMITTED`
+  derives the point terminal, `POINT_TERMINAL` only confirms the same result hash, an
+  attempt-level `INVALID` never becomes a business `FAILED`, `BATCH_TERMINAL` never implies
+  cleanup, identity drift, batch mismatch, sequence regression and post-terminal appends are
+  refused, and the input state is never mutated.
+
+### RED / GREEN
+
+- RED `task2/task5-red-20260921T121320Z` - exit 1, 10 collected, 10 failed (module absent).
+- GREEN `task2/task5-green-3-20260921T121408Z` - exit 0, 10 passed.
+- Retained intermediate runs: `task5-green-20260921T121345Z` (10 failed, my own
+  `MappingProxyType` dataclass-default error) and `task5-green-2-20260921T121359Z` (1 failed:
+  the regression test replayed an identical frame, which the reducer correctly treats as an
+  idempotent repeat rather than a sequence regression). Both were implementation/test defects
+  inside this slice; no product behaviour was weakened for them.
+- Adjacent `task2/task5-adjacent-20260921T121422Z` - exit 1: 44 passed, 2 failed in
+  `test_expert_validation_production_projection.py`
+  (`test_cancel_command_replays_durably_and_conflicting_target_never_contacts_owner[False/True]`,
+  a missing `/private/tmp/so101-control-501/campaign-1-b001.sock`).
+  **Classified as pre-existing, not a regression:** a pristine extraction of `121435df`
+  (`git archive`, no `reducer` module available at all) fails the same two cases
+  (`task2/task5-baseline-projection-2-20260921T1214…`, 5 failed / 17 passed), and no module in the
+  package imports `expert_validation.reducer`, so the new file cannot affect that file.
+
+### Still to do for Task 5 (explicitly not done, not claimed)
+
+- `projection_source.py` (`ProjectionSource.read_after()`) and removing the `payload.delta`
+  merge from `coordinator_events.py`, so sources only adapt and verify.
+- `SupervisorStore.accept_projection_batch()`: idempotency key, reducer state, attempt dedupe and
+  the accepted cursor updated in one SQLite transaction, with the injected-failure rollback and
+  restart-without-double-counting tests.
+- `production.py` wiring to the canonical reducer, the three existing test files from the plan's
+  Task 5 list, and the `src/so101_teleop/CMakeLists.txt` registration.
+- The Task 5 RED command from the plan therefore cannot be run as written yet; this checkpoint
+  covers only the reducer component with its own RED/GREEN.
+- Unchanged open items: five-run strict Gate A not rerun, ordinary package gate not GREEN
+  (208 failed / 3453 passed in the other dispatch's run), second physical Mac NOT_RUN, legacy C++
+  root cause UNCONFIRMED, Task 2/3/4 boundaries.
+
+Decision: `TASK_5_REDUCER_GREEN_SLICE_COMMITTED`; continue Task 5 with the source/store/production
+migration.
