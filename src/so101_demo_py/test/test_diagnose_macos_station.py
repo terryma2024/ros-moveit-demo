@@ -13,6 +13,7 @@ import importlib
 import importlib.util
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -86,6 +87,34 @@ def test_only_the_three_closed_modes_resolve() -> None:
     with pytest.raises(module.StationDiagnosticError) as error:
         module.resolve_mode("ARBITRARY_CONTROLLER_MANAGER")
     assert error.value.code == "STATION_LAUNCH_MODE_UNSUPPORTED"
+
+
+def test_full_station_readiness_uses_manifest_python_and_installed_entrypoint(
+    tmp_path: Path,
+) -> None:
+    module = _diagnostic_module()
+    install = tmp_path / "closure"
+    relative = "lib/so101_demo_py/motion_stack_ready"
+    executable = install / relative
+    executable.parent.mkdir(parents=True)
+    executable.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+    executable.chmod(0o755)
+    manifest = SimpleNamespace(
+        install_root=install,
+        closure=SimpleNamespace(inventory={relative: object()}),
+        semantic=SimpleNamespace(python_executable=Path("/venv/bin/python")),
+    )
+
+    assert module._readiness_argv(manifest) == (
+        "/venv/bin/python",
+        str(executable),
+        "--timeout-s",
+        "90.0",
+    )
+
+    manifest.closure.inventory.clear()
+    with pytest.raises(module.StationDiagnosticError, match="READINESS_EXECUTABLE"):
+        module._readiness_argv(manifest)
 
 
 def test_minimal_mode_never_loads_the_robot_system(tmp_path: Path) -> None:
