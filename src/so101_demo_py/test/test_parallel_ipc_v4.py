@@ -14,11 +14,15 @@ Sockets are real AF_UNIX sockets under a short per-test private directory, becau
 import os
 import socket
 import stat
+import sys
 import threading
 import time
 from pathlib import Path
 
 import pytest
+
+pytestmark = pytest.mark.skipif(
+    sys.platform != "darwin", reason="v4 private-path IPC is macOS-only")
 
 from so101_demo.runtime.parallel_ipc_v4 import (
     DEFAULT_QUEUE_CAPACITY,

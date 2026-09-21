@@ -18,6 +18,9 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.skipif(
+    sys.platform != "darwin", reason="Darwin private-path transport is macOS-only")
+
 from so101_demo.runtime.unix_address import (
     ALREADY_GONE,
     CLEANED,

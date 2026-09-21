@@ -527,6 +527,8 @@ def test_missing_proc_meminfo_uses_macos_host_statistics(monkeypatch, tmp_path):
 
     import so101_demo.parallel_batch.start_guard as module
 
+    monkeypatch.setattr(sys, "platform", "darwin")
+
     responses = {
         ("/usr/sbin/sysctl", "-n", "hw.memsize"): "1073741824\n",
         ("/usr/bin/vm_stat",): (
@@ -568,6 +570,8 @@ def test_macos_meminfo_uses_sysconf_when_sysctl_is_denied(monkeypatch, tmp_path)
     """A sandbox denial cannot erase host RAM that sysconf reports directly."""
 
     import so101_demo.parallel_batch.start_guard as module
+
+    monkeypatch.setattr(sys, "platform", "darwin")
 
     vm_stat = (
         "Mach Virtual Memory Statistics: (page size of 16384 bytes)\n"

@@ -10,6 +10,9 @@ from pathlib import Path
 import pytest
 import yaml
 
+pytestmark = pytest.mark.skipif(
+    sys.platform != "darwin", reason="macOS install and dylib contracts are macOS-only")
+
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 INSTALLER = REPOSITORY_ROOT / "scripts" / "install-mujoco-ros2-control.zsh"

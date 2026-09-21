@@ -47,6 +47,7 @@ def test_epoch_export_binds_model_optimizer_receipt_and_identity(tmp_path):
     assert verify_complete_checkpoint(root, expected_identity=identity).completed_epoch == 1
 
 
+@pytest.mark.explicit_ml
 def test_export_failure_never_marks_checkpoint_complete(tmp_path):
     def interrupted(directory):
         directory.mkdir()
