@@ -1,6 +1,10 @@
 """Focused ownership contracts for replacing an exited shared Broker."""
 
+import os
+from pathlib import Path
 import signal
+import subprocess
+import sys
 import time
 
 import pytest
@@ -45,12 +49,38 @@ def test_stop_probe_rejects_non_boolean_without_erasing_owned_child(value):
 
 
 def test_proc_stat_start_time_parser_ignores_spaces_and_parentheses_in_comm():
-    from so101_demo.runtime.parallel_processes import _parse_proc_stat_start_time
+    from so101_demo.runtime.parallel_processes import (
+        _parse_proc_stat_start_time,
+        _parse_proc_stat_state,
+    )
 
     suffix = "S " + " ".join(str(value) for value in range(1, 19)) + " 4242"
-    assert _parse_proc_stat_start_time(
-        f"123 (broker (generation 2) worker) {suffix}"
-    ) == 4242
+    document = f"123 (broker (generation 2) worker) {suffix}"
+    assert _parse_proc_stat_state(document) == "S"
+    assert _parse_proc_stat_start_time(document) == 4242
+
+
+@pytest.mark.skipif(not Path("/proc").is_dir(), reason="Linux procfs contract")
+def test_proc_group_members_excludes_an_unreaped_zombie():
+    from so101_demo.runtime.parallel_processes import _proc_group_members
+
+    child = subprocess.Popen(
+        [sys.executable, "-c", "pass"],
+        start_new_session=True,
+    )
+    try:
+        deadline = time.monotonic() + 2.0
+        state = ""
+        while time.monotonic() < deadline:
+            document = Path(f"/proc/{child.pid}/stat").read_text()
+            state = document[document.rfind(")") + 2:].split(maxsplit=1)[0]
+            if state == "Z":
+                break
+            time.sleep(0.005)
+        assert state == "Z"
+        assert child.pid not in _proc_group_members(os.getpgid(child.pid))
+    finally:
+        child.wait(timeout=2.0)
 
 
 def test_wait_can_retire_exact_exited_broker_and_continue_with_replacement():
