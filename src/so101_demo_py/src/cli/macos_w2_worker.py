@@ -42,6 +42,15 @@ if len(station_arguments) == 3:
     config = default_task_station_config(station_session, Path(station_root))
     environment = station_environment(base=dict(os.environ))
     environment["ROS_DOMAIN_ID"] = station_domain
+    # Owner-tree cooperation (Task 6): exactly one STATION intent may exist per station spawn, so
+    # only the boundary that actually calls `Popen` writes it - `runtime.task_stack` - and this
+    # Worker writes no record of its own, not even on the station's failure paths, because the
+    # abandonment of a station that never started is that same boundary's job. What the Worker
+    # contributes is the parent-token context: the token the campaign gave this Worker becomes the
+    # station's SO101_OWNER_PARENT_TOKEN, so the tree reads campaign -> worker -> station.
+    worker_owner_token = str(os.environ.get("SO101_OWNER_TOKEN") or "")
+    if worker_owner_token:
+        environment["SO101_OWNER_PARENT_TOKEN"] = worker_owner_token
     station = PersistentTaskStack()
     station.start(config, environment=environment)
 

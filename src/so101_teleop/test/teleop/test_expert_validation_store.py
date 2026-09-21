@@ -348,3 +348,37 @@ def test_projection_batch_is_transactional_idempotent_and_resumable(tmp_path):
         assert len(after_restart.attempts) == 1
     finally:
         reopened.close()
+
+
+# --------------------------------------------------------------------------------------
+# Task 6: a recovery fence carries the exact generation its reaper committed
+# --------------------------------------------------------------------------------------
+
+
+def test_recovery_fence_takes_the_exact_generation_the_reaper_committed(tmp_path):
+    root = tmp_path.resolve()
+    store = SupervisorStore.open(root)
+    try:
+        _prepare(store, root)
+        reason = "OWNER_TREE_UNRESOLVED generation 4: WORKER INTENT_UNCONFIRMED"
+
+        store.record_recovery_fence(
+            "campaign-1", "batch-1", reason=reason, command_id="recover-1-4", generation=4
+        )
+
+        fence = store.recovery_fence("campaign-1")
+        assert fence["reason"] == reason
+        assert fence["command_id"] == "recover-1-4"
+        # The keyword is optional: the callers that predate it are unchanged.
+        store.record_recovery_fence("campaign-1", "batch-1", reason=reason, command_id="recover-1-4")
+        with pytest.raises(StoreConflict, match="RECOVERY_FENCE_GENERATION_INVALID"):
+            store.record_recovery_fence(
+                "campaign-1", "batch-1", reason=reason, command_id="recover-1-4", generation=0
+            )
+        with pytest.raises(StoreConflict, match="RECOVERY_FENCE_GENERATION_INVALID"):
+            store.record_recovery_fence(
+                "campaign-1", "batch-1", reason=reason, command_id="recover-1-4", generation=True
+            )
+        assert store.recovery_fence("campaign-1")["command_id"] == "recover-1-4"
+    finally:
+        store.close()

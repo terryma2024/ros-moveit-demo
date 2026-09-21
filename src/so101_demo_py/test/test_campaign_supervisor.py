@@ -28,6 +28,7 @@ from so101_demo.parallel_batch.campaign_supervisor import (
     ACTIVE,
     FAILED,
     SPAWNING,
+    SPAWN_FAILED,
     STOPPED,
     CampaignBlocked,
     CampaignSupervisor,
@@ -545,4 +546,279 @@ def test_a_child_stderr_sink_is_accepted_and_used(tmp_path):
         assert "child diagnostic" in log_path.read_text()
     finally:
         supervisor.terminate_all()
+        supervisor.release_claim()
+
+
+# --------------------------------------------------------------------------------------
+# Owner records (Task 6): the intent is durable before Popen, the readback confirms it after
+# --------------------------------------------------------------------------------------
+
+OWNER_BATCH = "batch-7"
+
+
+def _owner_environment(tmp_path, **overrides):
+    environment = {
+        "SO101_OWNER_TREE_ROOT": str(tmp_path / "owner-tree"),
+        "SO101_OWNER_CAMPAIGN_ID": "w2-campaign",
+        "SO101_OWNER_BATCH_ID": OWNER_BATCH,
+        "SO101_OWNER_GENERATION": "1",
+    }
+    environment.update(overrides)
+    return environment
+
+
+def _owner_directory(tmp_path):
+    return tmp_path / "owner-tree" / "w2-campaign" / OWNER_BATCH
+
+
+def _observing_popen(observed, directory):
+    """The real Popen, with what the supervisor knew at that moment recorded first."""
+
+    real_popen = subprocess.Popen
+
+    def popen(argv, **kwargs):
+        observed["argv"] = list(argv)
+        observed["env"] = kwargs.get("env")
+        observed["intents"] = sorted(path.name for path in directory.glob("*.intent.json"))
+        observed["confirmed"] = sorted(path.name for path in directory.glob("*.confirmed.json"))
+        observed["parts"] = sorted(path.name for path in directory.glob("*.part"))
+        return real_popen(argv, **kwargs)
+
+    return popen
+
+
+def _owner_supervisor(tmp_path, **kwargs):
+    return CampaignSupervisor(
+        campaign_id="w2-campaign",
+        state_root=tmp_path / "supervisor",
+        ack_timeout_s=kwargs.pop("ack_timeout_s", 5.0),
+        **kwargs,
+    )
+
+
+def _abandoned(directory):
+    return [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in sorted(directory.glob("*.abandoned.json"))
+    ]
+
+
+def test_a_spawn_records_its_owner_intent_before_popen_and_confirms_the_child(tmp_path):
+    from so101_demo.runtime.owner_records import command_fingerprint
+
+    directory = _owner_directory(tmp_path)
+    observed = {}
+    supervisor = _owner_supervisor(
+        tmp_path,
+        popen=_observing_popen(observed, directory),
+        owner_environment=_owner_environment(tmp_path, **{"SO101_OWNER_TOKEN": "campaign-abc"}),
+    )
+    supervisor.acquire_claim()
+    try:
+        ack_path = tmp_path / "ack.json"
+        record = supervisor.spawn(
+            role="worker", slot=0, argv=_ack_command(ack_path, sleep_s=30.0),
+            nonce="n-owner", ack_path=ack_path,
+        )
+        assert record.status == ACTIVE
+        assert len(observed["intents"]) == 1, "the intent is durable before Popen"
+        assert observed["confirmed"] == [], "the confirmation is written after Popen"
+        assert observed["parts"] == [], "an atomic write never leaves a .part behind"
+
+        intent = json.loads((directory / observed["intents"][0]).read_text(encoding="utf-8"))
+        assert intent["schema"] == "so101.owner-intent/1"
+        assert intent["role"] == "WORKER"
+        assert intent["generation"] == 1
+        assert intent["parent_spawn_token"] == "campaign-abc"
+        assert intent["expected_executable"] == PYTHON
+        assert intent["argv_sha256"] == command_fingerprint(record.argv)
+
+        child_environment = observed["env"]
+        assert child_environment["SO101_OWNER_TOKEN"] == intent["spawn_token"]
+        assert child_environment["SO101_OWNER_PARENT_TOKEN"] == "campaign-abc"
+        assert child_environment["SO101_OWNER_TREE_ROOT"] == str(tmp_path / "owner-tree")
+        assert child_environment["SO101_OWNER_BATCH_ID"] == OWNER_BATCH
+        assert child_environment["SO101_OWNER_GENERATION"] == "1"
+
+        confirmed = list(directory.glob("*.confirmed.json"))
+        assert [path.name for path in confirmed] == [f"{intent['spawn_token']}.confirmed.json"]
+        document = json.loads(confirmed[0].read_text(encoding="utf-8"))
+        assert document["pid"] == record.pid
+        assert document["pgid"] == record.process_group == record.pid
+        assert document["started_ticks"] == record.birth_identity
+        assert document["command_sha256"] == intent["argv_sha256"]
+        assert not list(directory.glob("*.abandoned.json"))
+    finally:
+        supervisor.terminate_all()
+        supervisor.release_claim()
+
+
+def test_a_spawn_without_an_owner_context_is_unchanged(tmp_path):
+    observed = {}
+    supervisor = _owner_supervisor(
+        tmp_path,
+        popen=_observing_popen(observed, _owner_directory(tmp_path)),
+        owner_environment={},
+    )
+    supervisor.acquire_claim()
+    try:
+        ack_path = tmp_path / "ack.json"
+        record = supervisor.spawn(
+            role="worker", slot=0, argv=_ack_command(ack_path, sleep_s=30.0),
+            nonce="n-inert", ack_path=ack_path,
+        )
+        assert record.status == ACTIVE
+        assert observed["env"] is None, "Popen still inherits the environment exactly as before"
+        assert observed["argv"] == list(record.argv)
+        assert not (tmp_path / "owner-tree").exists()
+    finally:
+        supervisor.terminate_all()
+        supervisor.release_claim()
+
+
+def test_a_role_outside_the_owner_vocabulary_is_spawned_without_a_record(tmp_path):
+    """The supervisor may own roles the owner tree does not know; none is invented for them."""
+
+    supervisor = _owner_supervisor(
+        tmp_path, owner_environment=_owner_environment(tmp_path, **{"SO101_OWNER_TOKEN": "c-1"})
+    )
+    supervisor.acquire_claim()
+    try:
+        ack_path = tmp_path / "ack.json"
+        record = supervisor.spawn(
+            role="coordinator", slot=0, argv=_ack_command(ack_path, sleep_s=30.0),
+            nonce="n-coordinator", ack_path=ack_path,
+        )
+        assert record.status == ACTIVE
+        assert not (tmp_path / "owner-tree").exists()
+    finally:
+        supervisor.terminate_all()
+        supervisor.release_claim()
+
+
+def test_the_broker_role_is_mapped_to_the_upper_case_vocabulary(tmp_path):
+    directory = _owner_directory(tmp_path)
+    supervisor = _owner_supervisor(
+        tmp_path,
+        popen=_observing_popen({}, directory),
+        owner_environment=_owner_environment(tmp_path),
+    )
+    supervisor.acquire_claim()
+    try:
+        ack_path = tmp_path / "ack.json"
+        record = supervisor.spawn(
+            role="broker", slot=0, argv=_ack_command(ack_path, sleep_s=30.0),
+            nonce="n-broker", ack_path=ack_path,
+        )
+        assert record.status == ACTIVE
+        intents = [
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in directory.glob("*.intent.json")
+        ]
+        assert [intent["role"] for intent in intents] == ["BROKER"]
+    finally:
+        supervisor.terminate_all()
+        supervisor.release_claim()
+
+
+def test_an_ack_timeout_abandons_the_record_and_keeps_the_confirmation(tmp_path):
+    """The child was really born and really read back; the *spawn* is what failed."""
+
+    directory = _owner_directory(tmp_path)
+    supervisor = _owner_supervisor(
+        tmp_path,
+        popen=_observing_popen({}, directory),
+        owner_environment=_owner_environment(tmp_path),
+    )
+    supervisor.acquire_claim()
+    try:
+        ack_path = tmp_path / "ack.json"
+        record = supervisor.spawn(
+            role="worker", slot=0, argv=[PYTHON, "-c", SILENT_CHILD, "30.0"],
+            nonce="n-silent", ack_path=ack_path, ack_timeout_s=0.5,
+        )
+        assert record.status == FAILED
+        assert record.reason == ACK_TIMEOUT
+        assert [marker["reason"] for marker in _abandoned(directory)] == [ACK_TIMEOUT]
+        assert len(list(directory.glob("*.confirmed.json"))) == 1
+        assert len(list(directory.glob("*.intent.json"))) == 1
+    finally:
+        supervisor.terminate_all()
+        supervisor.release_claim()
+
+
+def test_an_unreadable_child_identity_abandons_the_record(tmp_path):
+    directory = _owner_directory(tmp_path)
+    supervisor = CampaignSupervisor(
+        campaign_id="w2-campaign",
+        state_root=tmp_path / "supervisor",
+        ack_timeout_s=5.0,
+        identity_timeout_s=0.05,
+        identity_reader=lambda _pid: None,
+        sleep=lambda _s: None,
+        owner_environment=_owner_environment(tmp_path),
+    )
+    supervisor.acquire_claim()
+    try:
+        ack_path = tmp_path / "ack.json"
+        record = supervisor.spawn(
+            role="worker", slot=0, argv=_ack_command(ack_path, sleep_s=30.0),
+            nonce="n-unreadable", ack_path=ack_path,
+        )
+        assert record.status == FAILED
+        assert record.reason == IDENTITY_UNAVAILABLE
+        assert [marker["reason"] for marker in _abandoned(directory)] == [IDENTITY_UNAVAILABLE]
+        assert not list(directory.glob("*.confirmed.json"))
+    finally:
+        supervisor.terminate_all()
+        supervisor.release_claim()
+
+
+def test_a_failed_popen_abandons_the_record(tmp_path):
+    directory = _owner_directory(tmp_path)
+
+    def popen(*_args, **_kwargs):
+        raise OSError("cannot spawn")
+
+    supervisor = _owner_supervisor(
+        tmp_path, popen=popen, owner_environment=_owner_environment(tmp_path)
+    )
+    supervisor.acquire_claim()
+    try:
+        with pytest.raises(CampaignBlocked, match=SPAWN_FAILED):
+            supervisor.spawn(
+                role="worker", slot=0, argv=[PYTHON, "-c", SILENT_CHILD, "1.0"],
+                nonce="n-failed", ack_path=tmp_path / "ack.json",
+            )
+        assert [marker["reason"] for marker in _abandoned(directory)] == [SPAWN_FAILED]
+        assert not list(directory.glob("*.confirmed.json"))
+    finally:
+        supervisor.release_claim()
+
+
+def test_nothing_is_spawned_when_the_owner_record_cannot_be_written(tmp_path):
+    """No record, no spawn: a child the recovery path cannot see is worse than a refusal."""
+
+    spawned = []
+
+    def popen(*args, **_kwargs):
+        spawned.append(args)
+        raise AssertionError("nothing may be spawned without a durable owner record")
+
+    # A plain file where the owner-record root must be a directory: every write under it fails.
+    (tmp_path / "owner-tree").write_text("not a directory", encoding="utf-8")
+    supervisor = _owner_supervisor(
+        tmp_path, popen=popen, owner_environment=_owner_environment(tmp_path)
+    )
+    supervisor.acquire_claim()
+    try:
+        with pytest.raises(CampaignBlocked, match=SPAWN_FAILED):
+            supervisor.spawn(
+                role="worker", slot=0, argv=[PYTHON, "-c", SILENT_CHILD, "1.0"],
+                nonce="n-unwritable", ack_path=tmp_path / "ack.json",
+            )
+        assert spawned == []
+        document = json.loads(supervisor.receipt_path.read_text())
+        assert [child["status"] for child in document["children"]] == [FAILED]
+    finally:
         supervisor.release_claim()

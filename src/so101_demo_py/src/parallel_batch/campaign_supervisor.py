@@ -30,6 +30,14 @@ from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
 from .start_guard_probe import ProcessIdentityRecord, read_process_identity
+from ..runtime.owner_records import (
+    CONFIRMATION_UNREADABLE as OWNER_CONFIRMATION_UNREADABLE,
+    ROLES as OWNER_RECORD_ROLES,
+    OwnerRecordError,
+    OwnerSpawnRecorder,
+    owner_context_from_environment,
+    spawner_token_from_environment,
+)
 
 #: Receipt states for one child. Only ACTIVE children may be running.
 SPAWNING = "SPAWNING"
@@ -249,7 +257,8 @@ class CampaignSupervisor:
                  popen: Callable[..., object] = subprocess.Popen,
                  identity_reader: Callable[[int], ProcessIdentityRecord | None]
                  = read_process_identity,
-                 sleep: Callable[[float], None] = time.sleep) -> None:
+                 sleep: Callable[[float], None] = time.sleep,
+                 owner_environment: Mapping[str, str] | None = None) -> None:
         if not isinstance(campaign_id, str) or not campaign_id:
             raise CampaignBlocked("CAMPAIGN_ID")
         self.campaign_id = campaign_id
@@ -265,6 +274,11 @@ class CampaignSupervisor:
         self._popen = popen
         self._identity_reader = identity_reader
         self._sleep = sleep
+        #: The environment the owner-record context is read from. ``None`` means this process's own
+        #: environment - the campaign process inherits it from the adapter that spawned it - and an
+        #: explicit mapping (including an empty one) is used instead, which is how a caller keeps a
+        #: campaign out of any owner tree.
+        self._owner_environment = owner_environment
         self._claim_descriptor: int | None = None
         self._receipt: OwnershipReceipt | None = None
 
@@ -455,16 +469,32 @@ class CampaignSupervisor:
         ack_path = Path(ack_path)
         if ack_path.exists():
             ack_path.unlink()
+        # The owner record is durable before the spawn, and the child is handed its own token plus
+        # this campaign's token, so anything the child spawns in turn (a Worker's station) continues
+        # the same owner tree instead of starting a new root.
+        try:
+            recorder = self._begin_owner_record(role=role, argv=intent.argv)
+        except OwnerRecordError as error:
+            # No record, no spawn: a child the recovery path cannot see is worse than a refused
+            # spawn, and the receipt intent is resolved as failed because nothing was spawned.
+            self._update_child(replace(intent, status=FAILED, reason=SPAWN_FAILED,
+                                       recorded_monotonic_s=self._clock()))
+            raise CampaignBlocked(SPAWN_FAILED, str(error)) from error
+        child_environment = environment
+        if recorder is not None:
+            child_environment = recorder.child_environment(
+                os.environ if environment is None else environment)
         try:
             child = self._popen(
                 list(intent.argv),
-                env=None if environment is None else dict(environment),
+                env=None if child_environment is None else dict(child_environment),
                 start_new_session=True,
                 # A child's own diagnostics are evidence: an optional sink keeps a failing child
                 # from being silent, which is exactly how the identity race stayed hidden.
                 **({} if stderr is None else {"stderr": stderr}),
             )
         except OSError as error:
+            self._abandon_owner_record(recorder, SPAWN_FAILED)
             self._update_child(replace(intent, status=FAILED, reason=SPAWN_FAILED,
                                        recorded_monotonic_s=self._clock()))
             raise CampaignBlocked(SPAWN_FAILED, str(error)) from error
@@ -476,6 +506,8 @@ class CampaignSupervisor:
         # finish and exit first, and an exited child is unidentifiable, so it could never be
         # signalled safely. This was measured on macOS, where the read returns None once gone.
         birth = self._read_birth_identity(pid, deadline=self._clock() + self.identity_timeout_s)
+        if birth is not None:
+            self._confirm_owner_record(recorder, pid)
         deadline = self._clock() + timeout
         ack: RegistrationAck | None = None
         while self._clock() < deadline:
@@ -493,6 +525,7 @@ class CampaignSupervisor:
 
         if ack is None or ack.pid != pid:
             self._stop_exact(child, pid)
+            self._abandon_owner_record(recorder, ACK_TIMEOUT)
             failed = replace(intent, status=FAILED, pid=pid, reason=ACK_TIMEOUT,
                              recorded_monotonic_s=self._clock())
             self._update_child(failed)
@@ -507,6 +540,7 @@ class CampaignSupervisor:
         if birth is None or (recheck is not None
                              and recheck.start_time_ticks != birth.start_time_ticks):
             self._stop_exact(child, pid)
+            self._abandon_owner_record(recorder, IDENTITY_UNAVAILABLE)
             failed = replace(intent, status=FAILED, pid=pid, reason=IDENTITY_UNAVAILABLE,
                              recorded_monotonic_s=self._clock())
             self._update_child(failed)
@@ -517,6 +551,81 @@ class CampaignSupervisor:
                          ack=ack, recorded_monotonic_s=self._clock())
         self._update_child(active)
         return active
+
+    # -- owner records -------------------------------------------------------------------
+
+    def _owner_environment_document(self) -> Mapping[str, str]:
+        return os.environ if self._owner_environment is None else self._owner_environment
+
+    def _begin_owner_record(self, *, role: str, argv: Sequence[str]):
+        """The durable owner intent for one spawn, written before ``Popen``; ``None`` when inert.
+
+        The supervisor's own roles are ``worker`` and ``broker``; the owner vocabulary is upper
+        case. A role the owner tree does not know - today's ``coordinator`` - is spawned exactly as
+        before and left un-recorded, because inventing a role for it would make the recovery side
+        claim a tree shape this campaign never had.
+        """
+
+        owner_role = role.upper()
+        if owner_role not in OWNER_RECORD_ROLES:
+            return None
+        environment = self._owner_environment_document()
+        context = owner_context_from_environment(environment)
+        if context is None:
+            return None
+        return OwnerSpawnRecorder.begin(
+            context=context,
+            role=owner_role,
+            argv=argv,
+            # The child's parent is this campaign, not the campaign's own parent: the token this
+            # process was given by the adapter is what the child records and receives.
+            parent_spawn_token=spawner_token_from_environment(environment),
+            own_session=True,
+        )
+
+    def _owner_identity_observation(self, pid: int) -> tuple[int, int] | None:
+        """``(pgid, start_time_ticks)`` for the confirmation, through this supervisor's own seam."""
+
+        identity = self._identity_reader(pid)
+        if identity is None:
+            return None
+        try:
+            pgid = int(os.getpgid(pid))
+        except OSError:
+            return None
+        return pgid, int(identity.start_time_ticks)
+
+    def _confirm_owner_record(self, recorder: OwnerSpawnRecorder | None, pid: int) -> None:
+        """Read the child's kernel identity back and record it, right after the birth read.
+
+        A confirmation that cannot be read is *marked*, never silently missing, and it does not
+        change this spawn's decision: the receipt above already carries the birth identity the
+        supervisor signals by, and the ACK/identity checks below remain the only admission.
+        """
+
+        if recorder is None:
+            return
+        try:
+            recorder.confirm(
+                pid,
+                identity_reader=self._owner_identity_observation,
+                deadline_s=self.identity_timeout_s,
+            )
+        except OwnerRecordError:
+            self._abandon_owner_record(recorder, OWNER_CONFIRMATION_UNREADABLE)
+
+    def _abandon_owner_record(self, recorder: OwnerSpawnRecorder | None, reason: str) -> None:
+        """Mark the record of a spawn that failed.
+
+        Best effort: the failure that caused it is the one that must still propagate.
+        """
+
+        if recorder is None:
+            return
+        try:
+            recorder.abandon(reason)
+        except (OwnerRecordError, OSError):
+            pass
 
     def _read_birth_identity(self, pid: int, *, deadline: float):
         """Retry the identity read until the deadline; return None if it never resolved."""

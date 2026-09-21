@@ -4,9 +4,12 @@ import hashlib
 import importlib
 import importlib.util
 import json
+import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
+import time
 
 import pytest
 
@@ -270,3 +273,201 @@ def test_recover_defaults_to_keyword_only_preview_without_writes(fenced):
     with pytest.raises(TypeError):
         module.recover(store, campaign_id='campaign-1', command_id='invalid-positional',
             parallel_config=config, inspector=probe, source_commit='2' * 40)
+
+
+# --------------------------------------------------------------------------------------
+# Task 6: the formal recovery entry reclaims the durable owner tree, leaf first
+# --------------------------------------------------------------------------------------
+
+
+def _sleeper():
+    return subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(60)"],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+def _kill(pids):
+    for pid in pids:
+        try:
+            os.killpg(pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+
+
+def _record_tree_process(root, role, token, child):
+    """One durable record exactly as the spawn boundary and the service write it."""
+
+    from so101_teleop.expert_validation.owner_tree import (
+        ConfirmedOwnerProcess,
+        DirectoryOwnerRecords,
+        OwnerIntent,
+    )
+    from so101_teleop.process_identity import read_identity
+
+    source = DirectoryOwnerRecords(root=root)
+    argv = (sys.executable, "-c", "import time; time.sleep(60)")
+    intent = OwnerIntent.for_argv(
+        campaign_id="campaign-1",
+        batch_id="b001",
+        role=role,
+        generation=1,
+        spawn_token=token,
+        argv=argv,
+    )
+    source.record_owner_intent(intent)
+    identity = read_identity(child.pid)
+    source.confirm_owner_process(
+        ConfirmedOwnerProcess(
+            spawn_token=token,
+            pid=identity.pid,
+            pgid=identity.pgid,
+            started_ticks=identity.start_marker,
+            command_sha256=identity.command_sha256,
+            confirmed_at_ns=time.time_ns(),
+        )
+    )
+    return source
+
+
+def test_owner_tree_root_reclaims_the_recorded_tree_leaf_first_and_resolves_the_fence(fenced):
+    module = recovery_module()
+    store, _, tmp_path = fenced
+    tree_root = (tmp_path / "owner-tree").resolve()
+    children = []
+    try:
+        for role in ("WORKER", "STATION"):
+            child = _sleeper()
+            children.append(child)
+            _record_tree_process(tree_root, role, f"spawn-{role.lower()}", child)
+        assert all(child.poll() is None for child in children)
+
+        result = recover(fenced, owner_tree_root=tree_root, apply=True)
+
+        assert result["status"] == "OPERATOR_RECOVERED_ABORTED"
+        assert store.operator_recovery("campaign-1") is not None
+        committed = store.owner_cleanup_receipt("campaign-1", "b001", 1)
+        assert committed is not None
+        assert [entry["role"] for entry in committed["reclaimed"]] == ["STATION", "WORKER"]
+        assert committed["fence_released"] is True
+        assert (
+            tree_root / "campaign-1" / "b001" / "generation-1.owner-cleanup-receipt.json"
+        ).is_file()
+        for child in children:
+            child.wait(timeout=5)
+            assert child.poll() is not None
+        assert not any(os.path.lexists(tmp_path / "proc" / str(child.pid)) for child in children)
+    finally:
+        _kill([child.pid for child in children if child.poll() is None])
+
+
+def test_owner_tree_root_refuses_an_unproven_identity_and_keeps_the_fence(fenced):
+    module = recovery_module()
+    store, _, tmp_path = fenced
+    from so101_teleop.expert_validation.owner_tree import (
+        ConfirmedOwnerProcess,
+        DirectoryOwnerRecords,
+        OwnerIntent,
+    )
+    from so101_teleop.process_identity import read_identity
+
+    tree_root = (tmp_path / "owner-tree").resolve()
+    source = DirectoryOwnerRecords(root=tree_root)
+    child = _sleeper()
+    try:
+        identity = read_identity(child.pid)
+        intent = OwnerIntent.for_argv(
+            campaign_id="campaign-1",
+            batch_id="b001",
+            role="WORKER",
+            generation=1,
+            spawn_token="spawn-worker-reused",
+            argv=(sys.executable, "-c", "import time; time.sleep(60)"),
+        )
+        source.record_owner_intent(intent)
+        # The pid is live but the birth marker is not the confirmed one: a reused pid, never ours.
+        source.confirm_owner_process(
+            ConfirmedOwnerProcess(
+                spawn_token=intent.spawn_token,
+                pid=identity.pid,
+                pgid=identity.pgid,
+                started_ticks=identity.start_marker + 1,
+                command_sha256=identity.command_sha256,
+                confirmed_at_ns=time.time_ns(),
+            )
+        )
+        # And an intent that never confirmed a process at all.
+        source.record_owner_intent(
+            OwnerIntent.for_argv(
+                campaign_id="campaign-1",
+                batch_id="b001",
+                role="STATION",
+                generation=1,
+                spawn_token="spawn-station-unconfirmed",
+                argv=(sys.executable, "-c", "import time; time.sleep(60)"),
+            )
+        )
+
+        with pytest.raises(module.RecoveryError) as error:
+            recover(fenced, owner_tree_root=tree_root, apply=True)
+
+        message = str(error.value)
+        assert "RECOVERY_OWNER_TREE_UNRESOLVED" in message
+        assert "WORKER" in message and "OWNER_IDENTITY_MISMATCH" in message
+        assert "STATION" in message and "INTENT_UNCONFIRMED" in message
+        assert child.poll() is None, "an unproven identity must never be signalled"
+        assert store.operator_recovery("campaign-1") is None
+        assert store.has_recovery_fence() is True
+        assert store.recovery_fence("campaign-1")["reason"] == "OWNER_UNAVAILABLE"
+        assert store.owner_cleanup_receipt("campaign-1", "b001", 1) is None
+        fence_document = json.loads(
+            (
+                tree_root / "campaign-1" / "b001" / "generation-1.unresolved-owner-tree.json"
+            ).read_text(encoding="utf-8")
+        )
+        assert fence_document["generation_derived"] is False
+        assert fence_document["command_id"] == "recover-1-1"
+    finally:
+        _kill([child.pid])
+
+
+def test_owner_tree_root_preview_signals_nothing_and_writes_nothing(fenced):
+    module = recovery_module()
+    store, _, tmp_path = fenced
+    tree_root = (tmp_path / "owner-tree").resolve()
+    child = _sleeper()
+    try:
+        _record_tree_process(tree_root, "WORKER", "spawn-worker", child)
+
+        result = recover(fenced, owner_tree_root=tree_root, apply=False)
+
+        assert result["status"] == "RECOVERY_ELIGIBLE_PREVIEW"
+        assert child.poll() is None
+        directory = tree_root / "campaign-1" / "b001"
+        assert list(directory.glob("*owner-cleanup-receipt.json")) == []
+        assert list(directory.glob("*unresolved-owner-tree.json")) == []
+        assert store.owner_cleanup_receipt("campaign-1", "b001", 1) is None
+        assert store.operator_recovery("campaign-1") is None
+        assert store.has_recovery_fence() is True
+    finally:
+        _kill([child.pid])
+
+
+def test_operator_recovery_cli_accepts_an_owner_tree_root(tmp_path, capsys):
+    module = recovery_module()
+    store_root = tmp_path / "store"
+    store_root.mkdir()
+    rc = module.main([
+        "--store-root", str(store_root), "--campaign-id", "campaign-1",
+        "--command-id", "recover-1", "--parallel-config", str(tmp_path / "parallel.yaml"),
+        "--source-commit", "2" * 40, "--owner-tree-root", str(tmp_path / "owner-tree"),
+    ])
+    assert rc == 1
+    assert "RECOVERY_STORE_NOT_FOUND" in capsys.readouterr().err

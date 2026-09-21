@@ -11,6 +11,12 @@ from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
 from ..application.qualification_stack import ros2_command
+from .owner_records import (
+    OwnerRecordError,
+    OwnerSpawnRecorder,
+    owner_context_from_environment,
+    spawner_token_from_environment,
+)
 from .runtime_closure import (
     RuntimeAttestation,
     RuntimeClosureError,
@@ -21,6 +27,11 @@ from .runtime_closure import (
     read_process_birth_identity,
     verify_runtime_closure,
 )
+
+
+#: The stack's role vocabulary is not the owner-record vocabulary: these two stack roles name a
+#: station. Any other role stays un-recorded rather than being given an invented record role.
+_OWNER_ROLE_BY_STACK_ROLE = {"task-station": "STATION", "station": "STATION"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,6 +142,9 @@ class OwnedProcessGroup:
         terminate_timeout_s: float = 5.0,
         strict_identity: bool = True,
         birth_identity_probe: Callable[[int], int] | None = None,
+        owner_environment: Mapping[str, str] | None = None,
+        owner_identity_reader: Callable[[int], tuple[int, int] | None] | None = None,
+        owner_confirm_deadline_s: float = 2.0,
     ) -> None:
         self._popen = popen
         self._killpg = killpg
@@ -139,6 +153,11 @@ class OwnedProcessGroup:
         self._terminate_timeout_s = terminate_timeout_s
         self._strict_identity = strict_identity
         self._birth_identity_probe = birth_identity_probe
+        #: The environment the owner-record context is read from. ``None`` means this process's
+        #: own environment, which is what a spawned Worker inherited from its campaign.
+        self._owner_environment = owner_environment
+        self._owner_identity_reader = owner_identity_reader
+        self._owner_confirm_deadline_s = owner_confirm_deadline_s
         self._children: list[tuple[OwnedProcessIdentity, object]] = []
 
     @property
@@ -163,11 +182,21 @@ class OwnedProcessGroup:
         merged_environment = dict(os.environ)
         if environment is not None:
             merged_environment.update(environment)
-        child = self._popen(
-            list(spec.argv),
-            start_new_session=True,
-            env=merged_environment,
-        )
+        # The STATION intent is written here, by the boundary that calls Popen, and only here:
+        # `macos_w2_worker` owns the station but writes no record of its own, so one station spawn
+        # produces exactly one intent.
+        recorder = self._owner_recorder(spec)
+        if recorder is not None:
+            merged_environment = recorder.child_environment(merged_environment)
+        try:
+            child = self._popen(
+                list(spec.argv),
+                start_new_session=True,
+                env=merged_environment,
+            )
+        except BaseException as error:
+            self._abandon_owner_record(recorder, error)
+            raise
         try:
             probe = birth_identity_probe or self._birth_identity_probe
             if self._strict_identity:
@@ -191,7 +220,10 @@ class OwnedProcessGroup:
                 tuple(cmdline),
                 int(start_time_ticks),
             )
-        except BaseException:
+            if recorder is not None:
+                recorder.confirm(int(child.pid), **self._owner_confirm_kwargs())
+        except BaseException as error:
+            self._abandon_owner_record(recorder, error)
             if child.poll() is None:
                 try:
                     self._killpg(int(child.pid), signal.SIGTERM)
@@ -200,6 +232,46 @@ class OwnedProcessGroup:
             raise
         self._children.append((identity, child))
         return identity
+
+    # -- owner records ---------------------------------------------------------------------
+
+    def _owner_recorder(self, spec: StackProcessSpec) -> OwnerSpawnRecorder | None:
+        """The durable intent for this spawn, written before ``Popen``; ``None`` when inert."""
+
+        role = _OWNER_ROLE_BY_STACK_ROLE.get(spec.role)
+        if role is None:
+            return None
+        environment = os.environ if self._owner_environment is None else self._owner_environment
+        context = owner_context_from_environment(environment)
+        if context is None:
+            return None
+        return OwnerSpawnRecorder.begin(
+            context=context,
+            role=role,
+            argv=spec.argv,
+            # The child's parent is this spawner, so the token this process was given by its own
+            # parent is what the child records and receives as SO101_OWNER_PARENT_TOKEN.
+            parent_spawn_token=spawner_token_from_environment(environment),
+            own_session=True,
+        )
+
+    def _owner_confirm_kwargs(self) -> dict:
+        kwargs: dict = {"deadline_s": self._owner_confirm_deadline_s}
+        if self._owner_identity_reader is not None:
+            kwargs["identity_reader"] = self._owner_identity_reader
+        return kwargs
+
+    @staticmethod
+    def _abandon_owner_record(recorder: OwnerSpawnRecorder | None, error: BaseException) -> None:
+        """Mark the record of a spawn that failed. The original failure must still propagate."""
+
+        if recorder is None:
+            return
+        reason = error.code if isinstance(error, OwnerRecordError) else "SPAWN_FAILED"
+        try:
+            recorder.abandon(reason)
+        except (OwnerRecordError, OSError):
+            pass
 
     def _identity_status(self, identity: OwnedProcessIdentity) -> str:
         if not self._strict_identity:
@@ -287,6 +359,9 @@ class PersistentTaskStack:
         terminate_timeout_s: float = 5.0,
         birth_identity_probe: Callable[[int], int] | None = None,
         loaded_image_probe: Callable[[int], Sequence[Path]] | None = None,
+        owner_environment: Mapping[str, str] | None = None,
+        owner_identity_reader: Callable[[int], tuple[int, int] | None] | None = None,
+        owner_confirm_deadline_s: float = 2.0,
     ) -> None:
         self._birth_identity_probe = birth_identity_probe
         self._loaded_image_probe = loaded_image_probe or default_loaded_image_probe
@@ -297,6 +372,9 @@ class PersistentTaskStack:
             terminate_timeout_s=terminate_timeout_s,
             strict_identity=False,
             birth_identity_probe=birth_identity_probe,
+            owner_environment=owner_environment,
+            owner_identity_reader=owner_identity_reader,
+            owner_confirm_deadline_s=owner_confirm_deadline_s,
         )
         self._attestation: RuntimeAttestation | None = None
 

@@ -10,10 +10,12 @@ from pathlib import Path
 import signal
 import subprocess
 import time
+import uuid
 from typing import Callable
 
 from .adaptive import AdaptiveStartRequest
 from .coordinator import CoordinatorStartRequest
+from .owner_tree import ConfirmedOwnerProcess, DirectoryOwnerRecords, OwnerIntent
 from ..owned_group import terminate_group
 from ..process_identity import (
     ProcessIdentityError,
@@ -36,6 +38,35 @@ class CoordinatorOwnershipError(RuntimeError):
 def _canonical_hash(value) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _owner_tree_environment(intent: OwnerIntent, tree_root: Path) -> dict[str, str]:
+    """The child environment that attributes this adapter and its children to one owner tree.
+
+    The adapter reads its own token here and writes the intents of everything it spawns with that
+    token as ``parent_spawn_token``, so the whole tree stays reachable from the service side even
+    when the adapter dies. The owner sets these keys after the request environment, so a caller can
+    never point a child at another tree.
+    """
+    return {
+        "SO101_OWNER_TOKEN": intent.spawn_token,
+        # An adapter is the root of its own tree: it has no parent spawn to attribute.
+        "SO101_OWNER_PARENT_TOKEN": (
+            "" if intent.parent_spawn_token is None else intent.parent_spawn_token
+        ),
+        "SO101_OWNER_TREE_ROOT": str(tree_root),
+        "SO101_OWNER_CAMPAIGN_ID": intent.campaign_id,
+        "SO101_OWNER_BATCH_ID": intent.batch_id,
+        "SO101_OWNER_GENERATION": str(intent.generation),
+    }
+
+
+def _owner_generation(request) -> int:
+    """The coordinator epoch is the generation; an adaptive launch has none, so it is 1."""
+    epoch = getattr(request, "coordinator_epoch", None)
+    if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 1:
+        return 1
+    return epoch
 
 
 @dataclass(frozen=True)
@@ -114,12 +145,21 @@ class ExecutionProcessOwner:
         store=None,
         cleanup_checker: Callable[[OwnedExecution], bool] | None = None,
         stop_timeout_s: float = 3.0,
+        owner_tree_root: Path | None = None,
     ) -> None:
         self._store = store
         self._cleanup_checker = cleanup_checker or (lambda _owned: False)
         self._stop_timeout_s = stop_timeout_s
+        if owner_tree_root is not None and not Path(owner_tree_root).is_absolute():
+            # A relative root would be resolved differently by every child that inherits it.
+            raise CoordinatorOwnershipError("OWNER_TREE_ROOT_INVALID")
+        self._owner_tree_root = None if owner_tree_root is None else Path(owner_tree_root)
         self._active: OwnedExecution | None = None
         self._children: dict[int, subprocess.Popen] = {}
+
+    @property
+    def owner_tree_root(self) -> Path | None:
+        return self._owner_tree_root
 
     @property
     def active_execution(self) -> OwnedExecution | None:
@@ -128,6 +168,20 @@ class ExecutionProcessOwner:
     def has_active_execution(self) -> bool:
         return self._active is not None and self.poll(self._active).running
 
+    def _owner_tree_records(self):
+        """The shared tree root this owner writes its ADAPTER record into, when it has one."""
+        if self._owner_tree_root is None:
+            return None
+        return DirectoryOwnerRecords(root=self._owner_tree_root)
+
+    def _owner_tree_store(self):
+        """The store, when it can index the owner tree in its own durable state."""
+        if callable(getattr(self._store, "record_owner_intent", None)) and callable(
+            getattr(self._store, "confirm_owner_process", None)
+        ):
+            return self._store
+        return None
+
     def spawn(self, request: CoordinatorStartRequest | AdaptiveStartRequest) -> OwnedExecution:
         if self._active is not None and self.poll(self._active).running:
             raise CoordinatorOwnershipError("EXECUTION_OWNER_EXISTS")
@@ -135,6 +189,26 @@ class ExecutionProcessOwner:
             raise CoordinatorOwnershipError("START_REQUEST_INVALID")
         if self._store is not None:
             self._store.record_execution_owner_intent(request)
+        owner_records = self._owner_tree_records()
+        owner_store = self._owner_tree_store() if owner_records is not None else None
+        owner_intent = None
+        if owner_records is not None:
+            # Intent before spawn: a crash between these two lines must leave an intent with no
+            # process, never a process no reaper can find. The shared tree root is written first:
+            # it is the record the demo-side spawn boundaries and the offline recovery read.
+            owner_intent = OwnerIntent.for_argv(
+                campaign_id=request.campaign_id,
+                batch_id=request.batch_id,
+                role="ADAPTER",
+                generation=_owner_generation(request),
+                spawn_token="spawn-" + uuid.uuid4().hex,
+                argv=request.argv,
+                parent_spawn_token=None,
+                own_session=True,
+            )
+            owner_records.record_owner_intent(owner_intent)
+            if owner_store is not None:
+                owner_store.record_owner_intent(owner_intent)
         if isinstance(request, CoordinatorStartRequest):
             request.batch_root.parent.mkdir(parents=True, exist_ok=True)
             process_log = request.batch_root.parent / f"{request.batch_id}.coordinator.log"
@@ -149,6 +223,8 @@ class ExecutionProcessOwner:
             )
         environment = os.environ.copy()
         environment.update(request.environment)
+        if owner_intent is not None:
+            environment.update(_owner_tree_environment(owner_intent, self._owner_tree_root))
         with open(
             process_log,
             "xb",
@@ -198,6 +274,23 @@ class ExecutionProcessOwner:
                 runner_journal_root=request.runtime_root,
             )
         self._active = owned
+        if owner_intent is not None:
+            confirmation = ConfirmedOwnerProcess(
+                spawn_token=owner_intent.spawn_token,
+                pid=process.pid,
+                pgid=identity.pgid,
+                started_ticks=identity.started_ticks,
+                # The same fingerprint the owner verifies against later, so a recovery
+                # compares the live kernel command with the readback.
+                command_sha256=command_fingerprint(request.argv),
+                confirmed_at_ns=time.time_ns(),
+            )
+            try:
+                owner_records.confirm_owner_process(confirmation)
+                if owner_store is not None:
+                    owner_store.confirm_owner_process(confirmation)
+            except Exception as error:
+                raise CoordinatorOwnershipError("OWNER_CONFIRMATION_LOST", owned=owned) from error
         if self._store is not None:
             try:
                 self._store.acknowledge_execution_owner(owned)
