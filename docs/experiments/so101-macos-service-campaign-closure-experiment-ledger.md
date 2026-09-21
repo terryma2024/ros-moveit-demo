@@ -12,7 +12,7 @@ executor: dst-so101-macos-closure (DeepSeek Harness TUI, tmux) resumed by explic
 worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
 branch: codex/so101-unified-webapp
 base_commit: 6d5069026fbd322076f58d0d4b9504891abeb861
-current_commit: 87e38a8025c9e4a6a05762eeb3d149f5645eb8a0 (Task 5 canonical reader; see CP-MSC-T5-READER-DUAL-FORMAT)
+current_commit: 0342ab9b (Task 6 owner tree; see CP-MSC-T6)
 upstream: origin/codex/so101-unified-webapp (in sync at resume; this session does not push)
 evidence_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
 dispatch_receipt: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/dispatch.receipt
@@ -49,8 +49,8 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-T5-READER-DUAL-FORMAT
-next_experiment: EXP-MSC-108 (Task 6: persistent owner tree, leaf-first recovery and crash cleanup)
+latest_checkpoint: CP-MSC-T6
+next_experiment: EXP-MSC-109 (Task 7: v5/v6 profiles, W1 composition and fresh per-spawn StartGuard)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -1563,3 +1563,102 @@ runs the legacy branch; no guarantee was weakened and no fallback was invented.
 
 Retained: every invocation above plus `task2/task5-repro/` and `task2/task5-baseline-head/`.
 Deleted or archived: nothing.
+
+## CP-MSC-T6: a real owner tree, reclaimed leaf first, with the fence kept when identity is unknown
+
+```yaml
+checkpoint_id: CP-MSC-T6
+recorded_at: 2026-09-21T22:56:00+0800
+commit: 0342ab9b (feat(teleop): recover macOS ownership leaf first)
+gate: task2/task6-gate-final-20260921T225419Z - 122 passed / 1 failed (pre-existing, reproduced on HEAD)
+red: task6/task6-red-20260921T225533Z - 72 failed / 51 passed / 1 error on the pre-Task-6 product tree
+```
+
+### What exists now
+
+`so101_demo.runtime.owner_records` writes one intent before every real `Popen` and one kernel
+readback confirmation (pid, pgid, birth ticks) after it, atomically, fsynced, stdlib-only. It is
+wired into the four real spawn boundaries named by the plan: the adapter
+(`macos_service_campaign`, campaign role), the campaign supervisor (`worker`/`broker` roles), the
+worker (parent-token context only) and the station (`task_stack`, the boundary that calls `Popen`).
+The entry condition is `SO101_OWNER_TREE_ROOT`; without it nothing is written and no environment
+variable is added, and the supervisor still passes `env=None` to `Popen`.
+
+`expert_validation.owner_tree` owns the teleop half: `OwnerIntent`, `ConfirmedOwnerProcess`,
+`OwnerRecord`, `OwnerParentBinding`, `OwnerCleanupReceipt`,
+`OwnerTreeRecovery.recover_leaf_first()`, plus `DirectoryOwnerRecords` (reads the demo-side
+documents) and `CompositeOwnerRecords` (one ordered view over store rows and directory documents,
+de-duplicated by spawn token). `SupervisorStore` persists intents, confirmations and receipts;
+`create_production_service` binds `<evidence_root>/owner-tree` into `ExecutionProcessOwner`, and
+`ExecutionProcessOwner` writes the ADAPTER intent before `Popen` and its confirmation after the
+readback, handing `SO101_OWNER_*` to the child so the tree links adapter -> campaign -> worker ->
+station.
+
+Reclamation is leaf-first (`RECLAIM_ORDER = STATION, WORKER, BROKER, CAMPAIGN, ADAPTER`). A process
+is signalled only when its live identity still matches the recorded confirmation: pid, pgid, birth
+marker and command fingerprint. An unconfirmed intent, a recycled pid, a re-birth, a zombie or a
+group that survives the stop becomes `unresolved`, the fence stays, and no receipt is committed. A
+duplicate reaper returns the committed receipt and signals nothing. Recovery never releases a fence
+itself; only the operator-recovery path does, after the receipt is fsynced, indexed and
+`CLEANUP_COMMITTED` is committed.
+
+### Decisions and trade-offs (all deliberate)
+
+1. **Files, not a cross-package import.** `so101_demo_py` cannot import `so101_teleop`, so the
+   demo-side boundaries write frozen JSON documents under
+   `<root>/<campaign>/<batch>/<spawn_token>.{intent,confirmed}.json` and teleop reads them through
+   `DirectoryOwnerRecords`. The vocabulary is asserted equal in tests (including
+   `command_fingerprint` byte-equality); the interop smoke test
+   (`task6/interop/demo_writer_interop.py`) drives the demo writer, the teleop reader and a real
+   reclaim.
+2. **One STATION writer.** `task_stack.OwnedProcessGroup.start` writes the only STATION intent and
+   owns the abandon path; `macos_w2_worker` contributes only the parent-token context. Proven by
+   `test_exactly_one_station_intent_is_written_per_station_spawn` plus a source assertion.
+3. **The reaper runs before the operator-recovery inventory** (apply path only). The inventory
+   refuses any live recorded owner (`RECOVERY_LEADER_PRESENT`), which is exactly what the reaper
+   exists to stop, so running it later would make it unreachable. Trade-off, stated in the code:
+   if a later apply step fails, the tree is already reclaimed and receipted while the fence stays
+   unresolved - the operator sees both facts, and no receipt claims execution success. Preview
+   (`apply=False`) never reads or writes the tree and sends no signal.
+4. **Fence generation is exact or explicitly derived.** `record_recovery_fence` gained an optional
+   `generation`; the reaper passes the real one. Where a legacy caller cannot supply it, the
+   directory document records `generation_derived: true` and `generation_source` instead of
+   presenting a guessed number as fact, and a pid-shaped `command_id` can no longer name a
+   generation file.
+5. **`.abandoned.json` is deliberately not read.** An abandoned spawn stays an unconfirmed intent,
+   which keeps the fence - the conservative reading of the intent-first rule.
+
+### Evidence
+
+- Plan gate `task2/task6-gate-final-20260921T225419Z`: 122 passed / 1 failed; the failure
+  (`test_real_live_process_is_refused_without_sending_a_signal`, macOS `/proc` unavailable) is
+  reproduced on `git archive HEAD` in `task2/task6-teleop-wire-5-baseline-head-20260921T224950Z`.
+- RED `task6/task6-red-20260921T225533Z`: 72 failed / 51 passed / 1 collection error with the Task 6
+  tests overlaid on the pre-Task-6 product tree (the harness rebuilds `pyshim` so `so101_demo`
+  resolves inside the archive). Finer-grained REDs: `task2/task6-teleop-1-red-20260921T223618Z`
+  (31 failed / 46 passed), `task2/task6-teleop-wire-1-red-20260921T224639Z` (15 failed / 91 passed),
+  `task2/task6-demo-1b-20260921T223703Z` (14 failed / 21 passed on the real wiring boundaries).
+- No regressions: teleop package `task2/task6-teleop-wire-6-package-20260921T225010Z` (29 failed /
+  633 passed) versus HEAD baseline `task2/task6-teleop-9-package-baseline-head-20260921T224018Z`
+  (29 failed / 573 passed) - identical failure paths. Demo suite
+  `task2/task6-demo-21-worktree-full-20260921T225021Z` (181 failed / 3495 passed / 40 errors) versus
+  `task2/task6-demo-20-baseline-head` (200 / 3414 / 40): 221 shared failures, 0 failing only in the
+  worktree, 19 only in the archive (install-prefix/.git-dependent tests).
+- Adjacency: `task2/task6-demo-10-adjacent-20260921T224123Z` 123 passed / 0 failed
+  (runtime closure, worker runtime, W2 campaign, station launch); `task2/task6-demo-22-final` 83
+  passed / 0 failed.
+
+### Deviations and remaining work
+
+- Two files beyond the plan's Task 6 list: `src/so101_demo_py/src/runtime/owner_records.py` (the
+  dependency-free durable writer) and its test module `test_owner_records.py`. `models.py` is
+  deliberately unchanged: the plan's Interfaces place `OwnerIntent`/`ConfirmedOwnerProcess` in
+  `owner_tree.py`. `CMakeLists.txt` registers the new teleop test module and restores the
+  indentation of the Task 5 reducer registration.
+- `test_production_factory_wires_durable_authorities_and_releases_lock` fails before and after this
+  checkpoint (an exact `health()` dict comparison), recorded as pre-existing, not fixed here.
+- Not run: the live end-to-end chain adapter -> campaign -> worker -> station on a real MPS service.
+  It needs the installed prefix and belongs to the candidate/production gates (Tasks 11-13).
+
+Retained: all invocations above plus `task2/task6-*`, `task6/`, `task6/interop/`,
+`task6/baseline-head/`, `task6-full-suite-comparison.txt`. Deleted or archived: nothing.
