@@ -534,3 +534,35 @@ def test_campaign_binds_the_selection_and_queue_it_executes(tmp_path):
         _campaign(tmp_path / "second").bind_selection(binding=object(), queue=queue)
     with pytest.raises(MacosW2CampaignError, match="QUEUE_TYPE"):
         _campaign(tmp_path / "third").bind_selection(binding=binding, queue=object())
+
+
+def test_campaign_journal_publishes_committed_watermarks(tmp_path):
+    """The macOS campaign's standard events are durable *and* watermarked before they are ACKed."""
+
+    from so101_demo.cli.macos_w2_campaign import (
+        commit_campaign_terminal, open_campaign_journal)
+    from so101_demo.parallel_batch.journal import (
+        CoordinatorJournal, JournalCorruption)
+
+    journal = open_campaign_journal(
+        evidence_root=tmp_path, campaign_id="b-composed", batch_id="batch-composed")
+    try:
+        watermark = journal.read_watermark()
+        assert watermark is not None and watermark.sequence == 1
+        prefix = CoordinatorJournal.read_committed_prefix(tmp_path / "journal",
+                                                          "batch-composed", watermark)
+        assert [event.type for event in prefix.events] == ["CAMPAIGN_STARTED"]
+        assert prefix.unconfirmed_durability is False
+
+        commit_campaign_terminal(journal, outcome="W2_CAMPAIGN_PASS", cleanup_complete=True)
+        final = journal.read_watermark()
+        assert final.sequence == 3
+        with pytest.raises(JournalCorruption):
+            journal.append_committed("POINT_LEASED", "late-1", {"point_id": "p9"})
+    finally:
+        journal.close()
+
+    replay = CoordinatorJournal.read_committed_prefix(
+        tmp_path / "journal", "batch-composed", final)
+    assert [event.type for event in replay.events] == [
+        "CAMPAIGN_STARTED", "BATCH_TERMINAL", "CLEANUP_COMMITTED"]
