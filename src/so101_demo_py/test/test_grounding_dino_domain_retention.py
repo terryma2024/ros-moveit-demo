@@ -4,7 +4,6 @@ from types import SimpleNamespace
 
 import pytest
 
-torch = pytest.importorskip("torch")
 pytestmark = pytest.mark.explicit_ml
 
 from so101_demo.training.grounding_dino_domain_retention import (
@@ -125,6 +124,7 @@ def test_last_stage_trainability_and_optimizer_groups_are_exact() -> None:
 
 
 def test_distillation_masks_inactive_tokens_and_uses_teacher_candidates() -> None:
+    torch = pytest.importorskip("torch")
     negative_infinity = float("-inf")
     teacher_logits = torch.tensor(
         [[[2.0, 0.0, negative_infinity, negative_infinity], [-4.0, -4.0, negative_infinity, negative_infinity]]]
@@ -157,6 +157,7 @@ def test_distillation_masks_inactive_tokens_and_uses_teacher_candidates() -> Non
 
 
 def test_distillation_skips_empty_target_samples_without_breaking_gradients() -> None:
+    torch = pytest.importorskip("torch")
     teacher_logits = torch.tensor([[[4.0, 3.0], [2.0, 1.0]]])
     student_logits = torch.tensor(
         [[[1.0, 0.5], [-1.0, -2.0]]], requires_grad=True

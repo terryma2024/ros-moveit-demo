@@ -171,8 +171,8 @@
   `pytest -n 8 --dist loadscope src/so101_demo_py/test`. The ordinary gate excludes the eleven
   tests marked `explicit_ml` and does not collect `benchmark_test/`.
 - Result: after aligning the nine Torch/GroundingDINO cases discovered by the Linux environment,
-  the final fresh `package-gate-n8-post-linux-marker-012` completed with 3651 passed, 9 skipped,
-  zero failed in 42.11 seconds;
+  the final fresh `package-gate-n8-final-015` completed with 3651 passed, 9 skipped, zero failed in
+  40.48 seconds;
   pytest exit 0. Its JUnit, complete log, preflight, exit code, elapsed time, and basetemp record are
   retained under the run evidence directory.
 - Expanded diagnostic: `package-gate-n8-all-007` deliberately overrode the marker filter. It
@@ -185,6 +185,10 @@
   Darwin, while Linux retains pytest's normal path. The success-process fixture no longer races
   perception scheduling, and the stderr fixture gives its diagnostic child a bounded scheduling
   window. The seven exact failures passed 7/7 with eight workers before the final full gate.
+- Stability follow-up: a later full run exposed a synchronous `PerceptionService.run_next()` test
+  racing the executor threads started by `service.start()`. All four tests of the synchronous seam
+  now start only the fake runtime, leaving threaded behavior to the dedicated executor tests. The
+  four focused cases passed before `package-gate-n8-final-015`.
 - Runtime impact: no ROS stack was launched by this test-only A/B. Pytest-owned child processes
   exited with their runs.
 - Retained: all RED/GREEN, focused, and package-gate evidence under the registered root.
@@ -211,4 +215,7 @@
   collect tests: all eight workers failed importing `torch` from
   `test_grounding_dino_domain_retention.py`. The fixed Linux Python has no Torch, and the file is a
   Torch/GroundingDINO suite, so it is being aligned with the user-authorized `explicit_ml` boundary
-  rather than counted as a code failure. The failed scratch is retained as a deletion candidate.
+  rather than counted as a code failure. A first alignment using module-level `importorskip` made
+  the ROS launch-testing collector return only one skip and no tests (pytest exit 5); Torch import
+  is therefore delayed to the two tensor tests while the module-level marker remains available at
+  collection. Both failed scratch trees are retained as deletion candidates.
