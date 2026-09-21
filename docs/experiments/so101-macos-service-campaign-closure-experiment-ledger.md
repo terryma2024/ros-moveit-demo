@@ -49,8 +49,8 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-A1-RESUME
-next_experiment: EXP-MSC-101 (Task 2 RED: immutable selection bindings and durable shared queue)
+latest_checkpoint: CP-MSC-T2
+next_experiment: EXP-MSC-102 (Task 3: one selected point per Worker lease)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -973,3 +973,83 @@ evidence: []
 decision: PENDING
 next_experiment: NONE
 ```
+
+## CP-MSC-T2: Task 2 - immutable selection bindings and the durable shared queue
+
+```yaml
+checkpoint_id: CP-MSC-T2
+recorded_at: 2026-09-21T20:10:00+0800
+writer: dst-so101-macos-closure
+parent_source_at_test: e1817749e3013375b4a334efbe0746980f54d7bb
+submodule_commit: 85d2a5c42686a3d6b0d909a047a4188b24edd257
+install_overlay: /opt/data/so101/workspace/install (source tree prepended through PYTHONPATH for source-mode gates)
+runtime_executable: /opt/ros2_jazzy/.venv/bin/python (3.11.15, pytest 8.4.2)
+ros_domain_id: NOT_APPLICABLE_OFFLINE
+gz_partition: NOT_APPLICABLE_OFFLINE
+gate_harness: <RUN_ROOT>/operator/gate-env-task2.sh
+gate_harness_sha256: ea648311f97db5b27dac5e06983d2025d25f4dda4c5fd230d5a5be9776098566
+```
+
+### Delivered
+
+- New `src/so101_demo_py/src/parallel_batch/selection.py`: `PointCatalog`,
+  `SelectedPoint`, `FirstPassSelectionBinding`, `RetrySelectionBinding`,
+  `load_point_catalog()`, `build_first_pass_selection()`, `build_retry_selection()`,
+  `SelectionError` with stable codes.
+- New `src/so101_demo_py/src/parallel_batch/queue.py`: `WorkerIdentity`, `PointLease`,
+  `CommittedResult`, `QueueSnapshot`, `DurablePointQueue` (`lease_next`, `commit_result`,
+  `snapshot`), `QueueError`. State is one `queue-state.json` written through
+  `runtime.task_artifacts.atomic_json` (payload fsync + directory fsync + atomic replace).
+- `w2_composition.py`: `exact_w2_slots()` now returns the two exact-W2 **capacity** slots and
+  assigns no points; `W2CampaignPlan` records the ordered `selected_point_ids` and projects it
+  into `to_document()`.
+
+### RED evidence (EXP-MSC-101)
+
+`task2/task2-red-20260921T115251Z` - exit 1, 45 tests collected, 28 failed / 17 passed,
+0 errors, 0 skipped. 50 assertion messages are
+`so101_demo.parallel_batch.selection|queue is not implemented yet` (the modules did not exist),
+and the three W2-slot tests fail with `TypeError`/`AssertionError` on the old static-assignment
+contract. No `ModuleNotFoundError`/`ImportError` appears anywhere in the run, so the failures are
+assertion RED at the intended boundary rather than a bootstrap failure.
+
+### GREEN evidence
+
+- `task2/task2-green-2-20260921T115442Z` - exit 0, 64 passed, 0 failed/errors/skipped over
+  `test_parallel_selection.py`, `test_parallel_point_queue.py`, `test_macos_w2_campaign.py`,
+  `test_w2_composition.py`.
+- `task2/task2-adjacent-20260921T115450Z` - exit 0, 395 passed / 8 skipped over the four Task 2
+  files plus `test_parallel_batch_coordinator.py`, `test_parallel_batch_worker.py`,
+  `test_parallel_worker_runtime.py`, `test_macos_install_contract.py`,
+  `test_copied_installed_entrypoint.py`.
+- `task2/task2-green-20260921T115420Z` (exit 1, 9 failed) is retained, not deleted: it failed
+  because the new test helper built an uppercase `result_sha256`, which the queue correctly
+  rejected as `QUEUE_HASH_INVALID`; the helper was fixed, no product code changed for it.
+
+Covered behaviour: 4-20 points with all four anchors (any order) and rejection of counts outside
+that range, missing anchors, unknown/duplicate ids, catalog drift and tampering, invalid hash
+arguments, order- and identity-sensitive selection digest; retry requiring exactly one point with
+the original catalog/selection/result hashes and a committed business `FAILED` outcome (and
+rejecting `PASSED`/`INDETERMINATE`/`INVALID`/`UNRUN`); two capacity slots draining all 20 selected
+points exactly once while unselected catalog points never appear in a lease; idempotent duplicate
+lease requests; stale-generation refusal on both lease and commit; owner mismatch; forged and
+unselected leases; duplicate result commits; `INVALID` refused as a business outcome; reopen of a
+persisted queue without loss or double lease; abandoned-lease recovery by a higher generation.
+
+### Deviations and known boundaries (recorded, not hidden)
+
+- `src/so101_demo_py/test/test_w2_composition.py` is not in the plan's Task 2 file list but had to
+  change: its three slot tests asserted the static first-two assignment that Step 2 removes. The
+  tests were rewritten to the capacity-only contract; no product behaviour was weakened.
+- `cli/macos_w2_campaign.py` is deliberately untouched (plan Task 3 owns it). Its
+  `build_worker_leases()` keeps its documented explicit fallback point, and the updated test now
+  asserts only that a lease carries a *selected* id until Task 3 wires the queue into the Worker.
+- `compose_w2_campaign()` still accepts any ordered selection and does not validate 4-20/anchors
+  itself: that validation lives in the binding builders (`selection.py`) and is wired into the
+  adapter with the v4/v5/v6 dispatch in plan Task 7. This is recorded as an open boundary, not as
+  a passed check.
+- The ordinary `src/so101_demo_py/test` package gate remains NOT GREEN on this host (Linux-only
+  parallel assumptions), and the five-run strict no-DYLD Gate A attestation still has NOT been
+  rerun against the fixed runtime closure. Neither is claimed by this checkpoint.
+
+Decision: `TASK_2_SELECTION_AND_QUEUE_GREEN_ON_SCOPED_GATES`; next is Task 3 (one point per lease).
