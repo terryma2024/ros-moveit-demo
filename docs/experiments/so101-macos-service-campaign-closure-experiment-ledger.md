@@ -41,7 +41,12 @@ disproven_routes:
   - Controller service registration requires the aggregate MoveIt graph first (EXP-MSC-001E)
   - The shipped macOS UI dispatcher deadlocks controller construction (EXP-MSC-002B, EXP-MSC-003B)
 open_hypotheses:
-  - Product C++ root cause for the campaign's STATION_NOT_READY stays UNCONFIRMED; the working hypothesis is an overlay/dylib-closure defect in the environment that campaign used
+  - Product C++ root cause for the campaign's STATION_NOT_READY stays UNCONFIRMED (see the
+    correction in CP-MSC-CORR-1: the earlier "campaign environment loader-path defect"
+    inference is retracted)
+  - Mixed-provenance dylib resolution through the project's dylib farm can bind
+    mujoco_ros2_control artifacts to the foreign fork prefix; whether that is what the
+    campaign loaded is not yet measured
 latest_checkpoint: CP-MSC-A1
 next_experiment: NONE - Task 1 stops on INVALID_CONTROL for independent review; Task 2 remains forbidden
 ```
@@ -616,3 +621,62 @@ next_command: NONE - wait for GPT-5.6 Sol / High review of CP-MSC-A
   `gate-a/station-build` (regenerable build trees, ~417 MB total for the root) and the
   `pytest-XXXXXXXX` invocation directories of green runs. Deletion requires explicit user
   authorisation.
+
+## CP-MSC-CORR-1: correction to the CP-MSC-003/CP-MSC-A loader-path inference
+
+Appended after CP-MSC-A was committed. Reason: the evidence below was gathered after the
+checkpoint and contradicts part of the CP-MSC-A reasoning. Historical entries are left
+unchanged; this correction supersedes the affected statements.
+
+### Facts (all read-only checks on this host)
+
+1. The committed submodule CMakeLists is explicit about the macOS rpath:
+   `third_party/mujoco_ros2_control/mujoco_ros2_control/CMakeLists.txt` sets, under
+   `if(APPLE)`, `INSTALL_RPATH "@loader_path"` with the comment "Keep the macOS artifact
+   relocatable: ROS underlays belong in the test or launch environment, not in the production
+   binary's LC_RPATH commands", while the non-Apple branch uses
+   `$ORIGIN/../lib;$ORIGIN/../opt/mujoco_vendor/lib;${CMAKE_INSTALL_PREFIX}/lib`.
+   The plugin built from the committed source therefore has exactly one `LC_RPATH`
+   (`@loader_path`) and a dependency line `@rpath/libmujoco.3.4.0.dylib` - by design.
+2. The project's sanctioned shell environment resolves it: `.envrc.example` appends
+   `DYLD_LIBRARY_PATH="${DYLD_LIBRARY_PATH:+$DYLD_LIBRARY_PATH:}$dylib_farm"` with
+   `dylib_farm="$ros_workspace/macos_dylib_farm/current"`, and that farm contains
+   `libmujoco.3.4.0.dylib -> /Users/matianyi/ros2_jazzy/extra_ws/install/opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib`.
+3. The foreign fork workspace carries an **uncommitted** local patch that adds exactly this
+   macOS rpath (`@loader_path;@loader_path/../opt/mujoco_vendor/lib;${CMAKE_INSTALL_PREFIX}/lib`)
+   plus, on APPLE, `target_link_libraries(ros2_control_node PUBLIC mujoco_ros2_control)` and the
+   Cocoa/CoreVideo frameworks. Its built plugin indeed carries those three `LC_RPATH` entries.
+
+### Correction
+
+- The `INFERRED` statement in CP-MSC-003/CP-MSC-A ("the campaign's `STATION_NOT_READY` is
+  consistent with an overlay / loader-path defect in the environment the campaign used") is
+  **retracted**. EXP-MSC-002 failed because *this dispatch's runners* did not load the
+  project's sanctioned environment (no `.envrc` / dylib farm), so `DYLD_LIBRARY_PATH` never
+  contained the MuJoCo vendor directory. That is a defect of my run environment, not evidence
+  about the campaign's.
+- What EXP-MSC-002 does prove is narrower and still useful: this stack fails **hard and
+  misleadingly** when the loader environment is incomplete - pluginlib reports
+  `Failed to load library ... Make sure that you are calling the PLUGINLIB_EXPORT_CLASS macro`,
+  which points at the plugin export while the real cause is `Library not loaded`, and
+  controller_manager then loops on `/robot_description` forever without publishing
+  `/controller_manager/list_controllers`. Any diagnosis that reads only the pluginlib hint or
+  the downstream `STATION_NOT_READY` would be misled.
+- The campaign's failure therefore stays **UNCONFIRMED** with no surviving environment
+  explanation from this dispatch.
+
+### New, checkable hypothesis (not yet measured)
+
+The same farm resolves `libmujoco_ros2_control.dylib` and every
+`libmujoco_ros2_control_msgs*` dylib to the **foreign fork** prefix. With the farm on
+`DYLD_LIBRARY_PATH`, a process that loads this worktree's plugin by absolute path can still
+bind its dependencies (or any artifact resolved by leaf name) to the fork's copies - a
+mixed-provenance closure of exactly the kind `RuntimeClosureIdentity`/`RuntimeAttestation`
+(Task 1) is built to detect. Whether the campaign's controller-manager ever reached readiness
+under such a mix is not measured here.
+
+Next command if this is pursued (requires no product edit, task-owned processes only):
+run `so101_diagnose_macos_station --mode ROBOT_SYSTEM_CONTROLLER_MANAGER` with the project's
+sanctioned environment loaded (farm included) and attest the live process with
+`default_loaded_image_probe` + `build_runtime_attestation` to record which prefix every
+`mujoco_ros2_control*` image actually came from.
