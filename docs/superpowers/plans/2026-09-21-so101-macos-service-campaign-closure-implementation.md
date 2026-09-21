@@ -1,6 +1,6 @@
 # SO-101 macOS service campaign 闭环实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. 实际实现只能由 mac-mini 上 tmux session `dst-so101-macos-closure` 中的 DeepSeek Harness TUI（`dst`）inline 执行；每个 checkpoint 由 GPT-5.6 Sol / High 复核，设计、计划和最终 guide 由 GPT-6 Astra / High 独立审查。
+> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking。Task 1 由单独的 Codex session 在 mac-mini 当前 worktree 中执行；Task 2 起才交回 tmux session `dst-so101-macos-closure` 中的 DeepSeek Harness TUI（`dst`）inline 执行。每个 checkpoint 由 GPT-5.6 Sol / High 复核，设计、计划和最终 guide 由 GPT-6 Astra / High 独立审查。
 
 **Goal:** 在 macOS MuJoCo 仿真上闭合统一 Web 服务的 W2 first-pass、W1 first-pass 与单点 `FULL_RESTART_RETRY`，只使用现有轻量 `StartGuard` 做启动保护，并完成可恢复 projection、真实 owner tree 和 fresh Chrome 验收。
 
@@ -14,9 +14,10 @@
 
 - 本计划从 legacy `CP-MSC-A` 恢复，但该 checkpoint 的结论是 `UNCONFIRMED`，不是 PASS。task-owned station 曾 READY；5x `FULL_RESTART` 尚未执行。
 - 已完成的 Task 0–2 不重跑、不改写。先回读三个恢复提交、ledger、证据和 dirty state；缺失或 ancestry 不符即停止。
-- 唯一实现执行器是现有 `dst-so101-macos-closure`。旧 `dst-so101-macos-mps-w2` 保留且不接管；不启动第二个 writer、第二个实现 worktree 或第二套服务。
+- Gate A 使用 mac-mini 当前 worktree `/Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp` 和分支 `codex/so101-unified-webapp`，不得另建 worktree。Task 1 开始前必须暂停 `dst-so101-macos-closure`；handoff 完成后，Gate A Codex session 是该 worktree、ledger 和 task-owned 服务的唯一 writer，`dst` 不得写入或启动服务。
+- Gate A Codex 在 `CP-MSC-A1` 后退出或明确释放 writer。GPT-5.6 Sol / High 复核通过后，才通知 `dst-so101-macos-closure` 接回 writer 并进入 Task 2。旧 `dst-so101-macos-mps-w2` 只保留，不接管。
 - 不授权真实机械臂、sudo、系统/全局环境修改、停止 foreign 进程、删除或归档证据、push、merge、force push 或发布。
-- 继续使用已有单写 ledger `docs/experiments/so101-macos-service-campaign-closure-experiment-ledger.md` 和其中登记的唯一 evidence root。不要创建第二个 root。每次实验先写 `PLANNED`。
+- 继续使用已有单写 ledger `docs/experiments/so101-macos-service-campaign-closure-experiment-ledger.md` 和已登记的唯一 evidence root `/tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1`。Task 1 只在其下新建 `gate-a-resolution/<dispatch-id>/`；不得创建第二个 root。legacy 条目和旧 evidence 只读，每次新实验先写 `PLANNED`。
 - macOS 不套用 ai-station 的 `/data` NVMe pytest scratch 规则。每个测试调用使用 evidence root 下新子目录，并设置 task-local `ROS_HOME`、`ROS_LOG_DIR`、`TMPDIR`、`TMP`、`TEMP`。
 - 所有产品修改严格 RED -> GREEN；依赖导入、DYLD bootstrap、零收集和未执行到目标边界不算 RED。
 - schema v4 bytes/SHA 与 exact-W2 含义保持不变。v5 只允许 Darwin/MPS W1 `FULL_RESTART_RETRY`；v6 只允许 Darwin/MPS W1 `FIRST_PASS`。
@@ -36,16 +37,18 @@
 | controller 直连诊断与 MoveIt readiness 分离 | 已在恢复提交中，执行前回读测试与 diff |
 | task-owned full station READY | OBSERVED：3 controllers、3 services、3 actions |
 | 旧卡死 | 只在 incomplete dylib closure 中复现，`@rpath/libmujoco.3.4.0.dylib` load failure |
-| C++ controller 根因 | `UNCONFIRMED`；foreign modified overlay 未重跑，无 C++ 产品修改 |
+| legacy C++ controller 归因 | `UNCONFIRMED`；foreign modified overlay 未重跑，无 C++ 产品修改，永久保留原结论 |
 | Gate A 5x FULL_RESTART | NOT RUN |
 
-恢复后先在 ledger 追加 `CP-MSC-R0`，保留 legacy `CP-MSC-A` 原文，不回写成 PASS。
+恢复时只读引用 legacy `CP-MSC-A`、旧 root 和旧 ledger 行，不把它改写成 PASS。新的当前产品判定写入
+`gate-a-resolution/<dispatch-id>/` 和新 ledger 行；旧 overlay 无法重建时记
+`legacy_attribution=LEGACY_PROVENANCE_UNRECOVERABLE`，不据此判定当前产品失败。
 
 ## 文件与接口总图
 
 | 边界 | 文件与职责 |
 | --- | --- |
-| Gate A / rpath | `third_party/mujoco_ros2_control/mujoco_ros2_control/CMakeLists.txt`；`src/so101_demo_py/test/test_macos_install_contract.py`；既有 runtime closure/diagnostic 测试 |
+| Gate A / rpath | 新 `runtime/macos_dlopen_probe.py` 与测试；修改 station diagnostic、install/runtime closure 测试；仅 `CONFIRMED_RPATH` 时修改 submodule CMake、两份 dependency lock 与 candidate 常量 |
 | selection / queue | 新 `parallel_batch/selection.py`、`queue.py`、`single_point_input.py`；修改 W2 campaign/worker/composition |
 | journal / projection | 修改 `parallel_batch/journal.py`；新 `expert_validation/reducer.py`、`projection_source.py`；修改 events/models/store/production |
 | owner tree | 新 `expert_validation/owner_tree.py`；修改 process owner/store/supervisor 和四个真实 spawn 边界 |
@@ -57,60 +60,192 @@
 
 ---
 
-### Task 1: 恢复 checkpoint，闭合 copied-install rpath，并完成 5x readiness
+### Task 1: 接管当前 worktree，关闭当前产品 Gate A，并完成 5x readiness
+
+Task 1 由单独的 Codex session 执行。它复用当前 mac-mini worktree 和 branch，不另建 worktree，也不依赖
+重跑 foreign modified overlay。该 session 必须在 `CP-MSC-A1` 停止，禁止进入 Task 2。
 
 **Files:**
-- Modify only when Step 3 confirms the rpath boundary: `third_party/mujoco_ros2_control/mujoco_ros2_control/CMakeLists.txt`
-- Modify only when Step 3 confirms the rpath boundary: `src/so101_demo_py/config/mujoco/dependency-lock.yaml`
-- Modify only when Step 3 confirms the rpath boundary: `src/so101_demo_py/config/dependency-lock.yaml`
-- Modify only when Step 3 confirms the rpath boundary: `scripts/check_backend_integration.py`
+- Create: `src/so101_demo_py/src/runtime/macos_dlopen_probe.py`
+- Create: `src/so101_demo_py/test/test_macos_dlopen_probe.py`
+- Modify: `src/so101_demo_py/src/cli/diagnose_macos_station.py`
+- Modify: `src/so101_demo_py/test/test_diagnose_macos_station.py`
 - Modify: `src/so101_demo_py/test/test_macos_install_contract.py`
 - Modify: `src/so101_demo_py/test/test_runtime_closure.py`
+- `CONFIRMED_RPATH` route only: `third_party/mujoco_ros2_control/mujoco_ros2_control/CMakeLists.txt`
+- `CONFIRMED_RPATH` route only: `src/so101_demo_py/config/mujoco/dependency-lock.yaml`
+- `CONFIRMED_RPATH` route only: `src/so101_demo_py/config/dependency-lock.yaml`
+- `CONFIRMED_RPATH` route only: `scripts/check_backend_integration.py`
 - Modify: `docs/experiments/so101-macos-service-campaign-closure-experiment-ledger.md`
 
 **Interfaces:**
 - Consumes: committed `RuntimeClosureIdentity`, `RunBinding`, `RuntimeAttestation`, `so101_diagnose_macos_station`
-- Produces: relocatable macOS install-rpath contract, confirmed first bad boundary, five consecutive valid readiness records, `CP-MSC-01`
+- Produces: `GateAControlSetManifest`, `DirectDlopenObservation`, `CurrentBoundaryVerdict`, `ControllerVerdict`, `LegacyAttribution`
+- Closed values:
+  - `CurrentBoundaryVerdict = UNCONFIRMED_CURRENT | CONFIRMED_RPATH | CURRENT_CLOSURE_ALREADY_VALID | CURRENT_NON_RPATH_FAILURE | INVALID_CONTROL`
+  - `ControllerVerdict = NOT_EXCLUDED | EXCLUDED_BEFORE_PLUGIN_INIT | CURRENT_CONTROLLER_PATH_OPERATIONAL`
+  - `LegacyAttribution = LEGACY_TRACEABLE | LEGACY_PROVENANCE_UNRECOVERABLE`
+- Produces: no-DYLD current-product attestation、five consecutive valid readiness records、`CP-MSC-A1`
 
-- [ ] **Step 1: 回读恢复锚点与已有证据**
+- [ ] **Step 1: 串行接管 writer，并建立本轮 evidence 子目录**
 
-在 `dst-so101-macos-closure` 中回读 `hostname`、`pwd`、branch、HEAD、三个恢复提交的完整 SHA、
-`git status --short`、submodule SHA/status、ledger latest checkpoint、tmux 和相关进程。把 ledger 中的
-`RUN_ROOT`、`TEST_PYTHON`、ROS/TMP 路径加载并逐项验证。Expected: legacy checkpoint 明确为
-`UNCONFIRMED`；不存在第二个 writer 或未归属的 task process。
+先由 orchestration owner 确认 `dst-so101-macos-closure` 已暂停，不再持有运行中命令、服务或 ledger
+写权限。Gate A Codex 随后在下列固定路径接管唯一 writer：
 
-- [ ] **Step 2: 写 copied-install rpath RED**
+```bash
+cd /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
+test "$(git branch --show-current)" = codex/so101-unified-webapp
+git status --short --branch
+git show --no-patch --oneline fea8f57c
+git show --no-patch --oneline e264d1eb
+git show --no-patch --oneline 82b7a7d9
+git submodule status --recursive
+export TASK_ROOT=/tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
+export DISPATCH_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+export GATEA_RUN_ROOT="$TASK_ROOT/gate-a-resolution/$DISPATCH_ID"
+mkdir -p "$GATEA_RUN_ROOT"/{control-set,negative,positive,fixed,tests,tmp,ros-home,ros-logs}
+export TEST_PYTHON=/Users/matianyi/ros2_jazzy/.venv/bin/python
+export INSTALL_ROOT="$GATEA_RUN_ROOT/control-set/install"
+export ROS_HOME="$GATEA_RUN_ROOT/ros-home"
+export ROS_LOG_DIR="$GATEA_RUN_ROOT/ros-logs"
+export TMPDIR="$GATEA_RUN_ROOT/tmp"
+export TMP="$TMPDIR"
+export TEMP="$TMPDIR"
+```
 
-在 `test_macos_install_contract.py` 增加断言：copied install 的
-`libmujoco_ros2_control.dylib` 必须包含可重定位的 MuJoCo vendor LC_RPATH；在移除 task-owned
-`DYLD_LIBRARY_PATH` 的净化环境中，plugin 的 `libmujoco.3.4.0.dylib` 依赖必须可解析到同一
-copied prefix。`test_runtime_closure.py` 增加 loaded image 超出 copied prefix/vendor closure 的拒绝。
+在新 ledger 行登记 handoff 时间、前任 writer、当前 writer、branch/HEAD/submodule SHA、旧 ledger
+hash、`TASK_ROOT` 与 `GATEA_RUN_ROOT`。legacy `CP-MSC-A` 和旧 evidence 只读；不得把本轮文件写到
+`gate-a-resolution/` 之外。Expected: 只有 Gate A Codex 一个 writer，当前 worktree 无未归属改动，
+`legacy_attribution` 独立记录；无法恢复 foreign overlay 时使用
+`LEGACY_PROVENANCE_UNRECOVERABLE`，但不改变当前 Gate 判定。
+
+- [ ] **Step 2: RED -> GREEN 实现固定 control set 和 direct dlopen 证据**
+
+先写 RED，覆盖：closed enum；manifest 缺项或 SHA 不符 fail closed；N/P 除
+`DYLD_LIBRARY_PATH` 外任一差异均为 `INVALID_CONTROL`；direct `dlopen(RTLD_NOW|RTLD_LOCAL)` 输出
+`DLOPEN_STARTED`、`DLOPEN_SUCCEEDED` 或 `DLOPEN_FAILED` 和原始 `dlerror`；成功时输出实际
+plugin/vendor loaded-image 绝对路径与 SHA；station phase marker 只在真实越过对应边界后写出。
+
+`GateAControlSetManifest` 固定 parent/submodule commit、copied-install inventory、可执行文件、plugin、
+vendor dylib、plugin XML、config/model 的路径与 SHA、argv、environment allowlist、ROS domain policy、
+tool versions 和 `GATEA_RUN_ROOT`。`DirectDlopenObservation` 固定 control 名称、marker、错误文本、
+loaded-image path/SHA 与是否进入 plugin init。probe 通过 `execve` 启动 child：N 从 allowlist 重建环境
+并排除所有 `DYLD_*`，P 在同一环境上只加入一个 manifest-bound `DYLD_LIBRARY_PATH`；任何额外
+`DYLD_*` 都 fail closed。station diagnostic 新增 closed `FULL_TASK_STATION` mode，只能启动 installed
+`so101_mujoco_task_station.launch.py` 的固定 argv，并在同一进程树内做 direct controller 和 MoveIt
+readiness。`DYLD_PRINT_*` 只能作为辅助日志，不能替代该记录。
+
+```bash
+$TEST_PYTHON -m pytest -q \
+  src/so101_demo_py/test/test_macos_dlopen_probe.py \
+  src/so101_demo_py/test/test_diagnose_macos_station.py \
+  src/so101_demo_py/test/test_macos_install_contract.py \
+  src/so101_demo_py/test/test_runtime_closure.py \
+  --junitxml="$GATEA_RUN_ROOT/tests/task1-controls-red.xml"
+```
+
+Expected RED: 测试非零收集，并精确因新 manifest、direct dlopen、真实 phase marker 或 loaded-image
+校验尚未实现而失败，不得用 import、依赖或 fixture 错误充当 RED。实现最小接口后重跑同一命令，
+Expected GREEN: 全部通过。随后提交只含 control tooling 和测试的冻结 commit：
+
+```bash
+git add -- src/so101_demo_py/src/runtime/macos_dlopen_probe.py \
+  src/so101_demo_py/src/cli/diagnose_macos_station.py \
+  src/so101_demo_py/test/test_macos_dlopen_probe.py \
+  src/so101_demo_py/test/test_diagnose_macos_station.py \
+  src/so101_demo_py/test/test_macos_install_contract.py \
+  src/so101_demo_py/test/test_runtime_closure.py
+git diff --cached --check
+git commit -m "test(so101): freeze macOS Gate A controls"
+```
+
+- [ ] **Step 3: 冻结 manifest，并运行 N/P controls**
+
+从 Step 2 committed HEAD 构建一次 copied install，再生成只读 control-set manifest。N 和 P 必须使用
+同一 manifest、bytes、argv、config、domain policy 与 deadline：
+
+- N（negative）清除全部 `DYLD_*`，先跑 direct dlopen，再跑
+  `FULL_TASK_STATION`。
+- P（positive）只增加 manifest 中 task-owned vendor lib 的 `DYLD_LIBRARY_PATH`，其余与 N 完全相同，
+  同样先 direct dlopen、再跑 `FULL_TASK_STATION`。
+- 每次运行都保存 direct probe、structured phase、loaded images、controller direct query、MoveIt
+  readiness、PID/birth、timeout 与 cleanup accounting。probe error、manifest/identity mismatch 或残留都
+  使该 control 无效。
+
+```bash
+"$TEST_PYTHON" -m so101_demo.runtime.macos_dlopen_probe \
+  --manifest "$GATEA_RUN_ROOT/control-set/manifest.json" \
+  --control N --output "$GATEA_RUN_ROOT/negative/dlopen.json"
+"$TEST_PYTHON" -m so101_demo.runtime.macos_dlopen_probe \
+  --manifest "$GATEA_RUN_ROOT/control-set/manifest.json" \
+  --control P --output "$GATEA_RUN_ROOT/positive/dlopen.json"
+```
+
+full-station 使用同一 environment builder；扩展后的 diagnostic 接受 manifest-bound control 和 report
+路径，不接受任意 launch argv：
+
+```bash
+"$INSTALL_ROOT/bin/so101_diagnose_macos_station" \
+  --mode FULL_TASK_STATION \
+  --control-set-manifest "$GATEA_RUN_ROOT/control-set/manifest.json" \
+  --control N --session-id "gate-a-$DISPATCH_ID-n" \
+  --report-path "$GATEA_RUN_ROOT/negative/station.json"
+"$INSTALL_ROOT/bin/so101_diagnose_macos_station" \
+  --mode FULL_TASK_STATION \
+  --control-set-manifest "$GATEA_RUN_ROOT/control-set/manifest.json" \
+  --control P --session-id "gate-a-$DISPATCH_ID-p" \
+  --report-path "$GATEA_RUN_ROOT/positive/station.json"
+```
+
+除 manifest 固定值外不得手工改 launch 参数。
+完成后按下表写三个正交 verdict，不能把 legacy 归因塞进当前产品判定：
+
+| N | P | `current_boundary_verdict` | `controller_verdict` | 下一步 |
+| --- | --- | --- | --- | --- |
+| direct dlopen 在 plugin init 前报 `@rpath/libmujoco.3.4.0.dylib`；station 同边界失败 | direct dlopen 成功、loaded image 命中 manifest vendor SHA，station READY | `CONFIRMED_RPATH` | `EXCLUDED_BEFORE_PLUGIN_INIT` | 进入 Step 4 rpath 修复 route |
+| direct dlopen、loaded-image attestation 和 station READY | 同 bytes 也成功 | `CURRENT_CLOSURE_ALREADY_VALID` | `CURRENT_CONTROLLER_PATH_OPERATIONAL` | 不改 CMake；N 即 F，进入 Step 5 |
+| loader failure | 同样 loader failure，或 vendor path/SHA 不匹配 | `INVALID_CONTROL` | `NOT_EXCLUDED` | 停止本批并提交 control plan amendment；不能改 controller |
+| loader failure | dlopen 成功，但随后 station 在非 loader phase 失败 | `CURRENT_NON_RPATH_FAILURE` | `NOT_EXCLUDED` | 停止，记录首坏 phase，先修订计划 |
+| 非 loader failure | 任意结果 | `CURRENT_NON_RPATH_FAILURE` | `NOT_EXCLUDED` | 停止，记录首坏 phase，先修订计划 |
+| N/P 除唯一授权的 `DYLD_LIBRARY_PATH` 外存在差异，或 marker/identity/cleanup 不完整 | 任意结果 | `INVALID_CONTROL` | `NOT_EXCLUDED` | 停止本批并提交 control plan amendment |
+
+`LEGACY_TRACEABLE` 或 `LEGACY_PROVENANCE_UNRECOVERABLE` 可与表中任一行并存。foreign overlay 无法复现
+不是产品缺陷，也不阻塞两个合法 current route；`CURRENT_NON_RPATH_FAILURE` 和 `INVALID_CONTROL`
+都必须停下并修订计划。合法 route 同时冻结后续路径：
+
+```bash
+# CURRENT_CLOSURE_ALREADY_VALID route
+export F_MANIFEST="$GATEA_RUN_ROOT/control-set/manifest.json"
+export F_INSTALL_ROOT="$INSTALL_ROOT"
+
+# CONFIRMED_RPATH route：只在 Step 4 rebuild 和 manifest freeze 完成后设置
+export F_MANIFEST="$GATEA_RUN_ROOT/fixed/manifest.json"
+export F_INSTALL_ROOT="$GATEA_RUN_ROOT/fixed/install"
+```
+
+每次只能执行其中一组；verdict、`F_MANIFEST` 和 `F_INSTALL_ROOT` 必须一并写入 ledger。
+
+- [ ] **Step 4: 只在 `CONFIRMED_RPATH` route 修复 install-rpath**
+
+`CURRENT_CLOSURE_ALREADY_VALID` route 明确跳过本步，不修改 submodule、dependency lock 或 candidate
+常量。`CONFIRMED_RPATH` route 只修改 submodule CMake 的 Apple `INSTALL_RPATH`：保留
+`@loader_path`，加入指向同一 copied prefix `opt/mujoco_vendor/lib` 的相对 loader path；不得修改
+controller node、dispatcher 或 hardware interface。
+
+先在 `test_macos_install_contract.py` 写精确 RED：copied plugin 的 LC_RPATH 必须能在 no-DYLD
+environment 解析 manifest-bound vendor dylib；`test_runtime_closure.py` 拒绝 loaded image 落到 copied
+prefix 之外。运行下列命令，Expected RED 只能是已由 N/P 确认的 rpath 缺口：
 
 ```bash
 $TEST_PYTHON -m pytest -q \
   src/so101_demo_py/test/test_macos_install_contract.py \
   src/so101_demo_py/test/test_runtime_closure.py \
-  --junitxml="$RUN_ROOT/task1-rpath-red.xml"
+  --junitxml="$GATEA_RUN_ROOT/tests/task1-rpath-red.xml"
 ```
 
-Expected: 非零收集；RED 精确落在缺少 vendor LC_RPATH/净化环境无法解析，不是 import 或工具缺失。
-
-- [ ] **Step 3: 运行有界 A/B**
-
-预先登记两条实验，使用相同 copied bytes/config 和 domain policy。A 不注入
-`DYLD_LIBRARY_PATH`；B 只注入当前 task-owned vendor lib 路径。保存 `otool -L`、`otool -l`、
-plugin XML、loaded images、direct controller query 与 READY 结果。Expected: 只有当 A 在 dylib
-解析处失败而 B READY，才确认 install-rpath 根因；否则保持 `UNCONFIRMED` 并停止，不改 C++。
-
-- [ ] **Step 4: 实施最小 CMake 修复并 GREEN**
-
-只修改 submodule CMake 的 Apple `INSTALL_RPATH`，保留 `@loader_path`，并加入指向同一 prefix
-`opt/mujoco_vendor/lib` 的相对 loader path。不得改 node、dispatcher 或 hardware interface。
-先形成 submodule commit，再把它的完整 SHA 同步到两份 dependency lock 和
-`check_backend_integration.py` 的 candidate 常量；同时更新候选 SHA 测试，但继续证明
-lineage/policy ancestry，不得放宽 provenance 测试。随后必须先提交 parent gitlink、两锁、脚本和
-测试，使 `git ls-tree HEAD`、两锁、candidate 常量和 submodule HEAD 一致；这个 parent candidate
-commit 是 copied install 的冻结来源。不得在 parent 仍指向旧 gitlink 时构建或运行 GREEN。
+先提交 submodule，再把完整 SHA 同步到两份 dependency lock 和
+`scripts/check_backend_integration.py` candidate 常量。parent commit 必须同时冻结 gitlink、locks、
+candidate 常量和对应测试；不得在 parent 仍指向旧 gitlink 时构建 F。
 
 ```bash
 git -C third_party/mujoco_ros2_control add -- mujoco_ros2_control/CMakeLists.txt
@@ -134,39 +269,82 @@ rg -n 'CANDIDATE_COMMIT' \
   src/so101_demo_py/test/test_macos_install_contract.py
 ```
 
-从该 committed HEAD 重建 copied install，再在净化环境运行测试和 diagnostic。GREEN 失败时只在
-Task 1 内做新的 scoped fix commit 并重建；不得 amend 已用于证据的 candidate，也不得进入 live。
+从 committed HEAD 重建到 `$GATEA_RUN_ROOT/fixed/install`，生成新的
+`$GATEA_RUN_ROOT/fixed/manifest.json`。GREEN 失败只能在 Task 1 内形成新的 scoped fix commit，不能
+amend 已被引用的 candidate。
 
 ```bash
 $TEST_PYTHON -m pytest -q \
+  src/so101_demo_py/test/test_macos_dlopen_probe.py \
+  src/so101_demo_py/test/test_diagnose_macos_station.py \
   src/so101_demo_py/test/test_macos_install_contract.py \
   src/so101_demo_py/test/test_runtime_closure.py \
-  src/so101_demo_py/test/test_diagnose_macos_station.py \
   src/so101_demo_py/test/test_motion_stack_ready.py \
-  --junitxml="$RUN_ROOT/task1-rpath-green.xml"
+  --junitxml="$GATEA_RUN_ROOT/tests/task1-rpath-green.xml"
 ```
 
-Expected: copied install 不依赖 task-owned `DYLD_LIBRARY_PATH`；loaded images 都属于 attested
-closure；原 A/B 首坏边界翻转。
+Expected GREEN: copied install 在 no-DYLD control 下解析 manifest-bound vendor image，全部测试通过。
 
-- [ ] **Step 5: 执行五次 FULL_RESTART**
+- [ ] **Step 5: 验证 F no-DYLD attestation，并执行 5x FULL_RESTART**
 
-为五轮分别创建新实验 ID。每轮要求 closure hash 相同、run/attestation 唯一、三个 controller
-active、三个 MoveIt service/action ready、fresh domain/session、自然退出且 task-owned residue 为零。
-VALID failure 中断序列；INVALID 终止批次并使用新 ID 重开。既有 READY 不计数。
+`CONFIRMED_RPATH` route 的 F 是 Step 4 新 candidate；`CURRENT_CLOSURE_ALREADY_VALID` route 的 F 是
+Step 3 的 N frozen bytes。两条 route 都必须在清除全部 `DYLD_*` 后满足：direct dlopen 成功；实际
+plugin/vendor loaded-image 路径和 SHA 命中同一 F manifest；station 到达 READY；task-owned residue
+为零。任一项失败都不能进入 5x。
 
-- [ ] **Step 6: 提交证据与 checkpoint**
+```bash
+"$TEST_PYTHON" -m so101_demo.runtime.macos_dlopen_probe \
+  --manifest "$F_MANIFEST" \
+  --control F --output "$GATEA_RUN_ROOT/fixed/dlopen.json"
+"$F_INSTALL_ROOT/bin/so101_diagnose_macos_station" \
+  --mode FULL_TASK_STATION \
+  --control-set-manifest "$F_MANIFEST" \
+  --control F --session-id "gate-a-$DISPATCH_ID-f-attest" \
+  --report-path "$GATEA_RUN_ROOT/fixed/station.json"
+```
 
-Step 4 已冻结产品、provenance 和测试来源；本步只提交五轮结果、cleanup accounting 与 checkpoint，
-不重复提交 submodule 或 parent gitlink。
+随后为五轮分别创建新 experiment ID。每轮必须使用同一 F closure hash、fresh domain/session、唯一
+run/attestation，依次越过真实 phase marker，最后得到三个 active controller、三个 MoveIt service、
+三个 action、自然退出和零 task-owned residue。VALID failure 中断序列；INVALID 终止批次并用新 ID
+重开；既有 READY 不计数。diagnostic 从 manifest domain policy 分配并回写 fresh
+`ROS_DOMAIN_ID`，每轮命令固定为：
+
+```bash
+for round in 1 2 3 4 5; do
+  "$F_INSTALL_ROOT/bin/so101_diagnose_macos_station" \
+    --mode FULL_TASK_STATION \
+    --control-set-manifest "$F_MANIFEST" \
+    --control F --session-id "gate-a-$DISPATCH_ID-f-$round" \
+    --report-path "$GATEA_RUN_ROOT/fixed/full-restart-$round.json" || break
+done
+```
+
+五轮全部有效后写：
+
+```text
+controller_verdict=CURRENT_CONTROLLER_PATH_OPERATIONAL
+gate_a_status=CURRENT_PRODUCT_GATE_PASSED
+```
+
+- [ ] **Step 6: 提交 ledger、记录 `CP-MSC-A1`，并释放 writer**
+
+提交本轮 N/P/F manifest SHA、三个正交 verdict、合法 route、no-DYLD attestation、5x 结果、cleanup
+accounting、code/test commit 和 `CP-MSC-A1`。legacy `CP-MSC-A` 原文保持不变。
 
 ```bash
 git add -- docs/experiments/so101-macos-service-campaign-closure-experiment-ledger.md
 git diff --cached --check
-git commit -m "docs: record macOS station readiness gate"
+git commit -m "docs: record current macOS product Gate A"
+git status --short --branch
 ```
 
-STOP at `CP-MSC-01` for Sol/high review。5/5 缺失时不进入 campaign live。
+Gate A Codex 随后停止所有 task-owned 服务，确认零 residue，退出或明确记录
+`writer_released_at`，此后不得再写该 worktree。把 scoped commits 交给当前 worktree 的 orchestration
+owner；这里是同一 worktree 的串行交接，不做 cherry-pick，也不另建 worktree。
+
+**STOP at `CP-MSC-A1`. Do not start Task 2.** GPT-5.6 Sol / High 先只读复核 manifests、diff、tests、
+ledger、5x 和 cleanup。只有复核通过后，orchestration owner 才通知 `dst-so101-macos-closure` 接回唯一
+writer 并继续 Task 2；复核不通过时仍由新的 Gate A Codex handoff 修复，不能让 `dst` 与 Codex 并写。
 
 ### Task 2: 实现不可变 selection 和 durable shared queue
 
@@ -733,8 +911,7 @@ git commit -m "docs: record macOS W1 W2 service closure"
 | Checkpoint | 必须满足 | 不满足时 |
 | --- | --- | --- |
 | legacy `CP-MSC-A` | 只作恢复锚点；结论 `UNCONFIRMED` | 不得解释为 PASS |
-| `CP-MSC-R0` | 三个恢复提交、ledger、evidence root、writer ownership 已回读 | 停止，不重建第二套环境 |
-| `CP-MSC-01` | rpath 根因 RED->GREEN；无临时 DYLD 依赖；station 5/5 | 不进入 campaign live |
+| `CP-MSC-A1` | writer 已串行接管并释放；legacy 归因独立；`CONFIRMED_RPATH` 或 `CURRENT_CLOSURE_ALREADY_VALID` route 完成；F no-DYLD direct dlopen、loaded-image path/SHA、station 5/5 和 cleanup 均有效；`CURRENT_PRODUCT_GATE_PASSED` | 停止，不进入 Task 2；先修正 control/current failure 或补齐 Sol/high 复核 |
 | `CP-MSC-02` | selection/queue/single-point/watermark/reducer/owner tree 离线通过 | 返回 Tasks 2–6 |
 | `CP-MSC-03` | v4 frozen；v5/v6 closed；W1/W2 only；fresh guard；retry atomic | 返回 Tasks 7–9 |
 | `CP-MSC-04` | package gate 和 bounded candidate W2/W1/retry 有效且无残留 | 不进 production Chrome |
@@ -743,8 +920,12 @@ git commit -m "docs: record macOS W1 W2 service closure"
 
 ## 计划自查
 
-- 设计 §5 对应 Task 1，保留现有 READY 事实但不假定 Gate A 已通过；rpath 文件和 RED/GREEN
-  判据明确，不再强制 controller C++ 修改。
+- 设计 §5 对应 Task 1，永久保留 legacy `CP-MSC-A=UNCONFIRMED`，并以三个正交 verdict、固定
+  N/P/F control set、direct dlopen、loaded-image path/SHA、no-DYLD F 和 5x readiness 关闭当前
+  产品 Gate；`LEGACY_PROVENANCE_UNRECOVERABLE` 不会被误判成产品缺陷。
+- Task 1 固定复用当前 mac-mini worktree、branch 和唯一 evidence root，只创建
+  `gate-a-resolution/<dispatch-id>/`；Codex 与 dst 串行交接 writer，`CP-MSC-A1` 后先停下接受
+  Sol/high 复核，未经通知不得进入 Task 2。
 - 设计 §6–8 对应 Tasks 2、3、7、8；v4/v5/v6、W1/W2、point/profile 分离完整。
 - 设计 §7 对应 Tasks 7–8；只复用现有 StartGuard，没有新 sampler/watchdog/容量证明。
 - 设计 §9 对应 Tasks 4–5；committed watermark、唯一 reducer 和 cursor transaction 有明确测试。
