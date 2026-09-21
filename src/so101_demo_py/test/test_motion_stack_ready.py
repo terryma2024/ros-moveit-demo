@@ -81,28 +81,76 @@ def test_readiness_reports_missing_motion_action() -> None:
     assert result.evidence["dependency"] == "/execute_trajectory"
 
 
-def test_controller_query_waits_for_complete_service_and_action_graph() -> None:
+def test_controller_query_is_not_gated_by_the_moveit_graph() -> None:
+    """Direct controller traffic must start as soon as its own service is visible.
+
+    Waiting for the whole MoveIt service/action graph before the first controller query is
+    what made the earlier failure unattributable: a station stuck in hardware bring-up and a
+    station with missing MoveIt services looked identical.
+    """
+
     from so101_demo.cli.motion_stack_ready import controller_query_allowed
 
-    services = {
-        "/apply_planning_scene": True,
-        "/get_planning_scene": True,
-        "/plan_kinematic_path": True,
-    }
-    actions = {
-        "/execute_trajectory": True,
-        "/arm_controller/follow_joint_trajectory": True,
-        "/gripper_controller/follow_joint_trajectory": True,
-    }
+    assert controller_query_allowed(controller_service_visible=True)
+    assert not controller_query_allowed(controller_service_visible=False)
 
-    assert controller_query_allowed(services=services, actions=actions)
-    assert not controller_query_allowed(
-        services={**services, "/get_planning_scene": False}, actions=actions
+
+def test_readiness_separates_dds_invisibility_from_a_call_timeout() -> None:
+    from so101_demo.cli.motion_stack_ready import evaluate_readiness
+
+    invisible = evaluate_readiness(
+        controllers={},
+        services={},
+        actions={},
+        controller_service_visible=False,
     )
-    assert not controller_query_allowed(
-        services=services,
-        actions={**actions, "/arm_controller/follow_joint_trajectory": False},
+    timed_out = evaluate_readiness(
+        controllers={},
+        services={},
+        actions={},
+        controller_service_visible=True,
+        controller_call_timed_out=True,
     )
+    not_active = evaluate_readiness(
+        controllers={"joint_state_broadcaster": "inactive"},
+        services={},
+        actions={},
+    )
+
+    assert invisible.failure_code == "MOTION_STACK_CONTROLLER_SERVICE_INVISIBLE"
+    assert timed_out.failure_code == "MOTION_STACK_CONTROLLER_CALL_TIMEOUT"
+    assert not_active.failure_code == "MOTION_STACK_CONTROLLER_NOT_ACTIVE"
+    assert len(
+        {invisible.failure_code, timed_out.failure_code, not_active.failure_code}
+    ) == 3
+    assert invisible.phase == timed_out.phase == not_active.phase == "CONTROLLERS"
+
+
+def test_readiness_ignores_the_call_timeout_once_controllers_answer() -> None:
+    from so101_demo.cli.motion_stack_ready import evaluate_readiness
+
+    result = evaluate_readiness(
+        controllers={
+            "joint_state_broadcaster": "active",
+            "arm_controller": "active",
+            "gripper_controller": "active",
+        },
+        services={
+            "/apply_planning_scene": True,
+            "/get_planning_scene": True,
+            "/plan_kinematic_path": True,
+        },
+        actions={
+            "/execute_trajectory": True,
+            "/arm_controller/follow_joint_trajectory": True,
+            "/gripper_controller/follow_joint_trajectory": True,
+        },
+        controller_service_visible=True,
+        controller_call_timed_out=True,
+    )
+
+    assert result.ready
+    assert result.failure_code is None
 
 
 def test_controller_query_keeps_one_pending_request_until_response() -> None:
