@@ -193,8 +193,9 @@ next_experiment: EXP-MRC-MAC-MINI-CURRENT-PATCH
   `pytest -n 8 --dist loadscope src/so101_demo_py/test`. The ordinary gate excludes the twelve
   tests marked `explicit_ml` and does not collect `benchmark_test/`.
 - Result: after aligning the nine Torch/GroundingDINO cases discovered by the Linux environment,
-  the final fresh `package-gate-n8-cross-platform-017` completed with 3650 passed, 9 skipped, zero
-  failed in 40.73 seconds;
+  the final fresh `package-gate-n8-sshd-notty-020` completed with 3654 passed, 9 skipped, zero
+  failed in 41.61 seconds. The four additional passes are the new interactive/headless SSH
+  transport classification regressions.
   pytest exit 0. Its JUnit, complete log, preflight, exit code, elapsed time, and basetemp record are
   retained under the run evidence directory.
 - Expanded diagnostic: `package-gate-n8-all-007` deliberately overrode the marker filter. It
@@ -248,6 +249,12 @@ next_experiment: EXP-MRC-MAC-MINI-CURRENT-PATCH
   one Linux v4 document retaining MPS-only fields, an unmarked Torch checkpoint test, and an
   unpopulated locked submodule. These are environment/platform test boundaries, not represented as
   Linux acceptance. Scratch `linux-pytest-n8-003` is retained as a deletion candidate.
+- After dependency and platform alignment, `c080b343` reached 3521 passed, 135 skipped, and three
+  failures. All three were the same protected environment read for the per-session
+  `sshd: <user>@notty` process. The scanner already froze the interactive `@pts/N` form but not
+  headless SSH. The exact `@notty` spelling is now classified as the same non-ROS transport; other
+  SSH command shapes remain fail-closed. Full and focused failed runs are retained under scratches
+  `linux-pytest-n8-004` and `linux-pytest-n8-005`.
 
 ## RUN-007 — Second physical Mac reproduction
 

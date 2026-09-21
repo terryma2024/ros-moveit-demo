@@ -256,6 +256,26 @@ def test_oversized_cmdline_process_is_classified_not_refused():
         child.wait(timeout=10)
 
 
+@pytest.mark.parametrize(
+    "argv",
+    [("sshd: robot.user@pts/7",), ("sshd: robot.user@notty",)],
+)
+def test_interactive_and_headless_sshd_transports_are_frozen_non_candidates(argv):
+    """Remote execution must not read the protected environment of its sshd transport."""
+
+    reason = resources_api._frozen_non_candidate_reason('S', 'sshd', argv)
+
+    assert reason == 'frozen_sshd_transport_non_candidate'
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [("sshd: robot.user@tty7",), ("sshd: robot.user@notty extra",)],
+)
+def test_unknown_sshd_transport_shapes_remain_unclassified(argv):
+    assert resources_api._frozen_non_candidate_reason('S', 'sshd', argv) is None
+
+
 def test_claim_root_is_stable_per_test_and_isolated_between_tests(monkeypatch):
     monkeypatch.setenv('PYTEST_CURRENT_TEST', 'test/module.py::test_a (call)')
     first = claim_root()
