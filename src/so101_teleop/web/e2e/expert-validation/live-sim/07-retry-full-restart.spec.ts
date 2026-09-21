@@ -4,6 +4,13 @@ import { join } from "node:path";
 import { liveSimTest as test, expect } from "../fixtures/live-sim";
 import { storeQuery } from "../assertions/journal";
 import {
+  assertCampaignBatchEvidence,
+  assertRoutingClaim,
+  campaignJournalRoot,
+  readCampaignBatchEvidence,
+  type CampaignBatchExpectation,
+} from "../assertions/live-evidence";
+import {
   ExpertValidationPage,
   releaseAcquiredLeases,
 } from "../pages/expert-validation-page";
@@ -18,6 +25,10 @@ import {
  * failure is a valid business failure, and the retry runs the point again as its own
  * `FULL_RESTART_RETRY` batch.  It is fault injection for the retry workflow only and is never
  * counted as a normal acceptance campaign.
+ *
+ * On macOS the first pass is the W1 route (schema v6, SEQUENTIAL, one worker) and the retry is the
+ * v5 single-point FULL_RESTART route.  Both batches have to prove selected-only execution, the
+ * durability watermark, the sealed physical evidence set and their own cleanup.
  */
 
 test.afterEach(async ({ request }) => {
@@ -32,9 +43,39 @@ test("R07 a genuinely failed point retries as its own SEQUENTIAL N1 FULL_RESTART
   const app = new ExpertValidationPage(page);
   await app.goto();
   await app.acquireLease();
-  await app.generateManifest(4);
+  const [manifestResponse] = await Promise.all([
+    page.waitForResponse(
+      (candidate) =>
+        candidate.url().endsWith("/expert-validation/manifests")
+        && candidate.request().method() === "POST",
+    ),
+    app.generateManifest(4),
+  ]);
+  const generated = (await manifestResponse.json()) as { points?: Array<{ id: string }> };
+  const firstPassSelection = (generated.points ?? []).map((point) => point.id);
+  expect(firstPassSelection).toHaveLength(4);
   await app.configureSequential();
-  await app.runPreflight();
+
+  // The first pass claims the W1 first-pass row; the console never infers it from the point count.
+  const firstPassExpectation: CampaignBatchExpectation = {
+    batchKind: "FIRST_PASS",
+    executionProfile: "MPS_W1_FIRST_PASS",
+    schemaVersion: 6,
+    workerCount: 1,
+    selectedPointIds: firstPassSelection,
+  };
+  const [preflightResponse] = await Promise.all([
+    page.waitForResponse(
+      (candidate) =>
+        candidate.url().endsWith("/expert-validation/campaigns/preflight")
+        && candidate.request().method() === "POST",
+    ),
+    app.runPreflight(),
+  ]);
+  expect(preflightResponse.status()).toBe(200);
+  const receipt = (await preflightResponse.json()) as Record<string, unknown>;
+  assertRoutingClaim(receipt, firstPassExpectation);
+
   const campaignId = await app.startValidation();
 
   const readCampaign = async () =>
@@ -63,6 +104,13 @@ test("R07 a genuinely failed point retries as its own SEQUENTIAL N1 FULL_RESTART
   const firstPass = await waitForTerminal(600_000);
   expect(firstPass?.batch_cleanup_complete).toBe(true);
   const firstPassBatchId = firstPass.batch_id as string;
+
+  // The W1 first pass is a complete batch of its own: its selection, watermark, sealed physical
+  // evidence and cleanup all come from its own bytes.
+  assertCampaignBatchEvidence(
+    readCampaignBatchEvidence(join(liveServer.stateDir, "campaigns", campaignId, firstPassBatchId)),
+    { ...firstPassExpectation, projection: firstPass },
+  );
 
   // A genuine, valid failure is the precondition for the workflow -- never assumed, never faked.
   const failed = (firstPass.points ?? []).filter((point: any) => point.status === "FAILED");
@@ -93,7 +141,24 @@ test("R07 a genuinely failed point retries as its own SEQUENTIAL N1 FULL_RESTART
   expect(retryManifest.selected_point_ids).toEqual([target.point_id]);
   expect(retryManifest.worker_count).toBe(1);
   expect(existsSync(join(retryRoot, "cleanup-gates.json"))).toBe(true);
-  expect(existsSync(join(retryRoot, "coordinator", "events"))).toBe(true);
+  expect(existsSync(join(campaignJournalRoot(retryRoot), "events"))).toBe(true);
+
+  // The retry batch proves the same four claims as any other batch, from its own bytes: exactly
+  // the one failed point was executed (never a second point and never a repeat of the first
+  // pass), the published watermark closes its sequence, the sealed physical evidence set is
+  // intact and the retry batch completed its own cleanup.
+  const retryExpectation: CampaignBatchExpectation = {
+    batchKind: "FULL_RESTART_RETRY",
+    executionProfile: "MPS_W1_FULL_RESTART_RETRY",
+    schemaVersion: 5,
+    workerCount: 1,
+    selectedPointIds: [target.point_id],
+  };
+  const retryEvidence = readCampaignBatchEvidence(retryRoot);
+  // The campaign endpoint keeps projecting the *first-pass* batch, so the retry is asserted from
+  // its own bytes only: its manifest, journal, watermark, sealed attempts and cleanup gates.
+  assertCampaignBatchEvidence(retryEvidence, retryExpectation);
+  expect(retryEvidence.watermark?.batch_id).toBe("retry-001");
 
   // The store keeps the first pass and the retry as separate batches with separate statistics.
   const python = process.env.SO101_E2E_PYTHON ?? join(process.env.SO101_TASK_ROOT ?? "", "venv/bin/python");
@@ -124,6 +189,8 @@ test("R07 a genuinely failed point retries as its own SEQUENTIAL N1 FULL_RESTART
           })),
         },
         retry_batch: retryManifest,
+        retry_watermark: retryEvidence.watermark,
+        retry_cleanup: retryEvidence.cleanup,
         after_retry: {
           status: afterRetry.status,
           retried_point_status: (afterRetry.points ?? []).find(

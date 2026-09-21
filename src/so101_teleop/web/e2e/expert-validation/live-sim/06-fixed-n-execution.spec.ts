@@ -1,20 +1,34 @@
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { type Page } from "@playwright/test";
+
 import { liveSimTest as test, expect } from "../fixtures/live-sim";
+import { readJournalEvents } from "../assertions/journal";
+import {
+  assertCampaignBatchEvidence,
+  assertRoutingClaim,
+  campaignJournalRoot,
+  readCampaignBatchEvidence,
+  type CampaignBatchExpectation,
+} from "../assertions/live-evidence";
 import {
   ExpertValidationPage,
   releaseAcquiredLeases,
 } from "../pages/expert-validation-page";
 
 /**
- * Real per-option execution.
+ * Real per-option execution, restricted to what macOS actually runs.
  *
- * `05-functional-manifest.spec.ts` asks the deployed service what it advertises; this file runs
- * the workloads those options describe, one campaign per manifest case, through the same console
- * the operator uses.  A capability check is not an execution result, and an aggregate `PASSED`
- * is not per-point evidence, so each case asserts its own requested/actual worker count, all N
- * worker slots, every point's terminal state and the cleanup that closes the batch.
+ * `05-functional-manifest.spec.ts` asks the deployed service what it advertises; this file takes
+ * the same manifest and, for every case, either executes it through the console or proves the
+ * console cannot offer it. On macOS the execution contract is W1/W2 only: PARALLEL N=2 is the W2
+ * route (schema v4) and SEQUENTIAL N=1 is the W1 first-pass route (schema v6). PARALLEL N=1,
+ * N=3..N8 and ADAPTIVE are not routes, so the console has to refuse them and say why.
+ *
+ * A capability check is not an execution result, so each executed case asserts its own claimed
+ * profile, worker count, selected-only evidence, seam of sealed physical evidence, watermark and
+ * cleanup.
  */
 
 type FunctionalCase = {
@@ -29,38 +43,138 @@ type FunctionalCase = {
 
 type FunctionalManifest = { cases: FunctionalCase[]; stability: FunctionalCase };
 
+type MatrixRoute = {
+  profile: string;
+  schema_version: number;
+  execution_mode: string;
+  worker_count: number;
+  batch_kind: string;
+};
+
 function loadManifest(): FunctionalManifest {
   const path = process.env.SO101_FUNCTIONAL_MANIFEST ?? "";
   if (!path) throw new Error("FUNCTIONAL_MANIFEST_REQUIRED");
   return JSON.parse(readFileSync(path, "utf8")) as FunctionalManifest;
 }
 
+/** The first-pass routes this host actually carries, keyed by `MODE/worker_count`. */
+async function deployedFirstPassRoutes(baseURL: string): Promise<Map<string, MatrixRoute>> {
+  const response = await fetch(`${baseURL}/expert-validation/capabilities`);
+  expect(response.ok, "capabilities").toBe(true);
+  const capabilities = (await response.json()) as {
+    platform?: string;
+    support_matrix?: MatrixRoute[];
+  };
+  expect(capabilities.platform).toBe("macos");
+  const routes = new Map<string, MatrixRoute>();
+  for (const row of capabilities.support_matrix ?? []) {
+    if (row.batch_kind !== "FIRST_PASS") continue;
+    routes.set(`${row.execution_mode}/${row.worker_count}`, row);
+  }
+  return routes;
+}
+
+/** A case the matrix does not carry must be unavailable in the console, with its own reason. */
+async function expectRefusedInConsole(page: Page, entry: FunctionalCase): Promise<void> {
+  const modeSelect = page.getByLabel("Execution mode");
+  const modes = await modeSelect.locator("option").allTextContents();
+  expect(modes, "advertised execution modes").toEqual(["SEQUENTIAL", "PARALLEL"]);
+  expect(modes, `${entry.id} must not offer an adaptive route`).not.toContain("ADAPTIVE");
+  if (entry.mode === "ADAPTIVE") return;
+
+  await modeSelect.selectOption(entry.mode);
+  const option = page.getByLabel("Worker count").locator(`option[value="${entry.worker_count}"]`);
+  await expect(option, `${entry.id} option`).toBeDisabled();
+  if (entry.mode === "PARALLEL" && entry.worker_count === 1) {
+    // One worker is the sequential route, never a parallel one.
+    await expect(option).toContainText("SEQUENTIAL");
+  } else {
+    await expect(option).toContainText("UNSUPPORTED_ON_MACOS");
+    await expect(
+      page.getByText(`N${entry.worker_count} unavailable · UNSUPPORTED_ON_MACOS`),
+    ).toBeVisible();
+  }
+  await expect(
+    page.getByRole("button", { name: "Start validation" }),
+    `${entry.id} must not be startable`,
+  ).toBeDisabled();
+}
+
 // `FULL_RESTART_RETRY` is a single-point retry through the failure workflow, not a first-pass
-// execution; it is driven by the retry case and deliberately not claimed here.
+// execution; it is driven by the retry spec and deliberately not claimed here.
 const executions = loadManifest().cases.filter((entry) => entry.lifecycle === "FIRST_PASS");
+
+// The claimed profile per route, so two point counts under the same route compare against each
+// other rather than against a value from the capabilities document.
+const claimedProfiles = new Map<string, string>();
 
 test.afterEach(async ({ request }) => {
   await releaseAcquiredLeases(request);
 });
 
 for (const entry of executions) {
-  test(`R06 ${entry.id} executes ${entry.worker_count}×${entry.point_count} for real @live-sim`, async ({
+  test(`R06 ${entry.id} executes ${entry.worker_count}×${entry.point_count} or is refused @live-sim`, async ({
     page,
     liveServer,
   }) => {
     test.setTimeout(entry.batch_timeout_s * 1000);
+    const routes = await deployedFirstPassRoutes(liveServer.baseURL);
+    const route = routes.get(`${entry.mode}/${entry.worker_count}`);
     const app = new ExpertValidationPage(page);
     await app.goto();
-    await app.acquireLease();
-    await app.generateManifest(entry.point_count);
-    if (entry.mode === "PARALLEL") {
-      await app.configureParallel(entry.worker_count);
-    } else if (entry.mode === "SEQUENTIAL") {
-      await app.configureSequential();
-    } else {
-      await app.configureAdaptive();
+
+    if (!route) {
+      await expectRefusedInConsole(page, entry);
+      writeFileSync(
+        join(liveServer.caseDir, `refused-${entry.id}.json`),
+        JSON.stringify({ case: entry, reason: "NOT_IN_THE_MACOS_SUPPORT_MATRIX" }, null, 2) + "\n",
+      );
+      return;
     }
-    await app.runPreflight();
+
+    await app.acquireLease();
+    const [manifestResponse] = await Promise.all([
+      page.waitForResponse(
+        (candidate) =>
+          candidate.url().endsWith("/expert-validation/manifests")
+          && candidate.request().method() === "POST",
+      ),
+      app.generateManifest(entry.point_count),
+    ]);
+    const generated = (await manifestResponse.json()) as { points?: Array<{ id: string }> };
+    const selectedPointIds = (generated.points ?? []).map((point) => point.id);
+    expect(selectedPointIds).toHaveLength(entry.point_count);
+    const expectation: CampaignBatchExpectation = {
+      batchKind: "FIRST_PASS",
+      executionProfile: route.profile,
+      schemaVersion: route.schema_version,
+      workerCount: entry.worker_count,
+      selectedPointIds,
+    };
+
+    if (entry.mode === "PARALLEL") await app.configureParallel(entry.worker_count);
+    else await app.configureSequential();
+
+    const [preflightResponse] = await Promise.all([
+      page.waitForResponse(
+        (candidate) =>
+          candidate.url().endsWith("/expert-validation/campaigns/preflight")
+          && candidate.request().method() === "POST",
+      ),
+      app.runPreflight(),
+    ]);
+    if (preflightResponse.status() !== 200) {
+      throw new Error(
+        `PREFLIGHT_REFUSED: ${preflightResponse.status()} ${await preflightResponse.text()}`);
+    }
+    const receipt = (await preflightResponse.json()) as Record<string, unknown>;
+    assertRoutingClaim(receipt, expectation);
+    // The point count never selects the profile: this route's other point count claimed the same
+    // row, and the receipt's own bytes are what says so.
+    const previous = claimedProfiles.get(`${entry.mode}/${entry.worker_count}`);
+    if (previous) expect(receipt.execution_profile).toBe(previous);
+    claimedProfiles.set(`${entry.mode}/${entry.worker_count}`, String(receipt.execution_profile));
+
     const campaignId = await app.startValidation();
 
     // Bounded polling: every check is short, the deadline is the manifest's batch timeout.
@@ -87,6 +201,7 @@ for (const entry of executions) {
     const batchRoot = join(liveServer.stateDir, "campaigns", campaignId, projection.batch_id);
     const evidence = {
       case: entry,
+      route,
       campaign_id: campaignId,
       batch_id: projection.batch_id,
       status: projection.status,
@@ -95,6 +210,11 @@ for (const entry of executions) {
       evaluated: projection.evaluated,
       execution_started: projection.execution_started,
       cleanup_complete: projection.batch_cleanup_complete,
+      claim: {
+        execution_profile: receipt.execution_profile,
+        execution_schema_version: receipt.execution_schema_version,
+        execution_batch_kind: receipt.execution_batch_kind,
+      },
       workers: (projection.workers ?? []).map((worker: any) => ({
         worker_id: worker.worker_id,
         state: worker.state,
@@ -122,56 +242,33 @@ for (const entry of executions) {
     expect(projection.requested).toBe(entry.point_count);
     expect(projection.evaluated).toBe(entry.point_count);
     expect(projection.points).toHaveLength(entry.point_count);
-    if (entry.mode === "PARALLEL") {
-      // Fixed mode creates all N slots even when the campaign has fewer points than N.
-      expect(projection.workers).toHaveLength(entry.worker_count);
-    }
+    expect(projection.workers).toHaveLength(entry.worker_count);
     for (const point of projection.points) {
       expect(["PASSED", "FAILED"], `${point.display_id} terminal`).toContain(point.status);
-    }
-    if (entry.mode === "ADAPTIVE") {
-      // Adaptive results are imported from the pool's workers, so a point's evidence lives in the
-      // pool's per-worker attempt directories rather than in the campaign projection's artifact
-      // list — the plan's own `03-adaptive` spec reads the same shape.  Every point must still
-      // have its own attempt directory: an aggregate `PASSED` is not per-point evidence.
-      const poolRoot = join(batchRoot, "r", projection.batch_id, "p");
-      const generations = readdirSync(poolRoot).filter((name) => !name.endsWith(".json"));
-      expect(generations.length, "one pool generation").toBeGreaterThan(0);
-      const attempts = new Set<string>();
-      for (const generation of generations) {
-        const workersRoot = join(poolRoot, generation, "workers");
-        for (const workerId of readdirSync(workersRoot)) {
-          const workerAttempts = join(workersRoot, workerId, "attempts");
-          if (!existsSync(workerAttempts)) continue;
-          for (const pointId of readdirSync(workerAttempts)) attempts.add(pointId);
-        }
-      }
-      expect([...attempts].sort(), "every adaptive point has an attempt on disk").toEqual(
-        projection.points.map((point: any) => point.point_id).sort(),
-      );
-    } else {
-      for (const point of projection.points) {
-        expect(point.artifacts.length, `${point.display_id} artifacts`).toBeGreaterThan(0);
-      }
+      expect(point.artifacts.length, `${point.display_id} artifacts`).toBeGreaterThan(0);
+      // Selected-only and first-pass: one attempt per point, and never a retry attempt here.
+      expect((point.attempts ?? []).map((attempt: any) => attempt.kind), `${point.display_id}`)
+        .toEqual(["FIRST_PASS"]);
     }
 
-    // The batch on disk knows the same identity and finished its own cleanup.  The coordinator
-    // path records `cleanup-gates.json`; the adaptive wrapper records its pool's cleanup receipt
-    // under the runtime root, including the ROS domain ids it released.
-    expect(projection.batch_id).toBeTruthy();
-    if (entry.mode === "ADAPTIVE") {
-      const receipt = JSON.parse(
-        readFileSync(
-          join(batchRoot, "r", projection.batch_id, "cleanup-receipt.json"),
-          "utf8",
-        ),
-      ) as { cleanup_complete?: boolean; released_domain_ids?: number[] };
-      expect(receipt.cleanup_complete).toBe(true);
-      expect(receipt.released_domain_ids?.length ?? 0).toBeGreaterThan(0);
-    } else {
-      expect(readFileSync(join(batchRoot, "cleanup-gates.json"), "utf8")).toContain(
-        "batch_cleanup_complete",
-      );
-    }
+    // The batch on disk proves the same four claims from its own bytes: the selection, the
+    // committed watermark, the sealed physical evidence and the completed cleanup.
+    const batchEvidence = readCampaignBatchEvidence(batchRoot);
+    assertCampaignBatchEvidence(batchEvidence, { ...expectation, projection });
+    const commits = readJournalEvents(campaignJournalRoot(batchRoot))
+      .filter((event) => event.type === "RESULT_COMMITTED");
+    expect(commits).toHaveLength(entry.point_count);
+    expect(readFileSync(join(batchRoot, "cleanup-gates.json"), "utf8")).toContain(
+      "batch_cleanup_complete",
+    );
+    writeFileSync(
+      join(liveServer.caseDir, `execution-${entry.id}-evidence.json`),
+      JSON.stringify({
+        expectation,
+        manifest: batchEvidence.manifest,
+        watermark: batchEvidence.watermark,
+        commits: commits.map((event) => event.payload),
+      }, null, 2) + "\n",
+    );
   });
 }

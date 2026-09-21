@@ -4,7 +4,11 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, test, vi } from "vitest";
 
 import { CampaignProgress } from "./campaign-progress";
-import { CampaignSetup } from "./campaign-setup";
+import {
+  CampaignSetup,
+  START_GUARD_NOT_A_QUALIFICATION,
+  executionClaim,
+} from "./campaign-setup";
 import { PointEvidence } from "./point-evidence";
 import { RetryPanel } from "./retry-panel";
 
@@ -195,5 +199,245 @@ describe("CampaignSetup exact-N qualification", () => {
     const four = Array.from(select.options).find((option) => option.value === "4");
     expect(four?.disabled).toBe(false);
     expect(screen.queryByLabelText(/max points per worker/i)).toBeNull();
+  });
+});
+
+/**
+ * The macOS platform document. Every value is the published service shape
+ * (`expert_validation/production.py::_macos_capabilities`): three matrix rows, fixed W1/W2, and a
+ * start guard that protects a start rather than qualifying a host.
+ */
+const MACOS_START_GUARD_NOTE =
+  "The StartGuard policy and status describe one bounded startup check only; they are not a "
+  + "resource qualification proof and they do not certify macOS capacity.";
+
+function matrixRow(
+  profile: string,
+  schema_version: number,
+  execution_mode: "SEQUENTIAL" | "PARALLEL",
+  worker_count: number,
+  batch_kind: "FIRST_PASS" | "FULL_RESTART_RETRY",
+) {
+  return {
+    profile,
+    schema_version,
+    execution_mode,
+    worker_count,
+    batch_kind,
+    accelerator: "mps",
+    selector: "MPS:default",
+    platform: "macos",
+    selectable: true,
+    status: "SUPPORTED",
+    reason_codes: [] as string[],
+    profile_sha256: null,
+    qualification_sha256: null,
+  };
+}
+
+const macosCapabilities = {
+  available: true,
+  platform: "macos",
+  execution_modes: ["SEQUENTIAL", "PARALLEL"],
+  default_execution_mode: "PARALLEL",
+  minimum_points: 4,
+  maximum_points: 20,
+  fixed_worker_counts: [1, 2, 3, 4, 5, 6, 7, 8],
+  worker_count_availability: [
+    { worker_count: 1, selectable: true, status: "SUPPORTED", reason_codes: [], profile_sha256: null, qualification_sha256: null },
+    { worker_count: 2, selectable: true, status: "SUPPORTED", reason_codes: [], profile_sha256: null, qualification_sha256: null },
+    ...[3, 4, 5, 6, 7, 8].map((worker_count) => ({
+      worker_count,
+      selectable: false,
+      status: "UNSUPPORTED_ON_MACOS",
+      reason_codes: ["UNSUPPORTED_ON_MACOS"],
+      profile_sha256: null,
+      qualification_sha256: null,
+    })),
+  ],
+  support_matrix: [
+    matrixRow("MPS_W2_FIRST_PASS", 4, "PARALLEL", 2, "FIRST_PASS"),
+    matrixRow("MPS_W1_FULL_RESTART_RETRY", 5, "SEQUENTIAL", 1, "FULL_RESTART_RETRY"),
+    matrixRow("MPS_W1_FIRST_PASS", 6, "SEQUENTIAL", 1, "FIRST_PASS"),
+  ],
+  adaptive_default_ladder: [],
+  worker_qualifications: [],
+  lease_duration_s: 30,
+  lease_renewal_margin_s: 10,
+  start_guard_policy: {
+    timeout_s: 2,
+    cpu_busy_warn_fraction: 0.9,
+    ram_minimum_bytes: 1 << 30,
+    ram_minimum_fraction: 0.05,
+    gpu_minimum_bytes: 1 << 30,
+    mps_minimum_headroom_bytes: 1 << 30,
+  },
+  start_guard_note: MACOS_START_GUARD_NOTE,
+} as never;
+
+const macosBase = {
+  capabilities: macosCapabilities,
+  state: { pointCount: 4, executionMode: "SEQUENTIAL" as const, workerCount: 1 },
+  leaseHeld: true,
+  manifestReady: true,
+  onChange: () => undefined,
+  onAcquireLease: () => undefined,
+  onGenerate: () => undefined,
+  onPreflight: () => undefined,
+  onStart: () => undefined,
+};
+
+function workerOptionByValue(count: number): HTMLOptionElement {
+  const select = screen.getByLabelText("Worker count") as HTMLSelectElement;
+  const option = Array.from(select.options).find((entry) => entry.value === String(count));
+  if (!option) throw new Error(`worker option N${count} is missing`);
+  return option;
+}
+
+describe("macOS W1/W2 support matrix", () => {
+  test("only the matrix profiles are offered as execution modes", () => {
+    render(<CampaignSetup {...macosBase} />);
+    const modes = screen.getByLabelText("Execution mode") as HTMLSelectElement;
+    expect(Array.from(modes.options).map((option) => option.value))
+      .toEqual(["SEQUENTIAL", "PARALLEL"]);
+    expect(Array.from(modes.options).map((option) => option.value)).not.toContain("ADAPTIVE");
+    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_W1_FIRST_PASS");
+  });
+
+  test("N3 to N8 are unavailable with the macOS reason and no profile or qualification hash", () => {
+    render(<CampaignSetup {...macosBase} state={{ ...macosBase.state, executionMode: "PARALLEL", workerCount: 2 }} />);
+    expect(workerOptionByValue(2).disabled).toBe(false);
+    for (const count of [3, 4, 5, 6, 7, 8]) {
+      const option = workerOptionByValue(count);
+      expect(option.disabled, `N${count} must be disabled`).toBe(true);
+      expect(option.text, `N${count} reason`).toContain("UNSUPPORTED_ON_MACOS");
+      expect(screen.getByText(`N${count} unavailable · UNSUPPORTED_ON_MACOS`)).toBeTruthy();
+    }
+    // The matrix carries no budget profile and no qualification hash, so none may be rendered.
+    expect(document.body.textContent ?? "").not.toMatch(/[0-9a-f]{64}/);
+  });
+
+  test("a qualification view can neither enable nor disable the macOS selection", () => {
+    render(
+      <CampaignSetup
+        {...macosBase}
+        state={{ ...macosBase.state, executionMode: "PARALLEL", workerCount: 2 }}
+        qualifications={[
+          {
+            selected_n: 2,
+            status: "UNKNOWN",
+            reasons: ["BUDGET_PROVIDER_NOT_READY"],
+            runtime_identity: "test-runtime",
+            contract_version: 2,
+            profile_sha256: null,
+            approval_sha256: null,
+          },
+          {
+            selected_n: 8,
+            status: "AVAILABLE",
+            reasons: [],
+            runtime_identity: "test-runtime",
+            contract_version: 2,
+            profile_sha256: "f".repeat(64),
+            approval_sha256: "e".repeat(64),
+          },
+        ]}
+      />,
+    );
+    // N2 stays selectable because the matrix supports it, not because a provider approved it.
+    expect(workerOptionByValue(2).disabled).toBe(false);
+    // And a promoted N8 stays unselectable: on macOS the matrix, not a qualification, decides.
+    expect(workerOptionByValue(8).disabled).toBe(true);
+    expect(workerOptionByValue(8).text).toContain("UNSUPPORTED_ON_MACOS");
+    expect(screen.queryByText(/BUDGET_PROVIDER_NOT_READY/)).toBeNull();
+    expect(document.body.textContent ?? "").not.toContain("f".repeat(64));
+    expect(document.body.textContent ?? "").not.toContain("e".repeat(64));
+  });
+
+  test("the selected point count never selects the profile and W2 is the exact-W2 path", () => {
+    const { rerender } = render(<CampaignSetup {...macosBase} />);
+    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_W1_FIRST_PASS");
+    rerender(<CampaignSetup {...macosBase} state={{ ...macosBase.state, pointCount: 20 }} />);
+    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_W1_FIRST_PASS");
+    rerender(
+      <CampaignSetup
+        {...macosBase}
+        state={{ ...macosBase.state, pointCount: 20, executionMode: "PARALLEL", workerCount: 2 }}
+      />,
+    );
+    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_W2_FIRST_PASS");
+    rerender(
+      <CampaignSetup
+        {...macosBase}
+        state={{ ...macosBase.state, pointCount: 4, executionMode: "PARALLEL", workerCount: 2 }}
+      />,
+    );
+    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_W2_FIRST_PASS");
+
+    // The claim is a pure function of the matrix row and the selection: no point count is an input.
+    expect(executionClaim(macosCapabilities, { executionMode: "SEQUENTIAL", workerCount: 1 }))
+      .toEqual({ execution_profile: "MPS_W1_FIRST_PASS", batch_kind: "FIRST_PASS" });
+    expect(executionClaim(macosCapabilities, { executionMode: "PARALLEL", workerCount: 2 }))
+      .toEqual({ execution_profile: "MPS_W2_FIRST_PASS", batch_kind: "FIRST_PASS" });
+    expect(executionClaim(macosCapabilities, { executionMode: "PARALLEL", workerCount: 8 })).toBeNull();
+    expect(executionClaim(macosCapabilities, { executionMode: "SEQUENTIAL", workerCount: 3 })).toBeNull();
+  });
+
+  test("an N outside the matrix cannot preflight or start", () => {
+    render(
+      <CampaignSetup
+        {...macosBase}
+        state={{ ...macosBase.state, executionMode: "PARALLEL", workerCount: 3 }}
+      />,
+    );
+    expect((screen.getByRole("button", { name: "Check resources" }) as HTMLButtonElement).disabled)
+      .toBe(true);
+    expect((screen.getByRole("button", { name: "Start validation" }) as HTMLButtonElement).disabled)
+      .toBe(true);
+    expect(screen.getByLabelText("Execution profile").textContent).toContain("UNSUPPORTED_ON_MACOS");
+  });
+});
+
+describe("macOS start guard copy", () => {
+  const ramFail = {
+    status: "FAIL",
+    checks: {
+      cpu_busy: { status: "PASS", reason: "CPU_BUSY_OK", observed: 0.1, cutoff: 0.9, unit: "fraction" },
+      ram: { status: "FAIL", reason: "RAM_BELOW_MINIMUM", observed: 0, cutoff: 1 << 30, unit: "bytes" },
+      mps_headroom: { status: "FAIL", reason: "MPS_HEADROOM_BELOW_MINIMUM", observed: 0, cutoff: 1 << 30, unit: "bytes" },
+    },
+  } as never;
+  const cpuWarn = {
+    status: "WARN",
+    checks: {
+      cpu_busy: { status: "WARN", reason: "CPU_BUSY", observed: 0.95, cutoff: 0.9, unit: "fraction" },
+      ram: { status: "PASS", reason: "RAM_OK", observed: 8 << 30, cutoff: 1 << 30, unit: "bytes" },
+    },
+  } as never;
+
+  test("a RAM/MPS FAIL reads as a hard refusal and CPU busy reads as a warning", () => {
+    const { rerender } = render(<CampaignSetup {...macosBase} startGuard={ramFail} />);
+    const refusal = screen.getByLabelText("Start guard admission").textContent ?? "";
+    expect(refusal).toContain("hard refusal");
+    expect(refusal).toMatch(/RAM|MPS/);
+
+    rerender(<CampaignSetup {...macosBase} startGuard={cpuWarn} />);
+    const warning = screen.getByLabelText("Start guard admission").textContent ?? "";
+    expect(warning).toContain("CPU busy");
+    expect(warning).toContain("does not block");
+    expect(warning).not.toContain("hard refusal");
+  });
+
+  test("the guard is shown as start protection, never as a qualification", () => {
+    const { rerender } = render(<CampaignSetup {...macosBase} startGuard={cpuWarn} />);
+    const scope = screen.getByLabelText("Start guard scope").textContent ?? "";
+    expect(scope).toBe(MACOS_START_GUARD_NOTE);
+    expect(scope).toContain("not a resource qualification proof");
+    expect(START_GUARD_NOT_A_QUALIFICATION).toBe(MACOS_START_GUARD_NOTE);
+
+    // A server that publishes no note still gets the same statement, never a green qualification.
+    rerender(<CampaignSetup {...macosBase} capabilities={undefined} startGuard={cpuWarn} />);
+    expect(screen.getByLabelText("Start guard scope").textContent)
+      .toBe(START_GUARD_NOT_A_QUALIFICATION);
   });
 });

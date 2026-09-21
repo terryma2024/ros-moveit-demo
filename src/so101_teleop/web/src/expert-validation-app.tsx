@@ -16,7 +16,13 @@ import type {
   StartCampaignInput,
 } from "@/api/expert-validation-types";
 import { CampaignProgress, type CampaignView } from "@/components/expert-validation/campaign-progress";
-import { CampaignSetup, type SetupState } from "@/components/expert-validation/campaign-setup";
+import {
+  CampaignSetup,
+  executionClaim,
+  type ExecutionClaim,
+  type PlatformCapabilities,
+  type SetupState,
+} from "@/components/expert-validation/campaign-setup";
 import { describeStartGuard } from "./components/expert-validation/start-guard-summary";
 import { createCommandId } from "@/lib/command-id";
 import { PointEvidence } from "@/components/expert-validation/point-evidence";
@@ -142,7 +148,7 @@ function withRuntimeMutations(
 }
 
 export function ExpertValidationApp({ api: providedApi = defaultClient }: { api?: ExpertValidationApi }) {
-  const [capabilities, setCapabilities] = useState<Capabilities>();
+  const [capabilities, setCapabilities] = useState<PlatformCapabilities>();
   const [lease, setLease] = useState<Lease>();
   const leaseRef = useRef<Lease>();
   const receiptGeneration = useRef<number>();
@@ -291,24 +297,34 @@ export function ExpertValidationApp({ api: providedApi = defaultClient }: { api?
     };
   };
 
-  const preflightInput = (): PreflightInput => setup.executionMode === "ADAPTIVE"
-    ? {
-      contract_version: 3,
-      manifest_id: manifest!.manifest_id,
-      execution_mode: "ADAPTIVE",
-      preferred_worker_count: 8,
-      fallback_worker_counts: [6, 4, 2, 1],
-      initial_points_per_worker: 3,
-      worker_start_timeout_s: 120,
-      max_infra_attempts_per_point: 5,
-      yolo_executor_count: 2,
-    }
-    : {
-      contract_version: 3,
-      manifest_id: manifest!.manifest_id,
-      execution_mode: setup.executionMode,
-      worker_count: setup.workerCount,
-    };
+  /**
+   * The configuration every campaign request carries. On a platform-bound host (macOS W1/W2) the
+   * service refuses a document that names no routing key, and it never completes a half key or
+   * infers one from the number of selected points: the request has to claim the exact matrix row
+   * the console selected. A host without a support matrix keeps the previous request untouched.
+   */
+  const preflightInput = (): PreflightInput & Partial<ExecutionClaim> => {
+    const base: PreflightInput = setup.executionMode === "ADAPTIVE"
+      ? {
+        contract_version: 3,
+        manifest_id: manifest!.manifest_id,
+        execution_mode: "ADAPTIVE",
+        preferred_worker_count: 8,
+        fallback_worker_counts: [6, 4, 2, 1],
+        initial_points_per_worker: 3,
+        worker_start_timeout_s: 120,
+        max_infra_attempts_per_point: 5,
+        yolo_executor_count: 2,
+      }
+      : {
+        contract_version: 3,
+        manifest_id: manifest!.manifest_id,
+        execution_mode: setup.executionMode,
+        worker_count: setup.workerCount,
+      };
+    const claim = executionClaim(capabilities, setup);
+    return claim ? { ...base, ...claim } : base;
+  };
 
   const runPreflight = async () => {
     if (!manifest || !leaseRef.current || leaseRenewing) return undefined;
@@ -386,6 +402,8 @@ export function ExpertValidationApp({ api: providedApi = defaultClient }: { api?
         startGuardSummary={receipt
           ? describeStartGuard(receipt.start_guard, capabilities?.start_guard_policy)
           : undefined}
+        startGuard={receipt?.start_guard ?? null}
+        startGuardNote={capabilities?.start_guard_note ?? null}
         onChange={changeSetup}
         onAcquireLease={() => {
           void api
