@@ -36,8 +36,8 @@
 | hardware phase | A/B 后只允许修改 `mujoco_ros2_control_node.cpp`、`macos_ui_dispatcher.cpp`、`macos_ui_dispatcher.hpp`、`mujoco_system_interface.cpp`、`mujoco_system_interface.hpp` 的证据确认子集；固定新增 `tests/test_macos_controller_startup.cpp` 并修改 submodule `CMakeLists.txt` |
 | selection/queue | 新 `parallel_batch/selection.py`、`parallel_batch/queue.py`；修改 `w2_composition.py`、`cli/macos_w2_campaign.py`、`cli/macos_w2_worker.py` |
 | journal/projection | 修改 `parallel_batch/journal.py`；新 `expert_validation/reducer.py`、`projection_source.py`；修改 `coordinator_events.py`、`models.py`、`store.py`、`production.py` |
-| ownership | 新 `expert_validation/owner_tree.py`；修改 `process_owner.py`、`store.py`、`supervisor.py`、`cli/macos_service_campaign.py` |
-| W1/retry | 新 `parallel_batch/w1_composition.py`、`cli/macos_n1_first_pass.py`、`cli/macos_n1_retry.py`、`expert_validation/retry_context.py`；修改 contracts/config/setup/supervisor/API |
+| ownership | 新 `expert_validation/owner_tree.py`；修改 `process_owner.py`、`store.py`、`supervisor.py`，并在 `campaign_supervisor.py`、`macos_w2_worker.py`、`task_stack.py` 的真实 spawn 边界接线 |
+| W1/retry | 新 `parallel_batch/w1_composition.py`、`cli/macos_n1_first_pass.py`、`cli/macos_n1_retry.py`、`expert_validation/retry_context.py`；修改 contracts/config/setup/supervisor/API 及 `macos_service_campaign.py` 的 typed dispatch |
 | Darwin measurement | 新 `parallel_batch/measurement_authority.py`、`darwin_resource_sampler.py`、`resource_measurement.py`、`resource_budget.py`、`cli/measure_macos_resources.py`、`assets/macos/memory_pressure.swift` |
 | OpenAPI/Web | 修改 expert-validation API/export/generated types，现有 campaign setup/progress/evidence 与 live-sim Playwright files；不加入平台专用 reducer |
 | 持久文档 | 修改 2026-09-18 budget design/plan 的 Darwin/v5/v6 边界，新建 task ledger；不改写 2026-09-19 历史结论 |
@@ -632,6 +632,11 @@ Expected: all sources feed the same reducer, invalid axes remain orthogonal, and
 - Modify: `src/so101_teleop/so101_teleop/expert_validation/process_owner.py`
 - Modify: `src/so101_teleop/so101_teleop/expert_validation/supervisor.py`
 - Modify: `src/so101_demo_py/src/cli/macos_service_campaign.py`
+- Modify: `src/so101_demo_py/src/cli/macos_w2_worker.py`
+- Modify: `src/so101_demo_py/src/parallel_batch/campaign_supervisor.py`
+- Modify: `src/so101_demo_py/src/runtime/task_stack.py`
+- Modify: `src/so101_demo_py/test/test_campaign_supervisor.py`
+- Modify: `src/so101_demo_py/test/test_task_stack.py`
 - Modify: `src/so101_teleop/test/teleop/test_expert_validation_process_owner.py`
 - Modify: `src/so101_teleop/test/teleop/test_expert_validation_process_owner_integration.py`
 - Modify: `src/so101_teleop/test/teleop/test_expert_validation_operator_recovery.py`
@@ -640,19 +645,26 @@ Expected: all sources feed the same reducer, invalid axes remain orthogonal, and
 
 **Interfaces:**
 - Consumes: adapter/campaign/worker/station spawn intents and PID birth identities
-- Produces: `OwnerNode`, `OwnerTreeRecovery`, generation-bound cleanup receipt
+- Produces: `OwnerIntent`, `ConfirmedOwnerProcess`, `OwnerTreeRecovery`, generation-bound cleanup receipt
 
 ```python
 @dataclass(frozen=True, slots=True)
-class OwnerNode:
+class OwnerIntent:
     batch_id: str
+    node_id: str
+    parent_node_id: str | None
+    spawn_id: str
     role: Literal["ADAPTER", "CAMPAIGN", "WORKER", "STATION", "BROKER"]
-    parent_role: str | None
+    generation: int
+    spawn_state: Literal["INTENT"]
+
+@dataclass(frozen=True, slots=True)
+class ConfirmedOwnerProcess:
+    intent: OwnerIntent
     pid: int
     birth_identity: int
     pgid: int
-    generation: int
-    spawn_state: Literal["INTENT", "CONFIRMED", "EXITED"]
+    spawn_state: Literal["CONFIRMED", "EXITED"]
 
 class OwnerTreeRecovery:
     def recover_leaf_first(self, *, batch_id: str,
@@ -661,16 +673,14 @@ class OwnerTreeRecovery:
 
 - [ ] **Step 1: RED normal, cancel and SIGKILL paths**
 
-Cover process created in independent session; adapter/campaign/worker/station `SIGKILL`; PID reuse; unknown identity; duplicate reaper; leaf-first stop; station outside worker PGID; cleanup receipt from wrong generation; zero-process scan without ownership. Unknown identity stays fenced and is never signalled.
+Cover process created in independent session; stable `node_id/parent_node_id/spawn_id` across two Workers and their Stations; adapter/campaign/worker/station `SIGKILL`; PID reuse; unknown identity; duplicate reaper; leaf-first stop; station outside worker PGID; cleanup receipt from wrong generation; zero-process scan without ownership. Inject crashes before `Popen`, after `Popen` but before CONFIRMED, and after CONFIRMED at adapter, campaign, worker and station boundaries. Unknown identity and unresolved INTENT stay fenced and are never signalled by PID guesswork.
 
-- [ ] **Step 2: Implement durable nodes at every spawn boundary**
-
-Persist INTENT before spawn and CONFIRMED immediately after readback. Reaper order is station -> worker -> broker/campaign -> adapter. Only matching recovery owner generation may fsync cleanup receipt, append committed cleanup event and clear fence.
-
-- [ ] **Step 3: Run RED**
+- [ ] **Step 2: Run RED before implementation**
 
 ```bash
 $TEST_PYTHON -m pytest -q \
+  src/so101_demo_py/test/test_campaign_supervisor.py \
+  src/so101_demo_py/test/test_task_stack.py \
   src/so101_teleop/test/teleop/test_expert_validation_owner_tree.py \
   src/so101_teleop/test/teleop/test_expert_validation_process_owner.py \
   src/so101_teleop/test/teleop/test_expert_validation_process_owner_integration.py \
@@ -681,10 +691,16 @@ $TEST_PYTHON -m pytest -q \
 
 Expected: SIGKILL and station-outside-worker-PGID cases expose missing descendant identity and generation-bound cleanup proof.
 
+- [ ] **Step 3: Implement durable intent/confirmation at every real spawn boundary**
+
+Use one authenticated callback/IPC contract from `macos_service_campaign` into `CampaignSupervisor`, `macos_w2_worker` and `PersistentTaskStack`. Persist `OwnerIntent` before each `Popen`; persist `ConfirmedOwnerProcess` only after PID/birth/PGID readback. A pre-spawn intent has no synthetic PID fields. Recovery resolves the stable parent chain, treats an unresolved intent as a fence, and never reconstructs ownership from a later process scan. Reaper order is station -> worker -> broker/campaign -> adapter. Only matching recovery owner generation may fsync cleanup receipt, append committed cleanup event and clear fence.
+
 - [ ] **Step 4: GREEN and commit**
 
 ```bash
 $TEST_PYTHON -m pytest -q \
+  src/so101_demo_py/test/test_campaign_supervisor.py \
+  src/so101_demo_py/test/test_task_stack.py \
   src/so101_teleop/test/teleop/test_expert_validation_owner_tree.py \
   src/so101_teleop/test/teleop/test_expert_validation_process_owner.py \
   src/so101_teleop/test/teleop/test_expert_validation_process_owner_integration.py \
@@ -697,6 +713,11 @@ git add -- \
   src/so101_teleop/so101_teleop/expert_validation/store.py \
   src/so101_teleop/so101_teleop/expert_validation/process_owner.py \
   src/so101_teleop/so101_teleop/expert_validation/supervisor.py \
+  src/so101_demo_py/src/cli/macos_w2_worker.py \
+  src/so101_demo_py/src/parallel_batch/campaign_supervisor.py \
+  src/so101_demo_py/src/runtime/task_stack.py \
+  src/so101_demo_py/test/test_campaign_supervisor.py \
+  src/so101_demo_py/test/test_task_stack.py \
   src/so101_teleop/test/teleop/test_expert_validation_owner_tree.py \
   src/so101_teleop/test/teleop/test_expert_validation_process_owner.py \
   src/so101_teleop/test/teleop/test_expert_validation_process_owner_integration.py \
@@ -727,17 +748,19 @@ Run the combined offline B suite. Sol/high verifies non-default selection, selec
 - Create: `src/so101_demo_py/test/test_macos_w1_composition.py`
 - Create: `src/so101_demo_py/test/test_macos_n1_cli.py`
 - Modify: `src/so101_demo_py/src/parallel_batch/contracts.py`
+- Modify: `src/so101_demo_py/src/cli/macos_service_campaign.py`
 - Modify: `src/so101_demo_py/setup.py`
 - Modify: `src/so101_demo_py/test/test_parallel_batch_contracts.py`
 - Modify: `src/so101_demo_py/test/test_macos_install_contract.py`
+- Modify: `src/so101_teleop/test/teleop/test_expert_validation_macos_service_campaign.py`
 
 **Interfaces:**
 - Consumes: `FirstPassSelectionBinding` or `RetrySelectionBinding`
-- Produces: `ParallelRuntimeConfigV5`, `ParallelRuntimeConfigV6`, `compose_w1_first_pass()`, `compose_w1_retry()`
+- Produces: `ParallelRuntimeConfigV5`, `ParallelRuntimeConfigV6`, `compose_w1_first_pass()`, `compose_w1_retry()`, closed service-adapter dispatch
 
 - [ ] **Step 1: RED closed version matrix**
 
-Freeze v4 file bytes/SHA and both v4 platform combinations. v5 accepts only Darwin/MPS, N=1, `SEQUENTIAL`, `FULL_RESTART_RETRY`, `FULL_RESTART`, no CPU fallback and retry binding. v6 accepts only Darwin/MPS, N=1, `SEQUENTIAL`, `FIRST_PASS`, no CPU fallback and first-pass binding. Test all cross-version/profile/batch-kind rejections.
+Freeze v4 file bytes/SHA and both v4 platform combinations. v5 accepts only Darwin/MPS, N=1, `SEQUENTIAL`, `FULL_RESTART_RETRY`, `FULL_RESTART`, no CPU fallback and retry binding. v6 accepts only Darwin/MPS, N=1, `SEQUENTIAL`, `FIRST_PASS`, no CPU fallback and first-pass binding. Test all cross-version/profile/batch-kind rejections. Drive the real `macos_service_campaign.validate()` and `campaign_argv()` boundary: v4/W2 routes only to W2, v6/W1-FIRST_PASS only to `macos_n1_first_pass`, and v5/W1-RETRY only to `macos_n1_retry`; no route is inferred from point count and every crossed combination is rejected before spawn.
 
 - [ ] **Step 2: Run RED**
 
@@ -747,12 +770,13 @@ $TEST_PYTHON -m pytest -q \
   src/so101_demo_py/test/test_macos_w1_composition.py \
   src/so101_demo_py/test/test_macos_n1_cli.py \
   src/so101_demo_py/test/test_macos_install_contract.py \
+  src/so101_teleop/test/teleop/test_expert_validation_macos_service_campaign.py \
   --junitxml="$RUN_ROOT/task9-red.xml"
 ```
 
 - [ ] **Step 3: Implement typed W1 primitive**
 
-The common primitive creates exactly one slot/Worker/domain and reuses broker, station owner, control endpoint and cleanup. Public CLIs accept their one schema only; no generic `--batch-kind` switch and no profile inference from point count.
+The common primitive creates exactly one slot/Worker/domain and reuses broker, station owner, control endpoint and cleanup. Replace the adapter's hard-coded `worker_count == 2`, schema-v4 and W2 argv assumptions with an exhaustive typed dispatch keyed by `(schema_version, execution_profile, batch_kind)`. Public CLIs accept their one schema only; no generic `--batch-kind` switch and no profile inference from point count. Service-side request validation and the adapter independently reject crossed combinations.
 
 - [ ] **Step 4: GREEN and commit**
 
@@ -765,6 +789,7 @@ $TEST_PYTHON -m pytest -q \
   src/so101_demo_py/test/test_macos_w2_campaign.py \
   src/so101_demo_py/test/test_macos_install_contract.py \
   src/so101_demo_py/test/test_copied_installed_entrypoint.py \
+  src/so101_teleop/test/teleop/test_expert_validation_macos_service_campaign.py \
   --junitxml="$RUN_ROOT/task9-green.xml"
 git add -- \
   src/so101_demo_py/config/mujoco/parallel_batch_v5_macos_mps_w1_retry.yaml \
@@ -772,17 +797,19 @@ git add -- \
   src/so101_demo_py/src/parallel_batch/w1_composition.py \
   src/so101_demo_py/src/cli/macos_n1_first_pass.py \
   src/so101_demo_py/src/cli/macos_n1_retry.py \
+  src/so101_demo_py/src/cli/macos_service_campaign.py \
   src/so101_demo_py/src/parallel_batch/contracts.py \
   src/so101_demo_py/setup.py \
   src/so101_demo_py/test/test_parallel_batch_contracts.py \
   src/so101_demo_py/test/test_macos_w1_composition.py \
   src/so101_demo_py/test/test_macos_n1_cli.py \
-  src/so101_demo_py/test/test_macos_install_contract.py
+  src/so101_demo_py/test/test_macos_install_contract.py \
+  src/so101_teleop/test/teleop/test_expert_validation_macos_service_campaign.py
 git diff --cached --check
 git commit -m "feat(so101): add closed macOS W1 execution profiles"
 ```
 
-Expected: v5 and v6 accept only their declared Darwin/MPS W1 inputs; all cross-profile cases fail closed and the v4 config bytes/SHA remain unchanged.
+Expected: v5 and v6 accept only their declared Darwin/MPS W1 inputs; all cross-profile cases fail closed, all three accepted requests traverse the real service spawn argv boundary, and the v4 config bytes/SHA remain unchanged.
 
 ### Task 10: typed retry context 与原子 retry admission
 
@@ -828,11 +855,7 @@ class SupervisorStore:
 
 Cover missing qualification and missing measurement authorization; context replay/expiry/hash drift; measurement context at production endpoint; production context at measurement endpoint; non-business failure; original batch not terminal-clean; active/unknown owner; fence; stale lease; duplicate command; transaction succeeds then spawn fails.
 
-- [ ] **Step 2: Implement one transaction**
-
-Within one SQLite transaction consume command id, verify result/lease/terminal-clean/fence, create retry binding, write owner spawn intent and bind the context digest. A post-transaction spawn failure leaves recoverable intent/fence; command is not consumed twice. Retry appends history and never overwrites first-pass status/statistics.
-
-- [ ] **Step 3: Run RED**
+- [ ] **Step 2: Run RED before implementation**
 
 ```bash
 $TEST_PYTHON -m pytest -q \
@@ -845,6 +868,10 @@ $TEST_PYTHON -m pytest -q \
 ```
 
 Expected: admission/context tests fail because there is no typed mutually exclusive context and no atomic command/result/lease/owner-intent transaction.
+
+- [ ] **Step 3: Implement one transaction**
+
+Within one SQLite transaction consume command id, verify result/lease/terminal-clean/fence, create retry binding, write owner spawn intent and bind the context digest. A post-transaction spawn failure leaves recoverable intent/fence; command is not consumed twice. Retry appends history and never overwrites first-pass status/statistics.
 
 - [ ] **Step 4: GREEN, OpenAPI regeneration and commit**
 
@@ -1054,11 +1081,13 @@ Expected: fake Darwin fixtures enforce the exact thresholds and counter semantic
 
 **Files:**
 - Create: `src/so101_demo_py/src/parallel_batch/resource_budget.py`
+- Create: `src/so101_demo_py/config/mujoco/macos_mps_resource_budget_deployment_v1.yaml`
 - Create: `src/so101_demo_py/test/test_macos_exact_n_qualification.py`
 - Create: `src/so101_demo_py/test/test_macos_budget_promotion.py`
 - Create: `src/so101_teleop/test/teleop/test_expert_validation_macos_resource_budget.py`
 - Modify: `src/so101_demo_py/src/parallel_batch/resource_measurement.py`
 - Modify: `src/so101_demo_py/src/parallel_batch/resources.py`
+- Modify: `src/so101_demo_py/test/test_macos_install_contract.py`
 - Modify: `src/so101_teleop/so101_teleop/expert_validation/production.py`
 - Modify: `src/so101_teleop/CMakeLists.txt`
 - Modify: `docs/superpowers/specs/2026-09-18-so101-parallel-unbounded-queue-resource-budget-design.md`
@@ -1066,7 +1095,7 @@ Expected: fake Darwin fixtures enforce the exact thresholds and counter semantic
 
 **Interfaces:**
 - Consumes: raw B, execution identity R, coverage policy and independent approvals
-- Produces: `ExactNQualification` Q, `ApprovedBudgetProfile` P, promotion M, deployment D, `FixedProductionContext`
+- Produces: `ExactNQualification` Q, `ApprovedBudgetProfile` P, promotion M, deployment D, null-reference `DeploymentCarrierV1`, `FixedProductionContext`
 
 ```python
 class ExactNQualificationProvider:
@@ -1084,7 +1113,7 @@ class ResourceBudgetProvider:
 
 - [ ] **Step 1: RED digest graph and platform isolation**
 
-Test B->Q->P->M->D one-way references; no self/future digest; Linux profile rejected on Darwin and vice versa; N1 cannot authorize N2; retry qualification cannot replace N1 resource Q; candidate starts with sealed authority and no P/Q; production rejects the same state; missing coverage/unknown attribution stays disabled.
+Test B->Q->P->M->D one-way references; no self/future digest; Linux profile rejected on Darwin and vice versa; N1 cannot authorize N2; retry qualification cannot replace N1 resource Q; candidate starts with sealed authority and no P/Q; production rejects the same state; missing coverage/unknown attribution stays disabled. The new carrier is present in source and copied install before R freezes, uses a closed schema with exact N1/N2 entries and only `profile_path`, `profile_sha256`, and `promotion_path` as nullable reference fields. Reject unknown/duplicate keys, partial triples, non-null candidate references and any attempt to normalize an execution field or an unlisted file.
 
 - [ ] **Step 2: RED normal/fault/retry aggregation**
 
@@ -1096,15 +1125,16 @@ $TEST_PYTHON -m pytest -q \
   src/so101_demo_py/test/test_macos_budget_promotion.py \
   src/so101_demo_py/test/test_parallel_batch_resources.py \
   src/so101_demo_py/test/test_parallel_measurement_cli.py \
+  src/so101_demo_py/test/test_macos_install_contract.py \
   src/so101_teleop/test/teleop/test_expert_validation_macos_resource_budget.py \
   --junitxml="$RUN_ROOT/task13-red.xml"
 ```
 
 Expected: new exact-N/promotion/production-adapter assertions fail because the Darwin B/Q/P/M/D provider does not exist; the retired CLI test stays green.
 
-- [ ] **Step 3: Implement provider and update old budget boundaries**
+- [ ] **Step 3: Implement provider and pre-freeze null carrier**
 
-Document that the retired Linux-only chain is history, ordinary macOS N1 uses v6/20 points, v5 only feeds `RetryQualification`, and Darwin uses design section 10. Update old plan Task 13/15 accordingly; do not rewrite historical measurements or 2026-09-19 conclusions.
+Create `macos_mps_resource_budget_deployment_v1.yaml` now, before candidate R, with both exact-N entries present and all three approved-reference values null. Freeze normalization rule digest L and the logical source/install path allowlist in code: only those six reference values use the fixed semantic literal `DEPLOYMENT_REFERENCE_V1`; all schema/exact-N/platform/config identifiers remain in S, and every other file keeps its raw-byte digest in E/I. `RuntimeClosureIdentity` continues to retain the raw source commit and complete raw config inventory for A0/A1 audit, while execution identity R uses L/S/E/I and treats source commit only as a clean audit label. Populating approved references later therefore changes raw closure/A1/D but must keep L/S/E/I/R equal; any other byte, key, path, executable or parser change invalidates R.
 
 - [ ] **Step 4: GREEN and commit**
 
@@ -1114,31 +1144,33 @@ $TEST_PYTHON -m pytest -q \
   src/so101_demo_py/test/test_macos_budget_promotion.py \
   src/so101_demo_py/test/test_parallel_batch_resources.py \
   src/so101_demo_py/test/test_parallel_measurement_cli.py \
+  src/so101_demo_py/test/test_macos_install_contract.py \
   src/so101_teleop/test/teleop/test_expert_validation_macos_resource_budget.py \
   --junitxml="$RUN_ROOT/task13-green.xml"
 git add -- \
   src/so101_demo_py/src/parallel_batch/resource_budget.py \
+  src/so101_demo_py/config/mujoco/macos_mps_resource_budget_deployment_v1.yaml \
   src/so101_demo_py/src/parallel_batch/resource_measurement.py \
   src/so101_demo_py/src/parallel_batch/resources.py \
   src/so101_demo_py/test/test_macos_exact_n_qualification.py \
   src/so101_demo_py/test/test_macos_budget_promotion.py \
+  src/so101_demo_py/test/test_macos_install_contract.py \
   src/so101_teleop/so101_teleop/expert_validation/production.py \
   src/so101_teleop/test/teleop/test_expert_validation_macos_resource_budget.py \
   src/so101_teleop/CMakeLists.txt
 git diff --cached --check
 git commit -m "feat(resources): qualify Darwin MPS exact N budgets"
-git add -- \
-  docs/superpowers/specs/2026-09-18-so101-parallel-unbounded-queue-resource-budget-design.md \
-  docs/superpowers/plans/2026-09-18-so101-parallel-unbounded-queue-resource-budget-implementation.md
-git diff --cached --check
-git commit -m "docs: align budget chain with macOS W1 profiles"
 ```
 
 Expected: candidate and production contexts are mutually exclusive, exact-N/platform/R mismatches remain disabled, and the old entry point remains retired.
 
-- [ ] **Step 5: Gate D offline checkpoint**
+- [ ] **Step 5: Sol/high documentation handoff and Astra/high review**
 
-Run package-level non-live tests, copied-install origin checks, OpenAPI/Bun typecheck/unit/build and served-byte hashes. Sol/high reviews results; Astra/high independently reviews provider/parser/digest graph. STOP at `CP-MSC-D-OFFLINE` unless both reviews pass. No measurement or promotion is implied.
+`dst` writes a factual change brief and test evidence into the task ledger, then pauses. GPT-5.6 Sol / High updates the two listed 2026-09-18 design/plan files: the retired Linux-only chain remains history, ordinary macOS N1 uses v6/20 points, v5 only feeds `RetryQualification`, Darwin uses the current design section 10, and the new carrier path is added to the pre-reviewed normalization allowlist without rewriting historical measurements or 2026-09-19 conclusions. GPT-6 Astra / High independently reviews those edits. Only after PASS may the documentation commit `docs: align budget chain with macOS W1 profiles` be created; `dst` must not author or self-review these design/plan changes.
+
+- [ ] **Step 6: Gate D offline checkpoint**
+
+Run package-level non-live tests, copied-install origin checks, OpenAPI consistency, `bunx tsc -b --pretty false`, `bun run test`, `bun run build` and served-byte hashes. Sol/high reviews results; Astra/high independently reviews provider/parser/digest graph. STOP at `CP-MSC-D-OFFLINE` unless both reviews pass. No measurement or promotion is implied.
 
 ## Gate E: bounded candidate live gates、Stage C/D 与 production Chrome acceptance
 
@@ -1150,29 +1182,33 @@ Run package-level non-live tests, copied-install origin checks, OpenAPI/Bun type
 
 **Interfaces:**
 - Consumes: frozen copied install, sealed candidate authorization
-- Produces: bounded station/W2/W1/retry candidate evidence; no production context
+- Produces: sealed same-R N1/N2 calibration plus bounded station/W2/W1/retry candidate evidence; no production context
 
 - [ ] **Step 1: Freeze candidate R and write all experiments PLANNED**
 
-Record source/install inventories, model/config/catalog hashes, v4/v5/v6 files, closure identity, sampler/helper bytes, parser/provider bytes and copied executable origins. Set a finite authorization count and abort policy. Any later product edit invalidates the whole candidate series.
+Record source/install inventories, model/config/catalog hashes, v4/v5/v6 files, the null-reference deployment carrier, closure identity, normalization L/S/E/I/R, sampler/helper bytes, parser/provider bytes and copied executable origins. Set a finite authorization count and abort policy. Migrate the registered evidence root to a new durable `/data/work/so101-evidence/macos-service-campaign-closure/<timestamp>-<uuid>` root before the first sample, using the ledger's hash/size/count migration receipt. If that path is unavailable or not writable, STOP; do not run candidate live from `/tmp`. Any later product edit invalidates the whole candidate series.
 
-- [ ] **Step 2: Re-run station 5/5 under measurement ownership**
+- [ ] **Step 2: Calibrate exact N1 and N2 before any candidate live**
+
+Under sealed measurement authorizations, run the 50/25 ms cross-calibration separately for exact N1/v6 and N2/v4 against the frozen same R. Fsync raw counters, jitter/gap distribution, peak-alias rule and error E into the durable root. Any gap >100 ms, ownership ambiguity, failed helper heartbeat or authorization mismatch blocks all following candidate live; never reuse Linux calibration or N2 E for N1.
+
+- [ ] **Step 3: Re-run station 5/5 under measurement ownership**
 
 Use the same closure identity and fresh run/attestation each time. Do not reuse Gate A runs if execution bytes changed in Tasks 4–13.
 
-- [ ] **Step 3: Candidate W2 service gate**
+- [ ] **Step 4: Candidate W2 service gate**
 
 Use v4 with 4–20 selected points including non-first-two ids. Require two concurrent Workers/stations, every selected point exactly one physical attempt/result, unselected zero, raw journal equals service projection, fresh Chrome progress/evidence, and zero residue.
 
-- [ ] **Step 4: Candidate W1 first-pass gate**
+- [ ] **Step 5: Candidate W1 first-pass gate**
 
 Use v6 with 20 points, one Worker for the whole run, same candidate R, physical/resource/cleanup evidence and no retry semantics.
 
-- [ ] **Step 5: Candidate N1 retry gate**
+- [ ] **Step 6: Candidate N1 retry gate**
 
 First use fault injection only for rejection classification. Then use one terminal-clean real business FAILED point and one-time `MeasurementRetryContext`; require v5, fresh FULL_RESTART, exactly that point once, separate batch/journal/statistics and no residue.
 
-- [ ] **Step 6: Checkpoint and stop conditions**
+- [ ] **Step 7: Checkpoint and stop conditions**
 
 Any safety abort, unknown owner, incomplete cleanup, sampler gap, projection mismatch, invalid physical evidence or product code edit stops the candidate batch. Record `VALID`/`INVALID` exactly; do not auto-loop until PASS. Sol/high reviews `CP-MSC-E-CANDIDATE` before Stage C.
 
@@ -1186,9 +1222,9 @@ Any safety abort, unknown owner, incomplete cleanup, sampler gap, projection mis
 - Consumes: candidate R, sealed measurement authorizations, offline-approved parser/provider
 - Produces: Darwin N1 Q/P, Darwin N2 Q/P, independent `RetryQualification`; all remain CANDIDATE
 
-- [ ] **Step 1: Verify durable-root and calibration preconditions**
+- [ ] **Step 1: Verify the sealed same-R calibration remains valid**
 
-Migrate the registered evidence root if required. Run 50/25 ms calibration for exact N1 and N2 separately; calibration failure or >100 ms gap blocks the 20-point run. Save raw counters and error E; never reuse Linux numbers or N2 values for N1.
+Read back Task 14's durable-root migration receipt and the separately sealed N1/N2 50/25 ms calibration manifests. Require the same R, sampler/helper/profile hashes, host identity, CPU count, OS/kernel, MPS device, background envelope and authorization policy. A mismatch or expired calibration returns to Task 14 Step 2 under a new finite authorization; it never permits a 20-point run with stale E. Record the referenced calibration hashes in every B manifest.
 
 - [ ] **Step 2: Measure ordinary N1 first**
 
@@ -1209,7 +1245,7 @@ Seal B/Q/P and retry qualification hashes; report `resource_qualified` and `prod
 ### Task 16: Stage D 独立审查、显式批准和部署读回
 
 **Files:**
-- Create only after separate authorization: `src/so101_demo_py/config/mujoco/macos_mps_resource_budget_deployment_v1.yaml`
+- Modify only after separate authorization: `src/so101_demo_py/config/mujoco/macos_mps_resource_budget_deployment_v1.yaml`
 - Modify only after separate authorization: `src/so101_demo_py/test/test_macos_budget_promotion.py`
 - Modify only after separate authorization: `src/so101_demo_py/test/test_macos_install_contract.py`
 - Modify only after separate authorization: `src/so101_teleop/test/teleop/test_expert_validation_macos_resource_budget.py`
@@ -1230,7 +1266,7 @@ Present exact N, platform profile SHA, P/Q/R, retry qualification and proposed c
 
 - [ ] **Step 3: After approval only, write M and deployment refs**
 
-Write the approved exact-N/profile/P/Q/R/M references to `macos_mps_resource_budget_deployment_v1.yaml`; it is the only source-controlled carrier. Add RED->GREEN parser, cross-N/profile/hash rejection and copied-install presence tests in the three files listed above. Rebuild the copied install, produce A1/D and prove only allowed carrier metadata changed while L/S/E/I/R remain equal. Any executable/parser/config semantic byte change invalidates approval and returns to Stage C.
+Replace only the pre-existing carrier's six null reference values—P path, P SHA-256 and M path for N1 and N2—with the approved values; do not add a file, key or exact-N entry. The provider follows P to Q/R and M, then verifies the complete P/Q/R/M graph before emitting D. Add RED->GREEN parser, cross-N/profile/hash rejection and copied-install presence tests in the three files listed above. Rebuild the copied install, produce A1/D, compare A0/A1 raw inventories, and prove only the pre-authorized carrier reference values changed while L/S/E/I/R remain equal. Raw `RuntimeClosureIdentity` and source commit may differ only as recorded audit inputs; the fixed normalization verifier, not an assertion in the ledger, proves semantic equivalence. Any executable/parser/config semantic byte change invalidates approval and returns to Stage C.
 
 - [ ] **Step 4: Production context readback**
 
@@ -1257,6 +1293,8 @@ This local commit is not push/merge authorization.
 ### Task 17: Production Web + fresh Chrome acceptance
 
 **Files:**
+- Create: `src/so101_teleop/web/e2e/expert-validation/assertions/live-evidence.test.ts`
+- Modify: `src/so101_teleop/web/src/api/live-evidence.test.ts`
 - Modify: `src/so101_teleop/web/e2e/expert-validation/live-sim/02-parallel.spec.ts`
 - Modify: `src/so101_teleop/web/e2e/expert-validation/live-sim/06-fixed-n-execution.spec.ts`
 - Modify: `src/so101_teleop/web/e2e/expert-validation/live-sim/07-retry-full-restart.spec.ts`
@@ -1270,26 +1308,47 @@ This local commit is not push/merge authorization.
 
 - [ ] **Step 1: RED browser assertions against fixtures**
 
-Assert profile/status axes, selected-only execution, worker count 1/2, attempt identities, first-pass/retry separation, failure evidence selection, projection sequence/cursor, cleanup and disabled reasons. Run Bun unit/fixture Playwright; expected RED is a missing field/assertion, never a live service failure.
+Assert profile/status axes, selected-only execution, worker count 1/2, attempt identities, first-pass/retry separation, failure evidence selection, projection sequence/cursor, cleanup and disabled reasons. Put sealed-manifest/reducer assertion fixtures in the new Vitest file and API evidence fixtures in the existing unit file; do not import `liveSimTest` from either. Run from `src/so101_teleop/web`:
+
+```bash
+bun run test -- \
+  src/api/live-evidence.test.ts \
+  e2e/expert-validation/assertions/live-evidence.test.ts
+bunx tsc -b --pretty false
+```
+
+Expected RED is a missing field/assertion with nonzero unit-test collection, never a live service failure.
 
 - [ ] **Step 2: Implement minimal API/UI assertion support and GREEN fixtures**
 
-Modify only the five files listed for Task 17; do not add platform-specific state reconstruction. If a required API/UI field is absent, STOP and return to the owning Task 7, 10 or 13 with a reviewed plan amendment instead of editing an unlisted product file during acceptance. Regenerate OpenAPI/types only when that owning task changes the contract; then run `bun run typecheck`, unit tests, build and contract/installed fixtures before returning to Task 17.
+Modify only the seven files listed for Task 17; do not add platform-specific state reconstruction. If a required API/UI field is absent, STOP and return to the owning Task 7, 10 or 13 with a reviewed plan amendment instead of editing an unlisted product file during acceptance. Regenerate OpenAPI/types only when that owning task changes the contract; then run `bunx tsc -b --pretty false`, `bun run test`, `bun run build` and contract/installed fixtures before returning to Task 17.
 
 - [ ] **Step 3: Start one production service in an approved exclusive window**
 
-Fresh-read owner/process/port/lease state first. Start from copied install and D-bound config; do not stop an existing unknown service. Use a fresh browser profile and verify UI plus REST/WebSocket readback.
+Fresh-read owner/process/port/lease state first. Start from copied install and D-bound config; do not stop an existing unknown service. Use a fresh browser profile and verify UI plus REST/WebSocket readback. Before Playwright, load the task-local environment recorded in the approved authorization and ledger, then require all of these values to be nonempty and hash/read back their referenced files: `SO101_ENABLE_LIVE_SIM_E2E=1`, `SO101_LIVE_SIM_HOST`, `SO101_E2E_EVIDENCE_ROOT`, `SO101_E2E_INSTALL_PREFIX`, `SO101_LIVE_SERVICE_BASE_URL`, `SO101_LIVE_SERVICE_STATE_ROOT`, `SO101_UNIFIED_LIVE_AUTHORIZATION`, `SO101_E2E_PYTHON`, `SO101_FUNCTIONAL_MANIFEST`, and `SO101_PLAYWRIGHT_CHROME`. The authorization must bind the current R/P/Q/M/D, service PID/birth, host and deadline; an environment variable alone grants nothing.
 
 - [ ] **Step 4: Execute production W2 and W1/retry flows**
 
-W2 first pass proves selected-only real pick-place and projection. W1 first pass proves exact one Worker/20 points. Retry uses a real business FAILED point and `ProductionRetryContext`; only that point runs. For every flow verify controller/joint/TF, MuJoCo cup pose/contact/release, MoveIt shadow/world sync, raw journal/watermark, Web evidence and exact cleanup.
+W2 first pass proves selected-only real pick-place and projection. W1 first pass proves exact one Worker/20 points. Retry uses a real business FAILED point and `ProductionRetryContext`; only that point runs. For every flow verify controller/joint/TF, MuJoCo cup pose/contact/release, MoveIt shadow/world sync, raw journal/watermark, Web evidence and exact cleanup. Freeze `SO101_FUNCTIONAL_MANIFEST` to exactly two approved entries—N1/v6 and N2/v4—before execution. The run count is explicit: `parallel-resource` executes two campaigns through its dependencies (R01 then R02; R04 is read-only), `fixed-n-execution` executes two campaigns, and `retry-full-restart` executes one first-pass campaign plus one retry batch.
 
 - [ ] **Step 5: Run Playwright projects and checkpoint**
 
 ```bash
+cd src/so101_teleop/web
+test "$SO101_ENABLE_LIVE_SIM_E2E" = "1"
+test -n "$SO101_LIVE_SIM_HOST"
+test -n "$SO101_E2E_EVIDENCE_ROOT"
+test -n "$SO101_E2E_INSTALL_PREFIX"
+test -n "$SO101_LIVE_SERVICE_BASE_URL"
+test -n "$SO101_LIVE_SERVICE_STATE_ROOT"
+test -f "$SO101_UNIFIED_LIVE_AUTHORIZATION"
+test -x "$SO101_E2E_PYTHON"
+test -f "$SO101_FUNCTIONAL_MANIFEST"
+test -x "$SO101_PLAYWRIGHT_CHROME"
 bun run test:e2e:live-sim --project parallel-resource
 bun run test:e2e:live-sim --project fixed-n-execution
 bun run test:e2e:live-sim --project retry-full-restart
+cd ../../../
 ```
 
 These project names are frozen from `playwright.live-sim.config.ts` at base commit `6d5069026fbd322076f58d0d4b9504891abeb861`. A renamed or missing project is configuration drift and STOP; do not substitute another project. Fresh Chrome evidence must belong to this R/D and this service instance.
@@ -1306,25 +1365,29 @@ These project names are frozen from `playwright.live-sim.config.ts` at base comm
 
 - [ ] **Step 1: Run final non-benchmark package gates**
 
-Use the current macOS ROS environment and direct pytest fallback only under the repository's documented DYLD contract. Require nonzero collection, JUnit, package registration, copied-install origins and no source-tree import leakage. Run teleop CTest registrations, OpenAPI consistency, Bun typecheck/unit/build and served-byte hash.
+Use the current macOS ROS environment and direct pytest fallback only under the repository's documented DYLD contract. Require nonzero collection, JUnit, package registration, copied-install origins and no source-tree import leakage. Run teleop CTest registrations, OpenAPI consistency, `bunx tsc -b --pretty false`, `bun run test`, `bun run build` and served-byte hash.
 
 - [ ] **Step 2: Verify runtime closure and cleanup one last time**
 
 Read back HEAD, copied install inventory, R/P/Q/M/D, service PID/birth, task-owned process tree, controller goals, ROS nodes, broker claim, IPC registry and ports. Unknown residue blocks PASS; foreign processes are preserved and listed.
 
-- [ ] **Step 3: Independent result review**
+- [ ] **Step 3: Sol/high implementation-result review**
 
-Sol/high judges implementation results against design section 14. Astra/high independently reviews the final scoped code/docs and production evidence. Findings return to the owning task and invalidate affected live evidence.
+GPT-5.6 Sol / High judges implementation results against design section 14. Findings return to the owning task and invalidate affected live evidence. This step does not author or approve the guide.
 
 - [ ] **Step 4: Final ledger accounting**
 
 Record retained runs, archived runs and deletion candidates separately. Do not delete or archive. State exact incomplete layers and next command if any gate remains. `dst DONE`, tmux exit, a successful Web status or one screenshot never substitutes for the full closure.
 
-- [ ] **Step 5: Write the operator guide**
+- [ ] **Step 5: Sol/high writes the operator guide**
 
-Use the repository `humanizer-zh` workflow. Document exact W2/v6-W1/v5-retry profile selection, lease/authority prerequisites, disabled reasons, evidence locations, recovery checkpoints and the fact that `so101_measure_parallel_resources` remains retired. Do not describe candidate measurement authorization as a production bypass.
+`dst` writes a factual handoff containing commands, paths, hashes, accepted/rejected profiles, evidence roots and remaining boundaries, then pauses without editing the guide. GPT-5.6 Sol / High uses the repository `$humanizer-zh` skill to create `docs/guides/so101-macos-service-campaign-closure.md`. The guide documents exact W2/v6-W1/v5-retry profile selection, lease/authority prerequisites, disabled reasons, evidence locations, recovery checkpoints and the fact that `so101_measure_parallel_resources` remains retired. It must not describe candidate measurement authorization as a production bypass.
 
-- [ ] **Step 6: Local commit only**
+- [ ] **Step 6: Astra/high final independent review**
+
+Only after the guide exists, GPT-6 Astra / High independently reviews the final scoped code, updated design/plan, guide, ledger and production evidence. A P0/P1/P2 finding returns to the owning task; affected live evidence is invalidated. No actor may mark the final checkpoint PASS before this review passes.
+
+- [ ] **Step 7: Local commit only**
 
 ```bash
 git add -- \
