@@ -632,6 +632,8 @@ MuJoCo、RSP、MoveIt、静态 TF 或感知节点在 workflow 完成前退出，
 | `TF_UNAVAILABLE` | source stamp 的 `world <- task_camera_frame` | 不要换成 latest TF |
 | `/cup_pose` 已有但抓放失败 | MoveIt、controller、Gazebo pose/contact 和 Planning Scene | 不要把 Pose 发布当成物理成功 |
 
+这些错误码之外，`hf` 下载、模型包落盘、宿主机 CUDA venv、锁屏下的 Viewer 截图和包级 gate 的问题记录在 [`so101-perception-image-build-and-run-troubleshooting.md`](so101-perception-image-build-and-run-troubleshooting.md)。
+
 ## 25. 证据目录里有什么
 
 一次感知请求会写出：

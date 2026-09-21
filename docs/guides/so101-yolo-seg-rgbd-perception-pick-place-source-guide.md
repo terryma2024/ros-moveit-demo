@@ -966,6 +966,8 @@ result.json
 
 调试时沿第一处分叉往下查。RGB-D 输入错误不应在 IK 层补偿，模型部署错误也不应靠放宽几何门禁掩盖。
 
+推理镜像构建、锁屏下的 Viewer 截图、包级 gate 这些环境侧问题不在上表范围内，记录在 [`so101-perception-image-build-and-run-troubleshooting.md`](so101-perception-image-build-and-run-troubleshooting.md)。
+
 ## 30. 当前实现的边界
 
 - 模型训练数据来自当前 MuJoCo 场景，不代表真实相机域已经覆盖；
