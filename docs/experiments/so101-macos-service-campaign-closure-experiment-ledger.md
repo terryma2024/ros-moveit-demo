@@ -844,3 +844,33 @@ run `so101_diagnose_macos_station --mode ROBOT_SYSTEM_CONTROLLER_MANAGER` with t
 sanctioned environment loaded (farm included) and attest the live process with
 `default_loaded_image_probe` + `build_runtime_attestation` to record which prefix every
 `mujoco_ros2_control*` image actually came from.
+
+## CP-MSC-A1-RUNTIME-ALIGNMENT: fixed macOS runtime accepted; original strict gate not rerun
+
+This checkpoint is appended after the user-authorized fixed-runtime work. It does not alter
+the historical `CP-MSC-A=UNCONFIRMED`, CP-MSC-A1 control verdicts, or their evidence. The
+runtime work used the separately registered evidence root
+`/tmp/so101-debug-macos-runtime-contract-54f5d922-9678-4cff-a340-dc4f59479a23`; this is recorded
+explicitly rather than retroactively presenting it as part of the original dispatch root.
+
+- Parent source at runtime validation: `b4c149e6b120fbaa368580c07ebab4222855f9ae`.
+- Locked fork source: `85d2a5c42686a3d6b0d909a047a4188b24edd257`.
+- The fixed `/opt` contract and unified `scripts/so101-macos.zsh` entry passed full doctor,
+  including real loads of `libhardware_interface.dylib` and `librosidl_typesupport_c.dylib`.
+- One current-host launch on domain 225 reached `READY` with three controllers active, three
+  MoveIt services callable, and three actions available. No task-owned process residue was
+  found after shutdown.
+- The original Gate A five-consecutive no-DYLD `FULL_RESTART` attestation was not rerun against
+  this new runtime closure. Its prior 5/5 filtered-baseline result remains historical and is
+  not promoted by this checkpoint.
+- The scoped macOS runtime tests and locked-fork tests are GREEN. The ordinary package suite is
+  not GREEN: the Darwin run was interrupted at 83% after 2881 passed, 136 failed, and 8 skipped,
+  dominated by Linux-only parallel-suite assumptions outside this checkpoint.
+- A second physical Mac was not tested. Two poisoned-environment profiles on this host produced
+  byte-identical doctor JSON but do not establish two-host acceptance.
+- Retained: both existing evidence roots and the published fixed runtime overlays. Archived:
+  none. Regenerable build/install trees, superseded fork/farm runs, and pytest scratch trees
+  are deletion candidates only; none were deleted.
+- Task 2 of the service-campaign closure plan was not started by this runtime-alignment work.
+
+Decision: `RUNTIME_LAUNCHER_ACCEPTED_CURRENT_HOST`; `ORIGINAL_STRICT_GATE_NOT_RERUN`.

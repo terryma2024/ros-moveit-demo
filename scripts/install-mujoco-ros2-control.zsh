@@ -4,6 +4,12 @@ set -euo pipefail
 readonly installer_path=${0:A}
 readonly ros_underlay=${SO101_ROS_UNDERLAY:-/opt/ros/jazzy}
 readonly ros_dependency_overlay=${SO101_ROS_DEPENDENCY_OVERLAY:-${ros_underlay}}
+readonly configured_lodepng_source=${SO101_LODEPNG_SOURCE_DIR:-}
+readonly test_dylib_farm=${SO101_TEST_DYLIB_FARM:-}
+readonly python_command=${SO101_PYTHON:-$(command -v python3 || true)}
+readonly colcon_command=${SO101_COLCON:-$(command -v colcon || true)}
+readonly ros2_command=${SO101_ROS2:-$(command -v ros2 || true)}
+readonly ctest_command=${SO101_CTEST:-$(command -v ctest || true)}
 readonly -a fork_packages=(
   mujoco_3d_lidar
   mujoco_ros2_control_msgs
@@ -30,7 +36,7 @@ resolve_project_root() {
   [[ -f ${lock_file} ]] || fail "dependency lock is missing: ${lock_file}"
 
   local -a values
-  values=("${(@f)$(python3 - "${lock_file}" <<'PY'
+  values=("${(@f)$("${python_command}" - "${lock_file}" <<'PY'
 from pathlib import Path
 import sys
 import yaml
@@ -69,7 +75,7 @@ PY
   [[ ${fork_install_relative} == ${fork_workspace_relative}/install ]] ||
     fail "fork install path must be relative to the fork workspace"
   local configured_workspace=${SO101_WORKSPACE_DIR:-${project_root:h}}
-  workspace_dir=$(python3 - "${configured_workspace}" <<'PY'
+  workspace_dir=$("${python_command}" - "${configured_workspace}" <<'PY'
 from pathlib import Path
 import sys
 
@@ -131,7 +137,9 @@ verify_source_identity() {
     fail "official 0.1.0 commit is not an ancestor of fork HEAD"
   git -C "${source_dir}" merge-base --is-ancestor "${lineage_commit}" HEAD ||
     fail "local r11 lineage is not an ancestor of fork HEAD"
-  if [[ ${fork_tag} == *-candidate ]]; then
+  if [[ ${fork_tag} == main ]]; then
+    : # Branch label: the lock and superproject gitlink already pin the exact commit.
+  elif [[ ${fork_tag} == *-candidate ]]; then
     git -C "${source_dir}" show-ref --verify --quiet "refs/tags/${fork_tag}" &&
       fail "candidate label must not resolve as a release tag"
   else
@@ -192,28 +200,82 @@ prepare_build_source() {
     fail "build source must be clean at locked fork commit: ${build_source_dir}"
 }
 
+prepare_lodepng_source() {
+  lodepng_source=
+  if [[ -z ${configured_lodepng_source} ]]; then
+    return
+  fi
+  lodepng_source=$("${python_command}" - "${configured_lodepng_source}" <<'PY'
+from pathlib import Path
+import sys
+
+print(Path(sys.argv[1]).expanduser().resolve())
+PY
+  )
+  [[ -e ${lodepng_source}/.git ]] || fail "lodepng source is not a Git checkout: ${lodepng_source}"
+  local lodepng_changes
+  lodepng_changes=$(git -C "${lodepng_source}" status --porcelain --untracked-files=all)
+  [[ -z ${lodepng_changes} ]] || fail "lodepng source must be clean: ${lodepng_source}"
+  local vendor_extras=${ros_dependency_overlay}/share/mujoco_vendor/cmake/mujoco_vendor-extras.cmake
+  [[ -f ${vendor_extras} ]] || fail "mujoco vendor extras are missing: ${vendor_extras}"
+  local expected_lodepng_commit
+  expected_lodepng_commit=$("${python_command}" - "${vendor_extras}" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+match = re.search(r'MUJOCO_DEP_VERSION_lodepng\s+"([0-9a-f]{40})"', text)
+if match is None:
+    raise SystemExit("MUJOCO_DEP_VERSION_lodepng is missing")
+print(match.group(1))
+PY
+  )
+  [[ $(git -C "${lodepng_source}" rev-parse HEAD) == ${expected_lodepng_commit} ]] ||
+    fail "lodepng source is not at the vendor-locked commit: ${lodepng_source}"
+}
+
 build_and_test_overlay() {
   source_setup "${ros_underlay}/setup.zsh"
   if [[ ${ros_dependency_overlay:A} != ${ros_underlay:A} ]]; then
     source_setup "${ros_dependency_overlay}/setup.zsh"
   fi
-  colcon --log-base "${log_base}" build \
+  local -a cmake_arguments=(-DFETCHCONTENT_UPDATES_DISCONNECTED=ON)
+  if [[ -n ${lodepng_source} ]]; then
+    cmake_arguments+=("-DFETCHCONTENT_SOURCE_DIR_LODEPNG=${lodepng_source}")
+  fi
+  "${python_command}" "${colcon_command}" --log-base "${log_base}" build \
     --base-paths "${build_source_dir}" \
     --build-base "${build_base}" \
     --install-base "${install_base}" \
     --merge-install \
     --cmake-clean-cache \
-    --cmake-args -DFETCHCONTENT_UPDATES_DISCONNECTED=ON \
+    --cmake-args "${cmake_arguments[@]}" \
     --packages-select "${fork_packages[@]}"
   source_setup "${install_base}/setup.zsh"
-  colcon --log-base "${log_base}" test \
-    --base-paths "${build_source_dir}" \
-    --build-base "${build_base}" \
-    --install-base "${install_base}" \
-    --merge-install \
-    --packages-select "${fork_packages[@]}" \
-    --event-handlers console_direct+
-  colcon test-result --test-result-base "${build_base}" --verbose
+  if [[ -n ${test_dylib_farm} ]]; then
+    [[ -d ${test_dylib_farm} ]] || fail "test dylib farm is missing: ${test_dylib_farm}"
+    export DYLD_LIBRARY_PATH="${test_dylib_farm}"
+    export DYLD_FALLBACK_LIBRARY_PATH="${test_dylib_farm}"
+  fi
+  if [[ -n ${test_dylib_farm} ]]; then
+    [[ -x ${ctest_command} ]] || fail "ctest executable is unavailable: ${ctest_command:-<empty>}"
+    local package_name
+    for package_name in "${fork_packages[@]}"; do
+      [[ -f "${build_base}/${package_name}/CTestTestfile.cmake" ]] || continue
+      "${ctest_command}" --test-dir "${build_base}/${package_name}" --output-on-failure
+    done
+  else
+    "${python_command}" "${colcon_command}" --log-base "${log_base}" test \
+      --base-paths "${build_source_dir}" \
+      --build-base "${build_base}" \
+      --install-base "${install_base}" \
+      --merge-install \
+      --packages-select "${fork_packages[@]}" \
+      --event-handlers console_direct+
+  fi
+  "${python_command}" "${colcon_command}" test-result \
+    --test-result-base "${build_base}" --verbose
 }
 
 verify_installed_overlay() {
@@ -224,10 +286,10 @@ verify_installed_overlay() {
   source_setup "${install_base}/setup.zsh"
   local package_name
   for package_name in "${fork_packages[@]}"; do
-    [[ $(ros2 pkg prefix "${package_name}") == ${install_base} ]] ||
+    [[ $("${python_command}" "${ros2_command}" pkg prefix "${package_name}") == ${install_base} ]] ||
       fail "installed prefix mismatch for ${package_name}"
   done
-  [[ $(ros2 pkg prefix mujoco_vendor) == ${ros_dependency_overlay} ]] ||
+  [[ $("${python_command}" "${ros2_command}" pkg prefix mujoco_vendor) == ${ros_dependency_overlay} ]] ||
     fail "mujoco_vendor must continue to resolve from ${ros_dependency_overlay}"
   local interface_name
   for interface_name in \
@@ -238,9 +300,9 @@ verify_installed_overlay() {
     mujoco_ros2_control_msgs/srv/ResetWorld \
     mujoco_ros2_control_msgs/srv/SetPause \
     mujoco_ros2_control_msgs/srv/StepSimulation; do
-    ros2 interface show "${interface_name}" >/dev/null
+    "${python_command}" "${ros2_command}" interface show "${interface_name}" >/dev/null
   done
-  python3 - "${lock_file}" "${install_base}" <<'PY'
+  "${python_command}" - "${lock_file}" "${install_base}" <<'PY'
 from pathlib import Path
 import platform
 import sys
@@ -261,6 +323,7 @@ plugin_manifest = prefix / "share/mujoco_ros2_control_plugins/mujoco_ros2_contro
 if "mujoco_ros2_control_plugins/CameraPlugin" not in plugin_manifest.read_text(encoding="utf-8"):
     raise SystemExit("installed CameraPlugin registration is missing")
 PY
+  print -r -- "${fork_commit}" > "${install_base}/share/mujoco_ros2_control/so101-locked-commit.txt"
 }
 
 main() {
@@ -273,6 +336,10 @@ main() {
     shift
   done
 
+  [[ -x ${python_command} ]] || fail "Python executable is unavailable: ${python_command:-<empty>}"
+  [[ -f ${colcon_command} ]] || fail "colcon script is unavailable: ${colcon_command:-<empty>}"
+  [[ -f ${ros2_command} ]] || fail "ros2 script is unavailable: ${ros2_command:-<empty>}"
+
   resolve_project_root
   verify_superproject_gitlink
   if [[ ! -e ${source_dir}/.git ]]; then
@@ -284,6 +351,7 @@ main() {
   fi
   verify_source_identity
   prepare_build_source
+  prepare_lodepng_source
   build_and_test_overlay
   verify_installed_overlay
 }
