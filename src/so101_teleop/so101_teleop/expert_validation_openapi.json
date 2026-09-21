@@ -363,6 +363,21 @@
       "CampaignConfiguration": {
         "additionalProperties": false,
         "properties": {
+          "batch_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "FIRST_PASS",
+                  "FULL_RESTART_RETRY"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Kind"
+          },
           "contract_version": {
             "const": 3,
             "title": "Contract Version",
@@ -376,6 +391,22 @@
             ],
             "title": "Execution Mode",
             "type": "string"
+          },
+          "execution_profile": {
+            "anyOf": [
+              {
+                "enum": [
+                  "MPS_W2_FIRST_PASS",
+                  "MPS_W1_FULL_RESTART_RETRY",
+                  "MPS_W1_FIRST_PASS"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Profile"
           },
           "fallback_worker_counts": {
             "anyOf": [
@@ -703,6 +734,14 @@
             "title": "Resource Observations",
             "type": "object"
           },
+          "retry_history": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RetryHistoryResponse"
+            },
+            "title": "Retry History",
+            "type": "array"
+          },
           "sequence": {
             "title": "Sequence",
             "type": "integer"
@@ -747,6 +786,21 @@
       "CampaignStartRequest": {
         "additionalProperties": false,
         "properties": {
+          "batch_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "FIRST_PASS",
+                  "FULL_RESTART_RETRY"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Kind"
+          },
           "command_id": {
             "minLength": 1,
             "title": "Command Id",
@@ -765,6 +819,22 @@
             ],
             "title": "Execution Mode",
             "type": "string"
+          },
+          "execution_profile": {
+            "anyOf": [
+              {
+                "enum": [
+                  "MPS_W2_FIRST_PASS",
+                  "MPS_W1_FULL_RESTART_RETRY",
+                  "MPS_W1_FIRST_PASS"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Profile"
           },
           "fallback_worker_counts": {
             "anyOf": [
@@ -930,6 +1000,17 @@
             "title": "Default Execution Mode",
             "type": "string"
           },
+          "execution_config_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Config Sha256"
+          },
           "execution_modes": {
             "default": [],
             "items": {
@@ -942,6 +1023,28 @@
             },
             "title": "Execution Modes",
             "type": "array"
+          },
+          "execution_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Profile"
+          },
+          "execution_schema_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Schema Version"
           },
           "fixed_worker_counts": {
             "default": [
@@ -980,6 +1083,17 @@
             "title": "Minimum Points",
             "type": "integer"
           },
+          "platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform"
+          },
           "start_guard": {
             "anyOf": [
               {
@@ -990,6 +1104,17 @@
               }
             ]
           },
+          "start_guard_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Guard Note"
+          },
           "start_guard_policy": {
             "anyOf": [
               {
@@ -999,6 +1124,14 @@
                 "type": "null"
               }
             ]
+          },
+          "support_matrix": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ExecutionProfileResponse"
+            },
+            "title": "Support Matrix",
+            "type": "array"
           },
           "worker_count_availability": {
             "items": {
@@ -1142,6 +1275,108 @@
           "object_b"
         ],
         "title": "CollisionPair",
+        "type": "object"
+      },
+      "ExecutionProfileResponse": {
+        "additionalProperties": false,
+        "description": "One row of the platform-bound support matrix, as the server would execute it.\n\nThe row names the exact routing key a request must claim and carries no budget profile and\nno qualification hash: macOS supports W1 and W2, and that is the whole statement.",
+        "properties": {
+          "accelerator": {
+            "default": "mps",
+            "title": "Accelerator",
+            "type": "string"
+          },
+          "batch_kind": {
+            "enum": [
+              "FIRST_PASS",
+              "FULL_RESTART_RETRY"
+            ],
+            "title": "Batch Kind",
+            "type": "string"
+          },
+          "execution_mode": {
+            "enum": [
+              "SEQUENTIAL",
+              "PARALLEL"
+            ],
+            "title": "Execution Mode",
+            "type": "string"
+          },
+          "platform": {
+            "default": "macos",
+            "title": "Platform",
+            "type": "string"
+          },
+          "profile": {
+            "minLength": 1,
+            "title": "Profile",
+            "type": "string"
+          },
+          "profile_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Sha256"
+          },
+          "qualification_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qualification Sha256"
+          },
+          "reason_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "schema_version": {
+            "minimum": 1.0,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "selectable": {
+            "default": true,
+            "title": "Selectable",
+            "type": "boolean"
+          },
+          "selector": {
+            "default": "MPS:default",
+            "title": "Selector",
+            "type": "string"
+          },
+          "status": {
+            "default": "SUPPORTED",
+            "title": "Status",
+            "type": "string"
+          },
+          "worker_count": {
+            "maximum": 2.0,
+            "minimum": 1.0,
+            "title": "Worker Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "profile",
+          "schema_version",
+          "execution_mode",
+          "worker_count",
+          "batch_kind"
+        ],
+        "title": "ExecutionProfileResponse",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -1290,6 +1525,17 @@
       "LeaseResponse": {
         "additionalProperties": false,
         "properties": {
+          "execution_generation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Generation"
+          },
           "expires_monotonic_ns": {
             "title": "Expires Monotonic Ns",
             "type": "integer"
@@ -2190,6 +2436,17 @@
             "title": "Admitted",
             "type": "boolean"
           },
+          "execution_batch_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Batch Kind"
+          },
           "execution_config": {
             "additionalProperties": true,
             "default": {},
@@ -2211,6 +2468,28 @@
               }
             ],
             "title": "Execution Mode"
+          },
+          "execution_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Profile"
+          },
+          "execution_schema_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Schema Version"
           },
           "expires_at_monotonic_ns": {
             "anyOf": [
@@ -2506,6 +2785,71 @@
         "title": "RenderedImageRequest",
         "type": "object"
       },
+      "RetryHistoryResponse": {
+        "additionalProperties": false,
+        "description": "One admitted retry, as history. The first-pass counters above never change because of it.",
+        "properties": {
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "binding_sha256": {
+            "title": "Binding Sha256",
+            "type": "string"
+          },
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "cleanup_receipt_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cleanup Receipt Sha256"
+          },
+          "command_id": {
+            "title": "Command Id",
+            "type": "string"
+          },
+          "original_batch_id": {
+            "title": "Original Batch Id",
+            "type": "string"
+          },
+          "original_result_sha256": {
+            "title": "Original Result Sha256",
+            "type": "string"
+          },
+          "point_id": {
+            "title": "Point Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "ADMITTED",
+              "CLEANED"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaign_id",
+          "batch_id",
+          "point_id",
+          "original_batch_id",
+          "original_result_sha256",
+          "command_id",
+          "binding_sha256",
+          "state"
+        ],
+        "title": "RetryHistoryResponse",
+        "type": "object"
+      },
       "RetryRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2517,6 +2861,32 @@
           "confirmation": {
             "title": "Confirmation",
             "type": "string"
+          },
+          "context_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Id"
+          },
+          "context_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "CANDIDATE",
+                  "PRODUCTION"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Kind"
           },
           "lease_generation": {
             "minimum": 1.0,
@@ -3324,7 +3694,7 @@
           },
           "worker_count": {
             "maximum": 8.0,
-            "minimum": 2.0,
+            "minimum": 1.0,
             "title": "Worker Count",
             "type": "integer"
           }

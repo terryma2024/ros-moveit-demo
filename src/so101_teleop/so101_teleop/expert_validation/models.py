@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 from pathlib import Path
 import re
 from typing import Mapping
@@ -213,6 +215,179 @@ class CleanupReceipt:
         for name in ("campaign_id", "batch_id", "point_id"):
             _identifier(name, getattr(self, name))
         _sha("receipt_sha256", self.receipt_sha256)
+
+
+@dataclass(frozen=True, slots=True)
+class RetryStartRequest:
+    """One admitted retry: an existing committed business ``FAILED`` point, and nothing else.
+
+    The request carries only coordinates. The authority to execute it comes from the one-time
+    execution context that is consumed together with it (design section 10).
+    """
+
+    command_id: str
+    campaign_id: str
+    batch_id: str
+    point_id: str
+    original_batch_id: str
+    original_catalog_sha256: str
+    original_selection_sha256: str
+    original_result_sha256: str
+    execution_profile: str
+    schema_version: int
+    batch_kind: str
+    config_sha256: str
+    runtime_closure_sha256: str
+    worker_count: int
+    evidence_root: Path
+    install_prefix: Path
+    owner_generation: int
+    created_at_ns: int
+
+    def __post_init__(self) -> None:
+        for name in (
+            "command_id",
+            "campaign_id",
+            "batch_id",
+            "point_id",
+            "original_batch_id",
+            "execution_profile",
+        ):
+            _identifier(name, getattr(self, name))
+        for name in (
+            "original_catalog_sha256",
+            "original_selection_sha256",
+            "original_result_sha256",
+            "config_sha256",
+            "runtime_closure_sha256",
+        ):
+            _sha(name, getattr(self, name))
+        if self.batch_kind != "FULL_RESTART_RETRY":
+            raise ValueError("RETRY_BATCH_KIND")
+        if type(self.schema_version) is not int or self.schema_version < 1:
+            raise ValueError("RETRY_SCHEMA_VERSION")
+        if self.worker_count != 1:
+            raise ValueError("RETRY_WORKER_COUNT")
+        if type(self.owner_generation) is not int or self.owner_generation < 1:
+            raise ValueError("RETRY_OWNER_GENERATION")
+        object.__setattr__(self, "evidence_root", _absolute("evidence_root", self.evidence_root))
+        object.__setattr__(self, "install_prefix", _absolute("install_prefix", self.install_prefix))
+
+    def as_document(self) -> dict[str, object]:
+        return {
+            "command_id": self.command_id,
+            "campaign_id": self.campaign_id,
+            "batch_id": self.batch_id,
+            "point_id": self.point_id,
+            "original_batch_id": self.original_batch_id,
+            "original_catalog_sha256": self.original_catalog_sha256,
+            "original_selection_sha256": self.original_selection_sha256,
+            "original_result_sha256": self.original_result_sha256,
+            "execution_profile": self.execution_profile,
+            "schema_version": self.schema_version,
+            "batch_kind": self.batch_kind,
+            "config_sha256": self.config_sha256,
+            "runtime_closure_sha256": self.runtime_closure_sha256,
+            "worker_count": self.worker_count,
+            "evidence_root": str(self.evidence_root),
+            "install_prefix": str(self.install_prefix),
+            "owner_generation": self.owner_generation,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class RetrySelectionBinding:
+    """The immutable retry selection the store commits: one point of one original first pass."""
+
+    command_id: str
+    campaign_id: str
+    batch_id: str
+    point_id: str
+    original_batch_id: str
+    original_catalog_sha256: str
+    original_selection_sha256: str
+    original_result_sha256: str
+    original_outcome: str
+    execution_profile: str
+    schema_version: int
+    config_sha256: str
+    runtime_closure_sha256: str
+    worker_count: int
+    evidence_root: Path
+    owner_generation: int
+    context_kind: str
+    spawn_token: str
+    lease_id: str | None = None
+    lease_generation: int | None = None
+    binding_sha256: str = ""
+
+    def __post_init__(self) -> None:
+        for name in (
+            "command_id",
+            "campaign_id",
+            "batch_id",
+            "point_id",
+            "original_batch_id",
+            "execution_profile",
+            "spawn_token",
+        ):
+            _identifier(name, getattr(self, name))
+        for name in (
+            "original_catalog_sha256",
+            "original_selection_sha256",
+            "original_result_sha256",
+            "config_sha256",
+            "runtime_closure_sha256",
+        ):
+            _sha(name, getattr(self, name))
+        object.__setattr__(self, "evidence_root", _absolute("evidence_root", self.evidence_root))
+        # The binding is the retry of a *business* failure; nothing else may construct one.
+        if self.original_outcome != "FAILED":
+            raise ValueError("RETRY_ORIGINAL_NOT_FAILED")
+        if self.context_kind not in {"CANDIDATE", "PRODUCTION"}:
+            raise ValueError("RETRY_CONTEXT_KIND")
+        if self.context_kind == "PRODUCTION" and (
+            self.lease_id is None or self.lease_generation is None
+        ):
+            raise ValueError("RETRY_LEASE_BINDING_REQUIRED")
+        digest = self.compute_sha256()
+        if self.binding_sha256 and self.binding_sha256 != digest:
+            raise ValueError("RETRY_BINDING_HASH_MISMATCH")
+        object.__setattr__(self, "binding_sha256", digest)
+
+    def as_document(self) -> dict[str, object]:
+        return {
+            "kind": "FULL_RESTART_RETRY",
+            "command_id": self.command_id,
+            "campaign_id": self.campaign_id,
+            "batch_id": self.batch_id,
+            "point_id": self.point_id,
+            "original_batch_id": self.original_batch_id,
+            "original_catalog_sha256": self.original_catalog_sha256,
+            "original_selection_sha256": self.original_selection_sha256,
+            "original_result_sha256": self.original_result_sha256,
+            "original_outcome": self.original_outcome,
+            "execution_profile": self.execution_profile,
+            "schema_version": self.schema_version,
+            "config_sha256": self.config_sha256,
+            "runtime_closure_sha256": self.runtime_closure_sha256,
+            "worker_count": self.worker_count,
+            "evidence_root": str(self.evidence_root),
+            "owner_generation": self.owner_generation,
+            "context_kind": self.context_kind,
+            "spawn_token": self.spawn_token,
+            "lease_id": self.lease_id,
+            "lease_generation": self.lease_generation,
+        }
+
+    def compute_sha256(self) -> str:
+        body = {
+            key: value
+            for key, value in self.as_document().items()
+            if key not in {"binding_sha256"}
+        }
+        encoded = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)

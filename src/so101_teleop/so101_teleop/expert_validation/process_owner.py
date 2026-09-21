@@ -182,7 +182,19 @@ class ExecutionProcessOwner:
             return self._store
         return None
 
-    def spawn(self, request: CoordinatorStartRequest | AdaptiveStartRequest) -> OwnedExecution:
+    def spawn(
+        self,
+        request: CoordinatorStartRequest | AdaptiveStartRequest,
+        *,
+        owner_intent: OwnerIntent | None = None,
+    ) -> OwnedExecution:
+        """Spawn one owned process, reusing an intent that is already durable.
+
+        ``owner_intent`` is how a one-time retry admission hands over the intent it committed in the
+        same transaction as its command: one spawn is one intent, so the boundary may not mint a
+        second one for a spawn the store already recorded.
+        """
+
         if self._active is not None and self.poll(self._active).running:
             raise CoordinatorOwnershipError("EXECUTION_OWNER_EXISTS")
         if not isinstance(request, (CoordinatorStartRequest, AdaptiveStartRequest)):
@@ -191,21 +203,22 @@ class ExecutionProcessOwner:
             self._store.record_execution_owner_intent(request)
         owner_records = self._owner_tree_records()
         owner_store = self._owner_tree_store() if owner_records is not None else None
-        owner_intent = None
         if owner_records is not None:
-            # Intent before spawn: a crash between these two lines must leave an intent with no
-            # process, never a process no reaper can find. The shared tree root is written first:
-            # it is the record the demo-side spawn boundaries and the offline recovery read.
-            owner_intent = OwnerIntent.for_argv(
-                campaign_id=request.campaign_id,
-                batch_id=request.batch_id,
-                role="ADAPTER",
-                generation=_owner_generation(request),
-                spawn_token="spawn-" + uuid.uuid4().hex,
-                argv=request.argv,
-                parent_spawn_token=None,
-                own_session=True,
-            )
+            if owner_intent is None:
+                # Intent before spawn: a crash between these two lines must leave an intent with no
+                # process, never a process no reaper can find. The shared tree root is written
+                # first: it is the record the demo-side spawn boundaries and the offline recovery
+                # read.
+                owner_intent = OwnerIntent.for_argv(
+                    campaign_id=request.campaign_id,
+                    batch_id=request.batch_id,
+                    role="ADAPTER",
+                    generation=_owner_generation(request),
+                    spawn_token="spawn-" + uuid.uuid4().hex,
+                    argv=request.argv,
+                    parent_spawn_token=None,
+                    own_session=True,
+                )
             owner_records.record_owner_intent(owner_intent)
             if owner_store is not None:
                 owner_store.record_owner_intent(owner_intent)
@@ -223,7 +236,7 @@ class ExecutionProcessOwner:
             )
         environment = os.environ.copy()
         environment.update(request.environment)
-        if owner_intent is not None:
+        if owner_intent is not None and self._owner_tree_root is not None:
             environment.update(_owner_tree_environment(owner_intent, self._owner_tree_root))
         with open(
             process_log,

@@ -10,6 +10,8 @@ import logging
 import os
 from pathlib import Path
 import subprocess
+from types import SimpleNamespace
+import time
 import uuid
 from typing import Mapping
 
@@ -28,16 +30,28 @@ from .coordinator_events import (
     CoordinatorProjectionError,
     ReadOnlyCoordinatorJournal,
 )
+from .execution_context import (
+    CandidateExecutionContext,
+    ProductionExecutionContext,
+    RETRY_BATCH_KIND,
+    RETRY_PROFILE,
+    RETRY_SCHEMA_VERSION,
+    RETRY_WORKER_COUNT,
+    install_binding_sha256,
+    retry_admission_command_id,
+    runtime_closure_sha256,
+)
 from .executor_registry import ExecutorRegistry, QualificationProbes
 from .lease import ValidationLeaseService
 from .manifest_geometry import current_manifest_source_hash, freeze_manifest_context
-from .models import UpstreamCursor
+from .models import RetryStartRequest, UpstreamCursor
 from .preflight import (
     CampaignStartRequest,
     FIXED_WORKER_COUNTS,
     FixedExecutionConfig,
     MACOS_EXECUTION_PROFILES,
     MACOS_WORKER_COUNTS,
+    PreflightRejected,
     UNSUPPORTED_ON_MACOS,
 )
 from .process_owner import CoordinatorOwnershipError, ExecutionProcessOwner, OwnedCoordinator
@@ -48,6 +62,8 @@ from .statistics import (
     PointProjection,
     StatisticsProjectionError,
     WorkerProjection,
+    retry_history_document,
+    retry_history_entry,
     summarize_first_pass,
 )
 from .supervisor import ExpertValidationSupervisor
@@ -55,6 +71,9 @@ from .preflight import PreflightEngine
 
 
 _BROKER_IMAGE = "so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1"
+
+#: The installed matrix by routing key, so a restored row is resolved by name and never inferred.
+PROFILES_BY_NAME = {row.profile: row for row in MACOS_EXECUTION_PROFILES}
 
 
 def _sha256(path: Path) -> str:
@@ -526,6 +545,14 @@ class ProductionExpertValidationService(ExpertValidationService):
             raise ServiceConflict("CAMPAIGN_FIRST_PASS_MISSING")
         config = json.loads(row["execution_config_json"])
         selection = self._selection(row["manifest_id"])
+        # The durable receipt decided which installed document this campaign executed. A restart
+        # that rebuilt a v5/v6 campaign against the *configured* document would hand it different
+        # bytes than the ones its own results were produced with, so the receipt is the binding.
+        profile, config_path, config_sha256, worker_count = self._restored_execution_binding(row)
+        if profile is not None:
+            row_mode = PROFILES_BY_NAME[profile].execution_mode
+            if row["execution_mode"] != row_mode:
+                raise ServiceConflict("CAMPAIGN_PROFILE_MODE_MISMATCH")
         environment = {}
         if self.layout.provenance_binding is not None:
             environment["SO101_PARALLEL_PROVENANCE_BINDING"] = str(
@@ -544,12 +571,16 @@ class ProductionExpertValidationService(ExpertValidationService):
             execution_mode=row["execution_mode"],
             evidence_root=self.store.root.parent,
             points_path=self.layout.points_path,
-            parallel_config_path=self.layout.parallel_config_path,
+            parallel_config_path=config_path,
             adaptive_config_path=self.layout.adaptive_config_path,
             worker_count=(
-                config.get("preferred_worker_count", 8)
-                if adaptive
-                else config.get("worker_count", 1)
+                worker_count
+                if profile is not None
+                else (
+                    config.get("preferred_worker_count", 8)
+                    if adaptive
+                    else config.get("worker_count", 1)
+                )
             ),
             max_points_per_worker=config.get("max_points_per_worker"),
             fallback_worker_counts=tuple(config.get("fallback_worker_counts", (6, 4, 2, 1))),
@@ -570,8 +601,10 @@ class ProductionExpertValidationService(ExpertValidationService):
             ),
             adaptive_cleanup_executable_sha256=_sha256(self.layout.cleanup_executable),
             adaptive_wrapper_sha256=_sha256(self.layout.adaptive_wrapper),
-            parallel_config_sha256=_sha256(self.layout.parallel_config_path),
+            parallel_config_sha256=config_sha256,
             adaptive_config_sha256=_sha256(self.layout.adaptive_config_path),
+            execution_profile=profile,
+            batch_kind=(None if profile is None else PROFILES_BY_NAME[profile].batch_kind),
             yolo_weights_sha256=self.layout.yolo_weights_sha256,
             grounded_sam_manifest_sha256=self.layout.grounded_manifest_sha256,
             broker_image_id=self.layout.broker_image_id,
@@ -582,6 +615,38 @@ class ProductionExpertValidationService(ExpertValidationService):
             adaptive_wrapper_path=self.layout.adaptive_wrapper,
             provenance_binding_path=self.layout.provenance_binding,
             environment=environment,
+        )
+
+    def _restored_execution_binding(self, row) -> tuple[str | None, Path, str, int]:
+        """The profile, document, hash and worker count a restored campaign really executed.
+
+        The receipt carries the profile its preflight bound. When it names one, that profile's own
+        installed document is resolved again - never the configured document - so a restarted
+        service rebuilds the campaign against the bytes that produced its results.
+        """
+
+        from .preflight import resolve_execution_document
+
+        receipt = self.store.preflight_receipt(row["preflight_receipt_id"])
+        document = {} if receipt is None else json.loads(receipt["receipt_json"])
+        profile = document.get("execution_profile")
+        if profile is None:
+            return (
+                None,
+                Path(self.layout.parallel_config_path),
+                _sha256(self.layout.parallel_config_path),
+                0,
+            )
+        installed = resolve_execution_document(
+            Path(self.layout.parallel_config_path).parent, profile
+        )
+        if installed.profile is None or installed.profile.profile != profile:
+            raise ServiceConflict(UNSUPPORTED_ON_MACOS)
+        return (
+            profile,
+            installed.path,
+            installed.config_sha256,
+            installed.profile.worker_count,
         )
 
     def close(self) -> None:
@@ -1012,6 +1077,34 @@ class ProductionExpertValidationService(ExpertValidationService):
         return tuple(self.get_campaign(campaign_id) for campaign_id in self._campaigns)
 
     def get_campaign(self, campaign_id):
+        return self._with_retry_history(campaign_id, self._campaign_projection(campaign_id))
+
+    def _with_retry_history(self, campaign_id, projection):
+        """Append the durable retry history. It is a read: nothing above it is recomputed."""
+
+        admissions = getattr(self.store, "retry_admissions", None)
+        if admissions is None:
+            # A read-only cursor double keeps no admission table; it has no history to append.
+            return projection
+        rows = tuple(admissions(campaign_id))
+        if not rows:
+            # No retry has ever been admitted: the projection is returned unchanged, so a cached
+            # campaign keeps its identity.
+            return projection
+        history = tuple(
+            retry_history_document(
+                retry_history_entry({
+                    **row,
+                    "cleanup_receipt_sha256": getattr(
+                        self.store.batch(row["batch_id"]), "cleanup_receipt_sha256", None
+                    ),
+                })
+            )
+            for row in rows
+        )
+        return {**projection, "retry_history": history}
+
+    def _campaign_projection(self, campaign_id):
         try:
             cached = self._campaigns[campaign_id]
         except KeyError as error:
@@ -1092,6 +1185,10 @@ class ProductionExpertValidationService(ExpertValidationService):
         batch = reader.read_after(AcceptedCoordinatorCursor.initial(binding))
         if not batch.events:
             return None
+        # The canonical durable projection is committed before it is read back: a retry admission
+        # validates the original point's business result against exactly this state, never against
+        # a value this request happened to compute.
+        self._persist_canonical_projection(request, batch)
         state = batch.projected_state
         raw_points = state.get("points")
         if not isinstance(raw_points, Mapping):
@@ -1337,6 +1434,45 @@ class ProductionExpertValidationService(ExpertValidationService):
             "qualification_passed": statistics.qualification_passed,
         }
 
+    def _persist_canonical_projection(self, request, batch) -> None:
+        """Commit the verified canonical prefix, its attempts and its cursor in one transaction.
+
+        A journal that carries no canonical frame at all (a v1-v3 delta journal) has no canonical
+        state to persist and is left exactly as it was: the durable reducer state exists only for
+        the campaigns whose events the canonical reducer defines.
+        """
+
+        from .reducer import CanonicalCampaignReducer, ReducerError
+
+        accept = getattr(self.store, "accept_projection_batch", None)
+        if accept is None or not batch.events:
+            # A read-only cursor double has no projection table to commit into.
+            return
+        final = batch.events[-1]
+        next_cursor = UpstreamCursor(
+            batch_id=request.batch_id,
+            owner_kind="COORDINATOR",
+            owner_epoch_or_generation=final.owner_epoch,
+            segment_id=f"segment-{final.owner_epoch:020d}",
+            event_id=f"event-{final.sequence:020d}",
+            frame_sha256=final.frame_sha256,
+        )
+        snapshot = self.store.read_projection_state(request.batch_id)
+        try:
+            accept(
+                batch_id=request.batch_id,
+                expected_cursor=snapshot.cursor,
+                events=batch.events,
+                next_cursor=next_cursor,
+                reducer=CanonicalCampaignReducer(),
+            )
+        except ReducerError as error:
+            if error.code == "REDUCER_STATE_REQUIRED":
+                return
+            raise CoordinatorProjectionError("PROJECTION_PERSIST_FAILED") from error
+        except (StoreConflict, ValueError) as error:
+            raise CoordinatorProjectionError("PROJECTION_PERSIST_FAILED") from error
+
     def _adaptive_campaign_projection(self, request):
         """Project the adaptive Runner journal; never the nested pool journals."""
         batch_root = (
@@ -1524,6 +1660,8 @@ class ProductionExpertValidationService(ExpertValidationService):
         return projection
 
     async def retry_campaign(self, campaign_id, body):
+        """The production retry endpoint: one installed context, one point, one command."""
+
         document = {
             "operation": "FULL_RESTART_RETRY", "campaign_id": campaign_id, "request": body,
         }
@@ -1536,12 +1674,239 @@ class ProductionExpertValidationService(ExpertValidationService):
         self.lease_service.authorize(
             body["lease_id"], body["lease_generation"], service_session_id=body["service_session_id"]
         )
+        if not self.lease_service.can_start_campaign(body["service_session_id"]):
+            raise ServiceConflict("VALIDATION_RECOVERY_REQUIRED")
+        point_ids = tuple(body["point_ids"])
+        if len(point_ids) != 1:
+            # A retry binding is one committed business failure; a multi-point command would have
+            # to mint several contexts behind one client command id.
+            raise ServiceConflict("RETRY_ONE_POINT_PER_COMMAND")
         self.store.begin_command(body["command_id"], digest, "FULL_RESTART_RETRY")
-        result = await self.supervisor.start_retries(campaign_id, tuple(body["point_ids"]))
+        if not self.store.retry_items(campaign_id):
+            self.store.enqueue_retries(campaign_id, point_ids)
+        self.supervisor.reconcile_retry(campaign_id)
+        self.get_campaign(campaign_id)
+        request, context = self._production_retry_admission(campaign_id, point_ids[0], body)
+        result = await self.supervisor.start_production_retry(request=request, context=context)
         projection = {**self.get_campaign(campaign_id), "status": result["status"]}
         self._campaigns[campaign_id] = projection
         self.store.finish_command(body["command_id"], projection)
         return projection
+
+    def issue_candidate_context(
+        self,
+        *,
+        task_id,
+        dispatch_id,
+        campaign_id,
+        batch_id,
+        manifest_id,
+        execution_profile,
+        command_id,
+        owner_generation=1,
+        max_runs=1,
+        evidence_root=None,
+        ttl_s=3600.0,
+    ) -> CandidateExecutionContext:
+        """Issue one bounded candidate run from the installed document the profile names."""
+
+        installed = self._installed_profile_document(execution_profile)
+        now = time.monotonic_ns()
+        return self.register_candidate_context(CandidateExecutionContext(
+            context_id="candidate-" + uuid.uuid4().hex,
+            task_id=task_id,
+            dispatch_id=dispatch_id,
+            campaign_id=campaign_id,
+            batch_id=batch_id,
+            manifest_id=manifest_id,
+            execution_profile=installed.profile.profile,
+            schema_version=installed.schema_version,
+            batch_kind=installed.profile.batch_kind,
+            worker_count=installed.profile.worker_count,
+            config_sha256=installed.config_sha256,
+            runtime_closure_sha256=self._current_runtime_closure(),
+            evidence_root=Path(evidence_root) if evidence_root is not None else self.store.root.parent,
+            owner_generation=owner_generation,
+            command_id=command_id,
+            issued_at_monotonic_ns=now,
+            expires_at_monotonic_ns=now + int(ttl_s * 1_000_000_000),
+            max_runs=max_runs,
+        ))
+
+    def _installed_profile_document(self, execution_profile):
+        from .preflight import resolve_execution_document
+
+        try:
+            installed = resolve_execution_document(
+                Path(self.layout.parallel_config_path).parent, execution_profile
+            )
+        except PreflightRejected as error:
+            raise ServiceConflict(str(error)) from error
+        if installed.profile is None or installed.profile.profile != execution_profile:
+            # A named profile whose installed document is not the one it claims is never inferred.
+            raise ServiceConflict(UNSUPPORTED_ON_MACOS)
+        return installed
+
+    def _current_runtime_closure(self) -> str:
+        return runtime_closure_sha256(SimpleNamespace(
+            coordinator_executable_sha256=_sha256(self.layout.coordinator_executable),
+            adaptive_runner_module_sha256=_sha256(
+                Path(__import__("so101_demo.parallel_batch.adaptive_runner", fromlist=["x"]).__file__)
+            ),
+            adaptive_pool_module_sha256=_sha256(
+                Path(__import__("so101_demo.parallel_batch.adaptive_pool", fromlist=["x"]).__file__)
+            ),
+            adaptive_cleanup_executable_sha256=_sha256(self.layout.cleanup_executable),
+            adaptive_wrapper_sha256=_sha256(self.layout.adaptive_wrapper),
+            parallel_config_sha256=_sha256(self.layout.parallel_config_path),
+            adaptive_config_sha256=_sha256(self.layout.adaptive_config_path),
+            yolo_weights_sha256=self.layout.yolo_weights_sha256,
+            grounded_sam_manifest_sha256=self.layout.grounded_manifest_sha256,
+            broker_image_id=self.layout.broker_image_id,
+            resource_manifest_sha256=_sha256(self.layout.parallel_config_path),
+            source_commit=self.layout.source_commit,
+            install_prefix=str(self.layout.demo_prefix),
+        ))
+
+    def _production_retry_admission(self, campaign_id, point_id, body):
+        """Mint the one context and the one request this installed service may retry with."""
+
+        original, item, catalog_sha256, selection_sha256, result_sha256 = self._retry_origin(
+            campaign_id, point_id
+        )
+        lease = self.store.current_lease()
+        if lease is None:
+            raise ServiceConflict("RETRY_LEASE_REQUIRED")
+        runtime_closure = runtime_closure_sha256(original)
+        install_prefix = Path(original.install_prefix)
+        command_id = retry_admission_command_id(body["command_id"], item.ordinal)
+        context = self.register_production_context(ProductionExecutionContext(
+            context_id="production-" + uuid.uuid4().hex,
+            service_session_id=lease["service_session_id"],
+            lease_id=lease["lease_id"],
+            lease_generation=lease["generation"],
+            install_prefix=install_prefix,
+            install_binding_sha256=install_binding_sha256(
+                install_prefix=install_prefix, runtime_closure_sha256=runtime_closure),
+            execution_profile=RETRY_PROFILE,
+            schema_version=RETRY_SCHEMA_VERSION,
+            batch_kind=RETRY_BATCH_KIND,
+            worker_count=RETRY_WORKER_COUNT,
+            campaign_id=campaign_id,
+            batch_id=f"retry-{item.ordinal + 1:03d}",
+            manifest_id=original.manifest_id,
+            config_sha256=self._installed_profile_document(RETRY_PROFILE).config_sha256,
+            runtime_closure_sha256=runtime_closure,
+            evidence_root=Path(original.evidence_root),
+            owner_generation=1,
+            command_id=command_id,
+            issued_at_monotonic_ns=time.monotonic_ns(),
+            # The one-time context dies with the lease that authorized it.
+            expires_at_monotonic_ns=min(
+                time.monotonic_ns() + 300_000_000_000, lease["expires_monotonic_ns"]
+            ),
+        ))
+        return self._retry_start_request(
+            context, item, catalog_sha256, selection_sha256, result_sha256, install_prefix
+        )
+
+    async def retry_campaign_candidate(self, campaign_id, body, context):
+        """The candidate endpoint: the same one-point admission, under a candidate context."""
+
+        if not isinstance(context, CandidateExecutionContext):
+            raise ServiceConflict("CANDIDATE_CONTEXT_REQUIRED")
+        document = {
+            "operation": "CANDIDATE_FULL_RESTART_RETRY", "campaign_id": campaign_id,
+            "request": body, "context": context.context_id,
+        }
+        digest = hashlib.sha256(
+            json.dumps(document, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        repeated = self.store.repeat_command(body["command_id"], digest)
+        if repeated is not None:
+            return repeated
+        point_ids = tuple(body["point_ids"])
+        if len(point_ids) != 1:
+            raise ServiceConflict("RETRY_ONE_POINT_PER_COMMAND")
+        self.store.begin_command(body["command_id"], digest, "CANDIDATE_FULL_RESTART_RETRY")
+        if not self.store.retry_items(campaign_id):
+            self.store.enqueue_retries(campaign_id, point_ids)
+        self.supervisor.reconcile_retry(campaign_id)
+        self.get_campaign(campaign_id)
+        _original, item, catalog_sha256, selection_sha256, result_sha256 = self._retry_origin(
+            campaign_id, point_ids[0]
+        )
+        request = self._retry_start_request(
+            context, item, catalog_sha256, selection_sha256, result_sha256,
+            Path(self._campaign_requests[campaign_id].install_prefix),
+        )
+        result = await self.supervisor.start_candidate_retry(request=request, context=context)
+        projection = {**self.get_campaign(campaign_id), "status": result["status"]}
+        self._campaigns[campaign_id] = projection
+        self.store.finish_command(body["command_id"], projection)
+        return projection
+
+    def _retry_origin(self, campaign_id, point_id):
+        """The durable original of one retry: its request, queue entry, manifest and result."""
+
+        original = self._campaign_requests.get(campaign_id)
+        if original is None:
+            raise ServiceConflict("VALIDATION_CAMPAIGN_NOT_FOUND")
+        item = self.store.next_retry(campaign_id)
+        if item is None or item.point_id != point_id or item.state != "QUEUED":
+            raise ServiceConflict("RETRY_NOT_QUEUED")
+        first_pass = next(
+            (batch for batch in self.store.campaign_batches(campaign_id)
+             if batch.batch_kind == "FIRST_PASS"),
+            None,
+        )
+        if first_pass is None:
+            raise ServiceConflict("CAMPAIGN_FIRST_PASS_MISSING")
+        manifest = self.store.manifest(
+            original.manifest_id,
+            current_source_config_sha256=current_manifest_source_hash(self.layout),
+        )
+        if manifest is None:
+            raise ServiceConflict("VALIDATION_MANIFEST_NOT_FOUND")
+        snapshot = self.store.read_projection_state(first_pass.batch_id)
+        point = None if snapshot.state is None else snapshot.state.points.get(point_id)
+        if point is None or point.result_sha256 is None:
+            raise ServiceConflict("RETRY_ORIGINAL_RESULT_UNKNOWN")
+        document = manifest.canonical_document
+        return (
+            original,
+            item,
+            document["catalog_sha256"],
+            document["selection_sha256"],
+            point.result_sha256,
+        )
+
+    def _retry_start_request(
+        self, context, item, catalog_sha256, selection_sha256, result_sha256, install_prefix
+    ):
+        return RetryStartRequest(
+            command_id=context.command_id,
+            campaign_id=context.campaign_id,
+            batch_id=context.batch_id,
+            point_id=item.point_id,
+            original_batch_id=next(
+                batch.batch_id for batch in self.store.campaign_batches(context.campaign_id)
+                if batch.batch_kind == "FIRST_PASS"
+            ),
+            original_catalog_sha256=catalog_sha256,
+            original_selection_sha256=selection_sha256,
+            original_result_sha256=result_sha256,
+            execution_profile=context.execution_profile,
+            schema_version=context.schema_version,
+            batch_kind=context.batch_kind,
+            config_sha256=context.config_sha256,
+            runtime_closure_sha256=context.runtime_closure_sha256,
+            worker_count=context.worker_count,
+            evidence_root=context.evidence_root,
+            install_prefix=install_prefix,
+            owner_generation=context.owner_generation,
+            created_at_ns=time.time_ns(),
+        )
 
     def subscribe(self):
         queue = asyncio.Queue()
