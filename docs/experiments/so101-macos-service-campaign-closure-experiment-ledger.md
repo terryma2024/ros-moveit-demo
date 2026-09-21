@@ -12,8 +12,8 @@ executor: Gate A Codex dispatch a50dcb6c-1eba-43d5-a2ea-2725a18e3a27 inline on m
 worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
 branch: codex/so101-unified-webapp
 base_commit: 6d5069026fbd322076f58d0d4b9504891abeb861
-current_commit: ab3efeb23b4307e8d2a373e0dde332e38726925e before the EXP-MSC-A1-002 ledger edit
-upstream: origin/codex/so101-unified-webapp (ahead 23, no push authorized)
+current_commit: e4cf6dcf003f09e755dc7d609a5e39af01c439a3 before the final CP-MSC-A1 ledger edit
+upstream: origin/codex/so101-unified-webapp (ahead 47 before the final ledger commit; no push authorized)
 evidence_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
 dispatch_receipt: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/dispatch.receipt
 dispatch_receipt_sha256: bea49ba76cf9d131529ca0b72d82bf8c9c6350d9eebc69fdefbe8ad19bc34b51
@@ -49,8 +49,8 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-A1-FIX-TAKEOVER
-next_experiment: EXP-MSC-A1-002
+latest_checkpoint: CP-MSC-A1-REPAIR-CHECKPOINT
+next_experiment: NONE
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -83,7 +83,7 @@ next_experiment: EXP-MSC-A1-002
 
 ```yaml
 experiment_id: EXP-MSC-A1-002
-status: RUNNING
+status: COMPLETE_WITH_STRICT_GATE_BLOCKED
 prior_experiment: EXP-MSC-A1-001
 hypothesis: >-
   A task-owned filtered view of the canonical macOS ROS dylib farm will resolve
@@ -133,13 +133,86 @@ observed:
   - The related Gate A suite passed all 92 tests after the implementation.
   - The full ordinary test directory collected and ran 3604 tests; its 233 failures were outside the changed files and were dominated by Linux-only /data/work fixture paths on this macOS host, plus one existing Python-3.12 literal assertion. No modified Gate A test failed.
   - Correction: the ledger status transition from PLANNED to RUNNING was recorded after the RED/GREEN commands instead of immediately before them; command logs and immutable JUnit files preserve the actual order.
+  - The valid N/P pair used one copied closure and one filtered ROS dylib baseline. N stopped on the exact manifest vendor dependency before ROS plugin instance initialization; P added only the vendor directory and passed the full station.
+  - The reducer returned CONFIRMED_RPATH / EXCLUDED_BEFORE_ROS_PLUGIN_INSTANCE_INIT. The valid control evidence is control-attempt-006; its manifest SHA-256 is a943efb6593ec96aa870c148db02775e853af3dd53152138f79f252916f245d7.
+  - The Apple install rpath fix was committed in submodule 6591771de32c4d2e66bcb5076b3a851cfe6a9833 and parent e4cf6dcf003f09e755dc7d609a5e39af01c439a3.
+  - The rebuilt F closure froze with install inventory 43bd67f15b8b13144569e2ba00cec446fcfeed978cdd6a6d61142a66e36b9f5c. Its corrected manifest file SHA-256 is d7591a987338b328f0b083a9d5438d37e05c5d3ff3adaa089ab51e060918973a; the canonical manifest hash recorded by every station report is 8d2c3e183b1e208d5bc7f38b00195cc90a06c0daaf239c8d59eea3051204c198.
+  - F direct dlopen and the full station passed when F retained the manifest-bound ROS dylib baseline but omitted the vendor directory from DYLD_LIBRARY_PATH. The controller process loaded the manifest plugin and vendor bytes, reached READY, and shut down with zero process or IPC residue.
+  - Five fresh FULL_RESTART runs passed consecutively in full-restart-batch-002-round-1 through -5 on ROS domains 203 through 207. Every run recorded six phase markers, three active controllers, three MoveIt services, three actions, stable controller identity, matching plugin/vendor path and SHA, and zero residue.
+  - A literal no-DYLD probe, with every DYLD_* variable removed, still fails on @rpath/libhardware_interface.dylib. The original plan's strict no-DYLD completion condition is therefore not met by this repair.
+  - The final related gate passed 142 tests in 9.21 seconds. It includes the Linux/macOS path-adaptive tests requested by the user.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The MuJoCo vendor defect is fixed by the new relative install rpath. Host ROS dylibs remain an external macOS runtime dependency and still require the filtered task-owned baseline unless they are copied into a future self-contained closure.
+conclusion: >-
+  CONFIRMED_RPATH and CURRENT_CONTROLLER_PATH_OPERATIONAL under the filtered ROS dylib baseline;
+  the strict all-DYLD-cleared Gate A contract remains blocked by @rpath/libhardware_interface.dylib.
 evidence:
   - /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/gate-a-resolution/a50dcb6c-1eba-43d5-a2ea-2725a18e3a27/fix-dylib-baseline
-decision: PENDING
+decision: stop at CP-MSC-A1, release writer, and do not start Task 2
 next_experiment: NONE
+```
+
+## CP-MSC-A1-REPAIR-CHECKPOINT: current product passes with the ROS baseline; strict no-DYLD remains blocked
+
+This entry supersedes the earlier invalid-control result for the repaired N/P construction. It
+does not rewrite the earlier `CP-MSC-A1` or legacy `CP-MSC-A=UNCONFIRMED` text.
+
+```yaml
+checkpoint_id: CP-MSC-A1
+recorded_at: 2026-09-21T16:12:36+0800
+dispatch_id: a50dcb6c-1eba-43d5-a2ea-2725a18e3a27
+experiment: EXP-MSC-A1-002
+legacy_attribution: LEGACY_PROVENANCE_UNRECOVERABLE
+legacy_checkpoint: CP-MSC-A=UNCONFIRMED (preserved verbatim below)
+current_boundary_verdict: CONFIRMED_RPATH
+np_controller_verdict: EXCLUDED_BEFORE_ROS_PLUGIN_INSTANCE_INIT
+operational_controller_verdict: CURRENT_CONTROLLER_PATH_OPERATIONAL
+negative_class: MISSING_VENDOR_BEFORE_ROS_PLUGIN_INSTANCE_INIT
+positive_class: PASS
+amended_ros_baseline_gate: PASS_5_OF_5
+strict_no_dyld_gate: BLOCKED
+gate_a_status: STRICT_CURRENT_PRODUCT_GATE_NOT_PASSED
+strict_blocker: '@rpath/libhardware_interface.dylib is absent from the copied F closure when all DYLD_* variables are cleared'
+control_manifest_sha256: a943efb6593ec96aa870c148db02775e853af3dd53152138f79f252916f245d7
+f_manifest_file_sha256: d7591a987338b328f0b083a9d5438d37e05c5d3ff3adaa089ab51e060918973a
+f_manifest_canonical_sha256: 8d2c3e183b1e208d5bc7f38b00195cc90a06c0daaf239c8d59eea3051204c198
+f_install_inventory_sha256: 43bd67f15b8b13144569e2ba00cec446fcfeed978cdd6a6d61142a66e36b9f5c
+source_commit: e4cf6dcf003f09e755dc7d609a5e39af01c439a3
+submodule_commit: 6591771de32c4d2e66bcb5076b3a851cfe6a9833
+code_commits:
+  - a92b6c94ee341c05f635f84d29b68c857d0fca65 fix(so101): preserve macOS ROS dylib baseline
+  - a9f4de3ef0ecbe06f45facdccd08ac2adbd5ca0f fix(so101): make macOS controls host portable
+  - afaa91310447baac74a72e28d0dd7eb766456621 fix(so101): bind copied controller libraries
+  - 630170ddd0ac6a2f72cddda485e303ff94637241 fix(so101): execute installed readiness probe
+  - 3f3a0d1b565373f9cc66143b6cfc4423042a6f51 fix(so101): tolerate inaccessible vmmap entries
+  - 6591771de32c4d2e66bcb5076b3a851cfe6a9833 fix(mujoco): close macOS vendor install rpath
+  - e4cf6dcf003f09e755dc7d609a5e39af01c439a3 fix(so101): attest relocatable macOS station closure
+five_consecutive_full_restart_runs:
+  - full-restart-batch-002-round-1: PASS, ROS_DOMAIN_ID=203
+  - full-restart-batch-002-round-2: PASS, ROS_DOMAIN_ID=204
+  - full-restart-batch-002-round-3: PASS, ROS_DOMAIN_ID=205
+  - full-restart-batch-002-round-4: PASS, ROS_DOMAIN_ID=206
+  - full-restart-batch-002-round-5: PASS, ROS_DOMAIN_ID=207
+test_evidence:
+  - tests/green/path-portability-targeted: 47 passed
+  - tests/green/final-related-006: 142 passed in 9.21 seconds, exit 0
+cleanup_complete: true
+owned_processes: NONE - all recorded station descendants stopped; final task-owned process scan empty
+task_owned_ipc_residue: NONE
+task_2_started: false
+writer_release: effective after this checkpoint ledger commit and writer-release evidence marker
+evidence_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
+retained_runs:
+  - gate-a-resolution/a50dcb6c-1eba-43d5-a2ea-2725a18e3a27/fix-dylib-baseline/control-attempt-006
+  - gate-a-resolution/a50dcb6c-1eba-43d5-a2ea-2725a18e3a27/fix-dylib-baseline/fixed
+  - gate-a-resolution/a50dcb6c-1eba-43d5-a2ea-2725a18e3a27/fix-dylib-baseline/tests
+archived_runs: NONE
+deletion_candidates:
+  - failed and invalid control/manifest/attestation attempt directories under fix-dylib-baseline
+  - fixed/vendor-workspace/build, fixed/mujoco-build*, fixed/station-build*, and fixed/teleop-build*
+  - all per-invocation tmp directories under fix-dylib-baseline/tests and fixed/full-restart-*
+deletions_performed: NONE
+next_command: NONE - writer released; stop Task 1 and do not start Task 2
 ```
 
 ## CP-MSC-A1-TAKEOVER: current-product Gate A writer handoff
