@@ -1,5 +1,27 @@
 # SO-101 macOS fixed runtime contract experiment ledger
 
+```yaml
+task_id: so101-macos-runtime-contract
+goal: validate the current macOS runtime patch on the local second physical Mac and preserve the exact cross-host boundary
+success_contract: on matianyideMacBook-Air.local, prepare and full doctor pass, a real GUI task station reaches READY, and task-owned processes and windows clean up
+worktree: /tmp/so101-debug-macos-runtime-contract-second-mac-2oruml/repo
+branch: codex/so101-unified-webapp
+base_commit: d8416d15e69d1e2a025f7735360d89ff4cccda66
+current_commit: d8416d15e69d1e2a025f7735360d89ff4cccda66 plus the recorded macOS runtime worktree patch
+evidence_root: /tmp/so101-debug-macos-runtime-contract-second-mac-2oruml
+confirmed_conclusions:
+  - Terry-Mac-mini.local passed the earlier /tmp runtime contract in RUN-002
+  - matianyideMacBook-Air.local passed the current /opt/data/tmp worktree patch in EXP-MRC-007
+disproven_routes:
+  - a transferred submodule origin outside the approved remote allowlist is rejected by prepare
+  - a user-home-only bun installation is invisible to the clean fixed runtime PATH
+open_hypotheses:
+  - RUN-006 must finish the Linux eight-worker non-ML parity gate
+  - the current /opt/data/tmp patch still needs a fresh Mac mini prepare, doctor, READY, and cleanup run before a same-patch two-host claim
+latest_checkpoint: CP-MRC-SECOND-MAC-SCOPED-PASS
+next_experiment: EXP-MRC-MAC-MINI-CURRENT-PATCH
+```
+
 ## RUN-001 — Registered
 
 - Date: 2026-09-21 Asia/Shanghai
@@ -226,3 +248,153 @@
   one Linux v4 document retaining MPS-only fields, an unmarked Torch checkpoint test, and an
   unpopulated locked submodule. These are environment/platform test boundaries, not represented as
   Linux acceptance. Scratch `linux-pytest-n8-003` is retained as a deletion candidate.
+
+## RUN-007 — Second physical Mac reproduction
+
+- Date: 2026-09-21 Asia/Shanghai
+- Host: `matianyideMacBook-Air.local`, Darwin arm64
+- Source commit: `d8416d15e69d1e2a025f7735360d89ff4cccda66` plus the
+  `/opt/data/tmp` worktree patch copied from `Terry-Mac-mini.local`
+- Locked fork source: `85d2a5c42686a3d6b0d909a047a4188b24edd257`
+- Status: `PASS_SECOND_PHYSICAL_MAC`
+- Evidence root: `/tmp/so101-debug-macos-runtime-contract-second-mac-2oruml`
+- Fixed paths: `/opt/ros2_jazzy` resolves to `/Users/matianyi/ros2_jazzy`;
+  `/opt/data/tmp` is owned by the current user with mode `0700`.
+- Build prerequisite: the first project-overlay attempt stopped at `BUN_EXECUTABLE` because
+  the clean launcher does not accept `~/.bun/bin`. Homebrew `bun 1.4.2` was installed at
+  `/opt/homebrew/bin/bun`, matching the launcher's fixed PATH. No user-home bun path was added
+  to source or runtime configuration.
+- Scoped verification: `test_macos_runtime_contract.py` passed all 13 tests; zsh syntax,
+  Python byte compilation, and `git diff --check` passed.
+- Prepare: the locked fork build reported 233 tests, zero errors, zero failures, and zero skips.
+  `so101_mujoco_support`, `so101_teleop`, and `so101_demo_py` then built successfully. The
+  published dylib farm contains 879 libraries at run `20260921T140346Z-14147`, with inventory
+  SHA-256 `f731368429c8f1a36944a60ce67ee9205b59b9cd7bbcab543ef0e950dc353536`.
+- Full doctor: `PASS`; CPython 3.11.15 imported `rclpy`, loaded
+  `libcontrol_toolbox.dylib`, `libhardware_interface.dylib`, and
+  `librosidl_typesupport_c.dylib`, and verified all fixed package prefixes.
+- Real station: `ROS_DOMAIN_ID=226` launched the GUI task station through
+  `scripts/so101-macos.zsh`. `motion_stack_ready --timeout-s 90` returned `phase=READY`, with
+  all three controllers active, all three required MoveIt services callable, and all three
+  required actions available.
+- Visual evidence: exact window ID `27275`, owner `ros2_control_node`, title
+  `MuJoCo : so101_task_scene`, was captured at original window resolution. The image shows the
+  SO-101, cup, table, and MuJoCo `Running` status.
+- Cleanup: one Ctrl-C was sent to the task-owned launch PTY. The MuJoCo window disappeared and
+  the task-identity process scan found zero `ros2_control_node`, MoveGroup, robot-state,
+  readiness, or task-station residue.
+- Acceptance: **second physical Mac runtime reproduction passed**. This closes the cross-host
+  host run only. It does not prove a strict same-patch two-host A/B because `RUN-002` used the
+  earlier `/tmp` contract; the current `/opt/data/tmp` patch still needs a fresh Mac mini run.
+  The ordinary non-ML `so101_demo_py` package gate passed in `RUN-005`; the Linux parity run in
+  `RUN-006` remains open, and explicit ML tests are outside that gate.
+- Retained: the complete registered evidence root; locked-fork run
+  `/opt/data/so101/runtime/fork/runs/85d2a5c42686a3d6b0d909a047a4188b24edd257`;
+  `/opt/data/so101/workspace`; and dylib-farm run `20260921T140346Z-14147`.
+- Archived: none.
+- Deletion candidates only: the registered evidence root, failed prepare logs, and generated
+  launch-parameter entries under `/opt/data/tmp`. A later `mac-mini-worktree.patch` snapshot is
+  also a deletion candidate: it was captured only after the Mac mini writer had expanded the
+  dirty worktree into unrelated parallel-suite files, so it is invalid as the six-file source
+  patch and was not used for this result. Nothing was deleted.
+
+```yaml
+experiment_id: EXP-MRC-007
+status: VALID
+prior_experiment: RUN-002
+hypothesis: the fixed macOS runtime contract is portable to a second Apple Silicon Mac
+prediction: prepare and full doctor pass, then a real GUI task station reaches READY and cleans up without task-owned residue
+single_variable: not a strict single-variable A/B; host changed and the contract advanced from RUN-002 /tmp to the current /opt/data/tmp patch
+lifecycle: ISOLATED_STACK
+preconditions:
+  - no SO-101 task-station, ros2_control_node, MoveGroup, robot-state publisher, or readiness process was present
+  - /opt/ros2_jazzy resolved to /Users/matianyi/ros2_jazzy
+  - /opt/data/tmp existed with current-user ownership and mode 0700
+  - parent source was d8416d15e69d1e2a025f7735360d89ff4cccda66 and the locked fork was 85d2a5c42686a3d6b0d909a047a4188b24edd257
+success_criteria:
+  - locked fork and project overlays build successfully
+  - full doctor imports rclpy, loads all required dylibs, and verifies package prefixes
+  - motion_stack_ready reports three active controllers, three services, and three actions
+  - exact MuJoCo window evidence shows the running SO-101 task scene
+  - one owner Ctrl-C leaves no task-owned process or window residue
+failure_criteria:
+  - any prepare, doctor, READY, GUI, or cleanup boundary fails under the fixed contract
+invalid_criteria:
+  - source or submodule drift, a reused stack, a non-isolated ROS domain, or missing cleanup evidence
+provenance:
+  source_commit: d8416d15e69d1e2a025f7735360d89ff4cccda66
+  source_patch_paths:
+    - .agents/skills/so101-dev/references/macos-runtime-environment.md
+    - docs/experiments/so101-macos-runtime-contract-experiment-ledger.md
+    - docs/guides/macos-apple-silicon-ros2-jazzy-so101-mujoco.md
+    - scripts/so101-macos.zsh
+    - scripts/so101_macos_runtime_contract.py
+    - src/so101_demo_py/test/test_macos_runtime_contract.py
+  install_overlay: /opt/data/so101/workspace/install
+  runtime_executable: /opt/ros2_jazzy/.venv/bin/python /opt/ros2_jazzy/install/ros2cli/bin/ros2
+  ros_domain_id: 226
+  gz_partition: N/A (MuJoCo)
+commands:
+  - command: scripts/so101-macos.zsh doctor --base --json
+    exit_code: 0
+  - command: scripts/so101-macos.zsh prepare
+    exit_code: nonzero; rejected transferred unapproved submodule origin
+  - command: scripts/so101-macos.zsh prepare
+    exit_code: nonzero; fork passed 233 tests, then project overlay rejected missing fixed-PATH bun
+  - command: HOMEBREW_NO_AUTO_UPDATE=1 /opt/homebrew/bin/brew install bun
+    exit_code: 0
+  - command: scripts/so101-macos.zsh prepare
+    exit_code: 0
+  - command: scripts/so101-macos.zsh doctor --json
+    exit_code: 0
+  - command: ROS_DOMAIN_ID=226 scripts/so101-macos.zsh launch so101_demo_py so101_mujoco_task_station.launch.py headless:=false sensor_rendering:=true include_teleop:=false
+    exit_code: unavailable; the task-owned PTY was stopped by one Ctrl-C and cleanup was verified independently
+  - command: ROS_DOMAIN_ID=226 scripts/so101-macos.zsh run so101_demo_py motion_stack_ready --timeout-s 90
+    exit_code: 0
+  - command: .agents/skills/gui-capture/scripts/capture-gui.sh --local --window-id 27275 --output-root /tmp/so101-debug-macos-runtime-contract-second-mac-2oruml/gui
+    exit_code: 0
+observed:
+  - final prepare built three project packages and published an 879-library farm with manifest SHA-256 f731368429c8f1a36944a60ce67ee9205b59b9cd7bbcab543ef0e950dc353536
+  - READY reported all required controllers, services, and actions available
+  - exact GUI evidence showed MuJoCo running the SO-101 task scene
+  - post-Ctrl-C process and window readbacks found zero task-owned residue
+  - Octomap sensor configuration and an unattached plastic_cup warning were present but did not fail the declared runtime READY gate
+inferred:
+  - the current /opt/data/tmp patch runs successfully on matianyideMacBook-Air.local
+  - same-patch portability across both Macs remains unproven until a fresh Mac mini run
+  - this result does not qualify pick-place behavior or explicit ML tests
+conclusion: PASS_SECOND_PHYSICAL_MAC for this host and runtime patch only; not a same-patch two-host closure
+evidence:
+  - /tmp/so101-debug-macos-runtime-contract-second-mac-2oruml/prepare.log sha256=919a3a3623d10db48ed6b5012178898d7dfe85d73156cee3f17e7fb919a78f28
+  - /tmp/so101-debug-macos-runtime-contract-second-mac-2oruml/prepare-approved-origin.log sha256=c211d8319f569d9e623376050983b31ac0e946ccea051139094008fe091c42c6
+  - /tmp/so101-debug-macos-runtime-contract-second-mac-2oruml/prepare-with-bun.log sha256=bcae60b067851bad3a666bb5623d826236f075d84b57c510a0edd526bbb8982a
+  - /tmp/so101-debug-macos-runtime-contract-second-mac-2oruml/doctor.json sha256=c356988d37fd6f3366572b5da72ccfd467d9c9614f8b1f95c059eaa07b4083da
+  - /tmp/so101-debug-macos-runtime-contract-second-mac-2oruml/motion-stack-ready.log sha256=760515f1ee343a60f848889cf48a6fea110a98ebed150235ad05562a76ef9ab8
+  - /tmp/so101-debug-macos-runtime-contract-second-mac-2oruml/task-station.log sha256=7bfb5c6e77875bed04063724fbfae5cbc820c9911576e4991ab438a0945be5c3
+  - /tmp/so101-debug-macos-runtime-contract-second-mac-2oruml/gui/20260921T222338-19c8110358a2/manifest.json sha256=e3698aa27aedc5b5987725b9947ef30597533e47e4b6e58cb5b6db5874914e5e
+  - /tmp/so101-debug-macos-runtime-contract-second-mac-2oruml/gui/20260921T222338-19c8110358a2/window.png sha256=f6be2333d4ee9d7e43ad60d5552a0ade810673154e53d94ff90b7b4e013c49da
+  - /tmp/so101-debug-macos-runtime-contract-second-mac-2oruml/tests/final/junit.xml sha256=a034a032852048ed8dc41ce3a321b4d28fb96a61ddc2d977ff21cb8053056909
+  - /tmp/so101-debug-macos-runtime-contract-second-mac-2oruml/cleanup-readback.md sha256=02c0d083b764d565ed3ff64fc247dac51bc9b3e41f3d3153179df1580ea9cd6d
+decision: KEEP
+next_experiment: EXP-MRC-MAC-MINI-CURRENT-PATCH
+```
+
+```yaml
+checkpoint_id: CP-MRC-SECOND-MAC-SCOPED-PASS
+last_valid_experiment: EXP-MRC-007
+current_hypothesis: RUN-006 Linux parity and the Mac mini current-patch rerun remain open
+working_tree_status: RUN-007 second-Mac evidence and implementation-plan updates atop the RUN-005 fixes
+owned_processes: NONE
+preserved_processes: unrelated user GUI and terminal processes were not touched
+confirmed_conclusions:
+  - second physical Mac runtime reproduction passed
+disproven_routes:
+  - unapproved transferred submodule origin
+  - user-home-only bun path under a clean launcher
+open_risks:
+  - explicit ML tests are outside the RUN-005 ordinary non-ML gate
+  - RUN-006 Linux eight-worker parity is still running
+  - runtime READY does not prove pick-place motion behavior
+  - current /opt/data/tmp patch has not been rerun on Terry-Mac-mini.local
+next_command: rerun prepare, full doctor, READY, exact-window evidence, and cleanup on Terry-Mac-mini.local with the current patch
+```
