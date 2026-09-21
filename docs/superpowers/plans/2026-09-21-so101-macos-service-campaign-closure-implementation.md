@@ -107,7 +107,8 @@ export GATEA_RUN_ROOT="$TASK_ROOT/gate-a-resolution/$DISPATCH_ID"
 mkdir -p "$GATEA_RUN_ROOT"/{control-set,negative,positive,fixed,tmp,ros-home,ros-logs}
 mkdir -p "$GATEA_RUN_ROOT/tests/red" "$GATEA_RUN_ROOT/tests/green"
 export TEST_PYTHON=/Users/matianyi/ros2_jazzy/.venv/bin/python
-export INSTALL_ROOT="$GATEA_RUN_ROOT/control-set/install"
+export COLCON=/Users/matianyi/ros2_jazzy/.venv/bin/colcon
+export CLOSURE_ROOT="$GATEA_RUN_ROOT/control-set/closure"
 export ROS_HOME="$GATEA_RUN_ROOT/ros-home"
 export ROS_LOG_DIR="$GATEA_RUN_ROOT/ros-logs"
 export TMPDIR="$GATEA_RUN_ROOT/tmp"
@@ -148,6 +149,25 @@ readiness。`DYLD_PRINT_*` 只能作为辅助日志，不能替代该记录。
 launcher 冒充、wrong child、PID/birth/executable drift 全部拒绝。`reduce_gate_a_controls()` 是纯函数，
 表驱动 RED 覆盖 N-pass/P-fail、相同/不同 loader failure、timeout、missing marker、错误或缺失
 process attestation、identity drift、cleanup residue、semantic diff，以及默认未列组合。
+
+测试先按设计中的 required/allowed-absent 表实现单轮分类优先级：invariant/collector/identity/timeout/
+cleanup 先于 missing-vendor、PASS 和 NON_RPATH。至少固定下面两个相邻用例，防止只按错误字符串
+归因：
+
+| Class | Required | Allowed absent |
+| --- | --- | --- |
+| `PASS` | valid manifest/semantic/binding、healthy collector、真实稳定 controller identity、`DLOPEN_SUCCEEDED`、plugin/vendor images、全 ROS markers、READY、cleanup complete | loader error、first-bad phase |
+| `MISSING_VENDOR_BEFORE_ROS_PLUGIN_INSTANCE_INIT` | valid manifest/semantic/binding、healthy collector、真实 controller role/PID/birth/executable、`DLOPEN_FAILED`、精确 vendor loader error、无 ROS instance marker、cleanup complete | plugin/vendor images、`PLUGIN_RESOLVED` 起全部 markers、READY |
+| `NON_RPATH_FAILURE` | valid invariants/collector/identity、`DLOPEN_SUCCEEDED`、plugin/vendor images、first-bad phase、cleanup complete | 首坏 phase 后 markers、READY |
+| `INVALID` | 具体 invalid reason | 不允许用缺证据的表象升级成前三类 |
+
+```python
+def test_valid_n_missing_and_p_pass_confirms_rpath():
+    assert reduce_gate_a_controls(valid_missing_vendor_n, valid_pass_p).current == CONFIRMED_RPATH
+
+def test_same_loader_surface_without_collector_or_process_identity_is_invalid():
+    assert reduce_gate_a_controls(unattested_missing_vendor_n, valid_pass_p).current == INVALID_CONTROL
+```
 
 RED 和 GREEN 使用不同 invocation 目录，JUnit、stdout、stderr、elapsed、exit code 与 SHA 不得覆盖：
 
@@ -214,67 +234,107 @@ git commit -m "test(so101): freeze macOS Gate A controls"
 
 - [ ] **Step 3: 构建可追溯 copied install，冻结 manifest，并运行 N/P controls**
 
-不复用旧 `gate-a/` 目录作为写入位置。参考旧 ledger 已验证的 `build_submodule.sh` /
-`build_station.sh` 包集合，在本轮子目录做新的非 symlink、isolated install：
+不复用旧 `gate-a/` 目录作为写入位置。参考旧 ledger 已验证的 package set，在本轮子目录构建单一
+merged closure。先用仓库 installer 构建 pinned vendor：
 
 ```bash
-export COLCON=/Users/matianyi/ros2_jazzy/.venv/bin/colcon
+export MUJOCO_AUTHORITY=/Users/matianyi/ros2_jazzy/extra_ws/src/mujoco
+export VENDOR_WORKSPACE="$GATEA_RUN_ROOT/control-set/vendor-workspace"
+export INSTALLER="$PWD/scripts/install-mujoco-vendor-macos.zsh"
+export VENDOR_PATCH="$PWD/tools/mujoco_vendor_macos/patches/mujoco-3.4.0-glfw-no-primary-monitor.patch"
 export MUJOCO_BUILD="$GATEA_RUN_ROOT/control-set/mujoco-build"
-export MUJOCO_INSTALL="$GATEA_RUN_ROOT/control-set/mujoco-install"
 export MUJOCO_LOG="$GATEA_RUN_ROOT/control-set/mujoco-log"
 export STATION_BUILD="$GATEA_RUN_ROOT/control-set/station-build"
-export STATION_INSTALL="$GATEA_RUN_ROOT/control-set/station-install"
 export STATION_LOG="$GATEA_RUN_ROOT/control-set/station-log"
+test "$(git -C "$MUJOCO_AUTHORITY" rev-parse HEAD)" = e55fff5dea6f1d5dd7963ca52eecc41d05ad0922
+test -z "$(git -C "$MUJOCO_AUTHORITY" status --porcelain --untracked-files=all)"
+git -C "$MUJOCO_AUTHORITY" rev-parse HEAD >"$GATEA_RUN_ROOT/control-set/authority-commit.txt"
+git -C "$MUJOCO_AUTHORITY" status --porcelain --untracked-files=all \
+  >"$GATEA_RUN_ROOT/control-set/authority-status.txt"
+shasum -a 256 "$INSTALLER" "$VENDOR_PATCH" \
+  >"$GATEA_RUN_ROOT/control-set/installer-patch-SHA256SUMS"
+SECONDS=0
+SO101_ROS_WORKSPACE=/Users/matianyi/ros2_jazzy \
+SO101_ROS_UNDERLAY=/Users/matianyi/ros2_jazzy/install \
+SO101_COLCON="$COLCON" SO101_PYTHON="$TEST_PYTHON" \
+SO101_MUJOCO_SOURCE_ROOT="$MUJOCO_AUTHORITY" \
+SO101_MUJOCO_VENDOR_WORKSPACE="$VENDOR_WORKSPACE" \
+SO101_MUJOCO_VENDOR_INSTALL_PREFIX="$CLOSURE_ROOT" \
+zsh "$INSTALLER" >"$GATEA_RUN_ROOT/control-set/vendor-install.stdout.log" \
+  2>"$GATEA_RUN_ROOT/control-set/vendor-install.stderr.log"
+printf '%s\n' "$SECONDS" >"$GATEA_RUN_ROOT/control-set/vendor-install.elapsed-seconds.txt"
+test -f "$CLOSURE_ROOT/opt/mujoco_vendor/lib/libmujoco.dylib"
+git -C "$VENDOR_WORKSPACE/src/mujoco" rev-parse HEAD \
+  >"$GATEA_RUN_ROOT/control-set/prepared-source-commit.txt"
+git -C "$VENDOR_WORKSPACE/src/mujoco" status --porcelain --untracked-files=all \
+  >"$GATEA_RUN_ROOT/control-set/prepared-source-status.txt"
+shasum -a 256 "$VENDOR_WORKSPACE/src/mujoco/simulate/glfw_adapter.cc" \
+  >"$GATEA_RUN_ROOT/control-set/patched-source.sha256"
+find "$CLOSURE_ROOT/opt/mujoco_vendor/lib" -type f -name 'libmujoco*.dylib' -exec shasum -a 256 {} \; \
+  >"$GATEA_RUN_ROOT/control-set/vendor-dylib-SHA256SUMS"
+```
+
+authority checkout 只读；installer 只能把 clone、patch、build 写到 `$VENDOR_WORKSPACE`。随后 source
+host underlays 与刚生成的 closure，用同一 `--merge-install` root 依次构建 submodule 和 station：
+
+```bash
 source /Users/matianyi/ros2_jazzy/install/setup.zsh
 source /Users/matianyi/ros2_jazzy/extra_ws/install/setup.zsh
+source "$CLOSURE_ROOT/setup.zsh"
 "$COLCON" list --base-paths third_party/mujoco_ros2_control
 "$COLCON" --log-base "$MUJOCO_LOG" build \
   --base-paths third_party/mujoco_ros2_control \
   --packages-up-to mujoco_ros2_control \
-  --build-base "$MUJOCO_BUILD" --install-base "$MUJOCO_INSTALL" \
+  --build-base "$MUJOCO_BUILD" --install-base "$CLOSURE_ROOT" --merge-install \
   --event-handlers console_direct+
-source "$MUJOCO_INSTALL/setup.zsh"
+source "$CLOSURE_ROOT/setup.zsh"
 "$COLCON" list --base-paths src | rg '^(so101_mujoco_support|so101_demo_py)[[:space:]]'
 "$COLCON" --log-base "$STATION_LOG" build \
   --base-paths src \
   --packages-select so101_mujoco_support so101_demo_py \
-  --build-base "$STATION_BUILD" --install-base "$STATION_INSTALL" \
+  --build-base "$STATION_BUILD" --install-base "$CLOSURE_ROOT" --merge-install \
   --event-handlers console_direct+
-source "$STATION_INSTALL/setup.zsh"
-export INSTALL_ROOT="$STATION_INSTALL/so101_demo_py"
-export DIAGNOSTIC_EXE="$INSTALL_ROOT/lib/so101_demo_py/so101_diagnose_macos_station"
+source "$CLOSURE_ROOT/setup.zsh"
+export DIAGNOSTIC_EXE="$CLOSURE_ROOT/lib/so101_demo_py/so101_diagnose_macos_station"
 test -x "$DIAGNOSTIC_EXE"
 head -n 1 "$DIAGNOSTIC_EXE" >"$GATEA_RUN_ROOT/control-set/diagnostic-shebang.txt"
 ```
 
-`setup.cfg` 把 console scripts 安装到 `$base/lib/so101_demo_py`，所以 isolated layout 的入口是上面的
-`$DIAGNOSTIC_EXE`，不是 `$INSTALL_ROOT/bin/...`。运行任何 control 前保存 bootstrap readback，并
-要求 Python module 来自新 install 的 site-packages：
+`RuntimeClosureIdentity.install_root` 必须精确写 `$CLOSURE_ROOT`。运行任何 control 前保存 bootstrap
+readback，要求 ament prefix、Python modules、interpreter 与 shebang 全部精确绑定该 closure：
 
 ```bash
 PYTHONNOUSERSITE=1 "$TEST_PYTHON" -c '
 import json, pathlib, sys
 from ament_index_python.packages import get_package_prefix
 import so101_demo
+import so101_demo.runtime.macos_dlopen_probe as probe
+root = pathlib.Path("'"$CLOSURE_ROOT"'").resolve()
 doc = {
   "interpreter": sys.executable,
   "module_file": str(pathlib.Path(so101_demo.__file__).resolve()),
+  "probe_module_file": str(pathlib.Path(probe.__file__).resolve()),
   "ament_prefix": get_package_prefix("so101_demo_py"),
 }
 print(json.dumps(doc, sort_keys=True))
-assert pathlib.Path(doc["module_file"]).is_relative_to(pathlib.Path(doc["ament_prefix"]).resolve())
+assert pathlib.Path(doc["ament_prefix"]).resolve() == root
+assert pathlib.Path(doc["module_file"]).is_relative_to(root)
+assert pathlib.Path(doc["probe_module_file"]).is_relative_to(root)
+assert pathlib.Path(sys.executable).resolve() == pathlib.Path("'"$TEST_PYTHON"'").resolve()
 ' >"$GATEA_RUN_ROOT/control-set/bootstrap-readback.json"
+test "$(head -n 1 "$DIAGNOSTIC_EXE")" = "#!$TEST_PYTHON"
 shasum -a 256 "$GATEA_RUN_ROOT/control-set/bootstrap-readback.json" \
   "$GATEA_RUN_ROOT/control-set/diagnostic-shebang.txt" \
   >"$GATEA_RUN_ROOT/control-set/bootstrap-readback.sha256"
 ```
 
-从这个 committed HEAD 和 copied install 生成只读 manifest。N/P 共用
+从这个 committed HEAD 生成 manifest，递归冻结 `$CLOSURE_ROOT` 全部 regular files、symlinks 与 SHA；
+plugin、vendor 与 Python package 必须都在同一 root。N/P 共用
 `FrozenSemanticLaunchContract`；每轮另写 `GateARunBinding`，保存验证后的 expanded argv/env：
 
 - N（negative）清除全部 `DYLD_*`，先跑 direct dlopen，再跑
   `FULL_TASK_STATION`。
-- P（positive）始终执行，只增加 manifest 中 task-owned vendor lib 的 `DYLD_LIBRARY_PATH`，其余与 N 完全相同，
+- P（positive）始终执行，只增加 `DYLD_LIBRARY_PATH=$CLOSURE_ROOT/opt/mujoco_vendor/lib`，其余与 N 完全相同，
   同样先 direct dlopen、再跑 `FULL_TASK_STATION`。
 - 每次运行都保存 direct probe、structured phase、loaded images、controller direct query、MoveIt
   readiness、PID/birth、timeout 与 cleanup accounting。probe error、manifest/identity mismatch 或残留都
@@ -352,7 +412,7 @@ direct dlopen initializer 是否执行不参与这个判定。
 | `NON_RPATH_FAILURE` | `PASS` 或同一 `NON_RPATH_FAILURE` | `CURRENT_NON_RPATH_FAILURE` | `NOT_EXCLUDED` | 停止，记录 N 首坏 ROS phase，修订 owning-layer plan |
 | `PASS` | 任一非 `PASS` | `INVALID_CONTROL` | `NOT_EXCLUDED` | N/P 单变量合同被破坏；停止并修订 control plan |
 | P 未消除 N 的相同或不同 loader failure | 任一非 `PASS` | `INVALID_CONTROL` | `NOT_EXCLUDED` | vendor binding/control 无法证伪 rpath；停止并修订 control plan |
-| 任一 timeout、missing marker、空/错 process images、probe/launcher 冒充、wrong child、identity drift、cleanup residue、semantic diff 或非法 substitution | 任意 | `INVALID_CONTROL` | `NOT_EXCLUDED` | 停止本批并修订 control plan |
+| 任一 timeout、缺少该 observation class 表中要求的 marker/attestation、probe/launcher 冒充、wrong child、identity drift、cleanup residue、semantic diff 或非法 substitution | 任意 | `INVALID_CONTROL` | `NOT_EXCLUDED` | 停止本批并修订 control plan；不得把该 class 明确允许缺失的字段当成 invalid |
 | 任意未列组合 | 任意 | `INVALID_CONTROL` | `NOT_EXCLUDED` | deterministic reducer 默认 fail closed |
 
 `LEGACY_TRACEABLE` 或 `LEGACY_PROVENANCE_UNRECOVERABLE` 可与表中任一行并存。foreign overlay 无法复现
@@ -362,24 +422,27 @@ direct dlopen initializer 是否执行不参与这个判定。
 ```bash
 # CURRENT_CLOSURE_ALREADY_VALID route
 export F_MANIFEST="$GATEA_RUN_ROOT/control-set/manifest.json"
-export F_INSTALL_ROOT="$INSTALL_ROOT"
+export F_CLOSURE_ROOT="$CLOSURE_ROOT"
 export F_DIAGNOSTIC_EXE="$DIAGNOSTIC_EXE"
 
 # CONFIRMED_RPATH route：只在 Step 4 rebuild 和 manifest freeze 完成后设置
 export F_MANIFEST="$GATEA_RUN_ROOT/fixed/manifest.json"
-export F_INSTALL_ROOT="$GATEA_RUN_ROOT/fixed/station-install/so101_demo_py"
-export F_DIAGNOSTIC_EXE="$F_INSTALL_ROOT/lib/so101_demo_py/so101_diagnose_macos_station"
+export F_CLOSURE_ROOT="$GATEA_RUN_ROOT/fixed/closure"
+export F_DIAGNOSTIC_EXE="$F_CLOSURE_ROOT/lib/so101_demo_py/so101_diagnose_macos_station"
 ```
 
-每次只能执行其中一组；verdict、`F_MANIFEST`、`F_INSTALL_ROOT` 和 `F_DIAGNOSTIC_EXE` 必须一并
+每次只能执行其中一组；verdict、`F_MANIFEST`、`F_CLOSURE_ROOT` 和 `F_DIAGNOSTIC_EXE` 必须一并
 写入 ledger。
 
 - [ ] **Step 4: 只在 `CONFIRMED_RPATH` route 修复 install-rpath**
 
 `CURRENT_CLOSURE_ALREADY_VALID` route 明确跳过本步，不修改 submodule、dependency lock 或 candidate
 常量。`CONFIRMED_RPATH` route 只修改 submodule CMake 的 Apple `INSTALL_RPATH`：保留
-`@loader_path`，加入指向同一 copied prefix `opt/mujoco_vendor/lib` 的相对 loader path；不得修改
-controller node、dispatcher 或 hardware interface。
+`@loader_path`，并为 merged layout 中的
+`$F_CLOSURE_ROOT/lib/libmujoco_ros2_control.dylib` 增加精确
+`@loader_path/../opt/mujoco_vendor/lib`。修复后用 `otool -l` 证明该 rpath，从 plugin 实际目录解析后
+必须等于 `$F_CLOSURE_ROOT/opt/mujoco_vendor/lib`；不得修改 controller node、dispatcher 或
+hardware interface。
 
 先在 `test_macos_install_contract.py` 写精确 RED：copied plugin 的 LC_RPATH 必须能在 no-DYLD
 environment 解析 manifest-bound vendor dylib；`test_runtime_closure.py` 拒绝 loaded image 落到 copied
@@ -430,49 +493,81 @@ rg -n 'CANDIDATE_COMMIT' \
   src/so101_demo_py/test/test_macos_install_contract.py
 ```
 
-从 committed HEAD 完整重建 submodule 与 station copied install：
+从 committed HEAD 重建完整 vendor + submodule + station merged closure：
 
 ```bash
+export F_CLOSURE_ROOT="$GATEA_RUN_ROOT/fixed/closure"
+export F_VENDOR_WORKSPACE="$GATEA_RUN_ROOT/fixed/vendor-workspace"
 export F_MUJOCO_BUILD="$GATEA_RUN_ROOT/fixed/mujoco-build"
-export F_MUJOCO_INSTALL="$GATEA_RUN_ROOT/fixed/mujoco-install"
 export F_MUJOCO_LOG="$GATEA_RUN_ROOT/fixed/mujoco-log"
 export F_STATION_BUILD="$GATEA_RUN_ROOT/fixed/station-build"
-export F_STATION_INSTALL="$GATEA_RUN_ROOT/fixed/station-install"
 export F_STATION_LOG="$GATEA_RUN_ROOT/fixed/station-log"
+SO101_ROS_WORKSPACE=/Users/matianyi/ros2_jazzy \
+SO101_ROS_UNDERLAY=/Users/matianyi/ros2_jazzy/install \
+SO101_COLCON="$COLCON" SO101_PYTHON="$TEST_PYTHON" \
+SO101_MUJOCO_SOURCE_ROOT="$MUJOCO_AUTHORITY" \
+SO101_MUJOCO_VENDOR_WORKSPACE="$F_VENDOR_WORKSPACE" \
+SO101_MUJOCO_VENDOR_INSTALL_PREFIX="$F_CLOSURE_ROOT" \
+zsh "$INSTALLER" >"$GATEA_RUN_ROOT/fixed/vendor-install.stdout.log" \
+  2>"$GATEA_RUN_ROOT/fixed/vendor-install.stderr.log"
+git -C "$MUJOCO_AUTHORITY" rev-parse HEAD >"$GATEA_RUN_ROOT/fixed/authority-commit.txt"
+git -C "$MUJOCO_AUTHORITY" status --porcelain --untracked-files=all \
+  >"$GATEA_RUN_ROOT/fixed/authority-status.txt"
+shasum -a 256 "$INSTALLER" "$VENDOR_PATCH" \
+  >"$GATEA_RUN_ROOT/fixed/installer-patch-SHA256SUMS"
+git -C "$F_VENDOR_WORKSPACE/src/mujoco" rev-parse HEAD \
+  >"$GATEA_RUN_ROOT/fixed/prepared-source-commit.txt"
+git -C "$F_VENDOR_WORKSPACE/src/mujoco" status --porcelain --untracked-files=all \
+  >"$GATEA_RUN_ROOT/fixed/prepared-source-status.txt"
+shasum -a 256 "$F_VENDOR_WORKSPACE/src/mujoco/simulate/glfw_adapter.cc" \
+  >"$GATEA_RUN_ROOT/fixed/patched-source.sha256"
+find "$F_CLOSURE_ROOT/opt/mujoco_vendor/lib" -type f -name 'libmujoco*.dylib' \
+  -exec shasum -a 256 {} \; >"$GATEA_RUN_ROOT/fixed/vendor-dylib-SHA256SUMS"
 source /Users/matianyi/ros2_jazzy/install/setup.zsh
 source /Users/matianyi/ros2_jazzy/extra_ws/install/setup.zsh
+source "$F_CLOSURE_ROOT/setup.zsh"
 "$COLCON" --log-base "$F_MUJOCO_LOG" build \
   --base-paths third_party/mujoco_ros2_control \
   --packages-up-to mujoco_ros2_control \
-  --build-base "$F_MUJOCO_BUILD" --install-base "$F_MUJOCO_INSTALL" \
+  --build-base "$F_MUJOCO_BUILD" --install-base "$F_CLOSURE_ROOT" --merge-install \
   --event-handlers console_direct+
-source "$F_MUJOCO_INSTALL/setup.zsh"
+source "$F_CLOSURE_ROOT/setup.zsh"
 "$COLCON" --log-base "$F_STATION_LOG" build \
   --base-paths src --packages-select so101_mujoco_support so101_demo_py \
-  --build-base "$F_STATION_BUILD" --install-base "$F_STATION_INSTALL" \
+  --build-base "$F_STATION_BUILD" --install-base "$F_CLOSURE_ROOT" --merge-install \
   --event-handlers console_direct+
-source "$F_STATION_INSTALL/setup.zsh"
-export F_INSTALL_ROOT="$F_STATION_INSTALL/so101_demo_py"
-export F_DIAGNOSTIC_EXE="$F_INSTALL_ROOT/lib/so101_demo_py/so101_diagnose_macos_station"
+source "$F_CLOSURE_ROOT/setup.zsh"
+export F_DIAGNOSTIC_EXE="$F_CLOSURE_ROOT/lib/so101_demo_py/so101_diagnose_macos_station"
 test -x "$F_DIAGNOSTIC_EXE"
 head -n 1 "$F_DIAGNOSTIC_EXE" >"$GATEA_RUN_ROOT/fixed/diagnostic-shebang.txt"
+otool -l "$F_CLOSURE_ROOT/lib/libmujoco_ros2_control.dylib" \
+  >"$GATEA_RUN_ROOT/fixed/plugin-otool-l.txt"
+rg -F '@loader_path/../opt/mujoco_vendor/lib' "$GATEA_RUN_ROOT/fixed/plugin-otool-l.txt"
 ```
 
-生成新的 `$GATEA_RUN_ROOT/fixed/manifest.json`，并执行 installed Python readback：
+生成新的 `$GATEA_RUN_ROOT/fixed/manifest.json`，递归冻结 `$F_CLOSURE_ROOT` 完整 tree，并断言
+`RuntimeClosureIdentity.install_root == F_CLOSURE_ROOT`。随后执行 installed Python readback：
 
 ```bash
 PYTHONNOUSERSITE=1 "$TEST_PYTHON" -c '
 import json, pathlib, sys
 from ament_index_python.packages import get_package_prefix
 import so101_demo
+import so101_demo.runtime.macos_dlopen_probe as probe
+root = pathlib.Path("'"$F_CLOSURE_ROOT"'").resolve()
 doc = {
   "interpreter": sys.executable,
   "module_file": str(pathlib.Path(so101_demo.__file__).resolve()),
+  "probe_module_file": str(pathlib.Path(probe.__file__).resolve()),
   "ament_prefix": get_package_prefix("so101_demo_py"),
 }
 print(json.dumps(doc, sort_keys=True))
-assert pathlib.Path(doc["module_file"]).is_relative_to(pathlib.Path(doc["ament_prefix"]).resolve())
+assert pathlib.Path(doc["ament_prefix"]).resolve() == root
+assert pathlib.Path(doc["module_file"]).is_relative_to(root)
+assert pathlib.Path(doc["probe_module_file"]).is_relative_to(root)
+assert pathlib.Path(sys.executable).resolve() == pathlib.Path("'"$TEST_PYTHON"'").resolve()
 ' >"$GATEA_RUN_ROOT/fixed/bootstrap-readback.json"
+test "$(head -n 1 "$F_DIAGNOSTIC_EXE")" = "#!$TEST_PYTHON"
 shasum -a 256 "$GATEA_RUN_ROOT/fixed/bootstrap-readback.json" \
   "$GATEA_RUN_ROOT/fixed/diagnostic-shebang.txt" \
   >"$GATEA_RUN_ROOT/fixed/bootstrap-readback.sha256"
@@ -1149,7 +1244,7 @@ git commit -m "docs: record macOS W1 W2 service closure"
 | Checkpoint | 必须满足 | 不满足时 |
 | --- | --- | --- |
 | legacy `CP-MSC-A` | 只作恢复锚点；结论 `UNCONFIRMED` | 不得解释为 PASS |
-| `CP-MSC-A1` | writer 已串行接管并释放；legacy 归因独立；`CONFIRMED_RPATH` 或 `CURRENT_CLOSURE_ALREADY_VALID` route 完成；F no-DYLD direct dlopen、installed provenance、station 5/5 均有效；每轮真实 `controller_runtime` descendant 的 PID/birth/executable/plugin/vendor path+SHA、主动有界 shutdown 和 cleanup 通过；`CURRENT_PRODUCT_GATE_PASSED` | 停止，不进入 Task 2；先修正 control/current failure 或补齐 Sol/high 复核 |
+| `CP-MSC-A1` | writer 已串行接管并释放；legacy 归因独立；`CONFIRMED_RPATH` 或 `CURRENT_CLOSURE_ALREADY_VALID` route 完成；F merged closure 完整 tree、authority/vendor/plugin/Python/diagnostic provenance、no-DYLD direct dlopen 和 station 5/5 均有效；每轮真实 `controller_runtime` descendant 的 PID/birth/executable/plugin/vendor path+SHA、主动有界 shutdown 和 cleanup 通过；`CURRENT_PRODUCT_GATE_PASSED` | 停止，不进入 Task 2；先修正 control/current failure 或补齐 Sol/high 复核 |
 | `CP-MSC-02` | selection/queue/single-point/watermark/reducer/owner tree 离线通过 | 返回 Tasks 2–6 |
 | `CP-MSC-03` | v4 frozen；v5/v6 closed；W1/W2 only；fresh guard；retry atomic | 返回 Tasks 7–9 |
 | `CP-MSC-04` | package gate 和 bounded candidate W2/W1/retry 有效且无残留 | 不进 production Chrome |
@@ -1159,8 +1254,8 @@ git commit -m "docs: record macOS W1 W2 service closure"
 ## 计划自查
 
 - 设计 §5 对应 Task 1，永久保留 legacy `CP-MSC-A=UNCONFIRMED`，并以三个正交 verdict、固定
-  N/P/F control set、semantic contract/typed RunBinding、direct dlopen、真实 controller descendant 的
-  per-process loaded-image path/SHA、no-DYLD F 和 5x readiness 关闭当前产品 Gate；
+  N/P/F control set、task-owned merged closure、semantic contract/typed RunBinding、direct dlopen、
+  真实 controller descendant 的 per-process loaded-image path/SHA、no-DYLD F 和 5x readiness 关闭当前产品 Gate；
   `LEGACY_PROVENANCE_UNRECOVERABLE` 不会被误判成产品缺陷。
 - Task 1 固定复用当前 mac-mini worktree、branch 和唯一 evidence root，只创建
   `gate-a-resolution/$DISPATCH_ID/`；Codex 与 dst 串行交接 writer，`CP-MSC-A1` 后先停下接受

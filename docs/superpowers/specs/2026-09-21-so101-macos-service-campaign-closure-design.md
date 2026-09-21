@@ -87,8 +87,10 @@ Unified Web API
 
 运行闭包继续分为三层：
 
-- `RuntimeClosureIdentity`：source commit、submodule commit、copied install 相对文件 SHA256、
-  executable/dylib/plugin XML 来源、版本、净化环境约束，以及 robot/controller/model/launch hash。
+- `RuntimeClosureIdentity`：`install_root`、source commit、submodule commit、copied install 相对文件
+  SHA256、executable/dylib/plugin XML 来源、版本、净化环境约束，以及
+  robot/controller/model/launch hash。Gate A 中 `install_root` 必须精确等于本轮 task-owned merged
+  `CLOSURE_ROOT`，不能写成 Python package prefix 或任一分散 underlay。
 - `RunBinding`：campaign、batch、fresh `ROS_DOMAIN_ID`、station session、evidence root、owner
   generation 和启动时间。
 - `RuntimeAttestation`：实际 PID/birth identity、加载 image/dylib、ROS domain 和前两层 hash。
@@ -150,13 +152,24 @@ underlay/overlay、PATH、Python、locale 与 control policy。只有以下 type
 时将这些已验证值归一化为 typed token；除此之外不允许忽略任何 argv/env 差异。P 的唯一实验变量
 仍是 manifest-bound vendor lib `DYLD_LIBRARY_PATH`。
 
-copied install 使用本轮 evidence 子目录中的 fresh、非 symlink、isolated colcon build：先构建
-`third_party/mujoco_ros2_control`，source 该 install，再构建 `so101_mujoco_support` 和
-`so101_demo_py`。按现有 `setup.cfg`，diagnostic 入口是
-`$STATION_INSTALL/so101_demo_py/lib/so101_demo_py/so101_diagnose_macos_station`，不是 `bin/`。
-bootstrap 必须回读 installed `so101_demo.__file__`、ament package prefix 和 Python interpreter；
-`python -m so101_demo.runtime.macos_dlopen_probe` 也必须绑定同一 installed site-packages。旧 ledger 的
-build script 只作只读参考，新 build/log/install 只能写入本轮 `gate-a-resolution/$DISPATCH_ID/`。
+copied install 是本轮 evidence 子目录中的 fresh task-owned merged closure：N/P 使用
+`CLOSURE_ROOT=$GATEA_RUN_ROOT/control-set/closure`，F 使用
+`F_CLOSURE_ROOT=$GATEA_RUN_ROOT/fixed/closure`。构建顺序固定为：
+
+1. 用仓库 `scripts/install-mujoco-vendor-macos.zsh` 从 pinned、clean、只读 MuJoCo authority source
+   构建 vendor，并安装到 `$CLOSURE_ROOT/opt/mujoco_vendor`；
+2. source host ROS underlays 和 `$CLOSURE_ROOT/setup.zsh`，用 `--merge-install --install-base
+   $CLOSURE_ROOT` 构建 `third_party/mujoco_ros2_control` packages；
+3. 再 source `$CLOSURE_ROOT/setup.zsh`，用同一 merged install root 构建
+   `so101_mujoco_support` 与 `so101_demo_py`。
+
+manifest 冻结 `$CLOSURE_ROOT` 完整树，plugin、vendor、Python package 和 diagnostic 必须都位于该
+root。按现有 `setup.cfg`，入口是
+`$CLOSURE_ROOT/lib/so101_demo_py/so101_diagnose_macos_station`。bootstrap 必须证明 ament prefix
+精确等于 `$CLOSURE_ROOT`，`so101_demo.__file__` 与 probe module origin 都是其 descendant，
+interpreter 精确等于 `TEST_PYTHON`，diagnostic shebang 也与它匹配。P 只能增加
+`$CLOSURE_ROOT/opt/mujoco_vendor/lib`。旧 ledger 的 build script 只作只读参考；新
+vendor/build/log/install 只能写入本轮 `gate-a-resolution/$DISPATCH_ID/`。
 
 - N（negative）：删除所有 `DYLD_*`，先对 copied plugin 做
   `dlopen(RTLD_NOW | RTLD_LOCAL)`，再启动 bounded full-station diagnostic。
@@ -185,6 +198,20 @@ def reduce_gate_a_controls(
 ) -> GateADecision: ...
 ```
 
+单轮 observation 分类合同如下。表中的“允许缺失”是完整白名单，不代表 reducer 可以忽略其他字段：
+
+| Observation class | 必需证据 | 允许缺失 |
+| --- | --- | --- |
+| `PASS` | manifest/semantic/binding valid；healthy collector；真实 `controller_runtime` role、PID/birth/executable；`DLOPEN_SUCCEEDED`；manifest-bound plugin/vendor process images；全部 ROS phase marker、READY；cleanup complete | loader error、first-bad phase |
+| `MISSING_VENDOR_BEFORE_ROS_PLUGIN_INSTANCE_INIT` | manifest/semantic/binding valid；healthy collector；真实 controller process role、PID/birth/executable；`DLOPEN_FAILED`；精确 manifest vendor missing loader error；未越过任何 ROS plugin instance marker；cleanup complete | plugin/vendor process images；`PLUGIN_RESOLVED`、`HARDWARE_INITIALIZING` 及其后 markers；READY |
+| `NON_RPATH_FAILURE` | manifest/semantic/binding valid；healthy collector；稳定 process identity；`DLOPEN_SUCCEEDED`；manifest-bound plugin/vendor images；明确 first-bad ROS phase；cleanup complete | first-bad phase 之后的 markers、READY |
+| `INVALID` | 记录具体 invalid reason | 不适用；它是拒绝结果，不是成功证据的简化版 |
+
+分类顺序固定：先校验 manifest、semantic diff、binding、collector、process identity、timeout 和
+cleanup，任一失败立即 `INVALID`；再匹配精确 missing-vendor 合同；再匹配 `PASS`；再匹配带首坏
+phase 的 `NON_RPATH_FAILURE`；其余一律 `INVALID`。因此相同的 missing-vendor 表象，如果 collector
+或 controller process identity 缺失，只能得到 `INVALID_CONTROL`，不能得到 `CONFIRMED_RPATH`。
+
 判定矩阵固定如下：
 
 | N | P | 判定 | 后续 |
@@ -195,7 +222,7 @@ def reduce_gate_a_controls(
 | `NON_RPATH_FAILURE` | `PASS` 或同一 `NON_RPATH_FAILURE` | `CURRENT_NON_RPATH_FAILURE` + `NOT_EXCLUDED` | 保存 N 的首坏 ROS phase，停止并提交 owning-layer plan amendment |
 | `PASS` | 非 `PASS` | `INVALID_CONTROL` + `NOT_EXCLUDED` | P 与 N 的唯一变量模型被破坏；停止并修订 control plan |
 | 相同或不同 loader failure，但 P 未成为 `PASS` | 任意非 `PASS` | `INVALID_CONTROL` + `NOT_EXCLUDED` | vendor binding/control 无法证伪 rpath；停止并修订 control plan |
-| 任一 control timeout、缺 marker、缺/错 process attestation、identity drift、cleanup residue、semantic diff 或非法 substitution | 任意 | `INVALID_CONTROL` + `NOT_EXCLUDED` | 停止本批并修订 control plan |
+| 任一 control timeout、缺少该 observation class 表中要求的 marker/attestation、identity drift、cleanup residue、semantic diff 或非法 substitution | 任意 | `INVALID_CONTROL` + `NOT_EXCLUDED` | 停止本批并修订 control plan；不得把该 class 明确允许缺失的字段当成 invalid |
 | 任意未列组合 | 任意 | `INVALID_CONTROL` + `NOT_EXCLUDED` | fail closed |
 
 `CONFIRMED_RPATH` 路径的 F 必须在无 `DYLD_LIBRARY_PATH` 时 direct dlopen 成功，且实际
@@ -501,6 +528,8 @@ loaded-image readback。只有 `CONFIRMED_RPATH` route 才授权修改 install-r
 - `current_boundary_verdict` 是 `CONFIRMED_RPATH` 或 `CURRENT_CLOSURE_ALREADY_VALID`；F 在无
   `DYLD_LIBRARY_PATH` 时 direct dlopen、真实 controller descendant 的 per-process loaded-image
   path/SHA 和 closure attestation 全部通过。
+- F 的 `RuntimeClosureIdentity.install_root` 精确等于 task-owned merged `F_CLOSURE_ROOT`；manifest
+  冻结完整 tree，vendor、plugin、Python、diagnostic 与 ament prefix 均属于同一 root。
 - 五次连续 FULL_RESTART READY/clean 通过，`controller_verdict` 为
   `CURRENT_CONTROLLER_PATH_OPERATIONAL`，Gate A 派生状态为 `CURRENT_PRODUCT_GATE_PASSED`。
 - macOS capabilities、Web 和服务端只支持 W1/W2，N>2 明确拒绝。
