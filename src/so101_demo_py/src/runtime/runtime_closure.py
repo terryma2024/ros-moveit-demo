@@ -930,7 +930,10 @@ def _darwin_loaded_images(pid: int) -> tuple[Path, ...]:
         )
     paths: set[Path] = set()
     for line in completed.stdout.splitlines():
-        candidate = line.rsplit(None, 1)[-1]
+        fields = line.rsplit(None, 1)
+        if not fields:
+            continue
+        candidate = fields[-1]
         if not candidate.startswith("/"):
             continue
         path = Path(candidate)
