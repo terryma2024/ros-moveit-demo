@@ -92,53 +92,13 @@ nodeid 清单，把其余测试并行运行，再逐组串行跑该清单。核�
 直接整包 pytest 可以加速反馈，但在 ai-station 上不替代必要的 CTest 登记、package gate、
 `colcon test-result`、build/copied-install/provenance gate。此指引不授权 benchmark 或 live 测量。
 
-### 当前 macOS 的 Python package-test 契约
+### macOS 运行环境故障
 
-当前 Mac 上，`colcon test` 为 Python 包重建测试子进程环境时可能丢失
-`DYLD_LIBRARY_PATH`。典型边界是 pytest 尚未收集任何测试，导入 `rclpy` 时报告
-`Library not loaded: @rpath/librosidl_typesupport_c.dylib`。这属于 test-runner bootstrap
-失败，不是代码回归；Linux/ai-station 仍使用上面的标准 `colcon test`。
-
-先检查 `log/latest_test/<package>/command.log`：若执行的是正确 ROS venv 的
-`python -m pytest`，但命令环境没有 `DYLD_LIBRARY_PATH`，使用当前已导入环境的 zsh
-直接运行整包 pytest。不要用 `direnv exec`，也不要经 `/bin/bash` 包一层；这些路径可能再次
-触发 macOS SIP 清理 `DYLD_*`。以本 task 已登记的唯一 evidence root 替换示例路径：
-
-```zsh
-cd /Users/matianyi/Projects/robot_demo_001/moveit-demo
-eval "$(direnv export zsh)"
-source install/setup.zsh
-
-package_test_evidence=/tmp/so101-debug-macos-package-test-YYYYMMDD-HHMMSS
-export ROS_HOME="$package_test_evidence/ros-home"
-export ROS_LOG_DIR="$ROS_HOME/log"
-mkdir -p "$ROS_LOG_DIR"
-
-ros_python=/Users/matianyi/ros2_jazzy/.venv/bin/python3
-PYTHONNOUSERSITE=1 "$ros_python" -c 'import rclpy; print(rclpy.__file__)'
-PYTHONNOUSERSITE=1 "$ros_python" -m pytest \
-  -p no:cacheprovider src/so101_demo_py/test -q \
-  --junitxml="$package_test_evidence/so101_demo_py-pytest.xml"
-
-/Users/matianyi/ros2_jazzy/.venv/bin/colcon test-result \
-  --test-result-base "$package_test_evidence" --verbose
-```
-
-这个 direct pytest 命令就是 `ament_python` 包（例如 `so101_demo_py`）在当前 Mac 上的
-package-level gate，不是只跑定向测试的降级替代。验收必须同时满足：
-
-- `import rclpy` 成功，且路径来自当前 ROS Jazzy 安装；
-- pytest 实际收集非零测试、退出码为 0；
-- `colcon test-result` 汇总的 errors 和 failures 都为 0；
-- `ROS_HOME`、`ROS_LOG_DIR` 和 JUnit 都位于本 task 登记的 evidence root；
-- 定向测试仍先于整包测试运行，安装产物 provenance 仍需独立确认。
-
-若 direct `import rclpy` 也失败，停止测试并修复 overlay / dylib provenance；若导入成功后
-pytest 出现 assertion failure，则按真实代码或测试失败处理。不要用 direct pytest 的成功去覆盖
-另一个包类型的失败；`ament_cmake` / gtest 包应从其 `CTestTestfile.cmake` 发现并验证实际测试
-命令，在 macOS runner 丢失 dylib 时保留同样的当前-shell环境和非零测试计数门禁。
-测试其他 `ament_python` 包时替换上例中的源码测试目录和 JUnit 文件名，并先确认该目录属于
-当前 package；不要用跨包 pytest 集合冒充单包 gate。
+仅当 SO-101 在 macOS 上运行或测试时出现 Python、overlay、SIP、`DYLD_*`、package prefix
+或 `@rpath/*.dylib` 问题，读取
+[`macos-runtime-environment.md`](macos-runtime-environment.md)。该 reference 记录当前固定
+`/opt` 契约、统一启动入口和 Python package-test 边界。Linux/ai-station 继续使用本文件前述
+标准 `colcon test`，不要加载 macOS 专用流程。
 
 ## 运行时测试阶梯
 

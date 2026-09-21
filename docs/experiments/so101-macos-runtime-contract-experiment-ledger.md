@@ -102,3 +102,20 @@
   accidentally placed inside superseded targets before the `mv -fh` fix; and pytest temporary
   scratch trees under the registered evidence root. Explicit user authorization is required
   before deleting any of them.
+
+## RUN-003 — `so101-dev` conditional macOS runtime reference
+
+- Date: 2026-09-21 Asia/Shanghai
+- Source commit: `0704b367dd85d696afbcdef18570f4cb232322ac`
+- Status: `PASS`
+- Evidence: `/tmp/so101-debug-macos-runtime-contract-54f5d922-9678-4cff-a340-dc4f59479a23/skill-macos-runtime-reference`
+- RED: `red-001` exited 1 because `references/macos-runtime-environment.md` did not exist.
+- Change: added the macOS runtime reference, routed to it from `so101-dev/SKILL.md` only for
+  Apple Silicon runtime/test environment failures, and replaced the stale hard-coded macOS
+  package-test block in `test-and-acceptance.md` with that conditional route.
+- GREEN: `green-001` passed the skill validator, conditional-routing checks, all six local-link
+  resolution checks, the no-user-path check, and `git diff --check`.
+- Runtime impact: none; no ROS process or external service was started.
+- Retained: RED/GREEN logs under the registered evidence root.
+- Archived: none.
+- Deletion candidates: none added by this run. No evidence was deleted.

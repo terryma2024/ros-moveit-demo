@@ -21,6 +21,7 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
    - 查找源码、launch、安装产物或运行边界：[`references/so101-system-map.md`](references/so101-system-map.md)
    - 定位根因和区分证据层：[`references/debug-evidence.md`](references/debug-evidence.md)
    - 修改代码、运行测试或声明完成：[`references/test-and-acceptance.md`](references/test-and-acceptance.md)；ai-station 大规模普通 pytest 的 `-n 8` 加速、NVMe scratch 与串行冲突分组见其中“ai-station 大规模 pytest 加速”章节。
+   - 仅当 SO-101 在 macOS 上运行或测试时出现 Python、overlay、package prefix、SIP、`DYLD_*` 或 `@rpath/*.dylib` 环境问题：[`references/macos-runtime-environment.md`](references/macos-runtime-environment.md)。Linux 任务和 macOS 上与运行环境无关的控制、规划、物理或视觉问题不读取此文件。
    - 多轮实验、生命周期比较、上下文压缩或 agent 交接：[`references/experiment-ledger.md`](references/experiment-ledger.md)
    - 安装 Python 依赖、选择 uv 索引或让镜像域名绕过代理：[`references/python-dependency-install.md`](references/python-dependency-install.md)
 3. 从当前 orchestrator 和 ai-station 分别记录 `pwd`、commit、branch、submodule 和 `git status --short`；已经位于 ai-station 的 coding agent 直接在本机取证，不再 SSH 自身。已有改动均视为用户工作，不能覆盖、清理或夹带。
@@ -122,7 +123,7 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
 - 在无法收敛时继续扩大 `rg` 范围。改为写出一个竞争假设并运行能区分它们的命令。
 - 看到成功日志就直接改物理或视觉层。先定位成功只覆盖了哪一层。
 - 修改 source 后直接 `ros2 run`。必须 build、source，再验证 package prefix/产物。
-- 在 macOS 上把 `colcon test` 收集阶段的 `@rpath` / `librosidl_typesupport_c.dylib` 加载失败直接算作代码回归。先按 [`references/test-and-acceptance.md`](references/test-and-acceptance.md) 的 macOS package-test 契约区分 runner 环境失败与真实测试失败。
+- 在 macOS 上把 `colcon test` 收集阶段的 `@rpath` / `librosidl_typesupport_c.dylib` 加载失败直接算作代码回归。先按 [`references/macos-runtime-environment.md`](references/macos-runtime-environment.md) 区分 runner 环境失败与真实测试失败。
 - 用 GUI 截图代替状态查询，或用状态查询代替 GUI 验收。两者都要有。
 - 为获得“干净环境”清理用户 worktree。用该 task 已登记的单一 evidence root 和最小补丁隔离。
 - 只在聊天、tmux 或 `/tmp` 中保存长程实验结论。先更新持久账本和 checkpoint，再交接或继续下一轮。
