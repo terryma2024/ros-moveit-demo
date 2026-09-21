@@ -158,6 +158,41 @@ class MacosW2Campaign:
         self.snapshots = snapshots or SnapshotRegistry(
             store=SnapshotStore(root=Path(plan.snapshot_root),
                                 max_snapshot_bytes=plan.max_input_snapshot_bytes))
+        self._selection = None
+        self._queue = None
+
+    # -- selection and queue -------------------------------------------------------------
+
+    def bind_selection(self, *, binding, queue) -> None:
+        """Bind the immutable selection this campaign executes and its durable point queue.
+
+        The selection binding is what makes "which points may run" a checked fact rather than a
+        per-Worker convention, and the queue is the only issuer of point leases. Binding twice is
+        refused so a campaign cannot silently change what it is executing mid-run.
+        """
+
+        from .queue import DurablePointQueue
+        from .selection import FirstPassSelectionBinding, RetrySelectionBinding
+
+        if self._selection is not None or self._queue is not None:
+            raise MacosW2CampaignError("SELECTION_ALREADY_BOUND", self.plan.campaign_id)
+        if not isinstance(binding, (FirstPassSelectionBinding, RetrySelectionBinding)):
+            raise MacosW2CampaignError("SELECTION_TYPE", type(binding).__name__)
+        if not isinstance(queue, DurablePointQueue):
+            raise MacosW2CampaignError("QUEUE_TYPE", type(queue).__name__)
+        if queue.selection_sha256 != binding.selection_sha256:
+            raise MacosW2CampaignError(
+                "SELECTION_MISMATCH", f"{queue.selection_sha256} != {binding.selection_sha256}")
+        self._selection = binding
+        self._queue = queue
+
+    @property
+    def selection_sha256(self) -> str | None:
+        return None if self._selection is None else self._selection.selection_sha256
+
+    @property
+    def queue(self):
+        return self._queue
 
     # -- admission -----------------------------------------------------------------------
 

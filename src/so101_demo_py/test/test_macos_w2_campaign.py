@@ -502,3 +502,35 @@ def test_campaign_cli_exposes_the_fault_switches_with_safe_defaults() -> None:
     assert armed.duplicate_probe is True and armed.tamper_snapshot_sha is True
     assert armed.cancel_second_worker_after_served == 4
     assert armed.stall_serve_after == 2 and armed.worker_deadline_s == 4.0
+
+
+def test_campaign_binds_the_selection_and_queue_it_executes(tmp_path):
+    """Selection and queue are bound together, once, before any Worker can lease a point.
+
+    Without this binding the campaign has no checked answer to "which points may run", and the
+    queue is the only issuer of per-point leases (plan Task 2/3).
+    """
+
+    from so101_demo.parallel_batch.queue import DurablePointQueue
+    from so101_demo.parallel_batch.selection import build_first_pass_selection
+    from test_parallel_selection import (
+        ANCHOR_IDS, CLOSURE_SHA, CONFIG_SHA, SAMPLE_IDS, _write_catalog)
+
+    catalog = _write_catalog(tmp_path)
+    binding = build_first_pass_selection(
+        catalog_path=catalog, point_ids=ANCHOR_IDS + SAMPLE_IDS[:1],
+        campaign_id="b-composed", batch_id="batch-composed",
+        config_sha256=CONFIG_SHA, runtime_closure_sha256=CLOSURE_SHA)
+    queue = DurablePointQueue(root=tmp_path / "queue", binding=binding)
+    campaign = _campaign(tmp_path)
+
+    campaign.bind_selection(binding=binding, queue=queue)
+
+    assert campaign.selection_sha256 == binding.selection_sha256
+    assert campaign.queue is queue
+    with pytest.raises(MacosW2CampaignError, match="SELECTION_ALREADY_BOUND"):
+        campaign.bind_selection(binding=binding, queue=queue)
+    with pytest.raises(MacosW2CampaignError, match="SELECTION_TYPE"):
+        _campaign(tmp_path / "second").bind_selection(binding=object(), queue=queue)
+    with pytest.raises(MacosW2CampaignError, match="QUEUE_TYPE"):
+        _campaign(tmp_path / "third").bind_selection(binding=binding, queue=object())

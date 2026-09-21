@@ -96,6 +96,60 @@ def build_worker_leases(*, plan, batch_id: str, evidence_root: Path,
     return leases
 
 
+def lease_worker_execution(*, queue, binding, worker_id: str, slot_id: str,
+                           evidence_root: Path, input_sha256: str,
+                           deadline_s: float = 240.0, generation: int = 1,
+                           model_id: str = "yolo", attempt_count: int = 3,
+                           tamper_input_sha256: bool = False,
+                           duplicate_probe: bool = False) -> dict:
+    """Turn one queue lease into the single point file a Worker is allowed to execute.
+
+    The Worker receives a lease document that carries the *single-point* input path and digest
+    instead of the installed catalog, so "one lease executes one point" is a fact of the document
+    the Worker reads rather than a convention its argv has to respect.
+    """
+
+    from ..parallel_batch.queue import WorkerIdentity
+    from ..parallel_batch.single_point_input import write_single_point_input
+
+    lease = queue.lease_next(
+        WorkerIdentity(worker_id=worker_id, slot_id=slot_id, generation=generation)
+    )
+    if lease is None:
+        raise MacosW2CampaignError("QUEUE_NO_PENDING_POINT", worker_id)
+    execution_input = write_single_point_input(binding=binding, lease=lease, root=evidence_root)
+    attempt_ids = [lease.attempt_id] + [
+        f"{worker_id}-att-{attempt:02d}" for attempt in range(1, attempt_count)
+    ]
+    document = {
+        "worker_id": worker_id, "slot_id": slot_id, "batch_id": binding.batch_id,
+        "campaign_id": binding.campaign_id,
+        "coordinator_epoch": 1, "worker_generation": generation, "lease_generation": 1,
+        "reset_epoch": "epoch-1", "point_id": lease.point_id, "model_id": model_id,
+        "attempt_id": lease.attempt_id, "attempt_ids": attempt_ids,
+        "point_sha256": execution_input.point_sha256,
+        "points_path": str(execution_input.absolute_path(evidence_root)),
+        "points_sha256": execution_input.points_sha256,
+        "selection_sha256": binding.selection_sha256,
+        "worker_root": str(evidence_root / f"{worker_id}-worker"),
+        "snapshot_path": str(evidence_root / f"{worker_id}-frame.npy"),
+        "input_sha256": input_sha256, "source_stamp_ns": 1_000_000_000,
+        "source_frame_id": "task_camera_frame", "shape": [480, 640, 3],
+        "deadline_s": float(deadline_s),
+        "tamper_input_sha256": bool(tamper_input_sha256),
+        "duplicate_probe": bool(duplicate_probe),
+        "start_event_type": "attempt_started",
+    }
+    frame_path = Path(document["snapshot_path"])
+    frame_path.parent.mkdir(parents=True, exist_ok=True)
+    if not frame_path.exists():
+        frame_path.write_bytes(b"campaign-warm-frame")
+    lease_path = Path(evidence_root) / f"{worker_id}-lease.json"
+    lease_path.write_text(json.dumps(document, sort_keys=True), encoding="utf-8")
+    document["lease_path"] = str(lease_path)
+    return document
+
+
 def bind_worker_requests(campaign, leases: dict[str, dict], *, ready,
                          deadline_s: float = 300.0) -> None:
     """Bind every id the Workers will use *before* any of them is served.
