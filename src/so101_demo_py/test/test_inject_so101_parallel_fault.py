@@ -9,17 +9,24 @@ import pytest
 
 
 SCRIPT = Path(__file__).resolve().parents[3] / "scripts/inject_so101_parallel_fault.py"
-TASK_ROOT = Path("/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1")
-ADAPTIVE_TASK_ROOT = Path(
-    "/data/work/so101-evidence/parallel-adaptive-worker/20260914-a01"
-)
+
+
+def task_roots(tmp_path):
+    """Return per-test task roots on the host-selected pytest filesystem."""
+    base = tmp_path / "task-evidence"
+    return (
+        base / "parallel-multipoint-validation" / "run-v1",
+        base / "parallel-adaptive-worker" / "run-a01",
+    )
 
 
 @pytest.fixture
-def module():
+def module(tmp_path):
     spec = importlib.util.spec_from_file_location("inject_so101_parallel_fault", SCRIPT)
     value = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(value)
+    value.TASK_EVIDENCE_ROOTS = task_roots(tmp_path)
+    value.TASK_EVIDENCE_ROOT = value.TASK_EVIDENCE_ROOTS[0]
     return value
 
 
@@ -45,12 +52,11 @@ def worker_command(root, worker_id="worker-01", batch_id="batch-1"):
     )
 
 
-def write_manifest(
-    root, entries, *, batch_id="batch-1", extra=None, task_root=TASK_ROOT
-):
+def write_manifest(root, entries, *, batch_id="batch-1", extra=None):
+    scratch_root = next(parent for parent in root.parents if parent.name == "scratch")
     root.mkdir(parents=True, exist_ok=True)
     current = root
-    while current != task_root / "scratch":
+    while current != scratch_root:
         current.chmod(0o700)
         current = current.parent
     document = {
@@ -66,21 +72,14 @@ def write_manifest(
 
 
 def evidence_root(tmp_path, suffix):
-    """Keep script fixtures inside this pytest run's registered NVMe scratch."""
-    run_id = Path(os.environ["TMPDIR"]).parent.name
-    return TASK_ROOT / "scratch" / run_id / "fault-injector" / tmp_path.name / suffix
+    """Keep fixtures inside pytest's platform-selected temporary filesystem."""
+    task_root, _ = task_roots(tmp_path)
+    return task_root / "scratch" / "fault-injector" / suffix
 
 
 def adaptive_evidence_root(tmp_path, suffix):
-    run_id = Path(os.environ["TMPDIR"]).parent.name
-    return (
-        ADAPTIVE_TASK_ROOT
-        / "scratch"
-        / run_id
-        / "fault-injector"
-        / tmp_path.name
-        / suffix
-    )
+    _, task_root = task_roots(tmp_path)
+    return task_root / "scratch" / "fault-injector" / suffix
 
 
 def entry(root, target="worker-01", *, broker_generation=1, **changes):
@@ -169,7 +168,6 @@ def test_adaptive_flag_interface_targets_worker_sixteen_and_rejects_seventeen(
         root,
         [value],
         batch_id="su01-g01-w16",
-        task_root=ADAPTIVE_TASK_ROOT,
     )
     sent = []
 
@@ -233,21 +231,32 @@ def test_default_signal_port_is_monkeypatched_and_never_targets_an_unrelated_gro
 
 
 @pytest.mark.parametrize(
-    "argv",
+    "case",
     [
-        ["relative", "worker-01", "TERM"],
-        [str(TASK_ROOT.parent / "other"), "worker-01", "TERM"],
-        [str(TASK_ROOT), "worker-04", "TERM"],
-        [str(TASK_ROOT), "worker-01", "KILL"],
+        "relative",
+        "outside-task",
+        "wrong-target",
+        "wrong-signal",
     ],
 )
-def test_rejects_out_of_scope_paths_targets_and_signals(module, argv):
+def test_rejects_out_of_scope_paths_targets_and_signals(module, tmp_path, case):
+    task_root, _ = task_roots(tmp_path)
+    argv = {
+        "relative": ["relative", "worker-01", "TERM"],
+        "outside-task": [str(task_root.parent / "other"), "worker-01", "TERM"],
+        "wrong-target": [str(task_root), "worker-04", "TERM"],
+        "wrong-signal": [str(task_root), "worker-01", "KILL"],
+    }[case]
     with pytest.raises(ValueError):
         module.inject_fault(argv, proc_reader=lambda _pid: None, signal_group=lambda *_: None)
 
 
-@pytest.mark.parametrize("argv", [[], [str(TASK_ROOT)], [str(TASK_ROOT), "broker"]])
-def test_rejects_partial_argument_vectors_without_parser_exit(module, argv):
+@pytest.mark.parametrize("argument_count", [0, 1, 2])
+def test_rejects_partial_argument_vectors_without_parser_exit(
+    module, tmp_path, argument_count
+):
+    task_root, _ = task_roots(tmp_path)
+    argv = [str(task_root), "broker"][:argument_count]
     with pytest.raises(ValueError, match="ARGUMENT"):
         module.inject_fault(argv, proc_reader=lambda _pid: None, signal_group=lambda *_: None)
 

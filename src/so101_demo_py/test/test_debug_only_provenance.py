@@ -224,7 +224,6 @@ def test_debug_manifest_covers_installed_artifacts_and_detects_byte_change(tmp_p
     paths = {item["path"] for item in document["artifacts"]}
     relative_module = _site_packages(Path(".")).relative_to(".").as_posix()
     assert f"{relative_module}/so101_demo/cli/text_pick_agent.py" in paths
-    assert "lib/python3.12/site-packages/so101_demo/cli/text_pick_agent.py" in paths
     assert any(path.startswith("share/so101_demo_py/") for path in paths)
     assert MANIFEST_RELATIVE_PATH not in paths
     assert not any("__pycache__" in path or path.endswith(".pyc") for path in paths)

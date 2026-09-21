@@ -12,6 +12,7 @@ import importlib
 import importlib.util
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -486,6 +487,28 @@ def test_replacement_race_is_refused(tmp_path: Path, monkeypatch) -> None:
 # --------------------------------------------------------------------------------------
 # Attestation: process identity, loaded images, ROS domain
 # --------------------------------------------------------------------------------------
+
+
+def test_darwin_loaded_image_probe_ignores_blank_vmmap_lines(
+    tmp_path: Path, monkeypatch
+) -> None:
+    module = _closure_module()
+    library = tmp_path / "libexample.dylib"
+    library.write_bytes(b"example")
+    output = (
+        "Process: Python [123]\n\n"
+        "__TEXT 1000-2000 [ 4K 4K 0K 0K] r-x/r-x SM=COW  "
+        f"{library}\n\n"
+    )
+    monkeypatch.setattr(
+        module.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=0, stdout=output, stderr=""
+        ),
+    )
+
+    assert module._darwin_loaded_images(123) == (library,)
 
 
 def test_attestation_refuses_loaded_image_outside_the_copied_install(tmp_path: Path) -> None:
