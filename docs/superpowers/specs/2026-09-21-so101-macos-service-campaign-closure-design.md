@@ -154,6 +154,11 @@ Capabilities 在 macOS 只返回 fixed W1/W2：W1 用 `SEQUENTIAL`，W2 用 `PAR
 - 每个 Worker 在自己的 spawn intent 已持久化、但 `Popen` 尚未发生时运行 fresh check；
 - 同一次 preflight 结果不能跨 spawn epoch、Worker 或 retry 重用。
 
+所有 public/service entry 都服从同一规则。`start-guard.json` 只保存审计副本，既有文件无论是
+PASS、FAIL 还是旧 epoch，都不能跳过 fresh probe。public W2 CLI 为隔离 MPS probe 对 `torch`
+的导入，可在 guard 阶段后 `exec` 自身；跨 `exec` 的准入结果必须通过本次进程创建的 inherited
+pipe 一次性交接，并校验 scope、owner birth、epoch 和有效期，不能从磁盘 verdict 恢复。
+
 判定沿用现有语义：
 
 - RAM floor 是 hard refuse；
@@ -166,6 +171,11 @@ watchdog。运行失控由既有 per-state/batch hard timeout、lease、owner tr
 
 同一 macOS service instance 同时只允许一个 active campaign；同一 control domain 只允许一个
 有效 lease。W1 与 W2 不并行运行。
+
+服务端按实际 request profile/config path 加载 v4/v5/v6，并以
+`(profile, config_sha256, accelerator, selector)` 缓存 guard composition。缓存只复用 probe wiring，
+不复用 `GuardResult`；Darwin/MPS 三个 profile 都选择 MPS probe，Linux v3/v4 继续走原 CUDA/NVML
+路径。
 
 ## 8. Selection、共享队列和单点 Worker
 
@@ -288,6 +298,8 @@ binding；身份不明时不猜 PID、不盲杀，保留 fence。
 - macOS N>2 在 Web 不可选，API、preflight 和 adapter 都以稳定 reason 拒绝。
 - StartGuard 在 campaign 与每个 Worker spawn epoch fresh 执行；CPU WARN 可继续，RAM/MPS
   FAIL、probe error 和 identity mismatch 拒绝。
+- 预置或篡改 `start-guard.json`、旧 epoch、不同 owner 的 guard result 都不能绕过 public CLI、
+  service preflight 或 adapter 的 fresh check；v5/v6 安装版配置不得落入 CUDA/NVML 分支。
 - 非默认 selection 的所有 selected points 各执行一次，unselected points 为零次；retry 只执行
   指定失败点。
 - journal/watermark、canonical reducer、cursor transaction、restart、tamper、partial tail、
