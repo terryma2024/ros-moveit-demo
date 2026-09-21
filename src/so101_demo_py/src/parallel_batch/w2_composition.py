@@ -98,37 +98,40 @@ def load_execution_config_for_schema(path: Path, *, platform: str | None = None)
 
 @dataclass(frozen=True)
 class W2Slots:
-    """The two fixed slots. They exist even when there are fewer points than slots."""
+    """The two fixed slots as *capacity*. They own no point.
+
+    The design is explicit that this is not a capacity calculation: two slots exist because the
+    platform claim is exact W2, so a campaign still runs two Workers even when fewer points were
+    selected. Which point a Worker executes is decided per lease by the durable shared queue
+    (`parallel_batch.queue`), so a slot never holds a static assignment.
+    """
 
     slot_ids: tuple[str, ...]
-    assigned_points: tuple[tuple[str, str | None], ...]
+
+    @property
+    def assigned_points(self) -> tuple[tuple[str, str | None], ...]:
+        """Compatibility view: capacity slots have no assigned point."""
+
+        return tuple((slot, None) for slot in self.slot_ids)
 
     @property
     def idle_slots(self) -> tuple[str, ...]:
-        return tuple(slot for slot, point in self.assigned_points if point is None)
+        return self.slot_ids
 
     def to_document(self) -> dict:
         return {
             "slot_ids": list(self.slot_ids),
-            "assigned_points": [{"slot_id": slot, "point_id": point}
-                                for slot, point in self.assigned_points],
+            "assigned_points": [{"slot_id": slot, "point_id": None}
+                                for slot in self.slot_ids],
             "idle_slots": list(self.idle_slots),
+            "capacity_only": True,
         }
 
 
-def exact_w2_slots(selected_point_ids: tuple[str, ...]) -> W2Slots:
-    """Always two slots; points are assigned in order and the rest stay idle.
+def exact_w2_slots() -> W2Slots:
+    """Return the two exact-W2 capacity slots; point assignment belongs to the queue."""
 
-    The design is explicit that this is not a capacity calculation: two slots exist because the
-    platform claim is exact W2, so a one-point campaign still runs two Workers and leaves one
-    idle rather than silently becoming W1.
-    """
-
-    ids = tuple(selected_point_ids)
-    assignments = []
-    for index, slot in enumerate(("slot-0", "slot-1")):
-        assignments.append((slot, ids[index] if index < len(ids) else None))
-    return W2Slots(slot_ids=("slot-0", "slot-1"), assigned_points=tuple(assignments))
+    return W2Slots(slot_ids=("slot-0", "slot-1"))
 
 
 @dataclass(frozen=True)
@@ -160,6 +163,9 @@ class W2CampaignPlan:
     broker_max_frame_bytes: int
     ros_domain_ids: tuple[int, ...]
     config: object
+    #: The ordered selection this campaign must execute. It is recorded by the composition and
+    #: consumed by the durable shared queue; the slots above hold no points.
+    selected_point_ids: tuple[str, ...] = ()
 
     def to_document(self) -> dict:
         """The manifest projection: resolved values only, never `auto`."""
@@ -189,6 +195,7 @@ class W2CampaignPlan:
             "max_input_snapshot_bytes": self.max_input_snapshot_bytes,
             "broker_max_frame_bytes": self.broker_max_frame_bytes,
             "ros_domain_ids": list(self.ros_domain_ids),
+            "selected_point_ids": list(self.selected_point_ids),
         }
 
 
@@ -240,7 +247,7 @@ def compose_w2_campaign(*, config, config_path: Path, campaign_id: str, batch_id
         requested_device = config.requested_device
         allow_cpu_fallback = config.allow_cpu_fallback
 
-    slots = exact_w2_slots(tuple(selected_point_ids))
+    slots = exact_w2_slots()
     if worker_count != len(slots.slot_ids):
         raise CompositionError(
             "SLOT_COUNT_MISMATCH", f"{worker_count} workers for {len(slots.slot_ids)} slots")
@@ -278,6 +285,7 @@ def compose_w2_campaign(*, config, config_path: Path, campaign_id: str, batch_id
         broker_max_frame_bytes=config.broker_max_frame_bytes,
         ros_domain_ids=tuple(config.ros_domain_ids),
         config=config,
+        selected_point_ids=tuple(selected_point_ids),
     )
 
 

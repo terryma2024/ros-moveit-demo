@@ -104,12 +104,33 @@ def test_the_composition_refuses_a_slot_count_that_is_not_two(tmp_path):
 
     from so101_demo.parallel_batch.w2_composition import exact_w2_slots
 
-    plan = replace(_plan(tmp_path), slots=exact_w2_slots(("p1", "p2", "p3")),
-                   worker_count=3)
+    plan = replace(_plan(tmp_path), slots=exact_w2_slots(), worker_count=3)
     supervisor = CampaignSupervisor("x", state_root=tmp_path / "sup")
     with pytest.raises(MacosW2CampaignError, match="SLOT_COUNT_MISMATCH"):
         MacosW2Campaign(plan=plan, address=object(), supervisor=supervisor,
                         ports=CampaignPorts(model_factories={}))
+
+
+def test_the_two_slots_are_capacity_only_and_assign_no_points(tmp_path):
+    """The slots exist because the platform claim is exact W2, not to hold the first two points.
+
+    Point assignment belongs to the durable shared queue (`parallel_batch.queue`), which hands a
+    Worker exactly one point per lease; a slot that already owned a point would make concurrent
+    leasing impossible and would silently drop every selected point after the second.
+    """
+
+    from so101_demo.parallel_batch.w2_composition import exact_w2_slots
+
+    slots = exact_w2_slots()
+
+    assert slots.slot_ids == ("slot-0", "slot-1")
+    assert slots.assigned_points == (("slot-0", None), ("slot-1", None))
+    assert slots.idle_slots == ("slot-0", "slot-1")
+
+    plan = _plan(tmp_path)
+    assert plan.selected_point_ids == ("p1", "p2")
+    assert plan.to_document()["selected_point_ids"] == ["p1", "p2"]
+    assert [point for _slot, point in plan.slots.assigned_points] == [None, None]
 
 
 def test_a_mixed_platform_plan_is_refused_by_the_composition(tmp_path):
@@ -282,7 +303,8 @@ def test_worker_leases_and_bindings_use_the_ids_the_worker_derives(tmp_path: Pat
     from so101_demo.parallel_batch.w2_composition import exact_w2_slots
 
     class _Plan:
-        slots = exact_w2_slots(("p1", "p2"))
+        slots = exact_w2_slots()
+        selected_point_ids = ("p1", "p2")
 
     leases = build_worker_leases(
         plan=_Plan(), batch_id="b1", evidence_root=tmp_path, input_sha256="a" * 64
@@ -292,7 +314,10 @@ def test_worker_leases_and_bindings_use_the_ids_the_worker_derives(tmp_path: Pat
     document = leases["w1"]
     assert document["attempt_ids"] == ["w1-att-00", "w1-att-01", "w1-att-02"]
     assert document["slot_id"] == "slot-0" and leases["w2"]["slot_id"] == "slot-1"
-    assert document["point_id"] == "p1" and leases["w2"]["point_id"] == "p2"
+    # The slot no longer owns a point: the queue decides which point a lease carries. Until the
+    # Worker is wired to that queue (plan Task 3) the entry point keeps its explicit fallback, so
+    # the lease still carries a *selected* id rather than an invented or unselected one.
+    assert {lease["point_id"] for lease in leases.values()} <= set(_Plan.selected_point_ids)
     assert Path(document["snapshot_path"]).is_file()
     on_disk = json.loads(Path(document["lease_path"]).read_text())
     assert on_disk["attempt_ids"] == document["attempt_ids"]

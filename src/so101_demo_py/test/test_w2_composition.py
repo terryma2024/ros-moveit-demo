@@ -112,24 +112,30 @@ def test_a_v3_document_is_host_agnostic():
 
 
 def test_two_slots_exist_even_for_a_single_point():
-    """Exact W2 means two slots; a short campaign leaves a slot idle, it does not become W1."""
+    """Exact W2 means two capacity slots; a short campaign never silently becomes W1.
 
-    slots = exact_w2_slots(("p1",))
+    Slots hold no point: the durable shared queue hands each Worker one point per lease, so the
+    slot count is a platform claim rather than a point assignment.
+    """
+
+    slots = exact_w2_slots()
     assert slots.slot_ids == ("slot-0", "slot-1")
-    assert slots.assigned_points == (("slot-0", "p1"), ("slot-1", None))
-    assert slots.idle_slots == ("slot-1",)
+    assert slots.assigned_points == (("slot-0", None), ("slot-1", None))
+    assert slots.idle_slots == ("slot-0", "slot-1")
     assert len(slots.slot_ids) == EXACT_W2_WORKERS
 
 
-def test_two_slots_are_filled_in_order_for_a_longer_campaign():
-    slots = exact_w2_slots(("p1", "p2", "p3"))
-    assert slots.assigned_points == (("slot-0", "p1"), ("slot-1", "p2"))
-    assert slots.idle_slots == ()
-    assert slots.to_document()["slot_ids"] == ["slot-0", "slot-1"]
+def test_slots_never_assign_points_for_a_longer_campaign():
+    slots = exact_w2_slots()
+    assert [point for _slot, point in slots.assigned_points] == [None, None]
+    document = slots.to_document()
+    assert document["slot_ids"] == ["slot-0", "slot-1"]
+    assert document["capacity_only"] is True
+    assert [entry["point_id"] for entry in document["assigned_points"]] == [None, None]
 
 
 def test_no_points_at_all_still_yields_two_idle_slots():
-    slots = exact_w2_slots(())
+    slots = exact_w2_slots()
     assert slots.idle_slots == ("slot-0", "slot-1")
 
 
@@ -196,15 +202,20 @@ def test_the_manifest_records_identity_provenance_and_paths(tmp_path):
     assert len(plan.config_sha256) == 64
 
 
-def test_the_plan_carries_both_slots_and_their_assignments(tmp_path):
+def test_the_plan_carries_both_capacity_slots_and_the_ordered_selection(tmp_path):
     plan = _darwin_plan(tmp_path, selected_point_ids=("p1",))
     document = plan.to_document()
     assert document["slots"]["slot_ids"] == ["slot-0", "slot-1"]
-    assert document["slots"]["idle_slots"] == ["slot-1"]
+    assert document["slots"]["idle_slots"] == ["slot-0", "slot-1"]
+    assert document["slots"]["capacity_only"] is True
     assert document["slots"]["assigned_points"] == [
-        {"slot_id": "slot-0", "point_id": "p1"},
+        {"slot_id": "slot-0", "point_id": None},
         {"slot_id": "slot-1", "point_id": None},
     ]
+    # The selection the campaign must execute lives on the plan and is drained by the durable
+    # queue, not by a per-slot assignment.
+    assert document["selected_point_ids"] == ["p1"]
+    assert plan.selected_point_ids == ("p1",)
 
 
 def test_the_plan_refuses_a_worker_count_that_is_not_two(tmp_path):
