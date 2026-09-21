@@ -21,6 +21,7 @@ function campaignProjection(sequence: number): CampaignProjection {
     execution_coverage: 0,
     levels_used: [],
     fallback_history: [],
+    retry_history: [],
     infra_attempts: 0,
     resource_observations: {},
   };

@@ -187,12 +187,40 @@ describe("verifyV2LiveEvidence", () => {
       executionIdentitySha256: "c".repeat(64),
       releasePrefix: "release",
     });
+    // Same point count, one wrong id: a count alone is not the selection.
+    const points = JSON.parse(readFileSync(join(root, "points.json"), "utf-8"));
+    points[3] = { ...points[3], point_id: "p5" };
+    writeFileSync(join(root, "points.json"), JSON.stringify(points));
+    await expect(verifyV2LiveEvidence(root, {
+      ...expected, selectedPointIds: ["p1", "p2", "p3", "p4"],
+    })).rejects.toThrow("QUALIFICATION_EVIDENCE_INVALID");
+  });
+
+  test("rejects more point evidence than the selection carries", async () => {
+    const { root, expected } = fixtureRoot({
+      workerCount: 2,
+      pointIds: ["p1", "p2", "p3", "p4"],
+      profileSha256: "a".repeat(64),
+      qualificationSha256: "b".repeat(64),
+      executionIdentitySha256: "c".repeat(64),
+      releasePrefix: "release",
+    });
     const points = JSON.parse(readFileSync(join(root, "points.json"), "utf-8"));
     points.push({ ...points[0], point_id: "p5" });
     writeFileSync(join(root, "points.json"), JSON.stringify(points));
     // An unselected point's evidence is not part of this batch's selected-only evidence set.
     await expect(verifyV2LiveEvidence(root, expected))
       .rejects.toThrow("QUALIFICATION_EVIDENCE_INVALID");
+  });
+
+  test("accepts a batch whose declared selection is exactly its evidence set", async () => {
+    const { root, expected } = fixtureRoot();
+    await expect(verifyV2LiveEvidence(root, {
+      ...expected, selectedPointIds: ["p1", "p2", "p3", "p4"],
+    })).resolves.toBeUndefined();
+    await expect(verifyV2LiveEvidence(root, {
+      ...expected, selectedPointIds: ["p1", "p2", "p3", "p6"],
+    })).rejects.toThrow("QUALIFICATION_EVIDENCE_INVALID");
   });
 
   test("rejects a batch whose receipt did not complete its cleanup", async () => {
