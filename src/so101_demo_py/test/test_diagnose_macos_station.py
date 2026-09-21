@@ -387,3 +387,37 @@ def test_cli_rejects_a_negative_timeout() -> None:
     module = _diagnostic_module()
     with pytest.raises(SystemExit):
         module.parse_arguments(["--mode", "MINIMAL_CONTROLLER_MANAGER", "--timeout-s", "0"])
+
+
+def test_station_robot_description_renders_the_shared_urdf(tmp_path: Path) -> None:
+    """The diagnostic must use the station's own renderer, with the scene as a string.
+
+    Regression: the wrapper handed a ``Path`` to the shared renderer, which expects the scene
+    substitution value as ``str``; the first live diagnostic run failed with
+    ``TypeError: replace() argument 2 must be str, not PosixPath`` instead of starting.
+    """
+
+    module = _diagnostic_module()
+    share = tmp_path / "share"
+    assets = share / "assets" / "mujoco"
+    assets.mkdir(parents=True)
+    (assets / "so101.urdf").write_text(
+        "<robot name='so101'><hardware>"
+        "<plugin>mujoco_ros2_control/MujocoSystemInterface</plugin>"
+        "<param name='mujoco_model'>@SO101_MUJOCO_SCENE@</param>"
+        "<param name='initial_keyframe'>@SO101_MUJOCO_INITIAL_KEYFRAME@</param>"
+        "<param name='headless'>@SO101_MUJOCO_HEADLESS@</param>"
+        "<param name='disable_rendering'>@SO101_MUJOCO_DISABLE_RENDERING@</param>"
+        "<param name='sim_speed_factor'>@SO101_MUJOCO_SIM_SPEED_FACTOR@</param>"
+        "</hardware></robot>",
+        encoding="utf-8",
+    )
+    scene = assets / "scene.xml"
+    scene.write_text("<mujoco/>", encoding="utf-8")
+
+    rendered = module.station_robot_description(share)
+
+    assert "@SO101_" not in rendered
+    assert str(scene) in rendered
+    assert "task_start" in rendered
+    assert "mujoco_ros2_control/MujocoSystemInterface" in rendered
