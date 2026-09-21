@@ -49,8 +49,8 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-T2
-next_experiment: EXP-MSC-102 (Task 3: one selected point per Worker lease)
+latest_checkpoint: CP-MSC-T3
+next_experiment: EXP-MSC-103 (Task 4: CoordinatorJournal committed watermark)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -1053,3 +1053,78 @@ persisted queue without loss or double lease; abandoned-lease recovery by a high
   rerun against the fixed runtime closure. Neither is claimed by this checkpoint.
 
 Decision: `TASK_2_SELECTION_AND_QUEUE_GREEN_ON_SCOPED_GATES`; next is Task 3 (one point per lease).
+
+## CP-MSC-T3: Task 3 - one selected point per Worker lease
+
+```yaml
+checkpoint_id: CP-MSC-T3
+recorded_at: 2026-09-21T20:15:00+0800
+parent_source_at_test: e1817749e3013375b4a334efbe0746980f54d7bb (plus the Task 2 commit 3aaa2d67)
+submodule_commit: 85d2a5c42686a3d6b0d909a047a4188b24edd257
+install_overlay: /opt/data/so101/workspace/install (source tree prepended for source-mode gates)
+runtime_executable: /opt/ros2_jazzy/.venv/bin/python (3.11.15)
+ros_domain_id: NOT_APPLICABLE_OFFLINE
+gz_partition: NOT_APPLICABLE_OFFLINE
+```
+
+### Delivered
+
+- New `src/so101_demo_py/src/parallel_batch/single_point_input.py`: `PointExecutionInput`,
+  `PointExecutionResult`, `write_single_point_input()`, `read_single_point_input()`,
+  `batch_argv()`, `pick_place_request()`, `SinglePointInputError`. A lease becomes one immutable
+  single-point YAML under `points/`, written through a fsynced temporary file and an atomic
+  rename; an existing file with different bytes is refused instead of overwritten.
+- `cli/macos_w2_campaign.py`: `lease_worker_execution()` turns one queue lease into the Worker's
+  lease document with `points_path`/`points_sha256`/`point_id`/`attempt_id` (the queue's own
+  attempt id leads the attempt list) instead of a static slot point.
+- `cli/macos_w2_worker.py`: the installed catalog is gone from the Worker. It now asks
+  `pick_place_request()` for the exact input, runs the batch with that single-point argv, and
+  records the evidence manifest digest when the batch wrote one.
+- `parallel_batch/macos_w2_campaign.py`: `bind_selection(binding, queue)` binds the immutable
+  selection and its durable queue once per campaign (`SELECTION_ALREADY_BOUND` / `SELECTION_TYPE`
+  / `QUEUE_TYPE` / `SELECTION_MISMATCH` refusals) and exposes `selection_sha256`.
+
+### RED evidence (EXP-MSC-102)
+
+`task2/task3-red-20260921T115615Z` - exit 1, 106 tests collected, 9 failed / 97 passed, 0 errors;
+16 assertion messages are `so101_demo.parallel_batch.single_point_input is not implemented yet`.
+No import/bootstrap error appears.
+
+### GREEN evidence
+
+- `task2/task3-green-4-20260921T115756Z` - exit 0, 107 passed over
+  `test_single_point_input.py`, `test_macos_w2_campaign.py`, `test_parallel_batch_broker.py`,
+  `test_mujoco_rgbd_batch_cli.py`.
+- `task2/task3-adjacent-20260921T115803Z` - exit 0, 482 passed over those four plus
+  `test_parallel_selection.py`, `test_parallel_point_queue.py`, `test_w2_composition.py`,
+  `test_parallel_batch_coordinator.py`, `test_parallel_batch_worker.py`,
+  `test_parallel_worker_runtime.py`, `test_macos_install_contract.py`.
+- Retained intermediate runs, not deleted: `task3-green-20260921T115714Z` (4 failed) and
+  `task3-green-2-...` (1 failed). Both were **test-side** defects, not product failures: the new
+  tests parsed the single-point YAML with `json.loads`, and one fixture pointed at a
+  nonexistent batch binary. Both were fixed in the test file; no product behaviour was changed
+  for them.
+
+Covered behaviour: one lease produces one point file with exactly the leased id, position and
+digest (rewrite idempotent, conflicting bytes refused); leases outside the binding or with an
+edited point hash are refused; the read-back gate rejects drift, a wrong id and a multi-point
+file; the batch argv points at the single-point file and never at `rgbd_task_points.yaml`;
+a retry binding produces a one-point input and refuses any other catalog id; a business
+`PointExecutionResult` cannot be built without station readiness, a MoveIt execution, a relative
+evidence manifest with its digest and cleanup ownership, and `INVALID` is refused as an outcome;
+the campaign binds selection+queue once; the Worker refuses pick-place when the lease carries no
+single-point input (`POINTS_PATH_MISSING`) instead of falling back to the installed catalog.
+
+### Open boundaries after Task 3 (not claimed as passed)
+
+- The live probe entry still writes its probe lease documents with `build_worker_leases()`; those
+  leases carry no `points_path`, so their Workers now refuse pick-place by design. Switching that
+  entry to `lease_worker_execution()` and committing the produced `PointExecutionResult` to the
+  durable queue belongs to the service/adapter wiring (plan Tasks 7-9).
+- `compose_w2_campaign()` still accepts any ordered selection; the 4-20/anchor validation lives in
+  the selection builders and is enforced by the adapter later.
+- Ordinary `src/so101_demo_py/test` package gate remains NOT GREEN on this host, the five-run
+  strict no-DYLD Gate A attestation is still NOT rerun against the fixed runtime closure, and a
+  second physical Mac is still NOT RUN.
+
+Decision: `TASK_3_SINGLE_POINT_EXECUTION_GREEN_ON_SCOPED_GATES`; next is Task 4.
