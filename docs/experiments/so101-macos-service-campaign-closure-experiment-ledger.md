@@ -49,8 +49,8 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-T3
-next_experiment: EXP-MSC-103 (Task 4: CoordinatorJournal committed watermark)
+latest_checkpoint: CP-MSC-T4
+next_experiment: EXP-MSC-104 (Task 5: canonical reducer and transactional projection)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -1128,3 +1128,66 @@ single-point input (`POINTS_PATH_MISSING`) instead of falling back to the instal
   second physical Mac is still NOT RUN.
 
 Decision: `TASK_3_SINGLE_POINT_EXECUTION_GREEN_ON_SCOPED_GATES`; next is Task 4.
+
+## CP-MSC-T4: Task 4 - committed campaign watermarks
+
+```yaml
+checkpoint_id: CP-MSC-T4
+recorded_at: 2026-09-21T20:20:00+0800
+parent_source_at_test: e1817749 (plus Task 2 3aaa2d67, Task 3 4ce16007)
+submodule_commit: 85d2a5c42686a3d6b0d909a047a4188b24edd257
+install_overlay: /opt/data/so101/workspace/install (source tree prepended for source-mode gates)
+runtime_executable: /opt/ros2_jazzy/.venv/bin/python (3.11.15)
+ros_domain_id: NOT_APPLICABLE_OFFLINE
+gz_partition: NOT_APPLICABLE_OFFLINE
+```
+
+### Delivered
+
+- `parallel_batch/journal.py`: `CommittedWatermark(writer_epoch, sequence, event_sha256)` with a
+  closed document form; `append_committed()` (append + fsync the frame, then atomic
+  temp-fsync-rename-dir-fsync of `committed-watermark.json`, and only then return the ACK);
+  `read_watermark()`; `CoordinatorJournal.read_committed_prefix(root, batch_id, watermark)`;
+  terminal-event rules (`BATCH_TERMINAL` may only be followed by `CLEANUP_COMMITTED`, nothing may
+  follow `CLEANUP_COMMITTED`); `JournalReplay.unconfirmed_durability` reports bytes beyond the
+  watermark without returning, truncating or appending them. `read_only_replay()` keeps its strict
+  incomplete-tail rejection unchanged.
+- `cli/macos_w2_campaign.py`: `open_campaign_journal()` commits `CAMPAIGN_STARTED` through
+  `append_committed()` and the live run records the segment and published watermark in its
+  document; `commit_campaign_terminal()` commits `BATCH_TERMINAL` and, when cleanup is proven
+  complete, `CLEANUP_COMMITTED`. The live path closes the journal in its `finally` block, guarded
+  so a run that failed before opening it cannot raise a second error.
+
+### RED evidence (EXP-MSC-103)
+
+`task2/task4-red-20260921T115911Z` - exit 1, 99 tests collected, 9 failed / 90 passed, 0 errors;
+the nine failures are exactly the new watermark/committed-prefix/terminal assertions.
+
+### GREEN evidence
+
+- `task2/task4-green-2-20260921T120007Z` - exit 0, 100 passed over the plan's three files
+  (`test_parallel_batch_journal.py`, `test_parallel_batch_crash_recovery.py`,
+  `test_macos_w2_campaign.py`).
+- `task2/task4-adjacent-20260921T120016Z` - exit 0, 520 passed over those three plus
+  `test_single_point_input.py`, `test_parallel_point_queue.py`, `test_parallel_selection.py`,
+  `test_parallel_batch_coordinator.py`, `test_parallel_batch_worker.py`,
+  `test_parallel_worker_runtime.py`, `test_parallel_batch_broker.py`,
+  `test_mujoco_rgbd_batch_cli.py`.
+
+Covered behaviour: the watermark is published only after the frame is fsynced; repeated keys do
+not move it backwards and a disagreeing watermark fails closed; the committed-prefix reader
+returns exactly the covered prefix and flags frames beyond it (`unconfirmed_durability=True`)
+while strict replay still sees them; a partial tail is reported and never truncated or preserved
+by the reader; a tampered committed frame, a sequence gap and an unknown/rewound watermark all
+raise `JournalCorruption`; `BATCH_TERMINAL` and `CLEANUP_COMMITTED` close the stream; an epoch
+takeover keeps the previous prefix readable and advances the watermark monotonically.
+
+### Open boundaries after Task 4 (not claimed as passed)
+
+- The live projector/reader that consumes the committed prefix and drives the canonical reducer
+  is Task 5; nothing yet projects these events outside the campaign document.
+- The same three open items from CP-MSC-T3 remain: the ordinary package gate is not GREEN on this
+  host, the five-run strict no-DYLD Gate A attestation is still not rerun against the fixed
+  runtime closure, and a second physical Mac is still NOT RUN.
+
+Decision: `TASK_4_COMMITTED_WATERMARKS_GREEN_ON_SCOPED_GATES`; next is Task 5.
