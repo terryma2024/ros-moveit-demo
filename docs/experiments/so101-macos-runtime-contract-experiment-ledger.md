@@ -168,10 +168,11 @@
   failing parallel-runtime groups reported 468 passed and 1 skipped.
 - Authoritative macOS gate: fixed ROS Python, all four overlays, fixed dylib farm,
   `TMPDIR/TMP/TEMP=/opt/data/tmp`, a fresh short basetemp, and
-  `pytest -n 8 --dist loadscope src/so101_demo_py/test`. The ordinary gate excludes the two tests
-  marked `explicit_ml` and does not collect `benchmark_test/`.
-- Result: the final fresh `package-gate-n8-final-011` completed with 3660 passed, 9 skipped,
-  zero failed in 60.47 seconds;
+  `pytest -n 8 --dist loadscope src/so101_demo_py/test`. The ordinary gate excludes the eleven
+  tests marked `explicit_ml` and does not collect `benchmark_test/`.
+- Result: after aligning the nine Torch/GroundingDINO cases discovered by the Linux environment,
+  the final fresh `package-gate-n8-post-linux-marker-012` completed with 3651 passed, 9 skipped,
+  zero failed in 42.11 seconds;
   pytest exit 0. Its JUnit, complete log, preflight, exit code, elapsed time, and basetemp record are
   retained under the run evidence directory.
 - Expanded diagnostic: `package-gate-n8-all-007` deliberately overrode the marker filter. It
@@ -193,7 +194,7 @@
 ## RUN-006 — Linux eight-worker parity gate
 
 - Date: 2026-09-21 Asia/Shanghai
-- Status: `PLANNED_AFTER_MACOS_COMMIT_AND_PUSH`
+- Status: `RUNNING_ENVIRONMENT_ALIGNMENT`
 - Branch: `codex/so101-unified-webapp`
 - Evidence root: `/data/work/so101-evidence/macos-parallel-compat-linux/20260921-a50dcb6c-n8-001`
 - Scope: on `ai-station`, verify the same ordinary non-ML `src/so101_demo_py/test/` boundary with
@@ -204,3 +205,10 @@
 - Retention: retain the full test log, JUnit, environment preflight, elapsed time, exit code, and
   scratch-path record. Treat the scratch tree as a deletion candidate after readback; delete
   nothing without explicit authorization.
+- Preparation observations: the first recursive fetch updated the parent branch but failed because
+  Gitee no longer served the locked submodule object `6591771d`; a parent-only fetch then resolved
+  commit `97a69638`. The isolated `so101_demo_py` build passed. The first pytest attempt did not
+  collect tests: all eight workers failed importing `torch` from
+  `test_grounding_dino_domain_retention.py`. The fixed Linux Python has no Torch, and the file is a
+  Torch/GroundingDINO suite, so it is being aligned with the user-authorized `explicit_ml` boundary
+  rather than counted as a code failure. The failed scratch is retained as a deletion candidate.
