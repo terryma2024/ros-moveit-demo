@@ -125,10 +125,13 @@ def test_full_task_station_argv_is_fixed_and_uses_validated_binding_values(
         task_evidence_root=evidence,
         scene=scene,
         readiness_timeout_s=90.0,
+        python_executable=Path("/venv/bin/python"),
+        ros2_script=Path("/ros/bin/ros2"),
     )
 
     assert argv == (
-        "ros2",
+        "/venv/bin/python",
+        "/ros/bin/ros2",
         "launch",
         "so101_demo_py",
         "so101_mujoco_task_station.launch.py",

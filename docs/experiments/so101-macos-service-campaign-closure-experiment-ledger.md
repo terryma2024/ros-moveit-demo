@@ -8,11 +8,11 @@ termination, or evidence deletion.
 task_id: so101-macos-service-campaign-closure
 goal: close service-driven macOS W2, W1 and single-point retry with lightweight StartGuard protection
 success_contract: design section 16, with candidate and production evidence kept separate
-executor: Gate A Codex dispatch a50dcb6c-1eba-43d5-a2ea-2725a18e3a27 inline on mac-mini through CP-MSC-A1; paused dst resumes only after reviewer release
+executor: Gate A Codex dispatch a50dcb6c-1eba-43d5-a2ea-2725a18e3a27 inline on mac-mini; user-authorized control repair resumed after CP-MSC-A1 without dst
 worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
 branch: codex/so101-unified-webapp
 base_commit: 6d5069026fbd322076f58d0d4b9504891abeb861
-current_commit: 62a7431690bef974718e55dbcfb54a36ffc6af6b before the CP-MSC-A1 ledger commit
+current_commit: ab3efeb23b4307e8d2a373e0dde332e38726925e before the EXP-MSC-A1-002 ledger edit
 upstream: origin/codex/so101-unified-webapp (ahead 23, no push authorized)
 evidence_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
 dispatch_receipt: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/dispatch.receipt
@@ -47,8 +47,99 @@ open_hypotheses:
   - Mixed-provenance dylib resolution through the project's dylib farm can bind
     mujoco_ros2_control artifacts to the foreign fork prefix; whether that is what the
     campaign loaded is not yet measured
-latest_checkpoint: CP-MSC-A1
-next_experiment: NONE - Task 1 stops on INVALID_CONTROL for independent review; Task 2 remains forbidden
+  - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
+    preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
+latest_checkpoint: CP-MSC-A1-FIX-TAKEOVER
+next_experiment: EXP-MSC-A1-002
+```
+
+## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
+
+```yaml
+checkpoint_id: CP-MSC-A1-FIX-TAKEOVER
+recorded_at: 2026-09-21T13:57:08+0800
+authorization: >-
+  The user explicitly authorized code changes for the two unresolved dylib boundaries, requested
+  a design based on the macOS Apple Silicon guide, approved that design, and then required Codex
+  to execute it directly without dst.
+scope: repair Gate A N/P control construction and ros2 interpreter boundaries only; do not start Task 2
+worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
+branch: codex/so101-unified-webapp
+source_commit: ab3efeb23b4307e8d2a373e0dde332e38726925e
+submodule_commit: e4c0241aee52a40727681bd5872c09bf814e941a
+working_tree_status_at_takeover: clean
+evidence_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
+repair_run_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/gate-a-resolution/a50dcb6c-1eba-43d5-a2ea-2725a18e3a27/fix-dylib-baseline
+preserved_processes:
+  - tmux session dst-so101-macos-closure (paused and untouched)
+  - legacy static_transform_publisher processes 1541 and 1542 (foreign and untouched)
+owned_processes: NONE
+model_tool_deviation: >-
+  Repository defaults request GPT-5.6 Sol / High and dst for plan execution. This session cannot
+  verify the model tier, and the user explicitly prohibited dst and directed Codex to execute the
+  approved repair itself.
+next_experiment: EXP-MSC-A1-002
+```
+
+```yaml
+experiment_id: EXP-MSC-A1-002
+status: RUNNING
+prior_experiment: EXP-MSC-A1-001
+hypothesis: >-
+  A task-owned filtered view of the canonical macOS ROS dylib farm will resolve
+  libhardware_interface.dylib and librosidl_typesupport_c.dylib without exposing the MuJoCo vendor
+  library to N, while invoking ros2 through the frozen current sys.executable will preserve that
+  environment across the macOS script boundary.
+prediction: >-
+  Unit contracts first fail for the absent filtered-farm and explicit-interpreter behavior, then
+  pass after the minimal implementation; a rebuilt N/P pair reaches the intended MuJoCo boundary
+  with N using only the filtered ROS farm and P adding only the manifest vendor directory.
+single_variable: P adds only the manifest-bound MuJoCo vendor directory after the identical filtered ROS farm
+lifecycle: ISOLATED_STACK
+preconditions:
+  - worktree and submodule match the takeover identities
+  - the canonical dylib farm current link resolves to one fixed run for manifest construction
+  - the filtered view excludes every basename supplied by the frozen task closure and vendor directory
+  - no task-owned station process is running before live validation
+success_criteria:
+  - RED tests fail for missing filtered-farm and explicit-interpreter behavior
+  - GREEN targeted and package tests pass with nonzero collection
+  - N and P semantic validation proves the exact one-path vendor delta
+  - direct probe and station bootstrap both resolve the two previously missing ROS dylibs
+failure_criteria:
+  - either ROS dylib remains unresolved with a valid filtered-farm binding
+  - the explicit interpreter still loses the frozen DYLD environment
+invalid_criteria:
+  - farm current target changes during construction or validation
+  - filtered farm contains any frozen closure/vendor basename
+  - test collection fails before the intended assertion boundary
+provenance:
+  source_commit: ab3efeb23b4307e8d2a373e0dde332e38726925e
+  submodule_commit: e4c0241aee52a40727681bd5872c09bf814e941a
+  install_overlay: PENDING
+  runtime_executable: /Users/matianyi/ros2_jazzy/.venv/bin/python
+  ros_domain_id: PENDING
+  gz_partition: NOT_APPLICABLE_MUJOCO
+commands:
+  - command: targeted RED tests for filtered farm and explicit ros2 interpreter contracts
+    exit_code: 1 (valid assertion RED: 5 failed, 14 passed)
+  - command: related Gate A suite after implementation
+    exit_code: 0 (92 passed, 2 pre-existing Lark warnings)
+  - command: full ordinary so101_demo_py test directory on macOS
+    exit_code: 1 (environment-invalid for this experiment: 3363 passed, 233 failed, 8 skipped)
+observed:
+  - The first attempted RED exited 4 because launch_testing collected an unrelated test and hit the known stale FreeJointState underlay; it did not reach the intended assertion and is INVALID evidence.
+  - With third-party pytest autoload disabled, the intended RED reached the new APIs and failed with 5 expected failures while 14 existing tests passed.
+  - The related Gate A suite passed all 92 tests after the implementation.
+  - The full ordinary test directory collected and ran 3604 tests; its 233 failures were outside the changed files and were dominated by Linux-only /data/work fixture paths on this macOS host, plus one existing Python-3.12 literal assertion. No modified Gate A test failed.
+  - Correction: the ledger status transition from PLANNED to RUNNING was recorded after the RED/GREEN commands instead of immediately before them; command logs and immutable JUnit files preserve the actual order.
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/gate-a-resolution/a50dcb6c-1eba-43d5-a2ea-2725a18e3a27/fix-dylib-baseline
+decision: PENDING
+next_experiment: NONE
 ```
 
 ## CP-MSC-A1-TAKEOVER: current-product Gate A writer handoff

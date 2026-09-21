@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -164,21 +165,39 @@ def test_non_rpath_failure_stops_at_the_first_bad_ros_phase() -> None:
 
 def test_frozen_semantics_allow_only_the_manifest_vendor_dyld_delta(tmp_path: Path) -> None:
     module = _module()
+    ros_farm = tmp_path / "ros-dylib-farm"
     vendor = tmp_path / "closure/opt/mujoco_vendor/lib"
+    ros_farm.mkdir()
     vendor.mkdir(parents=True)
     base = {
         "PATH": "/usr/bin:/bin",
         "PYTHONNOUSERSITE": "1",
         "LANG": "C.UTF-8",
+        "DYLD_LIBRARY_PATH": str(ros_farm),
     }
     n = module.FrozenSemanticLaunchContract(
-        argv=("ros2", "launch", "so101_demo_py", "so101_mujoco_task_station.launch.py"),
+        argv=(
+            "/venv/bin/python",
+            "/ros/bin/ros2",
+            "launch",
+            "so101_demo_py",
+            "so101_mujoco_task_station.launch.py",
+        ),
         environment=base,
+        python_executable=Path("/venv/bin/python"),
+        ros2_script=Path("/ros/bin/ros2"),
+        ros_library_directory=ros_farm,
         vendor_library_directory=vendor,
     )
     p = module.FrozenSemanticLaunchContract(
         argv=n.argv,
-        environment={**base, "DYLD_LIBRARY_PATH": str(vendor)},
+        environment={
+            **base,
+            "DYLD_LIBRARY_PATH": os.pathsep.join((str(ros_farm), str(vendor))),
+        },
+        python_executable=n.python_executable,
+        ros2_script=n.ros2_script,
+        ros_library_directory=ros_farm,
         vendor_library_directory=vendor,
     )
 
@@ -190,10 +209,103 @@ def test_frozen_semantics_allow_only_the_manifest_vendor_dyld_delta(tmp_path: Pa
             module.FrozenSemanticLaunchContract(
                 argv=(*n.argv, "headless:=true"),
                 environment=p.environment,
+                python_executable=n.python_executable,
+                ros2_script=n.ros2_script,
+                ros_library_directory=ros_farm,
                 vendor_library_directory=vendor,
             ),
         )
     assert error.value.code == "CONTROL_SEMANTIC_DIFF"
+
+
+def _source_dylib_farm(tmp_path: Path, names: tuple[str, ...]) -> tuple[Path, dict[str, Path]]:
+    libraries = tmp_path / "libraries"
+    source_run = tmp_path / "farm/runs/run-1"
+    libraries.mkdir()
+    source_run.mkdir(parents=True)
+    targets: dict[str, Path] = {}
+    for name in names:
+        target = libraries / name
+        target.write_bytes(f"bytes:{name}".encode())
+        (source_run / name).symlink_to(target)
+        targets[name] = target
+    current = tmp_path / "farm/current"
+    current.symlink_to(source_run)
+    return current, targets
+
+
+def test_filtered_ros_dylib_farm_keeps_ros_dependencies_and_excludes_closure_names(
+    tmp_path: Path,
+) -> None:
+    module = _module()
+    source, _targets = _source_dylib_farm(
+        tmp_path,
+        (
+            "libhardware_interface.dylib",
+            "librosidl_typesupport_c.dylib",
+            "libmujoco.3.4.0.dylib",
+            "libmujoco_ros2_control.dylib",
+        ),
+    )
+
+    identity = module.build_filtered_ros_dylib_farm(
+        source_farm=source,
+        output_directory=tmp_path / "gate-a/filtered-ros-dylib-farm",
+        excluded_basenames={
+            "libmujoco.3.4.0.dylib",
+            "libmujoco_ros2_control.dylib",
+        },
+    )
+
+    assert set(identity.inventory) == {
+        "libhardware_interface.dylib",
+        "librosidl_typesupport_c.dylib",
+    }
+    assert not (identity.directory / "libmujoco.3.4.0.dylib").exists()
+    module.verify_filtered_ros_dylib_farm(
+        identity,
+        excluded_basenames={
+            "libmujoco.3.4.0.dylib",
+            "libmujoco_ros2_control.dylib",
+        },
+    )
+
+
+def test_filtered_ros_dylib_farm_requires_the_two_ros_bootstrap_dependencies(
+    tmp_path: Path,
+) -> None:
+    module = _module()
+    source, _targets = _source_dylib_farm(
+        tmp_path, ("libhardware_interface.dylib",)
+    )
+
+    with pytest.raises(module.GateAControlError) as error:
+        module.build_filtered_ros_dylib_farm(
+            source_farm=source,
+            output_directory=tmp_path / "gate-a/filtered-ros-dylib-farm",
+            excluded_basenames=set(),
+        )
+
+    assert error.value.code == "CONTROL_ROS_DYLIB_FARM_INVALID"
+
+
+def test_filtered_ros_dylib_farm_detects_target_byte_drift(tmp_path: Path) -> None:
+    module = _module()
+    source, targets = _source_dylib_farm(
+        tmp_path,
+        ("libhardware_interface.dylib", "librosidl_typesupport_c.dylib"),
+    )
+    identity = module.build_filtered_ros_dylib_farm(
+        source_farm=source,
+        output_directory=tmp_path / "gate-a/filtered-ros-dylib-farm",
+        excluded_basenames=set(),
+    )
+    targets["libhardware_interface.dylib"].write_bytes(b"replacement")
+
+    with pytest.raises(module.GateAControlError) as error:
+        module.verify_filtered_ros_dylib_farm(identity, excluded_basenames=set())
+
+    assert error.value.code == "CONTROL_ROS_DYLIB_FARM_DRIFT"
 
 
 def test_gate_a_binding_validates_domain_session_and_containment(tmp_path: Path) -> None:
@@ -220,6 +332,63 @@ def test_gate_a_binding_validates_domain_session_and_containment(tmp_path: Path)
         module.GateARunBinding.create(
             run_root=root, session_id="../escape", ros_domain_id=22
         )
+
+
+def test_gate_a_bindings_keep_ros_farm_and_only_positive_adds_vendor(
+    tmp_path: Path,
+) -> None:
+    module = _module()
+    ros_farm = tmp_path / "control-set/filtered-ros-dylib-farm"
+    vendor = tmp_path / "control-set/closure/opt/mujoco_vendor/lib"
+    scene = tmp_path / "control-set/closure/share/so101_demo_py/scene.xml"
+    ros_farm.mkdir(parents=True)
+    vendor.mkdir(parents=True)
+    scene.parent.mkdir(parents=True)
+    scene.write_text("<mujoco/>", encoding="utf-8")
+    semantic = module.FrozenSemanticLaunchContract(
+        argv=(
+            "/venv/bin/python",
+            "/ros/bin/ros2",
+            "launch",
+            "session_id:=@SESSION_ID@",
+            "task_evidence_root:=@TASK_EVIDENCE_ROOT@",
+            "mujoco_scene:=@MANIFEST_SCENE@",
+        ),
+        environment={
+            "PATH": "/usr/bin:/bin",
+            "PYTHONNOUSERSITE": "1",
+            "DYLD_LIBRARY_PATH": str(ros_farm),
+        },
+        python_executable=Path("/venv/bin/python"),
+        ros2_script=Path("/ros/bin/ros2"),
+        ros_library_directory=ros_farm,
+        vendor_library_directory=vendor,
+    )
+    manifest = SimpleNamespace(semantic=semantic, scene_path=scene)
+    n_root = tmp_path / "negative"
+    p_root = tmp_path / "positive"
+    n_root.mkdir()
+    p_root.mkdir()
+
+    negative = module.GateARunBinding.create(
+        run_root=n_root,
+        session_id="gate-a-n",
+        ros_domain_id=40,
+        control="N",
+        manifest=manifest,
+    )
+    positive = module.GateARunBinding.create(
+        run_root=p_root,
+        session_id="gate-a-p",
+        ros_domain_id=41,
+        control="P",
+        manifest=manifest,
+    )
+
+    assert negative.expanded_environment["DYLD_LIBRARY_PATH"] == str(ros_farm)
+    assert positive.expanded_environment["DYLD_LIBRARY_PATH"] == os.pathsep.join(
+        (str(ros_farm), str(vendor))
+    )
 
 
 def test_create_binding_accepts_precreated_empty_plan_run_root(
