@@ -61,6 +61,9 @@
 
 **Files:**
 - Modify only when Step 3 confirms the rpath boundary: `third_party/mujoco_ros2_control/mujoco_ros2_control/CMakeLists.txt`
+- Modify only when Step 3 confirms the rpath boundary: `src/so101_demo_py/config/mujoco/dependency-lock.yaml`
+- Modify only when Step 3 confirms the rpath boundary: `src/so101_demo_py/config/dependency-lock.yaml`
+- Modify only when Step 3 confirms the rpath boundary: `scripts/check_backend_integration.py`
 - Modify: `src/so101_demo_py/test/test_macos_install_contract.py`
 - Modify: `src/so101_demo_py/test/test_runtime_closure.py`
 - Modify: `docs/experiments/so101-macos-service-campaign-closure-experiment-ledger.md`
@@ -103,7 +106,10 @@ plugin XML、loaded images、direct controller query 与 READY 结果。Expected
 
 只修改 submodule CMake 的 Apple `INSTALL_RPATH`，保留 `@loader_path`，并加入指向同一 prefix
 `opt/mujoco_vendor/lib` 的相对 loader path。不得改 node、dispatcher 或 hardware interface。
-重建 copied install 后，在净化环境运行上一步测试和 diagnostic。
+先形成 submodule commit，再把它的完整 SHA 同步到两份 dependency lock 和
+`check_backend_integration.py` 的 candidate 常量；parent gitlink、两锁、candidate 断言和 submodule
+HEAD 必须一致，并继续证明 lineage/policy ancestry，不得放宽 provenance 测试。冻结这组来源后再
+重建 copied install，并在净化环境运行上一步测试和 diagnostic。
 
 ```bash
 $TEST_PYTHON -m pytest -q \
@@ -132,6 +138,9 @@ git -C third_party/mujoco_ros2_control add -- mujoco_ros2_control/CMakeLists.txt
 git -C third_party/mujoco_ros2_control diff --cached --check
 git -C third_party/mujoco_ros2_control commit -m "fix(mujoco): close macOS vendor install rpath"
 git add -- third_party/mujoco_ros2_control \
+  src/so101_demo_py/config/mujoco/dependency-lock.yaml \
+  src/so101_demo_py/config/dependency-lock.yaml \
+  scripts/check_backend_integration.py \
   src/so101_demo_py/test/test_macos_install_contract.py \
   src/so101_demo_py/test/test_runtime_closure.py \
   docs/experiments/so101-macos-service-campaign-closure-experiment-ledger.md
@@ -347,13 +356,16 @@ $TEST_PYTHON -m pytest -q \
 - Modify: `src/so101_demo_py/src/parallel_batch/contracts.py`
 - Modify: `src/so101_demo_py/src/parallel_batch/start_guard.py`
 - Modify: `src/so101_demo_py/src/parallel_batch/start_guard_probe.py`
+- Modify: `src/so101_demo_py/src/parallel_batch/w2_composition.py`
 - Modify: `src/so101_demo_py/src/cli/macos_service_campaign.py`
+- Modify: `src/so101_demo_py/src/cli/macos_w2_campaign.py`
 - Modify: `src/so101_demo_py/src/cli/macos_w2_worker.py`
 - Modify: `src/so101_demo_py/src/parallel_batch/campaign_supervisor.py`
 - Modify: `src/so101_demo_py/setup.py`
 - Modify: `src/so101_demo_py/test/test_parallel_batch_contracts.py`
 - Modify: `src/so101_demo_py/test/test_parallel_start_guard_composition.py`
 - Modify: `src/so101_demo_py/test/test_parallel_start_guard_probe.py`
+- Modify: `src/so101_demo_py/test/test_macos_w2_campaign.py`
 - Modify: `src/so101_demo_py/test/test_macos_install_contract.py`
 
 **Interfaces:**
@@ -365,7 +377,10 @@ $TEST_PYTHON -m pytest -q \
 
 - [ ] **Step 2: RED StartGuard spawn semantics** — campaign 与每个 Worker 使用不同 fresh epoch；
   旧 preflight result 不可重用。RAM/MPS FAIL 和 probe/identity error 不调用 `Popen`；CPU WARN 仍
-  调用一次；同一 service 不可同时启动 W1/W2。
+  调用一次；同一 service 不可同时启动 W1/W2。public W2 CLI 即使已存在 PASS/FAIL
+  `start-guard.json` 也必须 fresh probe；旧 epoch、不同 owner 或篡改文件都不能准入。guard 阶段
+  到 broker 阶段的 `exec` 只接受本次进程创建的 inherited pipe 中一次性 result，消费后关闭；
+  磁盘 JSON 只供审计。测试同时证明 broker 阶段开始前已通过 `exec` 清除 guard 阶段的 torch 导入。
 
 ```bash
 $TEST_PYTHON -m pytest -q \
@@ -374,13 +389,16 @@ $TEST_PYTHON -m pytest -q \
   src/so101_demo_py/test/test_macos_n1_cli.py \
   src/so101_demo_py/test/test_parallel_start_guard_composition.py \
   src/so101_demo_py/test/test_parallel_start_guard_probe.py \
+  src/so101_demo_py/test/test_macos_w2_campaign.py \
   src/so101_demo_py/test/test_macos_install_contract.py \
   --junitxml="$RUN_ROOT/task7-red.xml"
 ```
 
 - [ ] **Step 3: GREEN** — 共用 W1 primitive 只创建一套 slot/Worker/domain。把 StartGuard 源码中
   “仅 schema v4” 的限制收窄为“所有已批准的 Darwin/MPS v4/v5/v6 profile”，但保持 Linux v3
-  不能携带 MPS headroom；不改变现有 probe、阈值和判定算法。adapter 的 dispatch
+  不能携带 MPS headroom；不改变现有 probe、阈值和判定算法。扩展真实
+  `load_execution_config_for_schema()` 和 host validation，使安装版 v5/v6 YAML 能沿 MPS 路径加载，
+  且 W1 composition 复用这条入口。adapter 的 dispatch
   key 是 schema/profile/batch_kind/worker_count，不提供 generic `--batch-kind` fallback。guard
   绑定真实 owner birth 与 epoch。
 
@@ -404,7 +422,10 @@ $TEST_PYTHON -m pytest -q \
 
 - [ ] **Step 1: RED** — macOS capabilities 只允许 `SEQUENTIAL/W1` 和 `PARALLEL/W2`；N3–N8
   不可选且没有 profile/qualification hash；API/preflight 对 N>2 与 ADAPTIVE 拒绝；点数变化不改
-  worker profile。Linux fixture 保持原语义。
+  worker profile。分别从安装版 v4/v5/v6 YAML 发起 service preflight，要求三者都使用实际
+  profile/config hash、W1/W2 scope 和 MPS probe，且不进入 CUDA/NVML；Linux v3/v4 fixture 保持
+  原语义。`_LazyStartGuard` 可按 `(profile, config_sha256, accelerator, selector)` 缓存 composition，
+  但每个 request/spawn epoch 都必须 fresh probe，不能缓存 verdict。
 
 ```bash
 $TEST_PYTHON -m pytest -q \
