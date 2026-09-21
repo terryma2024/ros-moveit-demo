@@ -32,10 +32,16 @@ gate_policy: <RUN_ROOT>/operator/gate-policy.json
 gate_policy_sha256: 374439d0bbf02f74a428cfa444ab4e78c965e06063dd3ef32e5ee0c759f1b9fa
 gate_env: <RUN_ROOT>/operator/gate-env.sh
 gate_env_sha256: 55cc16fc22210fd144f600b1ab3c2b1365ecfb3e4ba01438b4d48085894d28d9
-confirmed_conclusions: []
-disproven_routes: []
+confirmed_conclusions:
+  - Minimal controller-manager path reaches CONTROLLER_MANAGER_SERVICES_READY and answers a direct list_controllers call (EXP-MSC-001E)
+  - Task-owned MuJoCo RobotSystem path loads the plugin, services the main-thread UI task and publishes a callable controller-manager service about 5.1 s after hardware init (EXP-MSC-002B)
+  - The full macOS task station reaches READY with the task-owned closure: 3 controllers active, 3 MoveIt services, 3 actions (EXP-MSC-003B)
+  - An incomplete dynamic-library closure reproduces the campaign symptom exactly (EXP-MSC-002)
+disproven_routes:
+  - Controller service registration requires the aggregate MoveIt graph first (EXP-MSC-001E)
+  - The shipped macOS UI dispatcher deadlocks controller construction (EXP-MSC-002B, EXP-MSC-003B)
 open_hypotheses:
-  - controller-manager first bad boundary on macOS is not yet confirmed (design section 4.2)
+  - Product C++ root cause for the campaign's STATION_NOT_READY stays UNCONFIRMED; the working hypothesis is an overlay/dylib-closure defect in the environment that campaign used
 latest_checkpoint: CP-MSC-A
 next_experiment: NONE (Gate A stopped for Sol/High review)
 ```
