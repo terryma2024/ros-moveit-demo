@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -219,6 +220,69 @@ def test_gate_a_binding_validates_domain_session_and_containment(tmp_path: Path)
         module.GateARunBinding.create(
             run_root=root, session_id="../escape", ros_domain_id=22
         )
+
+
+def test_create_binding_accepts_precreated_empty_plan_run_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module = _module()
+    run_root = tmp_path / "negative"
+    run_root.mkdir()
+    output = run_root / "run-binding.json"
+    fake_binding = SimpleNamespace(as_document=lambda: {"control": "N"})
+    monkeypatch.setattr(module, "load_manifest", lambda _path: object())
+    monkeypatch.setattr(module, "_next_domain", lambda _root, _session: 117)
+    monkeypatch.setattr(
+        module.GateARunBinding, "create", lambda **_kwargs: fake_binding
+    )
+
+    result = module.main(
+        [
+            "--create-run-binding",
+            "--manifest",
+            str(tmp_path / "manifest.json"),
+            "--control",
+            "N",
+            "--run-root",
+            str(run_root),
+            "--session-id",
+            "gate-a-plan-n",
+            "--output",
+            str(output),
+        ]
+    )
+
+    assert result == 0
+    assert output.read_text(encoding="utf-8") == '{\n  "control": "N"\n}\n'
+
+
+def test_create_binding_refuses_reused_nonempty_plan_run_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module = _module()
+    run_root = tmp_path / "negative"
+    run_root.mkdir()
+    (run_root / "foreign.txt").write_text("occupied", encoding="utf-8")
+    monkeypatch.setattr(module, "load_manifest", lambda _path: object())
+
+    with pytest.raises(module.GateAControlError) as error:
+        module.main(
+            [
+                "--create-run-binding",
+                "--manifest",
+                str(tmp_path / "manifest.json"),
+                "--control",
+                "N",
+                "--run-root",
+                str(run_root),
+                "--session-id",
+                "gate-a-plan-n",
+                "--output",
+                str(run_root / "run-binding.json"),
+            ]
+        )
+
+    assert error.value.code == "CONTROL_BINDING_INVALID"
 
 
 def test_direct_probe_observation_preserves_markers_and_raw_dlerror(tmp_path: Path) -> None:

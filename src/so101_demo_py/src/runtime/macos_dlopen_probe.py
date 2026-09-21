@@ -806,6 +806,24 @@ def _next_domain(run_root: Path, session_id: str) -> int:
     raise GateAControlError("CONTROL_BINDING_INVALID", "no free ROS domain")
 
 
+def _prepare_run_root(run_root: Path) -> Path:
+    root = Path(run_root)
+    if root.is_symlink():
+        raise GateAControlError("CONTROL_BINDING_INVALID", str(root))
+    try:
+        root.mkdir(parents=True, exist_ok=False)
+    except FileExistsError:
+        if root.is_symlink() or not root.is_dir():
+            raise GateAControlError("CONTROL_BINDING_INVALID", str(root))
+        try:
+            next(root.iterdir())
+        except StopIteration:
+            pass
+        else:
+            raise GateAControlError("CONTROL_BINDING_INVALID", f"nonempty: {root}")
+    return root
+
+
 def _execute_probe_child(
     manifest: GateAControlSetManifest, binding: GateARunBinding
 ) -> DirectDlopenObservation:
@@ -903,8 +921,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not all((options.manifest, options.control, options.run_root, options.session_id, options.output)):
             raise GateAControlError("CONTROL_BINDING_INVALID", "arguments")
         manifest = load_manifest(Path(options.manifest))
-        run_root = Path(options.run_root)
-        run_root.mkdir(parents=True, exist_ok=False)
+        run_root = _prepare_run_root(Path(options.run_root))
         domain = (
             options.ros_domain_id
             if options.ros_domain_id is not None
