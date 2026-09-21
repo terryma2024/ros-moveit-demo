@@ -969,6 +969,9 @@ def run_full_task_station_control(
             timed_out = True
             ready = False
             invalid_reasons.append("READINESS_SUBPROCESS_TIMEOUT")
+        except RuntimeClosureError as error:
+            ready = False
+            invalid_reasons.append(error.code)
         except StationDiagnosticError as error:
             ready = False
             collector_healthy = error.code != "STATION_PROCESS_COLLECTOR_FAILED"
