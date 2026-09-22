@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-7B-PARTIAL
+latest_checkpoint: CP-MSC-REMEDIATION-7B
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3473,3 +3473,53 @@ remediation/runs/t7b-launcher3-20260922T150207Z: 4 passed (RED first: missing-fi
 
 Tasks 8, 8B, 9, 10 and 11 are untouched and still owed exactly as the plan writes them. Nothing in
 this checkpoint weakens a gate: the launcher only adds a fail-closed boundary.
+
+## CP-MSC-REMEDIATION-7B: the closed live service window is complete
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-7B
+recorded_at: 2026-09-23T00:20:00+0800
+dispatch: ddf5bc35-e88c-4d3e-8005-0c165dff1841
+carried_by: the local commit that adds this entry (parent f8fdd2c7)
+status: complete; supersedes CP-MSC-REMEDIATION-7B-PARTIAL, which was written only because the
+        previous round ran out of context - no gate was relaxed and no authority is required
+```
+
+`scripts/so101-macos-service-campaign-live-window.zsh` owns one window end to end: `--case w2|w1|retry`,
+a single-case functional manifest (`macos-w2-20` PARALLEL 2×20, `macos-w1-20` SEQUENTIAL 1×20, and the
+retry window's own `macos-w1-20-retry`), the frozen identity readback, the launch document, the closed
+environment, the collection readback, the service start through the launcher, the Playwright project,
+the identity recheck, the bounded stop of only its own PID and the residue readback.
+
+The retry window is not a shortcut: it runs the same frozen twenty points as its own first pass
+through the `fixed-n-execution` machinery and only then drives `retry-full-restart`, so the eligible
+failed binding is the one that window just produced.
+
+### The collection readback is closed on three axes
+
+`playwright --list` has to show exactly one line carrying the target marker (`R06 ` or `R07 `), the
+manifest case id has to appear on it (the R07 title is a frozen scenario, so its identity is the spec
+file plus the exported case id), and the set of collected spec files has to be exactly
+`{preflight.spec.ts, <target spec>}`. Anything else is `PLAYWRIGHT_LIST_EXTRA_SPEC` or
+`PLAYWRIGHT_LIST_NOT_SINGLE_CASE` and the window refuses before a service exists.
+
+`SO101_LIVE_CASE_ID` is now required by both live specs. `06-fixed-n-execution.spec.ts` selects
+through `selectLiveCase`, which fails collection with `LIVE_CASE_ID_REQUIRED` or
+`LIVE_CASE_ID_NOT_UNIQUE` when the manifest carries no such case or more than one; the retry spec
+fails collection with `LIVE_CASE_ID_NOT_A_RETRY_CASE` when the window is not a retry window.
+
+### Evidence
+
+```text
+remediation/runs/t7b-final2-20260922T150540Z: 9 passed
+      (test_macos_live_window_runner.py 5, test_macos_unified_service_launcher.py 4)
+rehearsal (no service, no browser, no simulator):
+      w2    -> collection ok: 1 target case (macos-w2-20) + 2 preflight test(s)
+      w1    -> collection ok: 1 target case (macos-w1-20) + 2 preflight test(s)
+      retry -> collection ok: 1 target case (macos-w1-20-retry) + 2 preflight test(s)
+      under remediation/windows/rehearsal-selection/selection-20.json, a rehearsal placeholder; Task 11
+      Step 1 freezes the real twenty-point selection
+bunx tsc -b --pretty false: rc=0
+```
+
+The rehearsal windows are retained in the evidence root and listed as deletion candidates.
