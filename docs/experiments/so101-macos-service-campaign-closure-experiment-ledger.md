@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-INVENTORY-RESOLVED
+latest_checkpoint: CP-MSC-REMEDIATION-T11-CAPABILITIES-PROBE
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4538,3 +4538,48 @@ assertion runs. The next link is that assertion itself - its expected/actual pai
 Everything before this was the harness proving it could build a truthful environment; from here the
 failures are about the product or about the case's expectations, which is exactly where Task 11 Step 3
 said the work would be.
+
+## CP-MSC-REMEDIATION-T11-CAPABILITIES-PROBE: platform is null without an execution document
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-CAPABILITIES-PROBE
+recorded_at: 2026-09-23T10:55:00+0800
+carried_by: the local commit that adds this entry (parent 40a769e4)
+status: the R06 assertion's input is measured; the next question is when it is populated
+```
+
+The R06 case fails on `capabilities.platform` (`Expected "macos"`, `Received null`), so I asked the
+window's own service directly. Starting it exactly as the window does - the frozen launch document
+through the launcher - and calling the endpoint with no browser session:
+
+```text
+GET /expert-validation/capabilities -> 200
+keys: available, execution_profile, execution_schema_version, execution_config_sha256,
+      execution_modes, fixed_worker_counts, minimum_points, maximum_points, lease_*, adaptive_default_ladder
+platform: None
+support_matrix entries: 0
+```
+
+and `production.capabilities()` explains it:
+
+```python
+def capabilities(self):
+    lease = self.lease_service.capabilities
+    document = self._execution_document()
+    if document is not None and document.profile is not None:
+        return self._macos_capabilities(document, lease)
+    ...
+```
+
+The macOS document - the one carrying `platform: "macos"` and the `support_matrix` - is returned only
+when an execution document with a profile has been resolved. My probe had no lease and no browser
+session, so it got the default shape. The next question is therefore narrow and testable: does the
+console page acquire a lease, and with it an execution document, *before* `deployedFirstPassRoutes`
+reads capabilities in `06-fixed-n-execution.spec.ts:57`? If it does not, the case is asking for a
+document that cannot exist yet at that point - and the fix belongs in the case's sequencing, not in
+the product.
+
+Housekeeping for this probe: the first attempt backgrounded its whole shell chain and left the probe
+service running on port 8013. It was identified by exact pid (42978, the unified server started from
+this window's launch document at 02:14:53), stopped with `SIGINT`, and the port verified free - 0
+listeners, 0 task-owned stack processes. The second probe stopped its own service the same way.
