@@ -49,9 +49,9 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-FINAL-CANDIDATE
+latest_checkpoint: CP-MSC-T12-INFLIGHT
 review_pending: CP-MSC-02 (Tasks 2-6, GPT-5.6 Sol/high - not available in this session; packet below)
-next_experiment: EXP-MSC-114 (candidate W1 v6 and the v5 retry from a real business FAILED point, then Task 12 fresh-Chrome production acceptance)
+next_experiment: EXP-MSC-115 (land the three in-flight fixes, then the Task 12 installed-production fresh-Chrome acceptance)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -2140,5 +2140,71 @@ business `FAILED` point and is being driven separately; it is not claimed here.
   **pending, not reachable from this session**. Per the plan's checkpoint table the closure is **PARTIAL**, not
   FINAL PASS. The operator guide exists as a draft in the executing agent's name and must not be attributed to
   Sol/high.
+
+Retained: everything. Deleted or archived: nothing.
+
+## CP-MSC-T12-INFLIGHT: three integration defects surfaced by the production window
+
+```yaml
+checkpoint_id: CP-MSC-T12-INFLIGHT
+recorded_at: 2026-09-22T10:00:00+0800
+commits: 279c52b1 docs(so101): record the candidate W1 pass
+         5109d9db fix(web): accept a registered evidence root on macOS
+```
+
+Preparing the installed-production window surfaced three defects that the earlier gates could not see.
+All three are being fixed with RED evidence; none is papered over.
+
+1. **The service projection reads a different journal directory than the macOS route writes.**
+   `production.py` (~1198) and `supervisor.py` (~589) read `<batch_root>/coordinator`, while
+   `cli/macos_w2_campaign.py:164` writes `<batch_root>/journal` and the adapter passes the batch root
+   through unchanged (`cli/macos_service_campaign.py:284`). The real candidate batch
+   `task11/after-fix/w2-20260922T011804Z/batch` has `journal/` and no `coordinator/` at all. Effect: the
+   console projection never reaches a terminal verdict, `_persist_canonical_projection` never runs, and the
+   retry admission would refuse `RETRY_ORIGINAL_RESULT_UNKNOWN` even with a genuine business `FAILED`
+   point. `CP-172` already documented the structural gap; a fail-closed dual-layout resolver and an
+   end-to-end projection/admission test are in flight.
+2. **The campaign evidence assertions are Linux-shaped.** The Task 10 verifier expects
+   `batch_manifest.json`, `cleanup-gates.json`, `workers/<w>/attempts/<p>/<a>/sealed` and
+   `payload.response.location`; the macOS batch has `journal/`, `points/`, `queue/`, `point-results/`,
+   `*-lease-*.json`, `*-result-*.json`, `campaign-result.json` and the physical document under
+   `dynamic/dynamic-execute-manifest.json`, hashed into each `point-results/<point>.json`. Running the
+   product's own assertion on the real batch fails with `CAMPAIGN_EVIDENCE_INVALID: missing
+   batch_manifest.json`. A layout-aware rewrite is in flight.
+3. **The live-sim gate hard-coded the ai-station evidence root.** `SO101_E2E_EVIDENCE_ROOT` and
+   `SO101_LIVE_SERVICE_STATE_ROOT` had to start with `/data/work/so101-evidence/`, which does not exist
+   on macOS (`mkdir /data` -> read-only file system). Committed as `5109d9db`: the rule is now one pure
+   module (non-darwin keeps the registered prefix, darwin requires an absolute registered private
+   root), with RED 2F/3P, GREEN 5/5, fixture pytest 9 passed and `tsc` rc=0.
+
+### Correction: the two "Task 7 regressions" were host contention, not a defect
+
+My focused run `task2/task11-fix-final-owner-20260922T014421Z` reported two `test_macos_n1_cli.py`
+failures and I initially labelled them regressions. The raw output shows `stage: inventory`, detail "a
+claim, endpoint or campaign directory is already present", rc=2: the inventory guard refused because a
+live retry-hunt campaign held `/tmp/so101-ipc-501/b-*` during my run. On an idle host the same tests pass
+(`task2/task11-fix-package-dir3-20260921T013542Z` ran the whole suite with exactly the baseline failure
+set, 0 introduced). No test or product change is needed for them; the correct lesson is that the
+campaign inventory guard is host-global, so gates must not be run while a live campaign is up. Recorded
+here so the false label does not survive in the record.
+
+### Honest retry material found
+
+The retry hunt produced genuine business failures from unmodified runs (each point attempted exactly
+once in a 17-point selection): `cup_test_forward_5cm -> DYNAMIC_WORKFLOW_FAILED`,
+`task_start -> PHYSICAL_GRASP_UNSUPPORTED`, and `sample_05_near_center -> RGBD_PERCEPTION_EXITED_EARLY`.
+Which of them counts as a *business* `FAILED` for retry admission is being decided from the batch's own
+committed result and infrastructure axis, not from the label.
+
+### Task 12 state
+
+Step 1 preflight is recorded (`task12/preflight/`): window clear of campaigns, `doctor --json` PASS,
+ports free, one foreign legacy validation service (PID 62670) and ~15 orphaned helpers preserved and
+never signalled. The install overlay was refreshed once from **dirty** worktree bytes because the build
+finished before the hold arrived; that inventory is kept as an honest intermediate and will not be used
+for production runs. The clean rebuild, Steps 2-4 (fresh Chrome W2 then W1, optional retry) and the
+independent `verify-native.ts` readback (22/22 checks on both candidate legs, per-point digests recorded)
+are ready and waiting on a clean commit. Step 5's three Playwright projects are **NOT RUN**: no
+`SO101_UNIFIED_LIVE_AUTHORIZATION` document exists anywhere, and none was fabricated.
 
 Retained: everything. Deleted or archived: nothing.
