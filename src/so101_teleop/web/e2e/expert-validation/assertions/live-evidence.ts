@@ -700,11 +700,63 @@ export function assertSelectedOnlyAttempts(
 }
 
 /**
+ * The catalog digest a macOS binding names, in either vocabulary, or a refusal. A first pass names
+ * it `catalog_sha256`; a `FULL_RESTART_RETRY` binding names the catalog its point was selected from
+ * `original_catalog_sha256`. The retry name belongs to the retry kind alone, and a document that
+ * names both must name one digest: two catalogs in one binding contradict each other.
+ */
+function bindingCatalogSha256(selection: Record<string, any>, code: string): string {
+  const canonical = selection.catalog_sha256;
+  const original = selection.original_catalog_sha256;
+  if (isSha256(canonical) && isSha256(original) && canonical !== original) {
+    fail(code, "two catalog digests in the selection binding");
+  }
+  const named = isSha256(canonical) || String(selection.kind) !== "FULL_RESTART_RETRY"
+    ? canonical
+    : original;
+  if (!isSha256(named)) fail(code, "catalog digest in the selection binding");
+  return named as string;
+}
+
+/**
+ * The points a macOS binding names, in either vocabulary, or a refusal: a first pass lists them as
+ * `points`, a `FULL_RESTART_RETRY` binding names the one point it executes as `point`. Neither
+ * vocabulary is inferred from the other side of the document.
+ */
+function bindingPoints(selection: Record<string, any>, code: string): unknown[] {
+  if (Array.isArray(selection.points)) return selection.points;
+  if (String(selection.kind) === "FULL_RESTART_RETRY" && isRecord(selection.point)) {
+    return [selection.point];
+  }
+  fail(code, "selection points in the selection binding");
+}
+
+/** The selected point ids a macOS binding names, in either vocabulary, or a refusal. */
+function bindingSelectedPointIds(
+  selection: Record<string, any>, points: unknown[], code: string,
+): string[] {
+  if (Array.isArray(selection.selected_point_ids)) {
+    return pointIds(selection.selected_point_ids, code);
+  }
+  if (String(selection.kind) === "FULL_RESTART_RETRY") {
+    // A retry binding keeps no id list: the id of its one `point` entry is its selection.
+    return pointIds(points.map((entry) => (isRecord(entry) ? entry.point_id : undefined)), code);
+  }
+  fail(code, "invalid point selection");
+}
+
+/**
  * The macOS half of the same claim. The selection is the batch's own `selection-binding.json`,
  * cross-checked against the campaign's verdict document and the durable queue; every selected point
  * has exactly one lease, one committed point result and one journal commit, every lease is bound to
  * the selection's own point digest and to the single-point input on disk, and the commit's worker
  * result document still hashes to the digest the commitment recorded.
+ *
+ * The composed campaign writes that selection in two vocabularies: a first pass names its catalog
+ * `catalog_sha256` and its points `points` / `selected_point_ids`, while a `FULL_RESTART_RETRY`
+ * binding names the catalog its point was selected from `original_catalog_sha256` and that one
+ * point `point`. Both are read here as the same claim; a binding that names neither, or whose two
+ * names for one fact disagree, is refused.
  */
 function assertMacosSelectedOnly(
   evidence: CampaignBatchEvidence,
@@ -720,18 +772,24 @@ function assertMacosSelectedOnly(
   if (!isRecord(selection)) fail(code, `no selection binding in ${batchId}`);
   const selected = pointIds(binding.selected_point_ids, code);
   if (!isSha256(binding.selection_sha256)) fail(code, `selection digest in ${batchId}`);
+  const catalog = bindingCatalogSha256(selection, code);
+  if (isSha256(binding.catalog_sha256) && binding.catalog_sha256 !== catalog) {
+    // The document's own top-level summary names another catalog than the binding it carries.
+    fail(code, `catalog digest for ${batchId}`);
+  }
+  const named = bindingPoints(selection, code);
   if (
     selection.batch_id !== batchId
     || selection.selection_sha256 !== binding.selection_sha256
     || !["FIRST_PASS", "FULL_RESTART_RETRY"].includes(String(selection.kind))
     || typeof selection.campaign_id !== "string" || selection.campaign_id === ""
-    || pointIds(selection.selected_point_ids, code).join("\u0000") !== selected.join("\u0000")
+    || bindingSelectedPointIds(selection, named, code).join("\u0000")
+      !== selected.join("\u0000")
   ) {
     fail(code, `selection binding for ${batchId}`);
   }
-  if (!Array.isArray(selection.points)) fail(code, `selection points for ${batchId}`);
   const pointDigests = new Map<string, string>();
-  for (const entry of selection.points) {
+  for (const entry of named) {
     if (!isRecord(entry) || typeof entry.point_id !== "string" || !isSha256(entry.point_sha256)) {
       fail(code, `selection point entry for ${batchId}`);
     }
