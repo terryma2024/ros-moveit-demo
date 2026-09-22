@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-W2
+latest_checkpoint: CP-MSC-REMEDIATION-T11-W1
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -5193,4 +5193,83 @@ task-owned stack processes                         (none)
 
 Fourteen of the windows created for this task now carry a completed window receipt; all fourteen
 read back clean, and no signal has ever been sent to a pid outside the window that recorded it.
+
+## CP-MSC-REMEDIATION-T11-W1: the single-worker first pass closes PASS
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-W1
+recorded_at: 2026-09-23T20:12:00+0800
+carried_by: the local commit that adds this entry (parent 101ef909)
+window: remediation/windows/w1-20260922T193427Z-55971/
+campaign: campaign-1b4ac775213f450fbb07307b886ba43e / batch b9e48
+status: N1_CAMPAIGN_PASS
+```
+
+Same closed runner, same frozen twenty points, one worker instead of two:
+
+```text
+campaign status         N1_CAMPAIGN_PASS       execution_profile MPS_W1_FIRST_PASS
+route                   macos_n1_first_pass, schema v6, worker_count 1
+config                  parallel_batch_v6_macos_mps_w1_first_pass.yaml sha e1a30a2d...2d05
+selection               kind FIRST_PASS, catalog c7491547...8dc5, binding e974d074...7583
+points                  20 selected, 20 attempts, 20 spawns, 20 committed, complete
+duplicate_attempts      0    unselected_attempts 0    unexecuted 0
+infrastructure_failures 0    missing physical evidence 0
+outcome                 19 PASSED, 1 FAILED
+per slot                w1 20 executed, 19 manifests, failure RGBD_PERCEPTION_EXITED_EARLY
+start guard             PASS, MPS_HEADROOM_OK
+journal                 terminal true, watermark 1 -> 103
+served                  120 responses, 0 duplicate refusals, lane max_concurrent 1
+cleanup                 complete, directory removed, registry empty, 20 stations clear, 20 reaped
+inventory               clean, owned_processes [], live_endpoints [], existing dirs []
+drain                   20 releases, all EXITED, stopped_at_cap false
+handlers                joined, 0 handler errors, 0 server rejections, empty fault trace
+playwright              3 expected, 0 unexpected, 0 skipped, 0 flaky; R06 1788.2 s (29.8 min)
+runner                  rc 0; residue: owned processes (none), port 8013 (none), task stack (none)
+service                 pid 56025 birth 1790105671756370, identity recheck ok, stop rc 137
+```
+
+One worker drained the same queue at 1.5 minutes per point against the two-worker window's 1.6
+minutes per point with both slots busy, so the single-worker leg cost about twice the wall clock and
+produced the same terminal state.
+
+The failing point is the same point with the same signature, in an independent campaign on a
+different profile:
+
+```text
+                       W2 (v4, 2 workers)              W1 (v6, 1 worker)
+point                  sample_05_near_center           sample_05_near_center
+failure_code           RGBD_PERCEPTION_EXITED_EARLY    RGBD_PERCEPTION_EXITED_EARLY
+infrastructure_code    null                            null
+dynamic manifest       absent (failed before physical) absent
+cleanup_owned          true                            true
+```
+
+Two campaigns, two profiles, one worker against two, the same single failure at the same catalog
+pose, classified as a business failure both times and terminal-clean both times. That is the
+product's own behaviour on that pose rather than a flake, and it is the failure the retry leg is
+meant to pick up.
+
+### The two windows selected the same frozen twenty points
+
+The runners print different selection digests - `a565b7ab...527b` for W2, `e974d074...7583` for W1 -
+and neither equals the frozen `33374bb0...a64`, so the equality was checked rather than assumed:
+
+```text
+frozen digest         catalog.selection_sha256(point_ids) = sha256(json(point_ids))
+runtime binding       canonical hash over a document that also carries campaign_id, batch_id,
+                      config_sha256 and runtime_closure_sha256
+differing fields      exactly those four plus the digest itself; every point entry is identical
+points compared       W1 points == W2 points on (point_id, position_xyz_m, point_sha256)
+                      W2 ids+positions == the frozen manifest; catalog_sha256 equal in all three
+projected digest      the frozen 33374bb0...a64 is present in manifests.canonical_json and
+                      preflight_receipts.receipt_json in both windows' supervisor databases
+```
+
+The W1 window's own preflight receipt, read from its live supervisor database, carries
+`selection_sha256 33374bb0...a64`, `catalog_sha256 c7491547...8dc5`, `execution_profile
+MPS_W1_FIRST_PASS`, `schema_version 6`, `point_count 20`, `admitted true`, and the two model inputs
+by digest: `yolo_weights_sha256 f281d252...0781` and `grounded_sam_manifest_sha256 b55bb601...ed05`.
+So the projected selection digest is the frozen one, and it is the runtime *binding* digest that is
+campaign-scoped by construction - not a disagreement about which points ran.
 
