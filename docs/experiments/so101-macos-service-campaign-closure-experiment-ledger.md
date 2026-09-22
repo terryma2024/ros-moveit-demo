@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-W2-WINDOW
+latest_checkpoint: CP-MSC-REMEDIATION-T11-FIXTURE-BASES
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4421,3 +4421,41 @@ The R06 case itself now runs - and fails in about half a second, which is far to
 
 That is where the next round starts: read `playwright.log` in that window directory, diagnose the
 early failure, and only then decide whether it is a fixture gap or a product one.
+
+## CP-MSC-REMEDIATION-T11-FIXTURE-BASES: the window's dependency inventory assumes per-package directories
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-FIXTURE-BASES
+recorded_at: 2026-09-23T09:35:00+0800
+carried_by: the local commit that adds this entry (parent b4430b1d)
+window: remediation/windows/w2-20260922T175418Z-41821/
+status: one fixture default fixed and verified; the next gap is identified and needs a decision
+```
+
+Fixed and verified: the live fixture's dependency base and interpreter directory were the ai-station
+pair (`/data/work/ws_moveit/install` and `lib/python3.12/site-packages`), which refused every macOS
+window with `PACKAGE_PREFIX_MISSING: /data/work/ws_moveit/install/mujoco_3d_lidar`. They are now
+host-aware - `/opt/ros2_jazzy/extra_ws/install` and `lib/python3.11/site-packages` on Darwin, the
+original pair elsewhere - and the same `PYTHONPATH` fallback is host-aware too. `bunx tsc -b` is clean.
+
+The error moved one step forward, which is what makes the next gap legible:
+
+```text
+Error: PACKAGE_PREFIX_MISSING: /opt/ros2_jazzy/extra_ws/install/mujoco_3d_lidar
+```
+
+`resolvePackagePrefixes` (`fixtures/installed.ts`) looks for each package as a **per-package
+directory** under a prefix. On this host that shape does not exist for the fork packages:
+
+* `/opt/data/so101/workspace/install/` contains only `so101_demo_py/` plus the merged setup files;
+* `/opt/data/so101/runtime/fork/current/` is a **merged** install (`include/`, `lib/`, `share/`, setup
+  files) with no `mujoco_3d_lidar/`, `mujoco_ros2_control/` or `mujoco_ros2_control_msgs/` directory;
+* `/opt/ros2_jazzy/install/` has none either.
+
+So the fixture's inventory cannot be satisfied by the shape this host's runtime fork actually has. The
+next writer has one decision to make, and the plan's rule applies to it: a merged install can be
+verified honestly by resolving each package through the merged `share/ament_index/resource_index/packages/<name>`
+marker (that is what a merged install means, and the resource index is the product's own record), or -
+if the packages are genuinely absent - the window must say so as an environment gap rather than pass.
+Weakening the inventory into "skip what is missing" is not an option, because that inventory is what
+proves the dependency closure the acceptance claims.
