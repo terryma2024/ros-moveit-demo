@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-W2-PROGRESS
+latest_checkpoint: CP-MSC-REMEDIATION-T11-W2-STALLED
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4906,3 +4906,39 @@ not a flow failure.
 The window owns its service and stops it by recorded PID; its `campaign-result.json`, `playwright.log`
 and `service-window-receipt.json` carry the verdict. Task 11 Step 3 then wants the same for `w1` (one
 worker, sequential) and for `retry` (its own frozen first pass, then a same-page single-point v5 retry).
+
+## CP-MSC-REMEDIATION-T11-W2-STALLED: twelve points passed, then no further progress
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-W2-STALLED
+recorded_at: 2026-09-23T15:35:00+0800
+carried_by: the local commit that adds this entry (parent b099d274)
+window: remediation/windows/w2-20260922T191707Z-53004/
+status: the campaign runs and advances no further; the next diagnostic is named
+```
+
+The W2 campaign genuinely executed: twelve of the twenty points passed, one failed, and both workers
+were active. It then stopped advancing, and the measurement is unambiguous - the service's projection
+reports the same thing ten minutes apart, while the log keeps growing:
+
+```text
+sequence 72   ->  sequence 72
+points         ->  12 PASSED / 7 UNRUN / 1 FAILED   (unchanged)
+campaign.log   ->  31,191 lines  ->  32,697 lines   (still writing)
+active workers ->  w1, w2
+```
+
+So an attempt is in flight and has not completed: the station is still logging, the projection has
+nothing new to commit, and no hard timeout has fired yet. That is the state to diagnose next, and the
+route is the one this dispatch has used throughout - the attempt's own evidence:
+
+* the projection names the active point and its worker (`active_worker_id`), so the attempt is
+  identifiable without guessing;
+* that attempt's station directory under
+  `service-state/campaigns/<campaign>/<batch>/<worker>-station/<point>-attempt-1/` carries its own logs;
+* the campaign's per-state hard timeout and the owner tree's fence decide whether it should have been
+  cancelled, which is the product question rather than a harness one.
+
+Everything up to this point is measured and green: the frozen twenty selected, both workers leased
+from the shared queue, twelve points committed as `PASSED` with their evidence, cleanup discipline
+proven in the previous window, and the retry window's eligible `FAILED` point already present.
