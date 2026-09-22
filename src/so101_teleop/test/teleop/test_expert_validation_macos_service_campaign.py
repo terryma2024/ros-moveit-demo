@@ -20,6 +20,7 @@ from so101_demo.cli import macos_service_campaign as adapter
 from so101_demo.cli.macos_service_campaign import ServiceCampaignError
 from so101_teleop.expert_validation.supervisor import (
     FIXED_COORDINATOR_FLAGS,
+    RETRY_COORDINATOR_FLAGS,
     fixed_coordinator_argv,
 )
 
@@ -90,8 +91,11 @@ def test_the_adapter_accepts_exactly_the_flags_the_service_sends(tmp_path):
     assert set(FIXED_COORDINATOR_FLAGS) <= accepted, (
         "a flag the supervisor sends but the adapter cannot parse fails a live launch, not a review"
     )
-    assert accepted - {"-h", "--help"} == set(FIXED_COORDINATOR_FLAGS), (
-        "the adapter must not silently accept flags the service never sends"
+    assert accepted - {"-h", "--help"} == set(FIXED_COORDINATOR_FLAGS) | set(
+        RETRY_COORDINATOR_FLAGS
+    ), (
+        "the adapter must not silently accept flags the service never sends; the retry "
+        "binding flags are the v5 route's own contract and are forwarded only when set"
     )
     arguments = _parse(service_argv)
     assert arguments.batch_id == "b001"
@@ -100,6 +104,9 @@ def test_the_adapter_accepts_exactly_the_flags_the_service_sends(tmp_path):
     assert arguments.point_id == ["p1", "p2"]
     assert arguments.config == V4_CONFIG
     assert arguments.provenance_binding is None
+    # A first-pass request never carries a retry binding.
+    for flag in RETRY_COORDINATOR_FLAGS:
+        assert getattr(arguments, flag.lstrip("-").replace("-", "_")) is None
 
 
 def test_the_adapter_validates_the_service_request_and_names_every_refusal(tmp_path):
