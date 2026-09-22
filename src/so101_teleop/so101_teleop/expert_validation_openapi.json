@@ -968,6 +968,368 @@
         "title": "CampaignStartRequest",
         "type": "object"
       },
+      "CandidateContextIssueRequest": {
+        "additionalProperties": false,
+        "description": "The coordinates of one bounded candidate run (design section 10).\n\nEvery parameter the design names is required, including the worker count and batch kind: the\ninstalled matrix row, not a caller's inference, decides whether the combination may be issued.\nThere is deliberately no budget, qualification or promotion field.",
+        "properties": {
+          "batch_id": {
+            "minLength": 1,
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "batch_kind": {
+            "minLength": 1,
+            "title": "Batch Kind",
+            "type": "string"
+          },
+          "campaign_id": {
+            "minLength": 1,
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "command_id": {
+            "minLength": 1,
+            "title": "Command Id",
+            "type": "string"
+          },
+          "config_document": {
+            "minLength": 1,
+            "title": "Config Document",
+            "type": "string"
+          },
+          "context_kind": {
+            "default": "CANDIDATE",
+            "title": "Context Kind",
+            "type": "string"
+          },
+          "dispatch_id": {
+            "minLength": 1,
+            "title": "Dispatch Id",
+            "type": "string"
+          },
+          "evidence_root": {
+            "minLength": 1,
+            "title": "Evidence Root",
+            "type": "string"
+          },
+          "execution_profile": {
+            "minLength": 1,
+            "title": "Execution Profile",
+            "type": "string"
+          },
+          "expires_in_s": {
+            "exclusiveMinimum": 0.0,
+            "title": "Expires In S",
+            "type": "number"
+          },
+          "manifest_id": {
+            "minLength": 1,
+            "title": "Manifest Id",
+            "type": "string"
+          },
+          "max_runs": {
+            "minimum": 1.0,
+            "title": "Max Runs",
+            "type": "integer"
+          },
+          "owner_generation": {
+            "minimum": 1.0,
+            "title": "Owner Generation",
+            "type": "integer"
+          },
+          "task_id": {
+            "minLength": 1,
+            "title": "Task Id",
+            "type": "string"
+          },
+          "worker_count": {
+            "minimum": 1.0,
+            "title": "Worker Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "command_id",
+          "task_id",
+          "dispatch_id",
+          "campaign_id",
+          "batch_id",
+          "manifest_id",
+          "execution_profile",
+          "worker_count",
+          "batch_kind",
+          "config_document",
+          "evidence_root",
+          "owner_generation",
+          "expires_in_s",
+          "max_runs"
+        ],
+        "title": "CandidateContextIssueRequest",
+        "type": "object"
+      },
+      "CandidateExecutionContextResponse": {
+        "additionalProperties": false,
+        "description": "One issued candidate context, exactly as the design binds it.",
+        "properties": {
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "batch_kind": {
+            "enum": [
+              "FIRST_PASS",
+              "FULL_RESTART_RETRY"
+            ],
+            "title": "Batch Kind",
+            "type": "string"
+          },
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "command_id": {
+            "title": "Command Id",
+            "type": "string"
+          },
+          "config_document": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config Document"
+          },
+          "config_sha256": {
+            "title": "Config Sha256",
+            "type": "string"
+          },
+          "context_id": {
+            "title": "Context Id",
+            "type": "string"
+          },
+          "context_sha256": {
+            "title": "Context Sha256",
+            "type": "string"
+          },
+          "dispatch_id": {
+            "title": "Dispatch Id",
+            "type": "string"
+          },
+          "evidence_root": {
+            "title": "Evidence Root",
+            "type": "string"
+          },
+          "execution_profile": {
+            "title": "Execution Profile",
+            "type": "string"
+          },
+          "expires_at_monotonic_ns": {
+            "title": "Expires At Monotonic Ns",
+            "type": "integer"
+          },
+          "install_binding_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Install Binding Sha256"
+          },
+          "install_prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Install Prefix"
+          },
+          "issued_at_monotonic_ns": {
+            "title": "Issued At Monotonic Ns",
+            "type": "integer"
+          },
+          "kind": {
+            "const": "CANDIDATE",
+            "title": "Kind",
+            "type": "string"
+          },
+          "manifest_id": {
+            "title": "Manifest Id",
+            "type": "string"
+          },
+          "max_runs": {
+            "minimum": 1.0,
+            "title": "Max Runs",
+            "type": "integer"
+          },
+          "owner_generation": {
+            "minimum": 1.0,
+            "title": "Owner Generation",
+            "type": "integer"
+          },
+          "runtime_closure_sha256": {
+            "title": "Runtime Closure Sha256",
+            "type": "string"
+          },
+          "schema_version": {
+            "minimum": 1.0,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "worker_count": {
+            "minimum": 1.0,
+            "title": "Worker Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "context_id",
+          "task_id",
+          "dispatch_id",
+          "campaign_id",
+          "batch_id",
+          "manifest_id",
+          "execution_profile",
+          "schema_version",
+          "batch_kind",
+          "worker_count",
+          "config_sha256",
+          "runtime_closure_sha256",
+          "evidence_root",
+          "owner_generation",
+          "command_id",
+          "issued_at_monotonic_ns",
+          "expires_at_monotonic_ns",
+          "max_runs",
+          "context_sha256"
+        ],
+        "title": "CandidateExecutionContextResponse",
+        "type": "object"
+      },
+      "CandidateFirstPassRequest": {
+        "additionalProperties": false,
+        "description": "One candidate first pass, presented under the context that authorizes it.",
+        "properties": {
+          "command_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command Id"
+          },
+          "confirmation": {
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "context_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Id"
+          },
+          "context_kind": {
+            "default": "CANDIDATE",
+            "title": "Context Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmation"
+        ],
+        "title": "CandidateFirstPassRequest",
+        "type": "object"
+      },
+      "CandidateFirstPassResponse": {
+        "additionalProperties": false,
+        "description": "The admitted candidate first pass, before any projection is read back.",
+        "properties": {
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "binding_sha256": {
+            "title": "Binding Sha256",
+            "type": "string"
+          },
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "command_id": {
+            "title": "Command Id",
+            "type": "string"
+          },
+          "context_id": {
+            "title": "Context Id",
+            "type": "string"
+          },
+          "context_kind": {
+            "const": "CANDIDATE",
+            "title": "Context Kind",
+            "type": "string"
+          },
+          "execution_profile": {
+            "title": "Execution Profile",
+            "type": "string"
+          },
+          "manifest_id": {
+            "title": "Manifest Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "minimum": 1.0,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "status": {
+            "const": "STARTED",
+            "title": "Status",
+            "type": "string"
+          },
+          "worker_count": {
+            "minimum": 1.0,
+            "title": "Worker Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status",
+          "campaign_id",
+          "batch_id",
+          "manifest_id",
+          "execution_profile",
+          "schema_version",
+          "worker_count",
+          "context_id",
+          "context_kind",
+          "command_id",
+          "binding_sha256"
+        ],
+        "title": "CandidateFirstPassResponse",
+        "type": "object"
+      },
       "CapabilitiesResponse": {
         "additionalProperties": true,
         "description": "Capability payload: the original read-only fields plus worker qualification.\n\nThe model keeps the reviewed contract name that the generated TypeScript client already\nimports, widens ``extra`` to ``allow`` so unknown read-only fields survive, and requires\nthe per-N qualification list so it is a real, reachable part of the schema.",
@@ -3960,6 +4322,110 @@
         "summary": "Start Campaign"
       }
     },
+    "/expert-validation/campaigns/candidate-first-pass": {
+      "post": {
+        "operationId": "candidate_first_pass_expert_validation_campaigns_candidate_first_pass_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateFirstPassRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateFirstPassResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Candidate First Pass"
+      }
+    },
     "/expert-validation/campaigns/preflight": {
       "post": {
         "operationId": "preflight_expert_validation_campaigns_preflight_post",
@@ -4327,6 +4793,110 @@
           }
         },
         "summary": "Retry Campaign"
+      }
+    },
+    "/expert-validation/candidate-contexts": {
+      "post": {
+        "operationId": "issue_candidate_context_expert_validation_candidate_contexts_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Instance-Proof",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Instance-Proof"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Channel-Revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Channel-Revision"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-SO101-Execution-Generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-So101-Execution-Generation"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateContextIssueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateExecutionContextResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Issue Candidate Context"
       }
     },
     "/expert-validation/capabilities": {

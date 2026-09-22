@@ -148,6 +148,58 @@ class Service:
     def retry_campaign(self, campaign_id, body):
         return {"campaign_id": campaign_id, "status": "RETRYING"}
 
+    def issue_candidate_context_api(self, body):
+        if body["execution_profile"] == "MPS_W4_FAST":
+            raise RuntimeError("UNSUPPORTED_ON_MACOS")
+        self.issued = dict(body)
+        return _candidate_context_document(body)
+
+    def start_candidate_first_pass_api(self, body):
+        if body.get("context_id") == "candidate-production":
+            raise RuntimeError("PRODUCTION_CONTEXT_ON_CANDIDATE_ENDPOINT")
+        self.started = dict(body)
+        return {
+            "campaign_id": "campaign-1",
+            "batch_id": "b001",
+            "manifest_id": "manifest-1",
+            "execution_profile": "MPS_W2_FIRST_PASS",
+            "schema_version": 4,
+            "worker_count": 2,
+            "context_id": body["context_id"],
+            "context_kind": "CANDIDATE",
+            "command_id": "cmd-1-run",
+            "binding_sha256": "b" * 64,
+            "status": "STARTED",
+        }
+
+
+def _candidate_context_document(body):
+    return {
+        "kind": "CANDIDATE",
+        "context_id": "candidate-context-1",
+        "task_id": body["task_id"],
+        "dispatch_id": body["dispatch_id"],
+        "campaign_id": body["campaign_id"],
+        "batch_id": body["batch_id"],
+        "manifest_id": body["manifest_id"],
+        "execution_profile": body["execution_profile"],
+        "schema_version": 4,
+        "batch_kind": body["batch_kind"],
+        "worker_count": body["worker_count"],
+        "config_sha256": "c" * 64,
+        "config_document": body["config_document"],
+        "runtime_closure_sha256": "d" * 64,
+        "install_prefix": str(Path(body["config_document"]).parent.parent),
+        "install_binding_sha256": "e" * 64,
+        "evidence_root": body["evidence_root"],
+        "owner_generation": body["owner_generation"],
+        "command_id": body["command_id"] + "-run",
+        "issued_at_monotonic_ns": 1_000,
+        "expires_at_monotonic_ns": 1_000 + int(body["expires_in_s"] * 1_000_000_000),
+        "max_runs": body["max_runs"],
+        "context_sha256": "f" * 64,
+    }
+
 
 def _client(tmp_path):
     return TestClient(create_expert_validation_app(Service(tmp_path.resolve())))
@@ -322,7 +374,7 @@ def test_adaptive_start_rejects_k_and_freezes_ladder(tmp_path):
     assert response.status_code == 422
 
 
-def test_all_fourteen_routes_and_artifact_download_exist(tmp_path):
+def test_every_route_and_artifact_download_exist(tmp_path):
     client = _client(tmp_path)
     paths = create_expert_validation_app(Service(tmp_path.resolve())).openapi()["paths"]
     operations = sum(
@@ -330,7 +382,9 @@ def test_all_fourteen_routes_and_artifact_download_exist(tmp_path):
         for path, methods in paths.items()
         if path.startswith("/expert-validation/")
     )
-    assert operations == 13  # Plus the WebSocket event route gives 14 endpoints.
+    # The two Task 11 candidate routes (context issuance and candidate first pass) are included,
+    # and the WebSocket event route is not an OpenAPI path.
+    assert operations == 15
     response = client.get("/expert-validation/artifacts/artifact-1")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/json")
@@ -585,3 +639,245 @@ def test_the_capability_document_models_w1_w2_and_the_no_qualification_note():
             rows["MPS_W2_FIRST_PASS"]["batch_kind"]) == (4, 2, "FIRST_PASS")
     assert "not a resource qualification proof" in document["start_guard_note"]
     assert list(document["worker_qualifications"]) == []
+
+
+# --------------------------------------------------------------------------------------
+# Task 11 closure: the candidate context issuance and first-pass start entry points
+# --------------------------------------------------------------------------------------
+
+CANDIDATE_ISSUE_BODY = {
+    "context_kind": "CANDIDATE",
+    "command_id": "cmd-1",
+    "task_id": "task-11",
+    "dispatch_id": "candidate-w2",
+    "campaign_id": "campaign-1",
+    "batch_id": "b001",
+    "manifest_id": "manifest-1",
+    "execution_profile": "MPS_W2_FIRST_PASS",
+    "worker_count": 2,
+    "batch_kind": "FIRST_PASS",
+    "config_document": "/opt/so101/config/parallel_batch_v4_macos_mps_w2.yaml",
+    "evidence_root": "/evidence/candidate-w2",
+    "owner_generation": 1,
+    "expires_in_s": 3600.0,
+    "max_runs": 1,
+}
+
+
+def _real_service(tmp_path):
+    from so101_teleop.expert_validation.service import ExpertValidationService
+
+    store = SupervisorStore.open((tmp_path.resolve() / "store").resolve())
+    service = ExpertValidationService(
+        store=store,
+        supervisor=None,
+        lease_service=None,
+        current_source_config_sha256=lambda: "a" * 64,
+    )
+    return service, store
+
+
+def test_the_candidate_context_route_issues_a_context_and_requires_every_coordinate(tmp_path):
+    client = _client(tmp_path)
+    response = client.post("/expert-validation/candidate-contexts", json=CANDIDATE_ISSUE_BODY)
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["kind"] == "CANDIDATE"
+    assert payload["command_id"] == "cmd-1-run"
+    assert payload["execution_profile"] == "MPS_W2_FIRST_PASS"
+    assert payload["worker_count"] == 2 and payload["batch_kind"] == "FIRST_PASS"
+    assert payload["evidence_root"] == "/evidence/candidate-w2"
+    assert payload["max_runs"] == 1 and payload["owner_generation"] == 1
+    assert payload["config_document"] == CANDIDATE_ISSUE_BODY["config_document"]
+
+    # Every parameter the design names is required: a request missing one is refused at the shape.
+    for missing in CANDIDATE_ISSUE_BODY:
+        if missing == "context_kind":
+            continue
+        trimmed = {key: value for key, value in CANDIDATE_ISSUE_BODY.items() if key != missing}
+        assert client.post(
+            "/expert-validation/candidate-contexts", json=trimmed
+        ).status_code == 422, missing
+
+
+def test_the_candidate_context_route_answers_the_typed_issuance_refusal(tmp_path):
+    client = _client(tmp_path)
+    response = client.post(
+        "/expert-validation/candidate-contexts",
+        json={**CANDIDATE_ISSUE_BODY, "execution_profile": "MPS_W4_FAST", "worker_count": 4},
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "UNSUPPORTED_ON_MACOS"
+
+
+def test_the_candidate_first_pass_route_starts_through_the_issued_context(tmp_path):
+    service = Service(tmp_path.resolve())
+    client = TestClient(create_expert_validation_app(service))
+    response = client.post(
+        "/expert-validation/campaigns/candidate-first-pass",
+        json={"context_kind": "CANDIDATE", "context_id": "candidate-context-1",
+              "command_id": "cmd-1-run", "confirmation": "CONFIRM CANDIDATE FIRST PASS"},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["status"] == "STARTED"
+    assert payload["batch_id"] == "b001" and payload["context_kind"] == "CANDIDATE"
+    assert payload["command_id"] == "cmd-1-run"
+    assert service.started["context_id"] == "candidate-context-1"
+
+
+def test_the_candidate_routes_refuse_the_other_context_kind_and_an_unknown_context(tmp_path):
+    service, store = _real_service(tmp_path)
+    try:
+        # No composed issuer: the base service refuses rather than inventing one.
+        client = TestClient(create_expert_validation_app(service))
+        assert client.post(
+            "/expert-validation/candidate-contexts",
+            json={**CANDIDATE_ISSUE_BODY, "context_kind": "PRODUCTION"},
+        ).json()["code"] == "PRODUCTION_CONTEXT_ON_CANDIDATE_ENDPOINT"
+        assert client.post(
+            "/expert-validation/candidate-contexts", json=CANDIDATE_ISSUE_BODY
+        ).json()["code"] == "CANDIDATE_CONTEXT_UNAVAILABLE"
+
+        first_pass = "/expert-validation/campaigns/candidate-first-pass"
+        confirmation = "CONFIRM CANDIDATE FIRST PASS"
+        assert client.post(first_pass, json={
+            "context_kind": "CANDIDATE", "context_id": "candidate-context-1",
+            "confirmation": "CONFIRM",
+        }).json()["code"] == "CONFIRMATION_REQUIRED"
+        assert client.post(first_pass, json={
+            "context_kind": "CANDIDATE", "confirmation": confirmation,
+        }).json()["code"] == "CANDIDATE_CONTEXT_REQUIRED"
+        assert client.post(first_pass, json={
+            "context_kind": "CANDIDATE", "context_id": "candidate-nobody",
+            "confirmation": confirmation,
+        }).json()["code"] == "EXECUTION_CONTEXT_UNKNOWN"
+        assert client.post(first_pass, json={
+            "context_kind": "PRODUCTION", "context_id": "candidate-nobody",
+            "confirmation": confirmation,
+        }).json()["code"] == "EXECUTION_CONTEXT_KIND_INVALID"
+
+        # A production context on the candidate endpoint, and a candidate context on the
+        # production retry endpoint: neither registry answers for the other.
+        from so101_teleop.expert_validation.execution_context import (
+            CandidateExecutionContext,
+            ProductionExecutionContext,
+            install_binding_sha256,
+        )
+
+        root = tmp_path.resolve()
+        service.register_production_context(ProductionExecutionContext(
+            context_id="production-context-1",
+            service_session_id="session-1",
+            lease_id="lease-1",
+            lease_generation=1,
+            install_prefix=(root / "install").resolve(),
+            install_binding_sha256=install_binding_sha256(
+                install_prefix=(root / "install").resolve(), runtime_closure_sha256="b" * 64),
+            execution_profile="MPS_W1_FULL_RESTART_RETRY",
+            schema_version=5,
+            batch_kind="FULL_RESTART_RETRY",
+            worker_count=1,
+            campaign_id="campaign-1",
+            batch_id="retry-001",
+            manifest_id="manifest-1",
+            config_sha256="c" * 64,
+            runtime_closure_sha256="b" * 64,
+            evidence_root=root,
+            owner_generation=1,
+            command_id="cmd-retry-1",
+            issued_at_monotonic_ns=1_000,
+            # Far future on the real monotonic clock: this context is live, and only its kind is
+            # under test.
+            expires_at_monotonic_ns=2**62,
+        ))
+        candidate = CandidateExecutionContext(
+            context_id="candidate-context-1",
+            task_id="task-11",
+            dispatch_id="candidate-w2",
+            campaign_id="campaign-1",
+            batch_id="b001",
+            manifest_id="manifest-1",
+            execution_profile="MPS_W2_FIRST_PASS",
+            schema_version=4,
+            batch_kind="FIRST_PASS",
+            worker_count=2,
+            config_sha256="c" * 64,
+            runtime_closure_sha256="b" * 64,
+            evidence_root=root,
+            owner_generation=1,
+            command_id="cmd-1-run",
+            issued_at_monotonic_ns=1_000,
+            expires_at_monotonic_ns=2**62,
+            max_runs=1,
+        )
+        service.register_candidate_context(candidate)
+        refused = client.post(first_pass, json={
+            "context_kind": "CANDIDATE", "context_id": "production-context-1",
+            "confirmation": confirmation,
+        })
+        assert refused.json()["code"] == "PRODUCTION_CONTEXT_ON_CANDIDATE_ENDPOINT"
+        # The candidate context is accepted by the candidate endpoint and refused by the
+        # production retry endpoint, which is the production path this task leaves untouched.
+        accepted = client.post(first_pass, json={
+            "context_kind": "CANDIDATE", "context_id": "candidate-context-1",
+            "confirmation": confirmation,
+        })
+        assert accepted.json()["code"] == "CANDIDATE_FIRST_PASS_UNAVAILABLE"
+        retried = client.post(
+            "/expert-validation/campaigns/campaign-1/full-restart-retries",
+            json={"service_session_id": "s", "lease_id": "l", "lease_generation": 1,
+                  "command_id": "cmd-retry-1", "point_ids": ["p1"],
+                  "context_kind": "PRODUCTION", "context_id": "candidate-context-1",
+                  "confirmation": "CONFIRM FULL_RESTART RETRIES"},
+        )
+        assert retried.json()["code"] == "CANDIDATE_CONTEXT_ON_PRODUCTION_ENDPOINT"
+    finally:
+        store.close()
+
+
+def test_both_candidate_routes_are_part_of_the_validation_contract(tmp_path):
+    paths = create_expert_validation_app(Service(tmp_path.resolve())).openapi()["paths"]
+    assert set(paths["/expert-validation/candidate-contexts"]) == {"post"}
+    assert set(paths["/expert-validation/campaigns/candidate-first-pass"]) == {"post"}
+
+
+def test_an_expired_candidate_context_is_refused_before_any_run(tmp_path):
+    from so101_teleop.expert_validation.execution_context import CandidateExecutionContext
+
+    service, store = _real_service(tmp_path)
+    try:
+        root = tmp_path.resolve()
+        service.register_candidate_context(CandidateExecutionContext(
+            context_id="candidate-expired",
+            task_id="task-11",
+            dispatch_id="candidate-w2",
+            campaign_id="campaign-1",
+            batch_id="b001",
+            manifest_id="manifest-1",
+            execution_profile="MPS_W2_FIRST_PASS",
+            schema_version=4,
+            batch_kind="FIRST_PASS",
+            worker_count=2,
+            config_sha256="c" * 64,
+            runtime_closure_sha256="b" * 64,
+            evidence_root=root,
+            owner_generation=1,
+            command_id="cmd-1-run",
+            issued_at_monotonic_ns=1,
+            expires_at_monotonic_ns=2,
+            max_runs=1,
+        ))
+        response = TestClient(create_expert_validation_app(service)).post(
+            "/expert-validation/campaigns/candidate-first-pass",
+            json={"context_kind": "CANDIDATE", "context_id": "candidate-expired",
+                  "command_id": "cmd-1-run",
+                  "confirmation": "CONFIRM CANDIDATE FIRST PASS"},
+        )
+        assert response.status_code == 409
+        assert response.json()["code"] == "CANDIDATE_CONTEXT_EXPIRED"
+        assert store._connection.execute(
+            "SELECT count(*) FROM commands WHERE command_id = 'cmd-1-run'"
+        ).fetchone()[0] == 0
+    finally:
+        store.close()

@@ -142,6 +142,19 @@ def retry_admission_command_id(command_id: str, ordinal: int) -> str:
     return f"{command_id}-r{ordinal + 1:03d}"
 
 
+def candidate_run_command_id(command_id: str) -> str:
+    """The one-time command a candidate context carries, derived from its issuance command.
+
+    Issuance and the run it authorizes are two one-time commands: the issuance command is the
+    caller's own id and is consumed when the context is minted, and the context carries this
+    derived id, which the start endpoint consumes exactly once. They are deliberately different
+    rows, so neither can be replayed into the other.
+    """
+
+    _identifier("command_id", command_id)
+    return f"{command_id}-run"
+
+
 @dataclass(frozen=True, slots=True)
 class CandidateExecutionContext:
     """A bounded implementation-phase run, authorized by one task and one dispatch.

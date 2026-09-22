@@ -10,8 +10,32 @@ from types import SimpleNamespace
 import time
 import uuid
 
-from .execution_context import CandidateExecutionContext, ProductionExecutionContext
+from .execution_context import (
+    CANDIDATE_CONTEXT_KIND,
+    CandidateExecutionContext,
+    ProductionExecutionContext,
+)
 from .lease import LeaseConflict
+
+#: Every coordinate the design names for one bounded candidate run. The issuance entry point
+#: requires all of them; a caller's restatement of the row the profile decides is validated against
+#: the installed matrix, never trusted.
+CANDIDATE_ISSUANCE_PARAMETERS = (
+    "task_id",
+    "dispatch_id",
+    "campaign_id",
+    "batch_id",
+    "manifest_id",
+    "execution_profile",
+    "worker_count",
+    "batch_kind",
+    "config_document",
+    "evidence_root",
+    "owner_generation",
+    "expires_in_s",
+    "max_runs",
+    "command_id",
+)
 
 
 class ServiceConflict(RuntimeError):
@@ -112,6 +136,54 @@ class ExpertValidationService:
         """Only a live service composed for this host can issue a context."""
 
         raise ServiceConflict("CANDIDATE_CONTEXT_UNAVAILABLE")
+
+    def issue_candidate_context_api(self, body: dict) -> dict:
+        """The issuance endpoint: one bounded candidate context, or a named refusal.
+
+        Issuance is candidate-only by construction: a request that names the other kind is refused
+        by name, so this endpoint can never mint production authority.
+        """
+
+        kind = body.get("context_kind") or CANDIDATE_CONTEXT_KIND
+        if kind != CANDIDATE_CONTEXT_KIND:
+            raise ServiceConflict("PRODUCTION_CONTEXT_ON_CANDIDATE_ENDPOINT")
+        context = self.issue_candidate_context(**self._candidate_issuance_parameters(body))
+        return self.candidate_context_response(context)
+
+    def _candidate_issuance_parameters(self, body: dict) -> dict:
+        return {
+            name: body[name] for name in CANDIDATE_ISSUANCE_PARAMETERS if name in body
+        }
+
+    def candidate_context_response(self, context: CandidateExecutionContext) -> dict:
+        """The issued context as the caller receives it: the document, plus its own digest."""
+
+        return {**context.as_document(), "context_sha256": context.context_sha256()}
+
+    async def start_candidate_first_pass_api(self, body: dict):
+        """The candidate first-pass endpoint: the declared kind decides, and only CANDIDATE runs.
+
+        A context of the other kind (or one this service never issued) is refused by name before
+        any run is prepared, exactly as the retry endpoint refuses it.
+        """
+
+        kind = body.get("context_kind") or CANDIDATE_CONTEXT_KIND
+        if kind != CANDIDATE_CONTEXT_KIND:
+            raise ServiceConflict("EXECUTION_CONTEXT_KIND_INVALID")
+        context_id = body.get("context_id")
+        if not context_id:
+            raise ServiceConflict("CANDIDATE_CONTEXT_REQUIRED")
+        context = self.candidate_context(context_id)
+        if context.is_expired(self._monotonic_ns()):
+            # A context is dead at its deadline, before any guard probe or spawn boundary.
+            raise ServiceConflict("CANDIDATE_CONTEXT_EXPIRED")
+        declared = body.get("command_id")
+        if declared is not None and declared != context.command_id:
+            raise ServiceConflict("CANDIDATE_COMMAND_MISMATCH")
+        return await self.candidate_first_pass(context, body)
+
+    async def candidate_first_pass(self, context, body):
+        raise ServiceConflict("CANDIDATE_FIRST_PASS_UNAVAILABLE")
 
     async def retry_campaign_api(self, campaign_id, body):
         """The one retry route: the declared context kind decides which endpoint runs it.

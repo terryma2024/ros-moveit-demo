@@ -15,6 +15,7 @@ import time
 import uuid
 
 from .coordinator import CoordinatorBinding, CoordinatorStartRequest
+from .preflight import canonical_start_request_sha256
 from ..process_identity import command_fingerprint
 
 from .owner_tree import ConfirmedOwnerProcess, OwnerIntent, OwnerRecord
@@ -30,12 +31,14 @@ from .execution_context import (
     RETRY_WORKER_COUNT,
     install_binding_sha256,
     retry_batch_root,
+    runtime_closure_sha256,
 )
 from .models import (
     BatchBinding,
     CampaignBinding,
     CleanupReceipt,
     ExecutionOwnerIntent,
+    FirstPassSelectionBinding,
     OwnedExecutionRecord,
     PreflightReceipt,
     RetryItem,
@@ -195,6 +198,20 @@ CREATE TABLE IF NOT EXISTS retry_admissions (
   max_runs INTEGER, spawn_token TEXT NOT NULL,
   binding_json TEXT NOT NULL, binding_sha256 TEXT NOT NULL, created_at_ns INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS first_pass_admissions (
+  command_id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(campaign_id),
+  context_kind TEXT NOT NULL CHECK (context_kind IN ('CANDIDATE')),
+  context_id TEXT NOT NULL, context_scope TEXT NOT NULL,
+  batch_id TEXT NOT NULL UNIQUE REFERENCES campaign_batches(batch_id),
+  manifest_id TEXT NOT NULL,
+  execution_profile TEXT NOT NULL, schema_version INTEGER NOT NULL,
+  config_sha256 TEXT NOT NULL, runtime_closure_sha256 TEXT NOT NULL,
+  worker_count INTEGER NOT NULL, evidence_root TEXT NOT NULL,
+  owner_generation INTEGER NOT NULL, max_runs INTEGER,
+  spawn_token TEXT NOT NULL,
+  binding_json TEXT NOT NULL, binding_sha256 TEXT NOT NULL, created_at_ns INTEGER NOT NULL
+);
 """
 
 
@@ -351,24 +368,27 @@ class SupervisorStore:
         )
 
     def record_preflight_receipt(self, receipt: PreflightReceipt) -> str:
+        with self._transaction():
+            return self._record_preflight_receipt_locked(receipt)
+
+    def _record_preflight_receipt_locked(self, receipt: PreflightReceipt) -> str:
         canonical = _json(dict(receipt.receipt))
         digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-        with self._transaction():
-            try:
-                self._connection.execute(
-                    "INSERT INTO preflight_receipts VALUES (?, ?, ?, ?, ?, ?, ?, NULL)",
-                    (
-                        receipt.receipt_id,
-                        receipt.campaign_id,
-                        receipt.manifest_id,
-                        receipt.canonical_start_request_sha256,
-                        canonical,
-                        digest,
-                        receipt.expires_at_monotonic_ns,
-                    ),
-                )
-            except sqlite3.IntegrityError as error:
-                raise StoreConflict("PREFLIGHT_RECEIPT_CONFLICT") from error
+        try:
+            self._connection.execute(
+                "INSERT INTO preflight_receipts VALUES (?, ?, ?, ?, ?, ?, ?, NULL)",
+                (
+                    receipt.receipt_id,
+                    receipt.campaign_id,
+                    receipt.manifest_id,
+                    receipt.canonical_start_request_sha256,
+                    canonical,
+                    digest,
+                    receipt.expires_at_monotonic_ns,
+                ),
+            )
+        except sqlite3.IntegrityError as error:
+            raise StoreConflict("PREFLIGHT_RECEIPT_CONFLICT") from error
         return digest
 
     def consume_preflight_and_bind_campaign_batch(
@@ -380,40 +400,53 @@ class SupervisorStore:
         *,
         now_monotonic_ns: int,
     ) -> None:
+        with self._transaction():
+            self._consume_preflight_locked(
+                receipt_id, request_sha256, campaign, batch, now_monotonic_ns=now_monotonic_ns
+            )
+
+    def _consume_preflight_locked(
+        self,
+        receipt_id: str,
+        request_sha256: str,
+        campaign: CampaignBinding,
+        batch: BatchBinding,
+        *,
+        now_monotonic_ns: int,
+    ) -> None:
         if campaign.campaign_id != batch.campaign_id or campaign.preflight_receipt_id != receipt_id:
             raise StoreConflict("CAMPAIGN_BATCH_BINDING_MISMATCH")
         config_json = _json(dict(campaign.execution_config))
-        with self._transaction():
-            row = self._connection.execute(
-                "SELECT * FROM preflight_receipts WHERE receipt_id = ?", (receipt_id,)
-            ).fetchone()
-            if row is None or row["campaign_id"] != campaign.campaign_id:
-                raise StoreConflict("PREFLIGHT_RECEIPT_MISMATCH")
-            if row["consumed_at_ns"] is not None:
-                raise StoreConflict("PREFLIGHT_RECEIPT_CONSUMED")
-            if row["canonical_start_request_sha256"] != request_sha256:
-                raise StoreConflict("PREFLIGHT_REQUEST_MISMATCH")
-            if now_monotonic_ns >= row["expires_at_monotonic_ns"]:
-                raise StoreConflict("PREFLIGHT_RECEIPT_EXPIRED")
-            self._connection.execute(
-                "INSERT INTO campaigns VALUES (?, 'ACTIVE', ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    campaign.campaign_id,
-                    campaign.manifest_id,
-                    campaign.executor_id,
-                    campaign.operation_id,
-                    campaign.executor_config_sha256,
-                    campaign.execution_mode,
-                    config_json,
-                    hashlib.sha256(config_json.encode("utf-8")).hexdigest(),
-                    receipt_id,
-                ),
-            )
-            self._insert_batch(batch)
-            self._connection.execute(
-                "UPDATE preflight_receipts SET consumed_at_ns = ? WHERE receipt_id = ?",
-                (time.time_ns(), receipt_id),
-            )
+        row = self._connection.execute(
+            "SELECT * FROM preflight_receipts WHERE receipt_id = ?", (receipt_id,)
+        ).fetchone()
+        if row is None or row["campaign_id"] != campaign.campaign_id:
+            raise StoreConflict("PREFLIGHT_RECEIPT_MISMATCH")
+        if row["consumed_at_ns"] is not None:
+            raise StoreConflict("PREFLIGHT_RECEIPT_CONSUMED")
+        if row["canonical_start_request_sha256"] != request_sha256:
+            raise StoreConflict("PREFLIGHT_REQUEST_MISMATCH")
+        if now_monotonic_ns >= row["expires_at_monotonic_ns"]:
+            raise StoreConflict("PREFLIGHT_RECEIPT_EXPIRED")
+        self._connection.execute(
+            "INSERT INTO campaigns VALUES (?, 'ACTIVE', ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                campaign.campaign_id,
+                campaign.manifest_id,
+                campaign.executor_id,
+                campaign.operation_id,
+                campaign.executor_config_sha256,
+                campaign.execution_mode,
+                config_json,
+                hashlib.sha256(config_json.encode("utf-8")).hexdigest(),
+                receipt_id,
+            ),
+        )
+        self._insert_batch(batch)
+        self._connection.execute(
+            "UPDATE preflight_receipts SET consumed_at_ns = ? WHERE receipt_id = ?",
+            (time.time_ns(), receipt_id),
+        )
 
     def _insert_batch(self, batch: BatchBinding) -> None:
         self._connection.execute(
@@ -644,28 +677,315 @@ class SupervisorStore:
     def _check_retry_owner(self, request) -> None:
         """No standing fence, no live owner and no spawn whose outcome is unknowable."""
 
-        if self.recovery_fence(request.campaign_id) is not None:
-            raise StoreConflict("RETRY_RECOVERY_FENCE")
-        rows = self._connection.execute(
-            "SELECT o.state FROM owned_execution o JOIN campaign_batches b USING (batch_id) "
-            "WHERE b.campaign_id = ?",
-            (request.campaign_id,),
-        ).fetchall()
+        self._check_no_owner_or_fence(
+            request.campaign_id,
+            fence="RETRY_RECOVERY_FENCE",
+            active="RETRY_OWNER_ACTIVE",
+            unknown="RETRY_OWNER_UNKNOWN",
+        )
+
+    def _check_no_owner_or_fence(
+        self, campaign_id: str | None, *, fence: str, active: str, unknown: str
+    ) -> None:
+        """Refuse when an owner is live or unknowable, or when a recovery fence stands.
+
+        ``campaign_id=None`` asks the host-wide question a *new* run has to answer: this host runs
+        one live execution, so an unresolved owner anywhere blocks a new authorization. A named
+        campaign asks the narrower question a retry of that campaign asks.
+        """
+
+        if campaign_id is None:
+            fenced = self.has_recovery_fence()
+        else:
+            fenced = self.recovery_fence(campaign_id) is not None
+        if fenced:
+            raise StoreConflict(fence)
+        if campaign_id is None:
+            rows = self._connection.execute(
+                "SELECT o.state FROM owned_execution o JOIN campaign_batches b USING (batch_id)"
+            ).fetchall()
+        else:
+            rows = self._connection.execute(
+                "SELECT o.state FROM owned_execution o JOIN campaign_batches b USING (batch_id) "
+                "WHERE b.campaign_id = ?",
+                (campaign_id,),
+            ).fetchall()
         for row in rows:
             if row["state"] == "RUNNING":
-                raise StoreConflict("RETRY_OWNER_ACTIVE")
+                raise StoreConflict(active)
             if row["state"] == "INTENT":
-                raise StoreConflict("RETRY_OWNER_UNKNOWN")
-        unconfirmed = self._connection.execute(
+                raise StoreConflict(unknown)
+        statement = (
             "SELECT i.spawn_token FROM owner_intents i "
             "LEFT JOIN owner_processes p ON p.spawn_token = i.spawn_token "
             "JOIN campaign_batches b ON b.batch_id = i.batch_id "
-            "WHERE i.campaign_id = ? AND p.spawn_token IS NULL "
-            "AND b.cleanup_receipt_sha256 IS NULL LIMIT 1",
-            (request.campaign_id,),
+            "WHERE p.spawn_token IS NULL AND b.cleanup_receipt_sha256 IS NULL"
+        )
+        parameters: tuple = ()
+        if campaign_id is not None:
+            statement += " AND i.campaign_id = ?"
+            parameters = (campaign_id,)
+        unconfirmed = self._connection.execute(
+            statement + " LIMIT 1", parameters
         ).fetchone()
         if unconfirmed is not None:
-            raise StoreConflict("RETRY_OWNER_UNKNOWN")
+            raise StoreConflict(unknown)
+
+    # -- one-time candidate context issuance ---------------------------------------------------
+
+    #: The one issuance operation this store records in the shared one-time command table.
+    CANDIDATE_ISSUANCE_OPERATION = "ISSUE_CANDIDATE_CONTEXT"
+
+    def admit_candidate_context_issuance(
+        self,
+        *,
+        command_id: str,
+        request_sha256: str,
+        context_id: str,
+        campaign_id: str,
+        document,
+    ) -> None:
+        """Consume one issuance command and record the context it minted, or commit nothing.
+
+        The command is the caller's own id: a replay of the same issuance and a reuse of the id for
+        a different request are both refused, by name. Nothing is issued while a recovery fence
+        stands or an owner is live or unknowable, so a context never authorizes a run the host
+        cannot account for. The issued document is durable with the command, so the issuance can be
+        audited without trusting a later caller's restatement of it.
+        """
+
+        if not isinstance(document, dict):
+            raise StoreConflict("CONTEXT_DOCUMENT_INVALID")
+        with self._transaction():
+            row = self._connection.execute(
+                "SELECT request_sha256, operation FROM commands WHERE command_id = ?",
+                (command_id,),
+            ).fetchone()
+            if row is not None:
+                if row["operation"] != self.CANDIDATE_ISSUANCE_OPERATION:
+                    raise StoreConflict("CONTEXT_COMMAND_ID_REUSED")
+                if row["request_sha256"] == request_sha256:
+                    raise StoreConflict("CONTEXT_COMMAND_ALREADY_CONSUMED")
+                raise StoreConflict("CONTEXT_COMMAND_ID_REUSED")
+            self._check_no_owner_or_fence(
+                None,
+                fence="CONTEXT_RECOVERY_FENCE",
+                active="CONTEXT_OWNER_ACTIVE",
+                unknown="CONTEXT_OWNER_UNKNOWN",
+            )
+            self._connection.execute(
+                "INSERT INTO commands VALUES (?, ?, ?, 'COMPLETE', ?)",
+                (command_id, request_sha256, self.CANDIDATE_ISSUANCE_OPERATION, _json(document)),
+            )
+
+    # -- one-time candidate first-pass admission -----------------------------------------------
+
+    #: Every coordinate a first-pass request and its candidate context must agree on.
+    _FIRST_PASS_COORDINATES = (
+        ("campaign_id", "FIRST_PASS_CAMPAIGN_MISMATCH"),
+        ("batch_id", "FIRST_PASS_BATCH_MISMATCH"),
+        ("manifest_id", "FIRST_PASS_MANIFEST_MISMATCH"),
+        ("execution_profile", "FIRST_PASS_PROFILE_MISMATCH"),
+        ("worker_count", "FIRST_PASS_WORKER_COUNT_MISMATCH"),
+    )
+
+    def admit_first_pass(
+        self,
+        *,
+        request,
+        context,
+        receipt: PreflightReceipt,
+        campaign: CampaignBinding,
+        batch: BatchBinding,
+        spawn_intent: OwnerIntent,
+    ) -> FirstPassSelectionBinding:
+        """Admit exactly one candidate first pass, or commit nothing at all.
+
+        One SQLite transaction consumes the context's one-time command, checks the profile, config,
+        runtime closure, evidence root and owner generation the context binds, refuses any existing
+        campaign or batch and any standing fence or unresolved owner, consumes the preflight receipt
+        and writes the campaign, the batch, the admission row and the owner spawn intent. A refused
+        admission rolls everything back, so the command is still usable once the cause is corrected.
+        """
+
+        if not isinstance(context, CONTEXT_TYPES):
+            raise StoreConflict("FIRST_PASS_CONTEXT_KIND")
+        if isinstance(context, ProductionExecutionContext):
+            raise StoreConflict("FIRST_PASS_CANDIDATE_CONTEXT_REQUIRED")
+        if not isinstance(receipt, PreflightReceipt):
+            raise StoreConflict("FIRST_PASS_RECEIPT_REQUIRED")
+        if not isinstance(spawn_intent, OwnerIntent):
+            raise StoreConflict("FIRST_PASS_SPAWN_INTENT_INVALID")
+        now_monotonic_ns = time.monotonic_ns()
+        with self._transaction():
+            self._check_first_pass_coordinates(request, context, now_monotonic_ns)
+            self._consume_first_pass_command(request, context)
+            self._check_candidate_first_pass_budget(context)
+            self._check_first_pass_fresh(request)
+            self._check_no_owner_or_fence(
+                None,
+                fence="FIRST_PASS_RECOVERY_FENCE",
+                active="FIRST_PASS_OWNER_ACTIVE",
+                unknown="FIRST_PASS_OWNER_UNKNOWN",
+            )
+            if (
+                receipt.campaign_id != request.campaign_id
+                or receipt.manifest_id != request.manifest_id
+            ):
+                raise StoreConflict("PREFLIGHT_RECEIPT_MISMATCH")
+            self._record_preflight_receipt_locked(receipt)
+            self._consume_preflight_locked(
+                receipt.receipt_id,
+                receipt.canonical_start_request_sha256,
+                campaign,
+                batch,
+                now_monotonic_ns=now_monotonic_ns,
+            )
+            return self._bind_admitted_first_pass(request, context, spawn_intent)
+
+    def _check_first_pass_coordinates(self, request, context, now_monotonic_ns: int) -> None:
+        if context.batch_kind != "FIRST_PASS":
+            raise StoreConflict("FIRST_PASS_BATCH_KIND")
+        for name, code in self._FIRST_PASS_COORDINATES:
+            if getattr(request, name) != getattr(context, name):
+                raise StoreConflict(code)
+        if request.lease_generation != context.owner_generation:
+            raise StoreConflict("FIRST_PASS_OWNER_GENERATION_MISMATCH")
+        if context.is_expired(now_monotonic_ns):
+            raise StoreConflict("FIRST_PASS_CONTEXT_EXPIRED")
+        if request.parallel_config_sha256 != context.config_sha256:
+            raise StoreConflict("FIRST_PASS_CONFIG_MISMATCH")
+        if runtime_closure_sha256(request) != context.runtime_closure_sha256:
+            raise StoreConflict("FIRST_PASS_RUNTIME_CLOSURE_MISMATCH")
+        if Path(request.evidence_root) != context.evidence_root:
+            raise StoreConflict("FIRST_PASS_EVIDENCE_ROOT_MISMATCH")
+
+    def _consume_first_pass_command(self, request, context) -> None:
+        digest = _sha({
+            "operation": "ADMIT_CANDIDATE_FIRST_PASS",
+            "request": canonical_start_request_sha256(request),
+            "context": context.as_document(),
+        })
+        row = self._connection.execute(
+            "SELECT request_sha256 FROM commands WHERE command_id = ?", (context.command_id,)
+        ).fetchone()
+        if row is not None:
+            if row["request_sha256"] == digest:
+                raise StoreConflict("FIRST_PASS_COMMAND_ALREADY_CONSUMED")
+            raise StoreConflict("FIRST_PASS_COMMAND_ID_REUSED")
+        self._connection.execute(
+            "INSERT INTO commands VALUES (?, ?, 'ADMIT_CANDIDATE_FIRST_PASS', 'IN_PROGRESS', NULL)",
+            (context.command_id, digest),
+        )
+
+    def _check_candidate_first_pass_budget(self, context) -> None:
+        """A candidate dispatch authorizes a bounded number of admitted runs, never more."""
+
+        row = self._connection.execute(
+            "SELECT COUNT(*) FROM first_pass_admissions "
+            "WHERE context_kind = ? AND context_scope = ?",
+            (CANDIDATE_CONTEXT_KIND, context.scope),
+        ).fetchone()
+        if int(row[0]) >= context.max_runs:
+            raise StoreConflict("FIRST_PASS_MAX_RUNS_EXCEEDED")
+
+    def _check_first_pass_fresh(self, request) -> None:
+        if self._connection.execute(
+            "SELECT 1 FROM campaigns WHERE campaign_id = ?", (request.campaign_id,)
+        ).fetchone() is not None:
+            raise StoreConflict("FIRST_PASS_CAMPAIGN_EXISTS")
+        if self._connection.execute(
+            "SELECT 1 FROM campaign_batches WHERE batch_id = ?", (request.batch_id,)
+        ).fetchone() is not None:
+            raise StoreConflict("FIRST_PASS_BATCH_EXISTS")
+
+    def _bind_admitted_first_pass(
+        self, request, context, spawn_intent: OwnerIntent
+    ) -> FirstPassSelectionBinding:
+        if (
+            spawn_intent.campaign_id != request.campaign_id
+            or spawn_intent.batch_id != request.batch_id
+        ):
+            raise StoreConflict("FIRST_PASS_SPAWN_INTENT_MISMATCH")
+        if spawn_intent.generation != context.owner_generation:
+            raise StoreConflict("FIRST_PASS_OWNER_GENERATION_MISMATCH")
+        binding = FirstPassSelectionBinding(
+            command_id=context.command_id,
+            campaign_id=request.campaign_id,
+            batch_id=request.batch_id,
+            manifest_id=request.manifest_id,
+            execution_profile=context.execution_profile,
+            schema_version=context.schema_version,
+            batch_kind=context.batch_kind,
+            config_sha256=context.config_sha256,
+            runtime_closure_sha256=context.runtime_closure_sha256,
+            worker_count=context.worker_count,
+            evidence_root=context.evidence_root,
+            owner_generation=context.owner_generation,
+            context_kind=context.kind,
+            context_id=context.context_id,
+            spawn_token=spawn_intent.spawn_token,
+        )
+        try:
+            self._connection.execute(
+                "INSERT INTO first_pass_admissions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                "?, ?, ?, ?, ?, ?)",
+                (
+                    context.command_id,
+                    request.campaign_id,
+                    context.kind,
+                    context.context_id,
+                    context.scope,
+                    request.batch_id,
+                    request.manifest_id,
+                    context.execution_profile,
+                    context.schema_version,
+                    context.config_sha256,
+                    context.runtime_closure_sha256,
+                    context.worker_count,
+                    str(context.evidence_root),
+                    context.owner_generation,
+                    getattr(context, "max_runs", None),
+                    spawn_intent.spawn_token,
+                    _json(binding.as_document()),
+                    binding.binding_sha256,
+                    time.time_ns(),
+                ),
+            )
+            self._connection.execute(
+                "INSERT INTO owner_intents VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    spawn_intent.spawn_token,
+                    spawn_intent.campaign_id,
+                    spawn_intent.batch_id,
+                    spawn_intent.role,
+                    spawn_intent.generation,
+                    spawn_intent.parent_spawn_token,
+                    spawn_intent.expected_executable,
+                    spawn_intent.argv_sha256,
+                    1 if spawn_intent.own_session else 0,
+                    spawn_intent.created_at_ns,
+                ),
+            )
+        except sqlite3.IntegrityError as error:
+            raise StoreConflict("FIRST_PASS_OWNER_INTENT_CONFLICT") from error
+        return binding
+
+    def first_pass_admission(self, command_id: str) -> dict | None:
+        row = self._connection.execute(
+            "SELECT * FROM first_pass_admissions WHERE command_id = ?", (command_id,)
+        ).fetchone()
+        return None if row is None else dict(row)
+
+    def first_pass_admissions(self, campaign_id: str) -> tuple[dict, ...]:
+        return tuple(
+            dict(row)
+            for row in self._connection.execute(
+                "SELECT * FROM first_pass_admissions WHERE campaign_id = ? "
+                "ORDER BY created_at_ns, command_id",
+                (campaign_id,),
+            )
+        )
 
     def _bind_admitted_retry(
         self, request, context, spawn_intent: OwnerIntent

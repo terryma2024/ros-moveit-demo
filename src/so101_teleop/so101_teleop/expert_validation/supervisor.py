@@ -363,6 +363,104 @@ class ExpertValidationSupervisor:
             raise RuntimeError("RETRY_CANDIDATE_CONTEXT_REQUIRED")
         return await self._start_admitted_retry(request, context)
 
+    async def start_candidate_first_pass(self, *, request, context, receipt=None):
+        """The candidate first-pass endpoint: one issued context, one run, one command.
+
+        The admission transaction runs before any process exists: it consumes the context's
+        one-time command, checks every coordinate the context binds, consumes the preflight receipt
+        and writes the campaign, the batch and the owner spawn intent. The spawn then reuses that
+        exact intent, so a spawn that fails leaves an unconfirmed intent, a standing fence and an
+        ``IN_PROGRESS`` command that can never be replayed.
+        """
+
+        if not isinstance(context, CandidateExecutionContext):
+            raise RuntimeError("FIRST_PASS_CANDIDATE_CONTEXT_REQUIRED")
+        receipt = receipt or self.preflight_engine.require_admitted(request)
+        if (
+            not receipt.admitted
+            or receipt.canonical_start_request_sha256
+            != canonical_start_request_sha256(request)
+        ):
+            raise RuntimeError("PREFLIGHT_REQUEST_MISMATCH")
+        batch_root = self._batch_root(request, request.batch_id)
+        owner_request = self._owner_request(request, receipt, request.batch_id, batch_root)
+        campaign = CampaignBinding(
+            campaign_id=request.campaign_id,
+            manifest_id=request.manifest_id,
+            executor_id="expert-validation-web",
+            operation_id="first-pass",
+            executor_config_sha256=hashlib.sha256(
+                repr(sorted(asdict(receipt.execution_config).items())).encode("utf-8")
+            ).hexdigest(),
+            execution_mode=request.execution_mode,
+            execution_config=asdict(receipt.execution_config),
+            preflight_receipt_id=receipt.receipt_id,
+        )
+        batch = BatchBinding(
+            batch_id=request.batch_id,
+            campaign_id=request.campaign_id,
+            batch_kind="FIRST_PASS",
+            point_id=None,
+            journal_root=batch_root,
+            coordinator_epoch=1,
+        )
+        durable_receipt = PreflightReceipt(
+            receipt_id=receipt.receipt_id,
+            campaign_id=request.campaign_id,
+            manifest_id=request.manifest_id,
+            canonical_start_request_sha256=receipt.canonical_start_request_sha256,
+            receipt=asdict(receipt),
+            expires_at_monotonic_ns=receipt.expires_at_monotonic_ns,
+        )
+        intent = OwnerIntent.for_argv(
+            campaign_id=request.campaign_id,
+            batch_id=request.batch_id,
+            role="ADAPTER",
+            generation=context.owner_generation,
+            spawn_token="spawn-" + secrets.token_hex(16),
+            argv=owner_request.argv,
+            parent_spawn_token=None,
+            own_session=True,
+        )
+        binding = self.store.admit_first_pass(
+            request=request,
+            context=context,
+            receipt=durable_receipt,
+            campaign=campaign,
+            batch=batch,
+            spawn_intent=intent,
+        )
+        self._requests[request.campaign_id] = request
+        try:
+            result = await self._spawn(owner_request, owner_intent=intent)
+        except BaseException as error:
+            # The intent and the fence stay: nothing may guess whether a process exists.
+            self.store.record_recovery_fence(
+                request.campaign_id,
+                request.batch_id,
+                reason=f"FIRST_PASS_SPAWN_FAILED: {error}",
+                command_id=context.command_id,
+            )
+            raise
+        if isinstance(result, dict) and result.get("cleanup_complete"):
+            self.store.record_batch_cleanup(
+                request.batch_id, result.get("receipt_sha256", "0" * 64)
+            )
+        self.store.finish_command(context.command_id, binding.as_document())
+        return {
+            "status": "STARTED",
+            "campaign_id": request.campaign_id,
+            "batch_id": request.batch_id,
+            "manifest_id": request.manifest_id,
+            "execution_profile": context.execution_profile,
+            "schema_version": context.schema_version,
+            "worker_count": context.worker_count,
+            "context_id": context.context_id,
+            "context_kind": context.kind,
+            "command_id": context.command_id,
+            "binding_sha256": binding.binding_sha256,
+        }
+
     async def start_production_retry(self, *, request, context):
         """The production endpoint: only an installed context may authorize this spawn."""
 

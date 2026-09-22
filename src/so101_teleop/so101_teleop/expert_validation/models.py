@@ -391,6 +391,88 @@ class RetrySelectionBinding:
 
 
 @dataclass(frozen=True, slots=True)
+class FirstPassSelectionBinding:
+    """The immutable first pass the store commits: one campaign, one batch, one candidate run.
+
+    It is the first-pass counterpart of :class:`RetrySelectionBinding`: the durable record that one
+    one-time command authorized exactly one bounded run, under one context, one profile and one
+    runtime closure. Only a candidate context may produce one (design section 10).
+    """
+
+    command_id: str
+    campaign_id: str
+    batch_id: str
+    manifest_id: str
+    execution_profile: str
+    schema_version: int
+    batch_kind: str
+    config_sha256: str
+    runtime_closure_sha256: str
+    worker_count: int
+    evidence_root: Path
+    owner_generation: int
+    context_kind: str
+    context_id: str
+    spawn_token: str
+    binding_sha256: str = ""
+
+    def __post_init__(self) -> None:
+        for name in (
+            "command_id",
+            "campaign_id",
+            "batch_id",
+            "manifest_id",
+            "execution_profile",
+            "context_id",
+            "spawn_token",
+        ):
+            _identifier(name, getattr(self, name))
+        for name in ("config_sha256", "runtime_closure_sha256"):
+            _sha(name, getattr(self, name))
+        object.__setattr__(self, "evidence_root", _absolute("evidence_root", self.evidence_root))
+        # A first pass here is a candidate run: the production path authorizes its own first pass
+        # from the live lease, and never through this binding.
+        if self.batch_kind != "FIRST_PASS":
+            raise ValueError("FIRST_PASS_BATCH_KIND")
+        if self.context_kind != "CANDIDATE":
+            raise ValueError("FIRST_PASS_CONTEXT_KIND")
+        for name in ("schema_version", "worker_count", "owner_generation"):
+            value = getattr(self, name)
+            if type(value) is not int or isinstance(value, bool) or value < 1:
+                raise ValueError("FIRST_PASS_POSITIVE_INTEGER")
+        digest = self.compute_sha256()
+        if self.binding_sha256 and self.binding_sha256 != digest:
+            raise ValueError("FIRST_PASS_BINDING_HASH_MISMATCH")
+        object.__setattr__(self, "binding_sha256", digest)
+
+    def as_document(self) -> dict[str, object]:
+        return {
+            "kind": "FIRST_PASS",
+            "command_id": self.command_id,
+            "campaign_id": self.campaign_id,
+            "batch_id": self.batch_id,
+            "manifest_id": self.manifest_id,
+            "execution_profile": self.execution_profile,
+            "schema_version": self.schema_version,
+            "batch_kind": self.batch_kind,
+            "config_sha256": self.config_sha256,
+            "runtime_closure_sha256": self.runtime_closure_sha256,
+            "worker_count": self.worker_count,
+            "evidence_root": str(self.evidence_root),
+            "owner_generation": self.owner_generation,
+            "context_kind": self.context_kind,
+            "context_id": self.context_id,
+            "spawn_token": self.spawn_token,
+        }
+
+    def compute_sha256(self) -> str:
+        encoded = json.dumps(
+            self.as_document(), sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
 class ValidationManifest:
     manifest_id: str
     canonical_document: Mapping
