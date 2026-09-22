@@ -1,7 +1,10 @@
-"""Live-fixture contract tests (offline): the gates that authorize a real run.
+"""Live-fixture contract tests (offline): the gates that admit a real run.
 
 These are source-backed structural checks. They do not run a live simulation and they do
-not claim any live acceptance.
+not claim any live acceptance. The former bound operator authorization document
+(``SO101_UNIFIED_LIVE_AUTHORIZATION``) was removed in full by operator instruction, so the
+admission contract pinned here is the opt-in flag plus the host, durable-root,
+install-prefix and stack conditions.
 """
 
 from __future__ import annotations
@@ -21,35 +24,53 @@ def test_live_fixture_targets_one_unified_launcher_and_keeps_its_gates():
     assert "so101_expert_validation_server.py" not in fixture, (
         "the live fixture must not start the deprecated per-domain listener"
     )
-    assert "SO101_UNIFIED_LIVE_AUTHORIZATION" in fixture
+    assert "SO101_UNIFIED_LIVE_AUTHORIZATION" not in fixture
     assert "requireGate" in fixture
     assert "SO101_ENABLE_LIVE_SIM_E2E" in fixture
     assert "SO101_E2E_INSTALL_PREFIX" in fixture
     assert "LIVE_SIM_STACK_PRESENT" in fixture
 
 
-def test_live_authorization_is_required_and_cannot_carry_proofs():
+def test_the_retired_operator_authorization_is_not_reintroduced():
+    """The operator removed the bound authorization document in full: the opt-in flag plus the
+    host, durable-root, install-prefix and stack conditions are the whole admission contract.
+    This pin keeps the removal from being silently undone, and keeps the old refusal codes out of
+    the fixture so no caller can start depending on them again.
+    """
+
     fixture = FIXTURE.read_text()
-    assert "requireUnifiedLiveAuthorization(env)" in fixture, (
-        "the opt-in flag alone must never authorize a live run"
-    )
-    for code in (
+    for retired in (
+        "SO101_UNIFIED_LIVE_AUTHORIZATION",
+        "UnifiedLiveAuthorization",
+        "requireUnifiedLiveAuthorization",
         "LIVE_SIM_UNIFIED_AUTHORIZATION_REQUIRED",
-        "LIVE_SIM_AUTHORIZATION_EXPIRED",
-        "LIVE_SIM_AUTHORIZATION_SCOPE_MISMATCH",
+        "LIVE_SIM_UNIFIED_AUTHORIZATION_UNREADABLE",
         "LIVE_SIM_AUTHORIZATION_MUST_NOT_CARRY_PROOFS",
+        "LIVE_SIM_AUTHORIZATION_SCOPE_MISMATCH",
+        "LIVE_SIM_AUTHORIZATION_DEADLINE_REQUIRED",
+        "LIVE_SIM_AUTHORIZATION_EXPIRED",
         "LIVE_SIM_AUTHORIZATION_RUNTIME_IDENTITIES_REQUIRED",
     ):
-        assert code in fixture, code
+        assert retired not in fixture, retired
+    # The gates that stay are the ones that must keep biting.
+    for kept in (
+        "LIVE_SIM_OPT_IN_REQUIRED",
+        "LIVE_SIM_HOST_MISMATCH",
+        "LIVE_SIM_EVIDENCE_ROOT_REQUIRED",
+        "LIVE_SIM_EVIDENCE_ROOT_NOT_PRIVATE",
+        "LIVE_SIM_INSTALL_PREFIX_INVALID",
+        "LIVE_SIM_STACK_PRESENT",
+    ):
+        assert kept in fixture, kept
 
 
-def test_global_setup_reads_the_authorization_before_any_spawn():
+def test_global_setup_checks_the_opt_in_before_any_spawn():
     setup = GLOBAL_SETUP.read_text()
     assert "live-sim" in setup or "validateLiveSimPreconditions" in setup
     fixture = FIXTURE.read_text()
-    authorize_at = fixture.index("requireUnifiedLiveAuthorization(env)")
+    opt_in_at = fixture.index("LIVE_SIM_OPT_IN_REQUIRED")
     stack_at = fixture.index("stackConflicts(deps.stackScan)")
-    assert authorize_at < stack_at, "authorization must be checked before stack inspection"
+    assert opt_in_at < stack_at, "the opt-in must be checked before stack inspection"
 
 
 def test_the_durable_root_rule_is_platform_bound_and_still_fails_closed():
