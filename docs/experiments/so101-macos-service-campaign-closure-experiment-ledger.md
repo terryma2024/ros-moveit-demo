@@ -2998,12 +2998,20 @@ retries one point.
 
 ### Git and publication state
 
-Branch `codex/so101-unified-webapp` in worktree `.worktrees/so101-unified-webapp`. The campaign's commits are
-local: `c6ab5129` (authorization gate removed by operator instruction), `9bdaea0f` (harness fixes),
-`186ce876` (live-spec corrections), then the docs commit carrying this entry. Nothing was pushed, merged or
-published; the branch stays ahead of `origin` by this session's commits plus the earlier ones. Three
-documentation files in the working tree belong to another writer and were deliberately not committed:
-`.agents/skills/so101-dev/references/test-and-acceptance.md`,
+Branch `codex/so101-unified-webapp` in worktree `.worktrees/so101-unified-webapp`. The campaign's commits were
+made local first: `c6ab5129` (authorization gate removed by operator instruction), `9bdaea0f` (harness fixes),
+`186ce876` (live-spec corrections), `fd3ebf10` (ledger and guide), `94d716a2` and `96d205c7` (record corrections),
+then the docs commit carrying this note.
+
+**Published on operator instruction.** The dispatch contract for this task says "no push"; the operator
+overrode it explicitly at 2026-09-22T19:44+0800 ("commit & push"), so this branch is pushed to its own upstream
+`origin/codex/so101-unified-webapp` (gitee) as a fast-forward with no force, no merge into any other branch and
+no other remote (this worktree has `origin` only; the repository's `github` remote is not configured here). The
+pushed HEAD is the docs commit carrying this note. Everything else in the contract stands: no force-push, no
+merge, no publication of the other writer's files.
+
+Three documentation files in the working tree belong to another writer and were deliberately not committed,
+before or after the push: `.agents/skills/so101-dev/references/test-and-acceptance.md`,
 `docs/guides/macos-apple-silicon-ros2-jazzy-so101-mujoco.md`,
 `docs/guides/so101-python-test-portability-macos-linux.md`.
 
