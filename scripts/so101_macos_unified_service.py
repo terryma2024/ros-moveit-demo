@@ -241,6 +241,12 @@ def child_environment(
     # capabilities answer has `platform: null`, which is what every W2 window saw.
     if getattr(document, "validation_parallel_config", ""):
         environment["SO101_VALIDATION_PARALLEL_CONFIG"] = document.validation_parallel_config
+    # The perception weights are operator inputs, not repository content, and the layout reads them
+    # from SO101_VALIDATION_YOLO_WEIGHTS / SO101_VALIDATION_GROUNDED_ROOT with no default. Whatever
+    # the window exported is passed through rather than guessed; the declared profile still wins.
+    for key, value in os.environ.items():
+        if key.startswith("SO101_VALIDATION_") and key != "SO101_VALIDATION_PARALLEL_CONFIG":
+            environment.setdefault(key, value)
     environment.pop("NODE_ENV", None)
     return environment
 

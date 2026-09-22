@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-INSTALLED-GATE-BLOCKED
+latest_checkpoint: CP-MSC-REMEDIATION-T11-WEIGHTS-FOUND
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4706,3 +4706,42 @@ repository can supply the weights, and neither refusal may be bypassed.
 
 What remains actionable without them is a re-check of the static gate, because the web fixtures, the
 live-window runner and the installed launcher all changed after `t11-gate` ran.
+
+## CP-MSC-REMEDIATION-T11-WEIGHTS-FOUND: the "absent weights" finding is retracted
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-WEIGHTS-FOUND
+recorded_at: 2026-09-23T13:05:00+0800
+carried_by: the local commit that adds this entry (parent the installed-gate entry)
+status: correction of CP-MSC-REMEDIATION-T11-MODELS-ABSENT, which was wrong
+```
+
+**Retraction.** `CP-MSC-REMEDIATION-T11-MODELS-ABSENT` and the second round built on it were both
+mistaken: the weights are not absent, my search was. I looked under `/Users/matianyi`, `/opt/data` and
+`/opt/ros2_jazzy` and concluded they did not exist; the earlier acceptance's own
+`start-service.sh` in this evidence root names exactly where they are, and they are still there:
+
+```text
+MODELS=/private/tmp/so101-debug-unbounded-queue-w2-mac-mini-3eed4ddd-a50c-4c21-b78f-60be2216ef9d/model-artifacts/models
+SO101_VALIDATION_YOLO_WEIGHTS=$MODELS/yolo/best.pt        -> exists
+SO101_VALIDATION_GROUNDED_ROOT=$MODELS/grounded           -> exists, carries manifest.json
+```
+
+and their digests are the frozen ones the guide names:
+
+```text
+yolo best.pt            f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+grounded manifest.json  b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+```
+
+The lesson is worth keeping: an absence claim needs a search over the places the system actually
+uses, and the evidence root already recorded them. The weights live in another task family's scratch
+directory; they are read as inputs only - never modified, never moved, never deleted.
+
+The launcher now passes through whatever `SO101_VALIDATION_*` the window exports (the declared profile
+still wins for `SO101_VALIDATION_PARALLEL_CONFIG`), so a window is fully provisioned when the operator
+exports the two model inputs.
+
+With that, the W2 window is running a real campaign for the first time: collection readback passed,
+the service is up on its frozen identity, both preflight tests passed, and the R06 case is in flight -
+a twenty-point W2 campaign takes roughly a quarter of an hour, so its verdict lands in the next round.
