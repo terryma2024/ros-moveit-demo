@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-GATE9
+latest_checkpoint: CP-MSC-REMEDIATION-8B-LIVE
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3999,3 +3999,46 @@ So Task 8B's remaining work is Steps 3-5: rebuild and freeze the install for tha
 live task-owned crash recovery with a foreign sentinel whose PID/birth is frozen before and after,
 run the identity-drift negative control, and update this ledger plus re-run the gate. The closed live
 window runner from `a4698f0b` is what that experiment needs.
+
+## CP-MSC-REMEDIATION-8B-LIVE: the live recovery experiment is built and partially exercised
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-8B-LIVE
+recorded_at: 2026-09-23T05:45:00+0800
+carried_by: the local commit that adds this entry (parent 0f8da614)
+task: Task 8B Step 4, first live attempt
+install: remediation-build-20260922T164500Z (3 packages, prepare rc=0, doctor rc=0)
+experiment: remediation/task8b/live-20260922T164721Z/run_experiment.py
+status: PARTIAL - the sentinel half is proven; the recovery half stops on an identity read
+```
+
+The experiment runs the *installed* operator-recovery entry against a real durable store, a real owner
+tree (recorded through `DirectoryOwnerRecords`) and real processes: a leader with a real descendant,
+a foreign sentinel started in its own session and never recorded anywhere, and both a positive case
+(leader `SIGKILL`ed) and a negative control (the recorded descendant birth drifted by one tick).
+
+What the first live attempt already proves, from its own receipt:
+
+```text
+sentinel_before = {pid: 5436, pgid: 5436, birth: 1790095648479871, live: true}
+sentinel_after  = {pid: 5436, pgid: 5436, birth: 1790095648479871, live: true}
+sentinel_untouched: true
+residue_pids: []
+```
+
+So a foreign process outside the owner tree survives the whole attempt with its PID, birth identity
+and process group unchanged, and the experiment leaves no process behind - both are Step 4
+requirements.
+
+Two script bugs were found and fixed on the way (each one is a real requirement of the harness, not
+product behaviour): `BatchBinding.journal_root` must be an absolute *normalized* path, and a durable
+store cannot be created twice, so every attempt now gets its own case directories instead of reusing
+one.
+
+The attempt then stops at `identity unreadable for 5471`: `read_identity` raises for a freshly
+started real child on this host, so the owner record cannot be confirmed and the recovery half never
+runs. The next diagnostic step is to capture the exact `ProcessIdentityError` for that pid (an
+`errno` from libproc or from `sysctl(KERN_PROCARGS2)`) and decide whether the harness must start the
+child differently (for example with an absolute interpreter path and a controlled argv) or whether
+the port has a genuine gap on Darwin. It is recorded rather than worked around, because the recovery
+half's evidence is exactly what must not be guessed.
