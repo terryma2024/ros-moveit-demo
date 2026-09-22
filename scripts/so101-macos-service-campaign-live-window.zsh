@@ -133,7 +133,9 @@ evidence_root="$window_root/browser"
 state_root="$window_root/service-state"
 socket_dir="$window_root/sockets"
 mkdir -p "$evidence_root" "$state_root" "$socket_dir"
-chmod 700 "$state_root" "$socket_dir"
+# The live fixture requires the run root to be a private directory inside the registered task root,
+# so all three are created 0700 rather than with the ambient umask.
+chmod 700 "$evidence_root" "$state_root" "$socket_dir"
 
 launch_document="$window_root/service-launch.json"
 "$REGISTERED_PYTHON" - "$launch_document" "$identity_report" "$case_id" "$evidence_root" \

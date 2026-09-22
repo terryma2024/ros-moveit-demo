@@ -268,14 +268,26 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"status": "REFUSED", "code": getattr(error, "code", "LAUNCH_FAILED"),
                           "detail": getattr(error, "detail", str(error))}, sort_keys=True))
         return 2
-    ament_prefix = environment.get("AMENT_PREFIX_PATH", "")
+    # Every entry of AMENT_PREFIX_PATH is resolved before it is compared, and each root only has to
+    # be *represented*: this host's ROS install is an isolated install, so its 692 entries name
+    # `<root>/<package>` and never the bare root. Demanding the bare roots refused a correctly
+    # sourced environment with OVERLAY_NOT_SOURCED.
+    ament_entries = []
+    for entry in environment.get("AMENT_PREFIX_PATH", "").split(os.pathsep):
+        if not entry:
+            continue
+        try:
+            ament_entries.append(Path(entry).resolve())
+        except OSError:
+            continue
     for required_prefix in (
         str(paths.ros_install),
         str(paths.ros_dependency_overlay),
         str(paths.ros_fork_overlay),
         str(paths.project_install),
     ):
-        if required_prefix not in ament_prefix.split(os.pathsep):
+        root = Path(required_prefix).resolve()
+        if not any(entry == root or entry.is_relative_to(root) for entry in ament_entries):
             print(json.dumps({"status": "REFUSED", "code": "OVERLAY_NOT_SOURCED",
                               "detail": required_prefix}, sort_keys=True))
             return 2
