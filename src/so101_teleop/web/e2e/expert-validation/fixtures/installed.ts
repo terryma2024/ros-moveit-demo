@@ -47,7 +47,12 @@ export function resolvePackagePrefixes(
   overlayPrefix: string,
   verifiedDependencyPrefixes: string,
 ): string[] {
-  const dependencyBases = verifiedDependencyPrefixes.split(":").filter((entry) => entry !== "");
+  // The project install is a dependency base in its own right: `so101_mujoco_support` ships there,
+  // not in any overlay, so it is searched first and every other base after it.
+  const dependencyBases = [
+    overlayPrefix,
+    ...verifiedDependencyPrefixes.split(":").filter((entry) => entry !== ""),
+  ].filter((entry, index, all) => all.indexOf(entry) === index);
   if (dependencyBases.length === 0) dependencyBases.push(verifiedDependencyPrefixes);
   const resolved: string[] = [];
   for (const name of [...OVERLAY_PACKAGES, ...VERIFIED_DEPENDENCY_PACKAGES]) {

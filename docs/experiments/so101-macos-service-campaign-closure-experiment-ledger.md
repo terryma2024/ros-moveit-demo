@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-MERGED-LAYOUT
+latest_checkpoint: CP-MSC-REMEDIATION-T11-INVENTORY-RESOLVED
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4507,3 +4507,34 @@ The next link is precise: `so101_mujoco_support` is not in the fork overlay or t
 overlay, and the project install root contains only `so101_demo_py/`, so its prefix has to be located
 before it joins the search path - or the same merged-marker check has to run against the project
 install. `bunx tsc -b` is clean after both changes.
+
+## CP-MSC-REMEDIATION-T11-INVENTORY-RESOLVED: the window now runs the case for real
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-INVENTORY-RESOLVED
+recorded_at: 2026-09-23T10:30:00+0800
+carried_by: the local commit that adds this entry (parent c6e6a5f7)
+window: remediation/windows/w2-20260922T180941Z-42660/
+status: the dependency inventory resolves; the R06 case executes and asserts against the console
+```
+
+The project install joined the dependency search path - `so101_mujoco_support` ships there as a
+per-package directory rather than in any overlay - and with that the fixture's whole environment
+inventory resolves. The step change is visible in the window's own timings: the R06 case went from
+failing in 38 ms inside the fixture to running for **814 ms and failing on a product assertion**, with
+a screenshot attached:
+
+```
+✘  [fixed-n-execution] › R06 macos-w2-20 executes 2×20 or is refused @live-sim (814ms)
+   Error: expect(received).toBe(expected) // Object.is equality
+   test-failed-1.png  (window browser/reports/…)
+```
+
+So the chain is complete up to the console: collection readback, frozen-identity service start,
+`/health` readiness with `validation: ready`, Chrome launch, the page loads, and the case's first
+assertion runs. The next link is that assertion itself - its expected/actual pair is in
+`playwright.log` in that window directory, and the screenshot shows the page state.
+
+Everything before this was the harness proving it could build a truthful environment; from here the
+failures are about the product or about the case's expectations, which is exactly where Task 11 Step 3
+said the work would be.
