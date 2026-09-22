@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-PREFLIGHT-ISOLATION
+latest_checkpoint: CP-MSC-REMEDIATION-7B-PARTIAL
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3429,3 +3429,47 @@ GREEN playwright contract/live-preflight.spec.ts --workers=1: 14 passed (13 orig
 The wider `contract/` directory also holds UI scenario specs that require the live environment
 variables (`SO101_FUNCTIONAL_MANIFEST` and friends); those are supplied by the Task 11 acceptance
 invocation, not by this task, and `live-preflight.spec.ts` itself has no failures in that run.
+
+## CP-MSC-REMEDIATION-7B-PARTIAL: the frozen-identity launcher is in; the window runner is still owed
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-7B-PARTIAL
+recorded_at: 2026-09-23T00:05:00+0800
+dispatch: ddf5bc35-e88c-4d3e-8005-0c165dff1841
+carried_by: the local commit that adds this entry (parent 7dbeb704)
+status: PARTIAL - Task 7B's launcher landed, Task 7B's runner and spec wiring did not
+```
+
+### Done in this commit
+
+`scripts/so101_macos_unified_service.py` plus `src/so101_demo_py/test/test_macos_unified_service_launcher.py`.
+The launcher validates a closed `service-launch.json` (schema version, case id, host/port, ROS domain,
+evidence and socket roots, install prefix, install inventory SHA, Web bundle SHA, farm logical path,
+farm resolved target, farm manifest SHA, interpreter and console entry), re-resolves every frozen
+identity against the live filesystem, refuses on any drift (`INSTALL_PREFIX_DRIFT`,
+`FARM_LOGICAL_DRIFT`, `FARM_RESOLVED_DRIFT`, `FARM_MANIFEST_DRIFT`, `INSTALL_INVENTORY_DRIFT`,
+`WEB_BUNDLE_DRIFT`, `CONSOLE_ENTRY_MISSING`, `PYTHON_DRIFT`), checks that all four overlays were
+really sourced through `AMENT_PREFIX_PATH`, writes the child receipt atomically with the values the
+child received, and only then `execve`s the installed console entry. It resolves both installed
+layouts (`<prefix>/lib/...` and `<prefix>/so101_teleop/lib/...`, likewise for the Web bundle), which
+is what this host actually carries.
+
+```text
+remediation/runs/t7b-launcher3-20260922T150207Z: 4 passed (RED first: missing-field table, bad
+        schema, bad port, the seven drift codes, and the child-environment pins)
+```
+
+### Still owed by Task 7B (the next writer starts here)
+
+1. `scripts/so101-macos-service-campaign-live-window.zsh`: `--case w2|w1|retry`, single-case
+   functional manifest, `playwright --list` readback asserting exactly one target R06/R07 case plus
+   the necessary preflight, spawn intent, service PID/birth/executable readback, `/health` readiness,
+   the Playwright project run, identity recheck, SIGINT, bounded wait, residue readback and the
+   service receipt.
+2. The closed `SO101_LIVE_CASE_ID` check in `live-sim/06-fixed-n-execution.spec.ts` and
+   `live-sim/07-retry-full-restart.spec.ts` (missing, unknown or a match count other than one must
+   fail collection closed), plus the runner-side environment contract in `fixtures/live-sim.ts`.
+3. `src/so101_teleop/test/teleop/test_macos_live_window_runner.py`, the runner's own contract test.
+
+Tasks 8, 8B, 9, 10 and 11 are untouched and still owed exactly as the plan writes them. Nothing in
+this checkpoint weakens a gate: the launcher only adds a fail-closed boundary.
