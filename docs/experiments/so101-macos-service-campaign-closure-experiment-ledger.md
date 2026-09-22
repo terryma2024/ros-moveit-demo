@@ -2208,3 +2208,109 @@ are ready and waiting on a clean commit. Step 5's three Playwright projects are 
 `SO101_UNIFIED_LIVE_AUTHORIZATION` document exists anywhere, and none was fabricated.
 
 Retained: everything. Deleted or archived: nothing.
+
+## CP-MSC-05: the production window opens on the clean install and stops at the console's control channel
+
+```yaml
+checkpoint_id: CP-MSC-05
+recorded_at: 2026-09-22T10:38:00+0800
+commit_at_gate: b47e938fe8a2fcc8c0067566f9fe0b0429b8c9f7 (submodule 85d2a5c42686a3d6b0d909a047a4188b24edd257)
+verdict: NOT PASSED - the fresh-Chrome production legs are blocked by a missing runtime dependency, and the
+         three Playwright projects are blocked by the absent operator authorization document. No W2, W1 or
+         retry claim is made from this task.
+```
+
+### Step 1 - exclusive window, and the install refreshed from the named clean commit
+
+The window was clear: the candidate W1 v6 run finished (`task11/after-fix/w1-20260922T012455Z`, `exit-code.txt` 0,
+`elapsed-seconds.txt` 622) with no campaign process, station or broker socket left; `doctor --json` = PASS.
+Ports 8000/8010/8013 were free and both private IPC roots empty (`task12/preflight/preflight-20260922T013539Z.txt`).
+Foreign and preserved, never signalled: PID 62670 (legacy validation service on `100.74.192.81:18010`, tmux
+`dst-so101-macos-mps-w2`, its own worktree, state root and PYTHONPATH) and the orphaned `descendant_helper.py`
+residue. A production context binds the copied install, profile document, batch, service session, lease
+generation, owner generation, command and expiry; the service minted none because it was never reachable from the
+console (below).
+
+The copied install was stale for the plan's code (no `execution_context.py`, no `owner_tree.py`, no
+`macos_n1_first_pass.py`/`macos_n1_retry.py`, no v5/v6 documents, Sep 20 web bundle). The dirty-bytes build that
+finished before the hold is kept as `task12/install-refresh-dirty-build/` and was not used. The clean rebuild ran
+the launcher's own colcon command from `b47e938f` (`task12/install-refresh/`): rc=0, 76 s, `doctor --json` PASS,
+and the installed inventory now reads `production.py` `66645f4b…`, `supervisor.py` `e8d7b0ce…`, `store.py`
+`2ed723ca…`, `api.py` `8e821326…`, `macos_service_campaign.py` `d93bf388…`, `point_drain.py` `7b8b20b8…`,
+`selection.py` `8367657a…`, v4 `2f9d7a87…`, v5 `27a2d80f…`, v6 `e1a30a2d…`, unified entry `c7bff667…`, web
+`index-CTj0SHn5.js`. `freeze.txt` names the commit and the exact worktree diff hash. The service then reported the
+three-row macOS matrix (v4 W2, v5 W1 retry, v6 W1 first pass, all `SUPPORTED`) and the functional manifest built
+against it carries `runtime_code_head` `b47e938f`.
+
+### Steps 2-4 - blocked at the console's control channel, before any route could be claimed
+
+`task12/steps2-4.sh b47e938f b47e938f…` passed its preconditions (HEAD matched, only the other writer's three
+documentation files dirty) and started the installed service. The route-check leg (fresh Chrome, console's own
+lease/manifest/preflight) failed after the page loaded: `GET /expert-validation` and `/assets/*` 200,
+`GET /expert-validation/capabilities` and `/campaigns` 200, `POST /control/instances` 200 twice — and then every
+`GET /control/instances/<id>/channel` upgrade was refused with `404 Not Found` (`server: uvicorn`,
+`{"code":"NOT_FOUND"}`) while the service log printed `WARNING: Unsupported upgrade request.` and
+`WARNING: No supported WebSocket library detected. Please use pip install 'uvicorn[standard]', or install
+'websockets' or 'wsproto' manually.` A raw handshake (`curl` with `Connection: Upgrade`/`Upgrade: websocket` and
+the service origin, no browser and no driver in the path) reproduces the same 404 and the same warning, so the
+refusal happens in the ASGI server before routing or authority: it is not an instance, proof, subprotocol or route
+problem, and the console's own bootstrap step did run.
+
+Root cause, read-only: `/opt/ros2_jazzy/.venv/bin/python` has `uvicorn 0.34.3` and neither `websockets` nor
+`wsproto`; `find /opt/ros2_jazzy /opt/data/so101 -maxdepth 8 -type d \( -name websockets -o -name wsproto \)`
+returns nothing (no PYTHONPATH change can supply it) and `find ~/Library/Caches/pip /opt/data -iname
+'websockets*.whl'` returns nothing, so installing one would need the network, which this task must not use.
+Consequence by construction: `instance-client.ts:71` opens the channel, `:38` carries the four authority headers
+including the channel revision, `domain-runtime.ts:311` routes every mutation through that transport and
+`expert-validation-app.tsx:113` wraps every mutating console call with it — with no handshake there is no revision
+and no instance authority, which is exactly what the log shows (zero validation mutation requests reached the
+service). Evidence: `task12/blocker/uvicorn-websocket.txt` and the leg's own `task12/steps2-4-b47e938f/legs/route-check/`
+(console log, screenshots, `api-responses.json`, `websocket-frames.json`). W2, W1 and retry therefore **did not
+run**; no campaign process, station, broker, owner intent or batch was created by this task (Step 6 readback), and
+nothing was worked around or faked.
+
+What the leg could still establish, from raw bytes and without the channel: the product's own macOS-layout
+assertions now pass on both real candidate batches (`task12/verify-product-W2-candidate-after-ea4eea88.json` and
+`…-W1-…json`, `"assertions": "PASS"`), and the independent `verify-native.ts` agrees with them check for check
+(22/22 each; W2 `W2_CAMPAIGN_PASS` with workers w1+w2, W1 `N1_CAMPAIGN_PASS` sequentially, per-point
+`evidence_manifest_sha256`/`dynamic_manifest_sha256` recomputed and recorded in
+`task12/candidate-native-readback-digests.txt`). Those are candidate-leg confirmations, not the production claim.
+
+### Step 5 - the ten assertions, the manifest, and the three projects
+
+`task12/step5/assertions.txt`, run with real bound values: nine hold (`SO101_ENABLE_LIVE_SIM_E2E=1`,
+`SO101_LIVE_SIM_HOST=Terry-Mac-mini.local`, `SO101_E2E_EVIDENCE_ROOT` = this task's registered private root,
+`SO101_E2E_INSTALL_PREFIX=/opt/data/so101/workspace/install`, `SO101_LIVE_SERVICE_BASE_URL`,
+`SO101_LIVE_SERVICE_STATE_ROOT`, `SO101_E2E_PYTHON`, `SO101_FUNCTIONAL_MANIFEST`,
+`SO101_PLAYWRIGHT_CHROME`) and `SO101_UNIFIED_LIVE_AUTHORIZATION` fails, because no such operator document exists
+anywhere (`task12/step5/authorization-search.txt`: the two `find` sweeps, the bounded `owned_process_rule` grep,
+the fixture's required shape and the plan's own wording). It was not invented and no substitute file was used.
+`bun run prepare:functional-manifest` against the live service: rc=0, `platform: macos`, five cases
+(`fixed-n2-p4`, `fixed-n2-p20`, `sequential-n1-p4`, `sequential-n1-p20`, `n1-full-restart-single-point`) and five
+named skips (`fixed-n1-p4`/`fixed-n1-p20` `EXECUTION_ROUTE_NOT_IN_SUPPORT_MATRIX: PARALLEL/N1/FIRST_PASS`,
+`sequential-n2-p4`/`-p20` `SEQUENTIAL/N2/FIRST_PASS`, `adaptive-ladder-p20` `MODE_NOT_ADVERTISED: ADAPTIVE`).
+The three projects were invoked exactly as the plan writes them and all three failed closed with
+`LIVE_SIM_UNIFIED_AUTHORIZATION_REQUIRED` before anything spawned (`task12/step5/project-*.log`) — the
+authorization gate precedes the evidence-root check, so the darwin root branch is proven by its RED/GREEN unit
+tests (`task12/live-sim-fix/`), not by these runs.
+
+### Step 6 - residue
+
+`task12/residue/residue.txt`: no task-owned process, no listener on 8013, both private IPC roots empty, no owner
+intent/confirmation record and no campaign batch anywhere under this task's service roots, and `ros2 node list`
+empty (the service is ROS-free). Foreign processes preserved and listed: PID 62670 on `100.74.192.81:18010`, the
+foreign tmux sessions, and 21 orphaned `descendant_helper.py` (the count grew from 15 during this window because
+other gates ran the installed-port tests; none of them is this task's).
+
+### What is not claimed
+
+`CP-MSC-05` is **not passed**: the fresh-Chrome W2/W1/retry legs were never executed, so no production API/WebSocket,
+two-Worker, selected-only, controller/joint/TF, MuJoCo pose/contact/release, MoveIt shadow/world, journal/watermark,
+sealed-manifest or cleanup observable is claimed from the installed path. The three Playwright projects did not run.
+The remaining blockers, in order: (1) the fixed interpreter cannot serve a WebSocket, so the console cannot reach
+any mutation route; (2) the operator `SO101_UNIFIED_LIVE_AUTHORIZATION` document does not exist. Both are outside
+this task's authority to create.
+
+Retained: everything under the registered root, including `task12/install-refresh-dirty-build/` (the honest
+intermediate), the harness-slip service directories `task12/service-runs/harness-slip-*` (two mis-argumented starts,
+stopped immediately, kept rather than deleted), and the `task12/blocker/` record. Deleted or archived: nothing.
