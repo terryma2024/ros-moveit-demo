@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-PREFLIGHT
+latest_checkpoint: CP-MSC-REMEDIATION-T11-MODELS-ABSENT
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4621,3 +4621,50 @@ window needs is the perception model root and its frozen digests (`yolo f281d252
 manifest `b55bb601…ed05` in the guide's terms). The second line is a teardown race worth its own look:
 the fixture's `releaseAcquiredLeases` races the campaign's generation bump and reports
 `STALE_EXECUTION_GENERATION` instead of releasing cleanly.
+
+## CP-MSC-REMEDIATION-T11-MODELS-ABSENT: the live windows need an input this host does not have
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-MODELS-ABSENT
+recorded_at: 2026-09-23T11:55:00+0800
+carried_by: the local commit that adds this entry (parent ba346208)
+condition: the perception model weights are not present on this host
+status: first observation; recorded, not yet a declared blocker (the goal policy requires three rounds)
+```
+
+The W2 window now reaches the campaign and the service refuses it:
+
+```text
+PREFLIGHT_REFUSED: 409 {"code":"VALIDATION_MODELS_NOT_CONFIGURED"}
+```
+
+That refusal is the product enforcing its own precondition (`production.py:1063`):
+
+```python
+if self.layout.yolo_weights_path is None or self.layout.grounded_root is None:
+    raise ServiceConflict("VALIDATION_MODELS_NOT_CONFIGURED")
+```
+
+and the layout reads them from exactly two variables, with no default and no fallback route:
+
+* `SO101_VALIDATION_YOLO_WEIGHTS` - a weights **file** (a symlink is refused);
+* `SO101_VALIDATION_GROUNDED_ROOT` - a **directory** carrying `manifest.json` (a symlink is refused).
+
+Measured on this host, with bounded searches rather than assumptions:
+
+```text
+/Users/matianyi/Models          -> does not exist
+find /Users/matianyi -maxdepth 4 \( -name '*.pt' -o -name '*.safetensors' -o -name 'grounded*' \)  -> nothing
+find /opt/data /opt/ros2_jazzy -maxdepth 4 -name manifest.json -path '*ground*'                    -> nothing
+find /opt/data -maxdepth 3 -name '*.pt'                                                            -> nothing
+```
+
+So the weights are not merely unconfigured, they are absent, and this is the guide's own statement
+coming true: "模型权重是输入，不是仓库内容" - the weights are an operator input, not repository
+content. The frozen digests the guide names (`yolo f281d252…0781`, grounded manifest `b55bb601…ed05`)
+are what an operator would verify them against.
+
+This blocks Task 11 Steps 2-4 (the W2, W1 and retry live windows) on an external input: no amount of
+harness work can produce a campaign without the weights, and the product is right to refuse. It is
+**not** recorded as a blocker yet - the goal policy asks for the same condition across three
+consecutive rounds - and nothing about it weakens a gate: the refusal is preserved, not bypassed.
