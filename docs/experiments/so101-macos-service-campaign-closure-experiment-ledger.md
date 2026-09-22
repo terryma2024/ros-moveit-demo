@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-COLCON-ADDOPTS
+latest_checkpoint: CP-MSC-REMEDIATION-GATE-GREEN
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3904,3 +3904,36 @@ process honours, including the one ament starts. That change is committed but **
 the confirming run is the next action. If it also fails, the remaining lever is to make the colcon
 step's own `TMPDIR` the basetemp root and shorten the test-name component, which needs a different
 approach than the direct pytest steps.
+
+## CP-MSC-REMEDIATION-GATE-GREEN: the whole static gate passes
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-GATE-GREEN
+recorded_at: 2026-09-23T04:30:00+0800
+carried_by: the local commit that adds this entry (parent cbe83472)
+run: remediation/gates/t8-gate8-20260922T162312Z-87285  verdict=PASS
+install: remediation-build-20260922T155928Z (3 packages, doctor PASS complete)
+status: Task 8 complete; Tasks 8B, 9, 10 and 11 remain
+```
+
+| Layer | t8-gate8 | baseline |
+| --- | --- | --- |
+| demo pytest | **rc=0, 3917 tests, 0 failures, 0 errors** | rc=1, 176 failed |
+| teleop pytest | **rc=0, 902 tests, 0 failures, 0 errors** | rc=1, 27 failed |
+| copied install | **rc=0, 37 tests, 0 failures, 0 errors** | rc=0 |
+| `colcon test` | **rc=0** | rc=0 ("package had test failures") |
+| `colcon test-result --verbose` | **rc=0, 1074 tests, 0 failures, 0 errors**, 2 skipped | rc=1, 1065 tests, 39 failures |
+| web `tsc` / `vitest` / `build` | **rc=0 / rc=0 / rc=0** | rc=0 / rc=0 / rc=0 |
+| runner verdict | **PASS** | FAIL |
+
+`PYTEST_ADDOPTS=--basetemp=<short>` is what closed the last three: `--pytest-args "--basetemp=…"` did
+not reach ament's pytest invocation (gate7's failure record still showed
+`pytest-of-matianyi/pytest-35/…`), while `PYTEST_ADDOPTS` is honoured by every pytest process. The
+whole suite now runs well inside Darwin's 104-byte `sun_path` limit with real sockets, and no check
+was skipped, xfailed or narrowed to get there: the counts grew (demo 3697 → 3917, colcon 1065 → 1074)
+because this dispatch added tests.
+
+Task 8's five boundaries and its confirming run are done. The remaining plan work is Task 8B (live
+crash, fence and operator recovery), Task 9 (guide, ledger and run-command corrections), Task 10
+(final `prepare`/freeze, 5x owner-bound Gate A, `CP-MSC-A2-FARM`) and Task 11 (live W2/W1/retry
+requalification plus the two GPT reviews).
