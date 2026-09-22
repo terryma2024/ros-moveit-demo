@@ -633,6 +633,7 @@ def test_final_gate_runner_refuses_anything_outside_the_registered_contract(
         "SCRATCH_IS_SYMLINK",
         "prepare_macos_test_scratch",
         "probe_endpoint_bind",
+        "SO101_IPC_SOCKET_BASE",
         "ZERO_COLLECTION",
         "scratch_classification=deletion-candidate (not deleted)",
         "python_executable=",
