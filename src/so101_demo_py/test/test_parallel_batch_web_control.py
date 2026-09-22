@@ -270,3 +270,39 @@ def test_adaptive_generation_does_not_accept_a_fixed_web_control_endpoint(make):
     finally:
         if server is not None:
             server.close()
+
+
+def test_the_canonical_darwin_root_is_a_sanctioned_endpoint_home(make):
+    """Containment stays mandatory; Darwin's short canonical root is the second sanctioned home.
+
+    A batch-root endpoint is 200 bytes on macOS and cannot be bound at all, so the supervisor places
+    it in `<canonical root>/<campaign>-<batch>.sock`. The directory is still verified before a bind
+    (owner, mode 0700, no alias), and a path outside both roots is still refused.
+    """
+    import os
+    from pathlib import Path
+
+    coordinator, _, _, _, request = make()
+    module = importlib.import_module("so101_demo.parallel_batch.web_control")
+    canonical = Path(f"/private/tmp/so101-control-{os.getuid()}")
+    canonical.mkdir(mode=0o700, exist_ok=True)
+    os.chmod(canonical, 0o700)
+
+    # Outside both roots: refused, unchanged.
+    with pytest.raises(module.WebControlError, match="CONTROL_SOCKET_OUTSIDE_BATCH_ROOT"):
+        module.FixedCoordinatorControlServer(
+            coordinator=coordinator, campaign_id="campaign-a", control_token="cd" * 32,
+            path=Path("/tmp/not-registered.sock"),
+        )
+
+    # Inside the canonical root: accepted by the containment rule. The bind may still fail for its
+    # own reasons, which is not this test's subject.
+    try:
+        server = module.FixedCoordinatorControlServer(
+            coordinator=coordinator, campaign_id="campaign-a", control_token="cd" * 32,
+            path=canonical / "campaign-a-batch-a.sock",
+        )
+    except module.WebControlError as error:
+        assert error.code != "CONTROL_SOCKET_OUTSIDE_BATCH_ROOT", error
+    else:
+        server.close()

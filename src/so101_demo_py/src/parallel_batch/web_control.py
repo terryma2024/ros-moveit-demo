@@ -25,6 +25,10 @@ from so101_demo.runtime.unix_address import (
     LINUX_SUN_PATH_CAPACITY_BYTES,
 )
 
+#: The one canonical short control root on Darwin, so the composer and the validator cannot
+#: disagree about where an endpoint may live. Mirrored by the teleop supervisor, which imports it.
+CANONICAL_CONTROL_SOCKET_ROOT = Path(f"/private/tmp/so101-control-{os.getuid()}")
+
 from .contracts import BatchKindV2, BatchRequest, BatchRequestV2
 
 
@@ -117,10 +121,17 @@ class FixedCoordinatorControlServer:
         self.coordinator_epoch = coordinator.journal.coordinator_epoch
         self.path = Path(path)
         root = coordinator.request.evidence_root
+        # Containment stays mandatory, but Darwin has a second sanctioned location. A batch-root
+        # endpoint is 200 bytes on macOS and cannot be bound at all (the first live service-driven
+        # macOS campaign proved it), so the supervisor places the endpoint in a short canonical
+        # private directory instead. That directory is created and verified here (owner, mode
+        # 0700, no alias), which is what makes it an acceptable home for the endpoint.
+        parent = self.path.parent
+        sanctioned = parent == CANONICAL_CONTROL_SOCKET_ROOT
         if (
             not self.path.is_absolute()
             or self.path != self.path.resolve(strict=False)
-            or not self.path.is_relative_to(root)
+            or not (self.path.is_relative_to(root) or sanctioned)
         ):
             raise WebControlError("CONTROL_SOCKET_OUTSIDE_BATCH_ROOT")
         self._token = control_token
