@@ -471,3 +471,145 @@ def test_operator_recovery_cli_accepts_an_owner_tree_root(tmp_path, capsys):
     ])
     assert rc == 1
     assert "RECOVERY_STORE_NOT_FOUND" in capsys.readouterr().err
+
+
+# --------------------------------------------------------------------------------------
+# Portable runtime inventory (remediation Task 5)
+#
+# Darwin has no /proc. The inspector therefore reads the host through a port: procfs on Linux,
+# psutil on Darwin. An unreadable process, a broken psutil or a reused pid must never be read as
+# "the process is gone", and the fence has to survive exactly as it does on Linux.
+# --------------------------------------------------------------------------------------
+
+
+class _FakePsutilProcess:
+    def __init__(self, pid, created_at):
+        self.pid = pid
+        self._created_at = created_at
+
+    def create_time(self):
+        return self._created_at
+
+
+class _FakePsutil:
+    class NoSuchProcess(Exception):
+        pass
+
+    class AccessDenied(Exception):
+        pass
+
+    class ZombieProcess(Exception):
+        pass
+
+    def __init__(self, table, *, denied=(), broken=False):
+        self.table = dict(table)
+        self.denied = set(denied)
+        self.broken = broken
+
+    def pids(self):
+        if self.broken:
+            raise RuntimeError("psutil inventory unavailable")
+        return list(self.table)
+
+    def Process(self, pid):
+        if self.broken:
+            raise RuntimeError("psutil inventory unavailable")
+        if pid in self.denied:
+            raise self.AccessDenied(pid)
+        if pid not in self.table:
+            raise self.NoSuchProcess(pid)
+        return _FakePsutilProcess(pid, self.table[pid])
+
+
+def _psutil_inspector(module, table, *, groups, denied=(), broken=False, container_ids=(),
+                      busy_domain=None):
+    port = module.PsutilInventory(
+        psutil_module=_FakePsutil(table, denied=denied, broken=broken),
+        group_probe=lambda pid: groups[pid],
+    )
+    return module.RuntimeInspector(
+        inventory=port,
+        container_probe=lambda batch: list(container_ids),
+        domain_probe=lambda domain: domain == busy_domain,
+    )
+
+
+def test_darwin_inventory_refuses_a_leader_that_is_still_present(fenced) -> None:
+    module = recovery_module()
+    store, _, _ = fenced
+
+    # A pid that is present - including a reused pid with a different birth time - is not absent.
+    with pytest.raises(module.RecoveryError, match="RECOVERY_LEADER_PRESENT"):
+        recover(fenced, inspector=_psutil_inspector(
+            module, {90001: 1234.5}, groups={90001: 90001}))
+    assert store.has_recovery_fence() is True
+
+
+def test_darwin_inventory_allows_a_clean_recovery_without_procfs(fenced) -> None:
+    module = recovery_module()
+    store, _, _ = fenced
+
+    result = recover(fenced, inspector=_psutil_inspector(module, {}, groups={}))
+
+    assert result["status"] == "OPERATOR_RECOVERED_ABORTED"
+    assert store.has_recovery_fence() is False
+
+
+def test_darwin_inventory_refuses_a_descendant_in_a_recorded_group(fenced) -> None:
+    module = recovery_module()
+    _, _, root = fenced
+    owners = [{"pid": 90001, "runner_pid": 90002, "pgid": 90001}]
+
+    with pytest.raises(module.RecoveryError, match="RECOVERY_PROCESS_GROUP_PRESENT"):
+        _psutil_inspector(module, {91000: 7.0}, groups={91000: 90001}).inspect(
+            owners, [181], [])
+    _psutil_inspector(module, {91000: 7.0}, groups={91000: 91000}).inspect(owners, [181], [])
+
+
+@pytest.mark.parametrize(
+    "kwargs, code",
+    [
+        ({"broken": True}, "RECOVERY_RUNTIME_UNVERIFIABLE"),
+        # A leader whose identity cannot be read is unverifiable, never absent.
+        ({"denied": (90001,)}, "RECOVERY_RUNTIME_UNVERIFIABLE"),
+    ],
+)
+def test_darwin_inventory_fails_closed_when_identity_cannot_be_proven(fenced, kwargs, code) -> None:
+    module = recovery_module()
+    store, _, _ = fenced
+    table = {91000: 7.0}
+
+    with pytest.raises(module.RecoveryError, match=code):
+        recover(fenced, inspector=_psutil_inspector(
+            module, table, groups={91000: 91000}, **kwargs))
+    # A failed inspection keeps the fence: it never reads as a clean runtime.
+    assert store.has_recovery_fence() is True
+
+
+def test_missing_psutil_is_unverifiable_not_clean(monkeypatch) -> None:
+    module = recovery_module()
+    import builtins
+
+    real_import = builtins.__import__
+
+    def refusing_import(name, *args, **kwargs):
+        if name == "psutil":
+            raise ImportError("psutil is not installed")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", refusing_import)
+    with pytest.raises(module.RecoveryError, match="RECOVERY_RUNTIME_UNVERIFIABLE"):
+        module.PsutilInventory()
+
+
+def test_default_inventory_uses_procfs_when_it_exists(tmp_path) -> None:
+    module = recovery_module()
+    proc = tmp_path / "proc"
+    proc.mkdir()
+    (proc / "90001").mkdir()
+    port = module.default_process_inventory(proc)
+    assert isinstance(port, module.ProcfsInventory)
+    assert port.is_present(90001) is True
+    assert port.is_present(90002) is False
+    assert isinstance(
+        module.default_process_inventory(tmp_path / "absent"), module.PsutilInventory)

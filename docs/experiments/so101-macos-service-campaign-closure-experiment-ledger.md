@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-A2-ATTESTATION
+latest_checkpoint: CP-MSC-REMEDIATION-PORTABILITY
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3300,3 +3300,41 @@ from the descendant chain it actually observed; it is not used for A2.
 * Two `test_live_fixed_supervisor_uses_real_authenticated_coordinator_not_signals` failures observed
   while checking neighbours are pre-existing: both nodeids are in the independent baseline JUnit as
   part of the teleop 27.
+
+## CP-MSC-REMEDIATION-PORTABILITY: environment, Darwin process identity and package registration
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-PORTABILITY
+recorded_at: 2026-09-22T23:25:00+0800
+dispatch: ddf5bc35-e88c-4d3e-8005-0c165dff1841
+carried_by: the local commit that adds this entry (parent ff7fbd96)
+status: implemented, RED -> GREEN for the five boundaries below
+```
+
+| Boundary | Before | Now |
+| --- | --- | --- |
+| adapter script-path test | read `os.environ["SO101_TASK_ROOT"]` and died with `KeyError` | builds the child `PYTHONPATH` from its own source paths plus the inherited value; no task-specific env is required |
+| recovery runtime inventory | `RuntimeInspector` hard-coded `/proc`, so Darwin returned `RECOVERY_PROC_UNAVAILABLE` | a port: `ProcfsInventory` on Linux, `PsutilInventory` on Darwin, chosen by `default_process_inventory`; an unreadable process, a broken psutil or a missing module is `RECOVERY_RUNTIME_UNVERIFIABLE`, never "absent" |
+| e2e installed-port liveness | `Path("/proc/<pid>").exists()` | the shared `so101_teleop.process_identity` port (`read_identity`, `pgid`, `live`) |
+| CMake package gate | `test_unified_lease_maintenance.py` and `test_unified_lease_projection.py` were never registered, and the existing bidirectional registration test said so | both registered; `test_unified_launch.py` passes with no unregistered and no dangling entry |
+| StartGuard | one test demanded `worker_count=8` + `gpu_selector="INDEX:0"` from every host, so macOS failed with `GPU_TARGET_UNAVAILABLE` | a deterministic per-host contract for Linux W8/CUDA **and** Darwin W2/MPS, plus a native smoke that runs the composition the host really installs |
+
+The Linux W8/CUDA regression was not deleted: it is one row of `DECLARED_HOST_PROFILES` and the
+non-Darwin branch of the native smoke. The native smoke runs the real guard process and asserts the
+host's own accelerator check (`gpu` on Linux, `mps_headroom` on Darwin); a genuine host-resource
+refusal is reported as an explicit skip with the observed reasons, and the deterministic test above
+it keeps the accept/refuse product boundary covered either way.
+
+### Evidence
+
+```text
+RED/GREEN remediation/runs/t5-*: recovery inventory, adapter env, e2e identity, CMake registration,
+        guard split. t5-green-20260922T145611Z: 80 passed, 2 failed - both failures are the
+        pre-existing CONTROL_SOCKET_PATH_TOO_LONG cases in test_expert_validation_e2e_installed_port,
+        listed in the independent baseline and owned by the Task 8 pass.
+t5-neighbours-20260922T145636Z: 41 passed, 1 failed - the pre-existing
+        test_production_factory_wires_durable_authorities_and_releases_lock.
+```
+
+One pre-existing failure in the same file was fixed as a side effect:
+`test_adaptive_helper_handshake_and_sigint_cleanup` asserted `/proc/<pid>` absence after cleanup.

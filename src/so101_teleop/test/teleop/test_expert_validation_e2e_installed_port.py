@@ -42,6 +42,26 @@ def _port(tmp_path: Path) -> HelperExecutionPort:
     )
 
 
+def _process_identity(pid: int):
+    """The shared cross-platform identity port: never a /proc probe of its own."""
+
+    from so101_teleop.process_identity import ProcessAbsent, read_identity
+
+    try:
+        return read_identity(pid)
+    except ProcessAbsent:
+        return None
+
+
+def _live_group_leader(pid: int, pgid: int) -> bool:
+    identity = _process_identity(pid)
+    return identity is not None and identity.live and identity.pgid == pgid
+
+
+def _gone(pid: int) -> bool:
+    return _process_identity(pid) is None
+
+
 def test_production_entry_has_no_execution_port():
     signature = inspect.signature(create_production_service)
     assert signature.parameters["execution_port"].default is None
@@ -166,15 +186,12 @@ def test_fixed_helper_descendant_survives_leader_exit(tmp_path):
             if line.startswith("descendant_pid="):
                 descendant_pid = int(line.split("=", 1)[1])
         assert descendant_pid is not None
-        assert Path(f"/proc/{descendant_pid}").exists()
-        stat = Path(f"/proc/{descendant_pid}/stat").read_text()
-        tail = stat[stat.rfind(")") + 2 :].split()
-        assert int(tail[2]) == process.pid
+        assert _live_group_leader(descendant_pid, process.pid)
     finally:
-        if descendant_pid is not None and Path(f"/proc/{descendant_pid}").exists():
+        if descendant_pid is not None and _live_group_leader(descendant_pid, process.pid):
             os.kill(descendant_pid, signal.SIGKILL)
             for _ in range(100):
-                if not Path(f"/proc/{descendant_pid}").exists():
+                if _gone(descendant_pid):
                     break
                 time.sleep(0.05)
 
@@ -207,12 +224,13 @@ def test_adaptive_helper_handshake_and_sigint_cleanup(tmp_path):
         assert handshake["wrapper_pid"] == process.pid
         assert handshake["batch_id"] == "a001"
         assert handshake["runner_pid"] > 0
-        assert Path(f"/proc/{handshake['runner_pid']}").exists()
+        runner_identity = _process_identity(handshake["runner_pid"])
+        assert runner_identity is not None and runner_identity.live
         process.send_signal(signal.SIGINT)
         assert process.wait(timeout=10) == 0
         receipt = json.loads((runtime_root / "cleanup-receipt.json").read_text())
         assert receipt["cleanup_complete"] is True
-        assert not Path(f"/proc/{handshake['runner_pid']}").exists()
+        assert _gone(handshake["runner_pid"])
     finally:
         if process.poll() is None:
             process.kill()

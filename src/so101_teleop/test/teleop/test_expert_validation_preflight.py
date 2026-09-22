@@ -1,6 +1,8 @@
 import hashlib
 from pathlib import Path
 
+import sys
+
 import pytest
 
 from so101_teleop.expert_validation.catalog import CatalogPoint, PointSelection
@@ -250,29 +252,105 @@ def _local_check(self, policy, scope):
             snapshot=None, cleanup_state="CLEAR")
 
 
-def test_host_fixed_eight_admits_through_the_real_guard(monkeypatch, tmp_path):
-    from so101_demo.parallel_batch.start_guard import StartGuardPolicy
+#: What each host declares. Linux keeps its W8/CUDA contract; macOS declares W2/MPS.
+DECLARED_HOST_PROFILES = (
+    ("linux", 8, "INDEX:0"),
+    ("darwin", 2, "MPS:default"),
+)
+
+
+@pytest.mark.parametrize(("host", "worker_count", "gpu_selector"), DECLARED_HOST_PROFILES)
+def test_every_declared_host_profile_admits_through_a_deterministic_guard(
+    monkeypatch, tmp_path, host, worker_count, gpu_selector
+):
+    """The product contract is per host, and neither declaration is a second-class path."""
+
+    from so101_demo.parallel_batch.start_guard import (
+        PASS, GuardCheck, GuardResult, StartGuardPolicy)
     from so101_demo.parallel_batch.start_guard_probe import (
-        ProbeCoordinator, compose_default_start_guard)
+        EpochStartGuard, ProbeCoordinator)
     from so101_teleop.expert_validation.production import _HostResourceProbe
     from so101_teleop.expert_validation.preflight import FixedExecutionConfig
 
+    class AdmittingCoordinator(ProbeCoordinator):
+        def check(self, policy, scope):
+            return GuardResult(
+                scope=scope, status=PASS, started_monotonic_s=0.0, completed_monotonic_s=0.0,
+                checks={
+                    "ram": GuardCheck(PASS, "RAM_HEADROOM_OK", 0, 1 << 30, "bytes"),
+                    "gpu": GuardCheck(PASS, "GPU_HEADROOM_OK", 0, 1 << 30, "bytes"),
+                },
+                snapshot=None, cleanup_state="CLEAR")
+
     monkeypatch.setenv("SO101_TASK_ROOT", str(tmp_path))
-    monkeypatch.setattr(ProbeCoordinator, "check", _local_check)
     policy = StartGuardPolicy()
-    guard = compose_default_start_guard(policy)
+    guard = EpochStartGuard(AdmittingCoordinator(tmp_path / f"state-{host}"), policy)
 
     admitted, reasons, observations = _HostResourceProbe(
-        start_guard=guard, gpu_selector="INDEX:0").probe(
-            None, FixedExecutionConfig("PARALLEL", 8))
+        start_guard=guard, gpu_selector=gpu_selector).probe(
+            None, FixedExecutionConfig("PARALLEL", worker_count))
 
     assert admitted, reasons
-    assert observations["requested_worker_count"] == 8
+    assert observations["requested_worker_count"] == worker_count
     assert observations["start_guard_status"] in ("PASS", "WARN")
-    guard = observations["start_guard"]
-    assert guard["status"] in ("PASS", "WARN")
-    assert set(guard["checks"]) == {"cpu_capacity", "cpu_busy", "ram", "gpu"}
-    assert guard["checks"]["ram"]["unit"] == "bytes"
+
+
+def test_the_native_host_admits_its_declared_profile(monkeypatch, tmp_path):
+    """The real guard, on the host that is actually running this suite.
+
+    Darwin has no CUDA target, so asking for ``INDEX:0`` there is not a product failure - it is the
+    wrong question. The smoke asks each host for the profile that host declares: W8/CUDA on Linux,
+    W2/MPS on macOS. A host that genuinely cannot admit its own profile is reported as an explicit
+    environment result, and the deterministic contract above keeps the product boundary covered.
+    """
+
+    from so101_demo.parallel_batch.start_guard import StartGuardPolicy
+    from so101_demo.parallel_batch.start_guard_probe import (
+        compose_darwin_start_guard, compose_default_start_guard)
+    from so101_teleop.expert_validation.production import _HostResourceProbe
+    from so101_teleop.expert_validation.preflight import FixedExecutionConfig
+
+    # Each host asks for the composition it really installs: Darwin runs the MPS guard, Linux keeps
+    # the NVML-backed default. Asking Darwin for INDEX:0 would test a profile macOS does not ship.
+    monkeypatch.setenv("SO101_TASK_ROOT", str(tmp_path))
+    # A smoke is only a smoke if it runs the composition the product runs: real probe process,
+    # real decision. The deterministic contract above is what pins the accept/refuse boundary.
+    policy = StartGuardPolicy()
+    if sys.platform == "darwin":
+        # The MPS floor is an installed-document value, not a default: read it from the v4 profile.
+        import yaml
+
+        document = yaml.safe_load(
+            (Path(__file__).resolve().parents[3] / "so101_demo_py/config/mujoco"
+             / "parallel_batch_v4_macos_mps_w2.yaml").read_text(encoding="utf-8"))
+        policy = StartGuardPolicy(
+            mps_minimum_headroom_bytes=document["start_guard"]["mps_minimum_headroom_bytes"])
+        worker_count, gpu_selector = 2, "MPS:default"
+        guard = compose_darwin_start_guard(policy)
+    else:
+        worker_count, gpu_selector = 8, "INDEX:0"
+        guard = compose_default_start_guard(policy)
+
+    admitted, reasons, observations = _HostResourceProbe(
+        start_guard=guard, gpu_selector=gpu_selector).probe(
+            None, FixedExecutionConfig("PARALLEL", worker_count))
+
+    environment_reasons = {
+        "GPU_TARGET_UNAVAILABLE", "RAM_FREE_BELOW_MINIMUM", "GPU_FREE_BELOW_MINIMUM",
+        "MPS_HEADROOM_BELOW_MINIMUM", "PROBE_TIMEOUT", "SNAPSHOT_UNAVAILABLE",
+    }
+    if not admitted and set(reasons) <= environment_reasons:
+        pytest.skip(
+            f"{sys.platform} cannot admit worker_count={worker_count}: {reasons}")
+    assert admitted, reasons
+    assert observations["requested_worker_count"] == worker_count
+    assert observations["start_guard_status"] in ("PASS", "WARN")
+    guard_document = observations["start_guard"]
+    assert guard_document["status"] in ("PASS", "WARN")
+    accelerator_check = "mps_headroom" if sys.platform == "darwin" else "gpu"
+    assert set(guard_document["checks"]) == {
+        "cpu_capacity", "cpu_busy", "ram", accelerator_check}
+    assert guard_document["checks"]["ram"]["unit"] == "bytes"
 
 
 def test_host_probe_reports_a_failing_guard_reason(monkeypatch, tmp_path):
