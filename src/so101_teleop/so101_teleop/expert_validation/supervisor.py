@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 import asyncio
 import hashlib
 import inspect
@@ -14,17 +14,21 @@ import sys
 import time
 
 from .adaptive import AdaptiveStartRequest
+from .campaign_layout import CampaignLayoutReader
 from .coordinator import CONTROL_SOCKET_ROOT, CoordinatorStartRequest
 from .control import ControlProtocolError, CoordinatorControlClient
 from .coordinator_events import (
     AcceptedCoordinatorCursor,
     CampaignUpstreamBinding,
     CoordinatorEventReader,
+    CoordinatorProjectionError,
     ReadOnlyCoordinatorJournal,
 )
+from .journal_layout import CAMPAIGN_LAYOUT, resolve_fixed_journal_layout
 from .execution_context import (
     CandidateExecutionContext,
     ProductionExecutionContext,
+    RETRY_PROFILE,
     retry_batch_root,
 )
 from .owner_tree import OwnerIntent
@@ -41,6 +45,7 @@ from .preflight import (
     CampaignPreflightReceipt,
     CampaignStartRequest,
     FixedExecutionConfig,
+    PROFILE_DOCUMENT_BASENAMES,
     PreflightEngine,
     canonical_start_request_sha256,
 )
@@ -66,6 +71,58 @@ FIXED_COORDINATOR_FLAGS = (
     "--point-id",
     "--provenance-binding",
 )
+
+#: The additional flags an admitted retry needs, and the exact names the v5
+#: ``MPS_W1_FULL_RESTART_RETRY`` route parses. A retry cannot bind itself from the first-pass argv:
+#: the route refuses ``RETRY_ROOT_REQUIRED`` unless it is told which original chain it executes, and
+#: it accepts either the prior root (whose committed document it re-reads and hashes) or this
+#: already-admitted chain. The service sends the admitted one - the very digests its own retry
+#: admission verified in the store - so the retry batch records the chain the service authorized.
+#: The two forms are alternatives, not complements: naming the prior root *and* a declared result
+#: digest asks the route to confirm a digest its own file-byte definition does not produce.
+RETRY_SELECTION_FLAG = "--original-selection-sha256"
+RETRY_RESULT_FLAG = "--original-result-sha256"
+RETRY_CATALOG_FLAG = "--original-catalog-sha256"
+RETRY_BATCH_FLAG = "--original-batch-id"
+RETRY_COORDINATOR_FLAGS = (
+    RETRY_SELECTION_FLAG,
+    RETRY_RESULT_FLAG,
+    RETRY_CATALOG_FLAG,
+    RETRY_BATCH_FLAG,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class FixedRetryBinding:
+    """The original chain one admitted retry names on its coordinator's command line.
+
+    Every field is a coordinate the service already verified when it admitted the retry: the
+    original batch, the selection and result digests the failed point was committed with, the
+    original catalog, and the retry profile's own installed document.
+    """
+
+    original_batch_id: str
+    original_selection_sha256: str
+    original_result_sha256: str
+    original_catalog_sha256: str
+    config_path: Path
+
+    def flags(self) -> tuple[str, ...]:
+        return (
+            RETRY_SELECTION_FLAG, self.original_selection_sha256,
+            RETRY_RESULT_FLAG, self.original_result_sha256,
+            RETRY_CATALOG_FLAG, self.original_catalog_sha256,
+            RETRY_BATCH_FLAG, self.original_batch_id,
+        )
+
+    def as_document(self) -> dict[str, object]:
+        return {
+            "original_batch_id": self.original_batch_id,
+            "original_selection_sha256": self.original_selection_sha256,
+            "original_result_sha256": self.original_result_sha256,
+            "original_catalog_sha256": self.original_catalog_sha256,
+            "config_path": str(self.config_path),
+        }
 
 
 #: Darwin's ``sun_path`` is 104 bytes including the terminating NUL, and it has no ``bindat``/``connectat``
@@ -107,6 +164,7 @@ def fixed_coordinator_argv(
     grounded_root,
     grounded_manifest_sha256: str,
     selected_point_ids,
+    retry_binding: FixedRetryBinding | None = None,
     provenance_binding_path=None,
 ) -> list[str]:
     """The one argv this service launches a fixed coordinator with.
@@ -114,6 +172,9 @@ def fixed_coordinator_argv(
     The runner must be executed by the interpreter this service runs under: naming
     ``/usr/bin/python3`` literally pointed at Apple's Python 3.9 on macOS, where the runner died on
     ``import yaml`` and the execution barrier refused the start after its ten-second wait.
+
+    ``retry_binding`` is the admitted retry's original chain (see ``RETRY_COORDINATOR_FLAGS``); a
+    first-pass launch passes nothing and its argv is byte-for-byte what it always was.
     """
     if executable_path is not None:
         argv = [sys.executable, str(executable_path)]
@@ -136,6 +197,8 @@ def fixed_coordinator_argv(
     )
     for point_id in selected_point_ids:
         argv.extend(("--point-id", point_id))
+    if retry_binding is not None:
+        argv.extend(retry_binding.flags())
     if provenance_binding_path is not None:
         argv.extend(("--provenance-binding", str(provenance_binding_path)))
     return argv
@@ -246,7 +309,8 @@ class ExpertValidationSupervisor:
             request.evidence_root / "campaigns" / request.campaign_id / batch_id
         ).resolve()
 
-    def _owner_request(self, request, receipt, batch_id, batch_root, point_ids=None):
+    def _owner_request(self, request, receipt, batch_id, batch_root, point_ids=None,
+                       retry_binding: FixedRetryBinding | None = None):
         selected = tuple(point_ids or request.selection.point_ids)
         environment = dict(request.environment)
         if request.coordinator_executable_path is not None:
@@ -262,7 +326,12 @@ class ExpertValidationSupervisor:
             argv = fixed_coordinator_argv(
                 executable_path=request.coordinator_executable_path,
                 points_path=request.points_path,
-                config_path=request.parallel_config_path,
+                # An admitted retry executes the retry profile's own document; a first pass the
+                # document its own preflight bound.
+                config_path=(
+                    request.parallel_config_path if retry_binding is None
+                    else retry_binding.config_path
+                ),
                 batch_id=batch_id,
                 worker_count=config.worker_count,
                 evidence_root=batch_root,
@@ -272,6 +341,7 @@ class ExpertValidationSupervisor:
                 grounded_root=request.grounded_root,
                 grounded_manifest_sha256=request.grounded_sam_manifest_sha256,
                 selected_point_ids=selected,
+                retry_binding=retry_binding,
                 provenance_binding_path=request.provenance_binding_path,
             )
             token = secrets.token_hex(32)
@@ -468,6 +538,42 @@ class ExpertValidationSupervisor:
             raise RuntimeError("RETRY_PRODUCTION_CONTEXT_REQUIRED")
         return await self._start_admitted_retry(request, context)
 
+    def _retry_binding(self, original, request) -> FixedRetryBinding:
+        """The original chain an admitted retry must name, or a typed refusal.
+
+        The v5 route binds ``FULL_RESTART_RETRY`` from either the prior root or exactly this
+        already-admitted chain, so these coordinates are what make its argv complete. The check
+        runs before the one-time admission is consumed and before any process exists: a retry whose
+        binding cannot be named is refused, never spawned to fail on an argument it cannot receive.
+        """
+
+        if not isinstance(request, RetryStartRequest):
+            raise RuntimeError("RETRY_REQUEST_INVALID")
+        if request.execution_profile != RETRY_PROFILE:
+            raise RuntimeError("RETRY_PROFILE_MISMATCH")
+        if not isinstance(request.original_batch_id, str) or not request.original_batch_id:
+            raise RuntimeError("RETRY_ORIGINAL_BATCH_UNKNOWN")
+        if not isinstance(request.point_id, str) or not request.point_id:
+            raise RuntimeError("RETRY_BINDING_UNRESOLVED")
+        if request.original_batch_id == request.batch_id:
+            # A retry that names itself as its own original binds nothing: the chain it would
+            # reference is the batch it is about to create.
+            raise RuntimeError("RETRY_ORIGINAL_BATCH_SELF")
+        # The retry profile's document is installed beside the first pass's document - the same rule
+        # the production admission used to read the digest it admitted - so the argv names the
+        # document whose digest this request already carries.
+        config_path = (
+            Path(original.parallel_config_path).parent
+            / PROFILE_DOCUMENT_BASENAMES[RETRY_PROFILE]
+        )
+        return FixedRetryBinding(
+            original_batch_id=request.original_batch_id,
+            original_selection_sha256=request.original_selection_sha256,
+            original_result_sha256=request.original_result_sha256,
+            original_catalog_sha256=request.original_catalog_sha256,
+            config_path=config_path,
+        )
+
     async def _start_admitted_retry(self, request, context):
         """Admit one retry (one transaction), then spawn exactly that admitted owner once.
 
@@ -487,10 +593,12 @@ class ExpertValidationSupervisor:
             request.evidence_root, request.campaign_id, request.batch_id
         ):
             raise RuntimeError("RETRY_BATCH_ROOT_MISMATCH")
+        retry_binding = self._retry_binding(original, request)
         receipt = type("RetryReceipt", (), {
             "execution_config": FixedExecutionConfig("SEQUENTIAL", 1)})()
         owner_request = self._owner_request(
-            original, receipt, request.batch_id, batch_root, point_ids=(request.point_id,)
+            original, receipt, request.batch_id, batch_root, point_ids=(request.point_id,),
+            retry_binding=retry_binding,
         )
         intent = OwnerIntent.for_argv(
             campaign_id=request.campaign_id,
@@ -586,30 +694,32 @@ class ExpertValidationSupervisor:
     def _verify_retry_journal(
         self, request: CampaignStartRequest, batch_id: str, batch_root: Path
     ) -> str:
-        journal_root = batch_root / "coordinator"
-        epoch_path = journal_root / "coordinator_epoch.json"
-        if epoch_path.is_symlink() or not epoch_path.is_file():
-            raise RuntimeError("RETRY_OWNER_EPOCH_INVALID")
+        """Verify the retry batch's own journal, on whichever layout it published.
+
+        A retry is always a fresh batch at epoch 1, and its cleanup must be proven before the
+        admission is reported. Both layouts are read here; neither is guessed, and the layout
+        resolver's refusal is the same ``RETRY_OWNER_EPOCH_INVALID`` this check always raised.
+        """
+
         try:
-            epoch_document = json.loads(epoch_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as error:
+            layout = resolve_fixed_journal_layout(batch_root, batch_id)
+        except CoordinatorProjectionError as error:
             raise RuntimeError("RETRY_OWNER_EPOCH_INVALID") from error
-        if (
-            epoch_document.get("batch_id") != batch_id
-            or epoch_document.get("coordinator_epoch") != 1
-        ):
+        if layout.epoch != 1:
             raise RuntimeError("RETRY_OWNER_EPOCH_INVALID")
         binding = CampaignUpstreamBinding(
             campaign_id=request.campaign_id,
             batch_id=batch_id,
             owner_kind="COORDINATOR",
             owner_epoch_or_generation=1,
-            journal_root=journal_root,
+            journal_root=layout.journal_root,
             batch_root=batch_root,
         )
-        reader = CoordinatorEventReader(
-            ReadOnlyCoordinatorJournal(journal_root, batch_id), binding
-        )
+        journal = ReadOnlyCoordinatorJournal(layout.journal_root, batch_id)
+        if layout.layout == CAMPAIGN_LAYOUT:
+            reader = CampaignLayoutReader(journal, binding)
+        else:
+            reader = CoordinatorEventReader(journal, binding)
         batch = reader.read_after(AcceptedCoordinatorCursor.initial(binding))
         state = batch.projected_state
         if state.get("terminal_reason") is None or state.get("batch_cleanup_complete") is not True:
