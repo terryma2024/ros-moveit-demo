@@ -4055,3 +4055,36 @@ process is only ever signalled when its identity was recorded by the run itself.
 retires itself; it is recorded here and in the writer-release marker instead of being killed on a
 guess. Any process the experiment itself recorded (the sentinel) was stopped by exact pid, which is
 why `residue_pids` is empty.
+
+### Addendum 2: the experiment now runs both cases; the CLI refuses with VALIDATION_SUPERVISOR_ACTIVE
+
+Six harness facts were corrected in order, each one a real requirement of the durability contract
+rather than product behaviour, and each one found by running the experiment:
+
+1. `BatchBinding.journal_root` must be an absolute *normalized* path;
+2. a durable store cannot be created twice, so every attempt needs its own case directories;
+3. the owner tree's roles are the closed set `ADAPTER, CAMPAIGN, BROKER, WORKER, STATION`;
+4. `ExecutionOwnerIntent.owner_kind` keeps its own vocabulary (`COORDINATOR`/`ADAPTIVE_WRAPPER`),
+   which is not the owner-tree role set;
+5. a stale `descendant.pid` from an earlier attempt satisfied the wait loop instantly, so the script
+   read a pid belonging to a process long gone - the pid file is now unique per attempt. That was the
+   whole of the `identity unreadable` symptom, not a Darwin gap: `read_identity` reads a fresh
+   `python -c` child and a fresh `sleep` child fine, verified directly;
+6. `/tmp` is a symlink to `/private/tmp`, and the store refuses an unnormalized root
+   (`STORE_ROOT_INVALID`), so the CLI is now given resolved paths.
+
+With those fixed, the experiment runs both cases end to end and both are refused by the real CLI:
+
+```text
+positive: rc=1  stderr=VALIDATION_SUPERVISOR_ACTIVE
+negative: rc=1  stderr=VALIDATION_SUPERVISOR_ACTIVE
+sentinel_untouched: true      residue_pids: []
+```
+
+`VALIDATION_SUPERVISOR_ACTIVE` is the next boundary to understand: the durable supervisor state still
+reads as active in the CLI path, whose invocation (`recover(store=…, campaign_id=…, command_id=…,
+parallel_config=…, source_commit=…, apply=…, owner_tree_root=…)`) passes no `inspector`, whereas every
+unit rendering of the same scenario in `test_expert_validation_operator_recovery.py` passes one. The
+question for the next writer is therefore precise: either the CLI needs the supervisor to be stopped
+before `--apply` (an operational precondition the guide must state), or it needs an inspector to prove
+the owner is gone - and whichever it is, the live experiment must show it rather than assume it.
