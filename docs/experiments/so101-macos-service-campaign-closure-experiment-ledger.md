@@ -51,7 +51,7 @@ open_hypotheses:
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
 latest_checkpoint: CP-MSC-T12-RETRY-AUTHORITY
 review_pending: CP-MSC-02 (Tasks 2-6, GPT-5.6 Sol/high - not available in this session; packet below)
-next_experiment: EXP-MSC-120 (issue the v5 retry from the same console page that ran the 20-point first pass, before its lease release; then the three Playwright projects once the operator supplies SO101_UNIFIED_LIVE_AUTHORIZATION)
+next_experiment: EXP-MSC-121 (issue the v5 retry from the same console page that ran the 20-point first pass, before its lease release; then the three Playwright projects once the operator supplies SO101_UNIFIED_LIVE_AUTHORIZATION)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -2660,3 +2660,48 @@ measured reason on record: Tasks 1-11 including the candidate W2/W1/retry legs, 
 Steps 1, 3 and 6. What remains external: `SO101_UNIFIED_LIVE_AUTHORIZATION` for Step 5's three Playwright
 projects (and therefore CP-MSC-05 and any FINAL verdict), and the Sol/high and Astra/high review sessions, which
 are not reachable from this session.
+
+## CP-MSC-T12-FASTCASE-PROVEN: the fast one-failure case now drives the retry flow, and the retry point passes
+
+```yaml
+checkpoint_id: CP-MSC-T12-FASTCASE-PROVEN
+recorded_at: 2026-09-22T15:57:00+0800
+commit_at_run: f0143866 (installed overlay refreshed from it, reader fix markers verified in the installed bytes)
+evidence: task12/retry-fastcase-20260922T072935Z/ (run1 fastcase4, run2 fastcase4b) and
+          task12/service-runs/fastcase4b/state/campaigns/campaign-7127b4db619242b1a138f9bd83109f6a/
+verdict: the small iteration case the operator asked for works end to end, and the per-slot summary fix
+         is verified live on a retry batch
+```
+
+Per the operator's directive (16- and 20-point cycles are too slow; first make the retry flow correct with a
+small one-success/one-failure case, then use twenty points only for final acceptance), the smallest case the
+product admits was built and run: `total_points=4` = the four anchors, with one anchor's business failure
+**manufactured** under the operator's authorization.
+
+- run1 (`fastcase4`): the injector aborted fail-closed (`ABORT_NO_OWNED_SIM`) because its own record truncated the
+  station argv to 800 characters and lost the product's `--mujoco-pid`; it signalled nothing, all four anchors
+  passed naturally, and the console therefore offered no retry point. Recorded as a valid negative with its cause,
+  not as a wasted attempt. Its timing is the speed answer: a four-point first pass took **6 min 11 s** against
+  21.6 min for fifteen points.
+- run2 (`fastcase4b`, same attempt root): the injector fix engaged, so the first pass committed
+  `cup_test_right_5cm -> FAILED` (manufactured) with the other three anchors `PASSED`, and the console's own retry
+  panel drove the same page. The retry batch exists and is terminal:
+
+```text
+retry-001/campaign-result.json   status N1_CAMPAIGN_PASS
+route                            batch_kind FULL_RESTART_RETRY, v5 config inside the installed prefix
+cleanup                          complete, directory removed, registry empty
+per_slot_pick_place.w1            executed 1
+point-results                    [cup_test_right_5cm.json -> PASSED]
+leases                           1
+```
+
+Three things this proves at once: the whole retry flow works from a small case; the point that failed on the first
+pass was retried exactly once and **passed** on the fresh `FULL_RESTART`; and the per-slot summary fix (`d3de9c5d`)
+works live on a retry batch - `executed 1`, where the recorded twenty-point retry had reported zero. The four
+product defects found along the way are all fixed and committed: the leaked TypeError (`a38d3a6e`), the missing
+durable cleanup receipt (`af93107a`, `9f8b7921`), the stale `owned_execution` row (`82eceec9`) and the retry
+selection-binding vocabulary (`f0143866`), plus the summary derivation (`d3de9c5d`, `157b7c24`).
+
+Iteration loop now available: the four-anchor case with one manufactured failure plus its same-page retry, at roughly
+7-8 minutes per iteration, with the twenty-point run reserved for final acceptance as the operator asked.
