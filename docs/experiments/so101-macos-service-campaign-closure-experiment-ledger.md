@@ -49,9 +49,9 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-T12-RETRY-NOT-ADMISSIBLE
+latest_checkpoint: CP-MSC-T12-RETRY-AUTHORITY
 review_pending: CP-MSC-02 (Tasks 2-6, GPT-5.6 Sol/high - not available in this session; packet below)
-next_experiment: EXP-MSC-118 (operator supplies SO101_UNIFIED_LIVE_AUTHORIZATION for the three Playwright projects; the production v5 retry needs a genuine business FAILED point, which this host's pinned catalog has not produced)
+next_experiment: EXP-MSC-119 (issue the v5 retry from the same console page that ran the 20-point first pass, before its lease release; then the three Playwright projects once the operator supplies SO101_UNIFIED_LIVE_AUTHORIZATION)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -2495,10 +2495,30 @@ first pass. A bounded attempt answered it (`task12/retry-attempt-20260922T035321
   **infrastructure** failure, which design section 10 excludes from retry admission (the same code the earlier
   candidate hunt produced and classified the same way). There is no business `FAILED` point.
 
-So the retry admission's precondition is absent by measurement, twice over: a seven-point production first pass gave
-seven `PASSED` (`retryhunt2`), and this twenty-point pass gave nineteen `PASSED` plus one infrastructure failure.
-Manufacturing a business failure is forbidden, so plan Task 12 Step 4 stays **NOT RUN**, with the reason
-"no admissible business FAILED point occurred" rather than a missing capability.
+**Correction, same day:** the sentence above is wrong about the twenty-point pass, and the owner's report corrects it.
+In that batch `sample_05_near_center` is committed with `infrastructure_code = null`, `outcome = FAILED`,
+`failure_code = RGBD_PERCEPTION_EXITED_EARLY` (traced in its own station log: twelve invalid orange clusters, then an
+RGBD pose timeout), `station_ready = true`, `moveit_executed = true`, `retry_eligible = true`, and the product's own
+`verify-batch.ts` passes on the full twenty-point batch. That is a **genuine business `FAILED` point**, so the retry
+admission's precondition *was* satisfied by this run; the earlier reading confused it with the candidate hunt's
+infrastructure failure of the same name in a different run. The independent `verify-native.ts` crashes on this batch
+(`EISDIR` at line 142) because a `FAILED` point carries `dynamic_manifest_relative_path = null` and the recipe treats
+the batch root as a directory; over the nineteen `PASSED` points every byte-level check passes and a supplementary
+derivation matches projection, committed document and campaign attempt for all twenty.
+
+The retry itself still did not run, now for a precise product-authority reason rather than an absent precondition:
+the console v5 retry on P09 was refused twice. A fresh browser page issued no lease POST at all and showed its own
+client guard `CONTROLLER_INSTANCE_REQUIRED: this document holds no authority`
+(`web/src/state/domain-runtime.ts:313`), and a direct call with the console's own authority headers/body was refused
+`409 CONTROLLER_ALREADY_BOUND` because validation is still bound to the first-pass page's instance
+(`instances.py claim_locked`); the binding moves only by a handoff that needs the current controller's authority, or
+by an operator-only `abandon_controller`, and the console exposes neither. No retry batch was created
+(`retry_history = []`, no `retry-*` root), so nothing is claimed about one, and the first-pass digests were frozen and
+compared unchanged (407 files, three times).
+
+The actionable fix is harness-side and identified: submit the retry from the **same** browser page that ran the first
+pass, right after the terminal projection and before the lease release/browser close. That is what the next bounded
+attempt does.
 
 Two further facts from the same attempt: the previous worker's leftover service (PID 4499, still listening on 8013
 because its leg exited before its stop step) was stopped by exact PID after ownership was proven from its own
