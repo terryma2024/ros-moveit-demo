@@ -67,6 +67,8 @@ class ServiceLaunchDocument:
     python: str
     console_entry: str
     validation_parallel_config: str = ""
+    validation_coordinator: str = ""
+    validation_points: str = ""
 
 
 def _require(mapping: dict[str, Any], key: str, code: str = "LAUNCH_DOCUMENT_INVALID") -> Any:
@@ -110,6 +112,8 @@ def load_launch_document(path: Path) -> ServiceLaunchDocument:
         python=str(_require(document, "python")),
         console_entry=str(_require(document, "console_entry")),
         validation_parallel_config=str(document.get("validation_parallel_config") or ""),
+        validation_coordinator=str(document.get("validation_coordinator") or ""),
+        validation_points=str(document.get("validation_points") or ""),
     )
 
 
@@ -247,6 +251,16 @@ def child_environment(
     for key, value in os.environ.items():
         if key.startswith("SO101_VALIDATION_") and key != "SO101_VALIDATION_PARALLEL_CONFIG":
             environment.setdefault(key, value)
+    # The macOS service campaign adapter is a different entry point from the generic parallel-batch
+    # coordinator the layout defaults to, and the generic one refuses the v4 macOS profile with
+    # `CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION`. The acceptance names it explicitly, so the window
+    # does too, together with the points catalog the campaign reads.
+    declared_coordinator = getattr(document, "validation_coordinator", "")
+    if declared_coordinator:
+        environment["SO101_VALIDATION_COORDINATOR"] = declared_coordinator
+    declared_points = getattr(document, "validation_points", "")
+    if declared_points:
+        environment["SO101_VALIDATION_POINTS"] = declared_points
     environment.pop("NODE_ENV", None)
     return environment
 

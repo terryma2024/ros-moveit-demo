@@ -158,6 +158,12 @@ document = {
     "validation_parallel_config": str(
         Path(identity["install_prefix"]) / "so101_demo_py/share/so101_demo_py/config/mujoco"
         / profile_document),
+    "validation_coordinator": str(
+        Path(identity["install_prefix"]) / "so101_demo_py/lib/so101_demo_py"
+        / "so101_macos_service_campaign"),
+    "validation_points": str(
+        Path(identity["install_prefix"]) / "so101_demo_py/share/so101_demo_py/config/mujoco"
+        / "moveit_expert_validation_points_v1.yaml"),
     **identity,
 }
 json.dump(document, open(launch_path, "w", encoding="utf-8"), indent=2, sort_keys=True)
