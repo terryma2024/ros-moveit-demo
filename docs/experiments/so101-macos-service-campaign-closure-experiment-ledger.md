@@ -49,9 +49,9 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-T12-W2W1-PASS
+latest_checkpoint: CP-MSC-T12-RETRY-NOT-ADMISSIBLE
 review_pending: CP-MSC-02 (Tasks 2-6, GPT-5.6 Sol/high - not available in this session; packet below)
-next_experiment: EXP-MSC-117 (either a genuine business FAILED point appears in a pinned-catalog production first pass so the v5 retry can run, or the operator supplies SO101_UNIFIED_LIVE_AUTHORIZATION so the three Playwright projects can execute)
+next_experiment: EXP-MSC-118 (operator supplies SO101_UNIFIED_LIVE_AUTHORIZATION for the three Playwright projects; the production v5 retry needs a genuine business FAILED point, which this host's pinned catalog has not produced)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -2472,3 +2472,41 @@ orphaned `descendant_helper.py` set, and the two Sep 20 static TF publishers.
 
 Accounting unchanged from `CP-MSC-FINAL-PARTIAL`: everything retained, nothing archived (no `/data` path on this
 host), deletion candidates listed and none deleted. No push, no merge, no force operations.
+
+## CP-MSC-T12-RETRY-NOT-ADMISSIBLE: a 20-point production first pass ran; its only failure is infrastructure
+
+```yaml
+checkpoint_id: CP-MSC-T12-RETRY-NOT-ADMISSIBLE
+recorded_at: 2026-09-22T12:30:00+0800
+commit_at_run: ec6f3727
+verdict: PARTIAL unchanged - the production v5 retry is NOT RUN because no admissible business FAILED point exists,
+         and that is now measured twice rather than assumed
+```
+
+The last open product question was whether a genuine business `FAILED` point can occur in a pinned-catalog production
+first pass. A bounded attempt answered it (`task12/retry-attempt-20260922T035321Z`, watcher log
+`task12/watch-retryattempt.log`, batch `b3018` under `task12/service-runs/retryattempt/`):
+
+- one v6 W1 `FIRST_PASS` over the largest pinned-catalog selection available (20 points, catalog sha `c7491547...`,
+  installed service entry sha `c7bff667...`), driven through the installed console with a fresh Chrome profile;
+- terminal `N1_CAMPAIGN_PASS`, `cleanup true`, 20 point results: **19 `PASSED` and one `FAILED`**;
+- the single failure is `sample_05_near_center` with `failure_code = "RGBD_PERCEPTION_EXITED_EARLY"` and
+  `dynamic_manifest_sha256 = null` - the perception child exited before any pick-place ran, i.e. an
+  **infrastructure** failure, which design section 10 excludes from retry admission (the same code the earlier
+  candidate hunt produced and classified the same way). There is no business `FAILED` point.
+
+So the retry admission's precondition is absent by measurement, twice over: a seven-point production first pass gave
+seven `PASSED` (`retryhunt2`), and this twenty-point pass gave nineteen `PASSED` plus one infrastructure failure.
+Manufacturing a business failure is forbidden, so plan Task 12 Step 4 stays **NOT RUN**, with the reason
+"no admissible business FAILED point occurred" rather than a missing capability.
+
+Two further facts from the same attempt: the previous worker's leftover service (PID 4499, still listening on 8013
+because its leg exited before its stop step) was stopped by exact PID after ownership was proven from its own
+environment and pidfile; and the appended production owner tree again arrived complete
+(`ADAPTER -> CAMPAIGN -> two WORKERs -> two STATIONs`, intent + confirmation each).
+
+With this, every plan task whose completion does not require the missing operator authorization is either done or
+recorded with a measured reason. The remaining blockers are unchanged and external: `SO101_UNIFIED_LIVE_AUTHORIZATION`
+(Step 5's three Playwright projects, and therefore CP-MSC-05 and any FINAL verdict), and the review sessions
+(CP-MSC-02/03, Task 13 Sol/high and Astra/high) that are not reachable from this session. Accounting unchanged:
+everything retained, nothing archived, deletion candidates listed and none deleted.
