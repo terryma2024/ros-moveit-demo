@@ -28,6 +28,10 @@ import pytest
 
 from so101_teleop.owned_group import terminate_group
 from so101_teleop.process_identity import (
+    IDENTITY_ALIVE,
+    IDENTITY_EXITED,
+    IDENTITY_UNKNOWN,
+    ProcessAbsent,
     ProcessIdentity,
     ProcessIdentityError,
     argv_matches,
@@ -36,6 +40,7 @@ from so101_teleop.process_identity import (
     group_has_live_descendants,
     group_members,
     identity_alive,
+    identity_state,
     read_identity,
 )
 
@@ -120,6 +125,58 @@ def test_read_identity_fails_closed_when_the_platform_will_not_report_it():
     with pytest.raises(ProcessIdentityError):
         read_identity(live.pid)
     assert identity_alive(live.pid, recorded.start_marker, recorded.command_sha256) is False
+
+
+def test_identity_state_proves_absence_and_refuses_to_guess(tmp_path):
+    """``EXITED`` is proof, ``UNKNOWN`` is the absence of it, and only proof may retire an owner.
+
+    The three answers are what a durable owner record is reconciled against: a live row must keep
+    blocking, a row whose process the platform proves gone may be retired, and everything the
+    platform will not report must keep blocking because nothing here can tell it from a live owner.
+    """
+    live = _sleep_child()
+    try:
+        recorded = read_identity(live.pid)
+        assert identity_state(live.pid, recorded.start_marker, recorded.command_sha256) == (
+            IDENTITY_ALIVE
+        )
+        # Same live process, wrong recorded start marker: that identity cannot be running, because
+        # a pid is only handed out again to a process that started later.
+        assert identity_state(live.pid, recorded.start_marker + 1, recorded.command_sha256) == (
+            IDENTITY_EXITED
+        )
+        # Same live process, wrong recorded command: nothing proves the recorded owner exited.
+        assert identity_state(live.pid, recorded.start_marker, "f" * 64) == IDENTITY_UNKNOWN
+    finally:
+        _end(live)
+
+    # The very same reader that just answered ALIVE must now classify this pid as gone - and it is
+    # this classification, not a heuristic about ages or reuse, that licenses retiring the row.
+    with pytest.raises(ProcessAbsent):
+        read_identity(live.pid)
+    assert identity_state(live.pid, recorded.start_marker, recorded.command_sha256) == (
+        IDENTITY_EXITED
+    )
+    assert identity_state(_unused_pid(), 1, "a" * 64) == IDENTITY_EXITED
+
+    # A malformed record is never proof of absence, whatever the reader would say about the pid.
+    assert identity_state(live.pid, None, recorded.command_sha256) == IDENTITY_UNKNOWN
+    assert identity_state(live.pid, -1, recorded.command_sha256) == IDENTITY_UNKNOWN
+    assert identity_state(live.pid, recorded.start_marker, None) == IDENTITY_UNKNOWN
+    assert identity_state(live.pid, recorded.start_marker, "") == IDENTITY_UNKNOWN
+    assert identity_alive(live.pid, recorded.start_marker, recorded.command_sha256) is False
+
+
+def test_an_unreadable_identity_is_unknown_and_never_exited(monkeypatch):
+    """An error that is not proof of absence may not be spent as one."""
+    import so101_teleop.process_identity as process_identity
+
+    def refuse(_pid):
+        raise ProcessIdentityError()
+
+    monkeypatch.setattr(process_identity, "read_identity", refuse)
+    assert identity_state(4242, 1, "a" * 64) == IDENTITY_UNKNOWN
+    assert identity_alive(4242, 1, "a" * 64) is False
 
 
 def test_start_markers_separate_two_children_started_inside_one_second():

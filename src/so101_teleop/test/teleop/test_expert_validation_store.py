@@ -2,6 +2,8 @@ from dataclasses import replace
 import hashlib
 import os
 import stat
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 import time
@@ -601,6 +603,217 @@ def _json_document(value):
     return _json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
+# --------------------------------------------------------------------------------------
+# Task 12: an owner row is retired only on a proven-absent process identity
+# --------------------------------------------------------------------------------------
+
+from so101_teleop.owned_group import terminate_group  # noqa: E402
+from so101_teleop.process_identity import group_members, read_identity  # noqa: E402
+
+
+def _spawn_owner_process() -> subprocess.Popen:
+    """A real child that leads its own process group, so its kernel identity is a real one."""
+    return subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(120)"],
+        start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def _end_owner_process(process: subprocess.Popen, timeout: float = 5.0) -> None:
+    if process.poll() is None:
+        process.kill()
+    process.wait(timeout=timeout)
+
+
+def _record_running_owner(store, batch_id, *, identity, spawn_token, owner_kind="COORDINATOR"):
+    """Record an acknowledged owner whose recorded identity is exactly this kernel identity.
+
+    ``owned_execution`` stores the command fingerprint under ``argv_sha256`` (the same value the
+    owner tree confirms), so the row is built from the identity that was read, never from an
+    invented pid and start marker.
+    """
+    store.record_execution_owner_intent(ExecutionOwnerIntent(
+        batch_id=batch_id, owner_kind=owner_kind, spawn_token=spawn_token,
+        expected_executable="/opt/validation/bin/so101_parallel_batch",
+        argv_sha256=identity.command_sha256, environment_sha256=SHA_B,
+        source_commit="1" * 40, install_prefix=Path("/opt/validation"),
+        runtime_sha256=SHA_CLOSURE,
+    ))
+    store.acknowledge_execution_owner(
+        batch_id=batch_id, pid=identity.pid, pgid=identity.pgid,
+        started_ticks=identity.start_marker, coordinator_epoch=4)
+    assert store.owned_execution(batch_id).state == "RUNNING"
+
+
+def _dead_owner_identity():
+    """The identity of a real child, read while it lived and kept after it was reaped."""
+    process = _spawn_owner_process()
+    try:
+        return read_identity(process.pid)
+    finally:
+        _end_owner_process(process)
+
+
+def test_admit_retry_retires_a_running_owner_whose_process_is_proven_gone(tmp_path):
+    """RED: the recorded first pass ``bf16a`` refused its own retry with ``RETRY_OWNER_ACTIVE``.
+
+    That row was ``state='RUNNING'`` with pid 25005, a coordinator the service had acknowledged and
+    which was gone by the time the console retried: ``ps`` listed nothing and its process group was
+    empty. Nothing in the store ever writes a state after ``INTENT -> RUNNING``, so the finished
+    first pass blocked its retry for good. The row here carries that exact shape from a real child -
+    its kernel identity, read while it ran - instead of an invented pid.
+    """
+    store, request, context, intent = _retry_fixture(tmp_path)
+    identity = _dead_owner_identity()
+    try:
+        _record_running_owner(store, "batch-1", identity=identity, spawn_token="spawn-bf16a")
+        binding = store.admit_retry(request=request, context=context, spawn_intent=intent)
+        assert binding.batch_id == "retry-001"
+        assert store.owned_execution("batch-1").state == "EXITED", (
+            "the retired row is durable, not just skipped for this one admission"
+        )
+    finally:
+        store.close()
+
+
+def test_a_live_recorded_owner_still_refuses_the_retry_and_is_never_retired(tmp_path):
+    """The positive control for the transition: a live owner blocks, exactly as it always did."""
+    store, request, context, intent = _retry_fixture(tmp_path)
+    process = _spawn_owner_process()
+    try:
+        identity = read_identity(process.pid)
+        _record_running_owner(store, "batch-1", identity=identity, spawn_token="spawn-live")
+        with pytest.raises(StoreConflict, match="RETRY_OWNER_ACTIVE"):
+            store.admit_retry(request=request, context=context, spawn_intent=intent)
+        assert store.reconcile_exited_execution_owner("batch-1") is False
+        assert store.owned_execution("batch-1").state == "RUNNING"
+    finally:
+        _end_owner_process(process)
+        store.close()
+
+
+def test_an_owner_identity_the_platform_will_not_report_still_refuses_the_retry(
+    tmp_path, monkeypatch
+):
+    """A row is never retired on assumption: an unreadable identity keeps blocking."""
+    from so101_teleop import process_identity
+
+    store, request, context, intent = _retry_fixture(tmp_path)
+    identity = _dead_owner_identity()
+    try:
+        _record_running_owner(
+            store, "batch-1", identity=identity, spawn_token="spawn-unreadable"
+        )
+        assert store.reconcile_exited_execution_owner("batch-1") is True, (
+            "positive control: this very row is retirable while the reader answers"
+        )
+        store._connection.execute(
+            "UPDATE owned_execution SET state = 'RUNNING' WHERE batch_id = 'batch-1'"
+        )
+
+        def refuse(_pid):
+            raise process_identity.ProcessIdentityError()
+
+        monkeypatch.setattr(process_identity, "read_identity", refuse)
+        with pytest.raises(StoreConflict, match="RETRY_OWNER_ACTIVE"):
+            store.admit_retry(request=request, context=context, spawn_intent=intent)
+        assert store.owned_execution("batch-1").state == "RUNNING"
+    finally:
+        store.close()
+
+
+def test_an_owner_whose_group_still_holds_a_live_process_is_not_retired(tmp_path):
+    """A leader that exited is not a finished execution while its group still runs something."""
+    store, request, context, intent = _retry_fixture(tmp_path)
+    leader = subprocess.Popen(
+        [
+            sys.executable,
+            str(Path(__file__).parents[1] / "fixtures/process_tree_helper.py"),
+            "--mode", "coordinator", "--root", str(tmp_path / "owner-tree"),
+            "--batch-id", "b1", "--leader-exits",
+        ],
+        start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    handshake = tmp_path / "owner-tree" / "handshake.json"
+    pgid = leader.pid
+    try:
+        identity = read_identity(leader.pid)
+        leader.wait(timeout=10)
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline and not handshake.is_file():
+            time.sleep(0.02)
+        assert handshake.is_file(), "the owner never forked the descendant that keeps its group"
+        descendant_pid = _json.loads(handshake.read_text(encoding="utf-8"))["runner_pid"]
+        assert group_members(pgid).get(descendant_pid) not in {None, "Z"}, (
+            "the negative is only meaningful while a descendant of the leader is really running"
+        )
+
+        _record_running_owner(
+            store, "batch-1", identity=identity, spawn_token="spawn-with-descendant"
+        )
+        assert store.reconcile_exited_execution_owner("batch-1") is False
+        with pytest.raises(StoreConflict, match="RETRY_OWNER_ACTIVE"):
+            store.admit_retry(request=request, context=context, spawn_intent=intent)
+        assert store.owned_execution("batch-1").state == "RUNNING"
+    finally:
+        terminate_group(pgid=pgid, timeout_s=1.0)
+        _end_owner_process(leader)
+        store.close()
+
+
+def test_reconciling_a_dead_owner_is_idempotent_and_leaves_other_rows_alone(tmp_path):
+    """One guarded update, one row: a second call changes nothing and a live row is untouched."""
+    store, request, context, intent = _retry_fixture(tmp_path)
+    live = _spawn_owner_process()
+    try:
+        live_identity = read_identity(live.pid)
+        dead_identity = _dead_owner_identity()
+        store._connection.execute(
+            "INSERT INTO campaign_batches VALUES ('batch-2', 'campaign-1', "
+            "'FULL_RESTART_RETRY', 'p2', 'BOUND', 1, NULL, ?, NULL, NULL)",
+            (str((tmp_path.resolve() / "campaigns/campaign-1/batch-2")),),
+        )
+        _record_running_owner(store, "batch-1", identity=dead_identity, spawn_token="spawn-dead")
+        _record_running_owner(store, "batch-2", identity=live_identity, spawn_token="spawn-live")
+
+        assert store.reconcile_exited_execution_owner("batch-1") is True
+        assert store.owned_execution("batch-1").state == "EXITED"
+        assert store.reconcile_exited_execution_owner("batch-1") is True
+        assert store.owned_execution("batch-1").state == "EXITED"
+
+        assert store.reconcile_exited_execution_owner("batch-2") is False
+        untouched = store.owned_execution("batch-2")
+        assert untouched.state == "RUNNING"
+        assert (untouched.pid, untouched.pgid, untouched.started_ticks) == (
+            live_identity.pid, live_identity.pgid, live_identity.start_marker
+        )
+        assert untouched.spawn_token == "spawn-live"
+    finally:
+        _end_owner_process(live)
+        store.close()
+
+
+def test_an_owner_state_this_store_does_not_know_keeps_blocking(tmp_path):
+    """Fail closed on the row states this build cannot reason about."""
+    store, request, context, intent = _retry_fixture(tmp_path)
+    identity = _dead_owner_identity()
+    try:
+        _record_running_owner(store, "batch-1", identity=identity, spawn_token="spawn-unknown")
+        store._connection.execute(
+            "UPDATE owned_execution SET state = 'UNRECOGNIZED' WHERE batch_id = 'batch-1'"
+        )
+        with pytest.raises(StoreConflict, match="RETRY_OWNER_ACTIVE"):
+            store.admit_retry(request=request, context=context, spawn_intent=intent)
+    finally:
+        store.close()
+
+
 def test_admit_retry_consumes_the_command_and_writes_batch_queue_and_intent(tmp_path):
     store, request, context, intent = _retry_fixture(tmp_path)
     try:
@@ -953,22 +1166,23 @@ def test_admit_retry_refuses_a_batch_that_is_not_terminal_or_not_clean(tmp_path)
 
 def test_admit_retry_refuses_an_active_or_unknown_owner(tmp_path):
     store, request, context, intent = _retry_fixture(tmp_path)
+    process = _spawn_owner_process()
     try:
-        store.record_execution_owner_intent(ExecutionOwnerIntent(
-            batch_id="batch-1", owner_kind="COORDINATOR", spawn_token="spawn-live",
-            expected_executable="so101_parallel_batch", argv_sha256=SHA_A,
-            environment_sha256=SHA_B, source_commit="1" * 40,
-            install_prefix=Path("/opt/validation"), runtime_sha256=SHA_CLOSURE,
-        ))
-        store.acknowledge_execution_owner(
-            batch_id="batch-1", pid=123, pgid=123, started_ticks=99, coordinator_epoch=4)
+        identity = read_identity(process.pid)
+        _record_running_owner(
+            store, "batch-1", identity=identity, spawn_token="spawn-live"
+        )
         with pytest.raises(StoreConflict, match="RETRY_OWNER_ACTIVE"):
             store.admit_retry(request=request, context=context, spawn_intent=intent)
+        assert store.owned_execution("batch-1").state == "RUNNING", (
+            "a live owner is never retired, whatever else the admission does"
+        )
 
         store._connection.execute("UPDATE owned_execution SET state = 'INTENT'")
         with pytest.raises(StoreConflict, match="RETRY_OWNER_UNKNOWN"):
             store.admit_retry(request=request, context=context, spawn_intent=intent)
     finally:
+        _end_owner_process(process)
         store.close()
 
 
@@ -1573,6 +1787,7 @@ def test_admit_first_pass_refuses_a_recovery_fence_or_an_unresolved_owner(tmp_pa
     """A first pass never starts over a standing fence or an owner whose outcome is unknown."""
 
     store, request, context, intent, receipt, campaign, batch = _first_pass_fixture(tmp_path)
+    process = _spawn_owner_process()
     try:
         _admit_first_pass(store, request, context, intent, receipt, campaign, batch)
         second = _second_first_pass_campaign(request, context, intent, receipt, campaign, batch)
@@ -1586,21 +1801,39 @@ def test_admit_first_pass_refuses_a_recovery_fence_or_an_unresolved_owner(tmp_pa
         with pytest.raises(StoreConflict, match="FIRST_PASS_OWNER_UNKNOWN"):
             store.admit_first_pass(**second)
         store.record_execution_owner_intent(ExecutionOwnerIntent(
-            batch_id="b001", owner_kind="COORDINATOR", spawn_token="spawn-live",
+            batch_id="b001", owner_kind="COORDINATOR", spawn_token="spawn-b001",
             expected_executable="so101_parallel_batch", argv_sha256=SHA_A,
             environment_sha256=SHA_B, source_commit="1" * 40,
             install_prefix=Path("/opt/validation"), runtime_sha256=SHA_CLOSURE,
         ))
         with pytest.raises(StoreConflict, match="FIRST_PASS_OWNER_UNKNOWN"):
             store.admit_first_pass(**second)
+        # An acknowledged owner whose process is proven gone is not an active one any more: the
+        # admission reaches the next genuine gate, which is still this batch's unresolved spawn
+        # intent, and the transaction still rolls back with it.
         store.acknowledge_execution_owner(
             batch_id="b001", pid=4321, pgid=4321, started_ticks=7, coordinator_epoch=4)
+        with pytest.raises(StoreConflict, match="FIRST_PASS_OWNER_UNKNOWN"):
+            store.admit_first_pass(**second)
+        assert store.owned_execution("b001").state == "RUNNING", (
+            "a refused admission commits nothing, including the retirement it did not need"
+        )
+
+        # A genuinely live owner still refuses by name, and is never retired.
+        identity = read_identity(process.pid)
+        store._connection.execute(
+            "UPDATE owned_execution SET pid=?, pgid=?, started_ticks=?, argv_sha256=? "
+            "WHERE batch_id='b001'",
+            (identity.pid, identity.pgid, identity.start_marker, identity.command_sha256),
+        )
         with pytest.raises(StoreConflict, match="FIRST_PASS_OWNER_ACTIVE"):
             store.admit_first_pass(**second)
+        assert store.owned_execution("b001").state == "RUNNING"
         assert store._connection.execute(
             "SELECT count(*) FROM commands WHERE command_id = 'cmd-first-pass-2'"
         ).fetchone()[0] == 0
     finally:
+        _end_owner_process(process)
         store.close()
 
 
