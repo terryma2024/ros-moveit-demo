@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-W2-TAIL
+latest_checkpoint: CP-MSC-REMEDIATION-T11-W2
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -5130,3 +5130,67 @@ activity            58 files written in the last two minutes
 So the two workers are each part-way through one of the last points, and the extra time is the point's
 own work rather than a retry loop - there is no attempt storm, and the attempt-directory count matches
 the points committed plus those in flight. Nothing needs intervention.
+
+## CP-MSC-REMEDIATION-T11-W2: the two-worker first pass closes PASS
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-W2
+recorded_at: 2026-09-23T19:50:00+0800
+carried_by: the local commit that adds this entry (parent a23420d9)
+window: remediation/windows/w2-20260922T191707Z-53004/
+campaign: campaign-f6b2501bfe494c9ca8475832a7dc1034 / batch b5f51
+status: W2_CAMPAIGN_PASS
+```
+
+The window ran one case, `macos-w2-20`, through the Task 7B closed runner: collection readback first,
+then the service, then that case alone. Playwright finished at 3 expected, 0 unexpected, 0 flaky,
+0 skipped; the R06 case took 16.3 minutes and the runner exited 0 with its own receipt.
+
+```text
+campaign status         W2_CAMPAIGN_PASS       execution_profile MPS_W2_FIRST_PASS
+route                   macos_w2_campaign, schema v4, worker_count 2
+config                  parallel_batch_v4_macos_mps_w2.yaml sha256 2f9d7a87...6b06b
+selection               kind FIRST_PASS, catalog c7491547...8dc5, selection a565b7ab...527b
+points                  20 selected, 20 attempts, 20 spawns, 20 committed
+duplicate_attempts      0    unselected_attempts 0    unexecuted 0
+infrastructure_failures 0    missing physical evidence 0
+outcome                 19 PASSED, 1 FAILED
+per slot                w1 10 executed, w2 10 executed, overlap empty, union == selection
+start guard             PASS, MPS_HEADROOM_OK, 12.86 GB free against a 1 GiB cutoff
+broker                  pid 53106 birth 1790104636129591, device mps, ready, warmup 6.61 s
+journal                 terminal true, watermark sequence 103
+served                  120 responses, 0 duplicate refusals, lane peak depth 1
+cleanup                 complete, 20 of 20 workers reaped, 20 station readbacks clear
+inventory               clean, owned_processes [], live_endpoints [], existing dirs []
+```
+
+The one failure is the legitimate failed-before-physical shape, and it stayed in the accounting
+instead of being dropped:
+
+```text
+sample_05_near_center-attempt-5   outcome FAILED   state COMMITTED
+failure_code RGBD_PERCEPTION_EXITED_EARLY   infrastructure_code null   batch rc 1
+dynamic_manifest_relative_path null   physical_evidence false   moveit_executed true
+cleanup_owned true   released EXITED   station_readback clear
+19 of 20 dynamic manifests and 19 of 20 physical-evidence flags, missing only this point
+```
+
+So a point that never reached a physical execute is still committed, terminal-clean and classified as
+a business failure rather than an infrastructure one, and the campaign reports it by name. That is the
+shape `07-retry-full-restart.spec.ts` selects from. It is not spent here: the plan requires the retry
+window to find an eligible point inside its own first pass, and this one stays with the window that
+produced it.
+
+Window ownership held to the same rule as every window before it. The runner recorded its service as
+pid 53063 birth 1790104631083876, stopped that pid and nothing else, and the receipt's residue is four
+empty readbacks:
+
+```text
+processes this window owned that are still alive   (none)
+port 8013 listeners                                (none)
+task-owned stack processes                         (none)
+```
+
+Fourteen of the windows created for this task now carry a completed window receipt; all fourteen
+read back clean, and no signal has ever been sent to a pid outside the window that recorded it.
+
