@@ -23,7 +23,11 @@ import uvicorn
 def _bootstrap_install_imports(install_prefix: Path) -> None:
     """Resolve production modules from the copied install, not the source tree."""
 
-    site_packages = sorted(install_prefix.glob("*/lib/python3.12/site-packages"))
+    # The interpreter directory is a property of the host's install, not of the launcher: ai-station
+    # builds 3.12 and macOS runs 3.11, and hardcoding either one refused the other with
+    # INSTALL_PREFIX_SITE_PACKAGES_MISSING, which surfaced as INSTALLED_SERVER_EXITED:2 in every
+    # installed spec.
+    site_packages = sorted(install_prefix.glob("*/lib/python3.*/site-packages"))
     if not site_packages:
         raise RuntimeError("INSTALL_PREFIX_SITE_PACKAGES_MISSING")
     script_dir = str(Path(__file__).resolve().parent)
