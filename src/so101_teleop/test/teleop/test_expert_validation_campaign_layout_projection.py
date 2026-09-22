@@ -53,8 +53,23 @@ from so101_teleop.expert_validation.store import StoreConflict, SupervisorStore
 CAMPAIGN_ID = "cand-w2-20260922T011804Z"
 BATCH_ID = "w2-b001"
 POINT_IDS = ("task_start", "cup_test_forward_5cm", "cup_test_left_5cm")
+#: The fast five-point selection: the four anchors plus the one point that has genuinely failed.
+FIVE_POINT_IDS = (
+    "task_start", "cup_test_forward_5cm", "cup_test_left_5cm", "cup_test_right_5cm",
+    "sample_05_near_center",
+)
 WORKERS = {"task_start": "w1", "cup_test_forward_5cm": "w2", "cup_test_left_5cm": "w1"}
 SLOTS = {"task_start": "slot-0", "cup_test_forward_5cm": "slot-1", "cup_test_left_5cm": "slot-0"}
+
+
+def _worker_for(point_id):
+    return WORKERS.get(point_id, "w1")
+
+
+def _slot_for(point_id):
+    return SLOTS.get(point_id, "slot-0")
+
+
 SHA_A = "a" * 64
 SHA_B = "b" * 64
 SHA_CATALOG = "c" * 64
@@ -84,11 +99,11 @@ def _point_document(point_id, attempt_id, outcome):
         "outcome": outcome,
         "committed": True,
         "lease_identity": [
-            CAMPAIGN_ID, BATCH_ID, point_id, attempt_id, 1, WORKERS[point_id],
+            CAMPAIGN_ID, BATCH_ID, point_id, attempt_id, 1, _worker_for(point_id),
         ],
         "lease_sha256": hashlib.sha256(f"{point_id}-lease".encode()).hexdigest(),
-        "worker_id": WORKERS[point_id],
-        "slot_id": SLOTS[point_id],
+        "worker_id": _worker_for(point_id),
+        "slot_id": _slot_for(point_id),
         "generation": 1,
         "points_path": f"points/{point_id}.yaml",
         "points_sha256": hashlib.sha256(f"{point_id}-points".encode()).hexdigest(),
@@ -102,7 +117,7 @@ def _point_document(point_id, attempt_id, outcome):
         "cleanup_owned": True,
         "failure_code": None if outcome == "PASSED" else "ANCHOR_UNREACHABLE",
         "batch_exit_code": 0,
-        "worker_result_path": f"{WORKERS[point_id]}-result-{attempt_id}.json",
+        "worker_result_path": f"{_worker_for(point_id)}-result-{attempt_id}.json",
         "worker_result_sha256": hashlib.sha256(attempt_id.encode()).hexdigest(),
         "worker_pid": 4242,
         "released": "EXITED",
@@ -111,7 +126,8 @@ def _point_document(point_id, attempt_id, outcome):
     }
 
 
-def _append_campaign_stream(journal, outcomes, *, verdict, cleanup_complete=True):
+def _append_campaign_stream(journal, outcomes, *, verdict, cleanup_complete=True,
+                            point_ids=POINT_IDS):
     """Commit the campaign's own eight-event stream, exactly as the composition writes it.
 
     ``cleanup_complete=None`` omits the cleanup event altogether, so a batch can be written whose
@@ -123,11 +139,11 @@ def _append_campaign_stream(journal, outcomes, *, verdict, cleanup_complete=True
         f"{CAMPAIGN_ID}/CAMPAIGN_STARTED",
         {"campaign_id": CAMPAIGN_ID, "batch_id": BATCH_ID, "schema_version": journal.schema_version},
     )
-    for point_id in POINT_IDS:
+    for point_id in point_ids:
         attempt_id = f"{point_id}-attempt-1"
         outcome = outcomes[point_id]
-        worker_id = WORKERS[point_id]
-        slot_id = SLOTS[point_id]
+        worker_id = _worker_for(point_id)
+        slot_id = _slot_for(point_id)
         journal.append_committed(
             "POINT_LEASED", f"{BATCH_ID}/POINT_LEASED/{attempt_id}",
             {
@@ -182,14 +198,15 @@ def _result_sha256(point_id, attempt_id, outcome):
     return hashlib.sha256(f"{point_id}:{attempt_id}:{outcome}".encode()).hexdigest()
 
 
-def _write_campaign_batch(root, outcomes, *, verdict, batch_id=BATCH_ID, cleanup_complete=True):
+def _write_campaign_batch(root, outcomes, *, verdict, batch_id=BATCH_ID, cleanup_complete=True,
+                          point_ids=POINT_IDS):
     """Write one campaign batch root: journal, binding, per-point results and the result document."""
 
     batch_root = (Path(root) / "campaigns" / CAMPAIGN_ID / batch_id).resolve()
     batch_root.mkdir(parents=True)
     (batch_root / "points").mkdir()
     (batch_root / "point-results").mkdir()
-    for point_id in POINT_IDS:
+    for point_id in point_ids:
         (batch_root / "points" / f"{point_id}.yaml").write_text(f"point_id: {point_id}\n")
         (batch_root / "point-results" / f"{point_id}.json").write_text(
             json.dumps(
@@ -206,18 +223,19 @@ def _write_campaign_batch(root, outcomes, *, verdict, batch_id=BATCH_ID, cleanup
             "catalog_schema_version": 1, "coordinate_frame": "world",
             "catalog_sha256": SHA_CATALOG, "selection_sha256": SHA_SELECTION,
             "config_sha256": SHA_CONFIG, "runtime_closure_sha256": SHA_CLOSURE,
-            "selected_point_ids": list(POINT_IDS),
-            "points": [{"point_id": point_id, "point_sha256": "9" * 64} for point_id in POINT_IDS],
+            "selected_point_ids": list(point_ids),
+            "points": [{"point_id": point_id, "point_sha256": "9" * 64} for point_id in point_ids],
         },
     }, sort_keys=True))
     (batch_root / "campaign-result.json").write_text(json.dumps({
         "status": verdict,
         "points": {
-            point_id: {"committed": outcomes[point_id]} for point_id in POINT_IDS
+            point_id: {"committed": outcomes[point_id]} for point_id in point_ids
         },
     }, sort_keys=True))
     with CoordinatorJournal.create(batch_root / "journal", batch_id) as journal:
-        _append_campaign_stream(journal, outcomes, verdict=verdict, cleanup_complete=cleanup_complete)
+        _append_campaign_stream(journal, outcomes, verdict=verdict, cleanup_complete=cleanup_complete,
+                                point_ids=point_ids)
     return batch_root
 
 
@@ -534,6 +552,41 @@ def test_the_projection_records_the_verified_cleanup_receipt_the_retry_admission
             root, service, store, "cup_test_left_5cm"
         )
         binding = store.admit_retry(request=request, context=context, spawn_intent=intent)
+        assert binding.original_outcome == "FAILED"
+        assert binding.original_result_sha256 == original_result
+    finally:
+        store.close()
+
+
+def test_a_five_point_first_pass_records_the_receipt_its_failed_point_needs(tmp_path):
+    """The fast five-point selection is not a special case: the same bytes record the same receipt.
+
+    Five points (the four anchors plus ``sample_05_near_center``), one of them genuinely ``FAILED``.
+    Nothing here depends on the selection size: the receipt comes from the batch's own verified
+    cleanup event, so a short first pass reaches the retry admission exactly as a twenty-point one.
+    """
+
+    outcomes = {point_id: "PASSED" for point_id in FIVE_POINT_IDS}
+    outcomes["sample_05_near_center"] = "FAILED"
+    batch_root = _write_campaign_batch(
+        tmp_path, outcomes, verdict="N1_CAMPAIGN_INCOMPLETE", point_ids=FIVE_POINT_IDS
+    )
+    terminal_receipt = _journal_final_frame_sha256(batch_root, BATCH_ID)
+    service, store, root = _service(tmp_path, point_ids=FIVE_POINT_IDS)
+    try:
+        assert store.batch(BATCH_ID).cleanup_receipt_sha256 is None
+        projection = service.get_campaign(CAMPAIGN_ID)
+        assert projection["status"] == "COMPLETED_WITH_FAILURES"
+        assert projection["batch_cleanup_complete"] is True
+        assert [point["point_id"] for point in projection["points"]] == list(FIVE_POINT_IDS)
+        assert store.batch(BATCH_ID).cleanup_receipt_sha256 == terminal_receipt
+
+        store.enqueue_retries(CAMPAIGN_ID, ("sample_05_near_center",))
+        request, context, intent, original_result = _retry_admission(
+            root, service, store, "sample_05_near_center"
+        )
+        binding = store.admit_retry(request=request, context=context, spawn_intent=intent)
+        assert binding.point_id == "sample_05_near_center"
         assert binding.original_outcome == "FAILED"
         assert binding.original_result_sha256 == original_result
     finally:
