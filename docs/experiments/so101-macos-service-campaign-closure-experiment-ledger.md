@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-ADAPTER
+latest_checkpoint: CP-MSC-REMEDIATION-T11-ROS2-PATH
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4790,3 +4790,50 @@ step precisely stated: read the coordinator log's full body in
 `remediation/windows/w2-20260922T191113Z-52485/` to see why the campaign was incomplete - the point
 states, the attempt reasons and the terminal summary are all in that file and in the campaign API
 projection.
+
+## CP-MSC-REMEDIATION-T11-ROS2-PATH: the workers could not find ros2
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-ROS2-PATH
+recorded_at: 2026-09-23T14:20:00+0800
+carried_by: the local commit that adds this entry (parent 602ef74d)
+window: remediation/windows/w2-20260922T191113Z-52485/ (the incomplete campaign)
+status: cause found and fixed; the next window is running
+```
+
+`SERVICE_CAMPAIGN_INCOMPLETE` now has a root cause, and it is one line of the campaign's own log:
+
+```text
+Error: ros2 executable is not available      (twice)
+WORKER_EXITED_WITHOUT_RESULT                 (three times)
+```
+
+Reading `campaign-result.json` shows what that cost:
+
+```text
+selected_point_ids   : all 20 (the frozen selection reached the campaign correctly)
+complete             : False
+committed            : {}          unexecuted_point_ids: all 20
+spawns               : one attempt (task_start, pid 52607)
+infrastructure_failures: one, infrastructure_code = WORKER_EXITED_WITHOUT_RESULT
+workers              : ['w1']  with per_slot_pick_place for w1 and w2
+cleanup              : complete, stations clear, inventory clean
+```
+
+So the campaign was set up correctly - the frozen twenty, both slots, a clean cleanup - and died
+because its workers could not launch `ros2`. The fixed runtime contract pins a deliberately minimal
+`PATH` (`python.parent`, `/opt/homebrew/bin`, `/usr/bin`, `/bin`, `/usr/sbin`, `/sbin`), and the ROS
+CLI is not in any of those:
+
+```text
+/opt/ros2_jazzy/install/ros2cli/bin/ros2   exists, but was not on the child's PATH
+```
+
+The sourced setups add those directories, and the earlier acceptance's `start-service.sh` exported a
+PATH that had them; the launcher now derives them from the contract paths
+(`ros2_script.parent`, `<ros_install>/bin`, and the dependency/fork/project overlays' `bin`) and
+prepends the ones that exist. That is a harness environment fix, not a product change: the contract's
+minimal PATH is right for the service, and the campaign's workers are the ones that need the ROS CLI.
+
+A new W2 window is running with that PATH. Its campaign is expected to actually execute points this
+time, and its verdict lands in the next round.
