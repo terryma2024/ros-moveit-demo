@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { test as base, expect } from "@playwright/test";
 
 import { e2eEvidenceRoot, proveChrome } from "./chrome";
+import { qualificationEnvironment } from "./qualification-env";
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const LAUNCHER = join(PACKAGE_ROOT, "test/e2e/installed_test_launcher.py");
@@ -139,19 +140,12 @@ type InstalledFixtures = {
   consoleErrors: string[];
 };
 
-export const QUALIFICATION_ENV = {
-  SO101_VALIDATION_YOLO_WEIGHTS:
-    "/data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt",
-  SO101_VALIDATION_GROUNDED_ROOT: "/data/work/so101-models/grounded-sam-v2-scipy-lock",
-  SO101_VALIDATION_BROKER_IMAGE: "so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1",
-  SO101_VALIDATION_PARALLEL_ACCEPTANCE:
-    "/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-20-f91/aggregate_results.json",
-  SO101_VALIDATION_ADAPTIVE_ACCEPTANCE:
-    "/data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/r/e2001/aggregate_results.json",
-  SO101_VALIDATION_ADAPTIVE_FAULT_INJECTION:
-    "/data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/r/su09/aggregate_results.json",
-  SO101_VALIDATION_ADAPTIVE_PERFORMANCE_TIERS: "1,2,4,6,8",
-};
+/**
+ * The qualification environment for this host. The ai-station defaults are asserted only where
+ * `/data` exists, and an ambient value wins everywhere; see fixtures/qualification-env.ts for why
+ * this cannot be a fixed document.
+ */
+export const QUALIFICATION_ENV: Record<string, string> = qualificationEnvironment();
 
 export const installedTest = base.extend<InstalledFixtures>({
   consoleErrors: async ({ page }, use) => {
