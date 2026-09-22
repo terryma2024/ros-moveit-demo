@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-WEIGHTS-FOUND
+latest_checkpoint: CP-MSC-REMEDIATION-T11-ADAPTER
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4745,3 +4745,48 @@ exports the two model inputs.
 With that, the W2 window is running a real campaign for the first time: collection readback passed,
 the service is up on its frozen identity, both preflight tests passed, and the R06 case is in flight -
 a twenty-point W2 campaign takes roughly a quarter of an hour, so its verdict lands in the next round.
+
+## CP-MSC-REMEDIATION-T11-ADAPTER: the window runs the macOS campaign adapter
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-ADAPTER
+recorded_at: 2026-09-23T13:45:00+0800
+carried_by: the local commit that adds this entry (parent ae52d0bc)
+windows: w2-20260922T185535Z-51713 (the hang), w2-20260922T191113Z-52485 (the adapter run)
+status: two integration facts found by running; the campaign now executes and reports its own outcome
+```
+
+**First fact: the campaign hung rather than failed.** The 18:55 window started a campaign
+(`campaign-0249285d…`, batch `b51b7`, PARALLEL, STARTED) and every point stayed `UNRUN` for a quarter
+of an hour. The adapter it had confirmed in the owner tree (`spawn-8628c4a8…`, role `ADAPTER`,
+expected executable the venv python) was a **zombie**: it had exited and the service never reaped or
+noticed it. Its own log said why, in one line:
+
+```json
+{"message": "CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION", "status": "ERROR"}
+```
+
+**Second fact: the layout's default coordinator is the wrong one for this host.** Comparing the
+window's child environment with this evidence root's own `task12/live-auth-removed-…/start-service.sh`
+- the script the earlier, successful acceptance used - showed exactly what was missing:
+
+```text
+SO101_VALIDATION_COORDINATOR=<prefix>/so101_demo_py/lib/so101_demo_py/so101_macos_service_campaign
+SO101_VALIDATION_POINTS=<prefix>/so101_demo_py/share/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml
+```
+
+`ProductionRuntimeLayout` defaults the coordinator to `so101_parallel_batch`, the generic one, which
+refuses the v4 macOS profile with precisely that error. The window now declares both, taken from the
+installed prefix where the acceptance took them.
+
+With that, the same window runs the campaign through the right adapter and reports its own outcome:
+
+```text
+{"status": "SERVICE_CAMPAIGN_INCOMPLETE"}
+```
+
+No worker processes remain, and both windows stopped only their own service PID. That leaves the next
+step precisely stated: read the coordinator log's full body in
+`remediation/windows/w2-20260922T191113Z-52485/` to see why the campaign was incomplete - the point
+states, the attempt reasons and the terminal summary are all in that file and in the campaign API
+projection.
