@@ -47,36 +47,127 @@ def _domain_in_use(domain):
     return SystemResourceProbe().ros_domain_in_use(domain)
 
 
-class RuntimeInspector:
-    def __init__(self, *, proc_root=Path("/proc"), container_probe=_containers,
-                 domain_probe=_domain_in_use):
+class ProcfsInventory:
+    """Linux process inventory: the ``/proc`` tree is the identity and the absence proof."""
+
+    def __init__(self, proc_root=Path("/proc")):
         self.proc_root = Path(proc_root)
+        if not self.proc_root.is_dir():
+            raise RecoveryError("RECOVERY_PROC_UNAVAILABLE")
+
+    def process_ids(self):
+        try:
+            return tuple(
+                sorted(
+                    int(entry.name)
+                    for entry in self.proc_root.iterdir()
+                    if entry.name.isdigit()
+                )
+            )
+        except OSError as error:
+            raise RecoveryError("RECOVERY_PROC_UNVERIFIABLE") from error
+
+    def is_present(self, pid):
+        return os.path.lexists(self.proc_root / str(pid))
+
+    def process_group(self, pid):
+        try:
+            document = (self.proc_root / str(pid) / "stat").read_text(encoding="utf-8")
+        except (FileNotFoundError, ProcessLookupError):
+            return None
+        except OSError as error:
+            raise RecoveryError("RECOVERY_PROC_UNVERIFIABLE") from error
+        try:
+            fields = document[document.rfind(")") + 2:].split()
+            return int(fields[2])
+        except (ValueError, IndexError) as error:
+            raise RecoveryError("RECOVERY_PROC_UNVERIFIABLE") from error
+
+
+class PsutilInventory:
+    """Darwin process inventory: psutil only, and every gap fails closed.
+
+    Absence has to come from the operating system, never from a missing ``/proc`` entry. An
+    unreadable process (``AccessDenied``), a psutil error or a broken inventory is
+    ``RECOVERY_RUNTIME_UNVERIFIABLE`` rather than "the process is gone".
+    """
+
+    def __init__(self, psutil_module=None, group_probe=os.getpgid):
+        if psutil_module is None:
+            try:
+                import psutil as psutil_module
+            except ImportError as error:  # pragma: no cover - depends on the host
+                raise RecoveryError("RECOVERY_RUNTIME_UNVERIFIABLE") from error
+        self.psutil = psutil_module
+        self.group_probe = group_probe
+
+    def process_ids(self):
+        try:
+            return tuple(sorted(int(pid) for pid in self.psutil.pids()))
+        except Exception as error:
+            raise RecoveryError("RECOVERY_RUNTIME_UNVERIFIABLE") from error
+
+    def is_present(self, pid):
+        no_such_process = getattr(self.psutil, "NoSuchProcess", None)
+        try:
+            process = self.psutil.Process(int(pid))
+            # create_time is the birth identity: a reused pid is still *present*, and presence is
+            # what the fence check needs.
+            process.create_time()
+        except Exception as error:
+            if no_such_process is not None and isinstance(error, no_such_process):
+                return False
+            raise RecoveryError("RECOVERY_RUNTIME_UNVERIFIABLE") from error
+        return True
+
+    def process_group(self, pid):
+        try:
+            return int(self.group_probe(int(pid)))
+        except ProcessLookupError:
+            return None
+        except OSError as error:
+            raise RecoveryError("RECOVERY_RUNTIME_UNVERIFIABLE") from error
+
+
+def default_process_inventory(proc_root=None):
+    """Pick the host's inventory port: procfs on Linux, psutil on Darwin."""
+
+    candidate = Path(proc_root) if proc_root is not None else Path("/proc")
+    if candidate.is_dir():
+        return ProcfsInventory(candidate)
+    return PsutilInventory()
+
+
+class RuntimeInspector:
+    def __init__(self, *, proc_root=None, inventory=None, container_probe=_containers,
+                 domain_probe=_domain_in_use):
+        if inventory is None:
+            if proc_root is not None and not Path(proc_root).is_dir():
+                raise RecoveryError("RECOVERY_PROC_UNAVAILABLE")
+            self.inventory = (
+                ProcfsInventory(proc_root) if proc_root is not None
+                else default_process_inventory()
+            )
+        else:
+            self.inventory = inventory
         self.container_probe = container_probe
         self.domain_probe = domain_probe
 
     def inspect(self, owners, domains, batch_ids):
-        if not self.proc_root.is_dir():
-            raise RecoveryError("RECOVERY_PROC_UNAVAILABLE")
+        inventory = self.inventory
         leaders = sorted({value for owner in owners for value in (owner["pid"], owner["runner_pid"])
                           if value is not None})
         groups = sorted({owner["pgid"] for owner in owners})
         for pid in leaders:
-            if os.path.lexists(self.proc_root / str(pid)):
-                # Also reject PID reuse: absence, not a guessed identity, is required.
+            # Absence, not a guessed identity, is what the fence check requires.
+            if inventory.is_present(pid):
                 raise RecoveryError("RECOVERY_LEADER_PRESENT")
-        for process in self.proc_root.iterdir():
-            if not process.name.isdigit():
+        for pid in inventory.process_ids():
+            group = inventory.process_group(pid)
+            if group is None:
                 continue
-            try:
-                document = (process / "stat").read_text()
-                fields = document[document.rfind(")") + 2:].split()
-                if int(fields[2]) in groups:
-                    raise RecoveryError("RECOVERY_PROCESS_GROUP_PRESENT")
-            except (FileNotFoundError, ProcessLookupError):
-                if os.path.lexists(process):
-                    raise RecoveryError("RECOVERY_PROC_UNVERIFIABLE")
-            except (OSError, ValueError, IndexError) as error:
-                raise RecoveryError("RECOVERY_PROC_UNVERIFIABLE") from error
+            if group in groups:
+                raise RecoveryError("RECOVERY_PROCESS_GROUP_PRESENT")
         for batch_id in batch_ids:
             if self.container_probe(batch_id):
                 raise RecoveryError("RECOVERY_CONTAINER_PRESENT")

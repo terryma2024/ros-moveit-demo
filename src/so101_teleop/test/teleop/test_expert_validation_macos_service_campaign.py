@@ -227,12 +227,17 @@ def test_the_adapter_runs_as_the_script_the_service_launches(tmp_path):
     """
     adapter_path = DEMO_ROOT / "src/cli/macos_service_campaign.py"
     environment = dict(os.environ)
+    # The child gets its import root from this test's own source paths and whatever PYTHONPATH the
+    # caller already exported. A task-specific SO101_TASK_ROOT must not be required: the service
+    # launches the installed script, where the shim is an installation detail, not an input.
     environment["PYTHONPATH"] = os.pathsep.join(
-        [
-            str(Path(os.environ["SO101_TASK_ROOT"]) / "pyshim"),
+        part
+        for part in (
             str(DEMO_ROOT / "src"),
+            str(DEMO_ROOT / "src/cli"),
             environment.get("PYTHONPATH", ""),
-        ]
+        )
+        if part
     )
     service_argv = _request(tmp_path, config_path=tmp_path / "missing.yaml")
     completed = subprocess.run(
