@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-A2-FARM-CONTRACT
+latest_checkpoint: CP-MSC-A2-ATTESTATION
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3235,3 +3235,68 @@ RED   remediation/runs/t2-*: the two document-contract tests failed on the untou
 GREEN remediation/runs/t2-green-20260922T144219Z  rc=0  28 passed  (whole file)
       scratch=/opt/data/tmp/so101-service-gate-t2-green-Kmo7kPsH, tempfile.gettempdir() read back inside it
 ```
+
+## CP-MSC-A2-ATTESTATION: the controller attestation is bound to the owner tree
+
+```yaml
+checkpoint_id: CP-MSC-A2-ATTESTATION
+recorded_at: 2026-09-22T23:10:00+0800
+dispatch: ddf5bc35-e88c-4d3e-8005-0c165dff1841
+carried_by: the local commit that adds this entry (parent 8462c07c)
+status: implemented, RED -> GREEN; the live 5x rounds are still Task 10
+```
+
+### What the attestation now carries
+
+`RuntimeProcessAttestation` gained `plugin_path`, `plugin_sha256`, `vendor_path`, `vendor_sha256`
+and `owner_binding_sha256`, and points at a `ControllerRuntimeOwnerBinding` that records the owner
+root, the role written into the spawn intent, the owner ancestry and the round's sanctioned
+prefixes.
+
+`validate_controller_runtime_attestation` re-derives everything from the attestation itself and
+fails closed with `PROCESS_ATTESTATION_INVALID` for: an empty or non-absolute executable, a PID/birth
+that disagrees with the bound descendant, an ancestry that does not reach the recorded root, no or
+several `controller_runtime` candidates, a launcher standing in for the controller, a plugin or
+vendor image outside the sanctioned prefixes, a drifting plugin/vendor digest, an empty loaded-image
+read-back, a spell of `spawn_role` other than `controller_runtime`, a farm root outside every
+sanctioned prefix, and a tampered `owner_binding_sha256`.
+
+### RED and GREEN
+
+The mutation table (ten cases) was RED at the validator boundary first: with the validator stubbed
+to accept, every case failed as `DID NOT RAISE`. The checks then went in and the table is GREEN.
+
+```text
+RED   remediation/runs/t3-*  (ten DID NOT RAISE failures at validate_controller_runtime_attestation)
+GREEN remediation/runs/t3-green2-20260922T144959Z  rc=0  109 passed
+      test_runtime_closure.py, test_diagnose_macos_station.py, test_macos_install_contract.py,
+      test_macos_runtime_contract.py
+```
+
+### The single launch-owning farm mode
+
+`FIXED_DYLIB_FARM_FULL_TASK_STATION` is the only mode that owns intent -> spawn -> readiness ->
+attestation -> shutdown for an A2 round. It refuses before spawning when the receipt, the run binding
+or `--output` is missing, and it never accepts the legacy `--control-set-manifest`/`--control`
+arguments. The receipt is re-resolved against the live farm every time: logical path, resolved
+target, library inventory and manifest SHA all have to match, and a drifted receipt is reported with
+`spawned=false` and no signal at all. The run binding is checked against the receipt's own SHA, so a
+binding from another receipt or another farm target is refused too.
+
+The diagnostic process is the round's owner root: the ancestry is
+`fixed_dylib_farm_full_task_station -> task_station_launcher -> controller_runtime`, the role is
+written into the atomic spawn intent before the station exists, and the same intent supplies the
+executable pattern the validator checks. The union of the four legacy modes is unchanged, and the
+legacy `FULL_TASK_STATION` N/P/F entry keeps its own historical text and now builds an owner binding
+from the descendant chain it actually observed; it is not used for A2.
+
+### Evidence and accounting for this checkpoint
+
+* `remediation/operator/env.sh` (SHA256 `26eba1070235885d419343124aa35a2a286a76018e1865c7d38543c1f5370124`)
+  sources the four fixed overlays and keeps every invocation directory in this root while the pytest
+  scratch stays a short `/opt/data/tmp/so101-service-gate-*` directory.
+* `remediation/runs/` holds the RED and GREEN invocations (argv, stdout, stderr, rc, elapsed, JUnit
+  and SHA256SUMS). Retained, not archived, not deleted.
+* Two `test_live_fixed_supervisor_uses_real_authenticated_coordinator_not_signals` failures observed
+  while checking neighbours are pre-existing: both nodeids are in the independent baseline JUnit as
+  part of the teleop 27.

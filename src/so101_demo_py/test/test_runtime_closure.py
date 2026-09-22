@@ -630,6 +630,9 @@ def test_controller_process_attestation_requires_the_real_role_and_both_images(
             "lib/libmujoco_ros2_control.dylib",
             "opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib",
         ),
+        owner_binding=_spawn_intent_binding(module, install, closure),
+        plugin_relative_path="lib/libmujoco_ros2_control.dylib",
+        vendor_relative_path="opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib",
     )
 
     assert attestation.role == "controller_runtime"
@@ -675,6 +678,9 @@ def test_controller_process_attestation_rejects_wrong_child_or_incomplete_readba
                 "lib/libmujoco_ros2_control.dylib",
                 "opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib",
             ),
+            owner_binding=_spawn_intent_binding(module, install, closure),
+            plugin_relative_path="lib/libmujoco_ros2_control.dylib",
+            vendor_relative_path="opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib",
         )
     assert error.value.code == expected_code
 
@@ -865,3 +871,210 @@ def test_stack_config_requires_closure_and_run_binding_together(tmp_path: Path) 
             run_binding=binding,
             install_root=install,
         )
+
+
+# --------------------------------------------------------------------------------------
+# Owner-bound controller attestation (remediation Task 3)
+#
+# The role is bound when the spawn intent is written, the descendant is found along the owner
+# tree, and plugin/vendor readback has to name both the path and the digest. A live round may
+# not infer any of that from a loaded-image list after the fact.
+# --------------------------------------------------------------------------------------
+
+PLUGIN_RELATIVE_PATH = "lib/libmujoco_ros2_control.dylib"
+VENDOR_RELATIVE_PATH = "opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib"
+CONTROLLER_RELATIVE_PATH = "lib/mujoco_ros2_control/ros2_control_node"
+FARM_ROOT = "/opt/ros2_jazzy/dylib_farm/current"
+
+
+def _spawn_intent_binding(
+    module, install: Path, closure, *, spawn_role: str = "controller_runtime"
+):
+    """The owner tree a spawn intent recorded before the station was started."""
+
+    identity = module.ProcessIdentity
+    return module.ControllerRuntimeOwnerBinding(
+        owner_root_role="fixed_dylib_farm_full_task_station",
+        owner_root_pid=9001,
+        owner_root_birth_identity=41,
+        spawn_role=spawn_role,
+        expected_executable_relative_path=CONTROLLER_RELATIVE_PATH,
+        ancestry=(
+            identity(
+                role="fixed_dylib_farm_full_task_station",
+                pid=9001,
+                parent_pid=1,
+                birth_identity=41,
+                executable=f"{install}/lib/so101_demo_py/so101_diagnose_macos_station",
+            ),
+            identity(
+                role="task_station_launcher",
+                pid=9050,
+                parent_pid=9001,
+                birth_identity=42,
+                executable=f"{install}/lib/so101_demo_py/motion_stack_ready",
+            ),
+            identity(
+                role="controller_runtime",
+                pid=9123,
+                parent_pid=9050,
+                birth_identity=77,
+                executable=f"{install}/{CONTROLLER_RELATIVE_PATH}",
+            ),
+        ),
+        manifest_sha256=closure.sha256,
+        closure_prefixes=(str(install), FARM_ROOT),
+        dylib_farm_root=FARM_ROOT,
+    )
+
+
+def _valid_controller_attestation(tmp_path: Path):
+    module = _closure_module()
+    install, executable = _process_attestation_tree(tmp_path)
+    closure = _closure(module, install)
+    return module.build_runtime_process_attestation(
+        closure=closure,
+        install_root=install,
+        role="controller_runtime",
+        pid=9123,
+        birth_identity_before=77,
+        birth_identity_after=77,
+        executable=executable,
+        loaded_images=(
+            install / PLUGIN_RELATIVE_PATH,
+            install / VENDOR_RELATIVE_PATH,
+        ),
+        required_relative_paths=(PLUGIN_RELATIVE_PATH, VENDOR_RELATIVE_PATH),
+        owner_binding=_spawn_intent_binding(module, install, closure),
+        plugin_relative_path=PLUGIN_RELATIVE_PATH,
+        vendor_relative_path=VENDOR_RELATIVE_PATH,
+    )
+
+
+def _mutated_controller_attestation(attestation, mutation: str):
+    import dataclasses
+
+    binding = attestation.owner_binding
+    if mutation == "missing_executable":
+        return dataclasses.replace(attestation, executable=Path(""))
+    if mutation == "pid_birth_drift":
+        return dataclasses.replace(
+            attestation, birth_identity=attestation.birth_identity + 1)
+    if mutation == "wrong_owner_ancestry":
+        ancestry = list(binding.ancestry)
+        ancestry[0] = dataclasses.replace(
+            ancestry[0], birth_identity=ancestry[0].birth_identity + 1)
+        return dataclasses.replace(
+            attestation,
+            owner_binding=dataclasses.replace(binding, ancestry=tuple(ancestry)),
+        )
+    if mutation == "launcher_instead_of_controller":
+        return dataclasses.replace(
+            attestation, executable=Path(binding.ancestry[1].executable))
+    if mutation == "plugin_outside_closure":
+        return dataclasses.replace(
+            attestation, plugin_path=Path("/tmp/elsewhere/libmujoco_ros2_control.dylib"))
+    if mutation == "vendor_outside_closure":
+        return dataclasses.replace(
+            attestation, vendor_path=Path("/tmp/elsewhere/libmujoco.3.4.0.dylib"))
+    if mutation == "plugin_sha_drift":
+        return dataclasses.replace(attestation, plugin_sha256="0" * 64)
+    if mutation == "vendor_sha_drift":
+        return dataclasses.replace(attestation, vendor_sha256="0" * 64)
+    if mutation == "spawn_role_drift":
+        return dataclasses.replace(
+            attestation,
+            owner_binding=dataclasses.replace(
+                binding, spawn_role="task_station_launcher"),
+        )
+    if mutation == "owner_binding_sha_drift":
+        return dataclasses.replace(attestation, owner_binding_sha256="1" * 64)
+    raise AssertionError(mutation)  # pragma: no cover - a typo in the table, not a product bug
+
+
+def test_controller_runtime_attestation_accepts_only_the_bound_descendant(tmp_path: Path) -> None:
+    module = _closure_module()
+    attestation = _valid_controller_attestation(tmp_path)
+
+    document = module.validate_controller_runtime_attestation(attestation)
+
+    assert document["role"] == "controller_runtime"
+    assert document["pid"] == 9123
+    assert document["plugin_path"] == str(tmp_path / "install" / PLUGIN_RELATIVE_PATH)
+    assert document["vendor_path"] == str(tmp_path / "install" / VENDOR_RELATIVE_PATH)
+    assert document["owner_binding_sha256"] == attestation.owner_binding_sha256
+    assert attestation.owner_binding_sha256 == attestation.owner_binding.sha256
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "missing_executable",
+        "pid_birth_drift",
+        "wrong_owner_ancestry",
+        "launcher_instead_of_controller",
+        "plugin_outside_closure",
+        "vendor_outside_closure",
+        "plugin_sha_drift",
+        "vendor_sha_drift",
+        "spawn_role_drift",
+        "owner_binding_sha_drift",
+    ],
+)
+def test_controller_runtime_attestation_rejects_unbound_or_drifted_process(
+    tmp_path: Path, mutation: str
+) -> None:
+    module = _closure_module()
+    candidate = _mutated_controller_attestation(
+        _valid_controller_attestation(tmp_path), mutation)
+
+    with pytest.raises(module.RuntimeClosureError, match="PROCESS_ATTESTATION_INVALID"):
+        module.validate_controller_runtime_attestation(candidate)
+
+
+def test_controller_runtime_attestation_rejects_a_broken_or_foreign_ancestry(
+    tmp_path: Path,
+) -> None:
+    import dataclasses
+
+    module = _closure_module()
+    attestation = _valid_controller_attestation(tmp_path)
+    binding = attestation.owner_binding
+
+    # A descendant that is not reachable from the recorded root is not this owner's child.
+    detached = dataclasses.replace(
+        binding,
+        ancestry=(binding.ancestry[0], dataclasses.replace(binding.ancestry[2], parent_pid=4242)),
+    )
+    with pytest.raises(module.RuntimeClosureError, match="PROCESS_ATTESTATION_INVALID"):
+        module.validate_controller_runtime_attestation(
+            dataclasses.replace(attestation, owner_binding=detached))
+
+    # A second candidate with the same role is ambiguous, so the round fails closed.
+    ambiguous = dataclasses.replace(
+        binding,
+        ancestry=binding.ancestry
+        + (dataclasses.replace(binding.ancestry[2], pid=9124),),
+    )
+    with pytest.raises(module.RuntimeClosureError, match="PROCESS_ATTESTATION_INVALID"):
+        module.validate_controller_runtime_attestation(
+            dataclasses.replace(attestation, owner_binding=ambiguous))
+
+    # A plugin that read back under a name the frozen inventory does not carry is not proof.
+    empty_readback = dataclasses.replace(attestation, loaded_images=())
+    with pytest.raises(module.RuntimeClosureError, match="PROCESS_ATTESTATION_INVALID"):
+        module.validate_controller_runtime_attestation(empty_readback)
+
+
+def test_controller_runtime_attestation_requires_the_farm_prefix_to_be_sanctioned(
+    tmp_path: Path,
+) -> None:
+    import dataclasses
+
+    module = _closure_module()
+    attestation = _valid_controller_attestation(tmp_path)
+    binding = dataclasses.replace(attestation.owner_binding, dylib_farm_root="/tmp/rogue-farm")
+
+    with pytest.raises(module.RuntimeClosureError, match="PROCESS_ATTESTATION_INVALID"):
+        module.validate_controller_runtime_attestation(
+            dataclasses.replace(attestation, owner_binding=binding))

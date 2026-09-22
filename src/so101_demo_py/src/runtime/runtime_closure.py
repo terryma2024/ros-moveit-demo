@@ -38,6 +38,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only, avoids an import cycle with
     from .task_stack import OwnedProcessIdentity
 
 CLOSURE_SCHEMA_VERSION = 2
+CONTROLLER_RUNTIME_ROLE = "controller_runtime"
 
 MUJOCO_DYLIB_ALIAS_RELATIVE_PATH = "opt/mujoco_vendor/lib/libmujoco.dylib"
 MUJOCO_DYLIB_ALIAS_LINK_TEXT = "libmujoco.3.4.0.dylib"
@@ -381,6 +382,100 @@ class RuntimeAttestation:
 
 
 @dataclass(frozen=True, slots=True)
+class ProcessIdentity:
+    """One process on the owner tree: its role, PID/birth pair and the parent that spawned it.
+
+    The role is written when the spawn intent is recorded, never inferred from a loaded
+    image list after the fact.
+    """
+
+    role: str
+    pid: int
+    parent_pid: int
+    birth_identity: int
+    executable: str
+
+    def as_document(self) -> dict[str, object]:
+        return {
+            "role": self.role,
+            "pid": self.pid,
+            "parent_pid": self.parent_pid,
+            "birth_identity": self.birth_identity,
+            "executable": self.executable,
+        }
+
+    @classmethod
+    def from_document(cls, document: Mapping[str, object]) -> "ProcessIdentity":
+        return cls(
+            role=str(document["role"]),
+            pid=int(document["pid"]),  # type: ignore[arg-type]
+            parent_pid=int(document["parent_pid"]),  # type: ignore[arg-type]
+            birth_identity=int(document["birth_identity"]),  # type: ignore[arg-type]
+            executable=str(document["executable"]),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ControllerRuntimeOwnerBinding:
+    """The owner tree a spawn intent recorded before the controller process existed.
+
+    ``closure_prefixes`` and ``dylib_farm_root`` come from the round's frozen contract, so an
+    attestation can be re-validated without re-reading the manifest.
+    """
+
+    owner_root_role: str
+    owner_root_pid: int
+    owner_root_birth_identity: int
+    spawn_role: str
+    expected_executable_relative_path: str
+    ancestry: tuple[ProcessIdentity, ...]
+    manifest_sha256: str
+    closure_prefixes: tuple[str, ...]
+    dylib_farm_root: str
+
+    def as_document(self) -> dict[str, object]:
+        return {
+            "owner_root_role": self.owner_root_role,
+            "owner_root_pid": self.owner_root_pid,
+            "owner_root_birth_identity": self.owner_root_birth_identity,
+            "spawn_role": self.spawn_role,
+            "expected_executable_relative_path": self.expected_executable_relative_path,
+            "ancestry": [identity.as_document() for identity in self.ancestry],
+            "manifest_sha256": self.manifest_sha256,
+            "closure_prefixes": list(self.closure_prefixes),
+            "dylib_farm_root": self.dylib_farm_root,
+        }
+
+    @property
+    def sha256(self) -> str:
+        return canonical_sha256(self.as_document())
+
+    @classmethod
+    def from_document(cls, document: Mapping[str, object]) -> "ControllerRuntimeOwnerBinding":
+        return cls(
+            owner_root_role=str(document["owner_root_role"]),
+            owner_root_pid=int(document["owner_root_pid"]),  # type: ignore[arg-type]
+            owner_root_birth_identity=int(  # type: ignore[arg-type]
+                document["owner_root_birth_identity"]
+            ),
+            spawn_role=str(document["spawn_role"]),
+            expected_executable_relative_path=str(
+                document["expected_executable_relative_path"]
+            ),
+            ancestry=tuple(
+                ProcessIdentity.from_document(entry)
+                for entry in document["ancestry"]  # type: ignore[union-attr]
+            ),
+            manifest_sha256=str(document["manifest_sha256"]),
+            closure_prefixes=tuple(
+                str(prefix)
+                for prefix in document["closure_prefixes"]  # type: ignore[union-attr]
+            ),
+            dylib_farm_root=str(document["dylib_farm_root"]),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeProcessAttestation:
     """Per-process loaded-image proof for the pre-bound controller role."""
 
@@ -389,6 +484,12 @@ class RuntimeProcessAttestation:
     birth_identity: int
     executable: Path
     loaded_images: tuple[FileDigest, ...]
+    plugin_path: Path
+    plugin_sha256: str
+    vendor_path: Path
+    vendor_sha256: str
+    owner_binding: ControllerRuntimeOwnerBinding
+    owner_binding_sha256: str
 
     def __post_init__(self) -> None:
         if self.role != "controller_runtime":
@@ -397,12 +498,6 @@ class RuntimeProcessAttestation:
             raise RuntimeClosureError(
                 "PROCESS_ATTESTATION_IDENTITY", f"{self.pid}/{self.birth_identity}"
             )
-        if not self.executable.is_absolute():
-            raise RuntimeClosureError(
-                "PROCESS_ATTESTATION_EXECUTABLE", str(self.executable)
-            )
-        if not self.loaded_images:
-            raise RuntimeClosureError("PROCESS_ATTESTATION_IMAGES", "empty")
 
     def as_document(self) -> dict[str, object]:
         return {
@@ -411,12 +506,130 @@ class RuntimeProcessAttestation:
             "birth_identity": self.birth_identity,
             "executable": str(self.executable),
             "loaded_images": _inventory_document(self.loaded_images),
+            "plugin_path": str(self.plugin_path),
+            "plugin_sha256": self.plugin_sha256,
+            "vendor_path": str(self.vendor_path),
+            "vendor_sha256": self.vendor_sha256,
+            "owner_binding": self.owner_binding.as_document(),
+            "owner_binding_sha256": self.owner_binding_sha256,
         }
+
+
+def _attestation_invalid(reason: str, detail: str = "") -> RuntimeClosureError:
+    return RuntimeClosureError(
+        "PROCESS_ATTESTATION_INVALID", f"{reason}: {detail}" if detail else reason
+    )
+
+
+def _closure_prefix_for(path: Path, prefixes: Sequence[Path]) -> Path | None:
+    """The most specific sanctioned prefix that contains ``path``, if any."""
+
+    candidates = [prefix for prefix in prefixes if path.is_relative_to(prefix)]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda prefix: len(prefix.parts))
+
+
+def validate_controller_runtime_attestation(
+    attestation: RuntimeProcessAttestation,
+) -> dict[str, object]:
+    """Re-validate one controller attestation without trusting any cached verdict.
+
+    The role, the ancestor chain and the plugin/vendor read-back all have to line up: a
+    diagnostic launcher standing in for the controller, a descendant that is not reachable
+    from the recorded owner root, a second process claiming the same role, an image outside
+    the frozen closure (or the sanctioned farm), a drifted digest and an empty read-back all
+    fail closed with ``PROCESS_ATTESTATION_INVALID``.
+    """
+
+    binding = attestation.owner_binding
+    if attestation.role != CONTROLLER_RUNTIME_ROLE:
+        raise _attestation_invalid("role", attestation.role)
+    if not str(attestation.executable) or not attestation.executable.is_absolute():
+        raise _attestation_invalid("executable", str(attestation.executable))
+    if attestation.pid <= 0 or attestation.birth_identity <= 0:
+        raise _attestation_invalid(
+            "identity", f"{attestation.pid}/{attestation.birth_identity}"
+        )
+    if binding.spawn_role != CONTROLLER_RUNTIME_ROLE:
+        raise _attestation_invalid("spawn_role", binding.spawn_role)
+
+    ancestry = binding.ancestry
+    if not ancestry:
+        raise _attestation_invalid("owner_ancestry", "empty")
+    if (
+        ancestry[0].pid != binding.owner_root_pid
+        or ancestry[0].birth_identity != binding.owner_root_birth_identity
+    ):
+        raise _attestation_invalid("owner_ancestry", "root identity drift")
+    for index, identity in enumerate(ancestry[1:], start=1):
+        if identity.parent_pid != ancestry[index - 1].pid:
+            raise _attestation_invalid(
+                "owner_ancestry", f"{identity.pid} is not a child of {ancestry[index - 1].pid}"
+            )
+    candidates = [identity for identity in ancestry if identity.role == CONTROLLER_RUNTIME_ROLE]
+    if len(candidates) != 1:
+        raise _attestation_invalid(
+            "owner_ancestry", f"{len(candidates)} controller candidates"
+        )
+    descendant = ancestry[-1]
+    if descendant.role != CONTROLLER_RUNTIME_ROLE:
+        raise _attestation_invalid("role", descendant.role)
+    if (
+        descendant.pid != attestation.pid
+        or descendant.birth_identity != attestation.birth_identity
+    ):
+        raise _attestation_invalid(
+            "identity",
+            f"{descendant.pid}/{descendant.birth_identity} != "
+            f"{attestation.pid}/{attestation.birth_identity}",
+        )
+
+    if not binding.closure_prefixes:
+        raise _attestation_invalid("closure_prefixes", "empty")
+    if not any(
+        Path(binding.dylib_farm_root).is_relative_to(Path(prefix))
+        for prefix in binding.closure_prefixes
+    ):
+        raise _attestation_invalid("dylib_farm_root", binding.dylib_farm_root)
+    prefixes = tuple(Path(prefix).resolve() for prefix in binding.closure_prefixes)
+
+    executable = Path(attestation.executable).resolve()
+    executable_prefix = _closure_prefix_for(executable, prefixes)
+    if executable_prefix is None:
+        raise _attestation_invalid("executable_scope", str(executable))
+    relative_executable = executable.relative_to(executable_prefix).as_posix()
+    if relative_executable != binding.expected_executable_relative_path:
+        raise _attestation_invalid("controller_executable", relative_executable)
+
+    images = {image.relative_path: image for image in attestation.loaded_images}
+    if not images:
+        raise _attestation_invalid("loaded_images", "empty")
+    for field, image_path, declared in (
+        ("plugin", attestation.plugin_path, attestation.plugin_sha256),
+        ("vendor", attestation.vendor_path, attestation.vendor_sha256),
+    ):
+        if not str(image_path) or not Path(image_path).is_absolute():
+            raise _attestation_invalid(f"{field}_scope", str(image_path))
+        resolved = Path(image_path).resolve()
+        prefix = _closure_prefix_for(resolved, prefixes)
+        if prefix is None:
+            raise _attestation_invalid(f"{field}_scope", str(resolved))
+        relative = resolved.relative_to(prefix).as_posix()
+        image = images.get(relative)
+        if image is None or image.sha256 != declared:
+            raise _attestation_invalid(f"{field}_readback", f"{relative}: {declared}")
+
+    if attestation.owner_binding_sha256 != binding.sha256:
+        raise _attestation_invalid(
+            "owner_binding_sha256", attestation.owner_binding_sha256
+        )
+    return attestation.as_document()
 
 
 def build_runtime_process_attestation(
     *,
-    closure: RuntimeClosureIdentity,
+    closure: RuntimeClosureIdentity | None,
     install_root: Path,
     role: str,
     pid: int,
@@ -425,8 +638,17 @@ def build_runtime_process_attestation(
     executable: Path,
     loaded_images: Sequence[Path],
     required_relative_paths: Sequence[str],
+    owner_binding: ControllerRuntimeOwnerBinding,
+    plugin_relative_path: str,
+    vendor_relative_path: str,
 ) -> RuntimeProcessAttestation:
-    """Validate a stable real controller child and its required closure images."""
+    """Validate a stable real controller child and its required closure images.
+
+    ``closure`` is the copied-install identity when one exists. Under the authorized fixed
+    dylib-farm contract the round has no single merged closure, so ``closure=None`` keeps the
+    digest read-back and the owner binding while the sanctioned prefixes come from
+    ``owner_binding``.
+    """
 
     if role != "controller_runtime":
         raise RuntimeClosureError("PROCESS_ATTESTATION_ROLE", role)
@@ -436,28 +658,37 @@ def build_runtime_process_attestation(
             f"{birth_identity_before} != {birth_identity_after}",
         )
     root = _validated_install_root(install_root)
-    if root != closure.install_root:
+    if closure is not None and root != closure.install_root:
         raise RuntimeClosureError("CLOSURE_INSTALL_ROOT_MISMATCH", str(root))
     executable_path = Path(executable).resolve(strict=True)
     if not executable_path.is_relative_to(root):
         raise RuntimeClosureError(
             "PROCESS_ATTESTATION_EXECUTABLE", str(executable_path)
         )
-    known = closure.inventory
+    known = closure.inventory if closure is not None else {}
     known_names = {Path(value.relative_path).name for value in known.values()}
+    sanctioned = tuple(
+        Path(prefix).resolve() for prefix in owner_binding.closure_prefixes
+    )
     observed: dict[str, FileDigest] = {}
     for raw_path in loaded_images:
         path = Path(raw_path).resolve(strict=True)
-        if not path.is_relative_to(root):
+        if closure is not None and not path.is_relative_to(root):
             if path.name in known_names:
                 raise RuntimeClosureError("LOADED_IMAGE_OUTSIDE_INSTALL", str(path))
             continue
-        relative = path.relative_to(root).as_posix()
-        expected = known.get(relative)
-        if expected is None:
+        relative = None
+        for prefix in sanctioned:
+            if path.is_relative_to(prefix):
+                relative = path.relative_to(prefix).as_posix()
+                break
+        if relative is None:
             continue
+        expected = known.get(relative)
         digest = _digest_regular_file(path, relative_path=relative)
-        if digest.sha256 != expected.sha256 or digest.size_bytes != expected.size_bytes:
+        if expected is not None and (
+            digest.sha256 != expected.sha256 or digest.size_bytes != expected.size_bytes
+        ):
             raise RuntimeClosureError("LOADED_IMAGE_DIGEST_MISMATCH", relative)
         observed[relative] = digest
     missing = sorted(set(required_relative_paths) - set(observed))
@@ -465,13 +696,34 @@ def build_runtime_process_attestation(
         raise RuntimeClosureError(
             "PROCESS_ATTESTATION_REQUIRED_IMAGE_MISSING", ",".join(missing)
         )
-    return RuntimeProcessAttestation(
+    attestation = RuntimeProcessAttestation(
         role=role,
         pid=int(pid),
         birth_identity=int(birth_identity_before),
         executable=executable_path,
         loaded_images=tuple(observed[key] for key in sorted(observed)),
+        plugin_path=(Path(plugin_relative_path) if Path(plugin_relative_path).is_absolute()
+                     else _absolute_prefix_file(sanctioned, plugin_relative_path)),
+        plugin_sha256=observed[plugin_relative_path].sha256,
+        vendor_path=(Path(vendor_relative_path) if Path(vendor_relative_path).is_absolute()
+                     else _absolute_prefix_file(sanctioned, vendor_relative_path)),
+        vendor_sha256=observed[vendor_relative_path].sha256,
+        owner_binding=owner_binding,
+        owner_binding_sha256=owner_binding.sha256,
     )
+    validate_controller_runtime_attestation(attestation)
+    return attestation
+
+
+def _absolute_prefix_file(prefixes: Sequence[Path], relative_path: str) -> Path:
+    """Resolve one relative inventory path against the sanctioned prefixes."""
+
+    for prefix in prefixes:
+        candidate = prefix / relative_path
+        if candidate.is_file():
+            return candidate.resolve()
+    return prefixes[0] / relative_path if prefixes else Path(relative_path)
+
 
 
 # --------------------------------------------------------------------------------------

@@ -12,6 +12,8 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import json
+import os
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -70,7 +72,7 @@ def test_station_phases_are_the_closed_design_set() -> None:
     ]
 
 
-def test_only_the_three_closed_modes_resolve() -> None:
+def test_the_legacy_three_closed_modes_resolve() -> None:
     module = _diagnostic_module()
     assert (
         module.resolve_mode("MINIMAL_CONTROLLER_MANAGER")
@@ -510,3 +512,309 @@ def test_station_robot_description_renders_the_shared_urdf(tmp_path: Path) -> No
     assert str(scene) in rendered
     assert "task_start" in rendered
     assert "mujoco_ros2_control/MujocoSystemInterface" in rendered
+
+
+# --------------------------------------------------------------------------------------
+# The fixed-dylib-farm round owner (remediation Task 3)
+#
+# One invocation owns exactly one station tree: it freezes the intent before spawning, reads
+# readiness and the controller attestation back, writes its report atomically and cleans up
+# on both the PASS and the FAIL path. A drifted receipt is refused with no signal at all.
+# --------------------------------------------------------------------------------------
+
+
+def _farm_fixture(tmp_path: Path, *, project_install: Path | None = None):
+    """A synthetic fixed runtime: farm, install prefix, readiness entry and the two images."""
+
+    module = _diagnostic_module()
+    filesystem_root = tmp_path / "fs"
+    farm_run = filesystem_root / "opt/ros2_jazzy/dylib_farm/runs/fixture-01"
+    farm_run.mkdir(parents=True)
+    (farm_run / "libmujoco.3.4.0.dylib").write_bytes(b"farm-lib")
+    (filesystem_root / "opt/ros2_jazzy/dylib_farm/current").symlink_to(farm_run)
+    install = project_install or (filesystem_root / "opt/data/so101/workspace/install")
+    (install / "lib/so101_demo_py").mkdir(parents=True)
+    readiness = install / "lib/so101_demo_py/motion_stack_ready"
+    readiness.write_text(
+        '#!/bin/sh\nprintf \'%s\\n\' \'{"ready": true}\'\n', encoding="utf-8")
+    readiness.chmod(0o755)
+    (install / "lib/mujoco_ros2_control").mkdir(parents=True)
+    node = install / "lib/mujoco_ros2_control/ros2_control_node"
+    node.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    node.chmod(0o755)
+    (install / "lib/libmujoco_ros2_control.dylib").write_bytes(b"plugin-bytes")
+    (install / "opt/mujoco_vendor/lib").mkdir(parents=True)
+    (install / "opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib").write_bytes(b"vendor-bytes")
+
+    paths = module.FixedFarmRuntimePaths(
+        ros_root=filesystem_root / "opt/ros2_jazzy",
+        ros_install=filesystem_root / "opt/ros2_jazzy/install",
+        ros_dependency_overlay=filesystem_root / "opt/ros2_jazzy/extra_ws/install",
+        ros_fork_overlay=filesystem_root / "opt/data/so101/runtime/fork/current",
+        python=filesystem_root / "opt/ros2_jazzy/.venv/bin/python",
+        ros2_script=filesystem_root / "opt/ros2_jazzy/install/ros2cli/bin/ros2",
+        data_root=filesystem_root / "opt/data",
+        temp_root=filesystem_root / "opt/data/tmp",
+        dylib_farm=filesystem_root / "opt/ros2_jazzy/dylib_farm/current",
+        project_install=install,
+        runtime_home=filesystem_root / "opt/data/so101/home",
+        ros_home=filesystem_root / "opt/data/so101/ros-home",
+        ros_log_dir=filesystem_root / "opt/data/so101/ros-logs",
+    )
+    entries, manifest_sha256 = module._farm_library_inventory(paths.dylib_farm)
+    assert entries
+    receipt = {
+        "status": "PASS",
+        "level": "complete",
+        "closure_prefixes": [
+            str(filesystem_root / "opt/ros2_jazzy"),
+            str(filesystem_root / "opt/data/so101/workspace/install"),
+            str(paths.dylib_farm),
+        ],
+        "dylib_farm": {
+            "logical": str(paths.dylib_farm),
+            "resolved": str(paths.dylib_farm.resolve()),
+            "manifest_sha256": manifest_sha256,
+            "library_count": len(entries),
+        },
+        "project_install": {"logical": str(install), "resolved": str(install.resolve())},
+    }
+    receipt_path = tmp_path / "doctor.json"
+    receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True), encoding="utf-8")
+    return module, paths, receipt_path
+
+
+def _farm_binding(tmp_path: Path, module, receipt_path: Path, contract) -> Path:
+    binding = {
+        "schema_version": 1,
+        "round_id": "gate-a2-round-0001",
+        "session_id": "gate-a2-round-0001",
+        "ros_domain_id": 173,
+        "task_evidence_root": str(tmp_path / "round/station"),
+        "scene_path": str(tmp_path / "fs/opt/data/so101/workspace/install/scene.xml"),
+        "farm_contract_sha256": contract.receipt_sha256,
+        "farm_logical": str(contract.dylib_farm_logical),
+        "farm_resolved": str(contract.dylib_farm_resolved),
+        "farm_manifest_sha256": contract.dylib_farm_manifest_sha256,
+        "owner_root_pid": os.getpid(),
+        "owner_root_birth_identity": 41,
+    }
+    path = tmp_path / "run-binding.json"
+    path.write_text(json.dumps(binding, indent=2, sort_keys=True), encoding="utf-8")
+    return path
+
+
+class _FakeStation:
+    def __init__(self, pid: int) -> None:
+        self.pid = pid
+        self.alive = False
+
+    def poll(self):
+        return 0
+
+
+def _farm_round_hooks(module, install: Path, *, ready: bool = True):
+    node = install / "lib/mujoco_ros2_control/ros2_control_node"
+    plugin = install / "lib/libmujoco_ros2_control.dylib"
+    vendor = install / "opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib"
+    calls = {"spawn": 0, "cleanup": 0}
+
+    def spawn(argv, **kwargs):
+        calls["spawn"] += 1
+        calls["argv"] = argv
+        calls["env"] = dict(kwargs["env"])
+        return _FakeStation(9100)
+
+    def rows():
+        return ((9100, 1, "/usr/bin/python3 -m launch"), (9123, 9100, f"{node} --ros-args"))
+
+    def cleanup(launch, identities):
+        calls["cleanup"] += 1
+        calls["identities"] = dict(identities)
+        return {"escalation": [], "residue_pids": [], "complete": True}
+
+    return {
+        "_calls": calls,
+        "spawn": spawn,
+        "process_rows": rows,
+        "loaded_image_probe": lambda pid: (plugin, vendor),
+        "birth_identity": lambda pid: 77 if pid == 9123 else 41,
+        "cleanup_owner_tree": cleanup,
+        "sleep": lambda seconds: None,
+        "clock": lambda: 0.0,
+    }
+
+
+def _farm_kwargs(hooks):
+    return {key: value for key, value in hooks.items() if not key.startswith("_")}
+
+
+def test_each_closed_mode_resolves_and_arbitrary_modes_do_not() -> None:
+    module = _diagnostic_module()
+    assert (
+        module.resolve_mode("FIXED_DYLIB_FARM_FULL_TASK_STATION")
+        is module.StationMode.FIXED_DYLIB_FARM_FULL_TASK_STATION
+    )
+    with pytest.raises(module.StationDiagnosticError) as error:
+        module.resolve_mode("ARBITRARY_CONTROLLER_MANAGER")
+    assert error.value.code == "STATION_LAUNCH_MODE_UNSUPPORTED"
+
+
+def test_farm_mode_requires_receipt_binding_and_output_and_refuses_legacy_arguments() -> None:
+    module = _diagnostic_module()
+
+    with pytest.raises(SystemExit):
+        module.parse_arguments(["--mode", "FIXED_DYLIB_FARM_FULL_TASK_STATION"])
+    with pytest.raises(SystemExit):
+        module.parse_arguments(
+            [
+                "--mode", "FIXED_DYLIB_FARM_FULL_TASK_STATION",
+                "--farm-contract-receipt", "/tmp/doctor.json",
+                "--run-binding", "/tmp/run-binding.json",
+            ]
+        )
+    with pytest.raises(SystemExit):
+        module.parse_arguments(
+            [
+                "--mode", "FIXED_DYLIB_FARM_FULL_TASK_STATION",
+                "--farm-contract-receipt", "/tmp/doctor.json",
+                "--run-binding", "/tmp/run-binding.json",
+                "--output", "/tmp/report.json",
+                "--control", "N",
+            ]
+        )
+    options = module.parse_arguments(
+        [
+            "--mode", "FIXED_DYLIB_FARM_FULL_TASK_STATION",
+            "--farm-contract-receipt", "/tmp/doctor.json",
+            "--run-binding", "/tmp/run-binding.json",
+            "--output", "/tmp/report.json",
+            "--timeout-s", "180",
+        ]
+    )
+    assert options.mode is module.StationMode.FIXED_DYLIB_FARM_FULL_TASK_STATION
+    assert options.output == "/tmp/report.json"
+
+
+def test_farm_round_owns_one_station_tree_and_writes_its_report_before_returning(
+    tmp_path: Path,
+) -> None:
+    module, paths, receipt_path = _farm_fixture(tmp_path)
+    contract = module.load_fixed_dylib_farm_contract(receipt_path)
+    binding_path = _farm_binding(tmp_path, module, receipt_path, contract)
+    hooks = _farm_round_hooks(module, paths.project_install)
+    output = tmp_path / "station-report.json"
+
+    rc = module.run_fixed_dylib_farm_full_task_station(
+        farm_contract_receipt=receipt_path,
+        run_binding_path=binding_path,
+        output_path=output,
+        timeout_s=30.0,
+        paths=paths,
+        **_farm_kwargs(hooks),
+    )
+
+    assert rc == 0
+    assert hooks["_calls"]["spawn"] == 1
+    assert hooks["_calls"]["cleanup"] == 1
+    assert hooks["_calls"]["env"]["DYLD_LIBRARY_PATH"] == str(paths.dylib_farm)
+    assert hooks["_calls"]["env"]["ROS_DOMAIN_ID"] == "173"
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["observation_class"] == "PASS"
+    assert report["invalid_reasons"] == []
+    assert report["spawned"] is True
+    assert report["spawn_intent"]["spawned"] is True
+    assert report["attestation"]["owner_binding"]["spawn_role"] == "controller_runtime"
+    assert report["attestation"]["plugin_path"].endswith("libmujoco_ros2_control.dylib")
+    assert report["attestation"]["vendor_path"].endswith("libmujoco.3.4.0.dylib")
+    assert report["owner_tree"]["root_pid"] == os.getpid()
+    assert report["cleanup"]["complete"] is True
+    assert report["report_sha256"]
+    intent = json.loads((tmp_path / "farm-station-spawn-intent.json").read_text("utf-8"))
+    assert intent["role"] == "controller_runtime"
+    assert intent["owner_root_pid"] == os.getpid()
+
+
+def test_farm_round_refuses_a_drifted_receipt_before_spawning(tmp_path: Path) -> None:
+    module, paths, receipt_path = _farm_fixture(tmp_path)
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["dylib_farm"]["manifest_sha256"] = "0" * 64
+    receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True), encoding="utf-8")
+    output = tmp_path / "station-report.json"
+    hooks = _farm_round_hooks(module, paths.project_install)
+
+    with pytest.raises(module.StationDiagnosticError) as error:
+        module.load_fixed_dylib_farm_contract(receipt_path)
+    assert error.value.code == "FARM_MANIFEST_DRIFT"
+
+    # The runner itself reports the refusal instead of raising, with no spawn at all.
+    contract = module.load_fixed_dylib_farm_contract(
+        _farm_fixture(tmp_path / "second")[2])
+    rc = module.run_fixed_dylib_farm_full_task_station(
+        farm_contract_receipt=receipt_path,
+        run_binding_path=_farm_binding(tmp_path, module, receipt_path, contract),
+        output_path=output,
+        timeout_s=30.0,
+        paths=paths,
+        **_farm_kwargs(hooks),
+    )
+    assert rc == 1
+    assert hooks["_calls"]["spawn"] == 0
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["spawned"] is False
+    assert report["observation_class"] == "INVALID"
+    assert "FARM_MANIFEST_DRIFT" in report["invalid_reasons"]
+
+
+def test_farm_round_still_writes_a_report_and_cleans_up_when_it_is_not_ready(
+    tmp_path: Path,
+) -> None:
+    module, paths, receipt_path = _farm_fixture(tmp_path)
+    contract = module.load_fixed_dylib_farm_contract(receipt_path)
+    binding_path = _farm_binding(tmp_path, module, receipt_path, contract)
+    hooks = _farm_round_hooks(module, paths.project_install)
+    readiness = paths.project_install / "lib/so101_demo_py/motion_stack_ready"
+    readiness.write_text('#!/bin/sh\nprintf \'%s\\n\' \'{"ready": false}\'\n', encoding="utf-8")
+    readiness.chmod(0o755)
+    output = tmp_path / "station-report.json"
+
+    rc = module.run_fixed_dylib_farm_full_task_station(
+        farm_contract_receipt=receipt_path,
+        run_binding_path=binding_path,
+        output_path=output,
+        timeout_s=30.0,
+        paths=paths,
+        **_farm_kwargs(hooks),
+    )
+
+    assert rc == 1
+    assert hooks["_calls"]["spawn"] == 1
+    assert hooks["_calls"]["cleanup"] == 1
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["observation_class"] == "INVALID"
+    assert "STATION_NOT_READY" in report["invalid_reasons"]
+    assert report["cleanup"]["complete"] is True
+
+
+def test_farm_environment_is_the_same_builder_as_the_runtime_contract_tool() -> None:
+    """The diagnostic must not grow a second, drifting runtime environment."""
+
+    module = _diagnostic_module()
+    repository_root = Path(__file__).resolve().parents[3]
+    tool = repository_root / "scripts" / "so101_macos_runtime_contract.py"
+    spec = importlib.util.spec_from_file_location("so101_macos_runtime_contract", tool)
+    assert spec is not None and spec.loader is not None
+    contract_tool = importlib.util.module_from_spec(spec)
+    sys.modules["so101_macos_runtime_contract"] = contract_tool
+    spec.loader.exec_module(contract_tool)
+
+    ours = module.FixedFarmRuntimePaths.production().environment(7)
+    theirs = contract_tool.build_runtime_environment(
+        contract_tool.RuntimePaths.production(repository_root), ros_domain_id=7)
+
+    assert ours == theirs
+    assert module.FARM_CLOSURE_PREFIXES == contract_tool.FIXED_CLOSURE_PREFIXES
+    assert set(ours) == {
+        "HOME", "PATH", "VIRTUAL_ENV", "PYTHONNOUSERSITE", "TMPDIR", "TMP", "TEMP",
+        "ROS_HOME", "ROS_LOG_DIR", "ROS_DOMAIN_ID", "DYLD_LIBRARY_PATH",
+    }
