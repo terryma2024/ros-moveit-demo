@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-ROS2-PATH
+latest_checkpoint: CP-MSC-REMEDIATION-T11-W2-EXECUTING
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4837,3 +4837,37 @@ minimal PATH is right for the service, and the campaign's workers are the ones t
 
 A new W2 window is running with that PATH. Its campaign is expected to actually execute points this
 time, and its verdict lands in the next round.
+
+## CP-MSC-REMEDIATION-T11-W2-EXECUTING: the campaign is really running
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-W2-EXECUTING
+recorded_at: 2026-09-23T14:50:00+0800
+carried_by: the local commit that adds this entry (parent b29702d2)
+window: remediation/windows/w2-20260922T191707Z-53004/
+status: in flight and progressing; the verdict lands in the next round
+```
+
+The PATH fix did what the diagnosis predicted. In the previous window the campaign died almost at once
+with `Error: ros2 executable is not available` and `WORKER_EXITED_WITHOUT_RESULT`; in this one, at the
+same elapsed time:
+
+```text
+campaign.log        15,178 lines, then 30,440 lines   (a real campaign working through its points)
+task-owned processes 14  (station, ros2_control_node, move_group, the campaign adapter)
+ros2 errors          0
+worker exits         0
+```
+
+So the W2 campaign is now executing its frozen twenty points through the macOS adapter, with the two
+model inputs verified against the guide's frozen digests and the campaign's own cleanup discipline
+already proven in the previous window. It is a twenty-point campaign, so it takes roughly a quarter of
+an hour; the window owns its own service and stops it by recorded PID when it finishes, and its
+`campaign-result.json` plus `playwright.log` will carry the verdict.
+
+Everything that led here was one named cause at a time, each read out of the run's own evidence:
+fixture environment, collection readback, service start, readiness, page load, capabilities document,
+campaign preflight, adapter selection, worker PATH. The two genuinely product-side findings along the
+way - the missing `signals_sent` field and the container probe refusing a host with no container
+runtime - are recorded with their tests; everything else was the harness proving it could build a
+truthful environment.
