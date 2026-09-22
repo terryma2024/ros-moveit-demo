@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-HEALTH-DOC
+latest_checkpoint: CP-MSC-REMEDIATION-CANCEL-ROOT-CAUSE
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3640,3 +3640,38 @@ remediation/runs/t8-main-20260922T153337Z: 7 passed (the whole file)
 
 Task 8 Step 3 still owns the two `test_expert_validation_e2e_installed_port` helper cases, the
 durable cancel replay (two parameters) and the two live supervisor legs.
+
+## CP-MSC-REMEDIATION-CANCEL-ROOT-CAUSE: the cancel-replay case asks for a socket the product refuses
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-CANCEL-ROOT-CAUSE
+recorded_at: 2026-09-23T01:30:00+0800
+carried_by: the local commit that adds this entry (parent e825fc9a)
+boundary: test_expert_validation_production_projection.py::test_cancel_command_replays_durably_and_conflicting_target_never_contacts_owner
+status: NOT closed - the owning cause is proven, the fix belongs to the next writer
+```
+
+Two facts, both measured:
+
+1. The case's child program ran `path.parent.mkdir(mode=0o700)` without `exist_ok`, so from the second
+   run onward it died with `FileExistsError` before binding anything. That is fixed here
+   (`parents=True, exist_ok=True`), and it is needed whatever else changes.
+2. That was not the whole story. Running the same child program by hand with the same environment
+   shows why no socket ever appeared:
+
+```text
+so101_demo.parallel_batch.web_control.WebControlError: CONTROL_SOCKET_OUTSIDE_BATCH_ROOT
+    web_control.py:125 in FixedCoordinatorControlServer.__init__
+    path=/private/tmp/so101-control-501/campaign-1-b001.sock
+```
+
+`FixedCoordinatorControlServer` requires its control socket to live **inside the batch root**. The
+case builds `SO101_FIXED_CONTROL_SOCKET` under the shared host root `/private/tmp/so101-control-501`,
+which the product correctly refuses, so the child can never bind and `request.control_socket.exists()`
+can never become true. The test's premise predates that containment rule; the fix is to place the
+request's control socket inside its own batch root (or to teach `_control_service` to do so), not to
+relax the rule.
+
+The change committed with this entry (`exist_ok`) is a real repeat-run bug fix and is kept. Task 8
+Step 3 still owns: this boundary (now with its cause proven), the two
+`test_expert_validation_e2e_installed_port` helper cases and the two live supervisor legs.
