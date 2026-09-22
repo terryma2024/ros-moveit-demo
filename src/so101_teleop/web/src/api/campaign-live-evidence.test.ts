@@ -435,6 +435,14 @@ type MacosOptions = {
   leaseSelectionMismatch?: boolean;
   /** Rewrite a worker result after its digest was recorded. */
   tamperWorkerResult?: boolean;
+  /**
+   * Write the nested binding in the vocabulary the campaign's `FULL_RESTART_RETRY` composition
+   * emits: the catalog it was selected from as `original_catalog_sha256`, and its one point as
+   * `point` instead of `points`/`selected_point_ids`.
+   */
+  retryBinding?: boolean;
+  /** The last word on the nested binding document, for the refusal cases. */
+  bindingMutation?: (binding: Record<string, any>) => void;
 };
 
 type MacosScenario = {
@@ -809,18 +817,33 @@ function macosScenario(options: MacosOptions): MacosScenario {
     writeFileSync(join(journalRoot, "committed-watermark.json"), JSON.stringify(watermark));
   }
 
+  const selectionPoint = (pointId: string) => ({
+    point_id: pointId, point_sha256: pointSha(pointId), position_xyz_m: [0.02, -0.28, 0.165],
+  });
+  const nestedBinding: Record<string, any> = options.retryBinding
+    ? {
+        batch_id: options.batchId, campaign_id: campaignId, kind: options.batchKind,
+        original_catalog_sha256: sha256("catalog"),
+        original_selection_sha256: sha256("original-selection"),
+        original_result_sha256: sha256("original-result"),
+        original_outcome: "FAILED",
+        point: selectionPoint(selected[0]),
+        config_sha256: sha256("config"),
+        runtime_closure_sha256: sha256("closure"),
+        selection_sha256: selectionSha,
+      }
+    : {
+        batch_id: options.batchId, campaign_id: campaignId, kind: options.batchKind,
+        schema_version: 1, coordinate_frame: "world",
+        catalog_sha256: sha256("catalog"), config_sha256: sha256("config"),
+        runtime_closure_sha256: sha256("closure"),
+        points: selected.map(selectionPoint),
+        selected_point_ids: selected, selection_sha256: selectionSha,
+      };
+  options.bindingMutation?.(nestedBinding);
   const selectionBinding = {
     batch_id: options.batchId,
-    binding: {
-      batch_id: options.batchId, campaign_id: campaignId, kind: options.batchKind,
-      schema_version: 1, coordinate_frame: "world",
-      catalog_sha256: sha256("catalog"), config_sha256: sha256("config"),
-      runtime_closure_sha256: sha256("closure"),
-      points: selected.map((pointId) => ({
-        point_id: pointId, point_sha256: pointSha(pointId), position_xyz_m: [0.02, -0.28, 0.165],
-      })),
-      selected_point_ids: selected, selection_sha256: selectionSha,
-    },
+    binding: nestedBinding,
     campaign_id: campaignId,
     catalog_path: join(root, "catalog.yaml"),
     catalog_sha256: sha256("catalog"),
@@ -959,6 +982,15 @@ const W2_MACOS: Omit<MacosOptions, "batchId" | "points"> = {
   schemaVersion: 4,
 };
 
+/** The v5 single-point retry route, whose binding names its selection in the retry vocabulary. */
+const RETRY_MACOS: Omit<MacosOptions, "batchId" | "points"> = {
+  batchKind: "FULL_RESTART_RETRY",
+  workerCount: 1,
+  executionProfile: "MPS_W1_FULL_RESTART_RETRY",
+  schemaVersion: 5,
+  retryBinding: true,
+};
+
 describe("the macOS composed campaign layout", () => {
   test("accepts the W2 route: segment header skipped, four selected points, one result each", () => {
     const batch = macosScenario({ ...W2_MACOS, batchId: "w2-b001", points: ["p1", "p2", "p3", "p4"] });
@@ -985,6 +1017,64 @@ describe("the macOS composed campaign layout", () => {
     });
     expect(() => assertCampaignBatchEvidence(
       readCampaignBatchEvidence(batch.root), batch.expectation)).not.toThrow();
+  });
+
+  test("accepts the retry route: a one-point binding in the retry's own vocabulary", () => {
+    // RED: the recorded retry batch (`campaign-e94a4b74…/retry-001`) was refused here with
+    // `SELECTED_ONLY_EVIDENCE_INVALID`, because its binding names the catalog it was selected from
+    // as `original_catalog_sha256` and the one point it executes as `point`, not `points`.
+    const batch = macosScenario({
+      ...RETRY_MACOS, batchId: "retry-001", points: ["sample_05_near_center"],
+    });
+    const evidence = readCampaignBatchEvidence(batch.root);
+    expect(evidence.layout).toBe("MACOS_COMPOSED");
+    expect(() => assertCampaignBatchEvidence(evidence, batch.expectation)).not.toThrow();
+  });
+
+  test("rejects a retry binding that names neither selection vocabulary", () => {
+    const nameless = macosScenario({
+      ...RETRY_MACOS, batchId: "retry-001", points: ["p1"],
+      bindingMutation: (binding) => {
+        delete binding.point;
+      },
+    });
+    expect(() => assertCampaignBatchEvidence(
+      readCampaignBatchEvidence(nameless.root), nameless.expectation))
+      .toThrow(/SELECTED_ONLY_EVIDENCE_INVALID: selection points in the selection binding/);
+
+    const catalog = macosScenario({
+      ...RETRY_MACOS, batchId: "retry-001", points: ["p1"],
+      bindingMutation: (binding) => {
+        delete binding.original_catalog_sha256;
+      },
+    });
+    expect(() => assertCampaignBatchEvidence(
+      readCampaignBatchEvidence(catalog.root), catalog.expectation))
+      .toThrow(/SELECTED_ONLY_EVIDENCE_INVALID: catalog digest in the selection binding/);
+  });
+
+  test("rejects a retry binding whose point is not the one the batch's bytes carry", () => {
+    // The lease and the single-point input are the batch's own verified bytes: a binding that names
+    // another digest, or another point, is not the selection this batch executed.
+    const digest = macosScenario({
+      ...RETRY_MACOS, batchId: "retry-001", points: ["p1"],
+      bindingMutation: (binding) => {
+        binding.point.point_sha256 = "f".repeat(64);
+      },
+    });
+    expect(() => assertCampaignBatchEvidence(
+      readCampaignBatchEvidence(digest.root), digest.expectation))
+      .toThrow(/SELECTED_ONLY_EVIDENCE_INVALID: w1-lease-01\.json is not bound to the selection/);
+
+    const point = macosScenario({
+      ...RETRY_MACOS, batchId: "retry-001", points: ["p1"],
+      bindingMutation: (binding) => {
+        binding.point.point_id = "p9";
+      },
+    });
+    expect(() => assertCampaignBatchEvidence(
+      readCampaignBatchEvidence(point.root), point.expectation))
+      .toThrow(/SELECTED_ONLY_EVIDENCE_INVALID: selection binding for retry-001/);
   });
 
   test("accepts a restarted coordinator: the second segment chains onto the first", () => {

@@ -71,7 +71,15 @@ _TRANSLATED_EVENT_TYPES = frozenset(
     }
 )
 
-_HASH_FIELDS = ("catalog_sha256", "selection_sha256", "config_sha256")
+#: The two hashes every binding names for itself, under the same name in both vocabularies.
+_HASH_FIELDS = ("selection_sha256", "config_sha256")
+
+#: The binding kind whose selection is named in the retry vocabulary. A ``FIRST_PASS`` binding names
+#: the catalog ``catalog_sha256`` and lists its points as ``points`` / ``selected_point_ids``; this
+#: kind's binding names the catalog its one point was selected from ``original_catalog_sha256`` and
+#: that point ``point``. One binding, one selection: neither vocabulary is inferred from the other,
+#: and a document that names neither - or that names both with contradicting values - is refused.
+_RETRY_KIND = "FULL_RESTART_RETRY"
 
 #: The campaign's own terminal verdicts, translated into the canonical terminal vocabulary. A
 #: campaign PASS label is the campaign's statement that cleanup is proven, every worker was ACTIVE,
@@ -128,8 +136,55 @@ def _safe_regular(path: Path, root: Path) -> Path:
     return resolved
 
 
+def _binding_catalog_sha256(binding_document: Mapping[str, object]) -> str:
+    """The catalog digest a binding names, in either vocabulary, verified or refused.
+
+    The retry name is only the retry kind's: a binding that does not declare itself a
+    ``FULL_RESTART_RETRY`` may not borrow it. When a document names both, both must name one digest
+    - two catalogs in one binding is a contradiction, not an alias.
+    """
+
+    named = binding_document.get("catalog_sha256")
+    original = binding_document.get("original_catalog_sha256")
+    if isinstance(named, str) and isinstance(original, str) and named != original:
+        raise CoordinatorProjectionError("CAMPAIGN_FIELD_INVALID:catalog_sha256")
+    if binding_document.get("kind") == _RETRY_KIND and named is None:
+        named = original
+    return _require_hash("catalog_sha256", named)
+
+
+def _binding_point_ids(binding_document: Mapping[str, object]) -> tuple[str, ...]:
+    """The selected point ids a binding names, in either vocabulary, or a refusal.
+
+    A retry binding has no ``selected_point_ids`` list: the one point it executes, named ``point``,
+    is its selection. The ids are read from the binding only; the document's top-level summary is
+    cross-checked against them by the caller and never substituted for them.
+    """
+
+    point_ids: object = binding_document.get("selected_point_ids")
+    if point_ids is None and binding_document.get("kind") == _RETRY_KIND:
+        point = binding_document.get("point")
+        point_ids = [point.get("point_id")] if isinstance(point, Mapping) else None
+    if (
+        not isinstance(point_ids, (list, tuple))
+        or not point_ids
+        or any(not isinstance(point_id, str) or not point_id for point_id in point_ids)
+    ):
+        raise CoordinatorProjectionError("CAMPAIGN_BINDING_INVALID")
+    return tuple(point_ids)
+
+
 def read_selection_binding(binding: CampaignUpstreamBinding) -> Mapping[str, object]:
-    """The batch's own selection binding, verified against the journal that references it."""
+    """The batch's own selection binding, verified against the journal that references it.
+
+    What is verified is the *selection*: the two hashes both vocabularies name identically, the
+    catalog the batch was selected from, and the points it was selected to execute. The composed
+    campaign writes those same facts in two vocabularies - the first pass's, and the retry's
+    ``_RETRY_KIND`` vocabulary described above - and both are read here, so a retry batch's own
+    binding is read by the same reader as a first pass's. The binding document is returned as the
+    batch wrote it: nothing is renamed, and no field is invented for a document that did not carry
+    it.
+    """
 
     path = Path(binding.batch_root) / SELECTION_BINDING_NAME
     try:
@@ -147,13 +202,18 @@ def read_selection_binding(binding: CampaignUpstreamBinding) -> Mapping[str, obj
         raise CoordinatorProjectionError("CAMPAIGN_BINDING_INVALID")
     for name in _HASH_FIELDS:
         _require_hash(name, binding_document.get(name))
-    point_ids = binding_document.get("selected_point_ids")
-    if (
-        not isinstance(point_ids, (list, tuple))
-        or not point_ids
-        or any(not isinstance(point_id, str) or not point_id for point_id in point_ids)
+    catalog_sha256 = _binding_catalog_sha256(binding_document)
+    point_ids = _binding_point_ids(binding_document)
+    # The document's own top-level summary is written from this same binding, so it has to name the
+    # same selection. It is a cross-check, never a second source: a disagreement is a refusal.
+    summary_ids = document.get("selected_point_ids")
+    if summary_ids is not None and (
+        not isinstance(summary_ids, (list, tuple)) or tuple(summary_ids) != point_ids
     ):
         raise CoordinatorProjectionError("CAMPAIGN_BINDING_INVALID")
+    summary_catalog = document.get("catalog_sha256")
+    if isinstance(summary_catalog, str) and summary_catalog != catalog_sha256:
+        raise CoordinatorProjectionError("CAMPAIGN_FIELD_INVALID:catalog_sha256")
     return binding_document
 
 

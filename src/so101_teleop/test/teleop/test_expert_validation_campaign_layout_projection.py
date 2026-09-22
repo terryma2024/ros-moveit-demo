@@ -22,6 +22,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 from types import SimpleNamespace
 import time
 
@@ -937,3 +938,236 @@ def test_the_coordinator_layout_without_a_sealed_reference_still_fails_closed(tm
         assert "RESULT_REFERENCE_INVALID" in str(refusal.value.__cause__)
     finally:
         store.close()
+
+
+# ---------------------------------------------------------------------------------------------
+# One campaign, two binding vocabularies: the recorded retry closed loop.
+#
+# Recorded defect (``$RUN/task12/retry-closed-loop-20260922T063350Z``): the console's same-page retry
+# was admitted, spawned a real coordinator and ran its ``FULL_RESTART_RETRY`` batch (``retry-001``)
+# to ``N1_CAMPAIGN_PASS`` with complete cleanup - and the endpoint then answered
+# ``409 {"code": "CAMPAIGN_FIELD_INVALID:catalog_sha256"}`` while reading that batch back. The retry
+# composition writes the *same* selection in its own vocabulary: the catalog it was selected from is
+# ``original_catalog_sha256`` and the one point it executes is ``point``. The readback refused
+# before it could commit the batch's own cleanup frame, which is why the batch's durable receipt
+# stayed NULL while its bytes show cleanup complete.
+#
+# These tests read the recorded bytes of that campaign - the retry batch copied to scratch, the
+# first pass in place under a fingerprint - and pin both vocabularies to one contract.
+# ---------------------------------------------------------------------------------------------
+
+RECORDED_RETRY_STATE = Path(os.environ.get(
+    "SO101_TASK12_RETRY_STATE",
+    "/tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1"
+    "/task12/service-runs/retrycl/state",
+))
+RECORDED_RETRY_CAMPAIGN_ID = "campaign-e94a4b7470644a59a3cf921ce6e64444"
+RECORDED_RETRY_FIRST_PASS_ID = "bca3f"
+RECORDED_RETRY_BATCH_ID = "retry-001"
+RECORDED_RETRY_POINT_ID = "sample_05_near_center"
+#: The campaign's own catalog digest; both bindings name it, each in its own vocabulary.
+RECORDED_RETRY_CATALOG_SHA256 = (
+    "c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5"
+)
+#: The first-pass selection size, and the ``FAILED`` point the retry was admitted for.
+RECORDED_RETRY_FIRST_PASS_POINTS = 15
+
+
+def _recorded_retry_batch_root(batch_id):
+    return RECORDED_RETRY_STATE / "campaigns" / RECORDED_RETRY_CAMPAIGN_ID / batch_id
+
+
+def _campaign_upstream_binding(batch_root, batch_id):
+    from so101_teleop.expert_validation.coordinator_events import CampaignUpstreamBinding
+    from so101_teleop.expert_validation.journal_layout import resolve_fixed_journal_layout
+
+    layout = resolve_fixed_journal_layout(Path(batch_root), batch_id)
+    assert layout.layout == CAMPAIGN_LAYOUT
+    return CampaignUpstreamBinding(
+        campaign_id=RECORDED_RETRY_CAMPAIGN_ID, batch_id=batch_id, owner_kind="COORDINATOR",
+        owner_epoch_or_generation=layout.epoch, journal_root=layout.journal_root,
+        batch_root=layout.batch_root,
+    )
+
+
+def _stage_recorded_batch(tmp_path, batch_id=RECORDED_RETRY_BATCH_ID):
+    """The recorded retry batch copied to scratch: no reader is ever pointed at the record."""
+
+    source = _recorded_retry_batch_root(batch_id)
+    if not source.is_dir():
+        pytest.skip(f"the recorded retry closed loop is not present at {source}")
+    destination = tmp_path / "staged" / "campaigns" / RECORDED_RETRY_CAMPAIGN_ID / batch_id
+    destination.parent.mkdir(parents=True)
+    shutil.copytree(source, destination)
+    return destination
+
+
+def _read_recorded_batch(batch_root, batch_id):
+    from so101_teleop.expert_validation.campaign_layout import CampaignLayoutReader
+    from so101_teleop.expert_validation.coordinator_events import (
+        AcceptedCoordinatorCursor,
+        ReadOnlyCoordinatorJournal,
+    )
+
+    binding = _campaign_upstream_binding(batch_root, batch_id)
+    return binding, CampaignLayoutReader(
+        ReadOnlyCoordinatorJournal(binding.journal_root, batch_id), binding
+    ).read_after(AcceptedCoordinatorCursor.initial(binding))
+
+
+def test_the_recorded_retry_batch_is_read_in_its_own_binding_vocabulary(tmp_path):
+    """RED: ``read_selection_binding`` refused these bytes with ``CAMPAIGN_FIELD_INVALID``.
+
+    The same reader, over the same batch, must find the retry's selection: the catalog the original
+    selection was frozen from, named ``original_catalog_sha256``, and the one point it executes,
+    named ``point``. Nothing is inferred from the document's top-level summary, which is only
+    cross-checked against it.
+    """
+
+    from so101_teleop.expert_validation.campaign_layout import read_selection_binding
+
+    scratch = _stage_recorded_batch(tmp_path)
+    before = _tree_fingerprint(scratch)
+    binding = _campaign_upstream_binding(scratch, RECORDED_RETRY_BATCH_ID)
+
+    selection = read_selection_binding(binding)
+    assert selection["kind"] == "FULL_RESTART_RETRY"
+    assert selection["original_catalog_sha256"] == RECORDED_RETRY_CATALOG_SHA256
+    assert "catalog_sha256" not in selection
+    assert selection["point"]["point_id"] == RECORDED_RETRY_POINT_ID
+    assert "selected_point_ids" not in selection
+
+    batch = _read_recorded_batch(scratch, RECORDED_RETRY_BATCH_ID)[1]
+    state = batch.projected_state
+    assert state["terminal_reason"] == "POINTS_COMPLETE"
+    assert state["batch_cleanup_complete"] is True
+    assert sorted(state["points"]) == [RECORDED_RETRY_POINT_ID]
+    assert state["points"][RECORDED_RETRY_POINT_ID]["status"] == "FAILED"
+    assert batch.events[-1].type == "CLEANUP_COMMITTED"
+    assert _tree_fingerprint(scratch) == before, "the staged retry bytes were written to"
+
+
+def test_the_recorded_retry_batchs_own_readback_verifies_its_cleanup(tmp_path):
+    """The exact call that answered 409 now proves the cleanup and yields the batch's receipt.
+
+    ``ExpertValidationSupervisor.reconcile_retry`` reads the retry batch through this method and
+    commits what it returns as the batch's durable ``cleanup_receipt_sha256``. The recorded batch
+    really is terminal-clean, so the refusal - not a missing recording path - is what left that
+    column NULL; the returned receipt is the batch's own committed cleanup frame.
+    """
+
+    from so101_teleop.expert_validation.supervisor import ExpertValidationSupervisor
+
+    scratch = _stage_recorded_batch(tmp_path)
+    # The method reads only its arguments; no supervisor (and so no process owner) is needed here.
+    receipt = ExpertValidationSupervisor._verify_retry_journal(
+        object.__new__(ExpertValidationSupervisor),
+        SimpleNamespace(campaign_id=RECORDED_RETRY_CAMPAIGN_ID),
+        RECORDED_RETRY_BATCH_ID, scratch,
+    )
+    assert receipt == _journal_final_frame_sha256(scratch, RECORDED_RETRY_BATCH_ID)
+
+
+def test_the_recorded_first_pass_of_the_same_campaign_still_reads_unchanged():
+    """The first pass keeps its bytes and its vocabulary: nothing about it was renamed.
+
+    The recorded store's own receipt for this batch (``9def6124…``) is the frame this reader's
+    independent replay returns, so the receipt a successful readback commits and the receipt the
+    database already carries for the first pass are the same fact.
+    """
+
+    from so101_teleop.expert_validation.campaign_layout import read_selection_binding
+
+    batch_root = _recorded_retry_batch_root(RECORDED_RETRY_FIRST_PASS_ID)
+    if not batch_root.is_dir():
+        pytest.skip(f"the recorded first pass is not present at {batch_root}")
+    before = _tree_fingerprint(batch_root)
+    binding, batch = _read_recorded_batch(batch_root, RECORDED_RETRY_FIRST_PASS_ID)
+
+    selection = read_selection_binding(binding)
+    assert selection["kind"] == "FIRST_PASS"
+    assert selection["catalog_sha256"] == RECORDED_RETRY_CATALOG_SHA256
+    assert "original_catalog_sha256" not in selection
+    point_ids = tuple(selection["selected_point_ids"])
+    assert len(point_ids) == RECORDED_RETRY_FIRST_PASS_POINTS
+    assert RECORDED_RETRY_POINT_ID in point_ids
+
+    state = batch.projected_state
+    assert state["terminal_reason"] == "POINTS_COMPLETE"
+    assert state["batch_cleanup_complete"] is True
+    assert state["points"][RECORDED_RETRY_POINT_ID]["status"] == "FAILED"
+    assert batch.events[-1].type == "CLEANUP_COMMITTED"
+    assert _journal_final_frame_sha256(
+        batch_root, RECORDED_RETRY_FIRST_PASS_ID
+    ) == "9def6124ebdeaded52534b85617bc60f76db7216c51d78b8095fc3a74285a6e4"
+    assert _tree_fingerprint(batch_root) == before, "the recorded first-pass bytes were written to"
+
+
+def _without_any_catalog_digest(binding_document):
+    del binding_document["original_catalog_sha256"]
+
+
+def _catalog_digest_the_document_does_not_name(binding_document):
+    binding_document["original_catalog_sha256"] = "f" * 64
+
+
+def _catalog_digest_that_is_not_a_digest(binding_document):
+    binding_document["original_catalog_sha256"] = "not-a-hash"
+
+
+def _two_catalog_digests_in_one_binding(binding_document):
+    binding_document["catalog_sha256"] = "f" * 64
+
+
+def _retry_vocabulary_under_the_first_pass_kind(binding_document):
+    binding_document["kind"] = "FIRST_PASS"
+
+
+def _without_any_point(binding_document):
+    del binding_document["point"]
+
+
+def _point_the_document_does_not_select(binding_document):
+    binding_document["point"]["point_id"] = "sample_09_absent"
+
+
+@pytest.mark.parametrize(
+    "mutate,expected",
+    [
+        # A binding that names no catalog digest at all: the retry name is gone and the first-pass
+        # name was never written, so there is nothing to verify and nothing may be assumed.
+        (_without_any_catalog_digest, "CAMPAIGN_FIELD_INVALID:catalog_sha256"),
+        # A digest the document's own top level contradicts: one binding, one catalog.
+        (_catalog_digest_the_document_does_not_name, "CAMPAIGN_FIELD_INVALID:catalog_sha256"),
+        (_catalog_digest_that_is_not_a_digest, "CAMPAIGN_FIELD_INVALID:catalog_sha256"),
+        (_two_catalog_digests_in_one_binding, "CAMPAIGN_FIELD_INVALID:catalog_sha256"),
+        # The retry vocabulary belongs to the retry kind and is never accepted on another one.
+        (_retry_vocabulary_under_the_first_pass_kind, "CAMPAIGN_FIELD_INVALID:catalog_sha256"),
+        # A binding that names no point at all, and one whose point is not the selection.
+        (_without_any_point, "CAMPAIGN_BINDING_INVALID"),
+        (_point_the_document_does_not_select, "CAMPAIGN_BINDING_INVALID"),
+    ],
+)
+def test_a_retry_binding_that_names_no_selection_or_a_mismatched_digest_refuses(
+    tmp_path, mutate, expected
+):
+    """Neither vocabulary is weakened: an unverifiable retry binding still fails closed."""
+
+    from so101_teleop.expert_validation.campaign_layout import read_selection_binding
+    from so101_teleop.expert_validation.coordinator_events import CoordinatorProjectionError
+
+    scratch = _stage_recorded_batch(tmp_path)
+    path = scratch / "selection-binding.json"
+    pristine = json.loads(path.read_text())
+    document = json.loads(json.dumps(pristine))
+    mutate(document["binding"])
+    path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
+
+    with pytest.raises(CoordinatorProjectionError, match=expected):
+        read_selection_binding(_campaign_upstream_binding(scratch, RECORDED_RETRY_BATCH_ID))
+
+    # The control: the same reader over the unmutated bytes this case was copied from reads them.
+    path.write_text(json.dumps(pristine, indent=2, sort_keys=True) + "\n")
+    assert read_selection_binding(
+        _campaign_upstream_binding(scratch, RECORDED_RETRY_BATCH_ID)
+    )["original_catalog_sha256"] == RECORDED_RETRY_CATALOG_SHA256
