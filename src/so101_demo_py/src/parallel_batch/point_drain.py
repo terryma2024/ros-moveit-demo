@@ -52,6 +52,7 @@ from ..runtime.task_artifacts import atomic_json, fsync_directory
 from .queue import CommittedResult, DurablePointQueue, PointLease, WorkerIdentity
 from .resource_identity import canonical_sha256
 from .selection import (
+    BUSINESS_FAILED,
     FirstPassSelectionBinding,
     RetrySelectionBinding,
     build_first_pass_selection,
@@ -181,7 +182,8 @@ def binding_catalog_sha256(binding) -> str:
                or getattr(binding, "original_catalog_sha256"))
 
 
-def selection_document_for(binding, *, catalog_path: Path) -> dict:
+def selection_document_for(binding, *, catalog_path: Path,
+                           extras: Mapping[str, object] | None = None) -> dict:
     """The audit projection of the one selection a campaign executes, for either binding kind.
 
     A first-pass binding carries the catalog it was frozen from; a retry binding carries the
@@ -208,17 +210,21 @@ def selection_document_for(binding, *, catalog_path: Path) -> dict:
         document["original_selection_sha256"] = binding.original_selection_sha256
         document["original_result_sha256"] = binding.original_result_sha256
         document["original_outcome"] = binding.original_outcome
+    for name, value in (extras or {}).items():
+        if value is not None:
+            document[str(name)] = value
     return document
 
 
-def write_selection_document(*, evidence_root: Path, binding, catalog_path: Path) -> Path:
+def write_selection_document(*, evidence_root: Path, binding, catalog_path: Path,
+                             extras: Mapping[str, object] | None = None) -> Path:
     """Write the immutable selection binding a retry chain can reference, once.
 
     Rewriting the same bytes is idempotent; a different document at the same path is refused,
     because a selection that changed after it was recorded is not the selection that ran.
     """
 
-    document = selection_document_for(binding, catalog_path=catalog_path)
+    document = selection_document_for(binding, catalog_path=catalog_path, extras=extras)
     payload = (json.dumps(document, indent=2, sort_keys=True) + "\n").encode("utf-8")
     path = Path(evidence_root) / SELECTION_DOCUMENT_BASENAME
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -251,6 +257,75 @@ def read_selection_document(path: Path) -> dict:
         if name not in document:
             raise PointDrainError("SELECTION_DOCUMENT_UNREADABLE", f"{path}: {name}")
     return document
+
+
+def retry_source_from_hashes(*, point_id: str, original_selection_sha256: str,
+                             original_result_sha256: str,
+                             original_catalog_sha256: str | None = None,
+                             original_result_path: Path | None = None,
+                             original_batch_id: str | None = None) -> dict:
+    """The original chain a retry names on its own command line.
+
+    The service verifies the original business `FAILED` result in its store before it admits a
+    retry; this is the execution side of that decision, so the binding must name the original
+    selection and result explicitly - there is no wildcard and no default. Where the caller can
+    also name the original result *document*, the bytes decide: its digest must equal the declared
+    one, and its `committed`/`outcome` fields are read rather than assumed. The returned mapping
+    records which form was used, so a reader can tell a re-read result from a declared one.
+    """
+
+    for name, value in (("original_selection_sha256", original_selection_sha256),
+                        ("original_result_sha256", original_result_sha256)):
+        if not isinstance(value, str) or len(value) != 64 or any(
+                character not in "0123456789abcdef" for character in value):
+            raise PointDrainError("RETRY_SOURCE_INVALID", f"{name}={value!r}")
+    if original_catalog_sha256 is not None and (
+            not isinstance(original_catalog_sha256, str) or len(original_catalog_sha256) != 64
+            or any(character not in "0123456789abcdef"
+                   for character in original_catalog_sha256)):
+        raise PointDrainError("RETRY_SOURCE_INVALID", "original_catalog_sha256")
+    source = {
+        "point_id": _require_text("point_id", point_id),
+        "original_catalog_sha256": original_catalog_sha256 or original_selection_sha256,
+        "original_selection_sha256": original_selection_sha256,
+        "original_result_sha256": original_result_sha256,
+        "original_outcome": BUSINESS_FAILED,
+        "original_result_source": "declared",
+        "original_result_path": None if original_result_path is None
+        else str(Path(original_result_path)),
+        "original_batch_id": None if original_batch_id is None else str(original_batch_id),
+    }
+    if original_result_path is None:
+        return source
+    path = Path(original_result_path)
+    try:
+        payload = path.read_bytes()
+    except OSError as error:
+        raise PointDrainError("RETRY_POINT_NOT_COMMITTED", f"{path}: {error}") from error
+    if _sha256_bytes(payload) != original_result_sha256:
+        raise PointDrainError(
+            "RETRY_SOURCE_MISMATCH",
+            f"{path}: {_sha256_bytes(payload)} != {original_result_sha256}")
+    try:
+        document = json.loads(payload)
+    except ValueError as error:
+        raise PointDrainError("RETRY_POINT_NOT_COMMITTED", str(path)) from error
+    if not isinstance(document, dict) or document.get("committed") is not True:
+        raise PointDrainError("RETRY_POINT_NOT_COMMITTED", str(path))
+    if document.get("outcome") != BUSINESS_FAILED:
+        raise PointDrainError("RETRY_POINT_NOT_FAILED", str(document.get("outcome")))
+    if document.get("point_id") not in (None, source["point_id"]):
+        raise PointDrainError("RETRY_SOURCE_MISMATCH",
+                              f"{document.get('point_id')} != {source['point_id']}")
+    source["original_outcome"] = BUSINESS_FAILED
+    source["original_result_source"] = "document"
+    return source
+
+
+def _require_text(name: str, value: object) -> str:
+    if not isinstance(value, str) or not value:
+        raise PointDrainError("RETRY_SOURCE_INVALID", f"{name}={value!r}")
+    return value
 
 
 def read_retry_source(*, prior_root: Path, point_id: str,
@@ -286,8 +361,10 @@ def read_retry_source(*, prior_root: Path, point_id: str,
         "original_catalog_sha256": str(document["catalog_sha256"]),
         "original_selection_sha256": str(document["selection_sha256"]),
         "original_result_sha256": _sha256_bytes(payload),
-        "original_outcome": "FAILED",
+        "original_outcome": BUSINESS_FAILED,
+        "original_result_source": "document",
         "original_result_path": str(result_path),
+        "original_batch_id": str(document.get("batch_id") or "") or None,
         "catalog_path": str(document["catalog_path"]),
         "prior_root": str(root),
     }

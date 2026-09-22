@@ -700,6 +700,169 @@ def test_a_retry_selection_document_projects_the_original_chain(tmp_path: Path) 
     assert first_pass_projection["selected_point_ids"] == list(_binding.selected_point_ids)
 
 
+# --------------------------------------------------------------------------------------
+# The v5 CLI's own retry-binding contract (what the service forwards on the command line)
+# --------------------------------------------------------------------------------------
+
+V5_CONFIG = (Path(__file__).resolve().parents[1]
+             / "config/mujoco/parallel_batch_v5_macos_mps_w1_retry.yaml")
+
+
+def _retry_plan(tmp_path: Path, *, point_id: str = "cup_test_forward_5cm",
+                campaign_id: str = "retry-campaign"):
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v5
+    from so101_demo.parallel_batch.w1_composition import compose_w1_retry
+
+    return compose_w1_retry(
+        config=load_parallel_runtime_config_v5(V5_CONFIG), config_path=V5_CONFIG,
+        campaign_id=campaign_id, batch_id="retry-batch",
+        selected_point_ids=(point_id,), evidence_root=tmp_path)
+
+
+def _retry_arguments(tmp_path: Path, extra=(), *, campaign_id: str = "retry-campaign"):
+    cli = _cli()
+    parser = cli.build_w1_parser("MPS_W1_FULL_RESTART_RETRY")
+    base = ["--config", str(V5_CONFIG), "--campaign-id", campaign_id,
+            "--batch-id", "retry-batch", "--evidence-root", str(tmp_path / "retry-evidence"),
+            "--yolo-weights", str(tmp_path / "yolo.pt"),
+            "--grounded-root", str(tmp_path / "grounded")]
+    return parser.parse_args(base + list(extra))
+
+
+def test_the_v5_cli_accepts_the_original_chain_from_its_command_line(tmp_path: Path) -> None:
+    """The service has the original hashes, not a prior root: the retry entry must take them.
+
+    The flags are the contract the service forwards: the original selection and result digests,
+    the original catalog digest, and the retry point. When the caller can also name the original
+    result document, the bytes decide the outcome; the selection document records which form was
+    used, so a reader can tell a re-read result from a declared one.
+    """
+
+    cli = _cli()
+    drain = _drain_module()
+    _module, _binding, _queue, prior_root, report, _calls = _committed_failed_point(tmp_path)
+    point_id = report.attempts[0].point_id
+    prior_document = json.loads(
+        (prior_root / "selection-binding.json").read_text(encoding="utf-8"))
+    result_document = prior_root / "point-results" / f"{point_id}.json"
+    result_sha = hashlib.sha256(result_document.read_bytes()).hexdigest()
+    catalog = _catalog_copy(tmp_path)
+
+    arguments = _retry_arguments(tmp_path, [
+        "--catalog", str(catalog), "--catalog-sha256", prior_document["catalog_sha256"],
+        "--point-id", point_id,
+        "--original-selection-sha256", prior_document["selection_sha256"],
+        "--original-result-sha256", result_sha,
+        "--original-catalog-sha256", prior_document["catalog_sha256"],
+        "--original-result", str(result_document),
+        "--original-batch-id", prior_document["batch_id"]])
+    assert arguments.original_result == result_document
+
+    selection, queue, resolved_catalog = cli.bind_campaign_selection(
+        arguments=arguments, plan=_retry_plan(tmp_path, point_id=point_id),
+        spec=cli.route_spec("MPS_W1_FULL_RESTART_RETRY"))
+
+    assert selection.selected_point_ids == (point_id,)
+    assert selection.original_selection_sha256 == prior_document["selection_sha256"]
+    assert selection.original_result_sha256 == result_sha
+    assert selection.original_catalog_sha256 == prior_document["catalog_sha256"]
+    assert selection.original_outcome == "FAILED"
+    assert resolved_catalog.resolve() == catalog.resolve()
+    assert queue.snapshot().pending_point_ids == (point_id,)
+    written = json.loads((tmp_path / "retry-evidence"
+                          / drain.SELECTION_DOCUMENT_BASENAME).read_text(encoding="utf-8"))
+    assert written["kind"] == "FULL_RESTART_RETRY"
+    assert written["original_result_sha256"] == result_sha
+    assert written["original_result_source"] == "document"
+    assert written["original_batch_id"] == prior_document["batch_id"]
+    # and the campaign's own projection of that document carries the same verification fact
+    projected = cli.selection_document(selection, catalog_path=catalog, extras={
+        "original_result_source": written["original_result_source"],
+        "original_batch_id": written["original_batch_id"]})
+    assert projected["original_result_source"] == "document"
+    assert projected["original_batch_id"] == prior_document["batch_id"]
+
+
+def test_the_v5_cli_refuses_a_retry_without_a_named_original_result(tmp_path: Path) -> None:
+    """No source, a partial one, or one that disagrees with its bytes is refused by name."""
+
+    cli = _cli()
+    drain = _drain_module()
+    _module, _binding, _queue, prior_root, report, _calls = _committed_failed_point(tmp_path)
+    point_id = report.attempts[0].point_id
+    prior_document = json.loads(
+        (prior_root / "selection-binding.json").read_text(encoding="utf-8"))
+    result_document = prior_root / "point-results" / f"{point_id}.json"
+    result_sha = hashlib.sha256(result_document.read_bytes()).hexdigest()
+    catalog = _catalog_copy(tmp_path)
+    plan = _retry_plan(tmp_path, point_id=point_id)
+    spec = cli.route_spec("MPS_W1_FULL_RESTART_RETRY")
+
+    def refusal(extra) -> str:
+        arguments = _retry_arguments(tmp_path, ["--catalog", str(catalog), "--point-id", point_id]
+                                     + list(extra))
+        with pytest.raises(cli.RefusedRun) as refused:
+            cli.bind_campaign_selection(arguments=arguments, plan=plan, spec=spec)
+        return refused.value.detail
+
+    # no binding source at all, and only half of one
+    assert refusal([]).startswith("RETRY_ROOT_REQUIRED")
+    assert refusal(["--original-selection-sha256", prior_document["selection_sha256"]]).startswith(
+        "RETRY_ROOT_REQUIRED")
+    assert refusal(["--original-result-sha256", result_sha]).startswith("RETRY_ROOT_REQUIRED")
+    # a declared digest that disagrees with the document it names
+    assert refusal(["--original-selection-sha256", prior_document["selection_sha256"],
+                    "--original-result-sha256", "e" * 64,
+                    "--original-result", str(result_document)]).startswith(
+        "RETRY_SOURCE_MISMATCH")
+    # a document that is not a committed business failure cannot be retried
+    passed = tmp_path / "passed-result.json"
+    passed.write_text(json.dumps({"point_id": point_id, "outcome": "PASSED", "committed": True}))
+    assert refusal(["--original-selection-sha256", prior_document["selection_sha256"],
+                    "--original-result-sha256", hashlib.sha256(passed.read_bytes()).hexdigest(),
+                    "--original-result", str(passed)]).startswith("RETRY_POINT_NOT_FAILED")
+    uncommitted = tmp_path / "uncommitted-result.json"
+    uncommitted.write_text(json.dumps({"point_id": point_id, "outcome": "FAILED"}))
+    assert refusal(["--original-selection-sha256", prior_document["selection_sha256"],
+                    "--original-result-sha256",
+                    hashlib.sha256(uncommitted.read_bytes()).hexdigest(),
+                    "--original-result", str(uncommitted)]).startswith(
+        "RETRY_POINT_NOT_COMMITTED")
+    # a retry batch that is the original batch, and a retry of several points
+    assert refusal(["--original-selection-sha256", prior_document["selection_sha256"],
+                    "--original-result-sha256", result_sha,
+                    "--original-batch-id", "retry-batch"]).startswith("RETRY_BATCH_EXISTS")
+
+    arguments = _retry_arguments(
+        tmp_path, ["--catalog", str(catalog), "--point-id", point_id, "--point-id", "task_start",
+                   "--original-selection-sha256", prior_document["selection_sha256"],
+                   "--original-result-sha256", result_sha])
+    with pytest.raises(cli.RefusedRun) as several:
+        cli.bind_campaign_selection(arguments=arguments, plan=plan, spec=spec)
+    assert several.value.detail.startswith("RETRY_POINT_REQUIRED")
+
+    # the prior-root form still works, and a declared digest may only confirm it. A retry belongs
+    # to the original campaign, so these two carry the prior campaign's own id.
+    prior_campaign = prior_document["campaign_id"]
+    prior_plan = _retry_plan(tmp_path, point_id=point_id, campaign_id=prior_campaign)
+    arguments = _retry_arguments(
+        tmp_path, ["--catalog", str(catalog), "--point-id", point_id,
+                   "--retry-root", str(prior_root),
+                   "--original-result-sha256", "e" * 64],
+        campaign_id=prior_campaign)
+    with pytest.raises(cli.RefusedRun) as divergent:
+        cli.bind_campaign_selection(arguments=arguments, plan=prior_plan, spec=spec)
+    assert divergent.value.detail.startswith("RETRY_SOURCE_MISMATCH")
+    arguments = _retry_arguments(
+        tmp_path, ["--catalog", str(catalog), "--point-id", point_id,
+                   "--retry-root", str(prior_root),
+                   "--original-result-sha256", result_sha],
+        campaign_id=prior_campaign)
+    selection, _queue, _catalog = cli.bind_campaign_selection(
+        arguments=arguments, plan=prior_plan, spec=spec)
+    assert selection.original_result_sha256 == result_sha
+
+
 def test_retry_binding_leases_only_the_bound_failed_point(tmp_path: Path) -> None:
     drain = _drain_module()
     _drain_module_, _binding, _queue, prior_root, report, _calls = _committed_failed_point(tmp_path)
