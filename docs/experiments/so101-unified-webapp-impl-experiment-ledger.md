@@ -6151,3 +6151,52 @@ choice. Reporting them as the blocking condition is the honest end state; the le
 measurements, the code sites and the exact next experiment for the station question
 (`ros2 service list | grep -i list_controllers` alongside `ros2_control_node`'s stderr, with the caveat
 that the graph must be visible to the client at that moment).
+
+## CP-176: read-only verification of the successor's fix - first-pass projection closed, retry leg still refused
+
+Authorised follow-up (user chose the read-only option): verify the successor's projection fix myself and
+record the result here. Nothing of theirs was modified; no campaign or service was started; their
+evidence root was read only. Their work lives in two new ledgers
+(`so101-macos-service-campaign-closure-experiment-ledger.md`,
+`so101-macos-runtime-contract-experiment-ledger.md`) and is at HEAD `cfcb06dd`, 84 commits past my
+CP-175. The fix itself is `05e6cf9d fix(teleop): resolve the campaign journal layout and wire the retry
+argv`, and their own last checkpoint (`CP-MSC-T12-INFLIGHT`, 10:00) called this work "in flight" - it has
+since landed.
+
+**My replay** (`scratch-a5/verify_projection_chain.py`, read-only, run with the registered interpreter and
+the ROS-sourced environment) follows exactly the path `production.py:1195-1240` uses, against two real
+batches from their root.
+
+1. **The first-pass leg is closed, and I verified it independently.** On
+   `task11/after-fix/w2-20260922T010730Z` (batch `w2-b001`, campaign `cand-w2-20260922T010730Z`):
+   `journal=True coordinator=False` -> `resolve_fixed_journal_layout` returns
+   `layout=CAMPAIGN epoch=1 root=journal`, `CampaignLayoutReader` reads **11 events** from the real
+   segmented journal and produces a projected state in which **`task_start` carries
+   `result_sha256`** - the exact field `_retry_origin` needs, and the reason a retry previously refused
+   `RETRY_ORIGINAL_RESULT_UNKNOWN`. Their own cited stopping point is therefore fixed.
+2. **The retry leg is not.** On `task11/after-fix/retry-v5-flags-20260922T020305Z` (batch
+   `retry-flags-b001`, `kind: FULL_RESTART_RETRY`, CLI `macos_n1_retry`, **exit 0**) the resolver also
+   picks `CAMPAIGN`, the journal verifies, and then the reader refuses:
+   `CAMPAIGN_FIELD_INVALID:catalog_sha256`. The cause is a schema difference, not corruption: a retry
+   binding carries `original_catalog_sha256`, `original_selection_sha256`, `original_outcome`,
+   `original_result_sha256` and a single `point`, while `campaign_layout.read_selection_binding`
+   requires `catalog_sha256`, `catalog_schema_version`, `coordinate_frame` and `points`. So the new
+   reader can read a first-pass campaign journal and cannot read a retry campaign journal.
+   Consequences read from the code, not guessed: in the **start** path
+   (`production.py:575-586`) the error is swallowed (`projected = None`, the STARTED projection
+   stands); in the **read** path (`production.py:1171-1182`) any non-`JOURNAL_REPLAY_INCOMPLETE`
+   projection error becomes `ServiceConflict("UPSTREAM_PROJECTION_INVALID")`. Whether that bites depends
+   on one thing I did not finish confirming: whether `_campaign_requests[campaign_id]` ends up naming
+   the retry batch (`_candidate_first_pass_request` does overwrite it at `production.py:1962`; I did not
+   establish the retry path's equivalent).
+3. **Retry admission itself is no longer blocked by this**, because `_retry_origin` reads the
+   **FIRST_PASS** batch's persisted projection - which item 1 shows can now be produced.
+
+Status of my three blocked points after this verification: **(1) N=1 retry capability: lifted**
+(`ParallelRuntimeConfigV5` schema 5 / 1 worker / `MPS_W1_FULL_RESTART_RETRY`, `compose_w1_retry`
+composes one point to one slot, and a real CLI retry run exited 0); **(2) station readiness: lifted**
+per their `CP-MSC-003B` and `CP-MSC-FINAL-CANDIDATE` (I did not re-run it myself); **(3) projection:
+lifted for the first pass (verified above), still open for the retry leg**. And the deliverable my
+objective names - a retry driven through the **service API** - is still not demonstrated anywhere I can
+see: the retry evidence is a CLI run, and their Task 12 Steps 2-4 (fresh Chrome W2 then W1, optional
+retry) remain pending.
