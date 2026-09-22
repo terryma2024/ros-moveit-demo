@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-SIGNALS
+latest_checkpoint: CP-MSC-REMEDIATION-GATE9
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3961,3 +3961,41 @@ inventory, foreign sentinel as separate named cases - several are already covere
 inventory cases added in Task 5), Step 2's targeted RED/GREEN pass, Step 3's rebuild-and-freeze
 before any live work, Step 4's live crash recovery with a foreign sentinel plus the identity-drift
 negative control, and Step 5's ledger update and gate re-run.
+
+## CP-MSC-REMEDIATION-GATE9: the gate is green on the current product bytes
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-GATE9
+recorded_at: 2026-09-23T05:15:00+0800
+carried_by: the local commit that adds this entry (parent 937288d9)
+run: remediation/gates/t8-gate9-20260922T163410Z-94191  verdict=PASS
+status: gate8's PASS re-confirmed after the signals_sent product change
+```
+
+| Layer | t8-gate9 at `937288d9` |
+| --- | --- |
+| demo pytest | rc=0, 3917 tests, 0 failures, 0 errors |
+| teleop pytest | rc=0, **903** tests (one more than gate8: the new recovery receipt case), 0 failures, 0 errors |
+| copied install | rc=0, 37 tests, 0 failures, 0 errors |
+| `colcon test` / `colcon test-result --verbose` | rc=0 / rc=0, 1074 tests, 0 failures, 0 errors, 2 skipped |
+| web `tsc` / `vitest` / `build` | rc=0 / rc=0 / rc=0 |
+| runner verdict | **PASS** |
+
+## CP-MSC-REMEDIATION-8B-SCOPE: what Task 8B already has, and what is left
+
+Task 8B Step 1's table is now covered as follows, checked against the repository rather than assumed:
+
+| Case | Where it stands |
+| --- | --- |
+| leaf-first reclamation of PID/birth-matched task-owned descendants | `test_owner_tree_root_reclaims_the_recorded_tree_leaf_first_and_resolves_the_fence`, real sleepers, passing |
+| unknown ancestry | `INTENT_UNCONFIRMED` - `test_expert_validation_owner_tree.py:356,650,806` |
+| PID reuse / birth drift | `OWNER_IDENTITY_MISMATCH` - line 382, and the combined WORKER/STATION message in the recovery file at line 423 |
+| surviving group members | `OWNER_GROUP_SURVIVORS` - line 403 |
+| `AccessDenied` / broken psutil / missing identity port | `RECOVERY_RUNTIME_UNVERIFIABLE` - the psutil inventory cases added in Task 5 |
+| zero signals on every refusal | the new `signals_sent` field, `937288d9`, 34 passed |
+| **foreign sentinel survives a live recovery** | **not covered** - needs the live run |
+
+So Task 8B's remaining work is Steps 3-5: rebuild and freeze the install for that experiment, run the
+live task-owned crash recovery with a foreign sentinel whose PID/birth is frozen before and after,
+run the identity-drift negative control, and update this ledger plus re-run the gate. The closed live
+window runner from `a4698f0b` is what that experiment needs.
