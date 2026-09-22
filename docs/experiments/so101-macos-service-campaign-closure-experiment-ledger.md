@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-SUPERVISOR-LEGS
+latest_checkpoint: CP-MSC-REMEDIATION-GATE-CONFIRMED
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3762,3 +3762,33 @@ product changed for them.
 | `test_expert_validation_production_projection::test_cancel_command_replays…[False/True]` | `88c109b2` | 24 passed |
 | `test_expert_validation_supervisor::test_live_fixed_supervisor…[USER_CANCELLED/LEASE_EXPIRED]` | this commit | 24 passed |
 | `test_expert_validation_e2e_installed_port::test_fixed_helper_*` | runner basetemp | 6 passed |
+
+## CP-MSC-REMEDIATION-GATE-CONFIRMED: one helper case left in the whole static gate
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-GATE-CONFIRMED
+recorded_at: 2026-09-23T02:40:00+0800
+carried_by: the local commit that adds this entry (parent 83e00c6e)
+run: remediation/gates/t8-gate4-20260922T153814Z-54462
+status: every layer green except one order-dependent helper case
+```
+
+| Layer | t8-gate4 at `83e00c6e` | baseline |
+| --- | --- | --- |
+| demo pytest | **rc=0, 3917 tests, 0 failures, 0 errors** | rc=1, 176 failed |
+| teleop pytest | rc=1, 902 tests, **1 failure** | rc=1, 27 failed |
+| copied install | **rc=0, 37 tests, 0 failures** | rc=0 |
+| `colcon test-result` | rc=1, 1074 tests, **3 failures** | rc=1, 39 failures |
+| web tsc / test / build | rc=0 / rc=0 / rc=0 | rc=0 |
+
+The single remaining name is
+`test_expert_validation_e2e_installed_port.py::test_fixed_helper_descendant_survives_leader_exit`,
+which fails with `ProcessIdentityError: PROCESS_IDENTITY_MISMATCH` inside a full-file or
+full-suite run and passes on its own (`remediation/runs/t8-e2e-…`, 6 passed). `colcon` reports the
+same case plus `test_fixed_helper_full_protocol`, which is the same boundary under colcon's own
+`TMPDIR` rather than a per-step basetemp.
+
+That is a real, reproducible-in-context ordering interaction in a helper test, not a path artefact:
+the leader exits and the descendant is then expected to keep its own identity, which is exactly what
+`read_identity` refuses to guess. It needs its own RED and its own minimal fix, so it stays open
+rather than being explained away or relaxed.
