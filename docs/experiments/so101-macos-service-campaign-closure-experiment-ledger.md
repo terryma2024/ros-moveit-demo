@@ -4088,3 +4088,35 @@ unit rendering of the same scenario in `test_expert_validation_operator_recovery
 question for the next writer is therefore precise: either the CLI needs the supervisor to be stopped
 before `--apply` (an operational precondition the guide must state), or it needs an inspector to prove
 the owner is gone - and whichever it is, the live experiment must show it rather than assume it.
+
+### Addendum 3: VALIDATION_SUPERVISOR_ACTIVE answered, and what the live run shows next
+
+`VALIDATION_SUPERVISOR_ACTIVE` is not about an inspector at all: it is
+`SupervisorStore.open` failing to take the store's exclusive `flock` (`store.py:261`). The `--apply`
+help text says it plainly - "requires Web service offline" - so the experiment now closes its own
+store handle before invoking the CLI, and reads the fence straight out of `supervisor.sqlite3` with a
+read-only connection, because re-opening the store to ask would need the very lock the CLI must take.
+
+With that, the live run reaches the product's real decision and both cases answer the same way:
+
+```text
+positive rc=1  stderr=RECOVERY_PROCESS_GROUP_PRESENT   descendant_alive_after: true
+negative rc=1  stderr=RECOVERY_PROCESS_GROUP_PRESENT   descendant_alive_after: true
+sentinel_untouched: true                                residue_pids: []
+```
+
+Two facts follow, and they are the ones the next writer needs:
+
+1. the operator-recovery entry refuses while any process - including the *recorded, reclaimable*
+   task-owned descendant - is still in a recorded process group. That is what
+   `test_descendant_in_recorded_group_is_refused` pins at unit level, so it is the intended order for
+   this entry;
+2. the leaf-first reclaim that *stops* such a descendant lives on the owner-tree path
+   (`--owner-tree-root`), which is what
+   `test_owner_tree_root_reclaims_the_recorded_tree_leaf_first_and_resolves_the_fence` exercises.
+
+So the live experiment as written asks the wrong entry point for the crash-recovery case: a surviving
+descendant is not something `recover(... --apply)` will reclaim, it is something that refuses it. The
+live version of Step 4 should therefore drive the **owner-tree** reclaim with the real crashed tree
+and then the operator entry for the fence, and it must show the foreign sentinel surviving both. That
+is the corrected next step, and it is recorded rather than papered over.
