@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-COLCON-DEPTH
+latest_checkpoint: CP-MSC-REMEDIATION-COLCON-ADDOPTS
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3880,3 +3880,27 @@ colcon's pytest children use TMPDIR, and pytest appends `pytest-of-<user>/pytest
 even the runner's short `TMPDIR` left the batch root at about 86 bytes and the control endpoint past
 104. The colcon step now passes `--pytest-args "--basetemp=<short>"`, exactly like the three direct
 pytest steps, and the basetemp is recorded in the run's provenance.
+
+## CP-MSC-REMEDIATION-COLCON-ADDOPTS: colcon ignored --pytest-args
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-COLCON-ADDOPTS
+recorded_at: 2026-09-23T04:05:00+0800
+carried_by: the local commit that adds this entry (parent cbe83472)
+status: cause isolated; the PYTEST_ADDOPTS attempt is unverified
+```
+
+`t8-gate7` (fresh install, `remediation-build-20260922T155928Z`) keeps five of six layers green and
+still reports three colcon failures. The failure record proves the `--pytest-args "--basetemp=..."`
+form did not take effect, because the child still ran under TMPDIR:
+
+```text
+tmp_path = PosixPath('/opt/data/tmp/so101-cc-zLxL5nJe/pytest-of-matianyi/pytest-35/test_fixed_helper_full_protoco0')
+WebControlError: CONTROL_SOCKET_PATH_TOO_LONG
+```
+
+So the runner now exports `PYTEST_ADDOPTS=--basetemp=<short>` for the colcon step, which every pytest
+process honours, including the one ament starts. That change is committed but **not yet verified** -
+the confirming run is the next action. If it also fails, the remaining lever is to make the colcon
+step's own `TMPDIR` the basetemp root and shorten the test-name component, which needs a different
+approach than the direct pytest steps.
