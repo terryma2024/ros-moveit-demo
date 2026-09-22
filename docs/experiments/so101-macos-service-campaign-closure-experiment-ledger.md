@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-RETRY
+latest_checkpoint: CP-MSC-REMEDIATION-T11-RECOVERY
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -5355,4 +5355,59 @@ start, then the retry through `retryFailedPoints` on the selected point - and wr
 takes no screenshot, so the retry window has no `final.png` equivalent. The W2 window's screenshot
 does show the console rendering points, progress and per-point results. A visual capture of the retry
 result would need another service window, which the one-spec-one-window rule does not sanction here.
+
+## CP-MSC-REMEDIATION-T11-RECOVERY: the crash recovery re-run on the installed provenance
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-RECOVERY
+recorded_at: 2026-09-23T20:45:00+0800
+carried_by: the local commit that adds this entry (parent 2bf60250)
+task: Task 11 Step 4
+experiment: remediation/task11/t8b-recovery-20260922T202933Z/
+status: positive reclaimed, negative fenced, foreign sentinel untouched
+```
+
+Task 8B's live case was run again, this time with the recovery entry point resolving from the frozen
+install rather than the worktree. The runner was copied into the new experiment directory and its two
+source-path inserts were retargeted; nothing else changed, and the diff is two lines:
+
+```text
+- sys.path.insert(0, os.environ["SO101_WORKTREE"] + "/src/so101_teleop")
+- sys.path.insert(0, os.environ["SO101_WORKTREE"] + "/src/so101_demo_py/src")
++ sys.path.insert(0, "/opt/data/so101/workspace/install/so101_teleop/lib/python3.11/site-packages")
++ sys.path.insert(0, "/opt/data/so101/workspace/install/so101_demo_py/lib/python3.11/site-packages")
+```
+
+The install paths were also put ahead of the worktree in `PYTHONPATH`, and the resolution was proved
+rather than assumed before the experiment ran:
+
+```text
+so101_teleop.expert_validation.operator_recovery -> .../install/so101_teleop/lib/python3.11/site-packages/so101_teleop/expert_validation/operator_recovery.py
+so101_teleop.expert_validation.store            -> .../install/so101_teleop/lib/python3.11/site-packages/so101_teleop/expert_validation/store.py
+so101_teleop.process_identity                   -> .../install/so101_teleop/lib/python3.11/site-packages/so101_teleop/process_identity.py
+head 2bf60250, python /opt/ros2_jazzy/.venv/bin/python
+```
+
+Both cases, on the installed code:
+
+```text
+positive  rc 0, stderr empty, signals_sent [61052], fence_released true,
+          descendant_expected_pid 61052, descendant_alive_after false
+negative  rc 1, RECOVERY_OWNER_TREE_UNRESOLVED generation 1: WORKER: OWNER_IDENTITY_MISMATCH,
+          descendant_alive_after true, fence still in recovery_fences (OWNER_UNAVAILABLE)
+foreign   sentinel_untouched true - same pid 61050, same birth 1790109002576548, same pgid
+residue   residue_pids []
+```
+
+So the positive case still reclaims its own crashed tree leaf-first and releases the fence, the
+negative control still refuses to signal a descendant whose recorded birth drifted, and the foreign
+sentinel is untouched in both. The processes this experiment started were stopped by exact pid and
+the residue readback is empty.
+
+One correction to the record: the first launch of this experiment failed, and not for a product
+reason. The runner reads `SO101_WORKTREE` and I had sourced an environment that defines
+`REM_WORKTREE` instead, so it aborted with `KeyError: 'SO101_WORKTREE'` before reaching the recovery
+call. That attempt still wrote its own receipt - `sentinel_untouched true`, `residue_pids []` - so the
+failed attempt left nothing running. The retargeted run above is the second attempt, and
+`provenance.txt` in the experiment directory names both.
 
