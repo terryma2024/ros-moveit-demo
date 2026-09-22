@@ -12,7 +12,7 @@ executor: dst-so101-macos-closure (DeepSeek Harness TUI, tmux) resumed by explic
 worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
 branch: codex/so101-unified-webapp
 base_commit: 6d5069026fbd322076f58d0d4b9504891abeb861
-current_commit: ff263dbc (Task 9/10 checkpoints; see CP-MSC-T11-STOP)
+current_commit: 275077e2 (candidate contexts; see CP-MSC-T11-FIX)
 upstream: origin/codex/so101-unified-webapp (in sync at resume; this session does not push)
 evidence_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
 dispatch_receipt: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/dispatch.receipt
@@ -49,9 +49,9 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-T11-STOP
+latest_checkpoint: CP-MSC-T11-FIX
 review_pending: CP-MSC-02 (Tasks 2-6, GPT-5.6 Sol/high - not available in this session; packet below)
-next_experiment: EXP-MSC-112 (wire the durable shared queue into the campaign lease path, then re-run the candidate gates)
+next_experiment: EXP-MSC-113 (finish the candidate W2/W1/retry re-run, then Task 12 fresh-Chrome production acceptance)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -2009,3 +2009,65 @@ Final readback: no candidate process, zero TCP listeners, empty IPC/control dire
 broker or move_group left, and all six campaigns report cleanup complete.
 
 Retained: all of `task11/**` plus the preserved verbatim colcon run. Deleted or archived: nothing.
+
+## CP-MSC-T11-FIX: the two gaps behind the stop are closed and committed
+
+```yaml
+checkpoint_id: CP-MSC-T11-FIX
+recorded_at: 2026-09-22T09:20:00+0800
+commits: 48da468a feat(so101): drain the durable queue one leased point per Worker
+         275077e2 feat(teleop): issue one-time candidate contexts for first-pass runs
+```
+
+**Gap 1 - nothing executed a point.** The campaign now drives the durable shared queue: each lease
+writes the single-point input the Worker already reads, the Worker executes exactly that point, the
+result is committed to the queue and the journal, and the next lease follows (two Workers over one
+queue for v4 W2, one sequential Worker for v6 W1, only the bound business-`FAILED` point for v5
+retry). Verdicts stop being smoke verdicts: a pass requires exactly one committed result per selected
+point, a Worker that exits without a result becomes `WORKER_EXITED_WITHOUT_RESULT`, and the worker
+body sits under one `try/finally` so no exit path leaks its station. The first live re-run exposed a
+`NameError` in the Worker lease read and the missing station cleanup; both were fixed and covered
+before a single re-run, the two orphaned launch helpers were proven by PGID and stopped, and the
+foreign processes were preserved.
+
+**Gap 2 - no candidate context for a first pass.** `POST /expert-validation/candidate-contexts`
+issues a one-time candidate context from the design's explicit coordinates and binds the runtime
+closure of the exact run it authorizes plus the copied-install binding;
+`POST /expert-validation/campaigns/candidate-first-pass` starts a candidate first pass through it
+with the retry path's discipline (coordinates, freshness, max runs and the one-time command in one
+transaction that also consumes the preflight receipt and writes the campaign, batch, admission
+binding and owner spawn intent). Candidate contexts are candidate-only in both directions, replays
+and expired contexts are refused by typed reason, and the production path is untouched.
+
+Evidence: `task2/task11-fix-*`, `task2/task11-ctx-{baseline,red,green11,full-final2}-*`
+(167 passed / 2 failed on the four target modules; full gate 27 failed / 800 passed, a strict subset
+of the 28-failure HEAD baseline), OpenAPI/TS regenerated (`d8568b6c...`, `d98a3099...`), live re-runs
+under `task11/after-fix/`.
+
+### Status at this checkpoint
+
+- **Offline package gate (Task 11 Part A): PASS** as recorded in `CP-MSC-T11-STOP`, including the
+  stale CTest registration fix and the pre-existing-failure proof.
+- **Candidate live gate (CP-MSC-04): pending.** The post-fix W2 re-run (`task11/after-fix/w2-*`) was
+  still executing its points when this checkpoint was written; the selected-only, watermark, physical
+  evidence and cleanup observables must be read from that run (and from a W1 v6 run plus a v5 retry
+  from a real business `FAILED` point) before CP-MSC-04 can pass. Nothing is claimed for it here.
+- **Task 12 (installed production + fresh Chrome) and Task 13 (final gate, guide, reviews, handoff):
+  NOT RUN.** The exact next commands are the plan's Task 12 Step 5 environment assertions and the
+  three `bun run test:e2e:live-sim --project ...` projects, which need a fresh Chrome profile, the
+  live authorization file, the service state root and the functional manifest produced against the
+  live service; Task 13 then re-runs the full static gate with new JUnit names and accounts for the
+  evidence.
+- **External reviews are pending and cannot be performed from this session.** `CP-MSC-02` (Tasks 2-6),
+  `CP-MSC-03` (Tasks 7-9) and the Task 13 Sol/high result review plus the Astra/high independent final
+  review require models that are not reachable here. They are recorded as pending, not as passed, and
+  no guide has been authored in Sol/high's name. Per the plan's checkpoint table the closure is
+  therefore **PARTIAL**, not FINAL PASS.
+
+Residue: the pre-existing failing `test_unified_bridge*`/`e2e_installed_port` tests continue to leave
+orphaned `descendant_helper.py` processes (about twenty, several with ambiguous provenance); they are
+preserved and listed, never signalled. The two `static_transform_publisher` processes from Sep 20 are
+foreign and untouched. No candidate process, TCP listener, IPC socket, ROS node or broker is left by
+this task's runs.
+
+Retained: everything under the registered root. Deleted or archived: nothing.
