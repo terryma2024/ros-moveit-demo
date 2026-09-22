@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-TELEOP-GREEN
+latest_checkpoint: CP-MSC-REMEDIATION-GATE5
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3817,3 +3817,41 @@ remediation/runs/t9-e2e-file-20260922T154741Z:    6 passed (the file on its own)
 ```
 
 That was the last open boundary of Task 8. Task 8 Step 4's confirming run follows this commit.
+
+## CP-MSC-REMEDIATION-GATE5: only the stale install stands between Task 8 and green
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-GATE5
+recorded_at: 2026-09-23T03:20:00+0800
+carried_by: the local commit that adds this entry (parent the teleop-green commit)
+run: remediation/gates/t8-gate5-20260922T154951Z-62973
+status: five of six layers green; colcon fails only because the install predates the product fix
+```
+
+| Layer | t8-gate5 | baseline |
+| --- | --- | --- |
+| demo pytest | **rc=0, 3917 tests, 0 failures, 0 errors** | rc=1, 176 failed |
+| teleop pytest | **rc=0, 902 tests, 0 failures, 0 errors** | rc=1, 27 failed |
+| copied install | **rc=0, 37 tests, 0 failures** | rc=0 |
+| web tsc / test / build | **rc=0 / rc=0 / rc=0** | rc=0 |
+| `colcon test-result` | rc=1, 1074 tests, **3 failures** | rc=1, 39 failures |
+
+The three colcon failures are the two `test_expert_validation_e2e_installed_port` cases, and colcon
+says why in its own words:
+
+```text
+WARNING:colcon.colcon_core.shell:The following packages are in the workspace but haven't been built:
+- so101_teleop
+They are being used from the following locations instead:
+- /opt/data/so101/workspace/install/so101_teleop
+```
+
+The install was built at `remediation-build-20260922T150556Z`, before the product fix in
+`88c109b2` (the sanctioned Darwin control root). Those two cases exercise the installed bytes, so
+they still meet the old containment rule there. This is exactly the boundary Task 8 Step 1 names:
+"direct pytest、colcon 和 live 都必须 read back 当前 install provenance，不得测试旧 installed bytes",
+and Step 4 requires a fresh `prepare` plus doctor and CTest readback whenever source has changed
+before the runner is repeated.
+
+`remediation-build-20260922T155…` (recorded in `/tmp/t8b-build-run.txt`) is that fresh `prepare`.
+The confirming `t8-gate6` run follows it in the next round.
