@@ -4042,3 +4042,16 @@ runs. The next diagnostic step is to capture the exact `ProcessIdentityError` fo
 child differently (for example with an absolute interpreter path and a controlled argv) or whether
 the port has a genuine gap on Darwin. It is recorded rather than worked around, because the recovery
 half's evidence is exactly what must not be guessed.
+
+### Addendum: one self-terminating stray, deliberately not signalled
+
+The first live attempt left one `sleep 300` (pid 5536, pgid 5535, parent 1) behind: it is the
+descendant the leader program started internally, and the attempt died before that pid could be read
+back and recorded. The evidence that it belongs to the experiment is strong but circumstantial - same
+second as the experiment's own sentinel, a process group matching the leader this script started, and
+an argv (`sleep 300`) that only this harness produces - and the contract for this dispatch is that a
+process is only ever signalled when its identity was recorded by the run itself. It was not, so it was
+**not** signalled. It is a five-minute sleeper started at 00:47:54Z and it exits on its own, so it
+retires itself; it is recorded here and in the writer-release marker instead of being killed on a
+guess. Any process the experiment itself recorded (the sentinel) was stopped by exact pid, which is
+why `residue_pids` is empty.
