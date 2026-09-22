@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-SELECTION
+latest_checkpoint: CP-MSC-REMEDIATION-T11-W2-WINDOW
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4384,3 +4384,40 @@ position in order, so the W2 and W1 windows compare against the same frozen list
 each other. It was produced by calling `load_baseline_catalog()` and `select_catalog_points(20)` from
 the product's own catalog module - the same code the service uses - so the ids, the four anchors and
 the digests are the product's, not a hand-written fixture. The three live windows follow.
+
+## CP-MSC-REMEDIATION-T11-W2-WINDOW: the closed window reaches its target case
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-W2-WINDOW
+recorded_at: 2026-09-23T09:10:00+0800
+carried_by: the local commit that adds this entry (parent the selection commit)
+window: remediation/windows/w2-20260922T174901Z-41532/
+status: the runner, the launcher and the fixture gates all work; the R06 case itself fails early
+```
+
+Four defects were found by running the window for the first time, all of them mine and all fixed:
+
+1. `OVERLAY_NOT_SOURCED: /opt/ros2_jazzy/install` - the launcher compared literal `AMENT_PREFIX_PATH`
+   entries; `/opt/ros2_jazzy` is a symlink to the real workspace and the setups export the resolved
+   form. Entries are resolved before comparison now.
+2. `OVERLAY_NOT_SOURCED` again - this host's ROS install is an **isolated** install: all 692
+   `AMENT_PREFIX_PATH` entries name `<root>/<package>` and the bare root never appears. Each root now
+   only has to be *represented* by an entry equal to it or inside it.
+3. the evidence root was created with the ambient umask, so the live fixture refused it with
+   `LIVE_SIM_EVIDENCE_ROOT_REQUIRED`; all three run directories are `0700` now.
+4. (from the earlier rehearsal) the collection readback and the per-attempt scratch.
+
+With those, the window does its whole job: collection readback reports exactly one target case
+(`macos-w2-20`) plus the two preflight tests, the service starts through the frozen-identity launcher
+and answers `/health` 200 with `validation: ready`, Playwright runs the right project, and the window
+stops only its own PID with an empty residue.
+
+The R06 case itself now runs - and fails in about half a second, which is far too fast for a campaign:
+        Error: PACKAGE_PREFIX_MISSING: /data/work/ws_moveit/install/mujoco_3d_lidar
+          28 | function missingPackage(name: string, bases: readonly string[]): Error {
+        > 29 |   if (bases.length === 1) return new Error(`PACKAGE_PREFIX_MISSING: ${join(bases[0], name)}`);
+          30 |   return new Error(`PACKAGE_PREFIX_MISSING: ${name} (searched: ${bases.join(", ")})`);
+```
+
+That is where the next round starts: read `playwright.log` in that window directory, diagnose the
+early failure, and only then decide whether it is a fixture gap or a product one.
