@@ -1437,3 +1437,72 @@ export function assertCampaignBatchEvidence(
   assertPhysicalEvidenceSet(evidence);
   assertCleanupComplete(evidence, expectation.projection ?? null);
 }
+
+/**
+ * Every selected point carries the per-point evidence *its own layout* produces.
+ *
+ * The Linux/fixed layout registers each attempt's artifacts on the service projection, so the
+ * projection is the evidence. The macOS composed layout registers none by design - the product says
+ * so itself ("the campaign layout has no sealed attempt manifest to import ... no artifact is
+ * registered for it") - and binds every point to the committed point result the batch's own bytes
+ * carry instead. Both branches refuse missing, mismatched or tampered evidence; neither falls back
+ * to the other layout's expectation, and a projection without points is a refusal.
+ */
+export function assertProjectedPointEvidence(
+  evidence: CampaignBatchEvidence,
+  projection: Record<string, unknown> | null | undefined,
+): void {
+  const code = "POINT_EVIDENCE_INVALID";
+  const points = (projection as { points?: unknown } | null | undefined)?.points;
+  if (!Array.isArray(points) || points.length === 0) {
+    fail(code, "projection carries no points");
+  }
+  const committed = committedAttempts(evidence);
+  for (const raw of points) {
+    if (!isRecord(raw)) fail(code, "point entry");
+    const point = raw as Record<string, any>;
+    const label = String(point.display_id ?? point.point_id ?? "point");
+    if (evidence.layout === "LINUX_FIXED") {
+      if (!Array.isArray(point.artifacts) || point.artifacts.length === 0) {
+        fail(code, `${label} has no registered artifact`);
+      }
+      continue;
+    }
+    const pointId = String(point.point_id ?? "");
+    const attempt = committed.find((entry) => entry.pointId === pointId);
+    if (attempt === undefined) fail(code, `${label} has no committed attempt`);
+    // The batch-level point result is the document the commit is bound to: it names the evidence
+    // manifest and carries the digest that covers that manifest's bytes.
+    const committedResultPath = insideBatch(
+      evidence.batchRoot, join("point-results", `${pointId}.json`), code);
+    if (!existsSync(committedResultPath)) fail(code, `${label} missing ${committedResultPath}`);
+    const document = parseDocument(
+      readFileSync(committedResultPath), code, `${label} committed result`);
+    const manifestPath = insideBatch(
+      evidence.batchRoot, document.evidence_manifest_relative_path, code);
+    const expectedManifestPath = join(attempt!.sealedDir, "point-result.json");
+    if (resolve(manifestPath) !== resolve(expectedManifestPath)) {
+      fail(code, `${label} evidence manifest is not the committed attempt's own document`);
+    }
+    if (!existsSync(manifestPath)) fail(code, `${label} missing ${manifestPath}`);
+    if (
+      !isSha256(document.evidence_manifest_sha256)
+      || sha256(readFileSync(manifestPath)) !== document.evidence_manifest_sha256
+    ) {
+      fail(code, `${label} evidence manifest digest`);
+    }
+    // The attempt identity is already bound by `committedAttempts`, which checks this same result
+    // against the journal's own commit; here the manifest has to be the point's own document, with
+    // a status and a non-empty inventory.
+    const manifest = parseDocument(readFileSync(manifestPath), code, `${label} evidence manifest`);
+    if (
+      manifest.id !== pointId
+      || manifest.manifest_path !== "point-result.json"
+      || typeof manifest.status !== "string" || manifest.status === ""
+      || !Array.isArray(manifest.artifacts)
+      || manifest.artifacts.length === 0
+    ) {
+      fail(code, `${label} evidence manifest inventory`);
+    }
+  }
+}

@@ -4,7 +4,18 @@ import { join } from "node:path";
 
 import { liveSimTest as test, expect, recordGate } from "../fixtures/live-sim";
 import { readJournalEvents } from "../assertions/journal";
-import { readSealedAttempt } from "../assertions/live-evidence";
+import {
+  assertCleanupComplete,
+  assertPhysicalEvidenceSet,
+  assertProjectedPointEvidence,
+  assertSelectedOnlyAttempts,
+  assertSequenceAndWatermark,
+  campaignJournalRoot,
+  committedAttempts,
+  readCampaignBatchEvidence,
+  readSealedAttempt,
+  type CampaignBatchExpectation,
+} from "../assertions/live-evidence";
 import {
   ExpertValidationPage,
   releaseAcquiredLeases,
@@ -29,7 +40,17 @@ test("R01 four-point sequential live smoke @live-sim", async ({ page, liveServer
   await app.acquireLease();
   await app.generateManifest(4);
   await app.configureSequential();
-  await app.runPreflight();
+  // The receipt is this spec's own routing claim: which matrix row the console asked for.
+  const [preflightResponse] = await Promise.all([
+    page.waitForResponse(
+      (candidate) =>
+        candidate.url().endsWith("/expert-validation/campaigns/preflight")
+        && candidate.request().method() === "POST",
+    ),
+    app.runPreflight(),
+  ]);
+  expect(preflightResponse.status()).toBe(200);
+  const receipt = (await preflightResponse.json()) as Record<string, unknown>;
   // The campaign id comes from this spec's own start response: the campaign list also holds the
   // campaigns of every spec that ran before it.
   const campaignId = await app.startValidation();
@@ -59,38 +80,76 @@ test("R01 four-point sequential live smoke @live-sim", async ({ page, liveServer
 
   // Flow-level: every point reached a definite verdict.
   expect(projection.points).toHaveLength(4);
+  const batchRoot = join(liveServer.stateDir, "campaigns", campaignId, projection.batch_id);
+  const batchEvidence = readCampaignBatchEvidence(batchRoot);
   for (const point of projection.points) {
     expect(["PASSED", "FAILED"]).toContain(point.status);
-    expect(point.artifacts.length).toBeGreaterThan(0);
   }
+  const expectation: CampaignBatchExpectation = {
+    batchKind: "FIRST_PASS",
+    executionProfile: String(receipt.execution_profile ?? ""),
+    schemaVersion: Number(receipt.execution_schema_version ?? 0),
+    workerCount: 1,
+    selectedPointIds: projection.points.map((point: any) => point.point_id),
+    projection,
+  };
+  // Per-point evidence is what this batch's own layout produces: the projection's registered
+  // artifacts on the Linux/fixed layout, the committed point result on the macOS composed one.
+  assertProjectedPointEvidence(batchEvidence, projection);
 
-  // Journal-level: one coordinator epoch, four committed results, cleanup.
-  const batchRoot = join(liveServer.stateDir, "campaigns", campaignId, projection.batch_id);
-  const events = readJournalEvents(join(batchRoot, "coordinator"));
-  expect(events.filter((event) => event.type === "BATCH_STARTED")).toHaveLength(1);
-  expect(events.filter((event) => event.type === "RESULT_COMMITTED")).toHaveLength(4);
-  expect(events.some((event) => event.type === "BATCH_CLEANUP_COMPLETE")).toBe(true);
-  expect(existsSync(join(batchRoot, "cleanup-gates.json"))).toBe(true);
-
-  // Evidence-level: every point has a verifiable sealed attempt on disk.
+  // Evidence-level, per layout.  The Linux/fixed layout keeps its coordinator journal, its cleanup
+  // gates and its sealed attempt trees; the macOS composed layout is verified from its own bytes by
+  // the shared reader (selection, watermark, physical evidence, cleanup), never by Linux paths.
   const perPoint: Array<Record<string, unknown>> = [];
-  for (const point of projection.points) {
-    const attemptsRoot = join(batchRoot, "workers");
-    const sealed = readdirSync(attemptsRoot).flatMap((workerId) => {
-      const pointDir = join(attemptsRoot, workerId, "attempts", point.point_id);
-      if (!existsSync(pointDir)) return [];
-      return readdirSync(pointDir).map((attemptId) => join(pointDir, attemptId, "sealed"));
-    }).filter((dir) => existsSync(join(dir, "attempt_result_manifest.json")));
-    expect(sealed.length).toBeGreaterThan(0);
-    const { manifest, files } = readSealedAttempt(sealed[sealed.length - 1]);
-    expect(files.has("initial-rgb.png")).toBe(true);
-    expect(files.has("attempt-result.json")).toBe(true);
-    perPoint.push({
-      point_id: point.point_id,
-      status: point.status,
-      evidence_stage: manifest.evidence_stage ?? null,
-      sealed: sealed[sealed.length - 1],
-    });
+  if (batchEvidence.layout === "LINUX_FIXED") {
+    // Journal-level: one coordinator epoch, four committed results, cleanup.
+    const events = readJournalEvents(join(batchRoot, "coordinator"));
+    expect(events.filter((event) => event.type === "BATCH_STARTED")).toHaveLength(1);
+    expect(events.filter((event) => event.type === "RESULT_COMMITTED")).toHaveLength(4);
+    expect(events.some((event) => event.type === "BATCH_CLEANUP_COMPLETE")).toBe(true);
+    expect(existsSync(join(batchRoot, "cleanup-gates.json"))).toBe(true);
+
+    // Every point has a verifiable sealed attempt on disk.
+    for (const point of projection.points) {
+      const attemptsRoot = join(batchRoot, "workers");
+      const sealed = readdirSync(attemptsRoot).flatMap((workerId) => {
+        const pointDir = join(attemptsRoot, workerId, "attempts", point.point_id);
+        if (!existsSync(pointDir)) return [];
+        return readdirSync(pointDir).map((attemptId) => join(pointDir, attemptId, "sealed"));
+      }).filter((dir) => existsSync(join(dir, "attempt_result_manifest.json")));
+      expect(sealed.length).toBeGreaterThan(0);
+      const { manifest, files } = readSealedAttempt(sealed[sealed.length - 1]);
+      expect(files.has("initial-rgb.png")).toBe(true);
+      expect(files.has("attempt-result.json")).toBe(true);
+      perPoint.push({
+        point_id: point.point_id,
+        status: point.status,
+        evidence_stage: manifest.evidence_stage ?? null,
+        sealed: sealed[sealed.length - 1],
+      });
+    }
+  } else {
+    // The composed layout: selected-only execution, the durable watermark, the physical evidence
+    // set and the completed cleanup, each recomputed from the batch's own documents.
+    assertSelectedOnlyAttempts(batchEvidence, expectation);
+    assertSequenceAndWatermark(batchEvidence);
+    assertPhysicalEvidenceSet(batchEvidence);
+    assertCleanupComplete(batchEvidence, projection);
+    const commits = readJournalEvents(campaignJournalRoot(batchRoot))
+      .filter((event) => event.type === "RESULT_COMMITTED");
+    expect(commits).toHaveLength(4);
+    const byPoint = new Map(projection.points.map((point: any) => [point.point_id, point]));
+    for (const attempt of committedAttempts(batchEvidence)) {
+      const point = byPoint.get(attempt.pointId) as any;
+      expect(point, `${attempt.pointId} is a selected point`).toBeTruthy();
+      perPoint.push({
+        point_id: attempt.pointId,
+        status: point.status,
+        evidence_stage: "composed",
+        sealed: attempt.sealedDir,
+      });
+    }
+    expect(perPoint).toHaveLength(4);
   }
 
   // Runtime identity evidence: ROS domain claim, no Gazebo partition.

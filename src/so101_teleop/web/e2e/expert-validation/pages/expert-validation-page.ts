@@ -20,9 +20,35 @@ export type PointStatus =
  *
  * Release and renew both carry the *current* generation, and every renewal increments it, so the
  * console's own renew responses are what keep this record current.
+ *
+ * Every mutation also carries the console's own instance authority headers
+ * (`X-SO101-Instance-ID/-Proof/-Channel-Revision/-Execution-Generation`).  The unified service
+ * refuses a lease mutation without them by design (`409 CONTROLLER_INSTANCE_REQUIRED`), so a
+ * release that only sends the body leaves the exclusive controller binding held and poisons every
+ * following spec with `CONTROLLER_ALREADY_BOUND`.  The headers are captured from the console's own
+ * successful mutations and handed back with the release.
  */
 type LeaseMutation = { service_session_id: string; generation: number };
-const acquiredLeases = new Map<string, LeaseMutation>();
+type LeaseRecord = { mutation: LeaseMutation; authority: Record<string, string> };
+const acquiredLeases = new Map<string, LeaseRecord>();
+
+/** The authority headers of a request the console itself sent; Playwright lower-cases header names. */
+function authorityHeadersOf(headers: Record<string, string>): Record<string, string> {
+  const authority: Record<string, string> = {};
+  for (const [name, value] of Object.entries(headers)) {
+    if (name.toLowerCase().startsWith("x-so101-")) authority[name.toLowerCase()] = value;
+  }
+  return authority;
+}
+
+/** Seed a record for a lease whose mutation this module did not observe (test seam). */
+export function rememberLeaseAuthority(
+  leaseId: string,
+  mutation: LeaseMutation,
+  headers: Record<string, string>,
+): void {
+  acquiredLeases.set(leaseId, { mutation, authority: authorityHeadersOf(headers) });
+}
 
 /** Record every successful lease mutation the console performs, including its background renewals. */
 export function trackConsoleLeases(page: Page): void {
@@ -35,32 +61,64 @@ export function trackConsoleLeases(page: Page): void {
     ) {
       return;
     }
+    const authority = authorityHeadersOf(request.headers());
     void response
       .json()
       .then((payload: { lease_id?: string; service_session_id?: string; generation?: number }) => {
         if (!payload?.lease_id || !payload.service_session_id || !payload.generation) return;
         acquiredLeases.set(payload.lease_id, {
-          service_session_id: payload.service_session_id,
-          generation: payload.generation,
+          mutation: {
+            service_session_id: payload.service_session_id,
+            generation: payload.generation,
+          },
+          authority,
         });
       })
       .catch(() => undefined);
   });
 }
 
+/**
+ * The structured refusal code of a lease mutation, read from its JSON body - `code` or `detail.code`,
+ * the two shapes the service uses.  A non-JSON body is only accepted as a bare `ACTIVE_CAMPAIGN`
+ * token, never as a loose substring of a longer message, so a tolerance can never widen by accident.
+ */
+export function refusalCode(body: string): string {
+  try {
+    const parsed = JSON.parse(body) as { code?: unknown; detail?: { code?: unknown } };
+    const code = parsed?.code ?? parsed?.detail?.code;
+    return typeof code === "string" ? code : "";
+  } catch {
+    return /(^|[^A-Z_])ACTIVE_CAMPAIGN([^A-Z_]|$)/.test(body) ? "ACTIVE_CAMPAIGN" : "";
+  }
+}
+
 export async function releaseAcquiredLeases(request: APIRequestContext): Promise<void> {
-  for (const [leaseId, mutation] of [...acquiredLeases]) {
+  for (const [leaseId, record] of [...acquiredLeases]) {
     const response = await request.delete(`/expert-validation/lease/${leaseId}`, {
-      data: mutation as unknown as Record<string, unknown>,
+      headers: record.authority,
+      data: record.mutation as unknown as Record<string, unknown>,
     });
     // A lease the service already dropped is not a leak: only a refusal that leaves it held is.
     if (response.status() === 404) {
       acquiredLeases.delete(leaseId);
       continue;
     }
+    const body = response.ok() ? "" : await response.text();
+    if (!response.ok() && refusalCode(body) === "ACTIVE_CAMPAIGN") {
+      // A lease held by design, not a leak.  The product refuses to release while a campaign is
+      // unresolved - a point may still be retried - by raising `LeaseConflict("ACTIVE_CAMPAIGN")`
+      // (expert_validation/lease.py:113-117), pinned by
+      // test_expert_validation_lease.py::test_active_campaign_rejects_release.  A spec whose body
+      // passed must not be reported red for it.  It cannot leak here: this window protocol stops
+      // the service at the end of every case, so a held lease never crosses a service.
+      console.warn(`LEASE_HELD_BY_DESIGN: ACTIVE_CAMPAIGN ${leaseId}`);
+      acquiredLeases.delete(leaseId);
+      continue;
+    }
     expect(
       response.ok(),
-      `release lease failed: ${response.status()} ${await response.text()}`,
+      `release lease failed: ${response.status()} ${body}`,
     ).toBe(true);
     acquiredLeases.delete(leaseId);
   }
@@ -106,10 +164,11 @@ export class ExpertValidationPage {
       service_session_id: string;
       generation: number;
     };
-    acquiredLeases.set(payload.lease_id, {
-      service_session_id: payload.service_session_id,
-      generation: payload.generation,
-    });
+    rememberLeaseAuthority(
+      payload.lease_id,
+      { service_session_id: payload.service_session_id, generation: payload.generation },
+      response.request().headers(),
+    );
     await expect(this.page.getByRole("button", { name: "Acquire lease" })).toBeDisabled();
   }
 
@@ -128,9 +187,20 @@ export class ExpertValidationPage {
     await this.page.getByLabel("Execution mode").selectOption("SEQUENTIAL");
   }
 
+  /**
+   * The worker-count control.
+   *
+   * The macOS console renders both the `Worker count` select and an `Unavailable worker counts`
+   * list, so a non-exact label query resolves to two elements and Playwright's strict mode refuses
+   * it. The exact label names the one control this page object can select from.
+   */
+  workerCountSelect(): Locator {
+    return this.page.getByLabel("Worker count", { exact: true });
+  }
+
   async configureParallel(workerCount: number): Promise<void> {
     await this.page.getByLabel("Execution mode").selectOption("PARALLEL");
-    await this.page.getByLabel("Worker count").selectOption(String(workerCount));
+    await this.workerCountSelect().selectOption(String(workerCount));
   }
 
   async configureAdaptive(): Promise<void> {
