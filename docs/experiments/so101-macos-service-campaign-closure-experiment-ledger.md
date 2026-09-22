@@ -2110,8 +2110,11 @@ w2: 01-cup_test_forward_5cm, 01-cup_test_right_5cm, 01-sample_12_far_left
 Every lease carried its own `points/<point>.yaml` single-point input, no point was leased twice and no unselected
 point appears. The previous run (`w2-20260922T011200Z`) is kept as the honest intermediate: six of seven points
 executed and `W2_CAMPAIGN_INCOMPLETE`, which is the strict verdict refusing to claim a pass over an incomplete
-point set. The candidate W1 v6 leg and the v5 retry (which needs a real terminal-clean business `FAILED` point)
-were still being driven when this checkpoint was written.
+point set. The candidate W1 v6 leg is also observed: `task11/after-fix/w1-20260922T012455Z` is `N1_CAMPAIGN_PASS` and its
+single Worker executed all seven bound points in order (`01-cup_test_forward_5cm`, `01-cup_test_left_5cm`,
+`01-cup_test_right_5cm`, `01-sample_07_mid_center`, `01-sample_12_far_left`, `01-sample_16_far_right`,
+`01-task_start`), each through its own single-point input. The v5 retry leg still needs a genuine terminal-clean
+business `FAILED` point and is being driven separately; it is not claimed here.
 
 ### Accounting
 
@@ -2130,8 +2133,8 @@ were still being driven when this checkpoint was written.
 
 ### Status
 
-- `CP-MSC-04`: **partially satisfied** - offline package gate PASS, candidate W2 point execution observed as above;
-  candidate W1 and the real retry are still pending, so the checkpoint is not claimed.
+- `CP-MSC-04`: **partially satisfied** - offline package gate PASS; candidate W2 and W1 point execution observed
+  as above; the v5 retry leg is still pending, so the checkpoint is not claimed.
 - `CP-MSC-05` (Task 12 fresh Chrome on the installed production path): **NOT RUN**.
 - `CP-MSC-02`, `CP-MSC-03`, Task 13's Sol/high result review and the Astra/high independent final review:
   **pending, not reachable from this session**. Per the plan's checkpoint table the closure is **PARTIAL**, not
