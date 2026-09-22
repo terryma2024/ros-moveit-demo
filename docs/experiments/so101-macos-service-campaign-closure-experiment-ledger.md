@@ -2593,3 +2593,26 @@ receipt. Reconciling that - recording the batch's cleanup receipt from verified 
 making the admission read the same evidence the projection reads - is the next fix, and it is a product gap rather
 than a harness one. Nothing is claimed about a retry batch: none was created (`retry_history` empty, no `retry-*`
 root).
+
+## CP-MSC-T12-RETRY-SPEED: operator authorizes a manufactured business failure to exercise the retry quickly
+
+```yaml
+checkpoint_id: CP-MSC-T12-RETRY-SPEED
+recorded_at: 2026-09-22T14:20:00+0800
+operator_directive: manufacturing a business failure is authorised for validating the v5 retry; the twenty-point first pass is too slow for that cycle
+```
+
+The operator has authorised producing a business failure deliberately so the v5 retry path can be exercised without
+waiting for one to occur naturally, and has asked for a faster cycle than a full twenty-point first pass.
+
+Plan for that validation, recorded here so the evidence is unambiguous:
+1. the first pass uses the **smallest admissible selection that contains a reliable failing point** - the four
+   anchors plus `sample_05_near_center` (five points), which the product's own bytes have twice classified as a
+   genuine business `FAILED` (`infrastructure_code = null`, `retry_eligible = true`), so the failure is reproducible
+   rather than staged;
+2. if that point does not fail in a given run, a **deliberately manufactured** business failure may be used under
+   this authorization, and the evidence must label it as manufactured rather than natural;
+3. only `sample_05_near_center` may be retried, once, with a fresh `FULL_RESTART`, and both legs' wall-clock times
+   are recorded so the retry cycle can be compared with the twenty-point one;
+4. the prerequisite is the durable batch cleanup receipt fix (in progress) without which the admission refuses
+   `RETRY_ORIGINAL_CLEANUP_INCOMPLETE`.
