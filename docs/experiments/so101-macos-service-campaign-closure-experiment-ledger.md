@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-A2-FARM-ROUND
+latest_checkpoint: CP-MSC-A2-FARM
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4289,3 +4289,49 @@ those defects: `FARM_READINESS_EXECUTABLE_MISSING`, `STATION_CONTROLLER_PROCESS_
 Task 10 still owes: four more consecutive VALID rounds on this frozen identity, the negative drift
 fixture control (mutated farm target / manifest SHA / inventory entry must be refused with
 `spawned=false`), the frozen identity readback, and the `CP-MSC-A2-FARM` entry itself.
+
+## CP-MSC-A2-FARM: five consecutive owner-bound rounds under the fixed dylib farm
+
+```yaml
+checkpoint_id: CP-MSC-A2-FARM
+verdict: CURRENT_PRODUCT_GATE_PASSED_UNDER_FIXED_DYLIB_FARM
+recorded_at: 2026-09-23T07:55:00+0800
+carried_by: the local commit that adds this entry (parent 4bc562be)
+frozen_product_source_sha: 4bc562be713ee8368b9af68b94c7432b0ea5fc88
+submodule: 85d2a5c42686a3d6b0d909a047a4188b24edd257
+install: built by prepare4 from that working tree; doctor4 status PASS, level complete
+farm_contract_receipt: final-freeze-20260922T170308Z/doctor4.json
+farm_logical: /opt/ros2_jazzy/dylib_farm/current
+farm_resolved: /Users/matianyi/ros2_jazzy/dylib_farm/runs/20260922T171635Z-30834
+```
+
+Every round below used the same frozen receipt, the same resolved farm target and its own fresh
+`ros_domain_id`; each was spawned and stopped by the single launch-owning mode, with no external
+station.
+
+| Round | Verdict | controller PID | birth identity | plugin SHA256 | vendor SHA256 | residue |
+| --- | --- | --- | --- | --- | --- | --- |
+| 04 | PASS | 31995 | 1148638333901110855 | `da3d80e34e2c23ce…` | `fefba57cf2d7342e…` | [] |
+| 05 | PASS | 32327 | 1032993008896870052 | `da3d80e34e2c23ce…` | `fefba57cf2d7342e…` | [] |
+| 06 | PASS | 32617 | 435642339577281272 | `da3d80e34e2c23ce…` | `fefba57cf2d7342e…` | [] |
+| 07 | PASS | 32908 | 1067156190471437398 | `da3d80e34e2c23ce…` | `fefba57cf2d7342e…` | [] |
+| 08 | PASS | 33199 | 451295672441409400 | `da3d80e34e2c23ce…` | `fefba57cf2d7342e…` | [] |
+
+Each report (`round-0X/station-report.json`) carries `observation_class=PASS`, `spawned=true`,
+`readiness.ready=true`, a `controller_runtime` attestation with its owner binding digest, three
+controllers plus the MoveIt services and actions ready, a bounded `SIGINT` shutdown and an empty
+residue list. Distinct controller PIDs and birth identities across the five rounds are what makes them
+five spawns rather than one cached verdict.
+
+Negative drift control (not counted in the five): the same launch with a mutated
+`dylib_farm.manifest_sha256` in the receipt fixture was refused **before spawning** -
+`observation_class=INVALID`, `spawned=false`, `invalid_reasons=["FARM_MANIFEST_DRIFT"]`. The real
+fixed farm was never modified.
+
+Frozen identity re-read after the five rounds: `farm_logical`, `farm_resolved`,
+`farm_manifest_sha256` and `project_install.resolved` all equal `doctor4.json`, and its status is
+`PASS`. (`frozen-identities.json`, captured before prepares 2-4 each minted a new farm target, is
+superseded; the receipt the rounds actually used is the authority.)
+
+Historical `CP-MSC-A1`, the literal no-DYLD FAIL and the old N/P/F records are untouched: A2 replaces
+them as the current completion contract, exactly as design section 17 states.
