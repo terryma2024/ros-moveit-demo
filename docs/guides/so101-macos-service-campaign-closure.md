@@ -2,7 +2,7 @@
 
 这份指南给在 Mac mini 上跑 SO-101 仿真验证的人看。它讲清楚三件事：怎么选 profile、启动前需要什么、出问题后从哪里读证据。
 
-状态截至 2026-09-22 晚：离线 package gate 在 `186ce876` 重跑过，失败数与上一次完全一样（demo 181、teleop 27，都是这台机器上的既有失败），web 的 tsc/vitest/build 全过，copied install 全过。候选 W2/W1/retry 通过；安装版 production 的 W2、W1 和 v5 retry 都在 fresh Chrome 里跑通并留证（`CP-MSC-T12-W2W1-PASS`、`CP-MSC-T12-RETRY-PROVEN`）。浏览器验收（Task 12 Step 5）现在每条 console 用例都在自己的服务窗口里跑绿，二十点最终验收也过了（`CP-MSC-T12-LIVE-SPEC-CORRECTIONS`、`CP-MSC-T12-ACCEPTANCE-20`）；过程中两处用例前提被产品否掉，已换成可测的等价写法，见下文"已知限制"。Sol/high 与 Astra/high 的独立复核在本会话不可达（`gpt-6-astra` 根本不在本机挂载的模型目录里），所以本文是执行 agent 写的草稿，`CP-MSC-FINAL` 按计划只能报 PARTIAL。
+状态截至 2026-09-22 晚：离线 package gate 在 `186ce876` 重跑过，失败数与上一次完全一样（demo 181、teleop 27，都是这台机器上的既有失败），web 的 tsc/vitest/build 全过，copied install 全过。候选 W2/W1/retry 通过；安装版 production 的 W2、W1 和 v5 retry 都在 fresh Chrome 里跑通并留证（`CP-MSC-T12-W2W1-PASS`、`CP-MSC-T12-RETRY-PROVEN`）。浏览器验收（Task 12 Step 5）现在每条 console 用例都在自己的服务窗口里跑绿，二十点最终验收也过了（`CP-MSC-T12-LIVE-SPEC-CORRECTIONS`、`CP-MSC-T12-ACCEPTANCE-20`）；过程中两处用例前提被产品否掉，已换成可测的等价写法，见下文“已知限制”。Sol/high 与 Astra/high 的独立复核在本会话不可达（`gpt-6-astra` 根本不在本机挂载的模型目录里），所以本文是执行 agent 写的草稿，`CP-MSC-FINAL` 按计划只能报 PARTIAL。
 
 ## 三个 profile
 
