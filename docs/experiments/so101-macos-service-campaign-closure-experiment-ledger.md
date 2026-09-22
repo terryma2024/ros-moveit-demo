@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-W2-STALLED
+latest_checkpoint: CP-MSC-REMEDIATION-T11-W2-SLOW
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4942,3 +4942,36 @@ route is the one this dispatch has used throughout - the attempt's own evidence:
 Everything up to this point is measured and green: the frozen twenty selected, both workers leased
 from the shared queue, twelve points committed as `PASSED` with their evidence, cleanup discipline
 proven in the previous window, and the retry window's eligible `FAILED` point already present.
+
+## CP-MSC-REMEDIATION-T11-W2-SLOW: correction - the campaign is progressing, not stalled
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-W2-SLOW
+recorded_at: 2026-09-23T15:55:00+0800
+carried_by: the local commit that adds this entry (parent 8b487c31)
+status: correction of CP-MSC-REMEDIATION-T11-W2-STALLED
+```
+
+The previous entry read "stalled" from two samples that happened to agree. The next measurement says
+otherwise, so the word is retracted:
+
+```text
+15:15  sequence 72   12 PASSED / 7 UNRUN / 1 FAILED
+15:45  sequence 77   13 PASSED / 6 UNRUN / 1 FAILED
+```
+
+The campaign is advancing - about one point every six minutes - and the reason my two samples agreed is
+that a point takes several minutes: perception, MoveIt planning and execution per attempt. Each attempt
+has its own directory with its own logs, which is where the detail lives:
+
+```text
+<worker>-station/<point>-attempt-N/pick/batches/b5f51/points/01-<point>/rgbd-perception.log
+<worker>-station/<point>-attempt-N/pick/batches/b5f51/points/01-<point>/dynamic-consumer.log
+```
+
+with attempts numbered across the campaign (`sample_12_far_left-attempt-8` among them), so the two
+workers really are leasing and completing work in parallel against the shared queue. Six points remain,
+which is roughly half an hour at the observed rate.
+
+The lesson is the one this dispatch keeps re-learning: an inference from two agreeing samples is not a
+measurement of a rate, and the ledger says so rather than leaving "stalled" standing.
