@@ -294,14 +294,15 @@ def summarize_per_slot_pick_place(*, evidence_root: Path, workers=("w1", "w2")) 
                                  "final_cup_orientation_world_xyzw": sample.get("cup_orientation_world_xyzw"),
                                  "left_right_contacts": [sample.get("left_contact_count"),
                                                          sample.get("right_contact_count")]})
-        # A point that ran - passed or failed - leaves the batch runner's terminal per-point document
-        # in its own point directory, and the drain commits an attempt on exactly such a document
-        # (see `point_drain.read_point_evidence`). The dynamic manifest above exists only for the
-        # points that reached the pick-place stages, so counting executions from it alone made a retry
-        # batch whose single point died at RGBD perception - `retry-001` of campaign-e94a4b74 - read
-        # as having executed nothing, while its committed `point-results/sample_05_near_center.json`
-        # named that very point. A point directory with neither document was never executed and is not
-        # listed: a batch that ran nothing still reports nothing.
+        # A point that ran - passed or failed - leaves the batch runner's terminal per-point
+        # document in its own point directory, and the drain commits an attempt on exactly such a
+        # document (see `point_drain.read_point_evidence`). The dynamic manifest above exists only
+        # for the points that reached the pick-place stages, so counting executions from it alone
+        # made a retry batch whose single point died at RGBD perception - `retry-001` of
+        # campaign-e94a4b74 - read as having executed nothing, while its committed
+        # `point-results/sample_05_near_center.json` named that very point. A point directory with
+        # neither document was never executed and is not listed: a batch that ran nothing still
+        # reports nothing.
         executed.update(Path(result).parent.name for result in points)
         failure_codes = set()
         for result in points:
