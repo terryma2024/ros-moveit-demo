@@ -49,9 +49,9 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-FINAL-PARTIAL
+latest_checkpoint: CP-MSC-T12-W2W1-PASS
 review_pending: CP-MSC-02 (Tasks 2-6, GPT-5.6 Sol/high - not available in this session; packet below)
-next_experiment: EXP-MSC-116 (isolate each production leg from the previous attempt's residue, then complete W2/W1/retry; Step 5 needs the operator authorization document)
+next_experiment: EXP-MSC-117 (either a genuine business FAILED point appears in a pinned-catalog production first pass so the v5 retry can run, or the operator supplies SO101_UNIFIED_LIVE_AUTHORIZATION so the three Playwright projects can execute)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -2401,3 +2401,71 @@ superseded intermediate greens, the `git archive HEAD` baselines and their priva
 `build/so101_teleop` tree, per-invocation pytest scratch directories, and `/tmp/so101-debug-task10/` whose gates were
 all re-run under the registered root. No push, no merge, no force operations; 30+ local commits on
 `codex/so101-unified-webapp`.
+
+## CP-MSC-T12-W2W1-PASS: the installed-production W2 and W1 legs pass; the retry leg cannot be reached here
+
+```yaml
+checkpoint_id: CP-MSC-T12-W2W1-PASS
+recorded_at: 2026-09-22T11:55:00+0800
+commit: 6c5b2b19 baseline (this entry added on top; no product byte changed since fb6deef8)
+verdict: PARTIAL - W2(v4) and W1(v6) proven end to end through the installed service with fresh Chrome and two
+         independent readers; the v5 retry is not reachable in this window for two named reasons; the three
+         Playwright projects need the operator authorization document
+```
+
+Two production legs now have a terminal, dual-reader PASS. This corrects the "no campaign leg completed"
+statement of `CP-MSC-FINAL-PARTIAL`: the cause there was harness residue, and once each leg was isolated
+(previous attempt's claim/socket attributed and removed, service detached with `start_new_session=True` so
+`DYLD_*` survives, its own service and state root per leg) the legs ran.
+
+- **W2 v4 - PASS.** `task12/w2-leg-w2only2/`: campaign `campaign-8e8771dc8a584fb6a6a382039082f736`, batch `b8b3b`,
+  native `W2_CAMPAIGN_PASS`, the four anchors `PASSED` exactly once across two Workers, `complete true`,
+  `cleanup true`, projection `COMPLETED`, release 200, and `verify_native rc=0 verdict PASS` together with
+  `verify_product rc=0 assertions PASS`.
+- **W1 v6 - PASS.** `task12/one-leg-w1only/`: campaign `campaign-7d7a671c99d94000b66676512ecd0aeb`, batch `bde72`,
+  preflight claimed `MPS_W1_FIRST_PASS` (schema 6, one Worker) for the same four-point selection, native
+  `N1_CAMPAIGN_PASS`, all four points `PASSED` on worker `w1` sequentially, `cleanup true`, release generation 19 ->
+  200, both readers PASS. Route-check separately proved at 4 and 7 points that the count never selects the profile.
+- The earlier route-check, matrix and owner-tree findings stand: three-row macOS matrix from the installed service,
+  `ROUTE_CLAIM_SINGLE_PROFILE=yes`, and a complete linked owner tree for a service-driven campaign reaped with
+  `survivors: []`.
+
+### Why the v5 retry is not reachable here (two named facts, no workaround)
+
+1. The fault-catalog route is refused by the installed service. With `SO101_VALIDATION_POINTS` naming a task-owned
+   catalog the console's manifest call returned `409` with an empty selection
+   (`task12/one-leg-faultretry/legs/fault/driver.log`: `manifest -> 409 selected=`), so no campaign composed. The
+   service builds its selection from the *installed* catalog (`catalog.py:_catalog_path()` -> the installed share
+   directory) and that document is digest-pinned (`load_baseline_catalog` refuses any `digest != CATALOG_SHA256`),
+   so a modified catalog cannot enter the manifest path: the live-sim retry spec's `SO101_VALIDATION_POINTS`
+   approach does not work against an installed service. This is a real finding about the retry spec, not a defect
+   in the pinning.
+2. A pinned-catalog fallback (`task12/one-leg-retryhunt2`, campaign `campaign-a78bc3994fef454b81330c8afd9ce108`,
+   batch `b92ca`) had four of seven points `PASSED` and no business `FAILED` point when the window closed. The
+   retry admission requires a genuine business `FAILED` point by design, so Step 4 can only run when one actually
+   occurs; manufacturing one would violate the same rule.
+
+### Step 5 and Step 6
+
+Nine of the plan's ten assertions hold with real bound values (`task12/step5/`, earlier run preserved as
+`step5-first-run/`); `SO101_UNIFIED_LIVE_AUTHORIZATION` is the single failure because no operator document exists
+(`authorization-search.txt`). The functional manifest builds against the live service (rc=0, `platform macos`, five
+cases, five named skips), and the three Playwright projects each fail closed with
+`LIVE_SIM_UNIFIED_AUTHORIZATION_REQUIRED` before anything spawns. Step 6: every stopped leg's service is down,
+`ros2 node list` empty, owner tree with no unconfirmed intents, the stale broker socket left by a killed run was
+inventoried (holder check + stat) and removed under the attribution rule, and nothing held or unattributable was
+touched. Foreign and preserved throughout: PID 62670 on `100.74.192.81:18010`, the foreign tmux sessions, the
+orphaned `descendant_helper.py` set, and the two Sep 20 static TF publishers.
+
+### Still open for a reviewer
+
+1. The R04 mid-run reload against a 30 s lease with a 20 s heartbeat: on this host the reloaded document stops
+   renewing and the service cancels the campaign by design (observed with the cancel command id, `term_sent true`,
+   `survivors []`). The browser contract and the lease window need a decision.
+2. `SO101_UNIFIED_LIVE_AUTHORIZATION` does not exist, so CP-MSC-05 and the final checkpoint cannot pass on this host;
+   CP-MSC-02/03 and the Task 13 Sol/high and Astra/high reviews are likewise unreachable from this session.
+3. Whether a genuine business `FAILED` point appears in a pinned-catalog production first pass - that alone decides
+   whether the v5 retry leg can be exercised here at all.
+
+Accounting unchanged from `CP-MSC-FINAL-PARTIAL`: everything retained, nothing archived (no `/data` path on this
+host), deletion candidates listed and none deleted. No push, no merge, no force operations.
