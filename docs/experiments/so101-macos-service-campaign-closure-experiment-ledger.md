@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-NO-ACCUMULATION
+latest_checkpoint: CP-MSC-REMEDIATION-T11-W2-TAIL
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -5106,3 +5106,27 @@ workers against the shared queue, visible in the process table exactly as the pr
 Nothing foreign was ever touched: no signal was sent to a process this run had not recorded, and the
 only pids ever signalled were those in a window's own spawn record. That is the same rule the live
 crash-recovery experiment followed, and it held across all seventeen windows.
+
+## CP-MSC-REMEDIATION-T11-W2-TAIL: two points in flight, no retry storm
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-W2-TAIL
+recorded_at: 2026-09-23T18:15:00+0800
+carried_by: the local commit that adds this entry (parent eda0dc03)
+window: remediation/windows/w2-20260922T191707Z-53004/
+status: the last three points are being worked, one per worker
+```
+
+Why the tail is taking longer than the average point, measured rather than assumed:
+
+```text
+projection          sequence 92, 16 PASSED / 3 UNRUN / 1 FAILED
+in flight           sample_14_far_right  on w2   (attempts recorded: 0 so far)
+                    sample_15_far_center on w1   (attempts recorded: 0 so far)
+attempt directories 19 across the campaign for 16 committed points plus the two in flight
+activity            58 files written in the last two minutes
+```
+
+So the two workers are each part-way through one of the last points, and the extra time is the point's
+own work rather than a retry loop - there is no attempt storm, and the attempt-directory count matches
+the points committed plus those in flight. Nothing needs intervention.
