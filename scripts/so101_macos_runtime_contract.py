@@ -17,6 +17,20 @@ from typing import Callable, Mapping, Sequence
 
 
 REQUIRED_EXTERNAL_ENVIRONMENT: tuple[str, ...] = ()
+#: The authorized fixed dylib farm contract (design section 17): the five prefixes every
+#: runtime artifact has to be attributable to, and the two images an A2 round attests.
+FIXED_CLOSURE_PREFIXES = (
+    "/opt/ros2_jazzy/install",
+    "/opt/ros2_jazzy/extra_ws/install",
+    "/opt/data/so101/runtime/fork/current",
+    "/opt/data/so101/workspace/install",
+    "/opt/ros2_jazzy/dylib_farm/current",
+)
+FIXED_DYLIB_FARM_CONTRACT_SCHEMA_VERSION = 1
+CONTROLLER_RUNTIME_RELATIVE_PATH = "lib/mujoco_ros2_control/ros2_control_node"
+PLUGIN_BASENAME = "libmujoco_ros2_control.dylib"
+VENDOR_BASENAME = "libmujoco.3.4.0.dylib"
+
 REQUIRED_DYLIBS = (
     "libcontrol_toolbox.dylib",
     "libhardware_interface.dylib",
@@ -289,6 +303,9 @@ def _farm_manifest(paths: RuntimePaths) -> dict[str, object]:
         "library_count": len(entries),
         "manifest_sha256": hashlib.sha256(encoded).hexdigest(),
         "required": list(REQUIRED_DYLIBS),
+        # The receipt carries the sanctioned prefixes itself, so a round can freeze the
+        # contract it was validated against instead of re-deriving it later.
+        "closure_prefixes": list(FIXED_CLOSURE_PREFIXES),
     }
 
 
@@ -417,6 +434,14 @@ def validate_complete_contract(
             )
     report["level"] = "complete"
     report["dylib_farm"] = _farm_manifest(paths)
+    report["fixed_dylib_farm_contract"] = {
+        "schema_version": FIXED_DYLIB_FARM_CONTRACT_SCHEMA_VERSION,
+        "dylib_farm_root": str(paths.dylib_farm),
+        "closure_prefixes": list(FIXED_CLOSURE_PREFIXES),
+        "controller_relative_path": CONTROLLER_RUNTIME_RELATIVE_PATH,
+        "plugin_basename": PLUGIN_BASENAME,
+        "vendor_basename": VENDOR_BASENAME,
+    }
     report["project_install"] = _path_identity(paths.project_install)
     if run_load_probe:
         report["runtime_probe"] = _run_complete_probe(paths, ros_domain_id)
