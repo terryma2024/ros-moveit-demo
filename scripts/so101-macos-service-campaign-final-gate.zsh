@@ -182,15 +182,18 @@ record_step copied-install "$worktree" "$python" -m pytest -p no:cacheprovider -
 colcon_tmp="$(mktemp -d /opt/data/tmp/so101-cc-XXXXXXXX)" || fail "COLCON_TMP_NOT_CREATABLE"
 chmod 700 "$colcon_tmp"
 # colcon's pytest children build `pytest-of-<user>/pytest-N/<test-name>0` under TMPDIR, which is
-# enough to push an AF_UNIX endpoint past `sun_path` even when TMPDIR itself is short. A short
-# `--basetemp` is what the direct pytest steps use, so colcon gets one too.
+# enough to push an AF_UNIX endpoint past `sun_path` even when TMPDIR itself is short. Passing
+# `--pytest-args "--basetemp=..."` did NOT take effect: the failure record from t8-gate7 still shows
+# `tmp_path = <tmpdir>/pytest-of-matianyi/pytest-35/...`, so ament's own pytest invocation kept
+# TMPDIR. `PYTEST_ADDOPTS` is honoured by every pytest process, including ament's, so the colcon step
+# exports it instead.
 colcon_pytest_base="$(mktemp -d /opt/data/tmp/so101-cb-XXXXXXXX)" || fail "COLCON_BASE_NOT_CREATABLE"
 chmod 700 "$colcon_pytest_base"
 record_step colcon-test "$worktree" env "PATH=/opt/ros2_jazzy/.venv/bin:$PATH" \
   "TMPDIR=$colcon_tmp" "TMP=$colcon_tmp" "TEMP=$colcon_tmp" \
+  "PYTEST_ADDOPTS=--basetemp=$colcon_pytest_base" \
   "$python" "$colcon_bin" --log-base "$run_root/colcon-log" test \
   --packages-select so101_teleop --return-code-on-test-failure \
-  --pytest-args "--basetemp=$colcon_pytest_base" \
   --event-handlers console_direct+
 record_step colcon-result "$worktree" env "PATH=/opt/ros2_jazzy/.venv/bin:$PATH" \
   "$python" "$colcon_bin" --log-base "$run_root/colcon-log" test-result --verbose
