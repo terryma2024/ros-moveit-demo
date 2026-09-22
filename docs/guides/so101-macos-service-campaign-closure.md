@@ -2,7 +2,7 @@
 
 这份指南给在 Mac mini 上跑 SO-101 仿真验证的人看。它讲清楚三件事：怎么选 profile、启动前需要什么、出问题后从哪里读证据。
 
-状态先说清楚：离线 package gate 已通过；候选 live gate 只观察到部分结论（点位确实在真实执行，但完整 7 点 drain 还没跑完一轮）；安装版 production 的 fresh Chrome 验收没有运行。计划要求的 Sol/high 与 Astra/high 独立复核在本会话不可达，因此本文是执行 agent 写的草稿，不能当作已复核的最终文档。
+状态截至 2026-09-22 晚：离线 package gate 在 `186ce876` 重跑过，失败数与上一次完全一样（demo 181、teleop 27，都是这台机器上的既有失败），web 的 tsc/vitest/build 全过，copied install 全过。候选 W2/W1/retry 通过；安装版 production 的 W2、W1 和 v5 retry 都在 fresh Chrome 里跑通并留证（`CP-MSC-T12-W2W1-PASS`、`CP-MSC-T12-RETRY-PROVEN`）。浏览器验收（Task 12 Step 5）现在每条 console 用例都在自己的服务窗口里跑绿，二十点最终验收也过了（`CP-MSC-T12-LIVE-SPEC-CORRECTIONS`、`CP-MSC-T12-ACCEPTANCE-20`）；过程中两处用例前提被产品否掉，已换成可测的等价写法，见下文"已知限制"。Sol/high 与 Astra/high 的独立复核在本会话不可达（`gpt-6-astra` 根本不在本机挂载的模型目录里），所以本文是执行 agent 写的草稿，`CP-MSC-FINAL` 按计划只能报 PARTIAL。
 
 ## 三个 profile
 
@@ -33,6 +33,15 @@ guard 很轻，只做启动保护，不是资格认证，也不是容量证明�
 - 一次执行必须有有效的 lease 和 execution context。candidate 运行用 `POST /expert-validation/candidate-contexts` 签发一次性 context，再用 `POST /expert-validation/campaigns/candidate-first-pass` 启动；production 走安装版服务的 lease 授权入口。两类 context 不能互换，也不能跨 batch、profile、worker_count、evidence root 重放。
 - retry 只对准一个点，而且必须是上一批 terminal-clean 的真实业务 `FAILED`。`INFRA_FAILED`、`INDETERMINATE`、`INVALID`、`UNRUN` 都不行。准入在一个 SQLite 事务里完成：消费 command、验证结果和 lease、检查 fence 和 owner、写 retry binding 与 spawn intent。事务之后 spawn 失败会留下未确认的 intent 和 fence，command 不能重放。
 - 模型权重是输入，不是仓库内容。用之前核对冻结 hash：yolo `f281d252…0781`，grounded manifest `b55bb601…ed05`。hash 不符就不要启动。
+- 点位 catalog 的摘要被写死在产品里（`expert_validation/catalog.py` 和 `cli/mujoco_parallel_batch.py` 各一处），服务还会拿 manifest 的输入摘要再对一次。想用自己改过的 catalog 走 `SO101_VALIDATION_POINTS` 是走不通的，两个加载器都会报 `POINT_CATALOG_HASH_MISMATCH`，服务侧还会报 `VALIDATION_MANIFEST_CATALOG_MISMATCH`。要制造真实失败，只能挑本来就过不了的点位，或者用外部手段让某次 attempt 自己失败。
+
+## 一个服务同时只服务一个控制台
+
+排他控制器绑在 console 实例上。`claim_locked`（`so101_teleop/unified/instances.py`）只允许同一个 instance id 再次取得绑定，换一个实例一律 409 `CONTROLLER_ALREADY_BOUND`；释放 lease 不会解除绑定；`abandon_controller` 只在代码里，没有 HTTP 路由；`handoff` 要求当前实例和接手实例都活着。实际后果：
+
+- campaign 跑到一半 reload 页面，新文档就是新实例，续租会被拒，lease 过期之后服务把这次 campaign 取消掉。跑 campaign 的时候不要 reload。
+- 换个浏览器、换个 profile，或者上一个页面已经关了，都拿不回控制器。要接着跑，就重启服务。
+- 需要连跑几个用例，就一个用例开一个服务窗口：起服务、跑一个用例、按 PID 停掉、读残留。macOS 的浏览器验收就是这么跑的（`CP-MSC-T12-LIVE-SPEC-CORRECTIONS`）。
 
 ## 一次 campaign 怎么跑起来
 
@@ -63,10 +72,11 @@ Worker 的 lease 决定它执行哪个点：每个 lease 只带一个点，写�
 - 进程或 adapter 被 `SIGKILL` 之后，先看 owner tree 里有没有未确认的 intent。身份不明确就不要猜 PID、不要盲杀，保留 fence。
 - `operator_recovery --owner-tree-root <root>` 会按叶子到根回收：station、worker、broker/campaign、adapter。只有 hash 与 birth identity 都对得上才发信号。回收完 fsync receipt，提交 `CLEANUP_COMMITTED` 之后才解除 fence。
 - 未解决的记录会写出 `RECOVERY_OWNER_TREE_UNRESOLVED generation <g>: ROLE: REASON`，同时 fence 保留。看到这条就不要继续启动。
-- foreign 进程一律不动，只列出来。这个仓库里 `so101_measure_parallel_resources` 仍然是 retired 状态，macOS 也没有容量资格流程。
+- foreign 进程一律不动，只列出来：不猜 PID、不发信号、不清它的 socket 或 IPC 目录。
 
-## 还没做完的部分
+## 已知限制
 
-1. 候选 W2/W1 的完整 drain 与 v5 retry（需要一个真实业务 `FAILED` 点）还没跑完并留证；`CP-MSC-04` 因此没有通过。
-2. 安装版 production + fresh Chrome 验收（Task 12）没有运行，需要的环境断言与 Playwright project 命令写在计划的 Task 12 Step 5。
-3. `CP-MSC-02`、`CP-MSC-03`、Task 13 的 Sol/high 结果审查与 Astra/high 独立终审在本会话不可达，按计划只能报 PARTIAL，不能标 FINAL PASS。
+- macOS 没有容量资格流程，`so101_measure_parallel_resources` 仍然是 retired。StartGuard 只管启动，不做资格认证，也不出容量证明。
+- retry 保证的是流程：一个点、一次 lease、一次执行、一次提交，first-pass 的字节不变。它不保证失败点重跑就能通过；一条命令也只重试一个点，retry 的 retry 不支持。
+- Linux/fixed 布局和 macOS composed 布局的证据形状不一样。前者把每次 attempt 的 artifact 注册到 projection，后者按点提交 `point-results/<point>.json`。读证据时按布局走各自的路，别拿另一边的路径去套。
+- `CP-MSC-FINAL` 要求 Sol/high 的结果审查和 Astra/high 的独立终审，这两条在本会话不可达，所以只能报 PARTIAL。本文也停在这个状态。
