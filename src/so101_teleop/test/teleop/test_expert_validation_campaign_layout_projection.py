@@ -47,7 +47,7 @@ from so101_teleop.expert_validation.models import (
 from so101_teleop.expert_validation.owner_tree import OwnerIntent
 from so101_teleop.expert_validation.production import ProductionExpertValidationService
 from so101_teleop.expert_validation.service import ServiceConflict
-from so101_teleop.expert_validation.store import SupervisorStore
+from so101_teleop.expert_validation.store import StoreConflict, SupervisorStore
 
 
 CAMPAIGN_ID = "cand-w2-20260922T011804Z"
@@ -56,6 +56,7 @@ POINT_IDS = ("task_start", "cup_test_forward_5cm", "cup_test_left_5cm")
 WORKERS = {"task_start": "w1", "cup_test_forward_5cm": "w2", "cup_test_left_5cm": "w1"}
 SLOTS = {"task_start": "slot-0", "cup_test_forward_5cm": "slot-1", "cup_test_left_5cm": "slot-0"}
 SHA_A = "a" * 64
+SHA_B = "b" * 64
 SHA_CATALOG = "c" * 64
 SHA_SELECTION = "5" * 64
 SHA_CONFIG = "2" * 64
@@ -110,8 +111,12 @@ def _point_document(point_id, attempt_id, outcome):
     }
 
 
-def _append_campaign_stream(journal, outcomes, *, verdict):
-    """Commit the campaign's own eight-event stream, exactly as the composition writes it."""
+def _append_campaign_stream(journal, outcomes, *, verdict, cleanup_complete=True):
+    """Commit the campaign's own eight-event stream, exactly as the composition writes it.
+
+    ``cleanup_complete=None`` omits the cleanup event altogether, so a batch can be written whose
+    own bytes never claim cleanup - the negative case a receipt must never be invented from.
+    """
 
     journal.append_committed(
         "CAMPAIGN_STARTED",
@@ -166,16 +171,18 @@ def _append_campaign_stream(journal, outcomes, *, verdict):
              "state": "COMMITTED", "result_sha256": _result_sha256(point_id, attempt_id, outcome)},
         )
     journal.append_committed("BATCH_TERMINAL", f"{BATCH_ID}/BATCH_TERMINAL", {"outcome": verdict})
-    journal.append_committed(
-        "CLEANUP_COMMITTED", f"{BATCH_ID}/CLEANUP_COMMITTED", {"cleanup_complete": True}
-    )
+    if cleanup_complete is not None:
+        journal.append_committed(
+            "CLEANUP_COMMITTED", f"{BATCH_ID}/CLEANUP_COMMITTED",
+            {"cleanup_complete": cleanup_complete},
+        )
 
 
 def _result_sha256(point_id, attempt_id, outcome):
     return hashlib.sha256(f"{point_id}:{attempt_id}:{outcome}".encode()).hexdigest()
 
 
-def _write_campaign_batch(root, outcomes, *, verdict, batch_id=BATCH_ID):
+def _write_campaign_batch(root, outcomes, *, verdict, batch_id=BATCH_ID, cleanup_complete=True):
     """Write one campaign batch root: journal, binding, per-point results and the result document."""
 
     batch_root = (Path(root) / "campaigns" / CAMPAIGN_ID / batch_id).resolve()
@@ -210,11 +217,12 @@ def _write_campaign_batch(root, outcomes, *, verdict, batch_id=BATCH_ID):
         },
     }, sort_keys=True))
     with CoordinatorJournal.create(batch_root / "journal", batch_id) as journal:
-        _append_campaign_stream(journal, outcomes, verdict=verdict)
+        _append_campaign_stream(journal, outcomes, verdict=verdict, cleanup_complete=cleanup_complete)
     return batch_root
 
 
-def _campaign_request(evidence_root, batch_id=BATCH_ID, campaign_id=CAMPAIGN_ID):
+def _campaign_request(evidence_root, batch_id=BATCH_ID, campaign_id=CAMPAIGN_ID,
+                      point_ids=POINT_IDS):
     return SimpleNamespace(
         campaign_id=campaign_id,
         manifest_id="manifest-1",
@@ -222,10 +230,10 @@ def _campaign_request(evidence_root, batch_id=BATCH_ID, campaign_id=CAMPAIGN_ID)
         execution_mode="SEQUENTIAL",
         evidence_root=Path(evidence_root),
         selection=SimpleNamespace(
-            point_ids=POINT_IDS,
+            point_ids=point_ids,
             points=tuple(
                 SimpleNamespace(id=point_id, display_id=f"P{index:02d}")
-                for index, point_id in enumerate(POINT_IDS, start=1)
+                for index, point_id in enumerate(point_ids, start=1)
             ),
         ),
     )
@@ -238,32 +246,39 @@ class _Layout:
     adaptive_config_path = Path("/nonexistent-adaptive.yaml")
 
 
-def _service(tmp_path, *, manifest_id="manifest-1", batch_id=BATCH_ID):
-    """A real store bound to the campaign and its first-pass batch, and the service over it."""
+def _service(tmp_path, *, manifest_id="manifest-1", batch_id=BATCH_ID, campaign_id=CAMPAIGN_ID,
+             point_ids=POINT_IDS, catalog_sha256=SHA_CATALOG, selection_sha256=SHA_SELECTION,
+             evidence_root=None):
+    """A real store bound to the campaign and its first-pass batch, and the service over it.
+
+    ``evidence_root`` is where the campaign's own batch bytes are read from; it defaults to the
+    store's parent, which is the layout the production service restores a campaign with. A recorded
+    campaign outside the store can be projected by pointing it at the bytes that really exist.
+    """
 
     root = Path(tmp_path).resolve()
     store = SupervisorStore.open((root / "store").resolve())
     store.record_manifest(
-        manifest_id, {"schema_version": 1, "selection": list(POINT_IDS)},
+        manifest_id, {"schema_version": 1, "selection": list(point_ids)},
         source_config_sha256=SHA_A, created_at_ns=1,
     )
     store.record_preflight_receipt(PreflightReceipt(
-        receipt_id="receipt-1", campaign_id=CAMPAIGN_ID, manifest_id=manifest_id,
+        receipt_id="receipt-1", campaign_id=campaign_id, manifest_id=manifest_id,
         canonical_start_request_sha256=SHA_A, receipt={"admitted": True},
         expires_at_monotonic_ns=10_000_000_000,
     ))
     store.consume_preflight_and_bind_campaign_batch(
         "receipt-1", SHA_A,
         CampaignBinding(
-            campaign_id=CAMPAIGN_ID, manifest_id=manifest_id, executor_id="operator",
+            campaign_id=campaign_id, manifest_id=manifest_id, executor_id="operator",
             operation_id="operation-1", executor_config_sha256=SHA_A,
             execution_mode="PARALLEL",
             execution_config={"worker_count": 2, "max_points_per_worker": 10},
             preflight_receipt_id="receipt-1",
         ),
         BatchBinding(
-            batch_id=batch_id, campaign_id=CAMPAIGN_ID, batch_kind="FIRST_PASS", point_id=None,
-            journal_root=(root / "campaigns" / CAMPAIGN_ID / batch_id / "journal").resolve(),
+            batch_id=batch_id, campaign_id=campaign_id, batch_kind="FIRST_PASS", point_id=None,
+            journal_root=(root / "campaigns" / campaign_id / batch_id / "journal").resolve(),
             coordinator_epoch=1,
         ),
         now_monotonic_ns=1,
@@ -272,9 +287,9 @@ def _service(tmp_path, *, manifest_id="manifest-1", batch_id=BATCH_ID):
         "UPDATE manifests SET canonical_json = ? WHERE manifest_id = ?",
         (
             json.dumps({
-                "catalog_sha256": SHA_CATALOG,
-                "selection_sha256": SHA_SELECTION,
-                "point_ids": list(POINT_IDS),
+                "catalog_sha256": catalog_sha256,
+                "selection_sha256": selection_sha256,
+                "point_ids": list(point_ids),
             }, sort_keys=True, separators=(",", ":")),
             manifest_id,
         ),
@@ -284,15 +299,16 @@ def _service(tmp_path, *, manifest_id="manifest-1", batch_id=BATCH_ID):
         store=store, supervisor=SimpleNamespace(), lease_service=SimpleNamespace(),
         current_source_config_sha256=lambda: SHA_A,
     )
-    request = _campaign_request(root, batch_id)
-    service._campaign_requests = {CAMPAIGN_ID: request}
-    service._campaigns = {CAMPAIGN_ID: {
-        "campaign_id": CAMPAIGN_ID, "manifest_id": manifest_id, "sequence": 1,
+    read_root = root if evidence_root is None else Path(evidence_root).resolve()
+    request = _campaign_request(read_root, batch_id, campaign_id, point_ids)
+    service._campaign_requests = {campaign_id: request}
+    service._campaigns = {campaign_id: {
+        "campaign_id": campaign_id, "manifest_id": manifest_id, "sequence": 1,
         "execution_mode": "SEQUENTIAL", "owner_kind": "COORDINATOR", "batch_id": batch_id,
         "status": "STARTED",
-        "points": tuple({"point_id": point_id, "status": "UNRUN"} for point_id in POINT_IDS),
+        "points": tuple({"point_id": point_id, "status": "UNRUN"} for point_id in point_ids),
     }}
-    return service, store, root
+    return service, store, read_root
 
 
 def _recorded_real_batch(projection, real_batch):
@@ -366,18 +382,19 @@ def test_the_campaign_layout_reader_resolves_the_campaign_directory(tmp_path):
     assert layout.epoch == 1
 
 
-def _retry_admission(tmp_path, service, store, point_id):
-    """Build the real one-time retry admission for a first pass that is already enqueued."""
+def _retry_pair(*, evidence_root, campaign_id, original_batch_id, point_id, batch_id,
+                catalog_sha256, selection_sha256, original_result_sha256,
+                argv_batch_id=None, command_id="cmd-retry-1"):
+    """The real one-time retry admission pair the production route builds, and its spawn intent."""
 
-    original_result = store.read_projection_state(BATCH_ID).state.points[point_id].result_sha256
-    store.record_batch_cleanup(BATCH_ID, SHA_A)
+    root = Path(evidence_root).resolve()
     now = time.monotonic_ns()
     values = dict(
-        campaign_id=CAMPAIGN_ID, batch_id="retry-001", manifest_id="manifest-1",
+        campaign_id=campaign_id, batch_id=batch_id, manifest_id="manifest-1",
         execution_profile=RETRY_PROFILE, schema_version=RETRY_SCHEMA_VERSION,
         batch_kind=RETRY_BATCH_KIND, worker_count=RETRY_WORKER_COUNT, config_sha256=SHA_CONFIG,
-        runtime_closure_sha256=SHA_CLOSURE, evidence_root=Path(tmp_path).resolve(),
-        owner_generation=1, command_id="cmd-retry-1", issued_at_monotonic_ns=now,
+        runtime_closure_sha256=SHA_CLOSURE, evidence_root=root,
+        owner_generation=1, command_id=command_id, issued_at_monotonic_ns=now,
         expires_at_monotonic_ns=now + 3_600_000_000_000, max_runs=2,
     )
     context = CandidateExecutionContext(
@@ -385,20 +402,38 @@ def _retry_admission(tmp_path, service, store, point_id):
     )
     request = RetryStartRequest(
         command_id=context.command_id, campaign_id=context.campaign_id,
-        batch_id=context.batch_id, point_id=point_id, original_batch_id=BATCH_ID,
-        original_catalog_sha256=SHA_CATALOG, original_selection_sha256=SHA_SELECTION,
-        original_result_sha256=original_result, execution_profile=context.execution_profile,
-        schema_version=context.schema_version, batch_kind=context.batch_kind,
-        config_sha256=context.config_sha256,
-        runtime_closure_sha256=context.runtime_closure_sha256,
-        worker_count=context.worker_count, evidence_root=context.evidence_root,
-        install_prefix=Path(tmp_path).resolve() / "install", owner_generation=1,
-        created_at_ns=1,
+        batch_id=context.batch_id, point_id=point_id, original_batch_id=original_batch_id,
+        original_catalog_sha256=catalog_sha256, original_selection_sha256=selection_sha256,
+        original_result_sha256=original_result_sha256,
+        execution_profile=context.execution_profile, schema_version=context.schema_version,
+        batch_kind=context.batch_kind, config_sha256=context.config_sha256,
+        runtime_closure_sha256=context.runtime_closure_sha256, worker_count=context.worker_count,
+        evidence_root=context.evidence_root, install_prefix=root / "install",
+        owner_generation=1, created_at_ns=1,
     )
     intent = OwnerIntent.for_argv(
-        campaign_id=CAMPAIGN_ID, batch_id="retry-001", role="ADAPTER", generation=1,
+        campaign_id=campaign_id, batch_id=batch_id, role="ADAPTER", generation=1,
         spawn_token="spawn-retry-1",
-        argv=("so101_parallel_batch", "--batch-id", "retry-001"), created_at_ns=1,
+        argv=("so101_parallel_batch", "--batch-id", argv_batch_id or batch_id), created_at_ns=1,
+    )
+    return request, context, intent
+
+
+def _retry_admission(tmp_path, service, store, point_id, *, campaign_id=CAMPAIGN_ID,
+                     original_batch_id=BATCH_ID, batch_id="retry-001"):
+    """The admission for a first pass whose canonical state the projection already committed.
+
+    Nothing is staged here: the original batch's cleanup receipt has to be durable before
+    ``admit_retry`` is called, exactly as the service's own projection read leaves it.
+    """
+
+    original_result = store.read_projection_state(
+        original_batch_id
+    ).state.points[point_id].result_sha256
+    request, context, intent = _retry_pair(
+        evidence_root=tmp_path, campaign_id=campaign_id, original_batch_id=original_batch_id,
+        point_id=point_id, batch_id=batch_id, catalog_sha256=SHA_CATALOG,
+        selection_sha256=SHA_SELECTION, original_result_sha256=original_result,
     )
     return request, context, intent, original_result
 
@@ -450,6 +485,226 @@ def test_a_passed_point_is_not_admissible_for_retry(tmp_path):
         assert "RETRY_ORIGINAL_NOT_FAILED" in str(refusal.value)
     finally:
         store.close()
+
+
+def _journal_final_frame_sha256(batch_root, batch_id):
+    """The verified frame hash of the batch's own last committed event, read independently."""
+
+    replay = CoordinatorJournal.read_only_replay(Path(batch_root) / "journal", batch_id)
+    assert replay.events, "the batch published no committed event at all"
+    final = replay.events[-1]
+    assert final.type == "CLEANUP_COMMITTED", final.type
+    return final.frame_sha256
+
+
+def test_the_projection_records_the_verified_cleanup_receipt_the_retry_admission_needs(tmp_path):
+    """A clean projection must leave the durable receipt ``admit_retry`` checks for the original.
+
+    Recorded production defect (``$RUN/task12/retry-after-fix-20260922T052643Z/legs/w1/driver.log``):
+    the W1 first pass reached ``PROJECTION_TERMINAL_AND_CLEAN`` with a genuinely ``FAILED`` point and
+    ``cleanup.complete`` true, and the console's same-page retry then answered
+    ``409 {"code": "RETRY_ORIGINAL_CLEANUP_INCOMPLETE"}`` - the service read the batch's cleanup
+    bytes but never recorded the receipt they prove. RED: the receipt was still NULL here and the
+    admission refused by that name.
+    """
+
+    outcomes = {point_id: "PASSED" for point_id in POINT_IDS}
+    outcomes["cup_test_left_5cm"] = "FAILED"
+    batch_root = _write_campaign_batch(tmp_path, outcomes, verdict=CAMPAIGN_INCOMPLETE)
+    terminal_receipt = _journal_final_frame_sha256(batch_root, BATCH_ID)
+    service, store, root = _service(tmp_path)
+    try:
+        assert store.batch(BATCH_ID).cleanup_receipt_sha256 is None
+        projection = service.get_campaign(CAMPAIGN_ID)
+        assert projection["status"] == "COMPLETED_WITH_FAILURES"
+        assert projection["batch_cleanup_complete"] is True
+
+        recorded = store.batch(BATCH_ID).cleanup_receipt_sha256
+        assert recorded == terminal_receipt, (
+            "a batch whose own verified bytes show cleanup complete has no durable cleanup "
+            "receipt, so admit_retry refuses RETRY_ORIGINAL_CLEANUP_INCOMPLETE"
+        )
+        # Same receipt, same read: a later poll never re-records anything.
+        service.get_campaign(CAMPAIGN_ID)
+        assert store.batch(BATCH_ID).cleanup_receipt_sha256 == recorded
+
+        # The refusal is gone: the very admission the console builds now proceeds.
+        store.enqueue_retries(CAMPAIGN_ID, ("cup_test_left_5cm",))
+        request, context, intent, original_result = _retry_admission(
+            root, service, store, "cup_test_left_5cm"
+        )
+        binding = store.admit_retry(request=request, context=context, spawn_intent=intent)
+        assert binding.original_outcome == "FAILED"
+        assert binding.original_result_sha256 == original_result
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("cleanup_complete", [False, None])
+def test_a_batch_without_committed_cleanup_never_gets_a_receipt(tmp_path, cleanup_complete):
+    """Bytes that do not show cleanup complete cannot produce a receipt, and the refusal stands."""
+
+    outcomes = {point_id: "PASSED" for point_id in POINT_IDS}
+    outcomes["cup_test_left_5cm"] = "FAILED"
+    batch_root = _write_campaign_batch(
+        tmp_path, outcomes, verdict=CAMPAIGN_INCOMPLETE, cleanup_complete=cleanup_complete
+    )
+    service, store, root = _service(tmp_path)
+    try:
+        projection = service.get_campaign(CAMPAIGN_ID)
+        assert projection["batch_cleanup_complete"] is False
+        assert projection["status"] == "CLEANING_UP"
+        assert store.batch(BATCH_ID).cleanup_receipt_sha256 is None
+
+        store.enqueue_retries(CAMPAIGN_ID, ("cup_test_left_5cm",))
+        request, context, intent, _result = _retry_admission(
+            root, service, store, "cup_test_left_5cm"
+        )
+        with pytest.raises(StoreConflict, match="RETRY_ORIGINAL_CLEANUP_INCOMPLETE"):
+            store.admit_retry(request=request, context=context, spawn_intent=intent)
+        assert store.batch(BATCH_ID).cleanup_receipt_sha256 is None
+    finally:
+        store.close()
+
+
+def test_a_different_recorded_receipt_is_never_overwritten(tmp_path):
+    """The durable receipt is a fact about verified bytes: another caller may not replace it."""
+
+    outcomes = {point_id: "PASSED" for point_id in POINT_IDS}
+    outcomes["cup_test_left_5cm"] = "FAILED"
+    batch_root = _write_campaign_batch(tmp_path, outcomes, verdict=CAMPAIGN_INCOMPLETE)
+    service, store, _root = _service(tmp_path)
+    try:
+        store.record_batch_cleanup(BATCH_ID, SHA_A)
+        with pytest.raises(StoreConflict, match="BATCH_CLEANUP_RECEIPT_CONFLICT"):
+            store.record_batch_cleanup(BATCH_ID, SHA_B)
+        assert store.batch(BATCH_ID).cleanup_receipt_sha256 == SHA_A
+        # Recording the same receipt again is the idempotent case, not a conflict.
+        store.record_batch_cleanup(BATCH_ID, SHA_A)
+        assert store.batch(BATCH_ID).cleanup_receipt_sha256 == SHA_A
+        # And the read path leaves the already-durable receipt exactly as it found it.
+        service.get_campaign(CAMPAIGN_ID)
+        assert store.batch(BATCH_ID).cleanup_receipt_sha256 == SHA_A
+        assert _journal_final_frame_sha256(batch_root, BATCH_ID) != SHA_A
+    finally:
+        store.close()
+
+
+#: The campaign whose recorded first pass the console's same-page retry refused, and the genuinely
+#: ``FAILED`` point it named. The console's request is replayed over the batch's own recorded bytes.
+RECORDED_CLEANUP_STATE = Path(os.environ.get(
+    "SO101_TASK12_CLEANUP_STATE",
+    "/tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1"
+    "/task12/service-runs/retryafterfix/state",
+))
+RECORDED_CLEANUP_CAMPAIGN_ID = "campaign-4d9af7fca30f49939f952db367338454"
+RECORDED_CLEANUP_BATCH_ID = "bf16a"
+RECORDED_CLEANUP_POINT_ID = "sample_05_near_center"
+
+
+def _recorded_cleanup_batch_root():
+    return (
+        RECORDED_CLEANUP_STATE / "campaigns" / RECORDED_CLEANUP_CAMPAIGN_ID
+        / RECORDED_CLEANUP_BATCH_ID
+    )
+
+
+def _tree_fingerprint(root):
+    """Every recorded file's path, size and mtime: a read path may not write one of them."""
+
+    return tuple(sorted(
+        (str(path.relative_to(root)), path.stat().st_size, path.stat().st_mtime_ns)
+        for path in Path(root).rglob("*") if path.is_file()
+    ))
+
+
+@pytest.mark.skipif(
+    not _recorded_cleanup_batch_root().is_dir(), reason="the recorded W1 first pass is absent"
+)
+def test_the_recorded_w1_first_pass_records_the_receipt_its_console_retry_needed(tmp_path):
+    """The recorded 409 replayed, then answered by the same admission over the same bytes.
+
+    The batch's own bytes are read twice: once with the campaign reader to establish, without the
+    service, that this batch really shows terminal-clean cleanup and a genuine ``FAILED`` point, and
+    once through the service's projection read. The recorded evidence root is read-only here, which
+    the fingerprint check at the end proves.
+    """
+
+    from so101_teleop.expert_validation.campaign_layout import (
+        CampaignLayoutReader,
+        read_selection_binding,
+    )
+    from so101_teleop.expert_validation.coordinator_events import (
+        AcceptedCoordinatorCursor,
+        CampaignUpstreamBinding,
+        ReadOnlyCoordinatorJournal,
+    )
+    from so101_teleop.expert_validation.journal_layout import resolve_fixed_journal_layout
+
+    batch_root = _recorded_cleanup_batch_root()
+    before = _tree_fingerprint(batch_root)
+    layout = resolve_fixed_journal_layout(batch_root, RECORDED_CLEANUP_BATCH_ID)
+    binding = CampaignUpstreamBinding(
+        campaign_id=RECORDED_CLEANUP_CAMPAIGN_ID, batch_id=RECORDED_CLEANUP_BATCH_ID,
+        owner_kind="COORDINATOR", owner_epoch_or_generation=layout.epoch,
+        journal_root=layout.journal_root, batch_root=layout.batch_root,
+    )
+    recorded = CampaignLayoutReader(
+        ReadOnlyCoordinatorJournal(layout.journal_root, RECORDED_CLEANUP_BATCH_ID), binding
+    ).read_after(AcceptedCoordinatorCursor.initial(binding))
+    projected = recorded.projected_state
+    assert projected["terminal_reason"] == "POINTS_COMPLETE"
+    assert projected["batch_cleanup_complete"] is True
+    assert projected["points"][RECORDED_CLEANUP_POINT_ID]["status"] == "FAILED"
+    terminal_receipt = recorded.events[-1].frame_sha256
+    assert recorded.events[-1].type == "CLEANUP_COMMITTED"
+    selection = read_selection_binding(binding)
+    point_ids = tuple(selection["selected_point_ids"])
+    assert RECORDED_CLEANUP_POINT_ID in point_ids and len(point_ids) == 20
+
+    service, store, _root = _service(
+        tmp_path, batch_id=RECORDED_CLEANUP_BATCH_ID, campaign_id=RECORDED_CLEANUP_CAMPAIGN_ID,
+        point_ids=point_ids, catalog_sha256=selection["catalog_sha256"],
+        selection_sha256=selection["selection_sha256"], evidence_root=RECORDED_CLEANUP_STATE,
+    )
+    try:
+        # The recorded store carried exactly this NULL for bf16a while the campaign reported
+        # cleanup complete, which is the state the console's retry was refused in.
+        assert store.batch(RECORDED_CLEANUP_BATCH_ID).cleanup_receipt_sha256 is None
+        store.enqueue_retries(RECORDED_CLEANUP_CAMPAIGN_ID, (RECORDED_CLEANUP_POINT_ID,))
+        request, context, intent = _retry_pair(
+            evidence_root=_root, campaign_id=RECORDED_CLEANUP_CAMPAIGN_ID,
+            original_batch_id=RECORDED_CLEANUP_BATCH_ID, point_id=RECORDED_CLEANUP_POINT_ID,
+            batch_id="retry-001", catalog_sha256=selection["catalog_sha256"],
+            selection_sha256=selection["selection_sha256"],
+            original_result_sha256=projected["points"][RECORDED_CLEANUP_POINT_ID]["result_sha256"],
+        )
+        with pytest.raises(StoreConflict, match="RETRY_ORIGINAL_CLEANUP_INCOMPLETE"):
+            store.admit_retry(request=request, context=context, spawn_intent=intent)
+
+        projection = service.get_campaign(RECORDED_CLEANUP_CAMPAIGN_ID)
+        assert projection["status"] == "COMPLETED_WITH_FAILURES"
+        assert projection["batch_cleanup_complete"] is True
+        assert store.batch(
+            RECORDED_CLEANUP_BATCH_ID
+        ).cleanup_receipt_sha256 == terminal_receipt
+
+        # The production route's own origin read agrees, and the same request is now admitted.
+        _original, item, catalog, selection_sha256, result_sha256 = service._retry_origin(
+            RECORDED_CLEANUP_CAMPAIGN_ID, RECORDED_CLEANUP_POINT_ID
+        )
+        assert item.point_id == RECORDED_CLEANUP_POINT_ID
+        assert (catalog, selection_sha256) == (
+            selection["catalog_sha256"], selection["selection_sha256"]
+        )
+        assert result_sha256 == projected["points"][RECORDED_CLEANUP_POINT_ID]["result_sha256"]
+        admitted = store.admit_retry(request=request, context=context, spawn_intent=intent)
+        assert admitted.original_batch_id == RECORDED_CLEANUP_BATCH_ID
+        assert admitted.original_outcome == "FAILED"
+        assert admitted.original_result_sha256 == result_sha256
+    finally:
+        store.close()
+    assert _tree_fingerprint(batch_root) == before, "the recorded batch bytes were written to"
 
 
 @pytest.mark.parametrize(
