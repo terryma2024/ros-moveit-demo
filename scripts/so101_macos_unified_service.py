@@ -261,6 +261,23 @@ def child_environment(
     declared_points = getattr(document, "validation_points", "")
     if declared_points:
         environment["SO101_VALIDATION_POINTS"] = declared_points
+    # The fixed contract pins a minimal PATH, which is right for the service itself but leaves the
+    # campaign workers without `ros2`: they reported "Error: ros2 executable is not available" and
+    # then `WORKER_EXITED_WITHOUT_RESULT`, so the whole W2 campaign ended incomplete with nothing
+    # executed. The sourced setups add these directories, so the launcher adds the same ones,
+    # derived from the contract paths rather than guessed.
+    ros_bin_directories = [
+        str(paths.ros2_script.parent),
+        str(paths.ros_install / "bin"),
+        str(paths.ros_dependency_overlay / "bin"),
+        str(paths.ros_fork_overlay / "bin"),
+        str(paths.project_install / "bin"),
+    ]
+    existing = environment.get("PATH", "")
+    environment["PATH"] = os.pathsep.join(
+        [entry for entry in ros_bin_directories if Path(entry).is_dir()]
+        + ([existing] if existing else [])
+    )
     environment.pop("NODE_ENV", None)
     return environment
 
