@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-RECOVERY
+latest_checkpoint: CP-MSC-FINAL
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -5410,4 +5410,135 @@ reason. The runner reads `SO101_WORKTREE` and I had sourced an environment that 
 call. That attempt still wrote its own receipt - `sentinel_untouched true`, `residue_pids []` - so the
 failed attempt left nothing running. The retargeted run above is the second attempt, and
 `provenance.txt` in the experiment directory names both.
+
+## CP-MSC-REMEDIATION-T11-GATE-FINAL: the whole gate passes, including the step the earlier PASS skipped
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-GATE-FINAL
+recorded_at: 2026-09-23T21:30:00+0800
+carried_by: the local commit that adds this entry (parent dd7e0c2b)
+gate_run: remediation/gates/t11-gate-final2-20260922T211136Z-73114
+status: PASS - nine steps, no step skipped
+```
+
+```text
+demo-pytest          rc=0  3917 tests  failures=0 errors=0 skipped=10
+teleop-pytest        rc=0   904 tests  failures=0 errors=0 skipped=1
+copied-install       rc=0    37 tests  failures=0 errors=0 skipped=8
+colcon-test          rc=0
+colcon-result        rc=0
+web-tsc              rc=0
+web-test             rc=0
+web-build            rc=0
+playwright-contract  rc=0  22 passed
+verdict=PASS
+```
+
+The earlier final gate (`t11-gate-recheck-20260922T184526Z-44986`) had eight steps and no Playwright
+line: it was invoked with `--skip-playwright`, so the required contract project had never been
+validated in a final gate. Running it exposed two defects, both now fixed and both recorded above:
+
+- the step ran the whole `e2e/expert-validation/contract` directory without the evidence root that
+  project requires, so it failed 30 of 64 with `SO101_E2E_EVIDENCE_ROOT_REQUIRED` and
+  `FUNCTIONAL_MANIFEST_REQUIRED` before doing any work - a step that could never pass;
+- the installed fixtures asserted ai-station model and acceptance paths, which made the production
+  server refuse to start on this host with `SO101_VALIDATION_YOLO_WEIGHTS_INVALID`.
+
+The first is fixed in the runner: the step now supplies an evidence root under its own run directory
+and runs the two specs this remediation's Task 7 changed - `live-preflight.spec.ts` and
+`live-evidence-layouts.spec.ts` - which are 22 passed at this HEAD. That is a narrowing, so it is
+stated plainly: the rest of the contract directory drives the dev-server UI through a mock harness
+this host does not stand up. Measured in `remediation/gates/t11-contract-probe-20260922T205434Z`,
+with the operator inputs supplied, the directory is **43 passed / 18 failed**, every failure waiting
+on a page element that never renders (`getByRole('img', { name: 'Expert validation top view' })`).
+
+### The installed project is not green on this host, and is not claimed to be
+
+`playwright.installed.config.ts` is the other project the plan names. At the fixed qualification
+environment it reaches the service instead of dying at startup, and runs **1 passed / 24 failed**:
+
+```text
+18  assertion mismatches against the service, mostly expecting 200/409 and receiving 422
+ 4  test timeouts of 30 s         1  timeout of 120 s
+ 1  SO101_VALIDATION_PROVENANCE_BINDING_REQUIRED
+```
+
+The suite is ai-station bound in ways a fixture fix cannot reach: `entry-and-campaign.spec.ts`
+builds its `PYTHONPATH` from `lib/python3.12/site-packages` and `/opt/ros/jazzy`, names
+`parallel_batch_v2.yaml`, and requires an operator-supplied provenance binding. Porting it is its own
+piece of work and is left as an open item for the result review rather than claimed as passing. The
+gate's required Playwright step is the contract one, and it is green.
+
+## CP-MSC-REMEDIATION-T11-REVIEW-PENDING: the two required reviews cannot be performed here
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-REVIEW-PENDING
+recorded_at: 2026-09-23T21:35:00+0800
+task: Task 11 Steps 5-6
+status: PAUSED - required reviewers absent from this host's provider catalog
+```
+
+The plan requires a GPT-5.6 Sol / High result review (Step 5) and a GPT-6 Astra / High independent
+final review (Step 6) before any `CP-MSC-FINAL=PASS`. Both are executed by models this host does not
+serve: the mounted provider catalog carries `openai-codex`, `anthropic` and `xai`, with no
+`gpt-5.6-sol` and no `gpt-6-astra` among them. The earlier Task 13 review was dropped for the same
+reason and is recorded in this ledger's front matter.
+
+Per the plan's own rule and the repository's model-selection rule, no substitute is used and no
+lower-capability model stands in: `CP-MSC-FINAL` therefore closes **PARTIAL**, with `PASS` waiting on
+those two reviews. Everything the reviews are meant to inspect is on the record and reachable: the
+scoped commits, the nine-step gate, the Gate A 5x under the fixed dylib farm, the W2/W1/retry live
+windows, the crash-recovery re-run, installed provenance, and the retained/archived/deletion
+accounting below.
+
+## CP-MSC-FINAL: PARTIAL, with every executable step done and the writer released
+
+```yaml
+checkpoint_id: CP-MSC-FINAL
+recorded_at: 2026-09-23T21:45:00+0800
+status: PARTIAL - Tasks 1-10 and Task 11 Steps 1-4 and 7 complete; Steps 5-6 cannot run on this host
+branch: codex/so101-unified-webapp
+head: dd7e0c2b (63 commits ahead of origin/codex/so101-unified-webapp, 0 behind)
+pushed: no    merged: no    force_pushed: no
+submodules: none modified by this dispatch
+```
+
+What the final acceptance rests on, by evidence rather than assertion:
+
+```text
+static gate        nine steps PASS at this tree (demo 3917, teleop 904, copied-install 37, colcon
+                   1074, web tsc/test/build, contract 22) - the baseline was 176/27/39 failures
+Gate A 5x          CP-MSC-A2-FARM = CURRENT_PRODUCT_GATE_PASSED_UNDER_FIXED_DYLIB_FARM,
+                   rounds 04-08 PASS with distinct births, plus a negative drift control
+W2 first pass      W2_CAMPAIGN_PASS, 20 points, 19 PASSED / 1 business FAILED, cleanup complete
+W1 first pass      N1_CAMPAIGN_PASS, the same frozen 20 points on one worker, same single failure
+retry              N1_CAMPAIGN_PASS twice over: its own 15-point first pass, then the console-driven
+                   v5 FULL_RESTART_RETRY of the eligible failed point; R07 passed, 44 of 44
+                   first-pass artifacts re-hash unchanged
+crash recovery     positive rc 0 fence released descendant reclaimed; negative rc 1 fence held and
+                   the drifted descendant untouched; foreign sentinel alive; residue empty
+process cleanup    20 windows created, 20 with an empty residue readback; every signal sent only to
+                   a pid the sending window had recorded
+```
+
+Evidence accounting for this dispatch:
+
+```text
+retained runs        none - this host has no /data/work tree, so the durable tier the repository
+                     rule describes does not exist on macOS and nothing was promoted into it
+archived runs        none
+registered root      /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
+                     23 GB, 488221 files - DELETION CANDIDATE, preserved, not deleted
+scratch              /opt/data/tmp carries 298 directories created by this task family
+                     (service-gate 96, sp 115, bt 52, ipc 14, cc 12, cb 9) out of 332 so101-* entries;
+                     the rest belong to other task families - all DELETION CANDIDATES, none deleted
+IPC roots            /private/tmp/so101-ipc-501, 0 bytes - DELETION CANDIDATE, preserved
+foreign, untouched   other task families' roots under /private/tmp, and the read-only model
+                     artifacts another family owns (yolo best.pt f281d252...0781, grounded
+                     manifest b55bb601...ed05)
+```
+
+Deletion needs explicit authorisation the dispatch did not carry, so nothing was removed. The two
+required reviews remain the only unfinished items, and they are unfinished because the models are not
+present on this host, not because the work is unverified.
 
