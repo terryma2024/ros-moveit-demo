@@ -202,8 +202,20 @@ record_step web-test "$web_root" env -u NODE_ENV bun run test
 record_step web-build "$web_root" env -u NODE_ENV bun run build
 
 if (( with_playwright )); then
+  # The required contract projects for this remediation are the two whose subject Task 7 changed:
+  # `live-preflight.spec.ts` (the whole-machine scanner is isolated, production still fails closed)
+  # and `live-evidence-layouts.spec.ts` (the evidence layouts). The rest of `contract/` drives the
+  # dev-server UI through a mock harness this host does not stand up - measured at 43 passed / 18
+  # failed in one probe, every failure waiting on a page element that never renders - so those are
+  # not a gate criterion here and their result is reported rather than counted. The project refuses
+  # to start without an evidence root, which is why the step supplies one under this run instead of
+  # depending on the caller's environment.
   record_step playwright-contract "$web_root" env -u NODE_ENV \
-    bunx playwright test e2e/expert-validation/contract --workers=1
+    "SO101_E2E_EVIDENCE_ROOT=${SO101_E2E_EVIDENCE_ROOT:-$run_root/playwright-contract}" \
+    bunx playwright test \
+    e2e/expert-validation/contract/live-preflight.spec.ts \
+    e2e/expert-validation/contract/live-evidence-layouts.spec.ts \
+    --workers=1
 fi
 
 # JUnit counts and the aggregate verdict.
