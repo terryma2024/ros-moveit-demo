@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { test, expect } from "@playwright/test";
 
 import {
+  assertPhysicalEvidenceSet,
   assertProjectedPointEvidence,
   type CampaignBatchEvidence,
 } from "../assertions/live-evidence";
@@ -60,8 +61,13 @@ function linuxEvidence(batchRoot: string, sealedDir: string): CampaignBatchEvide
  * A macOS/composed batch, in the shape the product writes: `point-results/<point>.json` is the
  * committed point result, and the evidence manifest it names is the station document whose bytes
  * its own digest covers.
+ *
+ * `outcome` and the dynamic-manifest fields are the caller's, because the retry shape that matters
+ * here is a business FAILED that carries no physical claim at all.
  */
-function macosEvidence(): {
+function macosEvidence(
+  overrides: { outcome?: string; dynamicRelative?: string | null } = {},
+): {
   evidence: CampaignBatchEvidence;
   resultPath: string;
   manifestPath: string;
@@ -83,6 +89,13 @@ function macosEvidence(): {
       ],
     }));
   writeFileSync(manifestPath, manifestBytes());
+  // The manifest's own inventory is relative to the station's `pick` root and has to be real
+  // bytes: the physical-evidence reader walks it exactly like the product's own reader does.
+  mkdirSync(join(batchRoot, "w1-station", "p1-attempt-1", "pick"), { recursive: true });
+  writeFileSync(
+    join(batchRoot, "w1-station", "p1-attempt-1", "pick", "initial-rgb.png"),
+    Buffer.from("image"),
+  );
 
   const resultsDirectory = join(batchRoot, "point-results");
   mkdirSync(resultsDirectory, { recursive: true });
@@ -90,13 +103,16 @@ function macosEvidence(): {
   const document = {
     point_id: "p1",
     committed: true,
-    outcome: "PASSED",
+    outcome: overrides.outcome ?? "PASSED",
     attempt_id: "p1-attempt-1",
     worker_id: "w1",
+    failure_code: "RGBD_PERCEPTION_EXITED_EARLY",
+    physical_evidence: false,
+    station_readback: { station_root: "w1-station/p1-attempt-1" },
     evidence_manifest_relative_path:
       "w1-station/p1-attempt-1/pick/batches/b-macos/points/01-p1/point-result.json",
     evidence_manifest_sha256: sha256(readFileSync(manifestPath)),
-    dynamic_manifest_relative_path: null,
+    dynamic_manifest_relative_path: overrides.dynamicRelative ?? null,
     dynamic_manifest_sha256: null,
   };
   writeFileSync(resultPath, JSON.stringify(document));
@@ -207,4 +223,46 @@ test("a composed point whose evidence manifest is gone is refused", () => {
   expect(() =>
     assertProjectedPointEvidence(evidence, { points: [{ point_id: "p1", display_id: "P01" }] }),
   ).toThrow(/POINT_EVIDENCE_INVALID/);
+});
+
+/**
+ * The retry shape the product really writes: one point, one lease, one RESULT_COMMITTED /
+ * POINT_TERMINAL, business FAILED, `RGBD_PERCEPTION_EXITED_EARLY`, no dynamic manifest and no
+ * physical claim. The reader has to accept that shape, refuse the same document when it claims
+ * PASSED, and never hand a null relative path to the filesystem.
+ */
+test("a business FAILED attempt without a physical claim is valid composed evidence", () => {
+  const { evidence } = macosEvidence({ outcome: "FAILED" });
+  expect(() => assertPhysicalEvidenceSet(evidence)).not.toThrow();
+});
+
+test("a PASSED attempt without physical evidence stays PHYSICAL_EVIDENCE_INVALID", () => {
+  const { evidence } = macosEvidence({ outcome: "PASSED" });
+  expect(() => assertPhysicalEvidenceSet(evidence)).toThrow(
+    /PHYSICAL_EVIDENCE_INVALID: p1 claims physical evidence it does not carry/,
+  );
+});
+
+test("the composed reader never reads a null dynamic manifest as a file", () => {
+  const { evidence } = macosEvidence({ outcome: "FAILED" });
+  // The historical reader passed the null path to readFileSync and crashed with EISDIR/ENOENT
+  // instead of classifying the attempt. The refusal, when it comes, is this module's own code.
+  try {
+    assertPhysicalEvidenceSet(evidence);
+  } catch (error) {
+    expect(String(error)).not.toMatch(/EISDIR|ENOENT|TypeError/);
+    throw error;
+  }
+  const claimed = macosEvidence({ outcome: "PASSED" });
+  expect(() => assertPhysicalEvidenceSet(claimed.evidence)).toThrow(
+    /^PHYSICAL_EVIDENCE_INVALID: p1 claims physical evidence it does not carry$/,
+  );
+});
+
+test("a composed attempt that names a dynamic manifest still has to carry it", () => {
+  const { evidence } = macosEvidence({
+    outcome: "FAILED",
+    dynamicRelative: "w1-station/p1-attempt-1/pick/never-written.json",
+  });
+  expect(() => assertPhysicalEvidenceSet(evidence)).toThrow(/PHYSICAL_EVIDENCE_INVALID/);
 });
