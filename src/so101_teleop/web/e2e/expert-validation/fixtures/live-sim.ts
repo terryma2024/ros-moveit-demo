@@ -4,6 +4,7 @@ import { existsSync, createWriteStream, mkdirSync, readFileSync, writeFileSync }
 import os from "node:os";
 import { dirname, join } from "node:path";
 
+import { durableRootFailure } from "./durable-root";
 import { resolvePackagePrefixes } from "./installed";
 
 import { test as base, expect } from "@playwright/test";
@@ -80,7 +81,12 @@ export function stackConflicts(scan?: () => string): string[] {
 
 export function validateLiveSimPreconditions(
   env: NodeJS.ProcessEnv = process.env,
-  deps: { hostname?: string; stackScan?: () => string } = {},
+  deps: {
+    hostname?: string;
+    stackScan?: () => string;
+    platform?: NodeJS.Platform;
+    pathExists?: (path: string) => boolean;
+  } = {},
 ): LiveSimPreconditions {
   if (env.SO101_ENABLE_LIVE_SIM_E2E !== "1") {
     throw new LiveSimGateError("LIVE_SIM_OPT_IN_REQUIRED");
@@ -93,10 +99,16 @@ export function validateLiveSimPreconditions(
   if (hostname !== expectedHost) {
     throw new LiveSimGateError("LIVE_SIM_HOST_MISMATCH");
   }
+  // The durable-root rule is platform bound and lives in ./durable-root: ai-station keeps the
+  // registered /data/work/so101-evidence tree, macOS has no /data at all (sealed read-only system
+  // volume) and takes the task's own registered root instead, with a private run directory inside
+  // it. Neither branch has a fallback and neither creates anything.
   const evidenceRoot = env.SO101_E2E_EVIDENCE_ROOT ?? "";
-  if (
-    !evidenceRoot.startsWith("/data/work/so101-evidence/") || !existsSync(evidenceRoot)
-  ) {
+  const evidenceFailure = durableRootFailure(evidenceRoot, env, deps);
+  if (evidenceFailure === "NOT_PRIVATE") {
+    throw new LiveSimGateError("LIVE_SIM_EVIDENCE_ROOT_NOT_PRIVATE");
+  }
+  if (evidenceFailure !== null) {
     throw new LiveSimGateError("LIVE_SIM_EVIDENCE_ROOT_REQUIRED");
   }
   // The retired provenance binding is gone: a source commit, an ament prefix and a binding
@@ -125,7 +137,11 @@ export function validateLiveSimPreconditions(
     if (!root) {
       throw new LiveSimGateError("LIVE_SIM_SERVICE_STATE_ROOT_REQUIRED");
     }
-    if (!root.startsWith("/data/work/so101-evidence/") || !existsSync(root)) {
+    const stateFailure = durableRootFailure(root, env, deps);
+    if (stateFailure === "NOT_PRIVATE") {
+      throw new LiveSimGateError("LIVE_SIM_SERVICE_STATE_ROOT_NOT_PRIVATE");
+    }
+    if (stateFailure !== null) {
       throw new LiveSimGateError("LIVE_SIM_SERVICE_STATE_ROOT_INVALID");
     }
     serviceStateRoot = root;

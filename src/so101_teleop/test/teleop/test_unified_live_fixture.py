@@ -10,6 +10,7 @@ from pathlib import Path
 
 PACKAGE = Path(__file__).parents[2]
 FIXTURE = PACKAGE / "web/e2e/expert-validation/fixtures/live-sim.ts"
+DURABLE_ROOT = PACKAGE / "web/e2e/expert-validation/fixtures/durable-root.ts"
 GLOBAL_SETUP = PACKAGE / "web/e2e/expert-validation/fixtures/live-sim-global-setup.ts"
 LIVE_CONFIG = PACKAGE / "web/playwright.live-sim.config.ts"
 
@@ -49,6 +50,34 @@ def test_global_setup_reads_the_authorization_before_any_spawn():
     authorize_at = fixture.index("requireUnifiedLiveAuthorization(env)")
     stack_at = fixture.index("stackConflicts(deps.stackScan)")
     assert authorize_at < stack_at, "authorization must be checked before stack inspection"
+
+
+def test_the_durable_root_rule_is_platform_bound_and_still_fails_closed():
+    """ai-station keeps the registered /data/work/so101-evidence tree; macOS has no /data at all
+    (its root is a sealed, read-only system volume), so the registered root there is the task's own
+    ``SO101_TASK_ROOT`` and the run must be a private directory inside it. The macOS branch is a
+    narrow portability rule, never a fallback: a relative root, an unregistered root, a symlink or a
+    world-readable directory is refused by name.
+    """
+
+    fixture = FIXTURE.read_text()
+    rule = DURABLE_ROOT.read_text()
+    assert "durableRootFailure" in fixture, "the live gate must use the shared durable-root rule"
+    assert "SO101_TASK_ROOT" in rule
+    # The ai-station prefix stays in force for every other platform, next to the darwin branch.
+    assert "/data/work/so101-evidence/" in rule
+    assert 'platform !== "darwin"' in rule, "the ai-station prefix must remain the non-darwin rule"
+    assert "isSymbolicLink" in rule and "0o077" in rule, (
+        "the darwin branch must refuse symlinks and world-readable run roots"
+    )
+    for code in (
+        "LIVE_SIM_EVIDENCE_ROOT_REQUIRED",
+        "LIVE_SIM_EVIDENCE_ROOT_NOT_PRIVATE",
+        "LIVE_SIM_SERVICE_STATE_ROOT_REQUIRED",
+        "LIVE_SIM_SERVICE_STATE_ROOT_INVALID",
+        "LIVE_SIM_SERVICE_STATE_ROOT_NOT_PRIVATE",
+    ):
+        assert code in fixture, code
 
 
 def test_live_config_keeps_the_reviewed_projects_and_adds_the_unified_one():
