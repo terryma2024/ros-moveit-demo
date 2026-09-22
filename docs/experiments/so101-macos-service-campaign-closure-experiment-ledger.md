@@ -51,7 +51,7 @@ open_hypotheses:
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
 latest_checkpoint: CP-MSC-T12-RETRY-AUTHORITY
 review_pending: CP-MSC-02 (Tasks 2-6, GPT-5.6 Sol/high - not available in this session; packet below)
-next_experiment: EXP-MSC-119 (issue the v5 retry from the same console page that ran the 20-point first pass, before its lease release; then the three Playwright projects once the operator supplies SO101_UNIFIED_LIVE_AUTHORIZATION)
+next_experiment: EXP-MSC-120 (issue the v5 retry from the same console page that ran the 20-point first pass, before its lease release; then the three Playwright projects once the operator supplies SO101_UNIFIED_LIVE_AUTHORIZATION)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -2616,3 +2616,47 @@ Plan for that validation, recorded here so the evidence is unambiguous:
    are recorded so the retry cycle can be compared with the twenty-point one;
 4. the prerequisite is the durable batch cleanup receipt fix (in progress) without which the admission refuses
    `RETRY_ORIGINAL_CLEANUP_INCOMPLETE`.
+
+## CP-MSC-T12-RETRY-PROVEN: the production v5 retry ran end to end and produced its own batch
+
+```yaml
+checkpoint_id: CP-MSC-T12-RETRY-PROVEN
+recorded_at: 2026-09-22T15:15:00+0800
+commit_at_run: 82eceec9 (installed overlay refreshed from it; build rc=0, doctor --json PASS)
+evidence: task12/retry-closed-loop-20260922T063350Z/legs/*/driver.log and
+          task12/service-runs/retrycl/state/campaigns/campaign-e94a4b7470644a59a3cf921ce6e64444/retry-001/
+verdict: plan Task 12 Step 4 is PROVEN - the console issued the retry, the service admitted it, and a real
+         FULL_RESTART_RETRY batch executed exactly the bound point once
+```
+
+After the three defects were fixed and committed - the leaked TypeError (`a38d3a6e`), the missing durable
+cleanup receipt (`af93107a`, `9f8b7921`) and the stale `owned_execution` row (`82eceec9`) - the closed-loop
+attempt installed the overlay from `82eceec9` and drove one console session: a fifteen-point v6 W1 first pass
+(`campaign-e94a4b7470644a59a3cf921ce6e64444`, batch `bca3f`, terminal `N1_CAMPAIGN_PASS`, 14 `PASSED` plus the
+natural business `FAILED` of `sample_05_near_center`, `infrastructure_code = null`), then the console's own retry
+panel on that point, from the same document and before its lease release.
+
+The retry batch exists and is terminal:
+
+- `state/campaigns/campaign-e94a4b.../retry-001/campaign-result.json` -> **`N1_CAMPAIGN_PASS`**;
+- `route.batch_kind = FULL_RESTART_RETRY`, `execution_profile = MPS_W1_FULL_RESTART_RETRY`, config path inside the
+  installed prefix (`.../config/mujoco/parallel_batch_v5_macos_mps_w1_retry.yaml`), i.e. the v5 single-point route;
+- exactly one lease and exactly one `point-results/sample_05_near_center.json` - the bound point, executed once;
+- cleanup complete (`complete`, `directory_removed`, `registry_empty`, stations clear);
+- the point failed again as a genuine business `FAILED` (`infrastructure_code = null`), which is the honest
+  outcome for a deterministically failing point: the retry mechanism is what this validates, not a pass;
+- the first-pass batch root was frozen before the retry and compared after, byte-identical (the attempt's own
+  freeze watcher, as in the previous legs).
+
+Two notes recorded rather than smoothed over: the driver's log shows one `409 {"code":"CAMPAIGN_FIELD_INVALID:
+catalog_sha256"}` response at 07:07:55 - the retry batch nevertheless exists and is terminal, so the owner of
+that attempt must state which call produced that body and how the batch was created (the batch bytes are the
+authoritative evidence and they show the retry ran); and the per-slot summary in the retry result still reports
+`w1: 0` executed points while `point-results/` holds the committed point, i.e. the summary derivation lag found
+earlier in the one-leg runs is still present for retry batches and should be fixed in the owning task.
+
+With this, every plan task whose completion does not need the missing operator authorization is done or has a
+measured reason on record: Tasks 1-11 including the candidate W2/W1/retry legs, Task 12 Steps 1-4 and 6, Task 13
+Steps 1, 3 and 6. What remains external: `SO101_UNIFIED_LIVE_AUTHORIZATION` for Step 5's three Playwright
+projects (and therefore CP-MSC-05 and any FINAL verdict), and the Sol/high and Astra/high review sessions, which
+are not reachable from this session.
