@@ -52,6 +52,20 @@ test.afterEach(async ({ request }) => {
   await releaseAcquiredLeases(request);
 });
 
+/**
+ * The window that owns this spec also owns the retry route, so it must name that case. An empty,
+ * unknown or ambiguous id fails collection closed rather than falling through to another route.
+ */
+function assertRetryWindowCase(): void {
+  const caseId = process.env.SO101_LIVE_CASE_ID ?? "";
+  if (!caseId) throw new Error("LIVE_CASE_ID_REQUIRED");
+  if (!caseId.includes("retry")) {
+    throw new Error(`LIVE_CASE_ID_NOT_A_RETRY_CASE: ${caseId}`);
+  }
+}
+
+assertRetryWindowCase();
+
 test("R07 a genuinely failed point retries as its own SEQUENTIAL N1 FULL_RESTART batch @live-sim", async ({
   page,
   liveServer,

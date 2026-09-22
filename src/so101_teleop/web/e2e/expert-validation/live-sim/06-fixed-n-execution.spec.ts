@@ -101,9 +101,31 @@ async function expectRefusedInConsole(page: Page, entry: FunctionalCase): Promis
   ).toBeDisabled();
 }
 
+/**
+ * The one case this window is allowed to execute.
+ *
+ * A closed window runs exactly one console case, so a manifest that matches nothing, matches more
+ * than one case, or matches a case the manifest does not carry must fail collection instead of
+ * quietly running a different route. `SO101_LIVE_CASE_ID` is set by the window runner.
+ */
+export function selectLiveCase(
+  cases: FunctionalCase[],
+  caseId: string,
+): FunctionalCase[] {
+  if (!caseId) throw new Error("LIVE_CASE_ID_REQUIRED");
+  const matches = cases.filter((entry) => entry.id === caseId);
+  if (matches.length !== 1) {
+    throw new Error(`LIVE_CASE_ID_NOT_UNIQUE: ${caseId} matched ${matches.length} cases`);
+  }
+  return matches;
+}
+
 // `FULL_RESTART_RETRY` is a single-point retry through the failure workflow, not a first-pass
 // execution; it is driven by the retry spec and deliberately not claimed here.
-const executions = loadManifest().cases.filter((entry) => entry.lifecycle === "FIRST_PASS");
+const executions = selectLiveCase(
+  loadManifest().cases.filter((entry) => entry.lifecycle === "FIRST_PASS"),
+  process.env.SO101_LIVE_CASE_ID ?? "",
+);
 
 // The claimed profile per route, so two point counts under the same route compare against each
 // other rather than against a value from the capabilities document.
