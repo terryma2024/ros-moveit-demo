@@ -49,9 +49,9 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-T11-FIX
+latest_checkpoint: CP-MSC-FINAL-CANDIDATE
 review_pending: CP-MSC-02 (Tasks 2-6, GPT-5.6 Sol/high - not available in this session; packet below)
-next_experiment: EXP-MSC-113 (finish the candidate W2/W1/retry re-run, then Task 12 fresh-Chrome production acceptance)
+next_experiment: EXP-MSC-114 (candidate W1 v6 and the v5 retry from a real business FAILED point, then Task 12 fresh-Chrome production acceptance)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -2071,3 +2071,71 @@ foreign and untouched. No candidate process, TCP listener, IPC socket, ROS node 
 this task's runs.
 
 Retained: everything under the registered root. Deleted or archived: nothing.
+
+## CP-MSC-FINAL-CANDIDATE: final gate green, candidate W2 executes every selected point, closure still PARTIAL
+
+```yaml
+checkpoint_id: CP-MSC-FINAL-CANDIDATE
+recorded_at: 2026-09-22T09:45:00+0800
+commit_at_gate: c560d0d7d539dbfe7b06013d3e621ac3890b83e9 (submodule 85d2a5c42686a3d6b0d909a047a4188b24edd257)
+guide_draft: docs/guides/so101-macos-service-campaign-closure.md (written by the executing agent; Sol/high authorship and both external reviews remain pending)
+```
+
+### Task 13 Step 1 - final static gate
+
+Evidence `task13/final-gate-20260922T011619Z/` (fresh JUnit names, one log per command, SHA256SUMS).
+
+| command | rc | result |
+| --- | --- | --- |
+| `pytest src/so101_demo_py/test` | 1 | 181 failed / 3643 passed / 40 errors - the same pre-existing classes as every earlier run (PATH_OWNER, `UNIX_SOCKET_PATH_TOO_LONG`, missing `sysctl`), now with 16 more passing tests |
+| `pytest src/so101_teleop/test/teleop` | 1 | 27 failed / 789 passed / 2 skipped - the identical pre-existing failure set |
+| copied-install + macos-install-contract | 0 | 25 passed / 8 skipped |
+| `colcon test` + `colcon test-result` | 1 / 1 | 1016 tests / 0 errors / 41 failures / 3 skipped - the same totals Task 11 measured after the stale CTest registration was fixed |
+| web `tsc -b` / `bun run test` / `bun run build` | 0 / 0 / 0 | clean, 248 tests, dist built |
+
+The first attempt at the colcon pair returned rc=127 (`colcon: command not found`) because the runner did not put
+`/opt/ros2_jazzy/.venv/bin` first on `PATH`; it was re-run with that prefix and the result above is from the
+successful invocation. The failure is a harness detail, recorded rather than hidden.
+
+### The candidate W2 leg now executes every selected point
+
+After the queue-drain fix (`48da468a`) the live W2 run `task11/after-fix/w2-20260922T011804Z` reports
+`W2_CAMPAIGN_PASS` with the seven bound points executed exactly once across the two Workers:
+
+```text
+w1: 01-cup_test_left_5cm, 01-sample_07_mid_center, 01-sample_16_far_right, 01-task_start
+w2: 01-cup_test_forward_5cm, 01-cup_test_right_5cm, 01-sample_12_far_left
+```
+
+Every lease carried its own `points/<point>.yaml` single-point input, no point was leased twice and no unselected
+point appears. The previous run (`w2-20260922T011200Z`) is kept as the honest intermediate: six of seven points
+executed and `W2_CAMPAIGN_INCOMPLETE`, which is the strict verdict refusing to claim a pass over an incomplete
+point set. The candidate W1 v6 leg and the v5 retry (which needs a real terminal-clean business `FAILED` point)
+were still being driven when this checkpoint was written.
+
+### Accounting
+
+- **Retained (audit path)**: every gate cited in this ledger - `task2/task5-*` .. `task2/task11-*`, `task5*`,
+  `task6/`, `task9/`, `task11/**` (candidate freeze, discovery, part-a, colcon-discrepancy, candidate-live,
+  after-fix, residue), `task13/final-gate-20260922T011619Z/`, plus the RED/GREEN runs for every task and the
+  operator scripts under `$RUN/operator/`.
+- **Archived**: none. This host has no `/data/work/so101-evidence` path, so nothing was moved.
+- **Deletion candidates (nothing deleted)**: superseded intermediate greens (`task2/task8-green-1..6`,
+  `task2/task7-green-1..2`, `task2/task7-impl-*`, `task2/task9-green-1..24`, `task2/task10-*` intermediates,
+  `task11/after-fix/w2-20260922T010659Z` and `w2-20260922T010730Z`), the `git archive HEAD` baselines and their
+  private pyshims (`task5-baseline-head`, `task6/baseline-head`, `task9/baseline-head`, `task11/baseline-head`,
+  `task11/ctx-gap/baseline-head`), the regenerable `build/so101_teleop` tree, the per-invocation pytest scratch
+  directories, and the unregistered `/tmp/so101-debug-task10/` directory created by the Task 10 worker before the
+  accounting rule was enforced (its gates were all re-run under the registered root).
+
+### Status
+
+- `CP-MSC-04`: **partially satisfied** - offline package gate PASS, candidate W2 point execution observed as above;
+  candidate W1 and the real retry are still pending, so the checkpoint is not claimed.
+- `CP-MSC-05` (Task 12 fresh Chrome on the installed production path): **NOT RUN**.
+- `CP-MSC-02`, `CP-MSC-03`, Task 13's Sol/high result review and the Astra/high independent final review:
+  **pending, not reachable from this session**. Per the plan's checkpoint table the closure is **PARTIAL**, not
+  FINAL PASS. The operator guide exists as a draft in the executing agent's name and must not be attributed to
+  Sol/high.
+
+Retained: everything. Deleted or archived: nothing.
