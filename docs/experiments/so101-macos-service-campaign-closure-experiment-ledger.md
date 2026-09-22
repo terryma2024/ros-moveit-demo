@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-W2-EXECUTING
+latest_checkpoint: CP-MSC-REMEDIATION-T11-W2-PROGRESS
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4871,3 +4871,38 @@ campaign preflight, adapter selection, worker PATH. The two genuinely product-si
 way - the missing `signals_sent` field and the container probe refusing a host with no container
 runtime - are recorded with their tests; everything else was the harness proving it could build a
 truthful environment.
+
+## CP-MSC-REMEDIATION-T11-W2-PROGRESS: eleven of twenty points have passed
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-W2-PROGRESS
+recorded_at: 2026-09-23T15:15:00+0800
+carried_by: the local commit that adds this entry (parent b41c2d26)
+window: remediation/windows/w2-20260922T191707Z-53004/
+status: the campaign is running its points; the final verdict lands in the next round
+```
+
+The service's own projection of the in-flight campaign:
+
+```text
+campaign status : RUNNING, sequence 72
+points          : 20  ->  12 PASSED, 7 UNRUN, 1 FAILED
+active workers  : ['w2', 'w1']
+```
+
+That is the first real W2 execution of this dispatch, and it shows the whole shape working at once:
+
+* **both workers active** - the W2 profile really runs two Workers against the shared queue, which is
+  what the profile exists for;
+* **twelve points passed** and one failed, with seven still queued, so the durable queue, the per-point
+  leases and the projection are all advancing;
+* the station is doing real motion planning - the campaign log's tail is MoveIt's OMPL planner being
+  invoked through the graceful-shutdown adapter, 31,191 lines in.
+
+The one `FAILED` point is expected rather than alarming: the frozen twenty include points that do not
+pass, which is exactly what the retry window needs, and the plan says a retry failing a point again is
+not a flow failure.
+
+The window owns its service and stops it by recorded PID; its `campaign-result.json`, `playwright.log`
+and `service-window-receipt.json` carry the verdict. Task 11 Step 3 then wants the same for `w1` (one
+worker, sequential) and for `retry` (its own frozen first pass, then a same-page single-point v5 retry).
