@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-W1
+latest_checkpoint: CP-MSC-REMEDIATION-T11-RETRY
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -5272,4 +5272,87 @@ MPS_W1_FIRST_PASS`, `schema_version 6`, `point_count 20`, `admitted true`, and t
 by digest: `yolo_weights_sha256 f281d252...0781` and `grounded_sam_manifest_sha256 b55bb601...ed05`.
 So the projected selection digest is the frozen one, and it is the runtime *binding* digest that is
 campaign-scoped by construction - not a disagreement about which points ran.
+
+## CP-MSC-REMEDIATION-T11-RETRY: the same-page retry runs end to end
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-RETRY
+recorded_at: 2026-09-23T20:35:00+0800
+carried_by: the local commit that adds this entry (parent 1c9bd37c)
+window: remediation/windows/retry-20260922T200456Z-58328/
+campaign: campaign-c068a458e0f94fea82b227d5ffb8b685, two batches
+status: first pass N1_CAMPAIGN_PASS, retry N1_CAMPAIGN_PASS
+```
+
+This is the first time the retry case ran past collection. The three earlier retry windows reached
+only the list step - 3 skipped, 0 executed each - so nothing below was inherited from them.
+
+```text
+first pass  batch b3dd9      N1_CAMPAIGN_PASS   MPS_W1_FIRST_PASS, macos_n1_first_pass, schema 6
+            15 selected, 15 attempts, 15 spawns, 15 committed, complete
+            14 PASSED, 1 FAILED; duplicates 0, unselected 0, unexecuted 0
+            infrastructure failures 0, missing physical evidence 0
+            selection edde3a64...3847, catalog c7491547...8dc5, cleanup complete
+retry       batch retry-001  N1_CAMPAIGN_PASS   MPS_W1_FULL_RESTART_RETRY, macos_n1_retry, schema 5
+            1 selected, 1 attempt, 1 spawn, 1 commit, complete
+            selection binding kind FULL_RESTART_RETRY
+            original_selection_sha256 edde3a64...3847   original_result_sha256 2e3e021a...c1ee
+            original_outcome FAILED
+            watermark sequence 8, event 55e34c56...77e9
+            broker pid 60013 birth 1790108843217214, device mps, ready, warmup 7.32 s
+            cleanup complete, directory removed, registry empty, 1 station clear, 1 reaped
+            inventory clean, 1 release EXITED, stopped_at_cap false
+playwright  3 expected, 0 unexpected, 0 skipped, 0 flaky; R07 1398.8 s (23.3 min)
+runner      rc 0; residue: owned processes (none), port 8013 (none), task stack (none)
+service     pid 58386 birth 1790107501250473, identity recheck ok, stop rc 137
+```
+
+The retried point failed again, and that is the expected outcome rather than a process failure. The
+point fails before reaching a physical execute every time it is run:
+
+```text
+                       W2 v4 2w        W1 v6 1w        retry first pass   retry leg v5
+point                  sample_05       sample_05       sample_05          sample_05
+code                   RGBD_PERCEPTION_EXITED_EARLY at all four
+infrastructure_code    null at all four;  cleanup_owned true at all four
+```
+
+Four runs, three profiles, one worker and two, the same single failure at the same catalog pose,
+always classified as a business failure, never as infrastructure. The plan's own rule applies: the
+retry failing on the business again does not fail the process, while a reader, projection or cleanup
+failure would have. The retry's evidence document records the origin in its own words -
+`fault: none: sample_05_near_center fails on its own (catalog marginal cup pose, 15-point selection;
+no catalog override, no injection)`.
+
+The first pass was not touched by the retry. Rather than trust the spec's assertion alone, every
+artifact the first-pass verdict recorded was re-hashed after the retry finished:
+
+```text
+first-pass artifacts re-hashed after the retry: 44 identical, 0 changed, 0 missing
+(covers evidence_manifest_sha256, dynamic_manifest_sha256 and worker_result_sha256 for all 15 points)
+```
+
+The two batches also stay separate on disk - `b3dd9` and `retry-001` are sibling batch directories
+under the one campaign, and the store keeps both rows with their own kinds.
+
+### Two limits of this checkpoint, stated rather than smoothed over
+
+First, the plan's Step 3 asks the retry window to complete its own first pass over the *same frozen
+twenty points*; the implementation generates **fifteen**. `NATURAL_FAILURE_SELECTION = 15` is
+documented in the spec as the smallest selection containing the marginal pose, with
+`task12/fault-injection-route-refused/selection-allocation.txt` behind the arithmetic, and the
+fifteen ids are the first fifteen of the frozen ordered list - the same catalog digest, the same four
+anchors, and the frozen `sample_05_near_center` among them. The window's live preflight receipt reads
+`point_count 15` and `selection_sha256 edde3a64...3847`. So this is a frozen subset of the frozen
+selection, not a different selection, but it is not the twenty the plan names. Changing it is a
+one-constant edit plus a re-run, and the ruling belongs to the Step 5 result review rather than to
+this execution.
+
+Second, the browser evidence for this case is the page-driven session, not a picture. The R07 spec
+drives the real console - goto, acquire lease, generate manifest, configure sequential, preflight,
+start, then the retry through `retryFailedPoints` on the selected point - and writes
+`retry-full-restart.json` plus the Chrome identity receipt (`Google Chrome 153.0.8010.53`), but it
+takes no screenshot, so the retry window has no `final.png` equivalent. The W2 window's screenshot
+does show the console rendering points, progress and per-point results. A visual capture of the retry
+result would need another service window, which the one-spec-one-window rule does not sanction here.
 
