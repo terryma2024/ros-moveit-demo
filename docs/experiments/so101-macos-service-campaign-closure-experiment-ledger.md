@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-A2-FARM
+latest_checkpoint: CP-MSC-REMEDIATION-GATE-CONFIRMED-2
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4335,3 +4335,27 @@ superseded; the receipt the rounds actually used is the authority.)
 
 Historical `CP-MSC-A1`, the literal no-DYLD FAIL and the old N/P/F records are untouched: A2 replaces
 them as the current completion contract, exactly as design section 17 states.
+
+## CP-MSC-REMEDIATION-GATE-CONFIRMED-2: the gate is green on the A2 source
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-GATE-CONFIRMED-2
+recorded_at: 2026-09-23T08:20:00+0800
+carried_by: the local commit that adds this entry (parent 49915318)
+run: remediation/gates/t11-gate-20260922T172517Z-33723  verdict=PASS
+status: the owed confirming run after the farm-mode fixes; every layer green
+```
+
+| Layer | t11-gate at `49915318` | baseline |
+| --- | --- | --- |
+| demo pytest | rc=0, 3917 tests, 0 failures, 0 errors | rc=1, 176 failed |
+| teleop pytest | rc=0, 904 tests, 0 failures, 0 errors | rc=1, 27 failed |
+| copied install | rc=0, 37 tests, 0 failures, 0 errors | rc=0 |
+| colcon test / test-result | rc=0 / rc=0, 1074 tests, 0 failures, 0 errors, 2 skipped | rc=0 / rc=1, 39 failures |
+| web tsc / vitest / build | rc=0 / rc=0 / rc=0 | rc=0 / rc=0 / rc=0 |
+| runner verdict | **PASS** | FAIL |
+
+With `CP-MSC-A2-FARM` recorded and this run green, every static and Gate A obligation of the
+remediation plan is satisfied. What is left is Task 11's live requalification - W2, W1 and the
+same-page retry through the closed window runner, each in its own service window - and the two
+external review checkpoints that the plan requires and this host cannot reach.
