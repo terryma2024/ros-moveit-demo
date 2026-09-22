@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-GATE-CONFIRMED-2
+latest_checkpoint: CP-MSC-REMEDIATION-T11-SELECTION
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4359,3 +4359,28 @@ With `CP-MSC-A2-FARM` recorded and this run green, every static and Gate A oblig
 remediation plan is satisfied. What is left is Task 11's live requalification - W2, W1 and the
 same-page retry through the closed window runner, each in its own service window - and the two
 external review checkpoints that the plan requires and this host cannot reach.
+
+## CP-MSC-REMEDIATION-T11-SELECTION: the twenty-point selection is frozen
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-SELECTION
+recorded_at: 2026-09-23T08:40:00+0800
+carried_by: the local commit that adds this entry (parent 57288899)
+task: Task 11 Step 1
+selection_manifest: final-selection/selection-20.json
+status: frozen from the product's own catalog loader, not transcribed
+```
+
+| Field | Value |
+| --- | --- |
+| catalog | `ai_station_baseline_v1`, seed `20260911`, 20 catalog points |
+| catalog SHA256 | `c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5` |
+| selection SHA256 | `33374bb01c31f342e6a2f3d13943c91e74d62165a5a901678216bbb18ffa9a64` |
+| points | 20 - 4 anchors + 16 generated |
+| anchors | `task_start`, `cup_test_forward_5cm`, `cup_test_left_5cm`, `cup_test_right_5cm` |
+
+The manifest records each point's index, id, display id, anchor flag, stratum, source and world
+position in order, so the W2 and W1 windows compare against the same frozen list rather than against
+each other. It was produced by calling `load_baseline_catalog()` and `select_catalog_points(20)` from
+the product's own catalog module - the same code the service uses - so the ids, the four anchors and
+the digests are the product's, not a hand-written fixture. The three live windows follow.
