@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-8B-LIVE
+latest_checkpoint: CP-MSC-REMEDIATION-8B-LIVE-PROVEN
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4155,3 +4155,48 @@ the container probe must read "no container runtime present" as "no batch contai
 reading, since a host with no Docker cannot be running a batch-labelled container. The next round
 confirms it with one command and then decides, against the plan's rule that a refusal is never
 weakened into a pass.
+
+## CP-MSC-REMEDIATION-8B-LIVE-PROVEN: the crash recovery runs end to end
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-8B-LIVE-PROVEN
+recorded_at: 2026-09-23T06:20:00+0800
+carried_by: the local commit that adds this entry (parent 4cdda61c)
+experiment: remediation/task8b/live-20260922T164721Z/  (run10.log + receipt.json)
+status: Task 8B Step 4's positive and negative live outcomes are both reproduced
+```
+
+The open question in Addendum 4 is answered, and it was the container probe:
+
+```text
+_containers("b001") -> FileNotFoundError: [Errno 2] No such file or directory: 'docker'
+_domain_in_use(181) -> False        default_process_inventory() -> PsutilInventory
+```
+
+`recover()` converts that `OSError` into `RECOVERY_RUNTIME_UNVERIFIABLE`, so on a host without Docker
+the operator entry could never complete - even though a host with no container runtime cannot be
+running a container labelled with this batch. That is a *provable* fact about the host, unlike an
+inventory that exists but cannot be read, so the probe now answers it: `shutil.which("docker") is
+None` returns no containers, while a Docker that is installed and fails to list keeps the fail-closed
+refusal. Both halves are pinned by
+`test_a_host_without_a_container_runtime_has_no_batch_containers`; the recovery file is **35 passed**.
+
+With that single fix the live experiment reproduces exactly what Task 8B asks for:
+
+```text
+positive rc=0  signals_sent=[6249]  fence_released=True   descendant_alive_after=False
+negative rc=1  signals_sent=None    fence kept            descendant_alive_after=True
+               RECOVERY_OWNER_TREE_UNRESOLVED generation 1: WORKER: OWNER_IDENTITY_MISMATCH
+sentinel_untouched: true            residue_pids: []
+```
+
+* the positive case is a real task-owned crash recovered through the installed entry: the leaf-first
+  reclaim stopped the one recorded descendant and the receipt names **that pid and nothing else**,
+  while the foreign sentinel - a process in its own session that no owner record mentions - was
+  untouched before, during and after;
+* the negative case injected a one-tick birth drift into the recorded descendant and the entry
+  refused before signalling anything: the descendant is still alive and the fence is still held.
+
+That closes the substance of Task 8B Step 4. Steps 3 and 5 remain: this commit changed product bytes,
+so the static gate must be re-run before its result is quoted, and the ledger accounting for the live
+run is this entry plus Addenda 1-4.

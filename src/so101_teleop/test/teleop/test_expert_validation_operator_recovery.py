@@ -636,3 +636,26 @@ def test_a_recovery_receipt_records_exactly_what_it_signalled(fenced):
     assert result["status"] == "OPERATOR_RECOVERED_ABORTED"
     assert result["signals_sent"] == []
     assert store.has_recovery_fence() is False
+
+
+def test_a_host_without_a_container_runtime_has_no_batch_containers(monkeypatch):
+    """No runtime is a proven fact; a runtime that cannot list is an unknown inventory.
+
+    ``docker ps`` failing with ``FileNotFoundError`` on macOS was converted by ``recover()`` into
+    ``RECOVERY_RUNTIME_UNVERIFIABLE``, so the operator entry could never complete on a host without
+    Docker - even though a host without a container runtime cannot be running a batch container.
+    A Docker that *is* installed but fails to list keeps the fail-closed refusal.
+    """
+    module = recovery_module()
+
+    monkeypatch.setattr(module.shutil, "which", lambda _name: None)
+    assert module._containers("b001") == []
+
+    monkeypatch.setattr(module.shutil, "which", lambda _name: "/usr/local/bin/docker")
+
+    def failing(*_args, **_kwargs):
+        raise subprocess.CalledProcessError(1, "docker", stderr="cannot connect")
+
+    monkeypatch.setattr(module.subprocess, "run", failing)
+    with pytest.raises(subprocess.CalledProcessError):
+        module._containers("b001")

@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import sqlite3
 import stat
+import shutil
 import subprocess
 import sys
 import time
@@ -32,6 +33,12 @@ class RecoveryError(RuntimeError):
 
 
 def _containers(batch_id):
+    # A host with no container runtime at all cannot be running a container labelled with this batch,
+    # and that is a provable fact about the host rather than an unreadable inventory - so the absence
+    # of the command answers the question. A runtime that *is* installed but fails to list stays a
+    # refusal: there the inventory really is unknown.
+    if shutil.which("docker") is None:
+        return []
     result = subprocess.run(
         ["docker", "ps", "--no-trunc", "--filter", f"label=com.so101.batch-id={batch_id}",
          "--format", "{{.ID}}"], capture_output=True, text=True, timeout=10, check=True,
