@@ -174,6 +174,11 @@ scripts/install-mujoco-ros2-control.zsh
 
 ## 运行 `so101_demo_py` 全量测试
 
+测试代码需要同时兼容 macOS 和 Linux 时，参阅
+[`so101-python-test-portability-macos-linux.md`](so101-python-test-portability-macos-linux.md)。其中说明
+临时目录、Unix socket、进程身份、可选 ML 依赖和八进程并行测试的边界；本节只说明 macOS
+固定环境的运行方式。
+
 测试仍使用固定 Python、固定临时目录和同一组 overlay。八进程并行门禁还需要项目 `test`
 extra 中锁定的 `pytest-xdist==3.8.0`：
 

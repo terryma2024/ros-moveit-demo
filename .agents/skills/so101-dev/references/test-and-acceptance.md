@@ -26,6 +26,10 @@
 
 ## 构建与 package 测试
 
+需要新增或修复同时运行于 macOS 与 Linux 的 Python testcase 时，先读
+[`docs/guides/so101-python-test-portability-macos-linux.md`](../../../../docs/guides/so101-python-test-portability-macos-linux.md)。
+该指南记录临时目录、Unix socket、进程身份、可选 ML 依赖和 xdist 并行隔离的已验证模式。
+
 在 ai-station 的 ROS-only zsh 中使用标准 `colcon test`：
 
 ```bash
