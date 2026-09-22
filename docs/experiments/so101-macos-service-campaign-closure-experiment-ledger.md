@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-MODELS-ABSENT
+latest_checkpoint: CP-MSC-REMEDIATION-T11-INSTALLED-GATE-BLOCKED
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4668,3 +4668,41 @@ This blocks Task 11 Steps 2-4 (the W2, W1 and retry live windows) on an external
 harness work can produce a campaign without the weights, and the product is right to refuse. It is
 **not** recorded as a blocker yet - the goal policy asks for the same condition across three
 consecutive rounds - and nothing about it weakens a gate: the refusal is preserved, not bypassed.
+
+## CP-MSC-REMEDIATION-T11-INSTALLED-GATE-BLOCKED: the same two inputs gate every live layer
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-INSTALLED-GATE-BLOCKED
+recorded_at: 2026-09-23T12:25:00+0800
+carried_by: the local commit that adds this entry (parent the models-absent entry)
+run: final-installed3-20260922T184500Z-playwright.log
+status: second consecutive round with the same blocking condition; two harness fixes landed
+```
+
+Task 11 Step 2's installed Chrome gate now runs far enough to show what it needs, and the answer is
+the same input the live windows need. Two fixture defects were found and fixed on the way, both the
+same class as the ones already fixed in the live fixture:
+
+1. `test/e2e/installed_test_launcher.py` globbed `*/lib/python3.12/site-packages`, so on this host -
+   which installs `python3.11` - it raised `INSTALL_PREFIX_SITE_PACKAGES_MISSING` and every installed
+   spec failed with `INSTALLED_SERVER_EXITED:2`. It globs `python3.*` now, and the bootstrap was
+   verified directly against the installed prefix.
+2. the gate also has to be invoked from a shell with the four overlays sourced: without them the
+   child died with `ModuleNotFoundError: No module named 'ament_index_python'`. With them sourced,
+   the server starts and refuses on its own terms.
+
+That refusal is the finding:
+
+```text
+INSTALLED_SERVER_EXITED:2
+SO101_VALIDATION_YOLO_WEIGHTS_INVALID
+```
+
+So both remaining live layers - the installed Chrome gate and the W2/W1/retry windows - are gated by
+the same absent operator input: the perception weights (`SO101_VALIDATION_YOLO_WEIGHTS` and
+`SO101_VALIDATION_GROUNDED_ROOT`, with no default and no fallback, per `CP-MSC-REMEDIATION-T11-MODELS-ABSENT`).
+This is the second consecutive round in which that condition holds, and it is external: nothing in the
+repository can supply the weights, and neither refusal may be bypassed.
+
+What remains actionable without them is a re-check of the static gate, because the web fixtures, the
+live-window runner and the installed launcher all changed after `t11-gate` ran.
