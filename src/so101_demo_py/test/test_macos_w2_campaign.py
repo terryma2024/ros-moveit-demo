@@ -479,6 +479,115 @@ def test_per_slot_summary_reads_a_synthetic_evidence_tree(tmp_path: Path) -> Non
     assert summary["w2"]["manifests"] == 0 and summary["w2"]["executed_points"] == []
 
 
+def test_a_retry_batch_summary_reports_the_point_it_executed(tmp_path: Path) -> None:
+    """The recorded v5 retry batch ran one point; its slot summary must not read as zero.
+
+    `retry-001` of campaign `campaign-e94a4b74...` is a `FULL_RESTART_RETRY` batch: one lease, one
+    point executed, one committed point result (`sample_05_near_center`, `outcome FAILED`,
+    `infrastructure_code null`) and `N1_CAMPAIGN_PASS`. Its `per_slot_pick_place.w1` still read
+    `executed_points []` / `manifests 0`, because the point died at RGBD perception
+    (`RGBD_PERCEPTION_EXITED_EARLY`) and so never wrote the `dynamic/dynamic-execute-manifest.json`
+    the summary counted executions from. The derivation must count the batch runner's terminal
+    per-point document - the file the committed point result names as its evidence manifest - since
+    that is what an executed point leaves behind, while the dynamic manifest only marks the points
+    that reached the pick-place stages and, when DONE without failure, yields a contact entry.
+
+    The tree below is the recorded one, field for field.
+    """
+
+    from so101_demo.cli.macos_w2_campaign import summarize_per_slot_pick_place
+
+    root = tmp_path
+    batch = root / "w1-station/sample_05_near_center-attempt-1/pick/batches/retry-001"
+    point = batch / "points/01-sample_05_near_center"
+    (point / "dynamic").mkdir(parents=True)
+    (point / "point-input.json").write_text(json.dumps(
+        {"id": "sample_05_near_center", "reachability_status": "REACHABLE"}))
+    (point / "point-result.json").write_text(json.dumps(
+        {"artifacts": [{"artifact_id": "a4b187aafdc15a2710a8b648", "byte_size": 850,
+                        "media_type": "application/json", "producing_process": "reset",
+                        "relative_path": "resets/sample_05_near_center-1790060838695397000.json",
+                        "reset_epoch": 1}],
+         "failure_code": "RGBD_PERCEPTION_EXITED_EARLY", "id": "sample_05_near_center",
+         "manifest_path": "point-result.json", "reachability_status": "REACHABLE",
+         "reset_epoch": 1, "status": "FAILED"}))
+    (batch / "batch-result.json").write_text(json.dumps(
+        {"batch_id": "retry-001", "first_shared_failure": None, "status": "FAILED",
+         "points": [{"failure_code": "RGBD_PERCEPTION_EXITED_EARLY", "id": "sample_05_near_center",
+                     "manifest_path": "point-result.json", "reset_epoch": 1, "status": "FAILED"}]}))
+    (root / "point-results").mkdir()
+    (root / "point-results/sample_05_near_center.json").write_text(json.dumps(
+        {"committed": True, "failure_code": "RGBD_PERCEPTION_EXITED_EARLY", "generation": 1,
+         "moveit_executed": True, "outcome": "FAILED", "point_id": "sample_05_near_center",
+         "evidence_manifest_relative_path":
+             "w1-station/sample_05_near_center-attempt-1/pick/batches/retry-001"
+             "/points/01-sample_05_near_center/point-result.json",
+         "worker_id": "w1"}))
+
+    summary = summarize_per_slot_pick_place(evidence_root=root, workers=("w1",))["w1"]
+
+    # the point the batch really executed is named, in the first-pass summary's own shape
+    assert summary["executed_points"] == ["01-sample_05_near_center"]
+    # a FAILED point publishes no contact entry: the manifest that carries one is still the gate
+    assert summary["contacts"] == []
+    assert summary["manifests"] == 0 and summary["point_results"] == 1
+    assert summary["failure_codes"] == ["RGBD_PERCEPTION_EXITED_EARLY"]
+
+
+def test_a_summary_lists_every_executed_point_and_nothing_for_an_unrun_batch(tmp_path: Path) -> None:
+    """Executed points are what ran, failed or not; a station that ran nothing still reports zero.
+
+    A retry may serve more than one attempt, and a first-pass slot may fail a point without failing
+    the batch: every executed point is listed, while `contacts` keeps naming only the points whose
+    dynamic manifest reached DONE without failure. A point directory left behind without its
+    terminal document is a station artefact, not an execution, and is not listed.
+    """
+
+    from so101_demo.cli.macos_w2_campaign import summarize_per_slot_pick_place
+
+    root = tmp_path
+
+    def executed_point(attempt: str, batch: str, name: str, payload: dict) -> Path:
+        point = root / f"w1-station/{attempt}/pick/batches/{batch}/points/{name}"
+        point.mkdir(parents=True)
+        (point / "point-result.json").write_text(json.dumps(payload))
+        return point
+
+    # one point completed its pick-place, one failed at perception: both ran
+    done = executed_point("task_start-attempt-1", "bca3f", "01-task_start",
+                          {"id": "task_start", "status": "SUCCEEDED", "failure_code": None})
+    (done / "dynamic").mkdir()
+    (done / "dynamic/dynamic-execute-manifest.json").write_text(json.dumps(
+        {"current_state": "DONE", "failure": None,
+         "final_samples": [{"simulation_step": 33, "table_contact": True,
+                            "maximum_normal_force_n": 0.233}]}))
+    executed_point("sample_05_near_center-attempt-9", "bca3f", "01-sample_05_near_center",
+                   {"id": "sample_05_near_center", "status": "FAILED",
+                    "failure_code": "RGBD_PERCEPTION_EXITED_EARLY"})
+    # ... and a retry's second attempt, in its own attempt directory and its own batch directory
+    retry_done = executed_point("cup_test_left_5cm-attempt-2", "retry-002",
+                                "01-cup_test_left_5cm",
+                                {"id": "cup_test_left_5cm", "status": "SUCCEEDED",
+                                 "failure_code": None})
+    (retry_done / "dynamic").mkdir()
+    (retry_done / "dynamic/dynamic-execute-manifest.json").write_text(json.dumps(
+        {"current_state": "DONE", "failure": None, "final_samples": []}))
+    # a point directory from a Worker that was killed before the point finished: no execution
+    (root / "w1-station/never_ran-attempt-3/pick/batches/retry-002/points/01-never_ran").mkdir(
+        parents=True)
+
+    w1 = summarize_per_slot_pick_place(evidence_root=root, workers=("w1",))["w1"]
+
+    assert w1["executed_points"] == ["01-cup_test_left_5cm", "01-sample_05_near_center",
+                                     "01-task_start"]
+    assert [contact["point"] for contact in w1["contacts"]] == ["01-cup_test_left_5cm",
+                                                                "01-task_start"]
+    assert w1["manifests"] == 2 and w1["point_results"] == 3
+    # a slot with no station tree at all is still reported as zero, not omitted
+    assert summarize_per_slot_pick_place(evidence_root=root, workers=("w2",))["w2"][
+        "executed_points"] == []
+
+
 def _points(**overrides) -> dict:
     """A complete point-execution summary, as the drain reports one."""
 
