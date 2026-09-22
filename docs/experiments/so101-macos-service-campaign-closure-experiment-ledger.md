@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-8B-LIVE-PROVEN
+latest_checkpoint: CP-MSC-REMEDIATION-T9
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4200,3 +4200,44 @@ sentinel_untouched: true            residue_pids: []
 That closes the substance of Task 8B Step 4. Steps 3 and 5 remain: this commit changed product bytes,
 so the static gate must be re-run before its result is quoted, and the ledger accounting for the live
 run is this entry plus Addenda 1-4.
+
+## CP-MSC-REMEDIATION-T9: the guide states the current contract and the current order
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T9
+recorded_at: 2026-09-23T06:40:00+0800
+carried_by: the local commit that adds this entry (parent the container-probe fix)
+task: Task 9 Steps 1-3
+status: guide corrected; the ledger and the original plan's run commands are already current
+```
+
+The status paragraph no longer reasons from "the failure count is the same as last time". It states
+the layer-by-layer result of `t8-gate10` (`verdict=PASS`: demo 3917 tests 0 failed 0 errored, teleop
+904 0 failed, copied install 37 0 failed, `colcon test-result` 1074 0 failed 0 errored, web tsc/vitest/
+build all 0), puts the baseline beside it for comparison (demo 176 failed, teleop 27, colcon 39), and
+says plainly that a lower failure count is not the argument - the exit codes and JUnit counts are in
+the evidence root for anyone to check.
+
+The run order is now the one the product actually supports: `doctor` -> unified service -> lease and
+context -> start the campaign on the page -> read the evidence -> stop by owner PID/birth -> read the
+residue. The standalone station moved out of the main recipe and is described as an independent
+diagnostic entry on its own session, with a zero-residue check before any campaign starts.
+
+Two facts learned live this dispatch are now written down where an operator will hit them:
+
+* operator recovery requires the service to be **down**: `SupervisorStore.open` takes the store's
+  exclusive `flock`, so a live service only produces `VALIDATION_SUPERVISOR_ACTIVE`. The order is
+  stop-then-`--apply`, reclamation is leaf first, and `signals_sent` in the receipt is the list of
+  pids that were really signalled (empty when an identity no longer matches);
+* process inventory is psutil on Darwin and procfs on Linux, and neither a missing psutil nor an
+  `AccessDenied` degrades into "the process is gone"; the container inventory asks the host - a
+  runtime that cannot list stays fail-closed, a host without a runtime has no batch containers.
+
+Also stated in 已知限制: the per-console-spec service window is the operator-approved shape, not a
+product concession, because the exclusive controller binds one console instance per service.
+
+```text
+remediation/runs/t9-docs-20260922T170232Z: 36 passed
+      (test_macos_install_contract.py + test_expert_validation_macos_service_campaign.py)
+git diff --check: clean
+```
