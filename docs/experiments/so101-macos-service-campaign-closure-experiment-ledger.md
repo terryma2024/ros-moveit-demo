@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-GATE5
+latest_checkpoint: CP-MSC-REMEDIATION-COLCON-DEPTH
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3855,3 +3855,28 @@ before the runner is repeated.
 
 `remediation-build-20260922T155…` (recorded in `/tmp/t8b-build-run.txt`) is that fresh `prepare`.
 The confirming `t8-gate6` run follows it in the next round.
+
+## CP-MSC-REMEDIATION-COLCON-DEPTH: colcon's pytest children were the last centimetres
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-COLCON-DEPTH
+recorded_at: 2026-09-23T03:45:00+0800
+carried_by: the local commit that adds this entry (parent 7dd5dc37)
+status: cause proven; the confirming gate follows
+```
+
+`t8-gate6` on the fresh install (`remediation-build-20260922T155928Z`, doctor PASS) keeps five of six
+layers green - demo rc=0, teleop rc=0, copied install rc=0, web rc=0 - and only `colcon test-result`
+still reports the same two `test_expert_validation_e2e_installed_port` cases. So the stale install was
+not the whole cause either; the depth was. Proved directly, on the same file, with nothing else
+changed:
+
+```text
+basetemp = <short tmp>/pytest-of-matianyi/pytest-0   -> 2 failed, 4 passed  (CONTROL_SOCKET_PATH_TOO_LONG)
+basetemp = /opt/data/tmp/so101-bt-XXXXXXXX           -> 6 passed
+```
+
+colcon's pytest children use TMPDIR, and pytest appends `pytest-of-<user>/pytest-N/<test-name>0`, so
+even the runner's short `TMPDIR` left the batch root at about 86 bytes and the control endpoint past
+104. The colcon step now passes `--pytest-args "--basetemp=<short>"`, exactly like the three direct
+pytest steps, and the basetemp is recorded in the run's provenance.

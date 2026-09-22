@@ -181,10 +181,16 @@ record_step copied-install "$worktree" "$python" -m pytest -p no:cacheprovider -
 # one for the same reason the direct pytest steps do.
 colcon_tmp="$(mktemp -d /opt/data/tmp/so101-cc-XXXXXXXX)" || fail "COLCON_TMP_NOT_CREATABLE"
 chmod 700 "$colcon_tmp"
+# colcon's pytest children build `pytest-of-<user>/pytest-N/<test-name>0` under TMPDIR, which is
+# enough to push an AF_UNIX endpoint past `sun_path` even when TMPDIR itself is short. A short
+# `--basetemp` is what the direct pytest steps use, so colcon gets one too.
+colcon_pytest_base="$(mktemp -d /opt/data/tmp/so101-cb-XXXXXXXX)" || fail "COLCON_BASE_NOT_CREATABLE"
+chmod 700 "$colcon_pytest_base"
 record_step colcon-test "$worktree" env "PATH=/opt/ros2_jazzy/.venv/bin:$PATH" \
   "TMPDIR=$colcon_tmp" "TMP=$colcon_tmp" "TEMP=$colcon_tmp" \
   "$python" "$colcon_bin" --log-base "$run_root/colcon-log" test \
   --packages-select so101_teleop --return-code-on-test-failure \
+  --pytest-args "--basetemp=$colcon_pytest_base" \
   --event-handlers console_direct+
 record_step colcon-result "$worktree" env "PATH=/opt/ros2_jazzy/.venv/bin:$PATH" \
   "$python" "$colcon_bin" --log-base "$run_root/colcon-log" test-result --verbose
@@ -252,6 +258,7 @@ cat "$summary"
   print -r -- "ipc_socket_base=$ipc_base"
   for step_name in demo-pytest teleop-pytest copied-install; do
     print -r -- "pytest_basetemp[$step_name]=${pytest_bases[$step_name]}"
+  print -r -- "colcon_pytest_basetemp=$colcon_pytest_base"
   done
   print -r -- "scratch_classification=deletion-candidate (not deleted)"
   print -r -- "so101_task_root=$SO101_TASK_ROOT"
