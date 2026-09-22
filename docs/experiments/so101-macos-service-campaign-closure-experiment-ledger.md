@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T9
+latest_checkpoint: CP-MSC-REMEDIATION-A2-FARM-ROUND
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4241,3 +4241,51 @@ remediation/runs/t9-docs-20260922T170232Z: 36 passed
       (test_macos_install_contract.py + test_expert_validation_macos_service_campaign.py)
 git diff --check: clean
 ```
+
+## CP-MSC-REMEDIATION-A2-FARM-ROUND: the farm mode passes live
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-A2-FARM-ROUND
+recorded_at: 2026-09-23T07:20:00+0800
+carried_by: the local commit that adds this entry (parent 02e1bec0)
+round: final-freeze-20260922T170308Z/round-04/station-report.json
+status: one VALID owner-bound round; four more plus the drift control are Task 10 Step 3-5
+```
+
+`FIXED_DYLIB_FARM_FULL_TASK_STATION` now runs end to end on the installed bytes:
+
+```text
+observation_class: PASS      spawned: true      readiness.ready: true
+attestation: role=controller_runtime pid=31995 owner_binding_sha256=99970341de3cc5c8…
+             plugin_sha256=da3d80e34e2c23ce…  vendor_sha256=fefba57cf2d7342e…
+cleanup: complete, escalation SIGINT pids [31985, 31992, 31994, 31995, 31999], residue_pids []
+```
+
+Four real defects were found by running it, none of which a static test could have caught, and each is
+now fixed:
+
+1. **readiness executable layout** - the mode looked only at `<prefix>/lib/…`; this host installs the
+   isolated layout (`<prefix>/so101_demo_py/lib/…`), so it refused with
+   `FARM_READINESS_EXECUTABLE_MISSING`. Both layouts are resolved now.
+2. **station environment** - the mode passed only the 12-key fixed baseline to `Popen`, replacing the
+   sourced ROS environment outright; the station died with
+   `PackageNotFoundError: No package metadata was found for ros2cli`. It now keeps the environment the
+   runner sourced and writes the fixed contract keys over it, exactly as the service launcher does.
+3. **controller executable scope** - `build_runtime_process_attestation` required the executable to be
+   inside the project install, but under the farm contract `mujoco_ros2_control` lives in the fork
+   overlay, so every round failed with `PROCESS_ATTESTATION_EXECUTABLE`. With no single merged closure
+   the check now uses the binding's five sanctioned prefixes, and the validator still requires the
+   frozen relative path under exactly one of them.
+4. (earlier in the same session) `signals_sent`, the container inventory and the control-root sanction,
+   all recorded above.
+
+Each fix cost one `prepare` because the mode runs from the installed console script - the same lesson
+as `CP-MSC-REMEDIATION-GATE5`, applied four times in a row.
+
+Round 1-3 of the freeze (`round-01`, `round-02`, `round-03`) are retained as the RED evidence for
+those defects: `FARM_READINESS_EXECUTABLE_MISSING`, `STATION_CONTROLLER_PROCESS_MISSING` +
+`PackageNotFoundError: ros2cli`, and `PROCESS_ATTESTATION_EXECUTABLE` respectively.
+
+Task 10 still owes: four more consecutive VALID rounds on this frozen identity, the negative drift
+fixture control (mutated farm target / manifest SHA / inventory entry must be refused with
+`spawned=false`), the frozen identity readback, and the `CP-MSC-A2-FARM` entry itself.

@@ -1442,12 +1442,31 @@ def run_fixed_dylib_farm_full_task_station(
         report["report_sha256"] = _write_farm_report(Path(output_path), report)
         return 1
 
-    environment = runtime_paths.environment(int(binding["ros_domain_id"]))  # type: ignore[arg-type]
+    # The runner sources the four validated setups before this mode starts, so the station keeps
+    # those prefixes; the fixed contract keys are then written over whatever the shell had. Passing
+    # only the 12-key baseline replaced the sourced ROS environment outright, which is why the
+    # station died with `PackageNotFoundError: ros2cli`.
+    environment = {
+        key: value for key, value in os.environ.items() if isinstance(value, str)
+    }
+    environment.update(runtime_paths.environment(int(binding["ros_domain_id"])))  # type: ignore[arg-type]
     if str(runtime_paths.project_install.resolve()) != str(contract.project_install):
         report["invalid_reasons"] = ["FARM_PROJECT_INSTALL_DRIFT"]
         report["report_sha256"] = _write_farm_report(Path(output_path), report)
         return 1
-    readiness_executable = runtime_paths.project_install / READINESS_RELATIVE_PATH
+    # Both installed layouts carry the same relative path: merged at the prefix, isolated under a
+    # package directory. Resolving only the merged one refused the readiness entry on this host.
+    readiness_executable = next(
+        (
+            candidate
+            for candidate in (
+                runtime_paths.project_install / READINESS_RELATIVE_PATH,
+                runtime_paths.project_install / "so101_demo_py" / READINESS_RELATIVE_PATH,
+            )
+            if candidate.is_file()
+        ),
+        runtime_paths.project_install / READINESS_RELATIVE_PATH,
+    )
     if not readiness_executable.is_file():
         report["invalid_reasons"] = ["FARM_READINESS_EXECUTABLE_MISSING"]
         report["report_sha256"] = _write_farm_report(Path(output_path), report)

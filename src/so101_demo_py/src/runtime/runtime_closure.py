@@ -661,7 +661,17 @@ def build_runtime_process_attestation(
     if closure is not None and root != closure.install_root:
         raise RuntimeClosureError("CLOSURE_INSTALL_ROOT_MISMATCH", str(root))
     executable_path = Path(executable).resolve(strict=True)
-    if not executable_path.is_relative_to(root):
+    # Under the fixed dylib-farm contract the controller node legitimately lives in one of the five
+    # sanctioned prefixes rather than inside the project install (the fork overlay carries
+    # `mujoco_ros2_control`), so the scope check uses the binding's prefixes when there is no single
+    # merged closure. The validator below still requires the executable to sit under exactly one of
+    # them at the frozen relative path.
+    executable_prefixes = (
+        (root,)
+        if closure is not None
+        else tuple(Path(prefix).resolve() for prefix in owner_binding.closure_prefixes)
+    )
+    if not any(executable_path.is_relative_to(prefix) for prefix in executable_prefixes):
         raise RuntimeClosureError(
             "PROCESS_ATTESTATION_EXECUTABLE", str(executable_path)
         )
