@@ -12,7 +12,7 @@ executor: dst-so101-macos-closure (DeepSeek Harness TUI, tmux) resumed by explic
 worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
 branch: codex/so101-unified-webapp
 base_commit: 6d5069026fbd322076f58d0d4b9504891abeb861
-current_commit: d4a72649 (Task 10 web matrix builder; see CP-MSC-T9-T10)
+current_commit: ff263dbc (Task 9/10 checkpoints; see CP-MSC-T11-STOP)
 upstream: origin/codex/so101-unified-webapp (in sync at resume; this session does not push)
 evidence_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
 dispatch_receipt: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/dispatch.receipt
@@ -49,9 +49,9 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-T9-T10
+latest_checkpoint: CP-MSC-T11-STOP
 review_pending: CP-MSC-02 (Tasks 2-6, GPT-5.6 Sol/high - not available in this session; packet below)
-next_experiment: EXP-MSC-111 (Task 11: offline package gate and one-time candidate live gates)
+next_experiment: EXP-MSC-112 (wire the durable shared queue into the campaign lease path, then re-run the candidate gates)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -1931,3 +1931,81 @@ Retained: every invocation under `task2/task9-*`, `task9/`, `task2/task10-*`. De
 nothing. An unregistered evidence directory `/tmp/so101-debug-task10/` was created by the Task 10
 worker before the accounting rule was enforced; it is retained as-is and every gate it contains was
 re-run under the registered root (`task2/task10-gate-owner-*`, `task2/task10-gate2-*`).
+
+## CP-MSC-T11-STOP: the package gate passes, the candidate live gate stops on a real integration gap
+
+```yaml
+checkpoint_id: CP-MSC-T11-STOP
+recorded_at: 2026-09-22T08:45:00+0800
+candidate_commit: ff263dbc0ceb697ed073bd536b9737fc267b026e (worktree clean; no product edit during the run)
+cp_msc_04: NOT PASSED - offline gate PASS, candidate live point execution NOT OBSERVED
+```
+
+### Part A - the offline package gate ran verbatim (8/8 commands)
+
+| command | rc | result |
+| --- | --- | --- |
+| `pytest src/so101_demo_py/test` | 1 | 181 failed / 3627 passed / 40 errors - all known pre-existing classes (PATH_OWNER, `UNIX_SOCKET_PATH_TOO_LONG`, `sysctl` missing) |
+| `pytest src/so101_teleop/test/teleop` | 1 | 27 failed / 750 passed - failure set byte-identical to the recorded baseline |
+| `colcon test --packages-select so101_teleop` | 0 | runs the tests; its own summary already reported the package's failures |
+| `colcon test-result --verbose` | 1 | 1016 tests / 41 failures / 3 skipped after the fix below |
+| copied-install + macos-install-contract | 0 | 25 passed / 8 skipped |
+| web `tsc -b` / `bun run test` / `bun run build` | 0 / 0 / 0 | 48 files, 248 tests, dist built |
+
+`colcon test` rc=0 and `colcon test-result` rc=1 answer different questions; the worker proved there were no
+stale results (one `Testing/20260922-0004` run, every xunit mtime inside it, 236 s of measured execution),
+then re-ran from empty with the same summary. It did find a **stale registration**: `build/so101_teleop/
+CTestTestfile.cmake` was older than the `CMakeLists.txt` at HEAD, so ctest ran 81 of 84 entries and silently
+skipped three Task 7-9 modules. After a build-tree-only reconfigure (no product file touched) all 84 entries
+ran: the three previously skipped modules pass (98 tests), the same 13 suites fail. Evidence:
+`task11/colcon-discrepancy/DISCREPANCY.md` and the preserved verbatim run.
+
+Pre-existing proof: the same commands against `git archive HEAD` give a live-only failure set of **zero**
+(demo 200 vs 181, the archive failing more because submodule/git metadata is absent; teleop failure set
+identical). The three copied-install failures in the archive are harness artifacts (`git ls-files` exit 128,
+submodule content omitted), not product failures.
+
+### Part B - the candidate freeze is sound, the point execution is not there
+
+`task11/candidate-freeze/` records HEAD, the submodule commit, a clean worktree, the v4/v5/v6 document
+hashes, the bytes of every catalog/model/parser/reducer/StartGuard/authorization module, the installed
+entrypoint inventory with shebangs and the whole copied-install inventory. The frozen model artifacts were
+verified read-only and match the frozen hashes exactly (yolo `f281d252...`, grounded manifest
+`b55bb601...`, all eleven manifest files re-hashed). `doctor --json` reports PASS.
+
+Live runs (`task11/candidate-live/`, selection `cup_test_left_5cm`, `sample_07_mid_center`,
+`sample_12_far_left`, `sample_16_far_right` = catalog ids 3/11/16/20 of 20):
+
+- **W2 v4**: `W2_CAMPAIGN_PASS`, 25 s, two Workers ACTIVE, two stations READY (three controllers active,
+  three MoveIt services, three actions), ROS domains 181/182, fresh campaign guard epoch 0 PASS, journal
+  segment with a committed watermark, cleanup complete, `inventory.clean=true`.
+- **W1 v6**: `N1_CAMPAIGN_PASS`, 18 s, one Worker ACTIVE, domain 181, station READY, cleanup complete.
+- **fault injection**: the duplicate-request probe reached a refusal and refused it
+  (`REQUEST_ALREADY_CONSUMED`, `duplicates_refused=1`) and never counted as a business success; the
+  tamper-digest and stall probes did **not** reach their refusal paths in this configuration.
+
+**The stop condition.** Neither campaign executed a single point:
+`per_slot_pick_place.w1/w2.executed_points = []`, `manifests = 0`, `point_results = 0`, and both Workers
+report `pick_place.requested=false` with `error=POINTS_PATH_MISSING`. The raw lease documents carry no
+`points_path`/`points_sha256` and fall back to `point_id="p1"`. `build_worker_leases`
+(`cli/macos_w2_campaign.py`) writes neither field, `single_point_input` refuses without them, `W2Slots`
+capacity slots own no point by design, and `--point-id` never seeds the durable queue.
+`lease_worker_execution` does write the single-point input, but its only caller today is a test. So
+`W2_CAMPAIGN_PASS`/`N1_CAMPAIGN_PASS` are smoke verdicts: cleanup, ACTIVE workers, six served MPS
+responses and MPS-only devices, and they assert nothing about the selected point set. Selected-only
+execution, physical evidence and the real candidate retry are therefore **NOT OBSERVED**, and the real
+retry cannot exist at all because no point ever reaches a business `FAILED`.
+
+Also recorded: `issue_candidate_context()` has no HTTP route and no CLI caller, and it authorizes the retry
+endpoint only, so there is no way to issue a candidate context for a first-pass run.
+
+### Residue and foreign processes
+
+Five of the worker's own orphaned `descendant_helper.py` processes (argv inside its baseline archive or the
+live worktree, start times inside its own Part A windows) were stopped by exact PID after the owning test
+runs had exited, and all five are confirmed gone. Fourteen older `descendant_helper` processes (06:26-07:50)
+and the two `static_transform_publisher` processes from Sep 20 were preserved and listed, not signalled.
+Final readback: no candidate process, zero TCP listeners, empty IPC/control directories, no ROS node,
+broker or move_group left, and all six campaigns report cleanup complete.
+
+Retained: all of `task11/**` plus the preserved verbatim colcon run. Deleted or archived: nothing.
