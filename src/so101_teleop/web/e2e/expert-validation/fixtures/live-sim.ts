@@ -308,6 +308,12 @@ export type LiveServer = {
   stateDir: string;
   preconditions: LiveSimPreconditions;
   stop: () => Promise<void>;
+  /**
+   * True when this fixture reuses the task's deployed service (named by
+   * ``SO101_LIVE_SERVICE_BASE_URL``) instead of spawning its own on a free port. It is
+   * informational: the fact the specs act on is ``preconditions.serviceStateRoot``.
+   */
+  reusedDeployedService?: boolean;
 };
 
 /**
