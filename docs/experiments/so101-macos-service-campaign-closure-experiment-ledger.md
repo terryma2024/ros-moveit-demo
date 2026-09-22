@@ -2890,13 +2890,18 @@ reader does not have to re-derive them.
 ```yaml
 checkpoint_id: CP-MSC-05
 recorded_at: 2026-09-22T19:25:00+0800
+authority: >-
+  the operator reviewed the per-console-spec service window protocol and approved it explicitly
+  (2026-09-22, "我认可每用例一个服务窗口"), after being shown the four alternatives (one service with a
+  shared document, inter-spec handoff, an operator recovery route in the product, or keeping the
+  protocol); this checkpoint therefore carries an approved invocation shape, not a unilateral deviation
 supersedes: the earlier CP-MSC-05 entry (verdict NOT PASSED at b47e938f), whose two blockers are both resolved:
             the fixed interpreter could not serve a WebSocket (websockets installed under the operator's
             authorization, provenance task12/dependency-install/PROVENANCE.txt) and the operator's
             authorization document did not exist (its gate was removed by operator instruction, c6ab5129)
 evidence: task12/live-auth-removed-20260922T081412Z/windows/ (one fresh service window per console spec),
           task12/final20-20260922T084637Z/ (the twenty-point acceptance), and the campaign readbacks under both
-verdict: PASS, with the invocation deviation recorded and the project-level rcs explained - every console spec
+verdict: PASS, with the operator-approved invocation shape and the project-level rcs explained - every console spec
          of the three projects runs green against fresh Chrome and its own fresh service, and both the W2 and W1
          first passes and the v5 retry were re-proved at the operator's acceptance size
 ```
@@ -2907,13 +2912,14 @@ verdict: PASS, with the invocation deviation recorded and the project-level rcs 
 | W1 first-pass (v6, one worker) | R01 (4/4), w-06-n1p4 (4/4), w-06-n1p20 (20 points: 19/1), R07's fifteen-point first pass, and the twenty-point acceptance first pass |
 | v5 single-point retry | w-07 (`retry-001`, one point, one attempt, own cleanup, `N1_CAMPAIGN_PASS`) and the twenty-point acceptance (`retry-001`, HTTP 200, one point, one attempt, own cleanup, first-pass bytes unchanged) |
 
-The deviation: the plan's Step 5 runs each project as one command against one service; the product's exclusive
-controller makes that impossible after the first acquiring spec (CP-MSC-T12-LIVE-SPEC-CORRECTIONS), so each
-console spec ran in its own fresh service window and the project-level invocations are kept as the evidence of
-the refusal. Nothing about what the specs assert was relaxed, and the per-window protocol is strictly more
-isolated than one shared window. A reader who insists on the literal single-invocation form must read this as a
-documented product constraint rather than a passing command; everything the checkpoint requires of the
-*observables* is evidenced above.
+The invocation shape, now approved rather than merely recorded: the plan's Step 5 runs each project as one
+command against one service; the product's exclusive controller makes that impossible after the first acquiring
+spec (CP-MSC-T12-LIVE-SPEC-CORRECTIONS), so each console spec ran in its own fresh service window and the
+project-level invocations are kept as the evidence of the refusal. The operator was shown the alternatives - one
+service with a shared page document, inter-spec handoff, an operator recovery route in the product, or this
+protocol - and approved this one. Nothing about what the specs assert was relaxed, and the per-window protocol is
+strictly more isolated than one shared window. Everything the checkpoint requires of the *observables* is
+evidenced above.
 
 Also recorded here: the retry does not repair the failed point (it failed again in both retry runs), which the
 operator confirmed is expected, and the two live scenarios the product refuses were replaced with measured
@@ -2961,7 +2967,7 @@ verdict: PARTIAL - every executable plan task is done or has a measured reason; 
 | Task 1 (Gate A closure) | done at `CP-MSC-A1` / `CP-MSC-A1-FIX-TAKEOVER` |
 | Tasks 2-11 | done; `CP-MSC-02`, `CP-MSC-03` review packets prepared, `CP-MSC-04` satisfied |
 | Task 12 Step 1-4 (production W2, W1, v5 retry) | done (`CP-MSC-T12-W2W1-PASS`, `CP-MSC-T12-RETRY-PROVEN`) |
-| Task 12 Step 5 (three Playwright projects) | done as one fresh service window per console spec, with the invocation deviation recorded (`CP-MSC-T12-LIVE-SPEC-CORRECTIONS`) |
+| Task 12 Step 5 (three Playwright projects) | done as one fresh service window per console spec, an invocation shape the operator reviewed and approved (`CP-MSC-T12-LIVE-SPEC-CORRECTIONS`) |
 | Task 12 Step 6 | `CP-MSC-05` recorded above |
 | Task 13 Step 1 | done twice; the final re-run is `CP-MSC-T13-FINAL-GATE` |
 | Task 13 Step 2 (Sol/high result review) | **not performed** - operator dropped it from the todo; the review packets stay prepared |
