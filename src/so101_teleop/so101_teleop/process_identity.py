@@ -22,6 +22,7 @@ from __future__ import annotations
 import ctypes
 import ctypes.util
 from dataclasses import dataclass
+import errno
 import hashlib
 import json
 import os
@@ -32,6 +33,10 @@ import sys
 from typing import Any, Protocol, Sequence
 
 __all__ = [
+    "IDENTITY_ALIVE",
+    "IDENTITY_EXITED",
+    "IDENTITY_UNKNOWN",
+    "ProcessAbsent",
     "ProcessArgv",
     "ProcessIdentity",
     "ProcessIdentityError",
@@ -41,10 +46,17 @@ __all__ = [
     "group_has_live_descendants",
     "group_members",
     "identity_alive",
+    "identity_state",
     "read_identity",
 ]
 
 _ZOMBIE_STATE = "Z"
+
+#: The three answers a durable owner identity can earn. ``EXITED`` is proof that the recorded
+#: process is not running; ``UNKNOWN`` is the absence of proof and blocks exactly like ``ALIVE``.
+IDENTITY_ALIVE = "ALIVE"
+IDENTITY_EXITED = "EXITED"
+IDENTITY_UNKNOWN = "UNKNOWN"
 
 
 class ProcessIdentityError(RuntimeError):
@@ -52,6 +64,16 @@ class ProcessIdentityError(RuntimeError):
 
     def __init__(self, message: str = "PROCESS_IDENTITY_MISMATCH") -> None:
         super().__init__(message)
+
+
+class ProcessAbsent(ProcessIdentityError):
+    """The platform proved no process exists at this pid.
+
+    A plain :class:`ProcessIdentityError` is not proof of absence: an identity this caller may not
+    inspect, and a record the platform answers in a shape this module does not understand, are also
+    errors. Only this subclass says "there is nothing here", so it is the single error a durable
+    owner record may be retired on.
+    """
 
 
 def canonical_hash(value: Any) -> str:
@@ -117,6 +139,38 @@ def argv_matches(identity: ProcessArgv, requested: Sequence[str]) -> bool:
     return list(identity.argv[-len(tail) :]) == tail
 
 
+def identity_state(pid: int, start_marker: int, command_sha256: str) -> str:
+    """Classify a durable owner identity as ``ALIVE``, ``EXITED`` or ``UNKNOWN``.
+
+    ``EXITED`` is returned only on proof, because it is the one answer that lets a durable owner
+    record be retired: either the platform reports no process at this pid at all, or the pid now
+    carries a different start marker, which no earlier process can share. A zig-zag of the same
+    process (a live pid whose recorded command fingerprint no longer matches) and every unreadable
+    or malformed identity stay ``UNKNOWN``, and every caller must keep treating those as blocking.
+    """
+    if not isinstance(command_sha256, str) or not command_sha256:
+        return IDENTITY_UNKNOWN
+    if type(start_marker) is not int or start_marker < 0:
+        return IDENTITY_UNKNOWN
+    try:
+        identity = read_identity(pid)
+    except ProcessAbsent:
+        return IDENTITY_EXITED
+    except ProcessIdentityError:
+        return IDENTITY_UNKNOWN
+    if identity.pid != pid:
+        return IDENTITY_UNKNOWN
+    if identity.start_marker != start_marker:
+        # A pid is only handed out again to a process that started later, so a different start
+        # marker proves the process this record was written from is gone.
+        return IDENTITY_EXITED
+    if identity.command_sha256 != command_sha256:
+        # The recorded process is still there but no longer answers the command the record
+        # fingerprints: nothing here proves it exited.
+        return IDENTITY_UNKNOWN
+    return IDENTITY_ALIVE if identity.live else IDENTITY_EXITED
+
+
 def identity_alive(pid: int, start_marker: int, command_sha256: str) -> bool:
     """Prove that a durable owner record still names a live process, without signalling it.
 
@@ -124,15 +178,7 @@ def identity_alive(pid: int, start_marker: int, command_sha256: str) -> bool:
     same start marker, and a process that re-execs keeps both while still running the command the
     record fingerprints.
     """
-    try:
-        identity = read_identity(pid)
-    except ProcessIdentityError:
-        return False
-    return (
-        identity.live
-        and identity.start_marker == start_marker
-        and identity.command_sha256 == command_sha256
-    )
+    return identity_state(pid, start_marker, command_sha256) == IDENTITY_ALIVE
 
 
 def read_identity(pid: int) -> ProcessIdentity:
@@ -177,7 +223,15 @@ def _read_identity_proc(pid: int) -> ProcessIdentity:
         stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
         tail = stat[stat.rfind(")") + 2 :].split()
         command_line = Path(f"/proc/{pid}/cmdline").read_bytes()
-    except (FileNotFoundError, ProcessLookupError, PermissionError, OSError) as error:
+    except (FileNotFoundError, ProcessLookupError) as error:
+        # ``/proc/<pid>`` is created with the process and removed with it, so its absence is proof.
+        raise ProcessAbsent() from error
+    except PermissionError as error:
+        # A process this caller may not inspect is not a process that is gone.
+        raise ProcessIdentityError() from error
+    except OSError as error:
+        if error.errno == errno.ESRCH:
+            raise ProcessAbsent() from error
         raise ProcessIdentityError() from error
     argv = tuple(
         item.decode("utf-8", errors="surrogateescape")
@@ -264,9 +318,17 @@ def _libc() -> Any:
 
 def _darwin_bsdinfo(pid: int) -> dict[str, int]:
     buffer = ctypes.create_string_buffer(_BSDINFO_BUFFER)
-    written = _libproc().proc_pidinfo(pid, _PROC_PIDTBSDINFO, 0, buffer, _BSDINFO_BUFFER)
+    # ``proc_pidinfo`` reports a shorter record than asked for both for a pid that does not exist
+    # and for a process this caller may not inspect; errno is the only thing that tells them apart,
+    # so the handle is resolved first and errno is cleared immediately before the call whose answer
+    # it is, leaving no stale value able to masquerade as this call's refusal.
+    library = _libproc()
+    ctypes.set_errno(0)
+    written = library.proc_pidinfo(pid, _PROC_PIDTBSDINFO, 0, buffer, _BSDINFO_BUFFER)
     if written < _BSDINFO_MIN_BYTES:
-        # No such process, not ours to read, or a shorter record than this module understands.
+        if ctypes.get_errno() == errno.ESRCH:
+            raise ProcessAbsent()
+        # Not ours to read, or a shorter record than this module understands: not proof of absence.
         raise ProcessIdentityError()
     raw = buffer.raw[:written]
     return {

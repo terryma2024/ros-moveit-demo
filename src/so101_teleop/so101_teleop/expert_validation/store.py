@@ -16,7 +16,12 @@ import uuid
 
 from .coordinator import CoordinatorBinding, CoordinatorStartRequest
 from .preflight import canonical_start_request_sha256
-from ..process_identity import command_fingerprint
+from ..process_identity import (
+    IDENTITY_EXITED,
+    command_fingerprint,
+    group_has_live_descendants,
+    identity_state,
+)
 
 from .owner_tree import ConfirmedOwnerProcess, OwnerIntent, OwnerRecord
 from .execution_context import (
@@ -684,6 +689,76 @@ class SupervisorStore:
             unknown="RETRY_OWNER_UNKNOWN",
         )
 
+    #: The durable owner state a ``RUNNING`` execution is retired to once its process is proven
+    #: gone. It is a state of the owner row, not of the batch: the batch keeps whatever terminal or
+    #: cleaned state its own journal earned.
+    OWNER_STATE_EXITED = "EXITED"
+
+    def reconcile_exited_execution_owner(self, batch_id: str) -> bool:
+        """Retire one ``RUNNING`` owner whose recorded process is proven gone; never assume it.
+
+        The only evidence that retires an owner is a proven-absent identity: the platform reports no
+        process at the recorded pid, or the pid now carries a different start marker, and the
+        recorded process group holds no live process other than that leader. Everything else - a
+        live process, an identity this caller may not read, a row without a recorded identity, a
+        group that cannot be read or still has members - leaves the row ``RUNNING`` and returns
+        ``False``, because an unknown owner must keep blocking.
+
+        The transition is idempotent and moves exactly the row the proof was read from: the update
+        is guarded on the batch, the spawn token and the whole recorded identity, so an unrelated
+        owner row can never be overwritten and a second call changes nothing. ``True`` means the
+        post-condition holds - this batch has no standing ``RUNNING`` owner any more.
+        """
+
+        row = self._connection.execute(
+            "SELECT * FROM owned_execution WHERE batch_id = ?", (batch_id,)
+        ).fetchone()
+        if row is None or row["state"] != "RUNNING":
+            return True
+        if not self._owner_identity_proven_gone(row):
+            return False
+        cursor = self._connection.execute(
+            "UPDATE owned_execution SET state = ? "
+            "WHERE batch_id = ? AND state = 'RUNNING' AND spawn_token = ? "
+            "AND pid IS ? AND pgid IS ? AND started_ticks IS ?",
+            (
+                self.OWNER_STATE_EXITED,
+                batch_id,
+                row["spawn_token"],
+                row["pid"],
+                row["pgid"],
+                row["started_ticks"],
+            ),
+        )
+        if cursor.rowcount != 1:
+            # The row moved under the proof. Nothing may be retired without knowing which row was.
+            raise StoreConflict("EXECUTION_OWNER_RECONCILE_MISMATCH")
+        return True
+
+    def _owner_identity_proven_gone(self, row) -> bool:
+        """Whether the identity of one ``RUNNING`` owner row is proven not to be running.
+
+        The identity read and the group read are the same machinery the supervisor's own
+        unresolved-owner question uses, so the store and the supervisor cannot disagree about one
+        process. A row that never recorded an identity (a spawn intent that was never acknowledged)
+        is not this method's business: it stays ``INTENT`` and keeps blocking as unknowable.
+        """
+
+        # A group id this reader cannot even ask about would answer "no members", so the recorded
+        # coordinates are required to be a real identity before either read is consulted.
+        if type(row["pid"]) is not int or row["pid"] <= 0:
+            return False
+        if type(row["pgid"]) is not int or row["pgid"] <= 0:
+            return False
+        if type(row["started_ticks"]) is not int or row["started_ticks"] < 0:
+            return False
+        if (
+            identity_state(row["pid"], row["started_ticks"], row["argv_sha256"])
+            != IDENTITY_EXITED
+        ):
+            return False
+        return not group_has_live_descendants(row["pgid"], row["pid"])
+
     def _check_no_owner_or_fence(
         self, campaign_id: str | None, *, fence: str, active: str, unknown: str
     ) -> None:
@@ -692,6 +767,11 @@ class SupervisorStore:
         ``campaign_id=None`` asks the host-wide question a *new* run has to answer: this host runs
         one live execution, so an unresolved owner anywhere blocks a new authorization. A named
         campaign asks the narrower question a retry of that campaign asks.
+
+        A ``RUNNING`` row is not live by itself: the state is written once, when the owner is
+        acknowledged, and nothing in this store ever writes it back. So the row is reconciled
+        against the recorded process first, and only a proven-dead owner stops blocking - a live
+        one, an unreadable one and a row in any state this build does not know all still refuse.
         """
 
         if campaign_id is None:
@@ -702,19 +782,25 @@ class SupervisorStore:
             raise StoreConflict(fence)
         if campaign_id is None:
             rows = self._connection.execute(
-                "SELECT o.state FROM owned_execution o JOIN campaign_batches b USING (batch_id)"
+                "SELECT o.state, o.batch_id FROM owned_execution o "
+                "JOIN campaign_batches b USING (batch_id)"
             ).fetchall()
         else:
             rows = self._connection.execute(
-                "SELECT o.state FROM owned_execution o JOIN campaign_batches b USING (batch_id) "
-                "WHERE b.campaign_id = ?",
+                "SELECT o.state, o.batch_id FROM owned_execution o "
+                "JOIN campaign_batches b USING (batch_id) WHERE b.campaign_id = ?",
                 (campaign_id,),
             ).fetchall()
         for row in rows:
             if row["state"] == "RUNNING":
-                raise StoreConflict(active)
+                if not self.reconcile_exited_execution_owner(row["batch_id"]):
+                    raise StoreConflict(active)
+                continue
             if row["state"] == "INTENT":
                 raise StoreConflict(unknown)
+            if row["state"] != self.OWNER_STATE_EXITED:
+                # A state this build cannot reason about is not a retired owner.
+                raise StoreConflict(active)
         statement = (
             "SELECT i.spawn_token FROM owner_intents i "
             "LEFT JOIN owner_processes p ON p.spawn_token = i.spawn_token "
