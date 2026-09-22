@@ -18,6 +18,15 @@ evidence_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae
 dispatch_receipt: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/dispatch.receipt
 dispatch_receipt_sha256: bea49ba76cf9d131529ca0b72d82bf8c9c6350d9eebc69fdefbe8ad19bc34b51
 handoff_sha256: 4e672949dba8b72e18ed85ae6ef103063c1ce537b974e735defd492a2bcfede9
+remediation_dispatch: ddf5bc35-e88c-4d3e-8005-0c165dff1841
+remediation_writer: dst-so101-macos-closure (DeepSeek Harness TUI, tmux session dst-so101-macos-closure pane %8; same worktree, branch and evidence root, one writer)
+remediation_baseline_commit: a3f252e20680b2cbf83d947ec32ac911349666b5 (branch codex/so101-unified-webapp, submodule 85d2a5c42686a3d6b0d909a047a4188b24edd257, origin/codex/so101-unified-webapp...HEAD = 0 0, only untracked file the remediation plan)
+remediation_plan: docs/superpowers/plans/2026-09-22-so101-macos-service-campaign-final-gate-remediation.md
+remediation_plan_sha256: 7b3aa638b19cf3e365f02a573fdd5f0f5f46f30106daf2609e78bdab53d1c906
+remediation_handoff: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/dispatches/ddf5bc35-e88c-4d3e-8005-0c165dff1841/handoff.md
+remediation_handoff_sha256: eb20212dd8c63ce8c67b85a1cc72a8d36481ba3e5665b6f7d8309c748b2edd31
+remediation_receipt: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/dispatches/ddf5bc35-e88c-4d3e-8005-0c165dff1841/receipt.json
+remediation_receipt_sha256: 5b9d29c1d55ea0ec4ab28ecce86b573b65cdfe778f2e49ec0aaff954b847bf0f
 design: docs/superpowers/specs/2026-09-21-so101-macos-service-campaign-closure-design.md
 design_sha256: 8b7d0fc51821873c29feddc52c4f6a01e0fb3907f2158a22a036c5f533362832 (revised 2026-09-21; the pre-revision hash 0a5f5e0d... applies to the superseded design)
 plan: docs/superpowers/plans/2026-09-21-so101-macos-service-campaign-closure-implementation.md
@@ -49,9 +58,9 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-T13-HANDOFF
-review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule
-next_experiment: none owed by this campaign; a future session that can reach Sol/high and Astra/high should run the two prepared review packets against this ledger, the design and the production evidence, and a future owner of the live acceptance should read CP-MSC-T12-LIVE-SPEC-CORRECTIONS before running the three projects as one command
+latest_checkpoint: CP-MSC-REMEDIATION-START
+review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
+next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -3030,3 +3039,139 @@ before or after the push: `.agents/skills/so101-dev/references/test-and-acceptan
    launch guard, not a qualification or capacity proof.
 5. `CP-MSC-FINAL` is not claimed: the two external reviews required by the plan were not performed, for the
    reasons above.
+
+## CP-MSC-REMEDIATION-START: takeover, fresh failure baseline and four PLANNED experiments
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-START
+recorded_at: 2026-09-22T22:52:00+0800
+dispatch: ddf5bc35-e88c-4d3e-8005-0c165dff1841
+writer: dst-so101-macos-closure
+tmux: dst-so101-macos-closure pane %8
+worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
+branch: codex/so101-unified-webapp
+baseline_commit: a3f252e20680b2cbf83d947ec32ac911349666b5
+submodule: 85d2a5c42686a3d6b0d909a047a4188b24edd257
+remote_parity: origin/codex/so101-unified-webapp...HEAD = 0 0 (unchanged; this dispatch does not push)
+plan: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp/docs/superpowers/plans/2026-09-22-so101-macos-service-campaign-final-gate-remediation.md
+plan_sha256: 7b3aa638b19cf3e365f02a573fdd5f0f5f46f30106daf2609e78bdab53d1c906 (matches the handoff)
+dispatch_receipt_sha256: 5b9d29c1d55ea0ec4ab28ecce86b573b65cdfe778f2e49ec0aaff954b847bf0f
+handoff_sha256: eb20212dd8c63ce8c67b85a1cc72a8d36481ba3e5665b6f7d8309c748b2edd31
+takeover_preflight: branch, baseline HEAD, submodule and 0/0 remote parity all match; worktree clean except the
+                    exact-SHA untracked plan; no competing writer; no task-owned live stack; port 8013 free
+independent_baseline: independent-final-gate-20260922T131346Z-h4iCZ2/
+status: PLANNED
+```
+
+### Fresh failure baseline (independent re-run at `c6895b2d`, read back from its JUnit XML and exit files)
+
+| Layer | rc | Counts |
+| --- | --- | --- |
+| preflight | 0 | host/worktree/python/bun/colcon provenance recorded |
+| `so101_demo_py` pytest | 1 | 176 failed, 3697 passed, 10 skipped, 12 deselected |
+| `so101_teleop` pytest | 1 | 27 failed, 860 passed, 1 skipped |
+| copied install | 0 | 25 passed, 8 skipped |
+| `colcon test --return-code-on-test-failure` | 0 | "package had test failures" (exit code does not carry it) |
+| `colcon test-result --verbose` | 1 | 1065 tests, 39 failures, 2 skipped |
+| web `tsc` / `vitest` / `build` | 0 / 0 / 0 | all green |
+
+The runner's own `TMPDIR` was the evidence-root subdirectory
+`independent-final-gate-20260922T131346Z-h4iCZ2/tmp`, and its `SO101_TASK_ROOT` was unset. Both facts are part of
+the observed first-bad boundary and are what EXP-MSC-REM-SHORT-TEMP and Task 5 address.
+
+Observed first-bad boundaries carried into the remediation plan: AF_UNIX endpoint overflow on the long evidence
+`TMPDIR` (`UNIX_SOCKET_PATH_TOO_LONG`, `IPC_SOCKET_PATH_TOO_LONG`, `CONTROL_SOCKET_PATH_TOO_LONG`, then
+`PATH_OWNER`); `SO101_TASK_ROOT` read unconditionally by `test_expert_validation_macos_service_campaign.py`
+(`KeyError`); `RuntimeInspector` hard-coded to `/proc`, which returns `RECOVERY_PROC_UNAVAILABLE` on Darwin;
+`test_unified_lease_maintenance.py` and `test_unified_lease_projection.py` missing from the CMake package gate;
+fixed-eight/`INDEX:0` StartGuard tests that contradict the current macOS W1/W2 + `MPS:default` contract; the
+Playwright live-preflight contract reading the whole-machine foreign-process scanner; the older Gate A 5x
+attestation carrying an empty `executable`; the guide's foreground standalone station blocking the unified-service
+command; the retry acceptance readers hitting `EISDIR` on `dynamic_manifest_relative_path=null` and treating a
+legitimate failed-before-physical attempt as a failure; and the previous handoff wording that read "same failure
+counts as last time" as "the affected layer is green".
+
+Nothing above is rewritten here: the historical `CP-MSC-A1` FAIL, the literal no-DYLD FAIL and the old N/P/F
+records keep their original text, and the earlier per-layer counts stay in `CP-MSC-T13-FINAL-GATE` untouched.
+
+### Registered PLANNED experiments and their frozen criteria
+
+```yaml
+experiment_id: EXP-MSC-REM-A2
+status: PLANNED
+question: does the current product reach and hold the controller path five consecutive times under the
+          user-authorized fixed dylib farm, with every round bound to a provable owner tree?
+criteria:
+  - only the new FIXED_DYLIB_FARM_FULL_TASK_STATION diagnostic owns intent -> spawn -> readiness -> attestation ->
+    bounded shutdown for each round; no external launch, no legacy --control-set-manifest/--control, no ad-hoc
+    shell parser in place of the product schema validator
+  - each round: owner PID/birth, unique controller_runtime descendant PID/birth/executable, plugin and vendor
+    loaded-image path + SHA256 matching the round's frozen manifest, 3 controllers active, 3 MoveIt services and
+    3 actions ready, bounded shutdown, task-owned residue = 0
+  - farm logical path, resolved target, manifest bytes, inventory and SHA256 re-resolved before every spawn; any
+    symlink target, manifest, entry-path or SHA drift fails closed before spawning
+  - five consecutive VALID rounds; an INVALID control ends the batch, and the batch restarts from a new
+    experiment id after the cause is fixed
+  - a negative fixture control (mutated farm target / manifest SHA / inventory entry) must be refused with
+    spawned=false; the real fixed farm is never modified for it
+verdict: PENDING
+```
+
+```yaml
+experiment_id: EXP-MSC-REM-SHORT-TEMP
+status: PLANNED
+question: do the static gates pass on Darwin when the test scratch is a short private directory instead of a
+          subdirectory of the registered evidence root?
+criteria:
+  - every pytest/colcon/web gate runs with TMPDIR/TMP/TEMP pointing at one freshly created, non-symlink, mode
+    0700 directory under /opt/data/tmp owned by the current uid, and `tempfile.gettempdir()` is read back through
+    the exact test Python as proof
+  - the longest AF_UNIX endpoint is proven under the Darwin sun_path limit by a real bind in preflight, not by
+    comparing string constants
+  - the run contains none of UNIX_SOCKET_PATH_TOO_LONG, IPC_SOCKET_PATH_TOO_LONG, CONTROL_SOCKET_PATH_TOO_LONG
+    or PATH_OWNER
+  - logs, JUnit, argv, rc and counts still land in the single registered evidence root; the scratch is only
+    classified as a deletion candidate and is not deleted
+verdict: PENDING
+```
+
+```yaml
+experiment_id: EXP-MSC-REM-FULL-GATE
+status: PLANNED
+question: is the whole static gate green under that control, with no relaxed check anywhere?
+criteria:
+  - demo pytest, teleop pytest, copied install, `colcon test --return-code-on-test-failure`,
+    `colcon test-result --verbose`, web tsc/vitest/build and the required Playwright contract/installed projects
+    all rc=0
+  - `colcon test-result` exit code is authoritative, not the `colcon test` exit code; JUnit errors = 0 and
+    failures = 0; collection counts are non-zero
+  - no skip, xfail, deleted test, narrowed gate, weakened fail-closed check or "fewer failures than last time"
+    comparison is used to reach green
+  - every remaining real failure is fixed at its owning boundary with its own RED -> GREEN and its own scoped
+    commit
+  - the earlier failure counts stay in this ledger as history; the new run is appended, not substituted
+verdict: PENDING
+```
+
+```yaml
+experiment_id: EXP-MSC-REM-LIVE
+status: PLANNED
+question: do the changed boundaries still hold live on the frozen install, through a fresh Chrome console?
+criteria:
+  - W2 first-pass over the same frozen 20-point selection (4 fixed + 16 generated, exact ids/order/coords and
+    catalog/selection SHA) with worker_count=2; W1 first-pass with the same selection and worker_count=1
+  - retry: its own window completes the frozen-20 W1 first-pass, freezes a genuinely terminal-clean business
+    FAILED point from that window's own evidence, then retries exactly that point once, in the same page and
+    under the same lease authority; importing another window's binding is not allowed, and
+    BLOCKED_NO_ELIGIBLE_POINT is the honest outcome when no eligible point exists
+  - crash recovery: a task-owned process crash is reclaimed leaf-first with residue = 0, and an identity-drift or
+    unreadable-inventory control keeps the fence with zero signals while a foreign sentinel stays alive
+  - each console spec gets its own closed service window; the runner stops only the service owner it recorded,
+    by PID/birth, and proves ports/IPC/residue afterwards
+  - retry failing the point again is not a flow failure; a reader, projection or cleanup failure is
+verdict: PENDING
+```
+
+Task order for this dispatch is Tasks 1-8B, then Task 9, then Task 10, then Task 11, with Task 10's text sitting
+before Task 9's heading in the plan. Task 9 is the last repository-content change and Task 10 is the final
+`prepare` and freeze; after Task 10 only ledger checkpoint commits are allowed.
