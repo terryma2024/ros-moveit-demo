@@ -43,13 +43,19 @@ def _port(tmp_path: Path) -> HelperExecutionPort:
 
 
 def _process_identity(pid: int):
-    """The shared cross-platform identity port: never a /proc probe of its own."""
+    """The shared cross-platform identity port: never a /proc probe of its own.
 
-    from so101_teleop.process_identity import ProcessAbsent, read_identity
+    An identity the platform refuses to report is not proof that the process is gone, so nothing here
+    claims absence. What the platform *does* prove - the pid names no process - arrives as
+    `ProcessAbsent`; any other `ProcessIdentityError` is a drifting or unreadable identity, which is
+    never "live" for the positive check below and must not raise during suite teardown.
+    """
+
+    from so101_teleop.process_identity import ProcessIdentityError, read_identity
 
     try:
         return read_identity(pid)
-    except ProcessAbsent:
+    except ProcessIdentityError:
         return None
 
 

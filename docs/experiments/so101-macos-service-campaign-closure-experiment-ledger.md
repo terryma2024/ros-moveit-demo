@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-GATE-CONFIRMED
+latest_checkpoint: CP-MSC-REMEDIATION-TELEOP-GREEN
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3792,3 +3792,28 @@ That is a real, reproducible-in-context ordering interaction in a helper test, n
 the leader exits and the descendant is then expected to keep its own identity, which is exactly what
 `read_identity` refuses to guess. It needs its own RED and its own minimal fix, so it stays open
 rather than being explained away or relaxed.
+
+## CP-MSC-REMEDIATION-TELEOP-GREEN: the last helper case is closed
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-TELEOP-GREEN
+recorded_at: 2026-09-23T03:00:00+0800
+carried_by: the local commit that adds this entry (parent e726a507)
+boundary: test_expert_validation_e2e_installed_port::test_fixed_helper_descendant_survives_leader_exit
+status: CLOSED; the whole teleop suite is green
+```
+
+The case failed only in a full-directory run, in its own cleanup loop, with
+`ProcessIdentityError: PROCESS_IDENTITY_MISMATCH`. The cause was in the liveness helper introduced by
+this dispatch's portability work: it caught only `ProcessAbsent`, so any *other* identity error - a
+drifting or unreadable identity during teardown - propagated out of `_process_identity` and turned a
+cleanup check into a failure. The helper now catches `ProcessIdentityError` and reports the identity
+as unknown, which is this dispatch's own rule: an unprovable identity is never read as "live", and
+absence is only ever what the platform actually proves.
+
+```text
+remediation/runs/t9-teleop-dir-20260922T154810Z: 901 passed, 1 skipped, 0 failed (94s, whole suite)
+remediation/runs/t9-e2e-file-20260922T154741Z:    6 passed (the file on its own)
+```
+
+That was the last open boundary of Task 8. Task 8 Step 4's confirming run follows this commit.
