@@ -333,12 +333,18 @@ def recover(*, store, campaign_id, command_id, parallel_config, inspector=None,
                "fence_sha256": context["fence_sha256"], "binding_sha256": context["binding_sha256"],
                "status": "OPERATOR_RECOVERED_ABORTED", "execution_success": False,
                "upstream_cleanup_claimed": False}
+    # What was signalled is part of the evidence, not something a reader has to infer: the
+    # reclaim only ever signals the pids it re-proved, and every refusal path leaves this empty.
+    receipt["signals_sent"] = []
     if tree_receipt is not None:
         # The reclaim was fsynced and indexed before this receipt exists; the fence may only be
         # resolved now that nothing about the tree is left unproven.
         receipt["owner_tree_receipt_sha256"] = tree_receipt.receipt_sha256
         receipt["owner_tree_reclaimed"] = [entry["role"] for entry in tree_receipt.reclaimed]
         receipt["owner_tree_fence_released"] = tree_receipt.fence_released
+        receipt["signals_sent"] = sorted(
+            int(entry["pid"]) for entry in tree_receipt.reclaimed if "pid" in entry
+        )
     for prefix, path in (("report", report_path), ("backup", backup), ("config", config_path)):
         receipt[f"{prefix}_path"] = str(path)
         receipt[f"{prefix}_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()

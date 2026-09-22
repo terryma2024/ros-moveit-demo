@@ -613,3 +613,26 @@ def test_default_inventory_uses_procfs_when_it_exists(tmp_path) -> None:
     assert port.is_present(90002) is False
     assert isinstance(
         module.default_process_inventory(tmp_path / "absent"), module.PsutilInventory)
+
+
+def test_a_recovery_receipt_records_exactly_what_it_signalled(fenced):
+    """Zero signals is a claim the receipt has to carry, not something a reader infers.
+
+    Any refusal - an unprovable identity, an unresolved tree, a foreign sentinel - happens before a
+    signal exists, so the receipt of a refused recovery cannot report one. A completed reclaim names
+    the pids it re-proved and stopped.
+    """
+    module = recovery_module()
+    store, _, tmp_path = fenced
+
+    # A refused recovery raises before a receipt exists; the fence stays and nothing was signalled.
+    with pytest.raises(module.RecoveryError, match="RECOVERY_RUNTIME_UNVERIFIABLE"):
+        recover(fenced, inspector=_psutil_inspector(
+            module, {91000: 7.0}, groups={91000: 91000}, broken=True))
+    assert store.has_recovery_fence() is True
+
+    # A completed recovery carries the field, and an abort recovery with no owner tree reports none.
+    result = recover(fenced, inspector=_psutil_inspector(module, {}, groups={}))
+    assert result["status"] == "OPERATOR_RECOVERED_ABORTED"
+    assert result["signals_sent"] == []
+    assert store.has_recovery_fence() is False
