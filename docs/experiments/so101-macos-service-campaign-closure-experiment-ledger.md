@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-GATE
+latest_checkpoint: CP-MSC-REMEDIATION-UNIFIED-DOMAIN
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3582,3 +3582,38 @@ remediation-build-20260922T150556Z/   prepare.log, doctor.json, ctest-registrati
 remediation/gates/t8-gate1..3/        summary.txt, per-step stdout/stderr, argv, exit codes, JUnit,
     endpoint preflight (78 bytes of 104), scratch identity, SHA256SUMS
 ```
+
+## CP-MSC-REMEDIATION-UNIFIED-DOMAIN: the unprovisioned-domain case follows the fixed contract
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-UNIFIED-DOMAIN
+recorded_at: 2026-09-23T01:05:00+0800
+dispatch: ddf5bc35-e88c-4d3e-8005-0c165dff1841
+carried_by: the local commit that adds this entry (parent 5e351ea4)
+boundary: test_unified_lifecycle.py::test_composition_builds_a_readable_app_without_ros
+status: closed by correcting a stale premise, not by relaxing an assertion
+```
+
+The case asserted that a composition built without `SO101_UNIFIED_ROS_PYTHON` and
+`SO101_UNIFIED_INSTALL_PREFIX` must report `validation_error is not None` and leave the validation
+domain unbuilt. That premise belongs to the older environment-provisioned runtime. Under the fixed
+runtime contract of design §17 those two variables are optional: `ProductionRuntimeLayout.discover`
+resolves the fixed paths, so the domain really is provisioned and `validation_error` is correctly
+`None`. Measured directly: with the variables deleted, and again with an explicitly nonexistent
+install prefix, `create_production_service` composes successfully both times - there is no
+unprovisioned-domain refusal left to prove.
+
+The case now states the current contract and keeps every absence claim it can still make: the
+validation domain is provisioned (`validation is not None`, `validation_error is None`) while teleop,
+the bridge and the task half stay absent, `/snapshot` still answers `TELEOP_UNAVAILABLE` and
+`/tasks/runs` still answers `TASKS_UNAVAILABLE`. `/health/ready` is asserted as either 200 or 503,
+because readiness now legitimately depends on which halves are present rather than on a blocked
+validation domain.
+
+```text
+remediation/runs/t8-lifecycle2-20260922T153258Z: 8 passed (the whole file)
+```
+
+This closes one of the five boundaries `CP-MSC-REMEDIATION-GATE` listed. Still owned by Task 8
+Step 3: the two `test_expert_validation_e2e_installed_port` helper cases, the production-factory
+lease-maintenance shape, the durable cancel replay (two parameters) and the two live supervisor legs.
