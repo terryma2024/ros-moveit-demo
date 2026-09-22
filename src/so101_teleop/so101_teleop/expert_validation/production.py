@@ -1992,7 +1992,12 @@ class ProductionExpertValidationService(ExpertValidationService):
         return installed
 
     def _production_retry_admission(self, campaign_id, point_id, body):
-        """Mint the one context and the one request this installed service may retry with."""
+        """Mint the one context and the one request this installed service may retry with.
+
+        The pair is the return value: the caller admits with both, so a helper that handed back only
+        the request made the retry unpacks raise ``cannot unpack non-iterable RetryStartRequest``
+        before any admission and before any process existed.
+        """
 
         original, item, catalog_sha256, selection_sha256, result_sha256 = self._retry_origin(
             campaign_id, point_id
@@ -2029,8 +2034,11 @@ class ProductionExpertValidationService(ExpertValidationService):
                 time.monotonic_ns() + 300_000_000_000, lease["expires_monotonic_ns"]
             ),
         ))
-        return self._retry_start_request(
-            context, item, catalog_sha256, selection_sha256, result_sha256, install_prefix
+        return (
+            self._retry_start_request(
+                context, item, catalog_sha256, selection_sha256, result_sha256, install_prefix
+            ),
+            context,
         )
 
     async def retry_campaign_candidate(self, campaign_id, body, context):

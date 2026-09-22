@@ -8,6 +8,7 @@ import inspect
 import json
 import logging
 from pathlib import Path
+import re
 from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -15,7 +16,20 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_validator
 
-from .preflight import FIXED_WORKER_COUNTS, MACOS_EXECUTION_PROFILES
+from .catalog import CatalogError
+from .control import CleanupNotAuthorized, ControlProtocolError
+from .coordinator_events import CoordinatorProjectionError
+from .execution_context import ExecutionContextError
+from .executor_registry import UnknownOperation
+from .lease import LeaseConflict
+from .operator_recovery import RecoveryError
+from .owner_tree import OwnerTreeError
+from .preflight import FIXED_WORKER_COUNTS, MACOS_EXECUTION_PROFILES, PreflightRejected
+from .process_owner import CoordinatorOwnershipError
+from .reducer import ReducerError
+from .service import ServiceConflict
+from .statistics import StatisticsProjectionError
+from .store import CommandOutcomeUnknown, StoreConflict
 from so101_teleop.api import validate_bind_address
 from so101_teleop.task_artifacts import ArtifactAccessError
 
@@ -565,8 +579,62 @@ async def _invoke(method, *args):
     return await value if inspect.isawaitable(value) else value
 
 
+#: The exception families this package raises *on purpose*. Their text is the refusal code the
+#: design names, so it is the contract the console renders.
+_TYPED_REFUSALS: tuple[type[BaseException], ...] = (
+    ArtifactAccessError,
+    CatalogError,
+    CleanupNotAuthorized,
+    CommandOutcomeUnknown,
+    ControlProtocolError,
+    CoordinatorOwnershipError,
+    CoordinatorProjectionError,
+    ExecutionContextError,
+    LeaseConflict,
+    OwnerTreeError,
+    PreflightRejected,
+    RecoveryError,
+    ReducerError,
+    ServiceConflict,
+    StatisticsProjectionError,
+    StoreConflict,
+    UnknownOperation,
+)
+
+#: A refusal names one stable code, optionally with one named detail (``RETRY_NOT_QUEUED``,
+#: ``EXECUTION_CONTEXT_KIND_INVALID: CANDIDATE``, ``CONFIRMATION_REQUIRED``). A Python exception
+#: message - ``cannot unpack non-iterable RetryStartRequest object``, ``SQLite objects created in a
+#: thread can only be used in that same thread`` - is prose, and prose is never a code.
+_REFUSAL_CODE = re.compile(r"^[A-Z][A-Z0-9_]*(?::.*)?$")
+
+#: The one code this boundary answers with when the fault was not a refusal at all. The fault itself
+#: is logged with its traceback; the client is told only that the service failed internally.
+INTERNAL_FAULT_CODE = "VALIDATION_INTERNAL_ERROR"
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _refusal_code(error: Exception) -> str | None:
+    """The code a deliberate refusal carries, or ``None`` when the text is an internal detail.
+
+    Both halves are needed to keep the boundary honest without weakening it: a typed refusal may
+    carry a composed message (a comma-joined reason list), and the retry admission raises named
+    ``RuntimeError`` codes that are just as deliberate.
+    """
+
+    message = str(error).strip()
+    if isinstance(error, _TYPED_REFUSALS) or _REFUSAL_CODE.match(message):
+        return message or type(error).__name__
+    return None
+
+
 def _error(error: Exception, *, default_status: int = 409) -> JSONResponse:
-    code = str(error) or type(error).__name__
+    code = _refusal_code(error)
+    if code is None:
+        # The text of an unexpected exception is a Python detail, not a contract: it leaked the
+        # recorded retry defect to the console as a 409 code. It stays in the log.
+        _LOGGER.exception("VALIDATION_INTERNAL_FAULT")
+        code = INTERNAL_FAULT_CODE
     return JSONResponse(status_code=default_status, content={"code": code})
 
 
