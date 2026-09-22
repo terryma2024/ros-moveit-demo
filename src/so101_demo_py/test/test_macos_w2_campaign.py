@@ -777,6 +777,110 @@ def test_the_service_adapter_refuses_a_v3_document_and_a_missing_w1_config(tmp_p
         adapter.validate(adapter.build_parser().parse_args(argv), environment=environment)
 
 
+def test_the_service_adapter_forwards_an_admitted_retry_binding_and_nothing_else(tmp_path):
+    """The service names the admitted chain; the adapter parses it and forwards it verbatim.
+
+    The four flags are the caller's own vocabulary (`RETRY_SELECTION_FLAG` and friends in the
+    teleop supervisor). The adapter must not invent a `--retry-root`: the service deliberately sends
+    the digests its store verified, and a root would make the v5 route re-hash the prior document's
+    bytes and refuse `RETRY_SOURCE_MISMATCH` against a genuinely different admitted digest.
+    """
+
+    import sys
+
+    adapter, _ = _service_argv(tmp_path / "first-pass", config_path=V4_CONFIG, worker_count=2)
+    first_pass = adapter.build_parser().parse_args(
+        [*_retry_argv_prefix(tmp_path / "first-pass", V4_CONFIG, worker_count=2),
+         "--point-id", "p1"])
+    baseline = adapter.campaign_argv(first_pass, campaign_id="campaign-a")
+
+    # A first-pass argv is byte-identical to what the adapter built before the retry flags existed.
+    assert baseline == [
+        sys.executable, "-m", adapter.CAMPAIGN_MODULE,
+        "--config", str(V4_CONFIG), "--campaign-id", "campaign-a", "--batch-id", "b001",
+        "--evidence-root", str(Path(tmp_path / "first-pass") / "batch"),
+        "--yolo-weights", str(Path(tmp_path / "first-pass") / "yolo.pt"),
+        "--grounded-root", str(Path(tmp_path / "first-pass") / "grounded"),
+        "--point-id", "p1",
+    ]
+    assert not {flag for flag in baseline if flag.startswith("--original")}
+
+    retry_arguments = adapter.build_parser().parse_args([
+        *_retry_argv_prefix(tmp_path / "retry", V5_CONFIG, worker_count=1),
+        "--point-id", "cup_test_forward_5cm",
+        "--original-selection-sha256", "a" * 64,
+        "--original-result-sha256", "b" * 64,
+        "--original-catalog-sha256", "c" * 64,
+        "--original-batch-id", "hunt17-b001",
+    ])
+    record = adapter.validate(retry_arguments, environment=_service_environment(tmp_path))
+    assert record["batch_kind"] == "FULL_RESTART_RETRY"
+    assert record["retry_binding"] == {
+        "original_selection_sha256": "a" * 64, "original_result_sha256": "b" * 64,
+        "original_catalog_sha256": "c" * 64, "original_batch_id": "hunt17-b001"}
+
+    argv = adapter.campaign_argv(retry_arguments, campaign_id="campaign-a")
+    assert "--retry-root" not in argv
+    for flag, value in (("--original-selection-sha256", "a" * 64),
+                        ("--original-result-sha256", "b" * 64),
+                        ("--original-catalog-sha256", "c" * 64),
+                        ("--original-batch-id", "hunt17-b001")):
+        assert argv[argv.index(flag) + 1] == value
+    assert argv[-2:] == ["--point-id", "cup_test_forward_5cm"]
+
+
+def test_the_service_adapter_refuses_a_half_named_retry_binding(tmp_path):
+    """Some of the four flags is worse than none: it is refused before anything is spawned."""
+
+    from so101_demo.cli.macos_service_campaign import ServiceCampaignError
+
+    adapter, _ = _service_argv(tmp_path / "half", config_path=V5_CONFIG, worker_count=1)
+    half = adapter.build_parser().parse_args([
+        *_retry_argv_prefix(tmp_path / "half", V5_CONFIG, worker_count=1),
+        "--point-id", "cup_test_forward_5cm",
+        "--original-selection-sha256", "a" * 64])
+    with pytest.raises(ServiceCampaignError, match="RETRY_ROOT_REQUIRED"):
+        adapter.validate(half, environment=_service_environment(tmp_path))
+    # and the argv builder refuses too, so a direct caller cannot drop the missing half silently
+    with pytest.raises(ServiceCampaignError, match="RETRY_ROOT_REQUIRED"):
+        adapter.campaign_argv(half, campaign_id="campaign-a")
+
+    for extra, reason in (
+        (["--original-selection-sha256", "a" * 64, "--original-result-sha256", "b" * 64],
+         "RETRY_BINDING_UNSUPPORTED"),
+        (["--original-batch-id", "hunt17-b001"], "RETRY_BINDING_UNSUPPORTED"),
+    ):
+        arguments = adapter.build_parser().parse_args([
+            *_retry_argv_prefix(tmp_path / "wrong-route", V4_CONFIG, worker_count=2),
+            "--point-id", "p1", *extra])
+        with pytest.raises(ServiceCampaignError, match=reason):
+            adapter.validate(arguments, environment=_service_environment(tmp_path))
+
+
+def _retry_argv_prefix(root, config_path, *, worker_count: int) -> list[str]:
+    """Everything the adapter requires, without any point or retry flag."""
+
+    root = Path(root)
+    root.mkdir(parents=True, exist_ok=True)
+    weights = root / "yolo.pt"
+    weights.write_bytes(b"weights")
+    grounded = root / "grounded"
+    grounded.mkdir(parents=True, exist_ok=True)
+    (grounded / "manifest.json").write_text('{"model": "grounded"}\n')
+    points = root / "points.yaml"
+    points.write_text("points: [p1, p2]\n")
+    from so101_demo.cli import macos_service_campaign as adapter
+
+    return [
+        "--points", str(points), "--config", str(config_path), "--batch-id", "b001",
+        "--worker-count", str(worker_count), "--evidence-root", str(root / "batch"),
+        "--broker-image", "sha256:" + "a" * 64, "--yolo-weights", str(weights),
+        "--yolo-weights-sha256", adapter._digest(weights), "--grounded-root", str(grounded),
+        "--grounded-manifest-sha256", adapter._digest(grounded / "manifest.json"),
+        "--run-mode", "execute",
+    ]
+
+
 def test_the_adapter_runs_the_fresh_guard_before_it_creates_the_campaign_child(
         tmp_path, monkeypatch, capsys):
     """The campaign child is never created when the fresh admission refuses."""
