@@ -257,9 +257,14 @@ def test_the_console_retry_body_is_answered_with_a_typed_code(production_session
     )
 
     payload = assert_typed(response)
-    # The recorded first pass never published a cleanup receipt for b889e, so the admission refuses
-    # by name. The point of the assertion is that the admission *ran*: the request/context pair was
-    # built and reached the store's transaction instead of failing on an unpack.
+    # The admission refuses by name. This fixture stages the recorded store without the campaign's
+    # batch bytes (``staged_state`` copies the store, not the 124 MB journal), so no cleanup receipt
+    # can be derived here and ``RETRY_ORIGINAL_CLEANUP_INCOMPLETE`` is the refusal this replay still
+    # earns. Recording the receipt from the batch's own verified cleanup bytes - which is what turns
+    # this refusal into an admission for a first pass that really is terminal-clean - is covered by
+    # ``test_expert_validation_campaign_layout_projection``. The point of the assertion is that the
+    # admission *ran*: the request/context pair was built and reached the store's transaction
+    # instead of failing on an unpack.
     assert payload["code"] == "RETRY_ORIGINAL_CLEANUP_INCOMPLETE"
 
 

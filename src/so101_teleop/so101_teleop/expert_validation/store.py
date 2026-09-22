@@ -1788,14 +1788,33 @@ class SupervisorStore:
         )
 
     def record_batch_cleanup(self, batch_id: str, receipt_sha256: str) -> None:
+        """Commit the one cleanup receipt a batch's own verified bytes prove.
+
+        Recording the same receipt again is idempotent; a *different* receipt is refused rather than
+        written over. The column is the durable fact a retry admission checks for its original, so a
+        later caller with other bytes may not replace what was already verified and committed.
+        """
+
+        if (
+            not isinstance(receipt_sha256, str)
+            or len(receipt_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in receipt_sha256)
+        ):
+            raise StoreConflict("BATCH_CLEANUP_RECEIPT_INVALID")
         with self._transaction():
-            cursor = self._connection.execute(
+            row = self._connection.execute(
+                "SELECT cleanup_receipt_sha256 FROM campaign_batches WHERE batch_id = ?",
+                (batch_id,),
+            ).fetchone()
+            if row is None:
+                raise StoreConflict("BATCH_NOT_FOUND")
+            if row["cleanup_receipt_sha256"] not in (None, receipt_sha256):
+                raise StoreConflict("BATCH_CLEANUP_RECEIPT_CONFLICT")
+            self._connection.execute(
                 "UPDATE campaign_batches SET state='CLEANED', cleanup_receipt_sha256=? "
                 "WHERE batch_id=?",
                 (receipt_sha256, batch_id),
             )
-            if cursor.rowcount != 1:
-                raise StoreConflict("BATCH_NOT_FOUND")
 
     def list_campaigns(self) -> tuple[dict, ...]:
         return tuple(

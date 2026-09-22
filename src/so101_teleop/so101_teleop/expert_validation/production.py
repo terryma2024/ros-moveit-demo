@@ -429,6 +429,21 @@ def _accelerator_for_document(document):
     return None
 
 
+def _verified_cleanup_receipt_sha256(batch) -> str | None:
+    """The frame hash of a batch's own verified ``CLEANUP_COMMITTED`` event, or ``None``.
+
+    The frame hash is computed by the journal reader over the committed bytes of that event, so a
+    receipt taken from it is a fact this service verified - never a claim the batch merely wrote
+    somewhere else. ``None`` means the verified events carry no committed cleanup at all, and no
+    receipt may be invented for them.
+    """
+
+    for event in reversed(batch.events):
+        if event.type == "CLEANUP_COMMITTED":
+            return event.frame_sha256
+    return None
+
+
 class _HostResourceProbe:
     """Fixed mode admits through the shared start guard; no budget authority is consulted."""
 
@@ -1372,6 +1387,13 @@ class ProductionExpertValidationService(ExpertValidationService):
         cleanup_complete = state.get("batch_cleanup_complete", False)
         if not isinstance(cleanup_complete, bool):
             raise CoordinatorProjectionError("BATCH_PROJECTION_INVALID")
+        if terminal and cleanup_complete:
+            # A first pass runs for its whole campaign inside the coordinator, so the supervisor's
+            # spawn-result receipt (``start_first_pass``) never sees it. The batch's own verified
+            # journal is the only authority for this receipt: without it ``admit_retry`` refuses
+            # the original with ``RETRY_ORIGINAL_CLEANUP_INCOMPLETE`` while this very projection
+            # reports cleanup complete.
+            self._record_verified_batch_cleanup(request, batch)
         summary = BatchSummary(
             run_mode=RunMode.EXECUTE,
             point_statuses=point_statuses,
@@ -1481,6 +1503,30 @@ class ProductionExpertValidationService(ExpertValidationService):
             "batch_cleanup_complete": statistics.batch_cleanup_complete,
             "qualification_passed": statistics.qualification_passed,
         }
+
+    def _record_verified_batch_cleanup(self, request, batch) -> None:
+        """Record the cleanup receipt a terminal-clean batch's own verified bytes prove.
+
+        Two things are deliberately never done here: no receipt is derived from anything but the
+        verified ``CLEANUP_COMMITTED`` frame of this batch, and an existing durable receipt is never
+        replaced. A batch whose bytes show no committed cleanup leaves the column NULL, so the retry
+        admission keeps refusing ``RETRY_ORIGINAL_CLEANUP_INCOMPLETE`` exactly as it did.
+        """
+
+        record = getattr(self.store, "record_batch_cleanup", None)
+        read = getattr(self.store, "batch", None)
+        if record is None or read is None:
+            # A read-only cursor double keeps no batch table; it has no receipt to record.
+            return
+        receipt_sha256 = _verified_cleanup_receipt_sha256(batch)
+        if receipt_sha256 is None:
+            return
+        durable = read(request.batch_id)
+        if durable is None or durable.cleanup_receipt_sha256 is not None:
+            # No durable batch to bind the receipt to, or one already committed: a read never
+            # rewrites a receipt another verification recorded.
+            return
+        record(request.batch_id, receipt_sha256)
 
     def _persist_canonical_projection(self, request, batch, *, reducer=None) -> None:
         """Commit the verified canonical prefix, its attempts and its cursor in one transaction.
