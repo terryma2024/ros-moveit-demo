@@ -258,9 +258,19 @@ for (const entry of executions) {
     const commits = readJournalEvents(campaignJournalRoot(batchRoot))
       .filter((event) => event.type === "RESULT_COMMITTED");
     expect(commits).toHaveLength(entry.point_count);
-    expect(readFileSync(join(batchRoot, "cleanup-gates.json"), "utf8")).toContain(
-      "batch_cleanup_complete",
-    );
+    if (batchEvidence.layout === "LINUX_FIXED") {
+      expect(readFileSync(join(batchRoot, "cleanup-gates.json"), "utf8")).toContain(
+        "batch_cleanup_complete",
+      );
+    } else {
+      // The composed campaign closes in its own verdict document, not in the fixed coordinator's
+      // cleanup gates file.
+      const verdict = JSON.parse(
+        readFileSync(join(batchRoot, "campaign-result.json"), "utf8"),
+      ) as { cleanup?: { complete?: boolean }; points?: { complete?: boolean } };
+      expect(verdict.cleanup?.complete, "campaign cleanup").toBe(true);
+      expect(verdict.points?.complete, "campaign points").toBe(true);
+    }
     writeFileSync(
       join(liveServer.caseDir, `execution-${entry.id}-evidence.json`),
       JSON.stringify({
