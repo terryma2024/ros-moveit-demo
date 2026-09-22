@@ -174,6 +174,43 @@ def retry_binding(*, source: Mapping[str, object], catalog_path: Path, campaign_
         expected_catalog_sha256=expected_catalog_sha256)
 
 
+def binding_catalog_sha256(binding) -> str:
+    """The catalog digest of either binding: a retry names it as the *original* catalog."""
+
+    return str(getattr(binding, "catalog_sha256", None)
+               or getattr(binding, "original_catalog_sha256"))
+
+
+def selection_document_for(binding, *, catalog_path: Path) -> dict:
+    """The audit projection of the one selection a campaign executes, for either binding kind.
+
+    A first-pass binding carries the catalog it was frozen from; a retry binding carries the
+    *original* catalog, selection and result hashes of the committed business `FAILED` point it
+    references. Both documents must carry a catalog digest, because the retry chain is read back
+    from exactly this file.
+    """
+
+    document = {
+        "schema_version": SELECTION_DOCUMENT_SCHEMA_VERSION,
+        "catalog_path": str(Path(catalog_path).resolve()),
+        "catalog_sha256": binding_catalog_sha256(binding),
+        "config_sha256": binding.config_sha256,
+        "runtime_closure_sha256": binding.runtime_closure_sha256,
+        "selection_sha256": binding.selection_sha256,
+        "selected_point_ids": list(binding.selected_point_ids),
+        "campaign_id": binding.campaign_id,
+        "batch_id": binding.batch_id,
+        "kind": ("FULL_RESTART_RETRY" if isinstance(binding, RetrySelectionBinding)
+                 else "FIRST_PASS"),
+        "binding": binding.as_document(),
+    }
+    if isinstance(binding, RetrySelectionBinding):
+        document["original_selection_sha256"] = binding.original_selection_sha256
+        document["original_result_sha256"] = binding.original_result_sha256
+        document["original_outcome"] = binding.original_outcome
+    return document
+
+
 def write_selection_document(*, evidence_root: Path, binding, catalog_path: Path) -> Path:
     """Write the immutable selection binding a retry chain can reference, once.
 
@@ -181,18 +218,7 @@ def write_selection_document(*, evidence_root: Path, binding, catalog_path: Path
     because a selection that changed after it was recorded is not the selection that ran.
     """
 
-    document = {
-        "schema_version": SELECTION_DOCUMENT_SCHEMA_VERSION,
-        "catalog_path": str(Path(catalog_path).resolve()),
-        "catalog_sha256": binding.catalog_sha256,
-        "config_sha256": binding.config_sha256,
-        "runtime_closure_sha256": binding.runtime_closure_sha256,
-        "selection_sha256": binding.selection_sha256,
-        "selected_point_ids": list(binding.selected_point_ids),
-        "campaign_id": binding.campaign_id,
-        "batch_id": binding.batch_id,
-        "binding": binding.as_document(),
-    }
+    document = selection_document_for(binding, catalog_path=catalog_path)
     payload = (json.dumps(document, indent=2, sort_keys=True) + "\n").encode("utf-8")
     path = Path(evidence_root) / SELECTION_DOCUMENT_BASENAME
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -882,6 +908,7 @@ class DrainReport:
     releases: tuple[dict, ...]
     stop_reason: str | None
     stopped_at_cap: bool
+    stop_detail: str | None = None
 
     def summary(self, *, selected_point_ids: Sequence[str]) -> dict:
         return point_execution_summary(
@@ -924,6 +951,7 @@ def drain_point_queue(*, queue: DurablePointQueue, binding, worker_ids: Sequence
     spawns: list[dict] = []
     releases: list[dict] = []
     stop_reason: str | None = None
+    stop_detail: str | None = None
     stopped_at_cap = False
     leased = 0
     deadline = clock() + float(wait_timeout_s)
@@ -944,9 +972,11 @@ def drain_point_queue(*, queue: DurablePointQueue, binding, worker_ids: Sequence
                 lease_document = lease_point(worker_by_slot[slot_id], slot_id, generation)
             except PointDrainError as error:
                 stop_reason = error.code
+                stop_detail = error.detail or None
                 break
             except Exception as error:  # noqa: BLE001 - a refused lease is a stop, not a crash
                 stop_reason = f"LEASE_FAILED:{type(error).__name__}"
+                stop_detail = str(error)
                 break
             generations[slot_id] = generation
             leased += 1
@@ -966,6 +996,7 @@ def drain_point_queue(*, queue: DurablePointQueue, binding, worker_ids: Sequence
                 run = spawn_worker(worker_by_slot[slot_id], slot_id, generation, lease_document)
             except Exception as error:  # noqa: BLE001 - a refused spawn is a stop, not a crash
                 stop_reason = f"SPAWN_FAILED:{type(error).__name__}"
+                stop_detail = str(error)
                 break
             spawns.append({**run.as_document(), "point_id": lease_document["point_id"],
                            "attempt_id": lease_document["attempt_id"]})
@@ -1059,4 +1090,4 @@ def drain_point_queue(*, queue: DurablePointQueue, binding, worker_ids: Sequence
 
     return DrainReport(attempts=tuple(attempts), spawns=tuple(spawns),
                        releases=tuple(releases), stop_reason=stop_reason,
-                       stopped_at_cap=stopped_at_cap)
+                       stopped_at_cap=stopped_at_cap, stop_detail=stop_detail)
