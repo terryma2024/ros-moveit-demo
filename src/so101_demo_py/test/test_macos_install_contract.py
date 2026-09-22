@@ -599,3 +599,79 @@ def test_the_completion_definition_now_rests_on_the_farm_contract() -> None:
     a1_row = next(
         row for row in checkpoints.splitlines() if row.startswith("| `CP-MSC-A1`"))
     assert "historical" in a1_row or "历史" in a1_row
+
+
+#: The replayable gate runner: one evidence root, one short scratch, one aggregate verdict.
+FINAL_GATE_RUNNER = (
+    REPOSITORY_ROOT / "scripts" / "so101-macos-service-campaign-final-gate.zsh"
+)
+REGISTERED_EVIDENCE_ROOT = (
+    "/tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1"
+)
+REGISTERED_TEST_PYTHON = "/opt/ros2_jazzy/.venv/bin/python"
+
+
+def test_final_gate_runner_refuses_anything_outside_the_registered_contract(
+    tmp_path: Path,
+) -> None:
+    """The runner only accepts this worktree, this evidence root and this interpreter."""
+
+    assert FINAL_GATE_RUNNER.is_file()
+    assert FINAL_GATE_RUNNER.stat().st_mode & 0o111
+    runner = FINAL_GATE_RUNNER.read_text(encoding="utf-8")
+    for token in (
+        f'REGISTERED_WORKTREE="{REPOSITORY_ROOT}"',
+        f'REGISTERED_EVIDENCE_ROOT="{REGISTERED_EVIDENCE_ROOT}"',
+        f'REGISTERED_PYTHON="{REGISTERED_TEST_PYTHON}"',
+        'REGISTERED_BRANCH="codex/so101-unified-webapp"',
+        "WORKTREE_NOT_REGISTERED",
+        "EVIDENCE_ROOT_NOT_REGISTERED",
+        "PYTHON_NOT_REGISTERED",
+        "BRANCH_NOT_REGISTERED",
+        "TASK_ROOT_MISMATCH",
+        "TMPDIR_NOT_READ_BACK",
+        "SCRATCH_IS_SYMLINK",
+        "prepare_macos_test_scratch",
+        "probe_endpoint_bind",
+        "ZERO_COLLECTION",
+        "scratch_classification=deletion-candidate (not deleted)",
+        "python_executable=",
+        "rclpy=",
+    ):
+        assert token in runner, token
+    # The runner preserves the scratch and every log: nothing here may remove evidence.
+    assert "rm -rf" not in runner
+    assert "rm -f" not in runner
+
+    zsh = shutil.which("zsh")
+    if zsh is None:
+        pytest.skip("zsh is required for the macOS gate runner")
+    label = f"refused-{os.getpid()}"
+    for arguments, code in (
+        (["--worktree", str(tmp_path)], "WORKTREE_NOT_REGISTERED"),
+        (["--evidence-root", str(tmp_path)], "EVIDENCE_ROOT_NOT_REGISTERED"),
+        (["--python", "/bin/sh"], "PYTHON_NOT_REGISTERED"),
+        (["--python", str(tmp_path / "python")], "PYTHON_NOT_REGISTERED"),
+    ):
+        completed = subprocess.run(
+            [
+                zsh,
+                str(FINAL_GATE_RUNNER),
+                "--worktree",
+                str(REPOSITORY_ROOT),
+                "--evidence-root",
+                REGISTERED_EVIDENCE_ROOT,
+                "--python",
+                REGISTERED_TEST_PYTHON,
+                "--label",
+                label,
+                *arguments,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert completed.returncode == 2
+        assert code in completed.stderr, completed.stderr
+    assert not list(
+        Path(REGISTERED_EVIDENCE_ROOT).glob(f"remediation/gates/{label}-*"))

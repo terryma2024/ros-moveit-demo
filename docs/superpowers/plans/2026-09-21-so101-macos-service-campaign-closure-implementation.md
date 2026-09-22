@@ -34,6 +34,7 @@
 - 不授权真实机械臂、sudo、系统/全局环境修改、停止 foreign 进程、删除或归档证据、push、merge、force push 或发布。
 - 继续使用已有单写 ledger `docs/experiments/so101-macos-service-campaign-closure-experiment-ledger.md` 和已登记的唯一 evidence root `/tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1`。Task 1 只在其下新建 `gate-a-resolution/$DISPATCH_ID/`；不得创建第二个 root。legacy 条目和旧 evidence 只读，每次新实验先写 `PLANNED`。
 - macOS 不套用 ai-station 的 `/data` NVMe pytest scratch 规则。每个测试调用使用 evidence root 下新子目录，并设置 task-local `ROS_HOME`、`ROS_LOG_DIR`、`TMPDIR`、`TMP`、`TEMP`。
+  superseded-by: FixedDylibFarmRuntimeContract —— 2026-09-22 修订：evidence root 下的 `TMPDIR` 让 Darwin AF_UNIX endpoint 超限，测试 scratch 改为 `/opt/data/tmp/so101-service-gate-<run-id>`（0700、非 symlink、最长 endpoint 用真实 bind 预检），日志与 JUnit 仍留在唯一 evidence root，见设计 §18 和 `scripts/so101-macos-service-campaign-final-gate.zsh`。
 - 所有产品修改严格 RED -> GREEN；依赖导入、DYLD bootstrap、零收集和未执行到目标边界不算 RED。
 - schema v4 bytes/SHA 与 exact-W2 含义保持不变。v5 只允许 Darwin/MPS W1 `FULL_RESTART_RETRY`；v6 只允许 Darwin/MPS W1 `FIRST_PASS`。
 - macOS `worker_count` 只允许 1/2。N>2 Web 不可选，API/preflight/adapter 拒绝。worker profile 不从 point count 推断。

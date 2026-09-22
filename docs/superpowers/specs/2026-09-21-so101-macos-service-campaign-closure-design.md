@@ -630,3 +630,30 @@ controller plugin 与 MuJoCo vendor dylib 的来源都必须能归属到上面�
 五轮连续 VALID、负向 control 通过、冻结身份再回读一致，才写
 `CP-MSC-A2-FARM=CURRENT_PRODUCT_GATE_PASSED_UNDER_FIXED_DYLIB_FARM`。`CP-MSC-FINAL` 依赖 A2，
 不再依赖历史 A1 变成 PASS。
+
+## 18. macOS 测试 scratch 与可重放 gate runner
+
+Darwin 的 AF_UNIX endpoint 上限是 104 字节（含结尾 NUL）。证据根本身就超过这个长度，测试再把
+fixture 目录接上去，失败会以 `UNIX_SOCKET_PATH_TOO_LONG`、`IPC_SOCKET_PATH_TOO_LONG`、
+`CONTROL_SOCKET_PATH_TOO_LONG` 最后是 `PATH_OWNER` 的形式出现在离原因很远的地方。
+
+所以 macOS 不套用 ai-station 的 scratch-under-evidence-root 规则，也不用 symlink alias（pytest 8.4.2
+会 resolve basetemp，长路径会重新露出来）：
+
+- 测试 scratch 是 `/opt/data/tmp/so101-service-gate-<run-id>`，每次运行新建，mode `0700`，owner 是当前
+  uid，不是 symlink；已存在、owner 不符、mode 不符、parent 是 symlink、路径逃逸或最长 endpoint 超限
+  都 fail closed，而且在创建之前就拒绝，不留半成品目录；
+- `TMPDIR`、`TMP`、`TEMP` 三个变量精确指向该目录，并用同一个 TEST_PYTHON 回读
+  `tempfile.gettempdir()` 作为证据，不能只设置不验证；
+- 所有日志、JUnit、argv、真实 rc、计数、identity receipt 和 SHA256 仍然写入唯一 evidence root；
+- scratch 只列为 deletion candidate，helper 和 runner 都不删除它。
+
+`scripts/so101-macos-service-campaign-final-gate.zsh` 是唯一可重放的静态 gate 入口：它只接受当前
+worktree、已登记 evidence root 和精确 TEST_PYTHON，断言 `SO101_TASK_ROOT` 与 `TASK_ROOT` 相等，按固定
+顺序 source 四个 overlay，用真实 socket bind 预检最长 endpoint，然后依次跑 demo pytest、teleop
+pytest、copied-install、`colcon test --return-code-on-test-failure`、`colcon test-result --verbose`、
+Bun tsc/test/build 和必需的 Playwright contract project。前一步失败不阻止后面的证据采集。
+
+汇总判据固定：`colcon test` 的退出码不替代 `colcon test-result`；任一 JUnit errors/failures 非零、
+任一真实退出码非零、任一收集数为零或任一 Web gate 非零，runner 总退出码就非零并留下完整 failure
+manifest。
