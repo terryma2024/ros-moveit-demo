@@ -163,7 +163,13 @@ def test_production_factory_wires_durable_authorities_and_releases_lock(
     evidence.mkdir()
 
     service = create_production_service(evidence, environment={})
-    assert service.health() == {"ok": True, "service": "expert-validation"}
+    # The health document carries the lease-maintenance authority's own state, so a service whose
+    # maintenance loop has not failed says so explicitly instead of leaving the field out.
+    assert service.health() == {
+        "ok": True,
+        "service": "expert-validation",
+        "lease_maintenance_failed": False,
+    }
     assert service.store is service.supervisor.store
     assert service.supervisor.process_owner._store is service.store
     assert service.lease_service.store is service.store

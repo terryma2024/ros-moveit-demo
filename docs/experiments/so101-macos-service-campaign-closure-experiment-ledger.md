@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-UNIFIED-DOMAIN
+latest_checkpoint: CP-MSC-REMEDIATION-HEALTH-DOC
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3617,3 +3617,26 @@ remediation/runs/t8-lifecycle2-20260922T153258Z: 8 passed (the whole file)
 This closes one of the five boundaries `CP-MSC-REMEDIATION-GATE` listed. Still owned by Task 8
 Step 3: the two `test_expert_validation_e2e_installed_port` helper cases, the production-factory
 lease-maintenance shape, the durable cancel replay (two parameters) and the two live supervisor legs.
+
+## CP-MSC-REMEDIATION-HEALTH-DOC: the health document states the lease-maintenance authority
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-HEALTH-DOC
+recorded_at: 2026-09-23T01:15:00+0800
+carried_by: the local commit that adds this entry (parent c41b9e3d)
+boundary: test_expert_validation_main.py::test_production_factory_wires_durable_authorities_and_releases_lock
+status: closed by stating the current document, with equality kept
+```
+
+`ProductionExpertValidationService.health()` returns `ok`, `service` **and**
+`lease_maintenance_failed` (from `self.maintenance_failed`), unconditionally. The case asserted
+equality against the first two keys only, so it failed as soon as the maintenance authority's own
+state became part of the document. The assertion still uses exact equality; it now names all three
+keys with `lease_maintenance_failed: False` for a service whose maintenance loop has not failed.
+
+```text
+remediation/runs/t8-main-20260922T153337Z: 7 passed (the whole file)
+```
+
+Task 8 Step 3 still owns the two `test_expert_validation_e2e_installed_port` helper cases, the
+durable cancel replay (two parameters) and the two live supervisor legs.
