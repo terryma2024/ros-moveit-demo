@@ -104,6 +104,18 @@ function storedLease(sessionId: string): Lease | undefined {
 }
 
 /**
+ * The refusal code a resolved payload carries, or `undefined` when the payload is a real result.
+ *
+ * The runtime transport resolves a status the service answered with instead of throwing it, so a
+ * typed refusal arrives as `{ code }` on the same channel as a projection.
+ */
+function refusalCode(payload: unknown): string | undefined {
+  if (typeof payload !== "object" || payload === null) return undefined;
+  const code = (payload as { code?: unknown }).code;
+  return typeof code === "string" && code ? code : undefined;
+}
+
+/**
  * Every mutation the page issues has to present instance authority, and the runtime is the only thing
  * that holds it: a registered instance, a live channel and its revision. The page's own client sends no
  * authority headers at all, so each mutating call goes through the runtime transport instead of through
@@ -114,8 +126,16 @@ function withRuntimeMutations(
   runtime: DomainRuntime | null,
 ): ExpertValidationApi {
   if (!runtime) return client;
-  const through = <T,>(path: string, body: Record<string, unknown>) =>
-    runtime.post(path, body) as Promise<T>;
+  // A refusal is not a result. The runtime resolves it, so it is raised here - the boundary every
+  // call site already handles - exactly as the typed client above does. Adopting one as a result is
+  // what made the page replace its campaign with `{ code }` and then ask for
+  // `GET /expert-validation/campaigns/undefined` on every poll.
+  const through = async <T,>(path: string, body: Record<string, unknown>): Promise<T> => {
+    const payload = await runtime.post(path, body);
+    const code = refusalCode(payload);
+    if (code) throw new Error(code);
+    return payload as T;
+  };
   // Object.create keeps the client's prototype methods (capabilities, getManifest, the campaign
   // watcher); a spread would copy only own properties and lose every read.
   const wrapped = Object.create(client) as ExpertValidationApi;
@@ -176,6 +196,17 @@ export function ExpertValidationApp({ api: providedApi = defaultClient }: { api?
   const sessionId = useMemo(stableSessionId, []);
 
   const replaceCampaign = (next: CampaignView) => {
+    // A refusal is not a projection, and neither is a document without the identity the watcher
+    // needs. The runtime transport resolves a typed refusal instead of throwing it, so this is the
+    // last boundary that can keep one from becoming the campaign: adopting it replaced the
+    // authoritative projection with `{ code }`, which is what made every poll ask for
+    // `GET /expert-validation/campaigns/undefined`.
+    const code = refusalCode(next);
+    if (code || typeof next?.campaign_id !== "string" || !next.campaign_id
+      || !Number.isFinite(next.sequence)) {
+      setNotice(code ?? "CAMPAIGN_PROJECTION_INVALID");
+      return;
+    }
     campaignRef.current = next;
     setCampaign(next);
   };
@@ -437,8 +468,14 @@ export function ExpertValidationApp({ api: providedApi = defaultClient }: { api?
         <RetryPanel
           campaign={campaign}
           onRetry={async (pointIds, confirmation) => {
-            const result = await api.retry(campaign.campaign_id, pointIds, authority(), confirmation);
-            replaceCampaign(result);
+            try {
+              const result = await api.retry(campaign.campaign_id, pointIds, authority(), confirmation);
+              replaceCampaign(result);
+            } catch (error) {
+              // A refused retry leaves the campaign exactly as it was: the refusal is reported, and
+              // the operator retries or stops from the projection the service still holds.
+              reportError(error);
+            }
           }}
         />
       ) : null}
