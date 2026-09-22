@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-RETRY-EVIDENCE
+latest_checkpoint: CP-MSC-REMEDIATION-PREFLIGHT-ISOLATION
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3386,3 +3386,46 @@ remediation/runs/t6-python-20260922T145806Z: 50 passed, 2 failed - both failures
 playwright contract/live-evidence-layouts.spec.ts --workers=1: 8 passed (4 new cases)
 bunx tsc -b --pretty false: rc=0
 ```
+
+## CP-MSC-REMEDIATION-PREFLIGHT-ISOLATION: the contract no longer reads the host's process table
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-PREFLIGHT-ISOLATION
+recorded_at: 2026-09-22T23:50:00+0800
+dispatch: ddf5bc35-e88c-4d3e-8005-0c165dff1841
+carried_by: the local commit that adds this entry (parent 9cefe77e)
+status: implemented, RED -> GREEN; production fail-closed semantics unchanged
+```
+
+`contract/live-preflight.spec.ts` used to call `validateLiveSimPreconditions` with no injected
+scanner, so the suite consulted the whole machine's `ps` table. On this shared host two processes
+from another task family legitimately match the stack patterns, which turned a correct product
+refusal into a flaky contract result. The durable-root, service-state-root and host cases were also
+reading whatever the developer's shell happened to export.
+
+Now every contract case goes through one wrapper that supplies the inputs the contract is about:
+
+* `stackScan: () => ""` - an empty inventory, so a case reaches its own assertion;
+* `hostname: os.hostname()` plus `SO101_LIVE_SIM_HOST` - the contract declares the host it is
+  simulating instead of inheriting it (the ai-station case still passes its own mismatching host);
+* `SO101_E2E_INSTALL_PREFIX` and `SO101_DEBUG_SOURCE_COMMIT` - declared defaults, each still deleted
+  or overridden by the case that tests its refusal.
+
+The foreign-inventory refusal keeps its own case: it injects a scan naming `gz sim` and `move_group`
+and asserts `LIVE_SIM_STACK_PRESENT` with both `pattern@pid` codes, after the roots are valid. No
+signal is sent and nothing is spawned by any of these cases.
+
+A new static guard reads this spec's own source and asserts there is exactly one raw
+`validateLiveSimPreconditions(` call - the wrapper - and that `live-sim/01-sequential.spec.ts`
+carries no injected scanner, so the real `ps` path stays in production.
+
+```text
+RED   nine contract cases failed on the untouched host: LIVE_SIM_HOST_MISMATCH,
+      LIVE_SIM_EVIDENCE_ROOT_REQUIRED and LIVE_SIM_INSTALL_PREFIX_INVALID masked each case's own gate
+GREEN playwright contract/live-preflight.spec.ts --workers=1: 14 passed (13 original + 1 new guard),
+      zero of them reading the host process table
+```
+
+The wider `contract/` directory also holds UI scenario specs that require the live environment
+variables (`SO101_FUNCTIONAL_MANIFEST` and friends); those are supplied by the Task 11 acceptance
+invocation, not by this task, and `live-preflight.spec.ts` itself has no failures in that run.
