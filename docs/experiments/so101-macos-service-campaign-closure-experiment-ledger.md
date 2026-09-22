@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-W2-15
+latest_checkpoint: CP-MSC-REMEDIATION-T11-NO-ACCUMULATION
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -5078,3 +5078,31 @@ status: advancing; both indicators agree again
 projection : sequence 87, 15 PASSED / 4 UNRUN / 1 FAILED   (was 82 / 14 PASSED)
 activity   : 60 files written in the last two minutes
 ```
+
+## CP-MSC-REMEDIATION-T11-NO-ACCUMULATION: seventeen windows, zero leftover residue
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-NO-ACCUMULATION
+recorded_at: 2026-09-23T17:40:00+0800
+carried_by: the local commit that adds this entry (parent 4926f5af)
+status: integrity check across every window this dispatch opened
+```
+
+The accumulation question the plan asks at handoff, answered by measurement rather than assumption:
+
+```text
+windows created                        17 (remediation/windows/w2-*)
+windows whose residue says STILL ALIVE 0
+port 8013 listeners                    1 - the running window's service (pid 53063)
+task-owned processes                   the same window only: its child, and two station trees
+                                       54346 (age 1:19) and 54847 (age 0:32), each carrying its
+                                       own ros2_control_node and so101_mujoco_support child
+```
+
+Two things worth keeping. Every completed window cleaned up after itself - sixteen of seventeen, the
+seventeenth still running - and the two station trees at different ages are the W2 profile's two
+workers against the shared queue, visible in the process table exactly as the projection reports it.
+
+Nothing foreign was ever touched: no signal was sent to a process this run had not recorded, and the
+only pids ever signalled were those in a window's own spawn record. That is the same rule the live
+crash-recovery experiment followed, and it held across all seventeen windows.
