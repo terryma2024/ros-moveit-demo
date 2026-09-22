@@ -17,7 +17,11 @@ _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 #: socket through ``/proc/self/fd/<dirfd>``, so it keeps the endpoint inside the batch root whatever
 #: its length. Darwin has ``sun_path`` at 104 bytes and no such indirection, and a batch root under a
 #: validation evidence root is roughly twice that, so the endpoint lives here instead.
-CONTROL_SOCKET_ROOT = Path(f"/private/tmp/so101-control-{os.getuid()}")
+from so101_demo.parallel_batch.web_control import (
+    CANONICAL_CONTROL_SOCKET_ROOT,
+)
+
+CONTROL_SOCKET_ROOT = CANONICAL_CONTROL_SOCKET_ROOT
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 
 

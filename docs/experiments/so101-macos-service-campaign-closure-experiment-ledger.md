@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-CANCEL-ROOT-CAUSE
+latest_checkpoint: CP-MSC-REMEDIATION-CONTROL-ROOT
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3675,3 +3675,51 @@ relax the rule.
 The change committed with this entry (`exist_ok`) is a real repeat-run bug fix and is kept. Task 8
 Step 3 still owns: this boundary (now with its cause proven), the two
 `test_expert_validation_e2e_installed_port` helper cases and the two live supervisor legs.
+
+## CP-MSC-REMEDIATION-CONTROL-ROOT: the Darwin control endpoint has a sanctioned home again
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-CONTROL-ROOT
+recorded_at: 2026-09-23T01:50:00+0800
+carried_by: the local commit that adds this entry (parent 097d56a9)
+boundary: test_expert_validation_production_projection.py::test_cancel_command_replays_durably_and_conflicting_target_never_contacts_owner
+status: CLOSED by a product fix; the two live supervisor legs and the e2e helper cases remain
+```
+
+`CP-MSC-REMEDIATION-CANCEL-ROOT-CAUSE` proved the symptom
+(`CONTROL_SOCKET_OUTSIDE_BATCH_ROOT`). Tracing it to the source shows a genuine product
+contradiction on Darwin:
+
+* `so101_teleop.expert_validation.supervisor.control_socket_path` deliberately returns
+  `/private/tmp/so101-control-<uid>/<campaign>-<batch>.sock` on Darwin, because a batch-root endpoint
+  there is about 200 bytes and cannot be bound at all (the first live service-driven macOS campaign
+  proved it);
+* `so101_demo.parallel_batch.web_control.FixedCoordinatorControlServer` accepted only an endpoint
+  inside the batch root, so on Darwin it refused every endpoint the supervisor was able to produce.
+
+The fix keeps containment mandatory and adds the second sanctioned home: the endpoint is accepted
+when it is inside the batch root **or** when its parent is exactly the canonical short root. That
+directory is still verified before the bind (owner, mode `0700`, no alias), so the guarantee is
+unchanged. The canonical root now has one definition, `CANONICAL_CONTROL_SOCKET_ROOT` in
+`web_control.py`, and `so101_teleop.expert_validation.coordinator.CONTROL_SOCKET_ROOT` imports it
+instead of repeating the string - the two sides can no longer disagree.
+
+```text
+RED   the new case in test_parallel_batch_web_control.py fails on the untouched product:
+      a canonical-root endpoint raised CONTROL_SOCKET_OUTSIDE_BATCH_ROOT
+GREEN remediation/runs/t8-webcontrol2-20260922T153556Z  24 passed (whole file; a path outside both
+      roots is still refused)
+      remediation/runs/t8-cancel-20260922T153605Z       24 passed
+      (test_expert_validation_production_projection.py, including both cancel-replay parameters)
+      remediation/runs/t8-neighbours-20260922T153629Z   53 passed, 1 skipped, 2 failed - the two
+      live supervisor legs that Task 8 Step 3 still owns
+```
+
+Also fixed in the evidence-root helper: ad-hoc `rem_pytest` runs now get their own short
+`/opt/data/tmp/so101-bt-XXXXXXXX` basetemp, like the gate runner, so a manual run reproduces the
+gate's conditions instead of tripping the `sun_path` limit. That was a measurement artefact, not a
+product defect: 21 `CONTROL_SOCKET_PATH_TOO_LONG` failures in a manual run against 0 with the short
+base.
+
+Task 8 Step 3 still owns: the two `test_expert_validation_e2e_installed_port` helper cases and the two
+live supervisor legs.
