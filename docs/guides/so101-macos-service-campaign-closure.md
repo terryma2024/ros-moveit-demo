@@ -2,7 +2,11 @@
 
 这份指南给在 Mac mini 上跑 SO-101 仿真验证的人看。它讲清楚三件事：怎么选 profile、启动前需要什么、出问题后从哪里读证据。
 
-状态截至 2026-09-22 晚：离线 package gate 在 `186ce876` 重跑过，失败数与上一次完全一样（demo 181、teleop 27，都是这台机器上的既有失败），web 的 tsc/vitest/build 全过，copied install 全过。候选 W2/W1/retry 通过；安装版 production 的 W2、W1 和 v5 retry 都在 fresh Chrome 里跑通并留证（`CP-MSC-T12-W2W1-PASS`、`CP-MSC-T12-RETRY-PROVEN`）。浏览器验收（Task 12 Step 5）现在每条 console 用例都在自己的服务窗口里跑绿（这种跑法操作员已认可），二十点最终验收也过了（`CP-MSC-T12-LIVE-SPEC-CORRECTIONS`、`CP-MSC-T12-ACCEPTANCE-20`）；过程中两处用例前提被产品否掉，已换成可测的等价写法，见下文“已知限制”。Sol/high 与 Astra/high 的独立复核在本会话不可达（`gpt-6-astra` 根本不在本机挂载的模型目录里），所以本文是执行 agent 写的草稿，`CP-MSC-FINAL` 按计划只能报 PARTIAL。
+状态截至 2026-09-23：静态门禁在 `t8-gate10` 跑出 `verdict=PASS`——demo 3917 个用例 0 失败 0 错误，teleop 904 个 0 失败，copied install 37 个 0 失败，`colcon test-result` 1074 个 0 失败 0 错误，web 的 tsc/vitest/build 全 0。（对照：这一轮开始前同一套门禁是 demo 176 失败、teleop 27 失败、colcon 39 失败。）失败数比上次少不算理由，上面每一层的真实退出码和 JUnit 计数都在证据根里，逐层读就能核。
+
+运行期合同这一轮换过一次，见下文「dylib farm 是当前合同」：literal no-DYLD 不再是门槛，farm 的 resolved target、manifest 和 inventory 每次 spawn 前重新验证。崩溃恢复也实测过：一个 task-owned descendant 被叶子优先回收、receipt 只列它自己那一个 pid，同时一个不属于 owner tree 的 foreign sentinel 从头到尾没被动过（`CP-MSC-REMEDIATION-8B-LIVE-PROVEN`）。
+
+还没做完的：W2/W1/retry 的 live 复验（Task 11）与两次独立复核。Sol/high 与 Astra/high 在本机不可达（`gpt-6-astra` 根本不在挂载的模型目录里），所以本文是执行 agent 写的草稿，`CP-MSC-FINAL` 按计划只能报 PARTIAL。
 
 ## 三个 profile
 
@@ -53,14 +57,23 @@ guard 很轻，只做启动保护，不是资格认证，也不是容量证明�
 
 ## 一次 campaign 怎么跑起来
 
+顺序是固定的，别改成先把 standalone station 挂在前台：
+
 ```bash
-scripts/so101-macos.zsh doctor --json
-scripts/so101-macos.zsh launch so101_demo_py so101_mujoco_task_station.launch.py headless:=false sensor_rendering:=true include_teleop:=false
-# candidate 路径：先签发 context，再启动 first-pass / retry
-scripts/so101-macos.zsh run so101_teleop so101_unified_web_server
+scripts/so101-macos.zsh doctor --json                 # 期望 status=PASS
+scripts/so101-macos.zsh run so101_teleop so101_unified_web_server   # 统一服务；campaign 由它启动
+# 然后：lease/context → 在页面上 start campaign → 读证据 → 按 owner PID 停服务 → 读残留
 ```
 
+standalone station（`launch so101_demo_py so101_mujoco_task_station.launch.py ...`）只是独立诊断入口，放在自己的窗口或 session 里跑，用完按 owner PID 有界停掉，并且在进 campaign 之前证明 station 残留为零。先把它挂在前台、再想启动统一服务，会卡在同一个控制域上（`CP-MSC-REMEDIATION-8B-LIVE-PROVEN` 之前的实测结论）。
+
+一整个 campaign 由一个服务窗口跑完：起服务、跑用例、按记录的 PID/birth 停掉、读残留。要连跑几个用例就开几个窗口，别在同一个服务上换页面或换 profile。
+
 Worker 的 lease 决定它执行哪个点：每个 lease 只带一个点，写好自己的单点输入（`points_path`/`points_sha256`），执行完把结果提交回 durable queue 和 journal，再取下一个。W2 是两个 Worker 抢同一个队列；W1 是一个 Worker 顺序排空。判定的 PASS 要求每个 selected 点恰好有一条 committed result——一个点都没执行却报 PASS 的情况不会再出现。
+
+崩溃之后要收敛，用运维入口，而且它要求服务已经下线：`SupervisorStore.open` 会拿 store 的排他 `flock`，服务还活着时它只会报 `VALIDATION_SUPERVISOR_ACTIVE`。所以顺序是「停服务 → `operator_recovery --apply`」。回收是叶子优先的，只对身份（PID/birth/executable/命令摘要）还对得上的 task-owned 进程发信号；身份漂移的树会被 `RECOVERY_OWNER_TREE_UNRESOLVED … OWNER_IDENTITY_MISMATCH` 挡住，fence 保留，一个信号都不发。receipt 里的 `signals_sent` 就是这次真正发过信号的 pid 列表。
+
+容器清点看主机：装了 Docker 但列不出来仍然 fail closed；主机上根本没有容器运行时，就没有带这个 batch label 的容器，恢复不会因此被拒。
 
 ## 证据读哪里
 
@@ -87,4 +100,6 @@ Worker 的 lease 决定它执行哪个点：每个 lease 只带一个点，写�
 - macOS 没有容量资格流程，`so101_measure_parallel_resources` 仍然是 retired。StartGuard 只管启动，不做资格认证，也不出容量证明。
 - retry 保证的是流程：一个点、一次 lease、一次执行、一次提交，first-pass 的字节不变。它不保证失败点重跑就能通过；一条命令也只重试一个点，retry 的 retry 不支持。
 - Linux/fixed 布局和 macOS composed 布局的证据形状不一样。前者把每次 attempt 的 artifact 注册到 projection，后者按点提交 `point-results/<point>.json`。读证据时按布局走各自的路，别拿另一边的路径去套。
+- 进程清点在 Darwin 上走 psutil，Linux 上走 procfs。缺 psutil、`AccessDenied` 或身份读不全一律 `RECOVERY_RUNTIME_UNVERIFIABLE`，不会退化成「进程不在」。跑运维恢复前先确认目标 Python 能 `import psutil`。
+- macOS 的浏览器验收采用「每条 console 用例一个服务窗口」的跑法，这是操作员认可的形态（`CP-MSC-T12-LIVE-SPEC-CORRECTIONS`）：排他控制器让一个服务同时只服务一个 console 实例，所以这不是产品上的退让。
 - `CP-MSC-FINAL` 要求 Sol/high 的结果审查和 Astra/high 的独立终审，这两条在本会话不可达，所以只能报 PARTIAL。本文也停在这个状态。
