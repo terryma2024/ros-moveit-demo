@@ -2530,3 +2530,34 @@ recorded with a measured reason. The remaining blockers are unchanged and extern
 (Step 5's three Playwright projects, and therefore CP-MSC-05 and any FINAL verdict), and the review sessions
 (CP-MSC-02/03, Task 13 Sol/high and Astra/high) that are not reachable from this session. Accounting unchanged:
 everything retained, nothing archived, deletion candidates listed and none deleted.
+
+## CP-MSC-T12-RETRY-DEFECT: the console does expose the retry; the service leaks a TypeError
+
+```yaml
+checkpoint_id: CP-MSC-T12-RETRY-DEFECT
+recorded_at: 2026-09-22T13:20:00+0800
+evidence: task12/retry-samepage-20260922T043538Z/legs/w1/{driver.log,api-responses.json,04-retry-panel.png,05-retry-selected.png,05b-retry-confirm.png,06-retry-accepted.png,07-after-retry.png}
+verdict: a real product defect in the production v5 retry path, found from the console's own retry panel
+```
+
+The same-page attempt first reproduced the precondition - a twenty-point v6 W1 production first pass,
+`campaign-e15544c0506e47b198bc907433d3ae37` / batch `b889e`, terminal `N1_CAMPAIGN_PASS`, with
+`sample_05_near_center` committed as a genuine business `FAILED` (`infrastructure_code = null`) - and then did what
+the previous attempt could not: the console **did** expose the retry flow. The driver's log reads
+
+```
+05:09:10.831Z same-page retry target=Retry P09 checked=true enabled=Retry P09
+05:09:10.977Z same-page retry -> 409 {"code":"cannot unpack non-iterable RetryStartRequest object"}
+```
+
+with the panel, selection, confirmation and accepted screenshots recorded. So the retry was submitted from the same
+page that held the instance, and the service answered **409 whose body is a leaked Python `TypeError`**
+("cannot unpack non-iterable RetryStartRequest object") rather than a typed refusal: the retry endpoint unpacks the
+request object it was given and the unpacking fails. The `GET /expert-validation/campaigns/undefined` 404s that
+follow are the console polling for a retry batch id it never received - a consequence of the refusal, not a missing
+route.
+
+This replaces the earlier reading of this leg: it is not "no retry control" and not an authority refusal. The
+control exists, the authority was held, and the product's own retry handler is broken for the request it receives.
+That is the last blocker of plan Task 12 Step 4, and it is a fixable product defect with a RED-testable boundary
+(the retry endpoint plus the service/supervisor path it calls). Nothing was bypassed and no retry batch exists.
