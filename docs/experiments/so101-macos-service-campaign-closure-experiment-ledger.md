@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-PORTABILITY
+latest_checkpoint: CP-MSC-REMEDIATION-RETRY-EVIDENCE
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3338,3 +3338,51 @@ t5-neighbours-20260922T145636Z: 41 passed, 1 failed - the pre-existing
 
 One pre-existing failure in the same file was fixed as a side effect:
 `test_adaptive_helper_handshake_and_sigint_cleanup` asserted `/proc/<pid>` absence after cleanup.
+
+## CP-MSC-REMEDIATION-RETRY-EVIDENCE: the retry shape is read by the layout-aware reader
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-RETRY-EVIDENCE
+recorded_at: 2026-09-22T23:35:00+0800
+dispatch: ddf5bc35-e88c-4d3e-8005-0c165dff1841
+carried_by: the local commit that adds this entry (parent 32a5aaca)
+status: contract closed; no product byte was changed, because the product already satisfied it
+```
+
+### What was already true, and is now pinned
+
+The Python half was closed in the previous dispatch and re-verified here: the recorded retry batch
+is read in its own binding vocabulary (`kind=FULL_RESTART_RETRY`, `original_catalog_sha256`, a single
+`point`), its projected state carries exactly one point with business `FAILED` and
+`batch_cleanup_complete=true`, `_verify_retry_journal` returns the batch's own committed cleanup
+frame, a retry binding with no selection or a mismatched digest is refused, and the first pass of the
+same campaign still reads from its own unchanged bytes.
+
+The TypeScript half needed the missing cases, and they pass against the existing reader:
+
+* a business `FAILED` point with `dynamic_manifest_relative_path=null`, `dynamic_manifest_sha256=null`
+  and no physical claim is valid composed evidence (the real retry shape);
+* the same document claiming `PASSED` is refused with
+  `PHYSICAL_EVIDENCE_INVALID: p1 claims physical evidence it does not carry`;
+* the reader never hands the null relative path to the filesystem: the refusal, when it comes, is
+  this module's own `PHYSICAL_EVIDENCE_INVALID`, never `EISDIR`, `ENOENT` or a `TypeError`;
+* an attempt that *names* a dynamic manifest still has to carry it.
+
+### The retired harness
+
+The earlier candidate-era reader read `dynamic_manifest_relative_path` unconditionally, so the retry
+shape reached `readFileSync` as a null (or a directory) and died with `EISDIR` instead of classifying
+the attempt; a second legacy reader treated a legitimate failed-before-physical attempt as a failure.
+Both are retired. `assertions/live-evidence.ts` now says so in its own docstring and is the only
+acceptance reader: formal acceptance calls `assertProjectedPointEvidence` and
+`assertPhysicalEvidenceSet`, which dispatch on the batch's own layout.
+
+### Evidence
+
+```text
+remediation/runs/t6-python-20260922T145806Z: 50 passed, 2 failed - both failures are the pre-existing
+        test_cancel_command_replays_durably_and_conflicting_target_never_contacts_owner cases from
+        the independent baseline, owned by the Task 8 pass.
+playwright contract/live-evidence-layouts.spec.ts --workers=1: 8 passed (4 new cases)
+bunx tsc -b --pretty false: rc=0
+```

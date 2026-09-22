@@ -1102,6 +1102,16 @@ function assertMacosSequenceAndWatermark(evidence: CampaignBatchEvidence): void 
  * manifest's own inventory is the authority, and the MuJoCo physical document itself has to name
  * a real object state, simulation step and publisher sequence.
  */
+/**
+ * The layout-aware readers in this module are the *only* acceptance readers for campaign evidence.
+ *
+ * The earlier candidate-era harness read `dynamic_manifest_relative_path` unconditionally, so a
+ * legitimate failed-before-physical attempt (the retry shape, which carries `null`) reached
+ * `readFileSync` as a null or directory path and died with EISDIR instead of being classified. That
+ * harness is retired; formal acceptance calls `assertProjectedPointEvidence` and
+ * `assertPhysicalEvidenceSet` from here, which dispatch on the batch's own layout, refuse a PASSED
+ * point that carries no physical manifest, and accept a business FAILED point that carries none.
+ */
 export function assertPhysicalEvidenceSet(evidence: CampaignBatchEvidence): void {
   if (evidence.layout === "MACOS_COMPOSED") {
     assertMacosPhysicalEvidence(evidence);
