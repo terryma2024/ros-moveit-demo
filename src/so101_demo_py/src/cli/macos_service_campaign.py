@@ -41,6 +41,7 @@ import time
 # need ``so101_demo`` to be importable, which the service guarantees - it imports that package itself to
 # resolve its layout, and the child inherits the same path.
 from so101_demo.parallel_batch.contracts import (
+    BatchKindV2,
     ContractError,
     ExecutionProfile,
     ParallelRuntimeConfigV4,
@@ -98,6 +99,21 @@ EXECUTION_PROFILE_VARIABLE = "SO101_FIXED_CONTROL_EXECUTION_PROFILE"
 STOP_TERM_TIMEOUT_S = 5.0
 STOP_KILL_TIMEOUT_S = 5.0
 
+#: The admitted-retry binding the service sends for a `FULL_RESTART_RETRY`, in the caller's own
+#: vocabulary. The adapter parses these and forwards them verbatim. It deliberately accepts no
+#: `--retry-root`: the service sends the digests its store already admitted, while a root would make
+#: the v5 route re-hash the prior document's bytes and refuse `RETRY_SOURCE_MISMATCH` against a
+#: genuinely different admitted digest.
+RETRY_BINDING_FLAGS = {
+    "original_selection_sha256": "--original-selection-sha256",
+    "original_result_sha256": "--original-result-sha256",
+    "original_catalog_sha256": "--original-catalog-sha256",
+    "original_batch_id": "--original-batch-id",
+}
+
+#: The two an admitted retry cannot be executed without; the other two are optional.
+REQUIRED_RETRY_BINDING = ("original_selection_sha256", "original_result_sha256")
+
 
 class ServiceCampaignError(RuntimeError):
     """The request cannot be executed on this platform. Never a warning."""
@@ -128,8 +144,47 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--grounded-manifest-sha256", required=True)
     parser.add_argument("--run-mode", required=True)
     parser.add_argument("--point-id", action="append", default=[])
+    # The admitted-retry binding, forwarded to the v5 route exactly as the service declared it.
+    for name, flag in RETRY_BINDING_FLAGS.items():
+        parser.add_argument(flag, dest=name, default=None)
     parser.add_argument("--provenance-binding", type=Path, default=None)
     return parser
+
+
+def retry_binding_values(arguments) -> dict:
+    """The retry binding this argv declares, with every unset flag left out."""
+
+    return {name: getattr(arguments, name, None) for name in RETRY_BINDING_FLAGS
+            if getattr(arguments, name, None) is not None}
+
+
+def require_retry_binding(arguments, route) -> dict:
+    """The declared retry binding, or a refusal by name before anything is spawned.
+
+    A half-named binding is worse than none: the v5 entry would refuse it in the child, after the
+    adapter had already taken a start guard and created a campaign child. A retry flag on a route
+    that executes no retry would otherwise be dropped silently, so it is refused here too.
+    """
+
+    values = retry_binding_values(arguments)
+    if not values:
+        return {}
+    is_retry_route = (
+        str(route.batch_kind) == str(BatchKindV2.FULL_RESTART_RETRY)
+        and str(route.execution_profile) == str(ExecutionProfile.MPS_W1_FULL_RESTART_RETRY))
+    if not is_retry_route:
+        raise ServiceCampaignError(
+            "RETRY_BINDING_UNSUPPORTED",
+            f"{route.execution_profile} executes no retry, so "
+            f"{sorted(RETRY_BINDING_FLAGS[name] for name in values)} cannot be honoured")
+    missing = [RETRY_BINDING_FLAGS[name] for name in REQUIRED_RETRY_BINDING
+               if name not in values]
+    if missing:
+        raise ServiceCampaignError(
+            "RETRY_ROOT_REQUIRED",
+            "an admitted retry must name " + " and ".join(missing)
+            + " beside the flags it did name")
+    return values
 
 
 def _digest(path: Path) -> str:
@@ -226,6 +281,7 @@ def resolve_request(arguments, *, environment=None, platform=None) -> AdapterRou
         raise ServiceCampaignError("POINTS_MISSING", str(arguments.points))
     if not arguments.point_id:
         raise ServiceCampaignError("SELECTED_POINTS_REQUIRED")
+    retry_binding = require_retry_binding(arguments, route)
     campaign_id = str(environment.get("SO101_FIXED_CONTROL_CAMPAIGN_ID") or "")
     control_socket = str(environment.get("SO101_FIXED_CONTROL_SOCKET") or "")
     control_token = str(environment.get("SO101_FIXED_CONTROL_TOKEN") or "")
@@ -257,6 +313,8 @@ def resolve_request(arguments, *, environment=None, platform=None) -> AdapterRou
         "yolo_weights_sha256": observed_weights,
         "grounded_manifest_sha256": observed_manifest,
         "selected_point_ids": list(arguments.point_id),
+        # Recorded, so the evidence says which admitted chain a retry executed.
+        "retry_binding": retry_binding,
     }
     return AdapterRoute(config=config, route=route, module=module, record=record)
 
@@ -273,9 +331,24 @@ def validate(arguments, *, environment=None, platform=None) -> dict:
 
 def campaign_argv(arguments, module: str = CAMPAIGN_MODULE, *,
                   campaign_id: str | None = None) -> list[str]:
-    """The argv one campaign entry point is driven with. Nothing else is added to it."""
+    """The argv one campaign entry point is driven with.
+
+    A first-pass argv is byte-identical to what it was before the retry binding existed: the four
+    flags are appended only when the request declared them, and then verbatim, so the child parses
+    exactly the digests the service admitted. A half-named binding is refused here as well as in
+    `require_retry_binding`, so a direct caller cannot drop the missing half silently.
+    """
+
     if campaign_id is None:
         campaign_id = os.environ["SO101_FIXED_CONTROL_CAMPAIGN_ID"]
+    binding = retry_binding_values(arguments)
+    missing = [RETRY_BINDING_FLAGS[name] for name in REQUIRED_RETRY_BINDING
+               if name not in binding]
+    if binding and missing:
+        raise ServiceCampaignError(
+            "RETRY_ROOT_REQUIRED",
+            "an admitted retry must name " + " and ".join(missing)
+            + " beside the flags it did name")
     argv = [
         sys.executable, "-m", module,
         "--config", str(arguments.config),
@@ -285,6 +358,9 @@ def campaign_argv(arguments, module: str = CAMPAIGN_MODULE, *,
         "--yolo-weights", str(arguments.yolo_weights),
         "--grounded-root", str(arguments.grounded_root),
     ]
+    for name, flag in RETRY_BINDING_FLAGS.items():
+        if name in binding:
+            argv.extend((flag, str(binding[name])))
     for point_id in arguments.point_id:
         argv.extend(("--point-id", point_id))
     return argv
