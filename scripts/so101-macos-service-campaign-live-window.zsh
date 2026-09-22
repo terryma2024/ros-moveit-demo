@@ -62,11 +62,14 @@ mkdir -p "$window_root"
 # the retry window runs the same frozen twenty points as its own first pass before retrying.
 case "$case_name" in
   w2) case_id="macos-w2-20"; mode="PARALLEL"; workers=2; points=20; project="fixed-n-execution"
-      target_spec="expert-validation/live-sim/06-fixed-n-execution.spec.ts"; target_marker="R06 " ;;
+      target_spec="expert-validation/live-sim/06-fixed-n-execution.spec.ts"; target_marker="R06 "
+      profile_document="parallel_batch_v4_macos_mps_w2.yaml" ;;
   w1) case_id="macos-w1-20"; mode="SEQUENTIAL"; workers=1; points=20; project="fixed-n-execution"
-      target_spec="expert-validation/live-sim/06-fixed-n-execution.spec.ts"; target_marker="R06 " ;;
+      target_spec="expert-validation/live-sim/06-fixed-n-execution.spec.ts"; target_marker="R06 "
+      profile_document="parallel_batch_v6_macos_mps_w1_first_pass.yaml" ;;
   retry) case_id="macos-w1-20-retry"; mode="SEQUENTIAL"; workers=1; points=20; project="retry-full-restart"
-      target_spec="expert-validation/live-sim/07-retry-full-restart.spec.ts"; target_marker="R07 " ;;
+      target_spec="expert-validation/live-sim/07-retry-full-restart.spec.ts"; target_marker="R07 "
+      profile_document="parallel_batch_v5_macos_mps_w1_retry.yaml" ;;
 esac
 
 functional_manifest="$window_root/functional-manifest.json"
@@ -139,9 +142,10 @@ chmod 700 "$evidence_root" "$state_root" "$socket_dir"
 
 launch_document="$window_root/service-launch.json"
 "$REGISTERED_PYTHON" - "$launch_document" "$identity_report" "$case_id" "$evidence_root" \
-    "$socket_dir" "$state_root" <<'PY'
-import json, sys
-launch_path, identity_path, case_id, evidence_root, socket_dir, state_root = sys.argv[1:7]
+    "$socket_dir" "$state_root" "$profile_document" <<'PY'
+import json, os, sys
+from pathlib import Path
+launch_path, identity_path, case_id, evidence_root, socket_dir, state_root, profile_document = sys.argv[1:8]
 identity = json.load(open(identity_path, encoding="utf-8"))
 document = {
     "schema_version": 1,
@@ -151,11 +155,15 @@ document = {
     "evidence_root": state_root,
     "socket_dir": socket_dir,
     "ros_domain_id": 211,
+    "validation_parallel_config": str(
+        Path(identity["install_prefix"]) / "so101_demo_py/share/so101_demo_py/config/mujoco"
+        / profile_document),
     **identity,
 }
 json.dump(document, open(launch_path, "w", encoding="utf-8"), indent=2, sort_keys=True)
 PY
 
+export SO101_WINDOW_PROFILE_DOCUMENT="$profile_document"
 export SO101_TASK_ROOT="$task_root"
 export TASK_ROOT="$task_root"
 export SO101_LIVE_SIM_HOST="$(hostname)"

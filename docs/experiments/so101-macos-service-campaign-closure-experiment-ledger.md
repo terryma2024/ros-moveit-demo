@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-CAPABILITIES-PROBE
+latest_checkpoint: CP-MSC-REMEDIATION-T11-PREFLIGHT
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4583,3 +4583,41 @@ Housekeeping for this probe: the first attempt backgrounded its whole shell chai
 service running on port 8013. It was identified by exact pid (42978, the unified server started from
 this window's launch document at 02:14:53), stopped with `SIGINT`, and the port verified free - 0
 listeners, 0 task-owned stack processes. The second probe stopped its own service the same way.
+
+## CP-MSC-REMEDIATION-T11-PREFLIGHT: capabilities fixed; the models precondition is the last input
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-PREFLIGHT
+recorded_at: 2026-09-23T11:30:00+0800
+carried_by: the local commit that adds this entry (parent ae413d7d)
+window: remediation/windows/w2-20260922T182657Z-43816/
+status: the R06 case now reaches the campaign preflight; the service refuses on an unmet precondition
+```
+
+The capabilities question is answered and fixed by measurement. `production.capabilities()` only
+serves the macOS document when `_execution_document()` can read `layout.parallel_config_path`, and
+that path comes from `SO101_VALIDATION_PARALLEL_CONFIG` - whose default is the generic v1 document.
+The window now declares the profile it is for (`parallel_batch_v4_macos_mps_w2.yaml` for w2,
+`..._v6_macos_mps_w1_first_pass.yaml` for w1, `..._v5_macos_mps_w1_retry.yaml` for retry) in its launch
+document, and the launcher passes it into the child environment. A lease was never the issue: my probe
+that tried to acquire one was rejected for wanting instance authority (`CONTROLLER_INSTANCE_REQUIRED`),
+which is a different surface entirely.
+
+Two smaller harness bugs were found and fixed on the way: the launch-document heredoc lacked `os` and
+`Path` imports, and it read the profile from an environment variable exported later in the script, so
+it now takes the value as an argument.
+
+With those, the case runs **past** capabilities and reaches the campaign itself:
+
+```text
+✘ R06 macos-w2-20 executes 2×20 or is refused @live-sim (1.2s)
+  Error: PREFLIGHT_REFUSED: 409 {"code":"VALIDATION_MODELS_NOT_CONFIGURED"}
+  Error: release lease failed: 409 {"code":"STALE_EXECUTION_GENERATION","message":"… 0 != 1"}
+```
+
+That refusal is the guide's own precondition being enforced: the model weights are an input, not
+repository content, and the service will not start a campaign without them. So the last input this
+window needs is the perception model root and its frozen digests (`yolo f281d252…0781`, grounded
+manifest `b55bb601…ed05` in the guide's terms). The second line is a teardown race worth its own look:
+the fixture's `releaseAcquiredLeases` races the campaign's generation bump and reports
+`STALE_EXECUTION_GENERATION` instead of releasing cleanly.

@@ -66,6 +66,7 @@ class ServiceLaunchDocument:
     farm_manifest_sha256: str
     python: str
     console_entry: str
+    validation_parallel_config: str = ""
 
 
 def _require(mapping: dict[str, Any], key: str, code: str = "LAUNCH_DOCUMENT_INVALID") -> Any:
@@ -108,6 +109,7 @@ def load_launch_document(path: Path) -> ServiceLaunchDocument:
         farm_manifest_sha256=str(_require(document, "farm_manifest_sha256")),
         python=str(_require(document, "python")),
         console_entry=str(_require(document, "console_entry")),
+        validation_parallel_config=str(document.get("validation_parallel_config") or ""),
     )
 
 
@@ -233,6 +235,12 @@ def child_environment(
             "SO101_LIVE_CASE_ID": document.case_id,
         }
     )
+    # The macOS capabilities document is only served when the service can read an execution profile:
+    # `_execution_document()` reads `layout.parallel_config_path`, which comes from
+    # SO101_VALIDATION_PARALLEL_CONFIG. Without it the default v1 document is used and the
+    # capabilities answer has `platform: null`, which is what every W2 window saw.
+    if getattr(document, "validation_parallel_config", ""):
+        environment["SO101_VALIDATION_PARALLEL_CONFIG"] = document.validation_parallel_config
     environment.pop("NODE_ENV", None)
     return environment
 
