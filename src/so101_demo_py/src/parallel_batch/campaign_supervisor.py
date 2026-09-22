@@ -64,6 +64,10 @@ START_GUARD_REFUSED = "START_GUARD_REFUSED"
 #: A guard object that cannot prove freshness is not a guard.
 SPAWN_GUARD_INVALID = "SPAWN_GUARD_INVALID"
 
+#: A role/slot whose previous child has not been resolved. One campaign drains a queue through the
+#: same slots, so a released child is what makes the next spawn into that slot legal.
+DUPLICATE_ROLE_SLOT = "DUPLICATE_ROLE_SLOT"
+
 #: The roles a campaign is allowed to own, and the slots each role may occupy.
 OWNED_ROLES: Mapping[str, int] = {"broker": 1, "worker": 2, "coordinator": 1}
 
@@ -465,7 +469,7 @@ class CampaignSupervisor:
         current = self.receipt
         for child in current.children:
             if child.role == role and child.slot == slot and child.status != STOPPED:
-                raise CampaignBlocked("DUPLICATE_ROLE_SLOT", f"{role}[{slot}]")
+                raise CampaignBlocked(DUPLICATE_ROLE_SLOT, f"{role}[{slot}]")
         intent = SpawnIntent(
             role=role, slot=slot, argv=tuple(str(item) for item in argv), nonce=nonce,
             status=SPAWNING, recorded_monotonic_s=self._clock(),
@@ -761,6 +765,64 @@ class CampaignSupervisor:
         except Exception:  # noqa: BLE001 - the poll below is the real check
             pass
         return reaped and child.poll() is not None
+
+    # -- one child at a time: the next lease for the same slot -----------------------------
+
+    def release_child(self, *, role: str, slot: int, wait_s: float = 180.0) -> str:
+        """Wait for one owned child to exit, stop it exactly if it does not, and free its slot.
+
+        One campaign drains one durable queue, so a slot is reused for the next point: the slot can
+        only be spawned again once its previous child is resolved, and ``begin_spawn`` refuses a
+        role/slot whose previous entry is not ``STOPPED``. This is that resolution, and it is
+        deliberately narrow:
+
+        * it waits for the child to exit on its own first - a Worker that is still shutting its
+          station down must not be killed mid-shutdown;
+        * a child that outlives the wait is stopped by PID *and* birth identity from this
+          supervisor's own receipt, never by name and never a process it does not own;
+        * a child whose identity changed (a reused PID) is never signalled: the slot is reported as
+          unresolved instead, so the caller stops rather than spawning on top of a stranger.
+        """
+
+        current = self.receipt
+        intents = [child for child in current.children if child.role == role and child.slot == slot]
+        if not intents:
+            return "ABSENT"
+        intent = intents[-1]
+        if intent.status == STOPPED:
+            return "ALREADY_STOPPED"
+        outcome = "EXITED"
+        if intent.pid is not None and intent.status == ACTIVE:
+            deadline = self._clock() + max(0.0, float(wait_s))
+            while self._identity_reader(intent.pid) is not None and self._clock() < deadline:
+                self._sleep(0.05)
+            if self._identity_reader(intent.pid) is not None:
+                identity = self._identity_reader(intent.pid)
+                if (intent.birth_identity is None or identity is None
+                        or identity.start_time_ticks != intent.birth_identity):
+                    raise CampaignBlocked(
+                        "CHILD_IDENTITY_CHANGED",
+                        f"{role}[{slot}] pid {intent.pid} is not the child this campaign spawned")
+                if not self._stop_pid_exact(intent.pid):
+                    raise CampaignBlocked(
+                        "CHILD_STOP_FAILED", f"{role}[{slot}] pid {intent.pid} is still running")
+                outcome = "STOPPED"
+            else:
+                self.is_gone(intent.pid)
+        resolved = replace(intent, status=STOPPED, reason=f"RELEASED_{outcome}",
+                           recorded_monotonic_s=self._clock())
+        self._write_receipt(OwnershipReceipt(
+            campaign_id=current.campaign_id,
+            owner_pid=current.owner_pid,
+            owner_birth_identity=current.owner_birth_identity,
+            claim_identity=current.claim_identity,
+            children=tuple(resolved if child.role == role and child.slot == slot else child
+                           for child in current.children),
+            coordinator_pid=current.coordinator_pid,
+            coordinator_heartbeat_monotonic_s=current.coordinator_heartbeat_monotonic_s,
+            written_monotonic_s=self._clock(),
+        ))
+        return outcome
 
     def terminate_all(self) -> CleanupReceipt:
         """Stop and reap every owned child by exact identity, then clear the receipt."""

@@ -34,6 +34,15 @@ BROKER_PID = 7001
 BROKER_BIRTH = 8001
 
 
+def _catalog(tmp_path) -> Path:
+    """The installed 20-point catalog, copied so a selection binding can be frozen from it."""
+
+    source = PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml"
+    target = tmp_path / source.name
+    target.write_bytes(source.read_bytes())
+    return target
+
+
 def _plan(tmp_path):
     return compose_w2_campaign(
         config=load_execution_config(V4_CONFIG), config_path=V4_CONFIG,
@@ -301,34 +310,55 @@ def test_worker_leases_and_bindings_use_the_ids_the_worker_derives(tmp_path: Pat
     import json
 
     from so101_demo.cli.macos_w2_campaign import bind_worker_requests, build_worker_leases
+    from so101_demo.parallel_batch.queue import DurablePointQueue
+    from so101_demo.parallel_batch.selection import build_first_pass_selection
     from so101_demo.parallel_batch.w2_composition import exact_w2_slots
+
+    catalog = _catalog(tmp_path)
+    point_ids = ("task_start", "cup_test_forward_5cm", "cup_test_left_5cm",
+                 "cup_test_right_5cm")
 
     class _Plan:
         slots = exact_w2_slots()
-        selected_point_ids = ("p1", "p2")
+        selected_point_ids = point_ids
+
+    binding = build_first_pass_selection(
+        catalog_path=catalog, point_ids=point_ids, campaign_id="b1", batch_id="b1",
+        config_sha256="c" * 64, runtime_closure_sha256="d" * 64)
+    queue = DurablePointQueue(root=tmp_path / "queue", binding=binding)
 
     leases = build_worker_leases(
-        plan=_Plan(), batch_id="b1", evidence_root=tmp_path, input_sha256="a" * 64
-    )
+        plan=_Plan(), batch_id="b1", evidence_root=tmp_path, input_sha256="a" * 64,
+        binding=binding, queue=queue)
 
     assert sorted(leases) == ["w1", "w2"]
     document = leases["w1"]
-    assert document["attempt_ids"] == ["w1-att-00", "w1-att-01", "w1-att-02"]
+    # The first id is the *lease's* attempt - the one the queue issued for the point this Worker
+    # executes - and it is bound exactly like the two inference round trips beside it.
+    assert document["attempt_ids"][1:] == ["w1-att-g01-01", "w1-att-g01-02"]
+    assert document["attempt_ids"][0] == document["attempt_id"]
+    assert document["attempt_id"].startswith(f"{document['point_id']}-attempt-")
     assert document["slot_id"] == "slot-0" and leases["w2"]["slot_id"] == "slot-1"
-    # The slot no longer owns a point: the queue decides which point a lease carries. Until the
-    # Worker is wired to that queue (plan Task 3) the entry point keeps its explicit fallback, so
-    # the lease still carries a *selected* id rather than an invented or unselected one.
-    assert {lease["point_id"] for lease in leases.values()} <= set(_Plan.selected_point_ids)
+    # The slot owns no point: the durable queue issued both leases, and each carries the one point
+    # file the Worker may execute - never the installed catalog.
+    assert {lease["point_id"] for lease in leases.values()} <= set(point_ids)
+    assert len({lease["point_id"] for lease in leases.values()}) == 2
+    assert {lease.point_id for lease in queue.snapshot().active_leases} == {
+        lease["point_id"] for lease in leases.values()}
     assert Path(document["snapshot_path"]).is_file()
+    assert Path(document["points_path"]).is_file()
+    assert "rgbd_task_points.yaml" not in document["points_path"]
     on_disk = json.loads(Path(document["lease_path"]).read_text())
     assert on_disk["attempt_ids"] == document["attempt_ids"]
     assert on_disk["model_id"] == "yolo"
+    assert on_disk["points_sha256"] == document["points_sha256"]
     # the fault-injection switches must travel with the lease, or a probe would silently do nothing
     assert on_disk["deadline_s"] == 240.0
     assert on_disk["tamper_input_sha256"] is False
 
     tuned = build_worker_leases(plan=_Plan(), batch_id="b1", evidence_root=tmp_path,
-                                input_sha256="a" * 64, deadline_s=4.0, tamper_input_sha256=True)
+                                input_sha256="a" * 64, deadline_s=4.0, tamper_input_sha256=True,
+                                binding=binding, queue=queue, worker_ids=("w1",), generation=2)
     tuned_disk = json.loads(Path(tuned["w1"]["lease_path"]).read_text())
     assert tuned_disk["deadline_s"] == 4.0 and tuned_disk["tamper_input_sha256"] is True
 
@@ -347,8 +377,9 @@ def test_worker_leases_and_bindings_use_the_ids_the_worker_derives(tmp_path: Pat
     bind_worker_requests(campaign, leases, ready=_Ready())
 
     bound = sorted(binding["request_id"] for binding in campaign.bindings)
-    assert bound == ["w1-att-00-yolo", "w1-att-01-yolo", "w1-att-02-yolo",
-                     "w2-att-00-yolo", "w2-att-01-yolo", "w2-att-02-yolo"]
+    attempt_ids = sorted(lease["attempt_ids"][index] for lease in leases.values()
+                         for index in (1, 2))
+    assert set(f"{attempt_id}-yolo" for attempt_id in attempt_ids) <= set(bound)
     assert all(binding["broker_pid"] == 4242 for binding in campaign.bindings)
     assert all(binding["input_sha256"] == "a" * 64 for binding in campaign.bindings)
 
@@ -448,24 +479,52 @@ def test_per_slot_summary_reads_a_synthetic_evidence_tree(tmp_path: Path) -> Non
     assert summary["w2"]["manifests"] == 0 and summary["w2"]["executed_points"] == []
 
 
+def _points(**overrides) -> dict:
+    """A complete point-execution summary, as the drain reports one."""
+
+    summary = {"selected_point_ids": ["a", "b"], "committed": {"a": "PASSED", "b": "PASSED"},
+               "complete": True, "unexecuted_point_ids": [], "duplicate_attempts": [],
+               "unselected_attempts": [], "infrastructure_failures": [],
+               "missing_physical_evidence": []}
+    summary.update(overrides)
+    return summary
+
+
 def test_campaign_verdict_requires_the_happy_path_and_no_refusals() -> None:
-    """PASS is the happy path only: any refusal - even a deliberate probe - reads INCOMPLETE."""
+    """PASS is the happy path only - including the point set - and any refusal reads INCOMPLETE.
+
+    The point clause is the one Task 11's live gate was missing: a campaign that executed no point
+    at all reported `W2_CAMPAIGN_PASS`. A verdict with no executed-point evidence, or with an
+    unexecuted, duplicated, unselected or infrastructure-failed point, reads INCOMPLETE.
+    """
 
     from so101_demo.cli.macos_w2_campaign import campaign_status
 
     good = dict(cleanup_complete=True, results=[{}, {}],
-                workers=[{"status": "ACTIVE"}, {"status": "ACTIVE"}],
-                served={"count": 6, "devices": ["mps"]}, refused=[])
+                workers=[{"worker_id": "w1", "status": "ACTIVE"},
+                         {"worker_id": "w2", "status": "ACTIVE"}],
+                served={"count": 6, "devices": ["mps"]}, refused=[], points=_points())
     assert campaign_status(**good) == "W2_CAMPAIGN_PASS"
 
     for change in (
         {"cleanup_complete": False},
         {"results": [{}]},
-        {"workers": [{"status": "ACTIVE"}, {"status": "STOPPED"}]},
+        {"results": [{}, {}, {}]},
+        {"workers": [{"worker_id": "w1", "status": "ACTIVE"},
+                     {"worker_id": "w2", "status": "STOPPED"}]},
+        {"workers": [{"worker_id": "w1", "status": "ACTIVE"}]},
         {"served": {"count": 5, "devices": ["mps"]}},
         {"served": {"count": 6, "devices": []}},
         {"served": {"count": 6, "devices": ["cpu"]}},
         {"refused": [{"reason": "DUPLICATE_REQUEST"}]},
+        # the clause that would have caught the empty Task 11 campaign
+        {"points": _points(complete=False, committed={}, unexecuted_point_ids=["a", "b"])},
+        {"points": _points(complete=False, duplicate_attempts=["a"])},
+        {"points": _points(complete=False, unselected_attempts=["c"])},
+        {"points": _points(complete=False, missing_physical_evidence=["b"])},
+        {"points": _points(complete=False,
+                           infrastructure_failures=[{"point_id": "a",
+                                                     "infrastructure_code": "POINT_EVIDENCE_MISSING"}])},
     ):
         assert campaign_status(**{**good, **change}) == "W2_CAMPAIGN_INCOMPLETE", change
 
@@ -806,16 +865,20 @@ def test_the_n1_verdict_requires_the_single_worker_happy_path():
 
     from so101_demo.cli.macos_n1_first_pass import campaign_status as n1_status
 
-    good = dict(cleanup_complete=True, results=[{}], workers=[{"status": "ACTIVE"}],
-                served={"count": 3, "devices": ["mps"]}, refused=[])
+    good = dict(cleanup_complete=True, results=[{}],
+                workers=[{"worker_id": "w1", "status": "ACTIVE"}],
+                served={"count": 3, "devices": ["mps"]}, refused=[], points=_points())
     assert n1_status(**good) == "N1_CAMPAIGN_PASS"
     for change in (
         {"cleanup_complete": False},
         {"results": []},
         {"results": [{}, {}]},
-        {"workers": [{"status": "STOPPED"}]},
+        {"workers": [{"worker_id": "w1", "status": "STOPPED"}]},
+        {"workers": [{"worker_id": "w2", "status": "ACTIVE"}]},
         {"served": {"count": 2, "devices": ["mps"]}},
         {"served": {"count": 3, "devices": []}},
         {"refused": [{"reason": "DUPLICATE_REQUEST"}]},
+        {"points": _points(complete=False, committed={"a": "PASSED"},
+                           unexecuted_point_ids=["b"])},
     ):
         assert n1_status(**{**good, **change}) == "N1_CAMPAIGN_INCOMPLETE", change

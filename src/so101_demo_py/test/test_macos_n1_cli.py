@@ -154,13 +154,24 @@ def test_the_w1_lease_names_the_profile_the_worker_executes(tmp_path, capsys):
 
     from so101_demo.cli.macos_w2_campaign import build_worker_leases
     from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v6
+    from so101_demo.parallel_batch.queue import DurablePointQueue
+    from so101_demo.parallel_batch.selection import build_first_pass_selection
     from so101_demo.parallel_batch.w1_composition import compose_w1_first_pass
 
+    point_ids = ("task_start", "cup_test_forward_5cm", "cup_test_left_5cm",
+                 "cup_test_right_5cm")
+    catalog = tmp_path / "moveit_expert_validation_points_v1.yaml"
+    catalog.write_bytes(
+        (PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml").read_bytes())
+    binding = build_first_pass_selection(
+        catalog_path=catalog, point_ids=point_ids, campaign_id="b-n1", batch_id="b-n1",
+        config_sha256="c" * 64, runtime_closure_sha256="d" * 64)
+    queue = DurablePointQueue(root=tmp_path / "queue", binding=binding)
     plan = compose_w1_first_pass(config=load_parallel_runtime_config_v6(V6_CONFIG),
                                  config_path=V6_CONFIG, campaign_id="b-n1", batch_id="b-n1",
-                                 selected_point_ids=("p1", "p2"), evidence_root=tmp_path)
+                                 selected_point_ids=point_ids, evidence_root=tmp_path)
     leases = build_worker_leases(plan=plan, batch_id="b-n1", evidence_root=tmp_path,
-                                 input_sha256="a" * 64)
+                                 input_sha256="a" * 64, binding=binding, queue=queue)
 
     assert list(leases) == ["w1"]
     document = _json.loads(Path(leases["w1"]["lease_path"]).read_text())
@@ -538,14 +549,18 @@ def test_the_campaign_body_stops_on_a_refused_admission_before_the_broker_phase(
 
     monkeypatch.setattr(cli, "run_guard_phase", refused_guard_phase)
 
+    point_ids = ("task_start", "cup_test_forward_5cm", "cup_test_left_5cm",
+                 "cup_test_right_5cm")
     arguments = SimpleNamespace(
         evidence_root=tmp_path, campaign_id="b-n1", batch_id="b-n1", skip_models=False,
         yolo_weights=tmp_path / "yolo.pt", grounded_root=tmp_path / "grounded",
         worker_deadline_s=1.0, tamper_snapshot_sha=False, duplicate_probe=False,
-        cancel_second_worker_after_served=0, crash_broker_after_served=0)
+        cancel_second_worker_after_served=0, crash_broker_after_served=0,
+        point_id=point_ids, catalog=PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml",
+        catalog_sha256=None, retry_root=None)
     plan = compose_w1_first_pass(config=load_parallel_runtime_config_v6(V6_CONFIG),
                                  config_path=V6_CONFIG, campaign_id="b-n1", batch_id="b-n1",
-                                 selected_point_ids=("p1",), evidence_root=tmp_path)
+                                 selected_point_ids=point_ids, evidence_root=tmp_path)
     document: dict = {"status": "PENDING"}
 
     code = cli._drive_campaign(arguments, ["--config", str(V6_CONFIG)], plan,

@@ -822,3 +822,110 @@ def test_nothing_is_spawned_when_the_owner_record_cannot_be_written(tmp_path):
         assert [child["status"] for child in document["children"]] == [FAILED]
     finally:
         supervisor.release_claim()
+
+
+# --------------------------------------------------------------------------------------
+# one slot, several leases: the released child is what makes the next spawn legal
+# --------------------------------------------------------------------------------------
+
+
+def test_a_finished_child_is_released_and_its_slot_can_be_spawned_again(tmp_path):
+    """One campaign drains a queue, so a slot is reused - but only once its child is resolved.
+
+    The Worker for the first point exits on its own; the supervisor must observe that, mark the
+    slot `STOPPED` and then allow the *next* lease to be spawned into it. Without the release the
+    slot would stay `ACTIVE` forever and `begin_spawn` would refuse the second point.
+    """
+
+    from so101_demo.parallel_batch.campaign_supervisor import DUPLICATE_ROLE_SLOT
+
+    supervisor = _supervisor(tmp_path)
+    supervisor.acquire_claim()
+    try:
+        ack = tmp_path / "w1-ack-1.json"
+        first = supervisor.spawn(role="worker", slot=0,
+                                 argv=_ack_command(ack, sleep_s=0.2), nonce="n-1",
+                                 ack_path=ack)
+        assert first.status == ACTIVE
+        with pytest.raises(CampaignBlocked, match=DUPLICATE_ROLE_SLOT):
+            supervisor.begin_spawn(role="worker", slot=0, argv=("python", "-m", "worker"),
+                                   nonce="n-2")
+
+        outcome = supervisor.release_child(role="worker", slot=0, wait_s=10.0)
+        assert outcome == "EXITED"
+        assert supervisor.is_gone(first.pid) is True
+        released = [child for child in supervisor.receipt.children if child.role == "worker"]
+        assert [child.status for child in released] == [STOPPED]
+
+        ack_second = tmp_path / "w1-ack-2.json"
+        second = supervisor.spawn(role="worker", slot=0,
+                                  argv=_ack_command(ack_second, sleep_s=0.2), nonce="n-2",
+                                  ack_path=ack_second)
+        assert second.status == ACTIVE and second.pid != first.pid
+        assert [child.status for child in supervisor.receipt.children
+                if child.role == "worker"] == [ACTIVE]
+        supervisor.terminate_all()
+    finally:
+        supervisor.release_claim()
+
+
+def test_a_child_that_outlives_the_wait_is_stopped_by_its_own_identity(tmp_path):
+    """A Worker still running when its lease is done is stopped exactly, never by name."""
+
+    supervisor = _supervisor(tmp_path)
+    supervisor.acquire_claim()
+    try:
+        ack = tmp_path / "w1-ack.json"
+        record = supervisor.spawn(role="worker", slot=0,
+                                  argv=_ack_command(ack, sleep_s=30.0), nonce="n-1",
+                                  ack_path=ack)
+        outcome = supervisor.release_child(role="worker", slot=0, wait_s=0.1)
+        assert outcome == "STOPPED"
+        assert supervisor.is_gone(record.pid) is True
+    finally:
+        supervisor.terminate_all()
+        supervisor.release_claim()
+
+
+def test_release_refuses_to_signal_a_child_whose_identity_changed(tmp_path):
+    """A reused PID is a stranger: the slot is left unresolved rather than signalled."""
+
+    supervisor = _supervisor(tmp_path)
+    supervisor.acquire_claim()
+    try:
+        ack = tmp_path / "w1-ack.json"
+        record = supervisor.spawn(role="worker", slot=0,
+                                  argv=_ack_command(ack, sleep_s=30.0), nonce="n-1",
+                                  ack_path=ack)
+        # Simulate PID reuse: the receipt's birth identity no longer matches the live process.
+        from dataclasses import replace
+
+        supervisor._write_receipt(replace(
+            supervisor.receipt,
+            children=tuple(replace(child, birth_identity=(child.birth_identity or 1) + 1)
+                           if child.role == "worker" else child
+                           for child in supervisor.receipt.children)))
+        with pytest.raises(CampaignBlocked, match="CHILD_IDENTITY_CHANGED"):
+            supervisor.release_child(role="worker", slot=0, wait_s=0.1)
+        # It was not signalled: the process is still alive and the slot stays unresolved.
+        assert supervisor.is_gone(record.pid) is False
+        assert [child.status for child in supervisor.receipt.children
+                if child.role == "worker"] == [ACTIVE]
+    finally:
+        supervisor.terminate_all()
+        supervisor.release_claim()
+
+
+def test_release_of_an_absent_or_already_released_child_is_reported(tmp_path):
+    supervisor = _supervisor(tmp_path)
+    supervisor.acquire_claim()
+    try:
+        assert supervisor.release_child(role="worker", slot=0, wait_s=0.1) == "ABSENT"
+        ack = tmp_path / "w1-ack.json"
+        supervisor.spawn(role="worker", slot=0, argv=_ack_command(ack, sleep_s=0.2),
+                         nonce="n-1", ack_path=ack)
+        assert supervisor.release_child(role="worker", slot=0, wait_s=10.0) == "EXITED"
+        assert supervisor.release_child(role="worker", slot=0, wait_s=0.1) == "ALREADY_STOPPED"
+    finally:
+        supervisor.terminate_all()
+        supervisor.release_claim()

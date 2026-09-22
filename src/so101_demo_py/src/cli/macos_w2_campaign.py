@@ -28,6 +28,7 @@ import glob
 import json
 import os
 import signal
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -35,7 +36,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Callable
 
-from ..parallel_batch.campaign_supervisor import CampaignSupervisor
+from ..parallel_batch.campaign_supervisor import ACTIVE, CampaignSupervisor
 from ..parallel_batch.contracts import (
     ContractError,
     ParallelRuntimeConfigV4,
@@ -43,6 +44,7 @@ from ..parallel_batch.contracts import (
     ParallelRuntimeConfigV6,
     resolve_execution_route,
 )
+from ..parallel_batch import point_drain
 from ..parallel_batch.inference_registry import InferenceRegistry
 from ..parallel_batch.macos_w2_campaign import (
     CampaignPorts,
@@ -50,6 +52,7 @@ from ..parallel_batch.macos_w2_campaign import (
     MacosW2CampaignError,
     read_inventory,
 )
+from ..parallel_batch.queue import DurablePointQueue
 from ..parallel_batch.start_guard import CAMPAIGN_GUARD_EPOCH, FAIL
 from ..parallel_batch.start_guard_probe import (
     GUARD_RESULT_FD_VARIABLE,
@@ -85,57 +88,66 @@ W2_FIRST_PASS_BATCH_KIND = "FIRST_PASS"
 _WORKER_MODULE = "so101_demo.cli.macos_w2_worker"
 
 
+def lease_worker_execution(*, queue, binding, worker_id: str, slot_id: str,
+                           evidence_root: Path, input_sha256: str,
+                           deadline_s: float = 240.0, generation: int = 1,
+                           model_id: str = "yolo", attempt_count: int = 3,
+                           tamper_input_sha256: bool = False,
+                           duplicate_probe: bool = False,
+                           execution_profile: str | None = None,
+                           batch_kind: str | None = None,
+                           schema_version: int | None = None,
+                           lease_name: str | None = None,
+                           point_id: str | None = None,
+                           journal=None) -> dict:
+    """Turn one queue lease into the single point file a Worker is allowed to execute.
+
+    The Worker receives a lease document that carries the *single-point* input path and digest
+    instead of the installed catalog, so "one lease executes one point" is a fact of the document
+    the Worker reads rather than a convention its argv has to respect. The queue is the only issuer
+    of the point: `point_id` can confirm the queue's choice but never select a different one.
+    """
+
+    return point_drain.write_lease_document(
+        queue=queue, binding=binding, worker_id=worker_id, slot_id=slot_id,
+        evidence_root=evidence_root, input_sha256=input_sha256, deadline_s=deadline_s,
+        generation=generation, model_id=model_id, attempt_count=attempt_count,
+        tamper_input_sha256=tamper_input_sha256, duplicate_probe=duplicate_probe,
+        execution_profile=execution_profile, batch_kind=batch_kind,
+        schema_version=schema_version, lease_name=lease_name, point_id=point_id, journal=journal)
+
+
 def build_worker_leases(*, plan, batch_id: str, evidence_root: Path,
                          input_sha256: str, deadline_s: float = 240.0,
                          tamper_input_sha256: bool = False,
                          duplicate_probe: bool = False,
-                         worker_ids: tuple[str, ...] | None = None) -> dict[str, dict]:
-    """Write each Worker's lease document and the frame it is told to send.
+                         worker_ids: tuple[str, ...] | None = None,
+                         binding=None, queue=None, generation: int = 1) -> dict[str, dict]:
+    """Write each Worker's lease document from the durable queue, one point per Worker.
 
-    The entry point knows both ends of the identity it binds, so it writes the identity down and
-    hands it to the Worker rather than letting the two sides derive ids independently. The frame is
-    created once; a later run reuses it rather than rewriting evidence.
+    There is no capacity-only form left: a lease that carries no single-point input is a lease the
+    Worker refuses (`POINTS_PATH_MISSING`), which is exactly the gap Task 11's live gate found. The
+    frame is created once; a later run reuses it rather than rewriting evidence.
     """
 
-    leases: dict[str, dict] = {}
+    if binding is None or queue is None:
+        raise MacosW2CampaignError("SELECTION_QUEUE_REQUIRED", "a binding and a queue are required")
     # One Worker per capacity slot: exact W2 creates two, each W1 profile exactly one.
     if worker_ids is None:
         worker_ids = tuple(f"w{index + 1}" for index in range(len(plan.slots.slot_ids)))
+    leases: dict[str, dict] = {}
     for index, worker_id in enumerate(worker_ids):
         slot_id = plan.slots.slot_ids[index] if index < len(plan.slots.slot_ids) else (
             f"slot-{index}")
-        assigned = plan.slots.assigned_points[index][1] or "p1"
-        document = {
-            "worker_id": worker_id, "slot_id": slot_id, "batch_id": batch_id,
-            # Which approved profile and batch kind this Worker is executing. The Worker records
-            # them in its own result document, so its evidence does not depend on knowing which
-            # entry point spawned it.
-            "execution_profile": getattr(plan, "execution_profile", None),
-            "batch_kind": getattr(plan, "batch_kind", None),
-            "schema_version": getattr(plan, "schema_version", 4),
-            "coordinator_epoch": 1, "worker_generation": 1, "lease_generation": 1,
-            # `InferenceRequest.reset_epoch` is a non-empty *identifier* string, not a number
-            # (contracts.py `_require_id`), so the lease carries the identifier form of the epoch.
-            "reset_epoch": "epoch-1", "point_id": assigned, "model_id": "yolo",
-            "attempt_ids": [f"{worker_id}-att-{attempt:02d}" for attempt in range(3)],
-            "worker_root": str(evidence_root / f"{worker_id}-worker"),
-            "snapshot_path": str(evidence_root / f"{worker_id}-frame.npy"),
-            "input_sha256": input_sha256, "source_stamp_ns": 1_000_000_000,
-            "source_frame_id": "task_camera_frame", "shape": [480, 640, 3],
-            # The Worker's v4 client deadline; a fault probe shortens it instead of waiting 240 s.
-            "deadline_s": float(deadline_s),
-            "tamper_input_sha256": bool(tamper_input_sha256),
-            "duplicate_probe": bool(duplicate_probe),
-            "start_event_type": "attempt_started",
-        }
-        frame_path = Path(document["snapshot_path"])
-        frame_path.parent.mkdir(parents=True, exist_ok=True)
-        if not frame_path.exists():
-            frame_path.write_bytes(b"campaign-warm-frame")
-        lease_path = evidence_root / f"{worker_id}-lease.json"
-        lease_path.write_text(json.dumps(document, sort_keys=True))
-        document["lease_path"] = str(lease_path)
-        leases[worker_id] = document
+        leases[worker_id] = lease_worker_execution(
+            queue=queue, binding=binding, worker_id=worker_id, slot_id=slot_id,
+            evidence_root=evidence_root, input_sha256=input_sha256, deadline_s=deadline_s,
+            generation=generation, tamper_input_sha256=tamper_input_sha256,
+            duplicate_probe=duplicate_probe,
+            execution_profile=getattr(plan, "execution_profile", None),
+            batch_kind=getattr(plan, "batch_kind", None),
+            schema_version=getattr(plan, "schema_version", None),
+            lease_name=f"{worker_id}-lease-{int(generation):02d}.json")
     return leases
 
 
@@ -180,69 +192,16 @@ def commit_campaign_terminal(journal, *, outcome: str, cleanup_complete: bool) -
         )
 
 
-def lease_worker_execution(*, queue, binding, worker_id: str, slot_id: str,
-                           evidence_root: Path, input_sha256: str,
-                           deadline_s: float = 240.0, generation: int = 1,
-                           model_id: str = "yolo", attempt_count: int = 3,
-                           tamper_input_sha256: bool = False,
-                           duplicate_probe: bool = False,
-                           execution_profile: str | None = None,
-                           batch_kind: str | None = None) -> dict:
-    """Turn one queue lease into the single point file a Worker is allowed to execute.
-
-    The Worker receives a lease document that carries the *single-point* input path and digest
-    instead of the installed catalog, so "one lease executes one point" is a fact of the document
-    the Worker reads rather than a convention its argv has to respect.
-    """
-
-    from ..parallel_batch.queue import WorkerIdentity
-    from ..parallel_batch.single_point_input import write_single_point_input
-
-    lease = queue.lease_next(
-        WorkerIdentity(worker_id=worker_id, slot_id=slot_id, generation=generation)
-    )
-    if lease is None:
-        raise MacosW2CampaignError("QUEUE_NO_PENDING_POINT", worker_id)
-    execution_input = write_single_point_input(binding=binding, lease=lease, root=evidence_root)
-    attempt_ids = [lease.attempt_id] + [
-        f"{worker_id}-att-{attempt:02d}" for attempt in range(1, attempt_count)
-    ]
-    document = {
-        "worker_id": worker_id, "slot_id": slot_id, "batch_id": binding.batch_id,
-        "campaign_id": binding.campaign_id,
-        "execution_profile": execution_profile, "batch_kind": batch_kind,
-        "coordinator_epoch": 1, "worker_generation": generation, "lease_generation": 1,
-        "reset_epoch": "epoch-1", "point_id": lease.point_id, "model_id": model_id,
-        "attempt_id": lease.attempt_id, "attempt_ids": attempt_ids,
-        "point_sha256": execution_input.point_sha256,
-        "points_path": str(execution_input.absolute_path(evidence_root)),
-        "points_sha256": execution_input.points_sha256,
-        "selection_sha256": binding.selection_sha256,
-        "worker_root": str(evidence_root / f"{worker_id}-worker"),
-        "snapshot_path": str(evidence_root / f"{worker_id}-frame.npy"),
-        "input_sha256": input_sha256, "source_stamp_ns": 1_000_000_000,
-        "source_frame_id": "task_camera_frame", "shape": [480, 640, 3],
-        "deadline_s": float(deadline_s),
-        "tamper_input_sha256": bool(tamper_input_sha256),
-        "duplicate_probe": bool(duplicate_probe),
-        "start_event_type": "attempt_started",
-    }
-    frame_path = Path(document["snapshot_path"])
-    frame_path.parent.mkdir(parents=True, exist_ok=True)
-    if not frame_path.exists():
-        frame_path.write_bytes(b"campaign-warm-frame")
-    lease_path = Path(evidence_root) / f"{worker_id}-lease.json"
-    lease_path.write_text(json.dumps(document, sort_keys=True), encoding="utf-8")
-    document["lease_path"] = str(lease_path)
-    return document
-
 
 def bind_worker_requests(campaign, leases: dict[str, dict], *, ready,
-                         deadline_s: float = 300.0) -> None:
+                         deadline_s: float = 300.0,
+                         progress_probe_count: int = 3) -> None:
     """Bind every id the Workers will use *before* any of them is served.
 
     An id that was never bound is refused by the one-time table, so this is the admission gate - and
-    it binds the `{attempt_id}-{model_id}` ids the Worker derives, not a parallel set.
+    it binds the `{attempt_id}-{model_id}` ids the Worker derives, not a parallel set. The Worker's
+    IPC round trips are bound per generation too: a Worker spawned again for the next point must not
+    replay an id the table already consumed.
     """
 
     for worker_id, document in sorted(leases.items()):
@@ -252,25 +211,34 @@ def bind_worker_requests(campaign, leases: dict[str, dict], *, ready,
                 point_id=document["point_id"], attempt=1,
                 input_sha256=document["input_sha256"], deadline_s=deadline_s,
                 broker_pid=ready.broker_pid, broker_birth_identity=ready.broker_birth_identity)
+        for index in range(int(progress_probe_count)):
+            campaign.request_binding(
+                request_id=point_drain.worker_progress_request_id(
+                    worker_id=worker_id, generation=int(document["worker_generation"]),
+                    index=index),
+                slot_id=document["slot_id"], point_id=document["point_id"], attempt=1,
+                input_sha256=document["input_sha256"], deadline_s=deadline_s,
+                broker_pid=ready.broker_pid, broker_birth_identity=ready.broker_birth_identity)
 
 
-def campaign_status(*, cleanup_complete: bool, results, workers, served, refused) -> str:
-    """The campaign's own verdict, as a pure function so the rule is testable and readable.
+def campaign_status(*, cleanup_complete: bool, results, workers, served, refused,
+                    points) -> str:
+    """The exact-W2 verdict: the same rule `campaign_verdict` applies to every route.
 
-    `W2_CAMPAIGN_PASS` requires all of: cleanup complete, two Worker result documents, both Workers
-    recorded `ACTIVE`, at least six served requests whose devices are exactly `["mps"]`, and **no
-    refused request at all**. The last clause is deliberate: a probe that deliberately exercises a
-    refusal (a duplicate, a tampered snapshot, a cancellation) cannot report PASS, which is why the
-    fault probes read INCOMPLETE - the verdict is about the happy path only.
+    It requires the whole happy path *and* the executed point set: cleanup complete, one result
+    document per Worker spawn, every spawn `ACTIVE`, at least six served requests whose devices are
+    exactly `["mps"]`, no refused request at all, and `points["complete"]` - every selected point
+    executed exactly once, with its evidence, and no unselected point attempted. A verdict that
+    asserted nothing about the point set is what let Task 11's empty campaigns report PASS.
     """
 
-    if (cleanup_complete and len(results) == 2
-            and all(worker["status"] == "ACTIVE" for worker in workers)
-            and served["count"] >= 6
-            and served["devices"] == ["mps"]
-            and not refused):
-        return "W2_CAMPAIGN_PASS"
-    return "W2_CAMPAIGN_INCOMPLETE"
+    spec = CampaignRouteSpec(
+        execution_profile=MPS_W2_FIRST_PASS, batch_kind=W2_FIRST_PASS_BATCH_KIND,
+        config_class=ParallelRuntimeConfigV4, module="so101_demo.cli.macos_w2_campaign",
+        worker_ids=("w1", "w2"), default_point_ids=("p1", "p2"), minimum_served=6,
+        composer=compose_w2_campaign)
+    return campaign_verdict(spec=spec, cleanup_complete=cleanup_complete, results=results,
+                            workers=workers, served=served, refused=refused, points=points)
 
 
 def summarize_per_slot_pick_place(*, evidence_root: Path, workers=("w1", "w2")) -> dict:
@@ -384,6 +352,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--point-id", action="append", default=[],
                         help="repeatable; exact W2 keeps two slots regardless")
     parser.add_argument("--evidence-root", type=Path, required=True)
+    parser.add_argument("--catalog", type=Path, default=None,
+                        help="the immutable point catalog the selection is frozen from; the "
+                             "installed document is used when this is omitted")
+    parser.add_argument("--catalog-sha256", default=None,
+                        help="the catalog digest the selection must match; drift is refused")
+    parser.add_argument("--retry-root", type=Path, default=None,
+                        help="v5 only: the prior campaign evidence root whose committed business "
+                             "FAILED point this retry is bound to")
     parser.add_argument("--yolo-weights", type=Path, required=True)
     parser.add_argument("--grounded-root", type=Path, required=True)
     parser.add_argument("--duplicate-probe", action="store_true",
@@ -804,6 +780,209 @@ def _guard_admission(arguments, argv, plan, spec, document):
     return admitted
 
 
+# --------------------------------------------------------------------------------------
+# the immutable selection and the durable queue: bound before anything is spawned
+# --------------------------------------------------------------------------------------
+
+
+def installed_catalog_path() -> Path:
+    """The installed point catalog, which is what a service-resolved selection uses."""
+
+    try:
+        from ament_index_python.packages import get_package_share_directory
+
+        return Path(get_package_share_directory("so101_demo_py")) \
+            / point_drain.INSTALLED_CATALOG_RELATIVE
+    except Exception as error:  # noqa: BLE001 - a missing catalog is a refusal, not a traceback
+        raise RefusedRun("config", f"CATALOG_MISSING: {type(error).__name__}: {error}") from error
+
+
+def selection_document(selection) -> dict:
+    """The audit projection of the one selection this campaign executes."""
+
+    return {
+        "kind": "FULL_RESTART_RETRY" if isinstance(
+            selection, point_drain.RetrySelectionBinding) else "FIRST_PASS",
+        "selection_sha256": selection.selection_sha256,
+        "catalog_sha256": selection.catalog_sha256,
+        "config_sha256": selection.config_sha256,
+        "runtime_closure_sha256": selection.runtime_closure_sha256,
+        "selected_point_ids": list(selection.selected_point_ids),
+    }
+
+
+def bind_campaign_selection(*, arguments, plan, spec):
+    """Freeze the selection binding and open the durable queue it drains.
+
+    A first pass takes the ordered `--point-id` list (the four anchors are required by the binding
+    contract, so a selection that omits them is refused by name rather than silently extended). A
+    v5 retry takes exactly one point and must reference the prior campaign's committed business
+    `FAILED` result; anything else - an unrun point, an infrastructure failure, an indeterminate
+    point - is refused before a process exists.
+    """
+
+    from ..parallel_batch.selection import SelectionError, load_point_catalog
+
+    retry = spec.batch_kind == W1_RETRY_BATCH_KIND
+    point_ids = tuple(arguments.point_id)
+    catalog_argument = getattr(arguments, "catalog", None)
+    expected_catalog_sha256 = getattr(arguments, "catalog_sha256", None)
+    try:
+        if retry:
+            retry_root = getattr(arguments, "retry_root", None)
+            if retry_root is None:
+                raise RefusedRun("selection", "RETRY_ROOT_REQUIRED", exit_code=2)
+            if len(point_ids) != 1:
+                raise RefusedRun("selection", "RETRY_POINT_REQUIRED", exit_code=2)
+            source = point_drain.read_retry_source(prior_root=Path(retry_root),
+                                                   point_id=point_ids[0])
+            prior = point_drain.read_selection_document(
+                Path(retry_root) / point_drain.SELECTION_DOCUMENT_BASENAME)
+            if str(prior["campaign_id"]) != arguments.campaign_id:
+                raise RefusedRun(
+                    "selection",
+                    f"RETRY_CAMPAIGN_MISMATCH: {prior['campaign_id']} != {arguments.campaign_id}",
+                    exit_code=2)
+            if str(prior["batch_id"]) == arguments.batch_id:
+                raise RefusedRun("selection", "RETRY_BATCH_EXISTS", exit_code=2)
+            catalog_path = (Path(catalog_argument) if catalog_argument is not None
+                            else Path(str(source["catalog_path"])))
+            if (catalog_argument is not None and catalog_path.resolve()
+                    != Path(str(source["catalog_path"])).resolve()):
+                raise RefusedRun("selection", "RETRY_CATALOG_MISMATCH", exit_code=2)
+            catalog = load_point_catalog(catalog_path)
+            closure = point_drain.runtime_closure_sha256(
+                catalog_path=catalog_path, catalog_sha256=catalog.sha256,
+                config_sha256=plan.config_sha256)
+            selection = point_drain.retry_binding(
+                source=source, catalog_path=catalog_path, campaign_id=arguments.campaign_id,
+                batch_id=arguments.batch_id, config_sha256=plan.config_sha256,
+                runtime_closure_sha256=closure,
+                expected_catalog_sha256=expected_catalog_sha256)
+        else:
+            if not point_ids:
+                raise RefusedRun("selection", "SELECTED_POINTS_REQUIRED", exit_code=2)
+            catalog_path = (Path(catalog_argument) if catalog_argument is not None
+                            else installed_catalog_path())
+            catalog = load_point_catalog(catalog_path)
+            closure = point_drain.runtime_closure_sha256(
+                catalog_path=catalog_path, catalog_sha256=catalog.sha256,
+                config_sha256=plan.config_sha256)
+            selection = point_drain.first_pass_binding(
+                catalog_path=catalog_path, point_ids=point_ids,
+                campaign_id=arguments.campaign_id, batch_id=arguments.batch_id,
+                config_sha256=plan.config_sha256, runtime_closure_sha256=closure,
+                expected_catalog_sha256=expected_catalog_sha256)
+    except (SelectionError, point_drain.PointDrainError) as error:
+        raise RefusedRun("selection", str(error), exit_code=2) from error
+    queue = DurablePointQueue(root=Path(arguments.evidence_root) / "queue", binding=selection)
+    point_drain.write_selection_document(
+        evidence_root=arguments.evidence_root, binding=selection, catalog_path=catalog_path)
+    return selection, queue
+
+
+def station_processes(station_root: str, *, ps_runner=None) -> list[dict]:
+    """Processes whose own argv declares exactly this attempt's station root.
+
+    The station launcher is passed `task_evidence_root:=<station root>`, and the root is unique to
+    one lease under this campaign's evidence root, so a match is this campaign's process and not a
+    stranger's. Nothing is signalled here.
+    """
+
+    import subprocess
+
+    runner = _default_ps_runner if ps_runner is None else ps_runner
+    token = f"task_evidence_root:={station_root}"
+    try:
+        completed = runner(["ps", "-axo", "pid=,pgid=,command="])
+    except (OSError, subprocess.SubprocessError):
+        return []
+    matches: list[dict] = []
+    for line in (getattr(completed, "stdout", "") or "").splitlines():
+        if token not in line or "so101_mujoco_task_station.launch.py" not in line:
+            continue
+        fields = line.split(None, 2)
+        if len(fields) != 3 or not fields[0].isdigit() or not fields[1].isdigit():
+            continue
+        matches.append({"pid": int(fields[0]), "pgid": int(fields[1]), "command": fields[2]})
+    return matches
+
+
+def _default_ps_runner(command):
+    import subprocess
+
+    return subprocess.run(command, capture_output=True, text=True, timeout=30.0)
+
+
+def stop_station_residue(station_root: str, *, ps_runner=None, signal_sender=None,
+                         sleep=None, wait_s: float = 6.0) -> dict:
+    """Stop a station that outlived the Worker that owned it, by exact identity, and report.
+
+    A Worker killed by a signal never runs its own `finally`, so its station can survive it. The
+    station is still this campaign's process - its argv names this attempt's station root - so it
+    is stopped the way the station stack stops it: SIGINT to the launch's own process group, then
+    SIGTERM, then SIGKILL, and never a group this campaign cannot name.
+    """
+
+    import signal as _signal
+    import time as _time
+
+    sender = (lambda pid, number: os.kill(pid, number)) if signal_sender is None else signal_sender
+    sleeper = _time.sleep if sleep is None else sleep
+    matches = station_processes(station_root, ps_runner=ps_runner)
+    stopped, refused = [], []
+    for entry in matches:
+        leader = entry["pid"] == entry["pgid"]
+        target = -entry["pgid"] if leader else entry["pid"]
+        for number, grace in ((_signal.SIGINT, wait_s), (_signal.SIGTERM, wait_s / 2.0),
+                              (_signal.SIGKILL, wait_s / 2.0)):
+            try:
+                sender(target, number)
+            except ProcessLookupError:
+                break
+            except (PermissionError, OSError) as error:
+                refused.append({"pid": entry["pid"], "error": f"{type(error).__name__}: {error}"})
+                break
+            sleeper(grace / 4.0)
+            if not station_processes(station_root, ps_runner=ps_runner):
+                break
+        stopped.append(entry["pid"])
+    remaining = station_processes(station_root, ps_runner=ps_runner)
+    return {"station_root": station_root, "clear": not remaining, "stopped": stopped,
+            "refused": refused, "remaining": [entry["pid"] for entry in remaining]}
+
+
+def reconcile_station(station_root: str, *, ps_runner=None, signal_sender=None, sleep=None) -> dict:
+    """Read this attempt's station back, and stop it if the Worker that owned it is gone."""
+
+    readback = station_readback(station_root, ps_runner=ps_runner)
+    if readback["clear"]:
+        return readback
+    stopped = stop_station_residue(station_root, ps_runner=ps_runner, signal_sender=signal_sender,
+                                   sleep=sleep)
+    after = station_readback(station_root, ps_runner=ps_runner)
+    return {**after, "reconciled": stopped}
+
+
+def station_readback(station_root: str, *, attempts: int = 6, sleep_s: float = 0.5,
+                     ps_runner=None) -> dict:
+    """Report whether anything still carries this attempt's station root.
+
+    The Worker shuts its own station down; this is the campaign's independent readback of that
+    claim. It signals nothing: a survivor is reported, and the drain stops rather than starting the
+    next point on top of a station that is still alive.
+    """
+
+    matches: list[dict] = []
+    for _attempt in range(int(attempts)):
+        matches = station_processes(station_root, ps_runner=ps_runner)
+        if not matches:
+            break
+        time.sleep(sleep_s)
+    return {"station_root": station_root, "clear": not matches,
+            "matches": [entry["pid"] for entry in matches[:8]]}
+
+
 def _drive_campaign(arguments, argv, plan, spec, document) -> int:
     """Run one composed campaign: guard, broker, Workers, admission, exact cleanup."""
 
@@ -823,6 +1002,19 @@ def _drive_campaign(arguments, argv, plan, spec, document) -> int:
     registry = InferenceRegistry(campaign_id=arguments.campaign_id)
     campaign = MacosW2Campaign(plan=plan, address=address, supervisor=supervisor, ports=ports,
                                registry=registry)
+    # The immutable selection and the durable queue exist before the first process does. A
+    # selection the binding contract refuses - fewer than four points, a missing anchor, an unknown
+    # id, a retry of a point that is not a committed business FAILED - stops the campaign here.
+    selection, queue = bind_campaign_selection(arguments=arguments, plan=plan, spec=spec)
+    campaign.bind_selection(binding=selection, queue=queue)
+    document["selection"] = {
+        **selection_document(selection),
+        "document_path": str(Path(arguments.evidence_root)
+                             / point_drain.SELECTION_DOCUMENT_BASENAME),
+    }
+    document["queue"] = {"root": str(queue.state_path.parent),
+                         "state_path": str(queue.state_path),
+                         "selected_point_ids": list(selection.selected_point_ids)}
 
     try:
         admitted = _guard_admission(arguments, argv, plan, spec, document)
@@ -846,6 +1038,8 @@ def _drive_campaign(arguments, argv, plan, spec, document) -> int:
     supervisor.acquire_claim()
     supervisor.note_heartbeat(owner_pid=os.getpid())
     bootstrap = None
+    campaign_root = None
+    campaign_root_cleaned = False
     try:
         bootstrap = MpsBrokerBootstrap(
             models=tuple(ports.model_factories.items()),
@@ -886,30 +1080,14 @@ def _drive_campaign(arguments, argv, plan, spec, document) -> int:
                                   source_frame_id="campaign-frame")
 
         # The Coordinator's table is the admission gate, so every request a Worker will make is
-        # bound here *before* it is served. An id that was never bound is refused.
+        # bound here *before* it is served. An id that was never bound is refused. Each lease binds
+        # the single point that Worker may execute, so the table itself carries the selected-only
+        # property: a point the queue never leased has no bound request either.
         import hashlib
 
         input_digest = hashlib.sha256(b"campaign-warm-frame").hexdigest()
-        leases = build_worker_leases(
-            plan=plan, batch_id=arguments.batch_id, evidence_root=arguments.evidence_root,
-            input_sha256=input_digest, deadline_s=arguments.worker_deadline_s,
-            tamper_input_sha256=arguments.tamper_snapshot_sha,
-            duplicate_probe=arguments.duplicate_probe, worker_ids=spec.worker_ids)
-        # The admission decision is applied once the Workers finish, and each Worker now runs a
-        # pick-place batch before it does - so the bound deadline has to cover the whole campaign.
         admission_deadline_s = float(getattr(plan.config, "batch_hard_timeout_s", 5400.0))
-        bind_worker_requests(campaign, leases, ready=ready, deadline_s=admission_deadline_s)
-        # The IPC-shape probe ids stay bound while the Worker still serves that shape, so this
-        # cannot silently refuse the requests the previous gate proved.
-        for index, worker_id in enumerate(spec.worker_ids):
-            slot_id = plan.slots.slot_ids[index]
-            for probe_index in range(3):
-                campaign.request_binding(
-                    request_id=f"{worker_id}-req-{probe_index:02d}", slot_id=slot_id,
-                    point_id=plan.slots.assigned_points[index][1] or "p1",
-                    attempt=1, input_sha256=input_digest, deadline_s=admission_deadline_s,
-                    broker_pid=ready.broker_pid,
-                    broker_birth_identity=ready.broker_birth_identity)
+        leases: dict[str, dict] = {}
 
         consumed_ids: set[str] = set()
         cancelled_ids: set[str] = set()
@@ -1001,36 +1179,95 @@ def _drive_campaign(arguments, argv, plan, spec, document) -> int:
             "in_campaign_process": broker_pid == os.getpid(),
         }
 
-        # The Workers, spawned by the supervisor, each acknowledging registration first and each
-        # taking its own fresh start-guard admission inside `spawn`.
-        workers = []
-        for slot, slot_id in enumerate(plan.slots.slot_ids):
-            worker_id = spec.worker_ids[slot]
-            ack = arguments.evidence_root / f"{worker_id}-ack.json"
+        # --- the drain: one lease, one point, one commit; then the next lease ---------------
+        slot_index = {slot_id: index for index, slot_id in enumerate(plan.slots.slot_ids)}
+
+        def lease_point(worker_id: str, slot_id: str, generation: int) -> dict:
+            """Lease the queue's next point and write the document this Worker executes from."""
+
+            lease_document = lease_worker_execution(
+                queue=queue, binding=selection, worker_id=worker_id, slot_id=slot_id,
+                evidence_root=arguments.evidence_root, input_sha256=input_digest,
+                deadline_s=arguments.worker_deadline_s, generation=generation,
+                execution_profile=spec.execution_profile, batch_kind=spec.batch_kind,
+                schema_version=getattr(plan, "schema_version", None),
+                tamper_input_sha256=arguments.tamper_snapshot_sha,
+                duplicate_probe=arguments.duplicate_probe,
+                lease_name=f"{worker_id}-lease-{int(generation):02d}.json", journal=journal)
+            leases[worker_id] = lease_document
+            bind_worker_requests(campaign, {worker_id: lease_document}, ready=ready,
+                                 deadline_s=admission_deadline_s)
+            return lease_document
+
+        def spawn_worker(worker_id: str, slot_id: str, generation: int,
+                         lease_document: dict) -> point_drain.WorkerRun:
+            """Spawn one Worker for exactly this lease, with its own fresh start-guard admission."""
+
+            slot = slot_index[slot_id]
+            attempt_id = str(lease_document["attempt_id"])
+            # Every lease gets its own ack, result and station root: a later point can never
+            # overwrite the evidence of an earlier one, and a station is never reused.
+            ack = arguments.evidence_root / f"{worker_id}-ack-{attempt_id}.json"
+            result_path = arguments.evidence_root / f"{worker_id}-result-{attempt_id}.json"
+            station_root = point_drain.station_root_for(
+                evidence_root=arguments.evidence_root, worker_id=worker_id, attempt_id=attempt_id)
+            station_root.mkdir(parents=True, exist_ok=True)
             record = supervisor.spawn(
                 role="worker", slot=slot,
                 argv=[sys.executable, "-m", _WORKER_MODULE, str(ack), str(endpoint.path),
-                      worker_id, str(arguments.evidence_root / f"{worker_id}-result.json"),
-                      f"{arguments.campaign_id}-{worker_id}",
-                      str(arguments.evidence_root / f"{worker_id}-station"),
-                      str(plan.ros_domain_ids[slot]),
-                      leases[worker_id]["lease_path"]],
-                nonce=f"{arguments.campaign_id}-{worker_id}", ack_path=ack,
+                      worker_id, str(result_path),
+                      f"{arguments.campaign_id}-{worker_id}-{attempt_id}",
+                      str(station_root), str(plan.ros_domain_ids[slot]),
+                      str(lease_document["lease_path"])],
+                nonce=f"{arguments.campaign_id}-{worker_id}-{attempt_id}", ack_path=ack,
                 ack_timeout_s=120.0)
-            workers.append({"slot_id": slot_id, "worker_id": worker_id,
-                            "status": record.status, "pid": record.pid,
-                            "birth_identity": record.birth_identity})
-        document["workers"] = workers
+            journal.append_committed(
+                "WORKER_REGISTERED", f"{arguments.batch_id}/WORKER_REGISTERED/{attempt_id}",
+                {"worker_id": worker_id, "slot_id": slot_id, "generation": generation,
+                 "point_id": lease_document["point_id"], "attempt_id": attempt_id,
+                 "pid": record.pid, "birth_identity": record.birth_identity,
+                 "status": record.status})
+            return point_drain.WorkerRun(
+                worker_id=worker_id, slot_id=slot_id, generation=generation, pid=record.pid,
+                status=record.status, result_path=result_path, station_root=str(station_root))
 
-        deadline = time.monotonic() + 1500
+        def release_worker(worker_id: str, slot_id: str) -> str:
+            """Wait for this attempt's Worker to exit, then free its slot for the next lease.
+
+            The bound is the station-teardown scale, not the batch budget: a Worker whose result is
+            already durable must not hold the slot for the whole campaign while it shuts its
+            station down. One that outlives this bound is stopped by its exact identity.
+            """
+
+            return supervisor.release_child(
+                role="worker", slot=slot_index[slot_id],
+                wait_s=float(getattr(plan.config, "executing_hard_timeout_s", 180.0)))
+
+        report = point_drain.drain_point_queue(
+            queue=queue, binding=selection, worker_ids=spec.worker_ids,
+            slot_ids=plan.slots.slot_ids, evidence_root=arguments.evidence_root,
+            lease_point=lease_point, spawn_worker=spawn_worker, release_worker=release_worker,
+            station_readback=lambda station_root: reconcile_station(station_root),
+            # A Worker that exits without a result document is an infrastructure failure, not a
+            # reason for the campaign to wait out its whole budget.
+            worker_alive=lambda run: not supervisor.is_gone(run.pid) if run.pid else True,
+            journal=journal,
+            wait_timeout_s=float(getattr(plan.config, "batch_hard_timeout_s", 5400.0)) + 600.0)
+        workers = [dict(spawn) for spawn in report.spawns]
+        document["workers"] = workers
+        document["drain"] = {"stop_reason": report.stop_reason,
+                             "stopped_at_cap": report.stopped_at_cap,
+                             "releases": [dict(release) for release in report.releases]}
+        points_summary = report.summary(selected_point_ids=selection.selected_point_ids)
+        document["points"] = points_summary
+        # The result documents are re-read from disk as evidence rather than restated from memory.
         results: list[dict] = []
-        while time.monotonic() < deadline:
-            results = [json.loads((arguments.evidence_root / f"{worker_id}-result.json").read_text())
-                       for worker_id in spec.worker_ids
-                       if (arguments.evidence_root / f"{worker_id}-result.json").exists()]
-            if len(results) == len(spec.worker_ids):
-                break
-            time.sleep(0.5)
+        for spawn in workers:
+            path = Path(str(spawn["result_path"]))
+            try:
+                results.append(json.loads(path.read_text(encoding="utf-8")))
+            except (OSError, ValueError):
+                results.append({"worker_id": spawn["worker_id"], "unreadable": str(path)})
         document["worker_results"] = results
 
         # Evidence must not be sealed while handlers are still in flight.
@@ -1065,28 +1302,61 @@ def _drive_campaign(arguments, argv, plan, spec, document) -> int:
 
         server.stop()
         cleanup = address.cleanup_campaign(campaign_root)
+        campaign_root_cleaned = bool(cleanup.complete)
         document["cleanup"] = {
             "complete": cleanup.complete, "directory_removed": cleanup.directory_removed,
             "registry_empty": address.registry == (),
         }
         supervisor.terminate_all()
         document["cleanup"]["workers_reaped"] = [supervisor.is_gone(w["pid"]) for w in workers]
+        # Every station this campaign started, read back and - if a killed Worker left one behind -
+        # stopped by exact identity. A station that outlives the campaign is residue, and residue is
+        # never a pass.
+        station_roots = sorted({str(spawn["station_root"]) for spawn in workers
+                                if spawn.get("station_root")})
+        stations = [reconcile_station(root) for root in station_roots]
+        document["cleanup"]["stations"] = stations
+        document["cleanup"]["stations_clear"] = all(item["clear"] for item in stations)
+        document["cleanup"]["complete"] = bool(
+            document["cleanup"]["complete"] and document["cleanup"]["stations_clear"])
 
         document["status"] = campaign_verdict(
             spec=spec, cleanup_complete=bool(document["cleanup"]["complete"]), results=results,
-            workers=workers, served=document["served"], refused=refused)
+            workers=workers, served=document["served"], refused=refused,
+            points=points_summary)
+        # The terminal events are committed before the document is sealed, so the recorded
+        # watermark covers every canonical event of the run. The `finally` block repeats them
+        # defensively; a repeated idempotency key returns the original event and cannot move the
+        # watermark backwards.
+        commit_campaign_terminal(
+            journal, outcome=str(document["status"]),
+            cleanup_complete=bool(document["cleanup"]["complete"]))
+        document["journal"] = {**document["journal"], "terminal_watermark": (
+            journal.read_watermark().as_document(arguments.batch_id)
+            if journal.read_watermark() else None)}
+        document["journal_terminal"] = True
         print(json.dumps(document, indent=2, sort_keys=True))
         (arguments.evidence_root / "campaign-result.json").write_text(
             json.dumps(document, indent=2, sort_keys=True) + "\n")
         return 0 if document["status"] == spec.pass_label else 7
     finally:
         supervisor.terminate_all()
+        if campaign_root is not None and not campaign_root_cleaned:
+            # A campaign that aborts before its cleanup phase must not leave a registered endpoint
+            # behind: `read_inventory` treats a live campaign directory as someone else's resource
+            # and would refuse the next campaign on this host. Best effort, reported by the caller.
+            try:
+                address.cleanup_campaign(campaign_root)
+            except Exception:  # noqa: BLE001 - the residue readback is what reports this
+                pass
         if journal is not None:
             try:
                 commit_campaign_terminal(
                     journal, outcome=str(document.get("status", "UNKNOWN")),
                     cleanup_complete=bool(document.get("cleanup", {}).get("complete")))
                 document["journal_terminal"] = True
+                (arguments.evidence_root / "campaign-result.json").write_text(
+                    json.dumps(document, indent=2, sort_keys=True) + "\n")
             finally:
                 journal.close()
         supervisor.release_claim()
@@ -1094,20 +1364,29 @@ def _drive_campaign(arguments, argv, plan, spec, document) -> int:
             bootstrap.lane.shutdown()
 
 
-def campaign_verdict(*, spec, cleanup_complete, results, workers, served, refused) -> str:
+def campaign_verdict(*, spec, cleanup_complete, results, workers, served, refused,
+                     points) -> str:
     """The campaign's own verdict for one route, as a pure function.
 
-    PASS is the happy path only: every Worker recorded ACTIVE, one result document each, at least
-    the route's minimum number of served requests whose devices are exactly ``["mps"]``, cleanup
-    proven complete and **no refused request at all**. A refused request - even a deliberate probe
-    - reads INCOMPLETE by construction.
+    PASS is the happy path only, and the happy path now includes the point set: cleanup proven
+    complete, one result document per Worker spawn, **every** spawn recorded `ACTIVE`, at least the
+    route's minimum number of served requests whose devices are exactly ``["mps"]``, no refused
+    request at all, and `points["complete"]` - every selected point executed exactly once with its
+    durable evidence, every `PASSED` point with its physical manifest, no duplicate attempt and no
+    unselected point ever attempted.
+
+    The point clause is the one Task 11's live gate was missing: without it a campaign that executed
+    nothing at all reported `W2_CAMPAIGN_PASS`. A refused request - even a deliberate probe - still
+    reads INCOMPLETE by construction.
     """
 
-    if (cleanup_complete and len(results) == len(spec.worker_ids) and workers
+    if (cleanup_complete and workers and len(results) == len(workers)
             and all(worker["status"] == "ACTIVE" for worker in workers)
+            and {worker["worker_id"] for worker in workers} >= set(spec.worker_ids)
             and served["count"] >= spec.minimum_served
             and served["devices"] == ["mps"]
-            and not refused):
+            and not refused
+            and bool(points.get("complete"))):
         return spec.pass_label
     return spec.incomplete_label
 
@@ -1141,6 +1420,12 @@ def build_w1_parser(execution_profile: str) -> argparse.ArgumentParser:
     parser.add_argument("--point-id", action="append", default=[],
                         help="repeatable; exact W1 keeps one slot regardless")
     parser.add_argument("--evidence-root", type=Path, required=True)
+    parser.add_argument("--catalog", type=Path, default=None,
+                        help="the immutable point catalog the selection is frozen from")
+    parser.add_argument("--catalog-sha256", default=None)
+    parser.add_argument("--retry-root", type=Path, default=None,
+                        help="v5 only: the prior campaign root holding the committed business "
+                             "FAILED point this retry is bound to")
     parser.add_argument("--yolo-weights", type=Path, required=True)
     parser.add_argument("--grounded-root", type=Path, required=True)
     parser.add_argument("--duplicate-probe", action="store_true")
