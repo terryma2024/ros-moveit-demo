@@ -35,6 +35,14 @@ guard 很轻，只做启动保护，不是资格认证，也不是容量证明�
 - 模型权重是输入，不是仓库内容。用之前核对冻结 hash：yolo `f281d252…0781`，grounded manifest `b55bb601…ed05`。hash 不符就不要启动。
 - 点位 catalog 的摘要被写死在产品里（`expert_validation/catalog.py` 和 `cli/mujoco_parallel_batch.py` 各一处），服务还会拿 manifest 的输入摘要再对一次。想用自己改过的 catalog 走 `SO101_VALIDATION_POINTS` 是走不通的，两个加载器都会报 `POINT_CATALOG_HASH_MISMATCH`，服务侧还会报 `VALIDATION_MANIFEST_CATALOG_MISMATCH`。要制造真实失败，只能挑本来就过不了的点位，或者用外部手段让某次 attempt 自己失败。
 
+## dylib farm 是当前合同
+
+运行闭包不再靠 no-DYLD 来证明，改用用户授权的 fixed dylib farm（`FixedDylibFarmRuntimeContract`）。farm 由 `scripts/so101-macos.zsh prepare` 生成，doctor 和 manifest 各校验一次。superseded-by: FixedDylibFarmRuntimeContract
+
+每次 spawn 前重新解析 `/opt/ros2_jazzy/dylib_farm/current`，回读它的 resolved target、manifest bytes 和 inventory SHA，对不上就不启动。`setup-macos-ros-dylib-farm.zsh` 每次跑都会生成新的 target，farm 一换，之前的 Gate A 轮次全部作废。
+
+`DYLD_LIBRARY_PATH` 只允许 runner 从已验证 manifest 构造。用户 shell 里继承来的、另外加上去的 `DYLD_*`、没登记的 overlay，都不算数。属主证据反而一条没少：owner ancestry 上唯一的 descendant，加上 pid、birth、executable，再加 plugin_path、plugin_sha256、vendor_path、vendor_sha256。
+
 ## 一个服务同时只服务一个控制台
 
 排他控制器绑在 console 实例上。`claim_locked`（`so101_teleop/unified/instances.py`）只允许同一个 instance id 再次取得绑定，换一个实例一律 409 `CONTROLLER_ALREADY_BOUND`；释放 lease 不会解除绑定；`abandon_controller` 只在代码里，没有 HTTP 路由；`handoff` 要求当前实例和接手实例都活着。实际后果：

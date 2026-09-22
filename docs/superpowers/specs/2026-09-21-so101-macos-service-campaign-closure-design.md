@@ -1,7 +1,8 @@
 # SO-101 macOS service campaign 闭环设计
 
 日期：2026-09-21
-状态：按用户批准的 W1/W2 轻量资源保护边界修订，待独立复审
+状态：按用户批准的 W1/W2 轻量资源保护边界修订，待独立复审；当前 Gate A 合同按用户 2026-09-22
+授权改为 §17 的 fixed dylib farm
 文档修订基线：`codex/so101-unified-webapp`，`90385e3fb4aa748788c5d8a4b4551ee307db4987`
 执行恢复锚点：本地提交 `fea8f57c`、`e264d1eb`、`82b7a7d9`
 
@@ -82,6 +83,10 @@ Unified Web API
 之后不出现 macOS 专用状态机。
 
 ## 5. Runtime closure 与 Gate A
+
+> 本节 5.3 的 N/P/F control set、literal no-DYLD 门槛和 5.1 的单一 merged `install_root` 描述的是
+> `CP-MSC-A1` 的历史归因路线。用户已授权 fixed dylib farm，当前完成合同见 §17。
+> superseded-by: FixedDylibFarmRuntimeContract
 
 ### 5.1 三层身份
 
@@ -523,6 +528,10 @@ binding；身份不明时不猜 PID、不盲杀，保留 fence。
 拒绝。它只用于 P control；最终 copied install 必须在 no-DYLD 环境中靠自身 closure 闭合，并完成
 loaded-image readback。只有 `CONFIRMED_RPATH` route 才授权修改 install-rpath。
 
+2026-09-22 修订：用户授权的是 §17 的 fixed dylib farm，即由 `prepare` 生成、doctor 与 manifest 校验、
+每次 spawn 前重新验证的固定 farm。临时拼出来的、靠 shell 继承的 `DYLD_LIBRARY_PATH` 仍然拒绝。
+superseded-by: FixedDylibFarmRuntimeContract
+
 ### 15.4 根据点数选择 W1 或 W2
 
 拒绝。点数是业务 selection，worker count 是显式执行 profile。两者独立。
@@ -535,11 +544,11 @@ loaded-image readback。只有 `CONFIRMED_RPATH` route 才授权修改 install-r
 
 - legacy `CP-MSC-A=UNCONFIRMED` 保持不变；`legacy_attribution` 已明确，且历史不可恢复状态没有被
   错写为当前产品缺陷。
-- `current_boundary_verdict` 是 `CONFIRMED_RPATH` 或 `CURRENT_CLOSURE_ALREADY_VALID`；F 在无
-  `DYLD_LIBRARY_PATH` 时 direct dlopen、真实 controller descendant 的 per-process loaded-image
-  path/SHA 和 closure attestation 全部通过。
-- F 的 `RuntimeClosureIdentity.install_root` 精确等于 task-owned merged `F_CLOSURE_ROOT`；manifest
-  冻结完整 tree，vendor、plugin、Python、diagnostic 与 ament prefix 均属于同一 root。
+- 当前完成合同是 §17 的 `FixedDylibFarmRuntimeContract`。历史 `CP-MSC-A1` 的 literal no-DYLD 路线和
+  单一 merged closure 路线保留为历史归因，不参与当前判定。
+- `CP-MSC-A2-FARM` 成立：每轮 station 由唯一 farm diagnostic 启动，`controller_runtime` descendant
+  的 owner ancestry、PID/birth/executable 与 plugin/vendor path+SHA 和本轮 manifest 一致；farm 的
+  logical path、resolved target、manifest bytes、inventory 与 SHA256 在每次 spawn 前重新验证。
 - 五次连续 FULL_RESTART READY/clean 通过，`controller_verdict` 为
   `CURRENT_CONTROLLER_PATH_OPERATIONAL`，Gate A 派生状态为 `CURRENT_PRODUCT_GATE_PASSED`。
 - macOS capabilities、Web 和服务端只支持 W1/W2，N>2 明确拒绝。
@@ -552,3 +561,72 @@ loaded-image readback。只有 `CONFIRMED_RPATH` route 才授权修改 install-r
 - 所有受影响测试 GREEN；ledger 记录新 checkpoint、retained/archived/deletion candidates。
 - 报告明确写明“未做 resource qualification/capacity certification”。
 - Astra/high 独立复审通过；只提交本地，不自动 push 或 merge。
+
+## 17. FixedDylibFarmRuntimeContract（用户已授权）
+
+superseded-by: FixedDylibFarmRuntimeContract
+
+用户在 2026-09-22 明确授权 fixed dylib farm：literal no-DYLD 不再是完成门槛。§5.1 的单一 merged
+`F_CLOSURE_ROOT`、§5.3 的 N/P/F control set 和 §5.4 的 no-DYLD 收敛路线原文保留为 `CP-MSC-A1` 的
+历史归因，不回写、也不算作当前完成条件。当前 gate 独立记为 `CP-MSC-A2-FARM`。
+
+授权只放开 DYLD 的构造方式。closure inventory、owner ancestry、PID/birth、executable、
+plugin/vendor path+SHA 和 cleanup 证据一条都没有放宽。
+
+```text
+FixedDylibFarmRuntimeContract:
+  closure_prefixes:
+    - /opt/ros2_jazzy/install
+    - /opt/ros2_jazzy/extra_ws/install
+    - /opt/data/so101/runtime/fork/current
+    - /opt/data/so101/workspace/install
+    - /opt/ros2_jazzy/dylib_farm/current
+  dylib_farm_root: /opt/ros2_jazzy/dylib_farm/current
+  source: scripts/so101-macos.zsh prepare 生成，由 doctor 与 manifest 校验
+  environment: 只允许 runner 从已验证 manifest 构造的 DYLD_LIBRARY_PATH
+  forbidden: 用户 shell 任意继承、额外 DYLD_*、未登记 overlay、路径或 SHA drift
+  attestation:
+    fields: role, pid, birth, executable, plugin_path, plugin_sha256, vendor_path,
+            vendor_sha256, owner_binding_sha256
+    binding: role 在 spawn intent 落盘时绑定，不从 loaded image 反推
+    ancestry: owner ancestry 上唯一 descendant；PID/birth/executable 同时核对
+    scope: plugin_path 与 vendor_path 必须落在上面五个 prefix 或本轮 manifest 之内
+  cleanup: task-owned tree 有界停止；foreign process 只读登记，不发信号
+```
+
+### 17.1 冻结对象
+
+每轮在 spawn 前重新解析并回读，任一漂移都 fail closed：
+
+- farm 的 logical path `/opt/ros2_jazzy/dylib_farm/current` 与它当前的 resolved target；
+- farm manifest 的 bytes 与 SHA256，以及 farm inventory 的 entry path 与 SHA256；
+- `/opt/data/so101/workspace/install` 的 inventory；
+- 产品三个 profile 文档、Web bundle 与关键 console script 的 SHA。
+
+`scripts/setup-macos-ros-dylib-farm.zsh` 每次都会生成新的 target，所以 farm target 一变，此前所有
+`CP-MSC-A2-FARM` 轮次立即失效。
+
+### 17.2 Provenance 归属
+
+只证明 dylib 文件存在不算通过。Python 解释器、诊断 CLI、ament index、launch executable 以及
+controller plugin 与 MuJoCo vendor dylib 的来源都必须能归属到上面五个 fixed prefix 之一，并给出
+绝对路径与 SHA256。归属不清楚就 fail closed。
+
+### 17.3 A2 的成立条件
+
+同时满足下面四条的轮次才能计入 5/5：
+
+1. 唯一 launch-owning 的 farm diagnostic 独立完成 intent、spawn、readiness、attestation 和 shutdown；
+   外部不先起另一套 station，也不把旧的 N/P 参数拼进 farm mode；
+2. `controller_runtime` descendant 的 owner ancestry、PID/birth/executable 和 plugin/vendor
+   path+SHA 与本轮 manifest 全部一致；
+3. 三个 controller active、三个 MoveIt service 与三个 action ready，READY 后有界关闭，
+   task-owned residue 为零；
+4. 上述冻结对象在 spawn 前重新验证通过。
+
+另加一个不计入 5/5 的负向 control：改动 farm resolved target、manifest SHA 或 inventory entry
+后，farm mode 必须在 spawn 前拒绝并报 `spawned=false`。真实 fixed farm 不因此被修改。
+
+五轮连续 VALID、负向 control 通过、冻结身份再回读一致，才写
+`CP-MSC-A2-FARM=CURRENT_PRODUCT_GATE_PASSED_UNDER_FIXED_DYLIB_FARM`。`CP-MSC-FINAL` 依赖 A2，
+不再依赖历史 A1 变成 PASS。

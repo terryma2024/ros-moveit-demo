@@ -38,6 +38,15 @@ UPSTREAM_010_COMMIT = "57fc6744844902d4532160b403fa95840c1d6f96"
 LOCAL_R11_COMMIT = "f19a8cc3af61feccacb22a9f0d16cc972e3b2c08"
 CANDIDATE_COMMIT = "85d2a5c42686a3d6b0d909a047a4188b24edd257"
 CANDIDATE_LABEL = "main"
+CLOSURE_DESIGN = (
+    REPOSITORY_ROOT / "docs/superpowers/specs"
+    / "2026-09-21-so101-macos-service-campaign-closure-design.md"
+)
+CLOSURE_PLAN = (
+    REPOSITORY_ROOT / "docs/superpowers/plans"
+    / "2026-09-21-so101-macos-service-campaign-closure-implementation.md"
+)
+CLOSURE_GUIDE = REPOSITORY_ROOT / "docs/guides/so101-macos-service-campaign-closure.md"
 MUJOCO_340_COMMIT = "e55fff5dea6f1d5dd7963ca52eecc41d05ad0922"
 MUJOCO_GLFW_PATCH_SHA256 = (
     "aa506e126cf8bec3bcc60a961fbe457e056d2aeb1838bb6c67c7584d7ac5264e"
@@ -503,3 +512,90 @@ def test_macos_dylib_farm_links_source_overlays_with_later_prefix_precedence(
     override_manifest = (replaced_farm / ".overrides.tsv").read_text(encoding="utf-8")
     assert str(first_library) in override_manifest
     assert str(conflicting_library) in override_manifest
+
+
+#: The operator authorized the fixed dylib farm as the macOS runtime contract. Literal no-DYLD is no
+#: longer a completion gate. The authorization relaxed nothing else: closure inventory, owner
+#: ancestry, PID/birth, executable, plugin/vendor path+SHA and cleanup evidence all still apply.
+FIXED_DYLIB_FARM_CONTRACT_TOKENS = (
+    "FixedDylibFarmRuntimeContract",
+    "/opt/ros2_jazzy/dylib_farm/current",
+    "owner ancestry",
+    "pid",
+    "birth",
+    "executable",
+    "plugin_path",
+    "plugin_sha256",
+    "vendor_path",
+    "vendor_sha256",
+)
+
+FIXED_DYLIB_FARM_CLOSURE_PREFIXES = (
+    "/opt/ros2_jazzy/install",
+    "/opt/ros2_jazzy/extra_ws/install",
+    "/opt/data/so101/runtime/fork/current",
+    "/opt/data/so101/workspace/install",
+    "/opt/ros2_jazzy/dylib_farm/current",
+)
+
+#: One literal marker, carried by every document that has to say which contract is current.
+SUPERSEDED_BY_FARM = "superseded-by: FixedDylibFarmRuntimeContract"
+
+
+def fixed_dylib_farm_contract_block(design: str) -> str:
+    """Read the contract from its own fenced block, so the assertions test the contract."""
+
+    match = re.search(
+        r"```text\n(?P<block>FixedDylibFarmRuntimeContract:.*?)\n```", design, re.DOTALL)
+    assert match is not None, "the design must carry a FixedDylibFarmRuntimeContract block"
+    return match.group("block")
+
+
+def test_the_authorized_fixed_dylib_farm_contract_is_in_design_plan_and_guide() -> None:
+    """The authorization is a written contract, not an implicit local habit."""
+
+    for path in (CLOSURE_DESIGN, CLOSURE_PLAN, CLOSURE_GUIDE):
+        text = path.read_text(encoding="utf-8")
+        for token in FIXED_DYLIB_FARM_CONTRACT_TOKENS:
+            assert token in text, f"{path.name} does not record {token!r}"
+
+
+def test_the_farm_contract_freezes_five_prefixes_and_refuses_inherited_dyld_paths() -> None:
+    """The farm is one frozen prefix among five; an arbitrary inherited DYLD_* stays illegal."""
+
+    block = fixed_dylib_farm_contract_block(CLOSURE_DESIGN.read_text(encoding="utf-8"))
+
+    for prefix in FIXED_DYLIB_FARM_CLOSURE_PREFIXES:
+        assert prefix in block, f"the contract does not freeze {prefix}"
+    for entry in ("closure_prefixes:", "dylib_farm_root:", "source:", "environment:",
+                  "forbidden:", "attestation:", "cleanup:"):
+        assert entry in block, f"the contract does not state {entry}"
+    for token in FIXED_DYLIB_FARM_CONTRACT_TOKENS[2:]:
+        assert token in block, f"the attestation does not carry {token!r}"
+    assert "任意继承" in block
+    assert SUPERSEDED_BY_FARM in CLOSURE_DESIGN.read_text(encoding="utf-8")
+
+
+def test_the_completion_definition_now_rests_on_the_farm_contract() -> None:
+    """Literal no-DYLD and the single merged F_CLOSURE_ROOT are history, not the current gate."""
+
+    design = CLOSURE_DESIGN.read_text(encoding="utf-8")
+    completion = design.split("## 16. 完成定义", 1)[1].split("\n## ", 1)[0]
+
+    assert "CP-MSC-A2-FARM" in completion
+    assert "无 `DYLD_LIBRARY_PATH`" not in completion
+    assert "F_CLOSURE_ROOT" not in completion
+    assert "FixedDylibFarmRuntimeContract" in completion
+
+    plan = CLOSURE_PLAN.read_text(encoding="utf-8")
+    checkpoints = plan.split("## Checkpoints", 1)[1].split("## 计划自查", 1)[0]
+    assert "CP-MSC-A2-FARM" in checkpoints
+    final_row = next(
+        row for row in checkpoints.splitlines() if row.startswith("| `CP-MSC-FINAL`"))
+    assert "CP-MSC-A2-FARM" in final_row
+    assert "F_CLOSURE_ROOT" not in checkpoints
+    assert SUPERSEDED_BY_FARM in plan
+    # The historical A1 row keeps its own text; it is the *current* contract that moved to the farm.
+    a1_row = next(
+        row for row in checkpoints.splitlines() if row.startswith("| `CP-MSC-A1`"))
+    assert "historical" in a1_row or "历史" in a1_row

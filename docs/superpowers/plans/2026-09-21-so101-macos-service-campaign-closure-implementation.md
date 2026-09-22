@@ -12,6 +12,21 @@
 
 ## Global Constraints
 
+> superseded-by: FixedDylibFarmRuntimeContract
+>
+> 2026-09-22 用户授权 fixed dylib farm 之后，本计划 Task 1 的 N/P/F control set、literal no-DYLD 门槛和
+> 单一 merged `F_CLOSURE_ROOT` 只作 `CP-MSC-A1` 的历史归因保留，原文不回写，也不再是当前完成合同。
+> 当前 Gate A 合同是设计 §17 的 `FixedDylibFarmRuntimeContract`，用独立 checkpoint `CP-MSC-A2-FARM`
+> 记录，做法见 `docs/superpowers/plans/2026-09-22-so101-macos-service-campaign-final-gate-remediation.md`
+> 的 Tasks 2、3、10。授权只放开 DYLD 的构造方式；closure inventory、owner ancestry、PID/birth、
+> executable、plugin/vendor path+SHA 和 cleanup 证据没有放宽。
+>
+> 冻结的五个 prefix：`/opt/ros2_jazzy/install`、`/opt/ros2_jazzy/extra_ws/install`、
+> `/opt/data/so101/runtime/fork/current`、`/opt/data/so101/workspace/install`、
+> `/opt/ros2_jazzy/dylib_farm/current`。Python、诊断 CLI、ament index、launch executable 和
+> controller plugin/vendor 都必须能归属到其中之一。每轮 attestation 至少带 role、pid、birth、
+> executable、plugin_path、plugin_sha256、vendor_path、vendor_sha256 和 owner_binding_sha256。
+
 - 本计划从 legacy `CP-MSC-A` 恢复，但该 checkpoint 的结论是 `UNCONFIRMED`，不是 PASS。task-owned station 曾 READY；5x `FULL_RESTART` 尚未执行。
 - 已完成的 Task 0–2 不重跑、不改写。先回读三个恢复提交、ledger、证据和 dirty state；缺失或 ancestry 不符即停止。
 - Gate A 使用 mac-mini 当前 worktree `/Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp` 和分支 `codex/so101-unified-webapp`，不得另建 worktree。Task 1 开始前必须暂停 `dst-so101-macos-closure`；handoff 完成后，Gate A Codex session 是该 worktree、ledger 和 task-owned 服务的唯一 writer，`dst` 不得写入或启动服务。
@@ -64,6 +79,10 @@
 
 Task 1 由单独的 Codex session 执行。它复用当前 mac-mini worktree 和 branch，不另建 worktree，也不依赖
 重跑 foreign modified overlay。该 session 必须在 `CP-MSC-A1` 停止，禁止进入 Task 2。
+
+本 Task 的 N/P/F、no-DYLD 和单一 merged closure 路线已在 2026-09-22 被用户授权的
+`FixedDylibFarmRuntimeContract` 取代，只作历史归因；当前 Gate A 由 remediation plan 的 Task 3 和
+Task 10 用 `CP-MSC-A2-FARM` 重新闭合。旧原文不回写。
 
 **Files:**
 - Create: `src/so101_demo_py/src/runtime/macos_dlopen_probe.py`
@@ -1262,12 +1281,13 @@ git commit -m "docs: record macOS W1 W2 service closure"
 | Checkpoint | 必须满足 | 不满足时 |
 | --- | --- | --- |
 | legacy `CP-MSC-A` | 只作恢复锚点；结论 `UNCONFIRMED` | 不得解释为 PASS |
-| `CP-MSC-A1` | writer 已串行接管并释放；legacy 归因独立；`CONFIRMED_RPATH` 或 `CURRENT_CLOSURE_ALREADY_VALID` route 完成；F merged closure 完整 tree、authority/vendor/plugin/Python/diagnostic provenance、no-DYLD direct dlopen 和 station 5/5 均有效；每轮真实 `controller_runtime` descendant 的 PID/birth/executable/plugin/vendor path+SHA、主动有界 shutdown 和 cleanup 通过；`CURRENT_PRODUCT_GATE_PASSED` | 停止，不进入 Task 2；先修正 control/current failure 或补齐 Sol/high 复核 |
+| `CP-MSC-A1`（历史/superseded-by: FixedDylibFarmRuntimeContract；原文保留） | writer 已串行接管并释放；legacy 归因独立；`CONFIRMED_RPATH` 或 `CURRENT_CLOSURE_ALREADY_VALID` route 完成；F merged closure 完整 tree、authority/vendor/plugin/Python/diagnostic provenance、no-DYLD direct dlopen 和 station 5/5 均有效；每轮真实 `controller_runtime` descendant 的 PID/birth/executable/plugin/vendor path+SHA、主动有界 shutdown 和 cleanup 通过；`CURRENT_PRODUCT_GATE_PASSED` | 停止，不进入 Task 2；先修正 control/current failure 或补齐 Sol/high 复核 |
+| `CP-MSC-A2-FARM` | 当前合同为设计 §17 的 `FixedDylibFarmRuntimeContract`：唯一 launch-owning farm diagnostic 每轮独立 spawn；`controller_runtime` descendant 的 owner ancestry、PID/birth/executable 和 plugin/vendor path+SHA 与本轮 manifest 一致；farm logical path/resolved target/manifest+inventory SHA 在 spawn 前重新验证；负向 drift control 在 spawn 前拒绝；五次连续 VALID FULL_RESTART、READY 后有界 shutdown、task-owned residue=0 | 停止并修订；任何再次 `prepare`、farm target 变化或非 ledger byte 变化都使本 checkpoint 失效，须从新 experiment id 重开 |
 | `CP-MSC-02` | selection/queue/single-point/watermark/reducer/owner tree 离线通过 | 返回 Tasks 2–6 |
 | `CP-MSC-03` | v4 frozen；v5/v6 closed；W1/W2 only；fresh guard；retry atomic | 返回 Tasks 7–9 |
 | `CP-MSC-04` | package gate 和 bounded candidate W2/W1/retry 有效且无残留 | 不进 production Chrome |
 | `CP-MSC-05` | fresh Chrome W2/W1/retry 与 raw/physical/cleanup 一致 | 返回 owning task |
-| `CP-MSC-FINAL` | Sol/high 与 Astra/high 审查通过，guide/ledger 完整 | 只报告 PARTIAL |
+| `CP-MSC-FINAL` | `CP-MSC-A2-FARM` 成立，Sol/high 与 Astra/high 审查通过，guide/ledger 完整 | 只报告 PARTIAL |
 
 ## 计划自查
 
@@ -1275,6 +1295,9 @@ git commit -m "docs: record macOS W1 W2 service closure"
   N/P/F control set、task-owned merged closure、semantic contract/typed RunBinding、direct dlopen、
   真实 controller descendant 的 per-process loaded-image path/SHA、no-DYLD F 和 5x readiness 关闭当前产品 Gate；
   `LEGACY_PROVENANCE_UNRECOVERABLE` 不会被误判成产品缺陷。
+- 上述 Task 1 当前合同已由设计 §17 的 `FixedDylibFarmRuntimeContract` 取代（`CP-MSC-A2-FARM`），
+  N/P/F 与 no-DYLD 原文只作历史归因；farm 授权没有放宽 closure inventory、owner ancestry、PID/birth、
+  executable、plugin/vendor path+SHA 或 cleanup 证据。
 - Task 1 固定复用当前 mac-mini worktree、branch 和唯一 evidence root，只创建
   `gate-a-resolution/$DISPATCH_ID/`；Codex 与 dst 串行交接 writer，`CP-MSC-A1` 后先停下接受
   Sol/high 复核，未经通知不得进入 Task 2。

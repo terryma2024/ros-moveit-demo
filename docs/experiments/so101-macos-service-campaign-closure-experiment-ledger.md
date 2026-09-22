@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-START
+latest_checkpoint: CP-MSC-A2-FARM-CONTRACT
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3175,3 +3175,63 @@ verdict: PENDING
 Task order for this dispatch is Tasks 1-8B, then Task 9, then Task 10, then Task 11, with Task 10's text sitting
 before Task 9's heading in the plan. Task 9 is the last repository-content change and Task 10 is the final
 `prepare` and freeze; after Task 10 only ledger checkpoint commits are allowed.
+
+## CP-MSC-A2-FARM-CONTRACT: the operator-authorized fixed dylib farm becomes the current contract
+
+```yaml
+checkpoint_id: CP-MSC-A2-FARM-CONTRACT
+recorded_at: 2026-09-22T22:45:00+0800
+dispatch: ddf5bc35-e88c-4d3e-8005-0c165dff1841
+carried_by: the local commit that adds this entry (parent 8decd019)
+contract: FixedDylibFarmRuntimeContract (design section 17)
+supersedes: the literal no-DYLD completion gate, the single merged F_CLOSURE_ROOT install_root rule and the
+            N/P/F control set as *current* conditions; all three keep their original text as CP-MSC-A1 history
+authorization: the operator authorized the fixed dylib farm explicitly at 2026-09-22 (see the remediation
+               dispatch handoff and plan); the authorization relaxes nothing except how DYLD_LIBRARY_PATH is
+               constructed
+status: CONTRACT FROZEN, checkpoint CP-MSC-A2-FARM still PLANNED
+verdict: PENDING (five consecutive owner-bound VALID FULL_RESTART rounds are Task 10)
+```
+
+### What changed in the documents
+
+* design: status line, a supersession note at the head of §5, §15.3 (an ad-hoc inherited `DYLD_LIBRARY_PATH`
+  stays rejected while the manifest-derived fixed farm is authorized) and the new §17; §16's second and third
+  bullets now rest on `CP-MSC-A2-FARM` instead of literal no-DYLD and the single merged `F_CLOSURE_ROOT`.
+* original implementation plan: a supersession note in `## Global Constraints` plus a Task 1 pointer, the
+  `CP-MSC-A2-FARM` row in `## Checkpoints`, the `CP-MSC-FINAL` row now depending on A2, and the `## 计划自查`
+  entry. The `CP-MSC-A1` row keeps its original wording and is marked historical in place.
+* guide: a new "dylib farm 是当前合同" section between the preconditions and the exclusive-controller section.
+* `src/so101_demo_py/test/test_macos_install_contract.py`: three new document-contract tests. They were
+  RED first (the design did not carry the contract, and the completion definition still rested on the old
+  rule) and are GREEN now.
+
+### Frozen contract, recorded here so the ledger is self-contained
+
+```text
+closure_prefixes:
+  - /opt/ros2_jazzy/install
+  - /opt/ros2_jazzy/extra_ws/install
+  - /opt/data/so101/runtime/fork/current
+  - /opt/data/so101/workspace/install
+  - /opt/ros2_jazzy/dylib_farm/current
+dylib_farm_root: /opt/ros2_jazzy/dylib_farm/current
+source: scripts/so101-macos.zsh prepare, validated by doctor and the manifest
+environment: DYLD_LIBRARY_PATH only as the runner constructs it from the verified manifest
+forbidden: inherited shell env, extra DYLD_*, unregistered overlays, path or SHA drift
+attestation fields: role, pid, birth, executable, plugin_path, plugin_sha256, vendor_path, vendor_sha256,
+                    owner_binding_sha256
+cleanup: bounded stop of the task-owned tree; foreign processes recorded read-only
+```
+
+`setup-macos-ros-dylib-farm.zsh` mints a new target every run, so any farm target change, any further
+`prepare`, or any non-ledger byte change voids every `CP-MSC-A2-FARM` round and requires reopening Task 10
+and Task 11 from a new experiment id.
+
+### Test evidence for this checkpoint
+
+```text
+RED   remediation/runs/t2-*: the two document-contract tests failed on the untouched design and plan
+GREEN remediation/runs/t2-green-20260922T144219Z  rc=0  28 passed  (whole file)
+      scratch=/opt/data/tmp/so101-service-gate-t2-green-Kmo7kPsH, tempfile.gettempdir() read back inside it
+```
