@@ -153,7 +153,10 @@ coordinator = BatchCoordinator(journal, request, config=load_parallel_runtime_co
 coordinator.register_worker("w1", generation=1)
 coordinator.register_worker("w2", generation=1)
 path = pathlib.Path(os.environ["SO101_FIXED_CONTROL_SOCKET"])
-path.parent.mkdir(mode=0o700)
+# The canonical control root is shared by every run of this suite, so it is created once and
+# reused. `mkdir` without `exist_ok` raised on the second run and killed this child before it could
+# bind, which left `binding.control_socket.exists()` false for every later run.
+path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
 server = FixedCoordinatorControlServer(coordinator=coordinator, campaign_id=os.environ["SO101_FIXED_CONTROL_CAMPAIGN_ID"], control_token=os.environ["SO101_FIXED_CONTROL_TOKEN"], path=path)
 server.start()
 try:

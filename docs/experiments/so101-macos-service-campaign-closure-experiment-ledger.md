@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-CONTROL-ROOT
+latest_checkpoint: CP-MSC-REMEDIATION-SUPERVISOR-LEGS
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3723,3 +3723,42 @@ base.
 
 Task 8 Step 3 still owns: the two `test_expert_validation_e2e_installed_port` helper cases and the two
 live supervisor legs.
+
+## CP-MSC-REMEDIATION-SUPERVISOR-LEGS: Task 8 Step 3 is closed
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-SUPERVISOR-LEGS
+recorded_at: 2026-09-23T02:05:00+0800
+carried_by: the local commit that adds this entry (parent 88c109b2)
+status: all five Task 8 Step 3 boundaries closed; Step 4 (the confirming full gate) is next
+```
+
+### The last two boundaries
+
+The live supervisor legs (`test_live_fixed_supervisor_uses_real_authenticated_coordinator_not_signals`,
+both parameters) carried the same repeat-run defect the cancel-replay case had: their child program
+ran `path.parent.mkdir(mode=0o700)` without `exist_ok`, so from the second run onward the child died
+with `FileExistsError` before binding and `binding.control_socket.exists()` could never become true.
+With `parents=True, exist_ok=True` the file is **24 passed** (`remediation/runs/t8-supervisor2-…`).
+
+One honest note: the very first run after that fix showed one unrelated case
+(`test_lease_expiry_does_not_cancel_an_already_exited_owner_without_descendants`) failing, and it
+passes both on its own and in two subsequent full-file runs. The shared canonical control root
+persists between runs and the endpoint name is `<campaign>-<batch>.sock`, so a leftover endpoint from
+the pre-fix era is the likely cause; the product deliberately refuses to unlink an endpoint it did not
+create, which is why a stale file can perturb one run. It is recorded rather than explained away, and
+the file has been green since.
+
+The two `test_expert_validation_e2e_installed_port` helper cases were path-length artefacts: the whole
+file is **6 passed** under the gate's short basetemp (`remediation/runs/t8-e2e-…`). Nothing in the
+product changed for them.
+
+### Task 8 Step 3 final state
+
+| Boundary | Closed by | Evidence |
+| --- | --- | --- |
+| `test_unified_lifecycle::test_composition_builds_a_readable_app_without_ros` | `c41b9e3d` | 8 passed |
+| `test_expert_validation_main::test_production_factory_wires_durable_authorities_and_releases_lock` | `e825fc9a` | 7 passed |
+| `test_expert_validation_production_projection::test_cancel_command_replays…[False/True]` | `88c109b2` | 24 passed |
+| `test_expert_validation_supervisor::test_live_fixed_supervisor…[USER_CANCELLED/LEASE_EXPIRED]` | this commit | 24 passed |
+| `test_expert_validation_e2e_installed_port::test_fixed_helper_*` | runner basetemp | 6 passed |
