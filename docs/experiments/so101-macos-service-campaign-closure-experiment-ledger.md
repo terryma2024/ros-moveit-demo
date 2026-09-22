@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-FIXTURE-BASES
+latest_checkpoint: CP-MSC-REMEDIATION-T11-MERGED-LAYOUT
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4459,3 +4459,51 @@ marker (that is what a merged install means, and the resource index is the produ
 if the packages are genuinely absent - the window must say so as an environment gap rather than pass.
 Weakening the inventory into "skip what is missing" is not an option, because that inventory is what
 proves the dependency closure the acceptance claims.
+
+## CP-MSC-REMEDIATION-T11-MERGED-LAYOUT: the decision, taken and verified
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-MERGED-LAYOUT
+recorded_at: 2026-09-23T10:05:00+0800
+carried_by: the local commit that adds this entry (parent d02b2863)
+window: remediation/windows/w2-20260922T180438Z-42393/
+status: the open decision from the last checkpoint is answered; the inventory chain advanced two links
+```
+
+The decision was made the honest way: I checked whether the packages are really present before
+touching the inventory.
+
+```text
+/opt/data/so101/runtime/fork/current/share/ament_index/resource_index/packages/
+    mujoco_3d_lidar   mujoco_ros2_control   mujoco_ros2_control_msgs   mujoco_ros2_control_plugins
+/opt/ros2_jazzy/extra_ws/install/share/ament_index/resource_index/packages/
+    mujoco_vendor
+```
+
+All five dependency packages exist - as **merged-install ament index markers**, not as per-package
+directories. That is what a merged install is, and the resource index is the product's own record of
+it, so the fixture now accepts both shapes:
+
+* an isolated install: `<base>/<name>` is a directory (unchanged, this is the Linux path);
+* a merged install: `<base>/share/ament_index/resource_index/packages/<name>` exists, and the prefix
+  pushed is the base itself, because that is where the merged `lib` and `site-packages` live.
+
+`PACKAGE_PREFIX_MISSING` now reports both shapes it searched, so a future failure names its own
+reason. The macOS dependency search path is also a path now, not a single base:
+`/opt/data/so101/runtime/fork/current:/opt/ros2_jazzy/extra_ws/install` - the fork overlay carries the
+four MuJoCo fork packages, the ROS dependency overlay carries `mujoco_vendor`.
+
+The chain moved twice, which is the evidence that both changes took effect:
+
+```text
+before: PACKAGE_PREFIX_MISSING: /opt/ros2_jazzy/extra_ws/install/mujoco_3d_lidar
+after:  PACKAGE_PREFIX_MISSING: so101_mujoco_support (searched: <fork>/so101_mujoco_support,
+        <fork>/share/ament_index/resource_index/packages/so101_mujoco_support,
+        <extra_ws>/so101_mujoco_support,
+        <extra_ws>/share/ament_index/resource_index/packages/so101_mujoco_support)
+```
+
+The next link is precise: `so101_mujoco_support` is not in the fork overlay or the ROS dependency
+overlay, and the project install root contains only `so101_demo_py/`, so its prefix has to be located
+before it joins the search path - or the same merged-marker check has to run against the project
+install. `bunx tsc -b` is clean after both changes.

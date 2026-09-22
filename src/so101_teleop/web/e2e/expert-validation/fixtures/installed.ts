@@ -57,10 +57,27 @@ export function resolvePackagePrefixes(
       resolved.push(candidate);
       continue;
     }
-    const candidate = dependencyBases
+    // Two installed layouts carry a package: an isolated install gives it a directory of its own
+    // (`<base>/<name>`), a merged install represents it by its ament index marker
+    // (`<base>/share/ament_index/resource_index/packages/<name>`) and keeps the libraries in the
+    // base's own `lib`. This host's runtime fork is merged - it carries all four fork packages as
+    // markers and none as directories - so both shapes are checked, and the prefix pushed is the one
+    // the caller's `lib`/`site-packages` joins need.
+    const isolated = dependencyBases
       .map((base) => join(base, name))
       .find((path) => existsSync(path));
-    if (candidate === undefined) throw missingPackage(name, dependencyBases);
+    const merged = dependencyBases
+      .find((base) => existsSync(join(base, "share/ament_index/resource_index/packages", name)));
+    const candidate = isolated ?? merged;
+    if (candidate === undefined) {
+      throw missingPackage(
+        name,
+        dependencyBases.flatMap((base) => [
+          join(base, name),
+          join(base, "share/ament_index/resource_index/packages", name),
+        ]),
+      );
+    }
     resolved.push(candidate);
   }
   return resolved;
