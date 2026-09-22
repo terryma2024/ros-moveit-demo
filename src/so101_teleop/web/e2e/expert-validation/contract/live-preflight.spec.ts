@@ -1,6 +1,7 @@
-import { chmodSync, mkdirSync, mkdtempSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { test, expect } from "@playwright/test";
 
@@ -220,12 +221,124 @@ test("live gate accepts the fully qualified environment", () => {
   if (roots.taskRoot) env.SO101_TASK_ROOT = roots.taskRoot;
   env.SO101_LIVE_SIM_HOST = os.hostname();
   delete env.SO101_LIVE_SERVICE_BASE_URL;
+  // The retired operator document takes no part: the opt-in flag and the roots are the whole
+  // admission contract, so the variable is not merely absent from this environment - it is
+  // deleted here to prove it is not consulted.
+  delete env.SO101_UNIFIED_LIVE_AUTHORIZATION;
   const result = validateLiveSimPreconditions(env, { stackScan: () => "" });
   expect(result.evidenceRoot).toBe(roots.evidenceRoot);
   expect(result.sourceCommit).toMatch(/^[0-9a-f]{40}$/);
   expect(result.installPrefix).toBe(process.env.SO101_E2E_INSTALL_PREFIX);
   // Without a reused service the fixture owns its own state root under the run directory.
   expect(result.serviceStateRoot).toBeNull();
+});
+
+/**
+ * The retired operator gate.
+ *
+ * `SO101_UNIFIED_LIVE_AUTHORIZATION` and `requireUnifiedLiveAuthorization` were removed in full by
+ * operator instruction: the live-sim projects run against a live unified service with the opt-in
+ * flag and the roots alone.  Everything else stays fail closed, and the negatives below are run on
+ * the same environment that a passing document used to satisfy - so the removal cannot have
+ * quietly widened the host, opt-in, durable-root, install-prefix or stack conditions.
+ */
+test("the retired authorization gate is gone from the fixture", () => {
+  const fixture = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "../fixtures/live-sim.ts"),
+    "utf-8",
+  );
+  for (const retired of [
+    "SO101_UNIFIED_LIVE_AUTHORIZATION",
+    "UnifiedLiveAuthorization",
+    "requireUnifiedLiveAuthorization",
+    "LIVE_SIM_UNIFIED_AUTHORIZATION_REQUIRED",
+    "LIVE_SIM_UNIFIED_AUTHORIZATION_UNREADABLE",
+    "LIVE_SIM_AUTHORIZATION_MUST_NOT_CARRY_PROOFS",
+    "LIVE_SIM_AUTHORIZATION_SCOPE_MISMATCH",
+    "LIVE_SIM_AUTHORIZATION_DEADLINE_REQUIRED",
+    "LIVE_SIM_AUTHORIZATION_EXPIRED",
+    "LIVE_SIM_AUTHORIZATION_RUNTIME_IDENTITIES_REQUIRED",
+  ]) {
+    expect(fixture, `${retired} must not survive in the live gate`).not.toContain(retired);
+  }
+});
+
+test("a plausible authorization document is ignored, never honoured", () => {
+  // The shape the removed reader used to accept: in scope, unexpired, with runtime identities.
+  const documentPath = join(privateDir("so101-live-auth-retired-"), "authorization.json");
+  writeFileSync(
+    documentPath,
+    JSON.stringify({
+      scope: "unified",
+      deadline: "2999-01-01T00:00:00Z",
+      runtime_identities: ["service01"],
+      owned_process_rule: "task-owned only",
+    }),
+  );
+  const roots = liveRoots();
+  const env = baseEnv();
+  env.SO101_E2E_EVIDENCE_ROOT = roots.evidenceRoot;
+  if (roots.taskRoot) env.SO101_TASK_ROOT = roots.taskRoot;
+  env.SO101_LIVE_SIM_HOST = os.hostname();
+  delete env.SO101_LIVE_SERVICE_BASE_URL;
+  env.SO101_UNIFIED_LIVE_AUTHORIZATION = documentPath;
+  const result = validateLiveSimPreconditions(env, { stackScan: () => "" });
+  expect(result.evidenceRoot).toBe(roots.evidenceRoot);
+  expect(Object.values(result)).not.toContain(documentPath);
+  // ...and a bogus path is not even looked at.
+  env.SO101_UNIFIED_LIVE_AUTHORIZATION = "/nonexistent/authorization.json";
+  expect(validateLiveSimPreconditions(env, { stackScan: () => "" }).evidenceRoot).toBe(
+    roots.evidenceRoot,
+  );
+});
+
+test("the remaining gates still bite without the retired document", () => {
+  const roots = liveRoots();
+  const env = baseEnv();
+  env.SO101_E2E_EVIDENCE_ROOT = roots.evidenceRoot;
+  if (roots.taskRoot) env.SO101_TASK_ROOT = roots.taskRoot;
+  delete env.SO101_UNIFIED_LIVE_AUTHORIZATION;
+
+  // 1. No opt-in -> refusal, on an otherwise complete environment.
+  const withoutOptIn: NodeJS.ProcessEnv = { ...env };
+  delete withoutOptIn.SO101_ENABLE_LIVE_SIM_E2E;
+  expect(() => validateLiveSimPreconditions(withoutOptIn)).toThrow("LIVE_SIM_OPT_IN_REQUIRED");
+
+  // 2. Wrong host -> refusal.
+  expect(() =>
+    validateLiveSimPreconditions(env, { hostname: "some-other-host" }),
+  ).toThrow("LIVE_SIM_HOST_MISMATCH");
+
+  // 3. A non-registered evidence root -> refusal.
+  expect(() =>
+    validateLiveSimPreconditions({ ...env, SO101_E2E_EVIDENCE_ROOT: "run" }),
+  ).toThrow("LIVE_SIM_EVIDENCE_ROOT_REQUIRED");
+
+  // 4. A private-looking root outside the registered tree -> refusal.
+  expect(() =>
+    validateLiveSimPreconditions(
+      { ...env, SO101_E2E_EVIDENCE_ROOT: privateDir("so101-live-gate-outside-") },
+      { platform: "darwin", hostname: os.hostname() },
+    ),
+  ).toThrow("LIVE_SIM_EVIDENCE_ROOT_REQUIRED");
+
+  // 5. A world-readable run root inside the registered tree -> refusal.
+  const taskRoot = privateDir("so101-live-gate-negatives-");
+  const loose = privateDirUnder(taskRoot, "loose");
+  chmodSync(loose, 0o755);
+  expect(() =>
+    validateLiveSimPreconditions(
+      { ...baseEnv(), SO101_TASK_ROOT: taskRoot, SO101_E2E_EVIDENCE_ROOT: loose },
+      { platform: "darwin", hostname: os.hostname() },
+    ),
+  ).toThrow("LIVE_SIM_EVIDENCE_ROOT_NOT_PRIVATE");
+
+  // 6. The install prefix is still mandatory.
+  const withoutPrefix: NodeJS.ProcessEnv = { ...env };
+  delete withoutPrefix.SO101_E2E_INSTALL_PREFIX;
+  expect(() => validateLiveSimPreconditions(withoutPrefix)).toThrow(
+    "LIVE_SIM_INSTALL_PREFIX_INVALID",
+  );
 });
 
 test("stack scanner ignores itself and unrelated processes", () => {
