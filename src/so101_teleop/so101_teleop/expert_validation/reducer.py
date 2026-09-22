@@ -75,6 +75,12 @@ def _require_sha256(name: str, value: object) -> str:
     return value
 
 
+def _optional_hash(value: object) -> str | None:
+    """Read a persisted identity hash that a layout may never have published."""
+
+    return None if value is None else str(value)
+
+
 @dataclass(frozen=True, slots=True)
 class AttemptState:
     point_id: str
@@ -169,10 +175,18 @@ class WorkerState:
 
 @dataclass(frozen=True, slots=True)
 class CampaignReducerState:
+    """The campaign state the reducer derives from one committed event stream.
+
+    ``runtime_identity_sha256`` is ``None`` for a layout that does not publish one. The macOS
+    campaign journal starts with ``CAMPAIGN_STARTED`` carrying ``campaign_id``/``batch_id`` only,
+    and inventing an identity hash for it would be a fabricated fact; the field stays null and is
+    never presented as an observed runtime identity.
+    """
+
     campaign_id: str
     batch_id: str
-    runtime_identity_sha256: str
-    config_sha256: str
+    runtime_identity_sha256: str | None
+    config_sha256: str | None
     points: Mapping[str, PointState] = field(
         default_factory=lambda: MappingProxyType({})
     )
@@ -199,8 +213,8 @@ class CampaignReducerState:
         return cls(
             campaign_id=str(document["campaign_id"]),
             batch_id=str(document["batch_id"]),
-            runtime_identity_sha256=str(document["runtime_identity_sha256"]),
-            config_sha256=str(document["config_sha256"]),
+            runtime_identity_sha256=_optional_hash(document.get("runtime_identity_sha256")),
+            config_sha256=_optional_hash(document.get("config_sha256")),
             points={
                 point_id: PointState.from_document(point)
                 for point_id, point in dict(document.get("points", {})).items()
@@ -249,7 +263,32 @@ class CampaignReducerState:
 
 
 class CanonicalCampaignReducer:
-    """Pure reducer: the returned state is new, the state passed in is never modified."""
+    """Pure reducer: the returned state is new, the state passed in is never modified.
+
+    ``identity_required`` is the one contract switch. It is ``True`` for the canonical coordinator
+    stream, whose ``CAMPAIGN_STARTED`` must carry the runtime identity and the config hash, so the
+    guard there is exactly what it always was. A projection source for a layout that publishes no
+    runtime identity (the macOS campaign journal) builds its reducer with
+    ``identity_required=False``: the event must then either omit the pair or carry well-formed
+    hashes, and the state records ``None`` rather than a fabricated value. A published identity
+    that *drifts* between two ``CAMPAIGN_STARTED`` events is still refused either way.
+    """
+
+    def __init__(self, *, identity_required: bool = True) -> None:
+        self.identity_required = bool(identity_required)
+
+    def _identity_pair(self, payload: Mapping[str, object]) -> tuple[str | None, str | None]:
+        runtime = payload.get("runtime_identity_sha256")
+        config = payload.get("config_sha256")
+        if self.identity_required:
+            return (
+                _require_sha256("runtime_identity_sha256", runtime),
+                _require_sha256("config_sha256", config),
+            )
+        return (
+            None if runtime is None else _require_sha256("runtime_identity_sha256", runtime),
+            None if config is None else _require_sha256("config_sha256", config),
+        )
 
     def apply(self, state: CampaignReducerState | None, event) -> CampaignReducerState:
         event_type = getattr(event, "type", None)
@@ -309,13 +348,12 @@ class CanonicalCampaignReducer:
     # -- transitions --------------------------------------------------------------------
 
     def _start(self, event, payload, sequence, event_hash) -> CampaignReducerState:
+        runtime_identity, config_sha256 = self._identity_pair(payload)
         return CampaignReducerState(
             campaign_id=_require_id("campaign_id", payload.get("campaign_id")),
             batch_id=_require_id("batch_id", payload.get("batch_id")),
-            runtime_identity_sha256=_require_sha256(
-                "runtime_identity_sha256", payload.get("runtime_identity_sha256")
-            ),
-            config_sha256=_require_sha256("config_sha256", payload.get("config_sha256")),
+            runtime_identity_sha256=runtime_identity,
+            config_sha256=config_sha256,
             last_sequence=sequence,
             last_event_sha256=event_hash,
         )

@@ -20,6 +20,7 @@ from so101_demo.parallel_batch.contracts import BatchSummary, ContractError, Poi
 
 from .adaptive_events import AdaptiveEventReader
 from .artifacts import ValidationArtifactRegistry
+from .campaign_layout import CampaignLayoutReader, campaign_committed_attempt
 from .catalog import CatalogPoint, PointSelection, select_catalog_points
 from .committed_artifacts import register_committed_attempt
 from .control import ControlProtocolError
@@ -30,6 +31,7 @@ from .coordinator_events import (
     CoordinatorProjectionError,
     ReadOnlyCoordinatorJournal,
 )
+from .journal_layout import CAMPAIGN_LAYOUT, resolve_fixed_journal_layout
 from .execution_context import (
     CandidateExecutionContext,
     ProductionExecutionContext,
@@ -56,6 +58,7 @@ from .preflight import (
     UNSUPPORTED_ON_MACOS,
 )
 from .process_owner import CoordinatorOwnershipError, ExecutionProcessOwner, OwnedCoordinator
+from .reducer import CanonicalCampaignReducer
 from .service import ExpertValidationService, ServiceConflict
 from .store import StoreConflict, SupervisorStore
 from .statistics import (
@@ -1195,46 +1198,39 @@ class ProductionExpertValidationService(ExpertValidationService):
             / request.campaign_id
             / request.batch_id
         ).resolve()
-        journal_root = batch_root / "coordinator"
-        epoch_path = journal_root / "coordinator_epoch.json"
-        if epoch_path.is_symlink():
-            raise CoordinatorProjectionError("OWNER_EPOCH_INVALID")
-        if not epoch_path.exists():
-            return None
-        if not epoch_path.is_file():
-            raise CoordinatorProjectionError("OWNER_EPOCH_INVALID")
         try:
-            epoch_document = json.loads(epoch_path.read_text(encoding="utf-8"))
-            epoch = epoch_document["coordinator_epoch"]
-        except (OSError, KeyError, TypeError, ValueError) as error:
-            raise CoordinatorProjectionError("OWNER_EPOCH_INVALID") from error
-        if (
-            set(epoch_document) != {"batch_id", "coordinator_epoch"}
-            or epoch_document["batch_id"] != request.batch_id
-            or isinstance(epoch, bool)
-            or not isinstance(epoch, int)
-            or epoch <= 0
-        ):
-            raise CoordinatorProjectionError("OWNER_EPOCH_INVALID")
+            layout = resolve_fixed_journal_layout(batch_root, request.batch_id)
+        except CoordinatorProjectionError as error:
+            if str(error) == "JOURNAL_NOT_PRESENT":
+                # The one typed outcome that means "this batch has not published a journal yet":
+                # a batch still starting keeps its cached projection, exactly as a missing epoch
+                # document did before. Every other code is a refusal, never a silent pick.
+                return None
+            raise
+        journal_root = layout.journal_root
         binding = CampaignUpstreamBinding(
             campaign_id=request.campaign_id,
             batch_id=request.batch_id,
             owner_kind="COORDINATOR",
-            owner_epoch_or_generation=epoch,
+            owner_epoch_or_generation=layout.epoch,
             journal_root=journal_root,
             batch_root=batch_root,
         )
-        reader = CoordinatorEventReader(
-            ReadOnlyCoordinatorJournal(journal_root, request.batch_id),
-            binding,
-        )
+        journal = ReadOnlyCoordinatorJournal(journal_root, request.batch_id)
+        if layout.layout == CAMPAIGN_LAYOUT:
+            # The macOS campaign journal: the same verification, its own committed payload schema.
+            reader = CampaignLayoutReader(journal, binding)
+            persist_reducer = CanonicalCampaignReducer(identity_required=False)
+        else:
+            reader = CoordinatorEventReader(journal, binding)
+            persist_reducer = None
         batch = reader.read_after(AcceptedCoordinatorCursor.initial(binding))
         if not batch.events:
             return None
         # The canonical durable projection is committed before it is read back: a retry admission
         # validates the original point's business result against exactly this state, never against
         # a value this request happened to compute.
-        self._persist_canonical_projection(request, batch)
+        self._persist_canonical_projection(request, batch, reducer=persist_reducer)
         state = batch.projected_state
         raw_points = state.get("points")
         if not isinstance(raw_points, Mapping):
@@ -1279,11 +1275,17 @@ class ProductionExpertValidationService(ExpertValidationService):
         for event in batch.events:
             if event.type != "RESULT_COMMITTED":
                 continue
-            if not isinstance(event.payload.get("identity"), Mapping):
-                # A canonical result event must still reference the sealed attempt it commits:
-                # the import is authorized by that reference, never by a flat outcome field.
-                raise CoordinatorProjectionError("RESULT_REFERENCE_INVALID")
-            evidence = register_committed_attempt(event, binding, selected, self.artifacts)
+            if layout.layout == CAMPAIGN_LAYOUT:
+                # The campaign layout has no sealed attempt manifest to import; its result was
+                # verified against the journal's own terminal and the batch's per-point document,
+                # and no artifact is registered for it.
+                evidence = campaign_committed_attempt(event, binding)
+            else:
+                if not isinstance(event.payload.get("identity"), Mapping):
+                    # A canonical result event must still reference the sealed attempt it commits:
+                    # the import is authorized by that reference, never by a flat outcome field.
+                    raise CoordinatorProjectionError("RESULT_REFERENCE_INVALID")
+                evidence = register_committed_attempt(event, binding, selected, self.artifacts)
             if evidence.identity in committed_identities:
                 raise CoordinatorProjectionError("DUPLICATE_COMMITTED_ATTEMPT")
             committed_identities.add(evidence.identity)
@@ -1480,12 +1482,14 @@ class ProductionExpertValidationService(ExpertValidationService):
             "qualification_passed": statistics.qualification_passed,
         }
 
-    def _persist_canonical_projection(self, request, batch) -> None:
+    def _persist_canonical_projection(self, request, batch, *, reducer=None) -> None:
         """Commit the verified canonical prefix, its attempts and its cursor in one transaction.
 
         A journal that carries no canonical frame at all (a v1-v3 delta journal) has no canonical
         state to persist and is left exactly as it was: the durable reducer state exists only for
-        the campaigns whose events the canonical reducer defines.
+        the campaigns whose events the canonical reducer defines. ``reducer`` is the one the
+        projection already reduced these events with, so the committed state and the projected
+        state can never disagree.
         """
 
         from .reducer import CanonicalCampaignReducer, ReducerError
@@ -1494,6 +1498,8 @@ class ProductionExpertValidationService(ExpertValidationService):
         if accept is None or not batch.events:
             # A read-only cursor double has no projection table to commit into.
             return
+        if reducer is None:
+            reducer = CanonicalCampaignReducer()
         final = batch.events[-1]
         next_cursor = UpstreamCursor(
             batch_id=request.batch_id,
@@ -1510,7 +1516,7 @@ class ProductionExpertValidationService(ExpertValidationService):
                 expected_cursor=snapshot.cursor,
                 events=batch.events,
                 next_cursor=next_cursor,
-                reducer=CanonicalCampaignReducer(),
+                reducer=reducer,
             )
         except ReducerError as error:
             if error.code == "REDUCER_STATE_REQUIRED":
