@@ -2561,3 +2561,35 @@ This replaces the earlier reading of this leg: it is not "no retry control" and 
 control exists, the authority was held, and the product's own retry handler is broken for the request it receives.
 That is the last blocker of plan Task 12 Step 4, and it is a fixable product defect with a RED-testable boundary
 (the retry endpoint plus the service/supervisor path it calls). Nothing was bypassed and no retry batch exists.
+
+## CP-MSC-T12-CLEANUP-RECEIPT: the retry now refuses by name; the block is a missing durable cleanup receipt
+
+```yaml
+checkpoint_id: CP-MSC-T12-CLEANUP-RECEIPT
+recorded_at: 2026-09-22T14:05:00+0800
+commit_at_run: a38d3a6e (installed overlay refreshed from it; doctor PASS; installed production.py 90485776..., api.py 9fcdd4b2..., new web bundle)
+evidence: task12/retry-after-fix-20260922T052643Z/legs/w1/driver.log; task12/service-runs/retryafterfix/state/campaigns/campaign-4d9af7fca30f49939f952db367338454/
+verdict: the TypeError defect is fixed and proven live; a second, different block is now named
+```
+
+The refreshed installed service ran one v6 W1 production first pass over the twenty pinned-catalog points,
+`campaign-4d9af7fca30f49939f952db367338454`, terminal `N1_CAMPAIGN_PASS`, with `sample_05_near_center` again the
+genuine business `FAILED` point (committed, `infrastructure_code` null). The console then, in the same document
+before releasing its lease, read its own retry panel, ticked P09 and submitted the v5 retry:
+
+```
+05:59:19.328Z same-page retry target=Retry P09 checked=true enabled=Retry P09
+05:59:19.474Z same-page retry -> 409 {"code":"RETRY_ORIGINAL_CLEANUP_INCOMPLETE"}
+```
+
+This is the fix working exactly as intended: a **typed refusal by name**, no leaked Python exception, and the
+request/context pair was built before the refusal (the boundary probe showed the same code against the recorded
+store). The new block is one step further in: the retry admission judges the original batch's cleanup incomplete
+because the service's durable `campaign_batches.cleanup_receipt_sha256` is NULL for that batch, even though the
+campaign's own `campaign-result.json` reports `cleanup.complete` (and the earlier boundary probe on batch `b889e`
+showed the same NULL). So the campaign completes its cleanup, the console projection reaches
+`COMPLETED_WITH_FAILURES` with `batch_cleanup_complete`, and the admission still cannot see a durable cleanup
+receipt. Reconciling that - recording the batch's cleanup receipt from verified bytes on the service side, or
+making the admission read the same evidence the projection reads - is the next fix, and it is a product gap rather
+than a harness one. Nothing is claimed about a retry batch: none was created (`retry_history` empty, no `retry-*`
+root).
