@@ -276,11 +276,20 @@ export const liveSimTest = base.extend<{ liveServer: LiveServer }>({
     }
     proveChrome(caseDir);
 
-    const prefixes = resolvePackagePrefixes(
-      preconditions.installPrefix,
-      process.env.SO101_E2E_DEPENDENCY_PREFIX ?? "/data/work/ws_moveit/install",
-    );
-    const sitePackages = prefixes.map((entry) => join(entry, "lib/python3.12/site-packages"));
+    // The dependency base and the interpreter directory are properties of the host, not of the
+    // acceptance: ai-station keeps its MoveIt workspace at /data/work/ws_moveit/install with a
+    // python3.12 overlay, while macOS installs the fixed runtime at /opt/ros2_jazzy and runs
+    // python3.11. Falling back to the Linux pair refused every macOS window with
+    // `PACKAGE_PREFIX_MISSING: /data/work/ws_moveit/install/mujoco_3d_lidar`.
+    const dependencyBase = process.env.SO101_E2E_DEPENDENCY_PREFIX
+      ?? (process.platform === "darwin"
+        ? "/opt/ros2_jazzy/extra_ws/install"
+        : "/data/work/ws_moveit/install");
+    const pythonSiteDirectory = process.platform === "darwin"
+      ? "lib/python3.11/site-packages"
+      : "lib/python3.12/site-packages";
+    const prefixes = resolvePackagePrefixes(preconditions.installPrefix, dependencyBase);
+    const sitePackages = prefixes.map((entry) => join(entry, pythonSiteDirectory));
     const libraryPaths = prefixes.map((entry) => join(entry, "lib"));
     // One installed launcher: the unified server. The deprecated per-domain scripts only
     // delegate to it, so a live acceptance can never raise a second web listener.
@@ -314,7 +323,12 @@ export const liveSimTest = base.extend<{ liveServer: LiveServer }>({
         ...MODEL_ENV,
         SO101_DISABLE_KIMI_EDITABLE_FINDER: "1",
         PYTHONNOUSERSITE: "1",
-        PYTHONPATH: [...sitePackages, "/opt/ros/jazzy/lib/python3.12/site-packages"].join(":"),
+        PYTHONPATH: [
+          ...sitePackages,
+          process.platform === "darwin"
+            ? "/opt/ros2_jazzy/install/rclpy/lib/python3.11/site-packages"
+            : "/opt/ros/jazzy/lib/python3.12/site-packages",
+        ].join(":"),
         AMENT_PREFIX_PATH: [...prefixes, "/opt/ros/jazzy"].join(":"),
         LD_LIBRARY_PATH: [...libraryPaths, process.env.LD_LIBRARY_PATH ?? ""]
           .filter(Boolean)
