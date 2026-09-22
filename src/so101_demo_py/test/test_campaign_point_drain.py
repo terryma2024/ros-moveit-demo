@@ -26,6 +26,7 @@ import hashlib
 import importlib
 import importlib.util
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -525,6 +526,81 @@ def test_a_station_that_outlived_its_worker_is_stopped_by_its_own_argv(tmp_path:
     assert all(target != 201 and target != -201 for target, _number in signalled)
 
 
+def test_every_served_response_is_admitted_immediately_so_the_table_stays_bounded() -> None:
+    """The one-time table bounds *outstanding* requests; a drain must not fill it and stop.
+
+    The first seven-point W2 drain issued six leases and then failed with `REGISTRY_CAPACITY`: every
+    response was admitted only at the end of the campaign, so the pending set grew with every spawn.
+    Admitting each response as it is served keeps the table's semantics and its bound.
+    """
+
+    cli = _cli()
+    from so101_demo.parallel_batch.inference_registry import InferenceRegistry
+
+    class _Campaign:
+        """`MacosW2Campaign.admit_response`, over a real registry with a tiny capacity."""
+
+        def __init__(self):
+            self.registry = InferenceRegistry(campaign_id="c", capacity=2)
+
+        def admit_response(self, request_id, *, broker_pid, broker_birth_identity, **_kwargs):
+            return self.registry.consume_result(
+                request_id, broker_pid=broker_pid, broker_birth_identity=broker_birth_identity)
+
+        def bind(self, request_id):
+            return self.registry.register_request(
+                request_id=request_id, slot_id="slot-0", point_id="p1", attempt=1,
+                model_id="yolo", input_sha256="a" * 64,
+                deadline_monotonic_ns=time.monotonic_ns() + 60_000_000_000,
+                broker_pid=4242, broker_birth_identity=17)
+
+    campaign = _Campaign()
+    served: list = []
+    for index in range(6):
+        request_id = f"w1-att-g{index:02d}-01-yolo"
+        campaign.bind(request_id)
+        assert cli.serve_and_admit(campaign, request_id=request_id, candidates=1, device="mps",
+                                   served=served, broker_pid=4242,
+                                   broker_birth_identity=17) is None
+    admitted, refused = cli.served_admission_split(served)
+    assert len(admitted) == 6 and refused == []
+
+    # a response the table will not admit is refused to the caller, never recorded as admitted
+    campaign.bind("late-yolo")
+    campaign.registry.consume_result("late-yolo", broker_pid=4242, broker_birth_identity=17)
+    refusal = cli.serve_and_admit(campaign, request_id="late-yolo", candidates=1, device="mps",
+                                  served=served, broker_pid=4242, broker_birth_identity=17)
+    assert refusal["error"]["code"] == "RESULT_NOT_ADMITTED"
+    admitted, refused = cli.served_admission_split(served)
+    assert [entry["request_id"] for entry in refused] == ["late-yolo"]
+
+
+def test_the_per_slot_summary_reads_the_per_attempt_station_evidence(tmp_path: Path) -> None:
+    """One station root per lease: the slot summary must read them, not a single fixed `pick` root."""
+
+    cli = _cli()
+    root = tmp_path
+    for attempt, point_id in (("task_start-attempt-1", "task_start"),
+                              ("cup_test_left_5cm-attempt-2", "cup_test_left_5cm")):
+        point_root = (root / "w1-station" / attempt / "pick" / "batches" / "b1" / "points"
+                      / f"01-{point_id}")
+        (point_root / "dynamic").mkdir(parents=True)
+        (point_root / "dynamic" / "dynamic-execute-manifest.json").write_text(json.dumps(
+            {"current_state": "DONE", "failure": None,
+             "final_samples": [{"simulation_step": 33, "table_contact": True,
+                                "maximum_normal_force_n": 0.233}]}))
+        (point_root / "point-result.json").write_text(json.dumps(
+            {"id": point_id, "status": "SUCCEEDED", "failure_code": None}))
+
+    summary = cli.summarize_per_slot_pick_place(evidence_root=root, workers=("w1",))
+
+    assert summary["w1"]["manifests"] == 2
+    assert summary["w1"]["point_results"] == 2
+    assert summary["w1"]["executed_points"] == ["01-cup_test_left_5cm", "01-task_start"]
+    assert {contact["point_id"] for contact in summary["w1"]["contacts"]} == {
+        "task_start", "cup_test_left_5cm"}
+
+
 def test_the_worker_reads_its_lease_before_it_uses_it() -> None:
     """The Worker is a script; a lease read placed after its first use is a NameError at runtime.
 
@@ -580,6 +656,48 @@ def test_retry_source_requires_a_committed_business_failure(tmp_path: Path) -> N
             prior_root=prior_root, point_id="sample_20_never_selected",
             selection_document_path=prior_root / "selection-binding.json")
     assert unselected.value.code == "RETRY_POINT_NOT_SELECTED"
+
+
+def test_a_retry_selection_document_projects_the_original_chain(tmp_path: Path) -> None:
+    """The retry's own selection document must record the chain it references, not crash.
+
+    The first v5 retry attempt died with `AttributeError: 'RetrySelectionBinding' object has no
+    attribute 'catalog_sha256'`: the campaign's selection projection and the document writer were
+    written for a first pass only. Both now go through one function, and the retry document carries
+    the original catalog/selection/result hashes a later reader needs.
+    """
+
+    cli = _cli()
+    drain = _drain_module()
+    _module, _binding, _queue, prior_root, report, _calls = _committed_failed_point(tmp_path)
+    point_id = report.attempts[0].point_id
+    source = drain.read_retry_source(
+        prior_root=prior_root, point_id=point_id,
+        selection_document_path=prior_root / "selection-binding.json")
+    selection_document = json.loads(
+        (prior_root / "selection-binding.json").read_text(encoding="utf-8"))
+    catalog_path = Path(selection_document["catalog_path"])
+    retry = drain.retry_binding(
+        source=source, catalog_path=catalog_path, campaign_id="retry-campaign",
+        batch_id="retry-batch", config_sha256="c" * 64, runtime_closure_sha256="d" * 64)
+
+    written = drain.write_selection_document(
+        evidence_root=tmp_path / "retry", binding=retry, catalog_path=catalog_path)
+    document = json.loads(written.read_text(encoding="utf-8"))
+    assert document["kind"] == "FULL_RESTART_RETRY"
+    assert document["catalog_sha256"] == selection_document["catalog_sha256"]
+    assert document["original_selection_sha256"] == source["original_selection_sha256"]
+    assert document["original_result_sha256"] == source["original_result_sha256"]
+    assert document["original_outcome"] == "FAILED"
+    assert document["selected_point_ids"] == [point_id]
+
+    # the campaign's own projection is the same shape, for either binding kind
+    projected = cli.selection_document(retry, catalog_path=catalog_path)
+    assert projected["catalog_sha256"] == document["catalog_sha256"]
+    assert projected["original_result_sha256"] == source["original_result_sha256"]
+    first_pass_projection = cli.selection_document(_binding, catalog_path=catalog_path)
+    assert first_pass_projection["kind"] == "FIRST_PASS"
+    assert first_pass_projection["selected_point_ids"] == list(_binding.selected_point_ids)
 
 
 def test_retry_binding_leases_only_the_bound_failed_point(tmp_path: Path) -> None:

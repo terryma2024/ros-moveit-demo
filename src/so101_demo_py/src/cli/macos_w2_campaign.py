@@ -251,9 +251,12 @@ def summarize_per_slot_pick_place(*, evidence_root: Path, workers=("w1", "w2")) 
 
     summary: dict[str, dict] = {}
     for worker_id in workers:
-        pick_root = Path(evidence_root) / f"{worker_id}-station/pick"
-        manifests = sorted(glob.glob(f"{pick_root}/**/dynamic-execute-manifest.json", recursive=True))
-        points = sorted(glob.glob(f"{pick_root}/**/point-result.json", recursive=True))
+        # One station root per lease, so the slot's evidence is everything under its own station
+        # directory - the `pick` root of each attempt included, never a single fixed one.
+        station_root = Path(evidence_root) / f"{worker_id}-station"
+        manifests = sorted(glob.glob(
+            f"{station_root}/**/dynamic-execute-manifest.json", recursive=True))
+        points = sorted(glob.glob(f"{station_root}/**/point-result.json", recursive=True))
         executed, contacts = [], []
         for manifest in manifests:
             try:
@@ -265,6 +268,8 @@ def summarize_per_slot_pick_place(*, evidence_root: Path, workers=("w1", "w2")) 
                 executed.append(point)
                 sample = (entry.get("final_samples") or [{}])[0]
                 contacts.append({"point": point,
+                                 # the catalog id, without the batch runner's ordinal prefix
+                                 "point_id": point.split("-", 1)[1] if "-" in point else point,
                                  "simulation_step": sample.get("simulation_step"),
                                  "table_contact": sample.get("table_contact"),
                                  "max_normal_force_n": sample.get("maximum_normal_force_n"),
@@ -295,7 +300,8 @@ def summarize_per_slot_pick_place(*, evidence_root: Path, workers=("w1", "w2")) 
             "point_results": len(points),
             "failure_codes": sorted(code for code in failure_codes if code is not None),
             "contacts": contacts,
-            "evidence_root": str(pick_root),
+            "evidence_root": str(station_root),
+            "point_result_paths": points,
         }
     return summary
 
@@ -338,6 +344,38 @@ def admission_decision(*, operation: str, request_id: str, serialized_request: o
         if declared != bound_digest:
             return {"error": {"code": "SNAPSHOT_MISMATCH", "detail": f"{request_id}: {declared!r}"}}
     return None
+
+
+def serve_and_admit(campaign, *, request_id: str, candidates: int, device: str,
+                    served: list, broker_pid: int, broker_birth_identity: int) -> dict | None:
+    """Record one served response and consult the one-time table for it *now*.
+
+    The table is the admission gate for every response, and it is also a bounded table of
+    *outstanding* requests. Deferring every admission to the end of a campaign drains that bound:
+    the drain issues one lease per point, and the registry refuses a new binding once its pending
+    set is full (`REGISTRY_CAPACITY`), which is how the first seven-point drain stopped after five
+    spawns. Admitting each response as it is served keeps the table's semantics exactly - nothing is
+    served that the table will not admit - while keeping its pending set bounded.
+    """
+
+    decision = campaign.admit_response(
+        request_id, broker_pid=broker_pid, broker_birth_identity=broker_birth_identity)
+    entry = {"request_id": request_id, "candidates": candidates, "device": device,
+             "admitted": bool(decision.accepted), "admission_reason": decision.reason}
+    served.append(entry)
+    if not decision.accepted:
+        return {"error": {"code": "RESULT_NOT_ADMITTED", "detail": decision.reason}}
+    return None
+
+
+def served_admission_split(served) -> tuple[list[dict], list[dict]]:
+    """The admitted and refused responses of one campaign, from the decisions made while serving."""
+
+    admitted = [{"request_id": entry["request_id"], "reason": entry.get("admission_reason")}
+                for entry in served if entry.get("admitted")]
+    refused = [{"request_id": entry["request_id"], "reason": entry.get("admission_reason")}
+               for entry in served if not entry.get("admitted")]
+    return admitted, refused
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -797,18 +835,15 @@ def installed_catalog_path() -> Path:
         raise RefusedRun("config", f"CATALOG_MISSING: {type(error).__name__}: {error}") from error
 
 
-def selection_document(selection) -> dict:
-    """The audit projection of the one selection this campaign executes."""
+def selection_document(selection, *, catalog_path: Path) -> dict:
+    """The audit projection of the one selection this campaign executes.
 
-    return {
-        "kind": "FULL_RESTART_RETRY" if isinstance(
-            selection, point_drain.RetrySelectionBinding) else "FIRST_PASS",
-        "selection_sha256": selection.selection_sha256,
-        "catalog_sha256": selection.catalog_sha256,
-        "config_sha256": selection.config_sha256,
-        "runtime_closure_sha256": selection.runtime_closure_sha256,
-        "selected_point_ids": list(selection.selected_point_ids),
-    }
+    It is produced by the same function that writes `selection-binding.json`, so a first pass and a
+    retry project the identical shape - including the retry's original selection/result chain -
+    instead of the retry path crashing on a first-pass-only field.
+    """
+
+    return point_drain.selection_document_for(selection, catalog_path=catalog_path)
 
 
 def bind_campaign_selection(*, arguments, plan, spec):
@@ -818,7 +853,8 @@ def bind_campaign_selection(*, arguments, plan, spec):
     contract, so a selection that omits them is refused by name rather than silently extended). A
     v5 retry takes exactly one point and must reference the prior campaign's committed business
     `FAILED` result; anything else - an unrun point, an infrastructure failure, an indeterminate
-    point - is refused before a process exists.
+    point - is refused before a process exists. Returns the binding, its durable queue and the
+    catalog path the binding was frozen from, which is what the selection document records.
     """
 
     from ..parallel_batch.selection import SelectionError, load_point_catalog
@@ -878,7 +914,7 @@ def bind_campaign_selection(*, arguments, plan, spec):
     queue = DurablePointQueue(root=Path(arguments.evidence_root) / "queue", binding=selection)
     point_drain.write_selection_document(
         evidence_root=arguments.evidence_root, binding=selection, catalog_path=catalog_path)
-    return selection, queue
+    return selection, queue, catalog_path
 
 
 def station_processes(station_root: str, *, ps_runner=None) -> list[dict]:
@@ -1005,10 +1041,11 @@ def _drive_campaign(arguments, argv, plan, spec, document) -> int:
     # The immutable selection and the durable queue exist before the first process does. A
     # selection the binding contract refuses - fewer than four points, a missing anchor, an unknown
     # id, a retry of a point that is not a committed business FAILED - stops the campaign here.
-    selection, queue = bind_campaign_selection(arguments=arguments, plan=plan, spec=spec)
+    selection, queue, catalog_path = bind_campaign_selection(
+        arguments=arguments, plan=plan, spec=spec)
     campaign.bind_selection(binding=selection, queue=queue)
     document["selection"] = {
-        **selection_document(selection),
+        **selection_document(selection, catalog_path=catalog_path),
         "document_path": str(Path(arguments.evidence_root)
                              / point_drain.SELECTION_DOCUMENT_BASENAME),
     }
@@ -1129,8 +1166,12 @@ def _drive_campaign(arguments, argv, plan, spec, document) -> int:
                 label=f"serve:{request.operation}")
             candidates = len(getattr(batch, "candidates", ()))
             device = detector.runtime_device
-            served.append({"request_id": request.request_id, "operation": request.operation,
-                           "candidates": candidates, "device": device})
+            refusal = serve_and_admit(
+                campaign, request_id=request.request_id, candidates=candidates, device=device,
+                served=served, broker_pid=ready.broker_pid,
+                broker_birth_identity=ready.broker_birth_identity)
+            if refusal is not None:
+                return refusal
             # Fault injection, explicit and one-shot: the Broker child is signalled by exact PID
             # only after the requested number of requests has been served, and what the campaign
             # does next is the evidence - never an automatic kill and never a silent retry.
@@ -1256,6 +1297,7 @@ def _drive_campaign(arguments, argv, plan, spec, document) -> int:
         workers = [dict(spawn) for spawn in report.spawns]
         document["workers"] = workers
         document["drain"] = {"stop_reason": report.stop_reason,
+                             "stop_detail": report.stop_detail,
                              "stopped_at_cap": report.stopped_at_cap,
                              "releases": [dict(release) for release in report.releases]}
         points_summary = report.summary(selected_point_ids=selection.selected_point_ids)
@@ -1282,14 +1324,8 @@ def _drive_campaign(arguments, argv, plan, spec, document) -> int:
         document["per_slot_pick_place"] = per_slot
         document["handler_errors"] = handler_errors
 
-        # Every response is admitted through the one-time table before it counts.
-        admitted_responses, refused = [], []
-        for entry in served:
-            decision = campaign.admit_response(
-                entry["request_id"], broker_pid=ready.broker_pid,
-                broker_birth_identity=ready.broker_birth_identity)
-            (admitted_responses if decision.accepted else refused).append(
-                {"request_id": entry["request_id"], "reason": decision.reason})
+        # Every response was admitted through the one-time table when it was served.
+        admitted_responses, refused = served_admission_split(served)
         document["admission"] = {"admitted": admitted_responses, "refused": refused}
         document["served"] = {
             "count": len(served),
