@@ -43,11 +43,16 @@ def run(argv: list[str] | None = None) -> int:
     return run_w1(argv, execution_profile=EXECUTION_PROFILE)
 
 
-def campaign_status(*, cleanup_complete, results, workers, served, refused) -> str:
-    """This profile's verdict, as a pure function so the rule is testable and readable."""
+def campaign_status(*, cleanup_complete, results, workers, served, refused, points) -> str:
+    """This profile's verdict, as a pure function so the rule is testable and readable.
+
+    `points` is the campaign's own executed-point summary: a pass requires every selected point to
+    have exactly one committed result, so a campaign that executed nothing cannot report one.
+    """
 
     return campaign_verdict(spec=route_spec(EXECUTION_PROFILE), cleanup_complete=cleanup_complete,
-                            results=results, workers=workers, served=served, refused=refused)
+                            results=results, workers=workers, served=served, refused=refused,
+                            points=points)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -93,145 +93,162 @@ if station_arguments and (station_ready or {}).get("exit_code") != 0:
     os.replace(out_path + ".part", out_path)
     raise SystemExit("STATION_NOT_READY")
 
+#: The one lease this Worker executes, read once and reused by both halves below. The campaign
+#: writes it before the spawn - one lease, one point - so a Worker without one is the IPC-only
+#: Worker of the earlier campaigns.
+lease_document = json.loads(Path(lease_argument[0]).read_text()) if lease_argument else None
+
 #: The profile and batch kind travel with the lease, so a Worker's own result document names the
 #: approved profile it executed instead of leaving that to the entry point that spawned it.
 lease_identity = {"execution_profile": None, "batch_kind": None, "schema_version": None}
 
-infer_results = []
-if lease_argument:
-    # The Worker now speaks the production path: it reads the identity the entry point bound for it
-    # and asks the shared Broker through `W2BrokerPort`, so its inference is a real model call gated
-    # by the one-time table instead of an IPC-shape probe.
-    from types import SimpleNamespace
-
-    from so101_demo.parallel_batch.contracts import ExecutionKind
-    from so101_demo.runtime.macos_w2_broker_port import BrokerAuthority, W2BrokerPort
-    from so101_demo.runtime.parallel_ipc_v4 import V4PermissionOnlyClient as _V4Client
-
-    lease_document = json.loads(Path(lease_argument[0]).read_text())
-    lease_identity = {name: lease_document.get(name)
-                      for name in ("execution_profile", "batch_kind", "schema_version")}
-    authority = BrokerAuthority(healthy=True, generation=1, endpoint_path=endpoint)
-    port_config = SimpleNamespace(
-        broker_max_frame_bytes=8 * 1024 * 1024,
-        executing_hard_timeout_s=float(lease_document.get("deadline_s", 240.0)),
-        broker_recovery_timeout_s=90.0)
-    port = W2BrokerPort(
-        coordinator=lambda: authority, authority=authority, config=port_config,
-        resources=SimpleNamespace(worker_root=Path(lease_document["worker_root"])),
-        connection=_V4Client(endpoint_path=endpoint))
-    declared_sha = lease_document["input_sha256"]
-    if lease_document.get("tamper_input_sha256"):
-        # Fault injection: declare a digest the Coordinator never bound.
-        declared_sha = "0" * 64
-    snapshot = SimpleNamespace(
-        path=Path(lease_document["snapshot_path"]), shape=tuple(lease_document["shape"]),
-        input_sha256=declared_sha,
-        source_stamp_ns=lease_document["source_stamp_ns"],
-        source_frame_id=lease_document["source_frame_id"])
-    for attempt_id in lease_document["attempt_ids"]:
-        lease = SimpleNamespace(
-            attempt_id=attempt_id, batch_id=lease_document["batch_id"],
-            coordinator_epoch=lease_document["coordinator_epoch"], worker_id=worker_id,
-            worker_generation=lease_document["worker_generation"],
-            point_id=lease_document["point_id"],
-            lease_generation=lease_document["lease_generation"])
-        try:
-            response = port.request_one(
-                lease, ExecutionKind.ATTEMPT, model_id=lease_document["model_id"],
-                snapshot=snapshot, start_event_id=f"{attempt_id}-start",
-                start_event_type=lease_document["start_event_type"],
-                reset_epoch=lease_document["reset_epoch"])
-            descriptor = getattr(response, "output_descriptor", None) or {}
-            infer_results.append({"request_id": f"{attempt_id}-{lease_document['model_id']}",
-                                  "status": getattr(response, "status", None),
-                                  "device": descriptor.get("device")})
-        except Exception as error:  # noqa: BLE001 - the failure mode is the evidence
-            infer_results.append({"request_id": f"{attempt_id}-{lease_document['model_id']}",
-                                  "status": "ERROR", "error": f"{type(error).__name__}: {error}",
-                                  "response": getattr(error, "response_document", None)})
-
-    # A duplicate of the first request: the one-time table must refuse it, so a late or repeated
-    # result cannot be admitted a second time.
-    # The duplicate probe is opt-in: with it off, a clean campaign can report PASS rather than
-    # being INCOMPLETE by construction, since the verdict refuses when anything was refused.
-    duplicate_result = None
-    if lease_document.get("duplicate_probe"):
-        duplicate_id = lease_document["attempt_ids"][0]
-        duplicate_lease = SimpleNamespace(
-            attempt_id=duplicate_id, batch_id=lease_document["batch_id"],
-            coordinator_epoch=lease_document["coordinator_epoch"], worker_id=worker_id,
-            worker_generation=lease_document["worker_generation"],
-            point_id=lease_document["point_id"],
-            lease_generation=lease_document["lease_generation"])
-        try:
-            port.request_one(
-                duplicate_lease, ExecutionKind.ATTEMPT, model_id=lease_document["model_id"],
-                snapshot=snapshot, start_event_id=f"{duplicate_id}-start",
-                start_event_type=lease_document["start_event_type"],
-                reset_epoch=lease_document["reset_epoch"])
-            duplicate_result = {"request_id": f"{duplicate_id}-{lease_document['model_id']}",
-                                "status": "ADMITTED_TWICE"}
-        except Exception as error:  # noqa: BLE001
-            duplicate_result = {"request_id": f"{duplicate_id}-{lease_document['model_id']}",
-                                "status": "REFUSED", "error": f"{type(error).__name__}: {error}"}
-
-
 try:
-    client = V4PermissionOnlyClient(endpoint_path=endpoint)
-    results = []
-    for index in range(3):
-        response = client.call("worker.progress", {"worker_id": worker_id, "index": index},
-                               request_id=f"{worker_id}-req-{index:02d}")
-        body = response.output_descriptor or {}
-        results.append({"request_id": response.request_id, "status": response.status,
-                        "device": body.get("device"), "candidates": body.get("candidates")})
+    infer_results = []
+    if lease_argument:
+        # The Worker now speaks the production path: it reads the identity the entry point bound for it
+        # and asks the shared Broker through `W2BrokerPort`, so its inference is a real model call gated
+        # by the one-time table instead of an IPC-shape probe.
+        from types import SimpleNamespace
 
-    # The pick-place half of the Worker: once its station is ready and its round trips are served,
-    # one real point list runs on that station and on the Worker's own ROS domain through the
-    # production batch runner in attach mode, with its own evidence root - so the two slots never
-    # share a batch, a reset epoch or a directory.
-    pick_place = {"requested": False}
-    if station is not None and lease_argument:
-        import subprocess as _subprocess
+        from so101_demo.parallel_batch.contracts import ExecutionKind
+        from so101_demo.runtime.macos_w2_broker_port import BrokerAuthority, W2BrokerPort
+        from so101_demo.runtime.parallel_ipc_v4 import V4PermissionOnlyClient as _V4Client
 
-        from ament_index_python.packages import get_package_prefix as _prefix
+        lease_identity = {name: lease_document.get(name)
+                          for name in ("execution_profile", "batch_kind", "schema_version")}
+        authority = BrokerAuthority(healthy=True, generation=1, endpoint_path=endpoint)
+        port_config = SimpleNamespace(
+            broker_max_frame_bytes=8 * 1024 * 1024,
+            executing_hard_timeout_s=float(lease_document.get("deadline_s", 240.0)),
+            broker_recovery_timeout_s=90.0)
+        port = W2BrokerPort(
+            coordinator=lambda: authority, authority=authority, config=port_config,
+            resources=SimpleNamespace(worker_root=Path(lease_document["worker_root"])),
+            connection=_V4Client(endpoint_path=endpoint))
+        declared_sha = lease_document["input_sha256"]
+        if lease_document.get("tamper_input_sha256"):
+            # Fault injection: declare a digest the Coordinator never bound.
+            declared_sha = "0" * 64
+        snapshot = SimpleNamespace(
+            path=Path(lease_document["snapshot_path"]), shape=tuple(lease_document["shape"]),
+            input_sha256=declared_sha,
+            source_stamp_ns=lease_document["source_stamp_ns"],
+            source_frame_id=lease_document["source_frame_id"])
+        for attempt_id in lease_document["attempt_ids"]:
+            lease = SimpleNamespace(
+                attempt_id=attempt_id, batch_id=lease_document["batch_id"],
+                coordinator_epoch=lease_document["coordinator_epoch"], worker_id=worker_id,
+                worker_generation=lease_document["worker_generation"],
+                point_id=lease_document["point_id"],
+                lease_generation=lease_document["lease_generation"])
+            try:
+                response = port.request_one(
+                    lease, ExecutionKind.ATTEMPT, model_id=lease_document["model_id"],
+                    snapshot=snapshot, start_event_id=f"{attempt_id}-start",
+                    start_event_type=lease_document["start_event_type"],
+                    reset_epoch=lease_document["reset_epoch"])
+                descriptor = getattr(response, "output_descriptor", None) or {}
+                infer_results.append({"request_id": f"{attempt_id}-{lease_document['model_id']}",
+                                      "status": getattr(response, "status", None),
+                                      "device": descriptor.get("device")})
+            except Exception as error:  # noqa: BLE001 - the failure mode is the evidence
+                infer_results.append({"request_id": f"{attempt_id}-{lease_document['model_id']}",
+                                      "status": "ERROR", "error": f"{type(error).__name__}: {error}",
+                                      "response": getattr(error, "response_document", None)})
 
-        from so101_demo.parallel_batch.single_point_input import pick_place_request
+        # A duplicate of the first request: the one-time table must refuse it, so a late or repeated
+        # result cannot be admitted a second time.
+        # The duplicate probe is opt-in: with it off, a clean campaign can report PASS rather than
+        # being INCOMPLETE by construction, since the verdict refuses when anything was refused.
+        duplicate_result = None
+        if lease_document.get("duplicate_probe"):
+            duplicate_id = lease_document["attempt_ids"][0]
+            duplicate_lease = SimpleNamespace(
+                attempt_id=duplicate_id, batch_id=lease_document["batch_id"],
+                coordinator_epoch=lease_document["coordinator_epoch"], worker_id=worker_id,
+                worker_generation=lease_document["worker_generation"],
+                point_id=lease_document["point_id"],
+                lease_generation=lease_document["lease_generation"])
+            try:
+                port.request_one(
+                    duplicate_lease, ExecutionKind.ATTEMPT, model_id=lease_document["model_id"],
+                    snapshot=snapshot, start_event_id=f"{duplicate_id}-start",
+                    start_event_type=lease_document["start_event_type"],
+                    reset_epoch=lease_document["reset_epoch"])
+                duplicate_result = {"request_id": f"{duplicate_id}-{lease_document['model_id']}",
+                                    "status": "ADMITTED_TWICE"}
+            except Exception as error:  # noqa: BLE001
+                duplicate_result = {"request_id": f"{duplicate_id}-{lease_document['model_id']}",
+                                    "status": "REFUSED", "error": f"{type(error).__name__}: {error}"}
 
-        # One lease, one point. The installed catalog is never an input here: the lease document
-        # carries the single-point file it is allowed to execute and its digest, and a lease
-        # without one refuses pick-place instead of falling back to the whole catalog.
-        batch_binary = Path(_prefix("so101_demo_py")) / "lib/so101_demo_py/so101_mujoco_rgbd_batch"
-        pick_root = Path(station_arguments[1]) / "pick"
-        pick_root.mkdir(parents=True, exist_ok=True)
-        mujoco_pid = station.wait_for_descendant("ros2_control_node", 120.0)
-        request = pick_place_request(
-            lease_document=lease_document, batch_binary=batch_binary,
-            session_id=station_arguments[0], evidence_root=pick_root, mujoco_pid=mujoco_pid)
-        pick_place = {**request, "evidence_root": str(pick_root), "mujoco_pid": mujoco_pid}
-        if request.get("requested"):
-            completed = _subprocess.run(
-                list(request["argv"]), capture_output=True, text=True, env=environment)
-            pick_place["exit_code"] = completed.returncode
-            pick_place["stdout_tail"] = (completed.stdout or "")[-400:]
-            pick_place["stderr_tail"] = (completed.stderr or "")[-400:]
-            manifest = pick_root / "point-result.json"
-            if manifest.is_file():
-                import hashlib as _hashlib
 
-                pick_place["evidence_manifest_relative_path"] = "point-result.json"
-                pick_place["evidence_manifest_sha256"] = _hashlib.sha256(
-                    manifest.read_bytes()).hexdigest()
+        client = V4PermissionOnlyClient(endpoint_path=endpoint)
+        results = []
+        # The round-trip ids carry this Worker's generation: the next lease for the same slot is a new
+        # spawn, and an id the one-time table already consumed could never be admitted again.
+        from so101_demo.parallel_batch.point_drain import worker_progress_request_id as _progress_id
 
-    with open(out_path + ".part", "w", encoding="utf-8") as handle:
-        json.dump({"worker_id": worker_id, "pid": os.getpid(), "results": results,
-                   "station_record": station_record, "infer_results": infer_results,
-               "duplicate_result": duplicate_result, "pick_place": pick_place,
-               **lease_identity}, handle)
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(out_path + ".part", out_path)
+        generation = int((lease_document or {}).get("worker_generation") or 1)
+        for index in range(3):
+            response = client.call("worker.progress", {"worker_id": worker_id, "index": index},
+                                   request_id=_progress_id(worker_id=worker_id,
+                                                           generation=generation, index=index))
+            body = response.output_descriptor or {}
+            results.append({"request_id": response.request_id, "status": response.status,
+                            "device": body.get("device"), "candidates": body.get("candidates")})
+
+        # The pick-place half of the Worker: once its station is ready and its round trips are served,
+        # one real point list runs on that station and on the Worker's own ROS domain through the
+        # production batch runner in attach mode, with its own evidence root - so the two slots never
+        # share a batch, a reset epoch or a directory.
+        pick_place = {"requested": False}
+        if station is not None and lease_document is not None:
+            import subprocess as _subprocess
+
+            from ament_index_python.packages import get_package_prefix as _prefix
+
+            from so101_demo.parallel_batch.single_point_input import pick_place_request
+
+            # One lease, one point. The installed catalog is never an input here: the lease document
+            # carries the single-point file it is allowed to execute and its digest, and a lease
+            # without one refuses pick-place instead of falling back to the whole catalog. The station
+            # root - and therefore this evidence root - is per lease, so the batch this Worker runs can
+            # never collide with the batch an earlier lease for the same slot already wrote.
+            batch_binary = Path(_prefix("so101_demo_py")) / "lib/so101_demo_py/so101_mujoco_rgbd_batch"
+            pick_root = Path(station_arguments[1]) / "pick"
+            pick_root.mkdir(parents=True, exist_ok=True)
+            mujoco_pid = station.wait_for_descendant("ros2_control_node", 120.0)
+            request = pick_place_request(
+                lease_document=lease_document, batch_binary=batch_binary,
+                session_id=station_arguments[0], evidence_root=pick_root, mujoco_pid=mujoco_pid)
+            pick_place = {**request, "evidence_root": str(pick_root), "mujoco_pid": mujoco_pid}
+            if request.get("requested"):
+                completed = _subprocess.run(
+                    list(request["argv"]), capture_output=True, text=True, env=environment)
+                pick_place["exit_code"] = completed.returncode
+                pick_place["stdout_tail"] = (completed.stdout or "")[-400:]
+                pick_place["stderr_tail"] = (completed.stderr or "")[-400:]
+                # The batch runner's own terminal manifest, read back where it actually writes it:
+                # `<pick root>/batches/<batch>/points/<NN-id>/point-result.json`. Its digest and
+                # relative path travel with the result so the campaign verifies the very same bytes.
+                manifests = sorted(pick_root.rglob("point-result.json"))
+                pick_place["evidence_manifests"] = [str(entry) for entry in manifests]
+                if len(manifests) == 1:
+                    import hashlib as _hashlib
+
+                    pick_place["evidence_manifest_relative_path"] = manifests[0].relative_to(
+                        pick_root).as_posix()
+                    pick_place["evidence_manifest_sha256"] = _hashlib.sha256(
+                        manifests[0].read_bytes()).hexdigest()
+
+        with open(out_path + ".part", "w", encoding="utf-8") as handle:
+            json.dump({"worker_id": worker_id, "pid": os.getpid(), "results": results,
+                       "station_record": station_record, "infer_results": infer_results,
+                   "duplicate_result": duplicate_result, "pick_place": pick_place,
+                   **lease_identity}, handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(out_path + ".part", out_path)
 finally:
     # The station outlives its Worker unless someone stops it (CP-UQ268): the supervisor owns
     # this process group, but the launch the stack spawned can land in its own group, so the
