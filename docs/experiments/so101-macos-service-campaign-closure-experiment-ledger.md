@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-W2-MECHANISM
+latest_checkpoint: CP-MSC-REMEDIATION-T11-W2-14
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -5013,3 +5013,28 @@ directories and the station process ages, and take *results* from `sequence` and
 
 This entry also supersedes the two readings before it - "stalled" and then "slow" - with a mechanism
 instead of another guess.
+
+## CP-MSC-REMEDIATION-T11-W2-14: fourteen of twenty committed, five to go
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-W2-14
+recorded_at: 2026-09-23T16:50:00+0800
+carried_by: the local commit that adds this entry (parent fd214249)
+window: remediation/windows/w2-20260922T191707Z-53004/
+status: advancing on both indicators; five points remain
+```
+
+Measured after the mechanism entry, with the two indicators it named:
+
+```text
+projection : RUNNING, sequence 82, 14 PASSED / 5 UNRUN / 1 FAILED   (was 77 / 13 PASSED)
+attempts   : 140 files written under the campaign's attempt directories in the last five minutes
+```
+
+So the campaign is on its fifth-from-last point, the commit counter and the attempt activity agree, and
+both workers keep leasing from the shared queue. Nothing needs a decision while it finishes; the window
+owns its service and will stop it by recorded PID, and its `campaign-result.json` plus `playwright.log`
+carry the verdict for the next round.
+
+The only thing this round adds to the record is a current number and the confirmation that the two
+indicators move together, which is what the previous entry predicted they would.
