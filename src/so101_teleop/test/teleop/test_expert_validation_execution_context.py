@@ -513,3 +513,271 @@ def test_candidate_context_replay_is_refused_after_its_command_is_consumed(tmp_p
     consumed = replace(context, command_id="cmd-retry-2")
     assert consumed.command_id != context.command_id
     assert consumed.context_sha256() != context.context_sha256()
+
+
+# --------------------------------------------------------------------------------------
+# Task 11 closure: the candidate context has a real issuance entry point
+#
+# The gap Task 11 found: `issue_candidate_context()` authorized the retry endpoint only and
+# had no HTTP route and no CLI caller, so no first-pass candidate run could be authorized.
+# Issuance is now one-time and command-scoped, binds the profile's installed document and the
+# current runtime closure / copied-install binding, and is refused by a fence or an unknown
+# owner.
+# --------------------------------------------------------------------------------------
+
+
+def _issuance_service(tmp_path, *, store=None, campaigns=None):
+    """A composed production service whose installed documents are the three real ones."""
+
+    import shutil
+
+    from so101_teleop.expert_validation.production import ProductionExpertValidationService
+
+    root = tmp_path.resolve()
+    config_dir = root / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    for document in (V4_DOCUMENT, V5_DOCUMENT, V6_DOCUMENT):
+        shutil.copyfile(document, config_dir / document.name)
+    install = root / "install"
+    install.mkdir(parents=True, exist_ok=True)
+    for name in ("so101_parallel_batch", "cleanup", "run_adaptive.zsh"):
+        (install / name).write_text("binary\n", encoding="utf-8")
+    (root / "adaptive.yaml").write_text("schema_version: 1\n", encoding="utf-8")
+    (root / "points.yaml").write_text("points: []\n", encoding="utf-8")
+    store = store or SupervisorStore.open(root / "store")
+    service = ProductionExpertValidationService(
+        layout=SimpleNamespace(
+            parallel_config_path=config_dir / V4_DOCUMENT.name,
+            demo_prefix=install,
+            points_path=root / "points.yaml",
+            adaptive_config_path=root / "adaptive.yaml",
+            coordinator_executable=install / "so101_parallel_batch",
+            cleanup_executable=install / "cleanup",
+            adaptive_wrapper=install / "run_adaptive.zsh",
+            yolo_weights_path=None,
+            yolo_weights_sha256=SHA_A,
+            grounded_root=None,
+            grounded_manifest_sha256=SHA_A,
+            broker_image_id="sha256:" + SHA_A,
+            provenance_binding=None,
+            source_commit="1" * 40,
+        ),
+        registry=None,
+        artifacts=None,
+        store=store,
+        supervisor=None,
+        lease_service=None,
+        current_source_config_sha256=lambda: SHA_A,
+    )
+    service._selection = lambda manifest_id: _selection()
+    for campaign_id, request in (campaigns or {}).items():
+        service._campaign_requests[campaign_id] = request
+    return service, store, config_dir
+
+
+def _issue(service, config_dir, **changes):
+    values = dict(
+        task_id="task-11",
+        dispatch_id="candidate-w2",
+        campaign_id="campaign-candidate-1",
+        batch_id="b001",
+        manifest_id="manifest-1",
+        execution_profile="MPS_W2_FIRST_PASS",
+        worker_count=2,
+        batch_kind="FIRST_PASS",
+        config_document=str(config_dir / V4_DOCUMENT.name),
+        evidence_root=str((config_dir.parent / "evidence").resolve()),
+        command_id="cmd-issue-1",
+        owner_generation=1,
+        expires_in_s=3600.0,
+        max_runs=1,
+    )
+    values.update(changes)
+    return service.issue_candidate_context(**values)
+
+
+@pytest.mark.parametrize(
+    ("profile", "document", "schema_version", "worker_count", "batch_kind"),
+    [
+        ("MPS_W2_FIRST_PASS", V4_DOCUMENT, 4, 2, "FIRST_PASS"),
+        ("MPS_W1_FIRST_PASS", V6_DOCUMENT, 6, 1, "FIRST_PASS"),
+    ],
+)
+def test_a_candidate_context_is_issued_for_a_first_pass_from_its_installed_document(
+    tmp_path, profile, document, schema_version, worker_count, batch_kind
+):
+    service, store, config_dir = _issuance_service(tmp_path)
+    try:
+        context = _issue(
+            service,
+            config_dir,
+            execution_profile=profile,
+            config_document=str(config_dir / document.name),
+            worker_count=worker_count,
+            batch_kind=batch_kind,
+        )
+        assert context.execution_profile == profile
+        assert context.schema_version == schema_version
+        assert context.batch_kind == batch_kind and context.worker_count == worker_count
+        assert context.config_sha256 == _sha256(config_dir / document.name)
+        assert context.command_id == "cmd-issue-1-run"
+        assert context.evidence_root == (config_dir.parent / "evidence").resolve()
+        assert context.max_runs == 1
+        assert context.is_expired(time.monotonic_ns()) is False
+        # The context binds the bytes and the closure the first-pass start will execute.
+        request = service._candidate_first_pass_request(context)
+        assert runtime_closure_sha256(request) == context.runtime_closure_sha256
+        assert request.campaign_id == context.campaign_id
+        assert request.batch_id == context.batch_id
+        assert request.evidence_root == context.evidence_root
+        assert request.parallel_config_path == config_dir / document.name
+        assert service.candidate_context(context.context_id) == context
+        # The response names the installed document and the copied install the closure covers.
+        response = service.candidate_context_response(context)
+        assert response["config_document"] == str(config_dir / document.name)
+        assert response["install_prefix"] == str((config_dir.parent / "install").resolve())
+        assert response["install_binding_sha256"] == install_binding_sha256(
+            install_prefix=(config_dir.parent / "install").resolve(),
+            runtime_closure_sha256=context.runtime_closure_sha256,
+        )
+        assert response["context_sha256"] == context.context_sha256()
+        # Issuance is durable: the one-time command carries the document it minted.
+        row = store._connection.execute(
+            "SELECT state, result_json FROM commands WHERE command_id = 'cmd-issue-1'"
+        ).fetchone()
+        assert row["state"] == "COMPLETE"
+        assert json.loads(row["result_json"])["context_id"] == context.context_id
+    finally:
+        store.close()
+
+
+def test_a_candidate_context_is_issued_for_a_retry_of_an_existing_campaign(tmp_path):
+    service, store, config_dir = _issuance_service(tmp_path)
+    try:
+        original = _campaign_request()
+        service._campaign_requests["campaign-1"] = original
+        context = _issue(
+            service,
+            config_dir,
+            execution_profile=RETRY_PROFILE,
+            config_document=str(config_dir / V5_DOCUMENT.name),
+            worker_count=RETRY_WORKER_COUNT,
+            batch_kind=RETRY_BATCH_KIND,
+            campaign_id="campaign-1",
+            batch_id="retry-001",
+            command_id="cmd-issue-retry",
+        )
+        assert context.batch_kind == RETRY_BATCH_KIND
+        assert context.schema_version == RETRY_SCHEMA_VERSION
+        assert context.runtime_closure_sha256 == runtime_closure_sha256(original)
+        assert context.command_id == "cmd-issue-retry-run"
+
+        with pytest.raises(Exception, match="CONTEXT_CAMPAIGN_UNKNOWN"):
+            _issue(
+                service,
+                config_dir,
+                execution_profile=RETRY_PROFILE,
+                config_document=str(config_dir / V5_DOCUMENT.name),
+                worker_count=RETRY_WORKER_COUNT,
+                batch_kind=RETRY_BATCH_KIND,
+                campaign_id="campaign-nobody",
+                batch_id="retry-001",
+                command_id="cmd-issue-retry-2",
+            )
+    finally:
+        store.close()
+
+
+def test_a_replayed_issuance_or_a_reused_command_id_is_refused(tmp_path):
+    service, store, config_dir = _issuance_service(tmp_path)
+    try:
+        _issue(service, config_dir)
+        with pytest.raises(Exception, match="CONTEXT_COMMAND_ALREADY_CONSUMED"):
+            _issue(service, config_dir)
+        with pytest.raises(Exception, match="CONTEXT_COMMAND_ID_REUSED"):
+            _issue(service, config_dir, dispatch_id="candidate-w1")
+        assert len(service._candidate_contexts) == 1
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize(
+    ("profile", "document", "worker_count", "batch_kind", "code"),
+    [
+        ("MPS_W2_FIRST_PASS", V4_DOCUMENT, 1, "FIRST_PASS", "CONTEXT_PROFILE_INVALID"),
+        ("MPS_W1_FIRST_PASS", V6_DOCUMENT, 1, "FULL_RESTART_RETRY", "CONTEXT_PROFILE_INVALID"),
+        ("MPS_W1_FULL_RESTART_RETRY", V5_DOCUMENT, 2, "FULL_RESTART_RETRY",
+         "CONTEXT_PROFILE_INVALID"),
+        ("MPS_W8_FAST", V4_DOCUMENT, 8, "FIRST_PASS", "UNSUPPORTED_ON_MACOS"),
+    ],
+)
+def test_issuing_refuses_a_combination_outside_the_macos_matrix(
+    tmp_path, profile, document, worker_count, batch_kind, code
+):
+    service, store, config_dir = _issuance_service(tmp_path)
+    try:
+        with pytest.raises(Exception, match=code):
+            _issue(
+                service,
+                config_dir,
+                execution_profile=profile,
+                config_document=str(config_dir / document.name),
+                worker_count=worker_count,
+                batch_kind=batch_kind,
+            )
+        assert service._candidate_contexts == {}
+        assert store._connection.execute(
+            "SELECT count(*) FROM commands WHERE command_id = 'cmd-issue-1'"
+        ).fetchone()[0] == 0
+    finally:
+        store.close()
+
+
+def test_issuing_refuses_a_config_document_that_is_not_the_installed_one(tmp_path):
+    service, store, config_dir = _issuance_service(tmp_path)
+    try:
+        with pytest.raises(Exception, match="CONTEXT_CONFIG_DOCUMENT_MISMATCH"):
+            _issue(
+                service,
+                config_dir,
+                execution_profile="MPS_W1_FIRST_PASS",
+                config_document=str(config_dir / V4_DOCUMENT.name),
+                worker_count=1,
+            )
+        (config_dir / V6_DOCUMENT.name).unlink()
+        with pytest.raises(Exception, match="EXECUTION_DOCUMENT_MISSING"):
+            _issue(
+                service,
+                config_dir,
+                execution_profile="MPS_W1_FIRST_PASS",
+                config_document=str(config_dir / V6_DOCUMENT.name),
+                worker_count=1,
+                command_id="cmd-issue-missing",
+            )
+    finally:
+        store.close()
+
+
+def test_issuing_is_refused_by_a_recovery_fence_or_an_unknown_owner(tmp_path):
+    from so101_teleop.expert_validation.store import StoreConflict
+    from test_expert_validation_store import _admit_first_pass, _first_pass_fixture
+
+    store, request, context, intent, receipt, campaign, batch = _first_pass_fixture(
+        tmp_path / "durable"
+    )
+    _admit_first_pass(store, request, context, intent, receipt, campaign, batch)
+    service, store, config_dir = _issuance_service(tmp_path, store=store)
+    try:
+        with pytest.raises(StoreConflict, match="CONTEXT_OWNER_UNKNOWN"):
+            _issue(service, config_dir)
+        store.record_recovery_fence(
+            "campaign-1", "b001", reason="OWNER_TREE_UNRESOLVED", command_id="recover-1"
+        )
+        with pytest.raises(StoreConflict, match="CONTEXT_RECOVERY_FENCE"):
+            _issue(service, config_dir)
+        assert service._candidate_contexts == {}
+        assert store._connection.execute(
+            "SELECT count(*) FROM commands WHERE command_id = 'cmd-issue-1'"
+        ).fetchone()[0] == 0
+    finally:
+        store.close()

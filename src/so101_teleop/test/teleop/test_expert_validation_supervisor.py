@@ -642,3 +642,188 @@ def _production_context_for(candidate, request):
         issued_at_monotonic_ns=1_000,
         expires_at_monotonic_ns=10_000_000_000_000,
     )
+
+
+# --------------------------------------------------------------------------------------
+# Task 11 closure: the candidate first-pass start runs on an issued context, once
+# --------------------------------------------------------------------------------------
+
+
+def _production_first_pass_context(candidate):
+    """The same coordinates under the production kind: never an authority for this endpoint."""
+
+    from so101_teleop.expert_validation.execution_context import (
+        ProductionExecutionContext,
+        install_binding_sha256,
+    )
+
+    install_prefix = candidate.evidence_root / "install"
+    return ProductionExecutionContext(
+        context_id="production-context-1",
+        service_session_id="session-1",
+        lease_id="lease-1",
+        lease_generation=1,
+        install_prefix=install_prefix,
+        install_binding_sha256=install_binding_sha256(
+            install_prefix=install_prefix,
+            runtime_closure_sha256=candidate.runtime_closure_sha256,
+        ),
+        execution_profile=candidate.execution_profile,
+        schema_version=candidate.schema_version,
+        batch_kind=candidate.batch_kind,
+        worker_count=candidate.worker_count,
+        campaign_id=candidate.campaign_id,
+        batch_id=candidate.batch_id,
+        manifest_id=candidate.manifest_id,
+        config_sha256=candidate.config_sha256,
+        runtime_closure_sha256=candidate.runtime_closure_sha256,
+        evidence_root=candidate.evidence_root,
+        owner_generation=candidate.owner_generation,
+        command_id=candidate.command_id,
+        issued_at_monotonic_ns=candidate.issued_at_monotonic_ns,
+        expires_at_monotonic_ns=candidate.expires_at_monotonic_ns,
+    )
+
+
+def _first_pass_supervisor(tmp_path):
+    from test_expert_validation_store import _first_pass_fixture
+
+    store, request, context, intent, receipt, campaign, batch = _first_pass_fixture(tmp_path)
+    supervisor = ExpertValidationSupervisor(
+        store=store,
+        process_owner=Owner(),
+        preflight_engine=PreflightEngine(Resources()),
+    )
+    return supervisor, store, request, context
+
+
+def test_a_candidate_first_pass_start_consumes_its_command_exactly_once(tmp_path):
+    from so101_teleop.expert_validation.execution_context import runtime_closure_sha256
+
+    supervisor, store, request, context = _first_pass_supervisor(tmp_path)
+    try:
+        receipt = supervisor.preflight_engine.preflight(request)
+        assert receipt.admitted is True
+        result = asyncio.run(
+            supervisor.start_candidate_first_pass(
+                request=request, context=context, receipt=receipt
+            )
+        )
+        assert result["status"] == "STARTED"
+        assert result["batch_id"] == "b001" and result["campaign_id"] == "campaign-1"
+        assert result["context_kind"] == "CANDIDATE" and result["command_id"] == context.command_id
+        assert len(supervisor.process_owner.requests) == 1
+        spawned = supervisor.process_owner.requests[0]
+        assert spawned.batch_id == "b001"
+        assert spawned.worker_count == 1
+        assert spawned.selected_point_ids == ("p1", "p2", "p3", "p4")
+        tree = store.owner_tree("campaign-1", "b001")
+        assert len(tree) == 1
+        assert tree[0].intent.role == "ADAPTER"
+        assert tree[0].intent.argv_sha256 == command_fingerprint(spawned.argv)
+        assert tree[0].intent.generation == context.owner_generation
+        assert store.first_pass_admission(context.command_id)["batch_id"] == "b001"
+        assert store._connection.execute(
+            "SELECT state FROM commands WHERE command_id = ?", (context.command_id,)
+        ).fetchone()["state"] == "COMPLETE"
+        assert store.batch("b001").cleanup_receipt_sha256 == "d" * 64
+        assert runtime_closure_sha256(request) == context.runtime_closure_sha256
+
+        # One issued command authorizes exactly one run: the same context spawns nothing twice.
+        with pytest.raises(StoreConflict, match="FIRST_PASS_COMMAND_ALREADY_CONSUMED"):
+            asyncio.run(
+                supervisor.start_candidate_first_pass(
+                    request=request, context=context, receipt=receipt
+                )
+            )
+        assert len(supervisor.process_owner.requests) == 1
+        assert len(tuple(store.first_pass_admissions("campaign-1"))) == 1
+    finally:
+        store.close()
+
+
+def test_a_candidate_first_pass_never_spawns_over_an_unadmitted_receipt(tmp_path):
+    supervisor, store, request, context = _first_pass_supervisor(tmp_path)
+    try:
+        refused = ExpertValidationSupervisor(
+            store=store,
+            process_owner=Owner(),
+            preflight_engine=PreflightEngine(Resources(admitted=False, reasons=("GPU_HEADROOM",))),
+        )
+        with pytest.raises(PreflightRejected, match="GPU_HEADROOM"):
+            asyncio.run(
+                refused.start_candidate_first_pass(request=request, context=context)
+            )
+        assert refused.process_owner.requests == []
+        assert store.first_pass_admission(context.command_id) is None
+        assert store.batch("b001") is None
+    finally:
+        store.close()
+
+
+def test_a_production_context_never_starts_a_candidate_first_pass(tmp_path):
+    from test_expert_validation_store import _first_pass_fixture
+
+    store, request, context, _intent, _receipt, _campaign, _batch = _first_pass_fixture(tmp_path)
+    supervisor = ExpertValidationSupervisor(
+        store=store,
+        process_owner=Owner(),
+        preflight_engine=PreflightEngine(Resources()),
+    )
+    try:
+        with pytest.raises(RuntimeError, match="FIRST_PASS_CANDIDATE_CONTEXT_REQUIRED"):
+            asyncio.run(
+                supervisor.start_candidate_first_pass(request=request, context=None)
+            )
+        with pytest.raises(RuntimeError, match="FIRST_PASS_CANDIDATE_CONTEXT_REQUIRED"):
+            asyncio.run(
+                supervisor.start_candidate_first_pass(
+                    request=request, context=_production_first_pass_context(context)
+                )
+            )
+        assert supervisor.process_owner.requests == []
+        assert store.first_pass_admission(context.command_id) is None
+    finally:
+        store.close()
+
+
+def test_a_spawn_failure_after_the_first_pass_admission_keeps_intent_and_fence(tmp_path):
+    from so101_teleop.expert_validation.execution_context import runtime_closure_sha256
+    from test_expert_validation_store import _first_pass_fixture
+
+    store, request, context, _intent, _receipt, _campaign, _batch = (
+        _first_pass_fixture(tmp_path)
+    )
+    supervisor = ExpertValidationSupervisor(
+        store=store,
+        process_owner=RefusingOwner(),
+        preflight_engine=PreflightEngine(Resources()),
+    )
+    try:
+        receipt = supervisor.preflight_engine.preflight(request)
+        with pytest.raises(RuntimeError, match="EXEC_BARRIER_ACK_MISSING"):
+            asyncio.run(
+                supervisor.start_candidate_first_pass(
+                    request=request, context=context, receipt=receipt
+                )
+            )
+        tree = store.owner_tree("campaign-1", "b001")
+        assert len(tree) == 1 and tree[0].confirmed is None
+        fence = store.recovery_fence("campaign-1")
+        assert fence["batch_id"] == "b001"
+        assert "FIRST_PASS_SPAWN_FAILED" in fence["reason"]
+        assert store._connection.execute(
+            "SELECT state FROM commands WHERE command_id = ?", (context.command_id,)
+        ).fetchone()["state"] == "IN_PROGRESS"
+        assert runtime_closure_sha256(request) == context.runtime_closure_sha256
+        with pytest.raises(StoreConflict, match="FIRST_PASS_COMMAND_ALREADY_CONSUMED"):
+            asyncio.run(
+                supervisor.start_candidate_first_pass(
+                    request=request, context=context, receipt=receipt
+                )
+            )
+        # The refusal is the admission's, not the spawn boundary's: the second attempt never
+        # reached the process owner.
+        assert len(supervisor.process_owner.requests) == 1
+    finally:
+        store.close()

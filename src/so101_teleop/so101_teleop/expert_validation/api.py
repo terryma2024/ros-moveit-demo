@@ -20,6 +20,9 @@ from so101_teleop.api import validate_bind_address
 from so101_teleop.task_artifacts import ArtifactAccessError
 
 
+#: The one confirmation phrase the candidate first-pass route requires, beside the issued context.
+CANDIDATE_FIRST_PASS_CONFIRMATION = "CONFIRM CANDIDATE FIRST PASS"
+
 #: The exact text every platform-bound capability document carries beside the guard policy.
 #: The guard is a startup check; it is not a capacity certification and must not be shown as one.
 START_GUARD_NOT_A_QUALIFICATION = (
@@ -136,6 +139,91 @@ class RetryRequest(CampaignCancelRequest):
     #: context id may only be presented here as ``CANDIDATE``; a production retry never accepts one.
     context_kind: Literal["CANDIDATE", "PRODUCTION"] | None = None
     context_id: str | None = None
+
+
+class CandidateContextIssueRequest(ClosedModel):
+    """The coordinates of one bounded candidate run (design section 10).
+
+    Every parameter the design names is required, including the worker count and batch kind: the
+    installed matrix row, not a caller's inference, decides whether the combination may be issued.
+    There is deliberately no budget, qualification or promotion field.
+    """
+
+    context_kind: str = "CANDIDATE"
+    command_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    dispatch_id: str = Field(min_length=1)
+    campaign_id: str = Field(min_length=1)
+    batch_id: str = Field(min_length=1)
+    manifest_id: str = Field(min_length=1)
+    execution_profile: str = Field(min_length=1)
+    worker_count: int = Field(ge=1)
+    batch_kind: str = Field(min_length=1)
+    #: The execution document the profile must resolve to, named by the caller and checked against
+    #: the installed one: the context binds those exact bytes.
+    config_document: str = Field(min_length=1)
+    evidence_root: str = Field(min_length=1)
+    owner_generation: int = Field(ge=1)
+    expires_in_s: float = Field(gt=0)
+    max_runs: int = Field(ge=1)
+
+
+class CandidateExecutionContextResponse(ClosedModel):
+    """One issued candidate context, exactly as the design binds it."""
+
+    kind: Literal["CANDIDATE"]
+    context_id: str
+    task_id: str
+    dispatch_id: str
+    campaign_id: str
+    batch_id: str
+    manifest_id: str
+    execution_profile: str
+    schema_version: int = Field(ge=1)
+    batch_kind: Literal["FIRST_PASS", "FULL_RESTART_RETRY"]
+    worker_count: int = Field(ge=1)
+    config_sha256: str
+    #: Present for a composed service: the installed document and copied install the closure covers.
+    config_document: str | None = None
+    runtime_closure_sha256: str
+    install_prefix: str | None = None
+    install_binding_sha256: str | None = None
+    evidence_root: str
+    owner_generation: int = Field(ge=1)
+    command_id: str
+    issued_at_monotonic_ns: int
+    expires_at_monotonic_ns: int
+    max_runs: int = Field(ge=1)
+    context_sha256: str
+
+
+class CandidateFirstPassRequest(ClosedModel):
+    """One candidate first pass, presented under the context that authorizes it."""
+
+    context_kind: str = "CANDIDATE"
+    #: Left optional so a missing context is answered with the named refusal rather than a shape
+    #: error, exactly as the retry route answers it.
+    context_id: str | None = None
+    #: The context's own one-time command. Optional, and checked when present: it is the command
+    #: the admission consumes, never a second authority beside it.
+    command_id: str | None = None
+    confirmation: str
+
+
+class CandidateFirstPassResponse(ClosedModel):
+    """The admitted candidate first pass, before any projection is read back."""
+
+    status: Literal["STARTED"]
+    campaign_id: str
+    batch_id: str
+    manifest_id: str
+    execution_profile: str
+    schema_version: int = Field(ge=1)
+    worker_count: int = Field(ge=1)
+    context_id: str
+    context_kind: Literal["CANDIDATE"]
+    command_id: str
+    binding_sha256: str
 
 
 class StartGuardCheck(ClosedModel):
@@ -672,6 +760,29 @@ def create_expert_validation_app(
             # kind is refused by name rather than silently reinterpreted.
             method = getattr(service, "retry_campaign_api", service.retry_campaign)
             return await _invoke(method, campaign_id, body.model_dump(exclude_none=True))
+        except Exception as error:
+            return _error(error)
+
+    @app.post("/expert-validation/candidate-contexts", response_model=CandidateExecutionContextResponse)
+    async def issue_candidate_context(body: CandidateContextIssueRequest):
+        try:
+            return await _invoke(
+                service.issue_candidate_context_api, body.model_dump(exclude_none=True)
+            )
+        except Exception as error:
+            return _error(error)
+
+    @app.post(
+        "/expert-validation/campaigns/candidate-first-pass",
+        response_model=CandidateFirstPassResponse,
+    )
+    async def candidate_first_pass(body: CandidateFirstPassRequest):
+        if body.confirmation != CANDIDATE_FIRST_PASS_CONFIRMATION:
+            return JSONResponse(status_code=409, content={"code": "CONFIRMATION_REQUIRED"})
+        try:
+            return await _invoke(
+                service.start_candidate_first_pass_api, body.model_dump(exclude_none=True)
+            )
         except Exception as error:
             return _error(error)
 

@@ -39,6 +39,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/expert-validation/campaigns/candidate-first-pass": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Candidate First Pass */
+        post: operations["candidate_first_pass_expert_validation_campaigns_candidate_first_pass_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/expert-validation/campaigns/preflight": {
         parameters: {
             query?: never;
@@ -101,6 +118,23 @@ export interface paths {
         put?: never;
         /** Retry Campaign */
         post: operations["retry_campaign_expert_validation_campaigns__campaign_id__full_restart_retries_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/expert-validation/candidate-contexts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue Candidate Context */
+        post: operations["issue_candidate_context_expert_validation_candidate_contexts_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -701,6 +735,158 @@ export interface components {
             worker_start_timeout_s?: number | null;
             /** Yolo Executor Count */
             yolo_executor_count?: (1 | 2 | 4) | null;
+        };
+        /**
+         * CandidateContextIssueRequest
+         * @description The coordinates of one bounded candidate run (design section 10).
+         *
+         *     Every parameter the design names is required, including the worker count and batch kind: the
+         *     installed matrix row, not a caller's inference, decides whether the combination may be issued.
+         *     There is deliberately no budget, qualification or promotion field.
+         */
+        CandidateContextIssueRequest: {
+            /** Batch Id */
+            batch_id: string;
+            /** Batch Kind */
+            batch_kind: string;
+            /** Campaign Id */
+            campaign_id: string;
+            /** Command Id */
+            command_id: string;
+            /** Config Document */
+            config_document: string;
+            /**
+             * Context Kind
+             * @default CANDIDATE
+             */
+            context_kind: string;
+            /** Dispatch Id */
+            dispatch_id: string;
+            /** Evidence Root */
+            evidence_root: string;
+            /** Execution Profile */
+            execution_profile: string;
+            /** Expires In S */
+            expires_in_s: number;
+            /** Manifest Id */
+            manifest_id: string;
+            /** Max Runs */
+            max_runs: number;
+            /** Owner Generation */
+            owner_generation: number;
+            /** Task Id */
+            task_id: string;
+            /** Worker Count */
+            worker_count: number;
+        };
+        /**
+         * CandidateExecutionContextResponse
+         * @description One issued candidate context, exactly as the design binds it.
+         */
+        CandidateExecutionContextResponse: {
+            /** Batch Id */
+            batch_id: string;
+            /**
+             * Batch Kind
+             * @enum {string}
+             */
+            batch_kind: "FIRST_PASS" | "FULL_RESTART_RETRY";
+            /** Campaign Id */
+            campaign_id: string;
+            /** Command Id */
+            command_id: string;
+            /** Config Document */
+            config_document?: string | null;
+            /** Config Sha256 */
+            config_sha256: string;
+            /** Context Id */
+            context_id: string;
+            /** Context Sha256 */
+            context_sha256: string;
+            /** Dispatch Id */
+            dispatch_id: string;
+            /** Evidence Root */
+            evidence_root: string;
+            /** Execution Profile */
+            execution_profile: string;
+            /** Expires At Monotonic Ns */
+            expires_at_monotonic_ns: number;
+            /** Install Binding Sha256 */
+            install_binding_sha256?: string | null;
+            /** Install Prefix */
+            install_prefix?: string | null;
+            /** Issued At Monotonic Ns */
+            issued_at_monotonic_ns: number;
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "CANDIDATE";
+            /** Manifest Id */
+            manifest_id: string;
+            /** Max Runs */
+            max_runs: number;
+            /** Owner Generation */
+            owner_generation: number;
+            /** Runtime Closure Sha256 */
+            runtime_closure_sha256: string;
+            /** Schema Version */
+            schema_version: number;
+            /** Task Id */
+            task_id: string;
+            /** Worker Count */
+            worker_count: number;
+        };
+        /**
+         * CandidateFirstPassRequest
+         * @description One candidate first pass, presented under the context that authorizes it.
+         */
+        CandidateFirstPassRequest: {
+            /** Command Id */
+            command_id?: string | null;
+            /** Confirmation */
+            confirmation: string;
+            /** Context Id */
+            context_id?: string | null;
+            /**
+             * Context Kind
+             * @default CANDIDATE
+             */
+            context_kind: string;
+        };
+        /**
+         * CandidateFirstPassResponse
+         * @description The admitted candidate first pass, before any projection is read back.
+         */
+        CandidateFirstPassResponse: {
+            /** Batch Id */
+            batch_id: string;
+            /** Binding Sha256 */
+            binding_sha256: string;
+            /** Campaign Id */
+            campaign_id: string;
+            /** Command Id */
+            command_id: string;
+            /** Context Id */
+            context_id: string;
+            /**
+             * Context Kind
+             * @constant
+             */
+            context_kind: "CANDIDATE";
+            /** Execution Profile */
+            execution_profile: string;
+            /** Manifest Id */
+            manifest_id: string;
+            /** Schema Version */
+            schema_version: number;
+            /**
+             * Status
+             * @constant
+             */
+            status: "STARTED";
+            /** Worker Count */
+            worker_count: number;
         };
         /**
          * CapabilitiesResponse
@@ -1820,6 +2006,44 @@ export interface operations {
             };
         };
     };
+    candidate_first_pass_expert_validation_campaigns_candidate_first_pass_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CandidateFirstPassRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateFirstPassResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     preflight_expert_validation_campaigns_preflight_post: {
         parameters: {
             query?: never;
@@ -1956,6 +2180,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CampaignProjectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    issue_candidate_context_expert_validation_candidate_contexts_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-SO101-Instance-ID"?: string | null;
+                "X-SO101-Instance-Proof"?: string | null;
+                "X-SO101-Channel-Revision"?: string | null;
+                "X-SO101-Execution-Generation"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CandidateContextIssueRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateExecutionContextResponse"];
                 };
             };
             /** @description Validation Error */

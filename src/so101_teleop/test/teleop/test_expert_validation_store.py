@@ -1192,3 +1192,516 @@ def test_a_delta_only_journal_is_never_given_a_canonical_durable_state(tmp_path)
         assert store.read_projection_state("batch-1").state is None
     finally:
         store.close()
+
+
+# --------------------------------------------------------------------------------------
+# Task 11 closure: candidate context issuance and the one-time first-pass admission
+#
+# The gap this section closes: a candidate context could only be minted by a private method
+# with no entry point, and it authorized the retry endpoint alone. Issuance now consumes a
+# one-time command of its own, and a first-pass run is admitted in one transaction exactly
+# like a retry: command, campaign, batch, owner intent and admission row, or nothing.
+# --------------------------------------------------------------------------------------
+
+
+def _first_pass_request(root, manifest_id, **changes):
+    """One first-pass request whose shape the candidate context can be bound to."""
+
+    from so101_teleop.expert_validation.catalog import CatalogPoint, PointSelection
+    from so101_teleop.expert_validation.preflight import CampaignStartRequest
+
+    points = tuple(
+        CatalogPoint(
+            id=f"p{index}",
+            label=f"Point {index}",
+            source="generated",
+            stratum="near/center",
+            position_world_m=(float(index), 0.0, 0.0),
+            display_id=f"P{index:02d}",
+        )
+        for index in range(1, 5)
+    )
+    values = dict(
+        campaign_id="campaign-1",
+        batch_id="b001",
+        manifest_id=manifest_id,
+        selection=PointSelection(
+            "catalog", 1, SHA_CATALOG, points, tuple(point.id for point in points), SHA_SELECTION
+        ),
+        execution_mode="SEQUENTIAL",
+        evidence_root=root,
+        points_path=root / "points.yaml",
+        parallel_config_path=root / "parallel_batch_v6_macos_mps_w1_first_pass.yaml",
+        adaptive_config_path=root / "adaptive.yaml",
+        worker_count=1,
+        max_points_per_worker=None,
+        fallback_worker_counts=(6, 4, 2, 1),
+        initial_points_per_worker=3,
+        worker_start_timeout_s=120.0,
+        max_infra_attempts_per_point=5,
+        yolo_executor_count=2,
+        service_session_id="candidate:task-11:candidate-first-pass",
+        lease_generation=1,
+        source_commit="1" * 40,
+        install_prefix=str(root / "install"),
+        coordinator_executable_sha256=SHA_A,
+        adaptive_runner_module_sha256=SHA_A,
+        adaptive_pool_module_sha256=SHA_A,
+        adaptive_cleanup_executable_sha256=SHA_A,
+        adaptive_wrapper_sha256=SHA_A,
+        parallel_config_sha256=SHA_CONFIG,
+        adaptive_config_sha256=SHA_A,
+        yolo_weights_sha256=SHA_A,
+        grounded_sam_manifest_sha256=SHA_A,
+        broker_image_id="sha256:" + SHA_A,
+        resource_manifest_sha256=SHA_A,
+        execution_profile="MPS_W1_FIRST_PASS",
+        batch_kind="FIRST_PASS",
+    )
+    values.update(changes)
+    return CampaignStartRequest(**values)
+
+
+def _first_pass_fixture(tmp_path, **context_changes):
+    """A fresh campaign, one admitted preflight receipt, and the candidate context for it."""
+
+    from so101_teleop.expert_validation.execution_context import (
+        CandidateExecutionContext,
+        runtime_closure_sha256,
+    )
+    from so101_teleop.expert_validation.preflight import canonical_start_request_sha256
+
+    root = tmp_path.resolve()
+    store = SupervisorStore.open((root / "store").resolve())
+    manifest_id = _manifest(store, "1")
+    request = _first_pass_request(root, manifest_id)
+    receipt = PreflightReceipt(
+        receipt_id="receipt-1",
+        campaign_id="campaign-1",
+        manifest_id=manifest_id,
+        canonical_start_request_sha256=canonical_start_request_sha256(request),
+        receipt={
+            "admitted": True,
+            "execution_profile": "MPS_W1_FIRST_PASS",
+            "schema_version": 6,
+            "batch_kind": "FIRST_PASS",
+        },
+        expires_at_monotonic_ns=time.monotonic_ns() + 3_600_000_000_000,
+    )
+    campaign = CampaignBinding(
+        campaign_id="campaign-1",
+        manifest_id=manifest_id,
+        executor_id="candidate-gate",
+        operation_id="first-pass",
+        executor_config_sha256=SHA_A,
+        execution_mode="SEQUENTIAL",
+        execution_config={"worker_count": 1},
+        preflight_receipt_id="receipt-1",
+    )
+    batch = BatchBinding(
+        batch_id="b001",
+        campaign_id="campaign-1",
+        batch_kind="FIRST_PASS",
+        point_id=None,
+        journal_root=(root / "campaigns/campaign-1/b001").resolve(),
+        coordinator_epoch=1,
+    )
+    values = dict(
+        context_id="candidate-first-pass-1",
+        task_id="task-11",
+        dispatch_id="candidate-first-pass",
+        campaign_id="campaign-1",
+        batch_id="b001",
+        manifest_id=manifest_id,
+        execution_profile="MPS_W1_FIRST_PASS",
+        schema_version=6,
+        batch_kind="FIRST_PASS",
+        worker_count=1,
+        config_sha256=SHA_CONFIG,
+        runtime_closure_sha256=runtime_closure_sha256(request),
+        evidence_root=root,
+        owner_generation=1,
+        command_id="cmd-first-pass-1",
+        issued_at_monotonic_ns=time.monotonic_ns(),
+        expires_at_monotonic_ns=time.monotonic_ns() + 3_600_000_000_000,
+        max_runs=1,
+    )
+    values.update(context_changes)
+    context = CandidateExecutionContext(**values)
+    intent = OwnerIntent.for_argv(
+        campaign_id="campaign-1",
+        batch_id="b001",
+        role="ADAPTER",
+        generation=context.owner_generation,
+        spawn_token="spawn-first-pass-1",
+        argv=("so101_parallel_batch", "--batch-id", "b001"),
+        created_at_ns=1,
+    )
+    return store, request, context, intent, receipt, campaign, batch
+
+
+def _admit_first_pass(store, request, context, intent, receipt, campaign, batch):
+    return store.admit_first_pass(
+        request=request,
+        context=context,
+        receipt=receipt,
+        campaign=campaign,
+        batch=batch,
+        spawn_intent=intent,
+    )
+
+
+def test_admit_first_pass_consumes_the_command_and_binds_campaign_batch_and_intent(tmp_path):
+    store, request, context, intent, receipt, campaign, batch = _first_pass_fixture(tmp_path)
+    try:
+        binding = _admit_first_pass(store, request, context, intent, receipt, campaign, batch)
+
+        assert binding.command_id == context.command_id
+        assert binding.batch_kind == "FIRST_PASS"
+        assert binding.context_kind == "CANDIDATE"
+        assert binding.batch_id == "b001" and binding.campaign_id == "campaign-1"
+        assert binding.binding_sha256 == binding.compute_sha256()
+        # Campaign, batch, owner intent and admission row are all durable, from one transaction.
+        assert store.batch("b001") is not None
+        assert store.campaign_records()[0]["campaign_id"] == "campaign-1"
+        tree = store.owner_tree("campaign-1", "b001")
+        assert len(tree) == 1 and tree[0].intent.spawn_token == intent.spawn_token
+        assert store.first_pass_admission(context.command_id)["binding_sha256"] == binding.binding_sha256
+        # The command stays IN_PROGRESS until the spawn boundary finishes it: an admission that
+        # never reached a process must stay unreplayable (the supervisor test pins the other end).
+        assert store._connection.execute(
+            "SELECT state FROM commands WHERE command_id = ?", (context.command_id,)
+        ).fetchone()["state"] == "IN_PROGRESS"
+        assert store._connection.execute(
+            "SELECT consumed_at_ns FROM preflight_receipts WHERE receipt_id = 'receipt-1'"
+        ).fetchone()["consumed_at_ns"] is not None
+    finally:
+        store.close()
+
+
+def test_admit_first_pass_refuses_a_replayed_command(tmp_path):
+    store, request, context, intent, receipt, campaign, batch = _first_pass_fixture(tmp_path)
+    try:
+        _admit_first_pass(store, request, context, intent, receipt, campaign, batch)
+        with pytest.raises(StoreConflict, match="FIRST_PASS_COMMAND_ALREADY_CONSUMED"):
+            _admit_first_pass(store, request, context, intent, receipt, campaign, batch)
+        assert len(tuple(store.first_pass_admissions("campaign-1"))) == 1
+    finally:
+        store.close()
+
+
+def test_admit_first_pass_refuses_a_command_id_reused_for_another_run(tmp_path):
+    store, request, context, intent, receipt, campaign, batch = _first_pass_fixture(tmp_path)
+    try:
+        _admit_first_pass(store, request, context, intent, receipt, campaign, batch)
+        with pytest.raises(StoreConflict, match="FIRST_PASS_COMMAND_ID_REUSED"):
+            store.admit_first_pass(
+                request=replace(request, campaign_id="campaign-other"),
+                context=replace(context, campaign_id="campaign-other"),
+                receipt=receipt,
+                campaign=replace(campaign, campaign_id="campaign-other"),
+                batch=replace(batch, batch_id="b002", campaign_id="campaign-other"),
+                spawn_intent=replace(intent, campaign_id="campaign-other", batch_id="b002"),
+            )
+    finally:
+        store.close()
+
+
+def test_admit_first_pass_refuses_an_expired_context(tmp_path):
+    store, request, context, intent, receipt, campaign, batch = _first_pass_fixture(
+        tmp_path, issued_at_monotonic_ns=1, expires_at_monotonic_ns=2)
+    try:
+        with pytest.raises(StoreConflict, match="FIRST_PASS_CONTEXT_EXPIRED"):
+            _admit_first_pass(store, request, context, intent, receipt, campaign, batch)
+        assert store.first_pass_admission(context.command_id) is None
+    finally:
+        store.close()
+
+
+def test_a_refused_first_pass_admission_never_consumes_its_command(tmp_path):
+    store, request, context, intent, receipt, campaign, batch = _first_pass_fixture(
+        tmp_path, issued_at_monotonic_ns=1, expires_at_monotonic_ns=2)
+    try:
+        with pytest.raises(StoreConflict, match="FIRST_PASS_CONTEXT_EXPIRED"):
+            _admit_first_pass(store, request, context, intent, receipt, campaign, batch)
+        live = replace(
+            context,
+            issued_at_monotonic_ns=time.monotonic_ns(),
+            expires_at_monotonic_ns=time.monotonic_ns() + 3_600_000_000_000,
+        )
+        binding = _admit_first_pass(store, request, live, intent, receipt, campaign, batch)
+        assert binding.command_id == live.command_id
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize(
+    ("holder", "field", "value", "code"),
+    [
+        ("context", "campaign_id", "campaign-other", "FIRST_PASS_CAMPAIGN_MISMATCH"),
+        ("context", "batch_id", "b002", "FIRST_PASS_BATCH_MISMATCH"),
+        ("context", "manifest_id", "manifest-other", "FIRST_PASS_MANIFEST_MISMATCH"),
+        # A candidate context can never even be constructed for the other profile/schema row, so
+        # the profile drift is only expressible on the request side of the pair.
+        ("request", "execution_profile", "MPS_W1_FULL_RESTART_RETRY", "FIRST_PASS_PROFILE_MISMATCH"),
+        ("context", "config_sha256", SHA_A, "FIRST_PASS_CONFIG_MISMATCH"),
+        ("context", "runtime_closure_sha256", SHA_A, "FIRST_PASS_RUNTIME_CLOSURE_MISMATCH"),
+        ("context", "evidence_root", Path("/evidence-other"), "FIRST_PASS_EVIDENCE_ROOT_MISMATCH"),
+        ("context", "owner_generation", 2, "FIRST_PASS_OWNER_GENERATION_MISMATCH"),
+        ("request", "lease_generation", 2, "FIRST_PASS_OWNER_GENERATION_MISMATCH"),
+    ],
+)
+def test_admit_first_pass_refuses_a_request_that_drifted_from_its_context(
+    tmp_path, holder, field, value, code
+):
+    store, request, context, intent, receipt, campaign, batch = _first_pass_fixture(tmp_path)
+    drifted = (
+        replace(context, **{field: value}) if holder == "context"
+        else replace(request, **{field: value})
+    )
+    try:
+        with pytest.raises(StoreConflict, match=code):
+            (
+                _admit_first_pass(store, drifted, context, intent, receipt, campaign, batch)
+                if holder == "request"
+                else _admit_first_pass(store, request, drifted, intent, receipt, campaign, batch)
+            )
+        assert store.first_pass_admission(context.command_id) is None
+        assert store.batch("b001") is None
+    finally:
+        store.close()
+
+
+def test_admit_first_pass_refuses_a_production_context(tmp_path):
+    """A production context is not a candidate authority, whatever a caller claims."""
+
+    from so101_teleop.expert_validation.execution_context import (
+        ProductionExecutionContext,
+        install_binding_sha256,
+    )
+
+    store, request, context, intent, receipt, campaign, batch = _first_pass_fixture(tmp_path)
+    try:
+        production = ProductionExecutionContext(
+            context_id="production-context-1",
+            service_session_id="session-1",
+            lease_id="lease-1",
+            lease_generation=1,
+            install_prefix=(tmp_path.resolve() / "install"),
+            install_binding_sha256=install_binding_sha256(
+                install_prefix=(tmp_path.resolve() / "install"),
+                runtime_closure_sha256=context.runtime_closure_sha256,
+            ),
+            execution_profile=context.execution_profile,
+            schema_version=context.schema_version,
+            batch_kind=context.batch_kind,
+            worker_count=context.worker_count,
+            campaign_id=context.campaign_id,
+            batch_id=context.batch_id,
+            manifest_id=context.manifest_id,
+            config_sha256=context.config_sha256,
+            runtime_closure_sha256=context.runtime_closure_sha256,
+            evidence_root=context.evidence_root,
+            owner_generation=context.owner_generation,
+            command_id=context.command_id,
+            issued_at_monotonic_ns=context.issued_at_monotonic_ns,
+            expires_at_monotonic_ns=context.expires_at_monotonic_ns,
+        )
+        with pytest.raises(StoreConflict, match="FIRST_PASS_CANDIDATE_CONTEXT_REQUIRED"):
+            _admit_first_pass(store, request, production, intent, receipt, campaign, batch)
+        with pytest.raises(StoreConflict, match="FIRST_PASS_CONTEXT_KIND"):
+            _admit_first_pass(store, request, object(), intent, receipt, campaign, batch)
+    finally:
+        store.close()
+
+
+def test_admit_first_pass_refuses_an_existing_campaign_or_batch(tmp_path):
+    """A first pass is a new campaign: an occupied campaign id is never replayed into."""
+
+    store, request, context, intent, receipt, campaign, batch = _first_pass_fixture(tmp_path)
+    try:
+        _admit_first_pass(store, request, context, intent, receipt, campaign, batch)
+        later = replace(
+            context,
+            context_id="candidate-first-pass-2",
+            dispatch_id="candidate-first-pass-other",
+            command_id="cmd-first-pass-2",
+            issued_at_monotonic_ns=time.monotonic_ns(),
+            expires_at_monotonic_ns=time.monotonic_ns() + 3_600_000_000_000,
+        )
+        with pytest.raises(StoreConflict, match="FIRST_PASS_CAMPAIGN_EXISTS"):
+            store.admit_first_pass(
+                request=request,
+                context=later,
+                receipt=replace(receipt, receipt_id="receipt-2"),
+                campaign=replace(campaign, preflight_receipt_id="receipt-2"),
+                batch=batch,
+                spawn_intent=replace(intent, spawn_token="spawn-first-pass-2"),
+            )
+        assert store._connection.execute(
+            "SELECT count(*) FROM commands WHERE command_id = 'cmd-first-pass-2'"
+        ).fetchone()[0] == 0
+    finally:
+        store.close()
+
+
+def _second_first_pass_campaign(request, context, intent, receipt, campaign, batch):
+    """The same run one campaign over, under its own command, dispatch and receipt."""
+
+    return dict(
+        request=replace(request, campaign_id="campaign-2", batch_id="b002"),
+        context=replace(
+            context,
+            context_id="candidate-first-pass-2",
+            dispatch_id="candidate-first-pass-other",
+            command_id="cmd-first-pass-2",
+            campaign_id="campaign-2",
+            batch_id="b002",
+            issued_at_monotonic_ns=time.monotonic_ns(),
+            expires_at_monotonic_ns=time.monotonic_ns() + 3_600_000_000_000,
+        ),
+        receipt=replace(receipt, receipt_id="receipt-2", campaign_id="campaign-2"),
+        campaign=replace(campaign, campaign_id="campaign-2", preflight_receipt_id="receipt-2"),
+        batch=replace(batch, batch_id="b002", campaign_id="campaign-2"),
+        spawn_intent=replace(
+            intent, campaign_id="campaign-2", batch_id="b002", spawn_token="spawn-first-pass-2"
+        ),
+    )
+
+
+def test_admit_first_pass_refuses_a_recovery_fence_or_an_unresolved_owner(tmp_path):
+    """A first pass never starts over a standing fence or an owner whose outcome is unknown."""
+
+    store, request, context, intent, receipt, campaign, batch = _first_pass_fixture(tmp_path)
+    try:
+        _admit_first_pass(store, request, context, intent, receipt, campaign, batch)
+        second = _second_first_pass_campaign(request, context, intent, receipt, campaign, batch)
+        store.record_recovery_fence(
+            "campaign-1", "b001", reason="OWNER_TREE_UNRESOLVED", command_id="recover-1"
+        )
+        with pytest.raises(StoreConflict, match="FIRST_PASS_RECOVERY_FENCE"):
+            store.admit_first_pass(**second)
+        store._connection.execute("DELETE FROM recovery_fences")
+        # The admitted spawn intent was never read back, and its batch has not cleaned up.
+        with pytest.raises(StoreConflict, match="FIRST_PASS_OWNER_UNKNOWN"):
+            store.admit_first_pass(**second)
+        store.record_execution_owner_intent(ExecutionOwnerIntent(
+            batch_id="b001", owner_kind="COORDINATOR", spawn_token="spawn-live",
+            expected_executable="so101_parallel_batch", argv_sha256=SHA_A,
+            environment_sha256=SHA_B, source_commit="1" * 40,
+            install_prefix=Path("/opt/validation"), runtime_sha256=SHA_CLOSURE,
+        ))
+        with pytest.raises(StoreConflict, match="FIRST_PASS_OWNER_UNKNOWN"):
+            store.admit_first_pass(**second)
+        store.acknowledge_execution_owner(
+            batch_id="b001", pid=4321, pgid=4321, started_ticks=7, coordinator_epoch=4)
+        with pytest.raises(StoreConflict, match="FIRST_PASS_OWNER_ACTIVE"):
+            store.admit_first_pass(**second)
+        assert store._connection.execute(
+            "SELECT count(*) FROM commands WHERE command_id = 'cmd-first-pass-2'"
+        ).fetchone()[0] == 0
+    finally:
+        store.close()
+
+
+def test_a_candidate_context_never_authorizes_more_first_pass_runs_than_its_max_runs(tmp_path):
+    store, request, context, intent, receipt, campaign, batch = _first_pass_fixture(tmp_path)
+    try:
+        _admit_first_pass(store, request, context, intent, receipt, campaign, batch)
+        second_context = replace(
+            context,
+            context_id="candidate-first-pass-2",
+            command_id="cmd-first-pass-2",
+            campaign_id="campaign-2",
+            batch_id="b002",
+        )
+        with pytest.raises(StoreConflict, match="FIRST_PASS_MAX_RUNS_EXCEEDED"):
+            store.admit_first_pass(
+                request=replace(request, campaign_id="campaign-2", batch_id="b002"),
+                context=second_context,
+                receipt=replace(receipt, receipt_id="receipt-2", campaign_id="campaign-2"),
+                campaign=replace(
+                    campaign, campaign_id="campaign-2", preflight_receipt_id="receipt-2"
+                ),
+                batch=replace(batch, batch_id="b002", campaign_id="campaign-2"),
+                spawn_intent=replace(
+                    intent, campaign_id="campaign-2", batch_id="b002",
+                    spawn_token="spawn-first-pass-2",
+                ),
+            )
+    finally:
+        store.close()
+
+
+def test_candidate_context_issuance_is_one_time_and_records_its_document(tmp_path):
+    """The issuance command is consumed once, and the context it minted stays readable."""
+
+    store = SupervisorStore.open(tmp_path.resolve())
+    try:
+        document = {"kind": "CANDIDATE", "context_id": "candidate-context-1"}
+        store.admit_candidate_context_issuance(
+            command_id="cmd-issue-1",
+            request_sha256=SHA_A,
+            context_id="candidate-context-1",
+            campaign_id="campaign-1",
+            document=document,
+        )
+        row = store._connection.execute(
+            "SELECT state, result_json FROM commands WHERE command_id = 'cmd-issue-1'"
+        ).fetchone()
+        assert row["state"] == "COMPLETE"
+        assert _json.loads(row["result_json"]) == document
+
+        with pytest.raises(StoreConflict, match="CONTEXT_COMMAND_ALREADY_CONSUMED"):
+            store.admit_candidate_context_issuance(
+                command_id="cmd-issue-1",
+                request_sha256=SHA_A,
+                context_id="candidate-context-1",
+                campaign_id="campaign-1",
+                document=document,
+            )
+        with pytest.raises(StoreConflict, match="CONTEXT_COMMAND_ID_REUSED"):
+            store.admit_candidate_context_issuance(
+                command_id="cmd-issue-1",
+                request_sha256=SHA_B,
+                context_id="candidate-context-2",
+                campaign_id="campaign-1",
+                document={"kind": "CANDIDATE", "context_id": "candidate-context-2"},
+            )
+    finally:
+        store.close()
+
+
+def test_candidate_context_issuance_is_refused_by_a_fence_or_an_unknown_owner(tmp_path):
+    """Issuance happens on a host whose previous owner is fully resolved, or not at all."""
+
+    store, request, context, intent, receipt, campaign, batch = _first_pass_fixture(tmp_path)
+    try:
+        _admit_first_pass(store, request, context, intent, receipt, campaign, batch)
+        store.record_recovery_fence(
+            "campaign-1", "b001", reason="OWNER_TREE_UNRESOLVED", command_id="recover-1"
+        )
+        with pytest.raises(StoreConflict, match="CONTEXT_RECOVERY_FENCE"):
+            store.admit_candidate_context_issuance(
+                command_id="cmd-issue-1",
+                request_sha256=SHA_A,
+                context_id="candidate-context-1",
+                campaign_id="campaign-2",
+                document={"kind": "CANDIDATE", "context_id": "candidate-context-1"},
+            )
+        store._connection.execute("DELETE FROM recovery_fences")
+        # The first-pass admission left an intent whose process was never read back, on a batch
+        # that did not clean up: the owner is unknown, and no new context may be issued.
+        with pytest.raises(StoreConflict, match="CONTEXT_OWNER_UNKNOWN"):
+            store.admit_candidate_context_issuance(
+                command_id="cmd-issue-1",
+                request_sha256=SHA_A,
+                context_id="candidate-context-1",
+                campaign_id="campaign-2",
+                document={"kind": "CANDIDATE", "context_id": "candidate-context-1"},
+            )
+        assert store._connection.execute(
+            "SELECT count(*) FROM commands WHERE command_id = 'cmd-issue-1'"
+        ).fetchone()[0] == 0
+    finally:
+        store.close()

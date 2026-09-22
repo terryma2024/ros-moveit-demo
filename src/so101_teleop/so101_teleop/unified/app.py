@@ -23,7 +23,12 @@ from pydantic import BaseModel, ConfigDict
 
 from so101_teleop.bind_policy import validate_bind_address
 from so101_teleop.expert_validation.api import (
+    CANDIDATE_FIRST_PASS_CONFIRMATION,
     CampaignCancelRequest,
+    CandidateContextIssueRequest,
+    CandidateExecutionContextResponse,
+    CandidateFirstPassRequest,
+    CandidateFirstPassResponse,
     CapabilitiesResponse as _ValidationCapabilitiesResponse,
     CampaignConfiguration,
     CampaignProjectionResponse,
@@ -813,6 +818,34 @@ def validation_router(services: UnifiedServices) -> APIRouter:
             return JSONResponse(status_code=409, content={"code": "CONFIRMATION_REQUIRED"})
         return await guarded(
             lambda service: _invoke(service.retry_campaign, campaign_id, body.model_dump())
+        )
+
+    @router.post(
+        "/expert-validation/candidate-contexts",
+        response_model=CandidateExecutionContextResponse,
+    )
+    async def issue_candidate_context(
+        body: CandidateContextIssueRequest, authority: RequestAuthority = mutation
+    ):
+        return await guarded(
+            lambda service: _invoke(
+                service.issue_candidate_context_api, body.model_dump(exclude_none=True)
+            )
+        )
+
+    @router.post(
+        "/expert-validation/campaigns/candidate-first-pass",
+        response_model=CandidateFirstPassResponse,
+    )
+    async def candidate_first_pass(
+        body: CandidateFirstPassRequest, authority: RequestAuthority = mutation
+    ):
+        if body.confirmation != CANDIDATE_FIRST_PASS_CONFIRMATION:
+            return JSONResponse(status_code=409, content={"code": "CONFIRMATION_REQUIRED"})
+        return await guarded(
+            lambda service: _invoke(
+                service.start_candidate_first_pass_api, body.model_dump(exclude_none=True)
+            )
         )
 
     @router.get("/expert-validation/artifacts/{artifact_id}")
