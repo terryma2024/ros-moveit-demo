@@ -2441,9 +2441,11 @@ statement of `CP-MSC-FINAL-PARTIAL`: the cause there was harness residue, and on
    approach does not work against an installed service. This is a real finding about the retry spec, not a defect
    in the pinning.
 2. A pinned-catalog fallback (`task12/one-leg-retryhunt2`, campaign `campaign-a78bc3994fef454b81330c8afd9ce108`,
-   batch `b92ca`) had four of seven points `PASSED` and no business `FAILED` point when the window closed. The
-   retry admission requires a genuine business `FAILED` point by design, so Step 4 can only run when one actually
-   occurs; manufacturing one would violate the same rule.
+   batch `b92ca`) **completed with all seven points `PASSED`** - `N1_CAMPAIGN_PASS`, one Worker, `cleanup true`,
+   route `FIRST_PASS` against the installed prefix, and no business `FAILED` point anywhere in the batch. The retry
+   admission requires a genuine business `FAILED` point by design, so with this selection no retry could be admitted
+   even in principle; manufacturing one would violate the same rule. A third production leg therefore ran and passed
+   here (v6, seven points, one Worker), while Step 4 of the plan remains NOT RUN for the reason above.
 
 ### Step 5 and Step 6
 
@@ -2465,7 +2467,8 @@ orphaned `descendant_helper.py` set, and the two Sep 20 static TF publishers.
 2. `SO101_UNIFIED_LIVE_AUTHORIZATION` does not exist, so CP-MSC-05 and the final checkpoint cannot pass on this host;
    CP-MSC-02/03 and the Task 13 Sol/high and Astra/high reviews are likewise unreachable from this session.
 3. Whether a genuine business `FAILED` point appears in a pinned-catalog production first pass - that alone decides
-   whether the v5 retry leg can be exercised here at all.
+   whether the v5 retry leg can be exercised here at all. Measured once: a seven-point v6 production first pass
+   produced seven `PASSED` and zero business failures (`task12/one-leg-retryhunt2`).
 
 Accounting unchanged from `CP-MSC-FINAL-PARTIAL`: everything retained, nothing archived (no `/data` path on this
 host), deletion candidates listed and none deleted. No push, no merge, no force operations.
