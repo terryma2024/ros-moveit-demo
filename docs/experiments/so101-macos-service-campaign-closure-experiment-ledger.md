@@ -49,9 +49,9 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-T12-INFLIGHT
+latest_checkpoint: CP-MSC-FINAL-PARTIAL
 review_pending: CP-MSC-02 (Tasks 2-6, GPT-5.6 Sol/high - not available in this session; packet below)
-next_experiment: EXP-MSC-115 (land the three in-flight fixes, then the Task 12 installed-production fresh-Chrome acceptance)
+next_experiment: EXP-MSC-116 (isolate each production leg from the previous attempt's residue, then complete W2/W1/retry; Step 5 needs the operator authorization document)
 ```
 
 ## CP-MSC-A1-FIX-TAKEOVER: user-authorized invalid-control repair
@@ -2314,3 +2314,90 @@ this task's authority to create.
 Retained: everything under the registered root, including `task12/install-refresh-dirty-build/` (the honest
 intermediate), the harness-slip service directories `task12/service-runs/harness-slip-*` (two mis-argumented starts,
 stopped immediately, kept rather than deleted), and the `task12/blocker/` record. Deleted or archived: nothing.
+
+## CP-MSC-FINAL-PARTIAL: the production window is characterised, the browser legs are not proven
+
+```yaml
+checkpoint_id: CP-MSC-FINAL-PARTIAL
+recorded_at: 2026-09-22T11:20:00+0800
+commit_at_gate: fb6deef8de146d62ef5ebe5638bf1f3de98c84e0 (submodule 85d2a5c42686a3d6b0d909a047a4188b24edd257)
+verdict: PARTIAL - offline and web gates pass, candidate legs are proven, the installed-production browser
+         legs are not, and the three Playwright projects cannot run without the operator authorization document
+```
+
+This supersedes the CP-MSC-05 entry of `cfcb06dd` (which stopped at the console channel because the fixed venv had
+no WebSocket implementation). The operator authorized dependency installs, so that blocker was fixed properly:
+`/opt/ros2_jazzy/.venv/bin/python -m pip install --no-input websockets` -> rc=0, **websockets 17.1**, provenance in
+`task12/dependency-install/PROVENANCE.txt` (the borrowed pure-Python copy remains only as history under
+`task12/borrowed-ws/`). The control channel then worked: the console completed `lease` 200, `manifest` 200 with
+exactly the four anchors, `preflight` 200 `MPS_W2_FIRST_PASS`, `start` 200, and a healthy renewal chain
+(21 generations, 20 `PUT /expert-validation/lease` 200).
+
+### Proven in the production window
+
+- the copied install could be brought current from a clean commit (`b47e938f`): colcon rc=0 in 76 s, `doctor --json`
+  PASS, full installed inventory hashes recorded (`task12/install-refresh/`), with the dirty-bytes build kept as the
+  honest intermediate;
+- the installed service serves the SPA and the three-row macOS matrix; the console's instance-authority chain works
+  end to end with a real WS implementation, and a mid-flight reload is independent of it;
+- the service persists a complete linked owner tree for a service-driven campaign - `ADAPTER -> CAMPAIGN -> two
+  WORKERs -> two STATIONs`, twelve files, every entry intent + confirmation, generation 1 - and reaps it with
+  `survivors: []`;
+- the point count never selects the profile, twice: PARALLEL/N2 at 4 and 7 points gives `MPS_W2_FIRST_PASS`/schema 4
+  and SEQUENTIAL/N1 gives `MPS_W1_FIRST_PASS`/schema 6, all admitted (`ROUTE_CLAIM_SINGLE_PROFILE=yes`);
+- both independent readers agree on both candidate batches (product assertions and `verify-native.ts`, 7/7 points
+  each, 22/22 checks), and the tamper controls still refuse by name;
+- the offline package gate and the web gate are green with only pre-existing failures, and the darwin evidence-root
+  rule is RED -> GREEN (the `/data/work/so101-evidence` prefix is the ai-station rule only).
+
+### Not proven, and why (every cause was harness or omission, never a product refusal at that layer)
+
+No W2, W1 or retry leg through the installed path reached a terminal verdict, so no production journal/watermark,
+sealed-manifest, physical-evidence or cleanup claim is made. Each attempt died of the previous attempt's residue, one
+layer at a time:
+
+1. `cfcb06dd-ws`: the service was launched with `nohup`, an Apple-protected binary that strips `DYLD_*`, so the
+   station could not import rclpy (`@rpath/librosidl_typesupport_c.dylib`, `STATION_NOT_READY`) and zero points ran.
+   Fixed by detaching with `start_new_session=True` and proving the live process environment.
+2. `cfcb06dd-ws2`: with that fixed, the mid-run Chrome reload (the live-sim spec's R04) destroyed the renewal chain -
+   one renewal at +20 s, then none - the 30 s lease expired, and the service cancelled the campaign
+   (`control-stop.json`, `term_sent true`, `survivors []`, `SERVICE_CAMPAIGN_INCOMPLETE`, zero points). The driver
+   now makes the reload opt-in.
+3. `fb6deef8`: reload off and heartbeat healthy, but a stale unheld broker socket
+   (`/private/tmp/so101-ipc-501/b-6fcbbcb94673/broker.sock`) from attempt 2 - whose cleanup never ran because that
+   campaign was cancelled - made the campaign's host-global inventory guard REFUSE before composing. The guard is
+   correct; the harness isolation was not. The stale directory was inventoried, attributed, removed and recorded
+   (`task12/residue/stale-broker-ipc-inventory.txt`).
+4. The next attempt aborted on its own precondition because a child of the just-killed run was still draining.
+
+Step 5: nine of the plan's ten assertions hold with real bound values; `SO101_UNIFIED_LIVE_AUTHORIZATION` fails
+because no operator document exists anywhere (`task12/step5/authorization-search.txt`). The functional manifest
+builds against the live service (rc=0, `platform: macos`, five cases and five named skips), and the three Playwright
+projects each fail closed with `LIVE_SIM_UNIFIED_AUTHORIZATION_REQUIRED` before anything spawns.
+
+Step 6 residue: no task-owned process, ports free, both private IPC roots empty, `ros2 node list` empty, three owner
+trees with zero unconfirmed intents (two complete twelve-file trees, one four-file refused run). Foreign and
+preserved, never signalled: PID 62670 on `100.74.192.81:18010`, the two Sep 20 static TF publishers, four foreign
+tmux sessions, and the orphaned `descendant_helper.py` set.
+
+### Open for a reviewer
+
+1. Whether a service-driven macOS campaign completes when the lease heartbeat is uninterrupted and the host-global
+   inventory is clean - every attempt so far died of harness/residue (or of the reload finding below), so the
+   question is unresolved rather than answered.
+2. The R04 mid-run reload against a 30 s lease with a 20 s heartbeat: on this host the reloaded document stops
+   renewing and the service cancels the campaign by design. That is a real interaction between the browser contract
+   and the lease window and needs a decision (longer lease, renewal independent of the document lifetime, or the spec
+   accepting the cancel).
+3. `SO101_UNIFIED_LIVE_AUTHORIZATION` does not exist, so CP-MSC-05 and the final checkpoint cannot pass on this host
+   regardless of product state; CP-MSC-02/CP-MSC-03 and the Task 13 Sol/high and Astra/high reviews are likewise
+   unreachable from this session.
+
+Accounting: retained - every gate cited above plus `task12/**` (preflight, install-refresh and the dirty intermediate,
+blocker, dependency-install, borrowed-ws, verify-native/verify-batch and the candidate digests, steps2-4 runs and
+legs, step5, residue, live-sim-fix) and all Task 1-11 evidence under `task2/**`, `task5*`, `task6/`, `task9/`,
+`task11/`, `task13/`; archived - none (no `/data` path exists on this host); deletion candidates (nothing deleted) -
+superseded intermediate greens, the `git archive HEAD` baselines and their private pyshims, the regenerable
+`build/so101_teleop` tree, per-invocation pytest scratch directories, and `/tmp/so101-debug-task10/` whose gates were
+all re-run under the registered root. No push, no merge, no force operations; 30+ local commits on
+`codex/so101-unified-webapp`.
