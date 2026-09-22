@@ -23,19 +23,44 @@ export const VERIFIED_DEPENDENCY_PACKAGES = [
   "so101_mujoco_support",
 ] as const;
 
+/** A package nothing carries: the candidate is named for a single base, and the package plus every
+ *  base searched when the dependency side is a list. */
+function missingPackage(name: string, bases: readonly string[]): Error {
+  if (bases.length === 1) return new Error(`PACKAGE_PREFIX_MISSING: ${join(bases[0], name)}`);
+  return new Error(`PACKAGE_PREFIX_MISSING: ${name} (searched: ${bases.join(", ")})`);
+}
+
+/**
+ * Resolve the two overlay prefixes and the five audited dependency prefixes.
+ *
+ * `verifiedDependencyPrefixes` is a list separated by `:` - a layout portability rule, the same
+ * shape as the darwin evidence-root branch: ai-station keeps the whole verified set under one
+ * install base (`/data/work/ws_moveit/install`), while macOS installs the MuJoCo fork with
+ * `--merge-install` into its own prefix and `so101_mujoco_support` with the task overlay, so the
+ * set genuinely lives in two bases there. A single base behaves exactly as before.
+ *
+ * The audit is not relaxed: every package has to be carried by one of the bases and a package that
+ * none of them carries fails closed with `PACKAGE_PREFIX_MISSING`. There is no fallback base and
+ * nothing is skipped - an overlay package is never rescued by a dependency base.
+ */
 export function resolvePackagePrefixes(
   overlayPrefix: string,
-  verifiedDependencyPrefix: string,
+  verifiedDependencyPrefixes: string,
 ): string[] {
+  const dependencyBases = verifiedDependencyPrefixes.split(":").filter((entry) => entry !== "");
+  if (dependencyBases.length === 0) dependencyBases.push(verifiedDependencyPrefixes);
   const resolved: string[] = [];
   for (const name of [...OVERLAY_PACKAGES, ...VERIFIED_DEPENDENCY_PACKAGES]) {
-    const base = (OVERLAY_PACKAGES as readonly string[]).includes(name)
-      ? overlayPrefix
-      : verifiedDependencyPrefix;
-    const candidate = join(base, name);
-    if (!existsSync(candidate)) {
-      throw new Error(`PACKAGE_PREFIX_MISSING: ${candidate}`);
+    if ((OVERLAY_PACKAGES as readonly string[]).includes(name)) {
+      const candidate = join(overlayPrefix, name);
+      if (!existsSync(candidate)) throw missingPackage(name, [overlayPrefix]);
+      resolved.push(candidate);
+      continue;
     }
+    const candidate = dependencyBases
+      .map((base) => join(base, name))
+      .find((path) => existsSync(path));
+    if (candidate === undefined) throw missingPackage(name, dependencyBases);
     resolved.push(candidate);
   }
   return resolved;

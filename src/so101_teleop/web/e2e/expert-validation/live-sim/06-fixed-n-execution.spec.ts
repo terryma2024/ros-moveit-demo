@@ -7,6 +7,7 @@ import { liveSimTest as test, expect } from "../fixtures/live-sim";
 import { readJournalEvents } from "../assertions/journal";
 import {
   assertCampaignBatchEvidence,
+  assertProjectedPointEvidence,
   assertRoutingClaim,
   campaignJournalRoot,
   readCampaignBatchEvidence,
@@ -243,17 +244,19 @@ for (const entry of executions) {
     expect(projection.evaluated).toBe(entry.point_count);
     expect(projection.points).toHaveLength(entry.point_count);
     expect(projection.workers).toHaveLength(entry.worker_count);
+    // The batch on disk proves the same four claims from its own bytes: the selection, the
+    // committed watermark, the sealed physical evidence and the completed cleanup.
+    const batchEvidence = readCampaignBatchEvidence(batchRoot);
     for (const point of projection.points) {
       expect(["PASSED", "FAILED"], `${point.display_id} terminal`).toContain(point.status);
-      expect(point.artifacts.length, `${point.display_id} artifacts`).toBeGreaterThan(0);
       // Selected-only and first-pass: one attempt per point, and never a retry attempt here.
       expect((point.attempts ?? []).map((attempt: any) => attempt.kind), `${point.display_id}`)
         .toEqual(["FIRST_PASS"]);
     }
-
-    // The batch on disk proves the same four claims from its own bytes: the selection, the
-    // committed watermark, the sealed physical evidence and the completed cleanup.
-    const batchEvidence = readCampaignBatchEvidence(batchRoot);
+    // Per-point evidence is the evidence *this batch's layout* produces: the projection's
+    // registered artifacts on the Linux/fixed layout, the committed point result on the macOS
+    // composed one. Missing or tampered evidence refuses on both.
+    assertProjectedPointEvidence(batchEvidence, projection);
     assertCampaignBatchEvidence(batchEvidence, { ...expectation, projection });
     const commits = readJournalEvents(campaignJournalRoot(batchRoot))
       .filter((event) => event.type === "RESULT_COMMITTED");
