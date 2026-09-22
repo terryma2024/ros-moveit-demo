@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-GATE-GREEN
+latest_checkpoint: CP-MSC-REMEDIATION-SIGNALS
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3937,3 +3937,27 @@ Task 8's five boundaries and its confirming run are done. The remaining plan wor
 crash, fence and operator recovery), Task 9 (guide, ledger and run-command corrections), Task 10
 (final `prepare`/freeze, 5x owner-bound Gate A, `CP-MSC-A2-FARM`) and Task 11 (live W2/W1/retry
 requalification plus the two GPT reviews).
+
+## CP-MSC-REMEDIATION-SIGNALS: a recovery receipt now states what it signalled
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-SIGNALS
+recorded_at: 2026-09-23T04:50:00+0800
+carried_by: the local commit that adds this entry (parent 258d43f1)
+task: Task 8B Step 1 (the table-driven recovery contract) - started, not finished
+```
+
+`receipt["signals_sent"]` is now part of every operator-recovery receipt. It is `[]` by construction
+on every refusal path, because a refusal happens before any signal exists, and on a completed reclaim
+it names exactly the pids the owner-tree recovery re-proved and stopped. "Zero signals" stops being
+something a reader has to infer from three other fields.
+
+```text
+remediation/runs/t8b-signals2-20260922T163345Z: 34 passed (the whole recovery file)
+```
+
+Still owed by Task 8B: the rest of Step 1's table (`AccessDenied`, PID reuse/birth drift, partial
+inventory, foreign sentinel as separate named cases - several are already covered by the psutil
+inventory cases added in Task 5), Step 2's targeted RED/GREEN pass, Step 3's rebuild-and-freeze
+before any live work, Step 4's live crash recovery with a foreign sentinel plus the identity-drift
+negative control, and Step 5's ledger update and gate re-run.
