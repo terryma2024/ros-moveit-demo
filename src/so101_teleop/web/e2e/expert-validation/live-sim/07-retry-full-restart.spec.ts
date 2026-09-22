@@ -129,18 +129,35 @@ test("R07 a genuinely failed point retries as its own SEQUENTIAL N1 FULL_RESTART
   const afterRetry = await waitForTerminal(900_000);
   expect(afterRetry?.batch_cleanup_complete).toBe(true);
 
-  // The retry is an independent, fresh batch on disk: its own manifest, journal and cleanup.
+  // The retry is an independent, fresh batch on disk: its own selection, journal and cleanup.
   const campaignRoot = join(liveServer.stateDir, "campaigns", campaignId);
   const retryRoot = join(campaignRoot, "retry-001");
   expect(existsSync(retryRoot), `retry batch directory: ${retryRoot}`).toBe(true);
-  const retryManifest = JSON.parse(
-    readFileSync(join(retryRoot, "batch_manifest.json"), "utf8"),
-  ) as { batch_id?: string; batch_kind?: string; selected_point_ids?: string[]; worker_count?: number };
-  expect(retryManifest.batch_kind).toBe("FULL_RESTART_RETRY");
-  expect(retryManifest.batch_id).not.toBe(firstPassBatchId);
-  expect(retryManifest.selected_point_ids).toEqual([target.point_id]);
-  expect(retryManifest.worker_count).toBe(1);
-  expect(existsSync(join(retryRoot, "cleanup-gates.json"))).toBe(true);
+  const retryEvidence = readCampaignBatchEvidence(retryRoot);
+  // The retry batch's own selection, read from whichever layout the route wrote: the fixed
+  // coordinator's frozen manifest, or the composed campaign's selection binding and verdict.
+  const retrySelection = retryEvidence.layout === "LINUX_FIXED"
+    ? (() => {
+      const manifest = JSON.parse(
+        readFileSync(join(retryRoot, "batch_manifest.json"), "utf8"),
+      ) as { batch_id?: string; batch_kind?: string; selected_point_ids?: string[]; worker_count?: number };
+      expect(existsSync(join(retryRoot, "cleanup-gates.json"))).toBe(true);
+      return {
+        batch_id: String(manifest.batch_id), batch_kind: String(manifest.batch_kind),
+        selected_point_ids: manifest.selected_point_ids as string[],
+        worker_count: Number(manifest.worker_count),
+      };
+    })()
+    : {
+      batch_id: String(retryEvidence.manifest.batch_id),
+      batch_kind: String((retryEvidence.manifest.binding as Record<string, unknown>).kind),
+      selected_point_ids: retryEvidence.manifest.selected_point_ids as string[],
+      worker_count: Number((retryEvidence.cleanup.route as Record<string, unknown>).worker_count),
+    };
+  expect(retrySelection.batch_kind).toBe("FULL_RESTART_RETRY");
+  expect(retrySelection.batch_id).not.toBe(firstPassBatchId);
+  expect(retrySelection.selected_point_ids).toEqual([target.point_id]);
+  expect(retrySelection.worker_count).toBe(1);
   expect(existsSync(join(campaignJournalRoot(retryRoot), "events"))).toBe(true);
 
   // The retry batch proves the same four claims as any other batch, from its own bytes: exactly
@@ -154,11 +171,10 @@ test("R07 a genuinely failed point retries as its own SEQUENTIAL N1 FULL_RESTART
     workerCount: 1,
     selectedPointIds: [target.point_id],
   };
-  const retryEvidence = readCampaignBatchEvidence(retryRoot);
   // The campaign endpoint keeps projecting the *first-pass* batch, so the retry is asserted from
-  // its own bytes only: its manifest, journal, watermark, sealed attempts and cleanup gates.
+  // its own bytes only: its selection, journal, watermark, per-point evidence and cleanup.
   assertCampaignBatchEvidence(retryEvidence, retryExpectation);
-  expect(retryEvidence.watermark?.batch_id).toBe("retry-001");
+  expect(retryEvidence.watermark?.batch_id).toBe(retrySelection.batch_id);
 
   // The store keeps the first pass and the retry as separate batches with separate statistics.
   const python = process.env.SO101_E2E_PYTHON ?? join(process.env.SO101_TASK_ROOT ?? "", "venv/bin/python");
@@ -188,7 +204,7 @@ test("R07 a genuinely failed point retries as its own SEQUENTIAL N1 FULL_RESTART
             retry_eligible: point.retry_eligible,
           })),
         },
-        retry_batch: retryManifest,
+        retry_batch: retrySelection,
         retry_watermark: retryEvidence.watermark,
         retry_cleanup: retryEvidence.cleanup,
         after_retry: {
