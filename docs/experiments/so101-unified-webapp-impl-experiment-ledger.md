@@ -6200,3 +6200,48 @@ lifted for the first pass (verified above), still open for the retry leg**. And 
 objective names - a retry driven through the **service API** - is still not demonstrated anywhere I can
 see: the retry evidence is a CLI run, and their Task 12 Steps 2-4 (fresh Chrome W2 then W1, optional
 retry) remain pending.
+
+## CP-177: the retry chain is wired on both sides; two preconditions still stand before I can drive it
+
+Follow-up to CP-176 under the user's authorisation to drive a v5 retry through the service API myself.
+Two things had to be checked first, and one of them changed the picture.
+
+**The launch chain is now complete, and I verified it rather than assuming it.** The successor has
+already extended my adapter (commits `6b36868c` "add closed macOS W1 profiles and spawn guards" and
+`196af022` "forward the admitted retry binding from the adapter"), so the v4/v5/v6 dispatch I was about
+to write already exists:
+
+- `ROUTE_MODULES` maps `(4, MPS_W2_FIRST_PASS) -> macos_w2_campaign`,
+  `(5, MPS_W1_FULL_RESTART_RETRY) -> macos_n1_retry`, `(6, MPS_W1_FIRST_PASS) -> macos_n1_first_pass`,
+  with `ROUTE_CONFIG_CLASSES` pinning the document class per schema - a closed table, no fallback.
+- The adapter declares `RETRY_BINDING_FLAGS`, requires `("original_selection_sha256",
+  "original_result_sha256")`, and forwards them "exactly as the service declared it".
+- The service renders them: `FixedRetryBinding.flags()` at `supervisor.py:112`, extended into the argv
+  at `supervisor.py:200-201`, composed by `supervisor._retry_binding(original, request)` and fed from
+  `production.py:2120`. So a service-driven v5 retry reaches `macos_n1_retry` with its admitted original
+  chain, end to end.
+
+**Two preconditions are unmet right now, and neither is mine to force.**
+
+1. **The retry batch still cannot be projected.** My CP-176 finding is unchanged at this HEAD:
+   `campaign_layout._HASH_FIELDS = ("catalog_sha256", "selection_sha256", "config_sha256")` and
+   `read_selection_binding` requires every one of them, while a retry binding carries
+   `original_catalog_sha256` instead of `catalog_sha256`. A driven service retry would therefore launch
+   and run, and its projection would either keep the swallowed STARTED value
+   (`production.py:575-586`) or raise `ServiceConflict("UPSTREAM_PROJECTION_INVALID")` on a console read
+   (`production.py:1171-1182`). That is the successor's file and their window; I am reporting it rather
+   than editing under their feet.
+2. **The host is occupied.** At the moment of writing: a live campaign claim holds
+   `/private/tmp/so101-ipc-501/b-6fcbbcb94673`, their campaign process (PID 99370) and a harness step
+   (`bash -c sleep 115; ... macos-service-campaign-closure-...`, PID 99688) are running, and their Task 12
+   Steps 2-4 are still pending in their ledger. The campaign inventory is host-global, so starting my
+   own campaign now would make their run refuse `a claim, endpoint or campaign directory is already
+   present` - the same collision they themselves recorded at CP-MSC-T12-INFLIGHT.
+
+**Ready to execute the moment both clear** (no new design work needed): (i) wait for the IPC claim and
+their campaign processes to disappear, (ii) take a fresh registered evidence root and start the unified
+service from the task install with the v4 document, (iii) drive one first pass through the service API
+(instance -> channel -> lease -> manifest -> preflight -> start) until a genuine business `FAILED` point
+with `retry_eligible` exists, (iv) `POST /expert-validation/campaigns/{id}/full-restart-retries` with
+that point, and (v) read the retry's result, cleanup and projection back. Step (v) is the one that needs
+precondition 1.
