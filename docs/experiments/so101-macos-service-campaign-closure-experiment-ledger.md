@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-7B
+latest_checkpoint: CP-MSC-REMEDIATION-GATE
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -3523,3 +3523,62 @@ bunx tsc -b --pretty false: rc=0
 ```
 
 The rehearsal windows are retained in the evidence root and listed as deletion candidates.
+
+## CP-MSC-REMEDIATION-GATE: the short-path gate is green except five owning boundaries
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-GATE
+recorded_at: 2026-09-23T00:50:00+0800
+dispatch: ddf5bc35-e88c-4d3e-8005-0c165dff1841
+carried_by: the local commit that adds this entry (parent a4698f0b)
+status: Task 8 Steps 1-2 done; Step 3 has five boundaries left
+prepare: remediation-build-20260922T150556Z (3 packages finished, doctor rc=0 status=PASS)
+```
+
+### What the first three gate passes found, and what was actually wrong
+
+| Pass | demo | teleop | copied install | web |
+| --- | --- | --- | --- | --- |
+| baseline (long `TMPDIR`) | 176 failed | 27 failed | rc=0 | rc=0 |
+| `t8-gate1` (short scratch) | 42 failed + 40 errors | 8 failed | rc=0 | rc=0 |
+| `t8-gate2` (shared basetemp) | **rc=0, 0/0** | 901 collection errors | 3 errors | rc=0 |
+| `t8-gate3` (per-step basetemp) | **rc=0, 0/0** | **7 failed** | **rc=0** | **rc=0** |
+
+Three causes, all in the runner rather than in the product:
+
+1. the runner's `PATH` did not contain `/usr/sbin`, so the 45 tests that call `sysctl` failed at
+   setup (`FileNotFoundError: 'sysctl'`);
+2. pytest joins `pytest-of-<user>/pytest-N/<test-name>0` onto its basetemp, so even the short scratch
+   left AF_UNIX endpoints at 110-132 bytes; each pytest step now gets its own fresh
+   `/opt/data/tmp/so101-bt-XXXXXXXX` basetemp;
+3. sharing one basetemp between the three pytest steps made pytest's own numbered directory
+   collide, which produced the 901 collection errors in `t8-gate2`. One basetemp per step fixed it.
+
+The colcon step also needed `--log-base` moved before the verb, and its pytest children now get their
+own short `TMPDIR` (`/opt/data/tmp/so101-cc-XXXXXXXX`) for the same endpoint reason.
+
+### The five boundaries Task 8 Step 3 still owns
+
+`teleop-pytest` (7 nodeids) and `colcon test-result` (8 nodeids, 13 failures) carry the same set:
+
+| Boundary | First bad fact |
+| --- | --- |
+| `test_expert_validation_e2e_installed_port::test_fixed_helper_descendant_survives_leader_exit` | `ProcessIdentityError: PROCESS_IDENTITY_MISMATCH` after the leader exits |
+| `test_expert_validation_e2e_installed_port::test_fixed_helper_full_protocol` | assertion at `test_expert_validation_e2e_installed_port.py:183` (fails under colcon's `TMPDIR`, passes under the short basetemp) |
+| `test_expert_validation_main::test_production_factory_wires_durable_authorities_and_releases_lock` | `{'lease_maintenance': ...} != {'ok': True, ...}` |
+| `test_expert_validation_production_projection::test_cancel_command_replays_durably_and_conflicting_target_never_contacts_owner[False/True]` | `assert False` in the durable cancel replay |
+| `test_expert_validation_supervisor::test_live_fixed_supervisor_uses_real_authenticated_coordinator_not_signals[USER_CANCELLED/LEASE_EXPIRED]` | `assert False` in the live supervisor leg |
+| `test_unified_lifecycle::test_composition_builds_a_readable_app_without_ros` | `composition.validation_error is None`: an unprovisioned domain does not report why |
+
+Each needs its own RED, its own minimal fix and its own scoped commit, exactly as the plan writes.
+No gate was weakened to reach this state: the remaining failures are real and are counted as such in
+`remediation/gates/t8-gate3-20260922T152234Z-46378/summary.txt`.
+
+### Evidence
+
+```text
+remediation-build-20260922T150556Z/   prepare.log, doctor.json, ctest-registration.txt (both lease
+    tests registered), provenance.txt, SHA256SUMS
+remediation/gates/t8-gate1..3/        summary.txt, per-step stdout/stderr, argv, exit codes, JUnit,
+    endpoint preflight (78 bytes of 104), scratch identity, SHA256SUMS
+```

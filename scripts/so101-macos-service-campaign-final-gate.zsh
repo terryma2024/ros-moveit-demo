@@ -81,6 +81,9 @@ source /opt/data/so101/runtime/fork/current/setup.zsh
 source /opt/data/so101/workspace/install/setup.zsh
 set -u
 
+# The suites call system tools (`sysctl` lives in /usr/sbin), so the run declares a complete PATH
+# instead of inheriting whatever the calling shell happened to have.
+export PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/ros2_jazzy/.venv/bin${PATH:+:$PATH}"
 export PYTHONNOUSERSITE=1
 export PYTHONDONTWRITEBYTECODE=1
 export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
@@ -89,6 +92,27 @@ export ROS_DOMAIN_ID="$EXPECTED_DOMAIN"
 export ROS_HOME="$run_root/ros-home"
 export ROS_LOG_DIR="$run_root/ros-logs"
 mkdir -p "$ROS_HOME" "$ROS_LOG_DIR"
+
+# Unit tests that open AF_UNIX sockets take their base from `SO101_IPC_SOCKET_BASE` (see the teleop
+# conftest). It has to be short and private for the same reason the pytest scratch does, and it is
+# never a symlink alias.
+ipc_base="$(mktemp -d /opt/data/tmp/so101-ipc-XXXXXXXX)" || fail "IPC_BASE_NOT_CREATABLE"
+chmod 700 "$ipc_base"
+export SO101_IPC_SOCKET_BASE="$ipc_base"
+[[ ! -L "$ipc_base" ]] || fail "IPC_BASE_IS_SYMLINK" "$ipc_base"
+
+# pytest joins its own `pytest-of-<user>/pytest-N/<test-name>0` onto the basetemp, so a basetemp
+# inside the scratch would still push AF_UNIX endpoints past `sun_path`. The basetemp is therefore
+# its own short directory, and it is a deletion candidate like the scratch.
+# One fresh short basetemp per pytest step: a basetemp may not be shared between runs, because
+# pytest owns (and clears) the numbered directory it creates underneath it.
+typeset -A pytest_bases
+for step_name in demo-pytest teleop-pytest copied-install; do
+  step_base="$(mktemp -d /opt/data/tmp/so101-bt-XXXXXXXX)" || fail "PYTEST_BASE_NOT_CREATABLE"
+  chmod 700 "$step_base"
+  [[ ! -L "$step_base" ]] || fail "PYTEST_BASE_IS_SYMLINK" "$step_base"
+  pytest_bases[$step_name]="$step_base"
+done
 
 # Short scratch through the repository helper, then an independent read-back.
 scratch="$("$python" -c '
@@ -143,19 +167,27 @@ record_step() {
 }
 
 # The full static gate, in the order the plan fixes.
-record_step demo-pytest "$worktree" "$python" -m pytest -p no:cacheprovider src/so101_demo_py/test -q \
+record_step demo-pytest "$worktree" "$python" -m pytest -p no:cacheprovider --basetemp "$pytest_bases[demo-pytest]" src/so101_demo_py/test -q \
   --junitxml="$run_root/demo-pytest.xml"
-record_step teleop-pytest "$worktree" "$python" -m pytest -p no:cacheprovider src/so101_teleop/test/teleop -q \
+record_step teleop-pytest "$worktree" "$python" -m pytest -p no:cacheprovider --basetemp "$pytest_bases[teleop-pytest]" src/so101_teleop/test/teleop -q \
   --junitxml="$run_root/teleop-pytest.xml"
-record_step copied-install "$worktree" "$python" -m pytest -p no:cacheprovider -q \
+record_step copied-install "$worktree" "$python" -m pytest -p no:cacheprovider --basetemp "$pytest_bases[copied-install]" -q \
   src/so101_demo_py/test/test_copied_installed_entrypoint.py \
   src/so101_demo_py/test/test_macos_install_contract.py \
   --junitxml="$run_root/copied-install.xml"
+# `--log-base` is a global colcon option: it has to precede the verb, and `--event-handlers` takes
+# the remaining values, so the handlers stay last.
+# colcon's pytest children take their basetemp from TMPDIR, so the colcon step gets its own short
+# one for the same reason the direct pytest steps do.
+colcon_tmp="$(mktemp -d /opt/data/tmp/so101-cc-XXXXXXXX)" || fail "COLCON_TMP_NOT_CREATABLE"
+chmod 700 "$colcon_tmp"
 record_step colcon-test "$worktree" env "PATH=/opt/ros2_jazzy/.venv/bin:$PATH" \
-  "$python" "$colcon_bin" test --packages-select so101_teleop --return-code-on-test-failure \
-  --event-handlers console_direct+ --log-base "$run_root/colcon-log"
+  "TMPDIR=$colcon_tmp" "TMP=$colcon_tmp" "TEMP=$colcon_tmp" \
+  "$python" "$colcon_bin" --log-base "$run_root/colcon-log" test \
+  --packages-select so101_teleop --return-code-on-test-failure \
+  --event-handlers console_direct+
 record_step colcon-result "$worktree" env "PATH=/opt/ros2_jazzy/.venv/bin:$PATH" \
-  "$python" "$colcon_bin" test-result --verbose --log-base "$run_root/colcon-log"
+  "$python" "$colcon_bin" --log-base "$run_root/colcon-log" test-result --verbose
 record_step web-tsc "$web_root" env -u NODE_ENV bunx tsc -b --pretty false
 record_step web-test "$web_root" env -u NODE_ENV bun run test
 record_step web-build "$web_root" env -u NODE_ENV bun run build
@@ -217,6 +249,10 @@ cat "$summary"
   print -r -- "colcon=$colcon_bin"
   print -r -- "bun=$(command -v bun) $(bun --version)"
   print -r -- "scratch=$scratch"
+  print -r -- "ipc_socket_base=$ipc_base"
+  for step_name in demo-pytest teleop-pytest copied-install; do
+    print -r -- "pytest_basetemp[$step_name]=${pytest_bases[$step_name]}"
+  done
   print -r -- "scratch_classification=deletion-candidate (not deleted)"
   print -r -- "so101_task_root=$SO101_TASK_ROOT"
   print -r -- "task_root=$TASK_ROOT"
