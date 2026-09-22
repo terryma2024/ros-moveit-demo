@@ -281,9 +281,11 @@ export const liveSimTest = base.extend<{ liveServer: LiveServer }>({
     // python3.12 overlay, while macOS installs the fixed runtime at /opt/ros2_jazzy and runs
     // python3.11. Falling back to the Linux pair refused every macOS window with
     // `PACKAGE_PREFIX_MISSING: /data/work/ws_moveit/install/mujoco_3d_lidar`.
+    // The bases are a colon-separated search path. On macOS the four fork packages live in the
+    // runtime fork overlay and `mujoco_vendor` in the ROS dependency overlay, so both are searched.
     const dependencyBase = process.env.SO101_E2E_DEPENDENCY_PREFIX
       ?? (process.platform === "darwin"
-        ? "/opt/ros2_jazzy/extra_ws/install"
+        ? "/opt/data/so101/runtime/fork/current:/opt/ros2_jazzy/extra_ws/install"
         : "/data/work/ws_moveit/install");
     const pythonSiteDirectory = process.platform === "darwin"
       ? "lib/python3.11/site-packages"
