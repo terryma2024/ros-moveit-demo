@@ -4120,3 +4120,38 @@ descendant is not something `recover(... --apply)` will reclaim, it is something
 live version of Step 4 should therefore drive the **owner-tree** reclaim with the real crashed tree
 and then the operator entry for the fence, and it must show the foreign sentinel surviving both. That
 is the corrected next step, and it is recorded rather than papered over.
+
+### Addendum 4: the live experiment now reproduces both required outcomes
+
+The harness bug behind `RECOVERY_PROCESS_GROUP_PRESENT` was mine, and the reclaim's own receipt proved
+it: `DirectoryOwnerRecords` takes the tree **root** and appends `<campaign>/<batch>/` itself, so
+passing the campaign/batch directory doubled it (`…/campaign-1/b001/campaign-1/b001/…`) and the
+reclaim found no owner documents at all - `{"reclaimed": [], "already_exited": [], "unresolved": []}`.
+With the root corrected, the two live cases now do exactly what Task 8B asks:
+
+```text
+positive rc=1  descendant_alive_after: False   stderr=RECOVERY_RUNTIME_UNVERIFIABLE
+negative rc=1  descendant_alive_after: True    stderr=RECOVERY_OWNER_TREE_UNRESOLVED generation 1: WORKER…
+sentinel_untouched: true                       residue_pids: []
+```
+
+* **positive**: the recorded task-owned descendant was really stopped by the leaf-first reclaim
+  (`descendant_alive_after: False`), and the foreign sentinel was untouched throughout.
+* **negative**: with the descendant's recorded birth drifted by one tick, the recovery refused
+  (`RECOVERY_OWNER_TREE_UNRESOLVED … WORKER`) and the descendant is **still alive** - zero signals on
+  the drift path, which is precisely the negative control Task 8B demands.
+
+### The last open question for the positive case: RECOVERY_RUNTIME_UNVERIFIABLE
+
+After the reclaim, `recover(… --apply)` still refuses with `RECOVERY_RUNTIME_UNVERIFIABLE`. psutil is
+present (`7.2.2`), so this is one of the inventory probes raising an `OSError`/`ValueError`/
+`SubprocessError`. The strongest candidate is the container probe: `_containers` runs
+`docker ps … check=True`, and **`docker` is not installed on this host**, so it raises
+`FileNotFoundError` (an `OSError`) which `recover()` converts into exactly this code.
+
+If that is confirmed, it is a real operational finding, not a harness bug: on a Mac without Docker the
+operator-recovery entry cannot complete, so either the guide must state Docker as a precondition or
+the container probe must read "no container runtime present" as "no batch containers" - a defensible
+reading, since a host with no Docker cannot be running a batch-labelled container. The next round
+confirms it with one command and then decides, against the plan's rule that a refusal is never
+weakened into a pass.
