@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-REMEDIATION-T11-W2-SLOW
+latest_checkpoint: CP-MSC-REMEDIATION-T11-W2-MECHANISM
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -4975,3 +4975,41 @@ which is roughly half an hour at the observed rate.
 
 The lesson is the one this dispatch keeps re-learning: an inference from two agreeing samples is not a
 measurement of a rate, and the ledger says so rather than leaving "stalled" standing.
+
+## CP-MSC-REMEDIATION-T11-W2-MECHANISM: the projection sequence is a commit counter, not a progress meter
+
+```yaml
+checkpoint_id: CP-MSC-REMEDIATION-T11-W2-MECHANISM
+recorded_at: 2026-09-23T16:35:00+0800
+carried_by: the local commit that adds this entry (parent f936d5f5)
+status: explains both earlier misreadings; the campaign is working
+```
+
+I twice read slow progress as a stop, and the reason is a property of the evidence rather than of the
+campaign: `sequence` in the campaign projection advances on **commit**, and an attempt commits only
+when it finishes. Between commits a campaign can be working flat out while that number stands still.
+Measured at 19:28:50 local, with the projection still at `sequence 77`:
+
+```text
+attempt directories written in the last 8 minutes:
+    sample_06_mid_left-attempt-5    15 files
+    sample_08_mid_right-attempt-6   15 files
+    sample_10_mid_center-attempt-7  15 files
+    sample_12_far_left-attempt-8    12 files
+station processes, age:
+    ros2_control_node (fork overlay)   1:21
+    so101_mujoco_support               1:21
+    python workers                     1:02 - 1:12
+```
+
+Fresh station processes a minute old, four attempts writing files, and both workers leased. That is a
+campaign in the middle of its work, not one that has stopped - and the projection's `attempts` list for
+those points is empty for the same reason: nothing has committed yet.
+
+So the honest reading of this window so far is: **thirteen of twenty points committed PASSED, one
+committed FAILED, both workers active, several attempts in flight**, with the station re-spawned per
+attempt as the profile requires. Anyone reading this evidence should take progress from the attempt
+directories and the station process ages, and take *results* from `sequence` and `committed`.
+
+This entry also supersedes the two readings before it - "stalled" and then "slow" - with a mechanism
+instead of another guess.
