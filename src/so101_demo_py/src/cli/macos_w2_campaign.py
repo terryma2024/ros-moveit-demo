@@ -835,15 +835,15 @@ def installed_catalog_path() -> Path:
         raise RefusedRun("config", f"CATALOG_MISSING: {type(error).__name__}: {error}") from error
 
 
-def selection_document(selection, *, catalog_path: Path) -> dict:
+def selection_document(selection, *, catalog_path: Path, extras=None) -> dict:
     """The audit projection of the one selection this campaign executes.
 
     It is produced by the same function that writes `selection-binding.json`, so a first pass and a
-    retry project the identical shape - including the retry's original selection/result chain -
-    instead of the retry path crashing on a first-pass-only field.
+    retry project the identical shape - including the retry's original selection/result chain and
+    how it was verified - instead of the retry path crashing on a first-pass-only field.
     """
 
-    return point_drain.selection_document_for(selection, catalog_path=catalog_path)
+    return point_drain.selection_document_for(selection, catalog_path=catalog_path, extras=extras)
 
 
 def bind_campaign_selection(*, arguments, plan, spec):
@@ -865,27 +865,77 @@ def bind_campaign_selection(*, arguments, plan, spec):
     expected_catalog_sha256 = getattr(arguments, "catalog_sha256", None)
     try:
         if retry:
+            # A retry binding is named one of two ways, and both must name an *original result*:
+            # the prior campaign root (`--retry-root`, whose committed result document is re-read
+            # and hashed) or the service's already-admitted chain (`--original-selection-sha256`
+            # with `--original-result-sha256`, optionally with the original result document so its
+            # bytes decide). There is no form that starts a retry without a named original result.
             retry_root = getattr(arguments, "retry_root", None)
-            if retry_root is None:
-                raise RefusedRun("selection", "RETRY_ROOT_REQUIRED", exit_code=2)
+            selection_sha = getattr(arguments, "original_selection_sha256", None)
+            result_sha = getattr(arguments, "original_result_sha256", None)
+            catalog_sha = getattr(arguments, "original_catalog_sha256", None)
+            original_result = getattr(arguments, "original_result", None)
+            original_batch_id = getattr(arguments, "original_batch_id", None)
             if len(point_ids) != 1:
                 raise RefusedRun("selection", "RETRY_POINT_REQUIRED", exit_code=2)
-            source = point_drain.read_retry_source(prior_root=Path(retry_root),
-                                                   point_id=point_ids[0])
-            prior = point_drain.read_selection_document(
-                Path(retry_root) / point_drain.SELECTION_DOCUMENT_BASENAME)
-            if str(prior["campaign_id"]) != arguments.campaign_id:
+            if retry_root is None and selection_sha is None and result_sha is None:
                 raise RefusedRun(
                     "selection",
-                    f"RETRY_CAMPAIGN_MISMATCH: {prior['campaign_id']} != {arguments.campaign_id}",
+                    "RETRY_ROOT_REQUIRED: name the original chain with --retry-root or with "
+                    "--original-selection-sha256 and --original-result-sha256",
                     exit_code=2)
-            if str(prior["batch_id"]) == arguments.batch_id:
+            if retry_root is None and (selection_sha is None or result_sha is None):
+                raise RefusedRun(
+                    "selection",
+                    "RETRY_ROOT_REQUIRED: --original-selection-sha256 and "
+                    "--original-result-sha256 are both required without --retry-root",
+                    exit_code=2)
+            if original_batch_id is not None and original_batch_id == arguments.batch_id:
                 raise RefusedRun("selection", "RETRY_BATCH_EXISTS", exit_code=2)
-            catalog_path = (Path(catalog_argument) if catalog_argument is not None
-                            else Path(str(source["catalog_path"])))
-            if (catalog_argument is not None and catalog_path.resolve()
-                    != Path(str(source["catalog_path"])).resolve()):
-                raise RefusedRun("selection", "RETRY_CATALOG_MISMATCH", exit_code=2)
+            extras = {"original_batch_id": original_batch_id}
+            if retry_root is not None:
+                source = point_drain.read_retry_source(prior_root=Path(retry_root),
+                                                       point_id=point_ids[0])
+                prior = point_drain.read_selection_document(
+                    Path(retry_root) / point_drain.SELECTION_DOCUMENT_BASENAME)
+                if str(prior["campaign_id"]) != arguments.campaign_id:
+                    raise RefusedRun(
+                        "selection",
+                        f"RETRY_CAMPAIGN_MISMATCH: {prior['campaign_id']} != "
+                        f"{arguments.campaign_id}", exit_code=2)
+                if str(prior["batch_id"]) == arguments.batch_id:
+                    raise RefusedRun("selection", "RETRY_BATCH_EXISTS", exit_code=2)
+                # A digest named beside the root may only *confirm* what the root's own bytes say.
+                for name, declared, recorded in (
+                        ("original_selection_sha256", selection_sha,
+                         str(prior["selection_sha256"])),
+                        ("original_result_sha256", result_sha,
+                         str(source["original_result_sha256"])),
+                        ("original_catalog_sha256", catalog_sha,
+                         str(prior["catalog_sha256"]))):
+                    if declared is not None and declared != recorded:
+                        raise RefusedRun(
+                            "selection",
+                            f"RETRY_SOURCE_MISMATCH: {name} {declared} != {recorded}",
+                            exit_code=2)
+                extras["original_batch_id"] = original_batch_id or str(prior["batch_id"])
+                catalog_path = (Path(catalog_argument) if catalog_argument is not None
+                                else Path(str(source["catalog_path"])))
+                if (catalog_argument is not None and catalog_path.resolve()
+                        != Path(str(source["catalog_path"])).resolve()):
+                    raise RefusedRun("selection", "RETRY_CATALOG_MISMATCH", exit_code=2)
+            else:
+                catalog_path = (Path(catalog_argument) if catalog_argument is not None
+                                else installed_catalog_path())
+                source = point_drain.retry_source_from_hashes(
+                    point_id=point_ids[0], original_selection_sha256=selection_sha,
+                    original_result_sha256=result_sha,
+                    original_catalog_sha256=(
+                        catalog_sha if catalog_sha is not None
+                        else load_point_catalog(catalog_path).sha256),
+                    original_result_path=original_result,
+                    original_batch_id=original_batch_id)
+            extras["original_result_source"] = source.get("original_result_source")
             catalog = load_point_catalog(catalog_path)
             closure = point_drain.runtime_closure_sha256(
                 catalog_path=catalog_path, catalog_sha256=catalog.sha256,
@@ -896,6 +946,7 @@ def bind_campaign_selection(*, arguments, plan, spec):
                 runtime_closure_sha256=closure,
                 expected_catalog_sha256=expected_catalog_sha256)
         else:
+            extras = {}
             if not point_ids:
                 raise RefusedRun("selection", "SELECTED_POINTS_REQUIRED", exit_code=2)
             catalog_path = (Path(catalog_argument) if catalog_argument is not None
@@ -913,7 +964,8 @@ def bind_campaign_selection(*, arguments, plan, spec):
         raise RefusedRun("selection", str(error), exit_code=2) from error
     queue = DurablePointQueue(root=Path(arguments.evidence_root) / "queue", binding=selection)
     point_drain.write_selection_document(
-        evidence_root=arguments.evidence_root, binding=selection, catalog_path=catalog_path)
+        evidence_root=arguments.evidence_root, binding=selection, catalog_path=catalog_path,
+        extras=extras)
     return selection, queue, catalog_path
 
 
@@ -1044,10 +1096,19 @@ def _drive_campaign(arguments, argv, plan, spec, document) -> int:
     selection, queue, catalog_path = bind_campaign_selection(
         arguments=arguments, plan=plan, spec=spec)
     campaign.bind_selection(binding=selection, queue=queue)
+    selection_path = (Path(arguments.evidence_root)
+                      / point_drain.SELECTION_DOCUMENT_BASENAME)
+    # The campaign document states the same selection the immutable document on disk holds, from
+    # that document rather than from a second projection: a retry's original chain and how it was
+    # verified (`original_result_source`) therefore read the same in both places.
+    written_selection = point_drain.read_selection_document(selection_path)
     document["selection"] = {
-        **selection_document(selection, catalog_path=catalog_path),
-        "document_path": str(Path(arguments.evidence_root)
-                             / point_drain.SELECTION_DOCUMENT_BASENAME),
+        **{key: written_selection[key] for key in (
+            "kind", "selection_sha256", "catalog_sha256", "config_sha256",
+            "runtime_closure_sha256", "selected_point_ids", "original_selection_sha256",
+            "original_result_sha256", "original_outcome", "original_result_source",
+            "original_batch_id") if key in written_selection},
+        "document_path": str(selection_path),
     }
     document["queue"] = {"root": str(queue.state_path.parent),
                          "state_path": str(queue.state_path),
@@ -1462,6 +1523,21 @@ def build_w1_parser(execution_profile: str) -> argparse.ArgumentParser:
     parser.add_argument("--retry-root", type=Path, default=None,
                         help="v5 only: the prior campaign root holding the committed business "
                              "FAILED point this retry is bound to")
+    parser.add_argument("--original-selection-sha256", default=None,
+                        help="v5 only: the original first-pass selection digest the retry "
+                             "references (required without --retry-root)")
+    parser.add_argument("--original-result-sha256", default=None,
+                        help="v5 only: the digest of the original committed business FAILED "
+                             "point result (required without --retry-root)")
+    parser.add_argument("--original-catalog-sha256", default=None,
+                        help="v5 only: the catalog digest the original selection was frozen from; "
+                             "the resolved catalog is used when this is omitted")
+    parser.add_argument("--original-result", type=Path, default=None,
+                        help="v5 only: the original committed result document; when given, its "
+                             "bytes must match --original-result-sha256 and it decides the outcome")
+    parser.add_argument("--original-batch-id", default=None,
+                        help="v5 only: the original batch the failed point came from; it must "
+                             "differ from --batch-id")
     parser.add_argument("--yolo-weights", type=Path, required=True)
     parser.add_argument("--grounded-root", type=Path, required=True)
     parser.add_argument("--duplicate-probe", action="store_true")
