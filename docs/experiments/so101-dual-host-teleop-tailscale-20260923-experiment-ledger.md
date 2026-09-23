@@ -9,8 +9,9 @@ evidence_root: /tmp/so101-debug-dual-teleop-tailscale-20260923-ff228e71
 evidence_root_hosts: Each host has its own instance of the same absolute path; the host name disambiguates files.
 mac_durable_evidence_root: /opt/data/work/so101-evidence/dual-teleop-tailscale/20260923-ff228e71
 ai_station_durable_evidence_root: /data/work/so101-evidence/dual-teleop-tailscale/20260923-ff228e71
-latest_checkpoint: CP-003
-next_experiment: NONE
+current_commit: 4a00ff0536fb77c5513113817ca7620d23ab4a5d
+latest_checkpoint: CP-005
+next_experiment: EXP-003
 ---
 
 ## CP-001: read-only baseline
@@ -175,5 +176,160 @@ conclusion: The two installed unified Web services are running and reachable ove
 evidence:
   - /tmp/so101-debug-dual-teleop-tailscale-20260923-ff228e71
 decision: Keep both owned tmux sessions running for operator acceptance.
+next_experiment: NONE
+```
+
+## CP-004: Mac resource preflight refusal
+
+During remote expert validation, the operator selected `PARALLEL` with two
+workers, acquired a lease, generated points, and saw `RESOURCE_PROBE_FAILED`
+at Check Resources. The Mac service log records several successful HTTP 200
+preflight responses to the operator's Tailscale client; the response body can
+still carry a refused receipt. The service remains PID 4563 on
+`100.74.192.81:8000`; the operator's lease and points remain untouched.
+
+A standalone call to the installed `_HostResourceProbe` under the same sourced
+Mac launch environment returned `accepted=false`, reason
+`RESOURCE_PROBE_FAILED`, and `probe_error=CoordinatorError`. The launch script
+does not export `SO101_TASK_ROOT`. `ProbeCoordinator.default_state_root()`
+requires that variable and raises `PROBE_STATE_ROOT_UNSET` when absent. The
+existing macOS live-window launcher explicitly exports it before starting the
+service. No task-owned Gazebo, MoveIt, or campaign process was started by this
+diagnosis.
+
+```yaml
+checkpoint_id: CP-004
+last_valid_experiment: EXP-001
+current_hypothesis: The missing SO101_TASK_ROOT in the Mac service process causes every W2 resource probe to return RESOURCE_PROBE_FAILED.
+working_tree_status: Clean at 4a00ff05 before this checkpoint; the ledger becomes the only local edit.
+owned_processes:
+  mac: tmux so101-teleop-tailscale-mac; PID 4563; 100.74.192.81:8000
+  ai_station: tmux so101-teleop-tailscale-ai; PID 2118905; 100.104.202.119:8000
+confirmed_conclusions:
+  - The installed Mac resource probe reproduces the reported refusal without using the operator's lease.
+  - SO101_TASK_ROOT is absent from the Mac task launch script and process environment.
+open_risks:
+  - A service restart may require the operator to acquire a fresh lease and regenerate points.
+next_command: Add SO101_TASK_ROOT to the Mac launch environment only; run the same standalone probe, then restart the owned Mac service.
+```
+
+## EXP-002: bind Mac resource probe state to registered evidence
+
+```yaml
+experiment_id: EXP-002
+status: VALID
+prior_experiment: EXP-001
+hypothesis: Setting SO101_TASK_ROOT to the registered Mac durable root resolves the CoordinatorError in W2 resource preflight.
+prediction: The same installed _HostResourceProbe call no longer returns RESOURCE_PROBE_FAILED or probe_error CoordinatorError, and the remote Check Resources receipt is admitted or reports a concrete resource limit.
+single_variable: SO101_TASK_ROOT in the Mac service launch environment.
+lifecycle: REUSE_STACK
+preconditions:
+  - The current Mac service is the recorded PID 4563 in tmux so101-teleop-tailscale-mac.
+  - No task-owned simulation or campaign is running.
+success_criteria:
+  - A fresh W2 probe returns an admitted result or a specific resource check outcome instead of RESOURCE_PROBE_FAILED.
+  - The Mac service is rebound to 100.74.192.81:8000 with Validation ready.
+failure_criteria:
+  - The probe still returns RESOURCE_PROBE_FAILED after SO101_TASK_ROOT is set.
+invalid_criteria:
+  - An unowned process replaces the listener or the install/config identity changes during the experiment.
+provenance:
+  source_commit: 4a00ff0536fb77c5513113817ca7620d23ab4a5d
+  install_overlay: /opt/data/so101/workspace/install
+  runtime_executable: /opt/ros/jazzy/.venv/bin/python
+  ros_domain_id: 225
+  gz_partition: so101-teleop-tailscale-mac-225
+commands:
+  - Added export SO101_TASK_ROOT="$durable" to the Mac task launch script, where durable is /opt/data/work/so101-evidence/dual-teleop-tailscale/20260923-ff228e71.
+  - Ran the identical installed _HostResourceProbe diagnostic with only SO101_TASK_ROOT changed; exit code 0.
+  - Verified no campaign or simulation owner existed, stopped only Mac service PID 4563 through its tmux session, and restarted the corrected script; exit code 0.
+  - Ran an isolated installed Expert Validation ASGI API flow: acquired a diagnostic lease, generated 20 points, submitted PARALLEL/W2 MPS_W2_FIRST_PASS preflight, and released the diagnostic lease; exit code 0.
+observed:
+  - Baseline diagnostic at /tmp/so101-debug-dual-teleop-tailscale-20260923-ff228e71/mac-resource-red.json returned RESOURCE_PROBE_FAILED with probe_error CoordinatorError.
+  - Corrected diagnostic at /tmp/so101-debug-dual-teleop-tailscale-20260923-ff228e71/mac-resource-green.json returned accepted=true, reasons=[], start_guard_status=PASS, cleanup_state=CLEAR, CPU_CAPACITY_OK, RAM_OK, and MPS_HEADROOM_OK.
+  - Restarted Mac service PID 6557 is bound to 100.74.192.81:8000; its process environment contains SO101_TASK_ROOT at the registered Mac durable root.
+  - The expert-validation page and capabilities return HTTP 200; /health reports validation ready.
+  - The isolated API preflight returned HTTP 200, admitted=true, reason_codes=[], start_guard PASS, and cleanup_state CLEAR; the diagnostic lease release returned released=true.
+  - An earlier unified TestClient harness was invalid because its worker thread crossed the SQLite connection and it omitted instance authority headers; it did not exercise the intended preflight boundary.
+inferred:
+  - The missing task root was the cause of the reproduced RESOURCE_PROBE_FAILED result; the operator's browser flow still needs a fresh lease after the restart.
+conclusion: The installed W2 resource probe succeeds with the registered SO101_TASK_ROOT, and the corrected Mac service is online.
+evidence:
+  - /tmp/so101-debug-dual-teleop-tailscale-20260923-ff228e71
+  - /tmp/so101-debug-dual-teleop-tailscale-20260923-ff228e71/mac-preflight-api-v2.json
+  - /opt/data/work/so101-evidence/dual-teleop-tailscale/20260923-ff228e71/launch/run-mac.zsh (SHA256 493826a2e97da6cddc3b434905f35c095c5dcc202dda22d48eabbce270ab62d6)
+decision: KEEP
+next_experiment: EXP-003
+```
+
+## CP-005: corrected Mac service online
+
+The corrected Mac service is PID 6557 in the same task-owned tmux session.
+`SO101_TASK_ROOT` points to the registered Mac durable root; the source and
+retained launch-script copies share SHA256
+`493826a2e97da6cddc3b434905f35c095c5dcc202dda22d48eabbce270ab62d6`.
+The W2 probe passed with 10 logical CPUs, 14,793,031,680 available RAM bytes,
+and 14,644,183,040 MPS headroom bytes. The service is reachable at the same
+Tailscale URL and Validation is ready. The operator's lease may require renewal
+after this restart. A separate installed API diagnostic with 20 points admitted
+the W2 preflight and released its own lease. No campaign was started by the
+diagnosis.
+
+```yaml
+checkpoint_id: CP-005
+last_valid_experiment: EXP-002
+current_hypothesis: A fresh browser lease and point selection should now pass Check Resources through the corrected Mac service.
+working_tree_status: This ledger is modified; no application source or installed package changed.
+owned_processes:
+  mac: tmux so101-teleop-tailscale-mac; PID 6557; 100.74.192.81:8000
+  ai_station: tmux so101-teleop-tailscale-ai; PID 2118905; 100.104.202.119:8000
+confirmed_conclusions:
+  - The same installed resource probe changed from RESOURCE_PROBE_FAILED to accepted with only SO101_TASK_ROOT added.
+  - The corrected Mac process has the registered SO101_TASK_ROOT and Validation ready.
+  - Isolated installed Expert Validation API preflight admitted PARALLEL/W2 with an empty reason_codes list.
+open_risks:
+  - Browser-level Check Resources after a new lease has not yet been observed.
+retained_runs:
+  mac: /opt/data/work/so101-evidence/dual-teleop-tailscale/20260923-ff228e71
+  ai_station: /data/work/so101-evidence/dual-teleop-tailscale/20260923-ff228e71
+archived_runs: []
+deletion_candidates:
+  - Both host-local /tmp/so101-debug-dual-teleop-tailscale-20260923-ff228e71 roots after acceptance; no deletion authorized.
+  - ai-station diagnostic-composition and diagnostic-composition-2 under its durable run root; no deletion authorized.
+  - Mac diagnostic-preflight-20260923 and diagnostic-preflight-api-20260923 under its durable run root after readback; no deletion authorized.
+next_command: Observe a fresh operator Check Resources receipt without starting a campaign.
+```
+
+## EXP-003: operator browser preflight recheck
+
+```yaml
+experiment_id: EXP-003
+status: PLANNED
+prior_experiment: EXP-002
+hypothesis: A fresh lease and points in the operator browser will yield a resource preflight receipt with no RESOURCE_PROBE_FAILED reason.
+prediction: Check Resources shows W2 start guard PASS and permits the next acceptance step, or a specific current resource limit replaces the prior setup error.
+single_variable: Fresh operator lease after the Mac service restart.
+lifecycle: REUSE_STACK
+preconditions:
+  - Mac service PID 6557 remains bound to 100.74.192.81:8000 with Validation ready.
+success_criteria:
+  - The operator's next Check Resources receipt has no RESOURCE_PROBE_FAILED reason.
+failure_criteria:
+  - The browser still shows RESOURCE_PROBE_FAILED on a fresh lease and manifest.
+invalid_criteria:
+  - The browser reuses an expired lease or an unrelated service replaces PID 6557.
+provenance:
+  source_commit: 4a00ff0536fb77c5513113817ca7620d23ab4a5d
+  install_overlay: /opt/data/so101/workspace/install
+  runtime_executable: /opt/ros/jazzy/.venv/bin/python
+  ros_domain_id: 225
+  gz_partition: so101-teleop-tailscale-mac-225
+commands: []
+observed: []
+inferred: []
+conclusion: PENDING
+evidence:
+  - /tmp/so101-debug-dual-teleop-tailscale-20260923-ff228e71
+decision: PENDING
 next_experiment: NONE
 ```
