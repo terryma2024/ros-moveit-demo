@@ -69,7 +69,10 @@ test("API command ids: replay, conflict reuse, outcome unknown @api-contract spe
   const startBody = { ...config, command_id: "api-start-1", preflight_receipt_id: receiptId };
 
   const first = await client.post("/expert-validation/campaigns", startBody);
-  expect(first.status).toBe(200);
+  expect(
+    first.status,
+    `start: sent ${JSON.stringify(startBody)} -> ${JSON.stringify(first.body)}`,
+  ).toBe(200);
   const replay = await client.post("/expert-validation/campaigns", startBody);
   expect(replay.status).toBe(200);
   expect(replay.body.campaign_id).toBe(first.body.campaign_id);
