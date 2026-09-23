@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-FINAL
+latest_checkpoint: CP-MSC-PLATFORM-PORT
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -5541,4 +5541,105 @@ foreign, untouched   other task families' roots under /private/tmp, and the read
 Deletion needs explicit authorisation the dispatch did not carry, so nothing was removed. The two
 required reviews remain the only unfinished items, and they are unfinished because the models are not
 present on this host, not because the work is unverified.
+
+## CP-MSC-PLATFORM-PORT: the installed suite on macOS and on ai-station
+
+```yaml
+checkpoint_id: CP-MSC-PLATFORM-PORT
+recorded_at: 2026-09-23T10:05:00+0800
+carried_by: the commit that adds this entry (parent 77a9ee39)
+task: make the installed Playwright project run on macOS, then re-verify Linux on ai-station
+status: macOS host assumptions removed (14 passed / 9 failed / 2 skipped); Linux builds and runs
+        the suite in a task-owned root (4 passed / 21 failed, cause pinned)
+```
+
+### macOS: five host assumptions, and the entry the deployment actually runs
+
+`playwright.installed.config.ts` was written against ai-station. Each defect below was measured,
+fixed under TDD, and re-measured; `fixtures/host-routes.ts` holds the rules with 17 offline tests
+that pin the Linux branch of every one of them.
+
+```text
+baseline                     1 passed / 24 failed
+after the port              14 passed /  9 failed / 2 skipped
+
+contract_version 2           the service refuses a body that is not version 3 before it validates
+                             anything, which killed 17 of 25 tests inside preflight
+/proc/<pid>/stat             macOS has no /proc, so every liveness answer was "dead" - the opposite
+                             of fail-closed for the "must still be alive" assertions
+one ROS underlay site        macOS installs ROS isolated, so naming rclpy alone dropped
+                             ament_index_python and the entry died on import
+v2 document, no claim        require_v3_execution refuses any contract version but 3; a
+                             platform-bound host also refuses a request that does not name its
+                             matrix row
+SO101_TASK_ROOT              the campaign resource probe reads $SO101_TASK_ROOT/start-guard-state
+                             and refused every preflight with CoordinatorError without it
+deprecated entry             S01 spawned the per-domain script, which delegates to the unified
+                             entry and demands the SO101_UNIFIED_* contract
+```
+
+The proof that the port works is not the pass count alone: a minimal API probe against the installed
+service shows `preflight admitted: true`, `start_guard_status: PASS` and `POST /campaigns` → 200 with
+`batch_id: babc7`, where before every preflight was refused.
+
+The nine remaining macOS failures are not host assumptions any more, and they are recorded as they
+stand rather than adjusted into passing:
+
+```text
+S06, S14, S15 x3   the retry cluster. macOS answers RETRY_ONE_POINT_PER_COMMAND where these specs
+                   assert RETRY_CLEANUP_INCOMPLETE / COMMAND_OUTCOME_UNKNOWN, and the intent-window
+                   case reports RETRY_ORIGINAL_*: the macOS route retries one point per command,
+                   the specs are written around the serial multi-point retry pipeline
+S02, S03, S04,     test-level timeouts against campaigns that actually execute on macOS; the specs
+S08 page           assume the deterministic helper execution port completes a campaign in seconds
+```
+
+### ai-station: the same suite, built task-owned, and what Linux really requires
+
+Everything lives in one task-owned root, `/data/work/so101-evidence/macos-installed-suite-linux/20260923T011359Z/`;
+nothing was installed globally, nothing was pushed, and ai-station's own checkout was not touched.
+
+```text
+branch         transferred as a git bundle, checked out at 77a9ee39; the third_party submodule
+               came the same way (a plain clone leaves it empty)
+build          7 of 7 packages finished: mujoco_3d_lidar, mujoco_ros2_control{,_msgs,_plugins},
+               so101_mujoco_support, so101_demo_py, so101_teleop
+needed         task-owned bun 1.4.2 (CMake refuses without BUN_EXECUTABLE); the MuJoCo 3.12.0
+               release unpacked task-owned, because the pip wheel's include set is incomplete
+               (no mjtnum.h); a ~20-line mujoco_vendor shim, because the ROS vendor package
+               exports /opt/mujoco_vendor, which this host does not have; include/simulate from
+               the MuJoCo source tree; a task-owned venv with mujoco, uvicorn, fastapi, pydantic,
+               psutil
+run            0 passed / 25 failed -> 4 passed / 21 failed
+```
+
+Two product facts the Linux run pinned down, both now fixed in the fixtures:
+
+```text
+execution document   require_v3_execution refuses a document whose contract version is not 3. The
+                     fixture pointed the legacy host at parallel_batch_v2.yaml (declares 2), so
+                     every preflight was refused with CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION and
+                     surfaced as a start refusal. parallel_batch_v3.yaml is the active document.
+acceptance documents the three qualification acceptance paths are _optional_file to the product and
+                     no longer exist on ai-station; asserting them stopped the server with
+                     SO101_VALIDATION_PARALLEL_ACCEPTANCE_INVALID. A model location is a host
+                     property and keeps its Linux default; the record of one run's acceptance is
+                     not, and is now sent only when the operator supplies it.
+```
+
+The platform split works as designed: the ADAPTIVE cases run and pass on Linux (S09, S12) and skip
+with `UNSUPPORTED_ON_MACOS` on macOS, instead of being rewritten into a shape the host does serve.
+
+The remaining Linux cause is pinned, not guessed: the start is refused with
+`{"code":"PREFLIGHT_REQUEST_MISMATCH"}` - 15 of the 21 failures - which is the service comparing the
+start body against the body its preflight receipt recorded. A standalone probe that sends the same
+two requests in the same shape is admitted and starts (`campaign-b826b3ab...`), so the difference is
+in what the specs send rather than in the service, and that is the next thing to isolate.
+
+```text
+scoped commits   b2652b06 host-routes port with 17 tests   fcdecc23 evidence paths and priming
+                 5306a4a1 active execution document       65d54e3d unified entry for S01
+                 77a9ee39 refusal bodies in the assertions
+pushed           no        merged  no        evidence deleted  no
+```
 
