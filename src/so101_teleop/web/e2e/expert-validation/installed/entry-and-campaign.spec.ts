@@ -108,9 +108,10 @@ async function startProductionEntry(evidenceRoot: string, port: number, logPath:
   }
   return {
     stop: async () => {
+      if (child.exitCode !== null || child.signalCode !== null) return child.exitCode;
       child.kill("SIGINT");
       const stopDeadline = Date.now() + 15_000;
-      while (child.exitCode === null) {
+      while (child.exitCode === null && child.signalCode === null) {
         if (Date.now() > stopDeadline) {
           child.kill("SIGKILL");
           break;
@@ -167,10 +168,9 @@ test("S01 installed production console entry serves health and page spec:default
     await expect(page.getByRole("heading", { name: "SO-101 Expert Validation" })).toBeVisible();
 
     // The console holds live websockets while it is open, and uvicorn waits for its connections
-    // before it returns from SIGINT. Closing the page first is what "the operator closed the
-    // console, then the service stopped" looks like; stopping with the page still attached only
-    // proves the harness can escalate to SIGKILL.
-    await page.close();
+    // before it returns from SIGINT. Closing the browser context releases every connection before
+    // stopping the service, as it does when the operator closes the console.
+    await page.context().close();
     const exitCode = await first.stop();
     expect(exitCode).toBe(0);
 
