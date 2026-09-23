@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { installedTest as test, expect, pythonExecutable } from "../fixtures/installed";
 import { readJournalEvents, storeQuery } from "../assertions/journal";
 import { EXECUTION_CONTRACT_VERSION, processAlive } from "../fixtures/host-routes";
-import { api, hostClaimFor, type Api } from "./support";
+import { api, hostClaimFor, waitProcessGone, type Api } from "./support";
 import { ExpertValidationPage } from "../pages/expert-validation-page";
 
 async function acquireLease(client: Api, session: string) {
@@ -248,10 +248,17 @@ test("S10 renew advances generation and active release fails closed spec:slow", 
   expect(activeRelease.status).toBe(409);
   expect(activeRelease.body.code).toBe("ACTIVE_CAMPAIGN");
 
-  await waitStatus(
+  const terminal = await waitStatus(
     client, started.body.campaign_id,
     (projection) => projection.status === "COMPLETED_WITH_FAILURES" && projection.batch_cleanup_complete === true,
   );
+  const database = join(installedServer.serverRoot, "validation-service", "supervisor.sqlite3");
+  const owners = storeQuery(
+    pythonExecutable(), database,
+    `SELECT pid FROM owned_execution WHERE batch_id='${terminal.batch_id}'`,
+  ) as Array<{ pid: number }>;
+  expect(owners).toHaveLength(1);
+  await waitProcessGone(owners[0].pid);
   const released = await client.del(`/expert-validation/lease/${lease.lease_id}`, {
     service_session_id: session,
     generation: current.generation,

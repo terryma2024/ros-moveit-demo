@@ -868,12 +868,28 @@ def validation_router(services: UnifiedServices) -> APIRouter:
             await websocket.close(code=1011, reason="EVENT_STREAM_UNAVAILABLE")
             return
         queue = subscribe()
+        disconnect = asyncio.create_task(websocket.receive())
+        event_ready = None
         try:
             while True:
-                await websocket.send_json((await queue.get()).model_dump())
+                event_ready = asyncio.create_task(queue.get())
+                done, _ = await asyncio.wait(
+                    {event_ready, disconnect}, return_when=asyncio.FIRST_COMPLETED
+                )
+                if disconnect in done:
+                    return
+                await websocket.send_json(event_ready.result().model_dump())
+                event_ready = None
         except WebSocketDisconnect:
             return
         finally:
+            tasks = (event_ready, disconnect)
+            for task in tasks:
+                if task is not None and not task.done():
+                    task.cancel()
+            await asyncio.gather(
+                *(task for task in tasks if task is not None), return_exceptions=True
+            )
             service.unsubscribe(queue)
 
     return router

@@ -57,7 +57,10 @@ test("S14 two failed points retry as serial N=1/K=1 batches spec:canonical-slow"
 
   const client = api(installedServer.baseURL);
   const campaigns = await client.get("/expert-validation/campaigns");
+  expect(campaigns.status).toBe(200);
+  expect(campaigns.body).toHaveLength(1);
   const campaignId = campaigns.body[0].campaign_id;
+  expect(campaignId).toMatch(/^campaign-/);
   const terminal = await waitStatus(
     client, campaignId,
     (value) => value.status === "COMPLETED_WITH_FAILURES" && value.batch_cleanup_complete === true,
