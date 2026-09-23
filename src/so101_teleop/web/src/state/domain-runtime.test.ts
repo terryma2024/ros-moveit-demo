@@ -372,4 +372,3 @@ test("the transport is told the authority, so renewal can present it", async () 
   expect(setLease).toHaveBeenCalledWith(expect.objectContaining({ lease_id: "l" }));
   expect(runtime.mutationHeaders()?.executionGeneration).toBe(0);
 });
-

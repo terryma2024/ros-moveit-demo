@@ -4233,7 +4233,7 @@ asset directory, with the task-local `websockets` visible:
 
 ```text
 before: {"codes": ["CONTROLLER_INSTANCE_REQUIRED"], "httpErrors": ["409 /expert-validation/lease"], ...}
-after:  {"codes": ["CONTROLLER_INSTANCE_REQUIRED"], "httpErrors": [], 
+after:  {"codes": ["CONTROLLER_INSTANCE_REQUIRED"], "httpErrors": [],
          "tail": "... CONTROLLER_INSTANCE_REQUIRED: this document holds no authority ..."}
 server: POST /control/instances 200 OK (twice); WebSocket .../channel [accepted] (twice); no 409 at all
 ```
@@ -4907,7 +4907,7 @@ CP-146 recorded; the host is clean afterwards, checked with the working method r
 ## CP-152: the campaign did not start, and the two refusals that stopped it are both named
 
 Driving the page through acquire -> generate -> check -> **start** on a fresh server got the clicks in
-(the page shows its point chips `P01..P10`), but no campaign POST was issued, and the run before it - 
+(the page shows its point chips `P01..P10`), but no campaign POST was issued, and the run before it -
 against a **server left over from the previous driver run** - produced two refusals worth keeping:
 
 ```text
