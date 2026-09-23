@@ -1,0 +1,8 @@
+{
+  "points": {},
+  "default_outcome": "FAILED",
+  "per_point_delay_s": 2.0,
+  "descendant_mode": "none",
+  "stop_after": null,
+  "canonical_first_pass": true
+}

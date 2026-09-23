@@ -17,6 +17,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -191,11 +192,156 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _canonical_first_pass(args: argparse.Namespace, spec: dict, batch_root: Path) -> int:
+    """Publish the current campaign contract for retry acceptance tests.
+
+    The binding comes from the service's already committed campaign and manifest. The helper
+    supplies failed business results but cannot invent the selection that admitted the campaign.
+    Retry batches continue through the legacy helper below so the two layouts are exercised.
+    """
+
+    store_path = batch_root.parents[2] / "validation-service" / "supervisor.sqlite3"
+    with sqlite3.connect(f"file:{store_path}?mode=ro", uri=True) as store:
+        row = store.execute(
+            "SELECT c.execution_config_sha256, m.canonical_json FROM campaigns c "
+            "JOIN manifests m ON m.manifest_id = c.manifest_id WHERE c.campaign_id = ?",
+            (args.campaign_id,),
+        ).fetchone()
+    if row is None:
+        raise RuntimeError("HELPER_CAMPAIGN_BINDING_MISSING")
+    config_sha256, manifest_json = row
+    manifest = json.loads(manifest_json)
+    points = list(args.point_id)
+    if points != manifest["point_ids"]:
+        raise RuntimeError("HELPER_SELECTION_MISMATCH")
+    binding = {
+        "batch_id": args.batch_id,
+        "campaign_id": args.campaign_id,
+        "catalog_sha256": manifest["catalog_sha256"],
+        "selected_point_ids": points,
+        "binding": {
+            "batch_id": args.batch_id,
+            "campaign_id": args.campaign_id,
+            "kind": "FIRST_PASS",
+            "catalog_sha256": manifest["catalog_sha256"],
+            "selection_sha256": manifest["selection_sha256"],
+            "config_sha256": config_sha256,
+            "selected_point_ids": points,
+        },
+    }
+    _atomic_write(batch_root / "selection-binding.json", _json_bytes(binding) + b"\n")
+    (batch_root / "point-results").mkdir()
+
+    journal = CoordinatorJournal.create(batch_root / "journal", args.batch_id)
+    coordinator = _HelperCoordinator(
+        BatchRequestV2(
+            batch_id=args.batch_id, run_mode=RunMode.EXECUTE,
+            selected_point_ids=tuple(points), worker_count=args.worker_count,
+            evidence_root=batch_root, batch_kind=BatchKindV2.FIRST_PASS,
+        ),
+        journal,
+    )
+    socket_path = Path(os.environ["SO101_FIXED_CONTROL_SOCKET"])
+    socket_path.parent.mkdir(parents=True, exist_ok=True)
+    os.chmod(socket_path.parent, 0o700)
+    control = FixedCoordinatorControlServer(
+        coordinator=coordinator,
+        campaign_id=os.environ["SO101_FIXED_CONTROL_CAMPAIGN_ID"],
+        control_token=os.environ.get("SO101_FIXED_CONTROL_TOKEN", ""),
+        path=socket_path,
+    )
+    control.start()
+    try:
+        journal.append_committed(
+            "CAMPAIGN_STARTED", f"{args.campaign_id}/CAMPAIGN_STARTED",
+            {"campaign_id": args.campaign_id, "batch_id": args.batch_id,
+             "schema_version": journal.schema_version},
+        )
+        for index, point_id in enumerate(points):
+            worker_id = f"worker-{index % args.worker_count + 1:02d}"
+            attempt_id = f"attempt-{index + 1:03d}"
+            slot_id = f"slot-{index % args.worker_count}"
+            identity = AttemptIdentity(
+                batch_id=args.batch_id, coordinator_epoch=journal.coordinator_epoch,
+                worker_id=worker_id, worker_generation=1, point_id=point_id,
+                attempt_id=attempt_id, lease_generation=1,
+            )
+            common = {
+                "point_id": point_id, "attempt_id": attempt_id,
+                "worker_id": worker_id, "slot_id": slot_id, "generation": 1,
+            }
+            journal.append_committed(
+                "POINT_LEASED", f"{args.batch_id}/POINT_LEASED/{attempt_id}",
+                {**common, "selection_sha256": manifest["selection_sha256"]},
+            )
+            journal.append_committed(
+                "WORKER_REGISTERED", f"{args.batch_id}/WORKER_REGISTERED/{attempt_id}",
+                common,
+            )
+            journal.append_committed(
+                "ATTEMPT_STARTED", f"{args.batch_id}/ATTEMPT_STARTED/{attempt_id}",
+                common,
+            )
+            time.sleep(float(spec.get("per_point_delay_s", 0.05)))
+            outcome = spec.get("points", {}).get(point_id, {}).get("outcome", "FAILED")
+            if outcome != "FAILED":
+                raise RuntimeError("HELPER_ONLY_PRODUCES_BUSINESS_FAILED")
+            reason = spec.get("points", {}).get(point_id, {}).get(
+                "reason", "TARGET_TOLERANCE_EXCEEDED"
+            )
+            sealed, manifest_sha = _seal_failed_attempt(
+                batch_root, identity,
+                simulation_session_id=f"e2e-helper-{args.batch_id}", reason=reason,
+            )
+            result_sha256 = _sha256_bytes((sealed / "attempt-result.json").read_bytes())
+            _atomic_write(
+                batch_root / "point-results" / f"{point_id}.json",
+                _json_bytes({
+                    "committed": True, "point_id": point_id, "attempt_id": attempt_id,
+                    "outcome": outcome,
+                    "lease_identity": [args.campaign_id, args.batch_id, point_id,
+                                       attempt_id, 1, worker_id],
+                    "evidence_manifest_sha256": manifest_sha,
+                }) + b"\n",
+            )
+            journal.append_committed(
+                "RESULT_COMMITTED", f"{args.batch_id}/RESULT_COMMITTED/{attempt_id}",
+                {**common, "outcome": outcome,
+                 "evidence_manifest_sha256": manifest_sha},
+            )
+            journal.append_committed(
+                "POINT_TERMINAL", f"{args.batch_id}/POINT_TERMINAL/{point_id}",
+                {"point_id": point_id, "attempt_id": attempt_id, "outcome": outcome,
+                 "state": "COMMITTED", "result_sha256": result_sha256},
+            )
+        journal.append_committed(
+            "BATCH_TERMINAL", f"{args.batch_id}/BATCH_TERMINAL",
+            {"outcome": "N1_CAMPAIGN_INCOMPLETE"},
+        )
+        journal.append_committed(
+            "CLEANUP_COMMITTED", f"{args.batch_id}/CLEANUP_COMMITTED",
+            {"cleanup_complete": True},
+        )
+        coordinator.cleanup_complete = True
+        _atomic_write(
+            batch_root / "cleanup-gates.json",
+            _json_bytes({"batch_id": args.batch_id, "owned_descendants_gone": True,
+                         "qualification": _MARKER}) + b"\n",
+        )
+        return 0
+    finally:
+        control.close()
+        journal.close()
+
+
 def main(argv: list[str]) -> int:
     args = _parse_args(argv)
     spec = json.loads(args.spec.read_text(encoding="utf-8"))
     batch_root = args.batch_root
     batch_root.mkdir(parents=False, exist_ok=False)
+
+    if spec.get("canonical_first_pass") and not args.batch_id.startswith("retry-"):
+        return _canonical_first_pass(args, spec, batch_root)
 
     journal = CoordinatorJournal.create(batch_root / "coordinator", args.batch_id)
     coordinator = _HelperCoordinator(
