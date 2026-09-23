@@ -6,7 +6,7 @@ import { installedTest as test, expect, pythonExecutable } from "../fixtures/ins
 import { readJournalEvents, storeQuery } from "../assertions/journal";
 import { ExpertValidationPage } from "../pages/expert-validation-page";
 import {
-  api, acquireLease, createManifest, fixedConfig, preflight, startCampaign,
+  api, acquireLease, createManifest, expectValidationConsoleErrors, fixedConfig, preflight, startCampaign,
   waitStatus, waitProcessGone,
 } from "./support";
 
@@ -28,6 +28,12 @@ function hasJournalEvent(events: Array<{ type?: string }>, type: string): boolea
   return events.some((event) => event.type === type);
 }
 
+async function waitFirstPassOwnerGone(serverRoot: string, batchId: string): Promise<void> {
+  const owners = query(serverRoot, `SELECT pid FROM owned_execution WHERE batch_id='${batchId}'`);
+  expect(owners).toHaveLength(1);
+  await waitProcessGone(owners[0].pid);
+}
+
 function retryBody(lease: { lease_id: string; generation: number }, session: string, commandId: string, pointIds: string[]) {
   return {
     service_session_id: session,
@@ -39,7 +45,7 @@ function retryBody(lease: { lease_id: string; generation: number }, session: str
   };
 }
 
-test("S14 two failed points retry as serial N=1/K=1 batches spec:slow", async ({ page, installedServer, consoleErrors }) => {
+test("S14 two failed points retry as serial N=1/K=1 batches spec:canonical-slow", async ({ page, installedServer, consoleErrors }) => {
   test.setTimeout(120_000);
   const app = new ExpertValidationPage(page);
   await app.goto();
@@ -115,10 +121,10 @@ test("S14 two failed points retry as serial N=1/K=1 batches spec:slow", async ({
   expect(after.valid_failed).toBe(4);
   expect(after.valid_succeeded).toBe(0);
   await expect(page.getByText("First pass 0 / 4 valid")).toBeVisible();
-  expect(consoleErrors).toEqual([]);
+  await expectValidationConsoleErrors(consoleErrors, installedServer.baseURL);
 });
 
-test("S15 terminal-to-cleanup window never replays or skips spec:window-terminal-cleanup", async ({ installedServer }) => {
+test("S15 terminal-to-cleanup window never replays or skips spec:canonical-window-terminal-cleanup", async ({ installedServer }) => {
   test.setTimeout(90_000);
   const client = api(installedServer.baseURL);
   const session = "s15-w1";
@@ -130,7 +136,8 @@ test("S15 terminal-to-cleanup window never replays or skips spec:window-terminal
     client, campaignId,
     (value) => value.status === "COMPLETED_WITH_FAILURES" && value.batch_cleanup_complete === true,
   );
-  const pointIds = terminal.points.slice(0, 2).map((point: any) => point.point_id);
+  await waitFirstPassOwnerGone(installedServer.serverRoot, terminal.batch_id);
+  const pointIds = [terminal.points[0].point_id];
 
   // The retry helper stops between terminal and cleanup: the command stays open.
   const first = await client.post(
@@ -164,13 +171,14 @@ test("S15 terminal-to-cleanup window never replays or skips spec:window-terminal
     installedServer.serverRoot,
     `SELECT ordinal, state FROM retry_queue WHERE campaign_id='${campaignId}' ORDER BY ordinal`,
   );
-  expect(queue.map((row) => row.state)).toEqual(["RUNNING", "QUEUED"]);
+  expect(queue.map((row) => row.state)).toEqual(["RUNNING"]);
+  expect(queue[0].ordinal).toBe(0);
   const events = journalEvents(installedServer.serverRoot, campaignId, "retry-001");
   expect(hasJournalEvent(events, "BATCH_TERMINAL")).toBe(true);
   expect(hasJournalEvent(events, "BATCH_FINISHED")).toBe(false);
 });
 
-test("S15 cleanup-to-dequeue window advances exactly once spec:slow", async ({ installedServer }) => {
+test("S15 cleanup-to-dequeue window advances exactly once spec:canonical-slow", async ({ installedServer }) => {
   test.setTimeout(120_000);
   const client = api(installedServer.baseURL);
   const session = "s15-w2";
@@ -182,7 +190,9 @@ test("S15 cleanup-to-dequeue window advances exactly once spec:slow", async ({ i
     client, campaignId,
     (value) => value.status === "COMPLETED_WITH_FAILURES" && value.batch_cleanup_complete === true,
   );
-  const pointIds = terminal.points.slice(0, 2).map((point: any) => point.point_id);
+  await waitFirstPassOwnerGone(installedServer.serverRoot, terminal.batch_id);
+  const firstPoint = [terminal.points[0].point_id];
+  const secondPoint = [terminal.points[1].point_id];
 
   // Renew before the retry: the slow first pass consumes most of the TTL.
   const renewed = await client.put(`/expert-validation/lease/${lease.lease_id}`, {
@@ -197,7 +207,7 @@ test("S15 cleanup-to-dequeue window advances exactly once spec:slow", async ({ i
   const pending = client
     .post(
       `/expert-validation/campaigns/${campaignId}/full-restart-retries`,
-      retryBody(lease, session, "s15w2-retry", pointIds),
+      retryBody(lease, session, "s15w2-retry", firstPoint),
     )
     .catch((error) => error);
   await expect
@@ -229,25 +239,33 @@ test("S15 cleanup-to-dequeue window advances exactly once spec:slow", async ({ i
   const leaseB = await acquireLease(client, session);
   const replay = await client.post(
     `/expert-validation/campaigns/${campaignId}/full-restart-retries`,
-    retryBody(lease, session, "s15w2-retry", pointIds),
+    retryBody(lease, session, "s15w2-retry", firstPoint),
   );
   expect(replay.status).toBe(409);
   expect(replay.body.code).toBe("COMMAND_OUTCOME_UNKNOWN");
 
-  const resumed = await client.post(
+  // Recovery must advance the completed orphan before admitting the next
+  // point; no extra rejected command may be needed to trigger reconciliation.
+  expect(query(
+    installedServer.serverRoot,
+    "SELECT batch_id FROM campaign_batches WHERE batch_kind='FULL_RESTART_RETRY'",
+  ).map((row) => row.batch_id)).toEqual(["retry-001"]);
+
+  const second = await client.post(
     `/expert-validation/campaigns/${campaignId}/full-restart-retries`,
-    retryBody(leaseB, session, "s15w2-retry-resume", pointIds),
+    retryBody(leaseB, session, "s15w2-retry-second", secondPoint),
   );
-  expect(resumed.status).toBe(200);
-  expect(resumed.body.status).toBe("RETRIES_COMPLETE");
+  expect(second.status).toBe(200);
+  expect(second.body.status).toBe("RETRIES_COMPLETE");
 
   // Point one was not re-executed; point two ran exactly once.
   expect(journalEvents(installedServer.serverRoot, campaignId, "retry-001")).toHaveLength(framesAtCrash);
   const queue = query(
     installedServer.serverRoot,
-    `SELECT ordinal, state, cleanup_receipt_sha256 FROM retry_queue WHERE campaign_id='${campaignId}' ORDER BY ordinal`,
+    `SELECT ordinal, point_id, state, cleanup_receipt_sha256 FROM retry_queue WHERE campaign_id='${campaignId}' ORDER BY ordinal`,
   );
-  expect(queue.map((row) => row.state)).toEqual(["COMPLETE", "COMPLETE"]);
+  expect(queue.map((row) => [row.ordinal, row.state])).toEqual([[0, "COMPLETE"], [1, "COMPLETE"]]);
+  expect(queue.map((row) => row.point_id)).toEqual([firstPoint[0], secondPoint[0]]);
   expect(queue.every((row) => Boolean(row.cleanup_receipt_sha256))).toBe(true);
   const owners = query(
     installedServer.serverRoot,
@@ -256,7 +274,7 @@ test("S15 cleanup-to-dequeue window advances exactly once spec:slow", async ({ i
   expect(owners.map((row) => row.batch_id)).toEqual([terminal.batch_id, "retry-001", "retry-002"]);
 });
 
-test("S15 spawn-intent-to-ack window stays fenced spec:slow", async ({ installedServer }) => {
+test("S15 spawn-intent-to-ack window stays fenced spec:canonical-slow", async ({ installedServer }) => {
   test.setTimeout(120_000);
   const client = api(installedServer.baseURL);
   const session = "s15-w3";
@@ -268,6 +286,7 @@ test("S15 spawn-intent-to-ack window stays fenced spec:slow", async ({ installed
     client, campaignId,
     (value) => value.status === "COMPLETED_WITH_FAILURES" && value.batch_cleanup_complete === true,
   );
+  await waitFirstPassOwnerGone(installedServer.serverRoot, terminal.batch_id);
   const pointIds = [terminal.points[0].point_id];
 
   // Renew before the retry: the slow first pass consumes most of the TTL.
@@ -369,7 +388,13 @@ test("S15 spawn-intent-to-ack window stays fenced spec:slow", async ({ installed
   );
   if (retryOwner.state === "INTENT") {
     expect(resumed.status).toBe(409);
-    expect(resumed.body.code).toBe("COMMAND_OUTCOME_UNKNOWN");
+    expect(resumed.body.code).toBe("VALIDATION_RECOVERY_REQUIRED");
+    const replay = await client.post(
+      `/expert-validation/campaigns/${campaignId}/full-restart-retries`,
+      retryBody(lease, session, "s15w3-retry", pointIds),
+    );
+    expect(replay.status).toBe(409);
+    expect(replay.body.code).toBe("COMMAND_OUTCOME_UNKNOWN");
 
     // The unacknowledged intent fences new campaigns too.
     const manifestB = await createManifest(client, 4);
