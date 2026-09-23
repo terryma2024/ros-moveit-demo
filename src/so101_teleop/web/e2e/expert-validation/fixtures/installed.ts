@@ -12,6 +12,7 @@ import {
   hostUnderlayPythonPath,
 } from "./host-routes";
 import { qualificationEnvironment } from "./qualification-env";
+import { stopOwnedDescendants } from "./owned-descendants";
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const LAUNCHER = join(PACKAGE_ROOT, "test/e2e/installed_test_launcher.py");
@@ -317,11 +318,20 @@ export const installedTest = base.extend<InstalledFixtures>({
         await start();
       },
     };
-    await use(server);
-    const exitCode = await stop();
+    let exitCode: number | null = null;
+    let reapedDescendants: number[] = [];
+    try {
+      await use(server);
+    } finally {
+      try {
+        exitCode = await stop();
+      } finally {
+        reapedDescendants = await stopOwnedDescendants(serverRoot);
+      }
+    }
     writeFileSync(
       join(evidenceDir, "server-exit.json"),
-      JSON.stringify({ exitCode }) + "\n",
+      JSON.stringify({ exitCode, reapedDescendants }) + "\n",
     );
     let leftovers = "";
     try {

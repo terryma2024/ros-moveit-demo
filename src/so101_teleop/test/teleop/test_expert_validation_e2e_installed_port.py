@@ -186,13 +186,17 @@ def test_fixed_helper_descendant_survives_leader_exit(tmp_path):
     )
     descendant_pid = None
     try:
-        assert process.wait(timeout=30) == 0
+        exit_code = process.wait(timeout=30)
         output = process.stdout.read() if process.stdout else ""
+        assert exit_code == 0, output
         for line in output.splitlines():
             if line.startswith("descendant_pid="):
                 descendant_pid = int(line.split("=", 1)[1])
         assert descendant_pid is not None
         assert _live_group_leader(descendant_pid, process.pid)
+        descendant_identity = _process_identity(descendant_pid)
+        assert descendant_identity is not None
+        assert str(batch_root) in descendant_identity.argv
     finally:
         if descendant_pid is not None and _live_group_leader(descendant_pid, process.pid):
             os.kill(descendant_pid, signal.SIGKILL)
@@ -200,6 +204,24 @@ def test_fixed_helper_descendant_survives_leader_exit(tmp_path):
                 if _gone(descendant_pid):
                     break
                 time.sleep(0.05)
+
+
+def test_descendant_helper_exits_after_its_test_lifetime(tmp_path):
+    """A test abort may skip teardown, but its deliberately surviving child must expire."""
+    helper = _E2E_DIR / "process_helpers" / "descendant_helper.py"
+    process = subprocess.Popen(
+        [sys.executable, str(helper), "--max-lifetime-s", "0.2"],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    try:
+        assert process.wait(timeout=2) == 0
+    finally:
+        if process.poll() is None:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.wait(timeout=2)
 
 
 def test_adaptive_helper_handshake_and_sigint_cleanup(tmp_path):

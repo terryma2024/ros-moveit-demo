@@ -509,7 +509,8 @@ def main(argv: list[str]) -> int:
     try:
         if spec.get("descendant_mode") == "survive":
             descendant = subprocess.Popen(
-                [sys.executable, str(Path(__file__).parent / "descendant_helper.py")],
+                [sys.executable, str(Path(__file__).parent / "descendant_helper.py"),
+                 "--owner-root", str(batch_root)],
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,

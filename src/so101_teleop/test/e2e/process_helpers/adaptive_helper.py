@@ -56,7 +56,8 @@ def main(argv: list[str]) -> int:
     runtime_root.mkdir(mode=0o700, parents=True)
 
     runner = subprocess.Popen(
-        [sys.executable, str(Path(__file__).parent / "descendant_helper.py")],
+        [sys.executable, str(Path(__file__).parent / "descendant_helper.py"),
+         "--owner-root", str(runtime_root)],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
