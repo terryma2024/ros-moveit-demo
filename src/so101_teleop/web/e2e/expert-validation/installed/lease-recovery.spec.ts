@@ -4,42 +4,8 @@ import { join } from "node:path";
 import { installedTest as test, expect, pythonExecutable } from "../fixtures/installed";
 import { readJournalEvents, storeQuery } from "../assertions/journal";
 import { EXECUTION_CONTRACT_VERSION, processAlive } from "../fixtures/host-routes";
-import { ensurePrimed, hostClaimFor } from "./support";
+import { api, hostClaimFor, type Api } from "./support";
 import { ExpertValidationPage } from "../pages/expert-validation-page";
-
-type Api = {
-  post: (path: string, body: Record<string, unknown>) => Promise<{ status: number; body: any }>;
-  get: (path: string) => Promise<{ status: number; body: any }>;
-  put: (path: string, body: Record<string, unknown>) => Promise<{ status: number; body: any }>;
-  del: (path: string, body: Record<string, unknown>) => Promise<{ status: number; body: any }>;
-};
-
-function api(baseURL: string): Api {
-  const call = async (method: string, path: string, body?: Record<string, unknown>) => {
-    // The claim this host requires is read from its capabilities document, so it has to be primed
-    // before the first configuration is built - and this client is local to the spec.
-    await ensurePrimed(baseURL);
-    const response = await fetch(`${baseURL}${path}`, {
-      method,
-      headers: { "content-type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    const text = await response.text();
-    let parsed: any = null;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      parsed = { raw: text };
-    }
-    return { status: response.status, body: parsed };
-  };
-  return {
-    post: (path, body) => call("POST", path, body),
-    get: (path) => call("GET", path),
-    put: (path, body) => call("PUT", path, body),
-    del: (path, body) => call("DELETE", path, body),
-  };
-}
 
 async function acquireLease(client: Api, session: string) {
   const response = await client.post("/expert-validation/lease", { service_session_id: session });
@@ -177,7 +143,7 @@ test("S05 server restart reconciles a running campaign spec:slow", async ({ page
   ).toBeVisible({ timeout: 15_000 });
 });
 
-test("S06 start and retry command ids are idempotent spec:default", async ({ installedServer }) => {
+test("S06 start and retry command ids are idempotent spec:canonical-retry", async ({ installedServer }) => {
   const client = api(installedServer.baseURL);
   const session = "s06-session";
   const lease = await acquireLease(client, session);

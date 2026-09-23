@@ -4,7 +4,7 @@ import { installedTest as test, expect, pythonExecutable } from "../fixtures/ins
 import { storeQuery } from "../assertions/journal";
 import { ExpertValidationPage } from "../pages/expert-validation-page";
 import {
-  api, acquireLease, createManifest, fixedConfig, preflight, startCampaign, waitStatus,
+  api, acquireLease, createManifest, expectValidationConsoleErrors, fixedConfig, preflight, startCampaign, waitStatus,
 } from "./support";
 
 const OPAQUE_ID = /^[0-9a-f]{32}$/;
@@ -58,7 +58,7 @@ test("S08 the page views only opaque registered artifacts of the campaign spec:d
   // A stale artifact id from another server instance does not resolve here.
   const stale = await client.get(`/expert-validation/artifacts/${"0".repeat(32)}`);
   expect(stale.status).toBe(404);
-  expect(consoleErrors).toEqual([]);
+  await expectValidationConsoleErrors(consoleErrors, installedServer.baseURL);
 });
 
 for (const mode of ["identity", "sha256", "escape", "symlink"] as const) {

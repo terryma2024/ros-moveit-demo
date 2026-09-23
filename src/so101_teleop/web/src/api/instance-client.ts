@@ -43,10 +43,13 @@ export function authorityHeaders(authority: ControllerAuthority): Record<string,
 export type Fetcher = (input: string, init?: RequestInit) => Promise<Response>;
 
 export class InstanceClient {
-  constructor(
-    private readonly baseUrl: string,
-    private readonly fetchImpl: Fetcher = (input, init) => fetch(input, init),
-  ) {}
+  private readonly baseUrl: string;
+  private readonly fetchImpl: Fetcher;
+
+  constructor(baseUrl: string, fetchImpl: Fetcher = (input, init) => fetch(input, init)) {
+    this.baseUrl = baseUrl;
+    this.fetchImpl = fetchImpl;
+  }
 
   async register(domain: DomainName): Promise<InstanceProof> {
     const response = await this.fetchImpl(`${this.baseUrl}/control/instances`, {

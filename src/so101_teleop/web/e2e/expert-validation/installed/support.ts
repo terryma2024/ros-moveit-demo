@@ -1,5 +1,8 @@
 import { expect } from "@playwright/test";
 
+import {
+  InstanceClient, authorityHeaders, type ControllerAuthority,
+} from "../../../src/api/instance-client";
 import type { CapabilitiesDocument } from "../fixtures/functional-cases";
 import {
   EXECUTION_CONTRACT_VERSION,
@@ -9,6 +12,17 @@ import {
 } from "../fixtures/host-routes";
 
 export type ApiResponse = { status: number; body: any };
+
+/** The installed validation fixture intentionally has no teleop worker. */
+export async function expectValidationConsoleErrors(errors: string[], baseURL: string): Promise<void> {
+  const snapshot = await fetch(`${baseURL}/snapshot`);
+  expect(snapshot.status).toBe(503);
+  expect((await snapshot.json()).code).toBe("TELEOP_UNAVAILABLE");
+  expect(errors.filter((error) => !(
+    error.includes("status of 503 (Service Unavailable)")
+    && error.endsWith(`(${baseURL}/snapshot)`)
+  ))).toEqual([]);
+}
 export type Api = {
   post: (path: string, body: Record<string, unknown>) => Promise<ApiResponse>;
   get: (path: string) => Promise<ApiResponse>;
@@ -16,15 +30,64 @@ export type Api = {
   del: (path: string, body: Record<string, unknown>) => Promise<ApiResponse>;
 };
 
+type LiveAuthority = {
+  authority: ControllerAuthority | null;
+  socket: WebSocket | null;
+  connecting: Promise<void> | null;
+};
+
+const authorities = new Map<string, LiveAuthority>();
+
+/** Keep each test server's channel alive for the entire API interaction. */
+export async function ensureAuthority(baseURL: string): Promise<ControllerAuthority> {
+  let state = authorities.get(baseURL);
+  if (!state) {
+    state = { authority: null, socket: null, connecting: null };
+    authorities.set(baseURL, state);
+  }
+  if (state.authority && state.socket?.readyState === WebSocket.OPEN) return state.authority;
+  if (!state.connecting) {
+    const current = state;
+    current.connecting = (async () => {
+      const client = new InstanceClient(baseURL);
+      const proof = await client.register("validation");
+      const binding = await client.connect(proof, {
+        origin: baseURL,
+        webSocketFactory: (url) => {
+          current.socket = new WebSocket(url);
+          return current.socket;
+        },
+      });
+      current.authority = {
+        instanceId: binding.instance_id,
+        proof: proof.proof,
+        channelRevision: binding.revision,
+        executionGeneration: 0,
+      };
+    })().finally(() => { current.connecting = null; });
+  }
+  await state.connecting;
+  if (!state.authority) throw new Error("INSTANCE_AUTHORITY_MISSING");
+  return state.authority;
+}
+
+function adoptLeaseAuthority(baseURL: string, lease: { execution_generation?: number | null }): void {
+  const state = authorities.get(baseURL);
+  if (state?.authority && typeof lease.execution_generation === "number") {
+    state.authority = { ...state.authority, executionGeneration: lease.execution_generation };
+  }
+}
+
 export function api(baseURL: string): Api {
   const call = async (method: string, path: string, body?: Record<string, unknown>) => {
     // The host's capabilities are needed by every configuration built after the first request
     // (the claim), and specs that keep their own client would otherwise build configs before
     // anything primed the cache. Priming here makes the order a property of the client.
     await ensurePrimed(baseURL);
+    const authority = method === "GET" ? null : await ensureAuthority(baseURL);
     const response = await fetch(`${baseURL}${path}`, {
       method,
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...(authority ? authorityHeaders(authority) : {}) },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const text = await response.text();
@@ -33,6 +96,9 @@ export function api(baseURL: string): Api {
       parsed = JSON.parse(text);
     } catch {
       parsed = { raw: text };
+    }
+    if (method === "POST" && path === "/expert-validation/lease" && response.ok) {
+      adoptLeaseAuthority(baseURL, parsed);
     }
     return { status: response.status, body: parsed };
   };
