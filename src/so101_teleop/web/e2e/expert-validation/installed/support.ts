@@ -18,6 +18,10 @@ export type Api = {
 
 export function api(baseURL: string): Api {
   const call = async (method: string, path: string, body?: Record<string, unknown>) => {
+    // The host's capabilities are needed by every configuration built after the first request
+    // (the claim), and specs that keep their own client would otherwise build configs before
+    // anything primed the cache. Priming here makes the order a property of the client.
+    await ensurePrimed(baseURL);
     const response = await fetch(`${baseURL}${path}`, {
       method,
       headers: { "content-type": "application/json" },
@@ -52,6 +56,22 @@ export type Lease = { lease_id: string; generation: number };
  * each call site.
  */
 let cachedCapabilities: CapabilitiesDocument | null = null;
+let priming: Promise<void> | null = null;
+
+/** Prime once per process, from whichever client asks first. */
+export async function ensurePrimed(baseURL: string): Promise<void> {
+  if (cachedCapabilities !== null || priming !== null) {
+    await priming;
+    return;
+  }
+  priming = (async () => {
+    const response = await fetch(`${baseURL}/expert-validation/capabilities`);
+    if (response.ok) cachedCapabilities = (await response.json()) as CapabilitiesDocument;
+  })().finally(() => {
+    priming = null;
+  });
+  await priming;
+}
 
 export async function primeHostCapabilities(client: Api): Promise<CapabilitiesDocument> {
   cachedCapabilities = await capabilities(client);
