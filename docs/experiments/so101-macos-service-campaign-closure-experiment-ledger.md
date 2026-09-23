@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-PLATFORM-PORT
+latest_checkpoint: CP-MSC-PLATFORM-PORT-2
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -5643,3 +5643,53 @@ scoped commits   b2652b06 host-routes port with 17 tests   fcdecc23 evidence pat
 pushed           no        merged  no        evidence deleted  no
 ```
 
+## CP-MSC-PLATFORM-PORT-2: the same nine cases fail on both hosts
+
+```yaml
+checkpoint_id: CP-MSC-PLATFORM-PORT-2
+recorded_at: 2026-09-23T11:40:00+0800
+carried_by: the commit that adds this entry (parent 859eb2a7)
+status: macOS 14 passed / 9 failed / 2 skipped; Linux 16 passed / 9 failed
+```
+
+The Linux side was one missing import away from working, and the chain that hid it is worth writing
+down because every link looked like a different bug:
+
+```text
+the fixture never passed PYTHONPATH to the service it spawns
+  -> the service's campaign resource probe child could not import the installed product
+  -> the probe answered PROBE_RESULT_INVALID
+  -> the preflight receipt came back admitted=false (start_guard FAIL)
+  -> supervisor.start_first_pass refuses an unadmitted receipt with the code
+     PREFLIGHT_REQUEST_MISMATCH, whose name points at the request, not at the probe
+  -> fifteen specs died on "the start is refused", and two rounds went into comparing request
+     bodies that were byte-identical all along
+```
+
+Fixed in `859eb2a7`: the fixture passes the installed site directories and the host underlay on
+PYTHONPATH, which is what the product's own launcher does for its children. Linux moved from
+4 passed / 21 failed to **16 passed / 9 failed**, and api-contract went from 1 failed to 3 passed.
+
+Two diagnosis aids stayed in the suite because they are what made the chain visible: a refused
+preflight now asserts `admitted` and prints the receipt (the reason codes live there and nowhere
+else), and a refused start prints the body it sent beside the code it got.
+
+### What that leaves
+
+Both hosts fail the **same nine cases**, so they are not platform differences:
+
+```text
+S08 page, S02, S03, S04   page-driven campaign flows
+S06, S14, S15 x3          the retry pipeline: one point per command on both hosts, where the specs
+                          assert the serial multi-point retry they were written around
+```
+
+The earlier reading of the retry cluster - that macOS answers `RETRY_ONE_POINT_PER_COMMAND` where
+Linux would answer `RETRY_CLEANUP_INCOMPLETE` - was wrong, and this checkpoint corrects it: Linux
+answers the same thing, so the specs' expectation is stale against the product rather than
+platform-bound. Nothing in the host-assumption set is left behind these nine.
+
+```text
+macOS   14 passed / 9 failed / 2 skipped   (baseline 1 passed / 24 failed)
+Linux   16 passed / 9 failed               (baseline 0 passed / 25 failed, suite could not start)
+```
