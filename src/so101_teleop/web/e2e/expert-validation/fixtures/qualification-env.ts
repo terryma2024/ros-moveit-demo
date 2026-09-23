@@ -15,18 +15,26 @@
  * either platform, so the gate can still be pointed at fresh artifacts without editing this file.
  */
 
-/** Model and acceptance locations as they exist on ai-station. Never asserted where `/data` cannot exist. */
-export const AI_STATION_QUALIFICATION_PATHS = {
+/** Model locations as they exist on ai-station. Never asserted where `/data` cannot exist. */
+export const AI_STATION_MODEL_PATHS = {
   SO101_VALIDATION_YOLO_WEIGHTS:
     "/data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt",
   SO101_VALIDATION_GROUNDED_ROOT: "/data/work/so101-models/grounded-sam-v2-scipy-lock",
-  SO101_VALIDATION_PARALLEL_ACCEPTANCE:
-    "/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-20-f91/aggregate_results.json",
-  SO101_VALIDATION_ADAPTIVE_ACCEPTANCE:
-    "/data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/r/e2001/aggregate_results.json",
-  SO101_VALIDATION_ADAPTIVE_FAULT_INJECTION:
-    "/data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/r/su09/aggregate_results.json",
 } as const;
+
+/**
+ * Acceptance documents from one past qualification run.
+ *
+ * The product treats all three as optional (`_optional_file`), and none of the files the old
+ * defaults named exist on ai-station any more - so a host that does not supply them is sent none,
+ * on every platform, instead of a path that cannot be resolved. This is the difference between a
+ * model location, which a host does have, and the record of one run's acceptance, which it does not.
+ */
+export const RUN_EVIDENCE_PATHS = [
+  "SO101_VALIDATION_PARALLEL_ACCEPTANCE",
+  "SO101_VALIDATION_ADAPTIVE_ACCEPTANCE",
+  "SO101_VALIDATION_ADAPTIVE_FAULT_INJECTION",
+] as const;
 
 /** Entry that names no filesystem location, so it reads the same on every host. */
 export const HOST_INDEPENDENT_QUALIFICATION = {
@@ -54,7 +62,7 @@ export function qualificationEnvironment(deps: QualificationEnvDeps = {}): Recor
     const ambient = environment[key];
     resolved[key] = ambient ? ambient : constant;
   }
-  for (const [key, aiStationPath] of Object.entries(AI_STATION_QUALIFICATION_PATHS)) {
+  for (const [key, aiStationPath] of Object.entries(AI_STATION_MODEL_PATHS)) {
     const ambient = environment[key];
     if (ambient) {
       resolved[key] = ambient;
@@ -62,6 +70,10 @@ export function qualificationEnvironment(deps: QualificationEnvDeps = {}): Recor
     }
     if (platform === "darwin") continue;
     resolved[key] = aiStationPath;
+  }
+  for (const key of RUN_EVIDENCE_PATHS) {
+    const ambient = environment[key];
+    if (ambient) resolved[key] = ambient;
   }
   return resolved;
 }

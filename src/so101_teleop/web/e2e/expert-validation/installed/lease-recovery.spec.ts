@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { installedTest as test, expect, pythonExecutable } from "../fixtures/installed";
 import { readJournalEvents, storeQuery } from "../assertions/journal";
 import { EXECUTION_CONTRACT_VERSION, processAlive } from "../fixtures/host-routes";
-import { hostClaimFor } from "./support";
+import { ensurePrimed, hostClaimFor } from "./support";
 import { ExpertValidationPage } from "../pages/expert-validation-page";
 
 type Api = {
@@ -16,6 +16,9 @@ type Api = {
 
 function api(baseURL: string): Api {
   const call = async (method: string, path: string, body?: Record<string, unknown>) => {
+    // The claim this host requires is read from its capabilities document, so it has to be primed
+    // before the first configuration is built - and this client is local to the spec.
+    await ensurePrimed(baseURL);
     const response = await fetch(`${baseURL}${path}`, {
       method,
       headers: { "content-type": "application/json" },

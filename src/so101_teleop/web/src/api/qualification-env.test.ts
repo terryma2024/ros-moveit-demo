@@ -12,7 +12,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  AI_STATION_QUALIFICATION_PATHS,
+  AI_STATION_MODEL_PATHS,
   HOST_INDEPENDENT_QUALIFICATION,
   qualificationEnvironment,
 } from "../../e2e/expert-validation/fixtures/qualification-env";
@@ -20,6 +20,10 @@ import {
 const MODEL_KEYS = [
   "SO101_VALIDATION_YOLO_WEIGHTS",
   "SO101_VALIDATION_GROUNDED_ROOT",
+] as const;
+
+/** Documents from one qualification run: the product reads them only when they are supplied. */
+const RUN_EVIDENCE_KEYS = [
   "SO101_VALIDATION_PARALLEL_ACCEPTANCE",
   "SO101_VALIDATION_ADAPTIVE_ACCEPTANCE",
   "SO101_VALIDATION_ADAPTIVE_FAULT_INJECTION",
@@ -32,6 +36,18 @@ describe("installed qualification environment", () => {
     expect(aiStation, "darwin must not carry an ai-station path").toEqual([]);
     for (const key of MODEL_KEYS) {
       expect(env[key], `${key} has no darwin default`).toBeUndefined();
+    }
+  });
+
+  it("never asserts a past run's evidence document on any platform", () => {
+    // The three acceptance documents are optional to the product and name one specific
+    // qualification run. ai-station does not hold the files the old defaults named, so a host that
+    // does not supply them must be sent none rather than a path that cannot exist.
+    for (const platform of ["linux", "darwin"] as const) {
+      const env = qualificationEnvironment({ platform, environment: {} });
+      for (const key of RUN_EVIDENCE_KEYS) {
+        expect(env[key], `${platform}: ${key}`).toBeUndefined();
+      }
     }
   });
 
@@ -51,7 +67,7 @@ describe("installed qualification environment", () => {
     const env = qualificationEnvironment({ platform: "linux", environment: {} });
     for (const key of MODEL_KEYS) {
       expect(env[key], `${key} keeps its ai-station default`).toBe(
-        AI_STATION_QUALIFICATION_PATHS[key],
+        AI_STATION_MODEL_PATHS[key as keyof typeof AI_STATION_MODEL_PATHS],
       );
     }
   });
@@ -81,7 +97,7 @@ describe("installed qualification environment", () => {
   it("defaults to this host when no platform is injected", () => {
     const env = qualificationEnvironment({ environment: {} });
     const expected =
-      process.platform === "darwin" ? undefined : AI_STATION_QUALIFICATION_PATHS.SO101_VALIDATION_YOLO_WEIGHTS;
+      process.platform === "darwin" ? undefined : AI_STATION_MODEL_PATHS.SO101_VALIDATION_YOLO_WEIGHTS;
     expect(env.SO101_VALIDATION_YOLO_WEIGHTS).toBe(expected);
   });
 });

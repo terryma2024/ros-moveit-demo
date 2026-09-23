@@ -83,8 +83,14 @@ test("S07 a surviving descendant blocks the next batch until inventory clears sp
   const ownerB = ownerRows(installedServer.serverRoot).find(
     (row) => row.batch_id !== owner.batch_id,
   )!;
-  const projectionB = (await client.get(`/expert-validation/campaigns/${campaignB}`)).body;
-  expect(projectionB.status).toBe("RUNNING");
+  // A started batch is reported STARTED until the coordinator picks it up, which on a host that
+  // runs the real coordinator is not instantaneous. The claim is that it reaches RUNNING, so the
+  // assertion waits for it instead of sampling once.
+  await expect
+    .poll(async () => (await client.get(`/expert-validation/campaigns/${campaignB}`)).body.status, {
+      timeout: 30_000,
+    })
+    .toBe("RUNNING");
 
   // This spec's helpers always leave a descendant behind; reap B's as well.
   const descendantB = readDescendantPid(
