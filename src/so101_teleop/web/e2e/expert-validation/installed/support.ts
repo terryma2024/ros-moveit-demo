@@ -1,6 +1,12 @@
-import { readFileSync } from "node:fs";
-
 import { expect } from "@playwright/test";
+
+import type { CapabilitiesDocument } from "../fixtures/functional-cases";
+import {
+  EXECUTION_CONTRACT_VERSION,
+  type HostMode,
+  hostRoute,
+  processAlive as hostProcessAlive,
+} from "../fixtures/host-routes";
 
 export type ApiResponse = { status: number; body: any };
 export type Api = {
@@ -36,9 +42,40 @@ export function api(baseURL: string): Api {
 
 export type Lease = { lease_id: string; generation: number };
 
+/**
+ * The host's capabilities, fetched once per test process.
+ *
+ * A platform-bound host refuses any campaign request that does not name the exact matrix row it
+ * serves, and it refuses a start whose body differs from the body its preflight receipt recorded.
+ * Both mean the claim has to be on *every* request built from a configuration - including the ones
+ * specs assemble by hand - so it lives here, next to the configurations themselves, rather than at
+ * each call site.
+ */
+let cachedCapabilities: CapabilitiesDocument | null = null;
+
+export async function primeHostCapabilities(client: Api): Promise<CapabilitiesDocument> {
+  cachedCapabilities = await capabilities(client);
+  return cachedCapabilities;
+}
+
+/** The claim this host requires for one shape, or an empty spread where no matrix applies. */
+export function hostClaimFor(
+  mode: HostMode,
+  workerCount: number,
+  batchKind: "FIRST_PASS" | "FULL_RESTART_RETRY" = "FIRST_PASS",
+): Record<string, unknown> {
+  if (cachedCapabilities === null) return {};
+  const route = hostRoute(cachedCapabilities, { mode, workerCount, batchKind });
+  return route.platformBound && route.runnable && route.profile !== null
+    ? { execution_profile: route.profile, batch_kind: batchKind }
+    : {};
+}
+
 export async function acquireLease(client: Api, session: string): Promise<Lease> {
   const response = await client.post("/expert-validation/lease", { service_session_id: session });
   expect(response.status).toBe(200);
+  // Every caller builds its configuration after this, so the claim is primed before the first one.
+  await primeHostCapabilities(client);
   return response.body;
 }
 
@@ -50,19 +87,20 @@ export async function createManifest(client: Api, totalPoints: number) {
 
 export function fixedConfig(lease: Lease, session: string, manifestId: string) {
   return {
-    contract_version: 2 as const,
+    contract_version: EXECUTION_CONTRACT_VERSION,
     service_session_id: session,
     lease_id: lease.lease_id,
     lease_generation: lease.generation,
     manifest_id: manifestId,
     execution_mode: "SEQUENTIAL" as const,
     worker_count: 1,
+    ...hostClaimFor("SEQUENTIAL", 1),
   };
 }
 
 export function adaptiveConfig(lease: Lease, session: string, manifestId: string) {
   return {
-    contract_version: 2 as const,
+    contract_version: EXECUTION_CONTRACT_VERSION,
     service_session_id: session,
     lease_id: lease.lease_id,
     lease_generation: lease.generation,
@@ -74,11 +112,37 @@ export function adaptiveConfig(lease: Lease, session: string, manifestId: string
     worker_start_timeout_s: 30,
     max_infra_attempts_per_point: 2,
     yolo_executor_count: 2,
+    ...hostClaimFor("ADAPTIVE", 2),
+  };
+}
+
+/**
+ * Add the profile claim a platform-bound host requires.
+ *
+ * "A request that names a profile must name the exact combination its installed document declares;
+ * one that names nothing is never completed by inference" - so macOS refuses a configuration that
+ * omits the claim with `EXECUTION_PROFILE_REQUIRED`. The claim is read from the host's own
+ * capabilities document rather than guessed, and a host with no matrix is sent exactly what the
+ * caller built.
+ */
+async function claimed(
+  client: Api, config: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  if (config.execution_profile !== undefined) return config;
+  if (cachedCapabilities === null) await primeHostCapabilities(client);
+  return {
+    ...config,
+    ...hostClaimFor(
+      String(config.execution_mode ?? "SEQUENTIAL") as HostMode,
+      Number(config.worker_count ?? config.preferred_worker_count ?? 1),
+    ),
   };
 }
 
 export async function preflight(client: Api, config: Record<string, unknown>) {
-  const response = await client.post("/expert-validation/campaigns/preflight", config);
+  const response = await client.post(
+    "/expert-validation/campaigns/preflight", await claimed(client, config),
+  );
   expect(response.status).toBe(200);
   return response.body.receipt_id as string;
 }
@@ -87,7 +151,7 @@ export async function startCampaign(
   client: Api, config: Record<string, unknown>, commandId: string, receiptId: string,
 ) {
   const response = await client.post("/expert-validation/campaigns", {
-    ...config,
+    ...(await claimed(client, config)),
     command_id: commandId,
     preflight_receipt_id: receiptId,
   });
@@ -113,14 +177,22 @@ export async function waitStatus(
   }
 }
 
+/**
+ * Liveness through the platform's own reader: `/proc` on Linux, `ps` on macOS.
+ *
+ * The previous `/proc`-only version returned false for every pid on macOS, which turned every
+ * "wait until it is gone" into an immediate pass and every "must still be alive" into a failure -
+ * the check has to be able to succeed and to fail on the host it runs on.
+ */
 export function processAlive(pid: number): boolean {
-  try {
-    const stat = readFileSync(`/proc/${pid}/stat`, "utf-8");
-    const tail = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-    return tail[0] !== "Z";
-  } catch {
-    return false;
-  }
+  return hostProcessAlive(pid);
+}
+
+/** The deployed capabilities document: the host's own answer about what it serves. */
+export async function capabilities(client: Api): Promise<CapabilitiesDocument> {
+  const response = await client.get("/expert-validation/capabilities");
+  expect(response.status).toBe(200);
+  return response.body as CapabilitiesDocument;
 }
 
 export async function waitProcessGone(pid: number, timeoutMs = 15_000) {
