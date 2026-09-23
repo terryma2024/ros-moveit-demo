@@ -8,7 +8,8 @@ import { test as base, expect } from "@playwright/test";
 
 import { e2eEvidenceRoot, proveChrome } from "./chrome";
 import {
-  hostCoordinatorRelative, hostExecutionDocument, hostUnderlayPrefixPath,
+  hostCoordinatorRelative, hostExecutionDocument, hostPaths, hostUnderlayPrefixPath,
+  hostUnderlayPythonPath,
 } from "./host-routes";
 import { qualificationEnvironment } from "./qualification-env";
 
@@ -229,6 +230,15 @@ export const installedTest = base.extend<InstalledFixtures>({
             PYTHONNOUSERSITE: "1",
             SO101_TASK_ROOT: taskRoot,
             TASK_ROOT: taskRoot,
+            // The service spawns the campaign resource probe as a child, and that child only sees
+            // this environment. Without the installed packages on PYTHONPATH the probe answers
+            // PROBE_RESULT_INVALID, the receipt is not admitted, and every campaign start is refused
+            // with PREFLIGHT_REQUEST_MISMATCH - which is how a missing import surfaced as a mismatch.
+            PYTHONPATH: [
+              ...packagePrefixes.map((entry) => join(entry, hostPaths().pythonSite)),
+              ...hostUnderlayPythonPath(),
+              ...(process.env.PYTHONPATH ? [process.env.PYTHONPATH] : []),
+            ].join(":"),
             SO101_VALIDATION_PARALLEL_CONFIG:
               process.env.SO101_VALIDATION_PARALLEL_CONFIG
               ?? join(mujocoConfig, hostExecutionDocument()),
