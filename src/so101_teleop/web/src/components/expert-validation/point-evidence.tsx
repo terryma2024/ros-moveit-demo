@@ -5,7 +5,7 @@ type Artifact = Pick<ArtifactProjection, "artifact_id" | "role" | "media_type">;
 
 export function PointEvidence({ point, artifacts }: { point: PointView; artifacts: Artifact[] }) {
   return (
-    <section aria-label={`Evidence for ${point.display_id ?? point.point_id}`} className="space-y-2 rounded-lg border border-slate-700 p-4">
+    <section aria-label={`Evidence for ${point.display_id ?? point.point_id}`} className="space-y-2 rounded-lg border border-border bg-card p-4 text-card-foreground">
       <h2>Point evidence · {point.display_id ?? point.point_id}</h2>
       <p>{point.status ?? "UNKNOWN"}{point.reason ? ` · ${point.reason}` : ""}</p>
       {point.attempts?.map((attempt) => (
@@ -23,7 +23,7 @@ export function PointEvidence({ point, artifacts }: { point: PointView; artifact
               <figcaption>{artifact.role}</figcaption>
             </figure>
           ) : (
-            <a key={artifact.artifact_id} href={url} download className="text-sky-300 underline">
+            <a key={artifact.artifact_id} href={url} download className="text-link underline">
               Download {artifact.role}
             </a>
           );

@@ -18,7 +18,7 @@ export function RetryPanel({
   const [confirmation, setConfirmation] = useState("");
   const enabled = campaign.batch_cleanup_complete === true && campaign.status !== "INFRA_FAILED";
   return (
-    <section aria-label="Full restart retries" className="space-y-3 rounded-lg border border-slate-700 p-4">
+    <section aria-label="Full restart retries" className="space-y-3 rounded-lg border border-border bg-card p-4 text-card-foreground">
       <h2>FULL_RESTART retries</h2>
       {campaign.points?.map((point) => {
         const eligible = enabled && point.status === "FAILED" && point.retry_eligible === true;
@@ -45,7 +45,7 @@ export function RetryPanel({
       {confirming ? (
         <div className="space-y-2">
           <label className="block">Confirmation
-            <input aria-label="Confirmation" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} className="ml-2 bg-slate-800 px-2" />
+            <input aria-label="Confirmation" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} className="ml-2 px-2" />
           </label>
           <Button
             disabled={confirmation !== "CONFIRM FULL_RESTART RETRIES"}

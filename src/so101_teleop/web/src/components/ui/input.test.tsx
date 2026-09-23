@@ -18,7 +18,7 @@ describe("Input token port", () => {
   test("uses tokens and no v4-only classes", () => {
     render(<Input aria-label="Target" />);
     const className = screen.getByLabelText("Target").className;
-    for (const token of ["border-input", "bg-input", "text-muted-foreground", "ring-ring", "rounded-md"]) {
+    for (const token of ["border-input", "bg-card", "text-foreground", "text-muted-foreground", "ring-ring", "rounded-md"]) {
       expect(className).toContain(token);
     }
     for (const v4Only of ["rounded-4xl", "/30", "/50", "outline-none ring"]) {
@@ -31,7 +31,7 @@ describe("Input token port", () => {
     const field = screen.getByLabelText("Target") as HTMLInputElement;
     expect(field.disabled).toBe(true);
     expect(field.getAttribute("aria-invalid")).toBe("true");
-    expect(field.className).toContain("disabled:opacity-50");
+    expect(field.className).toContain("disabled:opacity-70");
     expect(field.className).toContain("aria-invalid:border-destructive");
   });
 });

@@ -11,7 +11,7 @@ export function CampaignProgress({ campaign, selectedPointId, onSelect }: {
   const evaluated = campaign.evaluated ?? 0;
   const succeeded = campaign.valid_succeeded ?? 0;
   return (
-    <section aria-label="Campaign progress" className="validation-progress min-w-0 space-y-3 rounded-lg border border-slate-700 bg-slate-900 p-4 [overflow-wrap:anywhere]">
+    <section aria-label="Campaign progress" className="validation-progress min-w-0 space-y-3 rounded-lg border border-border bg-card p-4 text-card-foreground [overflow-wrap:anywhere]">
       <header>
         <h2 className="text-lg font-semibold">Campaign {campaign.campaign_id}</h2>
         <p>{campaign.execution_mode ?? "UNKNOWN"} · {campaign.status ?? "RUNNING"} · sequence {campaign.sequence}</p>
@@ -28,7 +28,7 @@ export function CampaignProgress({ campaign, selectedPointId, onSelect }: {
       {campaign.execution_mode === "ADAPTIVE" ? (
         <>
           <p>Infra attempts {campaign.infra_attempts ?? 0}</p>
-          <p className="text-slate-400">
+          <p className="text-muted-foreground">
             Resource observations only: {Object.entries(campaign.resource_observations ?? {})
               .map(([key, value]) => `${key}=${String(value)}`)
               .join(", ") || "none"}
@@ -36,7 +36,7 @@ export function CampaignProgress({ campaign, selectedPointId, onSelect }: {
         </>
       ) : null}
       {campaign.broker && !campaign.broker.available ? (
-        <p className="text-amber-300">Broker degraded: {campaign.broker.reason ?? "UNKNOWN"}</p>
+        <p className="text-warning">Broker degraded: {campaign.broker.reason ?? "UNKNOWN"}</p>
       ) : <p>Broker healthy</p>}
       {(campaign.levels_used?.length ?? 0) > 0 ? (
         <p>Levels used {campaign.levels_used?.map((level) => `W${level}`).join(" -> ")}</p>
@@ -55,17 +55,17 @@ export function CampaignProgress({ campaign, selectedPointId, onSelect }: {
             aria-label={`Point ${point.display_id ?? point.point_id}`}
             aria-pressed={selectedPointId === point.point_id}
             onClick={() => onSelect?.(point.point_id)}
-            className="min-w-0 rounded border border-slate-600 p-2 text-left text-sm aria-pressed:border-sky-300 aria-pressed:bg-sky-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300"
+            className="min-w-0 rounded border border-border bg-background p-2 text-left text-sm aria-pressed:border-primary aria-pressed:bg-sidebar-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
           >
             <span className="block font-semibold">{point.display_id ?? point.point_id}</span>
             <span className="block">{point.status ?? "UNKNOWN"}</span>
-            {point.reason ? <span className="block text-slate-400">{point.reason}</span> : null}
+            {point.reason ? <span className="block text-muted-foreground">{point.reason}</span> : null}
           </button>
         ))}
       </div>
       <div className="grid gap-2 md:grid-cols-2">
         {campaign.workers?.map((worker) => (
-          <article key={worker.worker_id} aria-label={`Worker ${worker.worker_id}`} className="rounded border border-slate-600 p-3">
+          <article key={worker.worker_id} aria-label={`Worker ${worker.worker_id}`} className="rounded border border-border bg-background p-3">
             <h3>{worker.worker_id} · generation {worker.generation}</h3>
             <p>{worker.state}{worker.current_point_id ? ` · ${worker.current_point_id}` : ""}</p>
             <p>Leases {worker.lease_count}{worker.max_points_per_worker == null ? "" : ` / ${worker.max_points_per_worker}`}</p>

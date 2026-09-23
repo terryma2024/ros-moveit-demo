@@ -11,16 +11,17 @@
   font-display: swap;
 }
 
-/* Design-system tokens, generated from the captured pinned preset manifest
+/* Design-system tokens, based on the captured pinned preset manifest
    (sha256 242969b2ed2d4ced3c35fdbc07605fd47758b3893f00f972f5af98df322a60df).
    Plain custom properties: Tailwind 3.4.17 consumes them via var(), so no v4-only
-   @theme syntax is introduced and the compiler is unchanged. Light is the default. */
+   @theme syntax is introduced and the compiler is unchanged. Operator contrast
+   refinements keep the light and dark palettes readable. Light is the default. */
 
 :root {
   --accent: oklch(0.963 0.002 197.1);
   --accent-foreground: oklch(0.218 0.008 223.9);
-  --background: oklch(1 0 0);
-  --border: oklch(0.925 0.005 214.3);
+  --background: #f4f7fb;
+  --border: #cbd6e4;
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.148 0.004 228.8);
   --chart-1: oklch(0.872 0.007 219.6);
@@ -30,20 +31,23 @@
   --chart-5: oklch(0.275 0.011 216.9);
   --destructive: oklch(0.577 0.245 27.325);
   --foreground: oklch(0.148 0.004 228.8);
-  --input: oklch(0.925 0.005 214.3);
-  --muted: oklch(0.963 0.002 197.1);
-  --muted-foreground: oklch(0.56 0.021 213.5);
+  --input: #bfcede;
+  --muted: #eaf1f8;
+  --muted-foreground: #465a70;
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.148 0.004 228.8);
   --primary: oklch(0.488 0.243 264.376);
   --primary-foreground: oklch(0.97 0.014 254.604);
+  --primary-hover: #1747b8;
+  --warning-foreground: #8a4b00;
+  --link: #1754bc;
   --ring: oklch(0.723 0.014 214.4);
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.21 0.006 285.885);
-  --sidebar: oklch(0.987 0.002 197.1);
-  --sidebar-accent: oklch(0.963 0.002 197.1);
+  --sidebar: #edf3f9;
+  --sidebar-accent: #dce9f7;
   --sidebar-accent-foreground: oklch(0.218 0.008 223.9);
-  --sidebar-border: oklch(0.925 0.005 214.3);
+  --sidebar-border: #cbd6e4;
   --sidebar-foreground: oklch(0.148 0.004 228.8);
   --sidebar-primary: oklch(0.546 0.245 262.881);
   --sidebar-primary-foreground: oklch(0.97 0.014 254.604);
@@ -60,8 +64,8 @@
 [data-theme="dark"] {
   --accent: oklch(0.275 0.011 216.9);
   --accent-foreground: oklch(0.987 0.002 197.1);
-  --background: oklch(0.148 0.004 228.8);
-  --border: oklch(1 0 0 / 10%);
+  --background: #101827;
+  --border: #3d4a5c;
   --card: oklch(0.218 0.008 223.9);
   --card-foreground: oklch(0.987 0.002 197.1);
   --chart-1: oklch(0.872 0.007 219.6);
@@ -71,13 +75,16 @@
   --chart-5: oklch(0.275 0.011 216.9);
   --destructive: oklch(0.704 0.191 22.216);
   --foreground: oklch(0.987 0.002 197.1);
-  --input: oklch(1 0 0 / 15%);
+  --input: #4a5b70;
   --muted: oklch(0.275 0.011 216.9);
   --muted-foreground: oklch(0.723 0.014 214.4);
   --popover: oklch(0.218 0.008 223.9);
   --popover-foreground: oklch(0.987 0.002 197.1);
   --primary: oklch(0.424 0.199 265.638);
   --primary-foreground: oklch(0.97 0.014 254.604);
+  --primary-hover: #3268d6;
+  --warning-foreground: #f6c56b;
+  --link: #90bbff;
   --ring: oklch(0.56 0.021 213.5);
   --secondary: oklch(0.274 0.006 286.033);
   --secondary-foreground: oklch(0.985 0 0);

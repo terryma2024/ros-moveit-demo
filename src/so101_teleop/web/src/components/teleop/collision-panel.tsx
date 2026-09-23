@@ -43,24 +43,24 @@ function TelemetrySummary({ objectPose, controllers, sourceAges }: {
   controllers: Record<string, string>;
   sourceAges: Record<string, number>;
 }) {
-  return <section aria-label="Telemetry summary" className="grid min-w-0 gap-3 rounded-lg border border-slate-700 bg-slate-950/60 p-3 text-sm lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)]">
+  return <section aria-label="Telemetry summary" className="grid min-w-0 gap-3 rounded-lg border border-border bg-muted p-3 text-sm lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)]">
     <div className="grid grid-cols-3 gap-2">
-      {([['X', objectPose?.x_m], ['Y', objectPose?.y_m], ['Z', objectPose?.z_m]] as const).map(([label, value]) => <div className="min-w-0" key={label}><div className="text-xs text-slate-400">{label}</div><ExactValue display={formatPoseCoordinate(value)} exact={value == null ? "unavailable" : `${label}: ${value}`} className="block truncate font-mono tabular-nums"/></div>)}
+      {([['X', objectPose?.x_m], ['Y', objectPose?.y_m], ['Z', objectPose?.z_m]] as const).map(([label, value]) => <div className="min-w-0" key={label}><div className="text-xs text-muted-foreground">{label}</div><ExactValue display={formatPoseCoordinate(value)} exact={value == null ? "unavailable" : `${label}: ${value}`} className="block truncate font-mono tabular-nums"/></div>)}
     </div>
     <div className="grid grid-cols-2 gap-2">
-      {([['Arm', 'arm_controller'], ['Gripper', 'gripper_controller']] as const).map(([label, key]) => <div key={key}><div className="text-xs text-slate-400">{label}</div><Badge variant="outline" className="mt-1 max-w-full border-slate-600 bg-slate-800 text-slate-100">{controllers[key] ?? "—"}</Badge></div>)}
+      {([['Arm', 'arm_controller'], ['Gripper', 'gripper_controller']] as const).map(([label, key]) => <div key={key}><div className="text-xs text-muted-foreground">{label}</div><Badge variant="outline" className="mt-1 max-w-full border-border bg-card text-card-foreground">{controllers[key] ?? "—"}</Badge></div>)}
     </div>
     <div className="grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-3">
-      {AGE_FIELDS.map(([key, label]) => <div className="flex min-w-0 justify-between gap-2" key={key}><span className="truncate text-slate-400">{label}</span><ExactValue display={formatAge(sourceAges[key])} exact={sourceAges[key] == null ? `${key}: unavailable` : `${key}: ${sourceAges[key]}`} className="shrink-0 font-mono tabular-nums"/></div>)}
+      {AGE_FIELDS.map(([key, label]) => <div className="flex min-w-0 justify-between gap-2" key={key}><span className="truncate text-muted-foreground">{label}</span><ExactValue display={formatAge(sourceAges[key])} exact={sourceAges[key] == null ? `${key}: unavailable` : `${key}: ${sourceAges[key]}`} className="shrink-0 font-mono tabular-nums"/></div>)}
     </div>
   </section>;
 }
 
 function EvidencePane({ layer, rows }: { layer: "MoveIt" | "Gazebo"; rows: Evidence[] }) {
   const label = `${layer} ${layer === "MoveIt" ? "collisions" : "contacts"}`;
-  return <section aria-label={`${layer} evidence pane`} className="flex h-56 min-w-0 flex-col overflow-hidden rounded-lg border border-slate-700 bg-slate-950/60">
-    <div className="shrink-0 border-b border-slate-700 px-3 py-2"><h3 className="font-medium">{label}</h3><p className="text-xs text-slate-400">{rows.length} evidence row{rows.length === 1 ? "" : "s"}</p></div>
-    {rows.length === 0 ? <Empty className="min-h-0 border-0 p-3"><EmptyHeader><EmptyTitle>No evidence</EmptyTitle><EmptyDescription className="text-slate-400">No current {label.toLowerCase()}.</EmptyDescription></EmptyHeader></Empty> :
+  return <section aria-label={`${layer} evidence pane`} className="flex h-56 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-muted">
+    <div className="shrink-0 border-b border-border px-3 py-2"><h3 className="font-medium">{label}</h3><p className="text-xs text-muted-foreground">{rows.length} evidence row{rows.length === 1 ? "" : "s"}</p></div>
+    {rows.length === 0 ? <Empty className="min-h-0 border-0 p-3"><EmptyHeader><EmptyTitle>No evidence</EmptyTitle><EmptyDescription className="text-muted-foreground">No current {label.toLowerCase()}.</EmptyDescription></EmptyHeader></Empty> :
       <ScrollArea className="min-h-0 flex-1" tabIndex={0} aria-label={`${label} scroll area`}>
         <Table aria-label={label} className="table-fixed">
           <TableHeader><TableRow><TableHead className="w-[31%]">Object A</TableHead><TableHead className="w-[25%]">Object B</TableHead><TableHead className="w-[19%]">Depth</TableHead><TableHead className="w-[25%]">Source</TableHead></TableRow></TableHeader>

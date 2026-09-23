@@ -20,7 +20,7 @@ test("the button keeps every business variant while using tokens", () => {
     expect(button).toContain(`${variant}:`);
   }
   for (const size of ["default", "sm", "lg"]) expect(button).toContain(`${size}:`);
-  expect(button).toContain("disabled:opacity-50");
+  expect(button).toContain("disabled:bg-muted disabled:text-muted-foreground");
   expect(button).toContain("focus-visible:ring-2");
   expect(button).toContain("bg-destructive text-white");
 });

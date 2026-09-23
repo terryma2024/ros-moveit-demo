@@ -16,6 +16,9 @@ const REQUIRED = [
   "input",
   "ring",
   "primary",
+  "primary-hover",
+  "warning-foreground",
+  "link",
   "destructive",
   "sidebar",
   "sidebar-border",
@@ -32,8 +35,10 @@ test("every required foundation token exists in both themes", () => {
 
 test("light is the default and dark is a separate, complete set", () => {
   expect(css.indexOf(":root {")).toBeLessThan(css.indexOf('[data-theme="dark"]'));
-  expect(rootBlock).toContain("--background: oklch(1 0 0)");
-  expect(darkBlock).not.toContain("--background: oklch(1 0 0)");
+  const background = (block: string) => block.match(/--background:\s*([^;]+);/)?.[1];
+  expect(background(rootBlock)).toBeTruthy();
+  expect(background(darkBlock)).toBeTruthy();
+  expect(background(rootBlock)).not.toBe(background(darkBlock));
   expect((darkBlock.match(/--[a-z0-9-]+:/g) ?? []).length).toBeGreaterThanOrEqual(31);
 });
 

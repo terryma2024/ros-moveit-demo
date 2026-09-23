@@ -63,7 +63,7 @@ export function WorkflowPanel({ snapshot, leaseHeld, command, capabilities = sup
   return <Card>
     <CardTitle>Checkpointed pick-place workflow</CardTitle>
     <p className="my-3">{snapshot?.current_state ?? "IDLE"} → {snapshot?.next_state ?? "—"}; browser never selects a state.</p>
-    {pendingOperation && <p role="status" aria-live="polite" className="mb-3 text-sm text-sky-200">Executing {operationLabels[pendingOperation]}…</p>}
+    {pendingOperation && <p role="status" aria-live="polite" className="mb-3 text-sm text-link">Executing {operationLabels[pendingOperation]}…</p>}
     <div className="flex flex-wrap gap-2">
       <Button disabled={!canStart} onClick={() => void execute("start")}>{label("start")}</Button>
       <Button disabled={!canContinue} onClick={() => void execute("step", { snapshot_revision: snapshot?.snapshot_revision })}>{label("step")}</Button>
@@ -73,7 +73,7 @@ export function WorkflowPanel({ snapshot, leaseHeld, command, capabilities = sup
       <ConfirmAction label="Reset workflow" disabled={!canReset} onConfirm={() => void execute("reset")}/>
       {validationFailed && <ConfirmAction label="Force Continue" disabled={!leaseHeld || pending} evidence={JSON.stringify(snapshot.validation ?? {}, null, 2)} typedConfirmation="FORCE CONTINUE" onConfirm={() => void execute("force-continue", { snapshot_revision: snapshot?.snapshot_revision, operator_confirmation: "FORCE CONTINUE" })}/>}
     </div>
-    <p className="mt-3 text-sm text-slate-400">Force Continue is single-use and audited server-side only for a fresh physical-grasp post-validation failure. Lease, readiness, session, stale-checkpoint, action and controller failures cannot be bypassed.</p>
+    <p className="mt-3 text-sm text-muted-foreground">Force Continue is single-use and audited server-side only for a fresh physical-grasp post-validation failure. Lease, readiness, session, stale-checkpoint, action and controller failures cannot be bypassed.</p>
     {snapshot?.trace && <pre className="mt-3 text-xs">{JSON.stringify(snapshot.trace, null, 2)}</pre>}
   </Card>;
 }

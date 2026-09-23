@@ -333,7 +333,7 @@ export function CampaignSetup({
         <div className="space-y-1">
           <p>W8 -&gt; W6 -&gt; W4 -&gt; W2 -&gt; W1</p>
           <p>Initial affinity 3 · startup 120 s · infrastructure attempts 5</p>
-          <p className="text-amber-300">Resource observations only</p>
+          <p className="text-warning">Resource observations only</p>
         </div>
       )}
       {preflightMessage ? <p aria-live="polite">{preflightMessage}</p> : null}

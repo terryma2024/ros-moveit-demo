@@ -15,7 +15,7 @@ export function EnvironmentPanel({ environment, backend }: { environment: Record
     <CardHeader>
       <CardTitle>ROS and Gazebo environment</CardTitle>
       <CardDescription>Read-only allowlisted runtime metadata from the Teleop process.</CardDescription>
-      {backend && <p className="text-sm text-sky-200">Backend <span className="font-mono">{backend.backend}</span> · owner <span className="font-mono">{backend.owner_package}</span>{backend.owner_executable ? <>/{backend.owner_executable}</> : null}</p>}
+      {backend && <p className="text-sm text-link">Backend <span className="font-mono">{backend.backend}</span> · owner <span className="font-mono">{backend.owner_package}</span>{backend.owner_executable ? <>/{backend.owner_executable}</> : null}</p>}
     </CardHeader>
     <CardContent className="mt-4 min-w-0 overflow-hidden">
       <Table aria-label="Runtime environment" className="table-fixed">

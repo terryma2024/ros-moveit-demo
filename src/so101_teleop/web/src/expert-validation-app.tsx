@@ -420,7 +420,7 @@ export function ExpertValidationApp({ api: providedApi = defaultClient }: { api?
   const selectedPoint = campaign?.points?.find((point) => point.point_id === selectedPointId);
 
   return (
-    <main className="mx-auto w-full max-w-[2400px] space-y-4 p-3 text-slate-100 [overflow-wrap:anywhere] sm:p-6">
+    <main className="mx-auto w-full max-w-[2400px] space-y-4 p-3 text-foreground [overflow-wrap:anywhere] sm:p-6">
       <header><h1 className="text-2xl font-bold">SO-101 Expert Validation</h1></header>
       <CampaignSetup
         capabilities={capabilities}

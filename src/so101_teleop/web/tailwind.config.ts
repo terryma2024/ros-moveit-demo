@@ -19,6 +19,7 @@ export default {
         card: { DEFAULT: token("card"), foreground: token("card-foreground") },
         popover: { DEFAULT: token("popover"), foreground: token("popover-foreground") },
         primary: { DEFAULT: token("primary"), foreground: token("primary-foreground") },
+        "primary-hover": token("primary-hover"),
         secondary: { DEFAULT: token("secondary"), foreground: token("secondary-foreground") },
         muted: { DEFAULT: token("muted"), foreground: token("muted-foreground") },
         accent: { DEFAULT: token("accent"), foreground: token("accent-foreground") },
@@ -26,6 +27,8 @@ export default {
         border: token("border"),
         input: token("input"),
         ring: token("ring"),
+        warning: token("warning-foreground"),
+        link: token("link"),
         sidebar: {
           DEFAULT: token("sidebar"),
           foreground: token("sidebar-foreground"),

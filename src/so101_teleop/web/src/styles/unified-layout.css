@@ -9,7 +9,8 @@
 }
 
 .unified-sidebar {
-  border-right: 1px solid hsl(var(--border, 215 28% 20%));
+  border-right: 1px solid var(--sidebar-border);
+  background: var(--sidebar);
   padding: 1rem;
 }
 
@@ -80,7 +81,7 @@
 
   .unified-sidebar {
     border-right: none;
-    border-bottom: 1px solid hsl(var(--border, 215 28% 20%));
+    border-bottom: 1px solid var(--sidebar-border);
   }
 }
 
