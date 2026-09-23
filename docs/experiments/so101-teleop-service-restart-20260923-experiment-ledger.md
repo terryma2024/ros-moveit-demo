@@ -8,7 +8,7 @@ worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-weba
 linux_worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
 branch: codex/so101-unified-webapp
 base_commit: fd7348aa27361750f7e2e7954df53ef75e96545c
-current_commit: 0d058b2c4d6fe500b6bb4b4299e9a12fefe8f224
+current_commit: b5c8cdf7c9291d9911def774fc7030c7e7b89492
 evidence_root_mac: /opt/data/work/so101-evidence/teleop-service-restart/20260923-70919020
 evidence_root_linux: /data/work/so101-evidence/teleop-service-restart/20260923-70919020
 low_rate_root_mac: /tmp/so101-debug-teleop-service-restart-20260923-70919020
@@ -23,7 +23,7 @@ confirmed_conclusions:
 disproven_routes:
   - Rebase requires rewriting commits after the latest origin/main fetch.
 open_hypotheses: []
-latest_checkpoint: CP-006
+latest_checkpoint: CP-007
 next_experiment: NONE
 ```
 
@@ -335,4 +335,26 @@ archived_runs: NONE
 deletion_candidates:
   - Both hosts' /tmp/so101-debug-teleop-service-restart-20260923-70919020 roots after readback; no evidence deleted.
 next_command: Commit and push the task-owned ledger, then verify the Mac service and branch status.
+```
+
+```yaml
+checkpoint_id: CP-007
+last_valid_experiment: EXP-004
+current_hypothesis: NONE
+working_tree_status: Mac branch at b5c8cdf7 was clean before this task-owned ledger update; ai-station feature worktree was synchronized at b5c8cdf7.
+owned_processes: Mac manager PID 27535 on 100.74.192.81:8000.
+preserved_processes: ai-station manager PID 2227775 and all unrelated processes; Mac campaign-ea42010d9fdb4b399ac68533e1c88c85 is RUNNING and must not be interrupted.
+confirmed_conclusions:
+  - At 2026-09-24 00:19:21 CST, Mac live index SHA256 remains d7ef8c16c863154fb8890bbbfe8526555031383ea3065f8573b1fdcdf841db4e and live CSS still has all three fd7348aa palette markers.
+  - The newly started campaign has status RUNNING and batch_cleanup_complete=false; no further service stop was attempted.
+disproven_routes: []
+open_risks:
+  - Existing browser tabs may need a reload to replace old cached assets.
+retained_runs:
+  - /opt/data/work/so101-evidence/teleop-service-restart/20260923-70919020
+  - /data/work/so101-evidence/teleop-service-restart/20260923-70919020
+archived_runs: NONE
+deletion_candidates:
+  - Both hosts' /tmp/so101-debug-teleop-service-restart-20260923-70919020 roots after readback; no evidence deleted.
+next_command: Commit and push the latest checkpoint; leave the active Mac campaign and service running.
 ```
