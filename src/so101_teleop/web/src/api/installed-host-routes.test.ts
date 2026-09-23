@@ -185,8 +185,12 @@ describe("readProcessState", () => {
 });
 
 describe("the execution document and coordinator this host runs", () => {
-  it("keeps ai-station's document and its own coordinator default on linux", () => {
-    expect(hostExecutionDocument("linux")).toBe("parallel_batch_v2.yaml");
+  it("names the active execution document and its own coordinator default on linux", () => {
+    // `require_v3_execution` refuses new execution for any contract version but 3, and the installed
+    // v2 document declares 2. The gate runner and the plan's own profiles are v3/v4/v5/v6 for that
+    // reason; pointing the legacy host at v2 refused every preflight with
+    // CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION.
+    expect(hostExecutionDocument("linux")).toBe("parallel_batch_v3.yaml");
     expect(hostCoordinatorRelative("linux")).toBeNull();
   });
 
