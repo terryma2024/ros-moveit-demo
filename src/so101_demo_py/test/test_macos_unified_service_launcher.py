@@ -40,10 +40,10 @@ def _absolute_document(tmp_path: Path, module, overrides: dict | None = None) ->
         "install_prefix": "/opt/data/so101/workspace/install",
         "install_inventory_sha256": "a" * 64,
         "web_bundle_sha256": "b" * 64,
-        "farm_logical": "/opt/ros2_jazzy/dylib_farm/current",
-        "farm_resolved": "/opt/ros2_jazzy/dylib_farm/runs/x",
+        "farm_logical": "/opt/ros/jazzy/dylib_farm/current",
+        "farm_resolved": "/opt/ros/jazzy/dylib_farm/runs/x",
         "farm_manifest_sha256": "c" * 64,
-        "python": "/opt/ros2_jazzy/.venv/bin/python",
+        "python": "/opt/ros/jazzy/.venv/bin/python",
         "console_entry": "lib/so101_teleop/so101_unified_web_server.py",
     }
     document.update(overrides or {})

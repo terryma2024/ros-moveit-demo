@@ -9,33 +9,57 @@
 
 | 用途 | 固定路径 |
 | --- | --- |
-| ROS 2 工作区根目录 | `/opt/ros2_jazzy` |
-| ROS 2 安装前缀 | `/opt/ros2_jazzy/install` |
-| ROS Python | `/opt/ros2_jazzy/.venv/bin/python` |
+| ROS 2 工作区根目录 | `/opt/ros/jazzy` |
+| ROS 2 安装前缀 | `/opt/ros/jazzy/install` |
+| ROS Python | `/opt/ros/jazzy/.venv/bin/python` |
 | 临时目录 | `/opt/data/tmp` |
 | SO-101 数据与构建目录 | `/opt/data` |
-| 动态库聚合目录 | `/opt/ros2_jazzy/dylib_farm/current` |
+| 动态库聚合目录 | `/opt/ros/jazzy/dylib_farm/current` |
 | 锁定 MuJoCo fork overlay | `/opt/data/so101/runtime/fork/current` |
 | 项目 overlay | `/opt/data/so101/workspace/install` |
 
 物理目录可以放在用户目录，但上述逻辑路径不能随机器变化。例如当前机器使用：
 
 ```zsh
-sudo mkdir -p /opt
-sudo ln -s "$HOME/ros2_jazzy" /opt/ros2_jazzy
+sudo mkdir -p /opt/ros
+sudo ln -s "$HOME/ros2_jazzy" /opt/ros/jazzy
 ```
 
 若链接已经存在，先检查，不要直接覆盖：
 
 ```zsh
-ls -ld /opt/ros2_jazzy
-readlink /opt/ros2_jazzy
+ls -ld /opt/ros/jazzy
+readlink /opt/ros/jazzy
 ```
+
+从旧入口迁移时，先确认新链接指向同一物理目录，并通过基础检查：
+
+```zsh
+test /opt/ros/jazzy -ef "$HOME/ros2_jazzy"
+scripts/so101-macos.zsh doctor --base
+scripts/setup-macos-ros-dylib-farm.zsh
+readlink /opt/ros/jazzy/dylib_farm/current/librosidl_typesupport_c.dylib
+```
+
+随后按 [C++ 依赖重建步骤](so101-macos-cpp-dependencies.md#重建依赖与项目) 补齐 29 个依赖包，运行
+`scripts/so101-macos.zsh prepare` 重建 fork 与三个项目包，再执行指南中的八包 C++ 构建命令。
+重新生成 dylib farm，确认完整 `doctor --json` 通过，并核对 ROS 依赖、fork 的 CMake 导出文件和项目安装文件不再引用旧前缀。
+旧入口确认为软链接后，使用管理员权限删除：
+
+```zsh
+test -L /opt/ros2_jazzy && sudo unlink /opt/ros2_jazzy
+```
+
+旧版 fork 和项目 overlay 的 `setup.zsh` 记录过旧入口。迁移后的启动和测试先加载
+`/opt/ros/jazzy` 下的两个 ROS underlay，再加载 fork 与项目的 `local_setup.zsh`；
+这样不会重新引入旧路径。Bash 开发环境按同样顺序使用 `local_setup.bash`。
 
 `/opt/data` 必须存在，并且当前用户可写。`prepare` 会创建权限为 `0700` 的
 `/opt/data/tmp`；后续的启动和测试都使用这个固定临时目录。
 
 ## 统一入口
+
+构建 Gazebo 和 MoveIt C++ 包时，先核对 [macOS C++ 依赖清单](so101-macos-cpp-dependencies.md)。
 
 首次配置或依赖更新后，在仓库根目录运行：
 
@@ -87,8 +111,8 @@ scripts/so101-macos.zsh run so101_demo_py <executable> [arguments...]
 overlay，并用下面的显式调用链跨过 macOS SIP 边界：
 
 ```text
-/opt/ros2_jazzy/.venv/bin/python
-  /opt/ros2_jazzy/install/ros2cli/bin/ros2
+/opt/ros/jazzy/.venv/bin/python
+  /opt/ros/jazzy/install/ros2cli/bin/ros2
 ```
 
 退出时向启动 owner 发送一次 `Ctrl-C`。不要向整个进程组重复发送 SIGINT；`ros2 launch`
@@ -161,12 +185,12 @@ macOS 测试有一个额外限制：colcon 生成包级测试环境时会经过 
 
 ```zsh
 SO101_WORKSPACE_DIR=/opt/data/so101/runtime/fork/runs/<commit> \
-SO101_ROS_UNDERLAY=/opt/ros2_jazzy/install \
-SO101_ROS_DEPENDENCY_OVERLAY=/opt/ros2_jazzy/extra_ws/install \
+SO101_ROS_UNDERLAY=/opt/ros/jazzy/install \
+SO101_ROS_DEPENDENCY_OVERLAY=/opt/ros/jazzy/extra_ws/install \
 SO101_TEST_DYLIB_FARM=/opt/data/so101/runtime/bootstrap-dylib-farm/current \
-SO101_PYTHON=/opt/ros2_jazzy/.venv/bin/python \
-SO101_COLCON=/opt/ros2_jazzy/.venv/bin/colcon \
-SO101_ROS2=/opt/ros2_jazzy/install/ros2cli/bin/ros2 \
+SO101_PYTHON=/opt/ros/jazzy/.venv/bin/python \
+SO101_COLCON=/opt/ros/jazzy/.venv/bin/colcon \
+SO101_ROS2=/opt/ros/jazzy/install/ros2cli/bin/ros2 \
 scripts/install-mujoco-ros2-control.zsh
 ```
 
@@ -183,27 +207,29 @@ scripts/install-mujoco-ros2-control.zsh
 extra 中锁定的 `pytest-xdist==3.8.0`：
 
 ```zsh
-/opt/ros2_jazzy/.venv/bin/python -m pip install 'src/so101_demo_py[test]'
+/opt/ros/jazzy/.venv/bin/python -m pip install 'src/so101_demo_py[test]'
 
-source /opt/ros2_jazzy/install/setup.zsh
-source /opt/ros2_jazzy/extra_ws/install/setup.zsh
-source /opt/data/so101/runtime/fork/current/setup.zsh
-source /opt/data/so101/workspace/install/setup.zsh
-export DYLD_LIBRARY_PATH=/opt/ros2_jazzy/dylib_farm/current
-export TMPDIR=/opt/data/tmp TMP=/opt/data/tmp TEMP=/opt/data/tmp
+source /opt/ros/jazzy/install/setup.zsh
+source /opt/ros/jazzy/extra_ws/install/setup.zsh
+source /opt/data/so101/runtime/fork/current/local_setup.zsh
+source /opt/data/so101/workspace/install/local_setup.zsh
+export DYLD_LIBRARY_PATH=/opt/ros/jazzy/dylib_farm/current
+scratch=$(mktemp -d /opt/data/tmp/jz.XXXXXXXX)
+export TMPDIR="$scratch" TMP="$scratch" TEMP="$scratch"
 
-/opt/ros2_jazzy/.venv/bin/python -m pytest -n 8 --dist loadscope \
-  --basetemp=/opt/data/tmp/pytest-<unique-run-id> \
+/opt/ros/jazzy/.venv/bin/python -m pytest -n 8 --dist loadscope \
+  --basetemp="$scratch/p" \
   src/so101_demo_py/test \
   --junitxml=/tmp/so101-demo-py-pytest.xml
 ```
 
-每次运行都要为 `--basetemp` 换一个尚不存在的短路径，避免并行 worker 读到旧状态。普通
+每次运行都要使用新的短 `scratch` 路径。macOS 的 Unix socket 有路径长度上限；长任务名
+不能直接拼在 pytest 默认的 `pytest-of-<user>/pytest-<n>` 目录后面。普通
 package gate 默认排除标记为 `explicit_ml` 的 Torch/SAM 集成用例，并且只收集
 `src/so101_demo_py/test/`，不包含 `benchmark_test/`。需要单独检查 ML 用例时运行：
 
 ```zsh
-/opt/ros2_jazzy/.venv/bin/python -m pytest -m explicit_ml \
+/opt/ros/jazzy/.venv/bin/python -m pytest -m explicit_ml \
   src/so101_demo_py/test/test_sam_decoder_runtime.py
 ```
 
@@ -242,9 +268,9 @@ scripts/so101-macos.zsh doctor --base
 
 ```zsh
 readlink /opt/data/so101/runtime/fork/current
-readlink /opt/ros2_jazzy/dylib_farm/current
+readlink /opt/ros/jazzy/dylib_farm/current
 ```
 
-若 IDE 仍然标红，把解释器设为 `/opt/ros2_jazzy/.venv/bin/python`。不要在源码里写死
+若 IDE 仍然标红，把解释器设为 `/opt/ros/jazzy/.venv/bin/python`。不要在源码里写死
 `sys.path`，也不要恢复旧的 `~/ros2_jazzy/so101_isolated_ws` 或
 `~/ros2_jazzy/macos_dylib_farm` 路径。

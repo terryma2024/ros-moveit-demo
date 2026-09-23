@@ -576,12 +576,12 @@ plugin/vendor path+SHA 和 cleanup 证据一条都没有放宽。
 ```text
 FixedDylibFarmRuntimeContract:
   closure_prefixes:
-    - /opt/ros2_jazzy/install
-    - /opt/ros2_jazzy/extra_ws/install
+    - /opt/ros/jazzy/install
+    - /opt/ros/jazzy/extra_ws/install
     - /opt/data/so101/runtime/fork/current
     - /opt/data/so101/workspace/install
-    - /opt/ros2_jazzy/dylib_farm/current
-  dylib_farm_root: /opt/ros2_jazzy/dylib_farm/current
+    - /opt/ros/jazzy/dylib_farm/current
+  dylib_farm_root: /opt/ros/jazzy/dylib_farm/current
   source: scripts/so101-macos.zsh prepare 生成，由 doctor 与 manifest 校验
   environment: 只允许 runner 从已验证 manifest 构造的 DYLD_LIBRARY_PATH
   forbidden: 用户 shell 任意继承、额外 DYLD_*、未登记 overlay、路径或 SHA drift
@@ -598,7 +598,7 @@ FixedDylibFarmRuntimeContract:
 
 每轮在 spawn 前重新解析并回读，任一漂移都 fail closed：
 
-- farm 的 logical path `/opt/ros2_jazzy/dylib_farm/current` 与它当前的 resolved target；
+- farm 的 logical path `/opt/ros/jazzy/dylib_farm/current` 与它当前的 resolved target；
 - farm manifest 的 bytes 与 SHA256，以及 farm inventory 的 entry path 与 SHA256；
 - `/opt/data/so101/workspace/install` 的 inventory；
 - 产品三个 profile 文档、Web bundle 与关键 console script 的 SHA。

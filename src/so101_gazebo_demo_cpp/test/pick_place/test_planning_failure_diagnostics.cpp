@@ -326,17 +326,13 @@ TEST(PlanningFailureDiagnostics, FileSinkCreatesOwnerOnlyUniqueImmutableArtifact
   EXPECT_FALSE(selection.sink->record(artifact));
   EXPECT_FALSE(selection.sink->record(artifact));
 
-  struct stat directory_stat
-  {
-  };
+  struct stat directory_stat{};
   ASSERT_EQ(::stat(directory.c_str(), &directory_stat), 0);
   EXPECT_EQ(directory_stat.st_mode & 0777, 0700);
   std::vector<std::filesystem::path> files;
   for (const auto & entry : std::filesystem::directory_iterator(directory)) {
     files.push_back(entry.path());
-    struct stat file_stat
-    {
-    };
+    struct stat file_stat{};
     ASSERT_EQ(::stat(entry.path().c_str(), &file_stat), 0);
     EXPECT_EQ(file_stat.st_mode & 0777, 0600);
     EXPECT_TRUE(std::regex_match(entry.path().filename().string(),

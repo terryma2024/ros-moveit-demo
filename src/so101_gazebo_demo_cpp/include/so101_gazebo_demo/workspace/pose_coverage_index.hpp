@@ -36,7 +36,7 @@ struct OrientationClusterSnapshot
 
 struct PositionVoxelSnapshot
 {
-  PositionVoxelSummary summary;
+  PositionVoxelSummary summary{};
   std::vector<OrientationClusterSnapshot> clusters;
   std::vector<RefinementSeed> seed_candidates;
 };
@@ -44,19 +44,19 @@ struct PositionVoxelSnapshot
 struct PoseCoverageCheckpoint
 {
   std::vector<PositionVoxelSnapshot> voxels;
-  std::size_t consecutive_stable_batches;
+  std::size_t consecutive_stable_batches{0};
 };
 
 class PoseCoverageIndex
 {
 public:
   PoseCoverageIndex(double position_voxel_size_m, double orientation_threshold_rad);
-  PositionVoxelKey keyFor(const std::array<double, 3> & xyz) const;
+  [[nodiscard]] PositionVoxelKey keyFor(const std::array<double, 3> & xyz) const;
   OrientationAssignment insert(PoseSample & sample);
   BatchCoverageDelta finishBatch();
-  std::vector<PositionVoxelSummary> voxelSummaries() const;
-  std::vector<RefinementSeed> refinementSeeds() const;
-  PoseCoverageCheckpoint checkpoint() const;
+  [[nodiscard]] std::vector<PositionVoxelSummary> voxelSummaries() const;
+  [[nodiscard]] std::vector<RefinementSeed> refinementSeeds() const;
+  [[nodiscard]] PoseCoverageCheckpoint checkpoint() const;
   void restore(const PoseCoverageCheckpoint & checkpoint);
 
 private:
@@ -79,7 +79,7 @@ class ConvergenceTracker
 public:
   explicit ConvergenceTracker(WorkspaceSamplingConfig config);
   bool observe(const BatchCoverageDelta & delta, std::uint64_t completed_samples);
-  std::size_t consecutiveStableBatches() const noexcept;
+  [[nodiscard]] std::size_t consecutiveStableBatches() const noexcept;
   void restore(std::size_t consecutive_stable_batches);
 
 private:

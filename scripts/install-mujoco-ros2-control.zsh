@@ -196,8 +196,25 @@ prepare_build_source() {
     fail "build source is not at locked commit: ${build_source_dir}"
   local build_source_changes
   build_source_changes=$(git -C "${build_source_dir}" status --porcelain --untracked-files=all)
-  [[ -z ${build_source_changes} ]] ||
-    fail "build source must be clean at locked fork commit: ${build_source_dir}"
+  if [[ $(uname -s) == Darwin ]]; then
+    local patch_file=${project_root}/tools/macos/mujoco-fork-rpath-test.patch
+    local patched_file=mujoco_ros2_control/tests/test_primary_monitor_guard.py
+    [[ -f ${patch_file} ]] || fail "missing macOS fork test patch: ${patch_file}"
+    if [[ -z ${build_source_changes} ]]; then
+      git -C "${build_source_dir}" apply --check "${patch_file}" ||
+        fail "macOS fork test patch does not apply to locked commit"
+      git -C "${build_source_dir}" apply "${patch_file}"
+    else
+      [[ ${build_source_changes} == " M ${patched_file}" ]] ||
+        fail "build source must be clean at locked fork commit or match the macOS test patch: ${build_source_dir}"
+      git -C "${build_source_dir}" diff -- "${patched_file}" |
+        /usr/bin/cmp -s - "${patch_file}" ||
+        fail "build source differs from the approved macOS test patch: ${build_source_dir}"
+    fi
+  else
+    [[ -z ${build_source_changes} ]] ||
+      fail "build source must be clean at locked fork commit: ${build_source_dir}"
+  fi
 }
 
 prepare_lodepng_source() {

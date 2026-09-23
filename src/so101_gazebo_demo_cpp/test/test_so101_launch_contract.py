@@ -5,6 +5,7 @@ import inspect
 import os
 from pathlib import Path
 import signal
+import shutil
 import subprocess
 import sys
 import time
@@ -579,7 +580,7 @@ def test_spawn_waits_for_attachment_relay_transport_subscription():
         for command_part in vars(ready_action)['_ExecuteLocal__process_description']
         ._Executable__cmd
     )
-    assert command.startswith('/usr/bin/timeout --signal=TERM --kill-after=1 120')
+    assert command.startswith(f'{shutil.which("timeout")} --signal=TERM --kill-after=1 120')
     assert 'ros2 topic echo --once' in command
     assert '--qos-durability transient_local' in command
     assert ready_topic in command
@@ -602,6 +603,7 @@ def test_failed_prerequisite_stops_before_downstream_readiness_actions():
     assert any(action.__class__.__name__ == 'EmitEvent' for action in actions)
 
 
+@pytest.mark.skipif(sys.platform != 'linux', reason='requires Linux prctl and /proc')
 def test_runtime_launch_child_exits_when_pytest_parent_is_terminated():
     """Catch CTest timeout cleanup that leaves an orphan simulation session."""
     runtime = load_launch_module(PICK_PLACE_WORLD_TEST)

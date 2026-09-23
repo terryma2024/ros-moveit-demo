@@ -37,6 +37,7 @@ start_relay() {
     sleep 0.1
   done
   printf 'relay did not become ready\n' >&2
+  cat "${log_file}" >&2
   return 1
 }
 

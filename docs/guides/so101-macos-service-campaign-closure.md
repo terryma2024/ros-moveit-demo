@@ -32,7 +32,7 @@ guard 很轻，只做启动保护，不是资格认证，也不是容量证明�
 
 ## 启动前的前置条件
 
-- 运行时契约是固定的：`/opt/ros2_jazzy`、`/opt/ros2_jazzy/.venv/bin/python`、`/opt/data/so101/runtime/fork/current`、`/opt/data/so101/workspace/install`、`/opt/ros2_jazzy/dylib_farm/current`。环境变量不是必需的；`ROS_DOMAIN_ID` 可选，范围 0..232。
+- 运行时契约是固定的：`/opt/ros/jazzy`、`/opt/ros/jazzy/.venv/bin/python`、`/opt/data/so101/runtime/fork/current`、`/opt/data/so101/workspace/install`、`/opt/ros/jazzy/dylib_farm/current`。环境变量不是必需的；`ROS_DOMAIN_ID` 可选，范围 0..232。
 - 先跑 `scripts/so101-macos.zsh doctor --json`，期望 `status=PASS`。要看基础检查用 `doctor --base`。
 - 一次执行必须有有效的 lease 和 execution context。candidate 运行用 `POST /expert-validation/candidate-contexts` 签发一次性 context，再用 `POST /expert-validation/campaigns/candidate-first-pass` 启动；production 走安装版服务的 lease 授权入口。两类 context 不能互换，也不能跨 batch、profile、worker_count、evidence root 重放。
 - retry 只对准一个点，而且必须是上一批 terminal-clean 的真实业务 `FAILED`。`INFRA_FAILED`、`INDETERMINATE`、`INVALID`、`UNRUN` 都不行。准入在一个 SQLite 事务里完成：消费 command、验证结果和 lease、检查 fence 和 owner、写 retry binding 与 spawn intent。事务之后 spawn 失败会留下未确认的 intent 和 fence，command 不能重放。
@@ -43,7 +43,7 @@ guard 很轻，只做启动保护，不是资格认证，也不是容量证明�
 
 运行闭包不再靠 no-DYLD 来证明，改用用户授权的 fixed dylib farm（`FixedDylibFarmRuntimeContract`）。farm 由 `scripts/so101-macos.zsh prepare` 生成，doctor 和 manifest 各校验一次。superseded-by: FixedDylibFarmRuntimeContract
 
-每次 spawn 前重新解析 `/opt/ros2_jazzy/dylib_farm/current`，回读它的 resolved target、manifest bytes 和 inventory SHA，对不上就不启动。`setup-macos-ros-dylib-farm.zsh` 每次跑都会生成新的 target，farm 一换，之前的 Gate A 轮次全部作废。
+每次 spawn 前重新解析 `/opt/ros/jazzy/dylib_farm/current`，回读它的 resolved target、manifest bytes 和 inventory SHA，对不上就不启动。`setup-macos-ros-dylib-farm.zsh` 每次跑都会生成新的 target，farm 一换，之前的 Gate A 轮次全部作废。
 
 `DYLD_LIBRARY_PATH` 只允许 runner 从已验证 manifest 构造。用户 shell 里继承来的、另外加上去的 `DYLD_*`、没登记的 overlay，都不算数。属主证据反而一条没少：owner ancestry 上唯一的 descendant，加上 pid、birth、executable，再加 plugin_path、plugin_sha256、vendor_path、vendor_sha256。
 

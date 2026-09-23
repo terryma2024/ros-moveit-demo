@@ -23,10 +23,10 @@ struct CommittedBatch
 
 struct FinalArtifacts
 {
-  WorkspaceArtifactPaths paths;
-  std::uint64_t total_vertices;
-  std::uint64_t collision_free_vertices;
-  std::uint64_t position_voxels;
+  WorkspaceArtifactPaths paths{};
+  std::uint64_t total_vertices{0};
+  std::uint64_t collision_free_vertices{0};
+  std::uint64_t position_voxels{0};
 };
 
 class WorkspaceArtifactWriter
@@ -37,7 +37,7 @@ public:
   CommittedBatch writeBatch(std::uint64_t batch_number, const std::vector<PoseSample> & samples);
   FinalArtifacts finalize(const std::vector<CommittedBatch> & batches,
                           const std::vector<PositionVoxelSummary> & voxels);
-  const std::filesystem::path & outputDirectory() const noexcept;
+  [[nodiscard]] const std::filesystem::path & outputDirectory() const noexcept;
 
 private:
   std::filesystem::path output_directory_;

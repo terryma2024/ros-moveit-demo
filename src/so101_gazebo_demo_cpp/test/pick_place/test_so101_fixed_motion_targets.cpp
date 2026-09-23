@@ -531,7 +531,7 @@ TEST(SO101MoveItJointPlanningBoundary, UpdatesDirtyRobotStateBeforeReadingLinkPo
 
 TEST(SO101MoveItJointPlanningBoundary, UsesTaskObjectFirstInExactTouchWhitelist)
 {
-  const auto profile = spp::SO101Profile::canonical();
+  const auto & profile = spp::SO101Profile::canonical();
   const std::set<std::string> expected{"plastic_cup:gripper", "plastic_cup:jaw"};
   EXPECT_EQ(spp::exactTaskObjectTouchWhitelist(profile), expected);
 }

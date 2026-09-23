@@ -728,9 +728,7 @@ selectPlanningFailureDiagnostics(const std::filesystem::path & directory)
   if (!directory.is_absolute())
     return {nullptr,
             invalidDirectory(directory, "planning diagnostics directory must be absolute")};
-  struct stat status
-  {
-  };
+  struct stat status{};
   if (::stat(directory.c_str(), &status) != 0) {
     if (errno != ENOENT || ::mkdir(directory.c_str(), 0700) != 0) {
       return {nullptr,

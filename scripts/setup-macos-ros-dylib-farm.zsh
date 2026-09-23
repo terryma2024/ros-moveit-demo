@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-readonly ros_workspace="${SO101_ROS_WORKSPACE:-${SO101_ROS_ROOT:-/opt/ros2_jazzy}}"
+readonly ros_workspace="${SO101_ROS_WORKSPACE:-${SO101_ROS_ROOT:-/opt/ros/jazzy}}"
 readonly ros_underlay="${SO101_ROS_UNDERLAY:-${ros_workspace}/install}"
 readonly farm_root="${SO101_DYLIB_FARM_ROOT:-${ros_workspace}/dylib_farm}"
 readonly fork_install="${SO101_MUJOCO_FORK_INSTALL:-/opt/data/so101/runtime/fork/current}"
@@ -66,6 +66,6 @@ trap - EXIT
 
 next_link="${farm_root}/.current-${$}"
 ln -s -- "${final_dir}" "${next_link}"
-mv -fh -- "${next_link}" "${farm_root}/current"
+/bin/mv -fh -- "${next_link}" "${farm_root}/current"
 
 print -- "${final_dir}"

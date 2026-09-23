@@ -643,7 +643,7 @@ python -c 'import torch; print(torch.__version__); print(torch.backends.mps.is_b
 
 ```zsh
 source /opt/ros/jazzy/setup.zsh
-source /Users/matianyi/ros2_jazzy/install/setup.zsh
+source /opt/ros/jazzy/install/setup.zsh
 source /path/to/candidate/install/setup.zsh
 
 export PYTHONPATH=/tmp/so101-perception-macos/lib/python3.11/site-packages${PYTHONPATH:+:$PYTHONPATH}

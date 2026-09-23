@@ -64,13 +64,13 @@ class StationMode(StrEnum):
 #: N/P/F entry stays as historical diagnostics and is never used for CP-MSC-A2-FARM.
 FARM_CONTRACT_RECEIPT_SCHEMA_VERSION = 1
 FARM_CLOSURE_PREFIXES = (
-    "/opt/ros2_jazzy/install",
-    "/opt/ros2_jazzy/extra_ws/install",
+    "/opt/ros/jazzy/install",
+    "/opt/ros/jazzy/extra_ws/install",
     "/opt/data/so101/runtime/fork/current",
     "/opt/data/so101/workspace/install",
-    "/opt/ros2_jazzy/dylib_farm/current",
+    "/opt/ros/jazzy/dylib_farm/current",
 )
-FARM_ROOT_HINT = Path("/opt/ros2_jazzy/dylib_farm")
+FARM_ROOT_HINT = Path("/opt/ros/jazzy/dylib_farm")
 READINESS_RELATIVE_PATH = "lib/so101_demo_py/motion_stack_ready"
 CONTROLLER_RELATIVE_PATH = "lib/mujoco_ros2_control/ros2_control_node"
 PLUGIN_BASENAME = "libmujoco_ros2_control.dylib"
@@ -1184,7 +1184,7 @@ class FixedFarmRuntimePaths:
 
     @classmethod
     def production(cls) -> "FixedFarmRuntimePaths":
-        ros_root = Path("/opt/ros2_jazzy")
+        ros_root = Path("/opt/ros/jazzy")
         runtime_root = Path("/opt/data/so101")
         data_root = Path("/opt/data")
         return cls(
@@ -1211,6 +1211,10 @@ class FixedFarmRuntimePaths:
             "PATH": os.pathsep.join(
                 (
                     str(self.python.parent),
+                    "/opt/homebrew/opt/ffmpeg-full/bin",
+                    "/opt/homebrew/opt/llvm/bin",
+                    "/opt/homebrew/opt/coreutils/libexec/gnubin",
+                    "/opt/homebrew/opt/gnu-sed/libexec/gnubin",
                     "/opt/homebrew/bin",
                     "/usr/bin",
                     "/bin",
@@ -1219,6 +1223,12 @@ class FixedFarmRuntimePaths:
                 )
             ),
             "VIRTUAL_ENV": str(self.python.parents[1]),
+            "GZ_CONFIG_PATH": os.pathsep.join(
+                f"/opt/homebrew/opt/{package}/share/gz"
+                for package in (
+                    "gz-sim8", "gz-transport13", "gz-msgs10", "gz-plugin2", "sdformat14"
+                )
+            ),
             "PYTHONNOUSERSITE": "1",
             "TMPDIR": str(self.temp_root),
             "TMP": str(self.temp_root),
@@ -1227,6 +1237,12 @@ class FixedFarmRuntimePaths:
             "ROS_LOG_DIR": str(self.ros_log_dir),
             "ROS_DOMAIN_ID": str(int(ros_domain_id)),
             "DYLD_LIBRARY_PATH": str(self.dylib_farm),
+            "GZ_SIM_SYSTEM_PLUGIN_PATH": os.pathsep.join(
+                (
+                    str(self.ros_dependency_overlay / "lib"),
+                    str(self.project_install / "so101_gazebo_demo_cpp/lib"),
+                )
+            ),
         }
 
 

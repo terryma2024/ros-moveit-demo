@@ -2,7 +2,7 @@
 # Developer shell for the fixed Apple Silicon ROS 2 Jazzy runtime.
 # Runtime launches should use scripts/so101-macos.zsh.
 
-ros_root=/opt/ros2_jazzy
+ros_root=/opt/ros/jazzy
 
 export VIRTUAL_ENV="$ros_root/.venv"
 unset PYTHONHOME PYTHONPATH AMENT_PREFIX_PATH CMAKE_PREFIX_PATH COLCON_PREFIX_PATH
@@ -19,8 +19,8 @@ export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 for setup in \
   "$ros_root/install/setup.bash" \
   "$ros_root/extra_ws/install/setup.bash" \
-  "/opt/data/so101/runtime/fork/current/setup.bash" \
-  "/opt/data/so101/workspace/install/setup.bash"; do
+  "/opt/data/so101/runtime/fork/current/local_setup.bash" \
+  "/opt/data/so101/workspace/install/local_setup.bash"; do
   if [[ ! -f "$setup" ]]; then
     log_error "missing fixed SO-101 setup: $setup; run scripts/so101-macos.zsh prepare"
     return 1

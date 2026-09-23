@@ -884,7 +884,7 @@ def test_stack_config_requires_closure_and_run_binding_together(tmp_path: Path) 
 PLUGIN_RELATIVE_PATH = "lib/libmujoco_ros2_control.dylib"
 VENDOR_RELATIVE_PATH = "opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib"
 CONTROLLER_RELATIVE_PATH = "lib/mujoco_ros2_control/ros2_control_node"
-FARM_ROOT = "/opt/ros2_jazzy/dylib_farm/current"
+FARM_ROOT = "/opt/ros/jazzy/dylib_farm/current"
 
 
 def _spawn_intent_binding(

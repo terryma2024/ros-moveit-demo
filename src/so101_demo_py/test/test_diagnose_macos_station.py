@@ -528,10 +528,10 @@ def _farm_fixture(tmp_path: Path, *, project_install: Path | None = None):
 
     module = _diagnostic_module()
     filesystem_root = tmp_path / "fs"
-    farm_run = filesystem_root / "opt/ros2_jazzy/dylib_farm/runs/fixture-01"
+    farm_run = filesystem_root / "opt/ros/jazzy/dylib_farm/runs/fixture-01"
     farm_run.mkdir(parents=True)
     (farm_run / "libmujoco.3.4.0.dylib").write_bytes(b"farm-lib")
-    (filesystem_root / "opt/ros2_jazzy/dylib_farm/current").symlink_to(farm_run)
+    (filesystem_root / "opt/ros/jazzy/dylib_farm/current").symlink_to(farm_run)
     install = project_install or (filesystem_root / "opt/data/so101/workspace/install")
     (install / "lib/so101_demo_py").mkdir(parents=True)
     readiness = install / "lib/so101_demo_py/motion_stack_ready"
@@ -547,15 +547,15 @@ def _farm_fixture(tmp_path: Path, *, project_install: Path | None = None):
     (install / "opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib").write_bytes(b"vendor-bytes")
 
     paths = module.FixedFarmRuntimePaths(
-        ros_root=filesystem_root / "opt/ros2_jazzy",
-        ros_install=filesystem_root / "opt/ros2_jazzy/install",
-        ros_dependency_overlay=filesystem_root / "opt/ros2_jazzy/extra_ws/install",
+        ros_root=filesystem_root / "opt/ros/jazzy",
+        ros_install=filesystem_root / "opt/ros/jazzy/install",
+        ros_dependency_overlay=filesystem_root / "opt/ros/jazzy/extra_ws/install",
         ros_fork_overlay=filesystem_root / "opt/data/so101/runtime/fork/current",
-        python=filesystem_root / "opt/ros2_jazzy/.venv/bin/python",
-        ros2_script=filesystem_root / "opt/ros2_jazzy/install/ros2cli/bin/ros2",
+        python=filesystem_root / "opt/ros/jazzy/.venv/bin/python",
+        ros2_script=filesystem_root / "opt/ros/jazzy/install/ros2cli/bin/ros2",
         data_root=filesystem_root / "opt/data",
         temp_root=filesystem_root / "opt/data/tmp",
-        dylib_farm=filesystem_root / "opt/ros2_jazzy/dylib_farm/current",
+        dylib_farm=filesystem_root / "opt/ros/jazzy/dylib_farm/current",
         project_install=install,
         runtime_home=filesystem_root / "opt/data/so101/home",
         ros_home=filesystem_root / "opt/data/so101/ros-home",
@@ -567,7 +567,7 @@ def _farm_fixture(tmp_path: Path, *, project_install: Path | None = None):
         "status": "PASS",
         "level": "complete",
         "closure_prefixes": [
-            str(filesystem_root / "opt/ros2_jazzy"),
+            str(filesystem_root / "opt/ros/jazzy"),
             str(filesystem_root / "opt/data/so101/workspace/install"),
             str(paths.dylib_farm),
         ],
@@ -817,4 +817,5 @@ def test_farm_environment_is_the_same_builder_as_the_runtime_contract_tool() -> 
     assert set(ours) == {
         "HOME", "PATH", "VIRTUAL_ENV", "PYTHONNOUSERSITE", "TMPDIR", "TMP", "TEMP",
         "ROS_HOME", "ROS_LOG_DIR", "ROS_DOMAIN_ID", "DYLD_LIBRARY_PATH",
+        "GZ_CONFIG_PATH", "GZ_SIM_SYSTEM_PLUGIN_PATH",
     }

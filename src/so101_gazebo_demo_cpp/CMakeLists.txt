@@ -163,6 +163,10 @@ ament_target_dependencies(sample_so101_workspace ament_index_cpp moveit_core mov
 
 add_library(so101_attachment_collision_system SHARED
   src/gazebo/attachment_collision_system.cpp)
+if(APPLE)
+  # Gazebo loads the filename embedded in the URDF, which is .so on both hosts.
+  set_target_properties(so101_attachment_collision_system PROPERTIES SUFFIX ".so")
+endif()
 target_compile_features(so101_attachment_collision_system PUBLIC cxx_std_17)
 target_link_libraries(so101_attachment_collision_system
   gz-msgs10::core gz-plugin2::gz-plugin2 gz-sim8::gz-sim8 gz-transport13::core)
@@ -371,6 +375,7 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_so101_launch_contract
     test/test_so101_launch_contract.py
+    TIMEOUT 300
   )
   ament_add_pytest_test(test_so101_srdf test/test_so101_srdf.py)
   ament_add_pytest_test(
@@ -420,7 +425,7 @@ if(BUILD_TESTING)
   # Direct installed-overlay run is 58.753 s under the live GUI stack and the
   # 60 s CTest wrapper expired at 60.03 s; retain assertion coverage while
   # allowing bounded wrapper/scheduler headroom.
-  set_tests_properties(test_fingertip_pad_geometry PROPERTIES TIMEOUT 90)
+  set_tests_properties(test_fingertip_pad_geometry PROPERTIES TIMEOUT 180)
   add_test(
     NAME test_cpp_quality_gate
     COMMAND

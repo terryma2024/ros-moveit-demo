@@ -120,8 +120,8 @@ describe("hostPaths", () => {
   it("uses this Mac's layout on darwin", () => {
     const paths = hostPaths("darwin");
     expect(paths.pythonSite).toBe("lib/python3.11/site-packages");
-    expect(paths.rosUnderlayRoot).toBe("/opt/ros2_jazzy/install");
-    expect(paths.rosUnderlaySite).toBe("/opt/ros2_jazzy/install/rclpy/lib/python3.11/site-packages");
+    expect(paths.rosUnderlayRoot).toBe("/opt/ros/jazzy/install");
+    expect(paths.rosUnderlaySite).toBe("/opt/ros/jazzy/install/rclpy/lib/python3.11/site-packages");
   });
 });
 
@@ -136,17 +136,17 @@ describe("the underlay search path", () => {
     // each carry their own site directory, so naming one of them drops the rest and the server
     // dies on `ModuleNotFoundError: No module named 'ament_index_python'` before it can serve.
     const environment = {
-      PYTHONPATH: "/opt/ros2_jazzy/install/ament_index_python/lib/python3.11/site-packages"
-        + ":/opt/ros2_jazzy/install/rclpy/lib/python3.11/site-packages",
-      AMENT_PREFIX_PATH: "/opt/data/so101/workspace/install/so101_teleop:/opt/ros2_jazzy/install/rclpy",
+      PYTHONPATH: "/opt/ros/jazzy/install/ament_index_python/lib/python3.11/site-packages"
+        + ":/opt/ros/jazzy/install/rclpy/lib/python3.11/site-packages",
+      AMENT_PREFIX_PATH: "/opt/data/so101/workspace/install/so101_teleop:/opt/ros/jazzy/install/rclpy",
     };
     expect(hostUnderlayPythonPath("darwin", environment)).toEqual([
-      "/opt/ros2_jazzy/install/ament_index_python/lib/python3.11/site-packages",
-      "/opt/ros2_jazzy/install/rclpy/lib/python3.11/site-packages",
+      "/opt/ros/jazzy/install/ament_index_python/lib/python3.11/site-packages",
+      "/opt/ros/jazzy/install/rclpy/lib/python3.11/site-packages",
     ]);
     expect(hostUnderlayPrefixPath("darwin", environment)).toEqual([
       "/opt/data/so101/workspace/install/so101_teleop",
-      "/opt/ros2_jazzy/install/rclpy",
+      "/opt/ros/jazzy/install/rclpy",
     ]);
   });
 

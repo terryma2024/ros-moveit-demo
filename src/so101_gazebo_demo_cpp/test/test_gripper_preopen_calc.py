@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import subprocess
 import re
+import sys
 import numpy as np
 import yaml
 
@@ -114,7 +115,7 @@ def test_calculator_runs_without_python_user_site_packages():
 
     completed = subprocess.run(
         [
-            'python3',
+            sys.executable,
             str(SCRIPT_PATH),
             '--mesh-dir',
             str(MESH_DIR),
@@ -177,7 +178,7 @@ def test_calibration_header_regenerates_without_user_site_packages():
     environment['PYTHONNOUSERSITE'] = '1'
     completed = subprocess.run(
         [
-            '/usr/bin/python3', str(SCRIPT_PATH),
+            sys.executable, str(SCRIPT_PATH),
             '--mesh-dir', str(MESH_DIR),
             '--urdf-path', str(URDF_PATH),
             '--print-calibration-header',

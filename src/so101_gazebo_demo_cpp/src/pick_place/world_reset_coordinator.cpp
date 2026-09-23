@@ -149,8 +149,9 @@ ActionResult WorldResetCoordinator::reset()
       config_.position_tolerance < 0.0 || config_.orientation_tolerance_rad < 0.0 ||
       config_.arm_joints.empty() ||
       config_.arm_joints.size() != config_.arm_home_positions.size() ||
-      !std::all_of(config_.arm_home_positions.begin(), config_.arm_home_positions.end(),
-                   [](double value) { return std::isfinite(value); }) ||
+      !std::all_of(
+        config_.arm_home_positions.begin(), config_.arm_home_positions.end(),
+        [](double value) { return std::isfinite(value); }) ||
       !std::isfinite(config_.q6_release_position) || !std::isfinite(config_.q6_safe_lower) ||
       !std::isfinite(config_.q6_home_position) ||
       !std::isfinite(config_.arm_joint_position_tolerance) ||

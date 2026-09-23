@@ -5,11 +5,12 @@ set -euo pipefail
 readonly script_path="${0:A}"
 readonly script_dir="${script_path:h}"
 readonly repository_root="${script_dir:h}"
-readonly ros_root=/opt/ros2_jazzy
+readonly ros_root=/opt/ros/jazzy
 readonly python_path="${ros_root}/.venv/bin/python"
 readonly colcon_path="${ros_root}/.venv/bin/colcon"
 readonly ros2_script="${ros_root}/install/ros2cli/bin/ros2"
 readonly farm_path="${ros_root}/dylib_farm/current"
+readonly gz_config_path=/opt/homebrew/opt/gz-sim8/share/gz:/opt/homebrew/opt/gz-transport13/share/gz:/opt/homebrew/opt/gz-msgs10/share/gz:/opt/homebrew/opt/gz-plugin2/share/gz:/opt/homebrew/opt/sdformat14/share/gz
 readonly data_root=/opt/data
 readonly temp_root="${data_root}/tmp"
 readonly runtime_root="${data_root}/so101"
@@ -52,7 +53,7 @@ clean_reexec() {
   domain_id="$(validated_domain_id)"
   exec /usr/bin/env -i \
     HOME="${runtime_root}/home" \
-    PATH="${ros_root}/.venv/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    PATH="${ros_root}/.venv/bin:/opt/homebrew/opt/ffmpeg-full/bin:/opt/homebrew/opt/llvm/bin:/opt/homebrew/opt/coreutils/libexec/gnubin:/opt/homebrew/opt/gnu-sed/libexec/gnubin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
     VIRTUAL_ENV="${ros_root}/.venv" \
     PYTHONNOUSERSITE=1 \
     TMPDIR="${temp_root}" TMP="${temp_root}" TEMP="${temp_root}" \
@@ -73,13 +74,15 @@ source_setup() {
 source_base_ros() {
   source_setup "${ros_root}/install/setup.zsh"
   source_setup "${ros_root}/extra_ws/install/setup.zsh"
+  export GZ_CONFIG_PATH="${gz_config_path}"
 }
 
 source_complete_runtime() {
   source_base_ros
-  source_setup "${fork_install}/setup.zsh"
-  source_setup "${project_install}/setup.zsh"
+  source_setup "${fork_install}/local_setup.zsh"
+  source_setup "${project_install}/local_setup.zsh"
   export DYLD_LIBRARY_PATH="${farm_path}"
+  export GZ_SIM_SYSTEM_PLUGIN_PATH="${ros_root}/extra_ws/install/lib:${project_install}/so101_gazebo_demo_cpp/lib"
 }
 
 case "${1:-}" in
@@ -137,7 +140,7 @@ case "${1:-}" in
     if [[ -e "${lodepng_cache}/.git" ]]; then
       export SO101_LODEPNG_SOURCE_DIR="${lodepng_cache}"
     fi
-    fork_workspace="${fork_runtime_root}/runs/${locked_commit}"
+    fork_workspace="${fork_runtime_root}/runs/${locked_commit}-opt-ros-jazzy"
     built_fork_install="${fork_workspace}/ws_mujoco_ros2_control_fork/install"
     required_fork_header="${built_fork_install}/include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugin_capabilities.hpp"
     fork_commit_marker="${built_fork_install}/share/mujoco_ros2_control/so101-locked-commit.txt"
@@ -165,8 +168,8 @@ case "${1:-}" in
       fail "locked fork validation marker is missing or stale: ${fork_commit_marker}"
     next_fork_link="${fork_runtime_root}/.current-${$}"
     ln -s "${built_fork_install}" "${next_fork_link}"
-    mv -fh "${next_fork_link}" "${fork_install}"
-    source_setup "${fork_install}/setup.zsh"
+    /bin/mv -fh "${next_fork_link}" "${fork_install}"
+    source_setup "${fork_install}/local_setup.zsh"
     "${colcon_path}" --log-base "${workspace_root}/log" build \
       --base-paths "${repository_root}/src" \
       --build-base "${workspace_root}/build" \

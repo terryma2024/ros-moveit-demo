@@ -34,8 +34,8 @@ resolve_paths() {
   patch_file=${project_root}/tools/mujoco_vendor_macos/patches/mujoco-3.4.0-glfw-no-primary-monitor.patch
   vendor_package=${project_root}/tools/mujoco_vendor_macos
 
-  ros_workspace=${SO101_ROS_WORKSPACE:-${SO101_ROS_ROOT:-${HOME}/ros2_jazzy}}
-  ros_underlay=${SO101_ROS_UNDERLAY:-/opt/ros/jazzy}
+  ros_workspace=${SO101_ROS_WORKSPACE:-${SO101_ROS_ROOT:-/opt/ros/jazzy}}
+  ros_underlay=${SO101_ROS_UNDERLAY:-${ros_workspace}/install}
   colcon_command=${SO101_COLCON:-${ros_workspace}/.venv/bin/colcon}
   python_command=${SO101_PYTHON:-${ros_workspace}/.venv/bin/python}
   authority_source=${SO101_MUJOCO_SOURCE_ROOT:-${ros_workspace}/extra_ws/src/mujoco}

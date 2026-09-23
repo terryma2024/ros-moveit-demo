@@ -127,10 +127,10 @@ export function hostPaths(platform: NodeJS.Platform = process.platform): HostPat
   if (platform === "darwin") {
     return {
       pythonSite: "lib/python3.11/site-packages",
-      rosUnderlayRoot: "/opt/ros2_jazzy/install",
-      rosUnderlaySite: "/opt/ros2_jazzy/install/rclpy/lib/python3.11/site-packages",
+      rosUnderlayRoot: "/opt/ros/jazzy/install",
+      rosUnderlaySite: "/opt/ros/jazzy/install/rclpy/lib/python3.11/site-packages",
       dependencyPrefixDefault:
-        "/opt/data/so101/runtime/fork/current:/opt/ros2_jazzy/extra_ws/install",
+        "/opt/data/so101/runtime/fork/current:/opt/ros/jazzy/extra_ws/install",
     };
   }
   return {

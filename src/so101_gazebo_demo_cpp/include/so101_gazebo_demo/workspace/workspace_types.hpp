@@ -64,17 +64,17 @@ struct GeneratedJointSample
 
 struct PoseSample
 {
-  std::uint64_t sample_id;
-  SampleSource source;
-  std::array<double, 5> arm_joints;
-  double gripper_q6;
-  pick_place::Pose3d tcp_pose;
-  bool bounds_valid;
-  bool self_collision;
-  bool scene_collision;
-  bool collision_free;
-  PositionVoxelKey position_voxel;
-  std::uint32_t orientation_cluster_id;
+  std::uint64_t sample_id{0};
+  SampleSource source{};
+  std::array<double, 5> arm_joints{};
+  double gripper_q6{0.0};
+  pick_place::Pose3d tcp_pose{};
+  bool bounds_valid{false};
+  bool self_collision{false};
+  bool scene_collision{false};
+  bool collision_free{false};
+  PositionVoxelKey position_voxel{};
+  std::uint32_t orientation_cluster_id{0};
 };
 
 struct BatchCoverageDelta

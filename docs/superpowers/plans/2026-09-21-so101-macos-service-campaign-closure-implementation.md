@@ -21,9 +21,9 @@
 > 的 Tasks 2、3、10。授权只放开 DYLD 的构造方式；closure inventory、owner ancestry、PID/birth、
 > executable、plugin/vendor path+SHA 和 cleanup 证据没有放宽。
 >
-> 冻结的五个 prefix：`/opt/ros2_jazzy/install`、`/opt/ros2_jazzy/extra_ws/install`、
+> 冻结的五个 prefix：`/opt/ros/jazzy/install`、`/opt/ros/jazzy/extra_ws/install`、
 > `/opt/data/so101/runtime/fork/current`、`/opt/data/so101/workspace/install`、
-> `/opt/ros2_jazzy/dylib_farm/current`。Python、诊断 CLI、ament index、launch executable 和
+> `/opt/ros/jazzy/dylib_farm/current`。Python、诊断 CLI、ament index、launch executable 和
 > controller plugin/vendor 都必须能归属到其中之一。每轮 attestation 至少带 role、pid、birth、
 > executable、plugin_path、plugin_sha256、vendor_path、vendor_sha256 和 owner_binding_sha256。
 

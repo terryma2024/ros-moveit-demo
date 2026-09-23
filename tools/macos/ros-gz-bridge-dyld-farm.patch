@@ -1,0 +1,35 @@
+diff --git a/ros_gz_bridge/CMakeLists.txt b/ros_gz_bridge/CMakeLists.txt
+index 03e3d83..46b0b9b 100644
+--- a/ros_gz_bridge/CMakeLists.txt
++++ b/ros_gz_bridge/CMakeLists.txt
+@@ -70,9 +70,20 @@ set(target_dependencies
+ 
+ find_package(Python3 REQUIRED COMPONENTS Interpreter)
+ 
++# A CMake build subprocess on macOS can lose DYLD_LIBRARY_PATH before running
++# the Python generators. Restore the fixed ROS dylib farm at that boundary.
++if(APPLE AND SO101_MACOS_DYLIB_FARM)
++  set(ros_gz_python_command
++    ${CMAKE_COMMAND} -E env
++    "DYLD_LIBRARY_PATH=${SO101_MACOS_DYLIB_FARM}"
++    ${Python3_EXECUTABLE})
++else()
++  set(ros_gz_python_command ${Python3_EXECUTABLE})
++endif()
++
+ add_custom_command(
+   OUTPUT ${generated_files}
+-  COMMAND Python3::Interpreter
++  COMMAND ${ros_gz_python_command}
+   ARGS bin/ros_gz_bridge_generate_factories
+     --output-path "${generated_path}" --template-dir resource
+     --gz-msgs-ver "${GZ_MSGS_VERSION_FULL}"
+@@ -273,7 +284,7 @@ if(BUILD_TESTING)
+ 
+   add_custom_command(
+     OUTPUT ${generated_files}
+-    COMMAND Python3::Interpreter
++    COMMAND ${ros_gz_python_command}
+     ARGS bin/ros_gz_bridge_generate_tests
+       --output-path "${generated_path}" --template-dir test/resource/
+       --gz-msgs-ver "${GZ_MSGS_VERSION_FULL}"

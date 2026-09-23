@@ -103,7 +103,8 @@ class SO101MotionPlanValidator final : public IPlanValidator
 {
 public:
   SO101MotionPlanValidator(MotionValidationConfig config, bool require_ladder);
-  ValidationResult validate(State, const WorldSnapshot &, const PlanArtifact &) const override;
+  [[nodiscard]] ValidationResult validate(State, const WorldSnapshot &,
+                                          const PlanArtifact &) const override;
 
 private:
   MotionValidationConfig config_;

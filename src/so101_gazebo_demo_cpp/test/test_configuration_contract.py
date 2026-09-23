@@ -4,6 +4,7 @@ import json
 import subprocess
 import xml.etree.ElementTree as ET
 
+from ament_index_python.packages import get_package_prefix
 import pytest
 import yaml
 
@@ -13,6 +14,10 @@ CONFIG_DIR = PACKAGE_DIR / 'config'
 XACRO_PATH = PACKAGE_DIR / 'urdf' / 'so101.urdf.xacro'
 COLLISION_DIR = PACKAGE_DIR / 'meshes' / 'so101' / 'collision'
 PREOPEN_CALCULATOR_PATH = PACKAGE_DIR / 'scripts' / 'gripper_preopen_calc.py'
+BUILD_ASSET_ROOT = (
+    Path(get_package_prefix('so101_gazebo_demo_cpp')).parents[1]
+    / 'build' / 'so101_gazebo_demo_cpp' / 'fingertip_pad_assets'
+)
 
 
 def load_preopen_calculator_module():
@@ -117,10 +122,7 @@ def test_gripper_trajectory_success_requires_mesh_bounded_joint6_convergence():
     calculator = load_preopen_calculator_module()
     calibration = calculator.calculate_fingertip_pad_gap_calibration(
         CONFIG_DIR / 'task_objects' / 'light_plastic_cup.yaml',
-        PACKAGE_DIR.parents[1]
-        / 'build'
-        / 'so101_gazebo_demo_cpp'
-        / 'fingertip_pad_assets',
+        BUILD_ASSET_ROOT,
         PACKAGE_DIR / 'urdf' / 'so101_base.xacro',
     )
     contact_limit = load_yaml('validation_policies/light_cup_wall_pick.yaml')[
@@ -409,10 +411,7 @@ def test_srdf_group_and_named_state_contract():
     calculator = load_preopen_calculator_module()
     calibration = calculator.calculate_fingertip_pad_gap_calibration(
         PACKAGE_DIR / 'config/task_objects/light_plastic_cup.yaml',
-        PACKAGE_DIR.parents[1]
-        / 'build'
-        / 'so101_gazebo_demo_cpp'
-        / 'fingertip_pad_assets',
+        BUILD_ASSET_ROOT,
         PACKAGE_DIR / 'urdf' / 'so101_base.xacro',
     )
     assert states[('gripper', 'contact')] == {

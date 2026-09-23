@@ -33,11 +33,12 @@ class JointSampleGenerator
 {
 public:
   explicit JointSampleGenerator(JointBounds bounds);
-  std::vector<GeneratedJointSample> explicitSamples(const std::array<double, 5> & home) const;
+  [[nodiscard]] std::vector<GeneratedJointSample>
+  explicitSamples(const std::array<double, 5> & home) const;
   std::vector<GeneratedJointSample> nextGlobal(std::size_t count);
   std::vector<GeneratedJointSample> nextRefined(const std::vector<RefinementSeed> & seeds,
                                                 std::size_t count);
-  GeneratorCheckpoint checkpoint() const;
+  [[nodiscard]] GeneratorCheckpoint checkpoint() const;
   void restore(const GeneratorCheckpoint & checkpoint);
 
 private:

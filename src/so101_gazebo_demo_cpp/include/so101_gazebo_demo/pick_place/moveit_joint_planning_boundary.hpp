@@ -144,7 +144,7 @@ public:
   captureWorldZMicroDescendPlanningRequest(const Pose3d & current_tcp_world,
                                            double target_world_z_m);
   ActionResult cancelWorldZMicroDescend() override;
-  std::optional<RobotStateEvidence>
+  [[nodiscard]] std::optional<RobotStateEvidence>
   evaluate(const std::vector<std::string> & joint_names,
            const std::vector<double> & joint_positions,
            const std::set<std::string> & allowed_touch_pairs,

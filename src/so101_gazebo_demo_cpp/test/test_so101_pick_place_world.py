@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 import uuid
@@ -76,6 +77,8 @@ def isolated_runtime_environment(partition_prefix):
 
 def arm_parent_death_signal():
     """Make a launch process receive SIGINT if its pytest parent disappears."""
+    if sys.platform != 'linux':
+        return
     parent_pid = os.getppid()
     libc = ctypes.CDLL(None, use_errno=True)
     if libc.prctl(1, signal.SIGINT) != 0:
@@ -85,7 +88,9 @@ def arm_parent_death_signal():
         os.kill(os.getpid(), signal.SIGINT)
 
 
-def wait_for_ros_topics(environment, required, launch, log, timeout=45):
+def wait_for_ros_topics(environment, required, launch, log, timeout=None):
+    if timeout is None:
+        timeout = 150 if sys.platform == 'darwin' else 45
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if launch.poll() is not None:
@@ -101,7 +106,8 @@ def wait_for_ros_topics(environment, required, launch, log, timeout=45):
         if completed.returncode == 0 and required <= set(completed.stdout.split()):
             return
         time.sleep(0.25)
-    pytest.fail(f'timed out waiting for ROS topics: {sorted(required)}')
+    log.seek(0)
+    pytest.fail(f'timed out waiting for ROS topics: {sorted(required)}\n{log.read()}')
 
 
 def pose_positions(payload):

@@ -20,11 +20,11 @@ REQUIRED_EXTERNAL_ENVIRONMENT: tuple[str, ...] = ()
 #: The authorized fixed dylib farm contract (design section 17): the five prefixes every
 #: runtime artifact has to be attributable to, and the two images an A2 round attests.
 FIXED_CLOSURE_PREFIXES = (
-    "/opt/ros2_jazzy/install",
-    "/opt/ros2_jazzy/extra_ws/install",
+    "/opt/ros/jazzy/install",
+    "/opt/ros/jazzy/extra_ws/install",
     "/opt/data/so101/runtime/fork/current",
     "/opt/data/so101/workspace/install",
-    "/opt/ros2_jazzy/dylib_farm/current",
+    "/opt/ros/jazzy/dylib_farm/current",
 )
 FIXED_DYLIB_FARM_CONTRACT_SCHEMA_VERSION = 1
 CONTROLLER_RUNTIME_RELATIVE_PATH = "lib/mujoco_ros2_control/ros2_control_node"
@@ -86,7 +86,7 @@ class RuntimePaths:
     ) -> "RuntimePaths":
         root = Path(filesystem_root)
         repository = Path(repository_root).resolve()
-        ros_root = root / "opt/ros2_jazzy"
+        ros_root = root / "opt/ros/jazzy"
         data_root = root / "opt/data"
         temp_root = data_root / "tmp"
         runtime_root = data_root / "so101"
@@ -114,8 +114,8 @@ class RuntimePaths:
         return (
             self.ros_install / "setup.zsh",
             self.ros_dependency_overlay / "setup.zsh",
-            self.ros_fork_overlay / "setup.zsh",
-            self.project_install / "setup.zsh",
+            self.ros_fork_overlay / "local_setup.zsh",
+            self.project_install / "local_setup.zsh",
         )
 
 
@@ -246,6 +246,10 @@ def build_runtime_environment(
         "PATH": os.pathsep.join(
             (
                 str(paths.python.parent),
+                "/opt/homebrew/opt/ffmpeg-full/bin",
+                "/opt/homebrew/opt/llvm/bin",
+                "/opt/homebrew/opt/coreutils/libexec/gnubin",
+                "/opt/homebrew/opt/gnu-sed/libexec/gnubin",
                 "/opt/homebrew/bin",
                 "/usr/bin",
                 "/bin",
@@ -254,6 +258,12 @@ def build_runtime_environment(
             )
         ),
         "VIRTUAL_ENV": str(paths.python.parents[1]),
+        "GZ_CONFIG_PATH": os.pathsep.join(
+            f"/opt/homebrew/opt/{package}/share/gz"
+            for package in (
+                "gz-sim8", "gz-transport13", "gz-msgs10", "gz-plugin2", "sdformat14"
+            )
+        ),
         "PYTHONNOUSERSITE": "1",
         "TMPDIR": str(paths.temp_root),
         "TMP": str(paths.temp_root),
@@ -262,6 +272,12 @@ def build_runtime_environment(
         "ROS_LOG_DIR": str(paths.ros_log_dir),
         "ROS_DOMAIN_ID": str(domain_id),
         "DYLD_LIBRARY_PATH": str(paths.dylib_farm),
+        "GZ_SIM_SYSTEM_PLUGIN_PATH": os.pathsep.join(
+            (
+                str(paths.ros_dependency_overlay / "lib"),
+                str(paths.project_install / "so101_gazebo_demo_cpp/lib"),
+            )
+        ),
     }
 
 
@@ -412,8 +428,8 @@ def validate_complete_contract(
         python_probe=python_probe,
     )
     _require_directory(paths.ros_fork_overlay, "ROS_FORK_OVERLAY_MISSING")
-    _require_file(paths.ros_fork_overlay / "setup.zsh", "ROS_SETUP_MISSING")
-    _require_file(paths.project_install / "setup.zsh", "PROJECT_SETUP_MISSING")
+    _require_file(paths.ros_fork_overlay / "local_setup.zsh", "ROS_SETUP_MISSING")
+    _require_file(paths.project_install / "local_setup.zsh", "PROJECT_SETUP_MISSING")
     for project_package in (
         "so101_demo_py",
         "so101_mujoco_support",

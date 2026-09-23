@@ -257,7 +257,7 @@ TEST(SO101JointMotionAdapter, RetreatAcceptsMatchingSupportedCylinderYaw)
 
 TEST(SO101JointMotionAdapter, CarryingAcceptsCylindricalAxialSelfSpin)
 {
-  auto profile = spp::SO101Profile::canonical();
+  const auto & profile = spp::SO101Profile::canonical();
   auto boundary = std::make_shared<FakeBoundary>();
   boundary->scene = carryingScene();
   boundary->scene.attached_relative_pose = withLocalYaw(graspRelativePose(), 0.20);
@@ -328,7 +328,7 @@ TEST(SO101JointMotionAdapter, RetreatUsesValidatedFullOpenTolerance)
 
 TEST(SO101JointMotionAdapter, CarryingLoadDriftRequiresBoundedBilateralContact)
 {
-  auto profile = spp::SO101Profile::canonical();
+  const auto & profile = spp::SO101Profile::canonical();
   auto request = goalRequest();
   request.state = spp::State::MOVE_ABOVE_PLACE;
   request.carrying = true;
@@ -366,7 +366,7 @@ TEST(SO101JointMotionAdapter, CarryingLoadDriftRequiresBoundedBilateralContact)
 TEST(SO101JointMotionAdapter,
      CarryingContactLoadVelocityRequiresBoundedBilateralContactAndCanonicalScene)
 {
-  auto profile = spp::SO101Profile::canonical();
+  const auto & profile = spp::SO101Profile::canonical();
   auto request = goalRequest();
   request.state = spp::State::MOVE_ABOVE_PLACE;
   request.carrying = true;

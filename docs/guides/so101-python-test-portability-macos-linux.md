@@ -183,14 +183,14 @@ scripts/so101-macos.zsh doctor --json
 随后在干净 zsh 中按固定顺序加载环境：
 
 ```zsh
-source /opt/ros2_jazzy/install/setup.zsh
-source /opt/ros2_jazzy/extra_ws/install/setup.zsh
-source /opt/data/so101/runtime/fork/current/setup.zsh
-source /opt/data/so101/workspace/install/setup.zsh
-export DYLD_LIBRARY_PATH=/opt/ros2_jazzy/dylib_farm/current
+source /opt/ros/jazzy/install/setup.zsh
+source /opt/ros/jazzy/extra_ws/install/setup.zsh
+source /opt/data/so101/runtime/fork/current/local_setup.zsh
+source /opt/data/so101/workspace/install/local_setup.zsh
+export DYLD_LIBRARY_PATH=/opt/ros/jazzy/dylib_farm/current
 export TMPDIR=/opt/data/tmp TMP=/opt/data/tmp TEMP=/opt/data/tmp
 
-/opt/ros2_jazzy/.venv/bin/python -m pytest -q -n 8 --dist loadscope \
+/opt/ros/jazzy/.venv/bin/python -m pytest -q -n 8 --dist loadscope \
   --basetemp=/opt/data/tmp/pytest-<unique-run-id> \
   --junitxml="$TASK_EVIDENCE/so101-demo-py-macos.xml" \
   src/so101_demo_py/test

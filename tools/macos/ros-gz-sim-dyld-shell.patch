@@ -1,0 +1,37 @@
+diff --git a/ros_gz_sim/launch/gz_sim.launch.py.in b/ros_gz_sim/launch/gz_sim.launch.py.in
+index 6a06642..21795f4 100644
+--- a/ros_gz_sim/launch/gz_sim.launch.py.in
++++ b/ros_gz_sim/launch/gz_sim.launch.py.in
+@@ -16,7 +16,9 @@
+ 
+ import os
+ from os import environ
++import shlex
+ import shutil
++import sys
+ 
+ from ament_index_python.packages import get_package_share_directory
+ from catkin_pkg.package import InvalidPackage, PACKAGE_MANIFEST_FILENAME, parse_package
+@@ -135,12 +137,20 @@ def launch_gz(context, *args, **kwargs):
+     else:
+         on_exit = None
+ 
++    command = [exec, exec_args, '--force-version', gz_version]
++    if sys.platform == 'darwin':
++        # launch shell=True selects /bin/sh, which strips DYLD_LIBRARY_PATH.
++        gz_command = 'ign' if len(ign_version) or (ign_version == '' and int(gz_version) < 7) else 'gz'
++        subcommand = 'gazebo' if gz_command == 'ign' else 'sim'
++        command = [get_executable_path('ruby'), get_executable_path(gz_command), subcommand,
++                   *shlex.split(exec_args), '--force-version', gz_version]
++
+     ld = [ExecuteProcess(
+-                cmd=[exec, exec_args, '--force-version', gz_version],
++                cmd=command,
+                 name='gazebo',
+                 output='screen',
+                 additional_env=env,
+-                shell=True,
++                shell=sys.platform != 'darwin',
+                 prefix=debug_prefix,
+                 on_exit=on_exit
+                 )

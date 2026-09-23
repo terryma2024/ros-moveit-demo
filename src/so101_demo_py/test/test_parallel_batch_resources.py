@@ -646,20 +646,22 @@ def test_concurrent_batches_cannot_claim_the_same_ros_domains(tmp_path, config):
             outcomes.put(('rejected', resource_allocator, str(error)))
             return
         outcomes.put(('admitted', resource_allocator, None))
-        release.wait(timeout=5)
+        release.wait()
         resource_allocator.close()
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         futures = [executor.submit(attempt, item) for item in (first, second)]
-        observed = [outcomes.get(timeout=5), outcomes.get(timeout=5)]
-        assert sorted(item[0] for item in observed) == ['admitted', 'rejected']
-        rejected = next(item for item in observed if item[0] == 'rejected')
-        assert 'ROS_DOMAIN_CLAIMED' in rejected[2]
-        winner = next(item[1] for item in observed if item[0] == 'admitted')
-        first_document = winner.manifest.to_dict()
-        release.set()
+        try:
+            observed = [outcomes.get(timeout=30), outcomes.get(timeout=30)]
+            assert sorted(item[0] for item in observed) == ['admitted', 'rejected']
+            rejected = next(item for item in observed if item[0] == 'rejected')
+            assert 'ROS_DOMAIN_CLAIMED' in rejected[2]
+            winner = next(item[1] for item in observed if item[0] == 'admitted')
+            first_document = winner.manifest.to_dict()
+        finally:
+            release.set()
         for future in futures:
-            future.result(timeout=5)
+            future.result(timeout=30)
 
     assert first_document['domain_claim_scope'] == 'cooperating_same_uid_processes'
     assert [claim['domain_id'] for claim in first_document['domain_claims']] == [181, 182]

@@ -7,13 +7,17 @@ from pathlib import Path
 
 import pytest
 import yaml
+from ament_index_python.packages import get_package_prefix
 
 
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
 SCRIPT = PACKAGE_DIR / 'scripts' / 'gripper_preopen_calc.py'
 CONFIG = PACKAGE_DIR / 'config' / 'task_objects' / 'light_plastic_cup.yaml'
 URDF = PACKAGE_DIR / 'urdf' / 'so101_base.xacro'
-ASSETS = PACKAGE_DIR.parents[1] / 'build' / 'so101_gazebo_demo_cpp' / 'fingertip_pad_assets'
+ASSETS = (
+    Path(get_package_prefix('so101_gazebo_demo_cpp')).parents[1]
+    / 'build' / 'so101_gazebo_demo_cpp' / 'fingertip_pad_assets'
+)
 HEADER = PACKAGE_DIR / 'include' / 'so101_gazebo_demo' / 'pick_place' / 'fingertip_pad_gap_calibration_data.hpp'
 
 

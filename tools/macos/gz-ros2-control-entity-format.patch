@@ -1,0 +1,27 @@
+diff --git a/gz_ros2_control/src/gz_ros2_control_plugin.cpp b/gz_ros2_control/src/gz_ros2_control_plugin.cpp
+index 04a674c..fa946aa 100644
+--- a/gz_ros2_control/src/gz_ros2_control_plugin.cpp
++++ b/gz_ros2_control/src/gz_ros2_control_plugin.cpp
+@@ -230,8 +230,8 @@ GazeboSimROS2ControlPluginPrivate::GetEnabledJoints(
+         {
+           RCLCPP_WARN(
+             node_->get_logger(),
+-            "[gz_ros2_control] Joint [%s] (Entity=%lu)] is of unknown type",
+-            jointName.c_str(), jointEntity);
++            "[gz_ros2_control] Joint [%s] (Entity=%llu)] is of unknown type",
++            jointName.c_str(), static_cast<unsigned long long>(jointEntity));
+           continue;
+         }
+     }
+@@ -267,9 +267,9 @@ void GazeboSimROS2ControlPlugin::Configure(
+   if (!model.Valid(_ecm)) {
+     RCLCPP_ERROR(
+       logger,
+-      "[Gazebo ROS 2 Control] Failed to initialize because [%s] (Entity=%lu)] is not a model."
++      "[Gazebo ROS 2 Control] Failed to initialize because [%s] (Entity=%llu)] is not a model."
+       "Please make sure that Gazebo ROS 2 Control is attached to a valid model.",
+-      model.Name(_ecm).c_str(), _entity);
++      model.Name(_ecm).c_str(), static_cast<unsigned long long>(_entity));
+     return;
+   }
+ 

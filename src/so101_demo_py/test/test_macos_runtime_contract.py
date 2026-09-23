@@ -26,7 +26,7 @@ def contract_fixture(tmp_path: Path):
     module = _load_contract_module()
     filesystem_root = tmp_path / "host"
     physical_ros_root = tmp_path / "ros-source"
-    logical_ros_root = filesystem_root / "opt/ros2_jazzy"
+    logical_ros_root = filesystem_root / "opt/ros/jazzy"
     data_root = filesystem_root / "opt/data"
     temp_root = data_root / "tmp"
     repository_root = tmp_path / "checkout"
@@ -60,11 +60,13 @@ def contract_fixture(tmp_path: Path):
     fork_install = data_root / "so101/runtime/fork/runs/fixture/install"
     fork_install.mkdir(parents=True)
     (fork_install / "setup.zsh").write_text("#!/bin/zsh\n", encoding="utf-8")
+    (fork_install / "local_setup.zsh").write_text("#!/bin/zsh\n", encoding="utf-8")
     (data_root / "so101/runtime/fork/current").symlink_to(fork_install)
 
     project_setup = data_root / "so101/workspace/install/setup.zsh"
     project_setup.parent.mkdir(parents=True)
     project_setup.write_text("#!/bin/zsh\n", encoding="utf-8")
+    project_setup.with_name("local_setup.zsh").write_text("#!/bin/zsh\n", encoding="utf-8")
     for project_package in (
         "so101_demo_py",
         "so101_mujoco_support",
@@ -107,12 +109,16 @@ def test_production_contract_has_no_required_external_environment() -> None:
     paths = module.RuntimePaths.production(REPOSITORY_ROOT)
 
     assert module.REQUIRED_EXTERNAL_ENVIRONMENT == ()
-    assert paths.ros_root == Path("/opt/ros2_jazzy")
-    assert paths.ros_install == Path("/opt/ros2_jazzy/install")
-    assert paths.python == Path("/opt/ros2_jazzy/.venv/bin/python")
+    assert paths.ros_root == Path("/opt/ros/jazzy")
+    assert paths.ros_install == Path("/opt/ros/jazzy/install")
+    assert paths.python == Path("/opt/ros/jazzy/.venv/bin/python")
     assert paths.data_root == Path("/opt/data")
     assert paths.temp_root == Path("/opt/data/tmp")
-    assert paths.dylib_farm == Path("/opt/ros2_jazzy/dylib_farm/current")
+    assert paths.dylib_farm == Path("/opt/ros/jazzy/dylib_farm/current")
+    assert paths.setup_files[2:] == (
+        Path("/opt/data/so101/runtime/fork/current/local_setup.zsh"),
+        Path("/opt/data/so101/workspace/install/local_setup.zsh"),
+    )
 
 
 def test_base_contract_accepts_a_valid_logical_symlink(contract_fixture) -> None:
@@ -226,7 +232,23 @@ def test_environment_is_rebuilt_from_the_contract_not_the_calling_shell(
     assert first == second
     assert first["HOME"] == str(paths.runtime_home)
     assert first["PATH"].split(os.pathsep)[0] == str(paths.python.parent)
+    assert first["PATH"].split(os.pathsep)[1:5] == [
+        "/opt/homebrew/opt/ffmpeg-full/bin",
+        "/opt/homebrew/opt/llvm/bin",
+        "/opt/homebrew/opt/coreutils/libexec/gnubin",
+        "/opt/homebrew/opt/gnu-sed/libexec/gnubin",
+    ]
     assert first["DYLD_LIBRARY_PATH"] == str(paths.dylib_farm)
+    assert first["GZ_SIM_SYSTEM_PLUGIN_PATH"].split(os.pathsep) == [
+        str(paths.ros_dependency_overlay / "lib"),
+        str(paths.project_install / "so101_gazebo_demo_cpp/lib"),
+    ]
+    assert first["GZ_CONFIG_PATH"].split(os.pathsep) == [
+        f"/opt/homebrew/opt/{package}/share/gz"
+        for package in (
+            "gz-sim8", "gz-transport13", "gz-msgs10", "gz-plugin2", "sdformat14"
+        )
+    ]
     assert first["TMPDIR"] == first["TMP"] == first["TEMP"] == str(paths.temp_root)
     assert first["ROS_HOME"] == str(paths.ros_home)
     assert first["ROS_LOG_DIR"] == str(paths.ros_log_dir)

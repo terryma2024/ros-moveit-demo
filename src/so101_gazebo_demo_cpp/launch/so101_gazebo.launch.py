@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import shlex
+import shutil
 import sys
 import tempfile
 from ament_index_python.packages import get_package_share_directory
@@ -84,11 +85,11 @@ def initial_detach_command(timeout_seconds=INITIAL_DETACH_TIMEOUT_SECONDS):
         "| grep -q 'data: \"detached\"'; do sleep 0.1; done"
     )
     return [
-        "/usr/bin/timeout",
+        shutil.which("timeout") or "/usr/bin/timeout",
         "--signal=TERM",
         "--kill-after=1",
         str(timeout_seconds),
-        "/bin/bash",
+        shutil.which("bash") or "/bin/bash",
         "-c",
         wait_and_publish,
     ]
@@ -104,11 +105,11 @@ def attachment_relay_ready_command(
         f"{shlex.quote(ready_topic)} std_msgs/msg/Empty"
     )
     return [
-        "/usr/bin/timeout",
+        shutil.which("timeout") or "/usr/bin/timeout",
         "--signal=TERM",
         "--kill-after=1",
         str(timeout_seconds),
-        "/bin/bash",
+        shutil.which("bash") or "/bin/bash",
         "-c",
         wait_for_relay,
     ]

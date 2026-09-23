@@ -52,10 +52,10 @@ public:
   WorkspaceCheckpointStore(std::filesystem::path output_directory,
                            WorkspaceProvenance expected_provenance);
   void writeCheckpointAtomically(const WorkspaceCheckpoint & checkpoint);
-  WorkspaceCheckpoint loadCheckpoint() const;
-  ResumeDecision validateResume(const WorkspaceCheckpoint & checkpoint) const;
+  [[nodiscard]] WorkspaceCheckpoint loadCheckpoint() const;
+  [[nodiscard]] ResumeDecision validateResume(const WorkspaceCheckpoint & checkpoint) const;
   void prepareResumeDirectory(const WorkspaceCheckpoint & checkpoint) const;
-  const WorkspaceProvenance & expectedProvenance() const noexcept;
+  [[nodiscard]] const WorkspaceProvenance & expectedProvenance() const noexcept;
 
 private:
   std::filesystem::path output_directory_;

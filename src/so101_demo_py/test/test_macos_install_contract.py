@@ -262,12 +262,12 @@ def test_macos_environment_uses_the_fixed_runtime_contract() -> None:
     envrc = ENVRC_EXAMPLE.read_text(encoding="utf-8")
     dylib_farm = DYLIB_FARM.read_text(encoding="utf-8")
 
-    assert "ros_root=/opt/ros2_jazzy" in envrc
+    assert "ros_root=/opt/ros/jazzy" in envrc
     assert '"$ros_root/install/setup.bash"' in envrc
     assert 'dylib_farm="$ros_root/dylib_farm/current"' in envrc
     assert '${HOME}/ros2_jazzy' not in envrc
-    assert '/opt/ros/jazzy' not in envrc
-    assert 'SO101_ROS_ROOT:-/opt/ros2_jazzy' in dylib_farm
+    assert '/opt/ros2_jazzy' not in envrc
+    assert 'SO101_ROS_ROOT:-/opt/ros/jazzy' in dylib_farm
     assert '${ros_workspace}/dylib_farm' in dylib_farm
 
 
@@ -278,8 +278,8 @@ def test_macos_environment_sources_the_project_overlay_last() -> None:
     expected_order = (
         '"$ros_root/install/setup.bash"',
         '"$ros_root/extra_ws/install/setup.bash"',
-        '"/opt/data/so101/runtime/fork/current/setup.bash"',
-        '"/opt/data/so101/workspace/install/setup.bash"',
+        '"/opt/data/so101/runtime/fork/current/local_setup.bash"',
+        '"/opt/data/so101/workspace/install/local_setup.bash"',
     )
     positions = [setup_block.index(item) for item in expected_order]
     assert positions == sorted(positions)
@@ -309,17 +309,18 @@ def test_mujoco_installer_validates_platform_library_names() -> None:
     assert 'suffix = ".dylib" if platform.system() == "Darwin" else ".so"' in installer
 
 
-def test_installer_builds_a_clean_locked_fork_without_patch_application() -> None:
+def test_installer_builds_locked_fork_with_only_the_macos_rpath_test_patch() -> None:
     installer = INSTALLER.read_text(encoding="utf-8")
 
     for forbidden in (
         "patch_series",
         "portable_patches",
         "apply_patch_series",
-        "git apply",
-        "if [[ $(uname -s) == Darwin ]]",
     ):
         assert forbidden not in installer
+    assert "tools/macos/mujoco-fork-rpath-test.patch" in installer
+    assert 'git -C "${build_source_dir}" apply --check "${patch_file}"' in installer
+    assert '/usr/bin/cmp -s - "${patch_file}"' in installer
     assert '--base-paths "${build_source_dir}"' in installer
     assert "status --porcelain --untracked-files=all" in installer
     assert "build source must be clean" in installer
@@ -519,7 +520,7 @@ def test_macos_dylib_farm_links_source_overlays_with_later_prefix_precedence(
 #: ancestry, PID/birth, executable, plugin/vendor path+SHA and cleanup evidence all still apply.
 FIXED_DYLIB_FARM_CONTRACT_TOKENS = (
     "FixedDylibFarmRuntimeContract",
-    "/opt/ros2_jazzy/dylib_farm/current",
+    "/opt/ros/jazzy/dylib_farm/current",
     "owner ancestry",
     "pid",
     "birth",
@@ -531,11 +532,11 @@ FIXED_DYLIB_FARM_CONTRACT_TOKENS = (
 )
 
 FIXED_DYLIB_FARM_CLOSURE_PREFIXES = (
-    "/opt/ros2_jazzy/install",
-    "/opt/ros2_jazzy/extra_ws/install",
+    "/opt/ros/jazzy/install",
+    "/opt/ros/jazzy/extra_ws/install",
     "/opt/data/so101/runtime/fork/current",
     "/opt/data/so101/workspace/install",
-    "/opt/ros2_jazzy/dylib_farm/current",
+    "/opt/ros/jazzy/dylib_farm/current",
 )
 
 #: One literal marker, carried by every document that has to say which contract is current.
@@ -608,7 +609,7 @@ FINAL_GATE_RUNNER = (
 REGISTERED_EVIDENCE_ROOT = (
     "/tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1"
 )
-REGISTERED_TEST_PYTHON = "/opt/ros2_jazzy/.venv/bin/python"
+REGISTERED_TEST_PYTHON = "/opt/ros/jazzy/.venv/bin/python"
 
 
 def test_final_gate_runner_refuses_anything_outside_the_registered_contract(

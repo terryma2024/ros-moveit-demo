@@ -36,10 +36,10 @@ public:
   WorkspaceStateEvaluator & operator=(const WorkspaceStateEvaluator &) = delete;
 
   PoseSample evaluate(std::uint64_t sample_id, const GeneratedJointSample & generated);
-  const CollisionPairCounts & collisionPairCounts() const noexcept;
-  const CollisionPairSampleIds & collisionPairSampleIds() const noexcept;
-  std::vector<std::string> worldObjectIds() const;
-  double gripperPreopen() const noexcept;
+  [[nodiscard]] const CollisionPairCounts & collisionPairCounts() const noexcept;
+  [[nodiscard]] const CollisionPairSampleIds & collisionPairSampleIds() const noexcept;
+  [[nodiscard]] std::vector<std::string> worldObjectIds() const;
+  [[nodiscard]] double gripperPreopen() const noexcept;
 
 private:
   class Impl;

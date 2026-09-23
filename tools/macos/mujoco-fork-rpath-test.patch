@@ -1,0 +1,13 @@
+diff --git a/mujoco_ros2_control/tests/test_primary_monitor_guard.py b/mujoco_ros2_control/tests/test_primary_monitor_guard.py
+index e1617d2..ffa289d 100644
+--- a/mujoco_ros2_control/tests/test_primary_monitor_guard.py
++++ b/mujoco_ros2_control/tests/test_primary_monitor_guard.py
+@@ -116,7 +116,7 @@ def test_installed_core_uses_only_loader_relative_rpath() -> None:
+         ["otool", "-l", str(library)], capture_output=True, check=True, text=True
+     )
+     rpaths = re.findall(r"cmd LC_RPATH\s+cmdsize \d+\s+path (.*?) \(offset", completed.stdout)
+-    assert rpaths == ["@loader_path"]
++    assert rpaths == ["@loader_path", "@loader_path/../opt/mujoco_vendor/lib"]
+ 
+ 
+ @pytest.mark.skipif(

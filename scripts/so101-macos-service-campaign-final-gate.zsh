@@ -21,7 +21,7 @@ set -u
 
 REGISTERED_WORKTREE="/Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp"
 REGISTERED_EVIDENCE_ROOT="/tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1"
-REGISTERED_PYTHON="/opt/ros2_jazzy/.venv/bin/python"
+REGISTERED_PYTHON="/opt/ros/jazzy/.venv/bin/python"
 REGISTERED_BRANCH="codex/so101-unified-webapp"
 EXPECTED_DOMAIN="${SO101_FINAL_GATE_DOMAIN:-211}"
 
@@ -75,15 +75,15 @@ submodule_commit="$(git submodule status third_party/mujoco_ros2_control | awk '
 
 # Fixed overlays, in the documented order.
 set +u
-source /opt/ros2_jazzy/install/setup.zsh
-source /opt/ros2_jazzy/extra_ws/install/setup.zsh
-source /opt/data/so101/runtime/fork/current/setup.zsh
-source /opt/data/so101/workspace/install/setup.zsh
+source /opt/ros/jazzy/install/setup.zsh
+source /opt/ros/jazzy/extra_ws/install/setup.zsh
+source /opt/data/so101/runtime/fork/current/local_setup.zsh
+source /opt/data/so101/workspace/install/local_setup.zsh
 set -u
 
 # The suites call system tools (`sysctl` lives in /usr/sbin), so the run declares a complete PATH
 # instead of inheriting whatever the calling shell happened to have.
-export PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/ros2_jazzy/.venv/bin${PATH:+:$PATH}"
+export PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/ros/jazzy/.venv/bin${PATH:+:$PATH}"
 export PYTHONNOUSERSITE=1
 export PYTHONDONTWRITEBYTECODE=1
 export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
@@ -142,7 +142,7 @@ print("sun_path_limit=104")
 ' "$worktree/src/so101_demo_py/src" "$scratch" > "$endpoint_report" 2>&1 \
   || fail "ENDPOINT_PREFLIGHT_FAILED" "$(cat "$endpoint_report")"
 
-colcon_bin="/opt/ros2_jazzy/.venv/bin/colcon"
+colcon_bin="/opt/ros/jazzy/.venv/bin/colcon"
 step_names=()
 
 record_step() {
@@ -189,13 +189,13 @@ chmod 700 "$colcon_tmp"
 # exports it instead.
 colcon_pytest_base="$(mktemp -d /opt/data/tmp/so101-cb-XXXXXXXX)" || fail "COLCON_BASE_NOT_CREATABLE"
 chmod 700 "$colcon_pytest_base"
-record_step colcon-test "$worktree" env "PATH=/opt/ros2_jazzy/.venv/bin:$PATH" \
+record_step colcon-test "$worktree" env "PATH=/opt/ros/jazzy/.venv/bin:$PATH" \
   "TMPDIR=$colcon_tmp" "TMP=$colcon_tmp" "TEMP=$colcon_tmp" \
   "PYTEST_ADDOPTS=--basetemp=$colcon_pytest_base" \
   "$python" "$colcon_bin" --log-base "$run_root/colcon-log" test \
   --packages-select so101_teleop --return-code-on-test-failure \
   --event-handlers console_direct+
-record_step colcon-result "$worktree" env "PATH=/opt/ros2_jazzy/.venv/bin:$PATH" \
+record_step colcon-result "$worktree" env "PATH=/opt/ros/jazzy/.venv/bin:$PATH" \
   "$python" "$colcon_bin" --log-base "$run_root/colcon-log" test-result --verbose
 record_step web-tsc "$web_root" env -u NODE_ENV bunx tsc -b --pretty false
 record_step web-test "$web_root" env -u NODE_ENV bun run test

@@ -19,7 +19,7 @@ set -u
 
 REGISTERED_WORKTREE="/Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp"
 REGISTERED_TASK_ROOT="/tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1"
-REGISTERED_PYTHON="/opt/ros2_jazzy/.venv/bin/python"
+REGISTERED_PYTHON="/opt/ros/jazzy/.venv/bin/python"
 DEFAULT_INSTALL_PREFIX="/opt/data/so101/workspace/install"
 SERVICE_URL="http://127.0.0.1:8013"
 PORT=8013
@@ -45,8 +45,8 @@ fail() { print -ru2 -- "LIVE_WINDOW_REFUSED $1: ${2:-}"; exit 2 }
 
 [[ "$case_name" == (w2|w1|retry) ]] || fail "CASE_REQUIRED" "w2|w1|retry"
 [[ "$task_root" == "$REGISTERED_TASK_ROOT" ]] || fail "TASK_ROOT_NOT_REGISTERED" "$task_root"
-[[ -d "$task_root" ]] || fail "TASK_ROOT_MISSING" "$task_root"
 [[ -n "$selection_manifest" && -f "$selection_manifest" ]] || fail "SELECTION_MANIFEST_REQUIRED"
+[[ -d "$task_root" ]] || fail "TASK_ROOT_MISSING" "$task_root"
 [[ "$install_prefix" == "$DEFAULT_INSTALL_PREFIX" ]] || fail "INSTALL_PREFIX_NOT_REGISTERED"
 [[ -d "$install_prefix" ]] || fail "INSTALL_PREFIX_MISSING" "$install_prefix"
 [[ "$(git -C "$REGISTERED_WORKTREE" branch --show-current)" == "codex/so101-unified-webapp" ]] \
@@ -225,10 +225,10 @@ fi
 # The service starts here and nowhere else: the launcher re-validates every frozen identity, writes
 # the child receipt, and execs the installed console entry.
 set +u
-source /opt/ros2_jazzy/install/setup.zsh
-source /opt/ros2_jazzy/extra_ws/install/setup.zsh
-source /opt/data/so101/runtime/fork/current/setup.zsh
-source /opt/data/so101/workspace/install/setup.zsh
+source /opt/ros/jazzy/install/setup.zsh
+source /opt/ros/jazzy/extra_ws/install/setup.zsh
+source /opt/data/so101/runtime/fork/current/local_setup.zsh
+source /opt/data/so101/workspace/install/local_setup.zsh
 set -u
 
 spawn_intent="$window_root/service-spawn-intent.json"

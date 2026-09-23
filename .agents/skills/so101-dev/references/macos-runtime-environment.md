@@ -30,16 +30,16 @@ Linux/ai-station 不使用这里的命令。macOS 上的控制器行为、MoveIt
 
 | 用途 | 路径 |
 |---|---|
-| ROS 根目录 | `/opt/ros2_jazzy` |
-| ROS install | `/opt/ros2_jazzy/install` |
-| ROS Python | `/opt/ros2_jazzy/.venv/bin/python` |
+| ROS 根目录 | `/opt/ros/jazzy` |
+| ROS install | `/opt/ros/jazzy/install` |
+| ROS Python | `/opt/ros/jazzy/.venv/bin/python` |
 | 临时目录 | `/opt/data/tmp` |
 | 工作数据根目录 | `/opt/data` |
 | 锁定 fork overlay | `/opt/data/so101/runtime/fork/current` |
 | 项目 overlay | `/opt/data/so101/workspace/install` |
-| dylib farm | `/opt/ros2_jazzy/dylib_farm/current` |
+| dylib farm | `/opt/ros/jazzy/dylib_farm/current` |
 
-物理 ROS 目录可以位于不同用户的 home 下，但 `/opt/ros2_jazzy` 这个逻辑入口必须一致。
+物理 ROS 目录可以位于不同用户的 home 下，但 `/opt/ros/jazzy` 这个逻辑入口必须一致。
 不要把 `/Users/<name>` 写进代码或测试。
 
 ## 使用方法
@@ -49,8 +49,8 @@ Linux/ai-station 不使用这里的命令。macOS 上的控制器行为、MoveIt
 ```zsh
 uname -s
 uname -m
-ls -ld /opt/ros2_jazzy /opt/data /opt/data/tmp
-readlink /opt/ros2_jazzy
+ls -ld /opt/ros/jazzy /opt/data /opt/data/tmp
+readlink /opt/ros/jazzy
 scripts/so101-macos.zsh doctor --base
 ```
 
@@ -106,20 +106,21 @@ macOS SIP 可能在受保护脚本边界移除 `DYLD_*`。如果日志出现上�
 macOS 上的 package test 必须使用固定 Python，并在当前 zsh 内按固定顺序加载 overlay：
 
 ```zsh
-source /opt/ros2_jazzy/install/setup.zsh
-source /opt/ros2_jazzy/extra_ws/install/setup.zsh
-source /opt/data/so101/runtime/fork/current/setup.zsh
-source /opt/data/so101/workspace/install/setup.zsh
-export DYLD_LIBRARY_PATH=/opt/ros2_jazzy/dylib_farm/current
-export TMPDIR=/opt/data/tmp TMP=/opt/data/tmp TEMP=/opt/data/tmp
+source /opt/ros/jazzy/install/setup.zsh
+source /opt/ros/jazzy/extra_ws/install/setup.zsh
+source /opt/data/so101/runtime/fork/current/local_setup.zsh
+source /opt/data/so101/workspace/install/local_setup.zsh
+export DYLD_LIBRARY_PATH=/opt/ros/jazzy/dylib_farm/current
+scratch=$(mktemp -d /opt/data/tmp/jz.XXXXXXXX)
+export TMPDIR="$scratch" TMP="$scratch" TEMP="$scratch"
 
-/opt/ros2_jazzy/.venv/bin/python -c 'import rclpy; print(rclpy.__file__)'
-logical_cpus=$(/opt/ros2_jazzy/.venv/bin/python -c 'import os; print(os.cpu_count() or 1)')
+/opt/ros/jazzy/.venv/bin/python -c 'import rclpy; print(rclpy.__file__)'
+logical_cpus=$(/opt/ros/jazzy/.venv/bin/python -c 'import os; print(os.cpu_count() or 1)')
 workers=$(( logical_cpus > 8 ? 8 : logical_cpus ))
 print -r -- "logical_cpus=$logical_cpus pytest_workers=$workers"
-/opt/ros2_jazzy/.venv/bin/python -m pytest \
+/opt/ros/jazzy/.venv/bin/python -m pytest \
   -n "$workers" --dist loadscope \
-  --basetemp=/opt/data/tmp/pytest-<unique-run-id> \
+  --basetemp="$scratch/p" \
   src/so101_demo_py/test \
   --junitxml="$TASK_EVIDENCE/tests/so101_demo_py.xml"
 ```
@@ -130,14 +131,15 @@ print -r -- "logical_cpus=$logical_cpus pytest_workers=$workers"
 `test` extra 安装，不能借用系统 Python 或用户 site-packages：
 
 ```zsh
-/opt/ros2_jazzy/.venv/bin/python -m pip show pytest-xdist
-/opt/ros2_jazzy/.venv/bin/python -m pip install 'src/so101_demo_py[test]'
+/opt/ros/jazzy/.venv/bin/python -m pip show pytest-xdist
+/opt/ros/jazzy/.venv/bin/python -m pip install 'src/so101_demo_py[test]'
 ```
 
 `TASK_EVIDENCE` 必须位于本 task 已登记的唯一 evidence root。测试必须实际收集非零用例。
 普通门默认排除标记为 `explicit_ml` 的 Torch/SAM 集成用例；需要验证这些用例时，单独运行
 `python -m pytest -m explicit_ml src/so101_demo_py/test/test_sam_decoder_runtime.py`。普通门仍不得收集
-`benchmark_test/`。每次运行都要换一个尚不存在的 `--basetemp`，避免并行 worker 复用旧状态。
+`benchmark_test/`。每次运行都要换一个尚不存在的短 `--basetemp`，避免并行 worker 复用旧状态，
+并为长测试名的 Unix socket 留足路径长度。日志和 JUnit 仍放在 task 已登记的 evidence root。
 pytest 收集前就因 `@rpath` 或模块导入失败时，记为 runner/environment failure，不记成代码
 RED；导入成功后出现 assertion failure 才按测试失败处理。只运行定向契约测试时，如果 ROS 的
 pytest plugin 干扰无关文件收集，可以为该次定向测试设置 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`；
