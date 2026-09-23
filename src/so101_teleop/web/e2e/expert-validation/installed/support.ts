@@ -160,11 +160,15 @@ async function claimed(
 }
 
 export async function preflight(client: Api, config: Record<string, unknown>) {
-  const response = await client.post(
-    "/expert-validation/campaigns/preflight", await claimed(client, config),
-  );
-  // A refused request answers with its own code, and a bare status assertion hides it.
-  expect(response.status, `preflight: ${JSON.stringify(response.body)}`).toBe(200);
+  const body = await claimed(client, config);
+  const response = await client.post("/expert-validation/campaigns/preflight", body);
+  // A refused request answers with its own code, and a bare status assertion hides it. The body is
+  // carried too: a start is refused with PREFLIGHT_REQUEST_MISMATCH when it differs from the exact
+  // body its receipt recorded, so both sides have to be visible to tell why.
+  expect(
+    response.status,
+    `preflight: sent ${JSON.stringify(body)} -> ${JSON.stringify(response.body)}`,
+  ).toBe(200);
   return response.body.receipt_id as string;
 }
 
