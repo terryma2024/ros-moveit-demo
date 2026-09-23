@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-PLATFORM-PORT-3
+latest_checkpoint: CP-MSC-PLATFORM-PORT-HANDOFF
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -5739,3 +5739,32 @@ c) leave the nine as findings: the page-driven acceptance cannot run against the
 
 Nothing in the host-assumption set is behind them, so the macOS port stands on its own results:
 14 passed / 9 failed / 2 skipped, with Linux at 16 passed / 9 failed against the same build.
+
+## CP-MSC-PLATFORM-PORT-HANDOFF: the remaining nine are a documented handoff
+
+```yaml
+checkpoint_id: CP-MSC-PLATFORM-PORT-HANDOFF
+recorded_at: 2026-09-23T11:15:00+0800
+carried_by: the commit that adds this entry (parent dd98413a)
+plan: docs/superpowers/plans/2026-09-23-so101-installed-suite-platform-repair.md
+status: nine cases documented; a second session takes the repair over in this same worktree and branch
+```
+
+The uncommitted unified-composition and authority attempt was preserved rather than left in the tree
+and then reverted, so the branch is back at the verified baseline (`dd98413a`, clean, macOS 14 passed
+/ 9 failed / 2 skipped, Linux 16 passed / 9 failed):
+
+```text
+patch   <registered root>/handoff/attempt-unified-authority.patch
+sha256  9f80cfce07a05f82f2730b5140e22b447b92d5e30a37f8a184fac3fb0ce18bff   217 lines
+```
+
+The repair plan carries everything the next writer would otherwise rediscover: the two workstreams
+with their measured causes, the retry vocabulary the product actually enforces, the three obstacles
+the attempt hit (type-stripping refuses parameter properties; the channel socket must be retained or
+the registry answers `UNKNOWN_INSTANCE`; the launcher must set `SO101_UNIFIED_ORIGIN`), the exact
+commands for both hosts, and the traps that already cost time - `SO101_TASK_ROOT`, the child
+`PYTHONPATH`, the v3 execution document, and a grounded root that contains `manifest.json`.
+
+Work continues in the same worktree on the same branch; no new worktree, no push, no evidence
+removal.
