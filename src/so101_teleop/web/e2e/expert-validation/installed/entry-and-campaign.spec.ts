@@ -10,6 +10,7 @@ import {
   hostUnderlayPrefixPath, hostUnderlayPythonPath,
 } from "../fixtures/host-routes";
 import { ExpertValidationPage } from "../pages/expert-validation-page";
+import { expectValidationConsoleErrors } from "./support";
 
 
 async function freePort(): Promise<number> {
@@ -235,7 +236,7 @@ test("S02 Chrome campaign flow matches the durable helper journal spec:default",
   ) as Array<Record<string, unknown>>;
   expect(rows).toHaveLength(1);
   expect(rows[0].campaign_id).toBe(campaignId);
-  expect(consoleErrors).toEqual([]);
+  await expectValidationConsoleErrors(consoleErrors, installedServer.baseURL);
 });
 
 test("S03 a second Chrome context stays fenced out spec:default", async ({ page, browser, installedServer }) => {

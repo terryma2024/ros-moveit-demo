@@ -61,16 +61,18 @@ def create_installed_test_app(
 
     _bootstrap_install_imports(install_prefix)
 
-    from so101_teleop.expert_validation.api import create_expert_validation_app
-    from so101_teleop.expert_validation.production import create_production_service
+    from so101_teleop.unified.app import create_unified_app
+    from so101_teleop.unified.compose import compose_domain_services
 
-    service = create_production_service(
-        evidence_root,
+    services = compose_domain_services(
         environment=environment,
-        execution_port=execution_port,
+        evidence_root=evidence_root,
+        validation_execution_port=execution_port,
     )
-    app = create_expert_validation_app(service, static_dir)
-    app.state.installed_test_service = service
+    app = create_unified_app(
+        services, static_dir=static_dir, capture_dir=None, bind_address="127.0.0.1",
+    )
+    app.state.installed_test_service = services.validation
     return app
 
 
@@ -96,11 +98,13 @@ async def _run(args: argparse.Namespace) -> int:
         helpers_dir=Path(__file__).resolve().parent / "process_helpers",
         spec_path=args.spec.resolve(),
     )
+    environment = dict(os.environ)
+    environment.setdefault("SO101_UNIFIED_ORIGIN", f"http://127.0.0.1:{args.port}")
     app = create_installed_test_app(
         install_prefix=install_prefix,
         evidence_root=args.evidence_root,
         execution_port=port,
-        environment=dict(os.environ),
+        environment=environment,
         static_dir=args.static_dir,
     )
     config = uvicorn.Config(
