@@ -330,6 +330,8 @@ class CanonicalCampaignReducer:
             return self._lease(state, payload, sequence, event_hash)
         if event_type == "ATTEMPT_STARTED":
             return self._attempt(state, payload, sequence, event_hash)
+        if event_type == "ATTEMPT_FAILED":
+            return self._failed_attempt(state, payload, sequence, event_hash)
         if event_type == "RESULT_COMMITTED":
             return self._result(state, payload, sequence, event_hash)
         if event_type == "POINT_TERMINAL":
@@ -486,6 +488,31 @@ class CanonicalCampaignReducer:
             last_event_sha256=event_hash,
         )
 
+    def _failed_attempt(self, state, payload, sequence, event_hash) -> CampaignReducerState:
+        point_id = _require_id("point_id", payload.get("point_id"))
+        attempt_id = _require_id("attempt_id", payload.get("attempt_id"))
+        reason = _require_id("infrastructure_code", payload.get("infrastructure_code"))
+        attempt = state.attempts.get(attempt_id)
+        point = state.points.get(point_id)
+        if (
+            attempt is None or point is None or attempt.point_id != point_id
+            or attempt.lifecycle is not ExecutionPhase.RUNNING
+            or point.attempt_id != attempt_id or point.result_sha256 is not None
+        ):
+            raise ReducerError("REDUCER_FAILURE_WITHOUT_ACTIVE_ATTEMPT", attempt_id)
+        attempts = dict(state.attempts)
+        attempts[attempt_id] = replace(
+            attempt, lifecycle=ExecutionPhase.TERMINAL,
+            validity=AttemptValidity.INVALID, infrastructure=InfrastructureOutcome.FAILED,
+        )
+        points = dict(state.points)
+        points[point_id] = replace(point, phase=ExecutionPhase.TERMINAL)
+        return replace(
+            state, attempts=attempts, points=points,
+            batch_infrastructure_terminal=reason,
+            last_sequence=sequence, last_event_sha256=event_hash,
+        )
+
     def _confirm_terminal(self, state, payload, sequence, event_hash) -> CampaignReducerState:
         point_id = _require_id("point_id", payload.get("point_id"))
         result_sha256 = _require_sha256("result_sha256", payload.get("result_sha256"))
@@ -502,8 +529,25 @@ class CanonicalCampaignReducer:
     def _batch_terminal(self, state, payload, sequence, event_hash) -> CampaignReducerState:
         business = payload.get("business_terminal")
         infrastructure = payload.get("infrastructure_terminal")
+        points = dict(state.points)
+        attempts = dict(state.attempts)
+        if infrastructure is not None:
+            # A committed infrastructure terminal closes the batch's remaining leases. It does
+            # not assert any business outcome for points without a RESULT_COMMITTED event.
+            for point_id, point in points.items():
+                if point.phase is not ExecutionPhase.TERMINAL:
+                    points[point_id] = replace(point, phase=ExecutionPhase.TERMINAL)
+            for attempt_id, attempt in attempts.items():
+                if attempt.lifecycle is not ExecutionPhase.TERMINAL:
+                    attempts[attempt_id] = replace(
+                        attempt, lifecycle=ExecutionPhase.TERMINAL,
+                        validity=AttemptValidity.INVALID,
+                        infrastructure=InfrastructureOutcome.FAILED,
+                    )
         return replace(
             state,
+            points=points,
+            attempts=attempts,
             batch_business_terminal=None if business is None else str(business),
             batch_infrastructure_terminal=(
                 state.batch_infrastructure_terminal
@@ -600,6 +644,7 @@ def projection_document(state: CampaignReducerState) -> dict[str, object]:
         "points": points,
         "workers": workers,
         "terminal_reason": state.batch_business_terminal,
+        "batch_infrastructure_terminal": state.batch_infrastructure_terminal,
         "batch_cleanup_complete": state.batch_cleanup_complete,
         "recovery_fence": state.recovery_fence,
     }

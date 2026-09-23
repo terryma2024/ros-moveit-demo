@@ -21,9 +21,10 @@ knows about it:
   attempt, outcome and lease identity. That document is the campaign's own evidence record; a
   missing or inconsistent one is refused rather than projected.
 
-Everything else fails closed: an event this adapter does not translate (for example the campaign's
-``ATTEMPT_FAILED`` infrastructure record, which has no canonical equivalent here) refuses the whole
-projection instead of being silently skipped. No artifact is imported on this layout: the campaign
+Everything else fails closed: an event this adapter does not translate refuses the whole
+projection instead of being silently skipped. An ``ATTEMPT_FAILED`` infrastructure record is
+accepted only with its bound worker result hash; it never creates a business point result.
+No artifact is imported on this layout: the campaign
 compositions do not write sealed ``workers/**/sealed`` attempt manifests, and a synthetic reference
 to one is exactly what must never be fabricated.
 """
@@ -31,6 +32,7 @@ to one is exactly what must never be fabricated.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import json
 from pathlib import Path
 from typing import Mapping
@@ -64,6 +66,7 @@ _TRANSLATED_EVENT_TYPES = frozenset(
         "WORKER_REGISTERED",
         "POINT_LEASED",
         "ATTEMPT_STARTED",
+        "ATTEMPT_FAILED",
         "RESULT_COMMITTED",
         "POINT_TERMINAL",
         "BATCH_TERMINAL",
@@ -369,6 +372,38 @@ class CampaignLayoutReader:
                 if selection_sha256 != binding_document["selection_sha256"]:
                     # The lease was issued from another selection than this batch's binding.
                     raise CoordinatorProjectionError("CAMPAIGN_BINDING_INVALID")
+        elif event_type == "ATTEMPT_FAILED":
+            point_id = _require_id("point_id", payload.get("point_id"))
+            attempt_id = _require_id("attempt_id", payload.get("attempt_id"))
+            worker_id = _require_id("worker_id", payload.get("worker_id"))
+            infrastructure_code = _require_id(
+                "infrastructure_code", payload.get("infrastructure_code")
+            )
+            if payload.get("outcome") is not None:
+                raise CoordinatorProjectionError("CAMPAIGN_FAILURE_OUTCOME_INVALID")
+            expected_hash = _require_hash(
+                "worker_result_sha256", payload.get("worker_result_sha256")
+            )
+            if any("/" in value or "\\" in value or value in {".", ".."}
+                   for value in (worker_id, attempt_id)):
+                raise CoordinatorProjectionError("CAMPAIGN_FAILURE_RESULT_INVALID")
+            result_path = self.binding.batch_root / f"{worker_id}-result-{attempt_id}.json"
+            try:
+                result_bytes = _safe_regular(result_path, self.binding.batch_root).read_bytes()
+            except OSError as error:
+                raise CoordinatorProjectionError("CAMPAIGN_FAILURE_RESULT_INVALID") from error
+            if hashlib.sha256(result_bytes).hexdigest() != expected_hash:
+                raise CoordinatorProjectionError("CAMPAIGN_FAILURE_HASH_MISMATCH")
+            try:
+                worker_result = json.loads(result_bytes)
+            except ValueError as error:
+                raise CoordinatorProjectionError("CAMPAIGN_FAILURE_RESULT_INVALID") from error
+            if not isinstance(worker_result, Mapping) or worker_result.get("worker_id") != worker_id:
+                raise CoordinatorProjectionError("CAMPAIGN_FAILURE_RESULT_INVALID")
+            translated = {
+                "point_id": point_id, "attempt_id": attempt_id,
+                "worker_id": worker_id, "infrastructure_code": infrastructure_code,
+            }
         elif event_type == "RESULT_COMMITTED":
             point_id = _require_id("point_id", payload.get("point_id"))
             attempt_id = _require_id("attempt_id", payload.get("attempt_id"))
@@ -410,6 +445,8 @@ class CampaignLayoutReader:
                     POINTS_COMPLETE if verdict in _CAMPAIGN_PASS_VERDICTS else verdict
                 ),
             }
+            if verdict in {"W2_CAMPAIGN_INCOMPLETE", "N1_CAMPAIGN_INCOMPLETE"}:
+                translated["infrastructure_terminal"] = verdict
         else:  # CLEANUP_COMMITTED
             cleanup_complete = payload.get("cleanup_complete", True)
             if not isinstance(cleanup_complete, bool):

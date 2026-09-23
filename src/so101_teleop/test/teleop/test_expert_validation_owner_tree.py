@@ -559,7 +559,23 @@ def _cleanup_pids(pids):
 
 def test_real_sigkill_of_the_owning_campaign_leaves_sessions_that_recovery_reclaims(tmp_path):
     module = _owner_tree()
-    from so101_teleop.process_identity import read_identity
+    from so101_teleop.process_identity import ProcessIdentityError, read_identity
+
+    def ready_identity(child):
+        # Popen can return while macOS is still replacing the child image. During that brief
+        # window KERN_PROCARGS2's size query and read can disagree, so wait for the sleeper's
+        # actual argv before using its identity in this owner-recovery test.
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline and child.poll() is None:
+            try:
+                identity = read_identity(child.pid)
+            except ProcessIdentityError:
+                time.sleep(0.02)
+                continue
+            if identity.argv[1:] == ("-c", "import time; time.sleep(60)"):
+                return identity
+            time.sleep(0.02)
+        pytest.fail(f"sleeper {child.pid} did not expose its stable process identity")
 
     store = _store(tmp_path)
     children = []
@@ -585,7 +601,7 @@ def test_real_sigkill_of_the_owning_campaign_leaves_sessions_that_recovery_recla
                 argv=(sys.executable, "-c", "import time; time.sleep(60)"),
             )
             store.record_owner_intent(intent)
-            identity = read_identity(child.pid)
+            identity = ready_identity(child)
             store.confirm_owner_process(
                 module.ConfirmedOwnerProcess(
                     spawn_token=intent.spawn_token,

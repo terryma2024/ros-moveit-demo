@@ -1383,9 +1383,15 @@ class ProductionExpertValidationService(ExpertValidationService):
         terminal_reason = state.get("terminal_reason")
         if terminal_reason is not None and not isinstance(terminal_reason, str):
             raise CoordinatorProjectionError("BATCH_PROJECTION_INVALID")
-        terminal = terminal_reason is not None and all(
-            raw_points.get(point_id, unrun_point).get("terminal", False)
-            for point_id in selected
+        terminal = terminal_reason is not None and (
+            all(
+                raw_points.get(point_id, unrun_point).get("terminal", False)
+                for point_id in selected
+            )
+            or (
+                state.get("batch_infrastructure_terminal") is not None
+                and not active_by_point
+            )
         )
         cleanup_complete = state.get("batch_cleanup_complete", False)
         if not isinstance(cleanup_complete, bool):

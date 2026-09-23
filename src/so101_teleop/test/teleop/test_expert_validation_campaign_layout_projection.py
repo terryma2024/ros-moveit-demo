@@ -389,6 +389,93 @@ def test_an_incomplete_campaign_is_not_reported_as_a_pass(tmp_path):
         store.close()
 
 
+def _write_infrastructure_failed_batch(root):
+    """A terminal campaign with one failed worker and another unfinished lease."""
+
+    reference = _write_campaign_batch(
+        Path(root) / "reference", {point_id: "PASSED" for point_id in POINT_IDS},
+        verdict=CAMPAIGN_PASS,
+    )
+    batch_root = Path(root) / "campaigns" / CAMPAIGN_ID / BATCH_ID
+    batch_root.mkdir(parents=True)
+    shutil.copyfile(reference / "selection-binding.json", batch_root / "selection-binding.json")
+    attempt = "task_start-attempt-1"
+    worker_result = batch_root / f"w1-result-{attempt}.json"
+    worker_result.write_text(json.dumps({
+        "worker_id": "w1", "failure_code": "STATION_NOT_READY", "results": [],
+    }, sort_keys=True))
+    with CoordinatorJournal.create(batch_root / "journal", BATCH_ID) as journal:
+        journal.append_committed(
+            "CAMPAIGN_STARTED", f"{CAMPAIGN_ID}/CAMPAIGN_STARTED",
+            {"campaign_id": CAMPAIGN_ID, "batch_id": BATCH_ID, "schema_version": 1},
+        )
+        for point_id in POINT_IDS[:2]:
+            attempt_id = f"{point_id}-attempt-1"
+            worker_id = _worker_for(point_id)
+            slot_id = _slot_for(point_id)
+            identity = {"point_id": point_id, "attempt_id": attempt_id,
+                        "worker_id": worker_id, "slot_id": slot_id, "generation": 1}
+            journal.append_committed(
+                "POINT_LEASED", f"{BATCH_ID}/POINT_LEASED/{attempt_id}",
+                {**identity, "selection_sha256": SHA_SELECTION},
+            )
+            journal.append_committed(
+                "WORKER_REGISTERED", f"{BATCH_ID}/WORKER_REGISTERED/{attempt_id}",
+                identity,
+            )
+            journal.append_committed(
+                "ATTEMPT_STARTED", f"{BATCH_ID}/ATTEMPT_STARTED/{attempt_id}",
+                identity,
+            )
+        journal.append_committed(
+            "ATTEMPT_FAILED", f"{BATCH_ID}/ATTEMPT_FAILED/{attempt}",
+            {"point_id": "task_start", "attempt_id": attempt, "worker_id": "w1",
+             "slot_id": "slot-0", "generation": 1,
+             "infrastructure_code": "STATION_NOT_READY", "outcome": None,
+             "worker_result_sha256": hashlib.sha256(worker_result.read_bytes()).hexdigest()},
+        )
+        journal.append_committed(
+            "BATCH_TERMINAL", f"{BATCH_ID}/BATCH_TERMINAL",
+            {"outcome": CAMPAIGN_INCOMPLETE},
+        )
+        journal.append_committed(
+            "CLEANUP_COMMITTED", f"{BATCH_ID}/CLEANUP_COMMITTED",
+            {"cleanup_complete": True},
+        )
+    return batch_root
+
+
+def test_infrastructure_failure_projects_terminal_unrun_points(tmp_path):
+    _write_infrastructure_failed_batch(tmp_path)
+    service, store, _root = _service(tmp_path)
+    try:
+        projection = service.get_campaign(CAMPAIGN_ID)
+        assert projection["status"] == "INFRA_FAILED"
+        assert projection["batch_cleanup_complete"] is True
+        assert projection["requested"] == len(POINT_IDS)
+        assert projection["evaluated"] == 0
+        assert projection["execution_started"] == 2
+        assert {point["status"] for point in projection["points"]} == {"UNRUN"}
+        assert all(worker["current_point_id"] is None for worker in projection["workers"])
+        state = store.read_projection_state(BATCH_ID).state
+        assert state is not None
+        assert state.batch_infrastructure_terminal == CAMPAIGN_INCOMPLETE
+    finally:
+        store.close()
+
+
+def test_tampered_worker_failure_result_refuses_projection(tmp_path):
+    batch_root = _write_infrastructure_failed_batch(tmp_path)
+    (batch_root / "w1-result-task_start-attempt-1.json").write_text("tampered")
+    service, store, _root = _service(tmp_path)
+    try:
+        with pytest.raises(ServiceConflict, match="UPSTREAM_PROJECTION_INVALID"):
+            service.get_campaign(CAMPAIGN_ID)
+        assert store.read_projection_state(BATCH_ID).state is None
+    finally:
+        store.close()
+
+
 def test_the_campaign_layout_reader_resolves_the_campaign_directory(tmp_path):
     batch_root = _write_campaign_batch(
         tmp_path, {point_id: "PASSED" for point_id in POINT_IDS}, verdict=CAMPAIGN_PASS
