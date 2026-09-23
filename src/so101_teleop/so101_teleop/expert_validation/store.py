@@ -1807,10 +1807,16 @@ class SupervisorStore:
         if len(points) != len(set(points)):
             raise StoreConflict("RETRY_POINT_DUPLICATE")
         with self._transaction():
-            for ordinal, point_id in enumerate(points):
+            existing = self._connection.execute(
+                "SELECT point_id FROM retry_queue WHERE campaign_id = ?", (campaign_id,)
+            ).fetchall()
+            if set(points).intersection(row["point_id"] for row in existing):
+                raise StoreConflict("RETRY_POINT_DUPLICATE")
+            first_ordinal = len(existing)
+            for offset, point_id in enumerate(points):
                 self._connection.execute(
                     "INSERT INTO retry_queue VALUES (?, ?, ?, 'QUEUED', NULL, NULL)",
-                    (campaign_id, ordinal, point_id),
+                    (campaign_id, first_ordinal + offset, point_id),
                 )
 
     def next_retry(self, campaign_id: str) -> RetryItem | None:

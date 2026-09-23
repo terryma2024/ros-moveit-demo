@@ -201,6 +201,31 @@ def test_cleanup_and_retry_advance_are_one_transaction(tmp_path):
         store.close()
 
 
+def test_separate_one_point_retry_commands_keep_distinct_serial_ordinals(tmp_path):
+    root = tmp_path.resolve()
+    store = SupervisorStore.open(root)
+    try:
+        _prepare(store, root)
+        store.enqueue_retries("campaign-1", ["sample_05"])
+        first = BatchBinding(
+            batch_id="retry-001", campaign_id="campaign-1",
+            batch_kind="FULL_RESTART_RETRY", point_id="sample_05",
+            journal_root=(root / "journal/retry-001").resolve(), coordinator_epoch=1,
+        )
+        store.bind_retry_batch(first)
+        store.record_cleanup_and_advance_retry(
+            CleanupReceipt("campaign-1", "retry-001", "sample_05", "d" * 64)
+        )
+
+        store.enqueue_retries("campaign-1", ["sample_14"])
+        assert [(item.ordinal, item.point_id, item.state) for item in store.retry_items("campaign-1")] == [
+            (0, "sample_05", "COMPLETE"), (1, "sample_14", "QUEUED"),
+        ]
+        assert store.next_retry("campaign-1").point_id == "sample_14"
+    finally:
+        store.close()
+
+
 def test_accepted_cursor_is_idempotent_and_owner_monotonic(tmp_path):
     root = tmp_path.resolve()
     store = SupervisorStore.open(root)
