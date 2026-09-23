@@ -8,22 +8,22 @@ worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-weba
 linux_worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
 branch: codex/so101-unified-webapp
 base_commit: fd7348aa27361750f7e2e7954df53ef75e96545c
-current_commit: 7091902086891d2fd276879e198ff93355f6d3d0
+current_commit: bedf45c746733996382d9ca68c8faf0189ee1944
 evidence_root_mac: /opt/data/work/so101-evidence/teleop-service-restart/20260923-70919020
 evidence_root_linux: /data/work/so101-evidence/teleop-service-restart/20260923-70919020
 low_rate_root_mac: /tmp/so101-debug-teleop-service-restart-20260923-70919020
 low_rate_root_linux: /tmp/so101-debug-teleop-service-restart-20260923-70919020
 confirmed_conclusions:
-  - origin/main is fd7348aa; git rebase origin/main returned up to date; branch remains 70919020 with four commits ahead of main.
+  - At the initial rebase, origin/main was fd7348aa; git rebase origin/main returned up to date and the branch was 70919020 with four commits ahead of main.
   - Mac old PID 13297 belongs to tmux so101-teleop-tailscale-mac; its sole campaign is INFRA_FAILED with batch_cleanup_complete=true.
   - ai-station old PID 2118905 belongs to tmux so101-teleop-tailscale-ai; its campaign list is empty.
   - Both old services report domains.validation=ready and global_state=IDLE before restart.
+  - EXP-001 and EXP-003: Mac and ai-station now have manager-owned port 8000 services with Validation ready, IDLE, zero campaigns, and Web index/assets HTTP 200.
 disproven_routes:
   - Rebase requires rewriting commits after the latest origin/main fetch.
-open_hypotheses:
-  - Platform manager preflight and installed app checks succeed with the existing overlays.
-latest_checkpoint: CP-003
-next_experiment: EXP-003
+open_hypotheses: []
+latest_checkpoint: CP-004
+next_experiment: NONE
 ```
 
 ```yaml
@@ -81,7 +81,6 @@ inferred:
   - The stop guard's bind probe raced macOS TIME_WAIT and did not indicate an active listener or failed service stop.
 conclusion: Mac port 8000 restart succeeded under the manager; Teleop control remains unavailable as before.
 evidence:
-  - /tmp/so101-debug-teleop-service-restart-20260923-70919020/old-service-stop-mac.json
   - /tmp/so101-debug-teleop-service-restart-20260923-70919020/start-mac.json
   - /opt/data/work/so101-evidence/teleop-service-restart/20260923-70919020/service-20260923T155740Z.log
 decision: KEEP
@@ -127,7 +126,6 @@ inferred:
   - With a symlink install, unified.main installed_web_assets resolves its module path into source and does not discover the installed share directory; the manager omitted --static-dir, unlike the old launcher.
 conclusion: The Linux manager start returned success without a usable Web page; this run does not meet the service acceptance contract.
 evidence:
-  - /tmp/so101-debug-teleop-service-restart-20260923-70919020/old-service-stop-linux.json
   - /tmp/so101-debug-teleop-service-restart-20260923-70919020/start-linux.json
   - /data/work/so101-evidence/teleop-service-restart/20260923-70919020/service-20260923T155954Z.log
 decision: REPEAT
@@ -167,4 +165,77 @@ disproven_routes:
 open_risks:
   - Linux manager restart with explicit --static-dir remains to be verified.
 next_command: Commit and publish the manager fix, fast-forward the Linux feature worktree, then plan EXP-003 before restarting Linux.
+```
+
+```yaml
+experiment_id: EXP-003
+status: VALID
+prior_experiment: EXP-002
+hypothesis: Explicit --static-dir and a Web 200 readiness gate make the Linux installed service usable.
+prediction: Manager cleanup stops only PID 2224105, the corrected manager starts a new PID on 100.104.202.119:8000, and both /health Validation and / return ready/200 from both hosts.
+single_variable: Manager revision bedf45c7 adds the installed static directory argument and Web page readiness check.
+lifecycle: FULL_RESTART
+preconditions:
+  - Linux manager PID 2224105 owns 100.104.202.119:8000; campaigns are empty; installed index and referenced assets exist.
+success_criteria:
+  - New manager reports RUNNING, health Validation ready/IDLE, zero campaigns, GET / returns 200, referenced JavaScript and CSS return 200, and no old port 8000 listener survives.
+failure_criteria:
+  - Cleanup/start exits nonzero after port release, or any service/Web check fails.
+invalid_criteria:
+  - A campaign becomes active before cleanup or another process claims the port.
+provenance:
+  source_commit: bedf45c746733996382d9ca68c8faf0189ee1944
+  install_overlay: /home/matianyi/Projects/ros-moveit-demo/install
+  runtime_executable: /data/work/so101-evidence/full-ut-linux/20260923-5a0b87a8/venv/bin/python
+  ros_domain_id: 226
+  gz_partition: so101-teleop-tailscale-ai-226
+commands:
+  - command: scripts/so101-teleop-linux.sh cleanup
+    exit_code: 0
+  - command: scripts/so101-teleop-linux.sh start --install-prefix /home/matianyi/Projects/ros-moveit-demo/install --evidence-root /data/work/so101-evidence/teleop-service-restart/20260923-70919020
+    exit_code: 0
+  - command: Fresh health, campaign, Web index and referenced asset checks from Mac and ai-station.
+    exit_code: 0
+observed:
+  - Manager cleanup stopped PID 2224105 after confirming an empty campaign list. TIME_WAIT briefly prevented a bind without SO_REUSEADDR; the port later became bindable with no listener.
+  - Corrected manager started PID 2227775 with explicit --static-dir /home/matianyi/Projects/ros-moveit-demo/install/so101_teleop/share/so101_teleop/web.
+  - Mac readback of both Tailscale endpoints showed Validation ready, IDLE, zero campaigns, Web index HTTP 200, and both referenced JS/CSS assets HTTP 200.
+  - Source and installed unified Web entry scripts have matching SHA256 c7bff667876a4d00bba5219bd184ecb6b53a46822fc64f051618b7a2498a4816 on each host.
+  - Ten manager safety tests passed on Mac and ai-station with the corrected branch manager.
+inferred:
+  - Explicit installed Web path removes the symlink install discovery failure; the Web readiness gate prevents the prior false STARTED result.
+conclusion: Both port 8000 Expert Validation Web services now meet the requested remote access boundary.
+evidence:
+  - /tmp/so101-debug-teleop-service-restart-20260923-70919020/cleanup-linux.json
+  - /tmp/so101-debug-teleop-service-restart-20260923-70919020/start-linux-fixed.json
+  - /data/work/so101-evidence/teleop-service-restart/20260923-70919020/service-20260923T160528Z.log
+decision: KEEP
+next_experiment: NONE
+```
+
+```yaml
+checkpoint_id: CP-004
+last_valid_experiment: EXP-003
+current_hypothesis: NONE
+working_tree_status: Mac feature worktree has only this task-owned ledger update pending commit; Linux feature worktree clean at bedf45c7; ai-station main unrelated untracked plan preserved.
+owned_processes: Mac manager PID 25883 on 100.74.192.81:8000; ai-station manager PID 2227775 on 100.104.202.119:8000.
+preserved_processes: ai-station tmux server PID 2118904 also owns the codex session; old service PID 2118905 remains defunct under it, with no listener or active campaign. All unrelated ROS/tmux processes preserved.
+confirmed_conclusions:
+  - EXP-001 Mac service replacement passed.
+  - EXP-002 showed that Validation health alone missed the Linux Web 503 failure.
+  - EXP-003 Linux service replacement passed with installed Web assets and index HTTP 200 from Mac.
+disproven_routes:
+  - Automatic Web asset discovery works for the Linux symlink install.
+  - Validation ready alone proves the page is usable.
+open_risks:
+  - Teleop control remains unavailable by configuration on both services; Expert Validation is ready.
+  - Prior Mac browser polling an old campaign ID now receives 404 until that browser tab is refreshed.
+  - Port 8000 may remain temporarily unbindable after shutdown while old connections are in TIME_WAIT.
+retained_runs:
+  - /opt/data/work/so101-evidence/teleop-service-restart/20260923-70919020
+  - /data/work/so101-evidence/teleop-service-restart/20260923-70919020
+archived_runs: NONE
+deletion_candidates:
+  - Both hosts' /tmp/so101-debug-teleop-service-restart-20260923-70919020 after readback; no evidence deleted.
+next_command: Commit and push the final ledger update, then verify both manager statuses and remote branch heads.
 ```
