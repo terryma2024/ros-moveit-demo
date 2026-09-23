@@ -172,6 +172,12 @@ export async function preflight(client: Api, config: Record<string, unknown>) {
     response.status,
     `preflight: sent ${JSON.stringify(body)} -> ${JSON.stringify(response.body)}`,
   ).toBe(200);
+  // A receipt that was not admitted is not a green preflight: the start refuses it, and the reason
+  // codes a refused receipt carries are the only place the refusal is explained.
+  expect(
+    response.body.admitted,
+    `preflight not admitted: ${JSON.stringify(response.body)}`,
+  ).toBe(true);
   return response.body.receipt_id as string;
 }
 
