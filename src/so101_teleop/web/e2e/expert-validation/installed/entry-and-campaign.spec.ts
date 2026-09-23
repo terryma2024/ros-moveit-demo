@@ -38,7 +38,11 @@ async function startProductionEntry(evidenceRoot: string, port: number, logPath:
   const sitePackages = prefixes.map((entry) => join(entry, paths.pythonSite));
   const taskRoot = process.env.SO101_TASK_ROOT ?? process.env.TASK_ROOT;
   if (!taskRoot) throw new Error("SO101_TASK_ROOT_REQUIRED");
-  const entry = join(prefix, "so101_teleop/lib/so101_teleop/so101_expert_validation_server.py");
+  // The product has one web entry: the per-domain script is deprecated and delegates to this one,
+  // and spawning it directly refused with `SO101_UNIFIED_EVIDENCE_ROOT must name the registered
+  // evidence root`. The acceptance is about the installed console entry, so it starts the entry
+  // the deployment actually runs.
+  const entry = join(prefix, "so101_teleop/lib/so101_teleop/so101_unified_web_server.py");
   if (!existsSync(entry)) throw new Error(`INSTALLED_ENTRY_MISSING: ${entry}`);
   // The binding names the checkout a deployment was built from. A copied install has no checkout,
   // and the product documents that fallback, so an operator-supplied binding is passed through
@@ -46,7 +50,8 @@ async function startProductionEntry(evidenceRoot: string, port: number, logPath:
   const binding = process.env.SO101_VALIDATION_PROVENANCE_BINDING;
   const { createWriteStream } = await import("node:fs");
   const logStream = createWriteStream(logPath, { flags: "a" });
-  const child: ChildProcess = spawn(pythonExecutable(), [entry], {
+  const child: ChildProcess = spawn(
+    pythonExecutable(), [entry, "--host", "127.0.0.1", "--port", String(port)], {
     env: {
       ...process.env,
       ...QUALIFICATION_ENV,
@@ -58,8 +63,12 @@ async function startProductionEntry(evidenceRoot: string, port: number, logPath:
       AMENT_PREFIX_PATH: [...prefixes, ...hostUnderlayPrefixPath()].join(":"),
       ROS_HOME: join(evidenceRoot, "ros-home"),
       ROS_LOG_DIR: join(evidenceRoot, "ros-home", "log"),
-      SO101_VALIDATION_EVIDENCE_ROOT: evidenceRoot,
-      SO101_VALIDATION_PORT: String(port),
+      SO101_UNIFIED_EVIDENCE_ROOT: evidenceRoot,
+      SO101_UNIFIED_SOCKET_DIR: join(evidenceRoot, "sockets"),
+      SO101_UNIFIED_ROS_PYTHON: pythonExecutable(),
+      SO101_UNIFIED_INSTALL_PREFIX: prefix,
+      SO101_UNIFIED_HOST: "127.0.0.1",
+      SO101_UNIFIED_PORT: String(port),
       SO101_VALIDATION_WEB_ROOT: join(prefix, "so101_teleop/share/so101_teleop/web"),
       ...(binding ? { SO101_VALIDATION_PROVENANCE_BINDING: binding } : {}),
       SO101_VALIDATION_PARALLEL_CONFIG: join(
@@ -132,6 +141,10 @@ async function waitCampaignTerminal(baseURL: string, campaignId: string, timeout
 }
 
 test("S01 installed production console entry serves health and page spec:default", async ({ page }, testInfo) => {
+  // This case starts the real console entry, browses it, stops it and starts it again. The unified
+  // entry holds live websockets and background tasks, so its orderly shutdown does not fit in the
+  // default budget the other cases use.
+  test.setTimeout(90_000);
   const slug = testInfo.title.replace(/[^a-zA-Z0-9]+/g, "-").slice(0, 60);
   const root = join(
     process.env.SO101_E2E_EVIDENCE_ROOT ?? "", "server", `s01-entry-${slug}-${Date.now().toString(36)}`,
@@ -144,11 +157,19 @@ test("S01 installed production console entry serves health and page spec:default
   try {
     const health = await fetch(`http://127.0.0.1:${port}/health`);
     expect(health.status).toBe(200);
-    expect((await health.json()).service).toBe("expert-validation");
+    // The unified health document reports each domain; the claim is that this entry serves the
+    // expert-validation domain, so it is asked for that domain's own document too.
+    const capabilities = await fetch(`http://127.0.0.1:${port}/expert-validation/capabilities`);
+    expect(capabilities.status).toBe(200);
 
     await page.goto(`http://127.0.0.1:${port}/expert-validation`);
     await expect(page.getByRole("heading", { name: "SO-101 Expert Validation" })).toBeVisible();
 
+    // The console holds live websockets while it is open, and uvicorn waits for its connections
+    // before it returns from SIGINT. Closing the page first is what "the operator closed the
+    // console, then the service stopped" looks like; stopping with the page still attached only
+    // proves the harness can escalate to SIGKILL.
+    await page.close();
     const exitCode = await first.stop();
     expect(exitCode).toBe(0);
 
