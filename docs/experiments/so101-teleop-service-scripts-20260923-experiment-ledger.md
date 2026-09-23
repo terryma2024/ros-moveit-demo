@@ -216,3 +216,26 @@ retained_runs:
 archived_runs: NONE
 next_command: Commit the task-owned scripts, test, and ledger; then push the rebased feature branch with a lease check.
 ```
+
+```yaml
+checkpoint_id: CP-005
+last_valid_experiment: EXP-003
+current_hypothesis: NONE
+working_tree_status: Branch codex/so101-unified-webapp at 413ddf4d; README and so101-dev reference updated for service operations.
+owned_processes: NONE
+preserved_processes: Mac port 8000 PID 13297; ai-station port 8000 PID 2118905.
+confirmed_conclusions:
+  - README documents platform launch, doctor, status, cleanup, health validation, and port ownership.
+  - so101-dev links to a dedicated reference with installed paths, overrides, evidence roots, and service cleanup rules.
+  - Skill validation and local documentation link checks pass; no service or test process was started for this documentation update.
+open_risks:
+  - Port 8000 remains owned by earlier services on both hosts; new manager requires a verified handoff before it can use that port.
+retained_runs:
+  - /opt/data/work/so101-evidence/teleop-service-scripts/20260923-9c6a7e42/smoke-mac
+  - /data/work/so101-evidence/teleop-service-scripts/20260923-9c6a7e42/smoke-linux
+archived_runs: NONE
+deletion_candidates:
+  - Linux scratch directories manager-unit-001 through manager-unit-005 after readback.
+  - Both hosts' /tmp/so101-debug-teleop-service-scripts-20260923-9c6a7e42 roots after readback.
+next_command: Commit and push the documentation update on codex/so101-unified-webapp.
+```

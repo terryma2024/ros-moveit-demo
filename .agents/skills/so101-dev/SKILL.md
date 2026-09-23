@@ -24,6 +24,7 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
    - 仅当 SO-101 在 macOS 上运行或测试时出现 Python、overlay、package prefix、SIP、`DYLD_*` 或 `@rpath/*.dylib` 环境问题：[`references/macos-runtime-environment.md`](references/macos-runtime-environment.md)。Linux 任务和 macOS 上与运行环境无关的控制、规划、物理或视觉问题不读取此文件。
    - 多轮实验、生命周期比较、上下文压缩或 agent 交接：[`references/experiment-ledger.md`](references/experiment-ledger.md)
    - 安装 Python 依赖、选择 uv 索引或让镜像域名绕过代理：[`references/python-dependency-install.md`](references/python-dependency-install.md)
+   - 启动、检查或清理 macOS/Linux 的统一 Web Expert Validation 服务：[`references/unified-teleop-service.md`](references/unified-teleop-service.md)
 3. 从当前 orchestrator 和 ai-station 分别记录 `pwd`、commit、branch、submodule 和 `git status --short`；已经位于 ai-station 的 coding agent 直接在本机取证，不再 SSH 自身。已有改动均视为用户工作，不能覆盖、清理或夹带。
 4. 检查现有进程、ROS graph 和 `codex-cua` tmux 状态。不得在不知情时启动第二套 `/move_group`、RViz 或 Gazebo。
 5. 按下述统一布局给整个 task 建立并登记唯一 evidence root；不要把日志、截图或构建产物写进源码目录。

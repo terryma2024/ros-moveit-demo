@@ -418,6 +418,50 @@ Teleop also supports `mujoco_py` and `gazebo_cpp` profiles. See the
 [Teleop Web UI guide](src/so101_teleop/docs/so101-teleop-web-ui.md) for network,
 safety, and Web bundle details.
 
+### Installed Expert Validation Web service
+
+Run these commands from the repository root on the target host. `start` checks
+the installed Python, ROS overlays, Web bundle, execution profile, point catalog,
+and model paths before it binds the host's Tailscale IPv4 address on port 8000.
+`doctor` checks the required paths without starting a service.
+
+On macOS:
+
+```zsh
+scripts/so101-teleop-macos.zsh doctor
+scripts/so101-teleop-macos.zsh start
+scripts/so101-teleop-macos.zsh status
+scripts/so101-teleop-macos.zsh cleanup
+```
+
+On Linux:
+
+```sh
+scripts/so101-teleop-linux.sh doctor
+scripts/so101-teleop-linux.sh start
+scripts/so101-teleop-linux.sh status
+scripts/so101-teleop-linux.sh cleanup
+```
+
+After `start`, open `http://<tailscale-ip>:8000` or inspect the health response:
+
+```sh
+curl -sS "http://$(tailscale ip -4):8000/health"
+```
+
+Check for `domains.validation: "ready"`. This service profile reports
+`domains.teleop: "unavailable"`; the top-level `ok` field therefore remains `false`.
+These scripts do not start a simulation stack or configure Teleop control.
+
+An existing service on port 8000 must be stopped through its own verified
+launcher before the new manager can start. `cleanup` stops only a service that
+the manager recorded, and refuses to stop one with an active campaign. It keeps
+the service logs and evidence root. If an installation or model path differs,
+pass `--python`, `--install-prefix`, `--yolo-weights`, or `--grounded-root` to
+`doctor` and `start`. See the
+[SO-101 service operations reference](.agents/skills/so101-dev/references/unified-teleop-service.md)
+for the platform defaults, evidence paths, and port-conflict procedure.
+
 ### C++ and example packages
 
 ```bash
