@@ -222,8 +222,10 @@ exec "$SO101_RUNTIME_PYTHON" "$SO101_RUNTIME_ENTRY" "$@"
 
 
 def command(cfg: dict[str, object], check: bool = False) -> list[str]:
+    web = layout(cfg)["web"].parent
     args = ["/bin/zsh", "-f", "-c", SOURCE_AND_EXEC, "so101-teleop-service",
-            "--host", str(cfg["host"]), "--port", str(cfg["port"])]
+            "--host", str(cfg["host"]), "--port", str(cfg["port"]),
+            "--static-dir", str(web)]
     if check:
         args.append("--check")
     return args
@@ -295,9 +297,13 @@ def request_json(url: str, timeout: float = 2) -> object:
 def ready(url: str) -> bool:
     try:
         health = request_json(url + "/health")
+        if not isinstance(health, dict) or health.get("domains", {}).get("validation") != "ready":
+            return False
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(url + "/", timeout=2) as response:
+            return response.status == 200
     except (OSError, ValueError, urllib.error.URLError):
         return False
-    return isinstance(health, dict) and health.get("domains", {}).get("validation") == "ready"
 
 
 def free_port(host: str, port: int) -> None:

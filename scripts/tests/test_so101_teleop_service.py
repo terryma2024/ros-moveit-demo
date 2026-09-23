@@ -56,6 +56,24 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertNotIn("SO101_UNIFIED_SOCKET_DIR", env)
         self.assertEqual(env["SO101_TASK_ROOT"], env["SO101_UNIFIED_EVIDENCE_ROOT"])
 
+    def test_start_and_check_use_installed_web_assets(self) -> None:
+        cfg = service.defaults("linux")
+        cfg.update({"platform": "linux", "install_prefix": "/installed",
+                    "host": "127.0.0.1", "port": 8014})
+        expected = ["--static-dir", "/installed/so101_teleop/share/so101_teleop/web"]
+        self.assertEqual(service.command(cfg)[-2:], expected)
+        self.assertEqual(service.command(cfg, check=True)[-3:], [*expected, "--check"])
+
+    def test_ready_requires_web_page_as_well_as_validation(self) -> None:
+        health = {"domains": {"validation": "ready"}}
+        with patch.object(service, "request_json", return_value=health), \
+             patch.object(service.urllib.request, "build_opener") as build_opener:
+            response = build_opener.return_value.open.return_value.__enter__.return_value
+            response.status = 503
+            self.assertFalse(service.ready("http://127.0.0.1:8014"))
+            response.status = 200
+            self.assertTrue(service.ready("http://127.0.0.1:8014"))
+
     def test_changed_pid_identity_is_never_owned(self) -> None:
         with patch.object(service, "process_identity", return_value={
             "pid": 12345, "uid": os.getuid(), "started": "different-start",
