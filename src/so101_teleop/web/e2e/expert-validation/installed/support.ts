@@ -161,6 +161,9 @@ async function claimed(
 
 export async function preflight(client: Api, config: Record<string, unknown>) {
   const body = await claimed(client, config);
+  // The body a receipt records is compared byte for byte when the campaign starts, so a mismatch
+  // can only be explained by seeing what was sent. Off unless asked for.
+  if (process.env.SO101_E2E_TRACE_REQUESTS) console.log(`PREFLIGHT_SENT ${JSON.stringify(body)}`);
   const response = await client.post("/expert-validation/campaigns/preflight", body);
   // A refused request answers with its own code, and a bare status assertion hides it. The body is
   // carried too: a start is refused with PREFLIGHT_REQUEST_MISMATCH when it differs from the exact
