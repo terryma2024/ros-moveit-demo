@@ -10,6 +10,7 @@ import logging
 import os
 from pathlib import Path
 import subprocess
+import sys
 from types import SimpleNamespace
 import time
 import uuid
@@ -36,6 +37,8 @@ from .execution_context import (
     CandidateExecutionContext,
     ProductionExecutionContext,
     RETRY_BATCH_KIND,
+    LINUX_RETRY_PROFILE,
+    LINUX_RETRY_SCHEMA_VERSION,
     RETRY_PROFILE,
     RETRY_SCHEMA_VERSION,
     RETRY_WORKER_COUNT,
@@ -2050,6 +2053,22 @@ class ProductionExpertValidationService(ExpertValidationService):
         original, item, catalog_sha256, selection_sha256, result_sha256 = self._retry_origin(
             campaign_id, point_id
         )
+        if sys.platform.startswith("linux") and original.execution_profile is None:
+            from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
+
+            try:
+                load_parallel_runtime_config_v3(Path(original.parallel_config_path))
+            except (ContractError, OSError, ValueError) as error:
+                raise ServiceConflict("RETRY_CONFIG_UNSUPPORTED") from error
+            if _sha256(Path(original.parallel_config_path)) != original.parallel_config_sha256:
+                raise ServiceConflict("RETRY_CONFIG_HASH_MISMATCH")
+            retry_profile = LINUX_RETRY_PROFILE
+            retry_schema_version = LINUX_RETRY_SCHEMA_VERSION
+            retry_config_sha256 = original.parallel_config_sha256
+        else:
+            retry_profile = RETRY_PROFILE
+            retry_schema_version = RETRY_SCHEMA_VERSION
+            retry_config_sha256 = self._installed_profile_document(RETRY_PROFILE).config_sha256
         lease = self.store.current_lease()
         if lease is None:
             raise ServiceConflict("RETRY_LEASE_REQUIRED")
@@ -2064,14 +2083,14 @@ class ProductionExpertValidationService(ExpertValidationService):
             install_prefix=install_prefix,
             install_binding_sha256=install_binding_sha256(
                 install_prefix=install_prefix, runtime_closure_sha256=runtime_closure),
-            execution_profile=RETRY_PROFILE,
-            schema_version=RETRY_SCHEMA_VERSION,
+            execution_profile=retry_profile,
+            schema_version=retry_schema_version,
             batch_kind=RETRY_BATCH_KIND,
             worker_count=RETRY_WORKER_COUNT,
             campaign_id=campaign_id,
             batch_id=f"retry-{item.ordinal + 1:03d}",
             manifest_id=original.manifest_id,
-            config_sha256=self._installed_profile_document(RETRY_PROFILE).config_sha256,
+            config_sha256=retry_config_sha256,
             runtime_closure_sha256=runtime_closure,
             evidence_root=Path(original.evidence_root),
             owner_generation=1,

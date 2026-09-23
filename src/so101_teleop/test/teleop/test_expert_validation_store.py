@@ -871,6 +871,26 @@ def test_admit_retry_consumes_the_command_and_writes_batch_queue_and_intent(tmp_
         store.close()
 
 
+def test_admit_retry_accepts_the_linux_v3_single_point_route(tmp_path):
+    from so101_teleop.expert_validation.execution_context import LINUX_RETRY_PROFILE
+
+    store, request, context, intent = _retry_fixture(tmp_path)
+    try:
+        linux_request = replace(
+            request, execution_profile=LINUX_RETRY_PROFILE, schema_version=3,
+        )
+        linux_context = replace(
+            context, execution_profile=LINUX_RETRY_PROFILE, schema_version=3,
+        )
+        binding = store.admit_retry(
+            request=linux_request, context=linux_context, spawn_intent=intent,
+        )
+        assert binding.execution_profile == LINUX_RETRY_PROFILE
+        assert store.retry_admission(request.command_id)["schema_version"] == 3
+    finally:
+        store.close()
+
+
 def test_admit_retry_refuses_a_foreign_object_instead_of_a_context(tmp_path):
     store, request, _context, intent = _retry_fixture(tmp_path)
     try:

@@ -93,6 +93,39 @@ def test_a_retry_argv_names_the_admitted_chain_and_the_one_point(tmp_path):
     )
 
 
+def test_linux_retry_argv_uses_the_original_v3_document_and_declares_retry_kind(tmp_path):
+    from so101_teleop.expert_validation.execution_context import LINUX_RETRY_PROFILE
+    supervisor, store, request, context = _retry_supervisor(tmp_path)
+    try:
+        original = replace(
+            supervisor._requests[request.campaign_id],
+            parallel_config_path=tmp_path / "parallel_batch_v3.yaml",
+        )
+        linux_request = replace(request, execution_profile=LINUX_RETRY_PROFILE, schema_version=3)
+        binding = supervisor._retry_binding(original, linux_request)
+        argv = fixed_coordinator_argv(
+            executable_path=original.coordinator_executable_path,
+            points_path=original.points_path,
+            config_path=binding.config_path,
+            batch_id=linux_request.batch_id,
+            worker_count=1,
+            evidence_root=tmp_path / "retry-root",
+            broker_image_id=original.broker_image_id,
+            yolo_weights_path=original.yolo_weights_path,
+            yolo_weights_sha256=original.yolo_weights_sha256,
+            grounded_root=original.grounded_root,
+            grounded_manifest_sha256=original.grounded_sam_manifest_sha256,
+            selected_point_ids=(linux_request.point_id,),
+            retry_binding=binding,
+            retry_profile=LINUX_RETRY_PROFILE,
+        )
+        assert _value_after(argv, "--config") == str(original.parallel_config_path)
+        assert _value_after(argv, "--batch-kind") == "FULL_RESTART_RETRY"
+        assert _value_after(argv, RETRY_RESULT_FLAG) == request.original_result_sha256
+    finally:
+        store.close()
+
+
 def test_a_retry_that_cannot_name_its_prior_batch_refuses_before_the_admission(tmp_path):
     supervisor, store, request, context = _retry_supervisor(tmp_path)
     owner = supervisor.process_owner

@@ -362,3 +362,44 @@ def test_the_retry_admission_returns_the_request_and_its_registered_context():
     assert context.schema_version == RETRY_SCHEMA_VERSION
     assert (context.lease_id, context.lease_generation) == ("lease-1", 7)
     assert request.install_prefix == install_prefix
+
+
+def test_linux_retry_admission_binds_the_original_installed_v3_document(monkeypatch):
+    from so101_teleop.expert_validation import production
+    from so101_teleop.expert_validation.execution_context import LINUX_RETRY_PROFILE
+
+    document = Path(__file__).resolve().parents[3] / "so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
+    service = object.__new__(production.ProductionExpertValidationService)
+    service.store = SimpleNamespace(
+        current_lease=lambda: {
+            "lease_id": "lease-1", "service_session_id": "session-1", "generation": 1,
+            "expires_monotonic_ns": 2**62,
+        },
+        campaign_batches=lambda _campaign_id: [
+            SimpleNamespace(batch_kind="FIRST_PASS", batch_id="b889e")
+        ],
+    )
+    service._retry_origin = lambda _campaign_id, point_id: (
+        SimpleNamespace(
+            install_prefix=Path("/opt/so101/install"),
+            evidence_root=Path("/evidence/campaigns"),
+            manifest_id="manifest-1",
+            execution_profile=None,
+            parallel_config_path=document,
+            parallel_config_sha256=production._sha256(document),
+        ),
+        SimpleNamespace(ordinal=0, point_id=point_id),
+        "1" * 64, "2" * 64, "3" * 64,
+    )
+    service.register_production_context = lambda context: context
+    monkeypatch.setattr(production.sys, "platform", "linux")
+
+    request, context = service._production_retry_admission(
+        CAMPAIGN_ID, POINT_ID, {"command_id": "cmd-linux-1"}
+    )
+
+    assert (request.execution_profile, context.execution_profile) == (
+        LINUX_RETRY_PROFILE, LINUX_RETRY_PROFILE,
+    )
+    assert (request.schema_version, context.schema_version) == (3, 3)
+    assert request.config_sha256 == production._sha256(document)

@@ -173,6 +173,7 @@ def test_context_refuses_a_non_positive_expiry_or_a_deadline_before_issue(tmp_pa
         ("MPS_W2_FIRST_PASS", 4, "FIRST_PASS", 2),
         ("MPS_W1_FULL_RESTART_RETRY", 5, "FULL_RESTART_RETRY", 1),
         ("MPS_W1_FIRST_PASS", 6, "FIRST_PASS", 1),
+        ("CUDA_W1_FULL_RESTART_RETRY", 3, "FULL_RESTART_RETRY", 1),
     ],
 )
 def test_production_context_accepts_every_installed_profile_row(
@@ -194,6 +195,7 @@ def test_production_context_accepts_every_installed_profile_row(
         ("MPS_W4_FAST", 7, "FIRST_PASS", 4),
         ("MPS_W2_FIRST_PASS", 5, "FULL_RESTART_RETRY", 2),
         ("MPS_W1_FIRST_PASS", 6, "FIRST_PASS", 2),
+        ("CUDA_W1_FULL_RESTART_RETRY", 3, "FULL_RESTART_RETRY", 2),
     ],
 )
 def test_production_context_refuses_anything_outside_the_installed_matrix(
