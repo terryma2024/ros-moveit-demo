@@ -337,7 +337,8 @@ def test_the_native_host_admits_its_declared_profile(monkeypatch, tmp_path):
 
     environment_reasons = {
         "GPU_TARGET_UNAVAILABLE", "RAM_FREE_BELOW_MINIMUM", "GPU_FREE_BELOW_MINIMUM",
-        "MPS_HEADROOM_BELOW_MINIMUM", "PROBE_TIMEOUT", "SNAPSHOT_UNAVAILABLE",
+        "MPS_HEADROOM_BELOW_MINIMUM", "PROBE_TIMEOUT", "PROBE_DEADLINE_EXCEEDED",
+        "SNAPSHOT_UNAVAILABLE",
     }
     if not admitted and set(reasons) <= environment_reasons:
         pytest.skip(

@@ -372,6 +372,11 @@ if(BUILD_TESTING)
     test/test_so101_pick_place_world.py
     TIMEOUT 300
   )
+  if(APPLE)
+    # This test starts Gazebo and ros2_control; reserve the CTest slots while
+    # its live world runs, then let the remaining tests use the full -j4 pool.
+    set_tests_properties(test_so101_pick_place_world PROPERTIES PROCESSORS 4)
+  endif()
   ament_add_pytest_test(
     test_so101_launch_contract
     test/test_so101_launch_contract.py
