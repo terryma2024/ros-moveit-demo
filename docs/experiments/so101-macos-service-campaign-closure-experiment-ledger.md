@@ -9,10 +9,11 @@ task_id: so101-macos-service-campaign-closure
 goal: close service-driven macOS W2, W1 and single-point retry with lightweight StartGuard protection
 success_contract: design section 16, with candidate and production evidence kept separate
 executor: dst-so101-macos-closure (DeepSeek Harness TUI, tmux) resumed by explicit operator handback; previous writer Gate A Codex dispatch a50dcb6c released at 2026-09-21T19:34:28+08:00
+current_executor: Codex dispatch 5e4d6647-db81-42d1-9594-983c7cdfcae6; user explicitly directed direct repair without dst or dsh
 worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
 branch: codex/so101-unified-webapp
 base_commit: 6d5069026fbd322076f58d0d4b9504891abeb861
-current_commit: 186ce876 (the accepted live-spec corrections, on top of 9bdaea0f harness fixes and c6ab5129 authorization-gate removal; the docs commit that carries this entry follows, and the final gate ran at 186ce876)
+current_commit: cf7e1aad99088b80821c8874b27868cab25f1a6f (cross-host installed suite source under test; the ledger commit follows)
 upstream: origin/codex/so101-unified-webapp (in sync at resume; this session does not push)
 evidence_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
 dispatch_receipt: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/dispatch.receipt
@@ -58,7 +59,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-PLATFORM-PORT-HANDOFF
+latest_checkpoint: CP-MSC-INSTALLED-CROSS-HOST-FINAL
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -5768,3 +5769,421 @@ commands for both hosts, and the traps that already cost time - `SO101_TASK_ROOT
 
 Work continues in the same worktree on the same branch; no new worktree, no push, no evidence
 removal.
+
+## CP-MSC-INSTALLED-REPAIR-START: dispatched repair, canonical retry hypothesis
+
+```yaml
+checkpoint_id: CP-MSC-INSTALLED-REPAIR-START
+recorded_at: 2026-09-23T11:09:00+0800
+source_commit: 5ab72f6c920ffe54bbcd68b96138b9f9149c7ad0
+worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
+branch: codex/so101-unified-webapp
+evidence_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
+install_overlay: /opt/data/so101/workspace/install
+runtime_executable: /opt/ros2_jazzy/.venv/bin/python
+ros_domain_id: not used by HTTP installed fixture
+gz_partition: not used by HTTP installed fixture
+observed: S06 first retry returned 409 RETRY_ORIGINAL_RESULT_UNKNOWN; first-pass journal begins BATCH_STARTED and projection_state is empty, while the production retry path requires a committed canonical point result
+red_evidence: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/repair/s06-canonical-red.log (exit 1)
+disproven_route: updating only the one-point retry request cannot make the legacy fixed helper's original result admissible
+next_experiment: EXP-MSC-INSTALLED-CANONICAL-1
+```
+
+```yaml
+experiment_id: EXP-MSC-INSTALLED-CANONICAL-1
+status: VALID
+prior_experiment: CP-MSC-PLATFORM-PORT-HANDOFF
+hypothesis: the installed retry cases fail because the test execution port publishes a legacy delta journal without canonical point results required by current product retry admission
+prediction: publishing a verified canonical first-pass journal with the manifest's real selection hashes will commit projection_state and allow a one-point S06 retry
+single_variable: first-pass helper journal contract for explicitly opted-in retry specs
+lifecycle: ISOLATED_STACK
+preconditions:
+  - no macOS installed_test_launcher or Playwright service window is active
+success_criteria:
+  - S06 returns 200 for its first retry and same command-id replay, with one retry batch
+failure_criteria:
+  - first retry remains refused or produces duplicate execution
+invalid_criteria:
+  - wrong install prefix, missing model files, or another active service window
+provenance:
+  source_commit: 5ab72f6c920ffe54bbcd68b96138b9f9149c7ad0
+  install_overlay: /opt/data/so101/workspace/install
+  runtime_executable: /opt/ros2_jazzy/.venv/bin/python
+  ros_domain_id: not used by HTTP installed fixture
+  gz_partition: not used by HTTP installed fixture
+commands:
+  - command: repair/run-installed-mac.zsh s06-canonical-green e2e/expert-validation/installed/lease-recovery.spec.ts -g S06 --timeout 240000
+    exit_code: 0
+observed:
+  - S06 passed with a canonical first-pass journal and one retry batch; the legacy helper had returned RETRY_ORIGINAL_RESULT_UNKNOWN at the same boundary.
+  - The unified installed composition and instance-channel authority were additionally required before the same browser path reached the retry endpoint.
+inferred:
+  - First-pass projection_state was missing because the prior fixed helper published only the legacy delta journal.
+conclusion: Canonical first-pass result publication is required for the installed retry acceptance.
+evidence:
+  - /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/repair/s06-canonical-red.log
+  - /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/repair/s06-unified-authority.log
+decision: RETAIN
+next_experiment: EXP-MSC-INSTALLED-SERIAL-RETRY-2
+```
+
+## CP-MSC-INSTALLED-REPAIR-MID: serial retries and crash windows
+
+```yaml
+checkpoint_id: CP-MSC-INSTALLED-REPAIR-MID
+recorded_at: 2026-09-23T11:29:00+0800
+source_commit: 5ab72f6c920ffe54bbcd68b96138b9f9149c7ad0 (worktree changes uncommitted)
+worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
+branch: codex/so101-unified-webapp
+evidence_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
+install_overlay: /opt/data/so101/workspace/install
+runtime_executable: /opt/ros2_jazzy/.venv/bin/python
+ros_domain_id: not used by HTTP installed fixture
+gz_partition: not used by HTTP installed fixture
+observed:
+  - Store regression was RED on the second one-point enqueue because ordinal 0 was reused; GREEN after appending ordinal 1 and rejecting duplicate points.
+  - S14 completed two serial N=1/K=1 retry batches and retained first-pass statistics; its only failure was a console report of the intentionally unavailable teleop /snapshot route (503).
+  - S15 terminal-to-cleanup, cleanup-to-dequeue, and spawn-intent-to-ack passed in separate targeted installed runs after matching the current one-point contract and waiting for first-pass owner exit.
+  - Restart after an orphan retry cleanup refuses a new command for the already completed point with RETRY_NOT_QUEUED; the following point executes once as a new command.
+  - Unacknowledged spawn intent fences new work with VALIDATION_RECOVERY_REQUIRED, while replay of its original command id remains COMMAND_OUTCOME_UNKNOWN.
+evidence:
+  - /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/repair/s15-w1-code-corrected.log
+  - /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/repair/s15-w2-no-replay.log
+  - /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/repair/s15-w3-fence-code.log
+next_experiment: EXP-MSC-INSTALLED-MAC-FULL-3
+```
+
+```yaml
+experiment_id: EXP-MSC-INSTALLED-MAC-FULL-3
+status: VALID
+prior_experiment: CP-MSC-INSTALLED-REPAIR-MID
+hypothesis: unified app composition, retained validation authority, canonical retry fixtures, and serial one-point commands clear all 25 installed cases under the macOS platform-bound matrix
+prediction: 23 passed, 2 skipped for absent ADAPTIVE route, zero failed
+single_variable: integrated repaired install and installed suite
+lifecycle: ISOLATED_STACK
+preconditions:
+  - source and installed Python modules match byte-for-byte
+  - no prior installed fixture service window is active
+success_criteria:
+  - 25 cases accounted for with zero failures and only host-justified skips
+failure_criteria:
+  - any failed case or unaccounted skip
+invalid_criteria:
+  - stale installed bundle, wrong model input, or overlapping service window
+provenance:
+  source_commit: 5ab72f6c920ffe54bbcd68b96138b9f9149c7ad0 (worktree changes uncommitted)
+  install_overlay: /opt/data/so101/workspace/install
+  runtime_executable: /opt/ros2_jazzy/.venv/bin/python
+  ros_domain_id: not used by HTTP installed fixture
+  gz_partition: not used by HTTP installed fixture
+command: repair/run-installed-mac.zsh mac-full-first --timeout 240000
+exit_code: 0
+evidence: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/repair/mac-full-first.log
+observed: 23 passed, 2 skipped (S09 and S12 lack a macOS ADAPTIVE route), zero failed; elapsed 267 seconds.
+decision: RETAIN; this run precedes the direct-next-point recovery order fix and is not final verification.
+next_experiment: EXP-MSC-INSTALLED-DIRECT-NEXT-4
+```
+
+```yaml
+experiment_id: EXP-MSC-INSTALLED-DIRECT-NEXT-4
+status: VALID
+prior_experiment: EXP-MSC-INSTALLED-MAC-FULL-3
+hypothesis: a fresh command for point two immediately after restart can follow a completed orphan point-one retry without a sacrificial refusal request
+prediction: the new point-two command runs once, retry-001 is not replayed, and queue ordinals are 0 and 1
+single_variable: reconcile the durable prior retry before deciding whether to enqueue the new one-point command
+lifecycle: ISOLATED_STACK
+provenance:
+  source_commit: 5ab72f6c920ffe54bbcd68b96138b9f9149c7ad0 (worktree changes uncommitted)
+  install_overlay: /opt/data/so101/workspace/install
+  runtime_executable: /opt/ros2_jazzy/.venv/bin/python
+  ros_domain_id: not used by HTTP installed fixture
+  gz_partition: not used by HTTP installed fixture
+red_evidence: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/repair/s15-w2-direct-next-red.log (exit 1, second command returned 409)
+green_evidence: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/repair/s15-w2-direct-next-green.log (exit 0, one pass)
+observed: product previously left a RUNNING queue entry until reconcile_retry; the new command checked queue state and skipped enqueue before reconciliation, then refused RETRY_NOT_QUEUED. Reordering reconciliation before enqueue let the second point run once without replaying retry-001.
+decision: RETAIN
+next_experiment: EXP-MSC-INSTALLED-STATIC-5
+```
+
+```yaml
+experiment_id: EXP-MSC-INSTALLED-STATIC-5
+status: VALID
+prior_experiment: EXP-MSC-INSTALLED-DIRECT-NEXT-4
+hypothesis: the repaired product, fixture, and web code pass the repository's broader static gate
+prediction: final-gate script returns 0 with every required step passing
+single_variable: integrated repaired source against the existing macOS overlay
+lifecycle: ISOLATED_STACK
+provenance:
+  source_commit: 5ab72f6c920ffe54bbcd68b96138b9f9149c7ad0 (worktree changes uncommitted)
+  install_overlay: /opt/data/so101/workspace/install
+  runtime_executable: /opt/ros2_jazzy/.venv/bin/python
+  ros_domain_id: 211
+  gz_partition: not used by static gate
+command: scripts/so101-macos-service-campaign-final-gate.zsh --worktree /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp --evidence-root /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1 --python /opt/ros2_jazzy/.venv/bin/python --label installed-suite-repair
+exit_code: 1
+observed:
+  - demo-pytest ran 3917 tests with one failure: test_concurrent_batches_cannot_claim_the_same_ros_domains timed out waiting for its second queue result.
+  - teleop-pytest passed 904 with one skip; copied-install, colcon-test (1077 tests, zero failures), colcon-result, web-tsc, web-test, web-build, and playwright-contract all exited 0.
+  - Targeted reruns reproduced the queue timeout; diagnostic exception capture exposed FileNotFoundError creating domain-181.lock in the unchanged so101_demo_py WorkerResourceAllocator claim directory during concurrent allocation.
+  - Increasing the test timeout to 30 seconds did not cure the failure; all temporary source diagnostics were reverted.
+inferred:
+  - The concurrency failure is an independent claim-directory race in code outside this installed-suite patch; the queue timeout hides the worker exception.
+conclusion: Broader static gate is red on one pre-existing concurrency boundary; the repaired teleop and web gates passed.
+evidence:
+  - /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/remediation/gates/installed-suite-repair-20260923T033449Z-60530/summary.txt
+  - /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/repair/demo-concurrent-trace-1.log
+decision: RETAIN finding for a separate resource-claim repair; do not count this gate as passing.
+next_experiment: EXP-MSC-INSTALLED-MAC-FINAL-6
+```
+
+## CP-MSC-INSTALLED-REPAIR-STATIC: installed suite green, independent static finding
+
+```yaml
+checkpoint_id: CP-MSC-INSTALLED-REPAIR-STATIC
+recorded_at: 2026-09-23T11:51:00+0800
+source_commit: 5ab72f6c920ffe54bbcd68b96138b9f9149c7ad0 (worktree changes uncommitted)
+worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
+branch: codex/so101-unified-webapp
+evidence_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
+install_overlay: /opt/data/so101/workspace/install
+runtime_executable: /opt/ros2_jazzy/.venv/bin/python
+ros_domain_id: 211 for static gate; not used by HTTP installed fixture
+gz_partition: not used
+last_valid_experiment: EXP-MSC-INSTALLED-STATIC-5 (valid failure)
+confirmed_conclusions:
+  - macOS installed suite 23 pass, 2 host-justified skip at EXP-MSC-INSTALLED-MAC-FULL-3 before direct-next recovery ordering.
+  - direct next-point command after crash is RED before and GREEN after product reconciliation ordering at EXP-MSC-INSTALLED-DIRECT-NEXT-4.
+open_risks:
+  - final macOS installed suite has not yet been rerun after recovery-order change.
+  - ai-station suite has not yet run on the repaired commit.
+  - static gate has one unchanged so101_demo_py claim-directory concurrency failure.
+next_experiment: EXP-MSC-INSTALLED-MAC-FINAL-6
+```
+
+```yaml
+experiment_id: EXP-MSC-INSTALLED-MAC-FINAL-6
+status: VALID
+prior_experiment: EXP-MSC-INSTALLED-MAC-FULL-3
+hypothesis: the final repaired install keeps all 25 macOS installed cases green after direct-next-point recovery ordering
+prediction: 23 passed, S09 and S12 skipped for absent ADAPTIVE route, zero failures
+single_variable: recovery ordering and direct-next-point S15 assertion added since EXP-MSC-INSTALLED-MAC-FULL-3
+lifecycle: ISOLATED_STACK
+preconditions:
+  - source and installed product bytes match
+  - no prior installed fixture service window is active
+success_criteria:
+  - 25 cases accounted for with zero failures and only host-justified skips
+failure_criteria:
+  - any failed case or unaccounted skip
+invalid_criteria:
+  - stale installed bundle, wrong model input, or overlapping service window
+provenance:
+  source_commit: 5ab72f6c920ffe54bbcd68b96138b9f9149c7ad0 (worktree changes uncommitted)
+  install_overlay: /opt/data/so101/workspace/install
+  runtime_executable: /opt/ros2_jazzy/.venv/bin/python
+  ros_domain_id: not used by HTTP installed fixture
+  gz_partition: not used by HTTP installed fixture
+command: repair/run-installed-mac.zsh mac-full-final --timeout 240000
+exit_code: 0
+observed: 23 passed, 2 skipped (S09/S12 lack macOS ADAPTIVE route), zero failures; elapsed 272 seconds after the direct-next-point fix.
+evidence: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/repair/mac-full-final.log
+decision: RETAIN
+next_experiment: EXP-MSC-INSTALLED-MAC-COMMIT-7
+```
+
+```yaml
+experiment_id: EXP-MSC-INSTALLED-MAC-COMMIT-7
+status: VALID
+prior_experiment: EXP-MSC-INSTALLED-MAC-FINAL-6
+hypothesis: the committed source tree reproduces the same installed result as the just-tested working tree
+prediction: 23 passed, 2 host-justified skips, zero failures at HEAD 27dd5b1d
+single_variable: commit identity; source and installed behavior bytes unchanged
+lifecycle: ISOLATED_STACK
+preconditions:
+  - branch HEAD 27dd5b1d and only evidence ledger dirty
+  - source and installed product bytes match
+  - no prior installed fixture service window is active
+success_criteria:
+  - 25 cases accounted for with zero failures and only host-justified skips
+failure_criteria:
+  - any failed case or unaccounted skip
+invalid_criteria:
+  - stale installed bundle, wrong model input, or overlapping service window
+provenance:
+  source_commit: 27dd5b1d70f1c9a64d4ae8b3dd4963ddb641a24b
+  install_overlay: /opt/data/so101/workspace/install
+  runtime_executable: /opt/ros2_jazzy/.venv/bin/python
+  ros_domain_id: not used by HTTP installed fixture
+  gz_partition: not used by HTTP installed fixture
+command: repair/run-installed-mac.zsh mac-full-commit --timeout 240000
+exit_code: 0
+observed: 23 passed, 2 skipped (S09/S12 lack a macOS ADAPTIVE route), zero failures; elapsed 271 seconds on committed source.
+evidence: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/repair/mac-full-commit.log
+decision: RETAIN
+next_experiment: EXP-MSC-INSTALLED-LINUX-8
+```
+
+```yaml
+experiment_id: EXP-MSC-INSTALLED-LINUX-8
+status: VALID
+prior_experiment: EXP-MSC-INSTALLED-MAC-COMMIT-7
+hypothesis: the installed Linux suite on the same committed source clears all 25 cases after restoring WebSocket authority
+prediction: 25 passed, zero failed
+single_variable: Linux host with the same 27dd5b1d code commit and installed fixture
+lifecycle: ISOLATED_STACK
+provenance:
+  source_commit: 27dd5b1d70f1c9a64d4ae8b3dd4963ddb641a24b
+  install_overlay: /data/work/so101-evidence/macos-installed-suite-linux/20260923T011359Z/install
+  runtime_executable: /data/work/so101-evidence/macos-installed-suite-linux/20260923T011359Z/venv/bin/python
+  evidence_root: /data/work/so101-evidence/macos-installed-suite-linux/20260923T011359Z
+  ros_domain_id: not used by HTTP installed fixture
+  gz_partition: not used by HTTP installed fixture
+precondition_correction: The first Linux attempt exited 130 after an intentional operator interruption; Uvicorn lacked a WebSocket backend, and /control/instances/{id}/channel could not upgrade. The task-owned venv then installed websockets 17.1 alongside uvicorn 0.53.0; that interrupted run is invalid and retained separately.
+command: node node_modules/.bin/playwright test --config playwright.installed.config.ts --timeout 240000
+exit_code: 1
+observed: 20 passed, 5 failed, zero skipped in 7.0 minutes. S06, S14 and three S15 cases all refused at retry admission with PLATFORM_HOST_MISMATCH because the service hard-coded the macOS MPS v5 retry document on Linux. S08, S02, S03 and S04 passed after WebSocket authority was available.
+evidence:
+  - /data/work/so101-evidence/macos-installed-suite-linux/20260923T011359Z/linux-installed-27dd-full-ws.log
+  - /data/work/so101-evidence/macos-installed-suite-linux/20260923T011359Z/linux-installed-27dd-full-ws.exit
+  - /data/work/so101-evidence/macos-installed-suite-linux/20260923T011359Z/linux-websockets-install.log
+decision: RETAIN as a valid host-route failure; user authorized the Linux retry product route at 2026-09-23T12:10+0800.
+next_experiment: EXP-MSC-INSTALLED-CROSS-HOST-9
+```
+
+## CP-MSC-INSTALLED-LINUX-RETRY: host-native retry route under verification
+
+```yaml
+checkpoint_id: CP-MSC-INSTALLED-LINUX-RETRY
+recorded_at: 2026-09-23T12:26:00+0800
+source_commit: 0fc4dd1301b4d9c04a11242a3b938ad84341dd6c
+worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
+branch: codex/so101-unified-webapp
+evidence_root: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1
+linux_evidence_root: /data/work/so101-evidence/macos-installed-suite-linux/20260923T011359Z
+observed:
+  - The Linux retry failure was reproduced in a 20-pass/5-fail installed suite; all five failures name the macOS MPS host mismatch.
+  - The Linux route now binds the original installed v3/CUDA document and original result, selection, catalog and batch identities; macOS keeps the v5/MPS route.
+  - An independent GPT-6 Astra/High read-only reviewer found that the Linux CLI accepted a foreign original catalog digest. A new RED test exposed that gap, then catalog equality was enforced and the CLI file passed 119 tests.
+  - Four teleop unit files passed 136 tests. The targeted S06 installed case passed on both macOS and Linux at commit 0fc4dd13 after the changed installed files matched source bytes.
+  - The dependency guide records the task-owned Linux Python package set and the WebSocket backend requirement.
+open_risks:
+  - Both full 25-case suites at commit 0fc4dd13 are running; their tallies are not yet known.
+  - The earlier broader macOS static gate retains one unrelated so101_demo_py concurrent domain-claim failure.
+evidence:
+  - /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/repair/linux-retry-cli-file-final.log
+  - /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/repair/linux-retry-teleop-files.log
+  - /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/repair/mac-s06-linux-route.log
+  - /data/work/so101-evidence/macos-installed-suite-linux/20260923T011359Z/linux-s06-0fc4.log
+next_experiment: EXP-MSC-INSTALLED-CROSS-HOST-9
+```
+
+```yaml
+experiment_id: EXP-MSC-INSTALLED-CROSS-HOST-9
+status: VALID_RED
+source_commit: 0fc4dd1301b4d9c04a11242a3b938ad84341dd6c
+single_variable: full installed suite after the host-native Linux retry route
+macos:
+  command: repair/run-installed-mac.zsh mac-full-0fc4 --timeout 240000
+  exit_code: 1
+  observed: 22 passed, 2 justified ADAPTIVE skips, 1 failed (S10 released the lease while its terminal batch still had a live process owner); elapsed 272 seconds
+  evidence: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/repair/mac-full-0fc4.log
+linux:
+  command: node node_modules/.bin/playwright test --config playwright.installed.config.ts --timeout 240000
+  exit_code: 1
+  observed: 22 passed, 3 failed (S01 shutdown blocked on the unified event WebSocket, S10 owner-drain race, S14 one transient campaign GET 404); elapsed 541 seconds
+  evidence: /data/work/so101-evidence/macos-installed-suite-linux/20260923T011359Z/linux-installed-0fc4-full.log
+diagnosis:
+  - S01's WebSocket connections closed, but the unified validation events handler still awaited queue.get and held Uvicorn shutdown. A bounded Uvicorn timeout made the symptom pass but was removed; the handler now observes disconnect and ends cleanly.
+  - S10's lease release is meant to refuse while the coordinator owner is alive. The test now waits for that owner to exit after the terminal projection.
+  - S14's 404 did not reproduce on a later targeted run; the test now records campaign identity and any response body on failure.
+decision: RETAIN as valid intermediate failure evidence; neither run is counted as final acceptance.
+next_experiment: EXP-MSC-INSTALLED-CROSS-HOST-10
+```
+
+```yaml
+experiment_id: EXP-MSC-INSTALLED-CROSS-HOST-10
+status: VALID_RED
+source_commit: 71480906e85eb8975c8e237b039b6192492d17df
+product_change: the unified validation event stream now exits on WebSocket disconnect; S01 and S10 test cleanup is explicit
+macos:
+  exit_code: 0
+  observed: 23 passed, 2 justified ADAPTIVE skips, zero failed; elapsed 180 seconds
+  evidence: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/repair/mac-full-71480906.log
+linux:
+  exit_code: 1
+  observed: 24 passed, 1 failed; S06 received 200 then 404 while polling the same campaign before retry admission; elapsed 197 seconds
+  evidence: /data/work/so101-evidence/macos-installed-suite-linux/20260923T011359Z/linux-installed-71480906-full.log
+  targeted_evidence: /data/work/so101-evidence/macos-installed-suite-linux/20260923T011359Z/linux-installed-71480906-targeted.log (S01, S10, S14 all passed)
+decision: RETAIN; a diagnostic assertion was added to expose any later campaign refusal body.
+next_experiment: EXP-MSC-INSTALLED-CROSS-HOST-11
+```
+
+```yaml
+experiment_id: EXP-MSC-INSTALLED-CROSS-HOST-11
+status: VALID_GREEN
+source_commit: cf7e1aad99088b80821c8874b27868cab25f1a6f
+product_install: product bytes from 71480906, identical to cf7e1aad in src/so101_teleop/so101_teleop and src/so101_demo_py/src; cf7e1aad changes only a polling assertion message
+macos:
+  command: repair/run-installed-mac.zsh mac-full-cf7e1aad --timeout 240000
+  exit_code: 0
+  observed: 23 passed, 2 justified ADAPTIVE skips, zero failed; elapsed 183 seconds
+  evidence: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/repair/mac-full-cf7e1aad.log
+  install_provenance: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/repair/mac-install-cf7.provenance (six changed product modules matched source bytes)
+linux:
+  command: node node_modules/.bin/playwright test --config playwright.installed.config.ts --timeout 240000
+  exit_code: 0
+  observed: 25 passed, zero failed, zero skipped; elapsed 193 seconds
+  evidence: /data/work/so101-evidence/macos-installed-suite-linux/20260923T011359Z/linux-installed-cf7-full-diagnostic.log
+  install_provenance: /data/work/so101-evidence/macos-installed-suite-linux/20260923T011359Z/linux-install-cf7.provenance (the same six modules matched source bytes)
+  repeat: S06 --repeat-each 5 passed 5/5 in 13 seconds; evidence /data/work/so101-evidence/macos-installed-suite-linux/20260923T011359Z/linux-installed-cf7-s06-repeat5.log
+  provenance: remote task-owned repository HEAD cf7e1aad; task-owned Linux venv includes websockets 17.1; source and installed product files compared byte-for-byte after the Linux build
+decision: RETAIN as the dispatch's cross-host installed acceptance. The prior intermittent campaign 404 remains an observed but unconfirmed risk.
+next_experiment: EXP-MSC-INSTALLED-STATIC-12
+```
+
+```yaml
+experiment_id: EXP-MSC-INSTALLED-STATIC-12
+status: VALID_RED
+source_head: 909bd1acb70b7500938eafa01004021165d00a4a (same installed product code as cf7e1aad)
+command: scripts/so101-macos-service-campaign-final-gate.zsh --worktree /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp --evidence-root /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1 --python /opt/ros2_jazzy/.venv/bin/python --label installed-suite-714-static --skip-playwright
+exit_code: 1
+observed:
+  - demo_py: 3909 passed, 10 skipped, 12 deselected, 1 failed in test_concurrent_batches_cannot_claim_the_same_ros_domains; a thread outcome did not arrive within its 5-second test timeout. The same unchanged test failed in the preceding broader static gate.
+  - teleop: 909 passed, 1 skipped.
+  - copied install: 29 passed, 8 skipped.
+  - colcon test, colcon result, Web TypeScript, Web tests and Web build all passed.
+evidence: /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1/remediation/gates/installed-suite-714-static-20260923T044504Z-91032/summary.txt
+scratch: /opt/data/tmp/so101-service-gate-fe700ee0; tempfile.gettempdir was verified there and the scratch was preserved
+decision: RETAIN as a separate static-gate failure; do not report the broad gate as green.
+next_experiment: separate follow-up if the static gate must be made green
+```
+
+## CP-MSC-INSTALLED-CROSS-HOST-FINAL: installed acceptance and retained risks
+
+```yaml
+checkpoint_id: CP-MSC-INSTALLED-CROSS-HOST-FINAL
+recorded_at: 2026-09-23T13:02:00+08:00
+dispatch: 5e4d6647-db81-42d1-9594-983c7cdfcae6
+worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
+branch: codex/so101-unified-webapp
+tested_source_commit: cf7e1aad99088b80821c8874b27868cab25f1a6f
+dependency_guide_commit: 909bd1acb70b7500938eafa01004021165d00a4a
+macos_installed: 23 passed, 2 justified skips, zero failed
+linux_installed: 25 passed, zero skipped, zero failed
+retained_runs:
+  - /tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1 (macOS low-rate dispatch log and gate records)
+  - /data/work/so101-evidence/macos-installed-suite-linux/20260923T011359Z (Linux installed runs, reports and task-owned checkout)
+archived_runs: []
+deletion_candidates:
+  - /opt/data/tmp/so101-service-gate-fe700ee0
+  - /opt/data/tmp/so101-ipc-41C9PTTq
+  - /opt/data/tmp/so101-bt-yaWfmaiR
+  - /opt/data/tmp/so101-bt-SOXWoXun
+  - /opt/data/tmp/so101-bt-ZU63lFnj
+  - /opt/data/tmp/so101-cb-TuiVcGm6
+deletion_policy: no evidence or scratch was deleted; user authorization is required before deletion
+open_risks:
+  - The campaign GET returned a transient 404 in one Linux full run at 71480906 and an earlier S14 run at 0fc4dd13; a subsequent full run and five S06 repeats passed, so the exact cause is not established.
+  - The broader macOS static gate is red only in the unchanged concurrent domain-claim test; all other reported steps passed.
+publication: no push, merge, or remote branch update was performed
+```
