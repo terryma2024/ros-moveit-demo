@@ -36,8 +36,17 @@ INTEGRATION_GUIDE = (
 )
 UPSTREAM_010_COMMIT = "57fc6744844902d4532160b403fa95840c1d6f96"
 LOCAL_R11_COMMIT = "f19a8cc3af61feccacb22a9f0d16cc972e3b2c08"
-CANDIDATE_COMMIT = "f89033c548591c9b4e7c2c5f76653562b22ff600"
+CANDIDATE_COMMIT = "5a590b22770b270b71ba6a1c3443d4e67edc7f4b"
 CANDIDATE_LABEL = "main"
+CLOSURE_DESIGN = (
+    REPOSITORY_ROOT / "docs/superpowers/specs"
+    / "2026-09-21-so101-macos-service-campaign-closure-design.md"
+)
+CLOSURE_PLAN = (
+    REPOSITORY_ROOT / "docs/superpowers/plans"
+    / "2026-09-21-so101-macos-service-campaign-closure-implementation.md"
+)
+CLOSURE_GUIDE = REPOSITORY_ROOT / "docs/guides/so101-macos-service-campaign-closure.md"
 MUJOCO_340_COMMIT = "e55fff5dea6f1d5dd7963ca52eecc41d05ad0922"
 MUJOCO_GLFW_PATCH_SHA256 = (
     "aa506e126cf8bec3bcc60a961fbe457e056d2aeb1838bb6c67c7584d7ac5264e"
@@ -249,109 +258,39 @@ def test_integration_guide_reads_back_all_four_fork_package_prefixes() -> None:
         assert f"ros2 pkg prefix {package}" in guide
 
 
-def test_macos_environment_defaults_to_ubuntu_ros_prefix() -> None:
+def test_macos_environment_uses_the_fixed_runtime_contract() -> None:
     envrc = ENVRC_EXAMPLE.read_text(encoding="utf-8")
     dylib_farm = DYLIB_FARM.read_text(encoding="utf-8")
 
-    assert 'ros_underlay="${SO101_ROS_UNDERLAY:-/opt/ros/jazzy}"' in envrc
-    assert '"$ros_underlay/setup.bash"' in envrc
-    assert 'ros_underlay="${SO101_ROS_UNDERLAY:-/opt/ros/jazzy}"' in dylib_farm
-    assert 'default_prefixes="${ros_underlay}:' in dylib_farm
+    assert "ros_root=/opt/ros2_jazzy" in envrc
+    assert '"$ros_root/install/setup.bash"' in envrc
+    assert 'dylib_farm="$ros_root/dylib_farm/current"' in envrc
+    assert '${HOME}/ros2_jazzy' not in envrc
+    assert '/opt/ros/jazzy' not in envrc
+    assert 'SO101_ROS_ROOT:-/opt/ros2_jazzy' in dylib_farm
+    assert '${ros_workspace}/dylib_farm' in dylib_farm
 
 
-def test_macos_environment_keeps_project_install_authoritative(tmp_path: Path) -> None:
-    project_root = tmp_path / "moveit-demo"
-    ros_workspace = tmp_path / "ros2_jazzy"
-    ros_underlay = tmp_path / "ros_underlay"
-    stale_fork = ros_workspace / "ws_mujoco_ros2_control_fork" / "install"
-    project_root.mkdir()
-    (project_root / ".envrc").write_text(
-        ENVRC_EXAMPLE.read_text(encoding="utf-8"), encoding="utf-8"
+def test_macos_environment_sources_the_project_overlay_last() -> None:
+    envrc = ENVRC_EXAMPLE.read_text(encoding="utf-8")
+    setup_block = envrc.split("for setup in", maxsplit=1)[1].split("; do", maxsplit=1)[0]
+
+    expected_order = (
+        '"$ros_root/install/setup.bash"',
+        '"$ros_root/extra_ws/install/setup.bash"',
+        '"/opt/data/so101/runtime/fork/current/setup.bash"',
+        '"/opt/data/so101/workspace/install/setup.bash"',
     )
-
-    prefixes = [
-        ros_underlay,
-        ros_workspace / "extra_ws" / "install",
-        stale_fork,
-        ros_workspace / "so101_isolated_ws" / "install",
-        project_root / "install",
-    ]
-    for prefix in prefixes:
-        prefix.mkdir(parents=True)
-        setup = (
-            f'export AMENT_PREFIX_PATH="{prefix}'
-            '${AMENT_PREFIX_PATH:+:$AMENT_PREFIX_PATH}"\n'
-        )
-        if prefix == project_root / "install":
-            setup = (
-                f'export AMENT_PREFIX_PATH="{stale_fork}'
-                '${AMENT_PREFIX_PATH:+:$AMENT_PREFIX_PATH}"\n' + setup
-            )
-        (prefix / "setup.bash").write_text(setup, encoding="utf-8")
-
-    result = subprocess.run(
-        [
-            "bash",
-            "-c",
-            'watch_file() { :; }; source_env() { source "$1"; }; '
-            'source "$1"; printf "%s" "$AMENT_PREFIX_PATH"',
-            "bash",
-            str(project_root / ".envrc"),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        env={
-            "HOME": str(tmp_path),
-            "PATH": "/usr/bin:/bin",
-            "SO101_ROS_UNDERLAY": str(ros_underlay),
-            "SO101_ROS_WORKSPACE": str(ros_workspace),
-        },
-    )
-    resolved_prefixes = result.stdout.split(":")
-
-    assert resolved_prefixes[0] == str(project_root / "install")
-    assert str(stale_fork) not in resolved_prefixes
+    positions = [setup_block.index(item) for item in expected_order]
+    assert positions == sorted(positions)
 
 
-def test_macos_environment_keeps_dylib_farm_as_fallback(tmp_path: Path) -> None:
-    project_root = tmp_path / "moveit-demo"
-    ros_workspace = tmp_path / "ros2_jazzy"
-    project_install = project_root / "install"
-    dylib_farm = ros_workspace / "macos_dylib_farm" / "current"
-    project_install.mkdir(parents=True)
-    dylib_farm.mkdir(parents=True)
-    (project_root / ".envrc").write_text(
-        ENVRC_EXAMPLE.read_text(encoding="utf-8"), encoding="utf-8"
-    )
-    (project_install / "setup.bash").write_text(
-        f'export DYLD_LIBRARY_PATH="{project_install / "lib"}'
-        '${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"\n',
-        encoding="utf-8",
-    )
+def test_macos_environment_replaces_inherited_dyld_paths_with_the_fixed_farm() -> None:
+    envrc = ENVRC_EXAMPLE.read_text(encoding="utf-8")
 
-    result = subprocess.run(
-        [
-            "bash",
-            "-c",
-            'watch_file() { :; }; source_env() { source "$1"; }; '
-            'source "$1"; printf "%s" "$DYLD_LIBRARY_PATH"',
-            "bash",
-            str(project_root / ".envrc"),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        env={
-            "HOME": str(tmp_path),
-            "PATH": "/usr/bin:/bin",
-            "SO101_ROS_WORKSPACE": str(ros_workspace),
-        },
-    )
-    resolved_paths = result.stdout.split(":")
-
-    assert resolved_paths[0] == str(project_install / "lib")
-    assert resolved_paths[-1] == str(dylib_farm)
+    assert "unset DYLD_LIBRARY_PATH" in envrc
+    assert 'export DYLD_LIBRARY_PATH="$dylib_farm"' in envrc
+    assert '${DYLD_LIBRARY_PATH:+' not in envrc
 
 
 def test_mujoco_installer_accepts_source_overlay_underlay() -> None:
@@ -384,6 +323,50 @@ def test_installer_builds_a_clean_locked_fork_without_patch_application() -> Non
     assert '--base-paths "${build_source_dir}"' in installer
     assert "status --porcelain --untracked-files=all" in installer
     assert "build source must be clean" in installer
+
+
+def test_installer_treats_main_as_a_branch_label_not_a_release_tag() -> None:
+    installer = INSTALLER.read_text(encoding="utf-8")
+
+    assert 'if [[ ${fork_tag} == main ]]; then' in installer
+    assert 'elif [[ ${fork_tag} == *-candidate ]]; then' in installer
+
+
+def test_installer_accepts_a_validated_local_lodepng_source() -> None:
+    installer = INSTALLER.read_text(encoding="utf-8")
+
+    assert "SO101_LODEPNG_SOURCE_DIR" in installer
+    assert "FETCHCONTENT_SOURCE_DIR_LODEPNG" in installer
+    assert "lodepng source must be clean" in installer
+    assert "so101-locked-commit.txt" in installer
+    assert "SO101_TEST_DYLIB_FARM" in installer
+    assert 'export DYLD_LIBRARY_PATH="${test_dylib_farm}"' in installer
+    assert 'export DYLD_FALLBACK_LIBRARY_PATH="${test_dylib_farm}"' in installer
+
+
+def test_installer_crosses_macos_sip_boundaries_with_explicit_python() -> None:
+    installer = INSTALLER.read_text(encoding="utf-8")
+
+    assert "SO101_PYTHON" in installer
+    assert "SO101_COLCON" in installer
+    assert "SO101_ROS2" in installer
+    assert "SO101_CTEST" in installer
+    assert '"${python_command}" "${colcon_command}" --log-base' in installer
+    assert '"${python_command}" "${colcon_command}" test-result' in installer
+    assert '"${python_command}" "${ros2_command}" pkg prefix' in installer
+    assert '"${python_command}" "${ros2_command}" interface show' in installer
+    assert '"${ctest_command}" --test-dir "${build_base}/${package_name}"' in installer
+
+
+def test_macos_plugin_install_rpath_resolves_the_copied_vendor() -> None:
+    cmake = (
+        SUBMODULE / "mujoco_ros2_control" / "CMakeLists.txt"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        'INSTALL_RPATH "@loader_path;@loader_path/../opt/mujoco_vendor/lib"'
+        in cmake
+    )
 
 
 def test_fusion_contract_uses_portable_sha256() -> None:
@@ -472,9 +455,12 @@ def test_macos_mujoco_vendor_installer_replays_patch_from_clean_340_source() -> 
     assert '-DPython3_EXECUTABLE="${python_command}"' in installer
 
 
-def test_macos_dylib_farm_links_source_overlays_and_rejects_ambiguous_names(
+def test_macos_dylib_farm_links_source_overlays_with_later_prefix_precedence(
     tmp_path: Path,
 ) -> None:
+    zsh = shutil.which("zsh")
+    if zsh is None:
+        pytest.skip("zsh is required for the macOS dylib farm script")
     ros_root = tmp_path / "ros2_jazzy"
     first_prefix = ros_root / "first/install"
     second_prefix = ros_root / "second/install"
@@ -484,6 +470,12 @@ def test_macos_dylib_farm_links_source_overlays_and_rejects_ambiguous_names(
     second_library = second_prefix / "beta/lib/libbeta.dylib"
     first_library.write_bytes(b"alpha")
     second_library.write_bytes(b"beta")
+    for library_name in (
+        "libcontrol_toolbox.dylib",
+        "libhardware_interface.dylib",
+        "librosidl_typesupport_c.dylib",
+    ):
+        (first_prefix / "alpha/lib" / library_name).write_bytes(library_name.encode())
 
     environment = os.environ.copy()
     environment["SO101_ROS_ROOT"] = str(ros_root)
@@ -491,7 +483,7 @@ def test_macos_dylib_farm_links_source_overlays_and_rejects_ambiguous_names(
         (str(first_prefix), str(second_prefix))
     )
     completed = subprocess.run(
-        [str(DYLIB_FARM)],
+        [zsh, str(DYLIB_FARM)],
         check=True,
         capture_output=True,
         env=environment,
@@ -499,36 +491,211 @@ def test_macos_dylib_farm_links_source_overlays_and_rejects_ambiguous_names(
     )
     farm = Path(completed.stdout.strip())
 
+    assert (ros_root / "dylib_farm/current").resolve() == farm
     assert (farm / "libalpha.dylib").resolve() == first_library
     assert (farm / "libbeta.dylib").resolve() == second_library
 
     conflicting_library = second_prefix / "beta/lib/libalpha.dylib"
     conflicting_library.write_bytes(b"conflict")
-    rejected = subprocess.run(
-        [str(DYLIB_FARM)],
-        check=False,
+    replaced = subprocess.run(
+        [zsh, str(DYLIB_FARM)],
+        check=True,
         capture_output=True,
         env=environment,
         text=True,
     )
+    replaced_farm = Path(replaced.stdout.strip())
 
-    assert rejected.returncode != 0
-    assert "ambiguous dylib basename: libalpha.dylib" in rejected.stderr
+    assert replaced_farm != farm
+    assert (ros_root / "dylib_farm/current").resolve() == replaced_farm
+    assert (replaced_farm / "libalpha.dylib").resolve() == conflicting_library
+    override_manifest = (replaced_farm / ".overrides.tsv").read_text(encoding="utf-8")
+    assert str(first_library) in override_manifest
+    assert str(conflicting_library) in override_manifest
 
 
+#: The operator authorized the fixed dylib farm as the macOS runtime contract. Literal no-DYLD is no
+#: longer a completion gate. The authorization relaxed nothing else: closure inventory, owner
+#: ancestry, PID/birth, executable, plugin/vendor path+SHA and cleanup evidence all still apply.
+FIXED_DYLIB_FARM_CONTRACT_TOKENS = (
+    "FixedDylibFarmRuntimeContract",
+    "/opt/ros2_jazzy/dylib_farm/current",
+    "owner ancestry",
+    "pid",
+    "birth",
+    "executable",
+    "plugin_path",
+    "plugin_sha256",
+    "vendor_path",
+    "vendor_sha256",
+)
+
+FIXED_DYLIB_FARM_CLOSURE_PREFIXES = (
+    "/opt/ros2_jazzy/install",
+    "/opt/ros2_jazzy/extra_ws/install",
+    "/opt/data/so101/runtime/fork/current",
+    "/opt/data/so101/workspace/install",
+    "/opt/ros2_jazzy/dylib_farm/current",
+)
+
+#: One literal marker, carried by every document that has to say which contract is current.
+SUPERSEDED_BY_FARM = "superseded-by: FixedDylibFarmRuntimeContract"
+
+
+def fixed_dylib_farm_contract_block(design: str) -> str:
+    """Read the contract from its own fenced block, so the assertions test the contract."""
+
+    match = re.search(
+        r"```text\n(?P<block>FixedDylibFarmRuntimeContract:.*?)\n```", design, re.DOTALL)
+    assert match is not None, "the design must carry a FixedDylibFarmRuntimeContract block"
+    return match.group("block")
+
+
+def test_the_authorized_fixed_dylib_farm_contract_is_in_design_plan_and_guide() -> None:
+    """The authorization is a written contract, not an implicit local habit."""
+
+    for path in (CLOSURE_DESIGN, CLOSURE_PLAN, CLOSURE_GUIDE):
+        text = path.read_text(encoding="utf-8")
+        for token in FIXED_DYLIB_FARM_CONTRACT_TOKENS:
+            assert token in text, f"{path.name} does not record {token!r}"
+
+
+def test_the_farm_contract_freezes_five_prefixes_and_refuses_inherited_dyld_paths() -> None:
+    """The farm is one frozen prefix among five; an arbitrary inherited DYLD_* stays illegal."""
+
+    block = fixed_dylib_farm_contract_block(CLOSURE_DESIGN.read_text(encoding="utf-8"))
+
+    for prefix in FIXED_DYLIB_FARM_CLOSURE_PREFIXES:
+        assert prefix in block, f"the contract does not freeze {prefix}"
+    for entry in ("closure_prefixes:", "dylib_farm_root:", "source:", "environment:",
+                  "forbidden:", "attestation:", "cleanup:"):
+        assert entry in block, f"the contract does not state {entry}"
+    for token in FIXED_DYLIB_FARM_CONTRACT_TOKENS[2:]:
+        assert token in block, f"the attestation does not carry {token!r}"
+    assert "任意继承" in block
+    assert SUPERSEDED_BY_FARM in CLOSURE_DESIGN.read_text(encoding="utf-8")
+
+
+def test_the_completion_definition_now_rests_on_the_farm_contract() -> None:
+    """Literal no-DYLD and the single merged F_CLOSURE_ROOT are history, not the current gate."""
+
+    design = CLOSURE_DESIGN.read_text(encoding="utf-8")
+    completion = design.split("## 16. 完成定义", 1)[1].split("\n## ", 1)[0]
+
+    assert "CP-MSC-A2-FARM" in completion
+    assert "无 `DYLD_LIBRARY_PATH`" not in completion
+    assert "F_CLOSURE_ROOT" not in completion
+    assert "FixedDylibFarmRuntimeContract" in completion
+
+    plan = CLOSURE_PLAN.read_text(encoding="utf-8")
+    checkpoints = plan.split("## Checkpoints", 1)[1].split("## 计划自查", 1)[0]
+    assert "CP-MSC-A2-FARM" in checkpoints
+    final_row = next(
+        row for row in checkpoints.splitlines() if row.startswith("| `CP-MSC-FINAL`"))
+    assert "CP-MSC-A2-FARM" in final_row
+    assert "F_CLOSURE_ROOT" not in checkpoints
+    assert SUPERSEDED_BY_FARM in plan
+    # The historical A1 row keeps its own text; it is the *current* contract that moved to the farm.
+    a1_row = next(
+        row for row in checkpoints.splitlines() if row.startswith("| `CP-MSC-A1`"))
+    assert "historical" in a1_row or "历史" in a1_row
+
+
+#: The replayable gate runner: one evidence root, one short scratch, one aggregate verdict.
+FINAL_GATE_RUNNER = (
+    REPOSITORY_ROOT / "scripts" / "so101-macos-service-campaign-final-gate.zsh"
+)
+REGISTERED_EVIDENCE_ROOT = (
+    "/tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1"
+)
+REGISTERED_TEST_PYTHON = "/opt/ros2_jazzy/.venv/bin/python"
+
+
+def test_final_gate_runner_refuses_anything_outside_the_registered_contract(
+    tmp_path: Path,
+) -> None:
+    """The runner only accepts this worktree, this evidence root and this interpreter."""
+
+    assert FINAL_GATE_RUNNER.is_file()
+    assert FINAL_GATE_RUNNER.stat().st_mode & 0o111
+    runner = FINAL_GATE_RUNNER.read_text(encoding="utf-8")
+    for token in (
+        f'REGISTERED_WORKTREE="{REPOSITORY_ROOT}"',
+        f'REGISTERED_EVIDENCE_ROOT="{REGISTERED_EVIDENCE_ROOT}"',
+        f'REGISTERED_PYTHON="{REGISTERED_TEST_PYTHON}"',
+        'REGISTERED_BRANCH="codex/so101-unified-webapp"',
+        "WORKTREE_NOT_REGISTERED",
+        "EVIDENCE_ROOT_NOT_REGISTERED",
+        "PYTHON_NOT_REGISTERED",
+        "BRANCH_NOT_REGISTERED",
+        "TASK_ROOT_MISMATCH",
+        "TMPDIR_NOT_READ_BACK",
+        "SCRATCH_IS_SYMLINK",
+        "prepare_macos_test_scratch",
+        "probe_endpoint_bind",
+        "SO101_IPC_SOCKET_BASE",
+        "ZERO_COLLECTION",
+        "scratch_classification=deletion-candidate (not deleted)",
+        "python_executable=",
+        "rclpy=",
+    ):
+        assert token in runner, token
+    # The runner preserves the scratch and every log: nothing here may remove evidence.
+    assert "rm -rf" not in runner
+    assert "rm -f" not in runner
+
+    zsh = shutil.which("zsh")
+    if zsh is None:
+        pytest.skip("zsh is required for the macOS gate runner")
+    label = f"refused-{os.getpid()}"
+    for arguments, code in (
+        (["--worktree", str(tmp_path)], "WORKTREE_NOT_REGISTERED"),
+        (["--evidence-root", str(tmp_path)], "EVIDENCE_ROOT_NOT_REGISTERED"),
+        (["--python", "/bin/sh"], "PYTHON_NOT_REGISTERED"),
+        (["--python", str(tmp_path / "python")], "PYTHON_NOT_REGISTERED"),
+    ):
+        completed = subprocess.run(
+            [
+                zsh,
+                str(FINAL_GATE_RUNNER),
+                "--worktree",
+                str(REPOSITORY_ROOT),
+                "--evidence-root",
+                REGISTERED_EVIDENCE_ROOT,
+                "--python",
+                REGISTERED_TEST_PYTHON,
+                "--label",
+                label,
+                *arguments,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert completed.returncode == 2
+        assert code in completed.stderr, completed.stderr
+    assert not list(
+        Path(REGISTERED_EVIDENCE_ROOT).glob(f"remediation/gates/{label}-*"))
+
+# Added from main: its fork lidar/vendor tests and the constants and helpers they need.
 
 MUJOCO_HEADER_INCLUDE = re.compile(r"#include\s*<(mujoco/[A-Za-z0-9_./]+\.h)>")
+
 FORK_SOURCE_SUFFIXES = {".h", ".hpp", ".hh", ".cpp", ".cc", ".cxx"}
+
 LIDAR_ROOT = SUBMODULE / "mujoco_extensions" / "mujoco_3d_lidar"
+
 LIDAR_NUMERIC_TYPES = (
     LIDAR_ROOT / "include" / "mujoco_3d_lidar" / "mujoco_numeric_types.hpp"
 )
-# MuJoCo keeps mjtNum/mjMINVAL/mjtByte in mjtnum.h up to 3.8.0 and in mjtype.h
-# from 3.9.0. The numeric type header is the one sanctioned place for the
-# version-dependent include.
-MUJOCO_NUMERIC_HEADER_SWITCH = "mujoco_numeric_types.hpp"
-GUARDED_MUJOCO_HEADER = "mujoco/mjtnum.h"
 
+MUJOCO_NUMERIC_HEADER_SWITCH = "mujoco_numeric_types.hpp"
+
+# The switch names one header per vendor generation, and the staged vendor differs per platform:
+# macOS builds MuJoCo 3.4.0, whose headers carry mjtnum.h, while the Linux vendor ships 3.12.0,
+# whose headers carry mjtype.h. Both are sanctioned inside the switch; the earlier single-name
+# whitelist only held on the Linux vendor.
+GUARDED_MUJOCO_HEADERS = ("mujoco/mjtnum.h", "mujoco/mjtype.h")
 
 def _mujoco_vendor_include_dir() -> Path | None:
     """Return the include directory of the installed MuJoCo vendor package."""
@@ -542,7 +709,6 @@ def _mujoco_vendor_include_dir() -> Path | None:
         return None
     include_dir = prefix / "opt" / "mujoco_vendor" / "include"
     return include_dir if include_dir.is_dir() else None
-
 
 def _fork_sources() -> list[Path]:
     if not (SUBMODULE / ".git").exists():
@@ -568,8 +734,8 @@ def test_lidar_extension_selects_the_mujoco_numeric_header_by_availability() -> 
     ):
         text = source.read_text(encoding="utf-8")
         assert f"#include <mujoco_3d_lidar/{MUJOCO_NUMERIC_HEADER_SWITCH}>" in text, source
-        assert f"#include <{GUARDED_MUJOCO_HEADER}>" not in text, source
-
+        for guarded in GUARDED_MUJOCO_HEADERS:
+            assert f"#include <{guarded}>" not in text, source
 
 def test_fork_sources_only_include_mujoco_headers_the_vendor_can_supply() -> None:
     include_dir = _mujoco_vendor_include_dir()
@@ -590,7 +756,7 @@ def test_fork_sources_only_include_mujoco_headers_the_vendor_can_supply() -> Non
             source.read_text(encoding="utf-8", errors="ignore")
         ):
             if header not in available and not (
-                header == GUARDED_MUJOCO_HEADER and source == LIDAR_NUMERIC_TYPES
+                header in GUARDED_MUJOCO_HEADERS and source == LIDAR_NUMERIC_TYPES
             ):
                 missing.setdefault(header, []).append(
                     source.relative_to(REPOSITORY_ROOT).as_posix()
@@ -599,7 +765,6 @@ def test_fork_sources_only_include_mujoco_headers_the_vendor_can_supply() -> Non
         "fork sources include MuJoCo headers that the pinned vendor version does "
         f"not ship: {missing}"
     )
-
 
 def test_lidar_extension_headers_compile_against_the_vendored_mujoco(
     tmp_path: Path,
@@ -630,7 +795,6 @@ def test_lidar_extension_headers_compile_against_the_vendored_mujoco(
         text=True,
     )
     assert completed.returncode == 0, completed.stderr
-
 
 def test_locked_fork_commit_is_contained_in_the_named_release_ref() -> None:
     """The lock names a release ref and an exact commit.
@@ -669,7 +833,6 @@ def test_locked_fork_commit_is_contained_in_the_named_release_ref() -> None:
         f"{release_ref} ({resolved.stdout.strip()})"
     )
 
-
 def test_installer_reports_a_pin_that_is_ahead_of_the_release_ref() -> None:
     installer = INSTALLER.read_text(encoding="utf-8")
 
@@ -677,7 +840,6 @@ def test_installer_reports_a_pin_that_is_ahead_of_the_release_ref() -> None:
     assert "commits_ahead=" in installer
     assert "is not contained in fork ref" in installer
     assert "fork release tag does not resolve to locked commit" not in installer
-
 
 def test_installer_repoints_a_stale_build_source_to_the_locked_commit() -> None:
     installer = INSTALLER.read_text(encoding="utf-8")
