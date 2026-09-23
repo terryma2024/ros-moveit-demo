@@ -59,7 +59,7 @@ async function waitStatus(
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const response = await client.get(`/expert-validation/campaigns/${campaignId}`);
-    expect(response.status).toBe(200);
+    expect(response.status, `campaign ${campaignId}: ${JSON.stringify(response.body)}`).toBe(200);
     if (predicate(response.body)) return response.body;
     if (Date.now() > deadline) throw new Error(`CAMPAIGN_WAIT_TIMEOUT: ${response.body.status}`);
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
