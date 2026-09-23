@@ -5,6 +5,10 @@ import { join } from "node:path";
 
 import { installedTest as test, expect, installPrefix, pythonExecutable, QUALIFICATION_ENV, resolvePackagePrefixes } from "../fixtures/installed";
 import { readJournalEvents, storeQuery } from "../assertions/journal";
+import {
+  EXECUTION_CONTRACT_VERSION, hostCoordinatorRelative, hostExecutionDocument, hostPaths,
+  hostUnderlayPrefixPath, hostUnderlayPythonPath,
+} from "../fixtures/host-routes";
 import { ExpertValidationPage } from "../pages/expert-validation-page";
 
 
@@ -27,14 +31,19 @@ type EntryHandle = { stop: () => Promise<number | null> };
 
 async function startProductionEntry(evidenceRoot: string, port: number, logPath: string): Promise<EntryHandle> {
   const prefix = installPrefix();
+  const paths = hostPaths();
   const prefixes = resolvePackagePrefixes(
-    prefix, process.env.SO101_E2E_DEPENDENCY_PREFIX ?? "/data/work/ws_moveit/install",
+    prefix, process.env.SO101_E2E_DEPENDENCY_PREFIX ?? paths.dependencyPrefixDefault,
   );
-  const sitePackages = prefixes.map((entry) => join(entry, "lib/python3.12/site-packages"));
+  const sitePackages = prefixes.map((entry) => join(entry, paths.pythonSite));
+  const taskRoot = process.env.SO101_TASK_ROOT ?? process.env.TASK_ROOT;
+  if (!taskRoot) throw new Error("SO101_TASK_ROOT_REQUIRED");
   const entry = join(prefix, "so101_teleop/lib/so101_teleop/so101_expert_validation_server.py");
   if (!existsSync(entry)) throw new Error(`INSTALLED_ENTRY_MISSING: ${entry}`);
+  // The binding names the checkout a deployment was built from. A copied install has no checkout,
+  // and the product documents that fallback, so an operator-supplied binding is passed through
+  // rather than the entry refusing to start when there is none.
   const binding = process.env.SO101_VALIDATION_PROVENANCE_BINDING;
-  if (!binding) throw new Error("SO101_VALIDATION_PROVENANCE_BINDING_REQUIRED");
   const { createWriteStream } = await import("node:fs");
   const logStream = createWriteStream(logPath, { flags: "a" });
   const child: ChildProcess = spawn(pythonExecutable(), [entry], {
@@ -43,18 +52,28 @@ async function startProductionEntry(evidenceRoot: string, port: number, logPath:
       ...QUALIFICATION_ENV,
       SO101_DISABLE_KIMI_EDITABLE_FINDER: "1",
       PYTHONNOUSERSITE: "1",
-      PYTHONPATH: [...sitePackages, "/opt/ros/jazzy/lib/python3.12/site-packages"].join(":"),
-      AMENT_PREFIX_PATH: [...prefixes, "/opt/ros/jazzy"].join(":"),
+      SO101_TASK_ROOT: taskRoot,
+      TASK_ROOT: taskRoot,
+      PYTHONPATH: [...sitePackages, ...hostUnderlayPythonPath()].join(":"),
+      AMENT_PREFIX_PATH: [...prefixes, ...hostUnderlayPrefixPath()].join(":"),
       ROS_HOME: join(evidenceRoot, "ros-home"),
       ROS_LOG_DIR: join(evidenceRoot, "ros-home", "log"),
       SO101_VALIDATION_EVIDENCE_ROOT: evidenceRoot,
       SO101_VALIDATION_PORT: String(port),
       SO101_VALIDATION_WEB_ROOT: join(prefix, "so101_teleop/share/so101_teleop/web"),
-      SO101_VALIDATION_PROVENANCE_BINDING: binding,
+      ...(binding ? { SO101_VALIDATION_PROVENANCE_BINDING: binding } : {}),
       SO101_VALIDATION_PARALLEL_CONFIG: join(
         prefix,
-        "so101_demo_py/share/so101_demo_py/config/mujoco/parallel_batch_v2.yaml",
+        "so101_demo_py/share/so101_demo_py/config/mujoco",
+        hostExecutionDocument(),
       ),
+      ...(hostCoordinatorRelative() === null
+        ? {}
+        : {
+          SO101_VALIDATION_COORDINATOR: join(
+            prefix, "so101_demo_py", hostCoordinatorRelative() as string,
+          ),
+        }),
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -218,7 +237,7 @@ test("S03 a second Chrome context stays fenced out spec:default", async ({ page,
         lease_id: "lease-b",
         lease_generation: 1,
         manifest_id: "manifest-b",
-        contract_version: 2,
+        contract_version: EXECUTION_CONTRACT_VERSION,
         execution_mode: "SEQUENTIAL",
         worker_count: 1,
       },

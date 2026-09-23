@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 import { installedTest as test, expect, pythonExecutable } from "../fixtures/installed";
 import { readJournalEvents, storeQuery } from "../assertions/journal";
+import { EXECUTION_CONTRACT_VERSION, processAlive } from "../fixtures/host-routes";
+import { hostClaimFor } from "./support";
 import { ExpertValidationPage } from "../pages/expert-validation-page";
 
 type Api = {
@@ -51,12 +53,13 @@ async function createManifest(client: Api, totalPoints: number) {
 function fixedConfig(lease: { lease_id: string; generation: number }, session: string, manifestId: string) {
   return {
     service_session_id: session,
-    contract_version: 2,
+    contract_version: EXECUTION_CONTRACT_VERSION,
     lease_id: lease.lease_id,
     lease_generation: lease.generation,
     manifest_id: manifestId,
     execution_mode: "SEQUENTIAL",
     worker_count: 1,
+    ...hostClaimFor("SEQUENTIAL", 1),
   };
 }
 
@@ -141,7 +144,7 @@ test("S05 server restart reconciles a running campaign spec:slow", async ({ page
   // recorded owner pid to actually disappear before expecting control back.
   const oldPid = ownersBefore[0].pid as number;
   const exitDeadline = Date.now() + 15_000;
-  while (existsSync(`/proc/${oldPid}`)) {
+  while (processAlive(oldPid)) {
     if (Date.now() > exitDeadline) throw new Error(`OWNER_PROCESS_STILL_ALIVE: ${oldPid}`);
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
   }

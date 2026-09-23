@@ -7,6 +7,9 @@ import { fileURLToPath } from "node:url";
 import { test as base, expect } from "@playwright/test";
 
 import { e2eEvidenceRoot, proveChrome } from "./chrome";
+import {
+  hostCoordinatorRelative, hostExecutionDocument, hostUnderlayPrefixPath,
+} from "./host-routes";
 import { qualificationEnvironment } from "./qualification-env";
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
@@ -183,6 +186,19 @@ export const installedTest = base.extend<InstalledFixtures>({
       "so101_demo_py", "so101_teleop"]
       .map((name) => join(prefix, name))
       .filter((path) => existsSync(path));
+    // The two variables the product's own launcher sets for its child: which execution document
+    // this host runs, and which coordinator answers the resource probe. Without them the service
+    // refuses every preflight with RESOURCE_PROBE_FAILED / CONFIG_VERSION_UNSUPPORTED.
+    // The campaign resource probe reads the start-guard state under `$SO101_TASK_ROOT/start-guard-state`
+    // and refuses with `CoordinatorError: PROBE_STATE_ROOT_UNSET` when the variable is unset - which
+    // is every preflight, and so every campaign start, on a host that does not export it. The gate
+    // runner and the live windows both set it to the registered evidence root; the fixture requires
+    // the same value rather than inventing one.
+    const taskRoot = process.env.SO101_TASK_ROOT ?? process.env.TASK_ROOT;
+    if (!taskRoot) throw new Error("SO101_TASK_ROOT_REQUIRED");
+    const mujocoConfig = join(prefix, "so101_demo_py/share/so101_demo_py/config/mujoco");
+    const coordinator = hostCoordinatorRelative();
+    const coordinatorPath = coordinator === null ? null : join(prefix, "so101_demo_py", coordinator);
     const port = await freePort();
     const readyFile = join(serverRoot, "ready.json");
     const serverLog = join(evidenceDir, "server.log");
@@ -211,7 +227,15 @@ export const installedTest = base.extend<InstalledFixtures>({
             ...QUALIFICATION_ENV,
             SO101_DISABLE_KIMI_EDITABLE_FINDER: "1",
             PYTHONNOUSERSITE: "1",
-            AMENT_PREFIX_PATH: [...packagePrefixes, "/opt/ros/jazzy"].join(":"),
+            SO101_TASK_ROOT: taskRoot,
+            TASK_ROOT: taskRoot,
+            SO101_VALIDATION_PARALLEL_CONFIG:
+              process.env.SO101_VALIDATION_PARALLEL_CONFIG
+              ?? join(mujocoConfig, hostExecutionDocument()),
+            ...(coordinatorPath && !process.env.SO101_VALIDATION_COORDINATOR
+              ? { SO101_VALIDATION_COORDINATOR: coordinatorPath }
+              : {}),
+            AMENT_PREFIX_PATH: [...packagePrefixes, ...hostUnderlayPrefixPath()].join(":"),
             ROS_HOME: join(serverRoot, "ros-home"),
             ROS_LOG_DIR: join(serverRoot, "ros-home", "log"),
           },

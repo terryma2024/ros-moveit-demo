@@ -3,8 +3,9 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";import { join } 
 
 import { installedTest as test, expect, pythonExecutable } from "../fixtures/installed";
 import { readJournalEvents, storeQuery } from "../assertions/journal";
+import { hostRoute, processAlive } from "../fixtures/host-routes";
 import {
-  api, acquireLease, createManifest, fixedConfig, adaptiveConfig,
+  api, acquireLease, capabilities, createManifest, fixedConfig, adaptiveConfig,
   preflight, startCampaign, waitStatus, waitProcessGone,
 } from "./support";
 
@@ -47,7 +48,7 @@ test("S07 a surviving descendant blocks the next batch until inventory clears sp
 
   const leaderLog = join(campaignRoot(installedServer.serverRoot, campaignId), `${owner.batch_id}.coordinator.log`);
   const descendantPid = readDescendantPid(leaderLog);
-  expect(existsSync(`/proc/${descendantPid}`)).toBe(true);
+  expect(processAlive(descendantPid)).toBe(true);
 
   // The campaign is not terminal and no descendant-free claim is possible.
   const projection = (await client.get(`/expert-validation/campaigns/${campaignId}`)).body;
@@ -100,6 +101,12 @@ test("S09 adaptive ownership stays on the wrapper spec:default", async ({ instal
   try {
     const lease = await acquireLease(client, session);
     const manifest = await createManifest(client, 4);
+    // ADAPTIVE is a route this host has to serve. A platform-bound host carries no such row, so the
+    // case is skipped with the host's own reason instead of being rewritten into a fixed route.
+    const route = hostRoute(await capabilities(client), {
+      mode: "ADAPTIVE", workerCount: 2, batchKind: "FIRST_PASS",
+    });
+    test.skip(!route.runnable, route.runnable ? "" : route.reason);
     const config = adaptiveConfig(lease, session, manifest.manifest_id);
     const campaignId = await startCampaign(
       client, config, "s09-start", await preflight(client, config),
@@ -119,7 +126,7 @@ test("S09 adaptive ownership stays on the wrapper spec:default", async ({ instal
     expect(handshake.wrapper_pid).toBe(owner.pid);
     expect(handshake.batch_id).toBe(owner.batch_id);
     expect(handshake.runner_pid).toBe(owner.runner_pid);
-    expect(existsSync(`/proc/${owner.runner_pid}`)).toBe(true);
+    expect(processAlive(owner.runner_pid)).toBe(true);
 
     // Cancel reaches only the identity-matched wrapper.
     const cancelled = await client.post(`/expert-validation/campaigns/${campaignId}/cancel`, {
@@ -192,6 +199,12 @@ test("S12 adaptive lease expiry signals only the identity-matched wrapper spec:d
   try {
     const lease = await acquireLease(client, session);
     const manifest = await createManifest(client, 4);
+    // ADAPTIVE is a route this host has to serve. A platform-bound host carries no such row, so the
+    // case is skipped with the host's own reason instead of being rewritten into a fixed route.
+    const route = hostRoute(await capabilities(client), {
+      mode: "ADAPTIVE", workerCount: 2, batchKind: "FIRST_PASS",
+    });
+    test.skip(!route.runnable, route.runnable ? "" : route.reason);
     const config = adaptiveConfig(lease, session, manifest.manifest_id);
     const campaignId = await startCampaign(
       client, config, "s12-start", await preflight(client, config),
