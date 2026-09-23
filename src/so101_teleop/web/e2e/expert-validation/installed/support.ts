@@ -171,12 +171,16 @@ export async function preflight(client: Api, config: Record<string, unknown>) {
 export async function startCampaign(
   client: Api, config: Record<string, unknown>, commandId: string, receiptId: string,
 ) {
-  const response = await client.post("/expert-validation/campaigns", {
+  const body = {
     ...(await claimed(client, config)),
     command_id: commandId,
     preflight_receipt_id: receiptId,
-  });
-  expect(response.status, `start ${commandId}: ${JSON.stringify(response.body)}`).toBe(200);
+  };
+  const response = await client.post("/expert-validation/campaigns", body);
+  expect(
+    response.status,
+    `start ${commandId}: sent ${JSON.stringify(body)} -> ${JSON.stringify(response.body)}`,
+  ).toBe(200);
   return response.body.campaign_id as string;
 }
 
