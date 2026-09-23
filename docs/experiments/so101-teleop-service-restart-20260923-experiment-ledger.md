@@ -8,7 +8,7 @@ worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-weba
 linux_worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
 branch: codex/so101-unified-webapp
 base_commit: fd7348aa27361750f7e2e7954df53ef75e96545c
-current_commit: bedf45c746733996382d9ca68c8faf0189ee1944
+current_commit: 0d058b2c4d6fe500b6bb4b4299e9a12fefe8f224
 evidence_root_mac: /opt/data/work/so101-evidence/teleop-service-restart/20260923-70919020
 evidence_root_linux: /data/work/so101-evidence/teleop-service-restart/20260923-70919020
 low_rate_root_mac: /tmp/so101-debug-teleop-service-restart-20260923-70919020
@@ -19,10 +19,11 @@ confirmed_conclusions:
   - ai-station old PID 2118905 belongs to tmux so101-teleop-tailscale-ai; its campaign list is empty.
   - Both old services report domains.validation=ready and global_state=IDLE before restart.
   - EXP-001 and EXP-003: Mac and ai-station now have manager-owned port 8000 services with Validation ready, IDLE, zero campaigns, and Web index/assets HTTP 200.
+  - EXP-004: Mac now serves the fd7348aa palette bundle, byte-identical to ai-station's installed index, JS, and CSS; light and dark browser renders use the new background tokens.
 disproven_routes:
   - Rebase requires rewriting commits after the latest origin/main fetch.
 open_hypotheses: []
-latest_checkpoint: CP-004
+latest_checkpoint: CP-006
 next_experiment: NONE
 ```
 
@@ -238,4 +239,100 @@ archived_runs: NONE
 deletion_candidates:
   - Both hosts' /tmp/so101-debug-teleop-service-restart-20260923-70919020 after readback; no evidence deleted.
 next_command: Commit and push the final ledger update, then verify both manager statuses and remote branch heads.
+```
+
+```yaml
+checkpoint_id: CP-005
+last_valid_experiment: EXP-003
+current_hypothesis: Mac still serves the pre-fd7348aa Web bundle because its dist and install timestamps predate the style commit.
+working_tree_status: Branch codex/so101-unified-webapp at 0d058b2c was clean before this task-owned ledger update.
+owned_processes: Mac manager PID 25883 on 100.74.192.81:8000; ai-station manager PID 2227775 remains preserved.
+preserved_processes: All other ROS, tmux, and ai-station processes.
+confirmed_conclusions:
+  - Branch contains fd7348aa, committed 2026-09-23 23:04:27 +0800.
+  - Mac source theme.css has #f4f7fb, #101827, and #90bbff; Mac dist and installed Web index were built at 22:38:54 and the served CSS lacks those markers.
+  - Mac service is Validation ready and IDLE with zero campaigns; its installed package CMake cache points at this branch worktree.
+disproven_routes:
+  - Git ancestry alone proves the installed Mac Web bundle reflects fd7348aa.
+open_risks:
+  - A browser may retain the old page until refreshed after deployment.
+next_command: Run EXP-004 using Bun tests/build, install only so101_teleop, and restart the Mac manager after a fresh campaign guard.
+```
+
+```yaml
+experiment_id: EXP-004
+status: VALID
+prior_experiment: EXP-001
+hypothesis: Rebuilding and installing the Mac Web bundle from the current branch will expose fd7348aa's light and dark palette on port 8000.
+prediction: Built and installed CSS contain #f4f7fb, #101827, and #90bbff; the index references new hashed assets; after a managed restart, live HTTP serves those same bytes and Validation remains ready.
+single_variable: Replace only the stale Mac Web build/install artifacts with a build from commit 0d058b2c, then restart its managed Web process.
+lifecycle: FULL_RESTART
+preconditions:
+  - Mac manager PID 25883 is IDLE and has no active campaigns; source tree is clean except this ledger.
+  - Installed Web index SHA256 is 23791b706123c5f6f60e2552c7093baf2e7e71806c1107dc608e134867637142; installed CSS lacks the new theme markers.
+success_criteria:
+  - Bun test/build and package install exit 0; Mac installed and live CSS include the three palette markers; Web root and referenced assets return HTTP 200; managed service remains Validation ready/IDLE.
+failure_criteria:
+  - Build/install fails, installed or live assets remain stale, or service readiness regresses.
+invalid_criteria:
+  - Source commit or package install prefix changes unexpectedly, or a campaign starts before service cleanup.
+provenance:
+  source_commit: 0d058b2c4d6fe500b6bb4b4299e9a12fefe8f224
+  install_overlay: /opt/data/so101/workspace/install
+  runtime_executable: /opt/ros/jazzy/.venv/bin/python
+  ros_domain_id: 225
+  gz_partition: so101-teleop-tailscale-mac-225
+commands:
+  - command: /opt/homebrew/bin/bun run test && /opt/homebrew/bin/bun run build (cwd src/so101_teleop/web)
+    exit_code: 0 and 0; 53 test files, 300 tests passed.
+  - command: /opt/ros/jazzy/.venv/bin/colcon --log-base /opt/data/so101/workspace/log build --base-paths /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp/src --build-base /opt/data/so101/workspace/build --install-base /opt/data/so101/workspace/install --packages-select so101_teleop --event-handlers console_direct+
+    exit_code: 0; one package finished.
+  - command: scripts/so101-teleop-macos.zsh cleanup; scripts/so101-teleop-macos.zsh start --evidence-root /opt/data/work/so101-evidence/teleop-service-restart/20260923-70919020
+    exit_code: 0 and 0
+  - command: Fresh live HTTP hash, health/campaign, and Chrome light/dark render checks.
+    exit_code: 0
+observed:
+  - New Mac dist and installed index SHA256 d7ef8c16c863154fb8890bbbfe8526555031383ea3065f8573b1fdcdf841db4e; CSS 8675560751c9b2b562559a2ecd96c04dc74885779ca848936ef7853caedfd442; JS cd47607f436c0858455da51261b3c9bca35f9e1eb18b764998d2277a84229da2. All three match ai-station's installed files.
+  - New installed CSS contains #f4f7fb, #101827, and #90bbff; previous installed CSS lacked all three markers.
+  - Manager cleanup stopped old PID 25883 after its empty campaign readback; manager started PID 27535 on 100.74.192.81:8000.
+  - Live index, CSS, and JS GETs returned HTTP 200 with the same hashes. Health reports Validation ready and IDLE with zero campaigns.
+  - Fresh headless Chrome render measured light --background #f4f7fb/body rgb(244, 247, 251) and dark --background #101827/body rgb(16, 24, 39); both screenshots were opened and visually inspected.
+inferred:
+  - The user-observed missing style was caused by a Mac Web bundle built before fd7348aa, not missing Git ancestry or a different server source.
+conclusion: Mac port 8000 now serves fd7348aa's light and dark palette from the installed Web bundle.
+evidence:
+  - /tmp/so101-debug-teleop-service-restart-20260923-70919020/web-test-fd7348aa.log
+  - /tmp/so101-debug-teleop-service-restart-20260923-70919020/web-build-fd7348aa.log
+  - /tmp/so101-debug-teleop-service-restart-20260923-70919020/colcon-mac-palette.log
+  - /tmp/so101-debug-teleop-service-restart-20260923-70919020/cleanup-mac-palette.json
+  - /tmp/so101-debug-teleop-service-restart-20260923-70919020/start-mac-palette.json
+  - /opt/data/work/so101-evidence/teleop-service-restart/20260923-70919020/service-20260923T161452Z.log
+  - /opt/data/work/so101-evidence/teleop-service-restart/20260923-70919020/visual/mac-palette-computed.json
+  - /opt/data/work/so101-evidence/teleop-service-restart/20260923-70919020/visual/mac-palette-light.png
+  - /opt/data/work/so101-evidence/teleop-service-restart/20260923-70919020/visual/mac-palette-dark.png
+decision: KEEP
+next_experiment: NONE
+```
+
+```yaml
+checkpoint_id: CP-006
+last_valid_experiment: EXP-004
+current_hypothesis: NONE
+working_tree_status: Only this task-owned ledger update is pending commit; no source code changed.
+owned_processes: Mac manager PID 27535 on 100.74.192.81:8000; ai-station manager PID 2227775 preserved.
+preserved_processes: All unrelated ROS, tmux, and ai-station processes.
+confirmed_conclusions:
+  - EXP-004 proved the Mac installed bundle was stale and replaced it with byte-identical fd7348aa artifacts from the current branch.
+  - Live HTTP and browser computed styles verify both light and dark palettes; Web and Validation service are healthy.
+disproven_routes:
+  - Mac served the current Git branch's styles before rebuilding the ignored dist and installed Web files.
+open_risks:
+  - An already open browser tab may continue displaying cached old assets until reloaded.
+retained_runs:
+  - /opt/data/work/so101-evidence/teleop-service-restart/20260923-70919020
+  - /data/work/so101-evidence/teleop-service-restart/20260923-70919020
+archived_runs: NONE
+deletion_candidates:
+  - Both hosts' /tmp/so101-debug-teleop-service-restart-20260923-70919020 roots after readback; no evidence deleted.
+next_command: Commit and push the task-owned ledger, then verify the Mac service and branch status.
 ```
