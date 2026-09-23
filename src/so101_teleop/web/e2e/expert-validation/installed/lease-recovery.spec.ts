@@ -188,7 +188,7 @@ test("S06 start and retry command ids are idempotent spec:default", async ({ ins
   const body = { ...config, command_id: "s06-start", preflight_receipt_id: receipt.body.receipt_id };
 
   const first = await client.post("/expert-validation/campaigns", body);
-  expect(first.status).toBe(200);
+  expect(first.status, `start: ${JSON.stringify(first.body)}`).toBe(200);
   const campaignId = first.body.campaign_id;
 
   // Lost-response replay with the same command id returns the stored outcome.
@@ -225,7 +225,7 @@ test("S06 start and retry command ids are idempotent spec:default", async ({ ins
   const retry = await client.post(
     `/expert-validation/campaigns/${campaignId}/full-restart-retries`, retryBody,
   );
-  expect(retry.status).toBe(200);
+  expect(retry.status, `retry: ${JSON.stringify(retry.body)}`).toBe(200);
 
   const retryReplay = await client.post(
     `/expert-validation/campaigns/${campaignId}/full-restart-retries`, retryBody,
