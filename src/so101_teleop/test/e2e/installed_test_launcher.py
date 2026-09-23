@@ -57,36 +57,20 @@ def create_installed_test_app(
     environment: dict[str, str],
     static_dir: Path | None = None,
 ):
-    """Compose the deployed service - the unified one - with the typed test execution port.
-
-    The console bundle the deployment serves is the unified one: its page boots by calling
-    ``/snapshot`` and opens ``/control/...`` channels, and only the unified app answers those. The
-    earlier composition mounted the expert-validation app alone, so every page-driven case loaded a
-    console whose boot fetch 404'd, never became interactive, and timed out with an empty store -
-    the same failure on both hosts. The unified app is composed here with the helper execution port
-    injected, so the acceptance keeps its deterministic execution while driving the real console.
-    """
+    """Compose production modules with the typed test execution port."""
 
     _bootstrap_install_imports(install_prefix)
 
-    from so101_teleop.unified.app import create_unified_app
-    from so101_teleop.unified.compose import compose_domain_services
+    from so101_teleop.expert_validation.api import create_expert_validation_app
+    from so101_teleop.expert_validation.production import create_production_service
 
-    services = compose_domain_services(
-        environment=dict(environment),
-        evidence_root=evidence_root,
-        worker=None,
-        bridge_owner=None,
-        validation_execution_port=execution_port,
+    service = create_production_service(
+        evidence_root,
+        environment=environment,
+        execution_port=execution_port,
     )
-    app = create_unified_app(
-        services,
-        static_dir=static_dir,
-        capture_dir=None,
-        bind_address="127.0.0.1",
-    )
-    app.state.installed_test_service = services.validation
-    app.state.unified_services = services
+    app = create_expert_validation_app(service, static_dir)
+    app.state.installed_test_service = service
     return app
 
 
