@@ -58,7 +58,7 @@ open_hypotheses:
     campaign loaded is not yet measured
   - A manifest-bound filtered ROS dylib farm can satisfy the host ROS dependencies while
     preserving the exact MuJoCo vendor boundary as the sole N/P semantic delta
-latest_checkpoint: CP-MSC-PLATFORM-PORT-2
+latest_checkpoint: CP-MSC-PLATFORM-PORT-3
 review_pending: CP-MSC-02 and CP-MSC-03 packets (Tasks 2-6, 7-9) stay prepared for an external reviewer; the Task 13 Step 2 Sol/high result review and Step 5 Astra/high final review could not be performed - the operator dropped them from this session's todo, `gpt-6-astra` is absent from the mounted provider catalog (openai-codex, anthropic, xai), and CP-MSC-FINAL therefore stays PARTIAL by the plan's own rule. The remediation dispatch reopens the same two reviews at its Task 11 Steps 5-6 and adds a required review checkpoint before each; `CP-MSC-FINAL=PASS` still waits on them.
 next_experiment: EXP-MSC-REM-A2 (owner-bound Gate A attestation under the authorized fixed dylib farm), EXP-MSC-REM-SHORT-TEMP (short AF_UNIX control for the static gates), EXP-MSC-REM-FULL-GATE (complete static gate under that control) and EXP-MSC-REM-LIVE (W2/W1/same-page retry plus crash-recovery live requalification) - all four registered PLANNED at CP-MSC-REMEDIATION-START with their criteria frozen there
 ```
@@ -5693,3 +5693,49 @@ platform-bound. Nothing in the host-assumption set is left behind these nine.
 macOS   14 passed / 9 failed / 2 skipped   (baseline 1 passed / 24 failed)
 Linux   16 passed / 9 failed               (baseline 0 passed / 25 failed, suite could not start)
 ```
+
+## CP-MSC-PLATFORM-PORT-3: why the last nine need a decision, not a spec edit
+
+```yaml
+checkpoint_id: CP-MSC-PLATFORM-PORT-3
+recorded_at: 2026-09-23T12:20:00+0800
+carried_by: the commit that adds this entry (parent 85fa385c)
+status: the nine are an app-composition mismatch, not stale assertions
+```
+
+The nine were to be updated to the product's current contract. Measuring first showed the contract
+they are missing is not an assertion, it is an authority protocol:
+
+```text
+the console bundle the deployment serves is the unified one
+  its page boots by calling /snapshot and opens /control/... channels
+  only the unified app answers those - the expert-validation app has neither route
+  so every page-driven case loaded a console whose boot fetch 404'd, never became interactive,
+  and timed out against an empty store: no campaign, no receipt, nothing
+```
+
+That also explains why the five timeouts failed identically on both hosts, and why S01 - which the
+port had already pointed at the unified entry - passes.
+
+Attempted fix, measured, reverted: composing the unified app in `installed_test_launcher.py` with the
+helper execution port injected (the seam exists: `compose_domain_services(validation_execution_port=)`).
+The page then works, but the suite regressed, because the unified routes demand the console's own
+authority: `/expert-validation/lease` takes `Depends(require_channel("validation"))` and every
+mutation takes `RequestAuthority = mutation`. A bare JSON POST with no instance registration, no
+channel handshake and no authority headers is refused. Reverted in `85fa385c`; the suite is back at
+macOS 14 / Linux 16 passed.
+
+So the remaining work is one of these, and it changes what the acceptance is:
+
+```text
+a) implement the console's authority protocol in the installed fixture - register an instance,
+   connect the channel, send authority headers - so the specs speak the deployed contract; the
+   retry expectations then also move to one point per command
+b) keep the legacy app for the specs and give the console the routes it boots on, which is a
+   hybrid deployment no host actually runs
+c) leave the nine as findings: the page-driven acceptance cannot run against the legacy
+   composition, and the retry specs assert a pipeline the product no longer has
+```
+
+Nothing in the host-assumption set is behind them, so the macOS port stands on its own results:
+14 passed / 9 failed / 2 skipped, with Linux at 16 passed / 9 failed against the same build.
