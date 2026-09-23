@@ -27,9 +27,9 @@
 - 账本：当前实现 worktree 的 `docs/experiments/<task-slug>-experiment-ledger.md`。
 - 每个 task 只能登记一个原始证据根：
   - 普通低速日志、截图、检查和临时构建证据：`/tmp/so101-debug-<task-id>/`；
-  - 高频无损或明确要求持久保留的证据：`/data/work/so101-evidence/<task-family>/<run-id>/`；
-  - 已被替代但仍需审计的批次：`/data/work/so101-evidence/archived/<task-family>/<run-id>/`。
-- 禁止直接创建 `/data/work/so101-debug-*`，也不得把一个 task 分散到多个 evidence root。
+  - 高频无损或明确要求持久保留的证据：ai-station 用 `/data/work/so101-evidence/<task-family>/<run-id>/`，macOS 用 `/opt/data/work/so101-evidence/<task-family>/<run-id>/`；
+  - 已被替代但仍需审计的批次：放在对应平台的 `so101-evidence/archived/<task-family>/<run-id>/`。
+- 禁止直接创建 `/data/work/so101-debug-*` 或 `/opt/data/work/so101-debug-*`，也不得把一个 task 分散到多个 evidence root。
 - 账本只保存关键数值、退出码、摘要、证据路径和必要哈希；日志、截图、视频、rosbag 和构建产物不得复制进账本或源码目录。
 - `/tmp` 不是长期结论的唯一保存位置。证据已丢失时必须标记 `evidence_unavailable`，不得假装仍可复核。
 - 完成 checkpoint 必须分类报告 retained、archived 和可删除候选。未获用户明确授权不得删除；
@@ -52,7 +52,7 @@ worktree: <absolute-path>
 branch: <branch-name>
 base_commit: <commit>
 current_commit: <commit>
-evidence_root: <the-one-approved-/tmp-or-/data/work/so101-evidence-root>
+evidence_root: <the-one-approved-/tmp-or-platform-so101-evidence-root>
 confirmed_conclusions:
   - <结论及其 experiment_id>
 disproven_routes:

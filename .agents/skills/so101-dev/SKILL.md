@@ -35,13 +35,15 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
 | 证据类型 | 唯一路径 |
 |---|---|
 | 普通低速日志、截图、检查与临时构建证据 | `/tmp/so101-debug-<task-id>/` |
-| 高频无损证据或必须持久保留的证据 | `/data/work/so101-evidence/<task-family>/<run-id>/` |
-| 已被替代但必须保留审计链的批次 | `/data/work/so101-evidence/archived/<task-family>/<run-id>/` |
+| 高频无损证据或必须持久保留的证据（ai-station） | `/data/work/so101-evidence/<task-family>/<run-id>/` |
+| 高频无损证据或必须持久保留的证据（macOS） | `/opt/data/work/so101-evidence/<task-family>/<run-id>/` |
+| 已被替代但必须保留审计链的批次（ai-station） | `/data/work/so101-evidence/archived/<task-family>/<run-id>/` |
+| 已被替代但必须保留审计链的批次（macOS） | `/opt/data/work/so101-evidence/archived/<task-family>/<run-id>/` |
 
-禁止直接创建 `/data/work/so101-debug-*`。不得把同一 task 分散到多个临时或持久根目录。
+禁止直接创建 `/data/work/so101-debug-*` 或 `/opt/data/work/so101-debug-*`。不得把同一 task 分散到多个临时或持久根目录。
 任务完成时必须分别报告 retained、archived 和可删除候选；“可删除候选”只是报告分类，未获
 用户明确授权不得删除任何证据。迁移或归档前后必须核验相对文件路径、SHA256、大小和数量，
-并更新账本/provenance 中的 tracked 绝对路径而不改写历史结论。持久布局说明位于
+并更新账本/provenance 中的 tracked 绝对路径而不改写历史结论。ai-station 的持久布局说明位于
 `/data/work/so101-evidence/README.md`；完整账本字段见
 [`references/experiment-ledger.md`](references/experiment-ledger.md)。
 
@@ -49,7 +51,7 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
 
 预计需要两轮以上实验、需要比较环境生命周期或连续成功、任务可能跨上下文压缩/goal 暂停/agent 交接，或用户要求避免重复路线时，必须在当前实现 worktree 建立并持续更新 `docs/experiments/<task-slug>-experiment-ledger.md`。详细状态机、字段和模板见 [`references/experiment-ledger.md`](references/experiment-ledger.md)。
 
-恢复任务时必须先读账本，复述最后可信 checkpoint、已确认结论、已证伪路线和下一条实验引用；完成前不得启动 stack、调参、操作 GUI 或清理进程。原始日志和截图继续放在本 task 登记的唯一 evidence root：普通低速证据使用 `/tmp`，高频无损或需持久保留的证据使用 `/data/work/so101-evidence`。不能让 `/tmp` 或聊天成为长期结论的唯一载体。
+恢复任务时必须先读账本，复述最后可信 checkpoint、已确认结论、已证伪路线和下一条实验引用；完成前不得启动 stack、调参、操作 GUI 或清理进程。原始日志和截图继续放在本 task 登记的唯一 evidence root：普通低速证据使用 `/tmp`，高频无损或需持久保留的证据使用上表对应平台的目录。不能让 `/tmp` 或聊天成为长期结论的唯一载体。
 
 每条实验记录必须显式写出 source commit、install overlay、runtime executable 或 package prefix、`ROS_DOMAIN_ID` 和 `GZ_PARTITION`；不得只写笼统的 “provenance 已确认”。每轮结束、上下文压缩、暂停或交接前，必须先更新账本 checkpoint，再发送聊天或 tmux 摘要。
 

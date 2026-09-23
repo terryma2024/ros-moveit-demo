@@ -15,11 +15,12 @@
   gates.
 - Every SO-101 task must use one registered evidence root. Put ordinary low-rate logs in a unique
   `/tmp/so101-debug-<task-id>/`. Put high-frequency lossless evidence or artifacts requiring durable
-  retention only in `/data/work/so101-evidence/<task-family>/<run-id>/`; put superseded but auditable
-  batches in `/data/work/so101-evidence/archived/<task-family>/<run-id>/`. Never create a direct
-  `/data/work/so101-debug-*` path. Register the root in the task ledger, and at completion report
-  retained runs, archived runs, and deletion candidates. Do not delete evidence without explicit
-  user authorization.
+  retention on `ai-station` in `/data/work/so101-evidence/<task-family>/<run-id>/` and on macOS in
+  `/opt/data/work/so101-evidence/<task-family>/<run-id>/`. Put superseded but auditable batches under
+  the corresponding platform root's `archived/<task-family>/<run-id>/`. Never create a direct
+  `/data/work/so101-debug-*` or `/opt/data/work/so101-debug-*` path. Register the root in the task
+  ledger, and at completion report retained runs, archived runs, and deletion candidates. Do not
+  delete evidence without explicit user authorization.
 - On `ai-station` only, any pytest or benchmark run that creates fsync-heavy temporary fixtures must
   use a unique, previously nonexistent scratch directory on the `/data` NVMe filesystem under the
   task's registered durable evidence root, for example
