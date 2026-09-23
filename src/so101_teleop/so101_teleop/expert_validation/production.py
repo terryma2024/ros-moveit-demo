@@ -1780,9 +1780,11 @@ class ProductionExpertValidationService(ExpertValidationService):
             # to mint several contexts behind one client command id.
             raise ServiceConflict("RETRY_ONE_POINT_PER_COMMAND")
         self.store.begin_command(body["command_id"], digest, "FULL_RESTART_RETRY")
-        if not self.store.retry_items(campaign_id):
-            self.store.enqueue_retries(campaign_id, point_ids)
+        # A dead owner may have committed cleanup while this service was down. Advance that
+        # durable entry before deciding whether the new one-point command needs an enqueue.
         self.supervisor.reconcile_retry(campaign_id)
+        if not any(item.state != "COMPLETE" for item in self.store.retry_items(campaign_id)):
+            self.store.enqueue_retries(campaign_id, point_ids)
         self.get_campaign(campaign_id)
         request, context = self._production_retry_admission(campaign_id, point_ids[0], body)
         result = await self.supervisor.start_production_retry(request=request, context=context)
@@ -2106,9 +2108,9 @@ class ProductionExpertValidationService(ExpertValidationService):
         if len(point_ids) != 1:
             raise ServiceConflict("RETRY_ONE_POINT_PER_COMMAND")
         self.store.begin_command(body["command_id"], digest, "CANDIDATE_FULL_RESTART_RETRY")
-        if not self.store.retry_items(campaign_id):
-            self.store.enqueue_retries(campaign_id, point_ids)
         self.supervisor.reconcile_retry(campaign_id)
+        if not any(item.state != "COMPLETE" for item in self.store.retry_items(campaign_id)):
+            self.store.enqueue_retries(campaign_id, point_ids)
         self.get_campaign(campaign_id)
         _original, item, catalog_sha256, selection_sha256, result_sha256 = self._retry_origin(
             campaign_id, point_ids[0]

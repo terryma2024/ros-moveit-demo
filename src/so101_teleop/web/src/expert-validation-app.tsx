@@ -469,11 +469,15 @@ export function ExpertValidationApp({ api: providedApi = defaultClient }: { api?
           campaign={campaign}
           onRetry={async (pointIds, confirmation) => {
             try {
-              const result = await api.retry(campaign.campaign_id, pointIds, authority(), confirmation);
-              replaceCampaign(result);
+              for (const pointId of pointIds) {
+                const result = await api.retry(
+                  campaign.campaign_id, [pointId], authority(), confirmation,
+                );
+                replaceCampaign(result);
+              }
             } catch (error) {
-              // A refused retry leaves the campaign exactly as it was: the refusal is reported, and
-              // the operator retries or stops from the projection the service still holds.
+              // Earlier one-point commands may already have completed. Keep their latest
+              // projection visible and report the refused command to the operator.
               reportError(error);
             }
           }}
