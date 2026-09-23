@@ -5,7 +5,7 @@ success_contract: A failed or interrupted S07 run cannot leave an unbounded test
 worktree: /Users/matianyi/Projects/ros-moveit-demo/.worktrees/so101-unified-webapp
 branch: codex/so101-unified-webapp
 base_commit: 4f39f618f24894d5f2d962cbaa0f913d688af9c6
-current_commit: 4f39f618f24894d5f2d962cbaa0f913d688af9c6
+current_commit: 9fd86e7f29c762e11451fff1457e394a548d91b7 (verified implementation commit; final ledger-only commit follows)
 evidence_root: /tmp/so101-debug-descendant-orphans-20260923-4f39f618
 confirmed_conclusions:
   - EXP-001: 39 resident helpers at initial inventory, all PPID 1; S07 deliberately forks a survivor, and its second survivor cleanup is outside finally.
@@ -17,7 +17,7 @@ disproven_routes:
   - The current process-owner group stop alone prevents these leaks; S07 directly creates a survivor after its leader exits.
 open_hypotheses:
   - Historical helpers' exact per-PID source testcase remains partly unknown; all 39 had the same test-only script, PPID 1, and no new attribution argument.
-latest_checkpoint: CP-002
+latest_checkpoint: CP-003
 next_experiment: NONE
 ---
 
@@ -256,4 +256,28 @@ archived_runs: []
 deletion_candidates:
   - This task's /opt/data/tmp/dh-* pytest scratch trees after readback.
   - Temporary owned-descendant-* roots below the registered evidence root after readback.
+```
+
+## CP-003: commit, non-force publication and final residue readback
+
+```yaml
+checkpoint_id: CP-003
+last_valid_experiment: EXP-004
+current_hypothesis: NONE
+working_tree_status: Clean after implementation commit 9fd86e7f; this checkpoint is a ledger-only follow-up.
+owned_processes: NONE; descendant_helper.py count 0 on final ps readback.
+preserved_processes: Unrelated host processes were not signalled.
+confirmed_conclusions:
+  - EXP-004 fresh S07 passed, 39/39 old test-only helpers exited, zero same-name residue.
+  - Implementation commit 9fd86e7f29c762e11451fff1457e394a548d91b7 was pushed to origin/codex/so101-descendant-helper-orphans-20260923.
+disproven_routes:
+  - Direct ordinary push to origin/codex/so101-unified-webapp is possible without reconciliation; remote rejected it as non-fast-forward.
+open_risks:
+  - The designated local branch and its remote have divergent history (480 ahead, 470 behind after the implementation commit); no force push or merge was attempted.
+next_command: Publish this ledger-only checkpoint to the new remote branch, then verify its tip and a clean worktree.
+retained_runs:
+  - /tmp/so101-debug-descendant-orphans-20260923-4f39f618.
+archived_runs: []
+deletion_candidates:
+  - This task's /opt/data/tmp/dh-* scratch trees and temporary owned-descendant-* fixture roots; no evidence was deleted.
 ```
