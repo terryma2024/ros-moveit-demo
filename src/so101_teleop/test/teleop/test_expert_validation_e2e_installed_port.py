@@ -8,6 +8,7 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 
 import pytest
@@ -40,6 +41,14 @@ def _port(tmp_path: Path) -> HelperExecutionPort:
         helpers_dir=_E2E_DIR / "process_helpers",
         spec_path=spec,
     )
+
+
+def _short_batch_root(batch_id: str) -> Path:
+    """Keep the fixed helper's control socket inside Darwin's Unix path limit."""
+    base = os.environ.get("SO101_IPC_SOCKET_BASE") or (
+        "/private/tmp" if sys.platform == "darwin" else "/tmp"
+    )
+    return Path(tempfile.mkdtemp(prefix="so101-fh-", dir=base)) / batch_id
 
 
 def _process_identity(pid: int):
@@ -104,8 +113,7 @@ def test_port_qualification_manifest_records_real_hashes(tmp_path):
 
 def test_fixed_helper_full_protocol(tmp_path):
     port = _port(tmp_path)
-    batch_root = tmp_path / "batch" / "b0001"
-    batch_root.parent.mkdir(parents=True)
+    batch_root = _short_batch_root("b0001")
     request = type(
         "Request",
         (),
@@ -156,8 +164,7 @@ def test_fixed_helper_descendant_survives_leader_exit(tmp_path):
     port = HelperExecutionPort(
         python=sys.executable, helpers_dir=_E2E_DIR / "process_helpers", spec_path=spec
     )
-    batch_root = tmp_path / "batch" / "b0002"
-    batch_root.parent.mkdir(parents=True)
+    batch_root = _short_batch_root("b0002")
     request = type(
         "Request",
         (),

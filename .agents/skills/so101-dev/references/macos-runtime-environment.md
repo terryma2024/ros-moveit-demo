@@ -114,14 +114,19 @@ export DYLD_LIBRARY_PATH=/opt/ros2_jazzy/dylib_farm/current
 export TMPDIR=/opt/data/tmp TMP=/opt/data/tmp TEMP=/opt/data/tmp
 
 /opt/ros2_jazzy/.venv/bin/python -c 'import rclpy; print(rclpy.__file__)'
+logical_cpus=$(/opt/ros2_jazzy/.venv/bin/python -c 'import os; print(os.cpu_count() or 1)')
+workers=$(( logical_cpus > 8 ? 8 : logical_cpus ))
+print -r -- "logical_cpus=$logical_cpus pytest_workers=$workers"
 /opt/ros2_jazzy/.venv/bin/python -m pytest \
-  -n 8 --dist loadscope \
+  -n "$workers" --dist loadscope \
   --basetemp=/opt/data/tmp/pytest-<unique-run-id> \
   src/so101_demo_py/test \
   --junitxml="$TASK_EVIDENCE/tests/so101_demo_py.xml"
 ```
 
-八进程门禁需要固定 venv 中安装 `pytest-xdist==3.8.0`。先用下面的命令核对；缺失时按项目的
+全量并行门禁需要固定 venv 中安装 `pytest-xdist==3.8.0`；逻辑 CPU 多于 8 个时必须以
+8 worker 通过，不多于 8 个时必须以实际逻辑 CPU 数通过。资源冲突须修复隔离后重跑完整
+范围，串行结果不能代替。先用下面的命令核对依赖；缺失时按项目的
 `test` extra 安装，不能借用系统 Python 或用户 site-packages：
 
 ```zsh

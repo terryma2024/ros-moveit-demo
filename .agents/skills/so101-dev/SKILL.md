@@ -20,7 +20,7 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
    - 远程命令、tmux、GUI、截图或 CUA：[`references/ai-station-access.md`](references/ai-station-access.md)
    - 查找源码、launch、安装产物或运行边界：[`references/so101-system-map.md`](references/so101-system-map.md)
    - 定位根因和区分证据层：[`references/debug-evidence.md`](references/debug-evidence.md)
-   - 修改代码、运行测试或声明完成：[`references/test-and-acceptance.md`](references/test-and-acceptance.md)；ai-station 大规模普通 pytest 的 `-n 8` 加速、NVMe scratch 与串行冲突分组见其中“ai-station 大规模 pytest 加速”章节。
+   - 修改代码、运行测试或声明完成：[`references/test-and-acceptance.md`](references/test-and-acceptance.md)；其中规定每个模块的全量 pytest 并行门禁、ai-station NVMe scratch 和资源隔离。
    - 仅当 SO-101 在 macOS 上运行或测试时出现 Python、overlay、package prefix、SIP、`DYLD_*` 或 `@rpath/*.dylib` 环境问题：[`references/macos-runtime-environment.md`](references/macos-runtime-environment.md)。Linux 任务和 macOS 上与运行环境无关的控制、规划、物理或视觉问题不读取此文件。
    - 多轮实验、生命周期比较、上下文压缩或 agent 交接：[`references/experiment-ledger.md`](references/experiment-ledger.md)
    - 安装 Python 依赖、选择 uv 索引或让镜像域名绕过代理：[`references/python-dependency-install.md`](references/python-dependency-install.md)
@@ -57,6 +57,16 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
 
 - `src/so101_gazebo_demo_cpp/web` 统一使用 Bun 安装依赖、运行 scripts 和调用一次性 CLI；以 `bun.lock` 为锁文件，不用 npm/npx 或 `package-lock.json`。
 - 每个新 shell 先记录 `command -v bun` 和 `bun --version`。项目预构建、本地测试和 shadcn CLI 也必须经 Bun 运行；不得回退使用系统 Node 18。
+
+## Python 全量测试并行门禁
+
+每个模块的全量 pytest 必须用 `pytest-xdist`，worker 数为 `min(8, 逻辑 CPU 数)`：逻辑 CPU
+多于 8 个时用 `-n 8`，不多于 8 个时用实际逻辑 CPU 数。每个模块的完整普通测试范围都须在
+该并行度下通过，并记录 CPU 数、worker 数、实际测试范围、退出码、JUnit 和跳过数。定向或
+串行运行只能用于定位问题，不算全量通过。遇到固定端口、socket、ROS domain、临时目录、
+进程清理或其他共享资源冲突，修复隔离与测试设计后重跑同一并行门禁；不能降为单进程或
+串行分组来宣称通过。无法满足门禁时如实报告未通过，不缩小收集范围。具体操作见
+[`references/test-and-acceptance.md`](references/test-and-acceptance.md)。
 
 ## 闭环
 

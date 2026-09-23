@@ -27,6 +27,19 @@ from so101_teleop.process_identity import (  # noqa: E402
 )
 
 
+def pytest_configure(config) -> None:
+    """Keep each xdist worker's socket processes outside every other worker's cleanup scope."""
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+    base = os.environ.get("SO101_IPC_SOCKET_BASE")
+    if not worker or not base:
+        return
+    worker_root = Path(base) / worker
+    worker_root.mkdir(mode=0o700)
+    if worker_root.stat().st_mode & 0o077:
+        raise RuntimeError(f"IPC worker root is not private: {worker_root}")
+    os.environ["SO101_IPC_SOCKET_BASE"] = str(worker_root)
+
+
 def _groups_naming(marker: str) -> dict[int, int]:
     """Every process group holding a process whose argv really names ``marker``: pgid -> a pid."""
     listing = subprocess.run(

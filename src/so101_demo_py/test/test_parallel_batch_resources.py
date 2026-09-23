@@ -18,6 +18,7 @@ import signal
 import shutil
 import subprocess
 import sys
+import tempfile
 from threading import Barrier, Event
 from types import SimpleNamespace
 
@@ -37,6 +38,7 @@ from so101_demo.parallel_batch.resources import (
     SystemResourceProbe,
     WorkerResourceAllocator,
     configured_runtime_ipc_root,
+    runtime_ipc_base,
 )
 
 
@@ -197,17 +199,19 @@ def claim_root():
 
 
 @pytest.mark.skipif(sys.platform != 'darwin', reason='macOS /tmp is a system alias')
-def test_trusted_parent_accepts_the_root_owned_macos_tmp_alias(tmp_path):
+def test_trusted_parent_accepts_the_root_owned_macos_tmp_alias():
     """The handoff's /tmp evidence root reaches the same trusted /private/tmp inode."""
 
-    relative = tmp_path.relative_to('/private/tmp')
-    alias_target = Path('/tmp') / relative / 'batch'
+    with tempfile.TemporaryDirectory(prefix='so101-tmp-alias-', dir='/private/tmp') as root:
+        real_path = Path(root)
+        relative = real_path.relative_to('/private/tmp')
+        alias_target = Path('/tmp') / relative / 'batch'
 
-    descriptor = resources_api._open_trusted_parent(alias_target)
-    try:
-        assert os.fstat(descriptor).st_ino == tmp_path.stat().st_ino
-    finally:
-        os.close(descriptor)
+        descriptor = resources_api._open_trusted_parent(alias_target)
+        try:
+            assert os.fstat(descriptor).st_ino == real_path.stat().st_ino
+        finally:
+            os.close(descriptor)
 
 
 @pytest.mark.skipif(sys.platform != 'darwin', reason='macOS has no procfs stat')
@@ -217,6 +221,7 @@ def test_domain_claim_owner_has_a_portable_process_birth_identity():
     assert resources_api._process_starttime_ticks() > 0
 
 
+@pytest.mark.skipif(sys.platform != 'linux', reason='requires Linux /proc/<pid>/cmdline')
 def test_oversized_cmdline_process_is_classified_not_refused():
     """A same-UID process with a huge argv must not make the whole probe fail closed.
 
@@ -1073,7 +1078,11 @@ def test_concurrent_reader_never_observes_partial_manifest(tmp_path, config, mon
     original_write = os.write
 
     def paused_write(descriptor, payload):
-        target = Path(os.readlink(f'/proc/self/fd/{descriptor}'))
+        if sys.platform == 'darwin':
+            raw_path = fcntl.fcntl(descriptor, fcntl.F_GETPATH, bytes(1024))
+            target = Path(os.fsdecode(raw_path.split(b'\0', 1)[0]))
+        else:
+            target = Path(os.readlink(f'/proc/self/fd/{descriptor}'))
         if target.name.startswith('.resource_manifest.') and not write_started.is_set():
             written = original_write(descriptor, payload[:32])
             write_started.set()
@@ -1644,7 +1653,7 @@ def test_socket_path_must_fit_linux_unix_domain_limit(tmp_path, config, monkeypa
 
 def test_short_external_ipc_root_preserves_long_durable_evidence_root(tmp_path, config):
     root = tmp_path / ("durable-" + "x" * 90)
-    ipc_root = Path(f"/run/user/{os.getuid()}/so101-test-{os.getpid()}")
+    ipc_root = runtime_ipc_base() / f"so101-test-{os.getpid()}"
     assert not ipc_root.exists()
     resource_allocator = WorkerResourceAllocator(
         config,
@@ -1660,7 +1669,12 @@ def test_short_external_ipc_root_preserves_long_durable_evidence_root(tmp_path, 
 
         assert worker.worker_root.is_relative_to(root)
         assert worker.socket_path == ipc_root / "1/s"
-        assert len(os.fsencode(worker.socket_path)) <= 107
+        capacity = (
+            resources_api.DARWIN_SUN_PATH_CAPACITY_BYTES
+            if sys.platform == 'darwin'
+            else resources_api.LINUX_SUN_PATH_CAPACITY_BYTES
+        )
+        assert len(os.fsencode(worker.socket_path)) + 1 <= capacity
         assert not (root / "ipc").exists()
     finally:
         resource_allocator.close()
@@ -1668,7 +1682,7 @@ def test_short_external_ipc_root_preserves_long_durable_evidence_root(tmp_path, 
 
 
 def test_runtime_ipc_base_is_closed_to_same_user_runtime_directory():
-    expected = Path(f"/run/user/{os.getuid()}")
+    expected = runtime_ipc_base()
     assert configured_runtime_ipc_root(
         "b1234", {"SO101_PARALLEL_IPC_BASE": str(expected)}
     ) == expected / "so101-b1234"

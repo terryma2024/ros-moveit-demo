@@ -176,10 +176,17 @@ test("S06 start and retry command ids are idempotent spec:canonical-retry", asyn
   expect(conflict.status).toBe(409);
   expect(conflict.body.code).toBe("COMMAND_ID_REUSED");
 
-  await waitStatus(
+  const terminal = await waitStatus(
     client, campaignId,
     (projection) => projection.status === "COMPLETED_WITH_FAILURES" && projection.batch_cleanup_complete === true,
   );
+  const database = join(installedServer.serverRoot, "validation-service", "supervisor.sqlite3");
+  const owners = storeQuery(
+    pythonExecutable(), database,
+    `SELECT pid FROM owned_execution WHERE batch_id='${terminal.batch_id}'`,
+  ) as Array<{ pid: number }>;
+  expect(owners).toHaveLength(1);
+  await waitProcessGone(owners[0].pid);
 
   const projection = (await client.get(`/expert-validation/campaigns/${campaignId}`)).body;
   const pointId = projection.points.find((point: any) => point.status === "FAILED").point_id;
@@ -201,7 +208,6 @@ test("S06 start and retry command ids are idempotent spec:canonical-retry", asyn
   );
   expect(retryReplay.status).toBe(200);
 
-  const database = join(installedServer.serverRoot, "validation-service", "supervisor.sqlite3");
   const retryBatches = storeQuery(
     pythonExecutable(), database,
     "SELECT batch_id FROM campaign_batches WHERE batch_kind='FULL_RESTART_RETRY'",

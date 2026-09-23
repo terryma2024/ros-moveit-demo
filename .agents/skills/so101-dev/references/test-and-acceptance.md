@@ -4,7 +4,7 @@
 
 - [修改前](#修改前)
 - [构建与 package 测试](#构建与-package-测试)
-- [ai-station 大规模 pytest 加速](#ai-station-大规模-pytest-加速)
+- [每个模块的全量 pytest 并行门禁](#每个模块的全量-pytest-并行门禁)
 - [运行时测试阶梯](#运行时测试阶梯)
 - [按状态验收](#按状态验收)
 - [视觉验收](#视觉验收)
@@ -55,11 +55,13 @@ stat install/so101_gazebo_demo_cpp/lib/so101_gazebo_demo_cpp/pick_place_state_ma
 
 定向测试先行，包级测试随后。精确测试名从当前 `CMakeLists.txt`、`colcon test-result --all` 或 build 目录发现，不从旧记录猜。
 
-### ai-station 大规模 pytest 加速
+### 每个模块的全量 pytest 并行门禁
 
-在 ai-station 上，已隔离共享资源的大规模普通 pytest 可用 `pytest-xdist -n 8` 缩短整包反馈时间。
-先核验可用 CPU/内存和并发负载；资源不足时降低测试并行度。这里的 8 是 pytest 进程数，
-与产品 WorkerCount、exact-N 预算及测量/运行授权无关；不能据此宣称产品支持 N=8。
+macOS 和 Linux 上，每个模块的完整普通 pytest 范围都必须使用 `pytest-xdist`，worker 数固定为
+`min(8, os.cpu_count() or 1)`。逻辑 CPU 数大于 8 时使用 8 个 worker；不大于 8 时使用
+实际逻辑 CPU 数。先记录逻辑 CPU 数、worker 数、内存和并发负载。资源不足时停止并说明
+门禁未完成，不能降低并行度来宣称通过。这里的 worker 数与产品 WorkerCount、exact-N
+预算及测量/运行授权无关；不能据此宣称产品支持 N=8。
 
 用任务登记的精确 Python 核验 `pytest`、`xdist` 版本和模块来源。缺依赖时，仅在已授权的
 task-owned 隔离环境安装并记录版本；未获该权限则报告依赖门，不改共享/global 环境。
@@ -68,15 +70,20 @@ task-owned 隔离环境安装并记录版本；未获该权限则报告依赖门
 
 ```zsh
 test -d "$TASK_ROOT/scratch" && test -x "$TEST_PYTHON" || exit 1
+logical_cpus=$("$TEST_PYTHON" -c 'import os; print(os.cpu_count() or 1)') || exit 1
+test "$logical_cpus" -ge 1 || exit 1
+workers=$(( logical_cpus > 8 ? 8 : logical_cpus ))
+print -r -- "logical_cpus=$logical_cpus pytest_workers=$workers"
 pytest_run_dir=$(mktemp -d "$TASK_ROOT/scratch/pytest-xdist8.XXXXXXXX") || exit 1
 mkdir "$pytest_run_dir/tmp" || exit 1
 export TMPDIR="$pytest_run_dir/tmp" TMP="$pytest_run_dir/tmp" TEMP="$pytest_run_dir/tmp"
 "$TEST_PYTHON" -c 'import os,pathlib,sys,tempfile,pytest,xdist; actual=pathlib.Path(tempfile.gettempdir()).resolve(); expected=pathlib.Path(os.environ["TMPDIR"]).resolve(); print("python=",sys.executable,"pytest=",pytest.__version__,pytest.__file__,"xdist=",xdist.__version__,xdist.__file__,"temp=",actual); assert actual == expected' \
   > "$pytest_run_dir/tempfile-proof.log" 2>&1 || exit 1
-"$TEST_PYTHON" -m pytest src/so101_demo_py/test -n 8 \
+"$TEST_PYTHON" -m pytest src/so101_demo_py/test -n "$workers" \
   --junitxml="$pytest_run_dir/junit.xml"
 ```
 
+对每个模块分别运行完整普通测试目录，不能因跨包重名模块而把两个目录混在一个 pytest 命令中。
 使用现有证据 wrapper 或补齐上述示例的完整 argv、stdout/stderr、真实退出码、elapsed、JUnit
 和采集计数。colcon 的每个实际测试 interpreter 都须单独保存带 executable/origin 标签的
 tempfile proof；不能只验证控制器 Python，也不能用旧 run 的证明。需要确认 xdist worker
@@ -84,13 +91,14 @@ tempfile proof；不能只验证控制器 Python，也不能用旧 run 的证明
 tmpfs，不关闭 journaling/integrity。scratch 读回后只列删除候选，未获授权不删除。
 
 并行前列出共享固定端口/socket/ROS_DOMAIN_ID/GZ_PARTITION、外部进程/服务、全局文件/环境、
-GPU 或其他主机资源的测试。能按 worker/run 隔离时先验证隔离；不能隔离时保存完整串行
-nodeid 清单，把其余测试并行运行，再逐组串行跑该清单。核对并行与串行集合无遗漏、无
-意外重复，合集等于原 gate 的全部 nodeid，分别保存 JUnit/exit/elapsed。`--dist loadscope`
-和 marker 本身不是跨 worker 的锁；不得仅忽略失败或删测试来得到 GREEN。
+GPU 或其他主机资源的测试。发现冲突时修复测试与资源的 worker/run 隔离，再用相同 worker
+数重跑该模块的完整范围，直到并行门禁通过。定向或串行测试只提供诊断证据，不能代替全量
+并行门禁；不得忽略失败、删除测试或缩小收集范围。`--dist loadscope` 和 marker 本身不是
+跨 worker 的锁。
 
 对实际由 `ament_python` 驱动 pytest 的包，可在核验子进程 argv 后使用
-`colcon test --packages-select so101_demo_py --pytest-args test -n 8`，仍保留普通 `test/` 范围。
+`colcon test --packages-select so101_demo_py --pytest-args test -n "$workers"`，仍保留普通
+`test/` 范围并核验实际子进程 worker 数。
 `ament_cmake` 的 CTest/ament pytest 不保证接收该参数；从 `CTestTestfile.cmake` 和实际
 命令确认后再选择兼容方式，不能盲套，也不要让多个 CTest case 各开 8 worker 导致超订阅。
 直接整包 pytest 可以加速反馈，但在 ai-station 上不替代必要的 CTest 登记、package gate、

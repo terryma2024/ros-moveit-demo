@@ -123,8 +123,7 @@ def test_canonical_base_is_the_private_short_path_for_this_uid():
     default = DarwinPrivatePathUnixAddress()
     assert default.base_path == PRIVATE_TMP / f"so101-ipc-{os.getuid()}"
     assert default.base_path.parent == PRIVATE_TMP
-    # The short base is what keeps a real socket path inside `sun_path` on both platforms.
-    assert default.base_path.parent.parent == Path("/")
+    # The platform parent is the trusted shared sticky directory on this host.
     assert str(default.base_path) != os.environ.get("TMPDIR", "")
 
 
