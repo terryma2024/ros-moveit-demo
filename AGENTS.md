@@ -74,11 +74,11 @@
 
 | Task | Required model or tool |
 | --- | --- |
-| Discuss approaches; write designs, implementation plans, and guides | GPT-5.6 Sol / High (`gpt-5.6-sol`, reasoning effort `high`) |
+| Discuss approaches; write designs, implementation plans, and guides | GPT-6 Sol / High (`gpt-6-sol`, reasoning effort `high`) |
 | Independently review approaches, designs, implementation plans, and guides | GPT-6 Astra / High (`gpt-6-astra`, reasoning effort `high`) |
 | Execute implementation plans | DeepSeek Harness TUI, launched with `dst` in a `tmux` session |
-| Monitor execution and review execution results | GPT-5.6 Sol / High (`gpt-5.6-sol`, reasoning effort `high`) |
-| Other tasks (default) | GPT-5.6 Sol / High (`gpt-5.6-sol`, reasoning effort `high`) |
+| Monitor execution and review execution results | GPT-6 Sol / High (`gpt-6-sol`, reasoning effort `high`) |
+| Other tasks (default) | GPT-6 Sol / High (`gpt-6-sol`, reasoning effort `high`) |
 
 - Use an independent GPT-6 Astra / High reviewer for the review tasks listed above.
 - If a required model or tool is unavailable, report the limitation explicitly. Do not silently
