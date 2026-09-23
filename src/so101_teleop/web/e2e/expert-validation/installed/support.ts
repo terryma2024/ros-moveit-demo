@@ -163,7 +163,8 @@ export async function preflight(client: Api, config: Record<string, unknown>) {
   const response = await client.post(
     "/expert-validation/campaigns/preflight", await claimed(client, config),
   );
-  expect(response.status).toBe(200);
+  // A refused request answers with its own code, and a bare status assertion hides it.
+  expect(response.status, `preflight: ${JSON.stringify(response.body)}`).toBe(200);
   return response.body.receipt_id as string;
 }
 
@@ -175,7 +176,7 @@ export async function startCampaign(
     command_id: commandId,
     preflight_receipt_id: receiptId,
   });
-  expect(response.status).toBe(200);
+  expect(response.status, `start ${commandId}: ${JSON.stringify(response.body)}`).toBe(200);
   return response.body.campaign_id as string;
 }
 
