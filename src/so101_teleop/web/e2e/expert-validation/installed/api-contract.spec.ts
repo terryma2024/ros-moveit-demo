@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { installedTest as test, expect, pythonExecutable } from "../fixtures/installed";
 import { storeQuery } from "../assertions/journal";
 import {
-  api, acquireLease, createManifest, fixedConfig, preflight, startCampaign, waitStatus,
+  api, acquireLease, createManifest, fixedConfig, hostClaimFor, preflight, startCampaign, waitStatus,
 } from "./support";
 
 function canonicalDigest(body: Record<string, unknown>): string {
@@ -71,7 +71,8 @@ test("API command ids: replay, conflict reuse, outcome unknown @api-contract spe
   const first = await client.post("/expert-validation/campaigns", startBody);
   expect(
     first.status,
-    `start: sent ${JSON.stringify(startBody)} -> ${JSON.stringify(first.body)}`,
+    `start: sent ${JSON.stringify(startBody)} claim=${JSON.stringify(hostClaimFor("SEQUENTIAL", 1))}`
+    + ` -> ${JSON.stringify(first.body)}`,
   ).toBe(200);
   const replay = await client.post("/expert-validation/campaigns", startBody);
   expect(replay.status).toBe(200);
