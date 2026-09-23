@@ -173,6 +173,59 @@ def verified(_spec):
     return {"source_commit": "a" * 40, "models_verified": True, "image_verified": True}
 
 
+def test_linux_v3_retry_cli_records_the_admitted_original_chain(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+
+    catalog_sha256 = hashlib.sha256(POINTS.read_bytes()).hexdigest()
+    values = argv(
+        tmp_path / "linux-retry", worker_count="1", point_id=("task_start",),
+        batch_kind="FULL_RESTART_RETRY",
+        original_selection_sha256="a" * 64,
+        original_result_sha256="b" * 64,
+        original_catalog_sha256=catalog_sha256,
+        original_batch_id="first-pass-1",
+    )
+    prepared = prepare_batch(values, provenance_verifier=verified)
+
+    assert prepared.request.batch_kind.value == "FULL_RESTART_RETRY"
+    assert prepared.manifest["retry_binding"] == {
+        "original_selection_sha256": "a" * 64,
+        "original_result_sha256": "b" * 64,
+        "original_catalog_sha256": catalog_sha256,
+        "original_batch_id": "first-pass-1",
+    }
+
+
+def test_linux_v3_retry_cli_refuses_an_unnamed_original_chain(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    with pytest.raises(CliError, match="RETRY_ROOT_REQUIRED"):
+        prepare_batch(
+            argv(
+                tmp_path / "linux-retry-missing", worker_count="1",
+                point_id=("task_start",), batch_kind="FULL_RESTART_RETRY",
+            ),
+            provenance_verifier=verified,
+        )
+
+
+def test_linux_v3_retry_cli_refuses_a_foreign_catalog_digest(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    with pytest.raises(CliError, match="RETRY_CATALOG_MISMATCH"):
+        prepare_batch(
+            argv(
+                tmp_path / "linux-retry-catalog", worker_count="1",
+                point_id=("task_start",), batch_kind="FULL_RESTART_RETRY",
+                original_selection_sha256="a" * 64,
+                original_result_sha256="b" * 64,
+                original_catalog_sha256="c" * 64,
+                original_batch_id="first-pass-1",
+            ),
+            provenance_verifier=verified,
+        )
+
+
 def _fixed_web_spec(tmp_path, monkeypatch, *, run_mode="dry_run"):
     from so101_demo.cli.mujoco_parallel_batch import prepare_batch
     from so101_demo.parallel_batch.resources import runtime_ipc_base

@@ -35,6 +35,8 @@ RETRY_PROFILE = "MPS_W1_FULL_RESTART_RETRY"
 RETRY_SCHEMA_VERSION = 5
 RETRY_WORKER_COUNT = 1
 RETRY_BATCH_KIND = "FULL_RESTART_RETRY"
+LINUX_RETRY_PROFILE = "CUDA_W1_FULL_RESTART_RETRY"
+LINUX_RETRY_SCHEMA_VERSION = 3
 
 #: Every durable fact about the bytes a run will execute. The closure hash covers all of them, so
 #: a context issued for one copied install can never authorize another one.
@@ -104,6 +106,17 @@ def installed_execution_profiles() -> tuple[ExecutionProfile, ...]:
 
 
 def installed_execution_profile(profile: str, schema_version: int) -> ExecutionProfile | None:
+    if profile == LINUX_RETRY_PROFILE and schema_version == LINUX_RETRY_SCHEMA_VERSION:
+        return ExecutionProfile(
+            profile=LINUX_RETRY_PROFILE,
+            schema_version=LINUX_RETRY_SCHEMA_VERSION,
+            execution_mode="SEQUENTIAL",
+            worker_count=RETRY_WORKER_COUNT,
+            batch_kind=RETRY_BATCH_KIND,
+            accelerator="cuda",
+            selector="INDEX:0",
+            platform="linux",
+        )
     for row in MACOS_EXECUTION_PROFILES:
         if row.profile == profile and row.schema_version == schema_version:
             return row

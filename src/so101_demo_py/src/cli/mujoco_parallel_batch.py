@@ -237,6 +237,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--worker-count")
     parser.add_argument("--contract-version", default="2")
     parser.add_argument("--batch-kind", default="FIRST_PASS")
+    parser.add_argument("--original-selection-sha256")
+    parser.add_argument("--original-result-sha256")
+    parser.add_argument("--original-catalog-sha256")
+    parser.add_argument("--original-batch-id")
     parser.add_argument("--adaptive-workers", action="store_true")
     parser.add_argument("--adaptive-config", type=Path)
     parser.add_argument("--fallback-worker-counts")
@@ -1133,6 +1137,28 @@ def prepare_batch(
 ) -> PreparedBatch:
     _reject_legacy_quota_flag(argv)
     options = build_parser().parse_args(argv)
+    retry_names = (
+        "original_selection_sha256", "original_result_sha256",
+        "original_catalog_sha256", "original_batch_id",
+    )
+    supplied_retry_names = tuple(
+        name for name in retry_names if getattr(options, name) is not None
+    )
+    if options.batch_kind == "FULL_RESTART_RETRY":
+        if options.adaptive_workers:
+            raise CliError("RETRY_FIXED_BATCH_REQUIRED")
+        if len(supplied_retry_names) != len(retry_names):
+            raise CliError("RETRY_ROOT_REQUIRED")
+        for name in retry_names[:3]:
+            if re.fullmatch(r"[0-9a-f]{64}", getattr(options, name)) is None:
+                raise CliError("RETRY_SOURCE_INVALID")
+        if (
+            re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]*", options.original_batch_id) is None
+            or options.original_batch_id == options.batch_id
+        ):
+            raise CliError("RETRY_ORIGINAL_BATCH_INVALID")
+    elif supplied_retry_names:
+        raise CliError("RETRY_BINDING_UNSUPPORTED")
     if options.measurement_authorization is not None or (
         options.measurement_authorization_sha256 is not None
     ):
@@ -1200,6 +1226,11 @@ def prepare_batch(
     except ValueError as error:
         raise CliError("UNKNOWN_RUN_MODE") from error
     catalog, catalog_sha = _catalog(options.points)
+    if (
+        options.batch_kind == "FULL_RESTART_RETRY"
+        and options.original_catalog_sha256 != catalog_sha
+    ):
+        raise CliError("RETRY_CATALOG_MISMATCH")
     supplied = tuple(options.point_id)
     if len(supplied) != len(set(supplied)):
         raise CliError("DUPLICATE_POINT_ID")
@@ -1357,6 +1388,10 @@ def prepare_batch(
                 "policy": dict(guard_summary["policy"]),
             },
         }
+        if options.batch_kind == "FULL_RESTART_RETRY":
+            manifest["retry_binding"] = {
+                name: getattr(options, name) for name in retry_names
+            }
     if options.resume:
         existing = _read_existing_json(
             evidence_root / "batch_manifest.json", label="BATCH_MANIFEST"

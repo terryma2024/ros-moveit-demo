@@ -27,6 +27,7 @@ from .coordinator_events import (
 from .journal_layout import CAMPAIGN_LAYOUT, resolve_fixed_journal_layout
 from .execution_context import (
     CandidateExecutionContext,
+    LINUX_RETRY_PROFILE,
     ProductionExecutionContext,
     RETRY_PROFILE,
     retry_batch_root,
@@ -165,6 +166,7 @@ def fixed_coordinator_argv(
     grounded_manifest_sha256: str,
     selected_point_ids,
     retry_binding: FixedRetryBinding | None = None,
+    retry_profile: str | None = None,
     provenance_binding_path=None,
 ) -> list[str]:
     """The one argv this service launches a fixed coordinator with.
@@ -198,6 +200,8 @@ def fixed_coordinator_argv(
     for point_id in selected_point_ids:
         argv.extend(("--point-id", point_id))
     if retry_binding is not None:
+        if retry_profile == LINUX_RETRY_PROFILE:
+            argv.extend(("--batch-kind", "FULL_RESTART_RETRY"))
         argv.extend(retry_binding.flags())
     if provenance_binding_path is not None:
         argv.extend(("--provenance-binding", str(provenance_binding_path)))
@@ -310,7 +314,8 @@ class ExpertValidationSupervisor:
         ).resolve()
 
     def _owner_request(self, request, receipt, batch_id, batch_root, point_ids=None,
-                       retry_binding: FixedRetryBinding | None = None):
+                       retry_binding: FixedRetryBinding | None = None,
+                       retry_profile: str | None = None):
         selected = tuple(point_ids or request.selection.point_ids)
         environment = dict(request.environment)
         if request.coordinator_executable_path is not None:
@@ -342,6 +347,7 @@ class ExpertValidationSupervisor:
                 grounded_manifest_sha256=request.grounded_sam_manifest_sha256,
                 selected_point_ids=selected,
                 retry_binding=retry_binding,
+                retry_profile=retry_profile,
                 provenance_binding_path=request.provenance_binding_path,
             )
             token = secrets.token_hex(32)
@@ -549,7 +555,7 @@ class ExpertValidationSupervisor:
 
         if not isinstance(request, RetryStartRequest):
             raise RuntimeError("RETRY_REQUEST_INVALID")
-        if request.execution_profile != RETRY_PROFILE:
+        if request.execution_profile not in (RETRY_PROFILE, LINUX_RETRY_PROFILE):
             raise RuntimeError("RETRY_PROFILE_MISMATCH")
         if not isinstance(request.original_batch_id, str) or not request.original_batch_id:
             raise RuntimeError("RETRY_ORIGINAL_BATCH_UNKNOWN")
@@ -563,7 +569,9 @@ class ExpertValidationSupervisor:
         # the production admission used to read the digest it admitted - so the argv names the
         # document whose digest this request already carries.
         config_path = (
-            Path(original.parallel_config_path).parent
+            Path(original.parallel_config_path)
+            if request.execution_profile == LINUX_RETRY_PROFILE
+            else Path(original.parallel_config_path).parent
             / PROFILE_DOCUMENT_BASENAMES[RETRY_PROFILE]
         )
         return FixedRetryBinding(
@@ -599,6 +607,7 @@ class ExpertValidationSupervisor:
         owner_request = self._owner_request(
             original, receipt, request.batch_id, batch_root, point_ids=(request.point_id,),
             retry_binding=retry_binding,
+            retry_profile=request.execution_profile,
         )
         intent = OwnerIntent.for_argv(
             campaign_id=request.campaign_id,

@@ -31,6 +31,8 @@ from .execution_context import (
     ProductionExecutionContext,
     PRODUCTION_CONTEXT_KIND,
     RETRY_BATCH_KIND,
+    LINUX_RETRY_PROFILE,
+    LINUX_RETRY_SCHEMA_VERSION,
     RETRY_PROFILE,
     RETRY_SCHEMA_VERSION,
     RETRY_WORKER_COUNT,
@@ -547,8 +549,10 @@ class SupervisorStore:
         if context.is_expired(now_monotonic_ns):
             raise StoreConflict("RETRY_CONTEXT_EXPIRED")
         if (
-            request.execution_profile != RETRY_PROFILE
-            or request.schema_version != RETRY_SCHEMA_VERSION
+            (request.execution_profile, request.schema_version) not in {
+                (RETRY_PROFILE, RETRY_SCHEMA_VERSION),
+                (LINUX_RETRY_PROFILE, LINUX_RETRY_SCHEMA_VERSION),
+            }
             or request.batch_kind != RETRY_BATCH_KIND
             or request.worker_count != RETRY_WORKER_COUNT
         ):
