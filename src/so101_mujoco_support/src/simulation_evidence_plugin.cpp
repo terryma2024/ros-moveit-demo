@@ -392,8 +392,21 @@ msg::PhysicsStepEvidence EvidenceBuilder::build_step(
   double diagnostic_hard_stop_force_n) const
 {
   const auto snapshot = build(model, data, paused, state, reset_generation, true);
-  return make_physics_step_evidence(snapshot, data == nullptr ? 0.0 : data->time,
-                                    static_shadow_force_n, diagnostic_hard_stop_force_n);
+  auto output = make_physics_step_evidence(snapshot, data == nullptr ? 0.0 : data->time,
+                                          static_shadow_force_n, diagnostic_hard_stop_force_n);
+  if (!model || !data) {
+    throw std::invalid_argument("physics step has no MuJoCo state");
+  }
+  output.model_qpos.assign(data->qpos, data->qpos + model->nq);
+  output.model_qvel.assign(data->qvel, data->qvel + model->nv);
+  if (!std::all_of(output.model_qpos.begin(), output.model_qpos.end(),
+    [](double value) {return std::isfinite(value);}) ||
+    !std::all_of(output.model_qvel.begin(), output.model_qvel.end(),
+    [](double value) {return std::isfinite(value);}))
+  {
+    throw std::invalid_argument("physics step has non-finite MuJoCo state");
+  }
+  return output;
 }
 
 PhysicsStepEvidenceBuffer::PhysicsStepEvidenceBuffer(
