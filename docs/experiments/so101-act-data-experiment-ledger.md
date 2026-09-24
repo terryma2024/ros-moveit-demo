@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 4b7533300796b89539bad5b6cc9cf144bde57010
+current_commit: b7ae287006cb29ecccb7cb170f46733c651db614
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -14,8 +14,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: EXP-168
-next_experiment: EXP-169 bounded placement alignment candidate screen
+latest_checkpoint: EXP-169
+next_experiment: EXP-170 offline aligned physical release and settle probe
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1358,3 +1358,9 @@ next_experiment: Live Task 3–8 calibration and controller publication after ow
 ## EXP-169 — Bounded placement alignment candidate screen
 
 - State: PLANNED. Lifecycle: OFFLINE after EXP-168 independent negative final box, source `4b753330...`, installed revised model SHA `3c876e7b...`. Audit checked-in `place_alignment` correction logic and measured endpoint error, then test bounded candidate lateral corrections that keep the cup within the policy's `max_axis_correction_m=.030` and leave grasp/transport physics otherwise frozen. Independently replay any promising correction through release/retreat and verify support, upright angle, exact target box and other protected contact. A candidate is not Task8 live qualification; no formal data or deletion.
+
+- State: VALID bounded static alignment candidate, not live/physical qualification. The actual phase `src/so101_demo_py/src/backends/mujoco/qualified_phases/place_alignment.py` targets `PLACE_XYZ (-.080,-.250,.165)` plus policy compensation `(.0012,.0025,.0185)`, hence pre-release target `(-.0788,-.2475,.1835)`. EXP-168 measured pre-release cup `(-.075661,-.261188,.182418)`, requiring per-axis shift `(−.003139,+.013688,+.001082) m`, inside `.030 m` bound. `experiments/exp169-alignment-screen/screen.py` exit0 and independent `verify.py` exit0 under installed model SHA `3c876e7b...` solved a five-arm-joint position/orientation-constrained correction, independently checked 21 interpolation FK/held-cup poses, 21 geom-ID masks, contacts and three lossless PNG/raw hashes. At final q `(0.428343,.360871,.234128,.991244,.040193,−.047066)` the cup is `(-.078856,-.247711,.183502)` m, XY error `.000219 m`, z error `.0000024 m`, orientation change `.004273 rad`; all inside policy alignment tolerances. Every sample has ≥27,819 visible cup pixels, ≥43 px margin and no non-fingertip static contact. Fresh final wrist image inspected. This is a kinematic candidate only; dynamic correction may slip or push cup and MoveIt/ROS controller feasibility remains unproved. Formal `0/0/0`, Task12 onward `NOT_STARTED`; retain EXP-169 and prior runs, archive none, scratch/superseded outputs deletion candidates only, delete nothing.
+
+## EXP-170 — Offline physical release after candidate alignment
+
+- State: PLANNED. Lifecycle: OFFLINE after EXP-169 independent static pass, source `b7ae2870...`, installed model SHA `3c876e7b...`. Replay EXP-168 grasp/transport/descent controls, insert EXP-169 candidate arm correction before release while maintaining closed jaw, then run actual MuJoCo release, retreat and settle. Independently replay all sampled q/cup/contact-force rows and final target/support/upright predicates; retain images. This is raw position control, not qualified MoveIt/ROS trajectory or formal data. No deletion.
