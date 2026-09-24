@@ -1,16 +1,16 @@
 # SO-101 Head/Wrist RGB ACT Implementation Plan
 
-> **Execution hold (2026-09-24):** [Task 8 live and formal collection design](../specs/2026-09-24-so101-act-task8-live-formal-collection-design.md) replaces part of the Task 7A–11A contract. MuJoCo is the only simulator; campaign resource binding is checked only at startup; W2 proceeds directly to an independent 40-scene exact-W8 qualification, without W4/W6. Do not execute the old Task 7A–11A steps until the written design is approved and this plan is revised.
+> **2026-09-24 refresh:** [Task 8 live and formal collection design](../specs/2026-09-24-so101-act-task8-live-formal-collection-design.md) is approved and incorporated below. MuJoCo is the only simulator; campaign resource binding is checked once at admission; W2 proceeds directly to one independent 40-scene exact-W8 qualification, without W4/W6. This plan supersedes the earlier Task 7A–11A wording.
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For execution:** follow the repository model rule: run implementation with DeepSeek Harness TUI (`dst`) in a dedicated ai-station `tmux` session, one reviewed task boundary at a time. This document update does not start that execution. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在 MuJoCo 中实现双 RGB、独立颈部搜索、MoveIt 示教和 ACT 无干预 pick-place，并在单次 120 s 内完成撤离与物理验收。
 
-**Architecture:** ACT 输入仅为双 RGB 和 8 维状态，输出 6 维绝对位置目标。搜索、动作执行和物理监督各自拥有明确接口，ROS/控制器与仿真真值留在 adapter 边界。MoveIt 示教采集复用 `main` 的 fixed exact-N v3 shared queue、start guard、统一全局仲裁与 owned cleanup，以独立 ACT workload、Worker 私有 Recorder 和确定性聚合器接入；正式采集批内不使用自适应降级。先交付相机与搜索，再交付可重放的数据管线，最后从 verifier 认可的不可变数据导出训练、接入执行与封存测试；每一阶段均能独立验收。
+**Architecture:** ACT 输入仅为双 RGB 和 8 维状态，输出 6 维绝对位置目标。搜索、动作执行和物理监督各自拥有明确接口，ROS/控制器与 MuJoCo 真值留在 adapter 边界。所有 Web/CLI 工作负载都经 `UnifiedWorkloadService.start(spec)` 完成一次 admission，取得不可变 `AdmittedCampaignContext`；每个 Worker 只通过 typed `WorkerPort` 驱动唯一 ROS execution child。MoveIt 示教采集复用 `main` 的 fixed exact-N v3 shared queue、Worker 私有 Recorder 和确定性 Coordinator；正式采集固定 W8，不自适应降档。先交付相机与搜索，再批准接触策略、完成 Task 8 live 与可重放数据管线，最后从 verifier 认可的不可变数据导出训练、接入执行与封存测试。
 
 **Tech Stack:** Python、ROS 2 Jazzy、MuJoCo、MoveIt 2、ros2_control、C++ CameraPlugin、LeRobot/PyTorch、fixed exact-N v3 shared queue、fsync journal、有界 IPC、React/TypeScript/Bun。
 
-**Spec:** [SO-101 双 RGB ACT 设计](../specs/2026-09-10-so101-act-head-wrist-rgb-design.md)。执行者必须先读设计和本计划；校准项由测量工件提供，不把测试示例数值用于实际控制。
+**Specs:** [SO-101 双 RGB ACT 设计](../specs/2026-09-10-so101-act-head-wrist-rgb-design.md)；[Task 8 live 与正式采集设计](../specs/2026-09-24-so101-act-task8-live-formal-collection-design.md)。执行者必须先读两份设计和本计划；校准项由测量工件提供，不把测试示例数值用于实际控制。
 
 ## Global Constraints
 
@@ -23,10 +23,14 @@
 - 非法动作拒绝并留证，不静默裁剪；监督器只批准、拒绝、停止与交接，不替 ACT 生成抓放动作。
 - Train 50、Validation 10、Offline Test 10 个成功 episode；Rollout Validation 至少 10 个固定初始条件；Rollout Test 至少 10 个封存初始条件。
 - 首版只并行 MoveIt 专家示教采集；ACT 闭环验证和封存测试仍按单场景独立执行。资格/扩容 episode 不进入正式训练数据。
-- Linux 新执行只使用 `ParallelRuntimeConfigV3`、`BatchRequestV3` 和 fixed exact-N shared queue。现有并行点位验证的 W8 默认值不自动继承；ACT 采集先通过 W1 语义等价和 W2 隔离/吞吐资格，再逐档测量 W4/W6/W8。
-- 每个采集 batch 固定 exact N。业务失败形成 scenario 终态；基础设施失败只允许在同 N、同 manifest/config/operation binding 下显式恢复，不在一个资格或正式 campaign 内跨 N fallback。
-- 采集必须持有统一服务 `validation` 域的 `GlobalMutationArbiter` reservation，直到 owned cleanup 收敛。headless CLI 无已核验 operation binding 时不得启动进程。
-- 单 stack 与并行采集、共享教师 Broker、训练必须共同使用按稳定 host identity + 物理 GPU UUID 持久化的 `ActGpuWorkloadArbiter`。authority 先解析 selector 与可见性映射，歧义或漂移 fail closed；lease 原子领取并保持到 cleanup/release proof，只读 GPU 进程检查不是互斥。
+- 仿真后端只允许 MuJoCo。配置、依赖或请求出现 Gazebo 时入口 fail closed；不实现 Gazebo adapter、topic/service、truth 或回退路径。
+- Linux 新执行只使用 `ParallelRuntimeConfigV3`、`BatchRequestV3` 和 fixed exact-N shared queue。ACT 先通过 W1 smoke、同一八场景的完整 W1/W2 功能资格，再直接运行一份独立 40 场景 exact-W8 持续负载资格；不测试 W4/W6，也不把 W8 写成项目永久全局默认值。
+- 每个采集 batch 固定 exact N。业务失败形成不可重试的 `FAILED` scenario 终态；基础设施失败只允许在相同 W8、manifest、runtime/collection config、contact policy 与 campaign 数据身份下显式恢复。恢复使用新的 resource binding/generation，不得改变业务输入或跨 N fallback。
+- Web 和 headless CLI 共享 `UnifiedWorkloadService.start(spec)`。服务在创建任何 Worker、Recorder、Broker 或 ROS child 前一次性核验 `GlobalMutationArbiter`、物理 GPU lease、MuJoCo-only、manifest/config/policy hash、资格记录与 cleanup fence，并签发不可变 `AdmittedCampaignContext`。资源绑定不穿透到内部组件重复验证。
+- campaign owner 负责 lease heartbeat、fencing、runtime telemetry 和 owned cleanup。Worker、Recorder、Broker、Task 8 phase runner 与 ROS child 只消费 context 中的业务身份和审计字段，不查询 arbiter，也不把运行期资源采样当作第二套 authority。
+- 单 stack、并行采集、共享教师执行与训练必须共同使用按稳定 host identity + 物理 GPU UUID 持久化的 `ActGpuWorkloadArbiter`。authority 在 admission 时解析 selector 与可见性映射，歧义或漂移 fail closed；lease 原子领取并由 campaign owner 保持到 cleanup/release proof，只读 GPU 进程检查不是互斥。
+- 接触 analyzer 只能产出 disabled proposal。`POLICY_FINGERPRINT` 必须是 canonical policy payload bytes 的 SHA256；proposal envelope hash 不是批准对象。只有用户批准精确 fingerprint 并生成独立 activation receipt 后，Task 8 live、W8 资格和正式采集才可启动。
+- W8 资格遇到 CPU/GPU/RAM、磁盘、MuJoCo RTF、Recorder queue、10 Hz frame gap、吞吐、物理成功率或 QC 门槛失败时立即停止，等待人工决策；不得自动降 Worker、换设备、降画质、降采样或用低档结果续算。
 - 旧 `/data/work/so101-evidence/act-data/0917a` 已丢失。分支 commit 只能恢复源码，不能恢复 episode、QC 或训练资格；新采集使用新的 dataset/run ID 与 evidence root。
 - 训练只消费 coordinator journal commit 引用且 verifier 通过的正式数据；资格、surplus、失败、迟到 seal、目录扫描结果与旧 0917a 均不得导入。训练与采集/Broker GPU 负载串行。
 - V5-T009 首次无干预成功率至少 70%；V5-T010 至少 20 个共享测试场景。搜索失败进入端到端分母，恢复另计干预。
@@ -39,7 +43,7 @@
 
 ## 范围、基线与交付顺序
 
-建议把后续执行拆为三个审阅批次：A 相机/搜索（Task 1–6）、B 执行安全与数据（Task 7、7A、8–11、11A）、C 训练/产品接入/验收（Task 12、12A、13–16）。本总计划保持一份，避免跨文件接口漂移。2026-09-11 根据 Astra high 审查增加 Task 7A 与 Task 12A；2026-09-16 增加 Task 11A；2026-09-24 按 fixed exact-N v3、统一仲裁、start guard 与八 Worker 测试门重写 Task 11A 和训练输入，共 19 个任务。编号后缀保留既有引用。Task 7A 在 Task 8 之前，Task 11A 在 Task 12 之前，Task 12A 在 Task 13 之前执行。A 的输出是可搜索、锁定并生成合格观测的仿真；B 的输出是有安全门控、可重放且完成 exact-N 并发资格验证的示教管线；C 的输出是经过封存测试的 ACT 系统。
+建议把后续执行拆为三个审阅批次：A 相机/搜索与接触策略（Task 1–6A）、B 执行安全与数据（Task 7、7A、8–11、11A）、C 训练/产品接入/验收（Task 12、12A、13–16）。本总计划保持一份，避免跨文件接口漂移。2026-09-24 增加 Task 6A，并按已批准的 Task 8 live 与正式采集设计重写 Task 7A–11A。编号后缀保留既有引用。顺序固定为 Task 6A→7→7A→8→9→10→11→11A→12；策略未激活不得开始 Task 8 live，W8 未通过不得开始正式采集。A 的输出是可搜索、锁定并具有已批准接触策略的 MuJoCo 仿真；B 的输出是有安全门控、可重放且完成 exact-W8 资格的示教管线；C 的输出是经过封存测试的 ACT 系统。
 
 原计划编写基线为 `0fbef11441e7eb541854b367a21b38dc354c43ac`。上一次 ACT 实现分支的可恢复末端为 `e2ec28c33ecaa455045477185b9c5dbc5e367538`；旧数据和运行 evidence 不可恢复。2026-09-24 文档更新对照的 ai-station `main` 为 `fd7348aa27361750f7e2e7954df53ef75e96545c`。执行者必须先把该分支 rebase 到现场最新 `main`，记录冲突与新 HEAD，再按更新后的任务边界审计已有实现。哈希只标识本轮现场基线，执行时仍需读取实际 HEAD、dirty files 和两远端状态。路径均相对仓库根。
 
@@ -54,7 +58,8 @@
 - `src/so101_demo_py/src/parallel_batch/contracts.py` 的 `ParallelRuntimeConfigV3` 与 `BatchRequestV3` 是 Linux 新执行契约；`coordinator.py` 的 ordered pending 集合、`worker.py`、Broker、start guard、owned-process manifest 与 fsync journal 提供无生命周期配额领取、lease、结果 commit 和精确清理。Task 11A 通过 ACT 专用 ports 接入，不复制调度或恢复权威；`queue.py` 是 macOS selection-binding 的 `DurablePointQueue`，不是 Linux fixed 调度依据。
 - `BatchRequestV3` 不限制 `selected_point_ids` 为 20 项。Task 11A 在 ACT collection config 中另冻结 `max_wave_size=20`，以限制单批故障域并保留资格口径；冻结 scenario 清单确定性分 wave，每个 wave 创建 exact-N v3 request，单 wave 恢复继续使用 main 的 fixed resume 语义。
 - `config/mujoco/parallel_batch_v3.yaml` 冻结 Linux CUDA、Domain 池与 start guard。ACT 的 `config/act/parallel_collection_v3.yaml` 只保存 collection workload、Recorder 与资格参数，并引用 v3 配置路径/hash；不得复制或改写公共运行字段。
-- `src/so101_teleop/so101_teleop/unified/arbiter.py` 是 Teleop、Tasks 与 Validation 的唯一 mutation reservation authority。Task 11A 的 Web 和 headless 入口都必须使用同一持久 operation binding。
+- `src/so101_teleop/so101_teleop/unified/arbiter.py` 是 Teleop、Tasks 与 Validation 的唯一 mutation reservation authority；`unified/teleop_service.py` 是 Web/headless 共同 admission 入口。Task 7A 扩展既有 `OperationSpec`、`WorkerPort`、closed `IpcRequest`、`BridgeProcessOwner`、`ChildRuntime` 和 `ros_child.py`，不新建第二套 ACT command broker。
+- `src/so101_teleop/so101_teleop/unified/ros_child.py` 是唯一 ROS import/driver 边界；现有 `RclpyActionDriver.submit` 的 `ROS_DRIVER_NOT_PROVISIONED` 是 Task 7A 必须闭合的真实实现缺口。
 
 ## 文件结构与职责
 
@@ -63,10 +68,10 @@
 | 单元 | 主要文件 | 责任 |
 | --- | --- | --- |
 | 契约与时间 | `act/contracts.py`, `act/deadline.py` | 输入白名单、时间网格、错误与 120 s 截止时间 |
-| 控制权 | `act/ownership.py`, `adapters/act/command_broker.py`, `adapters/act/leased_action_client.py` | 唯一仲裁与既有动作客户端接入 |
+| Admission 与 typed IPC | `so101_teleop/unified/contracts.py`, `parents.py`, `ipc.py`, `bridge.py`, `child_runtime.py`, `ros_child.py`, `teleop_service.py` | 单次资源 admission、不可变 campaign context、每 Worker 唯一 ROS child 与闭合 operation registry |
 | 图像与搜索 | `act/synchronizer.py`, `act/search.py`, `act/bearing.py` | 因果取样、扫描/锁定、相机视线方向 |
-| 校准 | `act/calibration.py`, `cli/act_preflight.py` | 校准报告、配置冻结、正式采集门槛 |
-| 执行与监督 | `act/execution.py`, `act/supervisor.py`, `adapters/act/ros_execution.py`, `adapters/act/physics.py` | 双控制器、路径检查、释放门控和状态机 |
+| 校准 | `act/calibration.py`, `act/contact_calibration.py`, `act/contact_policy.py`, `cli/act_preflight.py`, `cli/act_collect_contact_calibration.py`, `cli/act_analyze_contact_calibration.py` | 通用预检、五类接触样本、disabled proposal、fingerprint 与 activation receipt |
+| 执行与监督 | `act/execution.py`, `act/task8.py`, `act/supervisor.py`, `adapters/act/ros_execution.py`, `adapters/act/physics.py` | 双控制器、九阶段 phase-prefix/full runner、路径检查、释放门控和状态机 |
 | 数据 | `act/expert.py`, `act/recorder.py`, `act/sampling.py`, `act/collection.py` | 实际 reference、无损记录、划分与单场景采集 |
 | 并行采集 | `act/parallel_collection.py`, `adapters/act/parallel_collection_runtime.py`, `adapters/act/parallel_collection_results.py`, `runtime/act_fixed_collection_composition.py`, `cli/act_collect_parallel.py` | scenario→exact-N v3 wave、Worker ports、同 N 恢复、原子封存与确定性总 manifest |
 | 模型 | `act/bundle.py`, `act/policy.py`, `adapters/act/lerobot.py`, `cli/act_train.py` | 离线模型工件、单次推理、版本隔离 |
@@ -85,6 +90,8 @@ Python 接口中的 `dict` 均为下列闭合 JSON schema，校验拒绝多余�
 | `ActionPrefix` | `session_id:str, attempt_id:str, sequence:int, observation_time_s:float, target_times_s:tuple[float,...], positions:tuple[tuple[float,...],...]`（每行 6 维） |
 | `SearchResult` | `found:bool, status:str, bearing_rad:float|None, frame_id:str, ray_origin_frame_id:str, neck_yaw_rad:float|None, confidence:float|None, timestamp:float, attempt_id:str` |
 | `Scenario` | `scene_id:str, split:str, xy:tuple[float,float], arm_q:tuple[float,...]`（6 维）, `search_start_rad:float, seed:int, config_sha256:str` |
+| `AdmittedCampaignContext` | `operation_id:str, campaign_id:str, workload_kind:str, stable_host_id:str, physical_gpu_uuid:str, source_sha256:str, manifest_sha256:str, runtime_config_sha256:str, collection_config_sha256:str, contact_policy_fingerprint:str, worker_count:int, resource_binding_id:str, service_epoch:int, execution_generation:int, admitted_at_monotonic_s:float, deadline_monotonic_s:float, evidence_root:str` |
+| `Task8Request` | `session_id:str, attempt_id:str, scenario_id:str, mode:"phase_prefix"|"full", stop_after:str|None, contact_policy_fingerprint:str, deadline_monotonic_s:float` |
 | `CollectionScenarioResult` | `scene_id:str, split:str, status:str, business_failure:str|None, infra_attempts:int, episode_root:str, episode_sha256:str, worker_id:str, batch_id:str, worker_generation:int, worker_count:int, coordinator_commit_sequence:int` |
 | `RunResult` | `scene_id:str, split:str, search_locked:bool, done:bool, interventions:int, failure:str|None, elapsed_wall_s:float, elapsed_sim_s:float, checkpoint_sha256:str, config_sha256:str` |
 
@@ -93,12 +100,13 @@ Python 接口中的 `dict` 均为下列闭合 JSON schema，校验拒绝多余�
 ## 执行前准备与测试命令
 
 - [ ] 读取当前根/父仓 AGENTS.md、`so101-dev` 及有关 reference；记录本地和 ai-station 的 pwd、branch、commit、submodule、dirty files。只在执行阶段访问远端。需要隔离 checkout 时使用 `superpowers:using-git-worktrees`，不把用户未跟踪设计丢在原 checkout。
-- [ ] 检查已有进程、ROS graph、tmux `codex-cua`，记录所有权；运行阶段不得启动重复 stack。全任务使用一个 evidence root，写入 `docs/experiments/so101-act-head-wrist-experiment-ledger.md`。本次写计划沿用 `/tmp/so101-debug-act-design-review-20260911-01a08e1d/`，执行产生训练数据时另立执行 task，Linux root 使用 `/data/work/so101-evidence/act-head-wrist/<run-id>/`；这里的 run-id 由 `mktemp` 生成，不用字面占位路径。
+- [ ] 检查已有进程、ROS graph、tmux `codex-cua`，记录所有权；运行阶段不得启动重复 stack。实施任务使用一个独立 evidence root，写入 `docs/experiments/so101-act-head-wrist-experiment-ledger.md`。本次计划修订与审查登记在 `docs/experiments/so101-act-task8-live-formal-collection-plan-review-experiment-ledger.md`，低频 root 为 `/tmp/so101-debug-act-task8-plan-20260925/`。执行产生高频数据时另立执行 task，Linux root 使用 `/data/work/so101-evidence/act-head-wrist/<run-id>/`；run-id 由 `mktemp` 生成，不用字面占位路径。
 - [ ] 在执行主机配置一次下面的 shell 环境。Mac 使用当前已加载 ROS 的 zsh；Linux 直接在 ai-station 执行，禁止再次 SSH 自身。
 
 ```zsh
 if [[ "$(uname -s)" == Darwin ]]; then
-  ACT_EVIDENCE=$(mktemp -d /tmp/so101-debug-act-implementation-XXXXXXXX)
+  mkdir -p /opt/data/work/so101-evidence/act-head-wrist
+  ACT_EVIDENCE=$(mktemp -d /opt/data/work/so101-evidence/act-head-wrist/run-XXXXXXXX)
   ACT_PYTHON=/Users/matianyi/ros2_jazzy/.venv/bin/python3
   eval "$(direnv export zsh)"
 else
@@ -516,17 +524,17 @@ git commit -m "feat: add bounded head search and bearing"
 - Modify: `src/so101_demo_py/setup.py`
 - Create: `src/so101_demo_py/test/test_act_calibration.py`
 
-**Interfaces:** Consumes: Task 3–5、既有 MoveIt 教师链路。Produces: `require_qualified(report:dict) -> None`；CLI `act_preflight --output PATH`；校准 JSON 含 status、source_commit、config_sha256、measurements、checks，每个检查必须 PASS 才能 QUALIFIED。
+**Interfaces:** Consumes: Task 3–5、既有 MoveIt 教师链路。Produces: `require_gate(report:dict, gate:str)->None`，其中 `gate=task8_live|formal_collection`；CLI `act_preflight --output PATH`；校准 JSON 含 status、source_commit、config_sha256、measurements、checks。`TASK8_READY` 只要求 Task 8 可启动的前置检查通过；`QUALIFIED` 还要求 Task 8 live 回填 release/retreat 结果，只允许正式采集使用。
 
 - [ ] **Step 1: 写入边界失败测试。**
 
 ```python
 import pytest
-from so101_demo.act.calibration import require_qualified
+from so101_demo.act.calibration import require_gate
 
 def test_unmeasured_report_cannot_start_collection():
     with pytest.raises(ValueError):
-        require_qualified({"status": "CALIBRATION_REQUIRED", "checks": {}})
+        require_gate({"status": "CALIBRATION_REQUIRED", "checks": {}}, "formal_collection")
 ```
 
 - [ ] **Step 2: 验证 RED。**
@@ -540,14 +548,19 @@ act_test src/so101_demo_py/test/test_act_calibration.py -q
 - [ ] **Step 3: 实现核心逻辑与适配。**
 
 ```python
-def require_qualified(report):
-    required = {"fov", "collision", "search", "synchronization", "execution", "release", "retreat"}
+def require_gate(report, gate):
+    required_by_gate = {
+        "task8_live": {"fov", "collision", "search", "synchronization", "execution"},
+        "formal_collection": {"fov", "collision", "search", "synchronization", "execution", "release", "retreat"},
+    }
+    required = required_by_gate[gate]
     checks = report.get("checks", {})
-    if report.get("status") != "QUALIFIED" or not required.issubset(checks) or any(checks[k] != "PASS" for k in required):
+    allowed_status = {"task8_live": "TASK8_READY", "formal_collection": "QUALIFIED"}
+    if report.get("status") != allowed_status[gate] or not required.issubset(checks) or any(checks[k] != "PASS" for k in required):
         raise ValueError("CALIBRATION_REQUIRED")
 ```
 
-注册 act_preflight entry point。测量并输出高度/偏置/俯角、相机内外参、yaw 零位方向、扫描/微调预算、检测阈值、head 锁定有效区、动作限速/限加速度、同步新鲜度、抓取窗口、controller 提交提前量、支撑/释放/撤离阈值；每个值含单位、样本路径与 hash。使用专家全阶段轨迹检查视野和新增几何，分别验证两个平台 RGB 与原 task_camera 回归。执行/释放检查由 Task 7–8 完成后回填新的报告版本，Task 6 本轮可输出 CALIBRATION_REQUIRED 部分报告；禁止提前标 QUALIFIED。试验可以用明确标为 calibration 的候选配置，正式采集只接受完整 QUALIFIED。
+注册 act_preflight entry point。测量并输出高度/偏置/俯角、相机内外参、yaw 零位方向、扫描/微调预算、检测阈值、head 锁定有效区、动作限速/限加速度、同步新鲜度、抓取窗口、controller 提交提前量、支撑/释放/撤离阈值；每个值含单位、样本路径与 hash。使用专家全阶段轨迹检查视野和新增几何，分别验证两个平台 RGB 与原 task_camera 回归。Task 7 完成 controller timing 后，前置检查齐全可输出 `TASK8_READY`；Task 8 live 再回填 release/retreat，生成新版本 `QUALIFIED`。禁止用 `TASK8_READY` 启动采集，也禁止在 Task 8 live 前伪造 `QUALIFIED`。
 
 - [ ] **Step 4: 验证 GREEN 与失败矩阵。**
 
@@ -566,6 +579,76 @@ git commit -m "feat: gate ACT capture on measured calibration"
 ```
 
 提交前确认暂存区没有用户已有改动；只在相关自动检查和本任务必需运行门通过后勾选，校准/训练长任务的结果另写账本。
+
+### Task 6A: 接触校准、策略 fingerprint 与显式激活
+
+**Files:**
+
+- Create: `src/so101_demo_py/src/act/contact_calibration.py`
+- Create: `src/so101_demo_py/src/act/contact_policy.py`
+- Create: `src/so101_demo_py/src/cli/act_collect_contact_calibration.py`
+- Create: `src/so101_demo_py/src/cli/act_analyze_contact_calibration.py`
+- Create: `src/so101_demo_py/src/cli/act_activate_contact_policy.py`
+- Create: `src/so101_demo_py/config/act/contact-calibration-schema.json`
+- Modify: `src/so101_demo_py/src/core/contact_policy.py`
+- Modify: `src/so101_demo_py/setup.py`
+- Create: `src/so101_demo_py/test/test_act_contact_calibration.py`
+- Create: `src/so101_demo_py/test/test_act_contact_policy_activation.py`
+
+**Interfaces:** Consumes: Task 3 的确定性 MuJoCo reset、Task 6 的来源/配置 hash、原始接触与状态证据。Produces: `canonical_policy_payload(payload:dict)->bytes`；`policy_fingerprint(payload:dict)->str`；`verify_activation(payload:dict, receipt:dict)->None`；collector CLI 的 `--mode offline|live`；analyzer CLI 只写 `status=DISABLED` proposal envelope；activation CLI 要求 `--policy-fingerprint`、`--approved-by`、`--approval-reference` 和 `--evidence-root`，只在精确 fingerprint 与 proposal payload hash 一致时写 receipt。canonical payload 冻结运行阈值、适用 MuJoCo/模型版本与 `source_evidence_sha256`；activation receipt 单独记录已批准 fingerprint、批准身份、批准引用、时间和 evidence root，不改写 proposal 或 payload。
+
+- [ ] **Step 1: 先写 fingerprint、样本矩阵和自举边界测试。**
+
+```python
+from so101_demo.act.contact_policy import policy_fingerprint, verify_activation
+
+def test_activation_approves_payload_hash_not_envelope_hash():
+    payload = {"schema_version": 1, "thresholds": {"touch_n": 1.0},
+               "mujoco_version": "frozen", "model_sha256": "a" * 64,
+               "source_evidence_sha256": "b" * 64}
+    fingerprint = policy_fingerprint(payload)
+    verify_activation(payload, {"policy_fingerprint": fingerprint,
+                                "approved_by": "user", "approved_at": "2026-09-24T00:00:00Z",
+                                "evidence_root": "/data/work/so101-evidence/act-head-wrist/run"})
+    assert policy_fingerprint({**payload, "thresholds": {"touch_n": 1.1}}) != fingerprint
+```
+
+参数化测试要求五类状态 `no_contact`、`bilateral_touch`、`over_compression`、`micro_lift_slip`、`stable_hold` 各恰好 20 个 deterministic offline MuJoCo 样本和 5 个隔离 ROS/MuJoCo live 样本；另有 table-only、post-release residual、unilateral 三类 negative control。测试还要证明 collector 只读独立 diagnostic hard limits，不读取待批准 policy；proposal envelope hash、旧 fingerprint、缺失来源 hash、额外字段、非 canonical 数值和被改写 receipt 全部拒绝。
+
+- [ ] **Step 2: 运行 RED。**
+
+```zsh
+act_test src/so101_demo_py/test/test_act_contact_calibration.py src/so101_demo_py/test/test_act_contact_policy_activation.py -q
+```
+
+预期新模块缺失或边界断言失败；环境/bootstrap 失败不计 RED。
+
+- [ ] **Step 3: 实现 collector、analyzer 与 activation verifier。**
+
+`canonical_policy_payload` 使用 schema 的闭合字段、UTF-8、确定性 JSON（排序键、固定 separators、拒绝 NaN/Inf/bool-as-number），返回的 bytes 是唯一 fingerprint 输入。analyzer 从封存样本拟合候选阈值并输出 evidence index、混淆矩阵、negative-control 结果、适用版本、canonical payload、`POLICY_FINGERPRINT = SHA256(payload_bytes)` 和 disabled 状态；不得生成自批准 receipt。`src/core/contact_policy.py` 迁移到相同 canonical helper；删除 ACT 新策略中的 Gazebo-only key，旧 reader 若仍需兼容只能显式读取旧 schema，不能把该字段带入新 fingerprint。
+
+collector 每条样本保存原始接触流、MuJoCo state、ROS time、单调墙钟、scenario 参数、source/config/model hash 与 diagnostic result。offline 生成器必须可用固定 seed 重放；live 模式每次启动单一隔离 ROS/MuJoCo session，禁止复用正式 collection root。两种模式都在写完文件、manifest 和父目录后 `fsync`，再由 analyzer 按 manifest 读取，禁止目录扫描补样本。
+
+策略激活是执行阶段的人工门：独立审阅 proposal 后，用户授权精确 `POLICY_FINGERPRINT`，工具才写单独 receipt。计划中的测试只验证协议，不伪造真实批准。`verify_activation` 同时核对 payload fingerprint、receipt schema、source evidence 和当前 MuJoCo/model 适用性；失败返回 `POLICY_NOT_ACTIVATED`，零 Task 8/Worker 进程启动。
+
+- [ ] **Step 4: 验证 GREEN、离线确定性与隔离 live 证据。**
+
+```zsh
+act_test src/so101_demo_py/test/test_act_contact_calibration.py src/so101_demo_py/test/test_act_contact_policy_activation.py -q
+```
+
+随后按冻结 schema 运行 offline 100 条和 live 25 条主样本，加三类 negative control；两次 analyzer 对同一 payload 产生相同 fingerprint。独立审阅确认 evidence→payload→fingerprint 一致后停止，等待用户授权；未收到授权不得勾选 Task 8 live 的启动门。
+
+- [ ] **Step 5: 审查并提交。**
+
+```zsh
+git add src/so101_demo_py/src/act/contact_calibration.py src/so101_demo_py/src/act/contact_policy.py src/so101_demo_py/src/cli/act_collect_contact_calibration.py src/so101_demo_py/src/cli/act_analyze_contact_calibration.py src/so101_demo_py/src/cli/act_activate_contact_policy.py
+git add src/so101_demo_py/config/act/contact-calibration-schema.json src/so101_demo_py/src/core/contact_policy.py src/so101_demo_py/setup.py src/so101_demo_py/test/test_act_contact_calibration.py src/so101_demo_py/test/test_act_contact_policy_activation.py
+git diff --cached --check
+git commit -m "feat: calibrate and activate ACT contact policy"
+```
+
+真实 activation receipt 是运行证据，不进入源码 commit。保留所有 proposal、批准或拒绝记录；未经用户授权不得替换 fingerprint。
 
 ### Task 7: 双控制器定时提交与停止确认
 
@@ -623,133 +706,98 @@ git commit -m "feat: coordinate ACT arm and gripper execution"
 
 提交前确认暂存区没有用户已有改动；只在相关自动检查和本任务必需运行门通过后勾选，校准/训练长任务的结果另写账本。
 
-### Task 7A: 所有已知动作入口共用的控制权仲裁
+### Task 7A: 统一 admission、typed WorkerPort 与每 Worker ROS child
 
 **Files:**
 
-- Create: `src/so101_demo_py/src/act/ownership.py`
-- Create: `src/so101_demo_py/src/adapters/act/command_broker.py`
-- Create: `src/so101_demo_py/src/adapters/act/leased_action_client.py`
-- Create: `src/so101_demo_py/src/cli/act_command_broker.py`
-- Modify: `src/so101_demo_py/setup.py`
-- Modify: `src/so101_demo_py/src/ros/dynamic_mujoco_execution.py`
-- Modify: `src/so101_demo_py/src/backends/mujoco/qualified_phases/descend.py`
-- Modify: `src/so101_demo_py/src/backends/mujoco/qualified_phases/contact_hold.py`
-- Modify: `src/so101_demo_py/src/backends/mujoco/qualified_phases/transport.py`
-- Modify: `src/so101_demo_py/src/backends/mujoco/qualified_phases/place_alignment.py`
-- Modify: `src/so101_demo_py/src/backends/mujoco/qualified_phases/micro_lift.py`
-- Modify: `src/so101_demo_py/src/backends/mujoco/qualified_phases/remaining_lift.py`
-- Modify: `src/so101_demo_py/src/backends/mujoco/qualified_phases/staged_approach.py`
-- Modify: `src/so101_demo_py/src/backends/mujoco/qualified_phases/release_retreat.py`
-- Modify: `src/so101_demo_py/src/backends/mujoco/qualified_phases/policy_lift_waypoint1.py`
-- Modify: `src/so101_demo_py/src/runtime/launch_composition.py`
-- Modify: `src/so101_demo_py/launch/so101_mujoco_act.launch.py`（Task 3 创建后修改）
-- Modify: `src/so101_demo_py/src/adapters/act/ros_execution.py`（Task 7 创建后修改）
-- Modify: `src/so101_teleop/so101_teleop/server.py`
-- Modify: `src/so101_teleop/so101_teleop/moveit_gateway.py`
-- Modify: `src/so101_teleop/so101_teleop/workflow_gateway.py`
-- Create: `src/so101_demo_py/test/test_act_ownership.py`
-- Create: `src/so101_demo_py/test/test_act_command_broker.py`
-- Create: `src/so101_teleop/test/teleop/test_act_ownership.py`
+- Modify: `src/so101_teleop/so101_teleop/unified/contracts.py`
+- Modify: `src/so101_teleop/so101_teleop/unified/parents.py`
+- Modify: `src/so101_teleop/so101_teleop/unified/ipc.py`
+- Modify: `src/so101_teleop/so101_teleop/unified/bridge.py`
+- Modify: `src/so101_teleop/so101_teleop/unified/child_runtime.py`
+- Modify: `src/so101_teleop/so101_teleop/unified/ros_child.py`
+- Modify: `src/so101_teleop/so101_teleop/unified/admission.py`
+- Modify: `src/so101_teleop/so101_teleop/unified/teleop_service.py`
+- Modify: `src/so101_teleop/so101_teleop/unified/compose.py`
+- Modify: `src/so101_teleop/so101_teleop/unified/intent_store.py`
+- Create: `src/so101_teleop/so101_teleop/unified/gpu_workload.py`
+- Modify: `src/so101_demo_py/src/adapters/act/ros_execution.py`
+- Create: `src/so101_teleop/test/teleop/test_act_campaign_admission.py`
+- Create: `src/so101_teleop/test/teleop/test_act_worker_port.py`
+- Create: `src/so101_teleop/test/teleop/test_act_ros_child.py`
+- Create: `src/so101_teleop/test/teleop/test_gpu_workload_arbiter.py`
 
-**Interfaces:** Consumes: Task 7 的唯一底层 controller driver；既有 ExecuteTrajectory/FollowJointTrajectory 客户端。Produces: `Ownership.acquire(owner:str, session_id:str, attempt_id:str)->str`（随机 lease token）；`.require(token:str, owner:str, session_id:str, attempt_id:str)->None`；`.revoke(reason:str)->None`；`.release(token:str, stopped:bool)->None`。owner 仅 act/teacher/teleop/recovery；lease 原子覆盖 arm+gripper，neck 仍由搜索独立控制。
+**Interfaces:** Consumes: 既有 `OperationSpec`、`WorkerPort`、`IpcRequest`、`BridgeProcessOwner`、`ChildRuntime`、`RclpyActionDriver` 和 unified arbiters。Produces: `UnifiedWorkloadService.start(spec:OperationSpec)->AdmittedCampaignContext`；`WorkerPort.task8(request:dict)->dict`、`.act_collection(request:dict)->dict`、`.cancel(request:dict)->dict`；closed IPC operations `task8_phase`、`task8_full`、`act_collection_start`、`act_collection_resume`、`cancel`。每个 request 必须携带 operation/campaign/worker/execution generation、session/attempt、deadline 和闭合 payload schema。
 
-运行时只有 `act_command_broker` 进程拥有 Ownership，首版通过 evidence root 下 Unix socket 提供 acquire/submit/cancel/release/revoke/status 协议。请求含 protocol_version=1、request_id、owner、session_id、attempt_id、lease_token、operation；submit 另含 action_kind（execute_trajectory/arm/gripper）与经白名单校验的目标消息字段。响应含 request_id、accepted、error、goal_id；异步 goal feedback/result 也按 goal_id 关联。socket 以独占锁启动，第二实例拒绝；父进程或客户端断开、租约过期时撤销并停止，不能把 lease 存在浏览器里当作控制事实。
-
-- [ ] **Step 1: 写原子互斥与 stale token 的失败测试。**
+- [ ] **Step 1: 写 fail-closed admission 与 child 唯一性测试。**
 
 ```python
 import pytest
-from so101_demo.act.ownership import Ownership
 
-def test_teacher_cannot_acquire_or_reuse_act_lease():
-    owner = Ownership()
-    token = owner.acquire("act", "s", "a")
-    with pytest.raises(PermissionError):
-        owner.acquire("teacher", "s", "a")
-    with pytest.raises(PermissionError):
-        owner.require(token, "teacher", "s", "a")
-    owner.revoke("STOP")
-    with pytest.raises(PermissionError):
-        owner.require(token, "act", "s", "a")
+def test_start_rejects_gazebo_and_creates_no_child(unified_service, gazebo_spec):
+    with pytest.raises(ValueError, match="MUJOCO_ONLY"):
+        unified_service.start(gazebo_spec)
+    assert unified_service.child_registry.keys() == ()
+
+def test_one_child_per_campaign_worker_generation(child_registry, launch):
+    child_registry.register(launch(campaign_id="c", worker_id="w00", generation=3))
+    with pytest.raises(ValueError, match="DUPLICATE_CHILD"):
+        child_registry.register(launch(campaign_id="c", worker_id="w00", generation=3))
 ```
+
+再参数化测试无 activation receipt、错误 policy fingerprint、过期 deadline、stale service epoch/generation、未知 operation、schema 多余字段、资源 authority 非当前 owner、cleanup fence 和 W8 正式模式缺资格记录；每一种都断言零 Worker/Recorder/ROS child 进程启动。Web 与 CLI 对同一 `OperationSpec` 必须产生逐字段相同的 context 或相同稳定错误；context 序列化回读要保留 `operation_id`、host/GPU 物理身份与 admission 时间，任一字段篡改都拒绝。
 
 - [ ] **Step 2: 运行 RED。**
 
 ```zsh
-act_test src/so101_demo_py/test/test_act_ownership.py -q
+act_test src/so101_teleop/test/teleop/test_act_campaign_admission.py src/so101_teleop/test/teleop/test_act_worker_port.py src/so101_teleop/test/teleop/test_act_ros_child.py src/so101_teleop/test/teleop/test_gpu_workload_arbiter.py -q
 ```
 
-预期新增接口缺失或权限断言失败。
+- [ ] **Step 3: 扩展现有 unified service，不建立第二套 broker。**
 
-- [ ] **Step 3: 实现原子 lease 状态及唯一命令转发进程。**
+`AdmittedCampaignContext` 是 frozen dataclass/闭合 JSON，至少含全局接口表列出的字段，并额外保存 ROS Domain/MuJoCo session 分配表的 hash。`start` 按固定顺序：校验 MuJoCo-only 和 request schema→解析 manifest/config/policy hash→核验 activation receipt/正式 W8 资格→取得物理 GPU lease→取得 `validation` reservation→检查 cleanup fence→原子持久化 intent/context→才允许 compose children。任一步失败都逆序清理由本次调用取得的 owner 资源，不留下半启动进程。
 
-```python
-import secrets
-import threading
+Task 7A 同时交付通用 `ActGpuWorkloadArbiter`，不能等到并行采集阶段。它与 `GlobalMutationArbiter` 共用持久 `IntentStore`，在 admission 把 `INDEX`/`UUID` selector 和可见性映射解析为物理 GPU UUID，再按 `(stable_host_id, physical_gpu_uuid)` 互斥；歧义、映射漂移、PID 重用、未知 live owner 或 cleanup 未收敛均 fail closed。lease 绑定 service epoch、owner PID/start time、workload、physical GPU UUID、generation 与 deadline，只由 campaign owner 续租和释放。Task 8 live 因而不依赖 Task 11A 才具备 GPU admission。
 
-class Ownership:
-    def __init__(self):
-        self._lock = threading.Lock()
-        self._lease = None
+资源 authority 校验到此为止。context 发出后，campaign owner 续租并处理 fencing/cleanup；`WorkerPort`、Recorder、Task 8、child 和 controller driver 不读取 operation-binding 文件、不调用 arbiter、不解析 GPU selector。内部请求只校验 context 业务身份、generation、deadline 和 payload schema；runtime telemetry 回传 campaign owner，但不能改变 admission 结论或自动降档。
 
-    def acquire(self, owner, session_id, attempt_id):
-        with self._lock:
-            if self._lease is not None:
-                raise PermissionError("CONTROL_BUSY")
-            token = secrets.token_hex(32)
-            self._lease = (token, owner, session_id, attempt_id)
-            return token
+扩展既有 `IpcRequest.operation` Literal 和 registry，禁止任意 import path/反射调用。`BridgeProcessOwner` 为每个 `(campaign_id, worker_id, generation)` 生成唯一 socket、ROS Domain、namespace、controller 名和 MuJoCo session；W8 正常创建八个 child。`ChildRuntime` 只路由注册方法；`ros_child.py` 保持唯一 ROS import 边界，并实现目前缺失的 `RclpyActionDriver.submit`：保留真实 action accepted/status/error、支持 cancel/stop confirmation，绝不把 IPC ACK 当执行成功。Task 7 的 paired-controller driver 通过该 typed path 调用，不另建 `act_command_broker`、`Ownership` 或兼容 ActionClient 假层。
 
-    def require(self, token, owner, session_id, attempt_id):
-        with self._lock:
-            if self._lease != (token, owner, session_id, attempt_id):
-                raise PermissionError("LEASE_INVALID")
-
-    def revoke(self, reason):
-        with self._lock:
-            self._lease = None
-```
-
-以上只实现 lease 核心。broker 另有 RUNNING/STOPPING/IDLE 状态：revoke 原子禁止后续转发，然后取消 ExecuteTrajectory 及两个 controller 活跃目标；观察实际停止后才回 IDLE 并允许 acquire。不得因 `_lease=None` 就在 STOPPING 中接受新 owner。release(token, stopped) 只有 driver 已确认无活跃 goal 且速度达停止阈值时有效，否则拒绝。require 和真正入执行队列必须在同一 broker 临界区完成，防止校验后 revoke、旧请求仍排队的竞态。排队目标含 lease generation，出队再次核验。
-
-新增 `LeasedActionClient(node, action_type, action_name, *, broker_socket, owner, session_id, attempt_id, lease_token)`，为既有调用实现 `wait_for_server(timeout_sec)->bool`、`send_goal_async(goal, feedback_callback=None)->Future`；返回兼容 handle 的 accepted、get_result_async、cancel_goal_async。它只序列化和转发，底层 rclpy ActionClient 留在 broker。保留实际 action status/error_code，不把 broker 接受等同于轨迹成功。Task 7 的双 controller driver 移到 broker 内，ACT adapter 通过 broker 提交 prefix；lease 和 permit 均有效才可转发。
-
-- [ ] **Step 3a: 接通教师、qualified phases 和 Teleop 的全部既有入口。**
-
-在列出的 dynamic_mujoco_execution、qualified phases 创建 ActionClient 的位置使用公共 factory `make_action_client(node, action_type, action_name, *, control_context:dict|None)`；ACT profile 必須携带由父运行者取得的 control_context，缺失时拒绝运行；非 ACT profile 保留原 rclpy client，保证原 V5 行为兼容。qualified 子阶段共用整次 teacher lease，不能每阶段 release 再 acquire。recovery 是停止确认后的新 lease，不得与 act 重叠。
-
-Teleop server 的现有服务内 lease 只作为 UI 会话管理；ACT profile 下 joint、gripper、MoveIt execute、workflow 启动及 reset 都调用 broker 授权。moveit_gateway/workflow_gateway 不再直接越过仲裁启动执行。Task 15 的 ActGateway 复用这里的连接，不创建第二个 Ownership。Task 3 的 reset 必须先取得授权并确认双方已停，不能在 ACT 执行时单独 reset。
-
-MoveIt 的 `/execute_trajectory` 只由 broker 转发已授权 teacher/teleop/recovery 命令；其下游发送 controller goal 是同一授权执行链，broker 记录该执行期间控制器 goal，拒绝 ACT prefix。普通规划服务仍可只读运行。启动时清点已知动作客户端并验证实际映射；若发现同一 controller 的未知活跃 goal，停止并拒绝 ACT 资格。此仲裁针对同一受控仿真系统中的已知入口，不宣称能阻止不受控 ROS 节点蓄意绕过；启动了独立旧 stack 时不得进入 ACT execute。
-
-- [ ] **Step 4: 跨入口故障测试与 live 仲裁验收。**
+- [ ] **Step 4: 验证 Web/CLI 等价、隔离和故障矩阵。**
 
 ```zsh
-act_test src/so101_demo_py/test/test_act_ownership.py src/so101_demo_py/test/test_act_command_broker.py -q
-act_test src/so101_teleop/test/teleop/test_act_ownership.py -q
+act_test src/so101_teleop/test/teleop/test_act_campaign_admission.py src/so101_teleop/test/teleop/test_act_worker_port.py src/so101_teleop/test/teleop/test_act_ros_child.py src/so101_teleop/test/teleop/test_gpu_workload_arbiter.py -q
 ```
 
-broker 集成测试建立 ACT lease，分别通过真实教师 factory 和 Teleop gateway 提交 arm、gripper 与 ExecuteTrajectory，断言 CONTROL_BUSY/LEASE_INVALID 且底层 fake driver 收到零条额外命令。再测试 revoke 与 submit 并发、queued goal 的旧 generation、lease 超时、客户端断开、broker 重启后旧 token、第二 broker 实例。live 在同一仿真中验证 ACT 运行时其他已知入口全部拒绝；停稳释放后教师可执行，旧 V5 profile 的回归 gate 通过。
+fake W8 必须建立 8 个不同 Domain/session child，并证明每个 Worker 只收到自己的 request/result；注入 child crash、父进程断开、socket 路径过长、旧 generation response、deadline 到期、单 controller 接受/另一侧拒绝和 cancel 后未停稳，全部 fail closed 并进入 owner cleanup。运行期 arbiter 状态变化只由 campaign owner fencing 整个 campaign，内部组件不得自行重取 binding 或继续生成业务结果。
 
-- [ ] **Step 5: 显式提交本任务文件。**
+- [ ] **Step 5: 审查并提交。**
 
 ```zsh
-git add src/so101_demo_py/src/act/ownership.py src/so101_demo_py/src/adapters/act/command_broker.py src/so101_demo_py/src/adapters/act/leased_action_client.py src/so101_demo_py/src/cli/act_command_broker.py src/so101_demo_py/setup.py src/so101_demo_py/src/ros/dynamic_mujoco_execution.py
-git add src/so101_demo_py/src/backends/mujoco/qualified_phases/descend.py src/so101_demo_py/src/backends/mujoco/qualified_phases/contact_hold.py src/so101_demo_py/src/backends/mujoco/qualified_phases/transport.py src/so101_demo_py/src/backends/mujoco/qualified_phases/place_alignment.py src/so101_demo_py/src/backends/mujoco/qualified_phases/micro_lift.py src/so101_demo_py/src/backends/mujoco/qualified_phases/remaining_lift.py src/so101_demo_py/src/backends/mujoco/qualified_phases/staged_approach.py src/so101_demo_py/src/backends/mujoco/qualified_phases/release_retreat.py src/so101_demo_py/src/backends/mujoco/qualified_phases/policy_lift_waypoint1.py
-git add src/so101_demo_py/src/runtime/launch_composition.py src/so101_demo_py/launch/so101_mujoco_act.launch.py src/so101_demo_py/src/adapters/act/ros_execution.py src/so101_teleop/so101_teleop/server.py src/so101_teleop/so101_teleop/moveit_gateway.py src/so101_teleop/so101_teleop/workflow_gateway.py src/so101_demo_py/test/test_act_ownership.py src/so101_demo_py/test/test_act_command_broker.py src/so101_teleop/test/teleop/test_act_ownership.py
+git add src/so101_teleop/so101_teleop/unified/contracts.py src/so101_teleop/so101_teleop/unified/parents.py src/so101_teleop/so101_teleop/unified/ipc.py src/so101_teleop/so101_teleop/unified/bridge.py src/so101_teleop/so101_teleop/unified/child_runtime.py
+git add src/so101_teleop/so101_teleop/unified/ros_child.py src/so101_teleop/so101_teleop/unified/admission.py src/so101_teleop/so101_teleop/unified/teleop_service.py src/so101_teleop/so101_teleop/unified/compose.py src/so101_teleop/so101_teleop/unified/intent_store.py src/so101_teleop/so101_teleop/unified/gpu_workload.py src/so101_demo_py/src/adapters/act/ros_execution.py
+git add src/so101_teleop/test/teleop/test_act_campaign_admission.py src/so101_teleop/test/teleop/test_act_worker_port.py src/so101_teleop/test/teleop/test_act_ros_child.py src/so101_teleop/test/teleop/test_gpu_workload_arbiter.py
 git diff --cached --check
-git commit -m "feat: arbitrate ACT teacher and teleop execution"
+git commit -m "feat: admit ACT campaigns through typed worker ports"
 ```
 
-Task 7A 通过前，不进行 Task 8 live execute、Task 9 重放或 Task 11 正式采集。Task 7 的初始控制器定时测试只允许独占的校准运行，不宣称跨客户端安全。
+Task 7A 通过前，不进行 Task 8 live、Task 9 重放或 Task 11 采集。旧 V5 入口仍经现有 unified path 回归，不能为 ACT 新增旁路。
 
 ### Task 8: 碰撞、持物、释放与撤离监督
 
 **Files:**
 
+- Create: `src/so101_demo_py/src/act/task8.py`
+- Create: `src/so101_demo_py/src/act/task8_manifest.py`
 - Create: `src/so101_demo_py/src/act/supervisor.py`
 - Create: `src/so101_demo_py/src/adapters/act/physics.py`
+- Create: `src/so101_demo_py/src/cli/act_prepare_task8_live.py`
+- Create: `src/so101_demo_py/src/cli/act_task8_live.py`
+- Create: `src/so101_demo_py/config/act/task8-live-anchors.yaml`
+- Create: `src/so101_demo_py/config/act/task8-live-schema.json`
+- Modify: `src/so101_demo_py/setup.py`
+- Create: `src/so101_demo_py/test/test_act_task8.py`
+- Create: `src/so101_demo_py/test/test_act_task8_manifest.py`
 - Create: `src/so101_demo_py/test/test_act_supervisor.py`
 
 - Create: `src/so101_mujoco_support/msg/RobotContactEvidence.msg`
@@ -760,7 +808,7 @@ Task 7A 通过前，不进行 Task 8 live execute、Task 9 重放或 Task 11 正
 - Create: `src/so101_demo_py/src/adapters/act/contact_evidence.py`
 - Create: `src/so101_demo_py/test/test_act_contact_evidence.py`
 
-**Interfaces:** Consumes: Task 7 执行接口、Task 7A 仲裁、Task 1 Deadline、已有 MuJoCo 物理证据。Produces: `release_allowed(holding:bool, opening:bool, supported:bool, fresh:bool)->bool`；`ActSupervisor.check(prefix:dict, snapshot:dict)->dict`（permit）；`.tick(snapshot:dict, now_wall_s:float)->str`；physics port `check_path(prefix:dict,snapshot:dict)->bool`、`snapshot()->dict`。
+**Interfaces:** Consumes: Task 6A 已激活 policy、Task 7 执行接口、Task 7A typed `WorkerPort`、Task 1 Deadline、MuJoCo/MoveIt/controller/contact evidence。Produces: `Task8Runner.run(request:Task8Request)->Task8Result`；固定九相 `Task8Runner.PHASES`；`build_task8_live_manifest(anchors:dict, source/config/policy hashes)->dict`；`release_allowed(...)`；`ActSupervisor.check(...)`；physics port `check_path(...)`、`snapshot()`。`act_prepare_task8_live` 按闭合 schema 原子生成 manifest；`act_task8_live` 校验其 hash 后只把请求交给 `UnifiedWorkloadService`，不直接启动 ROS。两个 console script 都在 `setup.py` 注册。
 
 - [ ] **Step 1: 写入边界失败测试。**
 
@@ -771,12 +819,17 @@ def test_cannot_open_unsupported_cup():
     assert not release_allowed(True, True, False, True)
     assert not release_allowed(True, True, True, False)
     assert release_allowed(True, True, True, True)
+
+def test_phase_prefix_stops_only_after_requested_phase(fake_task8):
+    result = fake_task8.run({"mode": "phase_prefix", "stop_after": "MICRO_LIFT"})
+    assert result["completed_phases"] == ["SEARCH", "APPROACH", "CLOSE", "MICRO_LIFT"]
+    assert result["formal_episode_eligible"] is False
 ```
 
 - [ ] **Step 2: 验证 RED。**
 
 ```zsh
-act_test src/so101_demo_py/test/test_act_supervisor.py -q
+act_test src/so101_demo_py/test/test_act_task8.py src/so101_demo_py/test/test_act_task8_manifest.py src/so101_demo_py/test/test_act_supervisor.py -q
 ```
 
 预期新符号缺失或新增边界断言失败；保存退出码和日志。环境初始化失败先修复，不计 RED。
@@ -790,7 +843,13 @@ def release_allowed(holding, opening, supported, fresh):
     return True
 ```
 
+`Task8Runner` 使用唯一固定相序 SEARCH→APPROACH→CLOSE→MICRO_LIFT→TRANSPORT→ALIGN→RELEASE→RADIAL_RETREAT→FINAL_CHECK。`phase_prefix` 在每个 `stop_after` 边界先验证规划、controller reference、joint feedback、接触、MuJoCo truth 与 Planning Scene 一致，再安全停止；prefix 永远不生成正式 episode。`full` 必须从 FULL_RESTART 开始并自主完成全部九相，禁止人工或 MoveIt recovery 接管后继续计成功。
+
+`task8-live-anchors.yaml` 冻结 default/left/forward 三个 anchor 的场景参数；值来自 Task 6 测量，不在代码里另写默认值。`task8-live-schema.json` 要求 manifest 冻结 source/config/policy/anchors hash、三个 anchor、九条按相序排列且各含唯一 `stop_after` 的 prefix case，以及五条 full case。五条 full 的 anchor 顺序显式写入并覆盖三者，每条要求 FULL_RESTART；manifest 不接受额外 case、重复/遗漏 phase、未知 anchor 或 hash 漂移。producer 只创建新文件，已存在时拒绝覆盖。
+
 把 holding 扩展为运行状态 EMPTY/HOLDING/UNKNOWN；上述 bool 函数只用于已明确状态，UNKNOWN 一律停止。snapshot 明确包含 session/reset_epoch/release_epoch/sim_time_s、arm 位置速度、neck 漂移、target_visible、双侧接触、杯子高度/支撑/放置稳定/撤离稳定及证据新鲜度。check_path 在独立 MuJoCo data 上重建 controller 插值与持物体积，沿前缀检查自碰撞、桌面、支架和相机；使用冻结步长与安全距离界定离散近似，实际执行中还有接触 hazard 停止。允许接触按阶段+明确几何对收窄，不把杯子整体从碰撞检查删除。开爪前必须等支撑成立，不得把尚未成立条件的开爪排入不可撤销长队列；首版在潜在释放边界截断前缀，下一 tick 用新证据重新审批。
+
+RELEASE 先发送 `DETACH_MOVEIT` 并等待 Planning Scene 回读确认，再开放 gripper。合法释放建立新的 `release_epoch`；这不会使同一 episode 失效，但随后支撑、无持续指尖接触和放置稳定只能由新 epoch 的证据证明。RADIAL_RETREAT 先沿径向离开 10 mm，再垂直上抬 60 mm；两段都受相同 path/contact permit 约束。任何 reset、session 或 attempt 变化仍使旧证据与旧 permit 失效。
 
 
 
@@ -852,15 +911,21 @@ Linux 仍先建立全局测试函数规定的 NVMe scratch 并用实际 Python �
 - [ ] **Step 4: 验证 GREEN 与失败矩阵。**
 
 ```zsh
-act_test src/so101_demo_py/test/test_act_supervisor.py -q
+act_test src/so101_demo_py/test/test_act_task8.py src/so101_demo_py/test/test_act_task8_manifest.py src/so101_demo_py/test/test_act_supervisor.py -q
 ```
 
-预期非零测试收集、全部通过。补测抓取前丢失、接触阶段有界遮挡窗口、双侧接触+微抬升+离台确认、neck 漂移、悬空开爪、release epoch 不可复用、退臂碰杯、未知持物停住、120 s 推理阻塞与仿真暂停。detach planning shadow（若存在）先于开爪。状态 RELEASE_CONFIRMED→ACT_RETREAT→VALIDATE_FINAL_PLACEMENT→DONE，只有撤离与最终放置共同通过才能成功。监督器没有生成轨迹接口；MoveIt recovery 单独算干预。完成后重新运行 Task 6 preflight 形成完整 QUALIFIED 报告。
+预期非零测试收集、全部通过。补测抓取前丢失、接触阶段有界遮挡窗口、双侧接触+微抬升+离台确认、neck 漂移、悬空开爪、release epoch 只接受新证据、退臂碰杯、未知持物停住、120 s 推理阻塞与仿真暂停。监督器没有生成轨迹接口；MoveIt recovery 单独算干预。
+
+live 验收使用独立 `task8-live` manifest/evidence 子树。按九个 phase-prefix 逐项过门后，在 default、left、forward 三个 anchor 上运行冻结的五次 FULL_RESTART 序列；五次使用同一 source/config/policy fingerprint，覆盖全部三个 anchor，并且连续五次 full 都成功。每次都要证明 MuJoCo、Planning Scene、controller、contact stream 与双 RGB 时间线一致，且 120 s 内完成最终放置与撤离。任何人工/MoveIt recovery、prefix 续跑、旧 epoch 证据或不同 fingerprint 都使该次无效。完成后重新运行 Task 6 preflight 形成完整 QUALIFIED 报告。
+
+安装后运行 `ros2 run so101_demo_py act_prepare_task8_live --help` 和 `ros2 run so101_demo_py act_task8_live --help`，确认入口来自当前 overlay；未注册 console script 或 manifest schema 校验失败都不能进入 live。
 
 - [ ] **Step 5: 审查本任务 diff 并提交。**
 
 ```zsh
-git add src/so101_demo_py/src/act/supervisor.py src/so101_demo_py/src/adapters/act/physics.py src/so101_demo_py/test/test_act_supervisor.py
+git add src/so101_demo_py/src/act/task8.py src/so101_demo_py/src/act/task8_manifest.py src/so101_demo_py/src/act/supervisor.py src/so101_demo_py/src/adapters/act/physics.py
+git add src/so101_demo_py/src/cli/act_prepare_task8_live.py src/so101_demo_py/src/cli/act_task8_live.py src/so101_demo_py/config/act/task8-live-anchors.yaml src/so101_demo_py/config/act/task8-live-schema.json src/so101_demo_py/setup.py
+git add src/so101_demo_py/test/test_act_task8.py src/so101_demo_py/test/test_act_task8_manifest.py src/so101_demo_py/test/test_act_supervisor.py
 git add src/so101_mujoco_support/msg/RobotContactEvidence.msg src/so101_mujoco_support/include/so101_mujoco_support/simulation_evidence_plugin.hpp src/so101_mujoco_support/src/simulation_evidence_plugin.cpp src/so101_mujoco_support/CMakeLists.txt src/so101_mujoco_support/test/test_simulation_evidence_plugin.cpp src/so101_demo_py/src/adapters/act/contact_evidence.py src/so101_demo_py/test/test_act_contact_evidence.py
 git diff --cached --check
 git commit -m "feat: supervise ACT collision release and retreat"
@@ -907,7 +972,9 @@ def require_grid(times, dt=0.1):
         raise ValueError("EPISODE_TIME_GAP")
 ```
 
-controller reference 首选实际发布 desired，离线延后一个 tick 写 action；goal 接受/起始/取消/替换构成有效 reference 区间。若缺目标时刻 reference，只能用经过验证的 controller 同款插值重建；不能从未来实测关节生成 action。独立 gripper goal 同步转换，没有新 goal 保持最后有效 reference；跨取消空洞无有效 hold 时拒绝 episode。原始 RGB 用无损 PNG 或等价无损格式保存，JSONL 保存原 stamp、q、reference、goal、阶段事件、代码/场景/配置/模型 hash、seed。episode 从锁定稳定开始，直到专家撤离+最终检查完成，尾部无足够未来标签的观测留审计侧，不导出伪标签。finish 原子写 manifest，DISCARD 仅排除训练，不删除文件。
+每个 10 Hz observation 在时刻 `t` 同步保存 head/wrist RGB 与 8D state；action 是 controller 在 `t+0.1 s` 的实际 desired/reference。goal 接受/起始/取消/替换构成有效 reference 区间。若缺目标时刻 reference，只能用经过验证的 controller 同款插值重建；不能从未来实测关节生成 action。独立 gripper goal 同步转换，没有新 goal 保持最后有效 reference；跨取消空洞无有效 hold 时拒绝 episode。原始 RGB 用无损 PNG 或等价无损格式保存，JSONL 保存原 stamp、q、reference、goal、阶段事件、代码/场景/配置/策略 hash、seed。MuJoCo truth、接触原始流、Planning Scene 和 controller 状态只进入 audit，不进入 observation。
+
+episode 从锁定稳定开始，直到专家撤离+最终检查完成，尾部无足够未来标签的观测留审计侧，不导出伪标签。相机过期、时间倒退、reference 缺失、采样间隔超限、跨 reset/session/attempt 或无损写入失败都会使 QC 失败。合法 RELEASE 在同一 episode 内生成显式 release-epoch event，不使 episode 失效；新 epoch 之后只能使用新支撑/接触证据。Task 8 业务成功和业务失败都停止 Recorder，写不可变终态 manifest/hash，对文件和父目录 `fsync` 后运行 verifier；成功封存为 `PASSED`，业务失败封存为 `FAILED`。seal/hash/fsync/verifier 失败是基础设施故障，不能伪造 `FAILED`。只有 `PASSED`、QC 合格且随后由 Coordinator commit 的结果可进入训练配额；目录存在或 Recorder finish 不等于已提交。
 
 - [ ] **Step 4: 验证 GREEN 与失败矩阵。**
 
@@ -915,7 +982,7 @@ controller reference 首选实际发布 desired，离线延后一个 tick 写 ac
 act_test src/so101_demo_py/test/test_act_recorder.py -q
 ```
 
-预期非零测试收集、全部通过。测试夹爪与手臂不同 goal、reference 替换、时间空洞、保持 state==action、重复 stamp、时间尾段、磁盘写入失败与文件 hash。先回放一条完整示教，经 Task 7–8 验证实际物理抓放+撤离；只通过 action 数值误差不能批采。
+预期非零测试收集、全部通过。测试夹爪与手臂不同 goal、reference 替换、时间空洞、保持 state==action、重复 stamp、时间尾段、合法 release epoch、reset/session/attempt 变化、`PASSED`/`FAILED` 两种 seal、磁盘写入失败、父目录 fsync 与文件 hash。先回放一条完整示教，经 Task 7–8 验证实际物理抓放+撤离；只通过 action 数值误差不能批采。
 
 - [ ] **Step 5: 审查本任务 diff 并提交。**
 
@@ -996,7 +1063,7 @@ git commit -m "feat: isolate ACT spatial splits"
 - Modify: `src/so101_demo_py/setup.py`
 - Create: `src/so101_demo_py/test/test_act_collection.py`
 
-**Interfaces:** Consumes: Task 9 recorder、一个 Task 10 `Scenario`、QUALIFIED 校准、搜索/教师/物理监督，以及 Task 11A 统一服务签发的 operation+GPU binding。Produces: `training_eligible(record:dict)->bool`；`prepare_scenario(scenario:dict, reset_port:object)->dict`（只做一次 reset、七关节读回与安全就绪证明）；`collect_authorized_scenario(scenario:dict, preparation:dict, root:Path, ports:dict)->CollectionScenarioResult`（从搜索到 QC，不再 reset）；W1 调试 CLI `act_collect --manifest PATH --calibration PATH --operation-binding PATH --root PATH --limit INT [--qualification]`，ports 固定 reset/search/expert/recorder/supervisor。全局候选循环、配额和并发调度属于 Task 11A。
+**Interfaces:** Consumes: Task 9 recorder、一个 Task 10 `Scenario`、QUALIFIED 校准、已激活 policy，以及 Task 7A 的 `AdmittedCampaignContext`/typed `WorkerPort`。Produces: `training_eligible(record:dict)->bool`；`prepare_scenario(...)`（只做一次 reset、七关节读回与安全就绪证明）；`collect_authorized_scenario(...)`（从搜索到 QC，不再 reset）；W1 调试 CLI `act_collect --manifest PATH --calibration PATH --policy PATH --activation-receipt PATH --root PATH --limit INT [--qualification]`。CLI 只构造 `OperationSpec` 并调用统一服务；ports 固定 reset/search/expert/recorder/supervisor。全局候选循环、配额和并发调度属于 Task 11A。
 
 - [ ] **Step 1: 写入边界失败测试。**
 
@@ -1006,6 +1073,8 @@ from so101_demo.act.collection import training_eligible
 def test_failure_is_retained_but_not_exported():
     assert not training_eligible({"qc": "PASS", "done": False, "interventions": 0})
     assert not training_eligible({"qc": "FAIL", "done": True, "interventions": 0})
+    assert not training_eligible({"qc": "PASS", "done": True, "interventions": 0,
+                                  "status": "PASSED", "coordinator_committed": False})
 ```
 
 - [ ] **Step 2: 验证 RED。**
@@ -1020,10 +1089,14 @@ act_test src/so101_demo_py/test/test_act_collection.py -q
 
 ```python
 def training_eligible(record):
-    return record["qc"] == "PASS" and record["done"] and record["interventions"] == 0
+    return (record["status"] == "PASSED" and record["qc"] == "PASS" and
+            record["done"] and record["interventions"] == 0 and
+            record["coordinator_committed"])
 ```
 
-W1 CLI 在任何 reset 或子进程启动前核验统一服务签发的 operation+GPU binding；缺失、过期、foreign owner、mutation reservation 或 GPU lease 不匹配时零动作、零 Broker/Recorder 进程启动。binding 保持到最后一个 scenario 的终态与 cleanup proof，不能由 CLI 提前释放。每条 scenario 再调用一次 `prepare_scenario`，把 reset epoch、实测七关节与场景哈希传给 `collect_authorized_scenario`，完成 search→lock→stable→record→teacher inference→expert→release→retreat→final-check→QC；后半段拒绝再次 reset。单 stack 入口只有 Task 11A 完成统一 admission 接线后才允许进行 5 条 smoke 与完整 W1 基线。正式模式仅采 Train/Validation/Offline Test 示教；`--qualification` 只接受 qualification 场景并阻止结果进入训练 manifest；两个 Rollout 集合不得运行专家采标签。每条成功示教受 120 s 墙钟预算；搜索、规划、执行或 QC 失败也封存原始证据并返回不可改写业务终态，不在此函数内自动重试。放置失败先保留证据再独立恢复，持物/未知时不能直接 reset。每条记录生命周期、运行产物 provenance 与模型来源。
+W1 CLI 在任何 reset 或子进程启动前把闭合 spec 交给 `UnifiedWorkloadService.start`；缺失/错误 policy、authority 非当前 owner、cleanup fence、过期 deadline 或非 MuJoCo backend 时由 admission 拒绝，并断言零动作、零 Recorder/ROS child。成功后只把不可变 context 和业务 payload 交给内部组件；内部不再读取 binding 文件或查询 arbiter。campaign owner 保持资源到最后一个 scenario 终态与 cleanup proof，CLI 提前退出不能释放。
+
+每条 scenario 调用一次 `prepare_scenario`，把 reset epoch、实测七关节与场景哈希传给 `collect_authorized_scenario`，完成 search→lock→stable→record→teacher inference→expert→release→retreat→final-check→QC；后半段拒绝再次 reset。单 stack 入口只有 Task 11A 完成统一 admission 接线后才允许进行 5 条 smoke 与完整 W1 基线。正式模式仅采 Train/Validation/Offline Test 示教；`--qualification` 只接受 qualification 场景并阻止结果进入训练 manifest；两个 Rollout 集合不得运行专家采标签。每条成功示教受 120 s 墙钟预算；搜索、规划、执行或 QC 失败封存为不可改写业务 `FAILED`，不在此函数内重试。放置失败先保留证据再独立恢复，持物/未知时不能直接 reset。每条记录生命周期、运行产物 provenance、policy fingerprint 与模型来源。
 
 - [ ] **Step 4: 验证 GREEN 与失败矩阵。**
 
@@ -1031,7 +1104,7 @@ W1 CLI 在任何 reset 或子进程启动前核验统一服务签发的 operatio
 act_test src/so101_demo_py/test/test_act_collection.py -q
 ```
 
-预期非零测试收集、全部通过。单测注入缺失/过期/foreign operation+GPU binding、失败 reset、搜索歧义、MoveIt 失败、旧 reset epoch/教师 pose、QC 时间洞、Recorder 队列背压、磁盘写入失败和配置中途变化；无有效 binding 时断言零 reset、零动作、零子进程。其余场景检查每个 attempt 只 reset 一次，搜索失败成为业务 `FAILED`，不进入训练且原件存在；同一 `scene_id` 的重入不能覆盖既有终态。B 阶段通过条件还包括 Task 11A 并发资格，不包括 ACT 成功率。
+预期非零测试收集、全部通过。单测注入 admission 拒绝、失败 reset、搜索歧义、MoveIt 失败、旧 reset epoch/教师 pose、QC 时间洞、Recorder 队列背压、磁盘写入失败和配置中途变化；admission 失败时断言零 reset、零动作、零子进程。搜索/内容 QC 失败成为业务 `FAILED`；Recorder 或持久化故障必须返回 infra，不得 seal 成业务失败。每个 attempt 只 reset 一次，同一 `scene_id` 的重入不能覆盖既有终态。B 阶段通过条件还包括 Task 11A W8 资格，不包括 ACT 成功率。
 
 - [ ] **Step 5: 审查本任务 diff 并提交。**
 
@@ -1055,25 +1128,24 @@ git commit -m "feat: collect quality-gated ACT demonstrations"
 - Create: `src/so101_demo_py/src/runtime/act_fixed_collection_composition.py`
 - Create: `src/so101_demo_py/src/cli/act_collect_parallel.py`
 - Modify: `src/so101_demo_py/src/cli/act_collect.py`
+- Modify: `src/so101_demo_py/src/cli/mujoco_parallel_batch.py`
 - Create: `src/so101_demo_py/config/act/parallel_collection_v3.yaml`
 - Modify: `src/so101_demo_py/src/parallel_batch/worker.py`
 - Modify: `src/so101_teleop/so101_teleop/unified/bridge.py`
 - Modify: `src/so101_teleop/so101_teleop/unified/teleop_service.py`
 - Modify: `src/so101_teleop/so101_teleop/unified/contracts.py`
-- Modify: `src/so101_teleop/so101_teleop/unified/intent_store.py`
 - Modify: `src/so101_teleop/so101_teleop/unified/admission.py`
-- Create: `src/so101_teleop/so101_teleop/unified/gpu_workload.py`
 - Modify: `src/so101_demo_py/setup.py`
 - Create: `src/so101_demo_py/test/test_act_parallel_collection.py`
 - Create: `src/so101_demo_py/test/test_act_parallel_collection_runtime.py`
 - Create: `src/so101_demo_py/test/test_act_parallel_collection_recovery.py`
 - Create: `src/so101_demo_py/test/test_act_parallel_collection_integration.py`
+- Create: `src/so101_demo_py/test/test_act_parallel_collection_subprocess.py`
 - Create: `src/so101_demo_py/test/test_act_gpu_workload_client.py`
 - Modify: `src/so101_demo_py/test/test_parallel_batch_worker.py`
 - Create: `src/so101_teleop/test/teleop/test_unified_act_collection.py`
-- Create: `src/so101_teleop/test/teleop/test_gpu_workload_arbiter.py`
 
-**Interfaces:** Consumes: Task 10 冻结候选清单、Task 11 `prepare_scenario`/`collect_authorized_scenario`、`ParallelRuntimeConfigV3`、`BatchRequestV3`、fixed shared queue、coordinator/Worker/Broker/start guard/resources/cleanup，以及统一服务签发的 `OperationSpec` + GPU lease binding。Produces: `partition_waves(scene_ids:tuple[str,...], max_wave_size:int=20)->tuple[tuple[str,...],...]`；`FixedActCollectionCampaign(manifest:dict, config:dict, operation_binding:dict, root:Path).run()->dict`；`ActFixedWaveRecovery.resume(wave_record:dict)->dict`；统一服务内 `ActGpuWorkloadArbiter.acquire(stable_host_id:str, requested_selector:dict, visibility_map:dict, workload:str, owner:dict)->dict`（先解析 `physical_gpu_uuid`）、`.renew(lease:dict)->dict`、`.release(lease:dict, cleanup_proof:dict)->None`，以及训练/采集进程使用的 `GpuWorkloadClient`；闭合枚举 `workload_kind=point_validation|act_collection`；`AuthorizedWorkloadResult(decision, action_may_have_started:bool, terminal_failure:dict|None)`；`ActCollectionWorkload.run_authorized(...)->AuthorizedWorkloadResult`；`ActCollectionWorkerRuntime`；`ActCollectionResultStore`；`ActCollectionResultVerifier.verify/discover`；原子 `campaign-index.json` 逐 wave 保存 `batch_id`、coordinator journal root/hash、有效 commit sequence、verifier receipt root/hash 和选中 episode；CLI `act_collect_parallel --manifest PATH [--split-manifest PATH] --calibration PATH --collection-config PATH --runtime-config PATH --operation-binding PATH --root PATH [--qualification] --worker-count INT [--resume]`。正式模式要求 `--split-manifest` 和已有同档 ACT 资格；资格模式禁止该参数，只允许配置声明的待测档位和隔离 qualification manifest，不要求该档已有资格。`--worker-count` 是本 batch 的 exact N。
+**Interfaces:** Consumes: Task 10 冻结候选清单、Task 11 单场景接口、Task 7A `AdmittedCampaignContext`/typed `WorkerPort`、`ParallelRuntimeConfigV3`、`BatchRequestV3`、fixed shared queue、Coordinator/Worker/start guard/cleanup。Produces: `partition_waves(...)`；`FixedActCollectionCampaign(manifest:dict, config:dict, context:AdmittedCampaignContext, root:Path).run()->dict`；`ActFixedWaveRecovery.resume(wave_record:dict, context:AdmittedCampaignContext)->dict`；`ActCollectionResultStore`/`ActCollectionResultVerifier`；原子 `qualification-contract.json` 和 `campaign-index.json`。CLI `act_collect_parallel --manifest PATH [--split-manifest PATH] --calibration PATH --policy PATH --activation-receipt PATH --collection-config PATH --runtime-config PATH [--qualification-contract PATH] --root PATH [--qualification] --worker-count INT [--resume]` 只创建 `OperationSpec` 并调用统一服务。W8 资格必须显式传入尚不存在的 contract 路径，由入口在 spawn 前原子创建；已存在或不可持久化则拒绝。资格模式只允许 W1、W2 或独立 W8 清单；正式模式必须是 exact W8 且引用未撤销的 40 场景 W8 资格。
 
 - [ ] **Step 1: 写外层 wave、终态与恢复的失败测试。**
 
@@ -1087,7 +1159,7 @@ def test_manifest_order_is_partitioned_without_duplication():
     assert tuple(item for wave in waves for item in wave) == scene_ids
 ```
 
-增加 fake exact-W2 集成测试：每个 `scene_id` 只有一个业务终态；Worker 失败后，已由 coordinator commit 的结果不重跑；未提交项只能在同 N、同 manifest/config/operation binding 的 `--resume` 中继续；同一 scenario 的冲突终态拒绝；journal 截断后恢复到最后一个 fsync 事件。业务失败 `FAILED` 不重试。另模拟父进程在 Worker seal/coordinator commit 之后、外层导入之前退出，要求恢复从 commit 重新导入，不扫描任意目录，也不创建 W1 continuation。
+增加 fake exact-W2/W8 集成测试：每个 `scene_id` 只有一个业务终态；`PASSED` 与 `FAILED` 都必须先 seal、verifier 通过并由 Coordinator commit；业务 `FAILED` 不重试。未提交项只能在相同 W8、manifest、runtime/collection config、policy 和 campaign 数据身份下 `--resume`，允许新 resource binding/generation；同一 scenario 的冲突终态拒绝。journal 截断恢复到最后一个 fsync 事件。另模拟父进程在 seal/commit 后、外层导入前退出，要求从 commit 重放导入，不扫描任意目录，也不创建 W1 continuation。
 
 - [ ] **Step 2: 验证 RED。**
 
@@ -1103,39 +1175,43 @@ act_test \
 
 - [ ] **Step 3: 实现确定性 exact-N wave、统一 authority 与外层配额。**
 
-`FixedActCollectionCampaign` 只创建 `RunMode.EXECUTE` 的 `BatchRequestV3`，先校验 manifest hash、成功配额、唯一 `scene_id` 和 split 白名单。正式模式还要求 worker count 对应冻结且未撤销的 ACT 资格记录，同时读取五集合总清单和 collection 投影，核对来源 SHA256、三个示教 split 的逐项身份/顺序，并拒绝 Rollout 场景。`--qualification` 只接受 `qualification`，禁止 `--split-manifest`，使用隔离 root，只允许配置声明的待测 exact N，且不能生成 Task 12 可消费的训练 manifest；它不要求已有同档资格。`BatchRequestV3` 没有 20 项上限，ACT collection config 另行冻结 `max_wave_size=20`。campaign 按冻结顺序切分，每个 wave 创建短 ASCII batch ID、相同 exact N 和独立 v3 request。外层 fsync journal 记录 `COLLECTION_MANIFEST`、`AUTHORITY_BOUND`、`WAVE_STARTED`、`SCENARIO_TERMINAL`、`WAVE_TERMINAL`、split 配额和最终 summary；恢复时拒绝 manifest、runtime config、collection config、worker count 或 operation binding 变化。
+`FixedActCollectionCampaign` 只创建 `RunMode.EXECUTE` 的 `BatchRequestV3`，先校验 manifest hash、成功配额、唯一 `scene_id`、split 白名单和 context identity。正式模式固定 `worker_count=8`，要求未撤销的 ACT W8 资格记录，并核对五集合总清单、collection 投影、三个示教 split 的逐项身份/顺序；Rollout 场景拒绝。`--qualification` 只接受 `qualification`，禁止 `--split-manifest`，使用隔离 root，不能生成 Task 12 可消费的训练 manifest。`BatchRequestV3` 本身不限 20 项；ACT config 冻结 `max_wave_size=20`。campaign 按清单顺序分 wave，每个 wave 创建短 ASCII batch ID、相同 exact N 和独立 v3 request。外层 fsync journal 记录 `COLLECTION_MANIFEST`、`CAMPAIGN_ADMITTED`、`WAVE_STARTED`、`SCENARIO_TERMINAL`、`WAVE_TERMINAL`、split 配额和 summary。
 
-启动第一条 wave 前，统一服务先按固定顺序原子取得目标 GPU lease，再取得 `validation` reservation，并签发同时绑定二者的 operation binding。CLI 核验 operation ID、service epoch、execution generation、runtime identity、payload fingerprint、deadline、GPU selector/lease generation 和两个持久 owner 均与本 campaign 一致。`GlobalMutationArbiter` 与 `ActGpuWorkloadArbiter` 都不为 headless CLI 提供旁路；binding 缺失、过期、任一 authority 非当前 owner、旧 intent 未收敛或 cleanup fence 存在时返回稳定拒绝，且零进程启动。两项 lease 保持到所有 wave 终态和 owned cleanup 收敛；HTTP/CLI 提前退出不能释放。训练持有同 GPU lease 时，单条或并行采集 admission 必须失败；采集持有时训练 admission 同样失败。
+所有启动资源检查都由 `UnifiedWorkloadService.start` 在第一条 wave 前完成并返回 `AdmittedCampaignContext`。Web/CLI 不自行核验或重签 binding；Worker、Recorder、Broker、Task 8 与 ROS child 不查询两个 arbiter。campaign owner 保持 GPU lease 与 `validation` reservation 到所有 wave 终态和 owned cleanup 收敛，负责 heartbeat、fencing、runtime telemetry 与 release；HTTP/CLI 提前退出不能释放。训练持有同 GPU lease 时采集 admission 失败，采集持有时训练 admission 同样失败。
 
-`ActGpuWorkloadArbiter` 是统一服务中的单一 authority，状态写入与 `GlobalMutationArbiter` 同一个持久 `IntentStore`；不能把锁文件放进各 run root。它先用稳定机器身份和 NVML/驱动 inventory 把 `INDEX` 或 `UUID` selector、`CUDA_VISIBLE_DEVICES` 等可见性映射解析为物理 GPU UUID，再按 `(stable_host_id, physical_gpu_uuid)` 互斥。原 selector、映射、解析时间和 inventory hash 只作审计，不能参与生成不同锁键；解析歧义、同一 selector 映射漂移、binding UUID 与现场设备不符时拒绝。authority 通过 owner-authenticated 本机 Unix socket/API 向 `GpuWorkloadClient` 签发和续租，lease 绑定 service epoch、owner PID/start time、workload、physical GPU UUID、generation 与 deadline。服务重启先从持久状态恢复并 fencing，未知 live owner 时保持阻塞。collection operation binding 内嵌 GPU lease 摘要；训练使用独立 `gpu-binding.json`，两者都必须在线续租并在 cleanup proof 后由服务释放。
+Task 11A 复用 Task 7A 已交付的 `ActGpuWorkloadArbiter`，不再实现第二份 authority。状态仍与 `GlobalMutationArbiter` 共用持久 `IntentStore`；admission 解析稳定 host 与物理 GPU UUID，campaign owner 续租，内部组件只保留 context 审计摘要。服务重启先恢复并 fencing，未知 live owner 时保持阻塞。
 
 外层发现未终态 wave 时，`ActFixedWaveRecovery` 先取得 collection root 的独占恢复锁，读取 batch ID、resource/owned-process manifest 和 coordinator journal；调用 main 的 fixed resume fence，确认旧 Worker/Broker 进程、controller goal、socket 与 Domain 已停止或仍由同一恢复流程精确拥有。任一对象身份不明或无法清理时停止。fencing 后按 coordinator journal 顺序重建 lease 裁决。已有 result commit 的位置调用 `ActCollectionResultVerifier.verify`；缺 commit 时只允许 main 固定恢复协议在该 lease 的登记 workspace 调用 `discover`。`LEASE_EXPIRED`、revocation、replacement 与 `LATE_RESULT_REJECTED` 优先于磁盘 seal；迟到封存只保留审计。每个验证通过的结果以 `SCENARIO_RECONCILED` fsync 到外层 journal，保留 batch、worker generation、attempt 和 commit sequence。
 
-剩余 scenario 保持原 wave 顺序，只能由同一 batch ID、exact N、manifest/config hash 和 operation binding 的 `--resume` 继续。若 main 的 fixed resume 条件不成立，当前 wave 标记 `INFRA_INVALID`，campaign 停止并保留未完成列表；新运行必须使用新 batch ID 与新证据目录，不能写成原 wave continuation。业务失败不进入 resume。外层记录每个 scenario 的 infra attempt，超过冻结上限形成 `INFRA_EXHAUSTED`。
+剩余 scenario 保持原 wave 顺序，只能由同一 batch ID、exact W8、manifest/runtime config/collection config/policy hash 和 campaign 数据身份的 `--resume` 继续；恢复必须重新 admission，因此 resource binding 和 generation 可以更新。若 main 的 fixed resume fence 不成立，wave 标记 `INFRA_INVALID`，campaign 停止并保留未完成列表；新运行必须用新 batch ID/证据目录，不能伪装 continuation。业务失败不进入 resume。外层记录每个 scenario 的 infra attempt，超过冻结上限形成 `INFRA_EXHAUSTED`。
 
 每个 wave 通过 `ActFixedBatchComposition` 复用 v3 shared queue、lease、heartbeat、Domain claim、start guard、owned-process manifest 和 cleanup。公共 `parallel_batch_v3.yaml` 保持原样；`parallel_collection_v3.yaml` 只保存 workload、Recorder、资格和配额字段，并绑定公共配置 hash。`scenario_id` 映射为 `point_id` 只属于调度适配，终态工件仍使用 collection schema。`PointStatus.PASSED` 表示训练合格 episode，`PointStatus.FAILED` 表示已封存业务失败；二者均不可改写。
 
 正式采集按 split 和冻结顺序分别分 wave，一个 wave 完整终态后才判断配额。每个 split 选择 manifest 顺序中前 N 个训练合格结果；包含第 N 个成功的 wave 中，排在其后的成功 episode 保留为 `SURPLUS_SUCCESS` 但不进入 Task 12，之后的 wave 标记 `UNSCHEDULED_QUOTA_MET`。因此 Worker 完成顺序不会改变数据集成员。资格模式没有成功配额，必须消费完整资格清单。增加乱序完成测试，要求 W1/W2 的选中 `scene_id` 集合一致。
 
-默认 `parallel_collection_v3.yaml` 使用 `default_worker_count: 2`、`qualification_worker_counts: [1,2,4,6,8]`、`max_wave_size: 20`、Recorder 队列上限、最小持续写入吞吐、帧间隔容差、infra attempt 上限、共享教师 Broker executor 数和资源采样周期，并引用 `parallel_batch_v3.yaml` 的路径与 SHA256。它不定义 fallback 序列、Domain 池、lease、heartbeat 或 start guard，这些公共字段只从 v3 runtime config 读取。运行目录固定为 `<registered-root>/<run-code>/r/<one-char-wave-id>/wNN`；`run-code` 只允许 `s`、`u`、`q1`、`q2`、`q4`、`q6`、`q8` 或 `d`。
+`parallel_collection_v3.yaml` 分开声明 `functional_worker_counts: [1,2]`、`load_worker_count: 8`、`formal_worker_count: 8`、`max_wave_size: 20`、Recorder 队列上限、infra attempt 上限和 telemetry 周期，并引用 `parallel_batch_v3.yaml` 的路径/SHA256。它没有 fallback 序列，也不把 W8 导出为项目全局默认值。运行目录固定为 `<registered-root>/<run-code>/r/<one-char-wave-id>/wNN`；`run-code` 只允许 `s`、`u`、`q1`、`q2`、`q8`、`d`。
 
-`act_fixed_socket_paths(batch_root, worker_count)` 是 ACT composition 的唯一 endpoint manifest，合并 fixed coordinator/Broker/Worker 端点与每个 Worker 的 Task 7A command broker 短端点 `ipc/<worker-index>/a`。启动预检、owned-process manifest、cleanup 和恢复读取同一清单。CLI 在创建进程前用真实 evidence root 枚举全部端点，最长编码路径超过 107 bytes 立即拒绝。测试断言启动、清理与恢复使用相同集合，并以实际最长端点验证 107 bytes 通过、根路径增加 1 byte 后 108 bytes 且零进程启动。
+`act_fixed_socket_paths(batch_root, worker_count)` 是唯一 endpoint manifest，合并 fixed Coordinator/Broker/Worker 端点和每个 Worker 的 typed ROS child IPC 端点。启动预检、owned-process manifest、cleanup 和恢复读取同一清单；不存在 Task 7A 私有 command broker。CLI 在创建进程前用真实 evidence root 枚举全部端点，最长编码路径超过 107 bytes 立即拒绝。测试断言启动、清理与恢复使用同一集合，并以实际最长端点验证 107 bytes 通过、根路径增加 1 byte 后 108 bytes 且零进程启动。
 
 - [ ] **Step 3a: 适配现有 Worker ports、start guard 与统一 reservation，不复制调度状态机。**
 
-在 `parallel_batch/worker.py` 增加可选、闭合的 workload port。未指定时构造 `PointValidationWorkload`，逐行封装当前 `_run_authorized` 的既有 inference→admit→execute/plan 逻辑，确保原 CLI、v3 shared queue 和证据字节契约保持不变；`act_collection` 才构造 `ActCollectionWorkload`。Worker 继续拥有每个危险边界的 lease heartbeat/`_boundary` 检查、异常捕获与 `_safe_stop`；workload 只能通过受控 callback 调用 runtime/Broker，不能绕过 coordinator 或统一 reservation。两类 workload 返回 `AuthorizedWorkloadResult`，再由 Worker 执行既有 seal/commit/recovery。ACT 搜索/规划/QC 业务失败作为正常 decision 返回，不能抛异常进入基础设施恢复。
+在 `parallel_batch/worker.py` 增加可选、闭合的 workload port。未指定时构造 `PointValidationWorkload`，逐行封装当前 `_run_authorized` 的既有 inference→admit→execute/plan 逻辑，确保原 CLI、v3 shared queue 和证据字节契约保持不变；`act_collection` 才构造 `ActCollectionWorkload`。Worker 继续维护 shared-queue terminal lease 的 heartbeat/`_boundary`、异常捕获与 `_safe_stop`；这不是 campaign resource binding 的再次校验。workload 只能通过 context 绑定的 typed callback 调用 runtime/Broker，不能绕过 Coordinator 或 WorkerPort。两类 workload 返回 `AuthorizedWorkloadResult`，再由 Worker 执行既有 seal/commit/recovery。ACT 搜索/规划/QC 业务失败作为正常 decision 返回，不能抛异常进入基础设施恢复。
 
-`ActCollectionWorkerRuntime.reset_point` 调用 Task 11 `prepare_scenario`，只做一次 reset、实测七关节读回和 reset epoch 建立；`point_initial_gate` 只验证 controller 无活跃 goal、相机/Recorder/Broker/ROS 就绪和 preparation 身份，不执行 head 搜索，不把业务失败塞进初始门。`ActCollectionWorkload.run_authorized` 在获准阶段一次完成 head 搜索、相机稳定、教师 snapshot/Broker inference、pose 陈旧检查、录制、专家执行和 QC，并调用 `collect_authorized_scenario`，禁止第二次 reset。搜索歧义/未找到、规划/执行失败和 QC 失败返回正常业务 `FAILED`；端口、进程、通信或封存故障返回 `INVALID/INDETERMINATE`，停止当前 campaign 或按原 exact N 显式恢复。所有动作边界继续由 coordinator lease 和 Task 7A 控制权仲裁授权。
+`ActCollectionWorkerRuntime.reset_point` 调用 Task 11 `prepare_scenario`，只做一次 reset、实测七关节读回和 reset epoch 建立；`point_initial_gate` 只验证 controller 无活跃 goal、相机/Recorder/Broker/ROS 就绪和 preparation 身份，不执行 head 搜索，不把业务失败塞进初始门。`ActCollectionWorkload.run_authorized` 在获准阶段一次完成 head 搜索、相机稳定、教师 snapshot/Broker inference、pose 陈旧检查、录制、专家执行和 QC，并调用 `collect_authorized_scenario`，禁止第二次 reset。搜索歧义/未找到、规划/执行失败和 QC 失败返回正常业务 `FAILED`；端口、进程、通信或封存故障返回 `INVALID/INDETERMINATE`，停止当前 campaign 或按原 exact N 显式恢复。每个动作边界同时要求有效 terminal lease 和 context 绑定的 WorkerPort；内部不重新向资源 authority 申请许可。
 
 Broker 请求/响应必须关联 batch、worker、worker generation、`scenario_id`/point、attempt、lease generation、reset epoch、request sequence 和输入帧时间。现有 LeaseIdentity 已包含的字段直接复用；reset epoch 和 frame stamp 由 ACT runtime 作为请求负载校验。head 搜索检测留在 Worker 进程，head/wrist 训练帧由 Worker 私有 Recorder 直接写盘，不进入共享 Broker。
 
-`ActFixedBatchComposition` 构造闭合 worker spec，写入 `workload_kind`、scenario manifest/config 绝对路径和哈希、operation binding 摘要及 v3 runtime hash；子进程 builder 只从本地注册表选择 point-validation 或 ACT 的 runtime/workload/results factory，不接受任意 import path。原 `mujoco_parallel_batch.py` 和 `ProductionBatchComposition` 的默认 point-validation 字节契约保持不变。ACT composition 选择 `ActCollectionResultStore`/`ActCollectionResultVerifier`，resume 从已封存 batch manifest 读回并拒绝 workload、hash、exact N 或 authority 变化。
+`ActFixedBatchComposition` 构造闭合 worker spec，写入 `workload_kind`、scenario manifest/config 绝对路径/hash、policy fingerprint、campaign 数据身份、context 审计摘要及 v3 runtime hash。明确修改真实入口 `cli/mujoco_parallel_batch.py::_build_worker_from_spec`：schema 接受闭合 `workload_kind=point_validation|act_collection`，默认仍选 `_ArtifactResults`/`RosWorkerRuntimePorts`；ACT 值从本地 registry 选择 `ActCollectionWorkerRuntime`、`ActCollectionWorkload`、`ActCollectionResultStore` 和 verifier adapter，禁止任意 import path。`_start_workers` 继续使用现有 `python -m so101_demo.cli.mujoco_parallel_batch --internal-worker <spec>` argv，因此 cleanup/owned-process 逻辑不分叉。resume 拒绝 workload、业务 hash、exact N 或 campaign 数据身份变化，但接受统一服务签发的新 resource binding/generation。
 
-start guard 使用 v3 `EpochStartGuard`。CLI preflight 运行一次，真正 spawn 前按同一 batch/epoch/owner scope 再运行一次，记录两次 evidence；CPU busy 只按当前 frozen policy 的 WARN/拒绝语义处理，RAM/GPU 最低余量、cleanup、owner 或 probe failure 继续 fail closed。start guard 通过不写 ACT 并发资格，也不能替代 W2/W4/W6/W8 负载实测。
+`test_act_parallel_collection_subprocess.py` 必须启动真实 `--internal-worker` 子进程，而不是只调用 fake composition：用 in-package closed test ports 提供无 ROS 副作用的一个 ACT scenario，等待 child READY，完成一次 `FAILED` 业务结果的 seal/verifier/commit，再读回 child 报告的四个 factory identity；同时运行默认 point-validation spec，证明原 builder 字节契约不变。未知 workload/额外字段在真实子进程中非零退出且不创建结果目录。
 
-统一 bridge 增加闭合 `ACT_COLLECTION_START|RESUME|CANCEL` operation。服务在 dispatch 前持久写入 intent 和 reservation，child ACK 后记录真实 campaign/batch/owner identity。cancel 只作用于已登记的 ACT campaign，先冻结新 lease，再取消 owned controller goal 和 owned process；accepted 不等于 cleanup confirmed。Web 重启只能恢复 projection 和 blocked 原因，不自动重发采集命令。
+start guard 使用 v3 `EpochStartGuard`，作为统一 service admission 的内部步骤：preflight 一次，真正 spawn 前按同一 batch/epoch/owner scope 再运行一次。CPU、RAM、GPU、cleanup、owner 或 probe failure 按冻结 policy fail closed。start guard 通过不写 ACT 并发资格，也不能替代 W2 或 W8 负载实测。admission 完成后，Worker/child 不再重复执行资源 authority 校验。
 
-`ActCollectionResultStore` 在 Worker 私有临时目录写原始 RGB、状态/action、事件、QC 和 provenance；成功或业务失败都先写闭合 manifest、逐文件 hash，以及由 Worker/Coordinator 共用注入时钟产生的 `completed_monotonic_s`，再原子 rename 并 fsync 文件与父目录。它完整实现 Worker 需要的 `seal_attempt`、`write_recovery_receipt`、`verify_recovery_receipt`。`ActCollectionResultVerifier` 实现 `verify(lease, location, run_mode)` 与 `discover(lease, workspace)`，只在登记 workspace 内确认身份、状态、hash、完成时间和终态都匹配的结果，并拒绝 `completed_monotonic_s > lease_deadline_monotonic_s`。每个 wave 终态后，外层聚合器原子更新 `campaign-index.json`，逐项绑定 batch ID、实际 coordinator journal root/hash、commit sequence、verifier receipt root/hash 和 episode hash；它不复制或合并 coordinator journal。Task 12 只从这个索引逐 wave 回放有效 result commit。即使 `discover` 找到封存目录，也必须先形成合法 commit 才能导入。Recorder 队列满、持续磁盘吞吐不足、图像缺口或时间网格不连续记为业务 QC 失败，不静默丢帧。
+统一 bridge 增加闭合 `act_collection_start|act_collection_resume|cancel` operation，与 Task 7A 的 Literal/registry 一致。服务在 dispatch 前持久写入 intent/context，child ACK 后记录真实 campaign/batch/owner identity。cancel 只作用于已登记 campaign，先冻结新 terminal lease，再取消 owned controller goal/process；accepted 不等于 cleanup confirmed。Web 重启只能恢复 projection 和 blocked 原因，不自动重发采集命令。
+
+`ActCollectionResultStore` 在 Worker 私有临时目录写原始 RGB、状态/action、事件、QC 和 provenance；成功或业务失败都先写闭合 manifest、逐文件 hash，以及由 Worker/Coordinator 共用注入时钟产生的 `completed_monotonic_s`，再原子 rename 并 fsync 文件与父目录。它完整实现 Worker 需要的 `seal_attempt`、`write_recovery_receipt`、`verify_recovery_receipt`。`ActCollectionResultVerifier` 实现 `verify(lease, location, run_mode)` 与 `discover(lease, workspace)`，只在登记 workspace 内确认身份、状态、hash、完成时间和终态都匹配的结果，并拒绝 `completed_monotonic_s > lease_deadline_monotonic_s`。每个 wave 终态后，外层聚合器原子更新 `campaign-index.json`，逐项绑定 batch ID、实际 coordinator journal root/hash、commit sequence、verifier receipt root/hash 和 episode hash；它不复制或合并 coordinator journal。Task 12 只从这个索引逐 wave 回放有效 result commit。即使 `discover` 找到封存目录，也必须先形成合法 commit 才能导入。
+
+失败分类必须分开：相机来源时间洞、reference 缺失等内容问题可形成业务 QC `FAILED`；Recorder queue overflow、持续写入达不到无损要求、文件/rename/fsync/verifier 失败属于基础设施 `INVALID/INDETERMINATE`，不能伪造 `FAILED`。瞬时 Recorder/进程故障停止发放新 terminal lease，fence 当前 wave 后只允许相同 W8 数据身份恢复。若 queue 高水位不回落、磁盘吞吐/延迟持续越过 `qualification-contract.json` 或资源采样缺失，则是 campaign 资源瓶颈：立即停止整个 W8，保留未完成候选，等待人工决策，不自动 resume 或继续消费清单。
 
 - [ ] **Step 4: 验证 GREEN、隔离和故障矩阵。**
 
@@ -1145,6 +1221,7 @@ act_test \
   src/so101_demo_py/test/test_act_parallel_collection_runtime.py \
   src/so101_demo_py/test/test_act_parallel_collection_recovery.py \
   src/so101_demo_py/test/test_act_parallel_collection_integration.py \
+  src/so101_demo_py/test/test_act_parallel_collection_subprocess.py \
   src/so101_demo_py/test/test_act_gpu_workload_client.py \
   src/so101_demo_py/test/test_parallel_batch_worker.py \
   src/so101_demo_py/test/test_parallel_batch_crash_recovery.py -q
@@ -1153,19 +1230,23 @@ act_test \
   src/so101_teleop/test/teleop/test_gpu_workload_arbiter.py -q
 ```
 
-预期非零测试收集、全部通过。故障矩阵至少覆盖：旧 point-validation spec 仍构造原 runtime/results/verifier；真实 ACT spec 构造 ACT workload；每 scenario 只 reset 一次；搜索失败封存为 `FAILED` 且不重试；旧教师 pose/reset epoch 拒绝；两个 Worker 不同 ROS Domain/namespace/root；错误 Worker 或旧 generation 的 Broker 响应拒绝；一个 Recorder 变慢时另一个不串帧；start guard 第二次检查拒绝后零 spawn；缺失、过期或 foreign operation+GPU binding 零 spawn；Teleop/Tasks 与 ACT start 竞争只有一个 reservation 成功；`INDEX:0` 与对应 `UUID` 别名争用同一物理卡时只有一个 lease 成功；不同 `CUDA_VISIBLE_DEVICES` 映射到同一 UUID 仍互斥；映射漂移、歧义或 binding UUID 不符 fail closed；两个不同训练 run 同时争用同 GPU 只有一个 lease 成功；训练运行时单条/并行采集拒绝，采集运行时训练拒绝；GPU owner PID 重用、heartbeat 过期和未知 cleanup 均 fail closed；qualification 首轮无需已有资格但正式模式必须有；seal 后 ACK 前崩溃由同 N resume 恢复；`LEASE_EXPIRED`→迟到 seal 仍拒绝；coordinator commit 后、外层导入前崩溃可重放导入；未完成 fencing 时禁止 resume；不同 N、manifest 或 config 的 resume 拒绝；目录存在但无 result commit 不进入数据集；campaign index 缺 wave、错 journal hash、重复 commit sequence 或 receipt 冲突均拒绝；重复/冲突终态；wave 20+20+余数；不同完成顺序选择相同的 manifest 前 N 个合格 `scene_id`；五集合总清单到 collection 投影再到最终 dataset 的 hash 贯通；完整 endpoint manifest 107 bytes 通过、108 bytes 时零进程启动；SIGTERM 后 owned process、Domain、socket、command broker、controller goal、GPU lease 和全局 reservation 精确收敛。
+预期非零测试收集、全部通过。故障矩阵至少覆盖：旧 point-validation spec 保持原契约；ACT spec 构造 typed workload；每 scenario 只 reset 一次；搜索失败封存/commit 为 `FAILED` 且不重试；旧 teacher pose/reset/release epoch 拒绝；W8 八个 Worker 的 ROS Domain/namespace/session/root 互异；错误 Worker 或旧 generation 响应拒绝；相机内容时间洞成为业务 QC；Recorder overflow、写入/fsync/verifier 故障成为 infra，停止新 lease 且不消费后续候选；持续 queue/disk/telemetry 阈值越界停止 campaign 等待人工；admission 第二次 start guard 拒绝后零 spawn；缺失 activation、foreign resource owner、cleanup fence 零 spawn；Web/CLI 同 spec 同结果；GPU selector 别名仍互斥；映射漂移/歧义 fail closed；训练与采集互斥；owner PID 重用、heartbeat 过期和未知 cleanup fail closed；W8 qualification 无需旧资格但正式模式必须有；seal 后 ACK 前崩溃按相同 W8 数据身份恢复；迟到 seal 拒绝；commit 后外层导入前崩溃可重放；未完成 fencing 禁止 resume；不同 N、manifest、config、policy 或 campaign 数据身份的 resume 拒绝，新 resource binding/generation 接受；目录无 commit 不进入数据集；campaign index 缺 wave、错 journal hash、重复 commit sequence 或 receipt 冲突拒绝；两个 20 项 W8 wave 中每个 Worker 至少两个实际 terminal；不同完成顺序选择相同 manifest 前 N 个合格 `scene_id`；完整 endpoint manifest 107 bytes 通过、108 bytes 时零进程启动；SIGTERM 后 owned process、Domain、socket、ROS child、controller goal、GPU lease 和 reservation 精确收敛。
 
 - [ ] **Step 5: 运行 W1/W2 资格批次。**
 
 先生成单独的功能资格 manifest，使用 8 个覆盖不同区域和搜索角的 scenario；这些 episode 永久标记 `qualification`，不进入 Train/Validation/Offline Test。对同一清单分别运行 W1 单条入口、W1 并行入口和 W2。语义等价比较 schema、scene/reset 身份、10 Hz 时间网格、reference 定义、QC/失败分类、封存结构和物理结果，不要求不同运行的像素或 MoveIt 浮点轨迹逐字节相同。
 
-W2 通过条件：8 个 scenario 各有唯一终态；无跨 Worker topic、帧、controller goal 或目录写入；无静默丢帧；所有进程、Domain、socket、goal 与 reservation 完成精确清理；`worker_count == 2`，零 infra interruption/retry、零 crash resume；有效 episode/分钟高于完整八场景 W1 基线，且物理成功率和 QC 合格率没有超出冻结的退化容差。每次运行记录代码/runtime config/collection config/manifest/Broker 模型/operation binding hash、worker count、每 scenario infra attempts、CPU、RSS、GPU、磁盘写入、仿真实时因子、帧间隔分位数、吞吐与失败分布。发生恢复的批次只作为恢复证据，不计 W2 资格或吞吐。功能资格只证明 W2 接线和隔离，不用于选择 W4/W6/W8。
+W2 通过条件：8 个 scenario 各有唯一终态；无跨 Worker topic、帧、controller goal 或目录写入；无静默丢帧；所有进程、Domain、socket、goal 与 reservation 完成精确清理；`worker_count == 2`，零 infra interruption/retry、零 crash resume；有效 episode/分钟高于完整八场景 W1 基线，且物理成功率和 QC 合格率没有超出运行前冻结的退化容差。每次运行记录 source/runtime config/collection config/manifest/policy/context hash、worker count、每 scenario infra attempts、CPU、RSS、GPU、磁盘写入、RTF、帧间隔、吞吐与失败分布。恢复批次只证明恢复，不计 W2 资格或吞吐。W2 未通过时不启动 W8。
 
-- [ ] **Step 6: 逐档选择正式并发并运行正式采集。**
+- [ ] **Step 6: 运行一次独立 40 场景 exact-W8 资格，再进行正式 W8 采集。**
 
-W2 功能资格通过后，另冻结 40 个 `split=qualification`、`manifest_purpose=load` 的 scenario 作为持续负载清单；它与正式五集合及 8 场景功能清单互斥，确定性分成两个完整的 20 项 wave。扩容依次运行 W4、W6、W8。fixed shared queue 没有 `initial_points_per_worker` 或生命周期领取配额；要求每个 wave 中每个 Worker 从实际 terminal lease 连续完成至少 2 项，少于 2 项则该档失败，不在运行时追加候选。每个被测档位 Wn 的每个 wave 都满足 `worker_count == n`、零 infra interruption/retry、零 crash resume；不得跨 N fallback。每一档跑完整清单，不因早期成功停止；任何一档失败时停止升档。候选正式默认档位在全新 root 上重复一次完整持续负载，两轮都通过相同的 exact-N 正确性、资源稳定和吞吐门才算稳定。
+W2 通过后，冻结一份与八场景清单、正式五集合都不重叠的 40 场景 load manifest，并按顺序分成两个完整 20 项 wave。启动前写不可变 `qualification-contract.json`，绑定 source、submodule、install/runtime executable、manifest、runtime config、collection config、policy fingerprint 和 context schema hash；同时冻结指标单位、采样窗口及 CPU/GPU/RAM 上限、磁盘 latency/持续吞吐、MuJoCo RTF 下限、Recorder queue 高水位/回落时间、10 Hz frame-gap 分位数、有效 episode/分钟、物理成功率和 QC 合格率阈值。运行中不得改阈值。
 
-选择“满足全部数据正确性门且两轮有效 episode/分钟最高的稳定档位”为正式默认，不能只按 wall time。比较同时检查运行后半段吞吐不持续下降、Recorder 队列高水位可回落、磁盘延迟/帧间隔/RTF/RSS 没有越过冻结阈值。W8 点位验证或 W10 单样本不能代替 ACT 采集资格。正式采集使用冻结候选 manifest 和选定 exact N；基础设施故障停止或同 N resume，业务失败不重试。每个 split 完成包含第 N 个成功的整个 wave 后，聚合器按原 manifest 顺序选择前 N 个合格 episode；候选耗尽不足返回 `QUOTA_UNSATISFIED`，保留失败与 surplus 证据。
+两个 wave 都必须 `worker_count == 8`。每个 wave 的每个 Worker 都要通过实际 terminal lease 连续完成至少 2 项，静态 preferred assignment 不算；40 场景全部产生唯一终态，零 infra interruption/retry、零 crash resume。任何指标越界、后半程吞吐持续下降、队列不能回落、资源采样缺失或 Worker terminal 覆盖不足，W8 资格失败并停止等待人工决策。不得自动降 Worker、换设备、降画质/采样，或用 W1/W2 continuation 冒充 W8。恢复运行只证明恢复协议，不授予资格。
+
+本轮只要求一次完整 40 场景 W8。若人工决定失败后重测，使用新的 qualification ID 和 evidence 子树，从头运行全部 40 场景；不能拼接不完整结果。通过后签发仅适用于本 ai-station ACT campaign 的资格记录，不修改其他 workload 默认值。
+
+正式采集固定 exact W8、`max_wave_size=20`，按 Train 50、Validation 10、Offline Test 10 的冻结候选顺序运行。基础设施中断只能在相同 W8、manifest/config/policy/campaign 数据身份下显式恢复；业务 `FAILED` 不重试。每个 split 完成包含第 N 个成功的整个 wave 后，按 manifest 顺序选择前 N 个已 commit 的 `PASSED`+QC episode；同 wave 后续成功保留为 `SURPLUS_SUCCESS`，不进入 Task 12。聚合器同时原子写 `d/campaign-index.json`（wave/commit/receipt 索引）和 `d/manifest.json`（最终选中 dataset manifest），两者互相保存内容 hash。候选耗尽不足返回 `QUOTA_UNSATISFIED`，保留全部失败、surplus 与未调度原因。
 
 - [ ] **Step 7: 审查本任务 diff 并提交。**
 
@@ -1179,28 +1260,27 @@ git add \
   src/so101_demo_py/src/runtime/act_fixed_collection_composition.py \
   src/so101_demo_py/src/cli/act_collect_parallel.py \
   src/so101_demo_py/src/cli/act_collect.py \
+  src/so101_demo_py/src/cli/mujoco_parallel_batch.py \
   src/so101_demo_py/config/act/parallel_collection_v3.yaml \
   src/so101_demo_py/src/parallel_batch/worker.py \
   src/so101_teleop/so101_teleop/unified/bridge.py \
   src/so101_teleop/so101_teleop/unified/teleop_service.py \
   src/so101_teleop/so101_teleop/unified/contracts.py \
-  src/so101_teleop/so101_teleop/unified/intent_store.py \
   src/so101_teleop/so101_teleop/unified/admission.py \
-  src/so101_teleop/so101_teleop/unified/gpu_workload.py \
   src/so101_demo_py/setup.py \
   src/so101_demo_py/test/test_act_parallel_collection.py \
   src/so101_demo_py/test/test_act_parallel_collection_runtime.py \
   src/so101_demo_py/test/test_act_parallel_collection_recovery.py \
   src/so101_demo_py/test/test_act_parallel_collection_integration.py \
+  src/so101_demo_py/test/test_act_parallel_collection_subprocess.py \
   src/so101_demo_py/test/test_act_gpu_workload_client.py \
   src/so101_demo_py/test/test_parallel_batch_worker.py \
-  src/so101_teleop/test/teleop/test_unified_act_collection.py \
-  src/so101_teleop/test/teleop/test_gpu_workload_arbiter.py
+  src/so101_teleop/test/teleop/test_unified_act_collection.py
 git diff --cached --check
 git commit -m "feat: collect ACT demonstrations across isolated stacks"
 ```
 
-提交前确认暂存区没有用户已有改动；只有单元/集成测试、W1/W2 资格和所选正式并发档位的现场证据均通过后才勾选。更高档位未通过时，可以在新的配置版本中选择较低的已合格 exact N，但不能在原 campaign 中降档后继续计数。
+提交前确认暂存区没有用户已有改动。代码提交不代表运行门完成；只有单元/集成测试、W1/W2、完整 40 场景 W8 资格和正式 W8 采集各自的现场证据满足对应门槛后，才能分别勾选。W8 失败时停在人工决策点，不创建低档正式 continuation。
 
 ### Task 12: LeRobot 导出、训练与模型工件
 
@@ -1284,7 +1364,7 @@ git commit -m "feat: export and train versioned ACT bundles"
 - Modify: `src/so101_demo_py/setup.py`
 - Create: `src/so101_demo_py/test/test_act_offline_evaluation.py`
 
-**Interfaces:** Consumes: Task 12 `load_policy`、dataset manifest、bundle 和冻结清单。Produces: `masked_joint_mae(predicted:list, target:list, valid:list[bool])->list[float]`；`evaluate_offline(manifest_path:Path, bundle_path:Path, freeze_path:Path, output:Path)->dict`；`python -m so101_demo.cli.act_offline_evaluate --manifest PATH --bundle PATH --freeze PATH --output PATH`。此入口仅在训练环境执行，不依赖 ROS，也不驱动控制器。
+**Interfaces:** Consumes: Task 12 `load_policy`、dataset manifest、campaign index、bundle 和冻结清单。Produces: `masked_joint_mae(predicted:list, target:list, valid:list[bool])->list[float]`；`evaluate_offline(manifest_path:Path, bundle_path:Path, freeze_path:Path, output:Path)->dict`；`python -m so101_demo.cli.act_offline_evaluate --manifest PATH --bundle PATH --freeze PATH --output PATH`。此入口仅在训练环境执行，不依赖 ROS，也不驱动控制器。
 
 - [ ] **Step 1: 写入 padding 不计入误差的失败测试。**
 
@@ -1318,7 +1398,7 @@ def masked_joint_mae(predicted, target, valid):
             for j in range(6)]
 ```
 
-逐行补齐六维/finite/bool mask 校验，不能因损坏数据静默减少分母。freeze JSON 固定字段为 bundle_sha256、dataset_manifest_sha256、split_manifest_sha256、calibration_sha256、runtime_config_sha256；Task 16 冻结时从实际文件计算，配套同目录 freeze-paths.json 给出逐项绝对路径，文件丢失或 hash 不符拒绝评估。评估前逐项读回核验，并检查至少 10 个成功 Offline Test episode、没有跨 split/episode chunk 或 Train 拟合统计被更新。
+逐行补齐六维/finite/bool mask 校验，不能因损坏数据静默减少分母。freeze JSON 固定六个字段：bundle_sha256、dataset_manifest_sha256、campaign_index_sha256、split_manifest_sha256、calibration_sha256、runtime_config_sha256。Task 16 从实际文件计算，配套同目录 freeze-paths.json 给出逐项绝对路径；字段缺失/多余、任一文件丢失或 hash 不符都拒绝评估。评估前逐项读回，并检查 dataset manifest 与 campaign index 互引 hash、至少 10 个成功 Offline Test episode、没有跨 split/episode chunk 或 Train 拟合统计被更新。
 
 调用 load_policy(...).infer(...)，使用训练时同一预处理、action 时间约定和 tail padding mask；每个 episode 开始 reset 模型状态。全部指标用反归一化后的 rad，保存每关节 MAE/RMSE、按预测 horizon 的误差、每 episode 指标、有效目标数和 episode 等权总体均值，避免长 episode 独占总分。输出模型/清单/hash、配置、依赖版本、运行时间和错误；不反向传播、不更新统计、不选 checkpoint。
 
@@ -1331,7 +1411,7 @@ act_test src/so101_demo_py/test/test_act_offline_evaluation.py -q
 "$ACT_TRAIN_PYTHON" -m so101_demo.cli.act_offline_evaluate --help
 ```
 
-先在专用 synthetic fixture 上测试错误 split、hash 被改、全 padding、跨 episode、归一化不变和 metric 数值；模型 smoke 用 Validation 数据的独立测试 fixture，不提前打开 Offline Test。真实 10 个封存 episode 的命令留到 Task 16 冻结之后；本任务以接口和 fixture 验证完成，不声称最终离线指标通过。
+先在专用 synthetic fixture 上测试错误 split、dataset manifest 篡改、campaign index 篡改、两者互引 hash 冲突、全 padding、跨 episode、归一化不变和 metric 数值；模型 smoke 用 Validation 数据的独立测试 fixture，不提前打开 Offline Test。真实 10 个封存 episode 的命令留到 Task 16 冻结之后；本任务以接口和 fixture 验证完成，不声称最终离线指标通过。
 
 - [ ] **Step 5: 显式提交。**
 
@@ -1453,7 +1533,7 @@ git commit -m "feat: run timestamped ACT inference"
 - Modify: `src/so101_demo_py/setup.py`
 - Create: `src/so101_demo_py/test/test_act_session.py`
 
-**Interfaces:** Consumes: Task 3–13，尤其 Task 7A 的公共仲裁和 Task 13 的非阻塞推理客户端。Produces: `retry_allowed(attempt_index:int, holding:str, feedback_ok:bool)->bool`；`ActSession.command(name:str, payload:dict)->dict`；`.tick()->dict`；CLI `act_session --mode dry_run|plan_only|execute --bundle PATH --calibration PATH --runtime-config PATH --evidence-root PATH`。
+**Interfaces:** Consumes: Task 3–13，尤其 Task 7A 的统一 admission/typed `WorkerPort` 和 Task 13 的非阻塞推理客户端。Produces: `retry_allowed(...)`；`ActSession(context:AdmittedCampaignContext, worker_port:WorkerPort).command(...)`；`.tick()`；CLI `act_session --mode dry_run|plan_only|execute --bundle PATH --calibration PATH --policy PATH --activation-receipt PATH --runtime-config PATH --evidence-root PATH`。CLI 仍只向 `UnifiedWorkloadService` 提交 spec。
 
 - [ ] **Step 1: 写入边界失败测试。**
 
@@ -1482,7 +1562,7 @@ def retry_allowed(attempt_index, holding, feedback_ok):
     return attempt_index == 0 and holding == "EMPTY" and feedback_ok
 ```
 
-组合所有 port，在进入 ACT 首次推理前建立 Deadline。搜索只拥有 neck，Runner 没有 neck port；ACT arm/gripper 所有权通过 Task 7A 的原子 acquire 获取，所有已知教师/Teleop 客户端已接入公共仲裁；Task 14 不另建进程内 lease，其他活跃 goal 拒绝交接。dry_run 无控制副作用，plan_only 只检查候选；execute 需要有效校准/bundle/profile。命令白名单 Reset/Search/StartRecording/RunExpert/Keep/Discard/RunACT/Stop；RunExpert 与 RunACT 互斥。Stop 能由独立 callback 抢占。恢复只在 EMPTY+正常反馈+验证路径时交给 MoveIt，单独计干预；自动重搜最多 1 次。ACTIVE→timeout/error 后保留首次 RunResult，不用重试覆盖。
+组合所有 port，在进入 ACT 首次推理前建立 Deadline。搜索只拥有 neck，Runner 没有 neck port；arm/gripper 命令全部经 context 绑定的 typed `WorkerPort` 发送，Task 14 不取得第二份 lease、不读取 resource binding，也不建立进程内仲裁。admission 时若已有互斥 workload 或未知活跃 goal，统一服务拒绝交接。dry_run 无控制副作用，plan_only 只检查候选；execute 需要有效校准、已激活 policy、bundle 和 MuJoCo profile。命令白名单 Reset/Search/StartRecording/RunExpert/Keep/Discard/RunACT/Stop；RunExpert 与 RunACT 互斥。Stop 能由独立 callback 抢占。恢复只在 EMPTY+正常反馈+验证路径时交给 MoveIt，单独计干预；自动重搜最多 1 次。ACTIVE→timeout/error 后保留首次 RunResult，不用重试覆盖。
 
 - [ ] **Step 4: 验证 GREEN 与失败矩阵。**
 
@@ -1516,7 +1596,7 @@ git commit -m "feat: compose ACT session ownership and recovery"
 - Create: `src/so101_teleop/test/teleop/test_act_gateway.py`
 - Create: `src/so101_teleop/web/src/components/teleop/act-panel.test.tsx`
 
-**Interfaces:** Consumes: Task 14 ActSession.command。Produces: `ActGateway(session:object).command(name:str,payload:dict)->dict`；HTTP ACT command/status 接口；React ActPanel 展示状态、双相机、剩余时间与操作结果。
+**Interfaces:** Consumes: Task 7A `UnifiedWorkloadService`、Task 14 session spec。Produces: `ActGateway(service:object).command(name:str,payload:dict)->dict`；HTTP ACT command/status 接口；React ActPanel 展示状态、双相机、剩余时间与操作结果。Web 和 headless CLI 构造同一 `OperationSpec`，都由统一服务创建/恢复 `ActSession`。
 
 - [ ] **Step 1: 写入边界失败测试。**
 
@@ -1526,7 +1606,7 @@ from so101_teleop.act_gateway import ActGateway
 
 def test_gateway_rejects_arbitrary_command():
     with pytest.raises(ValueError):
-        ActGateway(session=None).command("shell", {"command":"echo bad"})
+        ActGateway(service=None).command("shell", {"command":"echo bad"})
 ```
 
 - [ ] **Step 2: 验证 RED。**
@@ -1541,17 +1621,17 @@ act_test src/so101_teleop/test/teleop/test_act_gateway.py -q
 
 ```python
 class ActGateway:
-    def __init__(self, session):
-        self.session = session
+    def __init__(self, service):
+        self.service = service
 
     def command(self, name, payload):
         allowed = {"Reset","Search","StartRecording","RunExpert","Keep","Discard","RunACT","Stop"}
         if name not in allowed:
             raise ValueError("COMMAND_INVALID")
-        return self.session.command(name, payload)
+        return self.service.dispatch_act_command(name, payload)
 ```
 
-沿现有 backend/profile 与 API 错误风格增加 ACT 能力，仅 ACT profile 显示面板。服务端校验所有权与状态，不能仅禁用前端按钮。界面提供 Reset、Search、Start Recording、Run Expert、Keep/Discard、Run ACT、Stop；Keep 必须 QC PASS，Discard 不删除原始证据。浏览器刷新不会启动第二个 session，重复 command_id 幂等；关闭页面不杀监督看门狗。倒计时读取服务端剩余秒数，不用浏览器计时作为超时事实源；不显示训练内部字段充当普通用户操作。
+沿现有 backend/profile 与 API 错误风格增加 ACT 能力，仅 ACT profile 显示面板。`dispatch_act_command` 对 Start/Resume 走与 CLI 相同的 `start(spec)`，其余命令路由到已登记 context/WorkerPort；服务端校验状态，不能仅禁用前端按钮。界面提供 Reset、Search、Start Recording、Run Expert、Keep/Discard、Run ACT、Stop；Keep 必须 QC PASS，Discard 不删除原始证据。浏览器刷新不会启动第二个 session，重复 command_id 幂等；关闭页面不杀监督看门狗。倒计时读取服务端剩余秒数，不用浏览器计时作为超时事实源；不显示训练内部字段充当普通用户操作。
 
 - [ ] **Step 4: 验证 GREEN 与失败矩阵。**
 
@@ -1685,41 +1765,48 @@ ros2 launch so101_demo_py so101_mujoco_act.launch.py --show-args
 ros2 run so101_demo_py act_session --help
 ```
 
-- [ ] 运行独立预检。若报告仍有 `CALIBRATION_REQUIRED`，只执行对应测量任务，不开始正式采集。
+- [ ] 运行通用预检、接触校准与 Task 8 live。Task 7 完成后，前置报告必须达到 `TASK8_READY`；若仍是 `CALIBRATION_REQUIRED`，或接触 proposal 尚未由用户批准精确 fingerprint，只执行对应测量，不启动 Task 8。九个 prefix 和五次 full 通过后再生成 `QUALIFIED` 报告；正式采集只接受后者。
 
 ```zsh
-ros2 run so101_demo_py act_preflight --output "$ACT_EVIDENCE/calibration.json"
-ros2 run so101_demo_py act_sample --calibration "$ACT_EVIDENCE/calibration.json" --output "$ACT_EVIDENCE/splits.json" --collection-output "$ACT_EVIDENCE/collection.json" --qualification-output "$ACT_EVIDENCE/parallel-qualification.json" --qualification-load-output "$ACT_EVIDENCE/parallel-load.json" --seed 20260911
+ros2 run so101_demo_py act_preflight --gate task8_live --output "$ACT_EVIDENCE/calibration-task8-ready.json"
+ros2 run so101_demo_py act_collect_contact_calibration --mode offline --output "$ACT_EVIDENCE/contact/offline"
+ros2 run so101_demo_py act_collect_contact_calibration --mode live --output "$ACT_EVIDENCE/contact/live"
+ros2 run so101_demo_py act_analyze_contact_calibration --offline "$ACT_EVIDENCE/contact/offline/manifest.json" --live "$ACT_EVIDENCE/contact/live/manifest.json" --proposal "$ACT_EVIDENCE/contact/proposal.json"
+# 独立审阅 proposal 后，由用户提供并批准精确 POLICY_FINGERPRINT；不得使用 proposal envelope hash。
+ros2 run so101_demo_py act_activate_contact_policy --proposal "$ACT_EVIDENCE/contact/proposal.json" --policy-fingerprint "$POLICY_FINGERPRINT" --approved-by "$ACT_POLICY_APPROVER" --approval-reference "$ACT_POLICY_APPROVAL_REFERENCE" --evidence-root "$ACT_EVIDENCE/contact" --receipt "$ACT_EVIDENCE/contact/activation-receipt.json"
+ros2 run so101_demo_py act_prepare_task8_live --anchors-config src/so101_demo_py/config/act/task8-live-anchors.yaml --calibration "$ACT_EVIDENCE/calibration-task8-ready.json" --policy "$ACT_EVIDENCE/contact/proposal.json" --activation-receipt "$ACT_EVIDENCE/contact/activation-receipt.json" --output "$ACT_EVIDENCE/task8-live.json"
+ros2 run so101_demo_py act_task8_live --manifest "$ACT_EVIDENCE/task8-live.json" --calibration "$ACT_EVIDENCE/calibration-task8-ready.json" --policy "$ACT_EVIDENCE/contact/proposal.json" --activation-receipt "$ACT_EVIDENCE/contact/activation-receipt.json" --mode phase-prefix --root "$ACT_EVIDENCE/task8-live"
+ros2 run so101_demo_py act_task8_live --manifest "$ACT_EVIDENCE/task8-live.json" --calibration "$ACT_EVIDENCE/calibration-task8-ready.json" --policy "$ACT_EVIDENCE/contact/proposal.json" --activation-receipt "$ACT_EVIDENCE/contact/activation-receipt.json" --mode full --root "$ACT_EVIDENCE/task8-live"
+ros2 run so101_demo_py act_preflight --gate formal_collection --previous "$ACT_EVIDENCE/calibration-task8-ready.json" --task8-evidence "$ACT_EVIDENCE/task8-live" --output "$ACT_EVIDENCE/calibration-qualified.json"
+ros2 run so101_demo_py act_sample --calibration "$ACT_EVIDENCE/calibration-qualified.json" --output "$ACT_EVIDENCE/splits.json" --collection-output "$ACT_EVIDENCE/collection.json" --qualification-output "$ACT_EVIDENCE/parallel-qualification.json" --qualification-load-output "$ACT_EVIDENCE/parallel-load.json" --seed 20260911
 ```
+
+phase-prefix 命令按 manifest 冻结的九个 `stop_after` 顺序执行；full 命令执行覆盖 default/left/forward 的五次连续 FULL_RESTART。CLI 自己不直连 ROS，两个入口都通过 unified service。prefix 结果不生成正式 episode。
 
 - [ ] 先用 W1 单条入口运行 5 条小批，读取 QC 和重放证据。`act_collect` 的 limit 是总尝试上限，不是成功数量；这个 smoke 使用独立 root，不并入正式数据集。
 
 ```zsh
-ros2 run so101_demo_py act_collect --manifest "$ACT_EVIDENCE/parallel-qualification.json" --calibration "$ACT_EVIDENCE/calibration.json" --operation-binding "$ACT_EVIDENCE/s-operation-binding.json" --root "$ACT_EVIDENCE/s" --limit 5 --qualification
+ros2 run so101_demo_py act_collect --manifest "$ACT_EVIDENCE/parallel-qualification.json" --calibration "$ACT_EVIDENCE/calibration-qualified.json" --policy "$ACT_EVIDENCE/contact/proposal.json" --activation-receipt "$ACT_EVIDENCE/contact/activation-receipt.json" --root "$ACT_EVIDENCE/s" --limit 5 --qualification
 ```
 
 - [ ] 在独立资格清单上运行完整八场景的单 stack 基线、W1 并行入口和 W2；结果分别写入不同 root。三次均必须使用相同 manifest/calibration/config hash，且这些 episode 不并入正式数据集。
 
 ```zsh
-ros2 run so101_demo_py act_collect --manifest "$ACT_EVIDENCE/parallel-qualification.json" --calibration "$ACT_EVIDENCE/calibration.json" --operation-binding "$ACT_EVIDENCE/u-operation-binding.json" --root "$ACT_EVIDENCE/u" --limit 8 --qualification
-ros2 run so101_demo_py act_collect_parallel --manifest "$ACT_EVIDENCE/parallel-qualification.json" --calibration "$ACT_EVIDENCE/calibration.json" --collection-config src/so101_demo_py/config/act/parallel_collection_v3.yaml --runtime-config src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml --operation-binding "$ACT_EVIDENCE/q1-operation-binding.json" --root "$ACT_EVIDENCE/q1" --qualification --worker-count 1
-ros2 run so101_demo_py act_collect_parallel --manifest "$ACT_EVIDENCE/parallel-qualification.json" --calibration "$ACT_EVIDENCE/calibration.json" --collection-config src/so101_demo_py/config/act/parallel_collection_v3.yaml --runtime-config src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml --operation-binding "$ACT_EVIDENCE/q2-operation-binding.json" --root "$ACT_EVIDENCE/q2" --qualification --worker-count 2
+ros2 run so101_demo_py act_collect --manifest "$ACT_EVIDENCE/parallel-qualification.json" --calibration "$ACT_EVIDENCE/calibration-qualified.json" --policy "$ACT_EVIDENCE/contact/proposal.json" --activation-receipt "$ACT_EVIDENCE/contact/activation-receipt.json" --root "$ACT_EVIDENCE/u" --limit 8 --qualification
+ros2 run so101_demo_py act_collect_parallel --manifest "$ACT_EVIDENCE/parallel-qualification.json" --calibration "$ACT_EVIDENCE/calibration-qualified.json" --policy "$ACT_EVIDENCE/contact/proposal.json" --activation-receipt "$ACT_EVIDENCE/contact/activation-receipt.json" --collection-config src/so101_demo_py/config/act/parallel_collection_v3.yaml --runtime-config src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml --root "$ACT_EVIDENCE/q1" --qualification --worker-count 1
+ros2 run so101_demo_py act_collect_parallel --manifest "$ACT_EVIDENCE/parallel-qualification.json" --calibration "$ACT_EVIDENCE/calibration-qualified.json" --policy "$ACT_EVIDENCE/contact/proposal.json" --activation-receipt "$ACT_EVIDENCE/contact/activation-receipt.json" --collection-config src/so101_demo_py/config/act/parallel_collection_v3.yaml --runtime-config src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml --root "$ACT_EVIDENCE/q2" --qualification --worker-count 2
 ```
 
-`u` 是完整八场景单 stack 基线；前面的 `s` 只用于尽早检查 5 条记录的内容和重放。W1 并行与 W2 的吞吐、成功率和 QC 都与 `u` 比较，不能用 5 条 smoke 作为性能分母。每条单 stack 或并行命令前都由统一服务按固定顺序取得新的 GPU lease 与 `validation` reservation，并把同时绑定二者的 operation binding 原子写入对应文件；不能跨运行复用 binding，也不能手写占位文件。
+`u` 是完整八场景单 stack 基线；`s` 只尽早检查 5 条记录内容和重放。W1 并行与 W2 都和 `u` 比较，不能用 smoke 作性能分母。每条命令由统一服务在 admission 时取得新的 GPU lease 与 `validation` reservation，并返回不可变 context；CLI 不手写 binding，内部组件不重复查询 authority。
 
-W2 通过后才按 Task 11A 在 40 场景、两个完整 wave 的持续负载清单上逐档运行 W4/W6/W8；每档使用 `q4`、`q6`、`q8` 短 root，候选默认档位的第二轮使用一个新的总 evidence root，不能覆盖历史结果。所有入口先打印最长 socket 路径与字节数，超过 107 bytes 时不启动任何子进程。选择档位并把两轮资格报告 hash 写入 config/账本后，用短目录 `d` 执行正式采集：
+W2 通过后直接在独立 40 场景清单上运行一次 exact-W8 资格；不运行中间档位，也不做隐式第二轮。所有入口先打印最长 socket 路径与字节数，超过 107 bytes 时不启动子进程。`q8/qualification-contract.json` 在启动前写入并冻结；W8 失败时停止等待人工决策。通过后用短目录 `d` 执行正式 exact-W8 采集：
 
 ```zsh
-ros2 run so101_demo_py act_collect_parallel --manifest "$ACT_EVIDENCE/parallel-load.json" --calibration "$ACT_EVIDENCE/calibration.json" --collection-config src/so101_demo_py/config/act/parallel_collection_v3.yaml --runtime-config src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml --operation-binding "$ACT_EVIDENCE/q4-operation-binding.json" --root "$ACT_EVIDENCE/q4" --qualification --worker-count 4
-ros2 run so101_demo_py act_collect_parallel --manifest "$ACT_EVIDENCE/parallel-load.json" --calibration "$ACT_EVIDENCE/calibration.json" --collection-config src/so101_demo_py/config/act/parallel_collection_v3.yaml --runtime-config src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml --operation-binding "$ACT_EVIDENCE/q6-operation-binding.json" --root "$ACT_EVIDENCE/q6" --qualification --worker-count 6
-ros2 run so101_demo_py act_collect_parallel --manifest "$ACT_EVIDENCE/parallel-load.json" --calibration "$ACT_EVIDENCE/calibration.json" --collection-config src/so101_demo_py/config/act/parallel_collection_v3.yaml --runtime-config src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml --operation-binding "$ACT_EVIDENCE/q8-operation-binding.json" --root "$ACT_EVIDENCE/q8" --qualification --worker-count 8
-ros2 run so101_demo_py act_collect_parallel --manifest "$ACT_EVIDENCE/collection.json" --split-manifest "$ACT_EVIDENCE/splits.json" --calibration "$ACT_EVIDENCE/calibration.json" --collection-config src/so101_demo_py/config/act/parallel_collection_v3.yaml --runtime-config src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml --operation-binding "$ACT_EVIDENCE/d-operation-binding.json" --root "$ACT_EVIDENCE/d" --worker-count "$ACT_COLLECTION_WORKERS"
+ros2 run so101_demo_py act_collect_parallel --manifest "$ACT_EVIDENCE/parallel-load.json" --calibration "$ACT_EVIDENCE/calibration-qualified.json" --policy "$ACT_EVIDENCE/contact/proposal.json" --activation-receipt "$ACT_EVIDENCE/contact/activation-receipt.json" --collection-config src/so101_demo_py/config/act/parallel_collection_v3.yaml --runtime-config src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml --qualification-contract "$ACT_EVIDENCE/q8/qualification-contract.json" --root "$ACT_EVIDENCE/q8" --qualification --worker-count 8
+ros2 run so101_demo_py act_collect_parallel --manifest "$ACT_EVIDENCE/collection.json" --split-manifest "$ACT_EVIDENCE/splits.json" --calibration "$ACT_EVIDENCE/calibration-qualified.json" --policy "$ACT_EVIDENCE/contact/proposal.json" --activation-receipt "$ACT_EVIDENCE/contact/activation-receipt.json" --collection-config src/so101_demo_py/config/act/parallel_collection_v3.yaml --runtime-config src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml --root "$ACT_EVIDENCE/d" --worker-count 8
 ```
 
-上面三条扩容命令按顺序执行，前一档未通过就不运行后一档。候选默认的第二轮在新建并登记的 evidence root 中只重跑该档；第二轮未通过则回退到前一个已两轮通过的档位，若不存在则不启动正式批采。
-
-正式采集预算从分层有效率估算后写入冻结清单；不在计划中捏造可达区域或假定所有点一次成功。配额不满则报告不足，不能用复制 episode 或业务失败重跑补齐。并行入口完成时在 `d/manifest.json` 写按冻结候选顺序聚合的结果，其中包含 QC、数据 split、batch/Worker generation、coordinator commit sequence、infra attempts、surplus 和未调度原因，不导出 Rollout Validation/Test 示教。`ACT_COLLECTION_WORKERS` 必须等于两轮资格都通过并已写入冻结配置的 exact N；命令行不能临时降档。
+正式采集预算从分层有效率估算后写入冻结清单；不捏造可达区域或假定候选一次成功。配额不满返回 `QUOTA_UNSATISFIED`，不能复制 episode 或重跑业务失败补齐。`d/campaign-index.json` 按冻结顺序记录 QC、split、batch/Worker generation、Coordinator commit、infra attempts、surplus 与未调度原因；`d/manifest.json` 只列最终选中的正式 episode，并绑定前者 hash。不导出 Rollout Validation/Test 示教。命令行固定 8，不能临时降档。
 
 - [ ] 使用独立训练 venv 执行离线入口，记录 `sys.executable` 与完整依赖锁。`ACT_TRAIN_PYTHON` 必须解析为该 venv 的实际 Python，先验证 LeRobot/torch 来源；不能沿用 ROS Python 安装训练依赖。
 
@@ -1746,7 +1833,7 @@ test -f "$ACT_BUNDLE"
 - [ ] 冻结模型前运行闭环验证。`act_evaluate` 使用必需参数 `--split rollout_validation|rollout_test|comparison`，缺省拒绝运行，避免误触封存测试。
 
 ```zsh
-ros2 run so101_demo_py act_evaluate --manifest "$ACT_EVIDENCE/splits.json" --split rollout_validation --bundle "$ACT_BUNDLE" --calibration "$ACT_EVIDENCE/calibration.json" --runtime-config src/so101_demo_py/config/act/runtime.yaml --root "$ACT_EVIDENCE/validation" --route act
+ros2 run so101_demo_py act_evaluate --manifest "$ACT_EVIDENCE/splits.json" --split rollout_validation --bundle "$ACT_BUNDLE" --calibration "$ACT_EVIDENCE/calibration-qualified.json" --runtime-config src/so101_demo_py/config/act/runtime.yaml --root "$ACT_EVIDENCE/validation" --route act
 ```
 
 - [ ] 保存封存清单，并实际调用 Task 12A 的离线评估入口。Task 16 的启动核验需确认这些文件是同一已冻结配置，不重新训练或更新归一化统计。
@@ -1759,8 +1846,9 @@ root = Path(os.environ["ACT_EVIDENCE"])
 artifacts = {
     "bundle_sha256": Path(os.environ["ACT_BUNDLE"]),
     "dataset_manifest_sha256": root / "d/manifest.json",
+    "campaign_index_sha256": root / "d/campaign-index.json",
     "split_manifest_sha256": root / "splits.json",
-    "calibration_sha256": root / "calibration.json",
+    "calibration_sha256": root / "calibration-qualified.json",
     "runtime_config_sha256": Path("src/so101_demo_py/config/act/runtime.yaml"),
 }
 freeze = {key: hashlib.sha256(path.read_bytes()).hexdigest() for key, path in artifacts.items()}
@@ -1772,14 +1860,14 @@ PY_FREEZE
 "$ACT_TRAIN_PYTHON" -m so101_demo.cli.act_offline_evaluate --manifest "$ACT_EVIDENCE/d/manifest.json" --bundle "$ACT_BUNDLE" --freeze "$ACT_EVIDENCE/freeze.json" --output "$ACT_EVIDENCE/offline-test"
 ```
 
-freeze 文件采用上述五个 hash 字段，另由同目录的 freeze-paths.json 记录五项实际文件路径；生成 freeze 时一并保存，evaluate_offline 据此读取并校验五项，而非只比较两个文件。不得为记录训练后的 runtime 配置回写原始 dataset manifest。模型内部的 checkpoint 与预处理 hash 由 load_bundle 继续递归核验。输出报告必须显示至少 10 个 Offline Test episode 和有效 mask 计数，缺失报告则 Task 16 不完成。
+freeze 文件采用上述六个 hash 字段，另由同目录的 freeze-paths.json 记录六项实际文件路径；生成 freeze 时一并保存，evaluate_offline 据此逐项读取并校验。dataset manifest 与 campaign index 任一篡改或互引 hash 不一致都拒绝。不得为记录训练后的 runtime 配置回写原始 dataset manifest。模型内部的 checkpoint 与预处理 hash 由 load_bundle 继续递归核验。输出报告必须显示至少 10 个 Offline Test episode 和有效 mask 计数，缺失报告则 Task 16 不完成。
 
 - [ ] 冻结 checkpoint、执行参数、场景清单与校准报告后运行封存测试及两路线比较。每次 invocation 创建独立子目录；报告保留每场景的首次结果。测试失败后调参必须更换新的封存批次。
 
 ```zsh
-ros2 run so101_demo_py act_evaluate --manifest "$ACT_EVIDENCE/splits.json" --split rollout_test --bundle "$ACT_BUNDLE" --calibration "$ACT_EVIDENCE/calibration.json" --runtime-config src/so101_demo_py/config/act/runtime.yaml --root "$ACT_EVIDENCE/test" --route act
-ros2 run so101_demo_py act_evaluate --manifest "$ACT_EVIDENCE/splits.json" --split comparison --bundle "$ACT_BUNDLE" --calibration "$ACT_EVIDENCE/calibration.json" --runtime-config src/so101_demo_py/config/act/runtime.yaml --root "$ACT_EVIDENCE/comparison-act" --route act
-ros2 run so101_demo_py act_evaluate --manifest "$ACT_EVIDENCE/splits.json" --split comparison --bundle "$ACT_BUNDLE" --calibration "$ACT_EVIDENCE/calibration.json" --runtime-config src/so101_demo_py/config/act/runtime.yaml --root "$ACT_EVIDENCE/comparison-moveit" --route moveit
+ros2 run so101_demo_py act_evaluate --manifest "$ACT_EVIDENCE/splits.json" --split rollout_test --bundle "$ACT_BUNDLE" --calibration "$ACT_EVIDENCE/calibration-qualified.json" --runtime-config src/so101_demo_py/config/act/runtime.yaml --root "$ACT_EVIDENCE/test" --route act
+ros2 run so101_demo_py act_evaluate --manifest "$ACT_EVIDENCE/splits.json" --split comparison --bundle "$ACT_BUNDLE" --calibration "$ACT_EVIDENCE/calibration-qualified.json" --runtime-config src/so101_demo_py/config/act/runtime.yaml --root "$ACT_EVIDENCE/comparison-act" --route act
+ros2 run so101_demo_py act_evaluate --manifest "$ACT_EVIDENCE/splits.json" --split comparison --bundle "$ACT_BUNDLE" --calibration "$ACT_EVIDENCE/calibration-qualified.json" --runtime-config src/so101_demo_py/config/act/runtime.yaml --root "$ACT_EVIDENCE/comparison-moveit" --route moveit
 ```
 
 ## 执行中必须解决的测量门槛
@@ -1791,10 +1879,11 @@ ros2 run so101_demo_py act_evaluate --manifest "$ACT_EVIDENCE/splits.json" --spl
 | 相机安装与视野 | 3、6 | 全阶段专家轨迹、新双视角图像、标定投影误差、碰撞几何 | 调整安装后重做预检，不采数据 |
 | 轻量检测器与阈值 | 5、6 | head 视角含无杯/多杯/遮挡的独立校准图；冻结模型来源、hash 与误差报告 | 无合格候选则停在搜索资格，不绕到真值检测 |
 | controller 定时能力 | 7 | 10 Hz 重放的 reference/joint 对齐、部分接受取消与停止速度测量 | 不放宽标签时间语义、不平移迟到目标 |
-| 持物/释放/路径检查 | 8 | 新鲜双侧接触/离台/支撑证据、已知非法路径及悬空开爪故障注入 | 无有效 permit，不交付 ACT execute |
+| 接触策略 fingerprint | 6A | 五类各 20 offline+5 live、三类 negative control；独立审阅 disabled proposal；用户批准 canonical payload SHA256 | 未激活精确 fingerprint，不启动 Task 8 live |
+| 持物/释放/路径检查 | 8 | 九个 phase-prefix；default/left/forward 上五次连续 FULL_RESTART；新鲜双侧接触/离台/支撑证据、非法路径及悬空开爪注入 | 无有效 permit 或五连 full，不进入采集 |
 | LeRobot 版本、训练所有权和 GPU/CPU 能力 | 11A、12、13 | 执行时锁版本；campaign index 逐 wave 回放 commit+receipt；arbiter `IDLE`、cleanup 与 GPU inventory；采集/Broker/训练共用持久 GPU lease；单写者训练 run；导出/训练/推理 smoke 与真实延迟分位数 | 输入 provenance、环境复现、持久所有权或资源串行任一不合格就不训练；推理未合格则不报部署通过 |
 | 数据空间隔离与规模 | 10、11、11A | 实际 XY 距离、冻结候选预算、分层配额、全轨迹预检和物理结果 | 报 QUOTA_UNSATISFIED，不复用封存位置或重跑业务失败 |
-| ACT 采集并发档位 | 11A | 8 场景验证 W1/W2 功能；40 场景两个完整 wave 逐档测 W4/W6/W8，候选默认再独立复测；记录有效 episode/分钟、CPU/RSS/GPU/磁盘、RTF、帧间隔、QC 与物理成功率 | 使用两轮都通过全部门槛的最高吞吐档位；未通过 W2 则只保留 W1，不启动正式并行采集 |
+| ACT W8 采集资格 | 11A | 8 场景完整 W1/W2；随后一份独立 40 场景、两个 20 项 wave 的 exact W8；冻结 `qualification-contract.json`，每 wave 每 Worker 至少 2 个 terminal，记录 CPU/RSS/GPU/磁盘、RTF、Recorder queue、帧间隔、吞吐、QC 与物理成功率 | W2 未过不启动 W8；W8 任一门失败立即停下等待人工决策，不自动降档 |
 
 ## 自审：设计覆盖与一致性
 
@@ -1804,12 +1893,12 @@ ros2 run so101_demo_py act_evaluate --manifest "$ACT_EVIDENCE/splits.json" --spl
 | 4 模型与视野 | 2、3、6 | RGB-only、neck、名称映射、两平台、原 RGB-D 回归 |
 | 5 搜索和方位 | 5、6、14 | 360°预算、身份一致、几何方位、过期失效与控制权 |
 | 6 观测/action | 1、4、7、13 | 因果采样、前缀时间、双控制器、异步取消 |
-| 7 示教 | 9、11、11A | 实际 reference、10 Hz、释放/撤离尾段、失败保留、并行封存与确定性汇总 |
+| 7 示教 | 9、11、11A | t 时刻双 RGB+8D，t+0.1 实际 reference、合法 release epoch、PASSED/FAILED 封存、commit 后确定性汇总 |
 | 8 随机区域 | 3、6、10 | 每实际点预检、分层拒绝统计与初始关节扰动 |
 | 9 数据/泛化 | 10–12、12A、16 | 五集合隔离、冻结候选、资格数据排除、闭环调参、70%与20场景比较 |
-| 10 安全/恢复 | 3、7、7A、8、13、14 | 120 s 墙钟、路径碰撞、支撑开爪、release epoch、最多1次重搜 |
-| 11 组件/Teleop | 2、3、11A、12、14、15 | 子模块锁、领域/adapter、v3 fixed queue、全局仲裁、训练单写者与环境隔离、界面命令 |
-| 12 校准顺序 | 6–8、10–13 | 分阶段测量，W1/W2 与 W4/W6/W8 exact-N 资格完成后才正式采集；commit+receipt 导出和 owner 预检后才训练 |
+| 10 安全/恢复 | 3、7、7A、8、13、14 | 120 s 墙钟、typed child、路径碰撞、支撑开爪、新 release epoch、最多1次重搜 |
+| 11 组件/Teleop | 2、3、7A、11A、12、14、15 | 子模块锁、unified admission、每 Worker ROS child、v3 fixed queue、训练单写者与界面同路径 |
+| 12 校准顺序 | 6–8、10–13 | 通用预检→contact fingerprint 激活→Task 8 prefix/full→W1/W2→独立 W8→正式采集→commit+receipt 导出→训练 |
 | 13 验收证据 | 11A、16及全局 gate | 并发正确性与吞吐分开、各层结果独立、两平台、原始证据与删除约束 |
 | 14 本地依据 | 基线、Files 与 v3 runtime/统一仲裁实现 | 已查合入实现和限制，新路径均标 Create |
 
@@ -1829,6 +1918,8 @@ ros2 run so101_demo_py act_evaluate --manifest "$ACT_EVIDENCE/splits.json" --spl
 
 ## Astra high 并行采集审查修订记录（2026-09-16）
 
+本节是历史审查轨迹。涉及 adaptive continuation、分档扩容或 Task 7A command broker 的条目已由 2026-09-24 设计和本版 Task 7A/11A 取代，不再是可执行合同。
+
 | 审查问题 | 修订位置 | 新验收证据 |
 | --- | --- | --- |
 | P1 搜索放入 initial gate 会被误判为 infra，且后续重复 reset | Task 11 分阶段接口；Task 11A Step 3a | 每 attempt 一次 reset；搜索失败封存为业务 `FAILED` 且不 fallback；旧 reset epoch/pose 拒绝 |
@@ -1842,7 +1933,7 @@ ros2 run so101_demo_py act_evaluate --manifest "$ACT_EVIDENCE/splits.json" --spl
 | 第二轮 P3：preferred 项可被 stealing，不能写成静态保证 | 设计第 7 节、Task 11A Step 6 | 初始优先分配；按每个 Worker 实际 terminal lease 验收 |
 | 第三轮 P2：崩溃对账可能导入 durable expiry 后的迟到 seal | Task 11A 对账优先级 | expiry/revocation/replacement/late rejection 优先；seal 完成时间不超过 lease deadline；专门故障测试 |
 | 第三轮 P2：降级完成可能误算被测档位资格 | Task 11A Step 5–6 | 每个资格 wave 固定 `levels_used == [n]`，零 infra retry/fallback/continuation；降级只作恢复证据 |
-| 第三轮 P2：socket 预检遗漏 Task 7A command broker | Task 11A `act_parallel_socket_paths` | adaptive 与每 Worker `ipc/<index>/a` 共用启动/清理/恢复清单；全清单 107/108-byte 边界测试 |
+| 第三轮 P2：旧方案 socket 预检遗漏独立动作端点 | 历史 Task 11A `act_parallel_socket_paths` | 当时补入全清单 107/108-byte 边界；现由 typed ROS child endpoint manifest 取代 |
 | 第三轮 P3：缺完整八场景单 stack 命令 | 运行命令 `u` root | 5 条 smoke 与 8 条性能基线分开，W1/W2 都与完整基线比较 |
 | 第三轮 P3：Task 14 重复标 Create | Task 14 Files | `so101_mujoco_act.launch.py` 改为 Modify，保留 Task 3 Create |
 | 第四轮 P3：无法构造“只有新增短端点超长”的测试 | Task 11A socket 故障矩阵 | 改为端点包含性、三类消费者同集合，以及全清单最长路径 107/108-byte 边界 |
