@@ -99,6 +99,67 @@ def test_reset_waits_for_joint_convergence_before_final_pause() -> None:
     assert services.pauses[-1] is True
 
 
+def test_act_reset_waits_below_broker_stop_velocity_before_final_pause() -> None:
+    """A running sample at the broker limit can drift above it while pausing."""
+    from so101_demo.act.joints import ACT_JOINTS
+
+    class ActServices(Services):
+        scalar_joint_callback_count = 0
+
+        def __init__(self):
+            super().__init__()
+            self.activated = False
+            self.low_velocity_seen = False
+            self.velocity_queries = 0
+
+        def enable_reset_joint_audit(self):
+            pass
+
+        def reset_joint_snapshot(self, names):
+            assert names == ACT_JOINTS
+            return dict(callback_count=1, simulation_session_id='session',
+                reset_epoch=4, simulation_step=0, paused=True, sim_time_s=2.,
+                positions=(0.,) * 7, velocities=(0.,) * 7)
+
+        def switch_controllers(self, *, activate, deactivate):
+            if activate:
+                self.activated = True
+            return True
+
+        def latest_joint_velocities(self, names):
+            assert names == ACT_JOINTS
+            self.velocity_queries += 1
+            value = .0015 if self.velocity_queries <= 3 else .0002
+            if value == .0002:
+                self.low_velocity_seen = True
+            return (value,) + (0.,) * 6
+
+        def joints_converged(self, expected, tolerance, *, after_callback_count, names):
+            assert names == ACT_JOINTS
+            return super().joints_converged(expected, tolerance,
+                after_callback_count=after_callback_count)
+
+        def pause(self, paused):
+            if paused and self.activated:
+                assert self.low_velocity_seen, 'ACT_PAUSED_AT_UNSETTLED_VELOCITY'
+            return super().pause(paused)
+
+    initial = _snapshot(epoch=3, sequence=100)
+    reset = _snapshot(epoch=4, sequence=101)
+    reset.simulation_time_s = 2.
+    final = _snapshot(epoch=4, sequence=102)
+    services = ActServices()
+    resetter = MujocoResetClient(services, Observer((initial, reset, final)),
+        simulation_session_id='session',
+        controller_names=('arm_controller', 'gripper_controller', 'neck_controller'),
+        expected_joint_positions=(0.,) * 7, expected_joint_names=ACT_JOINTS,
+        expected_object_position=(.1, .2, .3),
+        progress=lambda: setattr(services, 'joint_callback_count', services.joint_callback_count + 1))
+
+    assert resetter.reset('task_start').new_epoch == 4
+    assert services.velocity_queries >= 4
+
+
 def test_broker_reset_prepares_stop_barrier_before_initial_pause(monkeypatch) -> None:
     """A short lived stop proof must be refreshed before a paused snapshot wait."""
     from so101_demo.adapters.act import leased_action_client
