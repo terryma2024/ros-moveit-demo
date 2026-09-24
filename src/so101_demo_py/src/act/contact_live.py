@@ -185,6 +185,7 @@ class LivePhysicsStream:
         finally:
             os.close(directory)
 
+
     def _validated_step(
         self, value: Any, expected_step: int, previous_time: float,
         initial_cup: list[float] | None, ros_time_s: float,
@@ -336,3 +337,61 @@ class LivePhysicsStream:
             os.fsync(directory)
         finally:
             os.close(directory)
+
+
+class LiveContactObserver:
+    """Bind live ROS evidence to a single stop callback and recorder epoch."""
+
+    def __init__(
+        self, recorder: LivePhysicsStream, *, ros_clock: Callable[[], float],
+        monotonic: Callable[[], float], on_abort: Callable[[str], None],
+    ) -> None:
+        self.recorder = recorder
+        self.ros_clock = ros_clock
+        self.monotonic = monotonic
+        self.on_abort = on_abort
+        self.hazard: str | None = None
+        self._last_received = _finite(monotonic(), "observer start", 0)
+
+    def _abort(self, reason: str) -> None:
+        if self.hazard is None:
+            self.hazard = reason
+            self.on_abort(reason)
+
+    def accept_chunk(self, message: Any) -> None:
+        if self.hazard is not None:
+            return
+        try:
+            converted = chunk_from_ros(
+                message, cup_qpos_address=self.recorder.cup_qpos_address,
+                cup_qvel_address=self.recorder.cup_qvel_address,
+            )
+            self.recorder.accept_chunk(converted, ros_time_s=self.ros_clock())
+            self._last_received = _finite(self.monotonic(), "observer receipt", 0)
+        except (AttributeError, OSError, TypeError, ValueError) as error:
+            self._abort(f"LIVE_CONTACT_EVIDENCE_INVALID:{error}")
+
+    def accept_hazard(self, message: Any) -> None:
+        if self.hazard is not None:
+            return
+        try:
+            if (message.simulation_session_id != self.recorder.session_id
+                    or message.reset_epoch != self.recorder.reset_epoch
+                    or _integer(message.physics_step, "hazard physics_step", 1) < 1
+                    or _finite(message.force_n, "hazard force", 0) <
+                    _finite(message.threshold_n, "hazard threshold", 0)
+                    or type(message.evidence_loss) is not bool):
+                raise ValueError("hazard identity or force is invalid")
+            self._abort("LIVE_CONTACT_DIAGNOSTIC_HAZARD")
+        except (AttributeError, TypeError, ValueError) as error:
+            self._abort(f"LIVE_CONTACT_HAZARD_INVALID:{error}")
+
+    def poll(self) -> None:
+        if self.hazard is None and (
+            self.monotonic() - self._last_received >
+            self.recorder.limits["maximum_receipt_age_s"]
+        ):
+            self._abort("LIVE_CONTACT_EVIDENCE_STALE")
+
+    def close(self) -> None:
+        self.recorder.close()
