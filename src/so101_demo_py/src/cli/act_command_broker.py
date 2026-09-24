@@ -22,6 +22,7 @@ def main(arguments=None):
     parser.add_argument('--calibration-report',type=Path)
     parser.add_argument('--calibration-mode',action='store_true')
     parser.add_argument('--motion-calibration-manifest',type=Path)
+    parser.add_argument('--contact-diagnostic-manifest',type=Path)
     parser.add_argument('--stop-velocity-rad-s',type=float)
     parser.add_argument('--max-age-s',type=float)
     for flag in ('submit-lead-s','accept-timeout-s','stop-timeout-s','permit-ttl-s'):
@@ -50,12 +51,25 @@ def main(arguments=None):
         if not all(isfinite(value) and value > 0 for value in timing) or not timing[1] < timing[0]:
             raise ValueError('EXECUTION_TIMING_INVALID')
     motion_manifest=None
+    if options.motion_calibration_manifest and options.contact_diagnostic_manifest:
+        raise ValueError('DIAGNOSTIC_MANIFESTS_MUTUALLY_EXCLUSIVE')
     if options.motion_calibration_manifest:
         from so101_demo.adapters.act.calibration_motion import require_motion_manifest
         if not options.calibration_mode or not all(value is not None for value in timing):raise ValueError('MOTION_CALIBRATION_MODE_REQUIRED')
         motion_manifest=require_motion_manifest(json.loads(options.motion_calibration_manifest.read_text()))
         if (motion_manifest['session_id']!=options.session_id or motion_manifest['submit_lead_s']!=options.submit_lead_s
                 or motion_manifest['stop_velocity_rad_s']!=speed):raise ValueError('MOTION_CALIBRATION_CONFIG_MISMATCH')
+    if options.contact_diagnostic_manifest:
+        from so101_demo.adapters.act.calibration_motion import diagnostic_motion_configuration
+        if not options.calibration_mode or not all(value is not None for value in timing):
+            raise ValueError('CONTACT_DIAGNOSTIC_MODE_REQUIRED')
+        motion_manifest=json.loads(options.contact_diagnostic_manifest.read_text())
+        diagnostic=diagnostic_motion_configuration(motion_manifest)
+        if (diagnostic['session_id']!=options.session_id
+                or diagnostic['submit_lead_s']!=options.submit_lead_s
+                or diagnostic['stop_velocity_rad_s']!=speed
+                or diagnostic['max_age_s']!=age):
+            raise ValueError('CONTACT_DIAGNOSTIC_CONFIG_MISMATCH')
     from so101_demo.adapters.act.domain_authority import DomainAuthority
     authority=DomainAuthority(int(os.environ.get('ROS_DOMAIN_ID','0'))).acquire()
     import rclpy
@@ -101,6 +115,7 @@ def main(arguments=None):
         eligible_for_collection=False,stop_velocity_rad_s=speed,max_age_s=age,
         paired_calibration_timing=timing if broker.prefix_executor is not None else None,
         motion_calibration_manifest=str(options.motion_calibration_manifest) if motion_guard is not None else None,
+        contact_diagnostic_manifest=str(options.contact_diagnostic_manifest) if options.contact_diagnostic_manifest else None,
         motion_calibration_model_sha256=motion_manifest['model_sha256'] if motion_guard is not None else None,
         action_map={'arm':'/arm_controller/follow_joint_trajectory','gripper':'/gripper_controller/follow_joint_trajectory',
                     'execute_trajectory':'/execute_trajectory'}),indent=2)+'\n')

@@ -206,6 +206,10 @@ def test_live_observer_hazard_latch_and_stale_stream_abort(tmp_path):
     stale, now, aborts = _observer(tmp_path / "stale")
     now[0] += .201
     stale.poll()
+    assert aborts == []
+    stale.start()
+    now[0] += .201
+    stale.poll()
     assert aborts == ["LIVE_CONTACT_EVIDENCE_STALE"]
     stale.close()
 
