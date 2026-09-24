@@ -25,22 +25,29 @@ REQUIRED_MEASUREMENTS = {
     "retreat_distance_m": ("m", 1), "placement_stable_s": ("s", 1),
     "path_step_s": ("s", 1), "path_clearance_m": ("m", 1),
 }
+CHECK_MEASUREMENTS = {
+    "fov": frozenset(("head_translation_m", "head_rpy_rad", "wrist_translation_m",
+        "wrist_rpy_rad", "head_intrinsics_px", "wrist_intrinsics_px",
+        "yaw_zero_bearing_rad", "horizontal_fov_rad", "lock_valid_neck_rad")),
+    "search": frozenset(("coarse_step_rad", "search_timeout_s", "max_fine_corrections",
+        "max_fine_total_rad", "min_confidence", "tracking_iou", "min_bbox_aspect",
+        "center_deadband_px", "vertical_bounds_px", "min_area_px2")),
+    "synchronization": frozenset(("max_age_s", "max_skew_s")),
+    "collision": frozenset(("path_step_s", "path_clearance_m")),
+    "execution": frozenset(("velocity_limit_rad_s", "acceleration_limit_rad_s2",
+        "submit_lead_s", "stop_velocity_rad_s", "stop_latency_s")),
+    "release": frozenset(("grasp_occlusion_window_s", "support_distance_m", "release_stable_s")),
+    "retreat": frozenset(("retreat_distance_m", "placement_stable_s")),
+}
 
 
-def require_qualified(report):
-    fields(report, ("schema_version", "status", "source_commit", "config_sha256", "measurements", "checks"))
-    if (report["schema_version"] != 1 or isinstance(report["schema_version"], bool)
-            or report["status"] != "QUALIFIED"
-            or not isinstance(report["source_commit"], str)
-            or re.fullmatch(r"[0-9a-f]{40}", report["source_commit"]) is None):
-        raise ValueError("CALIBRATION_REQUIRED")
-    sha256(report["config_sha256"])
-    fields(report["checks"], REQUIRED_CHECKS)
-    if any(value != "PASS" for value in report["checks"].values()):
-        raise ValueError("CALIBRATION_REQUIRED")
-    fields(report["measurements"], REQUIRED_MEASUREMENTS)
-    for name, (unit, size) in REQUIRED_MEASUREMENTS.items():
-        item = report["measurements"][name]
+def _validate_measurements(measurements, *, complete):
+    if not isinstance(measurements, dict) or not set(measurements) <= set(REQUIRED_MEASUREMENTS):
+        raise ValueError("CALIBRATION_MEASUREMENTS_INVALID")
+    if complete:
+        fields(measurements, REQUIRED_MEASUREMENTS)
+    for name, item in measurements.items():
+        unit, size = REQUIRED_MEASUREMENTS[name]
         fields(item, ("value", "unit", "sample_path", "sample_sha256"))
         if item["unit"] != unit:
             raise ValueError("CALIBRATION_UNIT_INVALID")
@@ -59,3 +66,38 @@ def require_qualified(report):
         sha256(item["sample_sha256"])
         if hashlib.sha256(path.read_bytes()).hexdigest() != item["sample_sha256"]:
             raise ValueError("CALIBRATION_SAMPLE_HASH_INVALID")
+
+
+def validate_partial(report):
+    """Validate retained measurements while preserving the collection refusal."""
+    fields(report, ("schema_version", "status", "source_commit", "config_sha256", "measurements", "checks"))
+    if (report["schema_version"] != 1 or isinstance(report["schema_version"], bool)
+            or report["status"] != "CALIBRATION_REQUIRED"
+            or not isinstance(report["source_commit"], str)
+            or re.fullmatch(r"[0-9a-f]{40}", report["source_commit"]) is None):
+        raise ValueError("CALIBRATION_REQUIRED")
+    sha256(report["config_sha256"])
+    fields(report["checks"], REQUIRED_CHECKS)
+    if any(value not in ("PASS", "FAIL", "UNMEASURED") for value in report["checks"].values()):
+        raise ValueError("CALIBRATION_CHECK_INVALID")
+    if all(value == "PASS" for value in report["checks"].values()):
+        raise ValueError("CALIBRATION_STATUS_INVALID")
+    _validate_measurements(report["measurements"], complete=False)
+    for check, names in CHECK_MEASUREMENTS.items():
+        if report["checks"][check] == "PASS" and not names <= set(report["measurements"]):
+            raise ValueError("CALIBRATION_CHECK_EVIDENCE_MISSING")
+    return report
+
+
+def require_qualified(report):
+    fields(report, ("schema_version", "status", "source_commit", "config_sha256", "measurements", "checks"))
+    if (report["schema_version"] != 1 or isinstance(report["schema_version"], bool)
+            or report["status"] != "QUALIFIED"
+            or not isinstance(report["source_commit"], str)
+            or re.fullmatch(r"[0-9a-f]{40}", report["source_commit"]) is None):
+        raise ValueError("CALIBRATION_REQUIRED")
+    sha256(report["config_sha256"])
+    fields(report["checks"], REQUIRED_CHECKS)
+    if any(value != "PASS" for value in report["checks"].values()):
+        raise ValueError("CALIBRATION_REQUIRED")
+    _validate_measurements(report["measurements"], complete=True)

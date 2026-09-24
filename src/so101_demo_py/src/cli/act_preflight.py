@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import subprocess
 
-from so101_demo.act.calibration import REQUIRED_CHECKS, require_qualified
+from so101_demo.act.calibration import REQUIRED_CHECKS, require_qualified, validate_partial
 
 
 def main(arguments=None):
@@ -46,7 +46,10 @@ def main(arguments=None):
         measured = json.loads(options.measured_report.read_text())
         if measured["source_commit"] != source_commit or measured["config_sha256"] != config_hash:
             raise ValueError("CALIBRATION_SOURCE_CONFIG_MISMATCH")
-        require_qualified(measured)
+        if measured.get("status") == "QUALIFIED":
+            require_qualified(measured)
+        else:
+            validate_partial(measured)
         report = measured
     options.output.parent.mkdir(parents=True,exist_ok=True)
     # Preserve every report version; never overwrite earlier measured evidence.
