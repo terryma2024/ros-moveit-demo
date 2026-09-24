@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import subprocess
 
 from so101_demo.act.calibration import REQUIRED_CHECKS, require_qualified
@@ -13,6 +14,7 @@ def main(arguments=None):
     parser = argparse.ArgumentParser(prog="act_preflight")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--measured-report", type=Path)
+    parser.add_argument("--source-root", type=Path)
     options = parser.parse_args(arguments)
     from ament_index_python.packages import get_package_share_directory
     share = Path(get_package_share_directory("so101_demo_py"))
@@ -22,8 +24,21 @@ def main(arguments=None):
     if not files or any(not root.is_dir() for root in roots):
         raise ValueError("ACT_PROFILE_UNAVAILABLE")
     config_hash = hashlib.sha256(json.dumps(files,sort_keys=True,separators=(",",":")).encode()).hexdigest()
-    source_commit = subprocess.check_output(["git", "-C", str(Path(__file__).resolve().parent),
-                                            "rev-parse", "HEAD"], text=True).strip()
+    source_root = options.source_root or Path(__file__).resolve().parent
+    try:
+        source_commit = subprocess.check_output(
+            ["git", "-C", str(source_root), "rev-parse", "HEAD"],
+            text=True, stderr=subprocess.DEVNULL).strip()
+        if options.source_root is not None:
+            observed_root = subprocess.check_output(
+                ["git", "-C", str(source_root), "rev-parse", "--show-toplevel"],
+                text=True, stderr=subprocess.DEVNULL).strip()
+            if Path(observed_root).resolve() != source_root.resolve():
+                raise ValueError("CALIBRATION_SOURCE_ROOT_INVALID")
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise ValueError("CALIBRATION_SOURCE_UNAVAILABLE") from error
+    if re.fullmatch(r"[0-9a-f]{40}", source_commit) is None:
+        raise ValueError("CALIBRATION_SOURCE_INVALID")
     report = dict(schema_version=1,status="CALIBRATION_REQUIRED",source_commit=source_commit,
                   config_sha256=config_hash, measurements={},
                   checks={key:"UNMEASURED" for key in sorted(REQUIRED_CHECKS)})
