@@ -1257,6 +1257,32 @@ def test_supervisor_rejects_absent_incomplete_and_batch_mismatched_manifest():
         supervisor._record_started(wrong)
 
 
+def test_supervisor_resolves_default_popen_after_temporary_patch(monkeypatch):
+    """A patch active at module import cannot poison later process starts."""
+    import importlib.util
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    import so101_demo.runtime.parallel_processes as installed_module
+
+    module_name = "so101_demo.runtime._parallel_processes_import_probe"
+    spec = importlib.util.spec_from_file_location(module_name, Path(installed_module.__file__))
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, module_name, module)
+
+    def temporary_popen(*_args, **_kwargs):
+        raise AssertionError("temporary Popen escaped its patch")
+
+    with monkeypatch.context() as temporary_patch:
+        temporary_patch.setattr(subprocess, "Popen", temporary_popen)
+        spec.loader.exec_module(module)
+
+    supervisor = module.ProcessSupervisor("batch-import-probe")
+    assert supervisor._popen is subprocess.Popen
+
+
 def test_loaded_manifest_never_grants_signal_authority():
     from so101_demo.runtime.parallel_processes import ProcessSupervisor
 
