@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 24f5d9de
+current_commit: a36633ed
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -14,8 +14,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: EXP-162
-next_experiment: EXP-163 offline wrist field-of-view and pitch screen
+latest_checkpoint: EXP-163
+next_experiment: EXP-164 offline full-route wrist FOV screen
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1322,3 +1322,9 @@ next_experiment: Live Task 3–8 calibration and controller publication after ow
 ## EXP-163 — Wrist field-of-view and pitch screen
 
 - State: PLANNED. Lifecycle: OFFLINE after EXP-162 independent negative screen, source `24f5d9de`, original revised model SHA `cee0062a...`, no ROS stack. Durable `experiments/exp163-wrist-fov`. Reuse exact six frozen pose/cup states from EXP-162. In memory vary only wrist camera `fovy` over 75/85/95/105/115 degrees and local pitch over .15/.20/.25/.30/.35 rad at yaw+.1; leave all source assets, mount position, head camera and collision unchanged. Independently recompute all 150 geom-ID cup masks, edge margins and detail, rank only six-view candidates with ≥20 px and ≥1,000 pixels per view, and save baseline/best lossless RGB. A passing in-memory candidate is not a source change or Task6 qualification: TDD camera/intrinsic tests, optical consistency, live calibration, full-path and gripper occlusion checks remain. No formal data or deletion.
+
+- State: VALID in-memory six-view FOV candidate, not Task6/source qualification. `screen.py` exit0 and independent `verify-v2.py`/`verify-result.json` exit0 recomputed all five fovy values 75/85/95/105/115° × five pitch values `.15/.20/.25/.30/.35 rad` at yaw+.1 (150 geom-ID masks), original compiled model SHA `cee0062a...`, and selected lossless PNG/hash readbacks. Initial verifier passed all masks but failed an incorrect hard-coded candidate index; the retained v2 verifier fixed only that expected index and passed. Four of five 95° pitch choices, all five 105° and all five 115° choices meet six-view ≥20 px/≥1,000 pixel screen; 75°/85° have zero. Maximum-margin option 115°/pitch+.2 has min109 px but min4,403 pixels. Preferred narrower 95°/pitch+.2/yaw+.1 has quaternion `(0.9839547341,-0.1482083180,0.0962465912,-0.0245757895)`, min51 px margin and min9,103 pixels across cleared default/left/forward and expert preopen/closed/held states. Six preferred lossless images were captured; cleared-left and expert-hold were freshly inspected and visibly framed. The camera model was changed only in memory; installed camera/source remains 75° and original quaternion. Next screen tests the preferred setting over the checked-in full approach/lift route before any TDD asset revision. Formal `0/0/0`, Task12 onward `NOT_STARTED`; retain EXP-163 and earlier runs, archive none, scratch/superseded artifacts deletion candidates only, delete nothing.
+
+## EXP-164 — Preferred wrist camera over full checked-in approach and lift
+
+- State: PLANNED. Lifecycle: OFFLINE after EXP-163 independent six-view pass, source `a36633ed`, installed model SHA `cee0062a...`, no ROS stack. Durable `experiments/exp164-full-route-fov`. Freeze the preferred in-memory 95°/pitch+.2/yaw+.1 setting, source `light_cup_wall_pick/v1/mujoco.yaml` SHA, default cup, preopen/closed jaw and all checked-in MOVE_ABOVE_OBJECT, DESCEND and LIFT waypoints. Interpolate each listed segment at a declared fixed sample count, keeping the cup at its frozen scene pose until contact and using fresh EXP-161 measured held-cup pose for lifted endpoints only as a diagnostic approximation. Recompute protected static contacts and wrist cup masks/detail/margin at every sample; save lossless phase landmarks and independently verify. Also screen EXP-139's zero→cleared route across three placements to quantify early view loss. A negative is not proof the camera cannot work with another trajectory; a pass is still not live, dynamic, release/retreat or Task6 qualification. No source change, formal data or deletion.
