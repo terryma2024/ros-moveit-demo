@@ -45,6 +45,7 @@ class RosNeckSearchPort:
             if self._received is None or not 0<=now-self._received<=self.port.max_age:
                 raise PermissionError('NECK_FEEDBACK_STALE')
             if not 0<=sim-self._stamp<=self.port.max_age:raise PermissionError('NECK_FEEDBACK_STALE')
+            if not self.client.server_is_ready():raise RuntimeError('NECK_ACTION_SERVER_UNAVAILABLE')
             if self.guard(self._position,target) is not True:raise PermissionError('SEARCH_UNSAFE_MOTION')
             # Both positions are absolute measured/target radians. Search keeps
             # each motion until fresh settled feedback, then advances its budget.
