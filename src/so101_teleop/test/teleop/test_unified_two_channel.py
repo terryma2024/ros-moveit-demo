@@ -35,20 +35,20 @@ def harness_module():
 
 def test_safe_revoke_wins_before_delayed_normal_packet(tmp_path, harness_module):
     async def run():
-        h = await harness_module.TwoChannelHarness.start(tmp_path)
+        h = await asyncio.wait_for(harness_module.TwoChannelHarness.start(tmp_path), 10)
         try:
             token = h.prepare_child()
             h.hold_normal_delivery()
             pending = asyncio.create_task(h.send(token))
             await asyncio.sleep(0.05)
-            receipt = await h.revoke(token)
+            receipt = await asyncio.wait_for(h.revoke(token), 10)
             assert receipt.linearized and not receipt.submitted
-            await h.release_normal_delivery()
+            await asyncio.wait_for(h.release_normal_delivery(), 10)
             with pytest.raises(MutationError, match="INTENT_REVOKED"):
-                await pending
-            assert (await h.stats()).submit_count == 0
+                await asyncio.wait_for(pending, 10)
+            assert (await asyncio.wait_for(h.stats(), 10)).submit_count == 0
         finally:
-            await h.close()
+            await asyncio.wait_for(h.close(), 10)
 
     asyncio.run(run())
 

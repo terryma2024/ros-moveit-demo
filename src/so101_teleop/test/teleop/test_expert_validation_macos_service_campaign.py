@@ -109,6 +109,7 @@ def test_the_adapter_accepts_exactly_the_flags_the_service_sends(tmp_path):
         assert getattr(arguments, flag.lstrip("-").replace("-", "_")) is None
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
 def test_the_adapter_validates_the_service_request_and_names_every_refusal(tmp_path):
     def validate(arguments, *, environment):
         return adapter.validate(arguments, environment=environment, platform="darwin")

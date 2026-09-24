@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import importlib
+import inspect
 import json
 import math
 import os
@@ -625,11 +626,19 @@ class TeleopService:
             return None
         code, message = refusal
         return self._result(body, False, code, message)
+    def _act_authority(self):
+        # A fallback __getattr__ is not evidence that the worker owns a broker.
+        if inspect.getattr_static(self._worker, "_act_control", None) is None:
+            return None
+        try:
+            return self._worker._act_control
+        except AttributeError:
+            return None
     def _base_mutation_gate(self, body):
         if self._worker.snapshot().mode is not ServerMode.READY: return self._result(body,False,"READINESS_NOT_SATISFIED","fresh ROS, TF and controller evidence required")
         if not self._lease_ok(body): return self._result(body,False,"LEASE_REQUIRED","valid lease required")
         if body.get("session_id") and body["session_id"] != self._worker.snapshot().simulation_session_id: return self._result(body,False,"SESSION_MISMATCH","simulation session changed")
-        authority = getattr(self._worker, "_act_control", None)
+        authority = self._act_authority()
         if authority is not None:
             try: authority.require(self._worker.snapshot().simulation_session_id)
             except PermissionError as error:
@@ -726,12 +735,12 @@ class TeleopService:
         # the command it started is still progressing.
         if name == "lease_renew":
             if not self._lease_ok(body): return self._result(body,False,"LEASE_REQUIRED","valid lease required")
-            authority = getattr(self._worker, "_act_control", None)
+            authority = self._act_authority()
             if authority is not None:
                 try: await asyncio.to_thread(authority.require, self._worker.snapshot().simulation_session_id)
                 except PermissionError as error: return self._result(body,False,str(error),"broker control lease refused")
             self._lease=(self._lease[0],time.monotonic()+30); return self._result(body,True,"OK","lease renewed")
-        authority = getattr(self._worker, "_act_control", None)
+        authority = self._act_authority()
         if name == "cancel" and authority is not None:
             # Cancellation must remain available while the existing command
             # or workflow holds its lock. Broker checks the captured real lease.
@@ -751,7 +760,7 @@ class TeleopService:
                     if self._lease is not None and self._lease[1] > time.monotonic():
                         return self._result(body,False,"LEASE_BUSY","another operator holds the control lease")
                     lease_id=str(uuid.uuid4())
-                    authority = getattr(self._worker, "_act_control", None)
+                    authority = self._act_authority()
                     if authority is not None:
                         await asyncio.to_thread(authority.acquire,self._worker.snapshot().simulation_session_id,lease_id)
                         authority.publish_context()
@@ -871,7 +880,7 @@ class TeleopService:
                         if body.get("operator_confirmation") != "FORCE CONTINUE": return self._result(body,False,"OVERRIDE_NOT_ALLOWED","physical validation confirmation required")
                     if operation == "stop":
                         return self._backend_unavailable(body, "workflow_stop")
-                    authority = getattr(self._worker, "_act_control", None)
+                    authority = self._act_authority()
                     if authority is not None:
                         await asyncio.to_thread(authority.begin_workflow,session_id,run_id)
                     envelope = await asyncio.to_thread(

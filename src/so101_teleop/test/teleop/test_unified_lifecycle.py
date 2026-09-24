@@ -9,6 +9,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
+from ament_index_python.packages import get_package_share_directory
 from fastapi.testclient import TestClient
 
 from so101_teleop.unified.app import create_unified_app, schema_services
@@ -140,8 +141,14 @@ def test_composition_builds_a_readable_app_without_ros(tmp_path, monkeypatch):
         assert composition.safety is not None
         assert composition.teleop is None and composition.bridge is None
         assert isinstance(composition.budget_source, UnknownBudgetSource)
-        assert composition.validation_error is None
-        assert composition.validation is not None
+        points = (Path(get_package_share_directory("so101_demo_py"))
+                  / "config/mujoco/moveit_expert_validation_points_v1.yaml")
+        if points.is_symlink():
+            assert composition.validation is None
+            assert composition.validation_error == "RuntimeError: SO101_VALIDATION_POINTS_INVALID"
+        else:
+            assert composition.validation_error is None
+            assert composition.validation is not None
         app = create_unified_app(composition, bind_address="127.0.0.1")
         with TestClient(app) as client:
             live = client.get("/health/live")
