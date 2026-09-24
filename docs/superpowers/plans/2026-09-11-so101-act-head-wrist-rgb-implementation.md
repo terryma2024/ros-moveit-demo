@@ -1,5 +1,7 @@
 # SO-101 Head/Wrist RGB ACT Implementation Plan
 
+> **Execution hold (2026-09-24):** [Task 8 live and formal collection design](../specs/2026-09-24-so101-act-task8-live-formal-collection-design.md) replaces part of the Task 7A–11A contract. MuJoCo is the only simulator; campaign resource binding is checked only at startup; W2 proceeds directly to an independent 40-scene exact-W8 qualification, without W4/W6. Do not execute the old Task 7A–11A steps until the written design is approved and this plan is revised.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在 MuJoCo 中实现双 RGB、独立颈部搜索、MoveIt 示教和 ACT 无干预 pick-place，并在单次 120 s 内完成撤离与物理验收。
