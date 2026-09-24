@@ -13,6 +13,7 @@ spawn epoch runs its own fresh probe.
 from __future__ import annotations
 
 import hashlib
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -28,8 +29,12 @@ V3_DOCUMENT = CONFIG_DIR / "parallel_batch_v3.yaml"
 V4_DOCUMENT = CONFIG_DIR / "parallel_batch_v4_macos_mps_w2.yaml"
 V5_DOCUMENT = CONFIG_DIR / "parallel_batch_v5_macos_mps_w1_retry.yaml"
 V6_DOCUMENT = CONFIG_DIR / "parallel_batch_v6_macos_mps_w1_first_pass.yaml"
+DARWIN_ONLY = pytest.mark.skipif(
+    sys.platform != "darwin", reason="the guard composes installed MPS documents on macOS"
+)
 
 
+@DARWIN_ONLY
 def test_the_macos_document_composes_a_guard_its_host_can_run():
     guard = _LazyStartGuard(
         {"SO101_VALIDATION_PARALLEL_CONFIG": str(V4_DOCUMENT)}
@@ -54,6 +59,7 @@ def test_the_v3_document_keeps_the_nvml_guard():
         (V6_DOCUMENT, "MPS_W1_FIRST_PASS", "MPS:default"),
     ],
 )
+@DARWIN_ONLY
 def test_every_macos_profile_selects_the_darwin_mps_accelerator(document, profile, selector):
     guard = _LazyStartGuard({"SO101_VALIDATION_PARALLEL_CONFIG": str(document)})
 
@@ -66,6 +72,7 @@ def test_every_macos_profile_selects_the_darwin_mps_accelerator(document, profil
         "mps", selector)
 
 
+@DARWIN_ONLY
 def test_the_composition_is_cached_but_a_changed_document_is_not_reused(tmp_path, monkeypatch):
     """The cache key is (profile, config_sha256, accelerator, selector); bytes decide identity."""
 
@@ -92,6 +99,7 @@ def test_the_composition_is_cached_but_a_changed_document_is_not_reused(tmp_path
     assert other.composition_key != first.composition_key
 
 
+@DARWIN_ONLY
 def test_every_request_and_spawn_epoch_takes_a_fresh_probe(monkeypatch, tmp_path):
     """A cached composition must never accept a previous verdict."""
 

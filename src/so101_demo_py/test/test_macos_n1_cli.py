@@ -126,6 +126,7 @@ def test_each_entry_refuses_a_w2_document(tmp_path):
         assert module.run(argv[1:]) == 1
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="the MPS CLI route requires macOS")
 def test_each_entry_composes_exactly_one_slot_without_models(tmp_path, capsys):
     """`--skip-models` proves the route and the plan, and is never a pass."""
 
@@ -187,6 +188,7 @@ def test_the_w1_lease_names_the_profile_the_worker_executes(tmp_path, capsys):
         assert name in worker_source, "the Worker must record the profile it executed"
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="the MPS CLI route requires macOS")
 def test_the_retry_entry_keeps_the_full_restart_batch_kind(tmp_path, capsys):
     """The retry entry composes the retry route, with one slot and one domain."""
 

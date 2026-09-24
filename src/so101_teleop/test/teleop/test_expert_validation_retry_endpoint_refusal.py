@@ -1,8 +1,8 @@
 """A retry POST answers a typed refusal or an admitted run - never a Python exception message.
 
 Recorded production defect (``$RUN/task12/retry-samepage-20260922T043538Z``): the console held the
-instance authority, selected the genuinely ``FAILED`` point ``sample_05_near_center`` of the
-terminal-clean first pass ``b889e``, confirmed, and POSTed its own body to
+instance authority, selected the genuinely ``FAILED`` point of the terminal-clean first pass,
+confirmed, and POSTed its own body to
 ``POST /expert-validation/campaigns/{id}/full-restart-retries``. The service answered
 
     409 {"code": "cannot unpack non-iterable RetryStartRequest object"}
@@ -18,30 +18,25 @@ independent properties:
 * a half-formed request is refused by name, and a shape error stays a shape error;
 * no unexpected exception can cross this boundary as text.
 
-The first two replay the recorded production store (copied, never written in place) and compose the
-service through ``create_production_service`` with the recorded production environment, so no live
-MuJoCo station is needed. The last two are self-contained.
+Every case that used to replay a recorded production store now composes the whole production
+environment inside ``tmp_path`` through :mod:`retry_fixture`, so the same assertions execute on any
+host: no recorded directory has to exist for them to run, and the only boundary this file
+intercepts is the supervisor's final ``_spawn``.
 """
 
 from __future__ import annotations
 
 import asyncio
-import os
 import re
-import shutil
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-CAMPAIGN_ID = "campaign-e15544c0506e47b198bc907433d3ae37"
-POINT_ID = "sample_05_near_center"
-RECORDED_RUN = Path(os.environ.get(
-    "SO101_RETRY_FIX_RUN",
-    "/tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1",
-))
-RECORDED_STATE = RECORDED_RUN / "task12" / "service-runs" / "retrysamepage" / "state"
-RECORDED_ENV = RECORDED_STATE.parent / "service-env.txt"
+from retry_fixture import (
+    CAMPAIGN_ID,
+    POINT_ID,
+    build_retry_session,
+)
 
 ROUTE = "/expert-validation/campaigns/{campaign_id}/full-restart-retries"
 
@@ -147,63 +142,34 @@ _LEAKED_PYTHON_TEXT = (
     "positional argument",
 )
 
-
-def _require_recorded_state() -> None:
-    if not (RECORDED_STATE / "validation-service" / "supervisor.sqlite3").is_file():
-        pytest.skip(f"recorded production state is not present at {RECORDED_STATE}")
-
-
-def production_environment() -> dict:
-    """The recorded production service environment, restricted to the layout keys."""
-
-    environment = dict(os.environ)
-    for line in RECORDED_ENV.read_text(encoding="utf-8").splitlines():
-        if line.startswith("SO101_VALIDATION_"):
-            key, _, value = line.partition("=")
-            environment[key] = value
-    return environment
-
-
-def staged_state(tmp_path: Path) -> Path:
-    """A private copy of the recorded service state: the store plus the owner tree.
-
-    The campaign evidence tree is deliberately not copied - it is 124 MB of batch journal and the
-    retry admission reads the durable projection from the store - and nothing is ever written into
-    the recorded evidence root.
-    """
-
-    destination = (tmp_path / "state").resolve()
-    destination.mkdir(parents=True)
-    shutil.copytree(RECORDED_STATE / "validation-service", destination / "validation-service")
-    shutil.copytree(RECORDED_STATE / "owner-tree", destination / "owner-tree")
-    return destination
+#: The refusal this file's own spawn boundary raises. It is not a service code: it only has to be a
+#: single stable token, which is what proves the admission was granted and the boundary was reached.
+SPAWN_REFUSED = "RETRY_SPAWN_REFUSED_BY_TEST"
 
 
 @pytest.fixture()
 def production_session(tmp_path):
-    from so101_teleop.expert_validation.production import create_production_service
+    """The whole production composition for one test, built entirely inside ``tmp_path``."""
 
-    _require_recorded_state()
-    service = create_production_service(staged_state(tmp_path), environment=production_environment())
+    session = build_retry_session(tmp_path, session_id="retry-endpoint-refusal-test")
     try:
-        # The replay has to be real: if restore could not rebind the recorded campaign, the endpoint
-        # would refuse before the admission and this test would pass for the wrong reason.
-        assert service.get_campaign(CAMPAIGN_ID)["campaign_id"] == CAMPAIGN_ID
-        # One lease, as in production: the console holds exactly one for the whole page session.
-        authority = service.acquire_lease({"service_session_id": "retry-endpoint-refusal-test"})
-        yield SimpleNamespace(service=service, authority=authority)
+        # The composition has to be real: if restore could not rebind this campaign, the endpoint
+        # would refuse before the admission and these tests would pass for the wrong reason.
+        assert session.service.get_campaign(CAMPAIGN_ID)["campaign_id"] == CAMPAIGN_ID
+        assert session.store.batch(session.batch_id).cleanup_receipt_sha256 is not None, (
+            "the first pass's own verified cleanup frame is what admits a retry of its failed point"
+        )
+        assert [item.point_id for item in session.store.retry_items(CAMPAIGN_ID)] == [POINT_ID]
+        yield session
     finally:
-        service.store.close()
+        session.close()
 
 
 def console_body(session, command_id: str, point_ids=(POINT_ID,)) -> dict:
     """The body the console builds: the lease authority, one command id, the points, the phrase."""
 
-    lease = session.authority
     return {
-        "service_session_id": lease["service_session_id"],
-        "lease_id": lease["lease_id"],
-        "lease_generation": lease["generation"],
+        **session.lease_body,
         "command_id": command_id,
         "point_ids": list(point_ids),
         "confirmation": "CONFIRM FULL_RESTART RETRIES",
@@ -232,8 +198,12 @@ def post_retry(service, campaign_id: str, payload: dict):
     return asyncio.run(call())
 
 
-def assert_typed(response) -> dict:
-    """The body carries a refusal code from the endpoint's own vocabulary, and nothing leaked."""
+def assert_typed(response, *, injected=()) -> dict:
+    """The body carries a refusal code from the endpoint's own vocabulary, and nothing leaked.
+
+    ``injected`` names codes a test's own intercepted boundary raises. Those are still required to
+    be a single stable token, but they are not service vocabulary and are never treated as one.
+    """
 
     payload = response.json()
     assert response.status_code in {200, 409}, response.text
@@ -243,55 +213,99 @@ def assert_typed(response) -> dict:
         assert payload["campaign_id"] == CAMPAIGN_ID
         return payload
     assert _CODE.match(payload["code"]), payload
-    assert payload["code"] in RETRY_REFUSAL_CODES, payload
+    if payload["code"] not in injected:
+        assert payload["code"] in RETRY_REFUSAL_CODES, payload
     return payload
 
 
-def test_the_console_retry_body_is_answered_with_a_typed_code(production_session):
+def _refuse_the_spawn(monkeypatch, code: str = SPAWN_REFUSED) -> list:
+    """Intercept the one external process boundary, and record whether it was reached at all."""
+
+    from so101_teleop.expert_validation.supervisor import ExpertValidationSupervisor
+
+    calls: list = []
+
+    async def refuse(self, request, *, owner_intent=None):
+        calls.append(request)
+        raise RuntimeError(code)
+
+    monkeypatch.setattr(ExpertValidationSupervisor, "_spawn", refuse)
+    return calls
+
+
+def test_the_console_retry_body_is_answered_with_a_typed_code(production_session, monkeypatch):
     """RED: this returned ``{"code": "cannot unpack non-iterable RetryStartRequest object"}``."""
 
+    session = production_session
+    calls = _refuse_the_spawn(monkeypatch)
+
     response = post_retry(
-        production_session.service,
-        CAMPAIGN_ID,
-        console_body(production_session, "retry-endpoint-1"),
+        session.service, CAMPAIGN_ID, console_body(session, "retry-endpoint-1")
     )
 
-    payload = assert_typed(response)
-    # The admission refuses by name. This fixture stages the recorded store without the campaign's
-    # batch bytes (``staged_state`` copies the store, not the 124 MB journal), so no cleanup receipt
-    # can be derived here and ``RETRY_ORIGINAL_CLEANUP_INCOMPLETE`` is the refusal this replay still
-    # earns. Recording the receipt from the batch's own verified cleanup bytes - which is what turns
-    # this refusal into an admission for a first pass that really is terminal-clean - is covered by
-    # ``test_expert_validation_campaign_layout_projection``. The point of the assertion is that the
-    # admission *ran*: the request/context pair was built and reached the store's transaction
-    # instead of failing on an unpack.
-    assert payload["code"] == "RETRY_ORIGINAL_CLEANUP_INCOMPLETE"
+    payload = assert_typed(response, injected=(SPAWN_REFUSED,))
+    # The console's body is admissible here - the first pass really is terminal-clean and its
+    # failed point really is queued - so it reaches the spawn boundary, and the answer is that
+    # boundary's own single-token code rather than a Python detail. The point of the assertion is
+    # that the admission *ran*: the pair was built, the transaction committed, one spawn happened.
+    assert payload["code"] == SPAWN_REFUSED, payload
+    assert len(calls) == 1, calls
+    admissions = session.store.retry_admissions(CAMPAIGN_ID)
+    assert [(row["batch_id"], row["point_id"]) for row in admissions] == [
+        ("retry-001", POINT_ID)
+    ], "the admission transaction committed before the spawn boundary was reached"
+
+
+def test_the_console_retry_body_is_refused_by_name_when_cleanup_never_committed(
+    tmp_path, monkeypatch
+):
+    """The console's own body, answered with a code from its vocabulary, for a first pass that
+    never committed cleanup: the admission refuses by name instead of reaching the boundary."""
+
+    session = build_retry_session(
+        tmp_path, cleanup_complete=None, session_id="retry-endpoint-refusal-no-cleanup"
+    )
+    try:
+        assert session.store.batch(session.batch_id).cleanup_receipt_sha256 is None
+        calls = _refuse_the_spawn(monkeypatch)
+
+        response = post_retry(
+            session.service, CAMPAIGN_ID, console_body(session, "retry-endpoint-cleanup-1")
+        )
+
+        payload = assert_typed(response)
+        assert payload["code"] == "RETRY_ORIGINAL_CLEANUP_INCOMPLETE", payload
+        assert calls == [], "no process may be spawned for a first pass that never cleaned up"
+        assert session.store.retry_admissions(CAMPAIGN_ID) == ()
+    finally:
+        session.close()
 
 
 def test_a_half_formed_retry_request_is_refused_by_name(production_session):
     """A mismatched point and a missing phrase are refusals; a malformed shape is a shape error."""
 
-    service = production_session.service
+    session = production_session
+    service = session.service
     mismatched = post_retry(
         service,
         CAMPAIGN_ID,
-        console_body(production_session, "retry-endpoint-2", point_ids=("sample_99_absent",)),
+        console_body(session, "retry-endpoint-2", point_ids=("sample_99_absent",)),
     )
     assert assert_typed(mismatched)["code"] == "RETRY_NOT_QUEUED"
 
-    unconfirmed = console_body(production_session, "retry-endpoint-3")
+    unconfirmed = console_body(session, "retry-endpoint-3")
     unconfirmed["confirmation"] = "yes"
     assert assert_typed(post_retry(service, CAMPAIGN_ID, unconfirmed))["code"] == (
         "CONFIRMATION_REQUIRED"
     )
 
-    incomplete = console_body(production_session, "retry-endpoint-4")
+    incomplete = console_body(session, "retry-endpoint-4")
     del incomplete["point_ids"]
     response = post_retry(service, CAMPAIGN_ID, incomplete)
     assert response.status_code == 422, response.text
     assert "cannot unpack" not in response.text and "Traceback" not in response.text
 
-    foreign = {**console_body(production_session, "retry-endpoint-5"), "point_count": 20}
+    foreign = {**console_body(session, "retry-endpoint-5"), "point_count": 20}
     response = post_retry(service, CAMPAIGN_ID, foreign)
     assert response.status_code == 422, response.text
 
@@ -313,42 +327,26 @@ def test_an_unexpected_internal_error_is_not_echoed_to_the_console():
     assert response.json()["code"] == "VALIDATION_INTERNAL_ERROR", response.text
 
 
-def test_the_retry_admission_returns_the_request_and_its_registered_context():
-    """The caller's contract: one admission yields the request *and* the context that authorizes it."""
+def test_the_retry_admission_returns_the_request_and_its_registered_context(production_session):
+    """The caller's contract: one admission yields the request *and* the context that authorizes it.
+
+    Asserted against the composed production service rather than a hand-built double, so the pair is
+    the one the real restore, the real manifest geometry and the real lease produce.
+    """
 
     from so101_teleop.expert_validation.execution_context import (
         ProductionExecutionContext,
-        RETRY_PROFILE,
-        RETRY_SCHEMA_VERSION,
+        RETRY_BATCH_KIND,
+        RETRY_WORKER_COUNT,
     )
     from so101_teleop.expert_validation.models import RetryStartRequest
-    from so101_teleop.expert_validation.production import ProductionExpertValidationService
 
-    install_prefix = Path("/opt/so101/install")
-    evidence_root = Path("/evidence/campaigns")
-    service = object.__new__(ProductionExpertValidationService)
-    service.store = SimpleNamespace(
-        current_lease=lambda: {
-            "lease_id": "lease-1", "service_session_id": "session-1", "generation": 7,
-            "expires_monotonic_ns": 2**62,
-        },
-        campaign_batches=lambda _campaign_id: [
-            SimpleNamespace(batch_kind="FIRST_PASS", batch_id="b889e")
-        ],
-    )
-    service._retry_origin = lambda campaign_id, point_id: (
-        SimpleNamespace(
-            install_prefix=install_prefix, evidence_root=evidence_root, manifest_id="manifest-1"
-        ),
-        SimpleNamespace(ordinal=0, point_id=point_id),
-        "1" * 64,
-        "2" * 64,
-        "3" * 64,
-    )
-    service.register_production_context = lambda context: context
-    service._installed_profile_document = lambda _profile: SimpleNamespace(config_sha256="4" * 64)
+    session = production_session
+    service = session.service
 
-    result = service._production_retry_admission(CAMPAIGN_ID, POINT_ID, {"command_id": "cmd-1"})
+    result = service._production_retry_admission(
+        CAMPAIGN_ID, POINT_ID, {"command_id": "cmd-admission-1"}
+    )
 
     assert isinstance(result, tuple) and len(result) == 2, (
         "the retry endpoint unpacks (request, context); one returned value is a TypeError at the "
@@ -358,41 +356,42 @@ def test_the_retry_admission_returns_the_request_and_its_registered_context():
     assert isinstance(request, RetryStartRequest)
     assert isinstance(context, ProductionExecutionContext)
     assert (request.campaign_id, request.point_id) == (CAMPAIGN_ID, POINT_ID)
-    assert request.execution_profile == RETRY_PROFILE
-    assert context.schema_version == RETRY_SCHEMA_VERSION
-    assert (context.lease_id, context.lease_generation) == ("lease-1", 7)
-    assert request.install_prefix == install_prefix
+    assert (request.batch_id, request.original_batch_id) == ("retry-001", session.batch_id)
+    assert (request.batch_kind, request.worker_count) == (RETRY_BATCH_KIND, RETRY_WORKER_COUNT)
+    assert context.schema_version == request.schema_version
+    assert (context.lease_id, context.lease_generation) == (
+        session.authority["lease_id"], session.authority["generation"]
+    )
+    assert (request.lease_id if hasattr(request, "lease_id") else context.lease_id) == (
+        session.authority["lease_id"]
+    )
+    assert str(request.install_prefix) == service._campaign_requests[CAMPAIGN_ID].install_prefix
+    assert request.original_result_sha256 == session.store.read_projection_state(
+        session.batch_id
+    ).state.points[POINT_ID].result_sha256
 
 
-def test_linux_retry_admission_binds_the_original_installed_v3_document(monkeypatch):
+def test_linux_retry_admission_binds_the_original_installed_v3_document(
+    production_session, monkeypatch
+):
+    """On Linux the restored request names no profile, so the v3 document *is* the retry's binding.
+
+    The task-local document is a byte copy of this repository's real v3 document, and the admission
+    re-hashes it against the digest the restored request carries: the retry executes exactly the
+    bytes the first pass executed, or it refuses.
+    """
+
     from so101_teleop.expert_validation import production
     from so101_teleop.expert_validation.execution_context import LINUX_RETRY_PROFILE
+    from so101_teleop.expert_validation.production import _sha256
+    from so101_teleop.expert_validation.service import ServiceConflict
 
-    document = Path(__file__).resolve().parents[3] / "so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
-    service = object.__new__(production.ProductionExpertValidationService)
-    service.store = SimpleNamespace(
-        current_lease=lambda: {
-            "lease_id": "lease-1", "service_session_id": "session-1", "generation": 1,
-            "expires_monotonic_ns": 2**62,
-        },
-        campaign_batches=lambda _campaign_id: [
-            SimpleNamespace(batch_kind="FIRST_PASS", batch_id="b889e")
-        ],
-    )
-    service._retry_origin = lambda _campaign_id, point_id: (
-        SimpleNamespace(
-            install_prefix=Path("/opt/so101/install"),
-            evidence_root=Path("/evidence/campaigns"),
-            manifest_id="manifest-1",
-            execution_profile=None,
-            parallel_config_path=document,
-            parallel_config_sha256=production._sha256(document),
-        ),
-        SimpleNamespace(ordinal=0, point_id=point_id),
-        "1" * 64, "2" * 64, "3" * 64,
-    )
-    service.register_production_context = lambda context: context
-    monkeypatch.setattr(production.sys, "platform", "linux")
+    session = production_session
+    service = session.service
+    restored = service._campaign_requests[CAMPAIGN_ID]
+    document = restored.parallel_config_path
+    assert restored.execution_profile is None, "the receipt named no profile: this is the v3 path"
+    monkeypatch.setattr(production, "sys", SimpleNamespace(platform="linux"))
 
     request, context = service._production_retry_admission(
         CAMPAIGN_ID, POINT_ID, {"command_id": "cmd-linux-1"}
@@ -402,4 +401,37 @@ def test_linux_retry_admission_binds_the_original_installed_v3_document(monkeypa
         LINUX_RETRY_PROFILE, LINUX_RETRY_PROFILE,
     )
     assert (request.schema_version, context.schema_version) == (3, 3)
+    assert request.config_sha256 == _sha256(document) == restored.parallel_config_sha256
+
+    # The control: the same admission refuses the moment those bytes stop matching the digest the
+    # restored request bound, so the equality above is a real verification and not a restatement.
+    document.write_text(document.read_text(encoding="utf-8") + "\n# drifted\n", encoding="utf-8")
+    with pytest.raises(ServiceConflict, match="RETRY_CONFIG_HASH_MISMATCH"):
+        service._production_retry_admission(CAMPAIGN_ID, POINT_ID, {"command_id": "cmd-linux-2"})
+
+
+def test_macos_retry_admission_binds_its_installed_mps_document(
+    production_session, monkeypatch
+):
+    """The macOS branch resolves its own v5 bytes beside the first pass's v3 document."""
+
+    from so101_teleop.expert_validation import preflight, production
+    from so101_teleop.expert_validation.execution_context import RETRY_PROFILE
+
+    session = production_session
+    original_resolver = preflight.resolve_execution_document
+    monkeypatch.setattr(production, "sys", SimpleNamespace(platform="darwin"))
+    monkeypatch.setattr(
+        preflight, "resolve_execution_document",
+        lambda directory, profile: original_resolver(directory, profile, platform="darwin"),
+    )
+
+    request, context = session.service._production_retry_admission(
+        CAMPAIGN_ID, POINT_ID, {"command_id": "cmd-macos-1"}
+    )
+    document = session.evidence_root / "task-config/parallel_batch_v5_macos_mps_w1_retry.yaml"
+    assert (request.execution_profile, context.execution_profile) == (
+        RETRY_PROFILE, RETRY_PROFILE,
+    )
+    assert (request.schema_version, context.schema_version) == (5, 5)
     assert request.config_sha256 == production._sha256(document)

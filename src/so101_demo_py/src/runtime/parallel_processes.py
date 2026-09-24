@@ -200,7 +200,7 @@ class ProcessSupervisor:
         *,
         identity_reader: Callable[[int], OwnedProcess | None] | None = None,
         signal_group: Callable[[int, int], None] = os.killpg,
-        popen: Callable[..., object] = subprocess.Popen,
+        popen: Callable[..., object] | None = None,
         manifest_path: Path | None = None,
         group_members_reader: Callable[[int], tuple[int, ...]] = _proc_group_members,
     ):
@@ -210,7 +210,7 @@ class ProcessSupervisor:
         self._external_identity_reader = identity_reader
         self._identity_reader = identity_reader or self._read_owned_identity
         self._signal_group = signal_group
-        self._popen = popen
+        self._popen = subprocess.Popen if popen is None else popen
         self.manifest_path = None if manifest_path is None else Path(manifest_path)
         self._group_members_reader = group_members_reader
         self._owned: dict[int, tuple[OwnedProcess, Callable[[], int | None]]] = {}

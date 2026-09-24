@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import threading
@@ -173,6 +174,8 @@ def test_select_encoder_honors_an_explicit_choice_without_probing():
 
 
 def test_probe_encoder_accepts_real_libx264_with_lavfi_input():
+    if shutil.which('ffmpeg') is None:
+        pytest.skip('ffmpeg is not installed on this host')
     ok, reason = MODULE.probe_encoder('libx264')
     assert ok is True
     assert reason is None

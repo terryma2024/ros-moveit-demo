@@ -120,7 +120,8 @@ def test_gate_refuses_unregistered_root(gate, tmp_path):
     assert not (other / "gates").exists()
 
 
-def test_gate_requires_nvme_root_when_policy_demands_it(gate, tmp_path):
+def test_gate_requires_nvme_root_when_policy_demands_it(gate, tmp_path, monkeypatch):
+    monkeypatch.setattr(gate, "NVME_EVIDENCE_ROOT", tmp_path / "registered-nvme-root")
     with pytest.raises(RuntimeError, match="REGISTERED_NVME_ROOT_REQUIRED"):
         gate.run_gate(
             root=tmp_path,

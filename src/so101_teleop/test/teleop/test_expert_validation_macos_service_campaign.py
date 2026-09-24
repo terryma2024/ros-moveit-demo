@@ -110,6 +110,9 @@ def test_the_adapter_accepts_exactly_the_flags_the_service_sends(tmp_path):
 
 
 def test_the_adapter_validates_the_service_request_and_names_every_refusal(tmp_path):
+    def validate(arguments, *, environment):
+        return adapter.validate(arguments, environment=environment, platform="darwin")
+
     environment = {
         "SO101_FIXED_CONTROL_CAMPAIGN_ID": "campaign-a",
         "SO101_FIXED_CONTROL_SOCKET": str(tmp_path / "c.sock"),
@@ -117,31 +120,31 @@ def test_the_adapter_validates_the_service_request_and_names_every_refusal(tmp_p
         "SO101_FIXED_CONTROL_EPOCH": "1",
     }
     good = _parse(_request(tmp_path))
-    record = adapter.validate(good, environment=environment)
+    record = validate(good, environment=environment)
     assert record["campaign_id"] == "campaign-a" and record["coordinator_epoch"] == 1
     assert record["broker_image_used"] is False, "an unused container image must be recorded, not dropped"
 
     with pytest.raises(ServiceCampaignError, match="RUN_MODE_UNSUPPORTED"):
-        adapter.validate(
+        validate(
             _parse(_with_flag(_request(tmp_path), "--run-mode", "compose")),
             environment=environment
         )
     with pytest.raises(ServiceCampaignError, match="PLATFORM_WORKER_COUNT_UNSUPPORTED"):
-        adapter.validate(_parse(_request(tmp_path, worker_count=4)), environment=environment)
+        validate(_parse(_request(tmp_path, worker_count=4)), environment=environment)
     with pytest.raises(ServiceCampaignError, match="YOLO_WEIGHTS_SHA256_MISMATCH"):
-        adapter.validate(
+        validate(
             _parse(_request(tmp_path, yolo_weights_sha256="b" * 64)), environment=environment
         )
     with pytest.raises(ServiceCampaignError, match="GROUNDED_MANIFEST_SHA256_MISMATCH"):
-        adapter.validate(
+        validate(
             _parse(_request(tmp_path, grounded_manifest_sha256="c" * 64)), environment=environment
         )
     with pytest.raises(ServiceCampaignError, match="CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"):
-        adapter.validate(
+        validate(
             _parse(_request(tmp_path, config_path=V3_CONFIG)), environment=environment
         )
     with pytest.raises(ServiceCampaignError, match="SELECTED_POINTS_REQUIRED"):
-        adapter.validate(
+        validate(
             _parse(_request(tmp_path, selected_point_ids=())), environment=environment
         )
     for missing, reason in (
@@ -151,9 +154,9 @@ def test_the_adapter_validates_the_service_request_and_names_every_refusal(tmp_p
     ):
         without = {key: value for key, value in environment.items() if key != missing}
         with pytest.raises(ServiceCampaignError, match=reason):
-            adapter.validate(good, environment=without)
+            validate(good, environment=without)
     with pytest.raises(ServiceCampaignError, match="CONTROL_EPOCH_INVALID"):
-        adapter.validate(good, environment={**environment, "SO101_FIXED_CONTROL_EPOCH": "zero"})
+        validate(good, environment={**environment, "SO101_FIXED_CONTROL_EPOCH": "zero"})
 
 
 def test_the_adapter_stops_the_whole_owned_group_and_proves_it(tmp_path):

@@ -95,6 +95,9 @@ def test_a_valid_document_loads_and_a_bad_port_is_refused(tmp_path: Path) -> Non
         assert error.value.code == "LAUNCH_DOCUMENT_INVALID"
 
 
+@pytest.mark.skipif(
+    sys.platform != "darwin", reason="the installed dylib farm identity requires macOS"
+)
 def test_frozen_identity_drift_is_refused_before_any_process_exists(tmp_path: Path) -> None:
     module = _launcher_module()
     paths = module.RuntimePaths.production(REPOSITORY_ROOT)

@@ -41,6 +41,9 @@ MACOS_PROFILES = {
     "MPS_W1_FIRST_PASS": (
         "parallel_batch_v6_macos_mps_w1_first_pass.yaml", 6, "SEQUENTIAL", 1, "FIRST_PASS"),
 }
+DARWIN_ONLY = pytest.mark.skipif(
+    sys.platform != "darwin", reason="the production service executes MPS documents on macOS"
+)
 
 
 def _local_check(self, policy, scope, *, nvml=None, busy=None):
@@ -553,6 +556,7 @@ def _passing_mps_probe(calls):
     return probe
 
 
+@DARWIN_ONLY
 def test_macos_capabilities_expose_only_w1_and_w2(macos_service):
     import hashlib
 
@@ -613,6 +617,7 @@ def test_macos_capability_reads_never_probe(macos_service, monkeypatch):
 
 
 @pytest.mark.parametrize("profile", list(MACOS_PROFILES))
+@DARWIN_ONLY
 def test_a_macos_preflight_uses_the_profiles_own_document_and_the_mps_probe(
         macos_service, monkeypatch, profile):
     """Real coordinator, real helper, real CPU/RAM reads; only the accelerator read is pinned."""
@@ -654,6 +659,7 @@ def test_a_macos_preflight_uses_the_profiles_own_document_and_the_mps_probe(
 
 
 @pytest.mark.parametrize("profile", list(MACOS_PROFILES))
+@DARWIN_ONLY
 def test_a_macos_preflight_never_reads_nvml(macos_service, monkeypatch, profile):
     """Only the probe process boundary is replaced; the Darwin branch runs the real decision.
 
@@ -693,6 +699,7 @@ def test_a_macos_preflight_never_reads_nvml(macos_service, monkeypatch, profile)
     assert calls, "the MPS accelerator probe must run"
 
 
+@DARWIN_ONLY
 def test_a_macos_service_refuses_more_than_two_workers_and_adaptive(macos_service):
     client = _Client(macos_service)
     lease = _lease(client)

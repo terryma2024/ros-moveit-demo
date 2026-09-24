@@ -5,6 +5,7 @@ import importlib
 import json
 import os
 import socket
+import sys
 from contextlib import contextmanager
 from types import SimpleNamespace
 
@@ -272,6 +273,7 @@ def test_adaptive_generation_does_not_accept_a_fixed_web_control_endpoint(make):
             server.close()
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="Darwin canonical /private/tmp root")
 def test_the_canonical_darwin_root_is_a_sanctioned_endpoint_home(make):
     """Containment stays mandatory; Darwin's short canonical root is the second sanctioned home.
 

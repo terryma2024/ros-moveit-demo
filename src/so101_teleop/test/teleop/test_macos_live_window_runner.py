@@ -10,6 +10,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -27,6 +28,47 @@ RETRY_SPEC = (
     REPOSITORY_ROOT / "src/so101_teleop/web/e2e/expert-validation/live-sim"
     / "07-retry-full-restart.spec.ts"
 )
+
+#: The runner writes its functional manifest with an inline Python program fed to its registered
+#: interpreter. The test runs that same program - not a copy of its logic - so the document it
+#: asserts on is the one a window really writes.
+_MANIFEST_WRITER = re.compile(
+    r'"\$REGISTERED_PYTHON" - "\$functional_manifest" "\$case_id" "\$mode" "\$workers" '
+    r'"\$points" <<\'PY\'\n(?P<program>.*?)\nPY\n',
+    re.DOTALL,
+)
+_CASE_VALUE = re.compile(r'(\w+)=(?:"([^"]*)"|([^;\s]+))')
+
+
+def _manifest_writer(runner: str) -> str:
+    match = _MANIFEST_WRITER.search(runner)
+    assert match is not None, "the runner no longer writes its functional manifest inline"
+    return match.group("program")
+
+
+def _case_parameters(runner: str, case_name: str) -> dict[str, str]:
+    """The ``key=value`` assignments of one ``case "$case_name" in`` branch."""
+
+    block = re.search(
+        rf"^  {re.escape(case_name)}\)(?P<body>.*?);;$", runner, re.DOTALL | re.MULTILINE
+    )
+    assert block is not None, case_name
+    return {
+        key: quoted or bare for key, quoted, bare in _CASE_VALUE.findall(block.group("body"))
+    }
+
+
+def _written_manifest(tmp_path: Path, program: str, parameters: dict[str, str]) -> dict:
+    output = tmp_path / "functional-manifest.json"
+    completed = subprocess.run(
+        [
+            sys.executable, "-", str(output), parameters["case_id"], parameters["mode"],
+            parameters["workers"], parameters["points"],
+        ],
+        input=program, text=True, capture_output=True, check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    return json.loads(output.read_text(encoding="utf-8"))
 
 
 def test_the_runner_declares_one_case_per_window_and_a_closed_environment() -> None:
@@ -51,10 +93,9 @@ def test_the_runner_declares_one_case_per_window_and_a_closed_environment() -> N
         'export SO101_E2E_PYTHON="$REGISTERED_PYTHON"',
     ):
         assert token in runner, token
-    # "cases" is a single-entry manifest, so the R06 spec cannot traverse another route.
-    assert '"cases": [case], "stability": case' in runner
     # The service is started through the frozen-identity launcher, never through a shell that would
-    # clear the service parameters.
+    # clear the service parameters. The manifest itself is asserted where it is produced, in
+    # ``test_the_single_case_manifest_shape_is_the_one_the_specs_read``.
     assert "scripts/so101_macos_unified_service.py" in runner
     assert "clean_reexec" not in runner
 
@@ -122,12 +163,26 @@ def test_the_live_specs_require_a_closed_single_case_id() -> None:
 
 
 def test_the_single_case_manifest_shape_is_the_one_the_specs_read(tmp_path: Path) -> None:
-    """The runner writes `{cases: [...], stability: {...}}`; the spec reads exactly those keys."""
+    """Run the runner's own manifest writer and read the document it really produces.
+
+    The window writes ``{cases: [...], stability: {...}}`` and the R06 spec reads exactly those
+    keys, so the shape has to be asserted on the produced file rather than on a dictionary this test
+    built itself: a round trip through ``json.dumps``/``json.loads`` of a literal proves only that
+    the standard library works.
+    """
 
     spec = SPRINT_SPEC.read_text(encoding="utf-8")
     assert "type FunctionalManifest = { cases: FunctionalCase[]; stability: FunctionalCase }" in spec
+
     runner = RUNNER.read_text(encoding="utf-8")
-    assert '"lifecycle": "FIRST_PASS"' in runner
-    assert '"maximum_attempts": 1' in runner
-    manifest = {"cases": [{"id": "macos-w2-20"}], "stability": {"id": "macos-w2-20"}}
-    assert json.loads(json.dumps(manifest))["cases"][0]["id"] == "macos-w2-20"
+    parameters = _case_parameters(runner, "w2")
+    manifest = _written_manifest(tmp_path, _manifest_writer(runner), parameters)
+
+    assert set(manifest) == {"cases", "stability"}
+    assert [case["id"] for case in manifest["cases"]] == [parameters["case_id"]]
+    # The stability case is the same case, not a second one the spec could traverse instead.
+    assert manifest["stability"] == manifest["cases"][0]
+    assert manifest["stability"]["id"] == parameters["case_id"]
+    assert manifest["cases"][0]["lifecycle"] == "FIRST_PASS"
+    assert manifest["cases"][0]["maximum_attempts"] == 1
+    assert manifest["cases"][0]["point_count"] == int(parameters["points"])

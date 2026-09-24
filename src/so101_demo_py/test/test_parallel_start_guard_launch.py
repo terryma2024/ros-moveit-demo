@@ -49,16 +49,22 @@ def _copy_base() -> Path | None:
 
 
 def _v3_config(tmp_path: Path, workers: int) -> Path:
-    """The packaged v3 config; its frozen ROS domain list means this file runs serially.
-
-    The allocator claims the real domain locks (181..188 are frozen by the contract), so two
-    parallel test processes would collide with `ROS_DOMAIN_CLAIMED`; the module is listed in
-    the audited serial set for exactly that reason.
-    """
+    """Copy the packaged v3 config without changing its frozen domain list."""
 
     target = tmp_path / f"parallel_v3_w{workers}.yaml"
     shutil.copyfile(V3_CONFIG, target)
     return target
+
+
+def _isolated_allocator_argv(tmp_path: Path) -> list[str]:
+    """Call the installed allocator composition with test-owned domain claims."""
+
+    script = (
+        "import sys; from pathlib import Path; "
+        "from so101_demo.parallel_batch.resources import main; "
+        "raise SystemExit(main(sys.argv[2:], claim_root=Path(sys.argv[1])))"
+    )
+    return [sys.executable, "-c", script, str(tmp_path / "domain-claims")]
 
 
 def _entry_environment(prefix: Path, task_root: Path | None = None) -> dict[str, str]:
@@ -156,7 +162,7 @@ def test_allocator_default_entry_writes_the_v3_guard_composition(tmp_path) -> No
     evidence = tmp_path / "guard-batch"
     config = _v3_config(tmp_path, 2)
     completed = subprocess.run(
-        [sys.executable, "-m", "so101_demo.parallel_batch.resources",
+        [*_isolated_allocator_argv(tmp_path),
          "--config", str(config), "--worker-count", "2",
          "--evidence-root", str(evidence), "--dry-run"],
         capture_output=True, text=True, timeout=180, cwd=str(tmp_path),
@@ -199,7 +205,7 @@ def test_debug_metadata_cannot_block_but_control_errors_still_refuse(tmp_path) -
         "SO101_VALIDATION_EXECUTION_IDENTITY": "0" * 64,
     })
     accepted = subprocess.run(
-        [sys.executable, "-m", "so101_demo.parallel_batch.resources",
+        [*_isolated_allocator_argv(tmp_path),
          "--config", str(config), "--worker-count", "1",
          "--evidence-root", str(tmp_path / "debug-hostile"), "--dry-run"],
         capture_output=True, text=True, timeout=180, cwd=str(tmp_path), env=debug_hostile)
@@ -218,7 +224,7 @@ def test_debug_metadata_cannot_block_but_control_errors_still_refuse(tmp_path) -
     existing.mkdir()
     (existing / "resource_manifest.json").write_text("{}")
     refused = subprocess.run(
-        [sys.executable, "-m", "so101_demo.parallel_batch.resources",
+        [*_isolated_allocator_argv(tmp_path),
          "--config", str(config), "--worker-count", "1",
          "--evidence-root", str(existing), "--dry-run"],
         capture_output=True, text=True, timeout=180, cwd=str(tmp_path),

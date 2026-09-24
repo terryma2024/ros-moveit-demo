@@ -27,6 +27,7 @@ from pathlib import Path
 import pytest
 
 from so101_teleop.owned_group import terminate_group
+from so101_teleop import process_identity
 from so101_teleop.process_identity import (
     IDENTITY_ALIVE,
     IDENTITY_EXITED,
@@ -86,9 +87,19 @@ def _unused_pid() -> int:
     raise AssertionError("no unused pid found on this host")
 
 
-def test_read_identity_describes_a_live_child_exactly():
-    process = _spawn([sys.executable, "-c", "import time; time.sleep(120)", *ARGV_TAIL])
+def test_read_identity_describes_a_live_child_exactly(tmp_path):
+    ready = tmp_path / "child-ready"
+    child = (
+        "import pathlib, sys, time; "
+        "pathlib.Path(sys.argv[1]).write_text('ready'); time.sleep(120)"
+    )
+    process = _spawn([sys.executable, "-c", child, str(ready), *ARGV_TAIL])
     try:
+        deadline = time.monotonic() + 5.0
+        while not ready.exists():
+            assert process.poll() is None, "child exited before reporting it had executed"
+            assert time.monotonic() < deadline, "child never reported it had executed"
+            time.sleep(0.01)
         identity = read_identity(process.pid)
         assert identity.pid == process.pid
         assert identity.pgid == process.pid, "start_new_session makes the child its own group leader"
@@ -107,6 +118,31 @@ def test_read_identity_describes_a_live_child_exactly():
         )
     finally:
         _end(process)
+
+
+@pytest.mark.parametrize(
+    ("command_line", "expected"),
+    [
+        (b"python\0--label\0h\xc3\xa9llo\xe2\x86\x92\0", ("python", "--label", "héllo→")),
+        (b"python\0--label\0h\xc3\xa9llo\xe2\x86\x92", ("python", "--label", "héllo→")),
+        (b"python\0--label\0\0", ("python", "--label", "")),
+    ],
+)
+def test_proc_identity_preserves_the_last_argument(monkeypatch, command_line, expected):
+    tail = ["S", "1", "123", *("0" for _ in range(16)), "7"]
+    stat = "123 (child) " + " ".join(tail)
+
+    def read_text(path, **kwargs):
+        assert path == Path("/proc/123/stat")
+        return stat
+
+    def read_bytes(path):
+        assert path == Path("/proc/123/cmdline")
+        return command_line
+
+    monkeypatch.setattr(Path, "read_text", read_text)
+    monkeypatch.setattr(Path, "read_bytes", read_bytes)
+    assert process_identity._read_identity_proc(123).argv == expected
 
 
 def test_read_identity_fails_closed_when_the_platform_will_not_report_it():
