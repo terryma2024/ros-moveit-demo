@@ -2355,7 +2355,10 @@ def _configured_task_station_actions(context):
         environment_actions = [SetEnvironmentVariable("SO101_ACT_PROFILE", "1"),
                                SetEnvironmentVariable("SO101_ACT_BROKER_SOCKET", endpoint)]
     share = Path(get_package_share_directory("so101_demo_py"))
-    stack = _mujoco_stack_actions(context, share, session_id)
+    stack = _mujoco_stack_actions(
+        context, share, session_id,
+        sim_speed_factor=1.0 if act_profile else -1.0,
+    )
     teleop_actions = []
     if act_profile:
         broker = Node(package="so101_demo_py", executable="act_command_broker",
