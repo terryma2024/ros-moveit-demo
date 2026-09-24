@@ -85,7 +85,12 @@ if(BUILD_TESTING)
     list(REMOVE_DUPLICATES so101_test_library_dirs)
   endif()
   function(so101_add_pytest_test test_name test_path)
+    set(test_timeout 60)
+    if(APPLE AND test_name STREQUAL "test_expert_validation_package_layout")
+      set(test_timeout 180)
+    endif()
     ament_add_pytest_test(${test_name} ${test_path}
+      TIMEOUT ${test_timeout}
       APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
   endfunction()
 

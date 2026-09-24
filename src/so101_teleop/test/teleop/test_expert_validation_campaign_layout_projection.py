@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 import time
@@ -274,10 +275,10 @@ def _write_infrastructure_failed_batch(root):
             "CAMPAIGN_STARTED", f"{CAMPAIGN_ID}/CAMPAIGN_STARTED",
             {"campaign_id": CAMPAIGN_ID, "batch_id": BATCH_ID, "schema_version": 1},
         )
-        for point_id in POINT_IDS[:2]:
+        for slot_index, point_id in enumerate(POINT_IDS[:2]):
             attempt_id = f"{point_id}-attempt-1"
-            worker_id = _worker_for(point_id)
-            slot_id = _slot_for(point_id)
+            worker_id = f"w{slot_index + 1}"
+            slot_id = f"slot-{slot_index}"
             identity = {"point_id": point_id, "attempt_id": attempt_id,
                         "worker_id": worker_id, "slot_id": slot_id, "generation": 1}
             journal.append_committed(

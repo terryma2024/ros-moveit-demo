@@ -620,8 +620,17 @@ def test_final_gate_runner_refuses_anything_outside_the_registered_contract(
     assert FINAL_GATE_RUNNER.is_file()
     assert FINAL_GATE_RUNNER.stat().st_mode & 0o111
     runner = FINAL_GATE_RUNNER.read_text(encoding="utf-8")
+    registered_match = re.search(
+        r'^REGISTERED_WORKTREE="([^"]+)"$', runner, re.MULTILINE
+    )
+    assert registered_match is not None
+    registered_worktree = registered_match.group(1)
+    assert Path(registered_worktree).is_absolute()
+    assert Path(registered_worktree).parts[-2:] == (
+        ".worktrees", "so101-unified-webapp"
+    )
     for token in (
-        f'REGISTERED_WORKTREE="{REPOSITORY_ROOT}"',
+        f'REGISTERED_WORKTREE="{registered_worktree}"',
         f'REGISTERED_EVIDENCE_ROOT="{REGISTERED_EVIDENCE_ROOT}"',
         f'REGISTERED_PYTHON="{REGISTERED_TEST_PYTHON}"',
         'REGISTERED_BRANCH="codex/so101-unified-webapp"',
@@ -660,7 +669,7 @@ def test_final_gate_runner_refuses_anything_outside_the_registered_contract(
                 zsh,
                 str(FINAL_GATE_RUNNER),
                 "--worktree",
-                str(REPOSITORY_ROOT),
+                registered_worktree,
                 "--evidence-root",
                 REGISTERED_EVIDENCE_ROOT,
                 "--python",

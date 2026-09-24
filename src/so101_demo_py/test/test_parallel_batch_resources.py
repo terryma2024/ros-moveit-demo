@@ -316,7 +316,7 @@ def test_observational_policy_allocates_eight_without_headroom_rejection(
     target = resource_root(tmp_path, 'adaptive-eight')
     resource_allocator = WorkerResourceAllocator(
         config, target, probe=FakeProbe(cpu=1, ram=0.0, gpu=0.0),
-        claim_root=Path(os.environ['TMPDIR']).parent / 'adaptive-claims',
+        claim_root=resource_root(tmp_path, 'adaptive-claims'),
         allocation_policy=policy, batch_id='a001',
         start_guard=_start_guard_for(config),
     )
@@ -336,7 +336,7 @@ def test_persistent_active_domain_record_rejects_reuse_after_lock_release(
     tmp_path, config
 ):
     policy = AllocationPolicy(1, (215,), False, True)
-    claims = Path(os.environ['TMPDIR']).parent / 'persistent-claims'
+    claims = resource_root(tmp_path, 'persistent-claims')
     first = WorkerResourceAllocator(
         config, resource_root(tmp_path, 'first-active'), probe=FakeProbe(),
         claim_root=claims, allocation_policy=policy, batch_id='a001',
@@ -697,7 +697,7 @@ def test_domain_flocks_are_held_before_process_scan(tmp_path, config):
 
 
 def test_partial_domain_claim_does_not_publish_any_new_claim_record(tmp_path, config):
-    locks = claim_root().with_name('claims-partial')
+    locks = resource_root(tmp_path, 'claims-partial')
     locks.mkdir(mode=0o700)
     first_record = locks / 'domain-181.lock'
     blocked_record = locks / 'domain-182.lock'
@@ -936,10 +936,9 @@ def test_worker_slots_have_unique_headless_egl_context_resources(tmp_path, confi
 
 
 def test_evidence_root_rejects_symlink_ancestor(tmp_path, config):
-    short = Path(os.environ['TMPDIR']).parent
-    real = short / 'real'
+    real = resource_root(tmp_path, 'evidence-real')
     real.mkdir(mode=0o700)
-    link = short / 'link'
+    link = resource_root(tmp_path, 'evidence-link')
     link.symlink_to(real, target_is_directory=True)
 
     with pytest.raises(ResourceAllocationError, match='SYMLINK_PATH'):
@@ -950,7 +949,7 @@ def test_evidence_root_rejects_symlink_ancestor(tmp_path, config):
 
 
 def test_evidence_root_rejects_unsafe_parent_mode(tmp_path, config):
-    unsafe = Path(os.environ['TMPDIR']).parent / 'unsafe'
+    unsafe = resource_root(tmp_path, 'evidence-unsafe')
     unsafe.mkdir(mode=0o777)
     unsafe.chmod(0o777)
 
