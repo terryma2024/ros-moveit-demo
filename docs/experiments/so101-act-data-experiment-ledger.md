@@ -1559,3 +1559,33 @@ EXP-179 changes the installed simulator/version binding and must not reuse or re
 - Version-boundary RED `scratch/exp179-red1.Re5Ue6WJ` reached `MuJoCo runtime version mismatch` under exact 3.12.0 wheel, exit1. Current-source pin changed only version and compiled-model SHA, not scene or motion bytes. First physical GREEN `scratch/exp179-green1.ntjmL9yV` had three real boundary failures: `-.052` over-compression exceeded the independent hard stop and was rejected; initial +1 mm fixed-pad-only contact lasted one physics step; right-only/table contact had only five consecutive steps. These failed tests are retained and are not qualifying samples.
 - Version-matched offline probes `experiments/exp179-base` exit0 show two consecutive bilateral+table steps and 998 later bilateral lift steps under default q6, whole-route peak 3.205 N. `exp179-close-minus049` exit0 shows safe `-.049` q6 over-compression with bilateral off-table hold, peak 4.695 N; the previously used `-.052` is not reused. `exp179-unilateral-scan` and `scan2` exit0 show +1.00–1.30 mm initial Y offset gives only one fixed-pad-only physics step, with forces .1–8.086 N depending on offset. `exp179-left-route` exit0 confirms the same one-step contact and no later fixed-only phase. The collector now explicitly includes the genuine reset step0 contact plus physics step1 for the left-only control; right-only requires four consecutive steps, and over-compression selects a safe hold window. Fresh targeted `scratch/exp179-green3.91Dj2RDw` passed 34/34 physical/contract tests under actual 3.12.0, exit0, elapsed7 s. No ROS/live session or proposal has started. Retained: EXP-179 probes and scratch plus prior root; archived none; deletion candidates read-back scratch/superseded 3.4.0 material only, no deletion.
 - Corrected 3.12.0 ordinary full gate `scratch/exp179-demo-xdist8.05mie28T`: exit0, elapsed41 s, 4,053 passed/162 skipped/four warnings; benchmark suite excluded. Fresh package gate `scratch/exp179-colcon.PTotQbww`: exact `/usr/bin/python3` NVMe tempfile proof, `colcon test` exit0, elapsed42 s; XML readback 4,215 tests/0 errors/0 failures/162 skips. Only the existing vendor-underlay selection warning and fork warnings occurred. Both scratch trees retained deletion candidates. Next boundary: commit this corrected source, then collect new 3.12.0 cohort into `experiments/exp179-offline-cohort-v1` with no mixed 3.4.0 input.
+- Corrected source commit `9a804929`; exact task Python/MuJoCo 3.12.0 offline CLI into previously nonexistent `experiments/exp179-offline-cohort-v1` exited0, sealed 104 physical sessions with 20 each of the five regimes plus table-only/post-release/left/right controls. Sealed raw SHA256 `8412cac0d733de1a83c00e84cd93de05f61c7acd0ab4c65aaa261789a1c902be`. Independent verifier `experiments/exp179-offline-cohort-v1.verify.py` exited0 after 33 s: source/manifest/config/sample file hashes and unique identities matched; all 104 sessions were replayed against the installed-version model, including reset step0 for fixed-pad control; 638 recorded frames had zero qpos/normal-force replay difference. Whole-route peak force 4.695 N and cup displacement `.015255 m` stayed under 11.6 N/.03 m. Verifier result `independent-verify.json` status PASSED, verifier SHA256 `ce5711af...`. This is the valid **offline half** for MuJoCo 3.12.0; no 3.4.0 file is mixed. Live 5-per-regime and controls, disabled proposal, independent approval, activation receipt, Task 7A/8 onward still pending. Formal `0/0/0`; retain both versioned cohorts and all probes/logs, archive none, deletion candidates read-back scratch/superseded diagnostic outputs only, no deletion.
+
+## EXP-180 — Lossless ACT live physics state contract
+
+```yaml
+experiment_id: EXP-180
+status: PLANNED
+prior_experiment: EXP-179
+hypothesis: The existing 500 Hz PhysicsStepEvidenceChunk can carry exact MuJoCo qpos/qvel alongside cup pose and contacts, permitting same-step live calibration without inventing state from lower-rate SceneStateEvidence.
+prediction: A C++ test first fails at missing per-step model state, then passes after a closed message/builder extension; live collector still remains gated by ownership, reset, diagnostic motion and negative controls.
+single_variable: Add lossless full-state arrays to the existing per-step evidence message.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-179 sealed 3.12.0 offline cohort, no task-owned live stack, installed plugin and ROS vendor hashes verified]
+success_criteria: [Intended RED at message field boundary, C++ GREEN, exact package build/test with complete dependency closure, no evidence loss]
+failure_criteria: [Missing or nonfinite state, regressions in physics-step buffer or runtime]
+invalid_criteria: [Stale generated interface, incomplete underlay or package selection before source boundary]
+provenance:
+  source_commit: 9a804929
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  ros_mujoco_version: 3.12.0
+  ros_domain_id: NOT_ASSIGNED
+commands: []
+observed: []
+inferred: []
+conclusion: PENDING
+decision: PENDING
+next_experiment: Isolated live contact collector after source and safety gates
+```
+
+The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but no full `qpos/qvel`; `SceneStateEvidence` carries full state at the lower snapshot cadence and cannot be falsely copied into every physics step. The planned extension is additive to the existing publisher and does not change command ownership. No live process starts in EXP-180; retain source/build/test evidence, archive none, delete nothing.
