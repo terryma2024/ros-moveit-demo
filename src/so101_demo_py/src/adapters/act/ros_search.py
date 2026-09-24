@@ -148,31 +148,42 @@ class RosSearchAdapter:
                             self._pending_detection=None
                 else:
                     if not images:raise ValueError("INPUT_STALE")
-                    source_time,(image,received_at)=images[-1]
-                    info,info_received=causal_sample(infos,source_time,config['max_skew_s'])
-                    joints,feedback_received=causal_sample(feedback_buffer,source_time,config['max_skew_s'])
-                    if stamp_s(info)!=source_time or info.header.frame_id!=image.header.frame_id:
-                        raise ValueError("INPUT_CAMERA_INFO_INVALID")
-                    index=joints.name.index('neck_yaw_joint')
-                    feedback=dict(session_id=config['session_id'],attempt_id=config['attempt_id'],
-                        sim_time_s=stamp_s(joints),received_wall_s=feedback_received,
-                        neck_yaw_rad=finite(joints.position[index]),neck_velocity_rad_s=finite(joints.velocity[index]),
-                        safe_observe=safe_observe)
-                    if (image.encoding,image.width,image.height,image.step,len(image.data))!=(
-                            'rgb8',640,480,1920,640*480*3):raise ValueError('INPUT_RGB_INVALID')
-                    transform=self.tf_buffer.lookup_transform('base',image.header.frame_id,Time.from_msg(image.header.stamp))
-                    rotation=rotation_matrix(transform.transform.rotation)
-                    frame=dict(session_id=config['session_id'],attempt_id=config['attempt_id'],
-                        sim_time_s=source_time,received_wall_s=received_at,detections=[],
-                        k=tuple(info.k),distortion=tuple(info.d),rotation_optical_to_base=rotation,
-                        frame_id=image.header.frame_id)
-                    settled=(abs(feedback['neck_yaw_rad']-self.search.target)<=config['goal_tolerance_rad']
-                             and abs(feedback['neck_velocity_rad_s'])<=config['settle_velocity_rad_s'])
-                    fresh=(all(0<=now-value<=config['max_age_s'] for value in (received_at,info_received,feedback_received))
-                           and 0<=source_time-feedback['sim_time_s']<=config['max_skew_s'])
-                    new=(self.search.last_frame_s is None or source_time>self.search.last_frame_s)
-                    post_motion=self.search.motion_source_s is None or source_time>self.search.motion_source_s
-                    if settled and fresh and new and post_motion:
+                    tf_error=None
+                    for source_time,(image,received_at) in reversed(images):
+                        info,info_received=causal_sample(infos,source_time,config['max_skew_s'])
+                        joints,feedback_received=causal_sample(feedback_buffer,source_time,config['max_skew_s'])
+                        if stamp_s(info)!=source_time or info.header.frame_id!=image.header.frame_id:
+                            raise ValueError("INPUT_CAMERA_INFO_INVALID")
+                        index=joints.name.index('neck_yaw_joint')
+                        feedback=dict(session_id=config['session_id'],attempt_id=config['attempt_id'],
+                            sim_time_s=stamp_s(joints),received_wall_s=feedback_received,
+                            neck_yaw_rad=finite(joints.position[index]),neck_velocity_rad_s=finite(joints.velocity[index]),
+                            safe_observe=safe_observe)
+                        if (image.encoding,image.width,image.height,image.step,len(image.data))!=(
+                                'rgb8',640,480,1920,640*480*3):raise ValueError('INPUT_RGB_INVALID')
+                        fresh=(all(0<=now-value<=config['max_age_s'] for value in (received_at,info_received,feedback_received))
+                               and 0<=source_time-feedback['sim_time_s']<=config['max_skew_s'])
+                        new=(self.search.last_frame_s is None or source_time>self.search.last_frame_s)
+                        post_motion=self.search.motion_source_s is None or source_time>self.search.motion_source_s
+                        if not fresh or not new or not post_motion:continue
+                        settled=(abs(feedback['neck_yaw_rad']-self.search.target)<=config['goal_tolerance_rad']
+                                 and abs(feedback['neck_velocity_rad_s'])<=config['settle_velocity_rad_s'])
+                        rotation=None
+                        if settled:
+                            try:
+                                transform=self.tf_buffer.lookup_transform(
+                                    'base',image.header.frame_id,Time.from_msg(image.header.stamp))
+                                rotation=rotation_matrix(transform.transform.rotation)
+                            except Exception as error:
+                                tf_error=error
+                                continue
+                        frame=dict(session_id=config['session_id'],attempt_id=config['attempt_id'],
+                            sim_time_s=source_time,received_wall_s=received_at,detections=[],
+                            k=tuple(info.k),distortion=tuple(info.d),rotation_optical_to_base=rotation,
+                            frame_id=image.header.frame_id)
+                        break
+                    else:raise tf_error or ValueError("INPUT_STALE")
+                    if settled:
                         self._queue_detection(generation,image,frame,feedback,info_received)
                         decision=dict(neck_target_rad=None,stop=True,status='INPUT_PENDING')
                 elapsed=self.monotonic()-started
