@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 6bc81478397dfaefbfc09d44e761a7c07ffa01be
+current_commit: 7e5d269394f2c17618ef8083e4412d3ee440fa6a
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -14,8 +14,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: EXP-173
-next_experiment: EXP-174 ACT-specific contact-policy and unified worker contract audit
+latest_checkpoint: EXP-174
+next_experiment: Reviewed ACT-specific contact-policy and unified child-worker contract
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1386,3 +1386,11 @@ next_experiment: Live Task 3–8 calibration and controller publication after ow
 ## EXP-174 — ACT-specific contact policy and unified worker contract audit
 
 - State: PLANNED. Lifecycle: READ_ONLY/SOURCE_ONLY after EXP-173 fail-closed preflight, source `6bc81478...`, no ROS stack. Enumerate the exact ACT contact calibration regimes and approval contract required to bind an ACT-specific policy to current model/scene, and map the unified web WorkerPort operations to typed child IPC/ROS capabilities. Preserve fail-closed behavior and do not fake approval or forward a mutation via an unprovisioned driver. Any source change starts with an intended RED, targeted GREEN, complete ordinary tests and package gate. No live Task8 or formal data until both gates pass; no deletion.
+
+- State: VALID read-only architecture audit, source work held at the handoff stop boundary. Approved `config/mujoco/contact_calibration.yaml` schema v3 requires five labeled regimes (`no_contact`, `bilateral_touch`, `over_compression`, `micro_lift_slip`, `stable_hold`), 20 calibration plus five evaluation samples each, independent false-positive/negative and unilateral checks, a source-evidence hash, and an explicit `approval.approved_by: user`. It is pinned to obsolete model/scene and cannot be re-approved by changing only hashes. The unified web `ProductionTeleopService` requires a WorkerPort with command, snapshot, parent arm/gripper dispatch, terminal, home and workflow methods. Production `compose_services` leaves `worker=None`; `RclpyActionDriver` always raises `ROS_DRIVER_NOT_PROVISIONED`. The typed child IPC accepts an operation and payload, but `ChildIpcServer._normal_reply` passes only the dispatch token into `ChildRuntime.submit`; the action driver receives no operation/payload, so real ROS forwarding cannot be wired by a safe one-line patch. A revised child-driver/WorkerPort contract and ACT-specific contact calibration must be developed and independently reviewed before live Task8. The reviewed Task7A plan does not specify the unified payload contract; repository model rules require an independent Astra/High design reviewer, while this dispatch explicitly forbids subagents. This is the handoff's broken-plan/authority stop condition for further source or live work under this dispatch; no fake calibration or unreviewed forwarding change was made. Formal `0/0/0`, Task12 onward `NOT_STARTED`; retain all evidence, archive none, scratch/superseded output deletion candidates only, delete nothing.
+
+## STOP-175 — Dispatch checkpoint after EXP-174
+
+- Exact pre-checkpoint source HEAD `7e5d269394f2c17618ef8083e4412d3ee440fa6a`, branch `codex/so101-act-data-0917a`, clean tracked/untracked status, merge base `a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c` with `main`, MuJoCo submodule `54463fce3bfa6192976e74113f5ed7152f708a3f` preserved. Task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `.../test-venv/bin/python`, `/usr/bin/colcon` verified. Last task-owned ROS domain207/partition `act-66c42e4c-exp166` was broker-first retired: launch exit0, no task-owned processes or tmux `act-data-live-166` remain. Unrelated `act-data-rebase-20260924` tmux remains preserved. Dispatch receipt readback has exactly the 36 Dispatch ID bytes. Registered durable root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`, low-rate `/tmp/so101-debug-act-data-66c42e4c/`; retained every created EXP run through EXP-174 and all scratch/build/installed artifacts, archived none. Scratch fixture trees, superseded verifier logs/images and runtime `/run/user/1000/act166` socket symlink are deletion candidates only; nothing deleted.
+- Confirmed: revised ACT wrist source/install/model and live three-placement RGB/CameraInfo/search pass within EXP-166 scope; offline physical grasp/alignment/radial-retreat candidate passes frozen target/support/upright predicates in EXP-172. Disproven: initial +X/+Y grip schedules, old 75° wrist full-grasp FOV, raw uncorrected and raw RETREAT waypoint placement, and old-policy live preflight. Open: ACT-specific contact calibration/approval, independent review of unified child payload/WorkerPort architecture, Task7A unified production mutation binding, Task6 complete search-to-retreat live FOV, Task8 real ROS/MoveIt full physical execution, Tasks9–11A and 50/10/10 formal accepted episodes. Stop condition: no reviewed safe production payload contract and no current ACT contact-policy approval; handoff bars the independent Astra subagent required by repository design-review rule. Do not execute Task12 onward.
+- Next exact read-only command after authority/review is provided: `sed -n '39,105p' src/so101_teleop/so101_teleop/unified/parents.py`. Resume by freezing the WorkerPort/IPC payload contract and ACT contact-calibration evidence plan before any RED implementation or live motion; preserve the existing clean branch and all evidence.
