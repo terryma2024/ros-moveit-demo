@@ -97,6 +97,7 @@ class HoldProxy:
         self.holding = False
         self._buffers: list[tuple[list[bytes], asyncio.StreamWriter]] = []
         self._server: asyncio.AbstractServer | None = None
+        self._handlers: set[asyncio.Task] = set()
 
     async def start(self) -> None:
         with contextlib.suppress(FileNotFoundError):
@@ -116,6 +117,15 @@ class HoldProxy:
                 await writer.drain()
 
     async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        handler = asyncio.current_task()
+        assert handler is not None
+        self._handlers.add(handler)
+        try:
+            await self._forward(reader, writer)
+        finally:
+            self._handlers.discard(handler)
+
+    async def _forward(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         upstream_reader, upstream_writer = await asyncio.open_unix_connection(str(self.upstream))
         buffer: list[bytes] = []
         self._buffers.append((buffer, upstream_writer))
@@ -152,6 +162,10 @@ class HoldProxy:
     async def close(self) -> None:
         if self._server is not None:
             self._server.close()
+            handlers = tuple(self._handlers)
+            for handler in handlers:
+                handler.cancel()
+            await asyncio.gather(*handlers, return_exceptions=True)
             with contextlib.suppress(Exception):
                 await self._server.wait_closed()
         with contextlib.suppress(FileNotFoundError):
