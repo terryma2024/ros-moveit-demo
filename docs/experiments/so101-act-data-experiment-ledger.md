@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 966ee14b
+current_commit: cb81d552b151a824d202942a55fb79eee40a527d
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -14,8 +14,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: EXP-165
-next_experiment: EXP-166 live revised wrist image and CameraInfo calibration
+latest_checkpoint: EXP-166
+next_experiment: EXP-167 offline full transport, place and retreat FOV/physical route screen
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1340,3 +1340,9 @@ next_experiment: Live Task 3–8 calibration and controller publication after ow
 ## EXP-166 — Revised wrist live camera and search readback
 
 - State: PLANNED. Lifecycle: SIMULATION_ONLY after EXP-165 source gate, installed compiled model SHA `3c876e7b...`; no stack currently owned. Use clean task-specific ROS domain/partition, named paused reset, real installed wrist/head RGB plus CameraInfo and fresh joint/clock frames at default/left/forward cup placements. Verify image intrinsics follow fovy95, synchronized frames and cup masks/detail against installed model; inspect fresh images. Reuse verified broker-first retirement and independent no-contact timeline check. This probes calibration/search only and cannot qualify transport/place/retreat or authorize formal collection. Preserve unrelated web/tmux processes; retain all evidence, no deletion.
+
+- State: VALID three-scene live revised-camera/search readback; Task6 full-phase remains open. `experiments/exp166-live-revised-wrist/prepare-result.json` freezes source `cb81d552...`, installed model SHA `3c876e7b...`, three-scene manifest and script hashes. Unique task-owned domain207, partition/session `act-66c42e4c-exp166`, broker socket `/run/user/1000/act166/a`, tmux `act-data-live-166`; initial broker `IDLE`/stopped/no fault and arm/gripper/execute servers ready. Default/left/forward named seven-joint paused reset advanced epochs 0→1→2→3 at step0. Each scene produced three fresh synchronized head+wrist RGB/CameraInfo/joint frames with intact lossless PNG raw/hash readback; wrist `fx=fy=219.9194817641816` matches installed 95° fovy, head `fx=fy=415.69219381653056` unchanged. Six first-frame head/wrist images were freshly inspected; cup visible at all three placements. Real detector/search locked the cup at yaw `.239596/−.064244/.193473 rad`, confidence `.962818/.958479/.967281`, max inference `.401951/.393303/.417231 s`. `verify-pre.py` exit0 checks timestamp, shape, intrinsics, image hashes, three repeated locks, controller/joint readback, stopped cleanup and all scene epochs. Broker-first retire `retire.py` exit0 wrote direct SIGINT proof after eight stopped readbacks; launch exit0, tmux/PIDs gone, broker stop audit no unknown goal/hazard. Independent `verify-final.py` exit0 verifies 31,399 consecutive lossless no-contact robot frames across epochs0–3 and 6,072 finite matching scene frames, calibrated model identity and clean retirement. No action trajectory, placement/release/retreat, or formal data was attempted. Formal `0/0/0`, Task12 onward `NOT_STARTED`; retain EXP-166 and earlier runs, archive none, scratch and superseded outputs deletion candidates only, delete nothing.
+
+## EXP-167 — Revised wrist FOV over transport, place and retreat candidates
+
+- State: PLANNED. Lifecycle: OFFLINE after EXP-166 clean retirement, source `cb81d552...`, exact revised installed model SHA `3c876e7b...`. Extract checked-in expert policy transport/place/release/retreat waypoints and their semantics, then independently screen actual cup-camera visibility, pixel detail, edge margins, static protected contacts and physical support along complete candidate route in MuJoCo. Use measured cup state from EXP-161 only as a declared hypothesis, not as a controller or final-placement proof. Retain masks and fresh lossless images. A qualified static route still requires live physical whole-robot contact, support and placement evidence before Task6/8 or formal collection. No data or deletion.
