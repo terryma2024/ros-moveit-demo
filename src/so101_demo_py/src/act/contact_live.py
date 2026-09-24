@@ -72,9 +72,13 @@ def chunk_from_ros(
             if contact.body1 != "plastic_cup" or not contact.geom1:
                 raise ValueError("live contact is not bound to the cup")
             if category == "left_contacts":
-                allowed = geom.startswith("fixed_fingertip_pad_collision")
+                allowed = geom.startswith((
+                    "fixed_fingertip_pad_collision_", "fixed_finger_contact_convex_",
+                ))
             elif category == "right_contacts":
-                allowed = geom.startswith("moving_fingertip_pad_collision")
+                allowed = geom.startswith((
+                    "moving_fingertip_pad_collision_", "moving_jaw_contact_convex_",
+                ))
             else:
                 allowed = geom == "table_collision"
             if not allowed:
@@ -108,10 +112,14 @@ def chunk_from_ros(
             }
             maximum = max((item["normal_force_n"] for group in grouped.values()
                            for item in group), default=0.0)
+            total = sum(item["normal_force_n"] for group in grouped.values()
+                        for item in group)
             if (abs(maximum - _finite(sample.maximum_normal_force_n,
                                      "maximum_normal_force_n", 0)) > 1e-8
                     or abs(maximum - _finite(sample.global_max_single_contact_force_n,
-                                             "global_max_single_contact_force_n", 0)) > 1e-8):
+                                             "global_max_single_contact_force_n", 0)) > 1e-8
+                    or abs(total - _finite(sample.total_normal_force_n,
+                                           "total_normal_force_n", 0)) > 1e-8):
                 raise ValueError("live reported force disagrees with contacts")
             samples.append({
                 "simulation_session_id": sample.simulation_session_id,
@@ -395,3 +403,43 @@ class LiveContactObserver:
 
     def close(self) -> None:
         self.recorder.close()
+
+
+class RosLiveContactAdapter:
+    """Attach one read-only live observer to the existing MuJoCo evidence topics."""
+
+    def __init__(self, node: Any, observer: LiveContactObserver) -> None:
+        from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+        from so101_mujoco_support.msg import PhysicsHazardLatch, PhysicsStepEvidenceChunk
+
+        self.node = node
+        self.observer = observer
+        self.subscriptions: list[Any] = []
+        self.timer: Any | None = None
+        chunks = QoSProfile(depth=100, reliability=ReliabilityPolicy.RELIABLE)
+        hazards = QoSProfile(
+            depth=1, reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+        try:
+            self.subscriptions.append(node.create_subscription(
+                PhysicsStepEvidenceChunk, "/so101/simulation/physics_step_chunks",
+                observer.accept_chunk, chunks,
+            ))
+            self.subscriptions.append(node.create_subscription(
+                PhysicsHazardLatch, "/so101/simulation/physics_hazard",
+                observer.accept_hazard, hazards,
+            ))
+            self.timer = node.create_timer(.01, observer.poll)
+        except BaseException:
+            self.close()
+            raise
+
+    def close(self) -> None:
+        if self.timer is not None:
+            self.node.destroy_timer(self.timer)
+            self.timer = None
+        for handle in self.subscriptions:
+            self.node.destroy_subscription(handle)
+        self.subscriptions.clear()
+        self.observer.close()

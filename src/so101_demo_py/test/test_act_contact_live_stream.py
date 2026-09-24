@@ -6,7 +6,7 @@ from types import SimpleNamespace as NS
 import pytest
 
 from so101_demo.act.contact_live import (
-    LivePhysicsStream, LiveContactObserver, chunk_from_ros,
+    LivePhysicsStream, LiveContactObserver, RosLiveContactAdapter, chunk_from_ros,
 )
 
 
@@ -123,6 +123,7 @@ def _ros_chunk():
               left_fingertip_contacts=[_ros_contact("fixed_fingertip_pad_collision_006")],
               right_fingertip_contacts=[], other_object_contacts=[],
               maximum_normal_force_n=.5, global_max_single_contact_force_n=.5,
+              total_normal_force_n=.5,
               truncated=False, diagnostic_hazard_breached=False)
     return NS(chunk_sequence=0, simulation_session_id="session-live-a", reset_epoch=1,
               first_physics_step=1, last_physics_step=1,
@@ -140,7 +141,7 @@ def test_ros_chunk_converter_checks_same_step_state_and_contact_identity(tmp_pat
     assert row["left_contacts"][0]["robot_geom"] == "fixed_fingertip_pad_collision_006"
 
 
-@pytest.mark.parametrize("damage", ["body", "category", "force", "pose", "state"])
+@pytest.mark.parametrize("damage", ["body", "category", "force", "total", "pose", "state"])
 def test_ros_chunk_converter_rejects_misbound_evidence(damage):
     message = _ros_chunk()
     sample = message.samples[0]
@@ -150,6 +151,8 @@ def test_ros_chunk_converter_rejects_misbound_evidence(damage):
         sample.left_fingertip_contacts[0].geom2 = "table_collision"
     elif damage == "force":
         sample.maximum_normal_force_n = .1
+    elif damage == "total":
+        sample.total_normal_force_n = .1
     elif damage == "pose":
         sample.object_pose_world.position.x = .03
     else:
@@ -205,3 +208,41 @@ def test_live_observer_hazard_latch_and_stale_stream_abort(tmp_path):
     stale.poll()
     assert aborts == ["LIVE_CONTACT_EVIDENCE_STALE"]
     stale.close()
+
+
+def test_ros_adapter_subscribes_once_and_closes_owned_handles(tmp_path):
+    observer, _, aborts = _observer(tmp_path)
+
+    class Node:
+        def __init__(self):
+            self.subscriptions = []
+            self.destroyed = []
+
+        def create_subscription(self, kind, topic, callback, qos):
+            handle = (kind, topic, callback, qos)
+            self.subscriptions.append(handle)
+            return handle
+
+        def create_timer(self, period, callback):
+            self.timer = (period, callback)
+            return self.timer
+
+        def destroy_subscription(self, handle):
+            self.destroyed.append(handle)
+
+        def destroy_timer(self, handle):
+            self.destroyed.append(handle)
+
+    node = Node()
+    adapter = RosLiveContactAdapter(node, observer)
+    assert [part[1] for part in node.subscriptions] == [
+        "/so101/simulation/physics_step_chunks", "/so101/simulation/physics_hazard"
+    ]
+    assert node.timer[0] <= .01
+    node.subscriptions[0][2](_ros_chunk())
+    node.subscriptions[1][2](NS(simulation_session_id="session-live-a", reset_epoch=1,
+                                physics_step=1, force_n=12.0, threshold_n=11.6,
+                                evidence_loss=False))
+    assert len(aborts) == 1
+    adapter.close()
+    assert len(node.destroyed) == 3
