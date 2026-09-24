@@ -11,23 +11,31 @@ the bytes the real campaign writes - and drive the *installed* projection path o
 * a retry admission against that committed state finds the original business ``FAILED`` result
   instead of refusing ``RETRY_ORIGINAL_RESULT_UNKNOWN``.
 
-The real batch in this campaign's evidence root is also projected directly when it is present
-(``SO101_TASK12_REAL_BATCH`` or the recorded path), so the same code is proven against the raw bytes
-of a live run rather than only against this fixture.
+Every case here is deterministic and runs in the ordinary gate: the bytes are written by
+``campaign_batch_fixture``, which the retry fixture shares. The recorded production batches are
+replayed separately by ``test/replay/replay_recorded_validation.py`` - an explicit, read-only entry
+point that reports itself "not run" when a recording is absent instead of skipping cases here.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-import os
 from pathlib import Path
-import shutil
 from types import SimpleNamespace
 import time
 
 import pytest
 
+from campaign_batch_fixture import (
+    CATALOG_SHA256,
+    CONFIG_SHA256,
+    RETRY_KIND,
+    RUNTIME_CLOSURE_SHA256,
+    SELECTION_SHA256,
+    result_sha256,
+    write_campaign_batch,
+)
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_teleop.expert_validation.artifacts import ValidationArtifactRegistry
 from so101_teleop.expert_validation.execution_context import (
@@ -59,26 +67,14 @@ FIVE_POINT_IDS = (
     "task_start", "cup_test_forward_5cm", "cup_test_left_5cm", "cup_test_right_5cm",
     "sample_05_near_center",
 )
-WORKERS = {"task_start": "w1", "cup_test_forward_5cm": "w2", "cup_test_left_5cm": "w1"}
-SLOTS = {"task_start": "slot-0", "cup_test_forward_5cm": "slot-1", "cup_test_left_5cm": "slot-0"}
-
-
-def _worker_for(point_id):
-    return WORKERS.get(point_id, "w1")
-
-
-def _slot_for(point_id):
-    return SLOTS.get(point_id, "slot-0")
-
-
 SHA_A = "a" * 64
 SHA_B = "b" * 64
-SHA_CATALOG = "c" * 64
-SHA_SELECTION = "5" * 64
-SHA_CONFIG = "2" * 64
-SHA_CLOSURE = "7" * 64
-SHA_EVIDENCE = "e" * 64
-SHA_DYNAMIC = "d" * 64
+#: The campaign's own binding hashes come from the shared batch writer, so this module and the retry
+#: fixture cannot drift about the bytes either of them verifies.
+SHA_CATALOG = CATALOG_SHA256
+SHA_SELECTION = SELECTION_SHA256
+SHA_CONFIG = CONFIG_SHA256
+SHA_CLOSURE = RUNTIME_CLOSURE_SHA256
 CAMPAIGN_PASS = "W2_CAMPAIGN_PASS"
 CAMPAIGN_INCOMPLETE = "W2_CAMPAIGN_INCOMPLETE"
 
@@ -90,154 +86,23 @@ RECORDED_REAL_BATCH = (
 )
 
 
-def _point_document(point_id, attempt_id, outcome):
-    """The campaign's durable per-point committed document (``point_drain`` shape)."""
-
-    return {
-        "schema_version": 1,
-        "point_id": point_id,
-        "attempt_id": attempt_id,
-        "outcome": outcome,
-        "committed": True,
-        "lease_identity": [
-            CAMPAIGN_ID, BATCH_ID, point_id, attempt_id, 1, _worker_for(point_id),
-        ],
-        "lease_sha256": hashlib.sha256(f"{point_id}-lease".encode()).hexdigest(),
-        "worker_id": _worker_for(point_id),
-        "slot_id": _slot_for(point_id),
-        "generation": 1,
-        "points_path": f"points/{point_id}.yaml",
-        "points_sha256": hashlib.sha256(f"{point_id}-points".encode()).hexdigest(),
-        "evidence_manifest_relative_path": f"{point_id}/point-result.json",
-        "evidence_manifest_sha256": SHA_EVIDENCE,
-        "dynamic_manifest_relative_path": f"{point_id}/dynamic-execute-manifest.json",
-        "dynamic_manifest_sha256": SHA_DYNAMIC,
-        "physical_evidence": outcome == "PASSED",
-        "station_ready": True,
-        "moveit_executed": True,
-        "cleanup_owned": True,
-        "failure_code": None if outcome == "PASSED" else "ANCHOR_UNREACHABLE",
-        "batch_exit_code": 0,
-        "worker_result_path": f"{_worker_for(point_id)}-result-{attempt_id}.json",
-        "worker_result_sha256": hashlib.sha256(attempt_id.encode()).hexdigest(),
-        "worker_pid": 4242,
-        "released": "EXITED",
-        "station_readback": {"clear": True, "matches": [], "station_root": point_id},
-        "execution_result": None,
-    }
-
-
-def _append_campaign_stream(journal, outcomes, *, verdict, cleanup_complete=True,
-                            point_ids=POINT_IDS):
-    """Commit the campaign's own eight-event stream, exactly as the composition writes it.
-
-    ``cleanup_complete=None`` omits the cleanup event altogether, so a batch can be written whose
-    own bytes never claim cleanup - the negative case a receipt must never be invented from.
-    """
-
-    journal.append_committed(
-        "CAMPAIGN_STARTED",
-        f"{CAMPAIGN_ID}/CAMPAIGN_STARTED",
-        {"campaign_id": CAMPAIGN_ID, "batch_id": BATCH_ID, "schema_version": journal.schema_version},
-    )
-    for point_id in point_ids:
-        attempt_id = f"{point_id}-attempt-1"
-        outcome = outcomes[point_id]
-        worker_id = _worker_for(point_id)
-        slot_id = _slot_for(point_id)
-        journal.append_committed(
-            "POINT_LEASED", f"{BATCH_ID}/POINT_LEASED/{attempt_id}",
-            {
-                "point_id": point_id, "attempt_id": attempt_id, "worker_id": worker_id,
-                "slot_id": slot_id, "generation": 1,
-                "lease": {"batch_id": BATCH_ID, "campaign_id": CAMPAIGN_ID, "point_id": point_id,
-                          "attempt_id": attempt_id, "worker_id": worker_id, "slot_id": slot_id,
-                          "generation": 1},
-                "lease_sha256": hashlib.sha256(f"{point_id}-lease".encode()).hexdigest(),
-                "points_path": f"points/{point_id}.yaml",
-                "points_sha256": hashlib.sha256(f"{point_id}-points".encode()).hexdigest(),
-                "selection_sha256": SHA_SELECTION,
-            },
-        )
-        journal.append_committed(
-            "WORKER_REGISTERED", f"{BATCH_ID}/WORKER_REGISTERED/{attempt_id}",
-            {"point_id": point_id, "attempt_id": attempt_id, "worker_id": worker_id,
-             "slot_id": slot_id, "generation": 1, "pid": 4242, "birth_identity": 9001,
-             "status": "ACTIVE"},
-        )
-        journal.append_committed(
-            "ATTEMPT_STARTED", f"{BATCH_ID}/ATTEMPT_STARTED/{attempt_id}",
-            {"point_id": point_id, "attempt_id": attempt_id, "worker_id": worker_id,
-             "slot_id": slot_id, "generation": 1, "pid": 4242,
-             "lease_sha256": hashlib.sha256(f"{point_id}-lease".encode()).hexdigest(),
-             "points_sha256": hashlib.sha256(f"{point_id}-points".encode()).hexdigest()},
-        )
-        journal.append_committed(
-            "RESULT_COMMITTED", f"{BATCH_ID}/RESULT_COMMITTED/{attempt_id}",
-            {"point_id": point_id, "attempt_id": attempt_id, "worker_id": worker_id,
-             "slot_id": slot_id, "generation": 1, "outcome": outcome,
-             "failure_code": None if outcome == "PASSED" else "ANCHOR_UNREACHABLE",
-             "moveit_executed": True, "station_ready": True, "cleanup_owned": True,
-             "evidence_manifest_sha256": SHA_EVIDENCE,
-             "dynamic_manifest_sha256": SHA_DYNAMIC,
-             "lease_identity": [CAMPAIGN_ID, BATCH_ID, point_id, attempt_id, 1, worker_id]},
-        )
-        journal.append_committed(
-            "POINT_TERMINAL", f"{BATCH_ID}/POINT_TERMINAL/{point_id}",
-            {"point_id": point_id, "attempt_id": attempt_id, "outcome": outcome,
-             "state": "COMMITTED", "result_sha256": _result_sha256(point_id, attempt_id, outcome)},
-        )
-    journal.append_committed("BATCH_TERMINAL", f"{BATCH_ID}/BATCH_TERMINAL", {"outcome": verdict})
-    if cleanup_complete is not None:
-        journal.append_committed(
-            "CLEANUP_COMMITTED", f"{BATCH_ID}/CLEANUP_COMMITTED",
-            {"cleanup_complete": cleanup_complete},
-        )
-
-
-def _result_sha256(point_id, attempt_id, outcome):
-    return hashlib.sha256(f"{point_id}:{attempt_id}:{outcome}".encode()).hexdigest()
+#: The verified result hash of one committed attempt, as the batch's own ``POINT_TERMINAL`` writes
+#: it. The shared writer computes the same value for the same input.
+_result_sha256 = result_sha256
 
 
 def _write_campaign_batch(root, outcomes, *, verdict, batch_id=BATCH_ID, cleanup_complete=True,
                           point_ids=POINT_IDS):
-    """Write one campaign batch root: journal, binding, per-point results and the result document."""
+    """This module's own batch coordinates, bound to the one shared writer.
 
-    batch_root = (Path(root) / "campaigns" / CAMPAIGN_ID / batch_id).resolve()
-    batch_root.mkdir(parents=True)
-    (batch_root / "points").mkdir()
-    (batch_root / "point-results").mkdir()
-    for point_id in point_ids:
-        (batch_root / "points" / f"{point_id}.yaml").write_text(f"point_id: {point_id}\n")
-        (batch_root / "point-results" / f"{point_id}.json").write_text(
-            json.dumps(
-                _point_document(point_id, f"{point_id}-attempt-1", outcomes[point_id]),
-                sort_keys=True,
-            )
-        )
-    (batch_root / "selection-binding.json").write_text(json.dumps({
-        "batch_id": batch_id,
-        "campaign_id": CAMPAIGN_ID,
-        "catalog_sha256": SHA_CATALOG,
-        "binding": {
-            "batch_id": batch_id, "campaign_id": CAMPAIGN_ID, "kind": "FIRST_PASS",
-            "catalog_schema_version": 1, "coordinate_frame": "world",
-            "catalog_sha256": SHA_CATALOG, "selection_sha256": SHA_SELECTION,
-            "config_sha256": SHA_CONFIG, "runtime_closure_sha256": SHA_CLOSURE,
-            "selected_point_ids": list(point_ids),
-            "points": [{"point_id": point_id, "point_sha256": "9" * 64} for point_id in point_ids],
-        },
-    }, sort_keys=True))
-    (batch_root / "campaign-result.json").write_text(json.dumps({
-        "status": verdict,
-        "points": {
-            point_id: {"committed": outcomes[point_id]} for point_id in point_ids
-        },
-    }, sort_keys=True))
-    with CoordinatorJournal.create(batch_root / "journal", batch_id) as journal:
-        _append_campaign_stream(journal, outcomes, verdict=verdict, cleanup_complete=cleanup_complete,
-                                point_ids=point_ids)
-    return batch_root
+    The writer itself is ``campaign_batch_fixture``: a second copy of the event vocabulary here
+    would be a second source of truth for bytes the installed readers verify.
+    """
+
+    return write_campaign_batch(
+        root, outcomes, campaign_id=CAMPAIGN_ID, batch_id=batch_id, verdict=verdict,
+        point_ids=point_ids, cleanup_complete=cleanup_complete,
+    )
 
 
 def _campaign_request(evidence_root, batch_id=BATCH_ID, campaign_id=CAMPAIGN_ID,
@@ -330,8 +195,8 @@ def _service(tmp_path, *, manifest_id="manifest-1", batch_id=BATCH_ID, campaign_
     return service, store, read_root
 
 
-def _recorded_real_batch(projection, real_batch):
-    """The strongest assertion set, shared by the fixture and the recorded live batch."""
+def _assert_terminal_clean_projection(projection):
+    """The strongest assertion set for a first pass that reached terminal-clean cleanup."""
 
     assert projection["status"] == "COMPLETED"
     assert projection["batch_cleanup_complete"] is True
@@ -348,7 +213,7 @@ def test_campaign_layout_projects_terminal_cleanup_and_commits_the_canonical_sta
     try:
         assert store.read_projection_state(BATCH_ID).state is None
         projection = service.get_campaign(CAMPAIGN_ID)
-        _recorded_real_batch(projection, None)
+        _assert_terminal_clean_projection(projection)
         assert projection["valid_succeeded"] == len(POINT_IDS)
         assert projection["evaluated"] == len(POINT_IDS)
         # The canonical state is committed, not merely computed for this read.
@@ -644,123 +509,6 @@ def test_a_different_recorded_receipt_is_never_overwritten(tmp_path):
         store.close()
 
 
-#: The campaign whose recorded first pass the console's same-page retry refused, and the genuinely
-#: ``FAILED`` point it named. The console's request is replayed over the batch's own recorded bytes.
-RECORDED_CLEANUP_STATE = Path(os.environ.get(
-    "SO101_TASK12_CLEANUP_STATE",
-    "/tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1"
-    "/task12/service-runs/retryafterfix/state",
-))
-RECORDED_CLEANUP_CAMPAIGN_ID = "campaign-4d9af7fca30f49939f952db367338454"
-RECORDED_CLEANUP_BATCH_ID = "bf16a"
-RECORDED_CLEANUP_POINT_ID = "sample_05_near_center"
-
-
-def _recorded_cleanup_batch_root():
-    return (
-        RECORDED_CLEANUP_STATE / "campaigns" / RECORDED_CLEANUP_CAMPAIGN_ID
-        / RECORDED_CLEANUP_BATCH_ID
-    )
-
-
-def _tree_fingerprint(root):
-    """Every recorded file's path, size and mtime: a read path may not write one of them."""
-
-    return tuple(sorted(
-        (str(path.relative_to(root)), path.stat().st_size, path.stat().st_mtime_ns)
-        for path in Path(root).rglob("*") if path.is_file()
-    ))
-
-
-@pytest.mark.skipif(
-    not _recorded_cleanup_batch_root().is_dir(), reason="the recorded W1 first pass is absent"
-)
-def test_the_recorded_w1_first_pass_records_the_receipt_its_console_retry_needed(tmp_path):
-    """The recorded 409 replayed, then answered by the same admission over the same bytes.
-
-    The batch's own bytes are read twice: once with the campaign reader to establish, without the
-    service, that this batch really shows terminal-clean cleanup and a genuine ``FAILED`` point, and
-    once through the service's projection read. The recorded evidence root is read-only here, which
-    the fingerprint check at the end proves.
-    """
-
-    from so101_teleop.expert_validation.campaign_layout import (
-        CampaignLayoutReader,
-        read_selection_binding,
-    )
-    from so101_teleop.expert_validation.coordinator_events import (
-        AcceptedCoordinatorCursor,
-        CampaignUpstreamBinding,
-        ReadOnlyCoordinatorJournal,
-    )
-    from so101_teleop.expert_validation.journal_layout import resolve_fixed_journal_layout
-
-    batch_root = _recorded_cleanup_batch_root()
-    before = _tree_fingerprint(batch_root)
-    layout = resolve_fixed_journal_layout(batch_root, RECORDED_CLEANUP_BATCH_ID)
-    binding = CampaignUpstreamBinding(
-        campaign_id=RECORDED_CLEANUP_CAMPAIGN_ID, batch_id=RECORDED_CLEANUP_BATCH_ID,
-        owner_kind="COORDINATOR", owner_epoch_or_generation=layout.epoch,
-        journal_root=layout.journal_root, batch_root=layout.batch_root,
-    )
-    recorded = CampaignLayoutReader(
-        ReadOnlyCoordinatorJournal(layout.journal_root, RECORDED_CLEANUP_BATCH_ID), binding
-    ).read_after(AcceptedCoordinatorCursor.initial(binding))
-    projected = recorded.projected_state
-    assert projected["terminal_reason"] == "POINTS_COMPLETE"
-    assert projected["batch_cleanup_complete"] is True
-    assert projected["points"][RECORDED_CLEANUP_POINT_ID]["status"] == "FAILED"
-    terminal_receipt = recorded.events[-1].frame_sha256
-    assert recorded.events[-1].type == "CLEANUP_COMMITTED"
-    selection = read_selection_binding(binding)
-    point_ids = tuple(selection["selected_point_ids"])
-    assert RECORDED_CLEANUP_POINT_ID in point_ids and len(point_ids) == 20
-
-    service, store, _root = _service(
-        tmp_path, batch_id=RECORDED_CLEANUP_BATCH_ID, campaign_id=RECORDED_CLEANUP_CAMPAIGN_ID,
-        point_ids=point_ids, catalog_sha256=selection["catalog_sha256"],
-        selection_sha256=selection["selection_sha256"], evidence_root=RECORDED_CLEANUP_STATE,
-    )
-    try:
-        # The recorded store carried exactly this NULL for bf16a while the campaign reported
-        # cleanup complete, which is the state the console's retry was refused in.
-        assert store.batch(RECORDED_CLEANUP_BATCH_ID).cleanup_receipt_sha256 is None
-        store.enqueue_retries(RECORDED_CLEANUP_CAMPAIGN_ID, (RECORDED_CLEANUP_POINT_ID,))
-        request, context, intent = _retry_pair(
-            evidence_root=_root, campaign_id=RECORDED_CLEANUP_CAMPAIGN_ID,
-            original_batch_id=RECORDED_CLEANUP_BATCH_ID, point_id=RECORDED_CLEANUP_POINT_ID,
-            batch_id="retry-001", catalog_sha256=selection["catalog_sha256"],
-            selection_sha256=selection["selection_sha256"],
-            original_result_sha256=projected["points"][RECORDED_CLEANUP_POINT_ID]["result_sha256"],
-        )
-        with pytest.raises(StoreConflict, match="RETRY_ORIGINAL_CLEANUP_INCOMPLETE"):
-            store.admit_retry(request=request, context=context, spawn_intent=intent)
-
-        projection = service.get_campaign(RECORDED_CLEANUP_CAMPAIGN_ID)
-        assert projection["status"] == "COMPLETED_WITH_FAILURES"
-        assert projection["batch_cleanup_complete"] is True
-        assert store.batch(
-            RECORDED_CLEANUP_BATCH_ID
-        ).cleanup_receipt_sha256 == terminal_receipt
-
-        # The production route's own origin read agrees, and the same request is now admitted.
-        _original, item, catalog, selection_sha256, result_sha256 = service._retry_origin(
-            RECORDED_CLEANUP_CAMPAIGN_ID, RECORDED_CLEANUP_POINT_ID
-        )
-        assert item.point_id == RECORDED_CLEANUP_POINT_ID
-        assert (catalog, selection_sha256) == (
-            selection["catalog_sha256"], selection["selection_sha256"]
-        )
-        assert result_sha256 == projected["points"][RECORDED_CLEANUP_POINT_ID]["result_sha256"]
-        admitted = store.admit_retry(request=request, context=context, spawn_intent=intent)
-        assert admitted.original_batch_id == RECORDED_CLEANUP_BATCH_ID
-        assert admitted.original_outcome == "FAILED"
-        assert admitted.original_result_sha256 == result_sha256
-    finally:
-        store.close()
-    assert _tree_fingerprint(batch_root) == before, "the recorded batch bytes were written to"
-
-
 @pytest.mark.parametrize(
     "field,value,expected",
     [
@@ -802,49 +550,6 @@ def test_a_missing_durable_point_document_refuses_the_projection(tmp_path):
         assert store.read_projection_state(BATCH_ID).state is None
     finally:
         store.close()
-
-
-def _real_batch_path():
-    return Path(os.environ.get("SO101_TASK12_REAL_BATCH", RECORDED_REAL_BATCH))
-
-
-@pytest.mark.skipif(not _real_batch_path().is_dir(), reason="the recorded live batch is absent")
-def test_the_recorded_live_batch_layout_projects_from_its_own_bytes(tmp_path):
-    """The same code over the raw bytes of a real macOS campaign batch."""
-
-    from so101_teleop.expert_validation.campaign_layout import CampaignLayoutReader
-    from so101_teleop.expert_validation.coordinator_events import (
-        AcceptedCoordinatorCursor,
-        CampaignUpstreamBinding,
-        ReadOnlyCoordinatorJournal,
-    )
-    from so101_teleop.expert_validation.journal_layout import resolve_fixed_journal_layout
-
-    real = _real_batch_path()
-    layout = resolve_fixed_journal_layout(real, "w2-b001")
-    assert layout.layout == CAMPAIGN_LAYOUT
-    binding = CampaignUpstreamBinding(
-        campaign_id="cand-w2-20260922T011804Z", batch_id="w2-b001", owner_kind="COORDINATOR",
-        owner_epoch_or_generation=layout.epoch, journal_root=layout.journal_root,
-        batch_root=layout.batch_root,
-    )
-    batch = CampaignLayoutReader(
-        ReadOnlyCoordinatorJournal(layout.journal_root, "w2-b001"), binding
-    ).read_after(AcceptedCoordinatorCursor.initial(binding))
-    state = batch.projected_state
-    assert state["terminal_reason"] == "POINTS_COMPLETE"
-    assert state["batch_cleanup_complete"] is True
-    assert sorted(state["points"]) == [
-        "cup_test_forward_5cm", "cup_test_left_5cm", "cup_test_right_5cm",
-        "sample_07_mid_center", "sample_12_far_left", "sample_16_far_right", "task_start",
-    ]
-    terminals = {
-        event.payload["point_id"]: event.payload["result_sha256"]
-        for event in batch.events if event.type == "POINT_TERMINAL"
-    }
-    assert {
-        point_id: point["result_sha256"] for point_id, point in state["points"].items()
-    } == terminals
 
 
 def _write_coordinator_batch(root, *, with_reference=True):
@@ -941,166 +646,241 @@ def test_the_coordinator_layout_without_a_sealed_reference_still_fails_closed(tm
 
 
 # ---------------------------------------------------------------------------------------------
-# One campaign, two binding vocabularies: the recorded retry closed loop.
+# One campaign, two binding vocabularies: the retry closed loop.
 #
-# Recorded defect (``$RUN/task12/retry-closed-loop-20260922T063350Z``): the console's same-page retry
-# was admitted, spawned a real coordinator and ran its ``FULL_RESTART_RETRY`` batch (``retry-001``)
+# Recorded defect (``$RUN/task12/retry-closed-loop-20260922T063350Z``): the console's same-page
+# retry was admitted, spawned a real coordinator and ran its ``FULL_RESTART_RETRY`` batch
 # to ``N1_CAMPAIGN_PASS`` with complete cleanup - and the endpoint then answered
 # ``409 {"code": "CAMPAIGN_FIELD_INVALID:catalog_sha256"}`` while reading that batch back. The retry
 # composition writes the *same* selection in its own vocabulary: the catalog it was selected from is
 # ``original_catalog_sha256`` and the one point it executes is ``point``. The readback refused
 # before it could commit the batch's own cleanup frame, which is why the batch's durable receipt
-# stayed NULL while its bytes show cleanup complete.
+# stayed NULL while its bytes showed cleanup complete.
 #
-# These tests read the recorded bytes of that campaign - the retry batch copied to scratch, the
-# first pass in place under a fingerprint - and pin both vocabularies to one contract.
+# The cases below write that batch here and pin both vocabularies to one contract, so it is checked
+# in the ordinary gate. The recorded bytes of that campaign are replayed separately by
+# ``test/replay/replay_recorded_validation.py``, an explicit read-only entry point.
 # ---------------------------------------------------------------------------------------------
 
-RECORDED_RETRY_STATE = Path(os.environ.get(
-    "SO101_TASK12_RETRY_STATE",
-    "/tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1"
-    "/task12/service-runs/retrycl/state",
-))
-RECORDED_RETRY_CAMPAIGN_ID = "campaign-e94a4b7470644a59a3cf921ce6e64444"
-RECORDED_RETRY_FIRST_PASS_ID = "bca3f"
-RECORDED_RETRY_BATCH_ID = "retry-001"
-RECORDED_RETRY_POINT_ID = "sample_05_near_center"
-#: The campaign's own catalog digest; both bindings name it, each in its own vocabulary.
-RECORDED_RETRY_CATALOG_SHA256 = (
-    "c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5"
-)
-#: The first-pass selection size, and the ``FAILED`` point the retry was admitted for.
-RECORDED_RETRY_FIRST_PASS_POINTS = 15
+RETRY_CAMPAIGN_ID = "cand-w2-retry-20260922T063350Z"
+RETRY_BATCH_ID = "retry-001"
+RETRY_POINT_ID = "sample_05_near_center"
+#: The retry batch's own verdict about the whole retry, while the one point it executed carries its
+#: own business outcome: the two are read separately and never merged into one another.
+RETRY_VERDICT = "N1_CAMPAIGN_PASS"
 
 
-def _recorded_retry_batch_root(batch_id):
-    return RECORDED_RETRY_STATE / "campaigns" / RECORDED_RETRY_CAMPAIGN_ID / batch_id
-
-
-def _campaign_upstream_binding(batch_root, batch_id):
+def _campaign_upstream_binding(batch_root, batch_id, campaign_id=CAMPAIGN_ID):
     from so101_teleop.expert_validation.coordinator_events import CampaignUpstreamBinding
     from so101_teleop.expert_validation.journal_layout import resolve_fixed_journal_layout
 
     layout = resolve_fixed_journal_layout(Path(batch_root), batch_id)
     assert layout.layout == CAMPAIGN_LAYOUT
     return CampaignUpstreamBinding(
-        campaign_id=RECORDED_RETRY_CAMPAIGN_ID, batch_id=batch_id, owner_kind="COORDINATOR",
+        campaign_id=campaign_id, batch_id=batch_id, owner_kind="COORDINATOR",
         owner_epoch_or_generation=layout.epoch, journal_root=layout.journal_root,
         batch_root=layout.batch_root,
     )
 
 
-def _stage_recorded_batch(tmp_path, batch_id=RECORDED_RETRY_BATCH_ID):
-    """The recorded retry batch copied to scratch: no reader is ever pointed at the record."""
-
-    source = _recorded_retry_batch_root(batch_id)
-    if not source.is_dir():
-        pytest.skip(f"the recorded retry closed loop is not present at {source}")
-    destination = tmp_path / "staged" / "campaigns" / RECORDED_RETRY_CAMPAIGN_ID / batch_id
-    destination.parent.mkdir(parents=True)
-    shutil.copytree(source, destination)
-    return destination
-
-
-def _read_recorded_batch(batch_root, batch_id):
+def _read_campaign_batch(batch_root, batch_id, campaign_id=CAMPAIGN_ID):
     from so101_teleop.expert_validation.campaign_layout import CampaignLayoutReader
     from so101_teleop.expert_validation.coordinator_events import (
         AcceptedCoordinatorCursor,
         ReadOnlyCoordinatorJournal,
     )
 
-    binding = _campaign_upstream_binding(batch_root, batch_id)
+    binding = _campaign_upstream_binding(batch_root, batch_id, campaign_id)
     return binding, CampaignLayoutReader(
         ReadOnlyCoordinatorJournal(binding.journal_root, batch_id), binding
     ).read_after(AcceptedCoordinatorCursor.initial(binding))
 
 
-def test_the_recorded_retry_batch_is_read_in_its_own_binding_vocabulary(tmp_path):
+def _write_retry_batch(root, *, outcome="FAILED", point_id=RETRY_POINT_ID,
+                       batch_id=RETRY_BATCH_ID, campaign_id=RETRY_CAMPAIGN_ID,
+                       cleanup_complete=True):
+    """The retry composition's own batch: one point, written in the retry binding vocabulary."""
+
+    return write_campaign_batch(
+        root, {point_id: outcome}, campaign_id=campaign_id, batch_id=batch_id, kind=RETRY_KIND,
+        verdict=RETRY_VERDICT, cleanup_complete=cleanup_complete,
+    )
+
+
+def test_a_retry_batch_is_read_in_its_own_binding_vocabulary(tmp_path):
     """RED: ``read_selection_binding`` refused these bytes with ``CAMPAIGN_FIELD_INVALID``.
 
-    The same reader, over the same batch, must find the retry's selection: the catalog the original
-    selection was frozen from, named ``original_catalog_sha256``, and the one point it executes,
-    named ``point``. Nothing is inferred from the document's top-level summary, which is only
-    cross-checked against it.
+    The same reader, over the same kind of batch, must find the retry's selection: the catalog the
+    original selection was frozen from, named ``original_catalog_sha256``, and the one point it
+    executes, named ``point``. Nothing is inferred from the document's top-level summary, which is
+    only cross-checked against it.
     """
 
     from so101_teleop.expert_validation.campaign_layout import read_selection_binding
 
-    scratch = _stage_recorded_batch(tmp_path)
-    before = _tree_fingerprint(scratch)
-    binding = _campaign_upstream_binding(scratch, RECORDED_RETRY_BATCH_ID)
+    batch_root = _write_retry_batch(tmp_path)
+    binding = _campaign_upstream_binding(batch_root, RETRY_BATCH_ID, RETRY_CAMPAIGN_ID)
 
     selection = read_selection_binding(binding)
-    assert selection["kind"] == "FULL_RESTART_RETRY"
-    assert selection["original_catalog_sha256"] == RECORDED_RETRY_CATALOG_SHA256
+    assert selection["kind"] == RETRY_KIND == "FULL_RESTART_RETRY"
+    assert selection["original_catalog_sha256"] == SHA_CATALOG
     assert "catalog_sha256" not in selection
-    assert selection["point"]["point_id"] == RECORDED_RETRY_POINT_ID
+    assert selection["point"]["point_id"] == RETRY_POINT_ID
     assert "selected_point_ids" not in selection
 
-    batch = _read_recorded_batch(scratch, RECORDED_RETRY_BATCH_ID)[1]
+    batch = _read_campaign_batch(batch_root, RETRY_BATCH_ID, RETRY_CAMPAIGN_ID)[1]
     state = batch.projected_state
     assert state["terminal_reason"] == "POINTS_COMPLETE"
     assert state["batch_cleanup_complete"] is True
-    assert sorted(state["points"]) == [RECORDED_RETRY_POINT_ID]
-    assert state["points"][RECORDED_RETRY_POINT_ID]["status"] == "FAILED"
+    assert sorted(state["points"]) == [RETRY_POINT_ID]
+    assert state["points"][RETRY_POINT_ID]["status"] == "FAILED"
     assert batch.events[-1].type == "CLEANUP_COMMITTED"
-    assert _tree_fingerprint(scratch) == before, "the staged retry bytes were written to"
 
 
-def test_the_recorded_retry_batchs_own_readback_verifies_its_cleanup(tmp_path):
-    """The exact call that answered 409 now proves the cleanup and yields the batch's receipt.
+def test_a_retry_batchs_own_readback_verifies_its_cleanup(tmp_path):
+    """The exact call that answered 409 proves the cleanup and yields the batch's own receipt.
 
-    ``ExpertValidationSupervisor.reconcile_retry`` reads the retry batch through this method and
-    commits what it returns as the batch's durable ``cleanup_receipt_sha256``. The recorded batch
-    really is terminal-clean, so the refusal - not a missing recording path - is what left that
-    column NULL; the returned receipt is the batch's own committed cleanup frame.
+    ``ExpertValidationSupervisor.reconcile_retry`` reads a finished retry batch through this method
+    and commits what it returns as that batch's durable ``cleanup_receipt_sha256``. The refusal, not
+    a missing recording path, is what once left that column NULL: the frame returned here is the
+    batch's own committed cleanup frame, and a batch that never committed cleanup has none.
     """
 
     from so101_teleop.expert_validation.supervisor import ExpertValidationSupervisor
 
-    scratch = _stage_recorded_batch(tmp_path)
-    # The method reads only its arguments; no supervisor (and so no process owner) is needed here.
+    batch_root = _write_retry_batch(tmp_path)
     receipt = ExpertValidationSupervisor._verify_retry_journal(
         object.__new__(ExpertValidationSupervisor),
-        SimpleNamespace(campaign_id=RECORDED_RETRY_CAMPAIGN_ID),
-        RECORDED_RETRY_BATCH_ID, scratch,
+        SimpleNamespace(campaign_id=RETRY_CAMPAIGN_ID), RETRY_BATCH_ID, batch_root,
     )
-    assert receipt == _journal_final_frame_sha256(scratch, RECORDED_RETRY_BATCH_ID)
+    assert receipt == _journal_final_frame_sha256(batch_root, RETRY_BATCH_ID)
+
+    unverified = _write_retry_batch(tmp_path / "unverified", cleanup_complete=None)
+    with pytest.raises(RuntimeError, match="RETRY_CLEANUP_INCOMPLETE"):
+        ExpertValidationSupervisor._verify_retry_journal(
+            object.__new__(ExpertValidationSupervisor),
+            SimpleNamespace(campaign_id=RETRY_CAMPAIGN_ID), RETRY_BATCH_ID, unverified,
+        )
 
 
-def test_the_recorded_first_pass_of_the_same_campaign_still_reads_unchanged():
-    """The first pass keeps its bytes and its vocabulary: nothing about it was renamed.
+def _selection_of_size(size):
+    """A first-pass selection of ``size`` points: the four anchors plus generated samples."""
 
-    The recorded store's own receipt for this batch (``9def6124…``) is the frame this reader's
-    independent replay returns, so the receipt a successful readback commits and the receipt the
-    database already carries for the first pass are the same fact.
+    anchors = ("task_start", "cup_test_forward_5cm", "cup_test_left_5cm", "cup_test_right_5cm")
+    return anchors + tuple(
+        f"sample_{index:02d}_near_center" for index in range(5, 5 + size - len(anchors))
+    )
+
+
+@pytest.mark.parametrize("size", [4, 15, 20])
+def test_the_receipt_and_the_retry_admission_do_not_depend_on_the_selection_size(tmp_path, size):
+    """The recorded campaigns ran 15- and 20-point first passes; the size is not a special case.
+
+    The receipt comes from the batch's own verified cleanup frame, so a long selection reaches the
+    retry admission exactly as a short one does - asserted here for the sizes the recordings used
+    and for the shortest selection that still has a genuinely ``FAILED`` point.
     """
 
-    from so101_teleop.expert_validation.campaign_layout import read_selection_binding
+    point_ids = _selection_of_size(size)
+    failed = point_ids[-1]
+    outcomes = {point_id: "PASSED" for point_id in point_ids}
+    outcomes[failed] = "FAILED"
+    batch_root = _write_campaign_batch(
+        tmp_path, outcomes, verdict=CAMPAIGN_INCOMPLETE, point_ids=point_ids
+    )
+    terminal_receipt = _journal_final_frame_sha256(batch_root, BATCH_ID)
+    service, store, root = _service(tmp_path, point_ids=point_ids)
+    try:
+        assert store.batch(BATCH_ID).cleanup_receipt_sha256 is None
+        projection = service.get_campaign(CAMPAIGN_ID)
+        assert projection["status"] == "COMPLETED_WITH_FAILURES"
+        assert projection["batch_cleanup_complete"] is True
+        assert [point["point_id"] for point in projection["points"]] == list(point_ids)
+        assert store.batch(BATCH_ID).cleanup_receipt_sha256 == terminal_receipt
 
-    batch_root = _recorded_retry_batch_root(RECORDED_RETRY_FIRST_PASS_ID)
-    if not batch_root.is_dir():
-        pytest.skip(f"the recorded first pass is not present at {batch_root}")
-    before = _tree_fingerprint(batch_root)
-    binding, batch = _read_recorded_batch(batch_root, RECORDED_RETRY_FIRST_PASS_ID)
+        store.enqueue_retries(CAMPAIGN_ID, (failed,))
+        request, context, intent, original_result = _retry_admission(root, service, store, failed)
+        admitted = store.admit_retry(request=request, context=context, spawn_intent=intent)
+        assert admitted.point_id == failed
+        assert admitted.original_outcome == "FAILED"
+        assert admitted.original_result_sha256 == original_result
+    finally:
+        store.close()
 
-    selection = read_selection_binding(binding)
-    assert selection["kind"] == "FIRST_PASS"
-    assert selection["catalog_sha256"] == RECORDED_RETRY_CATALOG_SHA256
-    assert "original_catalog_sha256" not in selection
-    point_ids = tuple(selection["selected_point_ids"])
-    assert len(point_ids) == RECORDED_RETRY_FIRST_PASS_POINTS
-    assert RECORDED_RETRY_POINT_ID in point_ids
 
-    state = batch.projected_state
-    assert state["terminal_reason"] == "POINTS_COMPLETE"
-    assert state["batch_cleanup_complete"] is True
-    assert state["points"][RECORDED_RETRY_POINT_ID]["status"] == "FAILED"
-    assert batch.events[-1].type == "CLEANUP_COMMITTED"
-    assert _journal_final_frame_sha256(
-        batch_root, RECORDED_RETRY_FIRST_PASS_ID
-    ) == "9def6124ebdeaded52534b85617bc60f76db7216c51d78b8095fc3a74285a6e4"
-    assert _tree_fingerprint(batch_root) == before, "the recorded first-pass bytes were written to"
+def _point_document_without_committed(document):
+    document["committed"] = False
+
+
+def _point_document_for_another_point(document):
+    document["point_id"] = "sample_99_absent"
+
+
+def _point_document_for_another_attempt(document):
+    document["attempt_id"] = "task_start-attempt-2"
+
+
+def _point_document_with_another_outcome(document):
+    document["outcome"] = "FAILED"
+
+
+def _point_document_leased_for_another_point(document):
+    document["lease_identity"][2] = "sample_99_absent"
+
+
+def _point_document_with_a_truncated_lease(document):
+    document["lease_identity"] = document["lease_identity"][:5]
+
+
+def _point_document_with_another_evidence_digest(document):
+    document["evidence_manifest_sha256"] = "f" * 64
+
+
+def _point_document_with_another_dynamic_digest(document):
+    document["dynamic_manifest_sha256"] = "f" * 64
+
+
+@pytest.mark.parametrize(
+    "mutate,expected",
+    [
+        # The four fields the reader requires: a document that does not commit this exact result is
+        # refused, never read as evidence for a result it does not name.
+        (_point_document_without_committed, "CAMPAIGN_POINT_RESULT_INVALID"),
+        (_point_document_for_another_point, "CAMPAIGN_POINT_RESULT_INVALID"),
+        (_point_document_for_another_attempt, "CAMPAIGN_POINT_RESULT_INVALID"),
+        (_point_document_with_another_outcome, "CAMPAIGN_POINT_RESULT_INVALID"),
+        # The lease identity ties the document to the campaign's own lease of this point.
+        (_point_document_leased_for_another_point, "CAMPAIGN_POINT_RESULT_INVALID"),
+        (_point_document_with_a_truncated_lease, "CAMPAIGN_POINT_RESULT_INVALID"),
+        # The two manifest digests are cross-checked against the committed event naming them.
+        (_point_document_with_another_evidence_digest, "CAMPAIGN_POINT_RESULT_MISMATCH"),
+        (_point_document_with_another_dynamic_digest, "CAMPAIGN_POINT_RESULT_MISMATCH"),
+    ],
+)
+def test_a_point_document_the_committed_event_does_not_verify_refuses_the_projection(
+    tmp_path, mutate, expected
+):
+    """Every field the batch writer writes is one the reader really verifies.
+
+    Measured, not assumed: dropping any of these fields leaves the projection green, while a *wrong*
+    value refuses it. That is why the writer keeps them and writes nothing else.
+    """
+
+    batch_root = _write_campaign_batch(
+        tmp_path, {point_id: "PASSED" for point_id in POINT_IDS}, verdict=CAMPAIGN_PASS
+    )
+    path = batch_root / "point-results" / "task_start.json"
+    document = json.loads(path.read_text())
+    mutate(document)
+    path.write_text(json.dumps(document, sort_keys=True))
+    service, store, _root = _service(tmp_path)
+    try:
+        with pytest.raises(ServiceConflict, match="UPSTREAM_PROJECTION_INVALID") as refusal:
+            service.get_campaign(CAMPAIGN_ID)
+        assert expected in str(refusal.value.__cause__)
+        assert store.read_projection_state(BATCH_ID).state is None
+    finally:
+        store.close()
 
 
 def _without_any_catalog_digest(binding_document):
@@ -1151,23 +931,29 @@ def _point_the_document_does_not_select(binding_document):
 def test_a_retry_binding_that_names_no_selection_or_a_mismatched_digest_refuses(
     tmp_path, mutate, expected
 ):
-    """Neither vocabulary is weakened: an unverifiable retry binding still fails closed."""
+    """Neither vocabulary is weakened: an unverifiable retry binding still fails closed.
+
+    Every case runs over a batch written here, so each way of breaking the retry binding is checked
+    in the ordinary gate instead of only where a recording happens to exist.
+    """
 
     from so101_teleop.expert_validation.campaign_layout import read_selection_binding
     from so101_teleop.expert_validation.coordinator_events import CoordinatorProjectionError
 
-    scratch = _stage_recorded_batch(tmp_path)
-    path = scratch / "selection-binding.json"
+    batch_root = _write_retry_batch(tmp_path)
+    path = batch_root / "selection-binding.json"
     pristine = json.loads(path.read_text())
     document = json.loads(json.dumps(pristine))
     mutate(document["binding"])
     path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
 
     with pytest.raises(CoordinatorProjectionError, match=expected):
-        read_selection_binding(_campaign_upstream_binding(scratch, RECORDED_RETRY_BATCH_ID))
+        read_selection_binding(
+            _campaign_upstream_binding(batch_root, RETRY_BATCH_ID, RETRY_CAMPAIGN_ID)
+        )
 
     # The control: the same reader over the unmutated bytes this case was copied from reads them.
     path.write_text(json.dumps(pristine, indent=2, sort_keys=True) + "\n")
     assert read_selection_binding(
-        _campaign_upstream_binding(scratch, RECORDED_RETRY_BATCH_ID)
-    )["original_catalog_sha256"] == RECORDED_RETRY_CATALOG_SHA256
+        _campaign_upstream_binding(batch_root, RETRY_BATCH_ID, RETRY_CAMPAIGN_ID)
+    )["original_catalog_sha256"] == SHA_CATALOG
