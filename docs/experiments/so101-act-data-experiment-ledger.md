@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 1ab57537
+current_commit: ba3692dd
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -14,8 +14,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: EXP-159
-next_experiment: EXP-160 Task 8 alternate +Y dynamics screen
+latest_checkpoint: EXP-160
+next_experiment: EXP-161 fresh offline replay of checked-in expert grasp geometry
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1304,3 +1304,9 @@ next_experiment: Live Task 3–8 calibration and controller publication after ow
 ## EXP-160 — Alternate +Y offline grasp dynamics screen
 
 - State: PLANNED. Lifecycle: OFFLINE after EXP-159 independent pass, source `1ab57537`, revised model SHA `cee0062a...`, no ROS stack. Durable `experiments/exp160-y-dynamics`. Freeze default cup, EXP-153 +Y pregrasp q/jaw1.2, exact `.002 s` model physics and EXP-158 phase schedule. Sweep +Y radial targets `.02/.015/.01 m` and jaw finals `.55/.35/.15 rad`, nine deterministic position-control schedules, each with a 4 cm commanded TCP lift. Independently replay all q/cup/contact-force samples and report bilateral force duration, cup displacement, actual unsupported lift and other protected contact. Treat this as offline feasibility only; wrist FOV and live safety gates remain failed. No formal data or deletion.
+
+- State: VALID negative +Y dynamic grasp screen. `screen.py` exit0 and independent `verify.py`/`verify-result.json` exit0 replayed nine +Y radial `.02/.015/.01 m` by jaw `.55/.35/.15 rad` schedules, 29,250 MuJoCo physics steps and all saved 20-ms q/cup/force samples under revised model SHA `cee0062a...`. No bilateral force sample above`.05 N`, no unsupported lift sample, maximum cup rise `.0000917 m`; the nearest radial schedule displaced cup from y−`.28` to about−`.3033 m` on the table. All other protected force categories remained zero. This rejects the tested +Y pose/schedule; its wrist view was also clipped in EXP-159. During next source audit, a checked-in `light_cup_wall_pick/v1/mujoco.yaml` policy was found with a distinct, fully specified grasp orientation, preopen jaw`.465038`, close jaw−`.047609`, and descent joint waypoints. Its historical results are unavailable and will be tested only as fresh offline candidate geometry in EXP-161. No ROS stack or accepted data. Formal `0/0/0`, Task12 onward `NOT_STARTED`; retain EXP-160 and earlier runs, archive none, scratch/superseded artifacts deletion candidates only, delete nothing.
+
+## EXP-161 — Fresh offline replay of checked-in expert grasp geometry
+
+- State: PLANNED. Lifecycle: OFFLINE after EXP-160 independent negative replay; source `ba3692dd`, installed ACT revised model SHA `cee0062a...`, no ROS stack. Durable `experiments/exp161-policy-grasp`. Freeze default cup, exact source YAML SHA, preopen `.465038`/close `−.047608632840292` and checked-in DESCEND final arm waypoint; first compile exact installed ACT scene and static screen protected contacts, TCP-to-cup pose, head/wrist masks and lossless images. Then run isolated MuJoCo position-control settle, jaw closure, and the checked-in first LIFT waypoint as a small physical lift, sampling all finger/cup/table contacts, forces, cup pose/velocity and camera evidence. Independently replay controls and classify physical hold only from actual unsupported cup rise plus bilateral contact, never from source YAML claims or controller setpoints. If the initial static pose already violates a non-fingertip safety pair, stop before dynamics. No live ROS, formal data or deletion.
