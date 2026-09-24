@@ -109,6 +109,34 @@ def test_act_launcher_checks_complete_broker_path_before_constructing_stack(monk
     assert constructed==[]
 
 
+def test_act_station_pins_realtime_simulation_speed(monkeypatch):
+    from launch import LaunchContext
+    from launch.utilities import perform_substitutions
+    from launch.actions import DeclareLaunchArgument, OpaqueFunction
+    from so101_demo.runtime import launch_composition as launch
+
+    description = launch.build_task_station_launch_description(act_profile=True)
+    context = LaunchContext()
+    for argument in description.entities:
+        if isinstance(argument, DeclareLaunchArgument):
+            context.launch_configurations[argument.name] = perform_substitutions(
+                context, argument.default_value)
+    context.launch_configurations.update(
+        act_stop_velocity_rad_s='.002', act_max_age_s='1.5',
+        act_broker_socket='/run/user/1000/act-test/a')
+    captured = []
+    original = launch._mujoco_stack_actions
+
+    def stack(*args, **kwargs):
+        captured.append(kwargs.get('sim_speed_factor'))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(launch, '_mujoco_stack_actions', stack)
+    opaque = next(action for action in description.entities if isinstance(action, OpaqueFunction))
+    opaque.execute(context)
+    assert captured == [1.0]
+
+
 def test_act_reset_facade_routes_all_mutations_and_creates_only_readonly_clients(monkeypatch):
     from types import SimpleNamespace
     from so101_demo.backends.mujoco.client import MujocoRosClient
