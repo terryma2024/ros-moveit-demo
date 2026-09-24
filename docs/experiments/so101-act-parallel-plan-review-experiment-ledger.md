@@ -33,3 +33,33 @@ This task changes documentation only. It does not implement the ACT collection w
 - Retained: this ledger and the two reviewed documents.
 - Archived: none.
 - Deletion candidates: `/tmp/so101-debug-act-parallel-plan-review-9KjN50tq` after final readback; do not delete without explicit authorization.
+
+## 2026-09-24 main-contract refresh
+
+### Task identity
+
+- Scope: Reconcile the reviewed ACT collection and training design with the later `main` contracts, independently review the documents, and recover/rebase the last available ACT implementation branch without starting implementation, data collection, or training.
+- Local source HEAD: `b238eca2d6d280989a6f71529e53a91b29aa301b`.
+- Compared ai-station `main`: `fd7348aa27361750f7e2e7954df53ef75e96545c`.
+- Last recoverable ACT branch commit before rebase: `e2ec28c33ecaa455045477185b9c5dbc5e367538` from `origin/codex/so101-act-data-0917a` and `github/codex/so101-act-data-0917a`.
+- Registered evidence root: `/data/work/so101-evidence/act-main-refresh/20260924-e2ec-rebase` on ai-station.
+- Writer policy: this local task is the only document writer. The required Astra reviewer is read-only. The ai-station recovery uses a new ordinary tmux shell session and does not launch `dst` or another implementation agent.
+
+### Evidence boundary
+
+The missing `/data/work/so101-evidence/act-data/0917a` root and prior worktree are not recoverable. Git can recover source history only. The refresh therefore rejects old episode/QC claims, introduces a new dataset/run boundary, and does not run camera, MuJoCo, MoveIt, collection, training, or robot acceptance. Rebase graph/readback and static document checks do not prove runtime correctness.
+
+### Review log
+
+| Round | Reviewer | Input hash | Result | Evidence |
+| --- | --- | --- | --- | --- |
+| 1 | Astra high | Design `e8ca52283694d1ee4e88b4beb7d26d53058050e94e4ad984a1d2b07ac16e1a1a`; plan `76fbe7fe6d991e3176a391f120d6a7a7a440baa59e06252440f930c38502504e` | Not passed: 1 P1, 5 P2, 2 P3 | Single-stack collection bypassed global reservation; training had only a racy read-only GPU preflight; qualification required itself; multi-wave journal provenance and bundle paths were inconsistent; the full xdist gate was missing; dependency-lock and Linux queue references were stale. |
+| 2 | Astra high | Design `1f406103c9835c065460846426c97ae756de1185956bec066816368d4affb4b3`; plan `ee881235cc2e3aab9524006c4457c74caf264eaf4f12c1b21b66157023cac30a` | Not passed: 1 P2, 1 P3 | GPU locks were keyed by selector rather than physical device identity, so index/UUID aliases could bypass mutual exclusion. The xdist commands also needed durable logs, elapsed time, separate exit codes, and explicit aggregate failure. |
+| 3 | Astra high | Design `2d1db796d8ddfd20f63304ba3e976c7b07bef496c6fff265db4c3910195480ca`; plan `5fe40259879f03fa13c0bc5e50a5e0da1902f1e98bd170a5008b55936728b83c` | PASS: no P0/P1/P2/P3 | Physical GPU alias/mapping identity, durable xdist logs/elapsed/exit codes, and every prior finding were closed. Reviewer also parsed all 73 shell and 40 Python code blocks successfully. |
+
+### Evidence disposition
+
+- Retained: registered ai-station root, this ledger, both updated documents, review findings, and future rebase transcript/readback.
+- Archived: none.
+- Deletion candidates: future pytest scratch only if implementation later runs the package gate; none created by this document/rebase task.
+- Deletion performed: none.

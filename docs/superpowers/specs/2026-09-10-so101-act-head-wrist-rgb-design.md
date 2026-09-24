@@ -2,7 +2,7 @@
 
 日期：2026-09-10
 
-更新：2026-09-16，结合已合入的自适应多 stack Worker Pool，增加并行示教采集、录制背压、确定性汇总与并发资格验证；ACT 单次运行上限仍为 2 分钟。
+更新：2026-09-24，按 `main` 的 fixed exact-N v3 shared queue、轻量 start guard、统一 Web 全局仲裁和八 Worker 测试门重写并行采集与训练边界；ACT 单次运行上限仍为 2 分钟。
 
 状态：已确认方案的设计汇总，供实现与审阅使用。本文不代表相机、控制器、数据集或 ACT 已完成运行验收。
 
@@ -35,8 +35,12 @@
 | 示教来源 | MoveIt 教师完整 pick-place 的实际执行命令 |
 | 杯子位置 | 可抓取区域内分层、连续随机采样；空间隔离数据划分 |
 | 并行范围 | 首版只并行 MoveIt 专家示教采集；ACT 闭环验证和封存测试保持单场景独立执行 |
-| 并行实现 | 复用现有自适应 Worker Pool 的隔离、lease、跨代降级、终态提交与精确清理；新增 ACT collection workload，不复用点位验证证据 schema |
-| 初始并发 | W1 建立语义基线，W2 通过资格验证后才进入正式采集；W4/W6/W8 需按 ACT 双 RGB 无损录制负载逐档验证 |
+| 并行实现 | Linux 新执行复用 `ParallelRuntimeConfigV3`、`BatchRequestV3`、fixed exact-N shared queue、lease、终态提交、start guard 与精确清理；新增 ACT collection workload，不复用点位验证证据 schema |
+| 并发策略 | W1 建立语义基线，W2 通过功能资格后，再以 ACT 双 RGB 无损录制负载逐档验证 W4/W6/W8；每个批次固定 exact N，不在批内自适应降级 |
+| 运行所有权 | 采集 campaign 进入统一服务的 `validation` 域，由 `GlobalMutationArbiter` 从 admission 持有 reservation 到终态与 cleanup；headless CLI 必须携带已核验的 operation binding，不能旁路仲裁 |
+| GPU 所有权 | 采集、共享教师 Broker 与训练共同使用按稳定 host identity + 解析后的物理 GPU UUID 持久化的 `ActGpuWorkloadArbiter`；原 selector/可见性映射留审计，别名或映射漂移不能产生第二把锁 |
+| 丢失数据 | `/data/work/so101-evidence/act-data/0917a` 已不可用；Git 分支只能恢复源码，不能恢复 episode、QC 或训练资格。后续采集使用新的 dataset/run ID 与新 evidence root |
+| 训练执行 | 训练只消费 journal commit 引用且 verifier 通过的正式 episode；与采集/感知 GPU 负载串行，使用独立 Python 环境、不可变导出和独立 run root |
 
 ## 3. 系统分工与信息边界
 
@@ -63,10 +67,17 @@ head RGB + wrist RGB + q1…q6 + neck 朝向
                                       ↓
 双 RGB 与实测关节 → EpisodeRecorder → ACT 数据集
 
-冻结的示教候选清单 → ParallelActCollectionRunner
+冻结的示教候选清单 → FixedActCollectionCampaign
+                              ├→ BatchRequestV3 + exact-N shared queue
                               ├→ Worker 1：独立 ROS Domain + 完整 MuJoCo/MoveIt stack + Recorder
                               ├→ Worker 2：独立 ROS Domain + 完整 MuJoCo/MoveIt stack + Recorder
-                              └→ …；共享的仅是经过身份隔离的教师感知 Broker 与调度状态
+                              └→ …；共享的仅是身份隔离的教师感知 Broker 与持久调度状态
+
+统一 Web / headless authority → GlobalMutationArbiter(validation reservation)
+                              → campaign owner / intent / ACK / cleanup proof
+
+采集/Broker/训练 → ActGpuWorkloadArbiter(stable host + physical GPU UUID)
+                → durable owner / heartbeat / fencing / release proof
 ```
 
 ACT 不读取 `task_camera`、Depth、`/cup_pose`、TF、Planning Scene、物体真值、接触或教师内部阶段。教师轨迹经过转换后是训练 action 标签，不作为 observation。运行基础设施仍可维护 TF，不能把“不输入 ACT”误解为删除系统 TF。
@@ -190,23 +201,31 @@ MoveIt/controller 失败、抓放失败、时间不连续、neck 意外运动、
 
 ### 并行多 stack 示教采集
 
-仓库现有自适应 Worker Pool 已提供独立 ROS Domain、完整 MuJoCo/MoveIt stack、动态 lease、跨代降级、共享感知 Broker、fsync 终态与精确清理。这些基础设施边界可以复用，但当前 `ParallelWorker` 的点位执行流程、子进程构造、结果验证器、最多 20 个点的批次契约和封存工件均面向 MoveIt 随机点验证。实现时需要加入闭合的 `point_validation|act_collection` workload factory，让 Worker、runtime、results、coordinator verifier 和恢复发现使用同一类型；默认类型保持现有点位验证行为。ACT 不能把点位验证的 `PASSED` 直接改名为训练 episode，也不能把现有默认 W8 当作双 RGB 录制负载的合格并发度。
+`main` 上的新 Linux 执行路径以 fixed exact-N v3 为权威。ACT 复用 `ParallelRuntimeConfigV3`、`BatchRequestV3`、coordinator 的 ordered pending 集合、lease、持久 journal、start guard、owned-process manifest 和精确清理。旧自适应 Pool 仍可读取历史证据，但不再承担新的 ACT 正式采集。ACT 需要闭合的 `point_validation|act_collection` workload factory，使 Worker、runtime、result store 和 coordinator verifier 使用同一类型；默认类型保持原点位验证行为。点位验证的 `PASSED` 不能直接改名为训练 episode，MoveIt W8/W10 的历史结果也不能证明双 RGB 录制负载合格。
 
-正式采集前先冻结五集合总清单，再从中确定性投影只含 Train、Validation、Offline Test 的 collection manifest；投影保存总清单内容哈希，Rollout Validation/Test 明确不具备采集资格。每个示教候选有稳定的 `scenario_id`、split、随机种子、杯子位置、初始七关节状态、搜索起点与配置哈希。`ParallelActCollectionRunner` 按清单顺序把候选切成不超过 20 项的确定性 wave，复用现有自适应 Runner 处理每个 wave；外层 fsync journal 保存跨 wave 的终态、成功配额和恢复位置。调度键可以映射到现有 `point_id`，业务语义仍保持 `scenario_id`，不得把 Worker 的完成顺序写成数据集顺序。
+正式采集前先冻结五集合总清单，再确定性投影只含 Train、Validation、Offline Test 的 collection manifest；投影保存总清单内容哈希，Rollout Validation/Test 不具备采集资格。每个候选有稳定的 `scenario_id`、split、随机种子、杯子位置、初始七关节状态、搜索起点与配置哈希。`BatchRequestV3` 本身不设 20 项上限；ACT 为限制单批故障域和保留既有资格口径，另在 collection config 冻结 `max_wave_size=20`，由 `FixedActCollectionCampaign` 按清单顺序切分。每个 wave 创建一个 fixed `BatchRequestV3`，worker 数在该 batch 生命周期内不变。外层 fsync journal 保存 wave 终态、成功配额和恢复位置。调度键可以映射到现有 `point_id`，数据语义仍使用 `scenario_id`，不得按 Worker 完成顺序决定数据集成员。
 
-一个候选同一时刻只有一个有效 lease。每次只 reset 一次：初始门只建立 reset epoch、读回七关节并验证控制器/相机/Recorder/Broker 就绪；head 搜索、教师感知、录制、专家执行和 QC 在取得动作权限后作为一个业务流程运行，不在中途再次 reset。业务失败，例如搜索失败、规划失败、物理抓放失败或 QC 不合格，在该候选上形成不可改写的终态，不因降低 Worker 数自动重试；基础设施失败才允许在同一候选身份下增加 infra attempt，并由下一 pool generation 接管。Worker 只有在原始 episode、QC、终态 manifest 和内容哈希全部原子写入并 fsync 后才提交 ACK。结果存储同时提供 Worker recovery receipt 以及 coordinator 的 `verify/discover`；seal 后、ACK 前崩溃时只恢复同一封存结果。恢复时已封存的终态不重跑，冲突结果 fail closed。
+所有采集入口，包括单 stack smoke/W1 基线，先从 `ActGpuWorkloadArbiter` 原子取得目标 GPU lease，再取得统一服务 `validation` 域的全局 reservation；任一步失败都释放已取得但未 dispatch 的 lease，且零动作、零 Worker/Broker 进程启动。两项所有权从 campaign intent 落盘前保持到所有 Worker、controller goal、Broker、socket、Domain 和 owned process 完成清理。headless CLI 只接受服务签发并现场核验、同时绑定 operation ID 与 GPU lease ID 的 operation binding；统一 Web 不可用、owner 未知、旧 intent 未收敛、GPU owner 冲突或 cleanup 证据缺失时拒绝启动。页面上的 disabled 状态只是解释，服务端 authority 才是执行权威。
 
-现有自适应 Runner 对已启动但未完成的批次只允许报告，ACT 外层不能直接把同一 Runner 原地续跑。wave 崩溃恢复必须先锁定恢复权，依据旧 resource/owned-process manifest 完成进程、控制目标、socket 和 Domain fencing，再回放 adaptive/coordinator journal。对账器先重建 lease 的 durable 裁决：已有 commit 的结果可以验证；未提交结果只有在没有 expiry、revocation、replacement 或 late-result rejection，且封存完成时间未超过原 lease deadline 时才允许从原 workspace 发现。durable invalidation 优先于磁盘 seal，迟到结果只作审计。验证通过后写入外层 journal；其余已启动 lease 增加一次 infra attempt，剩余项按累计剩余额度使用新的短 continuation batch id 运行。fencing 或结果身份无法证明时停止，禁止用新 batch 与旧进程并行。
+GPU authority 先用稳定机器身份和 NVML/驱动 inventory，把 `INDEX` 或 `UUID` selector 及 `CUDA_VISIBLE_DEVICES` 等可见性映射解析为物理 GPU UUID，再以 `(stable_host_id, physical_gpu_uuid)` 作为唯一互斥键。原 selector、映射和 inventory hash 只留审计；同一物理卡的 index/UUID 别名不能取得两把 lease。解析歧义、映射漂移或 binding UUID 与现场设备不符时 fail closed。
 
-每个 Worker 独占 ROS Domain、仿真会话、namespace、controller、`ROS_HOME`、日志/临时目录、head/wrist topic、Recorder 与证据子目录。任何控制客户端都必须经过同一所有权仲裁；不同 Worker 之间不得共享 controller、Recorder、相机缓存或 episode 临时目录。共享教师感知 Broker 只处理 `task_camera` 的无状态推理，并以 batch、worker、generation、scenario、attempt、reset epoch 和请求序号隔离请求/响应。head 搜索检测首版留在 Worker 内；若将来接入共享 Broker，需要单独通过时序、身份和模型来源验证。head/wrist 训练图像始终由本 Worker 无损记录，不能经 task_camera Broker 转发。
+一个候选同一时刻只有一个有效 lease。每次只 reset 一次：初始门建立 reset epoch、读回七关节，并验证 controller、相机、Recorder 与 Broker 就绪；head 搜索、教师感知、录制、专家执行和 QC 在获准阶段一次完成，不得中途再次 reset。搜索、规划、物理抓放或 QC 失败形成不可改写的业务终态，不自动重试。基础设施故障使当前 exact-N wave 无效或进入同 N 恢复；不得在同一资格或正式 campaign 中改成较低 Worker 数后继续计数。
 
-每个 Worker 先写自己的临时 episode，完成后以原子 manifest 封存。顶层聚合器只引用封存工件，按 split 和冻结候选顺序分 wave；每个 wave 全部终态后，才选择该 split 中清单顺序最靠前的 N 个合格 episode。包含第 N 个成功的 wave 内，后续成功结果保留为 surplus，但不进入训练；后续 wave 不再调度。这样 Worker 完成顺序不会改变数据集成员。已封存目录在并行执行期间不能移动、重命名或覆盖。Recorder 使用有界队列和明确的磁盘背压：不能为维持吞吐静默丢帧、降采样或压缩改变数据语义。队列或磁盘延迟导致无法维持合格的 10 Hz 连续窗口时，该 episode 记为 QC 失败；调度器可以暂停新 lease，不能把不完整 episode 计入配额。
+Worker 只有在原始 episode、QC、终态 manifest 和逐文件哈希全部原子写入并 fsync 后才提交结果。coordinator journal 的 result commit 是聚合授权，目录扫描不是。seal 后、ACK 前崩溃时，恢复流程只能在原登记 workspace 中验证同一 lease、deadline、身份和内容哈希；expiry、revocation、replacement 与 late-result rejection 的 durable 裁决优先于磁盘文件。无法证明的结果保留审计但不进入业务终态或训练配额。
 
-并发资格按 W1 → W2 → W4/W6/W8 逐档进行。W1/W2 使用 8 个专用场景验证入口语义、exact-once、跨 Worker 无串帧、资源释放与基本吞吐。扩容另用至少 40 个持续负载场景，形成两个完整的 20 项 wave；每个 wave 为每个 Worker 初始优先分配 2 个 scenario，最终仍按实际 terminal lease 验收每个 Worker 是否连续处理至少 2 项。更高档位只在前一档通过后运行，候选默认档位还需在全新 evidence root 复测一次。某档位的资格 wave 必须始终保持该 Worker 数，零 fallback、infra retry 和 crash continuation；降级后完成只证明恢复能力，不计入原档位性能。每轮记录 CPU、内存、GPU、磁盘写入、仿真实时因子、Recorder 队列、帧间隔、前后半段有效 episode 吞吐和失败分布。默认 Worker 数由两轮稳定证据确定；现有 MoveIt 点位验证的 W8/W10 性能结果只证明基础设施具备扩展能力，不证明 ACT 采集合格。
+固定 batch 恢复先取得恢复锁，依据 resource/owned-process manifest 完成进程、控制目标、socket 和 Domain fencing，再回放 coordinator journal。验证通过的已提交结果不重跑；未提交或无效项只能通过同 N、同 manifest/config/operation binding 的显式 resume 继续。若 resume 条件不成立，则关闭该 campaign，使用新 batch ID 和新证据目录重新运行未完成项。不能把另一个 N 的新 batch 写成原 campaign continuation。
 
-并行运行仍使用一个登记的 evidence root，但 runtime 子目录必须短。每个资格档位和正式采集使用固定短码，wave 使用单字符 batch id；ACT composition 用统一清单枚举现有 adaptive 端点和每 Worker 的控制权仲裁 socket，启动、清理与崩溃恢复共享该清单。启动任何进程前，用真实绝对路径检查全部 Unix socket，编码长度超过现有 107-byte 上限就拒绝启动。可读的长描述写入 manifest，不进入 socket 路径。
+每个 Worker 独占 ROS Domain、仿真会话、namespace、controller、`ROS_HOME`、日志/临时目录、head/wrist topic、Recorder 与证据子目录。共享教师感知 Broker 只处理 `task_camera` 的无状态推理，并以 batch、worker、generation、scenario、attempt、reset epoch 和请求序号隔离请求/响应。head 搜索检测留在 Worker 内。head/wrist 训练图像始终由本 Worker 无损记录，不能经 task_camera Broker 转发。
 
-资格与扩容场景不进入正式训练数据，避免同一初始条件重复采集造成隐性加权。正式批次只能消费冻结候选清单；若业务失败导致成功配额不足，结束当前批次并生成新的候选清单和数据版本，不能在原批次中反复运行失败候选直到成功。基础设施 fallback 只改变并发度，不改变 split、场景配置、episode 内容契约或成功标准。
+每个 Worker 先写私有临时 episode，再以原子 manifest 封存。顶层聚合器只导入 coordinator journal commit 引用且 verifier 通过的工件；它不把多个 batch journal 复制成一个虚构的顶层 journal。每个 wave 终态后，原子 `campaign-index.json` 保存 batch ID、实际 journal root/hash、有效 commit sequence、verifier receipt root/hash 和选中 episode，训练据此逐 wave 回放。每个 wave 全部终态后，按 split 和冻结候选顺序选择最靠前的 N 个合格 episode；包含第 N 个成功的 wave 内，后续成功结果保留为 `SURPLUS_SUCCESS`，不进入训练，后续 wave 标记 `UNSCHEDULED_QUOTA_MET`。Recorder 使用有界队列和明确的磁盘背压，不能为维持吞吐静默丢帧、降采样或改变压缩语义。无法维持合格 10 Hz 连续窗口时，该 episode 记为 QC 失败，并暂停新 lease。
+
+并发资格按 W1 → W2 → W4 → W6 → W8 顺序进行。W1/W2 使用 8 个专用场景验证入口语义、exact-once、跨 Worker 无串帧、资源释放与基本吞吐。扩容使用至少 40 个持续负载场景，形成两个完整的 20 项 wave；共享队列不设置每 Worker 生命周期配额，每个 wave 仍须从实际 terminal lease 证明每个 Worker 至少连续处理 2 项。某档位的资格 wave 始终保持 exact N，零 infra retry、跨 N fallback 或 crash continuation。候选默认档位在全新 evidence root 复测一次。两轮都通过正确性、资源稳定和吞吐门后，才可成为正式默认值。
+
+start guard 是每次启动前的轻量 fail-closed 检查，不是 ACT 并发资格。它核对 CPU busy、RAM/GPU 最低余量、cleanup 和 owner 状态；通过 start guard 不能代替双 RGB 录制的 8/40 场景资格。每轮还需记录 CPU、内存、GPU、磁盘写入、仿真实时因子、Recorder 队列、帧间隔、前后半段有效 episode 吞吐和失败分布。
+
+并行运行使用一个登记的 evidence root，runtime 子目录保持短。资格档位和正式采集使用固定短码，wave 使用单字符 batch ID。统一 endpoint manifest 枚举 coordinator、Broker、每个 Worker 和控制权仲裁 socket，启动、清理与恢复读取同一清单。启动进程前按真实绝对路径检查全部 Unix socket，编码长度超过 107 bytes 就拒绝启动。可读的长描述写入 manifest，不进入 socket 路径。
+
+资格与扩容场景不进入正式训练数据。旧 `/data/work/so101-evidence/act-data/0917a` 已丢失，关联 episode 与 QC 不能从 Git commit 重建，也不能写入新 manifest。新正式批次使用新的 dataset ID、候选清单和 evidence root；若业务失败导致配额不足，报告 `QUOTA_UNSATISFIED`，再以新数据版本采样，不反复运行失败候选凑数。
 
 ## 8. 可抓取区域与连续随机位置
 
@@ -272,16 +291,19 @@ MoveIt 恢复动作单独计为干预，不得将恢复后的成功算作 ACT �
 | `RgbObservationSynchronizer` | 双 RGB 与状态 → 合格观测或明确输入错误 |
 | `MoveItExpertActionTap` | 已执行参考与时间 → 6 维标签、重建核验记录 |
 | `EpisodeRecorder` | 同步观测、动作与审计流 → 原始 episode、QC 与训练导出 |
-| `ParallelActCollectionRunner` | 冻结候选清单与独立 Worker 组合 → wave 调度、基础设施降级、跨 wave 恢复和确定性总 manifest |
+| `FixedActCollectionCampaign` | 冻结候选清单、`BatchRequestV3` 与独立 Worker 组合 → exact-N wave 调度、同 N 恢复和确定性总 manifest |
 | `ActCollectionWorkload` | 一个 scenario lease → 单次 reset 后的搜索/专家执行/录制/QC；业务失败与基础设施失败分离 |
 | `ActCollectionResultStore` | Worker 私有临时 episode → 原子终态、fsync journal、内容哈希与冲突拒绝 |
+| `ActCollectionResultVerifier` | coordinator commit/discover → 只确认登记 workspace、有效 lease 与内容哈希一致的封存结果 |
+| `ActGpuWorkloadArbiter` | 稳定 host identity、物理 GPU UUID、原 selector/可见性映射、进程身份与 workload → 采集/Broker/训练共用的持久互斥、heartbeat、fencing 与 release proof |
+| `ActTrainingRunOwner` | 不可变数据导出、训练配置与 GPU 进程身份 → 单写者训练 run、停止/失败证据与模型 bundle |
 | `ActPolicyRunner` | 合格观测与 checkpoint → 定时 6 维动作块 |
 | `ActSupervisor` | 输入、动作与监督证据 → 执行许可、停止与恢复交接 |
 | `ActExecutionAdapter` | 获准的执行前缀 → 双 controller 定时提交、goal 协调、过期拒绝与停止确认 |
 
 领域契约、应用流程与 MuJoCo/ROS adapter 分层放入 `src/so101_demo_py/src/`，具体文件划分在实现计划中确定。相机/机器人资产、控制参数与搜索阈值分别进入该包的 assets/config。CameraPlugin RGB-only 扩展属于 `third_party/mujoco_ros2_control` 依赖仓；修改后需更新依赖锁与来源证明。Teleop 可提供 Reset、Search、Start Recording、Run Expert、Keep/Discard 等操作，页面不承载高频控制循环。
 
-离线训练环境与 ROS 执行环境通过数据/模型工件连接，固定 LeRobot 与模型版本。已有模型、外部相机检测器或其他相机配置下训练的 checkpoint 均不能直接视为本系统合格产物。
+离线训练环境与 ROS 执行环境通过数据/模型工件连接，固定 LeRobot 与模型版本。训练前确认全局 mutation arbiter 为 `IDLE`，再由 `ActGpuWorkloadArbiter` 原子取得所选 GPU 的训练 lease，并建立与该 lease 绑定的独立训练 owner。训练不占用机器人 mutation reservation；采集 admission 与 Broker spawn 必须看到训练 lease 并拒绝，因此不能在训练启动后抢占同一 GPU。训练不得与采集共享 dataset 输出目录或可变 manifest。已有模型、外部相机检测器或其他相机配置下训练的 checkpoint 均不能直接视为本系统合格产物。
 
 ## 12. 参数冻结与实施顺序
 
@@ -291,7 +313,7 @@ MoveIt 恢复动作单独计为干预，不得将恢复后的成功算作 ACT �
 
 执行预检还需冻结双 controller 提交提前量、接受超时和允许时间偏差、插值与路径检查精度、允许接触规则、开爪判定、支撑与释放稳定窗口、撤离安全区域及最终稳定阈值。ACT 单次运行上限已确定为 120 s 单调墙钟，不作为闭环调参项。
 
-并行采集还需冻结候选清单哈希、wave 大小、已通过资格验证的 Worker 数、fallback 序列、ROS Domain 池、lease/heartbeat/启动超时、infra attempt 上限、Recorder 队列与磁盘背压阈值、每 Worker 资源上限、教师 Broker 模型/权重哈希及 executor 数。并发档位改变属于新的采集配置版本；若降级发生，最终 manifest 记录每条 episode 的 pool generation 与实际 Worker 档位。
+并行采集还需冻结候选清单哈希、wave 大小、已通过资格验证的 exact Worker 数、ROS Domain 池、lease/heartbeat/启动超时、Recorder 队列与磁盘背压阈值、start guard 策略、教师 Broker 模型/权重哈希及 executor 数。并发档位改变属于新的采集配置版本，不能在一个 campaign 内降级后继续计入原档位。训练还需冻结 dataset manifest、LeRobot 导出、依赖锁、训练配置、随机种子、设备选择、checkpoint 选择规则和 bundle schema。
 
 参数生成顺序：模型和 RGB 出口 → 全阶段视野与碰撞预检 → 搜索和控制交接 → 动作记录/重放 → 可抓取区域与数据划分 → 小批 QC → 正式采集 → 训练 → 冻结测试。所有待校准项均由对应预检报告给出明确值、单位、测量依据及配置哈希；未通过该门槛时不得启动正式采集。
 
@@ -306,8 +328,11 @@ MoveIt 恢复动作单独计为干预，不得将恢复后的成功算作 ACT �
 | 控制权 | neck/arm 命令隔离；交接无残留 goal；ACT 阶段 neck 锁定；reset 后缓存失效 |
 | 动作执行 | 双 controller 共同时间基准；部分接受可停止；替换无旧动作残留；迟到及跨 attempt 推理结果拒绝 |
 | 标签/数据 | controller reference 对齐与重放通过；固定 10 Hz 连续窗口；8 维 state/6 维 action；无禁止输入 |
-| 并行采集 | W1 与单条入口在 schema/QC/终态语义上等价；8 场景 W2 功能资格 exact-once、无跨 Worker 图像或控制串扰、所有候选有唯一终态、恢复不重跑已封存项、进程和 Domain 精确清理 |
-| 并发扩容 | 至少 40 场景、两个完整 wave 的持续负载，W4/W6/W8 逐档测量且每个 wave 中每 Worker 连续处理至少 2 项；每轮保持单一被测档位、零 infra retry/fallback/continuation；候选默认在新 root 复测；两轮吞吐提升且帧连续性、物理成功率、资源趋势与 QC 不退化 |
+| 运行所有权 | 所有采集入口的 `validation` reservation 覆盖 admission、dispatch、运行终态和 cleanup；Teleop/Tasks mutation 双向拒绝；headless CLI 无 operation+GPU binding 时零动作、零 Worker/Broker 进程启动 |
+| 并行采集 | W1 与单条入口在 schema/QC/终态语义上等价；8 场景 W2 功能资格 exact-once、无跨 Worker 图像或控制串扰、所有候选有唯一终态、同 N 恢复不重跑已提交项、进程和 Domain 精确清理 |
+| 并发扩容 | 至少 40 场景、两个完整 wave 的持续负载，W4/W6/W8 逐档测量且每个 wave 中每 Worker 连续处理至少 2 项；每轮保持 exact N，零 infra retry、跨 N fallback 或 crash continuation；候选默认在新 root 复测；两轮吞吐提升且帧连续性、物理成功率、资源趋势与 QC 不退化 |
+| 训练输入 | 只从 campaign index 逐 wave 回放 coordinator journal commit，并导入 verifier 通过的正式 Train/Validation/Offline Test episode；旧 0917a、资格、surplus、失败、未提交 seal 和目录扫描结果均拒绝 |
+| 训练复现 | 独立 Python 环境与精确依赖锁可重建；不可变导出与配置 hash 一致；训练 run 单写者；持久 GPU lease 使训练与采集/Broker 双向互斥；bundle 可从 checkpoint、统计与预处理 hash 完整回读 |
 | 随机采样 | 每个实际点完整预检；分层配额、拒绝统计、空间隔离和种子可复现 |
 | 监督/恢复 | 插值路径碰撞拒绝；抓取前丢失可停可恢复；遮挡确认窗口有界；悬空开爪拒绝；释放证据不跨 epoch；持物不明不重搜；干预单独统计 |
 | 闭环验证 | 至少 10 个可复现初始条件；保留历次调参结果；与训练和封存测试隔离 |
@@ -332,10 +357,11 @@ MoveIt 恢复动作单独计为干预，不得将恢复后的成功算作 ACT �
 - [相机插件配置](../../../src/so101_demo_py/config/mujoco/mujoco_plugins.yaml)：既有 10 Hz task_camera RGB-D。
 - [CameraPlugin 实现](../../../third_party/mujoco_ros2_control/mujoco_ros2_control_plugins/src/camera_plugin.cpp)：逐相机配置、发布器与渲染路径。
 - [Teleop 操作说明](../../../src/so101_teleop/docs/so101-teleop-web-ui.md)：现有 MuJoCo backend 的控制能力边界。
-- [自适应 Worker Pool 源码指南](../../guides/so101-parallel-adaptive-worker-pool-source-guide.md)：已实现的隔离、lease、fallback、Broker、journal、清理和扩容证据。
-- [自适应契约](../../../src/so101_demo_py/src/parallel_batch/adaptive_contracts.py)：W1–W16 档位与单批最多 20 项的闭合契约。
-- [自适应 Runner](../../../src/so101_demo_py/src/parallel_batch/adaptive_runner.py)：跨 pool generation 的不可变终态、恢复与降级。
+- [fixed v3 契约](../../../src/so101_demo_py/src/parallel_batch/contracts.py)：`ParallelRuntimeConfigV3`、`BatchRequestV3` 与 Linux 新执行边界。
+- [fixed v3 配置](../../../src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml)：Linux CUDA、ROS Domain 池、start guard 与运行时冻结值。
+- [协调器与 ordered pending](../../../src/so101_demo_py/src/parallel_batch/coordinator.py)：Linux fixed batch 的无生命周期点数配额领取、lease、ACK、heartbeat、终态 commit 与恢复权威。
+- [start guard](../../../src/so101_demo_py/src/parallel_batch/start_guard_probe.py)：启动前的轻量 CPU/RAM/GPU 与 owner/cleanup 检查。
 - [并行 Worker](../../../src/so101_demo_py/src/parallel_batch/worker.py)：现有点位验证状态机及 lease/heartbeat 边界。
-- [并行配置](../../../src/so101_demo_py/config/mujoco/parallel_adaptive_workers_v1.yaml)：MoveIt 点位验证的 W8 默认值和 Domain 池，仅作基础设施依据。
+- [统一仲裁](../../../src/so101_teleop/so101_teleop/unified/arbiter.py)：Teleop、Tasks 与 Validation 的持久全局 mutation reservation。
 
 本文中的组件名和新接口为设计约定；上述链接是已有实现依据，不表示新增功能已经存在。
