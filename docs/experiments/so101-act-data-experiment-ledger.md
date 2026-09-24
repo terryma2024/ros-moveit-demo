@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: b93b4f6298d2cc0bbf30400699913b25b3d2923a
+current_commit: a17796dffffbf3b6792187ac3cf108c55baa53b8
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -14,8 +14,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: CP-040
-next_experiment: EXP-073 broker post-reset stop-proof refresh regression and source repair
+latest_checkpoint: EXP-152
+next_experiment: EXP-153 Task 7A production HTTP mutation binding audit
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1255,3 +1255,5 @@ next_experiment: Live Task 3–8 calibration and controller publication after ow
 ## EXP-152 — Fresh revised-model forward camera diagnostic
 
 - State: PLANNED. Lifecycle: ISOLATED_STACK after EXP-151 broker-first clean retirement; source `c6a59457` clean, installed revised model SHA `cee0062a...`, unique domain206, partition/session `act-66c42e4c-exp152`, tmux `act-data-live-152`, `/run/user/1000/act152/a` symlink to durable `experiments/exp152-forward-live/ipc`, low-rate `/tmp/so101-debug-act-data-66c42e4c/ros-exp152`. Freeze only forward cup `(0.02,-0.36,0.165)`, arm `(-.25,-.5,1.5,0,0,0,0)`, neck start `.05`, exact EXP-151 revised assets, calibrated guard, pinned detector/CPU threads and camera thresholds. Fresh named paused reset epoch0→1; three causal lossless dual RGB+CameraInfo/joint frames; real three-frame same-track head `TARGET_LOCKED`, goal/reference/feedback, neck stop and broker pause/release. Change only the capture diagnostic's preflight behavior: permit transient `STOPPING` with no hazard, reset the stable counter, and proceed only after three consecutive `IDLE`/stopped statuses; an acquire `CONTROL_NOT_STOPPED` repeats that same proof loop with no control command. Any other refusal ends and retires the isolated run. Independently verify image bytes/stamps, same track/lock, model/guard, lossless whole-robot no-contact streams, final broker stop and process absence. This supplements EXP-151's first two scenes, not a unified three-scene qualification, full moving-arm wrist FOV or accepted episode; formal `0/0/0`, Task12 onward `NOT_STARTED`, no deletion.
+
+- State: VALID forward-only revised-model live diagnostic, still ineligible for collection. Source `a17796dffffbf3b6792187ac3cf108c55baa53b8` clean, installed overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, compiled model SHA `cee0062a5482cf87c4eaf366f37494d962dd1c75c186c43a7e6b0d20d118eb26`, domain206/partition/session `act-66c42e4c-exp152`. Clean build and refreshed debug provenance passed; pinned weight SHA `f281d252...`, Docker image `sha256:626131d9...`. Fresh named paused reset epoch0→1/step0 exact seven-joint target passed. Three live causal, lossless head/wrist RGB+CameraInfo/joint tuples passed independent decoded-byte/hash/intrinsic/stamp checks; both first head and wrist PNGs were visually inspected, with the forward cup framed. Frozen real detector reached same-track three-frame `TARGET_LOCKED` at yaw `+.1934105 rad`, confidence `.967325`, max inference `.374585 s` with Torch1/1, four accepted neck goals statuses `[4,4,5,5]`, reference/feedback and safe final stop. Capture preflight had three stable stopped `IDLE` readbacks and zero acquire refusals. The first retirement script invocation failed at Python import before contact with the broker; second preflight encountered a transient `STOPPING`, failed before signal, and was followed by eight fresh stopped statuses. Corrected retirement script requires eight consecutive stopped statuses while tolerating transient `STOPPING`; exact broker PID3721689 then received SIGINT, durable stop audit records `IDLE`/stop/no hazard/unknown/arm or gripper audit, launch exit0 and all owned stack processes/tmux gone. Independent `verify-pre.py` and `verify-final.py` exit0; robot-contact epochs0/1 have 8,741/11,385 contiguous no-contact/no-loss 500 Hz records; scene epochs0/1 have 1,629/2,212 finite matching-model records. `experiments/exp152-forward-live` retains all scripts, failures, images, logs, hashes, proof and raw streams. This supplements EXP-151 default/left; it does not qualify continuous moving-arm wrist FOV, Task6, unified Task7A, Task8 or formal episodes. Formal `0/0/0`, Task12 onward `NOT_STARTED`. Retained EXP-152 and all prior runs; archived none; scratch trees, superseded attempts and `/run/user/1000/act152` symlink are deletion candidates only; nothing deleted. Next exact command: `sed -n '624,760p' docs/superpowers/plans/2026-09-11-so101-act-head-wrist-rgb-implementation.md` to audit the remaining Task7A production HTTP binding contract.
