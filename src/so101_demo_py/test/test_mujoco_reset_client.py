@@ -134,6 +134,30 @@ def test_broker_reset_prepares_stop_barrier_before_initial_pause(monkeypatch) ->
     assert calls == ['prepare_reset']
 
 
+def test_reset_resumes_before_switch_even_if_cached_snapshot_says_running() -> None:
+    """A just paused world can still expose its last running observer frame."""
+    initial = _snapshot(epoch=3, sequence=100)
+    initial.paused = False
+
+    class ServicesRequiringRunningSwitch(Services):
+        def switch_controllers(self, *, activate, deactivate):
+            if deactivate:
+                assert self.pauses and self.pauses[-1] is False
+            return True
+
+    services = ServicesRequiringRunningSwitch()
+    resetter = MujocoResetClient(
+        services, Observer((initial, _snapshot(epoch=4, sequence=101),
+                            _snapshot(epoch=4, sequence=102))),
+        simulation_session_id='session',
+        controller_names=('arm_controller', 'gripper_controller'),
+        expected_joint_positions=(0.,) * 6, expected_object_position=(.1, .2, .3),
+        progress=lambda: setattr(services, 'joint_callback_count', services.joint_callback_count + 1),
+    )
+
+    assert resetter.reset('task_start').new_epoch == 4
+
+
 class _CompletedFuture:
     def __init__(self, result) -> None:
         self._result = result
