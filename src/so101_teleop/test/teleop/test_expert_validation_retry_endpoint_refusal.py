@@ -338,7 +338,15 @@ def test_the_retry_admission_returns_the_request_and_its_registered_context():
     )
     service._retry_origin = lambda campaign_id, point_id: (
         SimpleNamespace(
-            install_prefix=install_prefix, evidence_root=evidence_root, manifest_id="manifest-1"
+            install_prefix=install_prefix,
+            evidence_root=evidence_root,
+            manifest_id="manifest-1",
+            # The real ``_retry_origin`` returns the durable ``CampaignStartRequest``, which always
+            # carries the profile the original run executed. Naming it here keeps this assertion on
+            # the registered-context contract instead of the platform dispatch: a double without the
+            # attribute turned the Linux profile branch into an ``AttributeError`` the moment this
+            # file finally ran inside the package gate. The Linux binding has its own test below.
+            execution_profile=RETRY_PROFILE,
         ),
         SimpleNamespace(ordinal=0, point_id=point_id),
         "1" * 64,
