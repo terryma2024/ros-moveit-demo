@@ -778,6 +778,16 @@ TEST_F(AtomicEvidenceTest, PhysicsHookAdvancesAtFiveHundredHertzNotControllerCad
   }
   ASSERT_EQ(chunks.size(), 1U);
   ASSERT_EQ(chunks.front().samples.size(), 5U);
+  for (const auto & sample : chunks.front().samples) {
+    EXPECT_EQ(sample.model_qpos.size(), static_cast<std::size_t>(model_->nq));
+    EXPECT_EQ(sample.model_qvel.size(), static_cast<std::size_t>(model_->nv));
+    for (int i = 0; i < model_->nq; ++i) {
+      EXPECT_DOUBLE_EQ(sample.model_qpos[i], data_->qpos[i]);
+    }
+    for (int i = 0; i < model_->nv; ++i) {
+      EXPECT_DOUBLE_EQ(sample.model_qvel[i], data_->qvel[i]);
+    }
+  }
   EXPECT_EQ(chunks.front().first_physics_step, 1U);
   EXPECT_EQ(chunks.front().last_physics_step, 5U);
   EXPECT_EQ(chunks.front().simulation_session_id, "physics-step-test");

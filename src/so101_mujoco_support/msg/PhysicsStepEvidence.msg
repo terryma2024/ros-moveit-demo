@@ -2,6 +2,8 @@ string simulation_session_id
 uint64 reset_epoch
 uint64 physics_step
 float64 simulation_time_s
+float64[] model_qpos
+float64[] model_qvel
 geometry_msgs/Pose object_pose_world
 geometry_msgs/Twist object_twist_world
 bool has_contact
