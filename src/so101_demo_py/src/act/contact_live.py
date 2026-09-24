@@ -1,0 +1,338 @@
+"""Lossless, fail-closed ACT live physics chunk recorder.
+
+The command owner supplies a single reset epoch and forwards immutable physics
+chunks here. This module has no ROS imports or authority to move the robot.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import os
+import time
+from pathlib import Path
+from typing import Any, Callable
+
+_CHUNK_KEYS = frozenset({
+    "chunk_sequence", "simulation_session_id", "reset_epoch", "first_physics_step",
+    "last_physics_step", "first_simulation_time_s", "last_simulation_time_s",
+    "failed_publish_attempts", "evidence_loss", "samples",
+})
+_STEP_KEYS = frozenset({
+    "simulation_session_id", "reset_epoch", "physics_step", "simulation_time_s",
+    "model_qpos", "model_qvel", "cup_position_m", "cup_velocity_m_s",
+    "left_contacts", "right_contacts", "other_contacts", "truncated",
+    "diagnostic_hazard_breached",
+})
+_CONTACT_KEYS = frozenset({
+    "robot_geom", "object_body", "normal_force_n", "signed_distance_m",
+})
+_LIMIT_KEYS = frozenset({
+    "maximum_force_n", "maximum_displacement_m", "maximum_ros_skew_s",
+    "maximum_receipt_age_s",
+})
+
+
+def _exact(value: Any, keys: frozenset[str], name: str) -> dict:
+    if not isinstance(value, dict) or set(value) != keys:
+        raise ValueError(f"{name} has missing or unknown fields")
+    return value
+
+
+def _finite(value: Any, name: str, minimum: float | None = None) -> float:
+    if isinstance(value, bool) or not isinstance(value, (float, int)):
+        raise ValueError(f"{name} is not finite")
+    result = float(value)
+    if not math.isfinite(result) or (minimum is not None and result < minimum):
+        raise ValueError(f"{name} is not finite or below limit")
+    return result
+
+
+def _integer(value: Any, name: str, minimum: int = 0) -> int:
+    if type(value) is not int or value < minimum:
+        raise ValueError(f"{name} is not an admissible integer")
+    return value
+
+
+def _vector(value: Any, length: int, name: str) -> list[float]:
+    if not isinstance(value, list) or len(value) != length:
+        raise ValueError(f"{name} length mismatch")
+    return [_finite(item, name) for item in value]
+
+
+def chunk_from_ros(
+    message: Any, *, cup_qpos_address: int, cup_qvel_address: int,
+) -> dict:
+    """Convert the actual 500 Hz ROS message without inventing per-step state."""
+
+    def contacts(items: Any, category: str) -> list[dict]:
+        converted = []
+        for contact in items:
+            geom = contact.geom2
+            if contact.body1 != "plastic_cup" or not contact.geom1:
+                raise ValueError("live contact is not bound to the cup")
+            if category == "left_contacts":
+                allowed = geom.startswith("fixed_fingertip_pad_collision")
+            elif category == "right_contacts":
+                allowed = geom.startswith("moving_fingertip_pad_collision")
+            else:
+                allowed = geom == "table_collision"
+            if not allowed:
+                raise ValueError("live contact category/geometry mismatch")
+            converted.append({
+                "robot_geom": geom, "object_body": contact.body1,
+                "normal_force_n": _finite(contact.normal_force_n, "normal_force_n", 0),
+                "signed_distance_m": _finite(contact.signed_distance_m, "signed_distance_m"),
+            })
+        return converted
+
+    try:
+        _integer(cup_qpos_address, "cup_qpos_address")
+        _integer(cup_qvel_address, "cup_qvel_address")
+        samples = []
+        for sample in message.samples:
+            qpos = [_finite(value, "model_qpos") for value in sample.model_qpos]
+            qvel = [_finite(value, "model_qvel") for value in sample.model_qvel]
+            cup = qpos[cup_qpos_address:cup_qpos_address + 3]
+            velocity = qvel[cup_qvel_address:cup_qvel_address + 3]
+            if len(cup) != 3 or len(velocity) != 3:
+                raise ValueError("live MuJoCo state is incomplete")
+            pose = sample.object_pose_world.position
+            if any(abs(a - _finite(getattr(pose, axis), axis)) > 1e-8
+                   for a, axis in zip(cup, ("x", "y", "z"), strict=True)):
+                raise ValueError("live object pose disagrees with MuJoCo state")
+            grouped = {
+                "left_contacts": contacts(sample.left_fingertip_contacts, "left_contacts"),
+                "right_contacts": contacts(sample.right_fingertip_contacts, "right_contacts"),
+                "other_contacts": contacts(sample.other_object_contacts, "other_contacts"),
+            }
+            maximum = max((item["normal_force_n"] for group in grouped.values()
+                           for item in group), default=0.0)
+            if (abs(maximum - _finite(sample.maximum_normal_force_n,
+                                     "maximum_normal_force_n", 0)) > 1e-8
+                    or abs(maximum - _finite(sample.global_max_single_contact_force_n,
+                                             "global_max_single_contact_force_n", 0)) > 1e-8):
+                raise ValueError("live reported force disagrees with contacts")
+            samples.append({
+                "simulation_session_id": sample.simulation_session_id,
+                "reset_epoch": sample.reset_epoch,
+                "physics_step": sample.physics_step,
+                "simulation_time_s": sample.simulation_time_s,
+                "model_qpos": qpos, "model_qvel": qvel,
+                "cup_position_m": cup, "cup_velocity_m_s": velocity,
+                **grouped,
+                "truncated": sample.truncated,
+                "diagnostic_hazard_breached": sample.diagnostic_hazard_breached,
+            })
+        return {
+            "chunk_sequence": message.chunk_sequence,
+            "simulation_session_id": message.simulation_session_id,
+            "reset_epoch": message.reset_epoch,
+            "first_physics_step": message.first_physics_step,
+            "last_physics_step": message.last_physics_step,
+            "first_simulation_time_s": message.first_simulation_time_s,
+            "last_simulation_time_s": message.last_simulation_time_s,
+            "failed_publish_attempts": message.failed_publish_attempts,
+            "evidence_loss": message.evidence_loss,
+            "samples": samples,
+        }
+    except (AttributeError, IndexError, TypeError) as error:
+        raise ValueError("live ROS physics message is incomplete") from error
+
+
+class LivePhysicsStream:
+    """Append verified per-step evidence, fsync each chunk, latch every hazard."""
+
+    def __init__(
+        self, *, session_id: str, reset_epoch: int, model_sha256: str,
+        model_nq: int, model_nv: int, cup_qpos_address: int,
+        cup_qvel_address: int, diagnostic_limits: dict,
+        output_path: Path, monotonic: Callable[[], float] = time.monotonic,
+    ) -> None:
+        if not isinstance(session_id, str) or not session_id:
+            raise ValueError("live session identity is missing")
+        _integer(reset_epoch, "reset_epoch", 1)
+        if (not isinstance(model_sha256, str) or len(model_sha256) != 64
+                or any(character not in "0123456789abcdef" for character in model_sha256)):
+            raise ValueError("model hash is invalid")
+        self.model_nq = _integer(model_nq, "model_nq", 3)
+        self.model_nv = _integer(model_nv, "model_nv", 3)
+        self.cup_qpos_address = _integer(cup_qpos_address, "cup_qpos_address")
+        self.cup_qvel_address = _integer(cup_qvel_address, "cup_qvel_address")
+        if self.cup_qpos_address + 3 > model_nq or self.cup_qvel_address + 3 > model_nv:
+            raise ValueError("cup state addresses exceed model")
+        limits = _exact(diagnostic_limits, _LIMIT_KEYS, "diagnostic limits")
+        self.limits = {key: _finite(value, key, 0) for key, value in limits.items()}
+        if any(value == 0 for value in self.limits.values()):
+            raise ValueError("diagnostic limits must be positive")
+        self.session_id, self.reset_epoch = session_id, reset_epoch
+        self.model_sha256 = model_sha256
+        self.monotonic = monotonic
+        self.output_path = Path(output_path)
+        descriptor = os.open(self.output_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o640)
+        self._stream = os.fdopen(descriptor, "wb")
+        self._closed = False
+        self.hazard: str | None = None
+        self.recorded_steps = 0
+        self._last_chunk_sequence: int | None = None
+        self._last_step = 0
+        self._last_time = 0.0
+        self._last_receipt = -math.inf
+        self._initial_cup: list[float] | None = None
+        directory = os.open(self.output_path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+
+    def _validated_step(
+        self, value: Any, expected_step: int, previous_time: float,
+        initial_cup: list[float] | None, ros_time_s: float,
+    ) -> dict:
+        step = _exact(value, _STEP_KEYS, "live physics step")
+        if (step["simulation_session_id"], step["reset_epoch"]) != (
+            self.session_id, self.reset_epoch
+        ):
+            raise ValueError("live step identity mismatch")
+        if _integer(step["physics_step"], "physics_step", 1) != expected_step:
+            raise ValueError("live physics step gap")
+        simulation_time = _finite(step["simulation_time_s"], "simulation_time_s", 0)
+        if simulation_time <= previous_time:
+            raise ValueError("live physics clock is stale")
+        qpos = _vector(step["model_qpos"], self.model_nq, "model_qpos")
+        qvel = _vector(step["model_qvel"], self.model_nv, "model_qvel")
+        cup = _vector(step["cup_position_m"], 3, "cup_position_m")
+        velocity = _vector(step["cup_velocity_m_s"], 3, "cup_velocity_m_s")
+        if any(abs(a-b) > 1e-8 for a, b in zip(
+            qpos[self.cup_qpos_address:self.cup_qpos_address+3], cup, strict=True
+        )) or any(abs(a-b) > 1e-8 for a, b in zip(
+            qvel[self.cup_qvel_address:self.cup_qvel_address+3], velocity, strict=True
+        )):
+            raise ValueError("cup state disagrees with same-step MuJoCo state")
+        if step["truncated"] is not False or step["diagnostic_hazard_breached"] is not False:
+            raise ValueError("live physics contact stream is truncated or hazardous")
+        initial = initial_cup if initial_cup is not None else cup
+        if math.dist(cup, initial) > self.limits["maximum_displacement_m"]:
+            raise ValueError("live diagnostic displacement hard stop")
+        total_force = 0.0
+        contacts = {}
+        for field in ("left_contacts", "right_contacts", "other_contacts"):
+            items = step[field]
+            if not isinstance(items, list):
+                raise ValueError("live contact field is not a list")
+            checked = []
+            for item in items:
+                contact = _exact(item, _CONTACT_KEYS, "live contact")
+                if (not isinstance(contact["robot_geom"], str) or not contact["robot_geom"]
+                        or contact["object_body"] != "plastic_cup"):
+                    raise ValueError("live contact geometry/body mismatch")
+                force = _finite(contact["normal_force_n"], "normal_force_n", 0)
+                _finite(contact["signed_distance_m"], "signed_distance_m")
+                total_force += force
+                checked.append(contact)
+            contacts[field] = checked
+        if total_force > self.limits["maximum_force_n"]:
+            raise ValueError("live diagnostic force hard stop")
+        return {
+            "physics_step": expected_step,
+            "simulation_time_s": simulation_time,
+            "ros_time_s": ros_time_s,
+            "received_monotonic_s": _finite(self.monotonic(), "receipt", 0),
+            "left_contacts": contacts["left_contacts"],
+            "right_contacts": contacts["right_contacts"],
+            "other_contacts": contacts["other_contacts"],
+            "cup_position_m": cup, "cup_velocity_m_s": velocity,
+            "model_qpos": qpos, "model_qvel": qvel,
+            "table_supported": any(
+                contact["robot_geom"] == "table_collision"
+                for contact in contacts["other_contacts"]
+            ),
+            "released": False,
+        }
+
+    def accept_chunk(self, value: Any, *, ros_time_s: float | None = None) -> None:
+        if self._closed or self.hazard is not None:
+            raise ValueError(self.hazard or "live physics recorder closed")
+        try:
+            chunk = _exact(value, _CHUNK_KEYS, "live physics chunk")
+            sequence = _integer(chunk["chunk_sequence"], "chunk_sequence")
+            if self._last_chunk_sequence is not None and sequence != self._last_chunk_sequence + 1:
+                raise ValueError("live chunk sequence gap")
+            if (chunk["simulation_session_id"], chunk["reset_epoch"]) != (
+                self.session_id, self.reset_epoch
+            ):
+                raise ValueError("live chunk identity mismatch")
+            if chunk["evidence_loss"] is not False or _integer(
+                chunk["failed_publish_attempts"], "failed_publish_attempts"
+            ) != 0:
+                raise ValueError("lossless live evidence guarantee failed")
+            samples = chunk["samples"]
+            if not isinstance(samples, list) or not samples:
+                raise ValueError("live chunk has no samples")
+            first = _integer(chunk["first_physics_step"], "first_physics_step", 1)
+            last = _integer(chunk["last_physics_step"], "last_physics_step", 1)
+            if first != self._last_step + 1 or last != first + len(samples) - 1:
+                raise ValueError("live chunk physics step gap")
+            if ros_time_s is None:
+                raise ValueError("live ROS clock is missing")
+            ros_time_s = _finite(ros_time_s, "ros_time_s", 0)
+            last_simulation_time = _finite(
+                chunk["last_simulation_time_s"], "last_simulation_time_s", 0
+            )
+            if abs(ros_time_s - last_simulation_time) > self.limits["maximum_ros_skew_s"]:
+                raise ValueError("live ROS/MuJoCo clock skew")
+            if self._last_receipt != -math.inf and (
+                self.monotonic() - self._last_receipt > self.limits["maximum_receipt_age_s"]
+            ):
+                raise ValueError("live physics evidence is stale")
+            parsed = []
+            previous_time = self._last_time
+            initial_cup = self._initial_cup
+            for index, sample in enumerate(samples):
+                row = self._validated_step(
+                    sample, first + index, previous_time, initial_cup,
+                    ros_time_s - (last_simulation_time - sample["simulation_time_s"]),
+                )
+                if row["received_monotonic_s"] <= self._last_receipt or (
+                    parsed and row["received_monotonic_s"] <= parsed[-1]["received_monotonic_s"]
+                ):
+                    raise ValueError("live monotonic receipt did not advance")
+                parsed.append(row)
+                if initial_cup is None:
+                    initial_cup = row["cup_position_m"]
+                previous_time = row["simulation_time_s"]
+            if (parsed[0]["simulation_time_s"] != _finite(
+                chunk["first_simulation_time_s"], "first_simulation_time_s", 0
+            ) or parsed[-1]["simulation_time_s"] != _finite(
+                chunk["last_simulation_time_s"], "last_simulation_time_s", 0
+            )):
+                raise ValueError("live chunk time envelope mismatch")
+            payload = b"".join(
+                json.dumps(row, sort_keys=True, separators=(",", ":"),
+                           allow_nan=False).encode() + b"\n" for row in parsed
+            )
+            self._stream.write(payload)
+            self._stream.flush()
+            os.fsync(self._stream.fileno())
+            self._last_chunk_sequence = sequence
+            self._last_step = last
+            self._last_time = previous_time
+            self._last_receipt = parsed[-1]["received_monotonic_s"]
+            self._initial_cup = self._initial_cup or parsed[0]["cup_position_m"]
+            self.recorded_steps += len(parsed)
+        except (OSError, TypeError, ValueError) as error:
+            self.hazard = str(error)
+            raise ValueError(self.hazard) from error
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._stream.flush()
+        os.fsync(self._stream.fileno())
+        self._stream.close()
+        directory = os.open(self.output_path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)

@@ -1,0 +1,156 @@
+"""Lossless, fail-closed live contact chunk ingestion without a ROS process."""
+
+import json
+from types import SimpleNamespace as NS
+
+import pytest
+
+from so101_demo.act.contact_live import LivePhysicsStream, chunk_from_ros
+
+
+LIMITS = {"maximum_force_n": 11.6, "maximum_displacement_m": .03,
+          "maximum_ros_skew_s": .02, "maximum_receipt_age_s": .2}
+
+
+def _step(number, *, force=0.0):
+    left = [{"robot_geom": "fixed_fingertip_pad_collision_006",
+             "object_body": "plastic_cup", "normal_force_n": force,
+             "signed_distance_m": -.0001}] if force else []
+    return {
+        "simulation_session_id": "session-live-a", "reset_epoch": 1,
+        "physics_step": number, "simulation_time_s": number * .002,
+        "model_qpos": [.02, -.28, .165], "model_qvel": [0., 0., 0.],
+        "cup_position_m": [.02, -.28, .165], "cup_velocity_m_s": [0., 0., 0.],
+        "left_contacts": left, "right_contacts": [], "other_contacts": [],
+        "truncated": False, "diagnostic_hazard_breached": False,
+    }
+
+
+def _chunk(sequence, *steps):
+    return {
+        "chunk_sequence": sequence, "simulation_session_id": "session-live-a",
+        "reset_epoch": 1, "first_physics_step": steps[0]["physics_step"],
+        "last_physics_step": steps[-1]["physics_step"],
+        "first_simulation_time_s": steps[0]["simulation_time_s"],
+        "last_simulation_time_s": steps[-1]["simulation_time_s"],
+        "failed_publish_attempts": 0, "evidence_loss": False,
+        "samples": list(steps),
+    }
+
+
+def _stream(tmp_path):
+    ticks = iter((1000.0 + index * .001 for index in range(100)))
+    return LivePhysicsStream(
+        session_id="session-live-a", reset_epoch=1, model_sha256="a" * 64,
+        model_nq=3, model_nv=3, cup_qpos_address=0, cup_qvel_address=0,
+        diagnostic_limits=LIMITS, output_path=tmp_path / "physics.ndjson",
+        monotonic=lambda: next(ticks),
+    )
+
+
+def test_live_chunk_stream_persists_contiguous_raw_state(tmp_path):
+    recorder = _stream(tmp_path)
+    recorder.accept_chunk(_chunk(1, _step(1), _step(2)), ros_time_s=.004)
+    recorder.accept_chunk(_chunk(2, _step(3)), ros_time_s=.006)
+    recorder.close()
+    rows = [json.loads(line) for line in (tmp_path / "physics.ndjson").read_text().splitlines()]
+    assert [row["physics_step"] for row in rows] == [1, 2, 3]
+    assert all(row["model_qpos"] == [.02, -.28, .165] for row in rows)
+    assert recorder.recorded_steps == 3
+
+
+@pytest.mark.parametrize("damage", ["gap", "session", "loss", "truncated", "force", "state"])
+def test_live_chunk_stream_latches_damage_and_retains_prefix(tmp_path, damage):
+    recorder = _stream(tmp_path)
+    recorder.accept_chunk(_chunk(1, _step(1)), ros_time_s=.002)
+    bad = _chunk(2, _step(2))
+    if damage == "gap":
+        bad["samples"][0]["physics_step"] = 3
+        bad["first_physics_step"] = bad["last_physics_step"] = 3
+    elif damage == "session":
+        bad["samples"][0]["simulation_session_id"] = "other-session"
+    elif damage == "loss":
+        bad["evidence_loss"] = True
+    elif damage == "truncated":
+        bad["samples"][0]["truncated"] = True
+    elif damage == "force":
+        bad["samples"][0]["left_contacts"] = [
+            {"robot_geom": "fixed_fingertip_pad_collision_006", "object_body": "plastic_cup",
+             "normal_force_n": 12.0, "signed_distance_m": -.001}]
+    else:
+        bad["samples"][0]["model_qpos"][0] = .04
+    with pytest.raises(ValueError):
+        recorder.accept_chunk(bad, ros_time_s=.004)
+    assert recorder.hazard is not None
+    with pytest.raises(ValueError):
+        recorder.accept_chunk(_chunk(2, _step(2)), ros_time_s=.004)
+    recorder.close()
+    rows = [json.loads(line) for line in (tmp_path / "physics.ndjson").read_text().splitlines()]
+    assert [row["physics_step"] for row in rows] == [1]
+
+
+def test_live_chunk_checks_displacement_from_first_step_within_same_chunk(tmp_path):
+    recorder = _stream(tmp_path)
+    moved = _step(2)
+    moved["cup_position_m"][0] = .051
+    moved["model_qpos"][0] = .051
+    with pytest.raises(ValueError, match="displacement"):
+        recorder.accept_chunk(_chunk(1, _step(1), moved), ros_time_s=.004)
+    assert recorder.recorded_steps == 0
+    recorder.close()
+
+
+def test_live_chunk_requires_current_ros_clock(tmp_path):
+    recorder = _stream(tmp_path)
+    with pytest.raises(ValueError, match="ROS"):
+        recorder.accept_chunk(_chunk(1, _step(1)))
+    assert recorder.hazard is not None
+    recorder.close()
+
+
+def _ros_contact(geom):
+    return NS(body1="plastic_cup", geom1="cup_collision", body2="gripper",
+              geom2=geom, normal_force_n=.5, signed_distance_m=-.0001)
+
+
+def _ros_chunk():
+    step = NS(simulation_session_id="session-live-a", reset_epoch=1,
+              physics_step=1, simulation_time_s=.002,
+              model_qpos=[.02, -.28, .165], model_qvel=[0., 0., 0.],
+              object_pose_world=NS(position=NS(x=.02, y=-.28, z=.165)),
+              left_fingertip_contacts=[_ros_contact("fixed_fingertip_pad_collision_006")],
+              right_fingertip_contacts=[], other_object_contacts=[],
+              maximum_normal_force_n=.5, global_max_single_contact_force_n=.5,
+              truncated=False, diagnostic_hazard_breached=False)
+    return NS(chunk_sequence=0, simulation_session_id="session-live-a", reset_epoch=1,
+              first_physics_step=1, last_physics_step=1,
+              first_simulation_time_s=.002, last_simulation_time_s=.002,
+              failed_publish_attempts=0, evidence_loss=False, samples=[step])
+
+
+def test_ros_chunk_converter_checks_same_step_state_and_contact_identity(tmp_path):
+    message = _ros_chunk()
+    chunk = chunk_from_ros(message, cup_qpos_address=0, cup_qvel_address=0)
+    recorder = _stream(tmp_path)
+    recorder.accept_chunk(chunk, ros_time_s=.002)
+    recorder.close()
+    row = json.loads((tmp_path / "physics.ndjson").read_text())
+    assert row["left_contacts"][0]["robot_geom"] == "fixed_fingertip_pad_collision_006"
+
+
+@pytest.mark.parametrize("damage", ["body", "category", "force", "pose", "state"])
+def test_ros_chunk_converter_rejects_misbound_evidence(damage):
+    message = _ros_chunk()
+    sample = message.samples[0]
+    if damage == "body":
+        sample.left_fingertip_contacts[0].body1 = "wrong"
+    elif damage == "category":
+        sample.left_fingertip_contacts[0].geom2 = "table_collision"
+    elif damage == "force":
+        sample.maximum_normal_force_n = .1
+    elif damage == "pose":
+        sample.object_pose_world.position.x = .03
+    else:
+        sample.model_qpos = []
+    with pytest.raises(ValueError):
+        chunk_from_ros(message, cup_qpos_address=0, cup_qvel_address=0)
