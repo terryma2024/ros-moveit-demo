@@ -99,6 +99,41 @@ def test_reset_waits_for_joint_convergence_before_final_pause() -> None:
     assert services.pauses[-1] is True
 
 
+def test_broker_reset_prepares_stop_barrier_before_initial_pause(monkeypatch) -> None:
+    """A short lived stop proof must be refreshed before a paused snapshot wait."""
+    from so101_demo.adapters.act import leased_action_client
+
+    calls = []
+
+    class Broker:
+        def request(self, operation, context):
+            assert context == {'owner': 'recovery'}
+            calls.append(operation)
+
+    class BrokerServices(Services):
+        control_context = {'owner': 'recovery'}
+
+        def pause(self, paused):
+            assert calls == ['prepare_reset']
+            return super().pause(paused)
+
+        def finish_reset(self):
+            assert calls == ['prepare_reset']
+            return True
+
+    monkeypatch.setattr(leased_action_client, 'connection_for', lambda context: Broker())
+    services = BrokerServices()
+    resetter = MujocoResetClient(
+        services, Observer(), simulation_session_id='session',
+        controller_names=('arm_controller', 'gripper_controller'),
+        expected_joint_positions=(0.,) * 6, expected_object_position=(.1, .2, .3),
+        progress=lambda: setattr(services, 'joint_callback_count', services.joint_callback_count + 1),
+    )
+
+    assert resetter.reset('task_start').new_epoch == 4
+    assert calls == ['prepare_reset']
+
+
 class _CompletedFuture:
     def __init__(self, result) -> None:
         self._result = result

@@ -160,7 +160,7 @@ class RosSearchAdapter:
                         safe_observe=safe_observe)
                     if (image.encoding,image.width,image.height,image.step,len(image.data))!=(
                             'rgb8',640,480,1920,640*480*3):raise ValueError('INPUT_RGB_INVALID')
-                    transform=self.tf_buffer.lookup_transform('base',image.header.frame_id,Time.from_msg(joints.header.stamp))
+                    transform=self.tf_buffer.lookup_transform('base',image.header.frame_id,Time.from_msg(image.header.stamp))
                     rotation=rotation_matrix(transform.transform.rotation)
                     frame=dict(session_id=config['session_id'],attempt_id=config['attempt_id'],
                         sim_time_s=source_time,received_wall_s=received_at,detections=[],
