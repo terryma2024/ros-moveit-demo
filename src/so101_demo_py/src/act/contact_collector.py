@@ -20,9 +20,9 @@ import yaml
 from so101_demo.act.contact_calibration import _canonical
 from so101_demo.adapters.act.physics import model_sha256
 
-_MUJOCO_VERSION = "3.4.0"
+_MUJOCO_VERSION = "3.12.0"
 _SCENE_SHA256 = "4db48e35df9e91fc6868d303725badd0237fb10754d1e298637f5b0e1e55ed4f"
-_MODEL_SHA256 = "fda3d3a43ced9213a1ac1b835d6dff924fb071baa597e53155b4d0bffe2b6d6b"
+_MODEL_SHA256 = "3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78"
 _MOTION_SHA256 = "aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356"
 _MAX_FORCE_N = 11.6
 _MAX_DISPLACEMENT_M = .03
@@ -31,9 +31,9 @@ _SCENARIOS = {
     "no_contact": ("settle", 6),
     "table_only": ("settle", 6),
     "left_only": ("settle", 2),
-    "right_only": ("close", 6),
+    "right_only": ("close", 4),
     "bilateral_touch": ("lift", 2),
-    "over_compression": ("lift", 6),
+    "over_compression": ("hold", 6),
     "micro_lift_slip": ("lift", 6),
     "stable_hold": ("hold", 11),
     "post_release": ("settle_after_release", 6),
@@ -106,7 +106,7 @@ def _qualifies(regime: str, phase: str, step: int, frame: dict, force: float) ->
     if regime == "bilateral_touch":
         return left and right and table
     if regime == "over_compression":
-        return step >= 1300 and left and right and not table and 2.0 <= force < _MAX_FORCE_N
+        return step >= 2350 and left and right and not table and 2.0 <= force < _MAX_FORCE_N
     if regime == "micro_lift_slip":
         return step >= 1300 and left and right and not table and speed >= .005
     if regime == "stable_hold":
@@ -132,7 +132,7 @@ def collect_offline_sample(
         raise ValueError("ACT compiled model or timestep mismatch")
     policy = yaml.safe_load(motion_policy_path.read_bytes())
     preopen = policy["gripper_actions"]["preopen_q6"]
-    close = -.052 if regime == "over_compression" else policy["gripper_actions"]["grasp_close_q6"]
+    close = -.049 if regime == "over_compression" else policy["gripper_actions"]["grasp_close_q6"]
     start = np.array(policy["states"]["DESCEND"]["waypoints"][-1] + [preopen])
     closed = start.copy(); closed[5] = close
     lift = np.array(policy["states"]["LIFT"]["waypoints"][0] + [close])
@@ -166,6 +166,15 @@ def collect_offline_sample(
     step = 0
     peak_route_force = 0.0
     peak_route_displacement = 0.0
+    if regime == "left_only":
+        reset_frame, reset_force = _contact_frame(
+            model, data, step=0, released=False,
+            cup_address=cup_address, cup_velocity_address=cup_velocity_address,
+        )
+        if reset_force > _MAX_FORCE_N or not _qualifies(regime, "settle", 0, reset_frame, reset_force):
+            raise ValueError("left-only reset diagnostic is invalid")
+        window.append(reset_frame)
+        peak_route_force = reset_force
     for phase, duration, first, last in schedule:
         number = round(duration / model.opt.timestep)
         for index in range(number):

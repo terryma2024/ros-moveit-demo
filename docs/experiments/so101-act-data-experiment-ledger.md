@@ -1482,7 +1482,7 @@ The audited current source has no Task 6A collector/analyzer/activation modules 
 
 ```yaml
 experiment_id: EXP-178
-status: PLANNED
+status: RUNNING
 prior_experiment: EXP-177
 hypothesis: The current ACT MuJoCo model can produce the five physically distinct contact regimes within independent diagnostic hard stops, enabling a deterministic Task 6A offline collector.
 prediction: A bounded offline probe identifies real cup/table/finger contacts and measurable force, penetration, slip and hold separation without reading the candidate policy.
@@ -1520,3 +1520,42 @@ EXP-178 is an offline physical probe only. No ROS stack, robot command, policy a
 - Collector source RED `scratch/exp178-red3.f2o9KOM1`: eight physical tests reached the missing current-package collector module after pinned MuJoCo/scratch proof, exit1. Initial GREEN candidates `exp178-green4.DqU7WSwu`, `green5.9QLeVrFI` and `green6.K5cwID4i` exposed a real touch-window sensitivity to cup Y jitter and a mistaken table requirement for the left-only control; these are physical boundary failures, all retained. With X-only deterministic jitter and left-only fixed start, `exp178-green8.2FPMl4AH` passed 34/34 current Task 6A contract/physical tests, exit0, elapsed7 s under pinned MuJoCo 3.4.0 and verified NVMe scratch. A new CLI writes exclusive sample files and sealed cohort only after all 100 regime and four control sessions pass. The CLI's `live` mode rejects before creating any session; live collector remains unimplemented.
 - **Next risky boundary registered:** run `act_collect_contact_calibration --mode offline` through exact task Python and pinned MuJoCo 3.4.0 into previously nonexistent `experiments/exp178-offline-cohort-v1`. Expected 104 fresh physical sessions with distinct sample/session IDs and manifest hash readback. Stop on any hard force/displacement, missing contact window, source/model/version mismatch or incomplete write; retain partial files for diagnosis. No ROS/live motion, proposal or activation will be produced by this run. Retained roots remain the one registered evidence root; archived none; scratch/superseded artifacts deletion candidates only, no deletion.
 - Pre-cohort source gates: ordinary direct `src/so101_demo_py/test` xdist8 `scratch/exp178-demo-xdist8.J9sMODSD` exit0, elapsed39 s, 4,043 passed/172 skipped/four warnings, benchmark suite excluded. Task overlay `so101_demo_py` rebuild `experiments/exp178-build` exit0, elapsed3 s. Fresh package colcon gate `scratch/exp178-colcon.7EubvP2E` with exact `/usr/bin/python3` NVMe tempfile proof and worktree/test-venv `PYTHONPATH` exited0, elapsed40 s; XML readback has 4,215 cases/0 errors/0 failures/172 skips, actual argv included `test -n 8`. MuJoCo vendor was used from `/opt/ros/jazzy` and colcon warned the workspace vendor package was not selected; no missing dependency/compiler/test failure occurred. Scratch trees retained as deletion candidates, none deleted.
+- Source slice commit `7ae83c0f` was clean before the physical cohort. Exact pinned Python/MuJoCo 3.4.0 offline CLI run into previously nonexistent `experiments/exp178-offline-cohort-v1` exited0, elapsed50 s, and sealed 104 distinct sessions: 20 each `no_contact`, `bilateral_touch`, `over_compression`, `micro_lift_slip`, `stable_hold`, and one each `table_only`, `post_release`, `left_only`, `right_only`. Raw cohort is 1,019,462 bytes, SHA256 `6d8e965945b052619ea44ba7a59f165c6958102e91af8baab2e59f24fea74b8f`; manifest hash/count, all 104 exclusive sample files, unique sample/session IDs, collector/analyzer/config/source hashes passed readback. Independent physical verifier `experiments/exp178-offline-cohort-v1.verify.py` exit0, elapsed28 s replayed all 104 scenarios with pinned MuJoCo, checked all 640 recorded frame qpos/qvel/cup/contact geometry/normal force against raw stream with maximum numeric difference 0, and enforced route-wide diagnostic cap: peak summed force 6.624 N, peak cup displacement `.015235 m`, below 11.6 N/.03 m. `independent-verify.json` status PASSED; verifier SHA256 `76d5fdce...`. This qualifies the **offline 20-per-regime half only**. The live 5-per-regime and controls, proposal, independent review, activation receipt, Task 7A and Task 8 remain blocked by unimplemented live collector/production admission. Formal counts still `0/0/0`. Retained: registered root including EXP-178 cohort/probes/verifier and all prior evidence; archived none; deletion candidates read-back scratch and superseded outputs only, nothing deleted.
+- **Correction before live calibration:** exact installed `libso101_simulation_evidence_plugin.so` and `libmujoco_ros2_control.so` both link `/opt/ros/jazzy/opt/mujoco_vendor/lib/libmujoco.so.3.12.0`; direct `mj_versionString()` through that library returns `3.12.0`. The task test-venv's default wheel is also 3.12.0 and compiles the unchanged ACT scene to SHA256 `3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78`, matching EXP-166's installed model hash. Earlier notes that called the vendor 3.4.0 were wrong. The 3.4.0 offline cohort is **RETAINED EXPLORATORY EVIDENCE ONLY, NOT ACT LIVE CALIBRATION INPUT**; a new 3.12.0 offline cohort is mandatory. No 3.4.0 source metadata or fingerprint may be combined with 3.12.0 live samples. No live session had started when this mismatch was found.
+
+## EXP-179 — Match offline ACT contact calibration to installed ROS MuJoCo 3.12.0
+
+```yaml
+experiment_id: EXP-179
+status: PLANNED
+prior_experiment: EXP-178
+hypothesis: The same deterministic physical regimes and independent controls remain feasible under the actual plugin-linked MuJoCo 3.12.0, permitting version-consistent offline/live cohorts.
+prediction: Source tests RED on the explicit 3.12.0 boundary, then GREEN after frozen version/model binding, followed by a new 104-session sealed offline cohort and independent replay.
+single_variable: MuJoCo runtime and compiled model identity 3.4.0/fda3d3a4 to 3.12.0/3c876e7b.
+lifecycle: OFFLINE
+preconditions: [EXP-178 mismatch verified before live, unchanged ACT scene and motion bytes, no task-owned ROS stack]
+success_criteria: [All physical tests under 3.12.0, 104 exact samples, manifest/source readback, independent replay]
+failure_criteria: [Physical window or diagnostic hard-stop failure, source/model hash drift]
+invalid_criteria: [Wrong wheel or mixed 3.4.0 provenance]
+provenance:
+  source_commit: 7ae83c0f
+  runtime_python: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  mujoco_version: 3.12.0
+  model_sha256: 3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78
+  scene_sha256: 4db48e35df9e91fc6868d303725badd0237fb10754d1e298637f5b0e1e55ed4f
+  motion_policy_sha256: aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: []
+observed: []
+inferred: []
+conclusion: PENDING
+decision: PENDING
+next_experiment: ACT 3.12.0 live calibration only after current-source and isolated launch gates
+```
+
+EXP-179 changes the installed simulator/version binding and must not reuse or relabel the EXP-178 3.4.0 files. Its new output root will be `experiments/exp179-offline-cohort-v1`. Retain EXP-178 exactly for audit, archive none pending path-stable review, delete nothing.
+
+- Version-boundary RED `scratch/exp179-red1.Re5Ue6WJ` reached `MuJoCo runtime version mismatch` under exact 3.12.0 wheel, exit1. Current-source pin changed only version and compiled-model SHA, not scene or motion bytes. First physical GREEN `scratch/exp179-green1.ntjmL9yV` had three real boundary failures: `-.052` over-compression exceeded the independent hard stop and was rejected; initial +1 mm fixed-pad-only contact lasted one physics step; right-only/table contact had only five consecutive steps. These failed tests are retained and are not qualifying samples.
+- Version-matched offline probes `experiments/exp179-base` exit0 show two consecutive bilateral+table steps and 998 later bilateral lift steps under default q6, whole-route peak 3.205 N. `exp179-close-minus049` exit0 shows safe `-.049` q6 over-compression with bilateral off-table hold, peak 4.695 N; the previously used `-.052` is not reused. `exp179-unilateral-scan` and `scan2` exit0 show +1.00–1.30 mm initial Y offset gives only one fixed-pad-only physics step, with forces .1–8.086 N depending on offset. `exp179-left-route` exit0 confirms the same one-step contact and no later fixed-only phase. The collector now explicitly includes the genuine reset step0 contact plus physics step1 for the left-only control; right-only requires four consecutive steps, and over-compression selects a safe hold window. Fresh targeted `scratch/exp179-green3.91Dj2RDw` passed 34/34 physical/contract tests under actual 3.12.0, exit0, elapsed7 s. No ROS/live session or proposal has started. Retained: EXP-179 probes and scratch plus prior root; archived none; deletion candidates read-back scratch/superseded 3.4.0 material only, no deletion.
+- Corrected 3.12.0 ordinary full gate `scratch/exp179-demo-xdist8.05mie28T`: exit0, elapsed41 s, 4,053 passed/162 skipped/four warnings; benchmark suite excluded. Fresh package gate `scratch/exp179-colcon.PTotQbww`: exact `/usr/bin/python3` NVMe tempfile proof, `colcon test` exit0, elapsed42 s; XML readback 4,215 tests/0 errors/0 failures/162 skips. Only the existing vendor-underlay selection warning and fork warnings occurred. Both scratch trees retained deletion candidates. Next boundary: commit this corrected source, then collect new 3.12.0 cohort into `experiments/exp179-offline-cohort-v1` with no mixed 3.4.0 input.
