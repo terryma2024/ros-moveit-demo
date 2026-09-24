@@ -5,7 +5,7 @@ import json
 import subprocess
 import pytest
 
-from so101_demo.act.calibration import REQUIRED_MEASUREMENTS, require_qualified
+from so101_demo.act.calibration import REQUIRED_MEASUREMENTS, require_qualified, validate_partial
 
 
 def test_installed_preflight_reads_explicit_source_root(tmp_path, monkeypatch):
@@ -34,6 +34,59 @@ def test_installed_preflight_reads_explicit_source_root(tmp_path, monkeypatch):
     assert report["source_commit"] == expected
     assert report["status"] == "CALIBRATION_REQUIRED"
     assert set(report["checks"].values()) == {"UNMEASURED"}
+
+
+def test_installed_preflight_preserves_partial_evidence_without_qualification(tmp_path, monkeypatch):
+    from ament_index_python import packages
+    from so101_demo.cli import act_preflight
+
+    share = tmp_path / "share"
+    for relative in ("assets/mujoco/act", "config/mujoco/act"):
+        directory = share / relative
+        directory.mkdir(parents=True)
+        (directory / "asset.txt").write_text(relative)
+    monkeypatch.setattr(packages, "get_package_share_directory", lambda name: str(share))
+    source = tmp_path / "source"
+    source.mkdir()
+    subprocess.run(["git", "init", "-q", str(source)], check=True)
+    subprocess.run(["git", "-C", str(source), "-c", "user.name=test",
+                    "-c", "user.email=test@example.invalid", "commit", "--allow-empty",
+                    "-qm", "fixture"], check=True)
+    baseline = tmp_path / "baseline.json"
+    assert act_preflight.main(["--output", str(baseline), "--source-root", str(source)]) == 2
+    partial = json.loads(baseline.read_text())
+    sample = tmp_path / "camera-sample.json"
+    sample.write_text("measured camera sample\n")
+    partial["measurements"]["head_translation_m"] = dict(
+        value=[-.06, .06, .24], unit="m", sample_path=str(sample),
+        sample_sha256=hashlib.sha256(sample.read_bytes()).hexdigest())
+    measured = tmp_path / "measured.json"
+    measured.write_text(json.dumps(partial))
+    output = tmp_path / "partial.json"
+    assert act_preflight.main(["--output", str(output), "--source-root", str(source),
+                               "--measured-report", str(measured)]) == 2
+    assert json.loads(output.read_text()) == partial
+    with pytest.raises(ValueError):
+        require_qualified(partial)
+    sample.write_text("tampered\n")
+    with pytest.raises(ValueError, match="CALIBRATION_SAMPLE_HASH_INVALID"):
+        act_preflight.main(["--output", str(tmp_path / "tampered.json"),
+                            "--source-root", str(source), "--measured-report", str(measured)])
+
+
+def test_partial_report_refuses_unknown_measurement_and_all_pass_without_full_report(tmp_path):
+    partial = report(tmp_path)
+    partial["status"] = "CALIBRATION_REQUIRED"
+    partial["measurements"] = {"head_translation_m": partial["measurements"]["head_translation_m"]}
+    partial["checks"] = {key: "UNMEASURED" for key in partial["checks"]}
+    validate_partial(partial)
+    partial["measurements"]["unknown"] = partial["measurements"]["head_translation_m"]
+    with pytest.raises(ValueError):
+        validate_partial(partial)
+    del partial["measurements"]["unknown"]
+    partial["checks"]["fov"] = "PASS"
+    with pytest.raises(ValueError):
+        validate_partial(partial)
 
 
 def report(tmp_path):
