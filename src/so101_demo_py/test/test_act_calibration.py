@@ -1,9 +1,39 @@
 """Collection cannot use unmeasured, corrupted or wrongly dimensioned calibration."""
 
 import hashlib
+import json
+import subprocess
 import pytest
 
 from so101_demo.act.calibration import REQUIRED_MEASUREMENTS, require_qualified
+
+
+def test_installed_preflight_reads_explicit_source_root(tmp_path, monkeypatch):
+    from ament_index_python import packages
+    from so101_demo.cli import act_preflight
+
+    share = tmp_path / "share"
+    for relative in ("assets/mujoco/act", "config/mujoco/act"):
+        directory = share / relative
+        directory.mkdir(parents=True)
+        (directory / "asset.txt").write_text(relative)
+    monkeypatch.setattr(packages, "get_package_share_directory", lambda name: str(share))
+    monkeypatch.setattr(act_preflight, "__file__", str(tmp_path / "installed/act_preflight.py"))
+
+    source = tmp_path / "source"
+    source.mkdir()
+    subprocess.run(["git", "init", "-q", str(source)], check=True)
+    subprocess.run(["git", "-C", str(source), "-c", "user.name=test",
+                    "-c", "user.email=test@example.invalid", "commit", "--allow-empty",
+                    "-qm", "fixture"], check=True)
+    expected = subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"],
+                                       text=True).strip()
+    output = tmp_path / "report.json"
+    assert act_preflight.main(["--output", str(output), "--source-root", str(source)]) == 2
+    report = json.loads(output.read_text())
+    assert report["source_commit"] == expected
+    assert report["status"] == "CALIBRATION_REQUIRED"
+    assert set(report["checks"].values()) == {"UNMEASURED"}
 
 
 def report(tmp_path):
