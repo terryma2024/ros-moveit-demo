@@ -5,7 +5,9 @@ from types import SimpleNamespace as NS
 
 import pytest
 
-from so101_demo.act.contact_live import LivePhysicsStream, chunk_from_ros
+from so101_demo.act.contact_live import (
+    LivePhysicsStream, LiveContactObserver, chunk_from_ros,
+)
 
 
 LIMITS = {"maximum_force_n": 11.6, "maximum_displacement_m": .03,
@@ -154,3 +156,52 @@ def test_ros_chunk_converter_rejects_misbound_evidence(damage):
         sample.model_qpos = []
     with pytest.raises(ValueError):
         chunk_from_ros(message, cup_qpos_address=0, cup_qvel_address=0)
+
+
+def _observer(tmp_path):
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    now = [1000.0]
+    aborts = []
+    recorder = LivePhysicsStream(
+        session_id="session-live-a", reset_epoch=1, model_sha256="a" * 64,
+        model_nq=3, model_nv=3, cup_qpos_address=0, cup_qvel_address=0,
+        diagnostic_limits=LIMITS, output_path=tmp_path / "observer.ndjson",
+        monotonic=lambda: now[0],
+    )
+    observer = LiveContactObserver(
+        recorder, ros_clock=lambda: .002, monotonic=lambda: now[0],
+        on_abort=aborts.append,
+    )
+    return observer, now, aborts
+
+
+def test_live_observer_aborts_and_preserves_recorded_prefix(tmp_path):
+    observer, now, aborts = _observer(tmp_path)
+    observer.accept_chunk(_ros_chunk())
+    now[0] += .001
+    bad = _ros_chunk()
+    bad.chunk_sequence = 1
+    bad.samples[0].physics_step = 2
+    bad.first_physics_step = bad.last_physics_step = 2
+    bad.evidence_loss = True
+    observer.accept_chunk(bad)
+    assert len(aborts) == 1 and observer.hazard is not None
+    observer.accept_chunk(_ros_chunk())
+    assert len(aborts) == 1
+    observer.close()
+    assert len((tmp_path / "observer.ndjson").read_text().splitlines()) == 1
+
+
+def test_live_observer_hazard_latch_and_stale_stream_abort(tmp_path):
+    observer, now, aborts = _observer(tmp_path)
+    observer.accept_hazard(NS(simulation_session_id="session-live-a", reset_epoch=1,
+                              physics_step=1, force_n=12.0, threshold_n=11.6,
+                              evidence_loss=False))
+    assert len(aborts) == 1
+    observer.close()
+
+    stale, now, aborts = _observer(tmp_path / "stale")
+    now[0] += .201
+    stale.poll()
+    assert aborts == ["LIVE_CONTACT_EVIDENCE_STALE"]
+    stale.close()
