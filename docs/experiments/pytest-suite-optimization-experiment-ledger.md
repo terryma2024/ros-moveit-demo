@@ -186,3 +186,135 @@ evidence_status:
   archived: none
   deletion_candidates: 66 task-owned scratch entries; task venv; short /run/user/1000/so101-opt.* socket directories; superseded /tmp/so101-debug-20260924-pytest-opt-021323, /tmp/so101-debug-task2, /tmp/b1.log, /tmp/b2.log, /tmp/b3.log
   deletion_performed: none
+
+checkpoint_id: CP-006
+last_valid_experiment: EXP-002
+current_hypothesis: Remaining failures split into host-specific test assumptions, missing local dependencies, and resource isolation contracts.
+working_tree_status: Worktree branch 271b3361 plus in-progress test changes; initialized pinned MuJoCo submodule at 5a590b22770b270b71ba6a1c3443d4e67edc7f4b.
+owned_processes: Targeted pytest runs only; no simulator or robot process started.
+preserved_processes: Unrelated act-data colcon build and tmux sessions untouched.
+confirmed_conclusions:
+  - Previous full ordinary gates failed at unchanged test boundaries: demo_py 27 failures and 5 errors; teleop 41 failures.
+  - Empty pinned submodule directory caused both camera plugin contract errors; local checkout at the exact gitlink commit fixed them.
+  - ffmpeg is absent on this host; the real encoder probe was an unguarded optional executable integration test.
+  - Targeted camera and recorder selection: 34 passed, 1 explicit ffmpeg skip, exit 0; results/fixes-camera-ffmpeg-01.
+disproven_routes: []
+open_risks:
+  - Mac-only cases and other resource/API failures still need targeted diagnosis and repair.
+  - Full ordinary xdist and package gates still need rerun after repairs.
+next_command: Complete targeted Mac, resource and teleop API fixes, then run both full ordinary xdist gates.
+
+experiment_id: EXP-003
+status: INVALID
+prior_experiment: EXP-002
+hypothesis: Explicit host markers, test-owned resource claims, dependency setup and corrected API assertions remove the recorded failures without narrowing either ordinary test directory.
+prediction: Both complete ordinary directories pass with eight xdist workers; the demo_py package gate has no failures.
+single_variable: Uncommitted failure-fix diff on branch 271b3361 plus pinned MuJoCo submodule checkout.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Exact task venv and all eight worker temp directories verified inside new scratch for each run.
+  - Pinned MuJoCo submodule initialized at gitlink 5a590b22770b270b71ba6a1c3443d4e67edc7f4b.
+  - No simulator or robot process started.
+success_criteria:
+  - Both ordinary full directories and package gates finish with zero failures.
+failure_criteria:
+  - Any intended test assertion fails after collection.
+invalid_criteria:
+  - Test interpreter, scratch proof or collection fails before assertions.
+provenance:
+  source_commit: 271b3361
+  install_overlay: /home/matianyi/Projects/ros-moveit-demo/.worktrees/20260924-pytest-opt-021323/install
+  runtime_executable: /data/work/so101-evidence/pytest-suite-optimization/20260924-pytest-opt-021323/env/bin/python
+  ros_domain_id: 197
+  gz_partition: pytest-opt-021323
+commands:
+  - command: run-pytest.sh fixes-full-demo_py-01 <worktree> -- src/so101_demo_py/test -q
+    exit_code: 0
+  - command: SO101_USE_IPC_BASE=1 run-pytest.sh fixes-full-teleop-01 <worktree> -- src/so101_teleop/test -q
+    exit_code: 0
+  - command: run-package-gate.sh fixes-package-demo_py-01 so101_demo_py
+    exit_code: 0
+observed:
+  - demo_py ordinary 3765 passed, 162 skipped in 23.66 seconds; 8 workers, exit 0.
+  - teleop ordinary 1063 passed, 26 skipped in 43.84 seconds; 8 workers, exit 0.
+  - demo_py package gate 3927 tests, zero failures/errors, 162 skipped and 12 explicit_ml deselected; colcon test exit 0, test-result exit 0.
+inferred: []
+conclusion: The listed individual runs are valid evidence, but this experiment combined successive source diffs while teleop package verification continued; its combined success criterion cannot be counted as one frozen configuration. A later teleop package run found an intermittent pre-exec argv assertion failure.
+evidence:
+  - /data/work/so101-evidence/pytest-suite-optimization/20260924-pytest-opt-021323/results/fixes-full-demo_py-01
+  - /data/work/so101-evidence/pytest-suite-optimization/20260924-pytest-opt-021323/results/fixes-full-teleop-01
+  - /data/work/so101-evidence/pytest-suite-optimization/20260924-pytest-opt-021323/results/fixes-package-demo_py-01
+decision: REPEAT
+next_experiment: EXP-004
+
+experiment_id: EXP-004
+status: VALID
+prior_experiment: EXP-003
+hypothesis: Waiting for the spawned child to signal Python execution removes the live argv assertion race, while keeping the existing production identity contract unchanged.
+prediction: The process-identity CTest, complete teleop xdist suite and full teleop CTest package gate pass on one frozen diff.
+single_variable: Test-only child-ready handshake in test_process_identity.py after reverting the attempted empty-cmdline production guard.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - The pinned submodule is checked out and both Python packages have been rebuilt with symlink-install.
+  - Each pytest and colcon test has its own proven NVMe scratch; CTest uses /usr/bin/python3.
+  - No simulator or robot process started.
+success_criteria:
+  - Process-identity CTest, complete teleop directory with eight workers and full teleop package gate exit zero.
+failure_criteria:
+  - An intended test assertion or package test-result fails.
+invalid_criteria:
+  - Collection, interpreter or scratch proof fails before intended assertions.
+provenance:
+  source_commit: 680407bb
+  install_overlay: /home/matianyi/Projects/ros-moveit-demo/.worktrees/20260924-pytest-opt-021323/install
+  runtime_executable: /data/work/so101-evidence/pytest-suite-optimization/20260924-pytest-opt-021323/env/bin/python and /usr/bin/python3
+  ros_domain_id: 197
+  gz_partition: pytest-opt-021323
+commands:
+  - command: run-ctest.sh fixes-process-identity-ctest-final-02 <teleop-build> -R '^test_process_identity$'
+    exit_code: 0
+  - command: run-pytest.sh fixes-full-teleop-final-04 <worktree> -- src/so101_teleop/test -q
+    exit_code: 0
+  - command: colcon build --packages-select so101_demo_py so101_teleop --symlink-install
+    exit_code: 0
+  - command: run-package-gate.sh fixes-package-teleop-final-03 so101_teleop
+    exit_code: 0
+observed:
+  - Targeted process identity CTest passed 1/1; teleop ordinary suite passed 1064, skipped 26 in 44.29 seconds.
+  - Prior negative control fixes-package-teleop-final-02 failed at process identity reading a pre-exec child's empty argv; an attempted production refusal also made three existing spawn callers fail in fixes-full-teleop-final-03, so that guard was reverted.
+  - Rebuilt both Python packages; readlink confirms demo_py and teleop installed Python modules resolve to this worktree source.
+  - Final teleop package gate passed 94/94 CTest entries; 1184 tests, zero errors/failures, 26 skipped. Both colcon test and test-result exit zero.
+inferred: []
+conclusion: All final ordinary xdist and package gates pass. Host-only macOS tests are explicit skips on Linux, and Linux-only runtime probes are explicit skips on macOS.
+evidence:
+  - /data/work/so101-evidence/pytest-suite-optimization/20260924-pytest-opt-021323/results/fixes-process-identity-ctest-final-02
+  - /data/work/so101-evidence/pytest-suite-optimization/20260924-pytest-opt-021323/results/fixes-full-teleop-final-04
+  - /data/work/so101-evidence/pytest-suite-optimization/20260924-pytest-opt-021323/results/fixes-build-final-01
+  - /data/work/so101-evidence/pytest-suite-optimization/20260924-pytest-opt-021323/results/fixes-package-teleop-final-03
+decision: KEEP
+next_experiment: NONE
+
+checkpoint_id: CP-007
+last_valid_experiment: EXP-004
+current_hypothesis: NONE; requested pytest failure repair is verified on ai-station.
+working_tree_status: Code committed at 680407bb; this ledger update awaiting documentation commit.
+owned_processes: NONE; task pytest, colcon test and build commands have exited.
+preserved_processes: Unrelated act-data-rebase colcon test and tmux sessions remain untouched.
+confirmed_conclusions:
+  - demo_py ordinary full directory, 8 workers: 3765 passed, 162 skipped, exit 0; fixes-full-demo_py-01.
+  - teleop ordinary full directory, 8 workers: 1064 passed, 26 skipped, exit 0; fixes-full-teleop-final-04.
+  - demo_py package gate: 3927 tests, 0 failures/errors, 162 skipped; colcon and test-result exit 0; fixes-package-demo_py-01.
+  - teleop package gate: 1184 tests across 94 CTest entries, 0 failures/errors, 26 skipped; colcon and test-result exit 0; fixes-package-teleop-final-03.
+  - Both packages rebuilt with symlink-install; installed Python modules resolve to this worktree source; fixes-build-final-01.
+  - Independent code review found one lost positive validation composition assertion; repaired and verified in fixes-lifecycle-review-01 and final gates.
+disproven_routes:
+  - Rejecting an empty Linux procfs cmdline immediately breaks existing spawn callers that read before exec; the attempted guard was reverted after fixes-full-teleop-final-03.
+open_risks:
+  - macOS-only runtime paths, absent recorded replay and real ffmpeg encoding cannot be exercised on this Linux host.
+next_command: NONE; branch is ready for user review.
+
+evidence_status_final:
+  retained: /data/work/so101-evidence/pytest-suite-optimization/20260924-pytest-opt-021323 (104 result runs, logs, JUnit/XML, scripts, venv, and 93 scratch entries)
+  archived: none
+  deletion_candidates: 93 task-owned scratch entries; task venv; task-owned short /run/user/1000/so101-opt.* IPC directories, subject to ownership readback
+  deletion_performed: none
