@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 4d00f104d343b63ec197649a87233018812da3bf
+current_commit: 4b7533300796b89539bad5b6cc9cf144bde57010
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -14,8 +14,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: EXP-167
-next_experiment: EXP-168 offline physical transport, release and settle probe
+latest_checkpoint: EXP-168
+next_experiment: EXP-169 bounded placement alignment candidate screen
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1352,3 +1352,9 @@ next_experiment: Live Task 3–8 calibration and controller publication after ow
 ## EXP-168 — Offline physical transport, release and settlement probe
 
 - State: PLANNED. Lifecycle: OFFLINE after EXP-167 independently verified static support failure, source `4d00f104...`, installed model SHA `3c876e7b...`. Replay EXP-161 measured hold and drive checked-in remaining lift/transport/descend/release/retreat joint targets in MuJoCo position control with explicit phase durations, logging bilateral grip force, cup/table support, cup pose/tilt/velocity and all protected contact categories. A raw position-control diagnostic cannot prove ROS controller or MoveIt execution. Determine whether passive settling after release reaches the target box without displacement or collision; reject route if physical evidence fails. Independently replay measured outputs before any live attempt. No formal data or deletion.
+
+- State: VALID offline physical transport/release/settle probe; checked-in raw waypoint schedule fails target box. `experiments/exp168-physical-route/probe.py` exit0, independent `verify.py` exit0 under exact revised installed model SHA `3c876e7b...` and source policy hash. Replayed original 2,500-step physical grasp then all 7,250 additional `.002 s` MuJoCo steps for remaining LIFT/MOVE_ABOVE_PLACE/DESCEND_TO_PLACE waypoints `.7 s` each, RELEASE `2 s`, RETREAT `.7 s` each and SETTLE `2 s`. Independent verifier checked all 725 20-ms q/cup/contact-force rows, 17 PNG/raw hashes and image render differences ≤7 pixels at 1/255, exact schedule and final policy predicates. All 420 sampled lift/transport/descent rows had bilateral finger force >`.05 N`, no table support or other protected force. The cup descended from `.182418 m` at place to table height `.165358 m` during release (90/100 sampled release rows supported), then final supported stable cup `(-.076668,-.263424,.165352)` m with near-zero speed. Final x and z satisfy the target, but y is `.003424 m` below the policy lower bound `−.260 m`; `final_target_box_pass=false`. Fresh place/release/settle wrist PNGs were inspected. This disproves the uncorrected direct waypoint schedule as a successful episode and is only offline raw position-control evidence, not ROS controller execution, MoveIt path, final Task8 qualification or permission to collect. Formal `0/0/0`, Task12 onward `NOT_STARTED`; retain EXP-168 and prior runs, archive none, scratch/superseded artifacts deletion candidates only, delete nothing.
+
+## EXP-169 — Bounded placement alignment candidate screen
+
+- State: PLANNED. Lifecycle: OFFLINE after EXP-168 independent negative final box, source `4b753330...`, installed revised model SHA `3c876e7b...`. Audit checked-in `place_alignment` correction logic and measured endpoint error, then test bounded candidate lateral corrections that keep the cup within the policy's `max_axis_correction_m=.030` and leave grasp/transport physics otherwise frozen. Independently replay any promising correction through release/retreat and verify support, upright angle, exact target box and other protected contact. A candidate is not Task8 live qualification; no formal data or deletion.
