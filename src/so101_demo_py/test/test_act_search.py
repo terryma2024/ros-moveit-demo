@@ -178,6 +178,41 @@ def test_head_transform_uses_image_stamp_with_causal_older_joint_feedback(monkey
     assert requests == [('base', 'head_camera_frame', 1_010_000_000)]
 
 
+def test_lagging_tf_uses_an_older_fresh_causal_frame(monkeypatch):
+    from types import SimpleNamespace
+    from sensor_msgs.msg import Image,CameraInfo,JointState
+
+    adapter,_,calls,module=adapter_fixture(monkeypatch,with_inputs=True)
+    image=Image(width=640,height=480,step=1920,encoding='rgb8',data=bytes(640*480*3))
+    info=CameraInfo(k=[400.,0.,320.,0.,400.,240.,0.,0.,1.],d=[0.]*5)
+    joints=JointState(name=['neck_yaw_joint'],position=[0.],velocity=[0.])
+    for message in (image,info,joints):
+        message.header.stamp.sec=1;message.header.stamp.nanosec=100_000_000
+        message.header.frame_id='head_camera_frame'
+    adapter._image(image);adapter._info(info);adapter._joints(joints)
+    def lookup(target,source,stamp):
+        if stamp.nanoseconds>1_000_000_000:raise RuntimeError('TF_NOT_YET_AVAILABLE')
+        return SimpleNamespace(transform=SimpleNamespace(rotation=SimpleNamespace(x=0.,y=0.,z=0.,w=1.)))
+    adapter.tf_buffer=SimpleNamespace(lookup_transform=lookup)
+    monkeypatch.setattr(module,'detect_head',lambda *args:[])
+    decision=adapter.tick(safe_observe=True)
+    assert decision['status']=='INPUT_PENDING'
+    assert adapter._pending_detection['frame']['sim_time_s']==1.
+    assert calls==['stop']
+
+
+def test_moving_neck_does_not_require_camera_tf_before_settle(monkeypatch):
+    from types import SimpleNamespace
+
+    adapter,_,calls,_=adapter_fixture(monkeypatch,with_inputs=True)
+    adapter.search.target=.1
+    adapter.tf_buffer=SimpleNamespace(lookup_transform=lambda *args:(_ for _ in ()).throw(
+        RuntimeError('TF_NOT_YET_AVAILABLE')))
+    decision=adapter.tick(safe_observe=True)
+    assert decision['stop'] is False and decision['neck_target_rad']==.1
+    assert calls==['command']
+
+
 @pytest.mark.parametrize('tf_missing',(False,True))
 def test_adapter_deadline_runs_without_rgb_or_transform(monkeypatch,tf_missing):
     adapter,clock,calls,_=adapter_fixture(monkeypatch,with_inputs=tf_missing,tf_missing=tf_missing)
