@@ -638,13 +638,26 @@ from so101_teleop.process_identity import group_members, read_identity  # noqa: 
 
 def _spawn_owner_process() -> subprocess.Popen:
     """A real child that leads its own process group, so its kernel identity is a real one."""
-    return subprocess.Popen(
+    process = subprocess.Popen(
         [sys.executable, "-c", "import time; time.sleep(120)"],
         start_new_session=True,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline:
+        try:
+            identity = read_identity(process.pid)
+        except Exception:
+            identity = None
+        if identity is not None and identity.argv[1:] == ("-c", "import time; time.sleep(120)"):
+            return process
+        if process.poll() is not None:
+            break
+        time.sleep(0.005)
+    _end_owner_process(process)
+    raise AssertionError("owner test child did not publish its command line")
 
 
 def _end_owner_process(process: subprocess.Popen, timeout: float = 5.0) -> None:

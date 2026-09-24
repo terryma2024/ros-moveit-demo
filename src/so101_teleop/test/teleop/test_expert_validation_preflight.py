@@ -393,6 +393,7 @@ def test_host_probe_reports_a_failing_guard_reason(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("schema_version", [4, 5, 6])
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
 def test_a_macos_document_admits_only_its_own_routing_key(tmp_path, schema_version):
     profile, schema, mode, workers, batch_kind = MATRIX[schema_version]
     document = MACOS_DOCUMENTS[schema_version]
@@ -416,6 +417,7 @@ def test_a_macos_document_admits_only_its_own_routing_key(tmp_path, schema_versi
     assert observations["execution_worker_count"] == workers
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
 def test_a_v4_document_refuses_a_w1_claim(tmp_path):
     """v4 is frozen exact-W2: a W1 claim is a different platform claim, not a W2 run."""
 
@@ -431,6 +433,7 @@ def test_a_v4_document_refuses_a_w1_claim(tmp_path):
     assert receipt.execution_config.worker_count == 1
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
 def test_a_v5_document_refuses_a_first_pass_claim(tmp_path):
     from so101_teleop.expert_validation.preflight import UNSUPPORTED_ON_MACOS
 
@@ -442,6 +445,7 @@ def test_a_v5_document_refuses_a_first_pass_claim(tmp_path):
     assert UNSUPPORTED_ON_MACOS in receipt.reason_codes
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
 def test_a_v6_document_refuses_a_retry_claim(tmp_path):
     from so101_teleop.expert_validation.preflight import UNSUPPORTED_ON_MACOS
 
@@ -453,6 +457,7 @@ def test_a_v6_document_refuses_a_retry_claim(tmp_path):
     assert UNSUPPORTED_ON_MACOS in receipt.reason_codes
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
 def test_adaptive_is_refused_on_a_macos_document(tmp_path):
     from so101_teleop.expert_validation.preflight import UNSUPPORTED_ON_MACOS
 
@@ -464,6 +469,7 @@ def test_adaptive_is_refused_on_a_macos_document(tmp_path):
     assert UNSUPPORTED_ON_MACOS in receipt.reason_codes
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
 def test_the_selected_point_count_never_infers_the_profile_or_the_worker_count(tmp_path):
     """Four points do not mean W1 and twenty points do not mean W2."""
 
@@ -495,6 +501,7 @@ def test_the_selected_point_count_never_infers_the_profile_or_the_worker_count(t
     assert UNSUPPORTED_ON_MACOS in oversized.reason_codes
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
 def test_a_declared_config_hash_that_does_not_match_the_document_is_refused(tmp_path):
     receipt = PreflightEngine(Resources(), platform="darwin").preflight(
         _macos_request(tmp_path, 4, parallel_config_sha256="b" * 64)
