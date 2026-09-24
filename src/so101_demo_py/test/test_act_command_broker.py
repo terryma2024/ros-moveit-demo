@@ -166,6 +166,34 @@ def test_reset_is_authorized_and_requires_physical_stop():
     assert not out['accepted'] and len(writes)==1
 
 
+def test_act_reset_free_joint_uses_mujoco_body_name():
+    """ResetWorld resolves a free-joint override by its owning body."""
+    from mujoco_ros2_control_msgs.msg import FreeJointState
+    from mujoco_ros2_control_msgs.srv import ResetWorld
+    from so101_demo.act.joints import ACT_JOINTS
+    from so101_demo.adapters.act.leased_action_client import message_dict
+    from so101_demo.adapters.act.ros_broker import RosBrokerDriver
+
+    driver = object.__new__(RosBrokerDriver)
+    request = ResetWorld.Request()
+    request.keyframe = 'task_start'
+    request.state_overrides.joint_states.name = list(ACT_JOINTS)
+    request.state_overrides.joint_states.position = [0.] * 7
+    request.state_overrides.joint_states.velocity = [0.] * 7
+    cup = FreeJointState()
+    cup.name = 'plastic_cup'
+    cup.pose.pose.position.x = 0.12
+    cup.pose.pose.position.y = -0.28
+    cup.pose.pose.position.z = 0.165
+    cup.pose.pose.orientation.w = 1.
+    request.state_overrides.free_joints = [cup]
+
+    assert driver.validate_reset(message_dict(request)) == request
+    cup.name = 'cup_free_joint'
+    with pytest.raises(ValueError, match='RESET_FREE_JOINT_INVALID'):
+        driver.validate_reset(message_dict(request))
+
+
 def test_competing_acquire_cannot_revoke_a_running_owner():
     driver=Driver();ownership=Ownership();broker=CommandBroker(driver,ownership=ownership)
     token=broker.handle(request(),'teacher')['lease_token'];driver.stationary=False
