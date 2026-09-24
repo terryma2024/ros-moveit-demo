@@ -467,7 +467,8 @@ class RosBrokerDriver:
                 raise ValueError('RESET_JOINT_LIMIT_INVALID')
         if len(request.state_overrides.free_joints)>1:raise ValueError('RESET_FREE_JOINT_INVALID')
         for joint in request.state_overrides.free_joints:
-            if joint.name!='cup_free_joint':raise ValueError('RESET_FREE_JOINT_INVALID')
+            # ResetWorld addresses a free joint by its owning MuJoCo body.
+            if joint.name!='plastic_cup':raise ValueError('RESET_FREE_JOINT_INVALID')
             pose=joint.pose.pose;twist=joint.twist.twist
             for point in (pose.position,twist.linear,twist.angular):
                 for key in ('x','y','z'):finite(getattr(point,key))
