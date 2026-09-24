@@ -5,17 +5,18 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 7e5d269394f2c17618ef8083e4412d3ee440fa6a
+current_commit: 5924c5e020ae00a15d096b8191e27cf578162374
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
   - CP-001 verifies dispatch baseline and reviewed document hashes.
+  - EXP-176 confirms current schema-v3 collector and analyzer are absent from source and installed overlay; ACT proposal generation requires a reviewed design.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: EXP-174
-next_experiment: Reviewed ACT-specific contact-policy and unified child-worker contract
+latest_checkpoint: EXP-176
+next_experiment: Independently reviewed ACT schema-v3 calibration collector/analyzer design
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1394,3 +1395,34 @@ next_experiment: Live Task 3–8 calibration and controller publication after ow
 - Exact pre-checkpoint source HEAD `7e5d269394f2c17618ef8083e4412d3ee440fa6a`, branch `codex/so101-act-data-0917a`, clean tracked/untracked status, merge base `a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c` with `main`, MuJoCo submodule `54463fce3bfa6192976e74113f5ed7152f708a3f` preserved. Task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `.../test-venv/bin/python`, `/usr/bin/colcon` verified. Last task-owned ROS domain207/partition `act-66c42e4c-exp166` was broker-first retired: launch exit0, no task-owned processes or tmux `act-data-live-166` remain. Unrelated `act-data-rebase-20260924` tmux remains preserved. Dispatch receipt readback has exactly the 36 Dispatch ID bytes. Registered durable root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`, low-rate `/tmp/so101-debug-act-data-66c42e4c/`; retained every created EXP run through EXP-174 and all scratch/build/installed artifacts, archived none. Scratch fixture trees, superseded verifier logs/images and runtime `/run/user/1000/act166` socket symlink are deletion candidates only; nothing deleted.
 - Confirmed: revised ACT wrist source/install/model and live three-placement RGB/CameraInfo/search pass within EXP-166 scope; offline physical grasp/alignment/radial-retreat candidate passes frozen target/support/upright predicates in EXP-172. Disproven: initial +X/+Y grip schedules, old 75° wrist full-grasp FOV, raw uncorrected and raw RETREAT waypoint placement, and old-policy live preflight. Open: ACT-specific contact calibration/approval, independent review of unified child payload/WorkerPort architecture, Task7A unified production mutation binding, Task6 complete search-to-retreat live FOV, Task8 real ROS/MoveIt full physical execution, Tasks9–11A and 50/10/10 formal accepted episodes. Stop condition: no reviewed safe production payload contract and no current ACT contact-policy approval; handoff bars the independent Astra subagent required by repository design-review rule. Do not execute Task12 onward.
 - Next exact read-only command after authority/review is provided: `sed -n '39,105p' src/so101_teleop/so101_teleop/unified/parents.py`. Resume by freezing the WorkerPort/IPC payload contract and ACT contact-calibration evidence plan before any RED implementation or live motion; preserve the existing clean branch and all evidence.
+
+## EXP-176 — ACT contact-calibration tooling availability
+
+```yaml
+experiment_id: EXP-176
+status: VALID
+prior_experiment: EXP-174
+hypothesis: The current schema-v3 tooling can produce a fresh ACT-specific disabled contact proposal without a new collector/analyzer architecture.
+prediction: Current source and installed package expose a collector, analyzer, raw-evidence validator, and disabled-proposal output path independent of the stale approved policy.
+single_variable: Current ACT package tooling availability under the newly authorized fingerprint scope.
+lifecycle: READ_ONLY
+preconditions: [STOP-175 branch clean, no task-owned simulator stack, no live execution]
+success_criteria: [Existing current tooling supports fresh five-regime 25-sample cohorts and independent evaluation without policy approval]
+failure_criteria: [Collector/analyzer or safe calibration entry path absent; new architecture design required]
+invalid_criteria: [Dirty third-party source or unreadable installed overlay]
+provenance:
+  source_commit: 5924c5e020ae00a15d096b8191e27cf578162374
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: NOT_STARTED
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
+low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
+dispatch_id: 0abf968f-83f5-4aa0-bfeb-5de6e5578a3b
+decision: STOP_AT_DESIGN_BOUNDARY
+```
+
+- State: VALID read-only tooling audit. `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp176-contact-tooling-audit/audit.py` exited 0; independent JSON syntax and artifact SHA-256 readback passed. `result.json` SHA-256 is `59fe6deefb30e3462088160ca1505257c8904bb55cb6a5ded84fa4af210a55e0`; audit script SHA-256 is `4e13a5f1be8a4c97c2026af1fa94d0758583b908b0be41f980babd554a2f92fc`. Current source tree and installed overlay have no `contact_calibration.py`, `contact_calibration_collector.py`, `analyze_contact_calibration.py`, or `collect_contact_calibration.py`; `setup.py` exposes neither calibration entry point. Git tree at historical `2253aef3` contains the old collector, analyzer, and policy in retired `so101_mujoco_demo_py`, but the current `so101_demo_py` package contains only the policy validator/approval/hash routines. Its `qualified_phases/contact_hold.py` calls `load_live_task_policy()` before sampling, which requires an approved policy whose fingerprint already fails for ACT. The old files cannot be executed against the current package or copied as a hash-only update.
+- Exact current inputs: source `5924c5e020ae00a15d096b8191e27cf578162374`; dependency `54463fce3bfa6192976e74113f5ed7152f708a3f`; ACT model XML `d8665bb90bf8d4b47f2a75dbf8147094464b82a69a7e57da30a77c5858c7903c`; ACT scene XML `4db48e35df9e91fc6868d303725badd0237fb10754d1e298637f5b0e1e55ed4f`; motion policy `aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356`; stale approved contact policy file `c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82`. No new source-evidence SHA or proposal SHA exists, because no new raw evidence or proposal was generated.
+- Design review input required: define a current-package ACT calibration collector and analyzer that can operate before approval without relaxing production preflight; specify five physically labeled regimes with 25 ordered samples each and an independent 20/5 fit/evaluation split; preserve independent false-positive/false-negative, table-only/post-release negative controls, authentic unilateral fail-closed contracts, force/displacement/staleness/reset aborts, immutable evidence and fingerprint hashing, and disabled-proposal output. Map the historical schema-v3 implementation to the current `so101_demo` observer/broker/runtime and ACT geometry. The resulting architecture/design requires independent GPT-6 Astra/High review under repository rules; this dispatch expressly forbids subagents and new design work. Do not implement or run a collector until that boundary is resolved. Unified WorkerPort/IPC payload design is separate and remains blocked.
+- No source changes, tests, ROS stack, simulator action, physical hardware, Task 8 execution, formal episodes, or Task 12 onward work occurred under this dispatch. RED/GREEN, ordinary xdist8 and package gates are conditional on source changes and therefore were not run. Formal accepted Train/Validation/Offline Test `0/0/0`; Task 12 onward `NOT_STARTED`. Retained: registered evidence root, all earlier experiments, and new EXP-176 audit; archived: none; deletion candidates: previously read-back scratch trees, superseded verifier logs/images and `/run/user/1000/act166` socket symlink only. No evidence deleted. Next command after reviewed design authority: inspect current `src/so101_demo_py/src/core/contact_policy.py` and the historical `2253aef3` calibration collector/analyzer together, freeze the ACT-specific evidence and safety contract, then begin targeted RED tests in unique NVMe scratch.
