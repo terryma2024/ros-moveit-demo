@@ -5,18 +5,19 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 5924c5e020ae00a15d096b8191e27cf578162374
+current_commit: 66eea16b735873961df3ba1c4bd28b976fcf3fef
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
   - CP-001 verifies dispatch baseline and reviewed document hashes.
-  - EXP-176 confirms current schema-v3 collector and analyzer are absent from source and installed overlay; ACT proposal generation requires a reviewed design.
+  - EXP-176 confirms current schema-v3 collector and analyzer are absent from source and installed overlay.
+  - CP-177 rebased this branch onto the independently reviewed ACT Task 8 design and plan at approved-main 1e4664517fecc34a01ef6b8959e4a0f7316cda6e.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: EXP-176
-next_experiment: Independently reviewed ACT schema-v3 calibration collector/analyzer design
+latest_checkpoint: CP-177
+next_experiment: Audit first unmet approved implementation dependency, beginning with Task 6A contact calibration.
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1426,3 +1427,12 @@ decision: STOP_AT_DESIGN_BOUNDARY
 - Exact current inputs: source `5924c5e020ae00a15d096b8191e27cf578162374`; dependency `54463fce3bfa6192976e74113f5ed7152f708a3f`; ACT model XML `d8665bb90bf8d4b47f2a75dbf8147094464b82a69a7e57da30a77c5858c7903c`; ACT scene XML `4db48e35df9e91fc6868d303725badd0237fb10754d1e298637f5b0e1e55ed4f`; motion policy `aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356`; stale approved contact policy file `c4ba607fea92f7c605fbc8cf08df0dfa3278113c71d1dd6ff10ea402e8186f82`. No new source-evidence SHA or proposal SHA exists, because no new raw evidence or proposal was generated.
 - Design review input required: define a current-package ACT calibration collector and analyzer that can operate before approval without relaxing production preflight; specify five physically labeled regimes with 25 ordered samples each and an independent 20/5 fit/evaluation split; preserve independent false-positive/false-negative, table-only/post-release negative controls, authentic unilateral fail-closed contracts, force/displacement/staleness/reset aborts, immutable evidence and fingerprint hashing, and disabled-proposal output. Map the historical schema-v3 implementation to the current `so101_demo` observer/broker/runtime and ACT geometry. The resulting architecture/design requires independent GPT-6 Astra/High review under repository rules; this dispatch expressly forbids subagents and new design work. Do not implement or run a collector until that boundary is resolved. Unified WorkerPort/IPC payload design is separate and remains blocked.
 - No source changes, tests, ROS stack, simulator action, physical hardware, Task 8 execution, formal episodes, or Task 12 onward work occurred under this dispatch. RED/GREEN, ordinary xdist8 and package gates are conditional on source changes and therefore were not run. Formal accepted Train/Validation/Offline Test `0/0/0`; Task 12 onward `NOT_STARTED`. Retained: registered evidence root, all earlier experiments, and new EXP-176 audit; archived: none; deletion candidates: previously read-back scratch trees, superseded verifier logs/images and `/run/user/1000/act166` socket symlink only. No evidence deleted. Next command after reviewed design authority: inspect current `src/so101_demo_py/src/core/contact_policy.py` and the historical `2253aef3` calibration collector/analyzer together, freeze the ACT-specific evidence and safety contract, then begin targeted RED tests in unique NVMe scratch.
+
+## CP-177 — Approved-main recovery and rebase (dispatch 30a80149)
+
+- Dispatch receipt `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/dispatch-30a80149-408c-4361-a238-eb6ba8692d3c.receipt` was written and read back byte-for-byte as the 36-byte ID without newline before other task actions. The worktree was clean at exact pre-handoff HEAD `3aa20512b798c7426fce536c2906c2a70ad0f532`; `origin/main` was `fd10ed0226f80870a3a8e88bf6a663f731c19378`; submodule remained `54463fce3bfa6192976e74113f5ed7152f708a3f`.
+- Offline bundle SHA256 `cc5775718bee2a0e16a1bd7f42ad6d00fe249f816793bc14874df30a9a067f6c` passed `git bundle verify`, required the exact `origin/main` SHA, and supplied `main` `1e4664517fecc34a01ef6b8959e4a0f7316cda6e`. Fetched only to unpublished `refs/remotes/handoff/approved-main`, whose SHA was read back. Created unpublished recovery ref `refs/heads/recovery/so101-act-data-30a80149-408c-4361-a238-eb6ba8692d3c` at the exact pre-handoff HEAD before rebasing; no push or reset.
+- Rebase replayed the 106 branch-only commits from old merge base `a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c` onto the approved tip, reaching pre-checkpoint HEAD `66eea16b735873961df3ba1c4bd28b976fcf3fef`. Two historical documentation changes became redundant; 104 branch commits remain above approved main. Content conflicts at commits `cc1ad983` and `a5f7a8b2` were confined to the ACT design and implementation-plan paths. Both were resolved by selecting approved-main contents, as the handoff requires. The long-running ACT data ledger replayed and was reconciled here; no implementation conflict required a new policy.
+- Approved installed-tree document SHA256 readback: overall design `dc6c879195aee4d791e473bd2738554ba97041aca5be7e2920583643d0189483`; implementation plan `a62a5f9e1284734e7d56bb0b8eaa4dd1262e4df252c5e69e8f25bb24b67460c0`; Task 8 design `cacd061f1c0728e68092c3f658755e20e22c7c509ccef382ed4510f5926137e0`; independent plan-review ledger `cc4da5ac40c363db0fc890edec0d590f3a5dbfa291f9a970712456a6e1c289c0`. All equal the verified supplied readable copies. `git diff --check refs/remotes/handoff/approved-main...HEAD` exited 0 before this ledger edit.
+- Previous EXP-176 design stop is superseded by the approved design and plan, but it did not produce raw ACT calibration samples, a disabled proposal or an activated policy. The next gate is an implementation audit, then Task 6A test-first collector/analyzer work. No Task 8 live, W8 qualification, formal collection or Task 12 work has started under this dispatch. Accepted Train/Validation/Offline Test remains `0/0/0`. Source commit for this checkpoint is `66eea16b735873961df3ba1c4bd28b976fcf3fef`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i` is pre-rebase until rebuilt, runtime executable `NOT_STARTED`, ROS_DOMAIN_ID/GZ_PARTITION `NOT_ASSIGNED`.
+- Retained: registered root and all earlier EXP runs, new dispatch receipt, offline bundle/input copies, and unpublished recovery ref. Archived: none. Deletion candidates: previously read-back scratch trees, superseded verifier logs/images, runtime `/run/user/1000/act166` socket symlink. No evidence or ref deleted.
