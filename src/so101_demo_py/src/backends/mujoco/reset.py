@@ -210,7 +210,9 @@ class MujocoResetClient:
                 return False
             if self._expected_joint_names != ARM_JOINTS:
                 velocities = self._services.latest_joint_velocities(self._expected_joint_names)
-                return all(abs(value) <= self._joint_tolerance for value in velocities)
+                # Leave headroom for the final paused scalar sample: the
+                # controller can still move between this read and the pause.
+                return all(abs(value) <= self._joint_tolerance / 4.0 for value in velocities)
             return True
         deadline = self._monotonic() + self._timeout_s
         try:
