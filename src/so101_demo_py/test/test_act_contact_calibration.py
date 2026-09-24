@@ -67,7 +67,8 @@ def _sample(regime, source, index):
         "model_sha256": metadata["model_sha256"],
         "scene_sha256": metadata["scene_sha256"],
         "motion_policy_sha256": metadata["motion_policy_sha256"],
-        "collector_sha256": metadata["collector_sha256"],
+        "collector_sha256": metadata[
+            "collector_sha256" if source == "offline" else "live_collector_sha256"],
         "config_sha256": metadata["config_sha256"],
         "clock_origin": "mujoco_simulated_ros" if source == "offline" else "ros_clock",
         "diagnostic_result": {"status": "PASS", "peak_force_n": peak_force,
@@ -93,6 +94,7 @@ def _metadata():
         "scene_sha256": "b" * 64,
         "motion_policy_sha256": "c" * 64,
         "collector_sha256": "d" * 64,
+        "live_collector_sha256": "1" * 64,
         "analyzer_sha256": "e" * 64,
         "config_sha256": "f" * 64,
         "policy_id": "so101-act-contact",
@@ -113,6 +115,14 @@ def test_20_offline_and_independent_5_live_produce_disabled_proposal():
     assert result["confusion_matrix"]["stable_hold"]["stable_hold"] == 5
     assert result["policy_fingerprint"] == policy_fingerprint(result["payload"])
     assert result["proposal_sha256"] != result["policy_fingerprint"]
+    assert result["payload"]["live_collector_sha256"] == _metadata()["live_collector_sha256"]
+
+
+def test_live_collector_provenance_cannot_impersonate_offline_source():
+    offline, live = _cohorts()
+    live["samples"][0]["collector_sha256"] = _metadata()["collector_sha256"]
+    with pytest.raises(ValueError, match="collector_sha256"):
+        analyze_evidence(offline, live, _metadata())
 
 
 def test_missing_live_sample_or_negative_control_fails_closed():

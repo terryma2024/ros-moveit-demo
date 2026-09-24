@@ -243,6 +243,9 @@ class LivePhysicsStream:
         if total_force > self.limits["maximum_force_n"]:
             raise ValueError("live diagnostic force hard stop")
         return {
+            "simulation_session_id": self.session_id,
+            "reset_epoch": self.reset_epoch,
+            "model_sha256": self.model_sha256,
             "physics_step": expected_step,
             "simulation_time_s": simulation_time,
             "ros_time_s": ros_time_s,
