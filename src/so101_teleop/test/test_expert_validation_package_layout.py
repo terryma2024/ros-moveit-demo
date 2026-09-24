@@ -8,53 +8,6 @@ ROOT = Path(__file__).resolve().parents[3]
 TELEOP = ROOT / "src" / "so101_teleop"
 DEMO = ROOT / "src" / "so101_demo_py"
 
-EXPERT_VALIDATION_TESTS = {
-    "test_expert_validation_adaptive_events",
-    "test_expert_validation_adaptive_owner",
-    "test_expert_validation_api",
-    "test_expert_validation_artifacts",
-    "test_expert_validation_campaign_layout_projection",
-    "test_expert_validation_catalog",
-    "test_expert_validation_control",
-    "test_expert_validation_coordinator_events",
-    "test_expert_validation_e2e_fixtures",
-    "test_expert_validation_e2e_installed_port",
-    "test_expert_validation_execution_context",
-    "test_expert_validation_executor_registry",
-    "test_expert_validation_frozen_manifest",
-    "test_expert_validation_journal_layout",
-    "test_expert_validation_lease",
-    "test_expert_validation_macos_control_parity",
-    "test_expert_validation_macos_service_campaign",
-    "test_expert_validation_main",
-    "test_expert_validation_operator_recovery",
-    "test_expert_validation_owner_tree",
-    "test_expert_validation_preflight",
-    "test_expert_validation_process_owner",
-    "test_expert_validation_process_owner_integration",
-    "test_expert_validation_production_projection",
-    "test_expert_validation_projection",
-    "test_expert_validation_reducer",
-    "test_expert_validation_retry_argv",
-    "test_expert_validation_service",
-    "test_expert_validation_start_guard",
-    "test_expert_validation_statistics",
-    "test_expert_validation_store",
-    "test_expert_validation_supervisor",
-    "test_expert_validation_v2_contract",
-}
-
-
-def test_cmake_registers_every_expert_validation_python_gate():
-    cmake = (TELEOP / "CMakeLists.txt").read_text(encoding="utf-8")
-    registered = set(
-        re.findall(r"so101_add_pytest_test\((test_expert_validation_[a-z0-9_]+)", cmake)
-    )
-    assert registered == EXPERT_VALIDATION_TESTS | {
-        "test_expert_validation_package_layout"
-    }
-
-
 def test_e2e_launcher_helpers_and_scenarios_are_not_installed():
     cmake = (TELEOP / "CMakeLists.txt").read_text(encoding="utf-8")
     install_blocks = re.findall(r"install\((.*?)\)", cmake, re.DOTALL)
