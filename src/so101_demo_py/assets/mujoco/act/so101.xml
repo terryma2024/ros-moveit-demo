@@ -144,7 +144,7 @@
                 <body name="wrist_camera_mount" pos="0.045 0 0.02">
                   <inertial pos="0 0 0" mass="0.02" diaginertia="0.000002 0.000002 0.000002" />
                   <geom name="wrist_camera_mount_collision" type="box" size="0.01 0.012 0.008" contype="1" conaffinity="1" group="3" />
-                  <camera name="wrist_camera" resolution="640 480" fovy="75" quat="0.9677015334834238 -0.2470947687282004 0.04842543793313918 -0.012365044357817807" />
+                  <camera name="wrist_camera" resolution="640 480" fovy="95" quat="0.9839547340865649 -0.14820831798181258 0.09624659121013797 -0.024575789510572335" />
                 </body>
               </body>
             </body>
