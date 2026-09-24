@@ -30,7 +30,7 @@ class StubLeaseService:
     def __init__(self) -> None:
         self.calls = 0
 
-    async def command(self, name: str, body: dict) -> dict:
+    async def command(self, name: str, body: dict, *, authority=None, lease=None) -> dict:
         assert name == "lease", name
         self.calls += 1
         return {

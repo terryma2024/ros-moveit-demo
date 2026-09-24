@@ -189,6 +189,7 @@ if(BUILD_TESTING)
   so101_add_pytest_test(test_unified_web_dependencies test/test_unified_web_dependencies.py)
   so101_add_pytest_test(test_unified_cancel_integration test/teleop/test_unified_cancel_integration.py)
   so101_add_pytest_test(test_unified_route_parity test/teleop/test_unified_route_parity.py)
+  so101_add_pytest_test(test_unified_teleop_route_binding test/teleop/test_unified_teleop_route_binding.py)
 endif()
 
 ament_package()
