@@ -69,11 +69,15 @@ POINT_ID = "sample_05_near_center"
 #: implementation.
 SOURCE_SHA256 = "a" * 64
 
-#: The real v3 parallel document of this repository, copied byte for byte into ``tmp_path``. The
-#: Linux retry admission loads the restored campaign's document as v3 and compares its hash with
-#: the one the restored request carries, so a hand-written stub would not do.
+#: The installed documents the two host branches of retry admission load, copied byte for byte
+#: into ``tmp_path``. The restored first pass has no named profile and binds v3; a macOS retry
+#: resolves its own MPS v5 document beside that configured file.
 V3_PARALLEL_DOCUMENT = (
     Path(__file__).resolve().parents[3] / "so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
+)
+MPS_RETRY_DOCUMENT = (
+    Path(__file__).resolve().parents[3]
+    / "so101_demo_py/config/mujoco/parallel_batch_v5_macos_mps_w1_retry.yaml"
 )
 
 
@@ -147,6 +151,7 @@ def build_environment(root: Path) -> dict:
     configuration = (Path(root) / "task-config").resolve()
     configuration.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(V3_PARALLEL_DOCUMENT, configuration / "parallel_batch_v3.yaml")
+    shutil.copyfile(MPS_RETRY_DOCUMENT, configuration / MPS_RETRY_DOCUMENT.name)
     (configuration / "points.yaml").write_text(
         "catalog_id: catalog-retry-fixture\npoints:\n"
         + "".join(f"  - id: {point_id}\n" for point_id in POINT_IDS)

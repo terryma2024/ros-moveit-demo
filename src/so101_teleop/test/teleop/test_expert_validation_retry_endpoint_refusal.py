@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from types import SimpleNamespace
 
 import pytest
 
@@ -370,7 +371,9 @@ def test_the_retry_admission_returns_the_request_and_its_registered_context(prod
     ).state.points[POINT_ID].result_sha256
 
 
-def test_linux_retry_admission_binds_the_original_installed_v3_document(production_session):
+def test_linux_retry_admission_binds_the_original_installed_v3_document(
+    production_session, monkeypatch
+):
     """On Linux the restored request names no profile, so the v3 document *is* the retry's binding.
 
     The task-local document is a byte copy of this repository's real v3 document, and the admission
@@ -378,6 +381,7 @@ def test_linux_retry_admission_binds_the_original_installed_v3_document(producti
     bytes the first pass executed, or it refuses.
     """
 
+    from so101_teleop.expert_validation import production
     from so101_teleop.expert_validation.execution_context import LINUX_RETRY_PROFILE
     from so101_teleop.expert_validation.production import _sha256
     from so101_teleop.expert_validation.service import ServiceConflict
@@ -387,6 +391,7 @@ def test_linux_retry_admission_binds_the_original_installed_v3_document(producti
     restored = service._campaign_requests[CAMPAIGN_ID]
     document = restored.parallel_config_path
     assert restored.execution_profile is None, "the receipt named no profile: this is the v3 path"
+    monkeypatch.setattr(production, "sys", SimpleNamespace(platform="linux"))
 
     request, context = service._production_retry_admission(
         CAMPAIGN_ID, POINT_ID, {"command_id": "cmd-linux-1"}
@@ -403,3 +408,30 @@ def test_linux_retry_admission_binds_the_original_installed_v3_document(producti
     document.write_text(document.read_text(encoding="utf-8") + "\n# drifted\n", encoding="utf-8")
     with pytest.raises(ServiceConflict, match="RETRY_CONFIG_HASH_MISMATCH"):
         service._production_retry_admission(CAMPAIGN_ID, POINT_ID, {"command_id": "cmd-linux-2"})
+
+
+def test_macos_retry_admission_binds_its_installed_mps_document(
+    production_session, monkeypatch
+):
+    """The macOS branch resolves its own v5 bytes beside the first pass's v3 document."""
+
+    from so101_teleop.expert_validation import preflight, production
+    from so101_teleop.expert_validation.execution_context import RETRY_PROFILE
+
+    session = production_session
+    original_resolver = preflight.resolve_execution_document
+    monkeypatch.setattr(production, "sys", SimpleNamespace(platform="darwin"))
+    monkeypatch.setattr(
+        preflight, "resolve_execution_document",
+        lambda directory, profile: original_resolver(directory, profile, platform="darwin"),
+    )
+
+    request, context = session.service._production_retry_admission(
+        CAMPAIGN_ID, POINT_ID, {"command_id": "cmd-macos-1"}
+    )
+    document = session.evidence_root / "task-config/parallel_batch_v5_macos_mps_w1_retry.yaml"
+    assert (request.execution_profile, context.execution_profile) == (
+        RETRY_PROFILE, RETRY_PROFILE,
+    )
+    assert (request.schema_version, context.schema_version) == (5, 5)
+    assert request.config_sha256 == production._sha256(document)
