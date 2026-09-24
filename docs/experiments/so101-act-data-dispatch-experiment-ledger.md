@@ -83,3 +83,24 @@ Dispatch is complete. Remote implementation is running; data collection, QC and 
 - Archived: none; the missing prior evidence root could not be archived.
 - Deletion candidates: local `/tmp/act-rebase-resolution.patch`, `/tmp/act-remote-docs.m1IipE`, and `/tmp/act-doc-refresh.hsEpQu`; no deletion authorized or performed.
 - Data/runtime acceptance: not recovered and remains pending. Training and ACT policy application were not started.
+
+## CP-005 — Refreshed handoff submitted
+
+- Date: 2026-09-24.
+- Handoff source: `docs/experiments/so101-act-data-main-refresh-ai-station-handoff.md`, local commit `40452727`, SHA256 `07ababaa4010351bbba269d5fa7cc8d872541c35bebef3e5fd177e3c709f0a42`.
+- New execution evidence root: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`. The missing `/data/work/so101-evidence/act-data` parent was recreated after the first root creation failed before writing any file.
+- Frozen inputs: handoff, reviewed design and plan, Astra review ledger, dispatch ledger, and the recovered runtime ledger snapshot. All were read back by size and SHA256 before dispatch.
+- Tmux target: `act-data-rebase-20260924:0.0`, pane `%6`, worktree `/home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a`.
+- Codex command: `codex -a never -s danger-full-access -m gpt-6-sol`; CLI `0.156.1`, GPT-6-Sol high, approval `never`, danger-full-access.
+- Codex session UUID: `01a0d16d-17d1-7cc0-9ea7-fea568871455`; dispatch UUID `66c42e4c-4723-461c-9340-1b4f8974e2c8`.
+- Receipt: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/dispatch-66c42e4c-4723-461c-9340-1b4f8974e2c8.receipt`, exactly 36 bytes, SHA256 `9c36d0e8a8310b766f0afa7758c14b7006055f7de69401a0d5a1af6ef4ad1f6d`; value exactly matches the dispatch UUID.
+- Bounded readback: the agent created and read the receipt, read `$so101-dev` and the handoff, restated that old runtime evidence is unavailable, reset formal counts to zero, preserved the Task 12 stop boundary, and began reading AGENTS, references, design, plan, review and runtime ledger before source/runtime actions.
+- Execution scope: audit and execute Task 1–11A under the refreshed fixed exact-N v3, unified mutation/GPU arbitration and data-verifier contracts; complete new expert data/QC if gates pass; stop before Task 12. No `dst`, subagent or second implementation writer was launched.
+- Dispatch source remained clean at `fbc25063f7d6ca5b7ccf67696d142074600aed55`; no ROS/MuJoCo task stack, push, merge or publication occurred during dispatch.
+
+## Evidence disposition after refreshed dispatch
+
+- Retained: rebase root `/data/work/so101-evidence/act-main-refresh/20260924-e2ec-rebase`, execution root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`, current worktree, tmux session, handoff, frozen inputs and receipt.
+- Archived: none.
+- Deletion candidates: the previously listed local `/tmp` patch/document staging paths and future read-back test scratch trees. Nothing was deleted.
+- Current acceptance: handoff submitted and acknowledged. Implementation, qualification, formal 50/10/10 data acceptance and QC remain in progress; Task 12 onward remains `NOT_STARTED`.
