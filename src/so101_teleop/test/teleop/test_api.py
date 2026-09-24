@@ -16,11 +16,11 @@ class Service:
 
     async def health(self): return {"ok": True}
     async def current_snapshot(self): return self.snapshot
-    async def execute_plan(self, plan_id, body):
+    async def execute_plan(self, plan_id, body, *, authority=None, lease=None):
         return CommandResult(command_id=body["command_id"], accepted=True, succeeded=False,
                              code="PLAN_STALE_SCENE", message="scene changed")
 
-    async def command(self, name, body):
+    async def command(self, name, body, *, authority=None, lease=None):
         self.commands.append((name, body))
         return CommandResult(command_id=body["command_id"], accepted=True, succeeded=False,
                              code="MOVEIT_IK_FAILED_-31", message="No IK solution")

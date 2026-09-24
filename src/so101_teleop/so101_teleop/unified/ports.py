@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Protocol
 
-from .contracts import QualificationView
+from .contracts import LeaseIdentity, QualificationView, RequestAuthority
 
 
 class BudgetSource(Protocol):
@@ -49,9 +49,15 @@ class TeleopPort(Protocol):
 
     def telemetry_wait(self) -> Awaitable[None]: ...
 
-    def command(self, name: str, body: dict) -> Awaitable[Any]: ...
+    def command(
+        self, name: str, body: dict, *,
+        authority: RequestAuthority | None = None, lease: LeaseIdentity | None = None,
+    ) -> Awaitable[Any]: ...
 
-    def execute_plan(self, plan_id: str, body: dict) -> Awaitable[Any]: ...
+    def execute_plan(
+        self, plan_id: str, body: dict, *,
+        authority: RequestAuthority | None = None, lease: LeaseIdentity | None = None,
+    ) -> Awaitable[Any]: ...
 
 
 class TasksArtifactPort(Protocol):

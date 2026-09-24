@@ -436,11 +436,16 @@ def teleop_router(services: UnifiedServices) -> APIRouter:
             return None
         return services.teleop
 
-    async def command(name: str, body: dict):
+    def bound_lease(authority: RequestAuthority) -> LeaseIdentity:
+        # The lease is a server-side projection of the bound controller, never a caller claim.
+        return services.instances.current_lease(authority.domain)
+
+    async def command(name: str, body: dict, authority: RequestAuthority | None = None):
         service = owner()
         if service is None:
             return unavailable("TELEOP_UNAVAILABLE", "teleop domain is not available")
-        result = await service.command(name, body)
+        lease = bound_lease(authority) if authority is not None else None
+        result = await service.command(name, body, authority=authority, lease=lease)
         # A port implementation may answer with either a typed result or a plain mapping, so the
         # success test has to read the payload rather than an attribute of the object.
         payload = result.model_dump() if hasattr(result, "model_dump") else dict(result)
@@ -480,7 +485,9 @@ def teleop_router(services: UnifiedServices) -> APIRouter:
     async def execute(plan_id: str, body: dict, authority: RequestAuthority = mutation):
         if owner() is None:
             return unavailable("TELEOP_UNAVAILABLE", "teleop domain is not available")
-        result = await services.teleop.execute_plan(plan_id, body)
+        result = await services.teleop.execute_plan(
+            plan_id, body, authority=authority, lease=bound_lease(authority)
+        )
         payload = result.model_dump() if hasattr(result, "model_dump") else dict(result)
         if not payload.get("succeeded"):
             code = str(payload.get("code", ""))
@@ -494,7 +501,9 @@ def teleop_router(services: UnifiedServices) -> APIRouter:
     async def execute_all(plan_id: str, body: dict, authority: RequestAuthority = mutation):
         if owner() is None or not hasattr(services.teleop, "execute_all"):
             return unavailable("TELEOP_UNAVAILABLE", "teleop domain is not available")
-        projection = await services.teleop.execute_all({**body, "plan_id": plan_id}, authority=authority)
+        projection = await services.teleop.execute_all(
+            {**body, "plan_id": plan_id}, authority=authority, lease=bound_lease(authority)
+        )
         return {
             "operation_id": projection.operation_id,
             "phase": projection.phase,
@@ -521,55 +530,55 @@ def teleop_router(services: UnifiedServices) -> APIRouter:
 
     @router.post("/control/lease/renew")
     async def renew_lease(body: dict, authority: RequestAuthority = mutation):
-        return await command("lease_renew", body)
+        return await command("lease_renew", body, authority)
 
     @router.post("/plan/joints")
     async def plan_joints(body: dict, authority: RequestAuthority = mutation):
-        return await command("plan_joints", body)
+        return await command("plan_joints", body, authority)
 
     @router.post("/plan/tcp")
     async def plan_tcp(body: dict, authority: RequestAuthority = mutation):
-        return await command("plan_tcp", body)
+        return await command("plan_tcp", body, authority)
 
     @router.post("/gripper/execute")
     async def gripper(body: dict, authority: RequestAuthority = mutation):
-        return await command("gripper", body)
+        return await command("gripper", body, authority)
 
     @router.post("/execution/cancel")
     async def cancel(body: dict, authority: RequestAuthority = mutation):
-        return await command("cancel", body)
+        return await command("cancel", body, authority)
 
     @router.post("/attachment/{operation}")
     async def attachment(operation: str, body: dict, authority: RequestAuthority = mutation):
-        return await command(f"attachment_{operation}", body)
+        return await command(f"attachment_{operation}", body, authority)
 
     @router.post("/scene/repair")
     async def scene_repair(body: dict, authority: RequestAuthority = mutation):
-        return await command("scene_repair", body)
+        return await command("scene_repair", body, authority)
 
     @router.post("/robot/home")
     async def home(body: dict, authority: RequestAuthority = mutation):
-        return await command("robot_home", body)
+        return await command("robot_home", body, authority)
 
     @router.post("/simulation/reset")
     async def reset_simulation(body: dict, authority: RequestAuthority = mutation):
-        return await command("simulation_reset", body)
+        return await command("simulation_reset", body, authority)
 
     @router.post("/gazebo/screenshot")
     async def screenshot(body: dict, authority: RequestAuthority = mutation):
-        return await command("screenshot", body)
+        return await command("screenshot", body, authority)
 
     @router.post("/gazebo/camera/presets/{preset}")
     async def camera_preset(preset: str, body: dict, authority: RequestAuthority = mutation):
-        return await command("camera_preset", {**body, "preset": preset})
+        return await command("camera_preset", {**body, "preset": preset}, authority)
 
     @router.post("/parameters/{operation}")
     async def parameters(operation: str, body: dict, authority: RequestAuthority = mutation):
-        return await command(f"parameters_{operation}", body)
+        return await command(f"parameters_{operation}", body, authority)
 
     @router.post("/workflow/{operation}")
     async def workflow(operation: str, body: dict, authority: RequestAuthority = mutation):
-        return await command(f"workflow_{operation}", body)
+        return await command(f"workflow_{operation}", body, authority)
 
     @router.websocket("/telemetry")
     async def telemetry(websocket: WebSocket):
@@ -1052,10 +1061,10 @@ class _SchemaOnlyService:
     async def telemetry_wait(self):
         return None
 
-    async def command(self, name, body):
+    async def command(self, name, body, *, authority=None, lease=None):
         return _SchemaOnlyResult()
 
-    async def execute_plan(self, plan_id, body):
+    async def execute_plan(self, plan_id, body, *, authority=None, lease=None):
         return _SchemaOnlyResult()
 
     async def presets(self):
