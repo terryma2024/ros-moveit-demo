@@ -9,8 +9,8 @@ import numpy as np
 
 ASSETS = Path(__file__).parents[1] / "assets/mujoco/act"
 EXPECTED_MJCF_QUAT = np.array(
-    (0.9677015334834238, -0.2470947687282004,
-     0.04842543793313918, -0.012365044357817807)
+    (0.9839547340865649, -0.14820831798181258,
+     0.09624659121013797, -0.024575789510572335)
 )
 
 
@@ -33,6 +33,7 @@ def test_calibrated_wrist_camera_matches_urdf_optical_frame():
     np.testing.assert_allclose(model.cam_pos[camera], (0., 0., 0.), atol=1e-12)
     np.testing.assert_allclose(model.body_pos[mount], (.045, 0., .02), atol=1e-12)
     np.testing.assert_allclose(model.cam_quat[camera], EXPECTED_MJCF_QUAT, atol=1e-12)
+    np.testing.assert_allclose(model.cam_fovy[camera], 95., atol=1e-12)
 
     urdf = ET.parse(ASSETS / "so101.urdf").getroot()
     mount_joint = urdf.find("joint[@name='wrist_camera_mount_joint']")
