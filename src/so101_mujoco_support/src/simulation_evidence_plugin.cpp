@@ -366,9 +366,11 @@ msg::PhysicsStepEvidence make_physics_step_evidence(
   double ignored_maximum = 0.0;
   double ignored_compression = 0.0;
   accumulate(output.other_object_contacts, &ignored_total, &ignored_maximum, &ignored_compression);
+  output.total_normal_force_n = output.left_fingertip_total_normal_force_n +
+    output.right_fingertip_total_normal_force_n + ignored_total;
   output.static_shadow_crossed = output.maximum_normal_force_n > static_shadow_force_n;
   output.diagnostic_hazard_breached =
-    output.global_max_single_contact_force_n >= diagnostic_hard_stop_force_n;
+    output.total_normal_force_n >= diagnostic_hard_stop_force_n;
   return output;
 }
 
@@ -443,14 +445,14 @@ bool PhysicsStepEvidenceBuffer::append(const msg::PhysicsStepEvidence & sample)
   samples_.push_back(sample);
   last_observed_ = sample;
   if (!hazard_latch_.has_value() &&
-    sample.global_max_single_contact_force_n >= diagnostic_hard_stop_force_n_)
+    sample.total_normal_force_n >= diagnostic_hard_stop_force_n_)
   {
     msg::PhysicsHazardLatch hazard;
     hazard.simulation_session_id = sample.simulation_session_id;
     hazard.reset_epoch = sample.reset_epoch;
     hazard.physics_step = sample.physics_step;
     hazard.simulation_time_s = sample.simulation_time_s;
-    hazard.force_n = sample.global_max_single_contact_force_n;
+    hazard.force_n = sample.total_normal_force_n;
     hazard.threshold_n = diagnostic_hard_stop_force_n_;
     hazard.evidence_loss = evidence_loss_;
     hazard_latch_ = hazard;

@@ -9,6 +9,7 @@ geometry_msgs/Twist object_twist_world
 bool has_contact
 bool truncated
 float64 maximum_normal_force_n
+float64 total_normal_force_n
 float64 left_fingertip_total_normal_force_n
 float64 right_fingertip_total_normal_force_n
 float64 fingertip_max_single_contact_force_n

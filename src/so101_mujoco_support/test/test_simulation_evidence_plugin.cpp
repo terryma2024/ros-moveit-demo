@@ -615,6 +615,7 @@ PhysicsStepEvidence physics_step_sample(uint64_t step, double force_n)
   sample.simulation_time_s = static_cast<double>(step) * 0.002;
   sample.maximum_normal_force_n = force_n;
   sample.global_max_single_contact_force_n = force_n;
+  sample.total_normal_force_n = force_n;
   return sample;
 }
 
@@ -689,6 +690,18 @@ TEST(PhysicsStepEvidenceBufferTest, EqualityBreachesAndFirstHazardLatchCannotBeO
   EXPECT_EQ(hazard->reset_epoch, 3U);
 }
 
+TEST(PhysicsStepEvidenceBufferTest, SummedContactsLatchBeforeAnySingleContactReachesLimit)
+{
+  PhysicsStepEvidenceBuffer buffer(64, 5, 11.60);
+  auto sample = physics_step_sample(1, 6.0);
+  sample.total_normal_force_n = 12.0;
+  ASSERT_TRUE(buffer.append(sample));
+  const auto hazard = buffer.hazard_latch();
+  ASSERT_TRUE(hazard.has_value());
+  EXPECT_EQ(hazard->physics_step, 1U);
+  EXPECT_DOUBLE_EQ(hazard->force_n, 12.0);
+}
+
 TEST(PhysicsStepEvidenceMetricsTest, KeepsForceSemanticsSeparateAndCompressionFingertipOnly)
 {
   SimulationEvidence snapshot;
@@ -721,6 +734,7 @@ TEST(PhysicsStepEvidenceMetricsTest, KeepsForceSemanticsSeparateAndCompressionFi
 
   EXPECT_DOUBLE_EQ(sample.maximum_normal_force_n, 5.0);
   EXPECT_DOUBLE_EQ(sample.global_max_single_contact_force_n, 5.0);
+  EXPECT_DOUBLE_EQ(sample.total_normal_force_n, 14.0);
   EXPECT_DOUBLE_EQ(sample.left_fingertip_total_normal_force_n, 5.0);
   EXPECT_DOUBLE_EQ(sample.right_fingertip_total_normal_force_n, 4.0);
   EXPECT_DOUBLE_EQ(sample.fingertip_max_single_contact_force_n, 4.0);
@@ -730,7 +744,7 @@ TEST(PhysicsStepEvidenceMetricsTest, KeepsForceSemanticsSeparateAndCompressionFi
   EXPECT_DOUBLE_EQ(sample.net_contact_force_world_n.y, 4.0);
   EXPECT_DOUBLE_EQ(sample.net_contact_force_world_n.z, 5.0);
   EXPECT_TRUE(sample.static_shadow_crossed);
-  EXPECT_FALSE(sample.diagnostic_hazard_breached);
+  EXPECT_TRUE(sample.diagnostic_hazard_breached);
 }
 
 TEST_F(AtomicEvidenceTest, PhysicsHookAdvancesAtFiveHundredHertzNotControllerCadence)
