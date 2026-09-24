@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 3d590a4b
+current_commit: ec862b8f
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -14,8 +14,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: EXP-155
-next_experiment: EXP-156 Task 8 offline jaw closure contact screen
+latest_checkpoint: EXP-156
+next_experiment: EXP-157 Task 8 offline MuJoCo grasp dynamics probe
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1280,3 +1280,9 @@ next_experiment: Live Task 3–8 calibration and controller publication after ow
 ## EXP-156 — Offline jaw closure contact screen
 
 - State: PLANNED. Lifecycle: OFFLINE after EXP-155 independent pass, source `3d590a4b`, revised model SHA `cee0062a...`, no ROS stack. Durable `experiments/exp156-jaw-closure`. Hold default cup and the verified `.04 m` +X approach endpoint arm q. Sweep jaw joint6 from 1.2 toward 0 rad in 121 static samples, recomputing exact contact pairs/distances with independent MuJoCo data and dual-camera cup masks at landmarks. Identify whether moving and fixed fingertip contact occur together before any other protected contact; screen penetration depth and jaw angle without claiming physical grip, force, slip, lift or allowed-contact qualification. Retain all outputs; no accepted data or deletion.
+
+- State: VALID static bilateral-contact screen only, not a grasp/force qualification. `screen.py` exit0 and independent `verify.py`/`verify-result.json` exit0 recompiled revised model SHA `cee0062a...`, recomputed all 121 jaw samples from1.2→0 rad, every protected contact pair/distance, seven dual-camera landmarks and 14 PNG/raw SHA/decode/masks. At the frozen `.04 m` +X arm pose, fixed finger/cup wall contacts exist at the open jaw; first moving finger/cup contact appears at index65, jaw`.55 rad`, giving bilateral static contact. No other protected geometry pair appears in these position-stage samples. Maximum penetration magnitude across the sweep is `.007415 m`; it is not a measured safe force, and the initial fixed-side penetration `.003751 m` warns that dynamic cup motion may differ. A fresh jaw`.4 rad` wrist PNG was inspected and shows substantial occlusion. No support, lift, slip, controller, release or retreat proof. Formal `0/0/0`, Task12 onward `NOT_STARTED`; retain EXP-156 and earlier runs, archive none, scratch/superseded artifacts deletion candidates only, delete nothing.
+
+## EXP-157 — Offline MuJoCo grasp dynamics probe
+
+- State: PLANNED. Lifecycle: OFFLINE after EXP-156 independent pass, source `ec862b8f`, exact task MuJoCo3.12 revised scene/model SHA `cee0062a...`, no ROS stack. Durable `experiments/exp157-grasp-dynamics`. Start at verified EXP-153 +X pregrasp, jaw1.2, default cup/table, set matching position controls and let physics settle; command the verified `.04 m` arm pose by a bounded linear control ramp, then close jaw to `.55`/`.45` rad, then attempt a small upward TCP IK target while holding closure. Sample cup pose/velocity, jaw/arm feedback, bilateral fingertip contact and table support at fixed simulation intervals, retain lossless images and independent replay of exact control schedule. This is an exploratory offline physics diagnostic only; it does not authorize live motion or formal data. Stop on numerical instability or nonfinite state, preserve failure evidence; no deletion.
