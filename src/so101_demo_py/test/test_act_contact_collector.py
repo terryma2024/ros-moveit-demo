@@ -13,8 +13,8 @@ MOTION = PACKAGE / "config/policies/light_cup_wall_pick/v1/mujoco.yaml"
 
 def _pinned():
     mujoco = pytest.importorskip("mujoco")
-    if mujoco.mj_versionString() != "3.4.0":
-        pytest.skip("physical collector requires pinned MuJoCo 3.4.0")
+    if mujoco.mj_versionString() != "3.12.0":
+        pytest.skip("physical collector requires plugin-linked MuJoCo 3.12.0")
 
 
 @pytest.mark.parametrize("regime", [
