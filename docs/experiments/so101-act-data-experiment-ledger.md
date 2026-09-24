@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: ba3692dd
+current_commit: 80af4c03
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -14,8 +14,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: EXP-160
-next_experiment: EXP-161 fresh offline replay of checked-in expert grasp geometry
+latest_checkpoint: EXP-161
+next_experiment: EXP-162 offline wrist orientation screen over cleared and expert grasp poses
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1310,3 +1310,9 @@ next_experiment: Live Task 3–8 calibration and controller publication after ow
 ## EXP-161 — Fresh offline replay of checked-in expert grasp geometry
 
 - State: PLANNED. Lifecycle: OFFLINE after EXP-160 independent negative replay; source `ba3692dd`, installed ACT revised model SHA `cee0062a...`, no ROS stack. Durable `experiments/exp161-policy-grasp`. Freeze default cup, exact source YAML SHA, preopen `.465038`/close `−.047608632840292` and checked-in DESCEND final arm waypoint; first compile exact installed ACT scene and static screen protected contacts, TCP-to-cup pose, head/wrist masks and lossless images. Then run isolated MuJoCo position-control settle, jaw closure, and the checked-in first LIFT waypoint as a small physical lift, sampling all finger/cup/table contacts, forces, cup pose/velocity and camera evidence. Independently replay controls and classify physical hold only from actual unsupported cup rise plus bilateral contact, never from source YAML claims or controller setpoints. If the initial static pose already violates a non-fingertip safety pair, stop before dynamics. No live ROS, formal data or deletion.
+
+- State: VALID fresh offline physical micro-lift candidate, not Task8 live qualification. Source policy YAML SHA `aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356`, revised installed model SHA `cee0062a...`. `probe.py` exit0 and independent `verify.py`/`verify-result.json` exit0 rebuilt the policy waypoint/jaw values, exact model and camera masks, replayed 2,500 actual MuJoCo position-control physics steps and all 254 sampled q/cup/TCP/contact-force rows, and decoded/SHA checked eight saved RGB PNGs. At checked-in DESCEND final arm q with preopen jaw`.465038`, static TCP `(0.02067668,-0.26282102,0.20063061)` m matches source contact offset; no initial protected contact. With jaw closing to−`.0476086` and first checked-in LIFT waypoint, cup rise reached `.010016 m`; all 101 lift samples and 26 final hold samples had bilateral fixed/moving finger normal force >`.05 N`, and all 26 hold samples had no table support force. Minimum hold cup z `.175008 m`, final cup `(0.020003,-0.268552,0.175012)` m. No other protected force category appeared. This establishes one offline simulated physical hold/lift geometry, not live controller execution, safe full path, release/retreat, or final placement. The wrist cup segmentation at initial contact has margin0 (top clipped), and fresh final wrist PNG shows top clipping; Task6 full-phase FOV remains failed. Formal `0/0/0`, Task12 onward `NOT_STARTED`; retain EXP-161 and prior runs, archive none, scratch/superseded artifacts deletion candidates only, delete nothing.
+
+## EXP-162 — Wrist orientation screen over cleared and expert grasp poses
+
+- State: PLANNED. Lifecycle: OFFLINE after EXP-161 independent fresh replay, source `80af4c03`, exact revised installed model SHA `cee0062a...`, no ROS stack. Durable `experiments/exp162-wrist-grasp-orientation`. Keep camera mount position, all collision geometry, head camera and source assets unchanged. In memory, sweep explicit local pitch/yaw adjustments to the current wrist quaternion over a bounded grid; render geom-ID cup masks for the cleared candidate q across default/left/forward placements and source expert preopen grasp, closed grasp and lifted q for default cup. Rank contact-safe orientations requiring cup ≥1,000 px and ≥20 px edge margin in all six frozen views; retain baseline/best RGB/mask and independently recompute. A passing static candidate would require TDD asset revision, optical transform and fresh live/full-route evidence; no automatic camera change or Task6 qualification. No formal data or deletion.
