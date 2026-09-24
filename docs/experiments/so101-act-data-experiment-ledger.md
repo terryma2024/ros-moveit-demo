@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 66eea16b735873961df3ba1c4bd28b976fcf3fef
+current_commit: 4e9161686444c1d9dbaabec2b4cc3de45e80bcde
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -17,7 +17,7 @@ disproven_routes:
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
 latest_checkpoint: CP-177
-next_experiment: Audit first unmet approved implementation dependency, beginning with Task 6A contact calibration.
+next_experiment: EXP-177 Task 6A contact calibration RED/GREEN
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1436,3 +1436,44 @@ decision: STOP_AT_DESIGN_BOUNDARY
 - Approved installed-tree document SHA256 readback: overall design `dc6c879195aee4d791e473bd2738554ba97041aca5be7e2920583643d0189483`; implementation plan `a62a5f9e1284734e7d56bb0b8eaa4dd1262e4df252c5e69e8f25bb24b67460c0`; Task 8 design `cacd061f1c0728e68092c3f658755e20e22c7c509ccef382ed4510f5926137e0`; independent plan-review ledger `cc4da5ac40c363db0fc890edec0d590f3a5dbfa291f9a970712456a6e1c289c0`. All equal the verified supplied readable copies. `git diff --check refs/remotes/handoff/approved-main...HEAD` exited 0 before this ledger edit.
 - Previous EXP-176 design stop is superseded by the approved design and plan, but it did not produce raw ACT calibration samples, a disabled proposal or an activated policy. The next gate is an implementation audit, then Task 6A test-first collector/analyzer work. No Task 8 live, W8 qualification, formal collection or Task 12 work has started under this dispatch. Accepted Train/Validation/Offline Test remains `0/0/0`. Source commit for this checkpoint is `66eea16b735873961df3ba1c4bd28b976fcf3fef`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i` is pre-rebase until rebuilt, runtime executable `NOT_STARTED`, ROS_DOMAIN_ID/GZ_PARTITION `NOT_ASSIGNED`.
 - Retained: registered root and all earlier EXP runs, new dispatch receipt, offline bundle/input copies, and unpublished recovery ref. Archived: none. Deletion candidates: previously read-back scratch trees, superseded verifier logs/images, runtime `/run/user/1000/act166` socket symlink. No evidence or ref deleted.
+
+## EXP-177 — ACT contact calibration contract implementation
+
+```yaml
+experiment_id: EXP-177
+status: RUNNING
+prior_experiment: EXP-176
+hypothesis: A current-package collector/analyzer can enforce the reviewed five-regime physical cohort and canonical fingerprint contract before policy activation, without using the stale approved policy as its own oracle.
+prediction: New tests fail at the missing ACT calibration and policy modules, then pass for strict raw evidence, independent 20/5 splits, negative controls, disabled proposal, canonical payload fingerprint, and separate activation receipt.
+single_variable: New Task 6A current-package calibration and policy implementation.
+lifecycle: SOURCE_ONLY
+preconditions: [CP-177 clean rebase, no task-owned ROS stack, approved documents hash-verified]
+success_criteria: [Intended RED at new module boundary, targeted GREEN, tamper and negative-control matrix, ordinary full package gate]
+failure_criteria: [Invalid evidence accepted or proposal activates without distinct receipt]
+invalid_criteria: [Test bootstrap fails before intended boundary, source/provenance drift, concurrent writer]
+provenance:
+  source_commit: 4e9161686444c1d9dbaabec2b4cc3de45e80bcde
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: []
+observed: []
+inferred: []
+conclusion: PENDING
+decision: PENDING
+next_experiment: EXP-178 live physical calibration after source and safety gates
+```
+
+The audited current source has no Task 6A collector/analyzer/activation modules or entry points; `src/core/contact_policy.py` implements the earlier schema-v3 approved-policy loader with proposal-envelope authorization and cannot represent the reviewed canonical payload fingerprint by itself. Historical `2253aef3` contains a retired-package collector/analyzer and is used as an interface reference, not copied into runtime. Task 7A unified admission and Task 8 live remain unqualified. No formal episode or Task 12 work is authorized.
+
+### EXP-177 source-contract progress (not physical qualification)
+
+- Intended REDs reached the new module/behavior boundaries: policy module missing exit2 (`scratch/exp177-red.MeyPEbmc`), calibration module missing exit2 (`exp177-red2.yi0d4jlq`), sealed-manifest API missing exit2 (`exp177-red3.n79xIYTR`), disabled-proposal/receipt API missing exit2 (`exp177-red4.LEFbS9H2`), and CLI module missing with 11 other tests passing exit1 (`exp177-red5.sjHX38g9`). Each run used its own verified `/data` NVMe `TMPDIR/TMP/TEMP` and retained JUnit/log/exit proof.
+- Targeted current source GREEN: 20/20 synthetic contract tests, exit0, `scratch/exp177-green5.yztX85RX`, elapsed 1 s. Earlier 8/8, 16/16, 17/17 and 19/19 incremental greens are retained. The tests cover canonical payload hash versus envelope hash, separate activation receipt, exact 20 offline/5 live samples per physical regime, negative controls, stale/reset/force/displacement rejection, sealed raw cohort hash and tamper readback. They are synthetic fixtures and do not constitute ACT physical calibration.
+- Rebuilt `so101_demo_py` into task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i` with `colcon build --packages-select so101_demo_py`, exit0. Both `act_analyze_contact_calibration` and `act_activate_contact_policy` resolve from that overlay and their `--help` exits0. Installed Python module symlink resolves to this worktree. Runtime ROS executable `NOT_STARTED`, ROS_DOMAIN_ID/GZ_PARTITION `NOT_ASSIGNED`.
+- Ordinary direct full `src/so101_demo_py/test` xdist8 gate: `scratch/exp177-demo-xdist8.RfXrzNfo`, exact task test Python/pytest/xdist and tempfile proof, 4,039 passed, 162 skipped, four warnings, zero failure/error, exit0, elapsed41 s. Benchmark suite was not collected.
+- First colcon package gate `scratch/exp177-colcon.zV7UJqhg` was `INVALID_ENVIRONMENT`: `colcon` exit0 but pytest XML had 8 collection errors because its subprocess lacked this worktree root for `import tools`. It is not a test RED or passing gate. Fresh rerun `scratch/exp177-colcon-retry.rSzsIFyR` set the worktree root and isolated test dependencies on `PYTHONPATH`; exact `/usr/bin/python3` tempfile proof passed. `colcon` exit0, actual package pytest argv `test -n 8`, XML 4,201 cases/0 errors/0 failures/162 skips, elapsed41 s; `colcon test-result --verbose` reports zero errors/failures for registered results.
+- Separate pinned MuJoCo 3.4.0 Python wheel installed only under registered root `deps/mujoco34` with `uv --target --no-deps`, exit0; import readback resolves there as version 3.4.0. Task test venv's default MuJoCo remains 3.12.0. No offline physical sample or ROS live sample generated yet; any physical calibration must use the exact pinned version and independently verify its source/model/scene hashes.
+- Current implementation slice contains the pure policy payload/receipt validator, synthetic cohort analyzer, sealed raw cohort verification, and two CLI entry points. Task 6A is **not complete**: deterministic physical offline generator, isolated live collector, authentic negative controls, independent proposal review, current-package production loader integration, and actual activation receipt are still pending. Task 7A/8–11A have not advanced. Formal accepted counts remain `0/0/0`; Task 12 onward `NOT_STARTED`. Retained: registered root and all EXP-177 scratch/build/dependency evidence; archived: none; deletion candidates: read-back scratch trees and earlier superseded verifier artifacts, with no deletion.
+- Follow-up diagnostic hard-stop RED `scratch/exp177-red7.9Oi73B58`: 2 intended failures after exact source/install and scratch verification, because the analyzer trusted table support and allowed aggregate force above its diagnostic cap. Earlier `exp177-red6.39CkYlRJ` failed collection due a missing overlay environment and is `INVALID_ENVIRONMENT`, not an intended RED. Source fix derives table support from raw table contacts and caps summed frame force. Fresh targeted GREEN `scratch/exp177-green6.bSKKbGEz`: 22/22 passed, exit0, elapsed1 s. Both scratch trees are retained deletion candidates; none deleted.

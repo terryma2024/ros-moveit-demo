@@ -93,6 +93,8 @@ setup(
         "console_scripts": [
             "act_command_broker = so101_demo.cli.act_command_broker:main",
             "act_preflight = so101_demo.cli.act_preflight:main",
+            "act_analyze_contact_calibration = so101_demo.cli.act_analyze_contact_calibration:main",
+            "act_activate_contact_policy = so101_demo.cli.act_activate_contact_policy:main",
             "so101_parallel_batch = so101_demo.cli.mujoco_parallel_batch:main",
             # The macOS counterpart of the fixed coordinator: the entry point the unified service
             # launches on this platform, because so101_parallel_batch refuses it outright.
