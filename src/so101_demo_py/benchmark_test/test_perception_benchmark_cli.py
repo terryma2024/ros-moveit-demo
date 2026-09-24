@@ -93,6 +93,10 @@ def test_config_contains_frozen_literals() -> None:
     assert "nms:\n        source:" in text
 
 
+def test_checked_in_config_matches_cli_frozen_hash() -> None:
+    assert sha256_bytes(CONFIG.read_bytes()) == perception_benchmark._CONFIG_SHA256
+
+
 def test_unlock_without_verified_locks_is_typed_error(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

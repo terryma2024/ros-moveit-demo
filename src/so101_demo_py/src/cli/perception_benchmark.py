@@ -99,7 +99,7 @@ _SCENARIOS = (
 _MODELS = ("yolo_seg", "grounded_sam")
 _INDEX_SCHEMA = "so101-perception-benchmark/evidence-index/v1"
 _INDEX_SEMANTICS = "payload files only; evidence-index.json is excluded to avoid self-reference"
-_CONFIG_SHA256 = "511e0e6472cb774f521783982b2833c790ddc85d1cf3bad03112100ee2896a92"
+_CONFIG_SHA256 = "5c8b0046a71325c675228b08fc98aa1275b1fe36aeb85cf641c9b6afc8e0763d"
 _ARCHIVE_ID = (
     "datasets/so101-v5-t005-grounded-sam-postfix/so101-v5-t005-grounded-sam-postfix-r4.tar.gz"
 )
