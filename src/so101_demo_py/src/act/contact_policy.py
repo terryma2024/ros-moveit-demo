@@ -19,7 +19,7 @@ _PAYLOAD_KEYS = frozenset(
         "schema_version", "policy_id", "thresholds", "evaluation",
         "allowed_other_contact_bodies", "mujoco_version", "model_sha256",
         "scene_sha256", "motion_policy_sha256", "source_evidence_sha256",
-        "collector_sha256", "analyzer_sha256", "config_sha256",
+        "collector_sha256", "live_collector_sha256", "analyzer_sha256", "config_sha256",
     }
 )
 _THRESHOLD_KEYS = frozenset(
@@ -78,7 +78,7 @@ def canonical_policy_payload(payload: dict[str, Any]) -> bytes:
     _nonempty(item["mujoco_version"], "mujoco_version")
     for field in (
         "model_sha256", "scene_sha256", "motion_policy_sha256",
-        "source_evidence_sha256", "collector_sha256", "analyzer_sha256",
+        "source_evidence_sha256", "collector_sha256", "live_collector_sha256", "analyzer_sha256",
         "config_sha256",
     ):
         _sha(item[field], field)

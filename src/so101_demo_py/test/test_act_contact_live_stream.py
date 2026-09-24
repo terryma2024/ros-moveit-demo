@@ -58,6 +58,9 @@ def test_live_chunk_stream_persists_contiguous_raw_state(tmp_path):
     rows = [json.loads(line) for line in (tmp_path / "physics.ndjson").read_text().splitlines()]
     assert [row["physics_step"] for row in rows] == [1, 2, 3]
     assert all(row["model_qpos"] == [.02, -.28, .165] for row in rows)
+    assert all(row["simulation_session_id"] == "session-live-a" and
+               row["reset_epoch"] == 1 and row["model_sha256"] == "a" * 64
+               for row in rows)
     assert recorder.recorded_steps == 3
 
 

@@ -32,6 +32,7 @@ def _payload():
         "motion_policy_sha256": "c" * 64,
         "source_evidence_sha256": "d" * 64,
         "collector_sha256": "e" * 64,
+        "live_collector_sha256": "1" * 64,
         "analyzer_sha256": "f" * 64,
         "config_sha256": "1" * 64,
     }

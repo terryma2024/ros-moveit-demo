@@ -45,7 +45,7 @@ _CONTACT_KEYS = frozenset(
 )
 _METADATA_KEYS = frozenset(
     {"mujoco_version", "model_sha256", "scene_sha256", "motion_policy_sha256",
-     "collector_sha256", "analyzer_sha256", "config_sha256", "evaluation",
+     "collector_sha256", "live_collector_sha256", "analyzer_sha256", "config_sha256", "evaluation",
      "diagnostic_limits", "policy_id", "allowed_other_contact_bodies"}
 )
 _LIMIT_KEYS = frozenset(
@@ -121,10 +121,13 @@ def _validated_sample(
     if not isinstance(sample["simulation_session_id"], str) or not sample["simulation_session_id"]:
         raise ValueError("simulation_session_id is missing")
     _integer(sample["reset_epoch"], "reset_epoch")
-    for field in ("model_sha256", "scene_sha256", "motion_policy_sha256",
-                  "collector_sha256", "config_sha256"):
+    for field in ("model_sha256", "scene_sha256", "motion_policy_sha256", "config_sha256"):
         if sample[field] != metadata[field]:
             raise ValueError(f"sample {field} provenance mismatch")
+    expected_collector = metadata[
+        "collector_sha256" if source == "offline" else "live_collector_sha256"]
+    if sample["collector_sha256"] != expected_collector:
+        raise ValueError("sample collector_sha256 provenance mismatch")
     expected_clock = "mujoco_simulated_ros" if source == "offline" else "ros_clock"
     if sample["clock_origin"] != expected_clock:
         raise ValueError("sample clock provenance mismatch")
@@ -346,6 +349,7 @@ def analyze_evidence(offline: dict[str, Any], live: dict[str, Any], metadata: di
         "motion_policy_sha256": meta["motion_policy_sha256"],
         "source_evidence_sha256": source_hash,
         "collector_sha256": meta["collector_sha256"],
+        "live_collector_sha256": meta["live_collector_sha256"],
         "analyzer_sha256": meta["analyzer_sha256"],
         "config_sha256": meta["config_sha256"],
     }
