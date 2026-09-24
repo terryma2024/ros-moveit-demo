@@ -22,10 +22,13 @@ from so101_teleop.expert_validation.store import StoreConflict, SupervisorStore
 SHA = "a" * 64
 
 
-@pytest.fixture
-def fenced(tmp_path):
+@pytest.fixture(params=[
+    "ros_domain_ids: [181, 182]\n",
+    "schema_version: 3\nexecution:\n  ros_domain_ids: [181, 182]\n",
+])
+def fenced(tmp_path, request):
     config = tmp_path / "parallel.yaml"
-    config.write_text("ros_domain_ids: [181, 182]\n")
+    config.write_text(request.param)
     store = SupervisorStore.open((tmp_path / "store").resolve())
     store.record_manifest("manifest-1", {"points": []}, source_config_sha256=SHA, created_at_ns=1)
     receipt = PreflightReceipt(

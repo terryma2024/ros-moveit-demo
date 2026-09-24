@@ -273,7 +273,9 @@ def recover(*, store, campaign_id, command_id, parallel_config, inspector=None,
     if config_sha != context["preflight"].get("parallel_config_sha256"):
         raise RecoveryError("RECOVERY_CONFIG_MISMATCH")
     document = yaml.safe_load(config_bytes)
-    domains = document.get("ros_domain_ids") if isinstance(document, dict) else None
+    execution = document.get("execution") if isinstance(document, dict) else None
+    domain_scope = execution if isinstance(execution, dict) else document
+    domains = domain_scope.get("ros_domain_ids") if isinstance(domain_scope, dict) else None
     if (not isinstance(domains, list) or not domains or len(set(domains)) != len(domains)
             or any(type(domain) is not int or not 0 <= domain <= 232 for domain in domains)):
         raise RecoveryError("RECOVERY_DOMAIN_SCOPE_INVALID")

@@ -354,6 +354,39 @@ class RosDynamicMujocoExecution:
             ),
         }
 
+    def _record_monitor_violation(self, state: State, reason: str, value) -> None:
+        def contacts(items) -> list[dict[str, object]]:
+            return [
+                {
+                    "geom1": getattr(item, "geom1", None),
+                    "geom2": getattr(item, "geom2", None),
+                    "position_world_m": (
+                        None if getattr(item, "position_world", None) is None
+                        else list(item.position_world)
+                    ),
+                    "signed_distance_m": getattr(item, "signed_distance_m", None),
+                    "normal_force_n": getattr(item, "normal_force_n", None),
+                }
+                for item in items
+            ]
+
+        violation = {
+            "state": state.value,
+            "reason": reason,
+            "sample": self._evidence(value),
+            "contacts": {
+                "left": contacts(value.left_fingertip_contacts),
+                "right": contacts(value.right_fingertip_contacts),
+                "other": contacts(value.other_object_contacts),
+            },
+            "last_joint_positions_rad": {
+                name: self._positions.get(name) for name in (*self._ARM_JOINTS, "6")
+            },
+            "last_joint_state_received_monotonic_s": self._joint_state_received_monotonic_s,
+        }
+        self._document.setdefault("monitor_violation", violation)
+        self._document.setdefault("monitor_violations", []).append(violation)
+
     def _record(self, state: State, before, after, **details: object) -> None:
         self._state_events.append(
             {
@@ -703,10 +736,12 @@ class RosDynamicMujocoExecution:
         def monitor() -> None:
             value = self._snapshot()
             if value.maximum_normal_force_n > self._MAX_FORCE_N:
+                self._record_monitor_violation(state, "DYNAMIC_FORCE_LIMIT_EXCEEDED", value)
                 raise RuntimeError("DYNAMIC_FORCE_LIMIT_EXCEEDED")
             if carried:
                 guard.require(self._bilateral(value), "dynamic carry lost bilateral contact")
                 if self._reject_carried_table_contact(state, self._table_contact(value)):
+                    self._record_monitor_violation(state, "DYNAMIC_EARLY_TABLE_CONTACT", value)
                     raise RuntimeError("DYNAMIC_EARLY_TABLE_CONTACT")
             elif state in {State.MOVE_ABOVE_OBJECT, State.DESCEND} and self._initial is not None:
                 displacement = math.dist(
@@ -749,6 +784,10 @@ class RosDynamicMujocoExecution:
                 monitor=monitor,
             )
             if executed.status is not ActionStatus.SUCCEEDED:
+                # The trajectory client has already cancelled and settled the goal. Persist the
+                # triggering atomic sample before recovery can replace it with a later snapshot.
+                if "monitor_violation" in self._document:
+                    self._write()
                 if self._is_reconcilable_control_failure(executed):
                     current = self._joint_state(after_generation=execution_generation)
                     reconciliation = self._terminal_pose_reconciliation(

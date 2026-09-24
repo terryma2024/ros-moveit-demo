@@ -163,11 +163,36 @@ function fakeApi(overrides: Partial<ExpertValidationApi> = {}): ExpertValidation
       };
     },
     async retry() { throw new Error("not expected"); },
+    async cancelCampaign() { throw new Error("not expected"); },
     ...overrides,
   };
 }
 
 describe("ExpertValidationApp", () => {
+  test("operator can fence a started campaign whose coordinator died before the journal", async () => {
+    const user = userEvent.setup();
+    const cancelCampaign = vi.fn(async () => ({
+      campaign_id: "campaign-orphan", manifest_id: "manifest-4", sequence: 2,
+      execution_mode: "SEQUENTIAL" as const, status: "NEEDS_OPERATOR_RECOVERY" as const,
+      batch_cleanup_complete: false, points: [], workers: [], requested: 0, evaluated: 0,
+      execution_started: 0, valid_succeeded: 0, valid_failed: 0, indeterminate: 0,
+      not_executed: 4, evaluation_coverage: 0, execution_coverage: 0,
+      levels_used: [], fallback_history: [], retry_history: [], infra_attempts: 0,
+      resource_observations: {},
+    }));
+    render(<ExpertValidationApp api={fakeApi({
+      restoreCampaign: async () => ({
+        campaign_id: "campaign-orphan", manifest_id: "manifest-4", sequence: 1,
+        status: "STARTED", execution_mode: "SEQUENTIAL", batch_cleanup_complete: false,
+      }),
+      cancelCampaign,
+    })} />);
+    await user.click(await screen.findByRole("button", { name: "Acquire lease" }));
+    await user.click(screen.getByRole("button", { name: "Cancel campaign" }));
+    expect(cancelCampaign).toHaveBeenCalledWith("campaign-orphan", expect.objectContaining({ lease_id: "lease-a" }));
+    expect(await screen.findByText(/NEEDS_OPERATOR_RECOVERY/)).toBeTruthy();
+  });
+
   test("restored map uses its bound four-point server document, not twenty golden coordinates or a new setup", async () => {
     const user = userEvent.setup();
     const frozen = frozenManifest();

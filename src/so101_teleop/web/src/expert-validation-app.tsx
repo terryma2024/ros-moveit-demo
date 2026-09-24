@@ -36,6 +36,7 @@ export type ExpertValidationApi = {
   getManifest(manifestId: string): Promise<Manifest>;
   preflight(input: PreflightInput, lease: LeaseAuthority): Promise<PreflightReceipt>;
   startCampaign(input: StartCampaignInput, lease: LeaseAuthority): Promise<CampaignProjection>;
+  cancelCampaign(campaignId: string, lease: LeaseAuthority): Promise<CampaignProjection>;
   retry(
     campaignId: string,
     pointIds: string[],
@@ -152,6 +153,11 @@ function withRuntimeMutations(
         ...lease,
         command_id: createCommandId(),
       }),
+    cancelCampaign: (campaignId: string, lease: LeaseAuthority) =>
+      through<CampaignProjection>(
+        `/expert-validation/campaigns/${encodeURIComponent(campaignId)}/cancel`,
+        { ...lease, command_id: createCommandId() },
+      ),
     retry: (
       campaignId: string,
       pointIds: string[],
@@ -460,7 +466,11 @@ export function ExpertValidationApp({ api: providedApi = defaultClient }: { api?
         <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           {mapManifest?.top_view ? <TopViewMap manifest={mapManifest.top_view} campaign={mapCampaign} selectedPointId={selectedPointId} onSelect={setSelectedPointId} />
             : <p role="status">Map unavailable: {mapError || "Loading bound manifest"}</p>}
-          {campaign ? <CampaignProgress campaign={campaign} selectedPointId={selectedPointId} onSelect={setSelectedPointId} /> : null}
+          {campaign ? <CampaignProgress campaign={campaign} selectedPointId={selectedPointId} onSelect={setSelectedPointId}
+            onCancel={lease && !leaseRenewing ? () => {
+              void api.cancelCampaign(campaign.campaign_id, authority())
+                .then(replaceCampaign).catch(reportError);
+            } : undefined} /> : null}
         </div>
       ) : null}
       {selectedPoint ? <PointEvidence point={selectedPoint} artifacts={selectedPoint.artifacts ?? []} /> : null}

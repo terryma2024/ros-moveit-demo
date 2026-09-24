@@ -16,6 +16,9 @@ class UnderactuatedIkError(RuntimeError):
     pass
 
 
+CONTROL_JOINT_MARGIN_RAD = 0.002
+
+
 def _numbers(text: str | None, count: int) -> tuple[float, ...]:
     values = tuple(float(item) for item in (text or "").split())
     if len(values) != count or any(not math.isfinite(item) for item in values):
@@ -147,6 +150,10 @@ class UnderactuatedPoseIk:
             raise UnderactuatedIkError("DYNAMIC_IK_CHAIN_INVALID")
         self._lower = np.array([movable[name].lower for name in joint_names])
         self._upper = np.array([movable[name].upper for name in joint_names])
+        self._solve_lower = self._lower + CONTROL_JOINT_MARGIN_RAD
+        self._solve_upper = self._upper - CONTROL_JOINT_MARGIN_RAD
+        if np.any(self._solve_lower >= self._solve_upper):
+            raise UnderactuatedIkError("DYNAMIC_IK_JOINT_LIMIT_MARGIN_INVALID")
 
     @classmethod
     def from_urdf(
@@ -246,7 +253,7 @@ class UnderactuatedPoseIk:
     ) -> tuple[float, ...]:
         if len(seed) != len(self._joint_names):
             raise UnderactuatedIkError("DYNAMIC_IK_SEED_INVALID")
-        positions = np.clip(np.asarray(seed, dtype=float), self._lower, self._upper)
+        positions = np.clip(np.asarray(seed, dtype=float), self._solve_lower, self._solve_upper)
         epsilon = 1e-5
         for _ in range(200):
             residual = self._residual(positions, target)
@@ -269,7 +276,7 @@ class UnderactuatedPoseIk:
             norm = float(np.linalg.norm(step))
             if norm > 0.20:
                 step *= 0.20 / norm
-            positions = np.clip(positions + step, self._lower, self._upper)
+            positions = np.clip(positions + step, self._solve_lower, self._solve_upper)
         actual = self.forward(positions)
         raise UnderactuatedIkError(
             "DYNAMIC_IK_RESIDUAL_EXCEEDED: "

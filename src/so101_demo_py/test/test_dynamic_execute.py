@@ -431,6 +431,82 @@ def test_dynamic_motion_rejects_sampled_tcp_detour_before_execution(tmp_path) ->
     assert adapter._planning_attempts[-1]["failure_code"] == ("CARTESIAN_CORRIDOR_DEVIATION")
 
 
+def test_dynamic_motion_preserves_exact_table_contact_that_cancelled_execution(tmp_path) -> None:
+    adapter = object.__new__(RosDynamicMujocoExecution)
+    target = PoseEvidence((0.0, 0.0, 0.26), (0.0, 0.0, 0.0, 1.0))
+    joints = (0.0, 0.0, 0.26, 0.0, 0.0)
+    before = _mujoco_sample(sequence=100, step=1000, cup_z_m=0.225, table_contact=False)
+    contact = SimpleNamespace(
+        geom1="bottom_collision", geom2="table_collision",
+        position_world=(0.01, -0.20, 0.12), signed_distance_m=-0.0004,
+        normal_force_n=1.25,
+    )
+    trigger = _mujoco_sample(sequence=101, step=1001, cup_z_m=0.227, table_contact=True)
+    trigger.other_object_contacts = (contact,)
+    snapshots = iter((before, trigger))
+    adapter._snapshot = lambda: next(snapshots)
+    adapter._joint_state = lambda *_args, **_kwargs: joints
+    adapter._joint_state_generation = 4
+    adapter._joint_state_received_monotonic_s = 2.0
+    adapter._positions = {**{str(index): 0.0 for index in range(1, 6)}, "6": -0.0485}
+    adapter._ik = SimpleNamespace(forward=lambda *_args: target)
+    receipt = SimpleNamespace(
+        joint_positions_rad=joints,
+        to_document=lambda: {"state": State.MOVE_ABOVE_PLACE.value},
+    )
+    adapter._motion_horizon = lambda *_args: [
+        SimpleNamespace(waypoint=SimpleNamespace(target=target), receipt=receipt)
+    ]
+    adapter._plan_candidate_set = lambda **_kwargs: (
+        SimpleNamespace(trajectory=SimpleNamespace()), []
+    )
+    cancelled = []
+
+    def execute(*_args, monitor):
+        try:
+            monitor()
+        except RuntimeError as error:
+            cancelled.append(str(error))
+            return ActionResult(
+                ActionStatus.FAILED,
+                Failure(FailureCategory.EXECUTION, "MOVEIT_EXECUTION_MONITOR_ABORTED", str(error)),
+            )
+        raise AssertionError("the table-contact monitor did not cancel execution")
+
+    adapter._trajectory = SimpleNamespace(execute=execute)
+    adapter._planning_attempts = []
+    adapter._document = {"planning_attempts": adapter._planning_attempts}
+    adapter._evidence_file = tmp_path / "dynamic-execute-manifest.json"
+
+    with pytest.raises(RuntimeError, match="DYNAMIC_EARLY_TABLE_CONTACT"):
+        adapter._motion(State.MOVE_ABOVE_PLACE, target)
+
+    assert cancelled == ["DYNAMIC_EARLY_TABLE_CONTACT"]
+    persisted = json.loads(adapter._evidence_file.read_text(encoding="utf-8"))
+    violation = persisted["monitor_violation"]
+    assert violation["state"] == State.MOVE_ABOVE_PLACE.value
+    assert violation["reason"] == "DYNAMIC_EARLY_TABLE_CONTACT"
+    assert violation["sample"]["publisher_sequence"] == 101
+    assert violation["sample"]["cup_position_world_m"] == [0.02, -0.33, 0.227]
+    assert violation["contacts"]["other"] == [{
+        "geom1": "bottom_collision", "geom2": "table_collision",
+        "position_world_m": [0.01, -0.20, 0.12],
+        "signed_distance_m": -0.0004, "normal_force_n": 1.25,
+    }]
+    assert violation["last_joint_positions_rad"]["6"] == -0.0485
+
+    adapter._record_monitor_violation(
+        State.RECOVER_LIFT_TO_SAFE_HEIGHT, "DYNAMIC_FORCE_LIMIT_EXCEEDED", trigger
+    )
+    adapter._write()
+    persisted = json.loads(adapter._evidence_file.read_text(encoding="utf-8"))
+    assert persisted["monitor_violation"]["state"] == State.MOVE_ABOVE_PLACE.value
+    assert [item["state"] for item in persisted["monitor_violations"]] == [
+        State.MOVE_ABOVE_PLACE.value,
+        State.RECOVER_LIFT_TO_SAFE_HEIGHT.value,
+    ]
+
+
 def test_dynamic_motion_scores_bounded_moveit_candidates_and_executes_one(
     tmp_path,
 ) -> None:

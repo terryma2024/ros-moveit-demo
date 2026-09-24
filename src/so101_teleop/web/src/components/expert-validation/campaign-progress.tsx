@@ -1,12 +1,14 @@
 import type { CampaignProjection } from "@/api/expert-validation-types";
+import { Button } from "@/components/ui/button";
 
 export type CampaignView = Pick<CampaignProjection, "campaign_id" | "sequence"> &
   Partial<Omit<CampaignProjection, "campaign_id" | "sequence">>;
 
-export function CampaignProgress({ campaign, selectedPointId, onSelect }: {
+export function CampaignProgress({ campaign, selectedPointId, onSelect, onCancel }: {
   campaign: CampaignView;
   selectedPointId?: string;
   onSelect?: (pointId: string) => void;
+  onCancel?: () => void;
 }) {
   const evaluated = campaign.evaluated ?? 0;
   const succeeded = campaign.valid_succeeded ?? 0;
@@ -15,6 +17,8 @@ export function CampaignProgress({ campaign, selectedPointId, onSelect }: {
       <header>
         <h2 className="text-lg font-semibold">Campaign {campaign.campaign_id}</h2>
         <p>{campaign.execution_mode ?? "UNKNOWN"} · {campaign.status ?? "RUNNING"} · sequence {campaign.sequence}</p>
+        {onCancel && ["STARTED", "RUNNING", "EXECUTING", "CANCELLING"].includes(campaign.status ?? "")
+          ? <Button variant="outline" onClick={onCancel}>Cancel campaign</Button> : null}
       </header>
       <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
         <span>Requested {campaign.requested ?? 0}</span>

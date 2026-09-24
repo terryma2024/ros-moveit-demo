@@ -33,3 +33,19 @@ def test_full_pose_solver_recovers_grasp_branch_from_home_seed() -> None:
 
     assert actual.position_m == pytest.approx(GRASP_POSE.position_m, abs=0.002)
     assert solver.orientation_error_rad(actual, GRASP_POSE) <= 0.10
+
+
+@pytest.mark.parametrize("boundary", ("lower", "upper"))
+def test_solution_keeps_control_margin_at_joint_limit(boundary: str) -> None:
+    solver = UnderactuatedPoseIk.from_urdf(URDF, JOINTS, "world", "so101_tcp")
+    lower, upper = solver.joint_limits[3]
+    limit = lower if boundary == "lower" else upper
+    at_limit = (0.0, 0.0, 0.0, limit, 0.0)
+    target = solver.forward(at_limit)
+
+    solution = solver.solve(target, at_limit)
+    actual = solver.forward(solution)
+
+    assert lower + 0.002 - 1e-9 <= solution[3] <= upper - 0.002 + 1e-9
+    assert actual.position_m == pytest.approx(target.position_m, abs=0.002)
+    assert solver.orientation_error_rad(actual, target) <= 0.10

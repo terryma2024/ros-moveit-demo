@@ -177,6 +177,37 @@ describe("CampaignSetup exact-N qualification", () => {
     expect(screen.getByText(/BUDGET_PROVIDER_NOT_READY/)).toBeTruthy();
   });
 
+  test("a configured Linux v3 count can reach resource preflight without budget promotion", () => {
+    const configured = {
+      ...(capabilities as object),
+      worker_count_availability: [
+        { worker_count: 4, selectable: true, status: "CONFIGURED", reason_codes: [] },
+      ],
+    } as never;
+    render(
+      <CampaignSetup
+        {...base}
+        capabilities={configured}
+        qualifications={[
+          {
+            selected_n: 4,
+            status: "UNKNOWN",
+            reasons: ["BUDGET_PROVIDER_NOT_READY"],
+            runtime_identity: "uncomposed-runtime",
+            contract_version: 2,
+            profile_sha256: null,
+            approval_sha256: null,
+          },
+        ]}
+      />,
+    );
+    const select = screen.getByLabelText("Worker count") as HTMLSelectElement;
+    const four = Array.from(select.options).find((option) => option.value === "4");
+    expect(four?.disabled).toBe(false);
+    expect(screen.getByRole("button", { name: "Start validation" }).hasAttribute("disabled")).toBe(false);
+    expect(screen.getByText(/CONFIGURED.*resource check required/)).toBeTruthy();
+  });
+
   test("an available promoted N stays selectable and there is no K input", () => {
     render(
       <CampaignSetup

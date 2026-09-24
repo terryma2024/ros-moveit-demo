@@ -204,11 +204,13 @@ export function CampaignSetup({
     return (entry?.reason_codes ?? []).join(", ") || entry?.status || "UNSUPPORTED_ON_MACOS";
   };
 
-  // -- qualification rules (a host without a support matrix only) --------------------------------
+  // -- Linux v3 configured counts and legacy qualification views -------------------------------
   const qualification = platformBound
     ? undefined
     : qualifications?.find((view) => view.selected_n === state.workerCount);
   const qualificationOption = qualification ? workerOption(qualification) : null;
+  const configuredWithoutBudget = availability?.selectable === true
+    && availability.status === "CONFIGURED";
   const validFixedWorkers = platformBound
     ? Boolean(selectedRow)
     : fixedWorkerCounts.includes(state.workerCount)
@@ -216,12 +218,15 @@ export function CampaignSetup({
   const exactNSelectable = platformBound
     ? Boolean(selectedRow)
     : state.executionMode === "SEQUENTIAL"
+      || configuredWithoutBudget
       || ((availability?.selectable ?? false) && !(qualificationOption?.disabled ?? false));
   const exactNReason = platformBound
     ? selectedRow
       ? null
       : availabilityReason(state.workerCount) || "UNSUPPORTED_ON_MACOS"
-    : qualificationOption?.disabled
+    : configuredWithoutBudget
+      ? null
+      : qualificationOption?.disabled
       ? qualificationOption.reason
       : availability && !availability.selectable
         ? (availability.reason_codes ?? []).join(", ") || "EXACT_N_UNQUALIFIED"
@@ -238,7 +243,12 @@ export function CampaignSetup({
     : (state.executionMode === "PARALLEL" && count === 1)
       || Boolean(
         qualifications?.some(
-          (view) => view.selected_n === count && workerOption(view).disabled,
+          (view) => view.selected_n === count
+            && !availabilityList.some(
+              (entry) => entry.worker_count === count
+                && entry.selectable && entry.status === "CONFIGURED",
+            )
+            && workerOption(view).disabled,
         ),
       );
 
@@ -324,7 +334,7 @@ export function CampaignSetup({
           ) : (
             <p aria-live="polite">
               {availability
-                ? `${availability.status}${exactNReason ? ` · ${exactNReason}` : ""}`
+                ? `${availability.status}${configuredWithoutBudget ? " · resource check required" : exactNReason ? ` · ${exactNReason}` : ""}`
                 : `EXACT_N_UNQUALIFIED · ${exactNReason ?? "BUDGET_PROFILE_UNAVAILABLE"}`}
             </p>
           )}

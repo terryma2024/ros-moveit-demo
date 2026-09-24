@@ -109,6 +109,13 @@ export class ExpertValidationClient {
     });
   }
 
+  cancelCampaign(campaignId: string, lease: LeaseAuthority): Promise<CampaignProjection> {
+    return this.post<CampaignProjection>(
+      `/expert-validation/campaigns/${encodeURIComponent(campaignId)}/cancel`,
+      { ...lease, command_id: this.commandId() },
+    );
+  }
+
   campaign(campaignId: string): Promise<CampaignProjection> {
     return this.request<CampaignProjection>(
       `/expert-validation/campaigns/${encodeURIComponent(campaignId)}`,
