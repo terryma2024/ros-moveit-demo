@@ -60,3 +60,26 @@ Dispatch is complete. Remote implementation is running; data collection, QC and 
 - Archived: none.
 - Deletion candidates: local `/tmp/so101-act-data-dispatch.sh` and `/tmp/so101-act-data-dispatch-id.txt` after dispatch readback; do not delete without authorization.
 - Data/runtime acceptance: PENDING at CP-002. Training and ACT policy application: excluded.
+
+## CP-004 — Source-only recovery and rebase on current main
+
+- Date: 2026-09-24.
+- Recovery boundary: the former `/data/work/ws_moveit/.worktrees/so101-act-data-0917a` worktree and `/data/work/so101-evidence/act-data/0917a` root are absent. No episode, QC, qualification, runtime, or training claim was recovered. Git source history is the only recovered artifact.
+- Last published source: `e2ec28c33ecaa455045477185b9c5dbc5e367538`, identical on `origin/codex/so101-act-data-0917a` and `github/codex/so101-act-data-0917a` before this operation.
+- Rebase base: ai-station `main` at `fd7348aa27361750f7e2e7954df53ef75e96545c`.
+- New tmux session: `act-data-rebase-20260924`, running an ordinary `zsh` through `script`; no `dst`, DeepSeek Harness, Codex CLI, or implementation executor was launched.
+- New worktree: `/home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a`, branch `codex/so101-act-data-0917a`.
+- Rebased source commits: `7102c67a`, `874ea617`, `72e5bc16`, and `f3e1d826`; the reviewed document commit is `fbc25063`.
+- MuJoCo submodule conflict: `54463fce3bfa6192976e74113f5ed7152f708a3f` is a merge descendant of main pin `5a590b22770b270b71ba6a1c3443d4e67edc7f4b` and the ACT RGB pin `498472acdcc57752071ac03245942d8c5fe06411`. Both dependency locks, the macOS install contract, and the superproject gitlink now select `54463fce3bfa6192976e74113f5ed7152f708a3f`.
+- Document readback: design `2d1db796d8ddfd20f63304ba3e976c7b07bef496c6fff265db4c3910195480ca`; plan `5fe40259879f03fa13c0bc5e50a5e0da1902f1e98bd170a5008b55936728b83c`. Independent Astra high review passed with no P0/P1/P2/P3.
+- Progress reconciliation: the old Task 1 checkmarks were not retained. The recovered implementation accepts the old `pool_generation` result schema and does not satisfy the refreshed batch/Worker generation/coordinator commit contract.
+- Verification boundary: rebase ancestry, clean diff checks, submodule ancestry, document hashes, and static document syntax were verified. No collection, MuJoCo, ROS, MoveIt, pytest, training, rollout, or robot acceptance ran.
+- Publication boundary: no push was performed. Both remote branch refs therefore remain at `e2ec28c33ecaa455045477185b9c5dbc5e367538`; the rebased branch exists only in the new ai-station worktree.
+- Registered evidence root: `/data/work/so101-evidence/act-main-refresh/20260924-e2ec-rebase`; retained transcript and conflict/document resolution patches are audit evidence.
+
+## Evidence disposition after source-only recovery
+
+- Retained: the new ai-station worktree and tmux session, registered evidence root, transcript, resolution patches, reviewed documents, and both old remote refs.
+- Archived: none; the missing prior evidence root could not be archived.
+- Deletion candidates: local `/tmp/act-rebase-resolution.patch`, `/tmp/act-remote-docs.m1IipE`, and `/tmp/act-doc-refresh.hsEpQu`; no deletion authorized or performed.
+- Data/runtime acceptance: not recovered and remains pending. Training and ACT policy application were not started.

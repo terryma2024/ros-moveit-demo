@@ -56,10 +56,11 @@ The missing `/data/work/so101-evidence/act-data/0917a` root and prior worktree a
 | 1 | Astra high | Design `e8ca52283694d1ee4e88b4beb7d26d53058050e94e4ad984a1d2b07ac16e1a1a`; plan `76fbe7fe6d991e3176a391f120d6a7a7a440baa59e06252440f930c38502504e` | Not passed: 1 P1, 5 P2, 2 P3 | Single-stack collection bypassed global reservation; training had only a racy read-only GPU preflight; qualification required itself; multi-wave journal provenance and bundle paths were inconsistent; the full xdist gate was missing; dependency-lock and Linux queue references were stale. |
 | 2 | Astra high | Design `1f406103c9835c065460846426c97ae756de1185956bec066816368d4affb4b3`; plan `ee881235cc2e3aab9524006c4457c74caf264eaf4f12c1b21b66157023cac30a` | Not passed: 1 P2, 1 P3 | GPU locks were keyed by selector rather than physical device identity, so index/UUID aliases could bypass mutual exclusion. The xdist commands also needed durable logs, elapsed time, separate exit codes, and explicit aggregate failure. |
 | 3 | Astra high | Design `2d1db796d8ddfd20f63304ba3e976c7b07bef496c6fff265db4c3910195480ca`; plan `5fe40259879f03fa13c0bc5e50a5e0da1902f1e98bd170a5008b55936728b83c` | PASS: no P0/P1/P2/P3 | Physical GPU alias/mapping identity, durable xdist logs/elapsed/exit codes, and every prior finding were closed. Reviewer also parsed all 73 shell and 40 Python code blocks successfully. |
+| 4 | Astra high | Design `2d1db796d8ddfd20f63304ba3e976c7b07bef496c6fff265db4c3910195480ca`; plan `5fe40259879f03fa13c0bc5e50a5e0da1902f1e98bd170a5008b55936728b83c` | PASS: no P0/P1/P2/P3 | Rebase reconciliation briefly considered retaining the old Task 1 checkmarks. Review rejected that: `cdd79d15` validates the old `pool_generation` result schema, while the refreshed plan requires batch, Worker generation, and coordinator commit identity. The final document therefore keeps Task 1 unchecked and exactly matches the Round 3 approved hash. |
 
 ### Evidence disposition
 
 - Retained: registered ai-station root, this ledger, both updated documents, review findings, and future rebase transcript/readback.
 - Archived: none.
-- Deletion candidates: future pytest scratch only if implementation later runs the package gate; none created by this document/rebase task.
+- Deletion candidates: local `/tmp/act-rebase-resolution.patch`, `/tmp/act-remote-docs.m1IipE`, and `/tmp/act-doc-refresh.hsEpQu`; future pytest scratch only if implementation later runs the package gate. Do not delete without explicit authorization.
 - Deletion performed: none.
