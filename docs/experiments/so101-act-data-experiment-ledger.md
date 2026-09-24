@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 2b752604
+current_commit: 5e54800f
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -14,8 +14,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: EXP-152
-next_experiment: EXP-153 Task 8 offline pregrasp reachability screen
+latest_checkpoint: EXP-153
+next_experiment: EXP-154 Task 8 offline cleared-to-pregrasp route screen
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1262,3 +1262,9 @@ next_experiment: Live Task 3–8 calibration and controller publication after ow
 
 - Ruling: Task7A active ROS action entry evidence in EXP-124/126/128 and the broker-side authorization tests supports a calibration-only Task8 offline screen. The unified production HTTP service currently composes `worker=None`, so Teleop HTTP mutations are unavailable; its `RclpyActionDriver` explicitly refuses submission. That fail-closed gap remains a Task11A integration blocker and does not qualify formal collection or claim live HTTP handoff. No Task8 live motion in this screen.
 - State: PLANNED. Lifecycle: OFFLINE after EXP-152 clean retirement; source `2b752604`, installed revised ACT scene/model SHA `cee0062a5482cf87c4eaf366f37494d962dd1c75c186c43a7e6b0d20d118eb26`, exact task MuJoCo3.12/EGL Python, no task ROS domain/partition/stack. Durable `experiments/exp153-pregrasp-screen`. For the frozen default cup at `(0.02,-0.28,0.165)` m, use bounded SciPy least-squares position-only IK from deterministic seeds to screen TCP radial pregrasp targets at ±X/±Y offsets `.08 m` and heights `.165/.185/.205 m`, within exact six joint limits. Recompute independent MuJoCo FK, protected static contacts at `.002 m`, head/wrist cup masks, and optionally save lossless images for best contact-safe candidates. Report candidate/negative results, not a grasp path, controller permit, dynamic clearance, wrist full-phase FOV, release/retreat or Task6 qualification. Do not alter source assets or accept episodes; formal `0/0/0`, Task12 onward `NOT_STARTED`.
+
+- State: VALID offline position-only pregrasp reachability screen, not grasp or path qualification. `screen.py` exit0 and independent `verify.py`/`verify-result.json` exit0 under exact task MuJoCo3.12/EGL, revised installed scene/model SHA `cee0062a...`; 348 deterministic SciPy IK solutions over 12 target side/height combinations and 29 seeds were independently re-FKed, joint-bound checked and protected-static-contact classified. +X, −X and +Y target sides had 87/87, 87/87 and 82/87 contact-safe solves within 2 cm; −Y had 0/87 due measured cup/finger or wrist contacts, so that approach is rejected at this radial screen. Candidate index4 at +X, z`.205 m`, q `(-.2977144569,.4163950035,.4802642520,.2510329642,.0245367372,1.2)` yields TCP error `.00001834 m`, no protected contact, head cup 8,543 px and wrist 19,558 px with 100 px edge margin. Both saved candidate PNGs were freshly visually inspected: the cup is seen in each, with wrist cup partly hidden by nearby gripper geometry; independent PNG/raw SHA and segmentation readback passed for 12 retained candidates. This is a static candidate and gives no continuous route, orientation/grasp, dynamic contact, live controller, release or retreat evidence. No ROS stack; formal `0/0/0`, Task12 onward `NOT_STARTED`. Retain EXP-153 and earlier runs, archive none, scratch/superseded artifacts deletion candidates only, delete nothing.
+
+## EXP-154 — Offline cleared-to-pregrasp route screen
+
+- State: PLANNED. Lifecycle: OFFLINE after EXP-153 independent pass; source `5e54800f`, revised model SHA `cee0062a...`, no ROS stack. Durable `experiments/exp154-pregrasp-route`. Freeze EXP-139's 91-sample zero-to-cleared arm route, EXP-153 candidate index4, default cup, `.002 m` protected-root clearance. At cleared q first linearly open joint6 from zero to1.2, then linearly interpolate all six joints to the pregrasp candidate, 101 samples per segment. Recompute contact and dual-camera geom-ID cup box/margin at all samples, save selected lossless images and independently verify FK, contacts, samples and hashes. A pass remains an offline geometric screen only; it does not authorize controller execution, grip closure or Task6 FOV qualification. Formal `0/0/0`, no deletion.
