@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 7fa390351657d8201853c7d5f42286541f234aad
+current_commit: 82ddf3c74336496f74e79f801d9a642d51b76921
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -14,8 +14,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: EXP-171
-next_experiment: EXP-172 offline dynamic policy radial-then-vertical release retreat
+latest_checkpoint: EXP-172
+next_experiment: EXP-173 live Task8 controller/scene-shadow readiness audit
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1374,3 +1374,9 @@ next_experiment: Live Task 3–8 calibration and controller publication after ow
 ## EXP-172 — Offline dynamics for actual radial-then-vertical release retreat
 
 - State: PLANNED. Lifecycle: OFFLINE after EXP-171 independent static pass, source `7fa39035...`, model SHA `3c876e7b...`. Replay EXP-170 grasp/transport/alignment/release, replace raw RETREAT joint waypoints with EXP-171 joint-limited radial/vertical targets, then settle under MuJoCo position control. Independently verify all q/cup/force rows and final target/support/upright/released-cup displacement plus residual fixed-pad force against policy limits. This is not MoveIt/ROS execution. No formal data or deletion.
+
+- State: VALID offline physical route candidate, still not Task8 live/MoveIt qualification. `experiments/exp172-radial-retreat-dynamics/probe.py` exit0 and independent `verify.py` final exit0 replayed EXP-161 original grasp, the checked-in lift/transport/descent, EXP-169 alignment, physical release and EXP-171 radial/vertical IK targets over 10,150 total `.002 s` MuJoCo physics steps. All 765 post-grasp 20-ms q/cup/contact-force samples and 17 lossless wrist PNG/raw hashes independently matched, with EGL re-render differences ≤5 pixels at 1/255. During radial and vertical moves, all 70 samples had table support, zero fixed/moving fingertip normal force and zero cup displacement from the settled release pose. Final cup `(-.079079,-.248065,.165359)` m is inside the frozen target box `x[-.090,-.070], y[-.260,-.240]` and support-height range `.155–.175 m`; upright tilt `.011811 rad` is below `.087266 rad`, speed nearly zero. Fresh radial/vertical/settle wrist images inspected. This disproves the raw-waypoint negative as a universal route failure; actual policy radial retreat has an offline feasible path. It does not prove MoveIt planning, ROS controller interpolation/force guards, planning-scene attachment sync, live physical outcome, Task6 full-phase FOV or formal collection. Formal `0/0/0`, Task12 onward `NOT_STARTED`; retain EXP-172 and earlier runs, archive none, scratch/superseded outputs deletion candidates only, delete nothing.
+
+## EXP-173 — Task8 live controller and planning-scene readiness audit
+
+- State: PLANNED. Lifecycle: READ_ONLY after EXP-172 independent offline candidate, source `82ddf3c7...`, installed model SHA `3c876e7b...`, no task-owned ROS stack. Identify the exact installed qualified phase runner, source configuration, task-owned process and namespace requirements for a bounded live expert pick/transport/place/release/retreat diagnostic. Confirm authority path through the ACT broker and MoveIt action servers, exact safety/force boundaries and stop/cleanup procedure before launching motion. A plan-only or readiness audit cannot count as Task8 physical proof or formal data. No deletion.
