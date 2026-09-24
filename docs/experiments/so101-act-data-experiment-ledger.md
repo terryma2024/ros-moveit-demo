@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 18fdd310
+current_commit: 1ab57537
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -14,8 +14,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: EXP-158
-next_experiment: EXP-159 Task 8 alternate +Y static pregrasp approach screen
+latest_checkpoint: EXP-159
+next_experiment: EXP-160 Task 8 alternate +Y dynamics screen
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1298,3 +1298,9 @@ next_experiment: Live Task 3–8 calibration and controller publication after ow
 ## EXP-159 — Alternate +Y pregrasp and inward static screen
 
 - State: PLANNED. Lifecycle: OFFLINE after EXP-158 independent negative replay; source `18fdd310`, installed model SHA `cee0062a...`, no ROS stack. Durable `experiments/exp159-y-approach`. Freeze default cup, jaw1.2, and EXP-153 +Y pregrasp candidate index0 at radial `.08 m`, z`.205 m`. Use bounded least-squares continuation to +Y radial targets `.07/.06/.05/.04/.03/.02 m`, 21 interpolated samples per segment. Independently recompute FK, full protected contact geom pairs at `.002 m`, and endpoint dual-camera cup masks. Proceed to an offline dynamics probe only if the path to a fingertip/cup contact boundary has no table, self, mast or camera contact; require dynamic grip/lift before any live Task8 test. No source asset change, formal data or deletion.
+
+- State: VALID alternate +Y static contact onset, negative for wrist framing. `screen.py` exit0 and independent `verify.py`/`verify-result.json` exit0 under exact installed revised model SHA `cee0062a...`; 127 +Y radial samples from EXP-153 candidate index0 through `.07/.06/.05/.04/.03/.02 m`, all FK, protected-contact pairs/distances, six endpoint dual-camera masks and 12 PNG/raw hashes independently recomputed. No protected contact through `.03 m`; first proximity at `.02 m` fraction2/21, only fixed fingertip/cup near-wall pairs in 20/21 final-segment samples, no table/mast/camera/self contact. Head cup remains framed; wrist mask is clipped at image edge at every endpoint, including a freshly viewed `.02 m` PNG. This route cannot qualify Task6 full-phase wrist FOV as is. It remains eligible only for a separate offline physical grasp diagnostic; no controller or accepted data. Formal `0/0/0`, Task12 onward `NOT_STARTED`; retain EXP-159 and earlier runs, archive none, scratch/superseded artifacts deletion candidates only, delete nothing.
+
+## EXP-160 — Alternate +Y offline grasp dynamics screen
+
+- State: PLANNED. Lifecycle: OFFLINE after EXP-159 independent pass, source `1ab57537`, revised model SHA `cee0062a...`, no ROS stack. Durable `experiments/exp160-y-dynamics`. Freeze default cup, EXP-153 +Y pregrasp q/jaw1.2, exact `.002 s` model physics and EXP-158 phase schedule. Sweep +Y radial targets `.02/.015/.01 m` and jaw finals `.55/.35/.15 rad`, nine deterministic position-control schedules, each with a 4 cm commanded TCP lift. Independently replay all q/cup/contact-force samples and report bilateral force duration, cup displacement, actual unsupported lift and other protected contact. Treat this as offline feasibility only; wrist FOV and live safety gates remain failed. No formal data or deletion.
