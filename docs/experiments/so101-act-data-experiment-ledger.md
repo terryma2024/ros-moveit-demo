@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: cb81d552b151a824d202942a55fb79eee40a527d
+current_commit: 4d00f104d343b63ec197649a87233018812da3bf
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -14,8 +14,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: EXP-166
-next_experiment: EXP-167 offline full transport, place and retreat FOV/physical route screen
+latest_checkpoint: EXP-167
+next_experiment: EXP-168 offline physical transport, release and settle probe
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1346,3 +1346,9 @@ next_experiment: Live Task 3–8 calibration and controller publication after ow
 ## EXP-167 — Revised wrist FOV over transport, place and retreat candidates
 
 - State: PLANNED. Lifecycle: OFFLINE after EXP-166 clean retirement, source `cb81d552...`, exact revised installed model SHA `3c876e7b...`. Extract checked-in expert policy transport/place/release/retreat waypoints and their semantics, then independently screen actual cup-camera visibility, pixel detail, edge margins, static protected contacts and physical support along complete candidate route in MuJoCo. Use measured cup state from EXP-161 only as a declared hypothesis, not as a controller or final-placement proof. Retain masks and fresh lossless images. A qualified static route still requires live physical whole-robot contact, support and placement evidence before Task6/8 or formal collection. No data or deletion.
+
+- State: VALID FOV screen and negative static release-support check; physical place route is not qualified. `experiments/exp167-route-screen/screen.py` exit0 and independent `verify.py` final exit0 recompiled exact revised model SHA `3c876e7b...`, replayed EXP-161's 2,500 physics steps to rederive the measured held-cup transform, reconstructed all checked-in LIFT/MOVE_ABOVE_PLACE/DESCEND_TO_PLACE/RELEASE/RETREAT waypoint fractions and independently recomputed 160 cup masks, all FK cup poses and static contact pairs/distances. Six lossless wrist PNGs were decoded and source PNG/raw hashes checked; fresh place/release/retreat images visually inspected. Independent EGL render differed by at most six pixels with 1/255 channel delta in two images, bounded and retained in `verify-result.json`; masks/contacts/pose agreed exactly within declared numeric tolerances. Cup stays framed ≥1,000 px and ≥20 px margin in every route sample, with minimum visible cup pixels 3,214 at retreat. Kinematic place endpoint cup center `(-.077361,-.260094,.181734)` m is above the policy's `.155–.175 m` stable support-height range and has no `table_collision` pair at release; fixed-cup release is a diagnostic assumption, not physical settlement. Therefore this candidate establishes revised wrist visibility for these source waypoints but fails release support as screened, and cannot qualify Task8 or formal collection. The early approach view loss from EXP-164 remains. Formal `0/0/0`, Task12 onward `NOT_STARTED`; retain EXP-167 and prior runs, archive none, superseded verifier logs and scratch deletion candidates only, delete nothing.
+
+## EXP-168 — Offline physical transport, release and settlement probe
+
+- State: PLANNED. Lifecycle: OFFLINE after EXP-167 independently verified static support failure, source `4d00f104...`, installed model SHA `3c876e7b...`. Replay EXP-161 measured hold and drive checked-in remaining lift/transport/descend/release/retreat joint targets in MuJoCo position control with explicit phase durations, logging bilateral grip force, cup/table support, cup pose/tilt/velocity and all protected contact categories. A raw position-control diagnostic cannot prove ROS controller or MoveIt execution. Determine whether passive settling after release reaches the target box without displacement or collision; reject route if physical evidence fails. Independently replay measured outputs before any live attempt. No formal data or deletion.
