@@ -2,7 +2,7 @@
 
 日期：2026-09-24
 
-状态：方案已在对话中确认，等待书面审阅。本文只定义实现与验收合同，不表示接触校准、Task 8 live、W8 资格或正式数据已经完成。
+状态：方案已在对话中确认，并通过独立 GPT-6 Astra / High 文档审查；等待用户书面审阅。本文只定义实现与验收合同，不表示接触校准、Task 8 live、W8 资格或正式数据已经完成。
 
 关联文档：
 
@@ -31,10 +31,10 @@ Task 12 训练及后续 ACT 部署不在本轮实现范围内。正式数据完�
 | 主题 | 决策 |
 | --- | --- |
 | 仿真后端 | 仅 MuJoCo；不再支持 Gazebo |
-| 操作入口 | Web 与 headless CLI 共用一个 `UnifiedWorkloadService`、campaign owner 和 ROS child |
+| 操作入口 | Web 与 headless CLI 共用一个 `UnifiedWorkloadService` 和 campaign owner；每个 Worker 只有一个隔离的 ROS execution child |
 | 资源校验 | 只在 campaign 启动入口执行；内部组件不查询 lease 或重新验证资源 |
 | 接触校准 | 离线确定性 MuJoCo 样本拟合，加隔离的 ROS/MuJoCo live 评估 |
-| 策略批准 | analyzer 只产出 disabled proposal；用户批准精确 proposal hash 后才激活新的 `POLICY_FINGERPRINT` |
+| 策略批准 | analyzer 只产出 disabled proposal；用户批准精确 `POLICY_FINGERPRINT` 后才允许写 activation receipt |
 | Task 8 live | 先逐 phase-prefix 验收，再做完整自主流程连续成功 |
 | 正式数据资格 | 只有完整自主流程可进入训练候选；人工操作或 MoveIt recovery 使 episode 失去资格 |
 | 并发资格 | W1 冒烟；W1/W2 八场景功能资格；W2 通过后直接以独立 40 场景测试 W8 |
@@ -59,14 +59,14 @@ AdmittedCampaignContext  <---- immutable manifest/config/policy/resource identit
 Campaign owner  <---- heartbeat, lease renewal, fencing, stop, cleanup proof
         |
         v
-typed WorkerPort -> child IPC -> unique ROS child -> explicit ROS operation
+typed WorkerPort -> child IPC -> one ROS child per Worker -> explicit ROS operation
         |
         +--> Task 8 phase runner -> MuJoCo / MoveIt / controllers
         |
         +--> FixedActCollectionCampaign -> private Recorder -> atomic episode commit
 ```
 
-`UnifiedWorkloadService.start(spec)` 是唯一启动入口。它在创建任何 Worker、Broker、Recorder 或 ROS child 前完成 admission，并返回不可变的 `AdmittedCampaignContext`。Web 和 CLI 只改变交互方式，不形成两套执行路径。
+`UnifiedWorkloadService.start(spec)` 是唯一启动入口。它在创建任何 Worker、Broker、Recorder 或 ROS child 前完成 admission，并返回不可变的 `AdmittedCampaignContext`。Web 和 CLI 只改变交互方式，不形成两套执行路径。W8 会创建 8 个相互隔离的 ROS execution child，每个 child 绑定自己的 Worker、ROS Domain、namespace、controller 和 MuJoCo session。
 
 Campaign owner 是资源生命周期的唯一持有者。它续租、维护 heartbeat、生成 fencing generation、停止全部 Worker，并在所有 goal、进程、socket、ROS Domain、campaign index 和 cleanup proof 收敛后释放 binding。
 
@@ -134,10 +134,12 @@ analyzer 从不可变原始证据计算候选阈值、混淆矩阵、false posit
 - collector/analyzer 代码与配置 hash；
 - 各状态样本数和排除原因；
 - 候选阈值及适用 MuJoCo/模型版本；
-- disabled policy proposal；
-- proposal 的精确 SHA256。
+- 不可变的 canonical policy payload；
+- `POLICY_FINGERPRINT = SHA256(canonical_policy_payload_bytes)`；
+- 引用 fingerprint、证据和配置 hash 的 disabled proposal envelope；
+- proposal envelope 的精确 SHA256，供审查材料寻址。
 
-独立审阅只能确认 proposal 与证据一致，不能代替用户授权。用户批准精确 proposal hash 后，系统写入新的 `POLICY_FINGERPRINT`。任何字段或来源 hash 变化都会生成不同指纹并重新走批准流程。
+canonical policy payload 使用冻结的字段集合和确定性 JSON 编码，包含所有运行阈值、适用的 MuJoCo/模型版本及 `source_evidence_sha256`。用户批准的唯一授权对象是精确 `POLICY_FINGERPRINT`，不是 proposal envelope hash。独立审阅只能确认 envelope、payload 与证据一致，不能代替用户授权。激活通过单独的 approval/activation receipt 记录 fingerprint、批准身份、时间和证据根；它不改写 canonical payload 或 disabled proposal。payload 任一字段变化都会生成新 fingerprint，并重新走批准流程。
 
 策略激活前不得开始 Task 8 live、W8 资格或正式采集。旧数据和旧指纹保留审计，但不能与新 campaign 混用。
 
@@ -160,7 +162,7 @@ OperationHandle.result() -> OperationResult
 - manifest/config/policy hash；
 - 显式 operation 和版本化 payload。
 
-唯一 ROS child 根据注册表路由到明确的方法，不接受任意 import path 或字符串拼接调用。未知 operation、schema 不匹配、旧 generation、过期 deadline、ROS child 非唯一或 driver 不可用都 fail closed。
+每个 `(campaign_id, worker_id, generation)` 只能有一个 ROS execution child。child 根据注册表路由到明确的方法，不接受任意 import path 或字符串拼接调用。未知 operation、schema 不匹配、旧 generation、过期 deadline、同一键下出现重复 child 或 driver 不可用都 fail closed。不同 Worker 的 child 必须处于不同 ROS Domain 和 MuJoCo session；W8 正常状态是 8 个隔离 child，而不是全服务只有一个 child。
 
 Task 7A 只负责命令所有权和传输。碰撞、接触、释放、时间新鲜度等机器人安全条件仍由 Task 8 业务监督器判定。资源所有权只由 campaign owner 维护，不下沉到 command broker 或 phase runner。
 
@@ -215,9 +217,9 @@ phase-prefix 全部通过后，在冻结的 default、left、forward anchor scen
 
 audit 数据不进入 ACT observation。规划目标、发送给 action server 的原始 goal、未来实测 joint state 或事后估计值不能替代 controller reference。
 
-相机过期、时间倒退、reference 缺失、采样间隔超限、跨 reset/release epoch 或无损写入失败都会使 episode QC 失败。Recorder 不允许静默丢帧、改变采样率或更换压缩语义来维持吞吐。
+相机过期、时间倒退、reference 缺失、采样间隔超限、跨 reset/session/attempt 身份或无损写入失败都会使 episode QC 失败。正常释放会在同一 episode 内建立新的 release epoch，并以显式事件分隔释放前后样本；这不是 QC 失败。监督器只能使用当前 release epoch 的新接触、支撑和释放确认样本，不能用上一 epoch 的样本证明本次释放。Recorder 不允许静默丢帧、改变采样率或更换压缩语义来维持吞吐。
 
-每个 Worker 有私有 Recorder 和临时 episode 目录。只有 Task 8 完整自主成功、Recorder 正常停止、文件和父目录完成 `fsync`、QC 通过、manifest/hash/seal 完整后，Coordinator 才提交 result commit。目录存在不等于 episode 已提交。
+每个 Worker 有私有 Recorder 和临时 episode 目录。Task 8 成功和业务失败都要停止 Recorder，封存现有原始证据，写入不可改写的终态 manifest/hash，并对文件和父目录完成 `fsync`；verifier 通过后，由 Coordinator 提交 result commit。业务失败提交为 `FAILED`，不要求完整成功 episode 或 QC 通过，也不得因恢复而重试。只有 Task 8 完整自主成功、QC 合格且已提交为 `PASSED` 的结果可以进入训练配额。封存、hash、`fsync` 或 verifier 失败属于基础设施故障，不能伪造 `FAILED` 业务终态。目录存在不等于 episode 已提交。
 
 ## 9. Task 10：冻结清单与配额
 
@@ -238,11 +240,13 @@ W1 smoke
   -> formal W8 collection
 ```
 
-八场景功能资格比较 W1 与 W2 的入口语义、exact-once、数据 schema、跨 Worker 隔离、Recorder 行为、物理结果和清理。W2 未通过时不启动 W8。
+八场景功能资格比较 W1 与 W2 的入口语义、exact-once、数据 schema、跨 Worker 隔离、Recorder 行为、物理结果和清理。W1 smoke 只检查最小链路，不是性能基线；随后 W1 和 W2 各自完整消费同一份八场景清单。每次资格运行必须零基础设施中断、零 retry、零 crash resume，八个场景各有唯一终态，所有 owned 资源完成清理。W2 的有效 episode/分钟必须高于 W1；物理成功率和 QC 合格率不得越过运行前冻结的退化容差。W2 未通过时不启动 W8。
 
-W8 使用与八场景清单、正式五路清单都不重叠的 40 个场景，按冻结顺序分成两个 20 项 wave。每个 batch 的 `worker_count` 必须等于 8，不能用 W1/W2 结果或低并发 continuation 冒充 W8。W4、W6 不再执行；W8 是本次 ai-station campaign 的执行要求，不是项目其他工作负载的永久默认值。
+W8 使用与八场景清单、正式五路清单都不重叠的 40 个场景，按冻结顺序分成两个 20 项 wave。每个 batch 的 `worker_count` 必须等于 8，不能用 W1/W2 结果或低并发 continuation 冒充 W8。每个 wave 中，每个 Worker 必须通过实际 terminal lease 连续完成至少 2 项；静态 preferred assignment 不算证据。两个 wave 必须完整消费 40 场景，产生 40 个唯一终态，并满足零基础设施中断、零 retry、零 crash resume。恢复批次只证明恢复协议，不授予 W8 持续负载资格。W4、W6 不再执行；W8 是本次 ai-station campaign 的执行要求，不是项目其他工作负载的永久默认值。
 
-W8 运行中持续记录 CPU、GPU、RAM、磁盘延迟和吞吐、MuJoCo RTF、Recorder 队列、帧间隔、有效 episode 吞吐和失败分布。任何资源瓶颈都停止 campaign 并保存证据，等待人工决定。系统不自动减少 Worker、换设备、降低图像质量、降采样或继续以较低档位计数。
+资格运行前写入不可变的 `qualification-contract.json`，冻结 source/config/manifest/policy hash、指标单位、采样窗口和通过阈值。指标至少包括 CPU、GPU、RAM 上限，磁盘延迟与持续吞吐，MuJoCo RTF 下限，Recorder 队列高水位及回落时间，10 Hz 帧间隔分位数，有效 episode/分钟、物理成功率和 QC 合格率。运行中不允许改阈值。任一阈值越界、后半程吞吐持续下降、队列不能回落或资源采样缺失，都使该资格失败并停止 campaign，等待人工决定。系统不自动减少 Worker、换设备、降低图像质量、降采样或继续以较低档位计数。
+
+本轮只要求一次完整的 40 场景 W8 资格，不隐式继承旧计划的第二轮独立复测。失败后若人工决定重测，必须使用新的资格 ID 和 evidence 子树，重新完整运行 40 场景；两次不完整结果不能拼接成一次资格。
 
 正式采集同样运行 exact W8，`max_wave_size` 固定为 20。基础设施中断只允许在相同 worker count、manifest、runtime config、collection config、contact policy 和 campaign 数据身份下显式恢复。恢复会取得新 resource binding 和 generation，但不得改变业务输入。业务失败不进入恢复队列。
 
