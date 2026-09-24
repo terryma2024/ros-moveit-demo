@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 5e54800f
+current_commit: a79518c5
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -14,8 +14,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: EXP-153
-next_experiment: EXP-154 Task 8 offline cleared-to-pregrasp route screen
+latest_checkpoint: EXP-154
+next_experiment: EXP-155 Task 8 offline radial approach/contact screen
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1268,3 +1268,9 @@ next_experiment: Live Task 3–8 calibration and controller publication after ow
 ## EXP-154 — Offline cleared-to-pregrasp route screen
 
 - State: PLANNED. Lifecycle: OFFLINE after EXP-153 independent pass; source `5e54800f`, revised model SHA `cee0062a...`, no ROS stack. Durable `experiments/exp154-pregrasp-route`. Freeze EXP-139's 91-sample zero-to-cleared arm route, EXP-153 candidate index4, default cup, `.002 m` protected-root clearance. At cleared q first linearly open joint6 from zero to1.2, then linearly interpolate all six joints to the pregrasp candidate, 101 samples per segment. Recompute contact and dual-camera geom-ID cup box/margin at all samples, save selected lossless images and independently verify FK, contacts, samples and hashes. A pass remains an offline geometric screen only; it does not authorize controller execution, grip closure or Task6 FOV qualification. Formal `0/0/0`, no deletion.
+
+- State: VALID offline cleared-to-pregrasp geometric screen, not a motion/grasp qualification. `screen.py` exit0 and independent `verify.py`/`verify-result.json` exit0 under installed compiled model SHA `cee0062a...`, exact MuJoCo3.12/EGL and default cup: 91 frozen zero→cleared samples, 100 samples opening joint6 at cleared, 100 samples interpolating to EXP-153 candidate. Independent verifier reloaded the route and candidate hashes, rebuilt all 291 poses/FK/contact classifications and 582 geom-ID masks, and decoded/SHA checked 16 landmark RGB PNGs. All 291 protected-root static checks at `.002 m` had zero contacts. Head cup visible in all 291; wrist visible 23/91 and framed ≥20 px only 7/91 in reset→cleared, then visible and framed in 100/100 for each open and cleared→pregrasp segment. The first/last wrist landmark was freshly inspected. Thus the later two segments pass a static dual-view screen, while full-route Task6 wrist FOV still fails. No orientation, gripper contact, swept dynamic path, live controller, release/retreat or accepted data. Formal `0/0/0`, Task12 onward `NOT_STARTED`; retain EXP-154 and earlier runs, archive none, scratch/superseded artifacts deletion candidates only, delete nothing.
+
+## EXP-155 — Offline inward pregrasp contact screen
+
+- State: PLANNED. Lifecycle: OFFLINE after EXP-154 independent pass, source `a79518c5`, revised model SHA `cee0062a...`, no ROS stack. Durable `experiments/exp155-contact-approach`. Freeze default cup, EXP-153 +X pregrasp, jaw joint6=1.2 rad, same MuJoCo model and `.002 m` protected contact policy. Use deterministic bounded least-squares from the prior solution for TCP +X radial targets `.07/.06/.05/.04/.03 m` at z`.205 m`; independently classify all contacts by geometry and target, without declaring cup/finger contact permitted yet. Screen the interpolated six-joint motion between consecutive candidate solutions and render dual-camera cup masks at endpoints. Reject any unexpected robot/table, self, mast or camera contact; fingertip/cup contact is a candidate signal only and needs frozen phase allowlists and live force/support evidence before execution. No formal data or deletion.
