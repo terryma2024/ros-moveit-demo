@@ -321,3 +321,20 @@ evidence_disposition:
   archived_runs: NONE.
   deletion_candidates: All 18 unique /opt/data/tmp/jz.* scratch directories recorded in results/*/invocation.txt, plus the zero-byte transfers/pytest-fixes.bundle under the registered root.
   deleted: NONE.
+
+checkpoint_id: CP-008
+last_valid_experiment: EXP-005
+current_hypothesis: Published main on both remotes contains the verified mac-mini candidate without dropping remote-only commits.
+working_tree_status: Mac main fast-forwarded to 2b3eefe55789a89e95e1138cad559da38f758fd3; source/test tree clean before this audit-only ledger append.
+owned_processes: NONE.
+preserved_processes: Existing mac-mini services and user worktrees untouched.
+confirmed_conclusions:
+  - Fresh pre-merge readback showed origin/main and GitHub main both at 1639e58d35f7bb3b8a482a809f9e6bc28874a7af.
+  - That commit was an ancestor of tested candidate 2b3eefe55789a89e95e1138cad559da38f758fd3.
+  - Mac local main fast-forwarded from 1639e58d to 2b3eefe5 without conflicts.
+  - git push origin main succeeded; remote readback showed 2b3eefe55789a89e95e1138cad559da38f758fd3.
+  - git push git@github.com:terryma2024/ros-moveit-demo.git main:main succeeded; remote readback showed the same commit.
+  - No force push, evidence deletion, simulator launch, or physical robot operation occurred.
+disproven_routes: []
+open_risks: NONE for the requested Mac pytest retest and publication.
+next_command: Commit and publish this audit-only checkpoint, then read back both remote main refs.
