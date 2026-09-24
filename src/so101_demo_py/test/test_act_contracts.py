@@ -94,9 +94,12 @@ def test_search_and_scenario_identity_boundaries():
 def test_result_schemas_reject_extra_fields_and_inconsistent_outcomes():
     result = dict(scene_id="x", split="train", status="PASSED", business_failure=None,
                   infra_attempts=0, episode_root="/tmp/x", episode_sha256="a"*64,
-                  worker_id="w1", pool_generation=0, worker_count=1)
+                  worker_id="w1", batch_id="batch-1", worker_generation=1,
+                  worker_count=1, coordinator_commit_sequence=1)
     validate_collection_result(result)
-    for changes in (dict(status="FAILED"), dict(worker_count=True), dict(truth=1)):
+    for changes in (dict(status="FAILED"), dict(worker_count=True), dict(truth=1),
+                    dict(pool_generation=1), dict(coordinator_commit_sequence=0),
+                    dict(worker_generation=True), dict(batch_id="")):
         with pytest.raises(ContractError):
             validate_collection_result(dict(result, **changes))
     run = dict(scene_id="x", split="train", search_locked=True, done=True,

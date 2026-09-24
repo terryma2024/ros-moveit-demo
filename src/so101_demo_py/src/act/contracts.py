@@ -125,16 +125,17 @@ def validate_scenario(value):
 
 def validate_collection_result(value):
     fields(value, ("scene_id", "split", "status", "business_failure", "infra_attempts",
-                   "episode_root", "episode_sha256", "worker_id", "pool_generation",
-                   "worker_count"))
-    for key in ("scene_id", "episode_root", "worker_id"):
+                   "episode_root", "episode_sha256", "worker_id", "batch_id",
+                   "worker_generation", "worker_count", "coordinator_commit_sequence"))
+    for key in ("scene_id", "episode_root", "worker_id", "batch_id"):
         identifier(value[key])
     if value["split"] not in {"train", "validation", "offline_test", "qualification"}:
         raise ContractError("SPLIT_INVALID")
     sha256(value["episode_sha256"])
     integer(value["infra_attempts"])
-    integer(value["pool_generation"])
+    integer(value["worker_generation"], minimum=1)
     integer(value["worker_count"], minimum=1)
+    integer(value["coordinator_commit_sequence"], minimum=1)
     if value["status"] == "PASSED":
         if value["business_failure"] is not None:
             raise ContractError("RESULT_INVALID")
