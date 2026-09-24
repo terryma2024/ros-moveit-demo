@@ -11,6 +11,7 @@ import math
 import multiprocessing
 import os
 from pathlib import Path
+import sys
 import threading
 
 import mujoco
@@ -31,7 +32,9 @@ def model_sha256(model):
 class MujocoPathChecker:
     def __init__(self,model_path,*,protected_roots,cup_joint,gripper_body,path_step_s,path_clearance_m,
                  velocity_limit_rad_s,acceleration_limit_rad_s2,allowed_pairs_by_phase,max_samples=50000):
-        if mujoco.mj_versionString()!='3.4.0':raise ValueError('PHYSICS_VERSION_INVALID')
+        expected_version={'linux':'3.12.0','darwin':'3.4.0'}.get(sys.platform)
+        if expected_version is None or mujoco.mj_versionString()!=expected_version:
+            raise ValueError('PHYSICS_VERSION_INVALID')
         self.model=mujoco.MjModel.from_xml_path(str(Path(model_path).resolve()))
         self.model_sha256=model_sha256(self.model)
         self.step,self.clearance=finite(path_step_s),finite(path_clearance_m)

@@ -44,7 +44,7 @@ bool SceneStateBuilder::configure(const mjModel * model)
 {
   model_ = nullptr;
   model_sha256_.clear();
-  if (!model || mj_version() != 340) {return false;}
+  if (!model || mj_version() != mjVERSION_HEADER) {return false;}
   const auto size = mj_sizeModel(model);
   if (size <= 0) {return false;}
   std::vector<uint8_t> bytes(static_cast<std::size_t>(size));
