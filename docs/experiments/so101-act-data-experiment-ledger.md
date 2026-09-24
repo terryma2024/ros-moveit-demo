@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 24d71fd4
+current_commit: 18fdd310
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -14,8 +14,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: EXP-157
-next_experiment: EXP-158 Task 8 offline grasp parameter screen
+latest_checkpoint: EXP-158
+next_experiment: EXP-159 Task 8 alternate +Y static pregrasp approach screen
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1292,3 +1292,9 @@ next_experiment: Live Task 3–8 calibration and controller publication after ow
 ## EXP-158 — Bounded offline grasp parameter screen
 
 - State: PLANNED. Lifecycle: OFFLINE after EXP-157 independent negative replay, source `24d71fd4`, revised model SHA `cee0062a...`, no ROS stack. Durable `experiments/exp158-grasp-parameter-screen`. Freeze default cup and same +X pregrasp arm/jaw, installed MuJoCo position actuators and physics timestep. Vary only +X radial approach endpoint `.04/.03/.02 m` and jaw final `.55/.35/.15 rad` over nine deterministic schedules, with identical settle/approach/close/4 cm lift durations and fixed position-only lift IK per endpoint. Independently replay each schedule and read back cup height/displacement, bilateral contact force and table support; no source mutation, live control, release or accepted data. Stop this route if no candidate holds and lifts under the frozen contact/clearance bounds; do not loosen a live safety gate.
+
+- State: VALID negative +X parameter screen; the tested +X grip route is rejected for live use. `screen.py` exit0 and independent `verify.py`/`verify-result.json` exit0 replayed nine deterministic schedules and all 29,250 MuJoCo physics steps under exact revised model SHA `cee0062a...`. +X radial endpoints `.04/.03/.02 m` crossed with jaw finals `.55/.35/.15 rad`, with identical settle/approach/close/4 cm commanded TCP lift, produced at most 17 20-ms samples with simultaneous fixed/moving finger normal force >`.05 N`, but no sample had cup z above `.175 m` without table support. Across all nine, maximum cup rise was `.000491 m`, and the cup stayed on the table; tighter radial closure merely displaced it laterally. Every sampled q/cup/force replay agreed with saved rows; no other protected force category appeared. Do not attempt this +X route live or call static bilateral overlap a grasp. The dynamic negative does not rule out other approach orientations or side, so next screen uses the independent +Y reachability candidate. No ROS stack, formal `0/0/0`, Task12 onward `NOT_STARTED`; retain EXP-158 and earlier runs, archive none, scratch/superseded artifacts deletion candidates only, delete nothing.
+
+## EXP-159 — Alternate +Y pregrasp and inward static screen
+
+- State: PLANNED. Lifecycle: OFFLINE after EXP-158 independent negative replay; source `18fdd310`, installed model SHA `cee0062a...`, no ROS stack. Durable `experiments/exp159-y-approach`. Freeze default cup, jaw1.2, and EXP-153 +Y pregrasp candidate index0 at radial `.08 m`, z`.205 m`. Use bounded least-squares continuation to +Y radial targets `.07/.06/.05/.04/.03/.02 m`, 21 interpolated samples per segment. Independently recompute FK, full protected contact geom pairs at `.002 m`, and endpoint dual-camera cup masks. Proceed to an offline dynamics probe only if the path to a fingertip/cup contact boundary has no table, self, mast or camera contact; require dynamic grip/lift before any live Task8 test. No source asset change, formal data or deletion.
