@@ -214,14 +214,18 @@ class MujocoResetClient:
             return True
         deadline = self._monotonic() + self._timeout_s
         try:
-            old = self._wait_for_initial_snapshot(deadline=deadline)
-            expected_epoch = old.reset_epoch + 1
-            if old.paused:
-                self._require(self._services.pause(False), "prepare running")
+            # Establish the broker's stopped/reset ticket before waiting for a
+            # paused snapshot. The negative CancelGoal proof is time limited;
+            # a late pause/resume would otherwise be refused while this lease
+            # is RUNNING and idle proof refresh is suspended.
             context = getattr(self._services, "control_context", None)
             if context is not None:
                 from so101_demo.adapters.act.leased_action_client import connection_for
                 connection_for(context).request("prepare_reset", context)
+            old = self._wait_for_initial_snapshot(deadline=deadline)
+            expected_epoch = old.reset_epoch + 1
+            if old.paused:
+                self._require(self._services.pause(False), "prepare running")
             self._require(
                 self._services.switch_controllers(activate=(), deactivate=self._controllers),
                 "deactivate",

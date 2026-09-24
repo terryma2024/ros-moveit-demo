@@ -154,6 +154,30 @@ def adapter_fixture(monkeypatch,*,with_inputs=False,tf_missing=False,stop_confir
     return adapter,clock,calls,ros_search
 
 
+def test_head_transform_uses_image_stamp_with_causal_older_joint_feedback(monkeypatch):
+    from types import SimpleNamespace
+    from sensor_msgs.msg import Image, CameraInfo
+
+    adapter, _, _, _ = adapter_fixture(monkeypatch, with_inputs=True)
+    image = Image(width=640, height=480, step=1920, encoding='rgb8', data=bytes(640*480*3))
+    info = CameraInfo(k=[400., 0., 320., 0., 400., 240., 0., 0., 1.], d=[0.]*5)
+    for message in (image, info):
+        message.header.stamp.sec = 1
+        message.header.stamp.nanosec = 10_000_000
+        message.header.frame_id = 'head_camera_frame'
+    adapter._image(image)
+    adapter._info(info)
+    requests = []
+
+    def lookup(target, source, stamp):
+        requests.append((target, source, stamp.nanoseconds))
+        return SimpleNamespace(transform=SimpleNamespace(rotation=SimpleNamespace(x=0., y=0., z=0., w=1.)))
+
+    adapter.tf_buffer = SimpleNamespace(lookup_transform=lookup)
+    adapter.tick(safe_observe=True)
+    assert requests == [('base', 'head_camera_frame', 1_010_000_000)]
+
+
 @pytest.mark.parametrize('tf_missing',(False,True))
 def test_adapter_deadline_runs_without_rgb_or_transform(monkeypatch,tf_missing):
     adapter,clock,calls,_=adapter_fixture(monkeypatch,with_inputs=tf_missing,tf_missing=tf_missing)
