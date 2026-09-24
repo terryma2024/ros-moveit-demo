@@ -12,8 +12,8 @@ task-local bytes instead:
   are the same bytes in both;
 * the store rows that bind that batch to a campaign (manifest, consumed preflight receipt, first
   pass, retry queue) and one finished owner row;
-* the six ``SO101_VALIDATION_*`` layout inputs as task-local files (the parallel document is a byte
-  copy of the repository's real v3 document, because the Linux retry admission must load it as v3);
+* the six ``SO101_VALIDATION_*`` layout inputs as task-local files, with byte copies of the
+  repository's v3 first-pass and macOS MPS v5 retry documents;
 * a live control lease.
 
 The whole composition is then assembled by the *real* ``create_production_service``, so the store,
@@ -140,12 +140,9 @@ def manifest_document(*, point_ids=POINT_IDS) -> dict:
 def build_environment(root: Path) -> dict:
     """The production environment for this task root: six task-local layout inputs, nothing else.
 
-    ``demo_prefix``/``demo_share`` still come from the ament index - that is the environment this
-    host really has, not a fixed path - while every file the runtime layout must find is written
-    under ``root``. Only one of them has to be a *loadable* document: the Linux retry admission
-    loads the parallel document as v3, so it is a byte copy of this repository's real v3 document.
-    The others only have to be absolute regular files, and pointing them here is what keeps these
-    tests off an installed copy that could change underneath them.
+    ``demo_prefix``/``demo_share`` still come from the ament index, while every file the runtime
+    layout must find is written under ``root``. The v3 and MPS v5 documents are copied from the
+    repository; the points catalog and adaptive config are written here.
     """
 
     configuration = (Path(root) / "task-config").resolve()
