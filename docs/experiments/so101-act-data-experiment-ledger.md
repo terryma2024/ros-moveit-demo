@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 82ddf3c74336496f74e79f801d9a642d51b76921
+current_commit: 6bc81478397dfaefbfc09d44e761a7c07ffa01be
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -14,8 +14,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: EXP-172
-next_experiment: EXP-173 live Task8 controller/scene-shadow readiness audit
+latest_checkpoint: EXP-173
+next_experiment: EXP-174 ACT-specific contact-policy and unified worker contract audit
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1380,3 +1380,9 @@ next_experiment: Live Task 3–8 calibration and controller publication after ow
 ## EXP-173 — Task8 live controller and planning-scene readiness audit
 
 - State: PLANNED. Lifecycle: READ_ONLY after EXP-172 independent offline candidate, source `82ddf3c7...`, installed model SHA `3c876e7b...`, no task-owned ROS stack. Identify the exact installed qualified phase runner, source configuration, task-owned process and namespace requirements for a bounded live expert pick/transport/place/release/retreat diagnostic. Confirm authority path through the ACT broker and MoveIt action servers, exact safety/force boundaries and stop/cleanup procedure before launching motion. A plan-only or readiness audit cannot count as Task8 physical proof or formal data. No deletion.
+
+- State: VALID read-only refusal; no live Task8 launch. `experiments/exp173-live-readiness/audit.py` exit0 called the actual installed `application.pick_place._preflight_task_policy` with checked-in motion and contact policies and received `POLICY_FINGERPRINT_MISMATCH`. Existing `config/mujoco/contact_calibration.yaml` is user-approved only for older model XML SHA `f87a033a...` and older scene SHA `b98eca6f...`; current ACT model XML SHA `d8665bb9...`, ACT scene XML SHA `4db48e35...`, compiled model SHA `3c876e7b...`. Even the current non-ACT scene XML hash `fec97df9...` differs from the approved scene hash. The nine-phase `run_live_workflow` uses that policy preflight before motion; the ACT broker teacher context would additionally be required for every phase, while actual Task7A live whole-route arbitration is not yet qualified. Read-only source assertions also confirm unified production `compose_services` sets `worker=None`, and the ROS child driver raises `ROS_DRIVER_NOT_PROVISIONED`; its IPC currently discards operation payload before the action driver, so wiring is an architectural change, not a one-line composition fix. Plan Task7A explicitly forbids Task8 live execute before Task7A passes. Do not transfer the old approved contact thresholds by changing hash fields or launch this workflow as if it were ACT-qualified. The offline EXP-172 route remains a candidate. Formal `0/0/0`, Task12 onward `NOT_STARTED`; retain EXP-173 and prior runs, archive none, scratch/superseded outputs deletion candidates only, delete nothing.
+
+## EXP-174 — ACT-specific contact policy and unified worker contract audit
+
+- State: PLANNED. Lifecycle: READ_ONLY/SOURCE_ONLY after EXP-173 fail-closed preflight, source `6bc81478...`, no ROS stack. Enumerate the exact ACT contact calibration regimes and approval contract required to bind an ACT-specific policy to current model/scene, and map the unified web WorkerPort operations to typed child IPC/ROS capabilities. Preserve fail-closed behavior and do not fake approval or forward a mutation via an unprovisioned driver. Any source change starts with an intended RED, targeted GREEN, complete ordinary tests and package gate. No live Task8 or formal data until both gates pass; no deletion.
