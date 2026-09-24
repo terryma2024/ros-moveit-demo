@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: ec862b8f
+current_commit: 24d71fd4
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -14,8 +14,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: EXP-156
-next_experiment: EXP-157 Task 8 offline MuJoCo grasp dynamics probe
+latest_checkpoint: EXP-157
+next_experiment: EXP-158 Task 8 offline grasp parameter screen
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1286,3 +1286,9 @@ next_experiment: Live Task 3–8 calibration and controller publication after ow
 ## EXP-157 — Offline MuJoCo grasp dynamics probe
 
 - State: PLANNED. Lifecycle: OFFLINE after EXP-156 independent pass, source `ec862b8f`, exact task MuJoCo3.12 revised scene/model SHA `cee0062a...`, no ROS stack. Durable `experiments/exp157-grasp-dynamics`. Start at verified EXP-153 +X pregrasp, jaw1.2, default cup/table, set matching position controls and let physics settle; command the verified `.04 m` arm pose by a bounded linear control ramp, then close jaw to `.55`/`.45` rad, then attempt a small upward TCP IK target while holding closure. Sample cup pose/velocity, jaw/arm feedback, bilateral fingertip contact and table support at fixed simulation intervals, retain lossless images and independent replay of exact control schedule. This is an exploratory offline physics diagnostic only; it does not authorize live motion or formal data. Stop on numerical instability or nonfinite state, preserve failure evidence; no deletion.
+
+- State: VALID negative offline dynamic grasp probe; no live grasp attempt authorized from this candidate. First `probe.py` simulated all 3,250 physics steps but failed while building summary due Python `sum()` of list-valued truthy expressions; no `result.json` was written, its 14 PNGs/log/script/hash inventory are retained. Corrected `probe-v2.py` uses boolean counting and explicit contact indices, writes distinct v2 images and `result-v2.json`, exit0. Independent `verify.py`/`verify-result.json` exit0 recompiled exact revised model SHA `cee0062a...`, replayed every position-control target at `.002 s` for 3,250 steps and compared all 332 sampled q/cup/TCP/contacts/forces and PNG raw hashes. At +X pregrasp→`.04 m` approach→jaw1.2→`.45` closure→4 cm commanded TCP lift, the fixed finger contacted/pushed the cup about4.5 mm in x, no sampled moving-finger contact or bilateral contact occurred, and maximum cup z during lift was `.164993 m` (table height, no lift). Final cup `(0.0154729,-0.280994,0.164987)` m remained supported by table. Fresh final wrist image was inspected. This disproves this specific static-bilateral pose and schedule as a physical grasp; the static EXP-156 overlap was not dynamic evidence. No ROS stack, controller, release/retreat or formal data. Formal `0/0/0`, Task12 onward `NOT_STARTED`; retain both EXP-157 attempts and earlier runs, archive none, first-attempt images and other superseded outputs deletion candidates only, delete nothing.
+
+## EXP-158 — Bounded offline grasp parameter screen
+
+- State: PLANNED. Lifecycle: OFFLINE after EXP-157 independent negative replay, source `24d71fd4`, revised model SHA `cee0062a...`, no ROS stack. Durable `experiments/exp158-grasp-parameter-screen`. Freeze default cup and same +X pregrasp arm/jaw, installed MuJoCo position actuators and physics timestep. Vary only +X radial approach endpoint `.04/.03/.02 m` and jaw final `.55/.35/.15 rad` over nine deterministic schedules, with identical settle/approach/close/4 cm lift durations and fixed position-only lift IK per endpoint. Independently replay each schedule and read back cup height/displacement, bilateral contact force and table support; no source mutation, live control, release or accepted data. Stop this route if no candidate holds and lifts under the frozen contact/clearance bounds; do not loosen a live safety gate.
