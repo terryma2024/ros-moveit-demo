@@ -38,6 +38,26 @@ def within_calibration_envelope(prefix,reference,neck_yaw,manifest):
     except (KeyError,TypeError,ValueError):return False
 
 
+def diagnostic_motion_configuration(manifest):
+    """Replay pinned sources before converting a contact run to broker-local limits."""
+    from so101_demo.act.contact_diagnostic import require_contact_diagnostic_sources
+    source=require_contact_diagnostic_sources(manifest)
+    return dict(kind='ACT_CONTACT_DIAGNOSTIC',eligible_for_collection=False,
+        session_id=source['session_id'],attempt_id=source['attempt_id'],
+        model_path=source['scene_path'],model_sha256=source['model_sha256'],
+        arm_center=tuple(source['joint_start_rad']),neck_center_rad=source['neck_start_rad'],
+        max_neck_drift_rad=.002,max_rows=min(source['segment_rows']+1,len(source['target_positions'])+1),
+        path_step_s=source['path_step_s'],path_clearance_m=source['path_clearance_m'],
+        velocity_limit_rad_s=tuple(source['velocity_limit_rad_s']),
+        acceleration_limit_rad_s2=tuple(source['acceleration_limit_rad_s2']),
+        max_age_s=source['max_age_s'],max_skew_s=source['max_skew_s'],
+        stop_velocity_rad_s=source['stop_velocity_rad_s'],
+        submit_lead_s=source['submit_lead_s'],
+        allowed_pairs=frozenset(tuple(pair) for pair in source['allowed_contact_pairs']),
+        diagnostic_limits=source['diagnostic_limits'].copy(),
+        manifest_sha256=source['manifest_sha256'])
+
+
 class RosCalibrationMotionGuard:
     """Sole broker-local calibration gate, armed by actual paused reset evidence."""
     def __init__(self,node,driver,broker,manifest,*,evidence_root,monotonic=None):
@@ -50,26 +70,35 @@ class RosCalibrationMotionGuard:
         from .contact_evidence import RobotContactObserver,RosRobotContactAdapter
         from .scene_state import SceneStateObserver,RosSceneStateAdapter
         from .physics import MujocoPathProcess
-        self.manifest=require_motion_manifest(manifest);self.driver,self.broker=driver,broker
+        self.contact_mode=isinstance(manifest,dict) and manifest.get('kind')=='ACT_CONTACT_DIAGNOSTIC'
+        self.contact_manifest=manifest if self.contact_mode else None
+        self.manifest=(diagnostic_motion_configuration(manifest) if self.contact_mode
+                       else require_motion_manifest(manifest))
+        config=self.manifest
+        self.node=node;self.driver,self.broker=driver,broker
         self.monotonic=monotonic or time.monotonic;self._lock=threading.RLock();self._joints=None
-        self.audit=deque(maxlen=128);self._closed=False
-        self.path=MujocoPathProcess(check_timeout_s=manifest['submit_lead_s'],start_timeout_s=2.,
-            model_path=manifest['model_path'],protected_roots=('base',),cup_joint='cup_free_joint',
-            gripper_body='gripper',path_step_s=manifest['path_step_s'],path_clearance_m=manifest['path_clearance_m'],
-            velocity_limit_rad_s=manifest['velocity_limit_rad_s'],acceleration_limit_rad_s2=manifest['acceleration_limit_rad_s2'],
-            allowed_pairs_by_phase={})
-        if self.path.model_sha256!=manifest['model_sha256']:
+        self.audit=deque(maxlen=128);self._closed=False;self.live_observer=None;self.live_adapter=None
+        self._cup_reset_verified=False
+        self._next_segment=0
+        allowed=config['allowed_pairs'] if self.contact_mode else frozenset()
+        self.path=MujocoPathProcess(check_timeout_s=config['submit_lead_s'],start_timeout_s=2.,
+            model_path=config['model_path'],protected_roots=('base',),cup_joint='cup_free_joint',
+            gripper_body='gripper',path_step_s=config['path_step_s'],path_clearance_m=config['path_clearance_m'],
+            velocity_limit_rad_s=config['velocity_limit_rad_s'],acceleration_limit_rad_s2=config['acceleration_limit_rad_s2'],
+            allowed_pairs_by_phase={'APPROACH':allowed} if self.contact_mode else {})
+        if self.path.model_sha256!=config['model_sha256']:
             self.path.close();raise ValueError('MOTION_MODEL_HASH_INVALID')
         try:
             self.model=self.path.model
             known=set(self.path.names.values());known.discard(None)
-            self.contact_observer=RobotContactObserver(known_geoms=known,allowed_pairs=set(),
-                max_age_s=manifest['max_age_s'],max_sim_gap_s=float(self.model.opt.timestep)*1.01,monotonic=self.monotonic)
-            root=Path(evidence_root);root.mkdir(parents=True,exist_ok=True)
-            self._record=(root/'motion-calibration-robot-contacts.jsonl').open('x',encoding='utf-8')
-            self._scene_record=(root/'motion-calibration-scene-state.jsonl').open('x',encoding='utf-8')
+            self.contact_observer=RobotContactObserver(known_geoms=known,allowed_pairs=allowed,
+                max_age_s=config['max_age_s'],max_sim_gap_s=float(self.model.opt.timestep)*1.01,monotonic=self.monotonic)
+            root=Path(evidence_root);root.mkdir(parents=True,exist_ok=True);self.evidence_root=root
+            stem='contact-diagnostic' if self.contact_mode else 'motion-calibration'
+            self._record=(root/(stem+'-robot-contacts.jsonl')).open('x',encoding='utf-8')
+            self._scene_record=(root/(stem+'-scene-state.jsonl')).open('x',encoding='utf-8')
             self.scene_observer=SceneStateObserver(model_sha256=self.path.model_sha256,
-                nq=self.model.nq,nv=self.model.nv,max_age_s=manifest['max_age_s'],monotonic=self.monotonic)
+                nq=self.model.nq,nv=self.model.nv,max_age_s=config['max_age_s'],monotonic=self.monotonic)
             self.scene_adapter=RosSceneStateAdapter(node,self.scene_observer,on_hazard=self._fail,
                 record_port=self._record_scene,pending_reset_port=self._pending_scene_reset)
             self.contact_adapter=RosRobotContactAdapter(node,self.contact_observer,on_hazard=self._fail,record_port=self._record_frame)
@@ -81,6 +110,56 @@ class RosCalibrationMotionGuard:
             if hasattr(self,'_record'):self._record.close()
             if hasattr(self,'_scene_record'):self._scene_record.close()
             raise
+
+    def _start_safe(self,positions,neck_yaw):
+        if not self.contact_mode:
+            probe=dict(session_id=self.manifest['session_id'],attempt_id='start',sequence=0,
+                observation_time_s=0.,target_times_s=(.1,),positions=(tuple(positions),))
+            return within_calibration_envelope(
+                probe,self.manifest['arm_center'],neck_yaw,self.manifest)
+        try:
+            start=self._next_segment*self.contact_manifest['segment_rows']
+            expected=(self.manifest['arm_center'] if start==0 else
+                      self.contact_manifest['target_positions'][start-1])
+            return (abs(finite(neck_yaw)-self.manifest['neck_center_rad'])<=.002
+                and all(abs(a-b)<=.002 for a,b in zip(
+                    bounded_positions(positions),expected,strict=True)))
+        except (KeyError,TypeError,ValueError):return False
+
+    def _previous_segment_complete(self):
+        if not self.contact_mode or self._next_segment==0:return True
+        try:
+            pair=self.broker.prefix_executor
+            ids=pair.adapter.current_goal_ids
+            if len(ids)!=2 or any(gid is None for gid in ids):
+                return False
+            states=[self.driver.goal_state(gid) for gid in ids]
+            if not all(state['accepted'] is True and state['status']==4 and
+                       state['result'] is not None and state['result']['error_code']==0
+                       for state in states):
+                return False
+            self.driver.refresh_idle()
+            return self.driver.stopped()
+        except (AttributeError,KeyError,TypeError,ValueError,RuntimeError):return False
+
+    def _within(self,prefix,reference,neck_yaw):
+        if not self.contact_mode:
+            return within_calibration_envelope(prefix,reference,neck_yaw,self.manifest)
+        from so101_demo.act.contact_diagnostic import prefix_matches_diagnostic
+        return (prefix['sequence']==self._next_segment and
+            self._previous_segment_complete() and self._start_safe(reference,neck_yaw)
+            and prefix_matches_diagnostic(
+            prefix,self.contact_manifest)
+        )
+
+    def _live_ready(self):
+        if not self.contact_mode:return True
+        if not self._cup_reset_verified:return False
+        observer=self.live_observer
+        if observer is None or self.live_adapter is None:return False
+        try:observer.start()
+        except ValueError:return False
+        return observer.hazard is None and observer.recorder.recorded_steps>0
 
     def _record_scene(self,frame):
         import json
@@ -108,12 +187,29 @@ class RosCalibrationMotionGuard:
                     if (abs(positions[name]-value)>1e-9 or velocities[name]!=0.
                             or abs(frame['qpos'][self.model.jnt_qposadr[jid]]-value)>1e-9
                             or frame['qvel'][self.model.jnt_dofadr[jid]]!=0.):return False
+                if self.contact_mode:
+                    address=self.path.cup_address
+                    joint=mujoco.mj_name2id(self.model,mujoco.mjtObj.mjOBJ_JOINT,'cup_free_joint')
+                    if joint<0:return False
+                    velocity_address=int(self.model.jnt_dofadr[joint])
+                    if (any(abs(a-b)>1e-7 for a,b in zip(
+                            frame['qpos'][address:address+3],
+                            self.contact_manifest['cup_start_m'],strict=True))
+                            or any(abs(a-b)>1e-7 for a,b in zip(
+                                frame['qpos'][address+3:address+7],
+                                (1.,0.,0.,0.),strict=True))
+                            or any(abs(v)>1e-9 for v in frame['qvel'][velocity_address:velocity_address+6])):
+                        return False
             # A completed driver ACK is a retained trusted write receipt. Before
             # that ACK, the actual reset ticket must still be authorized.
-            if acknowledged:return True
+            if acknowledged:
+                if self.contact_mode:self._cup_reset_verified=True
+                return True
             with self.broker._lock:ticket=self.broker._reset_ticket
             if ticket is None or ticket[2]=='act' or ticket[3]!=self.manifest['session_id']:return False
-            self.broker.ownership.require_ticket(ticket);return True
+            self.broker.ownership.require_ticket(ticket)
+            if self.contact_mode:self._cup_reset_verified=True
+            return True
         except (AttributeError,KeyError,TypeError,ValueError,PermissionError):return False
 
     def _record_frame(self,frame):
@@ -148,7 +244,27 @@ class RosCalibrationMotionGuard:
                 reset_epoch=message.reset_epoch,simulation_time_s=stamp,simulation_step=0,paused=True))
             self.scene_adapter.arm(SimpleNamespace(simulation_session_id=message.simulation_session_id,
                 reset_epoch=message.reset_epoch,simulation_time_s=stamp,simulation_step=0,paused=True))
-        except (KeyError,TypeError,ValueError):self._fail('CONTACT_RESET_SNAPSHOT_INVALID')
+            if self.contact_mode:
+                if self.live_adapter is not None:
+                    raise ValueError('CONTACT_DIAGNOSTIC_SECOND_RESET')
+                from so101_demo.act.contact_live import (
+                    LivePhysicsStream,LiveContactObserver,RosLiveContactAdapter)
+                import mujoco
+                joint=mujoco.mj_name2id(self.model,mujoco.mjtObj.mjOBJ_JOINT,'cup_free_joint')
+                if joint<0:raise ValueError('CONTACT_CUP_JOINT_INVALID')
+                stream=LivePhysicsStream(session_id=self.manifest['session_id'],
+                    reset_epoch=message.reset_epoch,model_sha256=self.path.model_sha256,
+                    model_nq=self.model.nq,model_nv=self.model.nv,
+                    cup_qpos_address=self.path.cup_address,
+                    cup_qvel_address=int(self.model.jnt_dofadr[joint]),
+                    diagnostic_limits=self.manifest['diagnostic_limits'],
+                    output_path=self.evidence_root/'contact-live-physics.ndjson',
+                    monotonic=self.monotonic)
+                self.live_observer=LiveContactObserver(stream,
+                    ros_clock=lambda:self.node.get_clock().now().nanoseconds*1e-9,
+                    monotonic=self.monotonic,on_abort=self._fail)
+                self.live_adapter=RosLiveContactAdapter(self.node,self.live_observer)
+        except (KeyError,TypeError,ValueError,OSError,RuntimeError):self._fail('CONTACT_RESET_SNAPSHOT_INVALID')
 
     def accept_joints(self,message):
         from so101_demo.act.joints import ACT_JOINTS
@@ -165,6 +281,8 @@ class RosCalibrationMotionGuard:
         from so101_demo.act.joints import ACT_JOINTS
         import mujoco,numpy as np
         now=self.monotonic()
+        if self.contact_mode and not self._cup_reset_verified:
+            raise ValueError('CONTACT_CUP_RESET_UNVERIFIED')
         with self._lock:joints=self._joints
         with self.driver._lock:epoch=self.driver._epoch;fault=self.driver.hazard_reason
         with self.contact_observer._lock:
@@ -184,9 +302,8 @@ class RosCalibrationMotionGuard:
         stamps=(finite(base['sim_time_s']),joint_stamp,finite(cup_stamp),contact['simulation_time_s'],scene['simulation_time_s'])
         if max(stamps)-min(stamps)>self.manifest['max_skew_s'] or any(not 0<=now-r<=self.manifest['max_age_s'] for r in (joint_received,cup_received)):
             raise ValueError('MOTION_EVIDENCE_STALE')
-        measured_prefix=dict(session_id=self.manifest['session_id'],attempt_id=base['attempt_id'],sequence=0,
-            observation_time_s=0.,target_times_s=(.1,),positions=(q[:6],))
-        if not within_calibration_envelope(measured_prefix,reference,q[6],self.manifest):raise ValueError('MOTION_ENVELOPE_INVALID')
+        if not self._start_safe(q[:6],q[6]) or not self._start_safe(reference,q[6]):
+            raise ValueError('MOTION_ENVELOPE_INVALID')
         if abs(v[6])>self.manifest['stop_velocity_rad_s']:raise ValueError('MOTION_NECK_NOT_STOPPED')
         qpos=np.array(scene['qpos']);scene_q=[];scene_v=[]
         for name in ACT_JOINTS:
@@ -194,8 +311,7 @@ class RosCalibrationMotionGuard:
             if jid<0:raise ValueError('MOTION_MODEL_JOINT_INVALID')
             scene_q.append(float(qpos[self.model.jnt_qposadr[jid]]))
             scene_v.append(scene['qvel'][self.model.jnt_dofadr[jid]])
-        measured_prefix['positions']=(tuple(scene_q[:6]),)
-        if not within_calibration_envelope(measured_prefix,reference,scene_q[6],self.manifest):
+        if not self._start_safe(scene_q[:6],scene_q[6]):
             raise ValueError('MOTION_SCENE_ENVELOPE_INVALID')
         if abs(scene_v[6])>self.manifest['stop_velocity_rad_s']:raise ValueError('MOTION_SCENE_NECK_NOT_STOPPED')
         pose=cup.object_pose_world
@@ -217,10 +333,11 @@ class RosCalibrationMotionGuard:
     def check_prefix(self,prefix,snapshot):
         began=self.monotonic()
         try:
+            if not self._live_ready():return False
             start=snapshot['sim_time_s']+self.manifest['submit_lead_s']
             reference=self.driver.reference_state(start)
             full=self._snapshot(snapshot,start=start,reference=reference['positions'],reference_velocity=reference['velocities'])
-            if not within_calibration_envelope(prefix,reference['positions'],self._joints[0][6],self.manifest):return False
+            if not self._within(prefix,reference['positions'],self._joints[0][6]):return False
             safe=self.path.check_path(prefix,full)
             self.audit.append(dict(boundary='approve',safe=safe,path=dict(self.path.last_check),
                 elapsed_wall_s=self.monotonic()-began,snapshot_sim_time_s=snapshot['sim_time_s']))
@@ -231,6 +348,7 @@ class RosCalibrationMotionGuard:
 
     def check_exact_goals(self,goals,prefix):
         try:
+            if not self._live_ready():return False
             if len(goals)!=2 or goals[0]['header_stamp_s']!=goals[1]['header_stamp_s'] or goals[0]['time_from_start_s']!=goals[1]['time_from_start_s']:
                 return False
             base=dict(session_id=prefix['session_id'],attempt_id=prefix['attempt_id'],reset_epoch=self.contact_observer.epoch,
@@ -239,14 +357,16 @@ class RosCalibrationMotionGuard:
             reference=self.driver.reference_state(start)
             if any(abs(a-b)>1e-9 for a,b in zip(reference['positions'],held,strict=True)):return False
             full=self._snapshot(base,start=start,reference=held,reference_velocity=reference['velocities'])
-            if not within_calibration_envelope(prefix,held,self._joints[0][6],self.manifest):return False
+            if not self._within(prefix,held,self._joints[0][6]):return False
             safe=self.path.check_path(prefix,full)
             self.audit.append(dict(boundary='exact_goals',safe=safe,path=dict(self.path.last_check)))
+            if safe and self.contact_mode:self._next_segment+=1
             return safe
         except (KeyError,TypeError,ValueError,RuntimeError) as error:
             self.audit.append(dict(boundary='exact_goals',safe=False,error=repr(error)));return False
 
     def poll(self):
+        if self.live_observer is not None:self.live_observer.poll()
         pair=self.broker.prefix_executor
         ticket=None if pair is None else pair._ticket
         if ticket is None:return
@@ -262,6 +382,7 @@ class RosCalibrationMotionGuard:
         try:
             with self._lock:
                 self._closed=True
+                if self.live_adapter is not None:self.live_adapter.close()
                 for stream in (self._record,self._scene_record):
                     stream.flush();os.fsync(stream.fileno());stream.close()
         finally:self.path.close()

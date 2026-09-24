@@ -46,18 +46,23 @@ def test_diagnostic_regimes_freeze_real_model_and_controller_grid(regime, rows):
     assert manifest["path_clearance_m"] == .002
     assert manifest["velocity_limit_rad_s"] == [.5] * 6
     assert manifest["acceleration_limit_rad_s2"] == [16.] * 6
+    assert manifest["segment_rows"] == 9
     assert len(manifest["target_positions"]) == rows
     assert any("fixed_fingertip_pad_collision_006" in pair for pair in manifest["allowed_contact_pairs"])
-    prefix = {
-        "session_id": manifest["session_id"], "attempt_id": manifest["attempt_id"],
-        "sequence": 0, "observation_time_s": 10.0,
-        "target_times_s": [round(10.0 + .1 * (index + 1), 9) for index in range(rows)],
-        "positions": manifest["target_positions"],
-    }
-    assert prefix_matches_diagnostic(prefix, manifest)
-    prefix["positions"] = [list(row) for row in prefix["positions"]]
-    prefix["positions"][-1][-1] += .001
-    assert not prefix_matches_diagnostic(prefix, manifest)
+    for sequence,start in enumerate(range(0,rows,manifest["segment_rows"])):
+        previous=(manifest["joint_start_rad"] if start==0 else manifest["target_positions"][start-1])
+        positions=[previous]+manifest["target_positions"][start:start+manifest["segment_rows"]]
+        prefix = {
+            "session_id": manifest["session_id"], "attempt_id": manifest["attempt_id"],
+            "sequence": sequence, "observation_time_s": 10.0,
+            "target_times_s": [round(10.0 + .1 * (index + 1), 9)
+                               for index in range(len(positions))],
+            "positions": positions,
+        }
+        assert prefix_matches_diagnostic(prefix, manifest)
+        prefix["positions"] = [list(row) for row in prefix["positions"]]
+        prefix["positions"][-1][-1] += .001
+        assert not prefix_matches_diagnostic(prefix, manifest)
 
 
 def test_diagnostic_manifest_rejects_gazebo_and_source_drift():

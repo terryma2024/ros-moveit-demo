@@ -30,6 +30,7 @@ _KEYS = frozenset({
     "motion_policy_path", "motion_policy_sha256", "plugin_path", "plugin_sha256",
     "model_sha256", "cup_start_m", "joint_start_rad", "neck_start_rad",
     "target_positions", "allowed_contact_pairs", "diagnostic_limits",
+    "segment_rows",
     "path_step_s", "path_clearance_m", "velocity_limit_rad_s",
     "acceleration_limit_rad_s2", "max_age_s", "max_skew_s",
     "stop_velocity_rad_s", "submit_lead_s",
@@ -126,6 +127,7 @@ def build_contact_diagnostic_manifest(
         "cup_start_m": [.02 + jitter, -.28 + (.001 if regime == "left_only" else 0.), .165],
         "joint_start_rad": start, "neck_start_rad": 0.0,
         "target_positions": rows,
+        "segment_rows": 9,
         "allowed_contact_pairs": [list(pair) for pair in pairs],
         "diagnostic_limits": _LIMITS.copy(),
         **{key: value.copy() if isinstance(value, list) else value
@@ -161,6 +163,8 @@ def require_contact_diagnostic_manifest(value: object) -> dict:
            for field in ("scene_path", "motion_policy_path", "plugin_path")):
         raise ValueError("contact diagnostic source path invalid")
     rows = value["target_positions"]
+    if type(value["segment_rows"]) is not int or value["segment_rows"] != 9:
+        raise ValueError("contact diagnostic segment size invalid")
     if not isinstance(rows, list) or len(rows) != _ROWS[value["regime"]]:
         raise ValueError("contact diagnostic trajectory length invalid")
     for row in rows:
@@ -192,14 +196,17 @@ def prefix_matches_diagnostic(prefix: object, manifest: dict) -> bool:
     try:
         require_contact_diagnostic_manifest(manifest)
         checked = validate_action_prefix(prefix)
+        start=checked["sequence"]*manifest["segment_rows"]
+        prior=(manifest["joint_start_rad"] if start==0 else
+               manifest["target_positions"][start-1])
+        expected_rows=[prior]+manifest["target_positions"][start:start+manifest["segment_rows"]]
         if (checked["session_id"] != manifest["session_id"]
                 or checked["attempt_id"] != manifest["attempt_id"]
-                or checked["sequence"] != 0
-                or len(checked["positions"]) != len(manifest["target_positions"])):
+                or start>=len(manifest["target_positions"])
+                or len(checked["positions"]) != len(expected_rows)):
             return False
         return all(all(abs(a - b) <= 1e-10 for a, b in zip(row, expected, strict=True))
-                   for row, expected in zip(checked["positions"],
-                                            manifest["target_positions"], strict=True))
+                   for row, expected in zip(checked["positions"],expected_rows,strict=True))
     except (KeyError, TypeError, ValueError):
         return False
 

@@ -4,6 +4,166 @@ import pytest
 from so101_demo.adapters.act.calibration_motion import require_motion_manifest,within_calibration_envelope
 
 
+def test_contact_diagnostic_motion_configuration_is_source_replayed_and_not_collectible():
+    from pathlib import Path
+    from so101_demo.act.contact_diagnostic import build_contact_diagnostic_manifest
+    from so101_demo.adapters.act.calibration_motion import diagnostic_motion_configuration
+    package = Path(__file__).resolve().parents[1]
+    contact = build_contact_diagnostic_manifest(
+        scene_path=package / 'assets/mujoco/act/scene.xml',
+        motion_policy_path=package / 'config/policies/light_cup_wall_pick/v1/mujoco.yaml',
+        plugin_path=package / 'config/mujoco/act/mujoco_plugins.yaml',
+        regime='bilateral_touch', seed=0, session_id='contact-one', attempt_id='attempt-one',
+    )
+    config = diagnostic_motion_configuration(contact)
+    assert config['kind'] == 'ACT_CONTACT_DIAGNOSTIC'
+    assert config['model_sha256'] == contact['model_sha256']
+    assert config['max_rows'] == 10
+    assert config['allowed_pairs']
+    assert config['eligible_for_collection'] is False
+    tampered = copy.deepcopy(contact)
+    tampered['backend'] = 'gazebo'
+    with pytest.raises(ValueError):
+        diagnostic_motion_configuration(tampered)
+
+
+def test_contact_diagnostic_guard_uses_single_existing_broker_and_live_physics(tmp_path):
+    import threading
+    from pathlib import Path
+    from types import SimpleNamespace as NS
+    from so101_mujoco_support.msg import ScalarJointEvidence
+    from so101_demo.act.contact_diagnostic import build_contact_diagnostic_manifest
+    from so101_demo.adapters.act.calibration_motion import RosCalibrationMotionGuard
+    from so101_demo.act.ownership import Ownership
+    package = Path(__file__).resolve().parents[1]
+    contact = build_contact_diagnostic_manifest(
+        scene_path=package / 'assets/mujoco/act/scene.xml',
+        motion_policy_path=package / 'config/policies/light_cup_wall_pick/v1/mujoco.yaml',
+        plugin_path=package / 'config/mujoco/act/mujoco_plugins.yaml',
+        regime='left_only', seed=0, session_id='contact-one', attempt_id='attempt-one',
+    )
+    class Node:
+        def create_subscription(self,*args):return args
+        def create_timer(self,*args):return args
+        def destroy_subscription(self,*args):pass
+        def destroy_timer(self,*args):pass
+        def get_clock(self):return NS(now=lambda:NS(nanoseconds=2_000_000))
+    driver=NS(_lock=threading.RLock(),hazard_reason=None)
+    ownership=Ownership();broker=NS(ownership=ownership,prefix_executor=None,tick=lambda:None)
+    guard=RosCalibrationMotionGuard(Node(),driver,broker,contact,evidence_root=tmp_path)
+    assert guard.contact_mode is True
+    assert guard.contact_observer.allowed
+    reset=ScalarJointEvidence(
+        simulation_session_id='contact-one',reset_epoch=1,paused=True,simulation_step=0,
+        joint_names=['1','2','3','4','5','6','neck_yaw_joint'],
+        positions_rad=contact['joint_start_rad']+[contact['neck_start_rad']],
+        velocities_rad_s=[0.]*7,
+    )
+    guard.accept_reset(reset)
+    assert guard.live_observer is not None
+    assert (tmp_path/'contact-live-physics.ndjson').exists()
+    prefix=dict(session_id=contact['session_id'],attempt_id=contact['attempt_id'],
+        sequence=0,observation_time_s=0.,target_times_s=(.1,.2),
+        positions=[contact['joint_start_rad']]+contact['target_positions'])
+    assert guard._within(prefix,contact['joint_start_rad'],contact['neck_start_rad'])
+    altered=copy.deepcopy(prefix);altered['positions']=[row[:] for row in prefix['positions']]
+    altered['positions'][0][5]+=.001
+    assert not guard._within(altered,contact['joint_start_rad'],contact['neck_start_rad'])
+    assert not guard._live_ready()  # reset alone cannot authorize a trajectory
+    import mujoco
+    driver._reset_initial=NS(simulation_session_id='contact-one',reset_epoch=0)
+    driver._reset_target=NS(name=reset.joint_names,position=reset.positions_rad,
+                            velocity=reset.velocities_rad_s)
+    driver._world_reset_ack=True
+    qpos=list(guard.model.qpos0)
+    for name,value in zip(reset.joint_names,reset.positions_rad,strict=True):
+        joint=mujoco.mj_name2id(guard.model,mujoco.mjtObj.mjOBJ_JOINT,name)
+        qpos[guard.model.jnt_qposadr[joint]]=value
+    qpos[guard.path.cup_address:guard.path.cup_address+3]=contact['cup_start_m']
+    frame=dict(simulation_session_id='contact-one',reset_epoch=1,paused=True,
+               qpos=qpos,qvel=[0.]*guard.model.nv)
+    assert guard._pending_scene_reset(frame)
+    bad=copy.deepcopy(frame);bad['qpos'][guard.path.cup_address+1]+=.001
+    assert not guard._pending_scene_reset(bad)
+    guard.close()
+
+
+def test_contact_diagnostic_broker_rejects_bad_manifest_before_authority(tmp_path,monkeypatch):
+    import json,os
+    from pathlib import Path
+    from so101_demo.act.contact_diagnostic import build_contact_diagnostic_manifest
+    from so101_demo.cli.act_command_broker import main
+    from so101_demo.adapters.act.domain_authority import DomainAuthority
+    package=Path(__file__).resolve().parents[1]
+    value=build_contact_diagnostic_manifest(
+        scene_path=package/'assets/mujoco/act/scene.xml',
+        motion_policy_path=package/'config/policies/light_cup_wall_pick/v1/mujoco.yaml',
+        plugin_path=package/'config/mujoco/act/mujoco_plugins.yaml',
+        regime='left_only',seed=0,session_id='contact-one',attempt_id='attempt-one')
+    value['backend']='gazebo'
+    path=tmp_path/'bad-contact.json';path.write_text(json.dumps(value))
+    monkeypatch.setattr(DomainAuthority,'acquire',lambda *_:(_ for _ in ()).throw(
+        AssertionError('authority acquired before contact preflight')))
+    with pytest.raises(ValueError):
+        main(['--socket',str(tmp_path/'broker.sock'),'--session-id','contact-one',
+              '--parent-pid',str(os.getpid()),'--lease-timeout-s','30',
+              '--calibration-mode','--stop-velocity-rad-s','.002','--max-age-s','.2',
+              '--submit-lead-s','.05','--accept-timeout-s','.03',
+              '--stop-timeout-s','1','--permit-ttl-s','.1',
+              '--contact-diagnostic-manifest',str(path)])
+
+
+def test_contact_segments_require_prior_terminal_controller_success(tmp_path):
+    import threading
+    from pathlib import Path
+    from types import SimpleNamespace as NS
+    from so101_demo.act.contact_diagnostic import build_contact_diagnostic_manifest
+    from so101_demo.adapters.act.calibration_motion import RosCalibrationMotionGuard
+    from so101_demo.act.ownership import Ownership
+    package=Path(__file__).resolve().parents[1]
+    contact=build_contact_diagnostic_manifest(
+        scene_path=package/'assets/mujoco/act/scene.xml',
+        motion_policy_path=package/'config/policies/light_cup_wall_pick/v1/mujoco.yaml',
+        plugin_path=package/'config/mujoco/act/mujoco_plugins.yaml',
+        regime='bilateral_touch',seed=0,session_id='contact-two',attempt_id='attempt-two')
+    class Node:
+        def create_subscription(self,*args):return args
+        def create_timer(self,*args):return args
+    outcome={'status':6}
+    baseline={'refreshed':False}
+    driver=NS(_lock=threading.RLock(),hazard_reason=None,
+              refresh_idle=lambda:baseline.update(refreshed=True),
+              stopped=lambda:baseline['refreshed'],
+              goal_state=lambda gid:dict(accepted=True,status=outcome['status'],
+                                          result={'error_code':0}))
+    pair=NS(adapter=NS(current_goal_ids=('arm-goal','gripper-goal')))
+    broker=NS(ownership=Ownership(),prefix_executor=pair,tick=lambda:None)
+    guard=RosCalibrationMotionGuard(Node(),driver,broker,contact,evidence_root=tmp_path)
+    guard._next_segment=1
+    prior=contact['target_positions'][8]
+    rows=[prior]+contact['target_positions'][9:18]
+    prefix=dict(session_id=contact['session_id'],attempt_id=contact['attempt_id'],
+                sequence=1,observation_time_s=1.,
+                target_times_s=[1.+.1*(i+1) for i in range(len(rows))],positions=rows)
+    assert not guard._within(prefix,prior,0.)
+    assert baseline['refreshed'] is False
+    outcome['status']=4
+    assert guard._within(prefix,prior,0.)
+    assert baseline['refreshed'] is True
+    assert not guard._within(dict(prefix,sequence=2),prior,0.)
+    guard.close()
+
+
+def test_timing_guard_start_stays_inside_manifest_center():
+    from types import SimpleNamespace as NS
+    from so101_demo.adapters.act.calibration_motion import RosCalibrationMotionGuard
+    config=manifest()
+    guard=NS(contact_mode=False,manifest=config)
+    assert RosCalibrationMotionGuard._start_safe(guard,config['arm_center'],config['neck_center_rad'])
+    shifted=list(config['arm_center']);shifted[0]+=.01
+    assert not RosCalibrationMotionGuard._start_safe(guard,shifted,config['neck_center_rad'])
+
+
 def manifest():
     return dict(schema_version=1,kind='ACT_TIMING_CALIBRATION',eligible_for_collection=False,
         session_id='s',model_path='/data/work/model.xml',model_sha256='1'*64,arm_center=(-.25,0.,.6,.8,0.,.8),

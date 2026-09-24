@@ -360,6 +360,14 @@ class LiveContactObserver:
         self.on_abort = on_abort
         self.hazard: str | None = None
         self._last_received = _finite(monotonic(), "observer start", 0)
+        self.active = False
+
+    def start(self) -> None:
+        if self.hazard is not None:
+            raise ValueError(self.hazard)
+        if not self.active:
+            self._last_received = _finite(self.monotonic(), "observer start", 0)
+            self.active = True
 
     def _abort(self, reason: str) -> None:
         if self.hazard is None:
@@ -376,6 +384,7 @@ class LiveContactObserver:
             )
             self.recorder.accept_chunk(converted, ros_time_s=self.ros_clock())
             self._last_received = _finite(self.monotonic(), "observer receipt", 0)
+            self.active = True
         except (AttributeError, OSError, TypeError, ValueError) as error:
             self._abort(f"LIVE_CONTACT_EVIDENCE_INVALID:{error}")
 
@@ -395,7 +404,7 @@ class LiveContactObserver:
             self._abort(f"LIVE_CONTACT_HAZARD_INVALID:{error}")
 
     def poll(self) -> None:
-        if self.hazard is None and (
+        if self.active and self.hazard is None and (
             self.monotonic() - self._last_received >
             self.recorder.limits["maximum_receipt_age_s"]
         ):

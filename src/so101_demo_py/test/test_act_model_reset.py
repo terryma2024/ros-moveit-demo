@@ -175,3 +175,24 @@ def test_act_invalid_pair_timing_constructs_no_stack(monkeypatch):
     opaque=next(a for a in description.entities if isinstance(a,OpaqueFunction))
     with pytest.raises(ValueError,match='EXECUTION_TIMING_INVALID'):opaque.execute(context)
     assert constructed==[]
+
+
+def test_act_contact_diagnostic_launch_rejects_bad_manifest_before_stack(tmp_path,monkeypatch):
+    from launch import LaunchContext
+    from launch.utilities import perform_substitutions
+    from launch.actions import DeclareLaunchArgument,OpaqueFunction
+    from so101_demo.runtime import launch_composition as launch
+    path=tmp_path/'bad-contact.json';path.write_text('{"backend":"gazebo"}')
+    description=launch.build_task_station_launch_description(act_profile=True);context=LaunchContext()
+    for argument in description.entities:
+        if isinstance(argument,DeclareLaunchArgument):
+            context.launch_configurations[argument.name]=perform_substitutions(context,argument.default_value)
+    context.launch_configurations.update(
+        act_contact_diagnostic_manifest=str(path),act_stop_velocity_rad_s='.002',
+        act_max_age_s='.2',act_submit_lead_s='.05',act_accept_timeout_s='.03',
+        act_stop_timeout_s='1',act_permit_ttl_s='.1')
+    constructed=[]
+    monkeypatch.setattr(launch,'_mujoco_stack_actions',lambda *args:(constructed.append(True),None)[1])
+    opaque=next(a for a in description.entities if isinstance(a,OpaqueFunction))
+    with pytest.raises(ValueError):opaque.execute(context)
+    assert constructed==[]
