@@ -19,6 +19,9 @@ EXPLICIT_ML_CASES = {
 def _collected(*selection: str) -> set[str]:
     environment = dict(os.environ)
     environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
+    # Parent package gates may pass xdist in PYTEST_ADDOPTS; this subprocess
+    # intentionally disables plugin loading to inspect only marker collection.
+    environment.pop("PYTEST_ADDOPTS", None)
     completed = subprocess.run(
         [
             sys.executable,
