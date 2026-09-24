@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: a79518c5
+current_commit: 3d590a4b
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -14,8 +14,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: EXP-154
-next_experiment: EXP-155 Task 8 offline radial approach/contact screen
+latest_checkpoint: EXP-155
+next_experiment: EXP-156 Task 8 offline jaw closure contact screen
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1274,3 +1274,9 @@ next_experiment: Live Task 3–8 calibration and controller publication after ow
 ## EXP-155 — Offline inward pregrasp contact screen
 
 - State: PLANNED. Lifecycle: OFFLINE after EXP-154 independent pass, source `a79518c5`, revised model SHA `cee0062a...`, no ROS stack. Durable `experiments/exp155-contact-approach`. Freeze default cup, EXP-153 +X pregrasp, jaw joint6=1.2 rad, same MuJoCo model and `.002 m` protected contact policy. Use deterministic bounded least-squares from the prior solution for TCP +X radial targets `.07/.06/.05/.04/.03 m` at z`.205 m`; independently classify all contacts by geometry and target, without declaring cup/finger contact permitted yet. Screen the interpolated six-joint motion between consecutive candidate solutions and render dual-camera cup masks at endpoints. Reject any unexpected robot/table, self, mast or camera contact; fingertip/cup contact is a candidate signal only and needs frozen phase allowlists and live force/support evidence before execution. No formal data or deletion.
+
+- State: VALID offline radial contact onset screen, not a live grasp gate. `screen.py` exit0 and independent `verify.py`/`verify-result.json` exit0 recomputed 106 six-joint poses, FK, all protected contacts at `.002 m`, five endpoint dual-camera masks and 10 lossless PNG/raw hashes under model SHA `cee0062a...`. From the static +X pregrasp, TCP radial targets `.07/.06/.05 m` had zero contact over 21 samples each. Moving toward `.04 m`, first fixed-fingertip/cup-wall proximity appears at interpolation fraction 6/21 (signed distance `.001813 m`), with 16/21 samples in the `.04 m` segment and all 21 in `.03 m` segment having such contact. Every listed contact involves fixed finger or its pad and cup wall_01/02; no robot/table, mast, camera or self contact was observed in this frozen static route. At `.04 m`, fresh wrist image shows cup around the open gripper but significant gripper occlusion. These contacts are not yet an allowed phase or bilateral grasp proof; no contact force/support/lift, dynamics, controller or release/retreat. Formal `0/0/0`, Task12 onward `NOT_STARTED`; retain EXP-155 and earlier runs, archive none, scratch/superseded artifacts deletion candidates only, delete nothing.
+
+## EXP-156 — Offline jaw closure contact screen
+
+- State: PLANNED. Lifecycle: OFFLINE after EXP-155 independent pass, source `3d590a4b`, revised model SHA `cee0062a...`, no ROS stack. Durable `experiments/exp156-jaw-closure`. Hold default cup and the verified `.04 m` +X approach endpoint arm q. Sweep jaw joint6 from 1.2 toward 0 rad in 121 static samples, recomputing exact contact pairs/distances with independent MuJoCo data and dual-camera cup masks at landmarks. Identify whether moving and fixed fingertip contact occur together before any other protected contact; screen penetration depth and jaw angle without claiming physical grip, force, slip, lift or allowed-contact qualification. Retain all outputs; no accepted data or deletion.
