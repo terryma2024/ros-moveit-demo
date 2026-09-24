@@ -1,10 +1,17 @@
 import importlib.util
-import inspect
 from pathlib import Path
 from types import SimpleNamespace
 
-from launch.actions import DeclareLaunchArgument, RegisterEventHandler, Shutdown
+from launch.actions import (
+    DeclareLaunchArgument,
+    EmitEvent,
+    OpaqueFunction,
+    RegisterEventHandler,
+    Shutdown,
+)
+from launch.event_handlers import OnProcessExit
 from launch.events.process import ProcessExited
+from launch_ros.actions import Node
 from launch_ros.utilities import evaluate_parameters
 from so101_demo.runtime import launch_composition
 from so101_demo.runtime.launch_composition import COMMON_ARGUMENTS, build_launch_description
@@ -25,6 +32,78 @@ def _declared(description) -> set[str]:
     return {
         action.name for action in description.entities if isinstance(action, DeclareLaunchArgument)
     }
+
+
+def _execute_actions(backend: str, *, pick_place: bool):
+    """The actions the launch description really builds, with the run selected as ``execute``.
+
+    ``build_launch_description`` keeps its graph behind an ``OpaqueFunction``, so a test that only
+    reads the description's declared arguments never sees the nodes, timers or event handlers the
+    launch really installs. Running that function against a context filled from the declared
+    defaults is the same path ``ros2 launch`` takes, without starting anything.
+    """
+
+    description = build_launch_description(backend=backend, pick_place=pick_place)
+    context = LaunchContext()
+    for action in description.entities:
+        if isinstance(action, DeclareLaunchArgument):
+            context.launch_configurations[action.name] = action.default_value[0].perform(context)
+    context.launch_configurations.update({"run_mode": "execute", "execute": "true"})
+    configured = next(
+        action for action in description.entities if isinstance(action, OpaqueFunction)
+    )
+    return list(configured.execute(context)), context
+
+
+def _walk(actions):
+    """Every action in the graph, including the children of the timers that delay them."""
+
+    for action in actions:
+        yield action
+        children = getattr(action, "actions", None)
+        if isinstance(children, (list, tuple)):
+            yield from _walk(children)
+
+
+def _shape(actions) -> list[tuple]:
+    return [
+        (type(action).__name__, getattr(action, "node_executable", None),
+         getattr(action, "period", None))
+        for action in actions
+    ]
+
+
+def _handlers(actions):
+    return [action.event_handler for action in actions if isinstance(action, RegisterEventHandler)]
+
+
+def _exited(action, returncode: int = 0) -> ProcessExited:
+    return ProcessExited(
+        action=action, name=str(getattr(action, "node_executable", "process")),
+        cmd=[str(getattr(action, "node_executable", "process"))], cwd=None, env=None,
+        pid=4242, returncode=returncode,
+    )
+
+
+def _emitted(actions, event, context):
+    """What the graph does when ``event`` happens: every matching handler's own answer."""
+
+    emitted = []
+    for handler in _handlers(actions):
+        if handler.matches(event):
+            emitted.extend(handler.handle(event, context) or [])
+    return emitted
+
+
+def _only_node(emitted, executable: str) -> Node:
+    """The single node of that name the graph emits, or a failure naming what it emitted instead."""
+
+    nodes = [
+        action for action in emitted
+        if isinstance(action, Node) and action.node_executable == executable
+    ]
+    assert len(nodes) == 1, (executable, [(type(item).__name__, item) for item in emitted])
+    return nodes[0]
 
 
 def test_launchers_exist_are_thin_and_do_not_declare_backend_argument() -> None:
@@ -82,37 +161,81 @@ def test_mujoco_scene_setup_receives_the_launch_readiness_budget() -> None:
     )
 
 
-def test_pick_place_toggle_changes_only_workflow_launch() -> None:
-    stack = _declared(build_launch_description(backend="mujoco", pick_place=False))
-    workflow = _declared(build_launch_description(backend="mujoco", pick_place=True))
-    assert stack == workflow
+def test_pick_place_toggle_changes_only_the_workflow_gate() -> None:
+    """Both forms declare the same arguments and build the same stack, up to the workflow gate."""
+
+    assert _declared(build_launch_description(backend="gazebo", pick_place=False)) == _declared(
+        build_launch_description(backend="gazebo", pick_place=True)
+    )
+
+    stack, _ = _execute_actions("gazebo", pick_place=False)
+    with_workflow, _ = _execute_actions("gazebo", pick_place=True)
+
+    assert _shape(with_workflow)[: len(stack)] == _shape(stack)
+    assert _shape(with_workflow)[len(stack):] == [
+        ("TimerAction", None, 8.0),  # the delayed readiness probe
+        ("RegisterEventHandler", None, None),  # readiness -> scene setup
+        ("RegisterEventHandler", None, None),  # scene setup -> workflow
+        ("RegisterEventHandler", None, None),  # workflow -> shutdown
+    ]
 
 
-def test_stack_launcher_does_not_embed_workflow_or_shutdown_handler() -> None:
-    source = inspect.getsource(launch_composition._configured_actions)
+def test_gazebo_workflow_is_gated_by_the_readiness_and_scene_events() -> None:
+    """Readiness releases scene setup, scene setup releases the workflow, the workflow shuts down."""
 
-    assert "include_workflow=pick_place" in source
+    actions, context = _execute_actions("gazebo", pick_place=True)
+
+    readiness = [
+        action for action in _walk(actions)
+        if getattr(action, "node_executable", None) == "motion_stack_ready"
+    ]
+    assert len(readiness) == 1, _shape(list(_walk(actions)))
+    # One gate per phase boundary, and each one is a process-exit binding rather than a delay.
+    handlers = _handlers(actions)
+    assert len(handlers) == 3, handlers
+    assert all(isinstance(handler, OnProcessExit) for handler in handlers), handlers
+    scene_setup = _only_node(_emitted(actions, _exited(readiness[0]), context), "scene_setup")
+    workflow = _only_node(_emitted(actions, _exited(scene_setup), context), "gazebo_execute")
+
+    shutdowns = [
+        action for action in _emitted(actions, _exited(workflow), context)
+        if isinstance(action, Shutdown)
+    ]
+    assert len(shutdowns) == 1, shutdowns
+    assert shutdowns[0].event.reason == "Gazebo execute complete"
 
 
-def test_gazebo_workflow_is_event_gated_by_readiness_and_scene() -> None:
-    source = inspect.getsource(launch_composition._gazebo_execute_actions)
-    assert 'executable="motion_stack_ready"' in source
-    assert 'executable="scene_setup"' in source
-    assert 'executable="gazebo_execute"' in source
-    assert source.count("OnProcessExit(") >= 3
-    assert "TimerAction(period=12.0" not in source
+def test_gazebo_phase_failure_propagates_with_the_phase_that_failed() -> None:
+    """A gate whose process exits non-zero stops the launch and names its own phase."""
+
+    actions, context = _execute_actions("gazebo", pick_place=True)
+    readiness = next(
+        action for action in _walk(actions)
+        if getattr(action, "node_executable", None) == "motion_stack_ready"
+    )
+    scene_setup = _only_node(_emitted(actions, _exited(readiness), context), "scene_setup")
+
+    def reasons(action):
+        return [
+            emitted.event.reason
+            for emitted in _emitted(actions, _exited(action, returncode=1), context)
+            if isinstance(emitted, EmitEvent)
+        ]
+
+    assert reasons(readiness) == ["Gazebo readiness failed with exit code 1"]
+    assert reasons(scene_setup) == ["Gazebo Planning Scene setup failed with exit code 1"]
 
 
-def test_gazebo_stack_without_pick_place_has_no_workflow_gate() -> None:
-    source = inspect.getsource(launch_composition._configured_actions)
-    assert "include_workflow=pick_place" in source
+def test_gazebo_stack_without_pick_place_installs_no_workflow_gate() -> None:
+    """The stack itself keeps no workflow node, no gate handler and no fixed late start."""
 
+    actions, context = _execute_actions("gazebo", pick_place=False)
 
-def test_launch_source_reports_first_gazebo_phase_failure() -> None:
-    source = inspect.getsource(launch_composition._gazebo_execute_actions)
-    assert '"Gazebo readiness"' in source
-    assert '"Gazebo Planning Scene setup"' in source
-    assert "TimerAction(period=12.0" not in source
+    assert _handlers(actions) == []
+    assert not {
+        "motion_stack_ready", "scene_setup", "gazebo_execute",
+    } & {getattr(action, "node_executable", None) for action in _walk(actions)}
+    assert [action for action in _walk(actions) if getattr(action, "period", None) == 12.0] == []
 
 
 def test_mujoco_sensor_rendering_is_independent_from_headless_viewer() -> None:
