@@ -32,11 +32,12 @@ class CommandBroker:
         self.simulation_session_id=simulation_session_id
         self._lock=threading.RLock();self._participants={};self._goal_tickets={}
         self._stopping_generation=None;self.audit=[];self._fault_reason=None
-        self._reset_ticket=None;self._reset_applied=False;self._writes=[]
+        self._reset_ticket=None;self._reset_applied=False;self._post_reset_ticket=None;self._writes=[]
 
     def dispatch(self,ticket,kind,goal):
         with self._lock,self.ownership.authorized(*ticket[1:]):
             self.ownership.require_ticket(ticket)
+            self._post_reset_ticket=None
             gid=identifier(self.driver.submit(kind,goal))
             self._goal_tickets[gid]=ticket
             self.audit.append(dict(operation='submit',generation=ticket[0],owner=ticket[2],
@@ -48,7 +49,7 @@ class CommandBroker:
             generation=self.ownership.generation
             if generation!=self._stopping_generation:
                 self._stopping_generation=generation
-                self._reset_ticket=None;self._reset_applied=False
+                self._reset_ticket=None;self._reset_applied=False;self._post_reset_ticket=None
                 try:
                     if self.prefix_executor is not None:self.prefix_executor.invalidate(self.ownership.reason or 'REVOKED')
                 except Exception as error:
@@ -66,6 +67,12 @@ class CommandBroker:
             elif self._fault_reason and self.ownership.state=='RUNNING':self.ownership.revoke(self._fault_reason)
             self._stop_if_revoked()
             if self.ownership.state=='IDLE' and hasattr(self.driver,'refresh_idle'):self.driver.refresh_idle()
+            elif self._post_reset_ticket is not None:
+                try:self.ownership.require_ticket(self._post_reset_ticket)
+                except PermissionError:self._post_reset_ticket=None
+                else:
+                    if not self.driver.pause_idempotent(True):self._post_reset_ticket=None
+                    elif not self.driver.refresh_post_reset():self._post_reset_ticket=None
 
     def disconnect(self,connection_id):
         with self._lock:
@@ -77,7 +84,7 @@ class CommandBroker:
         with self._lock,self.ownership.authorized(*scope) as ticket:
             if scope[1]=='act':raise PermissionError('RESET_OWNER_INVALID')
             if self._reset_ticket is not None:raise PermissionError('RESET_IN_PROGRESS')
-            self._reset_ticket=ticket;self._reset_applied=False
+            self._reset_ticket=ticket;self._reset_applied=False;self._post_reset_ticket=None
             self._participants[connection_id]=ticket
         try:
             deadline=time.monotonic()+5.
@@ -144,7 +151,9 @@ class CommandBroker:
                     self.ownership.require_ticket(ticket)
                     if operation=='finish_reset':
                         if self.driver.finish_reset(result) is not True:raise RuntimeError('RESET_FINAL_EVIDENCE_INVALID')
-                        self._reset_ticket=None;self._reset_applied=False
+                        self._reset_ticket=None;self._reset_applied=False;self._post_reset_ticket=ticket
+                    elif operation=='pause' and request['paused'] is False:
+                        self._post_reset_ticket=None
                     response[{'reset_world':'reset_result','pause':'pause_result',
                               'switch_controllers':'switch_result','finish_reset':'finish_result'}[operation]]=result
                 response['accepted']=True
@@ -210,6 +219,7 @@ class CommandBroker:
                         elif operation=='release':
                             if self._reset_ticket is not None:raise PermissionError('RESET_IN_PROGRESS')
                             self.ownership.release(scope[0],self.driver.stopped())
+                            self._post_reset_ticket=None
                         elif operation=='revoke':self.ownership.revoke('CLIENT_REVOKED')
                     self._stop_if_revoked()
                 # RPC acceptance is permission/forwarding success. Actual action

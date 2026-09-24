@@ -122,7 +122,7 @@ class RosBrokerDriver:
         self._baseline_allow_existing=False
         self._positions=None;self._epoch=None;self._references={};self._scalar=None
         self._disabled_ack=self._paused_ack=self._world_reset_ack=self._activated_ack=False
-        self._reset_target=None;self._reset_initial=None;self._neck_velocity=None
+        self._reset_target=None;self._reset_initial=None;self._verified_reset_epoch=None;self._neck_velocity=None
         self._snapshot_refresh=None;self._write_records=[];self._write_receipts={}
         self.reset_client=node.create_client(ResetWorld,"/mujoco_ros2_control_node/reset_world")
         self._write_clients={'reset_world':self.reset_client,
@@ -371,6 +371,16 @@ class RosBrokerDriver:
             if self._stop_confirmed_at is None or self.monotonic()-self._stop_confirmed_at>=self.max_age*.5:
                 self._request_stop_baseline(allow_existing=False)
 
+    def refresh_post_reset(self):
+        with self._lock:
+            if self._verified_reset_epoch is None or self._epoch is None:return False
+            frame=self._epoch[0]
+            if (not frame.paused or
+                    (frame.simulation_session_id,frame.reset_epoch)!=self._verified_reset_epoch):
+                return False
+            self.refresh_idle()
+            return True
+
     def refresh_stop(self):
         with self._lock:
             self._read_stop_baseline()
@@ -485,6 +495,7 @@ class RosBrokerDriver:
             if self._epoch is None:raise RuntimeError('RESET_EPOCH_UNAVAILABLE')
             if not self.stopped():raise PermissionError('CONTROL_NOT_STOPPED')
             self._reset_initial=self._epoch[0]
+            self._verified_reset_epoch=None
             self._reset_target=None
             self._disabled_ack=self._paused_ack=self._world_reset_ack=self._activated_ack=False
 
@@ -571,4 +582,7 @@ class RosBrokerDriver:
             if any(abs(finite(q[name])-expected[name])>.002 for name in ACT_JOINTS):return False
             if any(abs(finite(value))>self.stop_velocity for value in frame.velocities_rad_s):return False
             states={item['name']:item['state'] for item in controller_readback['controller']}
-            return all(states.get(name)=='active' for name in ('arm_controller','gripper_controller','neck_controller'))
+            if not all(states.get(name)=='active' for name in ('arm_controller','gripper_controller','neck_controller')):
+                return False
+            self._verified_reset_epoch=(frame.simulation_session_id,frame.reset_epoch)
+            return True

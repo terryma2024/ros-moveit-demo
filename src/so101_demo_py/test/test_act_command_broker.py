@@ -308,6 +308,60 @@ def test_prepare_reset_refreshes_real_stop_proof_before_mutations():
     assert not driver.sent and broker._reset_ticket is not None
 
 
+def test_only_verified_paused_reset_refreshes_stop_proof_under_same_lease():
+    from concurrent.futures import Future
+
+    class ResetDriver(Driver):
+        def __init__(self):
+            super().__init__();self.paused=True;self.refreshes=0
+        def validate_write(self,operation,values):return values
+        def begin_write(self,operation,values):
+            future=Future();future.set_result({'success':True});return future
+        def await_write(self,future):return future.result()
+        def finish_reset(self,result):
+            self.stationary=False
+            return result['success'] and self.paused
+        def refresh_post_reset(self):
+            self.refreshes+=1
+            if self.paused:self.stationary=True
+            return self.paused
+        def pause_idempotent(self,paused):return self.paused is paused
+
+    driver=ResetDriver();ownership=Ownership();broker=CommandBroker(driver,ownership=ownership)
+    token=broker.handle(request(owner='recovery'),'r')['lease_token']
+    assert broker.handle(request('prepare_reset',owner='recovery',token=token),'r')['accepted']
+    assert driver.refreshes==0
+    assert broker.handle(request('reset_world',owner='recovery',token=token,
+                                 reset_request={'keyframe':'task_start'}),'r')['accepted']
+    assert broker.handle(request('finish_reset',owner='recovery',token=token),'r')['accepted']
+    assert not driver.stationary
+    status=broker.handle(request('status',owner='recovery',token=token),'r')
+    assert status['state']=='RUNNING' and status['stop_confirmed']
+    assert driver.refreshes==1 and not driver.sent
+
+    driver.stationary=False;driver.paused=False
+    broker.tick()
+    assert driver.refreshes==1 and not driver.stationary
+    assert broker.handle(request('revoke',owner='recovery',token=token),'r')['accepted']
+    broker.tick();assert driver.refreshes==1
+
+
+def test_ros_post_reset_refresh_rejects_changed_epoch_or_running_world():
+    from so101_mujoco_support.msg import SimulationEvidence
+    from so101_demo.adapters.act.ros_broker import RosBrokerDriver
+
+    driver=object.__new__(RosBrokerDriver);driver._lock=threading.RLock()
+    driver._verified_reset_epoch=('s',3);refreshes=[]
+    driver.refresh_idle=lambda:refreshes.append(True)
+    for session,epoch,paused,allowed in (
+            ('s',3,True,True),('other',3,True,False),
+            ('s',4,True,False),('s',3,False,False)):
+        driver._epoch=(SimulationEvidence(simulation_session_id=session,
+                       reset_epoch=epoch,paused=paused),0.)
+        assert driver.refresh_post_reset() is allowed
+    assert len(refreshes)==1
+
+
 def test_prepare_stop_proof_wait_is_generation_fenced_and_preemptible():
     reached=threading.Event();proceed=threading.Event()
     class RefreshDriver(Driver):
