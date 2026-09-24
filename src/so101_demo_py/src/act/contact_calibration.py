@@ -25,12 +25,20 @@ REGIMES = (
 CONTROLS = ("table_only", "post_release", "left_only", "right_only")
 _SAMPLE_KEYS = frozenset(
     {"sample_id", "source", "regime", "simulation_session_id", "reset_epoch",
-     "scenario_sha256", "frames", "collected_monotonic_s"}
+     "scenario", "scenario_sha256", "frames", "collected_monotonic_s",
+     "model_sha256", "scene_sha256", "motion_policy_sha256",
+     "collector_sha256", "config_sha256", "clock_origin", "diagnostic_result"}
 )
 _FRAME_KEYS = frozenset(
     {"physics_step", "simulation_time_s", "ros_time_s", "received_monotonic_s",
      "left_contacts", "right_contacts", "other_contacts", "cup_position_m",
-     "cup_velocity_m_s", "table_supported", "released"}
+     "cup_velocity_m_s", "model_qpos", "model_qvel", "table_supported", "released"}
+)
+_SCENARIO_KEYS = frozenset(
+    {"regime", "seed", "cup_start_m", "gripper_close_q6", "window_first_step", "window_last_step"}
+)
+_DIAGNOSTIC_KEYS = frozenset(
+    {"status", "peak_force_n", "peak_displacement_m"}
 )
 _CONTACT_KEYS = frozenset(
     {"robot_geom", "object_body", "normal_force_n", "signed_distance_m"}
@@ -73,6 +81,13 @@ def _vector(value: Any, name: str) -> tuple[float, float, float]:
     return tuple(_number(item, name) for item in value)
 
 
+def _state_vector(value: Any, name: str) -> None:
+    if not isinstance(value, list) or not value:
+        raise ValueError(f"{name} must be a nonempty state vector")
+    for item in value:
+        _number(item, name)
+
+
 def _contact_values(items: Any, name: str, maximum_force: float) -> tuple[float, float]:
     if not isinstance(items, list):
         raise ValueError(f"{name} must be a contact list")
@@ -95,8 +110,10 @@ def _contact_values(items: Any, name: str, maximum_force: float) -> tuple[float,
     return total_force, minimum_distance
 
 
-def _validated_sample(sample_value: Any, source: str, limits: dict[str, float]) -> dict[str, Any]:
-    sample = _exact(sample_value, _SAMPLE_KEYS, "calibration sample")
+def _validated_sample(
+    sample_value: Any, source: str, limits: dict[str, float], metadata: dict[str, Any]
+) -> dict[str, Any]:
+    sample = _exact(sample_value, _SAMPLE_KEYS, "calibration sample provenance")
     if sample["source"] != source or sample["regime"] not in (*REGIMES, *CONTROLS):
         raise ValueError("sample source or regime mismatch")
     if not isinstance(sample["sample_id"], str) or not sample["sample_id"]:
@@ -104,9 +121,26 @@ def _validated_sample(sample_value: Any, source: str, limits: dict[str, float]) 
     if not isinstance(sample["simulation_session_id"], str) or not sample["simulation_session_id"]:
         raise ValueError("simulation_session_id is missing")
     _integer(sample["reset_epoch"], "reset_epoch")
+    for field in ("model_sha256", "scene_sha256", "motion_policy_sha256",
+                  "collector_sha256", "config_sha256"):
+        if sample[field] != metadata[field]:
+            raise ValueError(f"sample {field} provenance mismatch")
+    expected_clock = "mujoco_simulated_ros" if source == "offline" else "ros_clock"
+    if sample["clock_origin"] != expected_clock:
+        raise ValueError("sample clock provenance mismatch")
+    scenario = _exact(sample["scenario"], _SCENARIO_KEYS, "scenario")
+    if scenario["regime"] != sample["regime"]:
+        raise ValueError("scenario regime mismatch")
+    _integer(scenario["seed"], "scenario.seed")
+    _vector(scenario["cup_start_m"], "scenario.cup_start_m")
+    _number(scenario["gripper_close_q6"], "scenario.gripper_close_q6")
+    first_step = _integer(scenario["window_first_step"], "scenario.window_first_step")
+    last_step = _integer(scenario["window_last_step"], "scenario.window_last_step")
+    if last_step <= first_step:
+        raise ValueError("scenario window is invalid")
     digest = sample["scenario_sha256"]
-    if not isinstance(digest, str) or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
-        raise ValueError("scenario_sha256 is invalid")
+    if digest != hashlib.sha256(_canonical(scenario)).hexdigest():
+        raise ValueError("scenario_sha256 does not match parameters")
     frames = sample["frames"]
     if not isinstance(frames, list) or len(frames) < 2:
         raise ValueError("raw contact stream must contain at least two frames")
@@ -118,10 +152,13 @@ def _validated_sample(sample_value: Any, source: str, limits: dict[str, float]) 
     left_force = right_force = maximum_force = 0.0
     minimum_distance = 0.0
     maximum_speed = 0.0
+    maximum_displacement = 0.0
     bilateral_times = []
     for frame_value in frames:
         frame = _exact(frame_value, _FRAME_KEYS, "contact frame")
         step = _integer(frame["physics_step"], "physics_step")
+        if step < first_step or step > last_step:
+            raise ValueError("frame is outside the declared scenario window")
         sim_time = _number(frame["simulation_time_s"], "simulation_time_s", minimum=0)
         ros_time = _number(frame["ros_time_s"], "ros_time_s", minimum=0)
         receipt = _number(frame["received_monotonic_s"], "received_monotonic_s", minimum=0)
@@ -135,6 +172,9 @@ def _validated_sample(sample_value: Any, source: str, limits: dict[str, float]) 
             initial_position = position
         if math.dist(position, initial_position) > limits["maximum_displacement_m"]:
             raise ValueError("diagnostic displacement limit exceeded")
+        maximum_displacement = max(maximum_displacement, math.dist(position, initial_position))
+        _state_vector(frame["model_qpos"], "model_qpos")
+        _state_vector(frame["model_qvel"], "model_qvel")
         speed = math.sqrt(sum(v * v for v in _vector(frame["cup_velocity_m_s"], "cup_velocity_m_s")))
         maximum_speed = max(maximum_speed, speed)
         forces = []
@@ -142,6 +182,7 @@ def _validated_sample(sample_value: Any, source: str, limits: dict[str, float]) 
             forces.append(_contact_values(frame[field], field, limits["maximum_force_n"]))
         if sum(force for force, _ in forces) > limits["maximum_force_n"]:
             raise ValueError("diagnostic hard force limit exceeded")
+        maximum_force = max(maximum_force, sum(force for force, _ in forces))
         left_force = max(left_force, forces[0][0])
         right_force = max(right_force, forces[1][0])
         maximum_force = max(maximum_force, *(force for force, _ in forces))
@@ -157,6 +198,17 @@ def _validated_sample(sample_value: Any, source: str, limits: dict[str, float]) 
         if frame["table_supported"] != table_contact:
             raise ValueError("table support disagrees with raw contact stream")
     collected = _number(sample["collected_monotonic_s"], "collected_monotonic_s", minimum=0)
+    if frames[0]["physics_step"] != first_step or frames[-1]["physics_step"] != last_step:
+        raise ValueError("scenario window is not fully recorded")
+    diagnostic = _exact(sample["diagnostic_result"], _DIAGNOSTIC_KEYS, "diagnostic result")
+    if diagnostic["status"] != "PASS" or not math.isclose(
+        _number(diagnostic["peak_force_n"], "diagnostic peak force", minimum=0),
+        maximum_force, rel_tol=0, abs_tol=1e-9,
+    ) or not math.isclose(
+        _number(diagnostic["peak_displacement_m"], "diagnostic peak displacement", minimum=0),
+        maximum_displacement, rel_tol=0, abs_tol=1e-9,
+    ):
+        raise ValueError("diagnostic result disagrees with raw stream")
     if collected < previous_receipt or collected - previous_receipt > limits["maximum_receipt_age_s"]:
         raise ValueError("last contact receipt is stale")
     last = frames[-1]
@@ -177,7 +229,7 @@ def _validated_sample(sample_value: Any, source: str, limits: dict[str, float]) 
         raise ValueError("post-release control lacks release/support")
     if regime in {"micro_lift_slip", "stable_hold"} and last["table_supported"]:
         raise ValueError("off-table regime still has table support")
-    if regime in {"bilateral_touch", "over_compression"} and not last["table_supported"]:
+    if regime == "bilateral_touch" and not last["table_supported"]:
         raise ValueError("table-contact regime lacks support")
     duration = bilateral_times[-1] - bilateral_times[0] if len(bilateral_times) >= 2 else 0.0
     return {
@@ -237,7 +289,7 @@ def analyze_evidence(offline: dict[str, Any], live: dict[str, Any], metadata: di
         item = _exact(cohort, frozenset({"source", "samples"}), f"{source} cohort")
         if item["source"] != source or not isinstance(item["samples"], list):
             raise ValueError("cohort source mismatch")
-        parsed = [_validated_sample(sample, source, checked_limits) for sample in item["samples"]]
+        parsed = [_validated_sample(sample, source, checked_limits, meta) for sample in item["samples"]]
         for original in item["samples"]:
             if original["sample_id"] in ids or original["simulation_session_id"] in sessions:
                 raise ValueError("offline/live sample or session identity reused")

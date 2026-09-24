@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SO-101 ACT contact calibration diagnostic configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "mujoco_version", "model_sha256", "scene_sha256",
+    "motion_policy_sha256", "policy_id", "allowed_other_contact_bodies",
+    "evaluation", "diagnostic_limits", "offline_seed_start",
+    "offline_count_per_regime"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "mujoco_version": {"const": "3.4.0"},
+    "model_sha256": {"const": "fda3d3a43ced9213a1ac1b835d6dff924fb071baa597e53155b4d0bffe2b6d6b"},
+    "scene_sha256": {"const": "4db48e35df9e91fc6868d303725badd0237fb10754d1e298637f5b0e1e55ed4f"},
+    "motion_policy_sha256": {"const": "aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356"},
+    "policy_id": {"const": "so101-act-contact-20260925"},
+    "allowed_other_contact_bodies": {"const": ["table"]},
+    "evaluation": {
+      "const": {"maximum_observation_age_s": 0.1, "minimum_consecutive_samples": 5}
+    },
+    "diagnostic_limits": {
+      "const": {
+        "maximum_force_n": 11.6,
+        "maximum_displacement_m": 0.03,
+        "maximum_ros_skew_s": 0.02,
+        "maximum_receipt_age_s": 0.2
+      }
+    },
+    "offline_seed_start": {"const": 0},
+    "offline_count_per_regime": {"const": 20}
+  }
+}

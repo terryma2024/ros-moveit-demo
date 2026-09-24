@@ -1,6 +1,7 @@
 """Synthetic contract tests; these samples never qualify a live contact policy."""
 
 import copy
+import hashlib
 import json
 
 import pytest
@@ -42,16 +43,35 @@ def _sample(regime, source, index):
             if regime in {"no_contact", "table_only", "post_release", "bilateral_touch", "over_compression"} else [],
             "cup_position_m": [0.0, 0.0, 0.16],
             "cup_velocity_m_s": [speed, 0.0, 0.0],
+            "model_qpos": [0.0, 0.0, 0.0],
+            "model_qvel": [0.0, 0.0, 0.0],
             "table_supported": regime in {"no_contact", "table_only", "post_release", "bilateral_touch", "over_compression"},
             "released": regime == "post_release",
         })
+    scenario = {"regime": regime, "seed": index, "cup_start_m": [0.0, 0.0, 0.16],
+                "gripper_close_q6": 0.1, "window_first_step": 100,
+                "window_last_step": 100 + count - 1}
+    peak_force = max(sum(c["normal_force_n"] for key in
+                         ("left_contacts", "right_contacts", "other_contacts")
+                         for c in frame[key]) for frame in frames)
+    metadata = _metadata()
     return {
         "sample_id": f"{source}-{regime}-{index:03d}",
         "source": source,
         "regime": regime,
         "simulation_session_id": f"{source}-{regime}-{index:03d}",
         "reset_epoch": 1,
-        "scenario_sha256": "a" * 64,
+        "scenario": scenario,
+        "scenario_sha256": hashlib.sha256(json.dumps(scenario, sort_keys=True,
+            separators=(",", ":")).encode()).hexdigest(),
+        "model_sha256": metadata["model_sha256"],
+        "scene_sha256": metadata["scene_sha256"],
+        "motion_policy_sha256": metadata["motion_policy_sha256"],
+        "collector_sha256": metadata["collector_sha256"],
+        "config_sha256": metadata["config_sha256"],
+        "clock_origin": "mujoco_simulated_ros" if source == "offline" else "ros_clock",
+        "diagnostic_result": {"status": "PASS", "peak_force_n": peak_force,
+                              "peak_displacement_m": 0.0},
         "frames": frames,
         "collected_monotonic_s": frames[-1]["received_monotonic_s"],
     }
@@ -141,6 +161,25 @@ def test_total_contact_force_obeys_diagnostic_hard_limit():
     frame["other_contacts"][0]["normal_force_n"] = 7.0
     frame["other_contacts"][1]["normal_force_n"] = 7.0
     with pytest.raises(ValueError, match="force limit"):
+        analyze_evidence(offline, live, _metadata())
+
+
+def test_over_compression_can_occur_after_lift():
+    offline, live = _cohorts()
+    for cohort in (offline, live):
+        for sample in cohort["samples"]:
+            if sample["regime"] == "over_compression":
+                for frame in sample["frames"]:
+                    frame["other_contacts"] = []
+                    frame["table_supported"] = False
+                sample["diagnostic_result"]["peak_force_n"] = 10.0
+    assert analyze_evidence(offline, live, _metadata())["confusion_matrix"]["over_compression"]["over_compression"] == 5
+
+
+def test_sample_without_scenario_and_source_provenance_is_rejected():
+    offline, live = _cohorts()
+    del offline["samples"][0]["scenario"]
+    with pytest.raises(ValueError, match="provenance|scenario"):
         analyze_evidence(offline, live, _metadata())
 
 
