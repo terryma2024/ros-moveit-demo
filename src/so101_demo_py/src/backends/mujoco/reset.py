@@ -224,8 +224,10 @@ class MujocoResetClient:
                 connection_for(context).request("prepare_reset", context)
             old = self._wait_for_initial_snapshot(deadline=deadline)
             expected_epoch = old.reset_epoch + 1
-            if old.paused:
-                self._require(self._services.pause(False), "prepare running")
+            # The observer may still hold its last running frame after another
+            # client pauses the simulator. The controller switch requires an
+            # actual resume service ACK regardless of that cached flag.
+            self._require(self._services.pause(False), "prepare running")
             self._require(
                 self._services.switch_controllers(activate=(), deactivate=self._controllers),
                 "deactivate",
