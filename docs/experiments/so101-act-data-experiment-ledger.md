@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: b7ae287006cb29ecccb7cb170f46733c651db614
+current_commit: 7fa390351657d8201853c7d5f42286541f234aad
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -14,8 +14,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: EXP-169
-next_experiment: EXP-170 offline aligned physical release and settle probe
+latest_checkpoint: EXP-171
+next_experiment: EXP-172 offline dynamic policy radial-then-vertical release retreat
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1364,3 +1364,13 @@ next_experiment: Live Task 3–8 calibration and controller publication after ow
 ## EXP-170 — Offline physical release after candidate alignment
 
 - State: PLANNED. Lifecycle: OFFLINE after EXP-169 independent static pass, source `b7ae2870...`, installed model SHA `3c876e7b...`. Replay EXP-168 grasp/transport/descent controls, insert EXP-169 candidate arm correction before release while maintaining closed jaw, then run actual MuJoCo release, retreat and settle. Independently replay all sampled q/cup/contact-force rows and final target/support/upright predicates; retain images. This is raw position control, not qualified MoveIt/ROS trajectory or formal data. No deletion.
+
+- State: VALID aligned release dynamics but negative raw RETREAT-waypoint outcome. `experiments/exp170-aligned-release/probe.py` exit0 and independent `verify.py` exit0 recompiled installed model SHA `3c876e7b...`, replayed 2,500 initial grasp plus 8,000 subsequent steps, all 800 saved q/cup/contact-force rows, 18 PNG/raw hashes and policy schedule. During inserted 1.5 s ALIGNMENT, all 75 samples held bilateral >`.05 N`, no table/other protected force, final pre-release cup `(-.078917,-.247653,.183533)` m within `.0002 m` of policy target. During release the cup settled supported at `(-.079079,-.248065,.165359)` m, inside the final target box. The subsequent **raw checked-in RETREAT joint waypoints** pushed it to `(-.078477,-.262775,.165349)` m, beyond y-min `−.260 m`; 27/105 retreat samples had residual fixed-fingertip force >`.05 N` and displaced the released cup about14.7 mm in y. Final table support/height/speed passed, target box failed. This negative is for raw RETREAT waypoints, while the actual `release_retreat` qualified phase uses a radial-then-vertical TCP path and explicit residual-contact/displacement guards. Do not conflate those routes. Formal `0/0/0`, Task12 onward `NOT_STARTED`; retain EXP-170 and prior runs, archive none, scratch/superseded outputs deletion candidates only, delete nothing.
+
+## EXP-171 — Static screen of actual release-retreat policy path
+
+- State: VALID static geometry/FOV candidate, not physical or ROS qualification. Source `src/so101_demo_py/src/application/release_retreat.py` computes a 10 mm world-XY radial move from released cup toward TCP, followed by 60 mm world-Z clearance; the qualified phase plans each segment with MoveIt and monitors table support, fixed-pad residual force ≤`.05 N` and released cup displacement ≤`.003 m`. At EXP-170 measured release state, TCP minus cup radial vector points toward +y, so the first commanded translation is `(+.003047,+.009525,0) m`, away from the raw-waypoint push direction. `experiments/exp171-radial-retreat-screen/screen.py` exit0 and independent `verify.py` exit0 found joint-limited IK for both source translations, reconstructed all 40 static interpolation poses, masks, contacts and two PNG/raw hashes under exact installed model SHA `3c876e7b...`. Endpoint TCP errors were below `.00005 m`, within `.001 m` policy position tolerance; cup stayed visible ≥3,709 pixels with ≥59 px margin. No static fingertip pair appeared. Fresh radial/vertical wrist images inspected. This is only a plausible candidate; actual dynamic residual contact and MoveIt/ROS path remain unproved. Formal `0/0/0`, Task12 onward `NOT_STARTED`; retain EXP-171 and prior runs, archive none, scratch/superseded outputs deletion candidates only, delete nothing.
+
+## EXP-172 — Offline dynamics for actual radial-then-vertical release retreat
+
+- State: PLANNED. Lifecycle: OFFLINE after EXP-171 independent static pass, source `7fa39035...`, model SHA `3c876e7b...`. Replay EXP-170 grasp/transport/alignment/release, replace raw RETREAT joint waypoints with EXP-171 joint-limited radial/vertical targets, then settle under MuJoCo position control. Independently verify all q/cup/force rows and final target/support/upright/released-cup displacement plus residual fixed-pad force against policy limits. This is not MoveIt/ROS execution. No formal data or deletion.
