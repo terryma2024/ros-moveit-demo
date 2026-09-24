@@ -30,6 +30,14 @@ def checker(scene,allowed=None):
         acceleration_limit_rad_s2=(1e6,)*6,allowed_pairs_by_phase=allowed or {})
 
 
+def test_linux_vendor_version_can_construct_independent_path_checker(scene, monkeypatch):
+    import sys
+    if sys.platform != 'linux':
+        pytest.skip('Linux ROS vendor version gate')
+    monkeypatch.setattr(mujoco, 'mj_versionString', lambda: '3.12.0')
+    assert checker(scene).model.nq > 0
+
+
 def inputs(port,holding=False):
     qpos=port.model.qpos0.copy()
     for name,value in zip(('1','2','3','4','5','6'),(-1.,0.,0.,0.,0.,1.),strict=True):
