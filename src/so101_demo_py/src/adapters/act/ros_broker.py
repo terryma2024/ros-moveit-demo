@@ -2,6 +2,7 @@
 
 import json
 import copy
+import math
 import secrets
 import threading
 import time
@@ -10,8 +11,6 @@ from action_msgs.msg import GoalStatusArray
 from action_msgs.srv import CancelGoal
 from control_msgs.action import FollowJointTrajectory
 from control_msgs.msg import JointTrajectoryControllerState
-from control_msgs.srv import QueryTrajectoryState
-from .ros_execution import seconds_message
 from so101_mujoco_support.msg import SimulationEvidence, ScalarJointEvidence
 from controller_manager_msgs.srv import SwitchController,ListControllers
 from so101_demo.backends.mujoco.observer import ATOMIC_EVIDENCE_QOS
@@ -23,10 +22,45 @@ from sensor_msgs.msg import JointState
 
 from so101_demo.act.contracts import finite, fields
 from so101_demo.act.joints import ARM_JOINTS, ACT_JOINTS, JOINT_LIMITS
+from so101_demo.act.trajectory import controller_point, interpolate_segment
 from .leased_action_client import ACTIONS, message_dict, decoded
 
 ACTION_TYPES={'arm':FollowJointTrajectory,'gripper':FollowJointTrajectory,'execute_trajectory':ExecuteTrajectory}
 NAMES={'arm':ARM_JOINTS[:5],'gripper':ARM_JOINTS[5:],'execute_trajectory':ARM_JOINTS[:5]}
+
+
+def direct_goal_reference(record,kind,when):
+    """Evaluate one accepted controller goal without mutating its live cursor."""
+    if record['kind']!=kind or record['accepted'] is not True or record['result'] is not None or record.get('cancel_requested'):
+        raise RuntimeError('REFERENCE_INTERVAL_INVALID')
+    accepted=record.get('accepted_sim_s')
+    if accepted is None or when<finite(accepted,nonnegative=True):
+        raise RuntimeError('REFERENCE_TIME_INVALID')
+    goal=record.get('submitted_goal')
+    if goal is None:raise RuntimeError('REFERENCE_RECONSTRUCTION_UNAVAILABLE')
+    trajectory=goal.trajectory
+    if tuple(trajectory.joint_names)!=NAMES[kind]:raise RuntimeError('REFERENCE_RECONSTRUCTION_INVALID')
+    start=trajectory.header.stamp.sec+trajectory.header.stamp.nanosec*1e-9
+    if start<=0 or when<start:raise RuntimeError('REFERENCE_TIME_INVALID')
+    samples=[];previous=-1.
+    try:
+        for point in trajectory.points:
+            offset=point.time_from_start.sec+point.time_from_start.nanosec*1e-9
+            if offset<0 or offset<=previous:raise ValueError('goal time')
+            checked=controller_point(dict(positions=tuple(point.positions),velocities=tuple(point.velocities),
+                                          accelerations=tuple(point.accelerations)))
+            if len(checked['positions'])!=len(NAMES[kind]):raise ValueError('goal width')
+            samples.append((start+offset,checked));previous=offset
+        if not samples or previous==0 and len(samples)>1:raise ValueError('goal points')
+        if samples[0][0]!=start:raise ValueError('missing start anchor')
+        if when>=samples[-1][0]:
+            return dict(positions=samples[-1][1]['positions'],
+                        velocities=(0.,)*len(NAMES[kind]),accelerations=(0.,)*len(NAMES[kind]))
+        for (begin,first),(end,last) in zip(samples,samples[1:]):
+            if begin<=when<=end:return interpolate_segment(begin,first,end,last,when)
+    except (AttributeError,TypeError,ValueError) as error:
+        raise RuntimeError('REFERENCE_RECONSTRUCTION_INVALID') from error
+    raise RuntimeError('REFERENCE_TIME_INVALID')
 
 
 def validated_goal(kind,values):
@@ -87,8 +121,6 @@ class RosBrokerDriver:
         self._baseline_futures={};self._stop_confirmed_at=None
         self._baseline_allow_existing=False
         self._positions=None;self._epoch=None;self._references={};self._scalar=None
-        self.reference_timeout_s=min(.03,self.max_age)
-        self._query_clients={kind:node.create_client(QueryTrajectoryState,'/'+('arm_controller' if kind=='arm' else 'gripper_controller')+'/query_state') for kind in ('arm','gripper')}
         self._disabled_ack=self._paused_ack=self._world_reset_ack=self._activated_ack=False
         self._reset_target=None;self._reset_initial=None;self._neck_velocity=None
         self._snapshot_refresh=None;self._write_records=[];self._write_receipts={}
@@ -182,28 +214,23 @@ class RosBrokerDriver:
                     accepted=[self._records[gid].get('accepted_sim_s') for gid,_ in interval]
                     if any(value is None or when<finite(value,nonnegative=True) for value in accepted):
                         raise RuntimeError('REFERENCE_TIME_INVALID')
-                client=self._query_clients[kind]
-            if not client.service_is_ready():raise RuntimeError('REFERENCE_QUERY_UNAVAILABLE')
-            request=QueryTrajectoryState.Request();seconds_message(when,request.time)
-            future=client.call_async(request);deadline=self.monotonic()+self.reference_timeout_s
-            while not future.done():
-                with self._lock:
-                    if self._reference_interval(kind)!=interval:raise RuntimeError('REFERENCE_INTERVAL_INVALID')
-                if self.monotonic()>=deadline:raise RuntimeError('REFERENCE_QUERY_TIMEOUT')
-                time.sleep(.001)
-            try:
-                result=future.result()
-                positions=tuple(finite(v) for v in result.position)
-                if (result.success is not True or tuple(result.name)!=NAMES[kind]
-                        or len(positions)!=len(NAMES[kind])
-                        or len(result.velocity)!=len(positions) or len(result.acceleration)!=len(positions)):
-                    raise ValueError('response')
-                for v in (*result.velocity,*result.acceleration):finite(v)
-            except (AttributeError,TypeError,ValueError) as error:raise RuntimeError('REFERENCE_QUERY_INVALID') from error
+                if len(interval)!=1:raise RuntimeError('REFERENCE_INTERVAL_INVALID')
+                live=self._records[interval[0][0]]
+                record={key:live.get(key) for key in ('kind','accepted','result','cancel_requested','accepted_sim_s')}
+                record['submitted_goal']=copy.deepcopy(live.get('submitted_goal'))
+            result=direct_goal_reference(record,kind,when)
+            goal_start=(record['submitted_goal'].trajectory.header.stamp.sec+
+                        record['submitted_goal'].trajectory.header.stamp.nanosec*1e-9)
+            if stamp>=goal_start and stamp>=record['accepted_sim_s']:
+                published=direct_goal_reference(record,kind,stamp)
+                if any(not math.isclose(actual,expected,rel_tol=0.,abs_tol=1e-4)
+                       for actual,expected in zip((*values,*velocities),
+                                                  (*published['positions'],*published['velocities']),strict=True)):
+                    raise RuntimeError('REFERENCE_QUERY_INVALID')
             with self._lock:
                 if self._reference_interval(kind)!=interval:raise RuntimeError('REFERENCE_INTERVAL_INVALID')
                 if not 0<=self.monotonic()-received<=self.max_age:raise RuntimeError('REFERENCE_STALE')
-                rows.extend(positions);vrows.extend(result.velocity);arows.extend(result.acceleration)
+                rows.extend(result['positions']);vrows.extend(result['velocities']);arows.extend(result['accelerations'])
         return dict(positions=tuple(rows),velocities=tuple(vrows),accelerations=tuple(arows),requested_sim_time_s=when)
 
     def approval_snapshot(self,ticket):
