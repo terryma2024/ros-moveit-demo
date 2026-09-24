@@ -397,7 +397,7 @@ def test_a_macos_document_admits_only_its_own_routing_key(tmp_path, schema_versi
     profile, schema, mode, workers, batch_kind = MATRIX[schema_version]
     document = MACOS_DOCUMENTS[schema_version]
 
-    receipt = PreflightEngine(Resources()).preflight(
+    receipt = PreflightEngine(Resources(), platform="darwin").preflight(
         _macos_request(tmp_path, schema_version)
     )
 
@@ -421,7 +421,7 @@ def test_a_v4_document_refuses_a_w1_claim(tmp_path):
 
     from so101_teleop.expert_validation.preflight import UNSUPPORTED_ON_MACOS
 
-    receipt = PreflightEngine(Resources()).preflight(
+    receipt = PreflightEngine(Resources(), platform="darwin").preflight(
         _macos_request(tmp_path, 4, claim=W1_FIRST_PASS_CLAIM,
                        mode="SEQUENTIAL", worker_count=1)
     )
@@ -434,7 +434,7 @@ def test_a_v4_document_refuses_a_w1_claim(tmp_path):
 def test_a_v5_document_refuses_a_first_pass_claim(tmp_path):
     from so101_teleop.expert_validation.preflight import UNSUPPORTED_ON_MACOS
 
-    receipt = PreflightEngine(Resources()).preflight(
+    receipt = PreflightEngine(Resources(), platform="darwin").preflight(
         _macos_request(tmp_path, 5, claim=W1_FIRST_PASS_CLAIM)
     )
 
@@ -445,7 +445,7 @@ def test_a_v5_document_refuses_a_first_pass_claim(tmp_path):
 def test_a_v6_document_refuses_a_retry_claim(tmp_path):
     from so101_teleop.expert_validation.preflight import UNSUPPORTED_ON_MACOS
 
-    receipt = PreflightEngine(Resources()).preflight(
+    receipt = PreflightEngine(Resources(), platform="darwin").preflight(
         _macos_request(tmp_path, 6, claim=W1_RETRY_CLAIM)
     )
 
@@ -456,7 +456,7 @@ def test_a_v6_document_refuses_a_retry_claim(tmp_path):
 def test_adaptive_is_refused_on_a_macos_document(tmp_path):
     from so101_teleop.expert_validation.preflight import UNSUPPORTED_ON_MACOS
 
-    receipt = PreflightEngine(Resources()).preflight(
+    receipt = PreflightEngine(Resources(), platform="darwin").preflight(
         _macos_request(tmp_path, 4, mode="ADAPTIVE", count=8, **W2_CLAIM)
     )
 
@@ -473,7 +473,7 @@ def test_the_selected_point_count_never_infers_the_profile_or_the_worker_count(t
     )
 
     for count in (4, 5, 8, 20):
-        receipt = PreflightEngine(Resources()).preflight(
+        receipt = PreflightEngine(Resources(), platform="darwin").preflight(
             _macos_request(tmp_path, 4, count=count)
         )
         assert receipt.admitted, (count, receipt.reason_codes)
@@ -481,14 +481,14 @@ def test_the_selected_point_count_never_infers_the_profile_or_the_worker_count(t
         assert receipt.execution_config.execution_mode == "PARALLEL"
 
     # Without the explicit routing key nothing is inferred, however many points were selected.
-    unclaimed = PreflightEngine(Resources()).preflight(
+    unclaimed = PreflightEngine(Resources(), platform="darwin").preflight(
         _macos_request(tmp_path, 4, count=8, claim={})
     )
     assert unclaimed.admitted is False
     assert EXECUTION_PROFILE_REQUIRED in unclaimed.reason_codes
 
     # N>2 is refused with the stable platform reason, claim or no claim.
-    oversized = PreflightEngine(Resources()).preflight(
+    oversized = PreflightEngine(Resources(), platform="darwin").preflight(
         _macos_request(tmp_path, 4, count=20, worker_count=8)
     )
     assert oversized.admitted is False
@@ -496,7 +496,7 @@ def test_the_selected_point_count_never_infers_the_profile_or_the_worker_count(t
 
 
 def test_a_declared_config_hash_that_does_not_match_the_document_is_refused(tmp_path):
-    receipt = PreflightEngine(Resources()).preflight(
+    receipt = PreflightEngine(Resources(), platform="darwin").preflight(
         _macos_request(tmp_path, 4, parallel_config_sha256="b" * 64)
     )
 

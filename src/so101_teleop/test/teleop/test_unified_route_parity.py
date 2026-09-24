@@ -15,17 +15,14 @@ from so101_teleop.unified.app import create_unified_app, schema_services
 
 
 def _route_pairs(app) -> set[tuple[str, str]]:
-    pairs: set[tuple[str, str]] = set()
-    for route in app.routes:
-        path = getattr(route, "path", None)
-        methods = getattr(route, "methods", None) or set()
-        if path is None:
-            continue
-        for method in methods:
-            if method in {"HEAD", "OPTIONS"}:
-                continue
-            pairs.add((method, path))
-    return pairs
+    # FastAPI may retain included routers as a route wrapper. OpenAPI is the public
+    # surface served by the app and includes the same concrete HTTP paths on both versions.
+    return {
+        (method.upper(), path)
+        for path, operations in app.openapi()["paths"].items()
+        for method in operations
+        if method.upper() not in {"HEAD", "OPTIONS"}
+    }
 
 
 def test_the_migrated_teleop_surface_is_served_by_the_unified_app():

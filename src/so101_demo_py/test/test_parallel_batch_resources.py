@@ -7,7 +7,6 @@ from dataclasses import asdict, replace
 from dataclasses import FrozenInstanceError
 import fcntl
 import hashlib
-import itertools
 import json
 import math
 import os
@@ -46,8 +45,6 @@ PACKAGE = Path(__file__).resolve().parents[1]
 CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v1.yaml'
 CLI_CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v3.yaml'
 V2_CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v2.yaml'
-_ROOT_IDS = itertools.count()
-_ROOTS = {}
 
 
 class FakeProbe:
@@ -98,7 +95,7 @@ def legacy_config():
 @pytest.fixture(autouse=True)
 def production_claim_records_are_never_mutated_by_unit_tests():
     paths = tuple(
-        Path(f'/run/user/{os.getuid()}/so101-parallel-domain-claims/domain-{domain}.lock')
+        runtime_ipc_base() / f'so101-parallel-domain-claims/domain-{domain}.lock'
         for domain in (181, 182, 183)
     )
 
@@ -182,11 +179,9 @@ def local_start_guard(monkeypatch, tmp_path_factory):
     monkeypatch.setattr(ProbeCoordinator, "check", _local_guard_check)
 
 def resource_root(tmp_path, suffix='batch'):
-    """Keep UDS fixtures in this registered scratch tree without pytest's deep suffix."""
-    key = str(tmp_path / suffix)
-    if key not in _ROOTS:
-        _ROOTS[key] = Path(os.environ['TMPDIR']).parent / f'rr{next(_ROOT_IDS):x}'
-    return _ROOTS[key]
+    """Keep UDS paths short while giving every test case its own root."""
+    key = os.fsencode(tmp_path / suffix)
+    return Path(os.environ['TMPDIR']).parent / f'rr-{hashlib.sha256(key).hexdigest()[:16]}'
 
 
 def claim_root():
@@ -291,16 +286,10 @@ def test_claim_root_is_stable_per_test_and_isolated_between_tests(monkeypatch):
 
 
 def test_allocator_fixture_does_not_reuse_retained_cli_claim_namespace(
-    tmp_path, config, monkeypatch
+    tmp_path, config
 ):
     # Earlier CLI tests retain their 'rc' claim namespace in this same scratch.
-    # Hexadecimal allocator root counters must not select it as evidence root.
-    # Reserve the forced ID in the normal sequence too: evidence directories
-    # survive this case and must not be selected again after monkeypatch undo.
-    while next(_ROOT_IDS) <= 12:
-        pass
-    monkeypatch.setattr(sys.modules[__name__], '_ROOT_IDS', itertools.count(12))
-    monkeypatch.setattr(sys.modules[__name__], '_ROOTS', {})
+    # The test-derived short root must stay distinct from that namespace.
     retained = Path(os.environ['TMPDIR']).parent / 'rc'
     retained.mkdir(mode=0o700, exist_ok=True)
     original = retained / 'retained-claim.json'
@@ -733,6 +722,7 @@ def test_partial_domain_claim_does_not_publish_any_new_claim_record(tmp_path, co
     assert first_record.read_bytes() == b'prior-owner-record\n'
 
 
+@pytest.mark.skipif(sys.platform != 'linux', reason='requires Linux procfs semantics')
 def test_protected_systemd_user_is_recorded_as_frozen_non_candidate(
     tmp_path, config, monkeypatch
 ):
@@ -787,6 +777,7 @@ def test_protected_systemd_user_is_recorded_as_frozen_non_candidate(
     resource_allocator.close()
 
 
+@pytest.mark.skipif(sys.platform != 'linux', reason='requires Linux procfs semantics')
 def test_same_uid_unreadable_proc_environment_fails_closed(tmp_path, monkeypatch):
     proc_root = tmp_path / 'proc'
     proc_root.mkdir()
@@ -811,6 +802,7 @@ def test_same_uid_unreadable_proc_environment_fails_closed(tmp_path, monkeypatch
         SystemResourceProbe(proc_root=proc_root).ros_domain_in_use(181)
 
 
+@pytest.mark.skipif(sys.platform != 'linux', reason='requires Linux procfs semantics')
 def test_disappearing_proc_candidate_is_not_an_unreadable_live_process(tmp_path, monkeypatch):
     proc_root = tmp_path / 'proc'
     proc_root.mkdir()
@@ -837,6 +829,7 @@ def test_disappearing_proc_candidate_is_not_an_unreadable_live_process(tmp_path,
     assert SystemResourceProbe(proc_root=proc_root).ros_domain_in_use(181) is False
 
 
+@pytest.mark.skipif(sys.platform != 'linux', reason='requires Linux procfs semantics')
 def test_unverifiable_proc_identity_fails_closed(tmp_path, monkeypatch):
     proc_root = tmp_path / 'proc'
     process = proc_root / '4244'
@@ -853,6 +846,7 @@ def test_unverifiable_proc_identity_fails_closed(tmp_path, monkeypatch):
         SystemResourceProbe(proc_root=proc_root).ros_domain_in_use(181)
 
 
+@pytest.mark.skipif(sys.platform != 'linux', reason='requires Linux procfs semantics')
 def test_candidate_proc_metadata_unreadable_fails_closed(tmp_path, monkeypatch):
     proc_root = tmp_path / 'proc'
     proc_root.mkdir()
@@ -874,6 +868,7 @@ def test_candidate_proc_metadata_unreadable_fails_closed(tmp_path, monkeypatch):
         SystemResourceProbe(proc_root=proc_root).ros_domain_in_use(181)
 
 
+@pytest.mark.skipif(sys.platform != 'linux', reason='requires Linux procfs semantics')
 def test_unclassified_unreadable_process_fails_closed(tmp_path, monkeypatch):
     proc_root = tmp_path / 'proc'
     proc_root.mkdir()
@@ -898,6 +893,7 @@ def test_unclassified_unreadable_process_fails_closed(tmp_path, monkeypatch):
         SystemResourceProbe(proc_root=proc_root).ros_domain_in_use(181)
 
 
+@pytest.mark.skipif(sys.platform != 'linux', reason='requires Linux procfs semantics')
 def test_pid_starttime_change_during_scan_fails_closed(tmp_path, monkeypatch):
     proc_root = tmp_path / 'proc'
     proc_root.mkdir()
@@ -926,6 +922,7 @@ def test_pid_starttime_change_during_scan_fails_closed(tmp_path, monkeypatch):
         SystemResourceProbe(proc_root=proc_root).ros_domain_in_use(181)
 
 
+@pytest.mark.skipif(sys.platform != 'linux', reason='headless EGL worker contract is Linux-only')
 def test_worker_slots_have_unique_headless_egl_context_resources(tmp_path, config):
     manifest = allocator(tmp_path, config).allocate()
     documents = [worker.to_dict() for worker in manifest.workers]
@@ -1207,6 +1204,7 @@ def system_probe(tmp_path, monkeypatch, meminfo):
     return SystemResourceProbe(proc_root=proc_root)
 
 
+@pytest.mark.skipif(sys.platform != 'linux', reason='requires Linux /proc/meminfo')
 def test_system_probe_uses_linux_memavailable_kib_without_sysconf_fallback(
     tmp_path, monkeypatch
 ):
@@ -1238,6 +1236,7 @@ def test_system_probe_uses_linux_memavailable_kib_without_sysconf_fallback(
         'MemAvailable: 28538252.0 kB\n',
     ],
 )
+@pytest.mark.skipif(sys.platform != 'linux', reason='requires Linux /proc/meminfo')
 def test_system_probe_rejects_missing_duplicate_or_malformed_memavailable(
     tmp_path, monkeypatch, meminfo
 ):
@@ -1247,6 +1246,7 @@ def test_system_probe_rejects_missing_duplicate_or_malformed_memavailable(
         probe.snapshot()
 
 
+@pytest.mark.skipif(sys.platform != 'linux', reason='requires Linux /proc/meminfo')
 def test_system_probe_fails_closed_when_meminfo_cannot_be_read(tmp_path, monkeypatch):
     probe = system_probe(tmp_path, monkeypatch, None)
 
@@ -1630,7 +1630,7 @@ def test_existing_socket_reservation_fails_before_directory_creation(tmp_path, c
     assert not root.exists()
 
 
-def test_socket_path_must_fit_linux_unix_domain_limit(tmp_path, config, monkeypatch):
+def test_socket_path_must_fit_unix_domain_limit(tmp_path, config, monkeypatch):
     root = resource_root(tmp_path)
     resource_allocator = WorkerResourceAllocator(
         config, root, probe=FakeProbe(), claim_root=claim_root(),

@@ -10,6 +10,7 @@ and neither may be replayed across a batch, profile, worker count or evidence ro
 from dataclasses import fields, replace
 import hashlib
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 import time
@@ -42,6 +43,9 @@ V6_DOCUMENT = REPO / "src/so101_demo_py/config/mujoco/parallel_batch_v6_macos_mp
 SHA_A = "a" * 64
 SHA_B = "b" * 64
 SHA_C = "c" * 64
+DARWIN_ONLY = pytest.mark.skipif(
+    sys.platform != "darwin", reason="resolving an installed MPS document requires macOS"
+)
 
 #: Any field whose name promises a measurement authority this design deliberately does not have.
 FORBIDDEN_FIELDS = ("budget", "qualification", "qualified", "promotion", "promote", "capacity")
@@ -449,6 +453,7 @@ def _persisted_campaign(tmp_path, profile_claim):
     return store, row
 
 
+@DARWIN_ONLY
 def test_restored_request_binds_the_receipts_own_profile_not_the_configured_document(tmp_path):
     """A restart of a v6 W1 campaign must not rebuild it against the configured v4 document."""
 
@@ -605,6 +610,7 @@ def _issue(service, config_dir, **changes):
         ("MPS_W1_FIRST_PASS", V6_DOCUMENT, 6, 1, "FIRST_PASS"),
     ],
 )
+@DARWIN_ONLY
 def test_a_candidate_context_is_issued_for_a_first_pass_from_its_installed_document(
     tmp_path, profile, document, schema_version, worker_count, batch_kind
 ):
@@ -653,6 +659,7 @@ def test_a_candidate_context_is_issued_for_a_first_pass_from_its_installed_docum
         store.close()
 
 
+@DARWIN_ONLY
 def test_a_candidate_context_is_issued_for_a_retry_of_an_existing_campaign(tmp_path):
     service, store, config_dir = _issuance_service(tmp_path)
     try:
@@ -690,6 +697,7 @@ def test_a_candidate_context_is_issued_for_a_retry_of_an_existing_campaign(tmp_p
         store.close()
 
 
+@DARWIN_ONLY
 def test_a_replayed_issuance_or_a_reused_command_id_is_refused(tmp_path):
     service, store, config_dir = _issuance_service(tmp_path)
     try:
@@ -713,6 +721,7 @@ def test_a_replayed_issuance_or_a_reused_command_id_is_refused(tmp_path):
         ("MPS_W8_FAST", V4_DOCUMENT, 8, "FIRST_PASS", "UNSUPPORTED_ON_MACOS"),
     ],
 )
+@DARWIN_ONLY
 def test_issuing_refuses_a_combination_outside_the_macos_matrix(
     tmp_path, profile, document, worker_count, batch_kind, code
 ):
@@ -735,6 +744,7 @@ def test_issuing_refuses_a_combination_outside_the_macos_matrix(
         store.close()
 
 
+@DARWIN_ONLY
 def test_issuing_refuses_a_config_document_that_is_not_the_installed_one(tmp_path):
     service, store, config_dir = _issuance_service(tmp_path)
     try:
@@ -760,6 +770,7 @@ def test_issuing_refuses_a_config_document_that_is_not_the_installed_one(tmp_pat
         store.close()
 
 
+@DARWIN_ONLY
 def test_issuing_is_refused_by_a_recovery_fence_or_an_unknown_owner(tmp_path):
     from so101_teleop.expert_validation.store import StoreConflict
     from test_expert_validation_store import _admit_first_pass, _first_pass_fixture

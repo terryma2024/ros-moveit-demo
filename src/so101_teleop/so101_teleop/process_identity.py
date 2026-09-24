@@ -235,7 +235,7 @@ def _read_identity_proc(pid: int) -> ProcessIdentity:
         raise ProcessIdentityError() from error
     argv = tuple(
         item.decode("utf-8", errors="surrogateescape")
-        for item in command_line.rstrip(b"\0").split(b"\0")
+        for item in command_line.removesuffix(b"\0").split(b"\0")
     )
     return ProcessIdentity(
         pid=pid,

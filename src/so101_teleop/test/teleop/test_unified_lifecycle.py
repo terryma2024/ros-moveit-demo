@@ -18,6 +18,7 @@ from so101_teleop.unified.contracts import MutationError, QualificationView
 from so101_teleop.unified.intent_store import IntentStore
 from so101_teleop.unified.lifecycle import UnifiedLifecycle
 from so101_teleop.unified.ports import UnknownBudgetSource, UnifiedServices
+from retry_fixture import build_environment
 
 
 class FakeBridge:
@@ -121,18 +122,14 @@ def test_shutdown_stops_accepting_mutations_before_closing_the_bridge():
 
 
 def test_composition_builds_a_readable_app_without_ros(tmp_path, monkeypatch):
-    """Composition never guesses a runtime, and it reports what is genuinely absent.
-
-    The validation domain is provisioned by the *fixed* runtime contract (design section 17): those
-    paths are no longer read from the environment, so a composition without the two `SO101_UNIFIED_*`
-    variables is fully provisioned rather than blocked. What is absent here is the teleop and task
-    half, and those keep reporting their own reasons below.
-    """
+    """A valid validation domain remains available without a ROS worker."""
 
     monkeypatch.delenv("SO101_UNIFIED_ROS_PYTHON", raising=False)
     monkeypatch.delenv("SO101_UNIFIED_INSTALL_PREFIX", raising=False)
+    environment = build_environment(tmp_path)
+    environment["SO101_UNIFIED_RUNTIME_ID"] = "R-test"
     composition = compose_domain_services(
-        environment={"SO101_UNIFIED_RUNTIME_ID": "R-test"},
+        environment=environment,
         evidence_root=tmp_path / "evidence",
         worker=None,
         bridge_owner=None,
@@ -152,6 +149,24 @@ def test_composition_builds_a_readable_app_without_ros(tmp_path, monkeypatch):
             assert client.get("/health/ready").status_code in (200, 503)
             assert client.get("/snapshot").json()["code"] == "TELEOP_UNAVAILABLE"
             assert client.get("/tasks/runs").json()["code"] == "TASKS_UNAVAILABLE"
+    finally:
+        composition.store.close()
+
+
+def test_composition_reports_missing_validation_points_without_hiding_the_app(tmp_path):
+    environment = build_environment(tmp_path)
+    environment["SO101_VALIDATION_POINTS"] = str(tmp_path / "missing-points.yaml")
+    composition = compose_domain_services(
+        environment=environment,
+        evidence_root=tmp_path / "evidence",
+        worker=None,
+        bridge_owner=None,
+    )
+    try:
+        assert "SO101_VALIDATION_POINTS_INVALID" in composition.validation_error
+        assert composition.validation is None
+        with TestClient(create_unified_app(composition, bind_address="127.0.0.1")) as client:
+            assert client.get("/health/live").status_code == 200
     finally:
         composition.store.close()
 

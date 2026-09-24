@@ -13,10 +13,16 @@ import importlib.util
 import json
 import os
 import stat
+import sys
 import uuid
 from pathlib import Path
 
 import pytest
+
+pytestmark = pytest.mark.skipif(
+    sys.platform != "darwin",
+    reason="the short /opt/data/tmp scratch and Darwin socket budget require macOS",
+)
 
 
 def _scratch_module():

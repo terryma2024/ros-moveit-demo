@@ -7,6 +7,7 @@ snapshots are reported rather than deleted.
 """
 
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -802,7 +803,9 @@ def test_the_service_adapter_dispatches_each_approved_route_to_one_module(tmp_pa
         adapter, argv = _service_argv(tmp_path / config_path.stem, config_path=config_path,
                                       worker_count=worker_count)
         arguments = adapter.build_parser().parse_args(argv)
-        record = adapter.validate(arguments, environment=_service_environment(tmp_path))
+        record = adapter.validate(
+            arguments, environment=_service_environment(tmp_path), platform="darwin"
+        )
 
         assert record["execution_profile"] == profile
         assert record["batch_kind"] == batch_kind
@@ -826,7 +829,9 @@ def test_the_service_adapter_refuses_a_key_outside_the_table(tmp_path):
         adapter, argv = _service_argv(tmp_path / f"{config_path.stem}-{worker_count}",
                                       config_path=config_path, worker_count=worker_count)
         with pytest.raises(ServiceCampaignError, match=reason):
-            adapter.validate(adapter.build_parser().parse_args(argv), environment=environment)
+            adapter.validate(
+                adapter.build_parser().parse_args(argv), environment=environment, platform="darwin"
+            )
 
 
 def test_the_service_adapter_refuses_a_declared_batch_kind_or_profile_that_disagrees(tmp_path):
@@ -857,7 +862,9 @@ def test_the_service_adapter_refuses_a_declared_batch_kind_or_profile_that_disag
                                       config_path=config_path, worker_count=worker_count)
         environment = {**_service_environment(tmp_path), **overrides}
         with pytest.raises(ServiceCampaignError, match=reason):
-            adapter.validate(adapter.build_parser().parse_args(argv), environment=environment)
+            adapter.validate(
+                adapter.build_parser().parse_args(argv), environment=environment, platform="darwin"
+            )
 
 
 def test_the_service_adapter_has_no_generic_batch_kind_or_profile_flag(tmp_path):
@@ -883,7 +890,9 @@ def test_the_service_adapter_refuses_a_v3_document_and_a_missing_w1_config(tmp_p
     adapter, argv = _service_argv(tmp_path / "v3", config_path=PACKAGE / "config/mujoco/parallel_batch_v3.yaml",
                                   worker_count=2)
     with pytest.raises(ServiceCampaignError, match="CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"):
-        adapter.validate(adapter.build_parser().parse_args(argv), environment=environment)
+        adapter.validate(
+            adapter.build_parser().parse_args(argv), environment=environment, platform="darwin"
+        )
 
 
 def test_the_service_adapter_forwards_an_admitted_retry_binding_and_nothing_else(tmp_path):
@@ -922,7 +931,9 @@ def test_the_service_adapter_forwards_an_admitted_retry_binding_and_nothing_else
         "--original-catalog-sha256", "c" * 64,
         "--original-batch-id", "hunt17-b001",
     ])
-    record = adapter.validate(retry_arguments, environment=_service_environment(tmp_path))
+    record = adapter.validate(
+        retry_arguments, environment=_service_environment(tmp_path), platform="darwin"
+    )
     assert record["batch_kind"] == "FULL_RESTART_RETRY"
     assert record["retry_binding"] == {
         "original_selection_sha256": "a" * 64, "original_result_sha256": "b" * 64,
@@ -949,7 +960,7 @@ def test_the_service_adapter_refuses_a_half_named_retry_binding(tmp_path):
         "--point-id", "cup_test_forward_5cm",
         "--original-selection-sha256", "a" * 64])
     with pytest.raises(ServiceCampaignError, match="RETRY_ROOT_REQUIRED"):
-        adapter.validate(half, environment=_service_environment(tmp_path))
+        adapter.validate(half, environment=_service_environment(tmp_path), platform="darwin")
     # and the argv builder refuses too, so a direct caller cannot drop the missing half silently
     with pytest.raises(ServiceCampaignError, match="RETRY_ROOT_REQUIRED"):
         adapter.campaign_argv(half, campaign_id="campaign-a")
@@ -963,7 +974,9 @@ def test_the_service_adapter_refuses_a_half_named_retry_binding(tmp_path):
             *_retry_argv_prefix(tmp_path / "wrong-route", V4_CONFIG, worker_count=2),
             "--point-id", "p1", *extra])
         with pytest.raises(ServiceCampaignError, match=reason):
-            adapter.validate(arguments, environment=_service_environment(tmp_path))
+            adapter.validate(
+                arguments, environment=_service_environment(tmp_path), platform="darwin"
+            )
 
 
 def _retry_argv_prefix(root, config_path, *, worker_count: int) -> list[str]:
@@ -990,6 +1003,7 @@ def _retry_argv_prefix(root, config_path, *, worker_count: int) -> list[str]:
     ]
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="the adapter starts an MPS campaign on macOS")
 def test_the_adapter_runs_the_fresh_guard_before_it_creates_the_campaign_child(
         tmp_path, monkeypatch, capsys):
     """The campaign child is never created when the fresh admission refuses."""
@@ -1033,6 +1047,7 @@ def test_the_adapter_runs_the_fresh_guard_before_it_creates_the_campaign_child(
     assert document["refusal"] == "MPS_HEADROOM_BELOW_MINIMUM"
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="the adapter starts an MPS campaign on macOS")
 def test_the_adapter_guard_is_only_asked_once_per_campaign(tmp_path, monkeypatch):
     """One fresh check per campaign start, not one per request field."""
 

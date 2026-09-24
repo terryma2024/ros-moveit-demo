@@ -30,13 +30,18 @@ def app():
 
 
 def test_single_factory_has_real_tasks_and_validation_without_deny(app):
+    registered_routes = [
+        route
+        for included in app.routes
+        for route in getattr(getattr(included, "original_router", None), "routes", (included,))
+    ]
     routes = [
         route
-        for route in app.routes
+        for route in registered_routes
         if getattr(route, "path", None) == "/tasks/runs" and "POST" in getattr(route, "methods", set())
     ]
     assert len(routes) == 1
-    assert not any(getattr(route, "name", "") == "disabled_tasks" for route in app.routes)
+    assert not any(getattr(route, "name", "") == "disabled_tasks" for route in registered_routes)
     schema = app.openapi()
     assert "/expert-validation/campaigns" in schema["paths"]
     assert "/plans/{plan_id}/execute-all" in schema["paths"]
