@@ -351,8 +351,14 @@ class RosCalibrationMotionGuard:
             if not self._live_ready():return False
             if len(goals)!=2 or goals[0]['header_stamp_s']!=goals[1]['header_stamp_s'] or goals[0]['time_from_start_s']!=goals[1]['time_from_start_s']:
                 return False
+            observation_time=finite(prefix['observation_time_s'],nonnegative=True)
+            sample_time=observation_time
+            if self.contact_mode:
+                sample_time=finite(self.node.get_clock().now().nanoseconds*1e-9,nonnegative=True)
+                if not 0<=sample_time-observation_time<=min(.1,self.manifest['max_age_s']):
+                    return False
             base=dict(session_id=prefix['session_id'],attempt_id=prefix['attempt_id'],reset_epoch=self.contact_observer.epoch,
-                sim_time_s=prefix['observation_time_s'])
+                sim_time_s=sample_time)
             start=goals[0]['header_stamp_s'];held=goals[0]['positions'][0]+goals[1]['positions'][0]
             reference=self.driver.reference_state(start)
             if any(abs(a-b)>1e-9 for a,b in zip(reference['positions'],held,strict=True)):return False
@@ -366,7 +372,10 @@ class RosCalibrationMotionGuard:
             self.audit.append(dict(boundary='exact_goals',safe=False,error=repr(error)));return False
 
     def poll(self):
-        if self.live_observer is not None:self.live_observer.poll()
+        with self.scene_observer._lock:
+            scene=self.scene_observer.last
+            running=scene is not None and scene['paused'] is False
+        if self.live_observer is not None and running:self.live_observer.poll()
         pair=self.broker.prefix_executor
         ticket=None if pair is None else pair._ticket
         if ticket is None:return

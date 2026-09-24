@@ -164,6 +164,46 @@ def test_timing_guard_start_stays_inside_manifest_center():
     assert not RosCalibrationMotionGuard._start_safe(guard,shifted,config['neck_center_rad'])
 
 
+def test_live_contact_staleness_waits_while_reset_is_paused():
+    import threading
+    from types import SimpleNamespace as NS
+    from so101_demo.adapters.act.calibration_motion import RosCalibrationMotionGuard
+    polled=[]
+    guard=NS(live_observer=NS(poll=lambda:polled.append(True)),
+             scene_observer=NS(_lock=threading.RLock(),last={'paused':True}),
+             broker=NS(prefix_executor=None))
+    RosCalibrationMotionGuard.poll(guard)
+    assert polled == []
+    guard.scene_observer.last['paused']=False
+    RosCalibrationMotionGuard.poll(guard)
+    assert polled == [True]
+
+
+def test_contact_exact_goals_use_fresh_sim_time_and_reject_old_observation():
+    from collections import deque
+    from types import SimpleNamespace as NS
+    from so101_demo.adapters.act.calibration_motion import RosCalibrationMotionGuard
+    now=[1.03]
+    snapshots=[]
+    held=(0.,)*6
+    guard=NS(contact_mode=True,manifest={'max_age_s':.2},
+             node=NS(get_clock=lambda:NS(now=lambda:NS(nanoseconds=round(now[0]*1e9)))),
+             contact_observer=NS(epoch=1),driver=NS(reference_state=lambda _:dict(positions=held,velocities=held)),
+             _joints=((0.,)*7,),audit=deque(maxlen=8),_next_segment=0,
+             _live_ready=lambda:True,_within=lambda *_:True,
+             _snapshot=lambda base,**_:snapshots.append(base) or {'sim_time_s':base['sim_time_s']},
+             path=NS(check_path=lambda *_:True,last_check={}))
+    goals=[{'header_stamp_s':1.08,'time_from_start_s':(0.,.1),
+            'positions':(held[:5],)},
+           {'header_stamp_s':1.08,'time_from_start_s':(0.,.1),
+            'positions':(held[5:],)}]
+    prefix={'session_id':'s','attempt_id':'a','observation_time_s':1.0}
+    assert RosCalibrationMotionGuard.check_exact_goals(guard,goals,prefix)
+    assert snapshots[-1]['sim_time_s']==1.03
+    now[0]=1.21
+    assert not RosCalibrationMotionGuard.check_exact_goals(guard,goals,prefix)
+
+
 def manifest():
     return dict(schema_version=1,kind='ACT_TIMING_CALIBRATION',eligible_for_collection=False,
         session_id='s',model_path='/data/work/model.xml',model_sha256='1'*64,arm_center=(-.25,0.,.6,.8,0.,.8),
