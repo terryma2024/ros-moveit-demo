@@ -6,11 +6,12 @@ from sensor_msgs.msg import JointState
 from so101_demo.adapters.act.ros_neck import RosNeckSearchPort
 
 
-def make(monkeypatch,guard=lambda *args:True):
+def make(monkeypatch,guard=lambda *args:True,ready=True):
     from so101_demo.adapters.act import ros_neck
     calls=[];response=Future();result=Future()
     class Client:
         def __init__(self,node,kind,name):calls.append(('endpoint',name))
+        def server_is_ready(self):return ready
         def send_goal_async(self,msg):calls.append(('goal',msg));return response
     monkeypatch.setattr(ros_neck,'ActionClient',Client)
     node=SimpleNamespace(create_subscription=lambda *args:None,
@@ -50,3 +51,10 @@ def test_missing_stale_unsafe_neck_command_is_rejected(monkeypatch):
     with pytest.raises(PermissionError,match='NECK_FEEDBACK_STALE'):
         port.command_neck(.7,session_id='s',attempt_id='a',observation_time_s=1.)
     assert len(calls)==1
+
+
+def test_neck_command_refuses_undiscovered_action_server(monkeypatch):
+    port,calls,*_=make(monkeypatch,ready=False)
+    with pytest.raises(RuntimeError,match='NECK_ACTION_SERVER_UNAVAILABLE'):
+        port.command_neck(.7,session_id='s',attempt_id='a',observation_time_s=1.)
+    assert calls==[('endpoint','/neck_controller/follow_joint_trajectory')]
