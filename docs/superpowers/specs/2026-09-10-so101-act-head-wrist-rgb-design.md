@@ -2,7 +2,9 @@
 
 日期：2026-09-10
 
-更新：2026-09-24，按 `main` 的 fixed exact-N v3 shared queue、轻量 start guard、统一 Web 全局仲裁和八 Worker 测试门重写并行采集与训练边界；ACT 单次运行上限仍为 2 分钟。
+更新：2026-09-24，按 `main` 的 fixed exact-N v3 shared queue、统一 Web 全局仲裁和八 Worker 测试门重写并行采集与训练边界；ACT 单次运行上限仍为 2 分钟。
+
+补充设计：[Task 8 live 与正式采集设计](2026-09-24-so101-act-task8-live-formal-collection-design.md) 收紧 Task 7A 至 Task 11A。仿真后端仅支持 MuJoCo；资源绑定只在 campaign 启动入口校验；W2 通过后直接测试独立 40 场景 W8，不再测试 W4/W6。相关内容与本文冲突时，以补充设计为准。
 
 状态：已确认方案的设计汇总，供实现与审阅使用。本文不代表相机、控制器、数据集或 ACT 已完成运行验收。
 
@@ -36,8 +38,8 @@
 | 杯子位置 | 可抓取区域内分层、连续随机采样；空间隔离数据划分 |
 | 并行范围 | 首版只并行 MoveIt 专家示教采集；ACT 闭环验证和封存测试保持单场景独立执行 |
 | 并行实现 | Linux 新执行复用 `ParallelRuntimeConfigV3`、`BatchRequestV3`、fixed exact-N shared queue、lease、终态提交、start guard 与精确清理；新增 ACT collection workload，不复用点位验证证据 schema |
-| 并发策略 | W1 建立语义基线，W2 通过功能资格后，再以 ACT 双 RGB 无损录制负载逐档验证 W4/W6/W8；每个批次固定 exact N，不在批内自适应降级 |
-| 运行所有权 | 采集 campaign 进入统一服务的 `validation` 域，由 `GlobalMutationArbiter` 从 admission 持有 reservation 到终态与 cleanup；headless CLI 必须携带已核验的 operation binding，不能旁路仲裁 |
+| 并发策略 | W1 冒烟并建立语义基线；W1/W2 完成八场景功能资格后，直接以独立 40 场景测试 W8；不测试 W4/W6，也不在运行中自动降档 |
+| 运行所有权 | Web 与 headless CLI 通过同一启动入口完成一次 admission；campaign owner 从 admission 持有 reservation 到终态与 cleanup，内部组件不复验资源 binding |
 | GPU 所有权 | 采集、共享教师 Broker 与训练共同使用按稳定 host identity + 解析后的物理 GPU UUID 持久化的 `ActGpuWorkloadArbiter`；原 selector/可见性映射留审计，别名或映射漂移不能产生第二把锁 |
 | 丢失数据 | `/data/work/so101-evidence/act-data/0917a` 已不可用；Git 分支只能恢复源码，不能恢复 episode、QC 或训练资格。后续采集使用新的 dataset/run ID 与新 evidence root |
 | 训练执行 | 训练只消费 journal commit 引用且 verifier 通过的正式 episode；与采集/感知 GPU 负载串行，使用独立 Python 环境、不可变导出和独立 run root |
@@ -73,8 +75,8 @@ head RGB + wrist RGB + q1…q6 + neck 朝向
                               ├→ Worker 2：独立 ROS Domain + 完整 MuJoCo/MoveIt stack + Recorder
                               └→ …；共享的仅是身份隔离的教师感知 Broker 与持久调度状态
 
-统一 Web / headless authority → GlobalMutationArbiter(validation reservation)
-                              → campaign owner / intent / ACK / cleanup proof
+统一 Web / headless authority → startup admission → AdmittedCampaignContext
+                              → campaign owner / heartbeat / fencing / cleanup proof
 
 采集/Broker/训练 → ActGpuWorkloadArbiter(stable host + physical GPU UUID)
                 → durable owner / heartbeat / fencing / release proof
@@ -205,7 +207,7 @@ MoveIt/controller 失败、抓放失败、时间不连续、neck 意外运动、
 
 正式采集前先冻结五集合总清单，再确定性投影只含 Train、Validation、Offline Test 的 collection manifest；投影保存总清单内容哈希，Rollout Validation/Test 不具备采集资格。每个候选有稳定的 `scenario_id`、split、随机种子、杯子位置、初始七关节状态、搜索起点与配置哈希。`BatchRequestV3` 本身不设 20 项上限；ACT 为限制单批故障域和保留既有资格口径，另在 collection config 冻结 `max_wave_size=20`，由 `FixedActCollectionCampaign` 按清单顺序切分。每个 wave 创建一个 fixed `BatchRequestV3`，worker 数在该 batch 生命周期内不变。外层 fsync journal 保存 wave 终态、成功配额和恢复位置。调度键可以映射到现有 `point_id`，数据语义仍使用 `scenario_id`，不得按 Worker 完成顺序决定数据集成员。
 
-所有采集入口，包括单 stack smoke/W1 基线，先从 `ActGpuWorkloadArbiter` 原子取得目标 GPU lease，再取得统一服务 `validation` 域的全局 reservation；任一步失败都释放已取得但未 dispatch 的 lease，且零动作、零 Worker/Broker 进程启动。两项所有权从 campaign intent 落盘前保持到所有 Worker、controller goal、Broker、socket、Domain 和 owned process 完成清理。headless CLI 只接受服务签发并现场核验、同时绑定 operation ID 与 GPU lease ID 的 operation binding；统一 Web 不可用、owner 未知、旧 intent 未收敛、GPU owner 冲突或 cleanup 证据缺失时拒绝启动。页面上的 disabled 状态只是解释，服务端 authority 才是执行权威。
+所有采集入口，包括 single-stack smoke/W1 基线，都通过统一服务完成一次 startup admission：先取得目标 GPU lease，再取得 `validation` reservation，并核对 operation、manifest/config/policy hash、W8 资格和 evidence root。任一步失败都释放已取得但未 dispatch 的 lease，且零动作、零 Worker/Broker/Recorder/ROS child 启动。两项所有权由 campaign owner 保持到所有 Worker、controller goal、Broker、socket、Domain、campaign index 和 cleanup proof 收敛。内部 Worker、Recorder、Broker、Task 8 phase 和 ROS driver 不读取 lease、查询 arbiter 或重新验证资源；它们只消费业务 payload 和审计 ID/hash。
 
 GPU authority 先用稳定机器身份和 NVML/驱动 inventory，把 `INDEX` 或 `UUID` selector 及 `CUDA_VISIBLE_DEVICES` 等可见性映射解析为物理 GPU UUID，再以 `(stable_host_id, physical_gpu_uuid)` 作为唯一互斥键。原 selector、映射和 inventory hash 只留审计；同一物理卡的 index/UUID 别名不能取得两把 lease。解析歧义、映射漂移或 binding UUID 与现场设备不符时 fail closed。
 
@@ -219,7 +221,7 @@ Worker 只有在原始 episode、QC、终态 manifest 和逐文件哈希全部�
 
 每个 Worker 先写私有临时 episode，再以原子 manifest 封存。顶层聚合器只导入 coordinator journal commit 引用且 verifier 通过的工件；它不把多个 batch journal 复制成一个虚构的顶层 journal。每个 wave 终态后，原子 `campaign-index.json` 保存 batch ID、实际 journal root/hash、有效 commit sequence、verifier receipt root/hash 和选中 episode，训练据此逐 wave 回放。每个 wave 全部终态后，按 split 和冻结候选顺序选择最靠前的 N 个合格 episode；包含第 N 个成功的 wave 内，后续成功结果保留为 `SURPLUS_SUCCESS`，不进入训练，后续 wave 标记 `UNSCHEDULED_QUOTA_MET`。Recorder 使用有界队列和明确的磁盘背压，不能为维持吞吐静默丢帧、降采样或改变压缩语义。无法维持合格 10 Hz 连续窗口时，该 episode 记为 QC 失败，并暂停新 lease。
 
-并发资格按 W1 → W2 → W4 → W6 → W8 顺序进行。W1/W2 使用 8 个专用场景验证入口语义、exact-once、跨 Worker 无串帧、资源释放与基本吞吐。扩容使用至少 40 个持续负载场景，形成两个完整的 20 项 wave；共享队列不设置每 Worker 生命周期配额，每个 wave 仍须从实际 terminal lease 证明每个 Worker 至少连续处理 2 项。某档位的资格 wave 始终保持 exact N，零 infra retry、跨 N fallback 或 crash continuation。候选默认档位在全新 evidence root 复测一次。两轮都通过正确性、资源稳定和吞吐门后，才可成为正式默认值。
+并发资格按 W1 smoke → W1/W2 八场景功能资格 → 独立 40 场景 exact-W8 持续负载资格执行。W4、W6 不再测试。W8 每个 batch 必须实际启动 8 个 Worker；出现 CPU、GPU、RAM、磁盘、RTF 或 Recorder 瓶颈时停止并等待人工决策，不自动降档、换设备或降低数据质量。W8 是本次 ai-station ACT campaign 的要求，不写成其他工作负载的永久全局默认值。
 
 start guard 是每次启动前的轻量 fail-closed 检查，不是 ACT 并发资格。它核对 CPU busy、RAM/GPU 最低余量、cleanup 和 owner 状态；通过 start guard 不能代替双 RGB 录制的 8/40 场景资格。每轮还需记录 CPU、内存、GPU、磁盘写入、仿真实时因子、Recorder 队列、帧间隔、前后半段有效 episode 吞吐和失败分布。
 
@@ -330,7 +332,7 @@ MoveIt 恢复动作单独计为干预，不得将恢复后的成功算作 ACT �
 | 标签/数据 | controller reference 对齐与重放通过；固定 10 Hz 连续窗口；8 维 state/6 维 action；无禁止输入 |
 | 运行所有权 | 所有采集入口的 `validation` reservation 覆盖 admission、dispatch、运行终态和 cleanup；Teleop/Tasks mutation 双向拒绝；headless CLI 无 operation+GPU binding 时零动作、零 Worker/Broker 进程启动 |
 | 并行采集 | W1 与单条入口在 schema/QC/终态语义上等价；8 场景 W2 功能资格 exact-once、无跨 Worker 图像或控制串扰、所有候选有唯一终态、同 N 恢复不重跑已提交项、进程和 Domain 精确清理 |
-| 并发扩容 | 至少 40 场景、两个完整 wave 的持续负载，W4/W6/W8 逐档测量且每个 wave 中每 Worker 连续处理至少 2 项；每轮保持 exact N，零 infra retry、跨 N fallback 或 crash continuation；候选默认在新 root 复测；两轮吞吐提升且帧连续性、物理成功率、资源趋势与 QC 不退化 |
+| 并发扩容 | W2 通过后使用独立 40 场景直接测试 exact W8；跳过 W4/W6；每个 batch 保持 8 Worker，零跨 N fallback；任何资源瓶颈都停止等待人工决策 |
 | 训练输入 | 只从 campaign index 逐 wave 回放 coordinator journal commit，并导入 verifier 通过的正式 Train/Validation/Offline Test episode；旧 0917a、资格、surplus、失败、未提交 seal 和目录扫描结果均拒绝 |
 | 训练复现 | 独立 Python 环境与精确依赖锁可重建；不可变导出与配置 hash 一致；训练 run 单写者；持久 GPU lease 使训练与采集/Broker 双向互斥；bundle 可从 checkpoint、统计与预处理 hash 完整回读 |
 | 随机采样 | 每个实际点完整预检；分层配额、拒绝统计、空间隔离和种子可复现 |
