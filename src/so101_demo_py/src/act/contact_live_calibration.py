@@ -190,11 +190,18 @@ def _read_physics(run: Path, manifest: dict, epoch: int,
     if path.is_symlink() or not path.is_file():
         raise ValueError("live physics evidence is missing or linked")
     limits = manifest["diagnostic_limits"]
+    plugin = yaml.safe_load(Path(manifest["plugin_path"]).read_bytes())
+    chunk_size = plugin["/**"]["ros__parameters"]["physics_step_chunk_size"]
+    if type(chunk_size) is not int or chunk_size <= 0:
+        raise ValueError("live physics chunk size is invalid")
     frames = []
     initial = None
     previous = None
     pause_row_seen = False
     approved_pause_gap = False
+    pause_gap_first_receipt = None
+    pause_gap_previous_step = None
+    pause_row_receipt = None
     for line in path.open("rb"):
         row = json.loads(line)
         if ((row["simulation_session_id"], row["reset_epoch"], row["model_sha256"]) !=
@@ -213,14 +220,19 @@ def _read_physics(run: Path, manifest: dict, epoch: int,
             if wall_gap > limits["maximum_receipt_age_s"]:
                 reset_pause_gap = (
                     not approved_pause_gap and
-                    previous["physics_step"] == pause["physics_step"] and
-                    abs(previous["simulation_time_s"] - pause["simulation_time_s"]) <= .002 and
+                    previous["physics_step"] <= pause["physics_step"] and
+                    # The recorder can receive the last pre-pause steps only
+                    # after resume because the plugin publishes whole chunks.
+                    pause["physics_step"] - previous["physics_step"] <= chunk_size and
+                    previous["simulation_time_s"] <= pause["simulation_time_s"] + .002 and
                     previous["received_monotonic_s"] <= pause["received_monotonic_s"] + .02 and
                     pause["received_monotonic_s"] < resume_start <= row["received_monotonic_s"]
                 )
                 if not reset_pause_gap:
                     raise ValueError("live physics receipt exceeded the hard deadline")
                 approved_pause_gap = True
+                pause_gap_first_receipt = row["received_monotonic_s"]
+                pause_gap_previous_step = previous["physics_step"]
         if (abs(row["ros_time_s"] - row["simulation_time_s"]) > limits["maximum_ros_skew_s"] or
                 math.dist(row["cup_position_m"], initial) > limits["maximum_displacement_m"] or
                 _force(row) > limits["maximum_force_n"]):
@@ -230,9 +242,13 @@ def _read_physics(run: Path, manifest: dict, epoch: int,
             if abs(row["simulation_time_s"] - pause["simulation_time_s"]) > .002:
                 raise ValueError("live reset pause step has mismatched simulation time")
             pause_row_seen = True
+            pause_row_receipt = row["received_monotonic_s"]
         previous = row
     if len(frames) < 51 or not pause_row_seen:
         raise ValueError("live physics stream is incomplete")
+    if (approved_pause_gap and pause_gap_previous_step < pause["physics_step"] and
+            not (pause_gap_first_receipt <= pause_row_receipt <= pause_gap_first_receipt + .02)):
+        raise ValueError("live reset pause step was not delivered with the resumed chunk")
     return frames
 
 

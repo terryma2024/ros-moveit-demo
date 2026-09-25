@@ -75,8 +75,8 @@ def test_live_sample_requires_completed_pair_stop_and_lossless_physics(tmp_path)
                                       "simulation_step": 0,
                                       "simulation_session_id": manifest["session_id"]},
         "final_pause": {"simulation_session_id": manifest["session_id"],
-                        "reset_epoch": 1, "physics_step": 200,
-                        "simulation_time_s": .4,
+                        "reset_epoch": 1, "physics_step": 204,
+                        "simulation_time_s": .408,
                         "received_monotonic_s": 1000.201, "paused": True},
         "status": [{"stop_confirmed": True}],
     }))
@@ -138,7 +138,7 @@ def test_live_sample_requires_completed_pair_stop_and_lossless_physics(tmp_path)
     with pytest.raises(ValueError, match="reset pause step|receipt exceeded"):
         build_live_sample(
             run, regime="no_contact", seed=0, sample_id="live-no_contact-000", metadata=metadata)
-    reset["final_pause"]["physics_step"] = 200
+    reset["final_pause"]["physics_step"] = 204
     (run / "reset-result.json").write_text(json.dumps(reset))
     rows[30]["physics_step"] += 1
     raw.write_text("".join(json.dumps(row) + "\n" for row in rows))
