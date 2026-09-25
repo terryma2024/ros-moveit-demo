@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: ab333a9a57bcf5716ce8a8016c129a64a04c58a8
+current_commit: 0b6f4db8fbc65ee0289f28dd5f61860736c1e335
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -16,8 +16,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: CP-249
-next_experiment: EXP-250 provision Task8 physical child adapters and full-stack case lifecycle
+latest_checkpoint: CP-250
+next_experiment: EXP-251 dedicated ACT simulator stack without legacy broker
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1846,3 +1846,14 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 
 - Last valid experiment: EXP-249. A read-only source join can detect the original cup pose/qpos disagreement and source identity, time or step drift; this does not substitute for a production Task8Port.
 - Remaining gates: derive qpos mappings and contact phase pairs from the verified compiled model/config, wire actual ROS subscriptions and broker reference in the child, implement reset/command/planning/release/retreat evidence, prove a fresh complete stack and clean retirement per case, then measure five Task6 checks before any live case. W8/formal remain unstarted, Train/Val/Test 0/0/0.
+
+## EXP-250 — Compiled-model Task8 readback mapping
+
+- **PLANNED:** Source HEAD `0b6f4db8fbc65ee0289f28dd5f61860736c1e335`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. Independent Astra review recommended deriving all 7 ACT hinge and cup free-joint qpos addresses from the compiled model by name/type, after matching the activated policy's exact model SHA. A read-only actual model probe found pinned MuJoCo 3.12.0, SHA `3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78`, 7 joint addresses 0–6, and cup free-joint address 7. Add a closed mapping helper and tests against the actual compiled model plus hash/geometry drift refusal. No Task8Port provisioning, motion or live case. Use TDD and ordinary Demo/package gates with new verified NVMe scratch; retain evidence, archive none, scratch deletion candidates only, delete nothing.
+
+- **VALID as a source-bound mapping primitive:** Intended `scratch/exp250-red.KQ28GnXE` exited2 at the missing compiled mapping symbol; `scratch/exp250-mapping-green.TQr17lnL` passed3/3 on the actual installed MuJoCo 3.12.0 ACT scene, including wrong model hash and wrong MuJoCo version refusal. Constructor RED `scratch/exp250-bind-red.L7w9eUXf` exited1 at the absent verified-model constructor path. Final targeted `scratch/exp250-green.W9nDwWHe` passed33/33. `Task8PhysicalReadback` now requires the actual compiled model plus expected policy model SHA and MuJoCo version, derives seven hinge qpos addresses and the cup free joint by name/type, and refuses mismatched hash, version, joint type or address overlap before evidence capture. No numeric address input remains. Ordinary Demo Python eight-worker `scratch/exp250-python-full.tkQbNPRG` exited0 in45 s, 4196 passed/162 skipped. Overlay build `scratch/exp250-demo-build.VfxU7EBY` exited0 in3 s. Package `scratch/exp250-demo-colcon.ticJznAL` used exact task Python and fresh proved NVMe tmp, exited0 in167 s with 4196 passed/162 skipped/12 deselected; `test-result --verbose` exited0, aggregate 5732 tests/0 errors/0 failures/205 skipped. Installed readback resolves to this source tree, SHA256 `c61861e8cb06cc96e7efb1a18f0330bd5dec612433249708db2adc5cd18dbde1`; `git diff --check` clean. An independently loaded unmodified compiled model is required for this hash check: `MujocoPathChecker` changes margins in its private model after recording its original SHA. Phase-specific geometry pairs and source artifact handoff to child are still missing. No ROS stack, live motion, Task8 phase PASS, W8 or formal episode; Train/Val/Test 0/0/0. Retain all registered evidence, archive none, scratch trees deletion candidates only, delete nothing.
+
+## CP-250 — ACT model mapping boundary
+
+- Last valid experiment: EXP-250. Same-step cup and joint readbacks cannot be configured with arbitrary qpos offsets; they require the exact compiled model and version.
+- Remaining gates: dedicated stack-only ACT launch, source-bound phase contact pairs and child evidence adapters, physical command/plan/reset/release/retreat, per-case fresh stack and clean-retirement proof, measured Task6 preflight, then live Task8 and W8/formal. No live case is admitted by this source primitive.
