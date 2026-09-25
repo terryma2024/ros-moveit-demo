@@ -152,3 +152,21 @@ def test_unconfirmed_cancel_records_indeterminate_and_stops_sequence(tmp_path):
     assert [item["scenario_id"] for item in worker.requests] == ["prefix-01", "prefix-02"]
     records = [json.loads(line) for line in journal.read_text().splitlines()]
     assert records[-1]["status"] == "INDETERMINATE"
+
+
+def test_uncertain_fsync_does_not_append_conflicting_case_terminal(tmp_path, monkeypatch):
+    manifest_path, context = prepared(tmp_path)
+    worker = Worker(context)
+    journal = tmp_path / "case-results.jsonl"
+    original = Task8LiveCampaign._record
+
+    def uncertain_write(stream, record):
+        original(stream, record)
+        raise OSError("fsync result uncertain")
+
+    monkeypatch.setattr(Task8LiveCampaign, "_record", staticmethod(uncertain_write))
+    with pytest.raises(Task8LiveError, match="TASK8_JOURNAL_WRITE_FAILED"):
+        asyncio.run(Task8LiveCampaign(manifest_path, context, worker, journal).run(
+            deadline_ns=time.monotonic_ns() + 60_000_000_000))
+    assert len(worker.requests) == len(worker.cancelled) == 1
+    assert len(journal.read_text().splitlines()) == 1

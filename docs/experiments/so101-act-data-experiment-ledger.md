@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 3fdb2e463c31b6c9aac75da3a367d3fb5af0c8c2
+current_commit: 06813a96147a88cbec0a3420d0b4ff785714318c
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -16,8 +16,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: CP-244
-next_experiment: EXP-245 Task 8 live case orchestration contract
+latest_checkpoint: CP-245
+next_experiment: EXP-246 Task 8 unified CLI composition
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1802,3 +1802,14 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 
 - Last valid experiment: EXP-245. Case scheduling now consumes only a hash-bound admitted manifest and writes an exclusive fsynced per-case journal; any wrong result or uncertain cancellation stops before the next case.
 - Remaining gates: no production physical phase port, Task 6 five-check `TASK8_READY`, Task 8 CLI/service composition, W8 verifier or formal collection. No live action is authorized by this source contract alone. Next source boundary: provision the physical Task8Port in the admitted ROS child with actual controller/scene/contact/RGB readback, then measure Task 6 dynamically before a live case.
+
+## EXP-246 — Task 8 unified CLI composition
+
+- **PLANNED:** Source HEAD `06813a96147a88cbec0a3420d0b4ff785714318c`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. Register the missing `act_task8_live` console entry. It accepts one closed, no-follow operation-spec file, requires Task8 full campaign mode and a task-owned new journal, composes the existing unified service and `ActCampaignLifecycle`, and passes only the admitted context plus typed Worker to `Task8LiveCampaign`. It must call exact owner cleanup on success or failure; admission refusal must start zero child and create zero case journal. Use test-first fake lifecycle, then targeted/full ordinary and package gates with unique verified NVMe scratch. Physical phase port and measured `TASK8_READY` remain separate prerequisites; no live action in this experiment. Retain all evidence, archive none, scratch deletion candidates only, delete nothing.
+
+- **VALID as unified entry composition, still pre-physical:** Intended RED `scratch/exp246-red.MRVJg0Uf` exited2 at the missing `so101_demo.cli.act_task8_live` module. New CLI reads a closed regular no-follow operation spec, requires `task8_full`, a new journal path under the registered root, and composes only the existing unified service, `ActCampaignLifecycle` and admitted typed Worker. Fake lifecycle tests prove exact 14-case handoff, cleanup after success or case failure, admission refusal before journal/Worker call, and invalid spec/link refusal. A further fsync uncertainty test proved the owner requests stop without adding contradictory terminal rows. Targeted `scratch/exp246-green2.slJRyWmp` passed28/28; initial pre-fsync-fix `scratch/exp246-green.omGRpghX` passed9/9. Full ordinary eight-worker gate `scratch/exp246-python-full.T8H2yT6a` used fresh verified NVMe tmp, exit0, 4185 passed/162 skipped in42.11 s. Overlay build `scratch/exp246-demo-build.qK4MLxnI` exit0; installed `act_task8_live` is executable and its module resolves to this source tree, SHA256 `7bd0e2c138b0a6fad267f6e6b33a347e643cc773fff2aaf8a1ce1a08288cecc7`. Package `scratch/exp246-demo-colcon.0aPtAIIp` invoked colcon with exact task Python after proving its fresh NVMe tempfile path, MuJoCo3.12.0 and repository tools import; exit0 in167 s, 4185 passed/162 skipped/12 deselected, `test-result --verbose` exit0, aggregate5721/0 errors/0 failures/205 skipped. `git diff --check` clean. No ROS stack, physical PhasePort, Task6 `TASK8_READY`, Task8 live case, W8 or formal episode. Train/Val/Test 0/0/0. Retain all run logs/XML, archive none, scratch deletion candidates only, delete nothing.
+
+## CP-246 — Unified Task 8 live entry boundary
+
+- Last valid experiment: EXP-246. CLI and source-level owner now reach the existing single campaign admission/child lifecycle and produce a hash-bound, exclusive case journal. No second resource authority was added in the Worker or child.
+- Next unmet dependency: genuine physical `Task8Port` provisioned in the admitted ROS child, including MoveIt plan and Planning Scene, paired controller reference/feedback, whole-robot contact, independent MuJoCo path, dual RGB readback and release/retreat; then new dynamic Task6 measurements for five-check `TASK8_READY`. Until both pass, the unified gate refuses live Task8 and formal collection remains 0/0/0.
