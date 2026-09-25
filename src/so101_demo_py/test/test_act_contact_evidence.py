@@ -52,6 +52,17 @@ def test_wall_freshness_and_backwards_clock_fail_closed():
     now[0]=9.9;assert not port.safe()
 
 
+def test_locked_contact_snapshot_is_fresh_and_caller_cannot_change_it():
+    now=[10.];port=observer(now);port.reset('s',1,source_floor_s=0.)
+    port.accept(frame())
+    read=port.snapshot()
+    read['geom_a'].append('arm')
+    assert port.snapshot()['geom_a']==[]
+    now[0]=10.2
+    with pytest.raises(ValueError,match='CONTACT_STALE'):
+        port.snapshot()
+
+
 def test_replacing_contact_pairs_uses_only_new_set_and_rechecks_latest_frame():
     port=observer([10.])
     port.reset('s',1,source_floor_s=0.)

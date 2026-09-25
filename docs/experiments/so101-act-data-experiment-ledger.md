@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 2a0e2849bf269e769ef2109d235b93ff38040294
+current_commit: ab333a9a57bcf5716ce8a8016c129a64a04c58a8
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -16,8 +16,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: CP-248
-next_experiment: EXP-249 child physical readback and exact lifecycle ownership
+latest_checkpoint: CP-249
+next_experiment: EXP-250 provision Task8 physical child adapters and full-stack case lifecycle
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1835,3 +1835,14 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 
 - Last valid experiment: EXP-248. The whole-robot contact adapter can narrow a phase policy without accepting prior or current disallowed contact and can trigger its existing stop callback immediately.
 - Remaining gates: source-backed phase-specific policy configuration, production child physical readback and command port, actual per-case complete stack start/retirement, five measured Task6 checks, then Task8 live and W8/formal dependencies. None is satisfied by this primitive alone.
+
+## EXP-249 — Task8 physical cross-source readback
+
+- **PLANNED:** Source HEAD `ab333a9a57bcf5716ce8a8016c129a64a04c58a8`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. Add read-only composition of the existing atomic MuJoCo world, full scene qpos/qvel, contiguous robot contact stream, paired RGB/joint synchronizer and controller reference. The readback must bind one session/reset/step, reject stale or skewed sources and prove actual cup pose agrees with qpos on the same step, as well as measured arm/neck against qpos at configured joint indices. It may return raw evidence for a future Task8Port but cannot synthesize phase PASS or authorize motion. Add a locked contact snapshot API to avoid torn reads. TDD then ordinary Demo/package gates in fresh NVMe scratch. Retain all registered evidence, archive none, scratch deletion candidates only, delete nothing.
+
+- **VALID as a read-only source contract:** Intended `scratch/exp249-red.cMmFHyWX` exited2 at the missing Task8 readback module, after actual pytest collection began. Contact snapshot RED `scratch/exp249-contact-red.e5YW2DE8` exited1 at the missing locked snapshot method. Targeted `scratch/exp249-green.22w6ew9q` passed29/29. The new readback accepts only one session/reset/physics step across world, scene and contiguous contact snapshots; checks world receipt age, source timestamps, actual cup world pose against free-joint qpos, measured arm/neck against configured qpos addresses, causal head/wrist RGB and paired controller reference. It returns source evidence without a phase PASS, motion permit or robot command. Ordinary Demo Python eight-worker `scratch/exp249-python-full.5axIANOL` exited0 in40 s, 4192 passed/162 skipped. Overlay build `scratch/exp249-demo-build.oRY3oSUa` exited0 in3 s. Package `scratch/exp249-demo-colcon.cEsFqCUl` used the exact task Python and fresh proved NVMe tmp, exited0 in166 s with 4192 passed/162 skipped/12 deselected; `test-result --verbose` exited0, aggregate 5728 tests/0 errors/0 failures/205 skipped. Installed readback and contact modules resolve to this source tree with SHA256 `37279d97451b56e4f0652e55eb2cae7798ecf04436cea9a051615f0bab508386` and `80ac91f17027af8fa7563e5be3bebf18061b02ad62384502f11875dce10aac7b`; `git diff --check` clean. There was no ROS stack or live motion, and no child wiring, Task8 phase PASS, W8 or formal episode. Train/Val/Test 0/0/0. Retain registered evidence, archive none, scratch trees deletion candidates only, delete nothing.
+
+## CP-249 — Physical readback boundary
+
+- Last valid experiment: EXP-249. A read-only source join can detect the original cup pose/qpos disagreement and source identity, time or step drift; this does not substitute for a production Task8Port.
+- Remaining gates: derive qpos mappings and contact phase pairs from the verified compiled model/config, wire actual ROS subscriptions and broker reference in the child, implement reset/command/planning/release/retreat evidence, prove a fresh complete stack and clean retirement per case, then measure five Task6 checks before any live case. W8/formal remain unstarted, Train/Val/Test 0/0/0.
