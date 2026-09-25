@@ -123,14 +123,22 @@ class MujocoRosClient:
     """Synchronous bounded facade over the pinned 0.1.0 service interfaces."""
 
     def __init__(
-        self, service_node: Any, joint_state_node: Any, *, service_timeout_s: float = 5.0
+        self, service_node: Any, joint_state_node: Any, *, service_timeout_s: float = 5.0,
+        control_context: dict | None = None, broker_connection: Any = None,
     ) -> None:
         if not math.isfinite(service_timeout_s) or service_timeout_s <= 0.0:
             raise ValueError("service_timeout_s must be finite and positive")
         from so101_demo.adapters.act.leased_action_client import context_from_environment
-        self.control_context = context_from_environment()
+        if broker_connection is not None and control_context is None:
+            raise ValueError("CONTROL_CONTEXT_REQUIRED")
+        if (control_context is not None and broker_connection is None
+                and "broker_socket" not in control_context):
+            raise ValueError("BROKER_CONNECTION_REQUIRED")
+        self.control_context = (control_context if control_context is not None
+                                else context_from_environment())
         if os.environ.get("SO101_ACT_PROFILE") in ("1", "true") and self.control_context is None:
             raise PermissionError("CONTROL_CONTEXT_REQUIRED")
+        self._broker_connection = broker_connection
         self._service_node = service_node
         self._joint_state_node = joint_state_node
         self._timeout_s = service_timeout_s
@@ -241,8 +249,7 @@ class MujocoRosClient:
 
     def pause(self, paused: bool) -> bool:
         if self.control_context is not None:
-            from so101_demo.adapters.act.leased_action_client import connection_for
-            result=connection_for(self.control_context).request("pause",self.control_context,paused=paused)
+            result=self._control_connection().request("pause",self.control_context,paused=paused)
             return bool(result["pause_result"]["success"])
         request = SetPause.Request()
         request.paused = paused
@@ -265,22 +272,32 @@ class MujocoRosClient:
         ]
         request.state_overrides.joint_states = joint_override_message(joint_overrides)
         if self.control_context is not None:
-            from so101_demo.adapters.act.leased_action_client import connection_for, message_dict
-            result = connection_for(self.control_context).request("reset_world", self.control_context,
+            from so101_demo.adapters.act.leased_action_client import message_dict
+            result = self._control_connection().request("reset_world", self.control_context,
                 reset_request=message_dict(request))
             return bool(result["reset_result"]["success"])
         return bool(self._call(self._reset, request, "reset").success)
 
     def finish_reset(self) -> bool:
         if self.control_context is None:return True
+        self._control_connection().request("finish_reset",self.control_context)
+        return True
+
+    def _control_connection(self):
+        if self._broker_connection is not None:
+            return self._broker_connection
         from so101_demo.adapters.act.leased_action_client import connection_for
-        connection_for(self.control_context).request("finish_reset",self.control_context)
+        return connection_for(self.control_context)
+
+    def prepare_reset(self) -> bool:
+        if self.control_context is None:
+            return True
+        self._control_connection().request("prepare_reset", self.control_context)
         return True
 
     def switch_controllers(self, *, activate, deactivate) -> bool:
         if self.control_context is not None:
-            from so101_demo.adapters.act.leased_action_client import connection_for
-            result=connection_for(self.control_context).request("switch_controllers",self.control_context,
+            result=self._control_connection().request("switch_controllers",self.control_context,
                 activate=list(activate),deactivate=list(deactivate))
             if not result["switch_result"]["ok"]:return False
             deadline=time.monotonic()+self._timeout_s

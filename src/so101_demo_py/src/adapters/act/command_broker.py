@@ -7,6 +7,7 @@ from pathlib import Path
 import socket
 import threading
 import time
+import uuid
 
 from so101_demo.act.contracts import fields, identifier
 from so101_demo.act.ownership import OWNERS
@@ -231,6 +232,45 @@ class CommandBroker:
             try:self.tick()
             except Exception:pass
         return response
+
+
+class LocalBrokerConnection:
+    """Use the child-owned broker without creating another writer or socket."""
+
+    def __init__(self, broker: CommandBroker):
+        if not isinstance(broker, CommandBroker):
+            raise TypeError('COMMAND_BROKER_REQUIRED')
+        self.broker = broker
+        self._connection_id = f'local-{uuid.uuid4()}'
+        self._lock = threading.RLock()
+        self._closed = False
+
+    def request(self, operation, context, **extra):
+        with self._lock:
+            if self._closed:
+                raise RuntimeError('BROKER_DISCONNECTED')
+            request = dict(protocol_version=1, request_id=str(uuid.uuid4()),
+                           operation=operation, owner=context['owner'],
+                           session_id=context['session_id'], attempt_id=context['attempt_id'],
+                           lease_token=context.get('lease_token', ''), **extra)
+            result = self.broker.handle(request, self._connection_id)
+            if result.get('request_id') != request['request_id']:
+                raise RuntimeError('BROKER_RESPONSE_ID_INVALID')
+            if result.get('accepted') is not True:
+                raise PermissionError(result.get('error') or 'BROKER_REJECTED')
+            return result
+
+    def acquire(self, owner, session_id, attempt_id):
+        context = dict(owner=owner, session_id=session_id, attempt_id=attempt_id)
+        context['lease_token'] = self.request('acquire', context)['lease_token']
+        return context
+
+    def close(self):
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            self.broker.disconnect(self._connection_id)
 
 
 class UnixBrokerServer:
