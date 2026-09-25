@@ -106,6 +106,27 @@ def test_current_epoch_step_zero_scene_requires_reset_proof_after_scalar_arm(pro
         with pytest.raises(ValueError,match='SCENE_RESET_PROOF_INVALID'):port.snapshot()
 
 
+def test_scene_first_reset_is_proven_and_retained_until_scalar_arm():
+    from types import SimpleNamespace
+    port=SceneStateObserver(model_sha256='1'*64,nq=14,nv=12,
+                            max_age_s=.15,monotonic=lambda:10.)
+    events=[];proofs=[]
+    def proof(value):
+        proofs.append((value['reset_epoch'],value['simulation_step'],value['paused']))
+        return value['reset_epoch']==1 and value['simulation_step']==0 and value['paused']
+    ros=adapter(port,proof,events)
+    initial=frame();initial.update(reset_epoch=1,paused=True,
+                                   simulation_step=0,simulation_time_s=1.)
+    ros.accept_message(message(initial))
+    assert proofs==[(1,0,True)]
+    latest=frame();latest.update(reset_epoch=1)
+    ros.accept_message(message(latest))
+    ros.arm(SimpleNamespace(simulation_session_id='s',reset_epoch=1,
+        simulation_time_s=1.,simulation_step=0,paused=True))
+    assert not events
+    assert port.snapshot()['simulation_step']==5
+
+
 @pytest.mark.parametrize('changes',[{}, {'model_sha256':'2'*64},{'simulation_step':1},{'paused':False}])
 def test_unproven_future_scene_or_invalid_reset_shape_is_stopped_once(changes):
     port,now=observer();assert port.accept(frame());events=[]
