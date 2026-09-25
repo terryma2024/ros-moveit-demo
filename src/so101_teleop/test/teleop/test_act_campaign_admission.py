@@ -17,6 +17,7 @@ from so101_teleop.unified.arbiter import GlobalMutationArbiter
 from so101_teleop.unified.contracts import Domain, OperationSpec
 from so101_teleop.unified.gpu_workload import ActGpuWorkloadArbiter
 from so101_teleop.unified.intent_store import IntentStore
+from so101_demo.act.calibration import REQUIRED_MEASUREMENTS
 
 
 def _canonical(value):
@@ -70,7 +71,30 @@ def _write_policy(tmp_path):
     return fingerprint, proposal_path, receipt_path, receipt
 
 
-def _start_spec(tmp_path, fingerprint, proposal_path, receipt_path, *, backend="mujoco"):
+def _calibration(tmp_path, *, status):
+    sample = tmp_path / "calibration-sample.json"
+    if not sample.exists():
+        sample.write_text("synthetic test sample\n")
+    sample_sha = hashlib.sha256(sample.read_bytes()).hexdigest()
+    measurements = {name: {
+        "value": 3 if name == "max_fine_corrections" else
+                 [1.0] * size if size > 1 else
+                 0.5 if name in ("min_confidence", "tracking_iou") else 1.0,
+        "unit": unit, "sample_path": str(sample), "sample_sha256": sample_sha,
+    } for name, (unit, size) in REQUIRED_MEASUREMENTS.items()}
+    checks = {name: "PASS" for name in (
+        "fov", "collision", "search", "synchronization", "execution", "release", "retreat")}
+    if status == "TASK8_READY":
+        checks["release"] = checks["retreat"] = "UNMEASURED"
+    report = {"schema_version": 1, "status": status, "source_commit": "a" * 40,
+              "config_sha256": "b" * 64, "measurements": measurements, "checks": checks}
+    path = tmp_path / f"calibration-{status}.json"
+    path.write_text(json.dumps(report))
+    return str(path), hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _start_spec(tmp_path, fingerprint, proposal_path, receipt_path, *, backend="mujoco",
+                calibration_status="TASK8_READY"):
     artifacts = {}
     for name in ("source", "manifest", "runtime_config", "collection_config"):
         path = tmp_path / f"{name}.json"
@@ -78,6 +102,7 @@ def _start_spec(tmp_path, fingerprint, proposal_path, receipt_path, *, backend="
             path.write_bytes(_canonical({"artifact": name, "campaign_id": "campaign-1"}))
         artifacts[f"{name}_path"] = str(path)
         artifacts[f"{name}_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    calibration_path, calibration_sha = _calibration(tmp_path, status=calibration_status)
     return OperationSpec(
         command_id="start-1", domain=Domain.VALIDATION, kind="task8_phase",
         payload={
@@ -88,6 +113,8 @@ def _start_spec(tmp_path, fingerprint, proposal_path, receipt_path, *, backend="
             "service_epoch": "epoch-1", "resource_binding_id": "binding-1",
             "qualification_mode": False,
             "qualification_receipt_path": None,
+            "calibration_report_path": calibration_path,
+            "calibration_report_sha256": calibration_sha,
             "children": [launch("w00", 40, "session-0").__dict__],
         },
         runtime_id="runtime-1", execution_generation=3, deadline_ns=time.monotonic_ns() + 10**12,
@@ -174,6 +201,52 @@ def test_start_without_activation_receipt_creates_no_owner_resources(tmp_path):
         service = _service(store)
         with pytest.raises(ValueError, match="POLICY_NOT_ACTIVATED"):
             service.start(_start_spec(tmp_path, fingerprint, proposal_path, receipt_path))
+        assert service.child_registry.launches() == ()
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+    finally:
+        store.close()
+
+
+def test_task8_start_without_measured_calibration_reserves_nothing(tmp_path):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+        payload = {key: value for key, value in spec.payload.items()
+                   if key not in {"calibration_report_path", "calibration_report_sha256"}}
+        with pytest.raises(ValueError, match="CALIBRATION_REQUIRED"):
+            service.start(replace(spec, payload=payload))
+        assert service.child_registry.launches() == ()
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("mutation", ("tamper", "unmeasured"))
+def test_task8_start_rejects_unverified_calibration_before_resources(tmp_path, mutation):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+    calibration_path = tmp_path / "calibration-TASK8_READY.json"
+    report = json.loads(calibration_path.read_text())
+    if mutation == "tamper":
+        report["checks"]["fov"] = "FAIL"
+        calibration_path.write_text(json.dumps(report))
+    else:
+        report["status"] = "CALIBRATION_REQUIRED"
+        report["checks"] = {key: "UNMEASURED" for key in report["checks"]}
+        calibration_path.write_text(json.dumps(report))
+        spec = replace(spec, payload={**spec.payload,
+            "calibration_report_sha256": hashlib.sha256(calibration_path.read_bytes()).hexdigest()})
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        with pytest.raises(ValueError, match="CALIBRATION_REQUIRED"):
+            service.start(spec)
         assert service.child_registry.launches() == ()
         assert service.arbiter.is_idle()
         assert store._query_one("SELECT * FROM gpu_workload_leases") is None
@@ -277,7 +350,8 @@ def test_formal_w8_without_exact_qualification_has_no_resources(tmp_path):
     store = IntentStore.open(tmp_path / "state")
     try:
         service = _service(store)
-        base = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+        base = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path,
+                           calibration_status="QUALIFIED")
         payload = dict(base.payload, worker_count=8, children=[
             launch(f"w{index:02d}", 40 + index, f"session-{index}").__dict__
             for index in range(8)
@@ -295,7 +369,8 @@ def test_formal_w8_without_exact_qualification_has_no_resources(tmp_path):
 def test_formal_w8_rejects_a_self_declared_passed_json_without_independent_verifier(tmp_path):
     fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
     receipt_path.write_text(json.dumps(receipt))
-    base = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+    base = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path,
+                       calibration_status="QUALIFIED")
     fake_path = tmp_path / "qualification.json"
     fake_path.write_text(json.dumps({
         "status": "PASSED", "worker_count": 8,
