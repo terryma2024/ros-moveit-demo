@@ -79,7 +79,9 @@ def _fsync_dir(path: Path) -> None:
 class ActCollectionResultStore:
     """One writer at the workspace reserved by a Coordinator lease."""
 
-    def __init__(self, workspace: Path, lease: LeaseIdentity, *, clock) -> None:
+    def __init__(self, workspace: Path, lease: LeaseIdentity, *, clock,
+                 expected_session_id: str | None = None,
+                 expected_reset_epoch: int | None = None) -> None:
         self.workspace = _safe(workspace)
         self.lease = lease
         self.identity = _identity(lease)
@@ -88,6 +90,8 @@ class ActCollectionResultStore:
         if not callable(clock):
             raise ValueError("RESULT_CLOCK_INVALID")
         self.clock = clock
+        self.expected_session_id = expected_session_id
+        self.expected_reset_epoch = expected_reset_epoch
         self.workspace.mkdir(parents=True, exist_ok=True)
         self.working = self.workspace / "working"
         self.working.mkdir(exist_ok=False)
@@ -100,6 +104,12 @@ class ActCollectionResultStore:
             episode = verify_episode_seal(episode_seal_path)
             if episode["attempt_id"] != self.lease.attempt_id:
                 raise ValueError("LEASE_IDENTITY_MISMATCH")
+            if (self.expected_session_id is not None
+                    and episode["session_id"] != self.expected_session_id):
+                raise ValueError("ACT_RESET_IDENTITY_MISMATCH")
+            if (self.expected_reset_epoch is not None
+                    and episode["reset_epoch"] != self.expected_reset_epoch):
+                raise ValueError("ACT_RESET_IDENTITY_MISMATCH")
             episode_sha256 = hashlib.sha256(_read_regular(episode_seal_path)).hexdigest()
         except (OSError, ValueError, TypeError) as error:
             raise ResultInfraError("RESULT_EPISODE_INVALID") from error
@@ -215,6 +225,80 @@ class ActCollectionResultStore:
                     and isinstance(current, (int, float)) and not isinstance(current, bool)
                     and math.isfinite(current) and completed <= current < deadline_monotonic_s)
         except (OSError, ValueError, TypeError, KeyError):
+            return False
+
+
+class ActCollectionResults:
+    """The static Worker result port, with one private store per terminal lease."""
+
+    _RESET_KEYS = frozenset({
+        "lease_identity", "session_id", "reset_epoch", "joint_positions",
+        "reset_completed_monotonic_s",
+    })
+
+    def __init__(self, worker_roots: Mapping[str, Path], *, clock) -> None:
+        if not callable(clock):
+            raise ValueError("RESULT_CLOCK_INVALID")
+        self.worker_roots = {name: _safe(Path(root)) for name, root in worker_roots.items()}
+        self.clock = clock
+        self._stores: dict[tuple, ActCollectionResultStore] = {}
+
+    @staticmethod
+    def _key(lease: LeaseIdentity) -> tuple:
+        identity = _identity(lease)
+        return tuple(identity[name] for name in _IDENTITY_KEYS)
+
+    def _store(self, lease: LeaseIdentity) -> ActCollectionResultStore:
+        try:
+            return self._stores[self._key(lease)]
+        except KeyError as error:
+            raise ValueError("ACT_WORKSPACE_NOT_RESERVED") from error
+
+    def reserve_workspace(self, lease: LeaseIdentity, reset_receipt: dict) -> bool:
+        key = self._key(lease)
+        if key in self._stores:
+            raise ValueError("ACT_WORKSPACE_ALREADY_RESERVED")
+        if not isinstance(reset_receipt, dict) or set(reset_receipt) != self._RESET_KEYS:
+            raise ValueError("ACT_RESET_RECEIPT_SCHEMA")
+        if reset_receipt["lease_identity"] != _identity(lease):
+            raise ValueError("ACT_RESET_IDENTITY_MISMATCH")
+        session = reset_receipt["session_id"]
+        epoch = reset_receipt["reset_epoch"]
+        if (not isinstance(session, str) or not session
+                or type(epoch) is not int or epoch < 0):
+            raise ValueError("ACT_RESET_IDENTITY_MISMATCH")
+        joints = reset_receipt["joint_positions"]
+        if (not isinstance(joints, (list, tuple)) or len(joints) != 7
+                or any(isinstance(value, bool) or not isinstance(value, (int, float))
+                       or not math.isfinite(value) for value in joints)):
+            raise ValueError("ACT_RESET_JOINTS_INVALID")
+        completed = reset_receipt["reset_completed_monotonic_s"]
+        if (isinstance(completed, bool) or not isinstance(completed, (int, float))
+                or not math.isfinite(completed)
+                or not lease.lease_issued_monotonic_s < completed < lease.lease_deadline_monotonic_s):
+            raise ValueError("ACT_RESET_TIME_INVALID")
+        if lease.worker_id not in self.worker_roots:
+            raise ValueError("ACT_WORKER_ROOT_UNKNOWN")
+        store = ActCollectionResultStore(
+            _workspace(self.worker_roots[lease.worker_id], lease), lease,
+            clock=self.clock, expected_session_id=session, expected_reset_epoch=epoch,
+        )
+        self._stores[key] = store
+        return True
+
+    def episode_root(self, lease: LeaseIdentity) -> Path:
+        return self._store(lease).episode_root
+
+    def seal_attempt(self, lease: LeaseIdentity, decision) -> str:
+        return self._store(lease).seal_attempt(lease, decision)
+
+    def write_recovery_receipt(self, lease: LeaseIdentity, **kwargs) -> Path:
+        return self._store(lease).write_recovery_receipt(lease, **kwargs)
+
+    def verify_recovery_receipt(self, location, lease: LeaseIdentity, **kwargs) -> bool:
+        try:
+            return self._store(lease).verify_recovery_receipt(location, lease, **kwargs)
+        except ValueError:
             return False
 
 
