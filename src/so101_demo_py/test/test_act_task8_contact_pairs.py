@@ -109,3 +109,60 @@ def test_receipt_tamper_is_refused(tmp_path):
     with pytest.raises(ValueError, match="TASK8_CONTACT_POLICY_INVALID"):
         Task8ContactPairs(model=model, scene_path=scene, proposal_path=proposal,
                           receipt_path=receipt, expected_fingerprint=fingerprint)
+
+
+def test_child_compiles_only_installed_act_scene_before_using_policy(tmp_path):
+    from so101_demo.adapters.act.task8_contact_pairs import load_installed_act_contact_pairs
+
+    expected_model, scene, proposal, receipt, fingerprint = artifacts(tmp_path)
+    model, pairs = load_installed_act_contact_pairs(
+        proposal_path=proposal, receipt_path=receipt, expected_fingerprint=fingerprint,
+    )
+    assert model_sha256(model) == model_sha256(expected_model)
+    assert pairs.scene_sha256 == hashlib.sha256(scene.read_bytes()).hexdigest()
+    assert pairs.for_phase("SEARCH") != pairs.for_phase("CLOSE")
+
+    wrong_root = tmp_path / "wrong-model"
+    wrong_root.mkdir()
+    _, _, wrong_proposal, wrong_receipt, wrong_fingerprint = artifacts(
+        wrong_root, change=lambda payload: payload.update(model_sha256="a" * 64),
+    )
+    with pytest.raises(ValueError, match="TASK8_CONTACT_POLICY_INVALID"):
+        load_installed_act_contact_pairs(
+            proposal_path=wrong_proposal, receipt_path=wrong_receipt,
+            expected_fingerprint=wrong_fingerprint,
+        )
+
+
+def test_act_child_retains_compiled_phase_pairs_before_ros_init(tmp_path, monkeypatch):
+    from so101_teleop.unified.act_artifacts import ActArtifactBinding
+    from so101_teleop.unified.ros_child import RclpyActionDriver
+
+    expected_model, _, proposal, receipt, fingerprint = artifacts(tmp_path)
+    names = ("source", "manifest", "runtime_config", "collection_config",
+             "calibration_report")
+    files = {}
+    for name in names:
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps({"artifact": name}))
+        files[name] = path
+    binding = ActArtifactBinding(
+        evidence_root=tmp_path,
+        paths=tuple((name, files[name]) for name in names)
+        + (("proposal", proposal), ("activation_receipt", receipt)),
+        hashes=tuple((name, hashlib.sha256(files[name].read_bytes()).hexdigest())
+                     for name in names),
+        policy_fingerprint=fingerprint,
+    )
+    for name, value in binding.environment().items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("SO101_ACT_CAMPAIGN_ID", "compiled-model-test")
+    monkeypatch.setenv("SO101_ACT_WORKER_ID", "w00")
+    monkeypatch.setenv("SO101_ACT_MANIFEST_SHA256", dict(binding.hashes)["manifest"])
+    monkeypatch.setenv("SO101_ACT_RUNTIME_CONFIG_SHA256", dict(binding.hashes)["runtime_config"])
+    monkeypatch.setenv("SO101_ACT_POLICY_FINGERPRINT", fingerprint)
+    monkeypatch.setattr(RclpyActionDriver, "_start_ros_broker", lambda self: object())
+
+    driver = RclpyActionDriver()
+    assert model_sha256(driver._act_model) == model_sha256(expected_model)
+    assert driver._act_contact_pairs.for_phase("SEARCH") != driver._act_contact_pairs.for_phase("CLOSE")
