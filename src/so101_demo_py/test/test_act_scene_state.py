@@ -87,6 +87,25 @@ def test_only_authorized_pending_paused_reset_is_buffered_until_atomic_reset_arm
     assert port.snapshot()['reset_epoch']==3 and port.snapshot()['simulation_step']==5
 
 
+@pytest.mark.parametrize('proof_valid', [True, False])
+def test_current_epoch_step_zero_scene_requires_reset_proof_after_scalar_arm(proof_valid):
+    port,now=observer();events=[];proofs=[]
+    def proof(value):
+        proofs.append((value['reset_epoch'],value['simulation_step'],value['paused']))
+        return proof_valid
+    ros=adapter(port,proof,events)
+    current=frame();current.update(paused=True,simulation_step=0,simulation_time_s=1.)
+    ros.accept_message(message(current))
+    assert proofs==[(2,0,True)]
+    if proof_valid:
+        assert not events and port.snapshot()['simulation_step']==0
+        ros.accept_message(message(frame()))
+        assert port.snapshot()['simulation_step']==5
+    else:
+        assert events==['SCENE_RESET_PROOF_INVALID']
+        with pytest.raises(ValueError,match='SCENE_RESET_PROOF_INVALID'):port.snapshot()
+
+
 @pytest.mark.parametrize('changes',[{}, {'model_sha256':'2'*64},{'simulation_step':1},{'paused':False}])
 def test_unproven_future_scene_or_invalid_reset_shape_is_stopped_once(changes):
     port,now=observer();assert port.accept(frame());events=[]
