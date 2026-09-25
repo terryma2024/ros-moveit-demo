@@ -117,3 +117,23 @@ class Task8ContactPairs:
             return self._pairs[phase]
         except (KeyError, TypeError) as error:
             raise ValueError("TASK8_CONTACT_PHASE_INVALID") from error
+
+
+def load_installed_act_contact_pairs(
+    *, proposal_path: Path, receipt_path: Path, expected_fingerprint: str,
+) -> tuple[mujoco.MjModel, Task8ContactPairs]:
+    """Compile the installed ACT scene and bind its exact activated geom pairs."""
+    from ament_index_python.packages import get_package_share_directory
+
+    try:
+        scene = Path(get_package_share_directory("so101_demo_py")) / "assets/mujoco/act/scene.xml"
+        if not scene.is_absolute() or not scene.is_file():
+            raise ValueError("installed ACT scene unavailable")
+        model = mujoco.MjModel.from_xml_path(str(scene))
+        pairs = Task8ContactPairs(
+            model=model, scene_path=scene, proposal_path=Path(proposal_path),
+            receipt_path=Path(receipt_path), expected_fingerprint=expected_fingerprint,
+        )
+        return model, pairs
+    except (OSError, ValueError, RuntimeError) as error:
+        raise ValueError("TASK8_CONTACT_POLICY_INVALID") from error

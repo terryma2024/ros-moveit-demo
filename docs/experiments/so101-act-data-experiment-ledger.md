@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: e227ee529480c52bfee7b931e6c6719ba94b3baa
+current_commit: 066e1ad258a609b5fdbbf8f0cbc4490bbd2a62b1
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -16,8 +16,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: CP-256
-next_experiment: EXP-257 compiled-model and physical Task 8 phase port composition
+latest_checkpoint: CP-257
+next_experiment: EXP-258 physical Task 8 port and common-step observer wiring
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1923,3 +1923,14 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 
 - Last valid experiment: EXP-256. Source, manifest, runtime/collection config, calibration report and activated policy identity are bound from admission into the child; post-admission hash drift stops child construction before ROS initialization.
 - Remaining gates: compile the installed ACT scene and verify model, version and phase-specific contact pairs in the child; then wire same-step world/scene/contact/RGB/controller and actual Task8Port, exact per-case stack/child lifecycle, measured Task6 preflight, Task8 live, W8 qualification and formal collection. `FULL_RESTART_PROOF_UNAVAILABLE` and `CALIBRATION_REQUIRED` remain enforced, Train/Val/Test 0/0/0.
+
+## EXP-257 — Child compiled-model and activated contact-pair gate
+
+- **PLANNED:** Source HEAD `066e1ad258a609b5fdbbf8f0cbc4490bbd2a62b1`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. Extend the child pre-ROS bootstrap from EXP-256: compile only the installed `so101_demo_py` ACT scene, verify MuJoCo version, scene bytes, compiled model hash and activated receipt via `Task8ContactPairs`, then retain the nine phase-specific geom sets for the physical port. Reject a synthetic wrong-model policy before ROS node creation. Test against the real installed model and current activated EXP-213 evidence read-only, then ordinary Demo and Teleop gates with fresh verified NVMe scratch. No ROS child or simulator launch; retain evidence, archive none, scratch trees deletion candidates only, delete nothing.
+
+- **VALID as a pre-ROS compiled-model gate:** `scratch/exp257-red.wE3qRyxP` exited1 on missing installed-scene loader; `scratch/exp257-green.xHkbPs48` passed5/5 after adding `load_installed_act_contact_pairs`. `scratch/exp257-red2.KIPNMlng` exited1 because the child retained no compiled model/pairs; `scratch/exp257-green2.7yrqrc9r` passed6/6 after the child loads and retains both before ROS broker/node creation. The loader uses only the installed `so101_demo_py` ACT scene and `Task8ContactPairs`; wrong compiled-model hash refuses. Read-only actual EXP-213 binding in `experiments/exp257-actual-policy-readback/result.json` exited0: MuJoCo3.12.0, model SHA256 `3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78`, scene SHA256 `4db48e35df9e91fc6868d303725badd0237fb10754d1e298637f5b0e1e55ed4f`, approved fingerprint `0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11`; phase-pair counts SEARCH/APPROACH13, CLOSE/MICRO_LIFT/RELEASE377, TRANSPORT/ALIGN364, RADIAL_RETREAT/FINAL_CHECK13. Two-package overlay build `scratch/exp257-demo-teleop-build.RvWtgxC8` exited0 in4 s. Demo ordinary eight-worker full `scratch/exp257-demo-full.9kwqknZK` exited0 in45 s, 4214 passed/162 skipped; package `scratch/exp257-demo-colcon.zy2D0QG5` exited0 in172 s, 4214 passed/162 skipped/12 benchmark deselected, `test-result --verbose` exit0. Teleop ordinary eight-worker full `scratch/exp257-teleop-full.B0YTchws` exited0 in73 s, 1166 passed/43 skipped; package `scratch/exp257-teleop-colcon.IjoyvACz` exited0 in298 s, 102/102 CTest passed, `test-result --verbose` exit0, aggregate5766 tests/0 errors/0 failures/205 skipped. Every test run used its own verified NVMe scratch; Teleop runs used a new short task-owned IPC root. Installed Demo module resolves through task overlay build symlink to current source and matches SHA256 `2dd81a2e6db7625ea04d8e5ae62ee635fa1a6937d62993ec283ee9a158345496`; installed/source Teleop `ros_child.py` both `708c6ce3dd2e5813938bfb095b36d0ffa727cfa7b63cb79ba8fb5fa37611e971`. `git diff --check` clean; no ACT stack/helper survivor. `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`; no ROS child, simulator motion, Task8 phase PASS, W8 or formal episode. Train/Val/Test 0/0/0. Retain all runs, archive none, scratch/short IPC roots deletion candidates only, delete nothing.
+
+## CP-257 — Activated geometry is bound before ROS init
+
+- Last valid experiment: EXP-257. The admitted child now refuses scene/model/version/receipt drift before creating a ROS node and holds exact nine-phase contact pairs for a future physical port.
+- Remaining gates: wire common-step world/scene/contact/RGB/controller and actual motion/Planning Scene methods into `Task8Port`; prove per-case full stack restart and cleanup, dynamically measure Task6 to `TASK8_READY`, then Task8 live, W8 and formal collection. `FULL_RESTART_PROOF_UNAVAILABLE` and `CALIBRATION_REQUIRED` remain enforced; Train/Val/Test 0/0/0.

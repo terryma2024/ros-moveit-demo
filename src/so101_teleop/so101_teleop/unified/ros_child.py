@@ -113,6 +113,8 @@ class RclpyActionDriver:
         self._act_hashes = (act_hashes if act_hashes is not None else
                             {key: os.environ.get(name) for key, name in _ACT_HASH_ENV.items()})
         self._act_artifacts = None
+        self._act_model = None
+        self._act_contact_pairs = None
         if os.environ.get("SO101_ACT_CAMPAIGN_ID"):
             from .act_artifacts import ActArtifactBinding
             self._act_artifacts = ActArtifactBinding.verify_environment(os.environ)
@@ -123,6 +125,14 @@ class RclpyActionDriver:
                 "contact_policy_fingerprint": self._act_artifacts.policy_fingerprint,
             }:
                 raise ValueError("ACT_ARTIFACT_BINDING_INVALID")
+            if self._broker is None:
+                from so101_demo.adapters.act.task8_contact_pairs import load_installed_act_contact_pairs
+                paths = dict(self._act_artifacts.paths)
+                self._act_model, self._act_contact_pairs = load_installed_act_contact_pairs(
+                    proposal_path=paths["proposal"],
+                    receipt_path=paths["activation_receipt"],
+                    expected_fingerprint=self._act_artifacts.policy_fingerprint,
+                )
         if self._broker is None and os.environ.get("SO101_ACT_CAMPAIGN_ID"):
             self._broker = self._start_ros_broker()
 
