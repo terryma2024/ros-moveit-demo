@@ -9,6 +9,7 @@ from so101_demo.act.contact_live_calibration import (
     build_live_sample, live_collector_sha256, select_live_window,
     select_session_window,
 )
+from so101_demo.act.contact_live_session import _await_final_stop
 
 
 def _frame(step, *, left=False, right=False, table=False, released=False,
@@ -71,6 +72,35 @@ def test_live_left_only_control_uses_measured_reset_transient():
             frames[1:], "left_only", first_motion_time=.02, final_pause_step=5)
 
 
+def test_live_final_stop_waits_for_three_fresh_readbacks(tmp_path, monkeypatch):
+    from so101_demo.act import contact_live_session
+    states = [False, False, True, True, True]
+
+    def status(socket, session_id, attempt_id):
+        return {"state": "IDLE", "stop_confirmed": states.pop(0),
+                "hazard_reason": None}
+
+    monkeypatch.setattr(contact_live_session, "_status", status)
+    monkeypatch.setattr(contact_live_session.time, "sleep", lambda seconds: None)
+    final = _await_final_stop(tmp_path, "unit-session")
+    assert final["stop_confirmed"] is True
+    assert not states
+    readbacks = json.loads((tmp_path / "broker-post-success-readbacks.json").read_bytes())
+    assert [row["stop_confirmed"] for row in readbacks] == [False, False, True, True, True]
+
+
+def test_live_final_stop_refuses_hazard_and_retains_readback(tmp_path, monkeypatch):
+    from so101_demo.act import contact_live_session
+    monkeypatch.setattr(contact_live_session, "_status", lambda *args: {
+        "state": "STOPPING", "stop_confirmed": False,
+        "hazard_reason": "CONTROLLER_UNRESPONSIVE",
+    })
+    with pytest.raises(RuntimeError, match="final broker hazard"):
+        _await_final_stop(tmp_path, "unit-session")
+    records = json.loads((tmp_path / "broker-post-success-readbacks.json").read_bytes())
+    assert len(records) == 1 and records[0]["hazard_reason"] == "CONTROLLER_UNRESPONSIVE"
+
+
 def test_live_sample_requires_completed_pair_stop_and_lossless_physics(tmp_path):
     from so101_demo.act.contact_diagnostic import build_contact_diagnostic_manifest
     from so101_demo.act.contact_live_session import EVIDENCE_PLUGIN_SHA256
@@ -114,6 +144,8 @@ def test_live_sample_requires_completed_pair_stop_and_lossless_physics(tmp_path)
     (run / "prefix-result.json").write_text(json.dumps(result))
     (run / "broker-post-success.json").write_text(json.dumps(
         {"state": "IDLE", "stop_confirmed": True, "hazard_reason": None}))
+    (run / "broker-post-success-readbacks.json").write_text(json.dumps(
+        [{"state": "IDLE", "stop_confirmed": True, "hazard_reason": None}] * 3))
     (run / "plugin-sha256.txt").write_text(EVIDENCE_PLUGIN_SHA256 + "\n")
     (run / "ipc/contact-diagnostic-guard-rejections.jsonl").write_text("")
     rows = []
