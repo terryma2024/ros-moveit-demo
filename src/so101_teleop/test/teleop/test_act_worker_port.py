@@ -150,6 +150,26 @@ def test_worker_port_binds_task8_packet_and_rejects_foreign_reply():
         asyncio.run(port.task8(request))
 
 
+def test_worker_port_can_cancel_after_campaign_deadline_with_fresh_bounded_stop_deadline():
+    client = _Client()
+    expired = replace(_context(), deadline_monotonic_s=time.monotonic() - 1)
+    port = ActWorkerPort(expired, _launch(), client)
+    request = {
+        "session_id": "session-w00", "attempt_id": "attempt-1", "reason": "deadline expired",
+        "deadline_ns": time.monotonic_ns() + 1_000_000_000,
+    }
+    assert asyncio.run(port.cancel(request)) == {"status": "ACCEPTED"}
+    sent = client.packets[-1]
+    assert sent.operation == "cancel"
+    assert sent.token.operation_id == expired.operation_id
+    assert sent.execution_generation == expired.execution_generation
+    assert sent.payload == {"reason": "deadline expired"}
+    with pytest.raises(MutationError, match="ACT_WORKER_DEADLINE_INVALID"):
+        asyncio.run(port.cancel({**request, "deadline_ns": time.monotonic_ns() - 1}))
+    with pytest.raises(MutationError, match="ACT_WORKER_DEADLINE_INVALID"):
+        asyncio.run(port.cancel({**request, "deadline_ns": time.monotonic_ns() + 31_000_000_000}))
+
+
 def test_bridge_launch_derives_distinct_worker_runtime_environment(tmp_path):
     base = BridgeLaunch(
         ros_python=__import__("pathlib").Path(sys.executable), install_prefix=tmp_path,

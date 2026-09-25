@@ -193,7 +193,7 @@ class ActWorkerPort:
         self.launch = launch
         self.client = client
 
-    def _base(self, request: dict, *, fields: frozenset[str]) -> tuple[str, str, int]:
+    def _base(self, request: dict, *, fields: frozenset[str], cancel: bool = False) -> tuple[str, str, int]:
         if not isinstance(request, dict) or set(request) != fields:
             raise MutationError("ACT_WORKER_REQUEST_SCHEMA")
         session_id = request["session_id"]
@@ -201,7 +201,11 @@ class ActWorkerPort:
         deadline_ns = request["deadline_ns"]
         if session_id != self.launch.mujoco_session_id or not isinstance(attempt_id, str) or not attempt_id:
             raise MutationError("ACT_WORKER_SESSION_MISMATCH")
-        if type(deadline_ns) is not int or not time.monotonic_ns() < deadline_ns <= int(self.context.deadline_monotonic_s * 1e9):
+        now_ns = time.monotonic_ns()
+        # A safety stop remains available after the business deadline. Its own
+        # short deadline is bounded by the ROS driver's maximum stop window.
+        latest_ns = now_ns + 30_000_000_000 if cancel else int(self.context.deadline_monotonic_s * 1e9)
+        if type(deadline_ns) is not int or not now_ns < deadline_ns <= latest_ns:
             raise MutationError("ACT_WORKER_DEADLINE_INVALID")
         return session_id, attempt_id, deadline_ns
 
@@ -301,6 +305,7 @@ class ActWorkerPort:
     async def cancel(self, request: dict) -> dict:
         session_id, attempt_id, deadline_ns = self._base(
             request, fields=frozenset({"session_id", "attempt_id", "reason", "deadline_ns"}),
+            cancel=True,
         )
         return await self._call(
             "cancel", session_id=session_id, attempt_id=attempt_id,
