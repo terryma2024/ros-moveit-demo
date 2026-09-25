@@ -113,14 +113,18 @@ class MujocoWorldObserver:
         max_age_s: float = 0.2,
         topic: str = "/so101/simulation/evidence",
         monotonic: Callable[[], float] = time.monotonic,
+        on_hazard: Callable[[str], None] | None = None,
     ) -> None:
         if not simulation_session_id:
             raise ValueError("simulation_session_id must be non-empty")
         if not math.isfinite(max_age_s) or max_age_s <= 0.0:
             raise ValueError("max_age_s must be finite and positive")
+        if on_hazard is not None and not callable(on_hazard):
+            raise ValueError("on_hazard must be callable")
         self._session_id = simulation_session_id
         self._max_age_s = max_age_s
         self._monotonic = monotonic
+        self._on_hazard = on_hazard
         self._lock = threading.Lock()
         self._latest: SimulationEvidence | None = None
         self._received_at_s: float | None = None
@@ -137,6 +141,7 @@ class MujocoWorldObserver:
         received_at_s = self._monotonic()
         with self._lock:
             self._callback_count += 1
+            previous_hazard = self._strict_hazard
         try:
             self.accept(message, received_at_s=received_at_s)
         except EvidenceRejected as error:
@@ -144,6 +149,10 @@ class MujocoWorldObserver:
                 self._rejected_count += 1
                 self._last_rejection = str(error)
                 self._strict_hazard = str(error)
+        with self._lock:
+            current_hazard = self._strict_hazard
+        if current_hazard is not None and current_hazard != previous_hazard and self._on_hazard is not None:
+            self._on_hazard(current_hazard)
 
     @property
     def callback_count(self) -> int:
