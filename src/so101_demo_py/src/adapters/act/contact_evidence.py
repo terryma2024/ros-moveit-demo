@@ -1,5 +1,6 @@
 """Whole-robot contact evidence is audit input, never a policy observation."""
 
+import copy
 import math
 import time
 import threading
@@ -95,6 +96,15 @@ class RobotContactObserver:
             if self.hazard or self.last is None or self.received is None:return False
             now=finite(self.monotonic(),nonnegative=True)
             return 0<=now-self.received<=self.max_age
+
+    def snapshot(self):
+        """Return one immutable-in-effect frame from the current safe epoch."""
+        with self._lock:
+            if self.hazard:raise ValueError(self.hazard)
+            if self.last is None or self.received is None:raise ValueError('CONTACT_UNAVAILABLE')
+            now=finite(self.monotonic(),nonnegative=True)
+            if not 0<=now-self.received<=self.max_age:raise ValueError('CONTACT_STALE')
+            return copy.deepcopy(self.last)
 
 
 class RosRobotContactAdapter:
