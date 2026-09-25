@@ -165,7 +165,8 @@ def test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8(tmp
             seen.append(("sources", kwargs))
 
     class Dispatcher:
-        def __init__(self, sources, broker, cancelled):
+        def __init__(self, sources, broker, cancelled, *, command_broker):
+            assert command_broker.driver is broker
             seen.append("dispatcher")
 
         def start(self):

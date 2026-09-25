@@ -206,6 +206,7 @@ class RclpyActionDriver:
             )
             self._act_hazard_dispatcher = Task8HazardDispatcher(
                 self._act_sources, broker, self._act_cancelled,
+                command_broker=self._act_command_broker,
             )
             self._executor = SingleThreadedExecutor()
             self._executor.add_node(self._node)
