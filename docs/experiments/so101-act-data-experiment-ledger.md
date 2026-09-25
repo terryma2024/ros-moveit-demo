@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 9e3e584d325cd5fc67f290602489d2c523909b3a
+current_commit: 92245d11d14a5cb6f0628ab73cdfd7409683b305
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -19,8 +19,8 @@ disproven_routes:
 open_hypotheses:
   - An owner-created readiness artifact and startup receipt can bind this observed seven-axis verdict to a Task8 case without opening the Task6 or phase gates.
   - The physical phase port can support measured Task6 TASK8_READY and Task8 live qualification.
-latest_checkpoint: CP-292
-next_experiment: EXP-293 fresh-domain no-motion owner lifecycle recheck
+latest_checkpoint: CP-293
+next_experiment: EXP-294 one-use startup proof consumption before child reset
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -2312,3 +2312,13 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-292 — Exact kernel owner fingerprint and isolated PGID are installed
 
 - Last valid experiment: EXP-292. The shebang identity mismatch and pre-setsid PGID capture are corrected under source, package and installed gates; the actual ACT owner lifecycle still needs a new isolated recheck. The failed EXP-291 group has been retired with independent stop evidence, empty group and domain225 graph. Next use a new domain/session to run one headless no-motion owner start/stop and read back cleanup receipt and empty graph. Keep Task6 and Task8 production fences and accepted 0/0/0. Retain registered root/all runs, archive none; scratch/IPC roots deletion candidates only, delete nothing.
+
+## EXP-293 — Recheck the installed no-motion owner lifecycle in a fresh domain
+
+- **PLANNED:** Frozen source HEAD `92245d11d14a5cb6f0628ab73cdfd7409683b305`, submodule `54463fce3bfa6192976e74113f5ed7152f708a3f`, registered root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`, exact overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, runtime launch `/opt/ros/jazzy/bin/ros2`, installed observer `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i/so101_demo_py/lib/so101_demo_py/act_stack_ready`, runner `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID=224`, `GZ_PARTITION=act-task8-224-campaign-exp293`, session `session-exp293`, lifecycle `ISOLATED_STACK`, headless, no admitted child, broker, motion target, reset or Task8 phase. Preflight found no SO-101 stack, domain224 graph empty and `diagnostics/exp293-owner-001` unused; exact executables and overlay exist. Relative to EXP-291 change only the verified kernel command fingerprint and pre-setsid isolated PGID gate. Run installed factory and owner once, preserve launch/startup/stop/cleanup identity and result, then fresh process and graph readback. A true cleanup receipt with physical stop and graph clear is a diagnostic success, not Task8 phase PASS, FULL_RESTART, W8 or collection. Any failed or uncertain retirement retains the owner fence for exact recovery. Task6 `CALIBRATION_REQUIRED`, `FULL_RESTART_PROOF_UNAVAILABLE`, `ACT_TASK8_PORT_NOT_PROVISIONED`; accepted Train/Val/Test 0/0/0. Retain evidence, archive none, delete nothing.
+
+- **VALID as an installed no-motion owner lifecycle, not an admitted Task8 case:** `diagnostics/exp293-owner-001` retains the fresh domain/session, exact launch argv, installed import and source/install bridge SHA256, owner PID1962004/PGID1962004/start ticks45624624, startup raw artifact, launch log, stop attempt, owner result and fsynced cleanup receipt. Wrapper exited0 in10 s. Startup observer returned all seven exact-session/domain checks true; the first owner stop attempt returned `RETIRED`. Cleanup receipt binds the same PID/PGID/start/kernel argv hash and session/domain, with `physical_stop_confirmed=true`, `group_clear=true`, `graph_clear=true`, `term_sent=true`, `kill_sent=false`. A fresh domain224 `ros2 node list --no-daemon` exited0 with zero bytes and no SO-101 process remained. No child was admitted or phase/reset/motion requested, so this does not satisfy Task6 `TASK8_READY`, Task8 phase PASS or FULL_RESTART, W8 or formal data. Retain run and registered root, archive none, delete nothing.
+
+## CP-293 — Installed stack owner starts and retires cleanly without motion
+
+- Last valid experiment: EXP-293. The exact installed stack factory and owner produce a seven-axis startup artifact and a physical-stop/group/graph-clear retirement receipt on a fresh isolated no-motion ACT stack. Next bind the one-use startup proof consumer to the child reset boundary with exact admitted owner identities and a replay-rejection test; only afterward consider a real admitted Task8 case. Preserve `FULL_RESTART_PROOF_UNAVAILABLE`, `ACT_TASK8_PORT_NOT_PROVISIONED`, `CALIBRATION_REQUIRED`; accepted Train/Val/Test 0/0/0. Retain registered root/all runs, archive none; scratch/IPC roots deletion candidates only, delete nothing.
