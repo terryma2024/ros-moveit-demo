@@ -115,6 +115,10 @@ class RosSceneStateAdapter:
                     # Exactly two frames: immutable reset proof and latest
                     # complete state. Neither is usable before scalar reset arm.
                     self._pending=(first,copy.deepcopy(frame))
+                elif (self.observer.epoch is None and frame['paused']
+                        and frame['simulation_step']==0 and self.pending_reset_port is not None
+                        and self.pending_reset_port(frame) is True):
+                    self._pending=(copy.deepcopy(frame),copy.deepcopy(frame))
                 elif (self.observer.epoch is not None
                         and identity==(self.observer.session,self.observer.epoch+1)
                         and frame['paused'] and frame['simulation_step']==0
