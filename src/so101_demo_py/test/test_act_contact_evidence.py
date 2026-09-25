@@ -52,6 +52,49 @@ def test_wall_freshness_and_backwards_clock_fail_closed():
     now[0]=9.9;assert not port.safe()
 
 
+def test_replacing_contact_pairs_uses_only_new_set_and_rechecks_latest_frame():
+    port=observer([10.])
+    port.reset('s',1,source_floor_s=0.)
+    arm_table=('arm','table')
+    port.replace_allowed_pairs({arm_table})
+    port.accept(frame(geom_a=['arm'],geom_b=['table'],signed_distance_m=[-.001],normal_force_n=[2.]))
+    assert port.safe()
+    port.replace_allowed_pairs(set())
+    assert port.allowed==frozenset() and port.hazard=='ROBOT_CONTACT_HAZARD'
+    port.replace_allowed_pairs({arm_table})
+    assert not port.safe() and port.hazard=='ROBOT_CONTACT_HAZARD'
+
+
+def test_invalid_contact_pair_replacement_preserves_current_policy():
+    port=observer([10.])
+    allowed={('arm','table')}
+    port.replace_allowed_pairs(allowed)
+    for invalid in ({('arm','unknown')},{('table','arm')},{(1,'arm')},[('arm','table')]):
+        with pytest.raises(ValueError,match='CONTACT_CONFIG_INVALID'):
+            port.replace_allowed_pairs(invalid)
+        assert port.allowed==frozenset(allowed)
+    port.reset('s',1,source_floor_s=0.)
+    port.accept(frame(geom_a=['arm'],geom_b=['table'],signed_distance_m=[-.001],normal_force_n=[2.]))
+    assert port.safe()
+
+
+def test_ros_phase_contact_transition_stops_before_next_physics_frame():
+    from so101_demo.adapters.act.contact_evidence import RosRobotContactAdapter
+    from so101_mujoco_support.msg import RobotContactEvidence
+    from types import SimpleNamespace
+    hazards=[]
+    port=observer([10.])
+    adapter=RosRobotContactAdapter(SimpleNamespace(create_subscription=lambda *args:None),
+        port,on_hazard=hazards.append)
+    adapter.arm(SimpleNamespace(simulation_session_id='s',reset_epoch=1,simulation_time_s=0.,paused=True,simulation_step=0))
+    adapter.replace_allowed_pairs({('arm','table')})
+    adapter.accept_message(RobotContactEvidence(**frame(geom_a=['arm'],geom_b=['table'],
+        signed_distance_m=[-.001],normal_force_n=[2.])))
+    assert port.safe() and hazards==[]
+    adapter.replace_allowed_pairs(set())
+    assert hazards==['ROBOT_CONTACT_HAZARD'] and not port.safe()
+
+
 def test_ros_contact_adapter_stops_once_and_revokes_permits_for_real_non_cup_frame():
     from so101_demo.adapters.act.contact_evidence import RosRobotContactAdapter
     from so101_mujoco_support.msg import RobotContactEvidence

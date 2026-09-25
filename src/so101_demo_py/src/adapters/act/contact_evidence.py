@@ -41,6 +41,25 @@ class RobotContactObserver:
         if self.max_age<=0 or self.max_gap<=0:raise ValueError('CONTACT_CONFIG_INVALID')
         self.monotonic=monotonic;self.session=None;self.epoch=None;self.last=None;self.received=None;self.hazard=None
 
+    def replace_allowed_pairs(self, pairs):
+        """Atomically replace the active phase policy and recheck the last frame.
+
+        A contact rejected under either policy stays hazardous until a new reset
+        epoch; broadening the next phase cannot retroactively accept it.
+        """
+        if not isinstance(pairs,(set,frozenset)):
+            raise ValueError('CONTACT_CONFIG_INVALID')
+        checked=frozenset(pairs)
+        for pair in checked:
+            if (not isinstance(pair,tuple) or len(pair)!=2
+                    or any(not isinstance(name,str) or name not in self.known for name in pair)
+                    or tuple(sorted(pair))!=pair):
+                raise ValueError('CONTACT_CONFIG_INVALID')
+        with self._lock:
+            self.allowed=checked
+            if self.last is not None and contact_hazard(self.last,checked):
+                self.hazard=self.hazard or 'ROBOT_CONTACT_HAZARD'
+
     def reset(self,session_id,reset_epoch,*,source_floor_s):
         with self._lock:
             identifier(session_id);integer(reset_epoch);floor=finite(source_floor_s,nonnegative=True)
@@ -90,6 +109,11 @@ class RosRobotContactAdapter:
         self._armed=False;self._stopped=False;self.rejections=deque(maxlen=32)
         self.subscription=node.create_subscription(RobotContactEvidence,'/so101/simulation/robot_contacts',
             self.accept_message,QoSProfile(depth=10000,reliability=ReliabilityPolicy.RELIABLE))
+
+    def replace_allowed_pairs(self, pairs):
+        with self._lock:
+            self.observer.replace_allowed_pairs(pairs)
+            self._stop_if_hazard()
 
     def arm(self,reset_snapshot):
         if reset_snapshot.paused is not True or reset_snapshot.simulation_step!=0:

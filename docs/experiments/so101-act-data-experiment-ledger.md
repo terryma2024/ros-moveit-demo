@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: d371bc1671dd812fdbbec476d516763edbce64c4
+current_commit: 2a0e2849bf269e769ef2109d235b93ff38040294
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -16,8 +16,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: CP-247
-next_experiment: EXP-248 per-case full-stack lifecycle owner and physical readback design
+latest_checkpoint: CP-248
+next_experiment: EXP-249 child physical readback and exact lifecycle ownership
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1824,3 +1824,14 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 
 - Last valid experiment: EXP-247. The installed Task8 CLI and campaign fail closed until each frozen case has a fresh complete simulator/ROS stack and independent clean-retirement receipt. Previous single-child case journal logic cannot qualify `FULL_RESTART`.
 - Remaining gates: implement the per-case stack owner and production physical Task8 phase port, measure all five current-source Task6 checks to `TASK8_READY`, then run nine prefixes and five full cases with actual readbacks. W8 qualification and exact-W8 formal collection remain unstarted; Train/Val/Test 0/0/0.
+
+## EXP-248 — Atomic phase contact transitions
+
+- **PLANNED:** Source HEAD `2a0e2849bf269e769ef2109d235b93ff38040294`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. Add a single atomic allowed-contact replacement at the existing lossless `RobotContactObserver`: only pairs in the compiled model's known-geom set, no union across phases, immediate re-evaluation of the latest frame, and no clearing of a latched hazard. An invalid pair must leave the old policy intact. This is a physical Task8Port prerequisite, not a phase PASS or live authorization. TDD then targeted/full ordinary Demo and package gates with new verified NVMe scratch. Retain all registered evidence, archive none, scratch deletion candidates only, delete nothing.
+
+- **VALID as a contact safety primitive:** Intended RED `scratch/exp248-red.I3Q6HK46` exited1 at the missing observer transition (2 failed/19 deselected). A second malformed-pair RED `scratch/exp248-malformed-red.nQgjFOle` exited1 at an uncaught mixed-type sort; adapter RED `scratch/exp248-adapter-red.rkCgWf68` exited1 at the missing immediate stop path. Final targeted `scratch/exp248-green2.y7VBUMXy` passed22/22; an intermediate `scratch/exp248-green.Uz25fTGT` passed21/21 before the adapter test. The observer now atomically replaces its allowed set, rejects unknown or malformed pairs without changing it, checks the latest accepted frame against the new set, and never clears an existing hazard; the ROS adapter dispatches its existing stop callback immediately after a hazardous transition, before another physics frame. Ordinary Demo Python eight-worker `scratch/exp248-python-full.aLWTr0ja` exited0 in43 s, 4185 passed/162 skipped. Overlay build `scratch/exp248-demo-build.kpAPBWwy` exited0 in3 s. Package `scratch/exp248-demo-colcon.OUL0cF7b` used the exact task Python and fresh proved NVMe tmp, exited0 in166 s, 4185 passed/162 skipped/12 deselected; `test-result --verbose` exited0, aggregate 5721 tests/0 errors/0 failures/205 skipped. Installed observer resolves to this source tree, SHA256 `a88dca027cf7a418d5965c35513ac99484a3b08bc66b5340b9c278e2479c906b`; `git diff --check` clean. No ROS stack or live motion; Task8/W8/formal remain unstarted and Train/Val/Test 0/0/0. Retain all registered evidence, archive none, scratch trees deletion candidates only, delete nothing.
+
+## CP-248 — Contact policy transition boundary
+
+- Last valid experiment: EXP-248. The whole-robot contact adapter can narrow a phase policy without accepting prior or current disallowed contact and can trigger its existing stop callback immediately.
+- Remaining gates: source-backed phase-specific policy configuration, production child physical readback and command port, actual per-case complete stack start/retirement, five measured Task6 checks, then Task8 live and W8/formal dependencies. None is satisfied by this primitive alone.
