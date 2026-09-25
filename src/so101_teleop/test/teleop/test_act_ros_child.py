@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import threading
 import time
 from types import SimpleNamespace
 
@@ -253,3 +254,132 @@ def test_ros_action_driver_requests_stop_when_send_result_is_unknown():
     with pytest.raises(MutationError, match="ROS_GOAL_SEND_UNKNOWN"):
         asyncio.run(driver.submit(token, goal_uuid))
     assert broker.stop_reasons == ["ROS_GOAL_SEND_UNKNOWN"]
+
+
+def test_act_task8_child_refuses_missing_phase_port_before_motion():
+    driver = RclpyActionDriver(broker=object())
+    with pytest.raises(MutationError, match="ACT_TASK8_PORT_NOT_PROVISIONED"):
+        asyncio.run(driver.task8_phase(request()))
+
+
+def test_act_task8_child_routes_closed_hashes_to_runner_and_confirms_stop():
+    class Broker:
+        def __init__(self):
+            self.reasons = []
+
+        def stop_all(self, reason):
+            self.reasons.append(reason)
+
+        def refresh_stop(self):
+            pass
+
+        def stopped(self):
+            return True
+
+    class Port:
+        def __init__(self):
+            self.phases = []
+            self.stops = []
+
+        def begin(self, req):
+            return {"session_id": req["session_id"], "attempt_id": req["attempt_id"],
+                    "reset_epoch": 1, "release_epoch": 0, "full_restart": True}
+
+        def run_phase(self, phase, req):
+            self.phases.append(phase)
+            return {
+                "phase": phase, "session_id": req["session_id"], "attempt_id": req["attempt_id"],
+                "reset_epoch": 1, "release_epoch": 0,
+                "planning_ok": True, "controller_reference_ok": True,
+                "joint_feedback_ok": True, "contact_ok": True, "mujoco_ok": True,
+                "planning_scene_ok": True, "head_rgb_ok": True, "wrist_rgb_ok": True,
+                "manual_intervention": False, "moveit_recovery": False,
+                "holding_state": "EMPTY", "bilateral_contact": phase == "CLOSE",
+                "micro_lift_confirmed": False, "cup_off_table": False,
+                "cup_supported": True, "released": False,
+                "no_fingertip_contact": True, "placement_stable": False, "retreat_stable": False,
+            }
+
+        def safe_stop(self, reason, req):
+            self.stops.append(reason)
+            return True
+
+    broker, port = Broker(), Port()
+    driver = RclpyActionDriver(
+        broker=broker, task8_port=port,
+        act_hashes={"manifest_sha256": "a" * 64, "runtime_config_sha256": "b" * 64,
+                    "contact_policy_fingerprint": "c" * 64},
+    )
+    child_request = request()
+    with pytest.raises(MutationError, match="ACT_TASK8_HASH_MISMATCH"):
+        bad = child_request.model_copy(update={"payload": {**child_request.payload,
+            "contact_policy_fingerprint": "d" * 64}})
+        asyncio.run(driver.task8_phase(bad))
+    assert port.phases == []
+    # Prefix through CLOSE needs only three phases, then a physical stop.
+    close_request = child_request.model_copy(update={"payload": {**child_request.payload,
+        "stop_after": "CLOSE"}})
+    result = asyncio.run(driver.task8_phase(close_request))
+    assert result["completed_phases"] == ["SEARCH", "APPROACH", "CLOSE"]
+    assert result["formal_episode_eligible"] is False
+    assert port.stops == ["PHASE_PREFIX_COMPLETE"]
+    assert broker.reasons == ["TASK8_COMPLETED"]
+    assert asyncio.run(driver.cancel_act(request(operation="cancel"))) == {
+        "stopped_confirmed": True, "reason": "operator"}
+
+
+def test_act_cancel_interrupts_next_phase_while_runner_thread_is_busy():
+    entered, release = threading.Event(), threading.Event()
+
+    class Broker:
+        def __init__(self):
+            self.reasons = []
+
+        def stop_all(self, reason):
+            self.reasons.append(reason)
+
+        def refresh_stop(self):
+            pass
+
+        def stopped(self):
+            return True
+
+    class BlockingPort:
+        def __init__(self):
+            self.phases = []
+            self.stops = []
+
+        def begin(self, req):
+            return {"session_id": req["session_id"], "attempt_id": req["attempt_id"],
+                    "reset_epoch": 1, "release_epoch": 0, "full_restart": True}
+
+        def run_phase(self, phase, req):
+            self.phases.append(phase)
+            entered.set()
+            assert release.wait(2)
+            return {}
+
+        def safe_stop(self, reason, req):
+            self.stops.append(reason)
+            return True
+
+    broker, port = Broker(), BlockingPort()
+    driver = RclpyActionDriver(
+        broker=broker, task8_port=port,
+        act_hashes={"manifest_sha256": "a" * 64, "runtime_config_sha256": "b" * 64,
+                    "contact_policy_fingerprint": "c" * 64},
+    )
+
+    async def run():
+        pending = asyncio.create_task(driver.task8_phase(request()))
+        assert await asyncio.to_thread(entered.wait, 1)
+        canceled = await driver.cancel_act(request(operation="cancel"))
+        release.set()
+        with pytest.raises(MutationError, match="ACT_TASK8_FAILED"):
+            await pending
+        return canceled
+
+    assert asyncio.run(run())["stopped_confirmed"] is True
+    assert port.phases == ["SEARCH"]
+    assert port.stops == ["TASK8_ABORT"]
+    assert broker.reasons == ["operator", "TASK8_FAILED"]

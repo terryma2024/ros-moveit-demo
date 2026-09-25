@@ -195,6 +195,9 @@ def test_campaign_owner_starts_exactly_eight_isolated_children_and_cleans_up(tmp
     assert {port.launch.mujoco_session_id for port in ports} == {f"session-w{index:02d}" for index in range(8)}
     assert all(item.environment["SO101_CHILD_SERVICE_EPOCH"] == "epoch-1" for item in started)
     assert all(item.environment["CUDA_VISIBLE_DEVICES"] == "GPU-physical-a" for item in started)
+    assert all(item.environment["SO101_ACT_MANIFEST_SHA256"] == "a" * 64 for item in started)
+    assert all(item.environment["SO101_ACT_RUNTIME_CONFIG_SHA256"] == "b" * 64 for item in started)
+    assert all(item.environment["SO101_ACT_POLICY_FINGERPRINT"] == "d" * 64 for item in started)
     assert len({item.environment["SO101_CHILD_SERVICE_TOKEN"] for item in started}) == 8
     asyncio.run(manager.stop_owned())
     assert len(stopped) == 8
