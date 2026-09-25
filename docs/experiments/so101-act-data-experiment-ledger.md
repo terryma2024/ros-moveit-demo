@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: c20809044cb35160efaf3359fa755f97e4c94217
+current_commit: 3fdb2e463c31b6c9aac75da3a367d3fb5af0c8c2
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -16,8 +16,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: CP-242
-next_experiment: EXP-243 Task 8 physical phase port and measured preflight
+latest_checkpoint: CP-244
+next_experiment: EXP-245 Task 8 live case orchestration contract
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1791,3 +1791,14 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 - Confirmed: activated contact fingerprint retained; current source/installed Task8 manifest admission passes complete Teleop gates; three static anchors lock and nine paired RGB samples are lossless with at most 8 ms observed joint skew; partial camera report is explicitly `CALIBRATION_REQUIRED`.
 - Disproven: EXP-237 static head search and EXP-232 single-route offline FOV can establish all five live Task6 checks; old `run_live_workflow` contact policy is a safe drop-in for the new ACT fingerprint.
 - Worktree before ledger commit: this ledger only; no task-owned live process. Preserved attached `act-data-rebase-20260924` tmux. Next exact source boundary is a physical Task8 phase port inside the admitted ROS child, with genuine MoveIt/controller/MuJoCo/contact/RGB/Planning Scene readbacks. No Task8 live or formal collection until five current-source checks pass.
+
+## EXP-245 — Task 8 live case orchestration
+
+- **PLANNED:** Source HEAD `3fdb2e463c31b6c9aac75da3a367d3fb5af0c8c2`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. Add the missing source-level owner sequence from the closed Task 8 manifest to one typed Worker: nine ordered phase prefixes, then five consecutive full restarts. Validate the manifest file against admitted context hash and policy/config identities, bind each case to a distinct attempt and the admitted session, require exact stopped result and phase sequence, fsync case outcomes into a new exclusive journal, and stop on any uncertain outcome. Write intended RED tests before implementation and run targeted/full ordinary Python plus package gates under fresh verified NVMe scratch. This does not provision a physical phase port or authorize live motion. Retain all evidence, archive none, scratch deletion candidates only, delete nothing.
+
+- **VALID as source/install orchestration contract:** First targeted `scratch/exp245-red.Ktqn7eph` exited2 at import because the wrapper set zsh nounset before sourcing ROS, leaving the task overlay unavailable; this was bootstrap error, not RED. Corrected targeted `scratch/exp245-red2.pbFjydvO` exited2 at the intended missing `so101_demo.act.task8_live_campaign` module. Five new cases cover exact nine-prefix/five-full order, unique attempts and admitted session/policy, malformed phase result with cancel and no next case, file-hash drift and existing journal before Worker call, policy binding drift, and uncertain cancel retained as `INDETERMINATE`. Targeted final `scratch/exp245-green2.qnf0ZZmf` passed23/23; initial three-case GREEN `scratch/exp245-green.mPGVTycA` passed3/3. Full ordinary `scratch/exp245-python-full.9bbe9GOk` used eight workers and fresh verified NVMe tmp, exit0, 4180 passed/162 skipped in42.43 s. Overlay build `scratch/exp245-demo-build.fk8q8pLL` exit0. First package `scratch/exp245-demo-colcon.Ts83OtbJ` exited2 before collection because `/usr/bin/colcon` invoked `/usr/bin/python3` without MuJoCo; second `scratch/exp245-demo-colcon2.ISx0QUh8` used the task Python but missed repository-root `tools` on colcon's package working directory. Both are retained environment errors, not source RED. Corrected `scratch/exp245-demo-colcon3.u9P9ybsQ` invoked `/usr/bin/colcon` with exact task Python, verified that Python's `tempfile.gettempdir()` was its new NVMe scratch and imported MuJoCo 3.12.0 and `tools.so101_pytest_gate` before launch; package test exit0 in166 s with 4180 passed/162 skipped/12 deselected (benchmark excluded), and `test-result --verbose` exit0, aggregate5716/0 errors/0 failures/205 skipped. Installed module resolves to this worktree, SHA256 both `d83162b5936ec596df06675ce449293aa06c1e09cc54e7cda9e0fe839673e86d`; `git diff --check` clean. `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`; no ROS stack, physical Task8Port, live case or formal episode, Train/Val/Test 0/0/0. Retain all run logs/XML and previously registered evidence, archive none, scratch deletion candidates only, delete nothing.
+
+## CP-245 — Frozen Task 8 owner sequence
+
+- Last valid experiment: EXP-245. Case scheduling now consumes only a hash-bound admitted manifest and writes an exclusive fsynced per-case journal; any wrong result or uncertain cancellation stops before the next case.
+- Remaining gates: no production physical phase port, Task 6 five-check `TASK8_READY`, Task 8 CLI/service composition, W8 verifier or formal collection. No live action is authorized by this source contract alone. Next source boundary: provision the physical Task8Port in the admitted ROS child with actual controller/scene/contact/RGB readback, then measure Task 6 dynamically before a live case.
