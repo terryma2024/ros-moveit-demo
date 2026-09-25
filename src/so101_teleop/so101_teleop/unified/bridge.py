@@ -37,7 +37,6 @@ from ..process_identity import (
     ProcessAbsent,
     ProcessIdentityError,
     argv_matches,
-    command_fingerprint,
     group_members,
     read_identity,
 )
@@ -472,11 +471,13 @@ def identity_for(pid: int, argv: list[str], environment: dict[str, str]) -> Owne
         raise MutationError(f"PROCESS_IDENTITY_UNREADABLE: {pid}") from error
     if not argv_matches(identity, argv):
         raise MutationError(f"PROCESS_ARGV_MISMATCH: pid {pid} is not running the launch argv")
+    if identity.pgid != pid:
+        raise MutationError(f"PROCESS_GROUP_NOT_ISOLATED: pid {pid} has pgid {identity.pgid}")
     return OwnerKey(
         pid=pid,
         pgid=identity.pgid,
         started_ticks=identity.start_marker,
-        argv_sha256=command_fingerprint(argv),
+        argv_sha256=identity.command_sha256,
         environment_sha256=_hash_environment(environment),
     )
 
@@ -574,7 +575,8 @@ class BridgeProcessOwner:
                 if self.process.poll() is not None:
                     raise MutationError(f"BRIDGE_CHILD_EXITED: {self.process.returncode}") from error
                 code = str(error).split(":", 1)[0]
-                if code not in ("PROCESS_ARGV_MISMATCH", "PROCESS_IDENTITY_UNREADABLE") or time.monotonic() >= identity_deadline:
+                if code not in ("PROCESS_ARGV_MISMATCH", "PROCESS_IDENTITY_UNREADABLE",
+                                "PROCESS_GROUP_NOT_ISOLATED") or time.monotonic() >= identity_deadline:
                     raise
                 # The just-spawned interpreter can briefly expose an incomplete argv.
                 # No signal is sent until exact kernel identity has been established.
