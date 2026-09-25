@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 2c4ad24d382cb7fc3c7e6535e0f7fd423d5064f9
+current_commit: 4c2de5c0f6b1f976afa7ccbdf30ab5873d6453ce
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -16,8 +16,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: CP-254
-next_experiment: EXP-255 dedicated ACT stack ownership and retirement proof
+latest_checkpoint: CP-255
+next_experiment: EXP-256 per-case admitted stack and child retirement composition
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1901,3 +1901,14 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 
 - Last valid experiment: EXP-254. An exited unified child parent cannot make a live descendant look clean, and a successful child retirement now has an fsynced terminal receipt.
 - Remaining gates: dedicated ACT simulator stack owner and exact retirement, physical stop and pending-write proof before campaign finish, child wiring and Task8Port, measured Task6 preflight, then live Task8 and W8/formal. No live case is admitted by child cleanup alone.
+
+## EXP-255 — Dedicated ACT stack process ownership boundary
+
+- **PLANNED:** Source HEAD `4c2de5c0f6b1f976afa7ccbdf30ab5873d6453ce`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. Build a closed Linux ACT stack launch argv for the dedicated broker-free launcher and a separately owned process group. Startup needs exact process identity and an injected readiness proof; retirement needs physical stop proof, fresh group clearance, ROS graph clearance and fsynced terminal receipt. Test live leader, exited leader and surviving descendant, failed readiness/stop/graph/receipt, and PID drift using real task-owned helper processes; retain resource fence on uncertainty. Do not connect this primitive to campaign admission yet or launch ROS live. Run focused Teleop and ordinary package gates with verified NVMe scratch. Retain all evidence, archive none, scratch trees deletion candidates only, delete nothing.
+
+- **VALID as an isolated stack owner primitive:** The missing module RED `scratch/exp255-red.6FnZZRFp` exited2 at test collection. Focused GREEN `scratch/exp255-green.w90siab6` passed6/6 and extended GREEN `scratch/exp255-green2.DaekIlP4` passed8/8 on real task-owned Python process groups. Closed argv selects only `so101_mujoco_act_execution_stack.launch.py` with headless RGB ACT profile. An exact kernel identity and caller-supplied readiness proof are required at start. At retirement the caller must prove physical stop, then exact group clearance including descendants, ROS graph clearance and an exclusive fsynced receipt; failed proofs leave the owner fenced. Initial eight-worker full Teleop `scratch/exp255-teleop-full.pwvPNdtF` stopped before collection because its reused short IPC root contained prior `gw*` directories; it is an environment error, not RED. A newly created per-run short IPC root and separately verified NVMe `TMPDIR/TMP/TEMP` let `scratch/exp255-teleop-full2.aVQc1By9` pass 1164 tests/43 skipped in72.26 s with 8 workers. First clean-cache build `scratch/exp255-teleop-build.pFcShLY5` exited0 but CMake selected `/usr/bin/python3`; package `scratch/exp255-teleop-colcon.gZJlRMox` then had 46/102 CTest failures due to system Python missing Pydantic v2 and httpx, before the affected code boundary. Reconfigured clean-cache build `scratch/exp255-teleop-build2.dci8Hmf1` exited0 in52 s with `_Python3_EXECUTABLE` set to the exact task Python. Corrected package `scratch/exp255-teleop-colcon2.i64jOQ6E` exited0 in298 s, 102/102 CTest passed, `test-result --verbose` exited0, aggregate 5762 tests/0 errors/0 failures/205 skipped. CTest registration invokes the exact task Python; installed/source `act_stack.py` SHA256 both `3ffe0acf4f7485d7481b259c841ce6f1f3734234eef33c7550de5168c83fbeee`. `git diff --check` clean and no task-owned stack/helper survivor in process inventory. `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`; no ROS stack, physical stop probe, child wiring, Task8 phase, W8 or formal episode. Train/Val/Test 0/0/0. Retain all runs, archive none, scratch trees and short IPC roots deletion candidates only, delete nothing.
+
+## CP-255 — Stack owner is not yet a case owner
+
+- Last valid experiment: EXP-255. The dedicated ACT simulator stack can be owned as a separate process group and cannot retire without supplied physical and ROS graph proofs plus durable receipt.
+- Next dependency: compose a fresh admission, distinct stack/session/domain, one unified child, physical stop proof and exact two-owner retirement for each of the 14 Task 8 cases. Current `Task8LiveCampaign.require_full_restart_lifecycle()` still refuses every live case; that fence remains required until this composition and physical phase port are wired and measured Task 6 reaches `TASK8_READY`.
