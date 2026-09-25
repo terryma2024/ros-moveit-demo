@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: d28f1553e47fd2acdf6b229c3e34dcd679b4be76
+current_commit: bf8bf86bc53259c07d899eaf91d3f8171dd8128e
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -13,14 +13,14 @@ confirmed_conclusions:
   - EXP-176 confirms current schema-v3 collector and analyzer are absent from source and installed overlay.
   - CP-177 rebased this branch onto the independently reviewed ACT Task 8 design and plan at approved-main 1e4664517fecc34a01ef6b8959e4a0f7316cda6e.
   - EXP-213 activated the independently reviewed canonical contact-policy fingerprint 0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11 under the user's exact authorization.
-  - CP-287 fixes the physically impossible 100 Hz stop sample window with RED/GREEN and full Demo/package gates; live Task 8 remains fenced.
+  - CP-288 confirms the installed seven-axis readiness observer succeeds on a fresh isolated no-motion ACT stack and retires cleanly; live Task 8 remains fenced.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
-  - A new isolated installed-CLI run will determine whether the widened 100 Hz sample window proves physical stop or whether measured velocity/time skew still fails.
+  - An owner-created readiness artifact and startup receipt can bind this observed seven-axis verdict to a Task8 case without opening the Task6 or phase gates.
   - The physical phase port can support measured Task6 TASK8_READY and Task8 live qualification.
-latest_checkpoint: CP-287
-next_experiment: EXP-288 isolated installed readiness rerun
+latest_checkpoint: CP-288
+next_experiment: EXP-289 owner-created readiness artifact and receipt
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -2262,3 +2262,13 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-287 — Stop observer covers enough actual 100 Hz samples
 
 - Last valid experiment: EXP-287. The impossible last-three-sample span is corrected and installed. A new isolated no-motion stack must now produce either a seven-axis artifact or a measured physical-stop failure with sample count/span/speed. Receipt producer and `FULL_RESTART` campaign remain closed. Retain registered root and all runs, archive none; scratch roots deletion candidates only, delete nothing.
+
+## EXP-288 — Verify the corrected physical-stop readiness on a fresh stack
+
+- **PLANNED:** Frozen source HEAD `bf8bf86bc53259c07d899eaf91d3f8171dd8128e`, submodule `54463fce3bfa6192976e74113f5ed7152f708a3f`, registered root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`, exact installed overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, runtime launch `/opt/ros/jazzy/bin/ros2`, installed CLI `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i/so101_demo_py/lib/so101_demo_py/act_stack_ready`, `ROS_DOMAIN_ID=227`, `GZ_PARTITION=act-data-exp288-227`, MuJoCo session `act-data-exp288-227`, lifecycle `ISOLATED_STACK`, headless, no broker, no motion target or reset. Preflight found domain 227 empty and no task stack; installed CLI exists and `diagnostics/exp288-stack-001` is unused. Relative to EXP-286, only the verified physical-stop sample-window fix changes. Start one owned stack, invoke the installed CLI exactly once with a 60 s deadline after graph startup, retain the artifact or measured failure metrics and exact process identity, then prove process/graph retirement. A fresh seven-axis artifact with exact session/domain is a diagnostic success, not Task8 phase PASS or FULL_RESTART qualification. Any CLI failure, timeout, wrong identity or uncertain cleanup is a diagnostic failure, not permission to bypass the stop gate. `FULL_RESTART_PROOF_UNAVAILABLE`, `ACT_TASK8_PORT_NOT_PROVISIONED`, `CALIBRATION_REQUIRED`; accepted Train/Val/Test 0/0/0. Retain all evidence, archive none; deletion candidates only after readback, delete nothing.
+
+- **VALID as installed seven-axis no-motion startup observation:** `diagnostics/exp288-stack-001` retains the exact owner PID1895130/PGID1895130/start ticks45252251, launch and CLI argv/logs, the raw readiness stdout and retirement result. After graph startup, the installed CLI exited0 in2.335 s with schema1, exact session `act-data-exp288-227`, domain227, captured monotonic ns452535706287201 and all seven checks true: `mujoco_session`, `advancing_physics`, `controller_states`, `moveit_graph`, `physical_stop`, `head_rgb`, `wrist_rgb`. Wrapper readback marked the artifact valid and exited0 in15 s. The stack launch exited0 after owned SIGINT; `graph_after`, a fresh domain-227 node list and task process check were empty; MoveIt logged graceful shutdown. No motion goal, reset or Task8 phase request was sent. This demonstrates the earlier false stop verdict came from the insufficient sample window under this no-motion startup, not that Task6 `TASK8_READY` or physical Task8 phase conditions have passed. No owner-created receipt was issued. Retain the run and registered root, archive none; delete nothing.
+
+## CP-288 — Installed startup observer is live-proven for no-motion stacks
+
+- Last valid experiment: EXP-288. The seven-axis CLI can return a fresh installed artifact from a new ACT stack. Next have the campaign owner invoke it with exact executable/environment, validate and persist its bytes under the fixed campaign path, bind an owner receipt to operation/artifact/process identities and test one-use child consumption. Keep Task6 `CALIBRATION_REQUIRED`, physical Task8 port, full-restart and formal data gates closed. Retain registered root and all runs, archive none; scratch roots are deletion candidates only, delete nothing.
