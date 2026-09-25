@@ -263,11 +263,17 @@ class RosCalibrationMotionGuard:
                 import mujoco
                 joint=mujoco.mj_name2id(self.model,mujoco.mjtObj.mjOBJ_JOINT,'cup_free_joint')
                 if joint<0:raise ValueError('CONTACT_CUP_JOINT_INVALID')
+                gripper_joint=mujoco.mj_name2id(self.model,mujoco.mjtObj.mjOBJ_JOINT,'6')
+                if gripper_joint<0:raise ValueError('CONTACT_GRIPPER_JOINT_INVALID')
                 stream=LivePhysicsStream(session_id=self.manifest['session_id'],
                     reset_epoch=message.reset_epoch,model_sha256=self.path.model_sha256,
                     model_nq=self.model.nq,model_nv=self.model.nv,
                     cup_qpos_address=self.path.cup_address,
                     cup_qvel_address=int(self.model.jnt_dofadr[joint]),
+                    release_qpos_address=int(self.model.jnt_qposadr[gripper_joint]),
+                    release_qvel_address=int(self.model.jnt_dofadr[gripper_joint]),
+                    release_open_q6=self.contact_manifest['joint_start_rad'][5],
+                    release_stop_velocity_rad_s=self.manifest['stop_velocity_rad_s'],
                     diagnostic_limits=self.manifest['diagnostic_limits'],
                     output_path=self.evidence_root/'contact-live-physics.ndjson',
                     monotonic=self.monotonic)

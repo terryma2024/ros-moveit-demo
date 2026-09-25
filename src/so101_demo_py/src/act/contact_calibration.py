@@ -243,6 +243,7 @@ def _validated_sample(
         "maximum_linear_speed_m_s": maximum_speed,
         "bilateral_duration_s": duration,
         "left_contact": left, "right_contact": right,
+        "table_supported": last["table_supported"],
     }
 
 
@@ -265,6 +266,8 @@ def _classify(sample: dict[str, Any], thresholds: dict[str, float]) -> str:
     if (sample["maximum_compression_distance_m"] >= thresholds["maximum_compression_distance_m"]
             or sample["maximum_normal_force_n"] >= thresholds["maximum_safe_force_n"]):
         return "over_compression"
+    if sample["table_supported"]:
+        return "bilateral_touch"
     if sample["maximum_linear_speed_m_s"] >= thresholds["maximum_hold_linear_speed_m_s"]:
         return "micro_lift_slip"
     if sample["bilateral_duration_s"] >= thresholds["minimum_stable_hold_duration_s"]:
