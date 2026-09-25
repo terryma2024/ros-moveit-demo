@@ -158,6 +158,52 @@ def _service(store):
     )
 
 
+def test_child_artifact_binding_refuses_config_replaced_after_admission(tmp_path):
+    from so101_teleop.unified.act_artifacts import ActArtifactBinding
+
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        context = service.start(spec)
+        binding = ActArtifactBinding.from_admission(spec.payload, context)
+        environment = binding.environment()
+        assert ActArtifactBinding.verify_environment(environment) == binding
+        Path(spec.payload["runtime_config_path"]).write_text("replaced after admission")
+        with pytest.raises(ValueError, match="ACT_ARTIFACT_HASH_MISMATCH"):
+            ActArtifactBinding.verify_environment(environment)
+        service.finish(context, cleanup_confirmed=True)
+    finally:
+        store.close()
+
+
+def test_act_ros_child_refuses_replaced_artifact_before_ros_node(tmp_path, monkeypatch):
+    from so101_teleop.unified.act_artifacts import ActArtifactBinding
+    from so101_teleop.unified.ros_child import RclpyActionDriver
+
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        context = _service(store).start(spec)
+        binding = ActArtifactBinding.from_admission(spec.payload, context)
+        for name, value in binding.environment().items():
+            monkeypatch.setenv(name, value)
+        monkeypatch.setenv("SO101_ACT_CAMPAIGN_ID", context.campaign_id)
+        monkeypatch.setenv("SO101_ACT_WORKER_ID", "w00")
+        monkeypatch.setenv("SO101_ACT_MANIFEST_SHA256", context.manifest_sha256)
+        monkeypatch.setenv("SO101_ACT_RUNTIME_CONFIG_SHA256", context.runtime_config_sha256)
+        monkeypatch.setenv("SO101_ACT_POLICY_FINGERPRINT", fingerprint)
+        Path(spec.payload["runtime_config_path"]).write_text("replaced after admission")
+        with pytest.raises(ValueError, match="ACT_ARTIFACT_HASH_MISMATCH"):
+            RclpyActionDriver(broker=object())
+    finally:
+        store.close()
+
+
 def context() -> AdmittedCampaignContext:
     return AdmittedCampaignContext(
         campaign_id="campaign-1",
@@ -543,9 +589,10 @@ def test_campaign_lifecycle_starts_only_after_admission_and_settles_after_cleanu
         seen = []
 
         class ChildOwner:
-            async def start(self, context, launches):
+            async def start(self, context, launches, *, artifacts):
                 assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
                 assert not service.arbiter.is_idle()
+                artifacts.verify()
                 seen.append((context, launches))
                 return ("worker-port",)
 
@@ -583,7 +630,7 @@ def test_campaign_lifecycle_start_failure_settles_only_after_owned_cleanup(tmp_p
         seen = []
 
         class FailingChildOwner:
-            async def start(self, context, launches):
+            async def start(self, context, launches, *, artifacts):
                 seen.append("start")
                 raise RuntimeError("child startup failed")
 
@@ -606,6 +653,8 @@ def test_campaign_lifecycle_start_failure_settles_only_after_owned_cleanup(tmp_p
 
 
 def test_campaign_lifecycle_composes_exact_eight_admitted_children(tmp_path):
+    from so101_teleop.unified.act_artifacts import ActArtifactBinding
+
     fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
     receipt_path.write_text(json.dumps(receipt))
     store = IntentStore.open(tmp_path / "state")
@@ -645,6 +694,8 @@ def test_campaign_lifecycle_composes_exact_eight_admitted_children(tmp_path):
             f"session-{index}" for index in range(8)}
         assert {item.environment["SO101_ACT_OPERATION_ID"] for item in started} == {
             context.operation_id}
+        assert all(ActArtifactBinding.verify_environment(item.environment).policy_fingerprint
+                   == fingerprint for item in started)
         asyncio.run(lifecycle.finish(context))
         assert stopped == [item.runtime_id for item in reversed(started)]
         assert service.child_registry.launches() == ()

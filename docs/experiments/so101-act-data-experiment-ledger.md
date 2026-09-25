@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 4c2de5c0f6b1f976afa7ccbdf30ab5873d6453ce
+current_commit: e227ee529480c52bfee7b931e6c6719ba94b3baa
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -16,8 +16,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: CP-255
-next_experiment: EXP-256 per-case admitted stack and child retirement composition
+latest_checkpoint: CP-256
+next_experiment: EXP-257 compiled-model and physical Task 8 phase port composition
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1912,3 +1912,14 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 
 - Last valid experiment: EXP-255. The dedicated ACT simulator stack can be owned as a separate process group and cannot retire without supplied physical and ROS graph proofs plus durable receipt.
 - Next dependency: compose a fresh admission, distinct stack/session/domain, one unified child, physical stop proof and exact two-owner retirement for each of the 14 Task 8 cases. Current `Task8LiveCampaign.require_full_restart_lifecycle()` still refuses every live case; that fence remains required until this composition and physical phase port are wired and measured Task 6 reaches `TASK8_READY`.
+
+## EXP-256 — Admitted artifact binding at child startup
+
+- **PLANNED:** Source HEAD `e227ee529480c52bfee7b931e6c6719ba94b3baa`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. The admitted context carries content hashes but the existing child receives no artifact paths and cannot re-read replaced source/config/manifest/policy/calibration bytes before ROS init. Bind closed absolute paths and hashes from the validated operation spec into child environment, re-open no-follow regular files at child bootstrap, and reject any post-admission drift before creating ROS nodes. Keep model-specific contact geometry verification at the later compiled-model boundary. TDD with synthetic already-valid admission artifacts and a post-admission replacement; targeted and full Teleop/package gates use fresh verified NVMe scratch. No child, stack or motion; retain evidence, archive none, scratch trees deletion candidates only, delete nothing.
+
+- **VALID as an admitted child-bootstrap artifact fence:** `scratch/exp256-red.NLxAKUQz` exited1 on missing `ActArtifactBinding`; `scratch/exp256-red2.yqGlxJ3F` exited1 because launched child environments lacked closed artifact paths; `scratch/exp256-red3.3DUdtixO` exited1 because a replaced runtime config was still accepted by the child constructor. Final targeted `scratch/exp256-green3.oXYrOzdJ` passed44/44. The lifecycle now passes an admission-bound artifact object to the child owner. The child owner copies closed absolute paths and expected hashes into the exact child environment; before any ROS node is created, `RclpyActionDriver` reopens no-follow regular files, checks source/manifest/runtime/collection/calibration hashes, verifies disabled proposal and activation receipt, and checks request hashes against the same binding. This does not yet bind a compiled MuJoCo model or geometry; that remains the next phase-port boundary. Initial eight-worker Teleop full `scratch/exp256-teleop-full.cLPgd1wa` failed 1/1209: unrelated owner-tree test recorded an empty pre-exec argv from a newly spawned real sleeper and then correctly refused identity drift. The retained confirmation file has command SHA `4f53cda1...` (empty argv), while the fresh read observed `554da572...`; reusing that file's existing stable-argv wait fixed the test boundary. Targeted `scratch/exp256-owner-tree-green.OTF6j59R` passed2/2. Full `scratch/exp256-teleop-full2.bDXKHz8B` then passed1166/43 in72.62 s. Teleop overlay build `scratch/exp256-teleop-build.KemgJHWU` exited0 in52 s with exact task Python retained in CMakeCache. First package `scratch/exp256-teleop-colcon.OoH4tYxS` ran all 102 CTest entries but one existing adaptive-helper test failed because its helper published the fsynced handshake before installing SIGINT handling; the test could immediately interrupt directory fsync. Handler installation now precedes handshake publication. Targeted `scratch/exp256-helper-green.gWIrWC1h` passed1/1; final eight-worker Teleop `scratch/exp256-teleop-full3.02w5tVzQ` exited0 in73 s, 1166 passed/43 skipped. Final Teleop package `scratch/exp256-teleop-colcon2.BRUH8bZ5` exited0 in297 s, 102/102 CTest passed and `test-result --verbose` exit0, aggregate5764 tests/0 errors/0 failures/205 skipped. Demo Task8 CLI/campaign targeted `scratch/exp256-demo-targeted.zYJlQY9c` passed7/7; ordinary eight-worker Demo `scratch/exp256-demo-full.Rmi8s43s` exited0 in45 s, 4212 passed/162 skipped. Every pytest/colcon run used a unique verified NVMe scratch; Teleop runs used new short task-owned IPC roots. Installed/source SHA256 match for `act_artifacts.py` `9d26f6cde8e75881771a73f714394bef66310f658b9bbe6c76865cf93644fe6e`, `bridge.py` `022406000603a3a62e7e25c8af1b6ea802da38294cc2729482a82fbe5cc857e0` and `ros_child.py` `cf24a8f61da707c51d20e16349944c7747d305f5cdb158e3aa4d9356e3918769`. `git diff --check` clean; no helper/ACT-stack survivor in process inventory. `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`; no ROS child, stack, motion, Task8 phase PASS, W8 or formal episode. Train/Val/Test 0/0/0. Retain all runs, archive none, scratch/short IPC roots deletion candidates only, delete nothing.
+
+## CP-256 — Artifact fence precedes ROS construction
+
+- Last valid experiment: EXP-256. Source, manifest, runtime/collection config, calibration report and activated policy identity are bound from admission into the child; post-admission hash drift stops child construction before ROS initialization.
+- Remaining gates: compile the installed ACT scene and verify model, version and phase-specific contact pairs in the child; then wire same-step world/scene/contact/RGB/controller and actual Task8Port, exact per-case stack/child lifecycle, measured Task6 preflight, Task8 live, W8 qualification and formal collection. `FULL_RESTART_PROOF_UNAVAILABLE` and `CALIBRATION_REQUIRED` remain enforced, Train/Val/Test 0/0/0.

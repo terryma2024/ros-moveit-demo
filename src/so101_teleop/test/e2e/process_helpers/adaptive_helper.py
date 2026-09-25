@@ -62,6 +62,14 @@ def main(argv: list[str]) -> int:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    cancelled = {"value": False}
+
+    def _on_sigint(_signum, _frame):
+        cancelled["value"] = True
+
+    # The handshake is the parent's signal-ready boundary. Install the handler
+    # before publishing it so a prompt SIGINT cannot interrupt its fsync.
+    signal.signal(signal.SIGINT, _on_sigint)
     _atomic_write(
         runtime_root / "handshake.json",
         json.dumps({
@@ -71,13 +79,6 @@ def main(argv: list[str]) -> int:
             "qualification": _MARKER,
         }, sort_keys=True).encode("utf-8") + b"\n",
     )
-
-    cancelled = {"value": False}
-
-    def _on_sigint(_signum, _frame):
-        cancelled["value"] = True
-
-    signal.signal(signal.SIGINT, _on_sigint)
 
     while not cancelled["value"]:
         time.sleep(0.05)

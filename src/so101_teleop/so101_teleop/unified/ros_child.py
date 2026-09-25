@@ -112,6 +112,17 @@ class RclpyActionDriver:
         self._act_cancelled = threading.Event()
         self._act_hashes = (act_hashes if act_hashes is not None else
                             {key: os.environ.get(name) for key, name in _ACT_HASH_ENV.items()})
+        self._act_artifacts = None
+        if os.environ.get("SO101_ACT_CAMPAIGN_ID"):
+            from .act_artifacts import ActArtifactBinding
+            self._act_artifacts = ActArtifactBinding.verify_environment(os.environ)
+            digests = dict(self._act_artifacts.hashes)
+            if self._act_hashes != {
+                "manifest_sha256": digests["manifest"],
+                "runtime_config_sha256": digests["runtime_config"],
+                "contact_policy_fingerprint": self._act_artifacts.policy_fingerprint,
+            }:
+                raise ValueError("ACT_ARTIFACT_BINDING_INVALID")
         if self._broker is None and os.environ.get("SO101_ACT_CAMPAIGN_ID"):
             self._broker = self._start_ros_broker()
 
