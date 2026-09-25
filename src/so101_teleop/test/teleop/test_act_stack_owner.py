@@ -6,12 +6,17 @@ import json
 import os
 from pathlib import Path
 import signal
+import subprocess
+import time
 import sys
+from types import SimpleNamespace
 
 import pytest
 
 from so101_teleop.owned_group import terminate_group
 from so101_teleop.unified.act_stack import ActStackLaunch, ActStackProcessOwner
+from so101_teleop.unified.bridge import _retirement_owner_state, identity_for
+from so101_teleop.process_identity import read_identity
 
 
 def launch(tmp_path, code):
@@ -213,3 +218,48 @@ def test_graph_clear_retry_does_not_requery_stopped_exited_stack(tmp_path):
         assert (tmp_path / "cleanup-receipt.json").exists()
 
     asyncio.run(run())
+
+
+def test_shebang_owner_records_kernel_command_fingerprint(tmp_path):
+    script = tmp_path / "ros2-like-script"
+    ready = tmp_path / "ready"
+    script.write_text(
+        "#!/usr/bin/env python3\n"
+        "import pathlib, sys, time\n"
+        "pathlib.Path(sys.argv[1]).write_text('ready')\n"
+        "time.sleep(120)\n"
+    )
+    script.chmod(0o700)
+    argv = [str(script), str(ready), "scope-exp292"]
+    environment = dict(os.environ)
+    process = subprocess.Popen(
+        argv, env=environment, shell=False, start_new_session=True,
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        deadline = time.monotonic() + 5
+        while not ready.exists():
+            assert process.poll() is None
+            assert time.monotonic() < deadline
+            time.sleep(0.01)
+        identity = read_identity(process.pid)
+        owner = identity_for(process.pid, argv, environment)
+        assert owner.argv_sha256 == identity.command_sha256
+        assert _retirement_owner_state(owner) == "live"
+    finally:
+        terminate_group(pgid=process.pid, leader_pid=process.pid, timeout_s=0.2)
+        process.wait(timeout=3)
+
+
+def test_pre_setsid_identity_cannot_capture_the_parent_process_group(monkeypatch):
+    import so101_teleop.unified.bridge as bridge_module
+
+    pid = 12345
+    argv = ["/tmp/owned-launch", "--scope", "exp292"]
+    monkeypatch.setattr(bridge_module, "read_identity", lambda _pid: SimpleNamespace(
+        argv=tuple(argv), pgid=pid - 1, start_marker=101,
+        command_sha256="a" * 64,
+    ))
+    with pytest.raises(Exception, match="PROCESS_GROUP_NOT_ISOLATED"):
+        identity_for(pid, argv, {})
