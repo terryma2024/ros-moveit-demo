@@ -53,7 +53,7 @@ def test_compiled_mapping_refuses_wrong_mujoco_version(compiled_model):
 
 
 def sources(*, cup_shift=0.0, scene_step=1, world_epoch=1, rgb_stamp=1.01,
-            expected_model_sha256=MODEL_SHA256):
+            expected_model_sha256=MODEL_SHA256, reference_shift=0.0):
     now = [10.0]
     object_state = ObjectState(
         body_id=1, body="cup", position_world=(0.1, -0.2, 0.15),
@@ -113,7 +113,7 @@ def sources(*, cup_shift=0.0, scene_step=1, world_epoch=1, rgb_stamp=1.01,
         def reference_state(self, when):
             if not self.enabled:
                 raise RuntimeError("reference temporarily unavailable")
-            return dict(positions=(0.1,) * 6, velocities=(0.0,) * 6,
+            return dict(positions=(0.1 + reference_shift,) * 6, velocities=(0.0,) * 6,
                         accelerations=(0.0,) * 6, requested_sim_time_s=when)
 
     readback = Task8PhysicalReadback(
@@ -138,6 +138,12 @@ def test_one_physics_step_joins_cup_pose_qpos_rgb_contact_and_reference():
     assert proof["world"].simulation_step == proof["scene"]["simulation_step"] == proof["contact"]["physics_step"] == 1
     assert proof["observation"]["state"][:6] == (0.1,) * 6
     assert proof["reference"]["requested_sim_time_s"] == 1.01
+
+
+def test_same_step_controller_reference_disagreement_denies_readback():
+    readback, _, _, _ = sources(reference_shift=0.01)
+    with pytest.raises(Task8ReadbackError, match="REFERENCE_JOINT_DIVERGED"):
+        readback.capture("s", "attempt-1", 1)
 
 
 def test_actual_cup_pose_disagreement_with_same_step_qpos_is_rejected():

@@ -152,6 +152,9 @@ class Task8PhysicalReadback:
         if any(abs(measured[index] - qpos[address]) > self.joint_tolerance
                for index, address in enumerate(self.joints)):
             raise Task8ReadbackError("JOINT_QPOS_DIVERGED")
+        if any(abs(reference["positions"][index] - measured[index]) > self.joint_tolerance
+               for index in range(6)):
+            raise Task8ReadbackError("REFERENCE_JOINT_DIVERGED")
         return {"world": world, "scene": scene, "contact": contact,
                 "observation": observation, "reference": reference,
                 "source_stamps_s": dict(audit["source_stamps"])}
