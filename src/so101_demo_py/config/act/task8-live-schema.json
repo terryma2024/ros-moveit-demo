@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SO-101 ACT Task 8 live manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "backend", "anchors", "anchors_sha256", "source_sha256", "runtime_config_sha256", "collection_config_sha256", "contact_policy_fingerprint", "prefix_cases", "full_cases", "manifest_sha256"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "ACT_TASK8_LIVE"},
+    "backend": {"const": "mujoco"},
+    "anchors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default", "left", "forward"],
+      "properties": {
+        "default": {"$ref": "#/$defs/anchor"},
+        "left": {"$ref": "#/$defs/anchor"},
+        "forward": {"$ref": "#/$defs/anchor"}
+      }
+    },
+    "anchors_sha256": {"$ref": "#/$defs/sha256"},
+    "source_sha256": {"$ref": "#/$defs/sha256"},
+    "runtime_config_sha256": {"$ref": "#/$defs/sha256"},
+    "collection_config_sha256": {"$ref": "#/$defs/sha256"},
+    "contact_policy_fingerprint": {"$ref": "#/$defs/sha256"},
+    "prefix_cases": {
+      "type": "array", "minItems": 9, "maxItems": 9,
+      "items": {"$ref": "#/$defs/case"}
+    },
+    "full_cases": {
+      "type": "array", "minItems": 5, "maxItems": 5,
+      "items": {"$ref": "#/$defs/case"}
+    },
+    "manifest_sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "anchor": {
+      "type": "object", "additionalProperties": false,
+      "required": ["cup_start_m", "neck_start_rad"],
+      "properties": {
+        "cup_start_m": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "number"}},
+        "neck_start_rad": {"type": "number"}
+      }
+    },
+    "case": {
+      "type": "object", "additionalProperties": false,
+      "required": ["case_id", "mode", "anchor", "stop_after", "lifecycle"],
+      "properties": {
+        "case_id": {"type": "string"},
+        "mode": {"enum": ["phase_prefix", "full"]},
+        "anchor": {"enum": ["default", "left", "forward"]},
+        "stop_after": {"type": ["string", "null"]},
+        "lifecycle": {"const": "FULL_RESTART"}
+      }
+    }
+  }
+}
