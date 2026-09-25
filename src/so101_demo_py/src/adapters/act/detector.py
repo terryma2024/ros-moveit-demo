@@ -1,7 +1,95 @@
 """Reuse the lightweight RGB detector with spatial, attempt-scoped tracks."""
 
+from dataclasses import dataclass
+import hashlib
+import os
+from pathlib import Path
+import stat
+import tempfile
+
 from so101_demo.act.contracts import fields, finite, identifier, integer, sha256
 from so101_demo.core.detection import DetectionFrame, DetectionQuery
+
+
+@dataclass(frozen=True, slots=True)
+class BoundHeadDetector:
+    runtime: "HeadRgbDetector"
+    snapshot_path: Path
+
+
+def build_bound_head_detector(binding, *, snapshot_root, yolo_detector_factory=None,
+                              torch_api=None, ultralytics_version=None):
+    """Load the admitted model from a verified owned snapshot, once per child."""
+    from so101_demo.adapters.perception.detector_factory import (
+        DetectorFactoryOptions, build_detector,
+    )
+    from so101_demo.adapters.perception.yolo_seg import YoloSegDetector, verify_weights
+
+    detector = binding.detector
+    if torch_api is None:
+        import torch
+        torch_api = torch
+    if ultralytics_version is None:
+        import ultralytics
+        ultralytics_version = ultralytics.__version__
+    if (torch_api.__version__ != detector["torch_version"] or
+            ultralytics_version != detector["ultralytics_version"]):
+        raise ValueError("HEAD_SEARCH_RUNTIME_VERSION_DRIFT")
+    torch_api.set_num_threads(detector["torch_threads"])
+    torch_api.set_num_interop_threads(detector["torch_interop_threads"])
+    if (torch_api.get_num_threads() != detector["torch_threads"] or
+            torch_api.get_num_interop_threads() != detector["torch_interop_threads"]):
+        raise ValueError("HEAD_SEARCH_THREAD_DRIFT")
+    weights = Path(detector["weights_path"])
+    root = Path(snapshot_root)
+    if not root.is_absolute() or ".." in root.parts or root.is_symlink() or not root.is_dir():
+        raise ValueError("HEAD_SEARCH_SNAPSHOT_ROOT_INVALID")
+    try:
+        fd = os.open(weights, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        with os.fdopen(fd, "rb") as source:
+            if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+                raise ValueError("HEAD_SEARCH_WEIGHTS_INVALID")
+            data = source.read(128 * 1024 * 1024 + 1)
+    except OSError as error:
+        raise ValueError("HEAD_SEARCH_WEIGHTS_INVALID") from error
+    if (len(data) > 128 * 1024 * 1024 or
+            hashlib.sha256(data).hexdigest() != detector["weights_sha256"]):
+        raise ValueError("HEAD_SEARCH_WEIGHTS_INVALID")
+    private = Path(tempfile.mkdtemp(prefix="head-model-", dir=root))
+    snapshot = private / "best.pt"
+    fd = os.open(snapshot, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600)
+    with os.fdopen(fd, "wb") as target:
+        target.write(data)
+        target.flush()
+        os.fsync(target.fileno())
+    snapshot.chmod(0o400)
+    directory = os.open(private, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+    options = DetectorFactoryOptions(
+        backend="yolo_seg", requested_device=detector["requested_device"],
+        allow_cpu_fallback=detector["allow_cpu_fallback"],
+        yolo_weights_path=snapshot, yolo_weights_sha256=detector["weights_sha256"],
+        yolo_model_id=detector["model_id"], yolo_imgsz=detector["image_size_px"],
+    )
+    built = build_detector(options, yolo_detector_factory=(
+        YoloSegDetector if yolo_detector_factory is None else yolo_detector_factory))
+    verify_weights(snapshot, detector["weights_sha256"])
+    if (torch_api.get_num_threads() != detector["torch_threads"] or
+            torch_api.get_num_interop_threads() != detector["torch_interop_threads"]):
+        raise ValueError("HEAD_SEARCH_THREAD_DRIFT")
+    if (not detector["allow_cpu_fallback"] and
+            built.detector.runtime_device != detector["requested_device"]):
+        raise ValueError("HEAD_SEARCH_DEVICE_DRIFT")
+    runtime = HeadRgbDetector(
+        built.detector, model_id=detector["model_id"],
+        weights_sha256=detector["weights_sha256"],
+        tracking_iou=binding.search_values["tracking_iou"],
+        min_bbox_aspect=binding.search_values["min_bbox_aspect"],
+    )
+    return BoundHeadDetector(runtime, snapshot)
 
 
 def head_model_factory(path):

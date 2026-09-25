@@ -140,6 +140,7 @@ def test_child_compiles_only_installed_act_scene_before_using_policy(tmp_path):
 def test_act_child_retains_compiled_phase_pairs_before_ros_init(tmp_path, monkeypatch):
     from so101_teleop.unified.act_artifacts import ActArtifactBinding
     from so101_teleop.unified.ros_child import RclpyActionDriver
+    from so101_demo.act import head_search_binding
 
     expected_model, _, proposal, receipt, fingerprint = artifacts(tmp_path)
     names = ("source", "manifest", "runtime_config", "collection_config",
@@ -164,6 +165,10 @@ def test_act_child_retains_compiled_phase_pairs_before_ros_init(tmp_path, monkey
     monkeypatch.setenv("SO101_ACT_MANIFEST_SHA256", dict(binding.hashes)["manifest"])
     monkeypatch.setenv("SO101_ACT_RUNTIME_CONFIG_SHA256", dict(binding.hashes)["runtime_config"])
     monkeypatch.setenv("SO101_ACT_POLICY_FINGERPRINT", fingerprint)
+    # This test isolates compiled contact pairs; the separate binding suite
+    # exercises the required calibrated head-search configuration.
+    monkeypatch.setattr(head_search_binding, "validate_head_search_binding",
+                        lambda runtime, report: object())
     monkeypatch.setattr(RclpyActionDriver, "_start_ros_broker", lambda self: object())
 
     driver = RclpyActionDriver()

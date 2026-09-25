@@ -360,8 +360,14 @@ class UnifiedWorkloadService:
         root = Path(payload["evidence_root"])
         if not root.is_absolute() or ".." in root.parts or not root.is_dir():
             raise ValueError("CAMPAIGN_EVIDENCE_ROOT_INVALID")
+        runtime_bytes = None
         for name in ("source", "runtime_config", "collection_config"):
-            self._verify_artifact(payload[f"{name}_path"], payload[f"{name}_sha256"])
+            verified = self._verify_artifact(
+                payload[f"{name}_path"], payload[f"{name}_sha256"],
+                read_bytes=name == "runtime_config" and spec.kind in ("task8_phase", "task8_full"),
+            )
+            if name == "runtime_config":
+                runtime_bytes = verified
         manifest_bytes = self._verify_artifact(
             payload["manifest_path"], payload["manifest_sha256"],
             read_bytes=spec.kind in ("task8_phase", "task8_full"),
@@ -399,6 +405,12 @@ class UnifiedWorkloadService:
         if (calibration["source_commit"] != current_source
                 or calibration["config_sha256"] != current_config):
             raise ValueError("CALIBRATION_SOURCE_CONFIG_MISMATCH")
+        if spec.kind in ("task8_phase", "task8_full"):
+            from so101_demo.act.head_search_binding import validate_head_search_binding
+            try:
+                validate_head_search_binding(json.loads(runtime_bytes), calibration)
+            except (TypeError, UnicodeDecodeError, json.JSONDecodeError) as error:
+                raise ValueError("HEAD_SEARCH_CONFIG_INVALID") from error
         proposal = self._read_json(payload["proposal_path"], root)
         receipt = self._read_json(payload["activation_receipt_path"], root)
         try:

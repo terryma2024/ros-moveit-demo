@@ -162,6 +162,11 @@ class RclpyActionDriver:
                 "contact_policy_fingerprint": self._act_artifacts.policy_fingerprint,
             }:
                 raise ValueError("ACT_ARTIFACT_BINDING_INVALID")
+            from so101_demo.act.head_search_binding import validate_head_search_binding
+            self._act_head_search = validate_head_search_binding(
+                self._act_artifacts.read_hashed_json("runtime_config"),
+                self._act_artifacts.read_hashed_json("calibration_report"),
+            )
             if self._broker is None:
                 from so101_demo.adapters.act.task8_contact_pairs import load_installed_act_contact_pairs
                 paths = dict(self._act_artifacts.paths)
