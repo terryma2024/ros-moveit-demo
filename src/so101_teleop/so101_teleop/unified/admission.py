@@ -242,6 +242,7 @@ _ACT_PAYLOAD_KEYS = frozenset({
     "collection_config_path", "collection_config_sha256", "contact_policy_fingerprint",
     "proposal_path", "activation_receipt_path", "evidence_root", "service_epoch",
     "resource_binding_id", "qualification_mode", "qualification_receipt_path", "children",
+    "calibration_report_path", "calibration_report_sha256",
 })
 
 
@@ -324,6 +325,10 @@ class UnifiedWorkloadService:
         if spec.runtime_id != self.runtime_id or spec.deadline_ns <= self.clock_ns():
             raise ValueError("CAMPAIGN_RUNTIME_OR_DEADLINE_INVALID")
         payload = spec.payload
+        if (isinstance(payload, dict)
+                and set(payload) == _ACT_PAYLOAD_KEYS - {
+                    "calibration_report_path", "calibration_report_sha256"}):
+            raise ValueError("CALIBRATION_REQUIRED")
         if not isinstance(payload, dict) or set(payload) != _ACT_PAYLOAD_KEYS:
             raise ValueError("CAMPAIGN_START_SCHEMA")
         if payload["backend"] != "mujoco":
@@ -347,6 +352,22 @@ class UnifiedWorkloadService:
             raise ValueError("CAMPAIGN_EVIDENCE_ROOT_INVALID")
         for name in ("source", "manifest", "runtime_config", "collection_config"):
             self._verify_artifact(payload[f"{name}_path"], payload[f"{name}_sha256"])
+        try:
+            calibration_path = Path(payload["calibration_report_path"])
+            if (not calibration_path.is_absolute() or ".." in calibration_path.parts
+                    or not calibration_path.resolve().is_relative_to(root.resolve())):
+                raise ValueError("CALIBRATION_REQUIRED")
+            self._verify_artifact(str(calibration_path), payload["calibration_report_sha256"])
+            calibration_bytes = calibration_path.read_bytes()
+            if hashlib.sha256(calibration_bytes).hexdigest() != payload["calibration_report_sha256"]:
+                raise ValueError("CALIBRATION_REQUIRED")
+            calibration = json.loads(calibration_bytes)
+            from so101_demo.act.calibration import require_gate
+
+            require_gate(calibration, "formal_collection" if spec.kind.startswith("act_collection")
+                         else "task8_live")
+        except (OSError, TypeError, json.JSONDecodeError, ValueError) as error:
+            raise ValueError("CALIBRATION_REQUIRED") from error
         proposal = self._read_json(payload["proposal_path"], root)
         receipt = self._read_json(payload["activation_receipt_path"], root)
         try:
