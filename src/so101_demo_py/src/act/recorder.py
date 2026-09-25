@@ -270,13 +270,16 @@ def verify_episode_seal(path: Path) -> dict:
     path = Path(path)
     if path.name != "seal.json" or not path.is_file() or path.is_symlink():
         raise ValueError("EPISODE_SEAL_MISSING")
-    document = json.loads(path.read_bytes())
+    source_bytes = path.read_bytes()
+    document = json.loads(source_bytes)
     keys = {"schema_version", "kind", "status", "reason", "task8_success",
             "stopped_confirmed", "qc_passed", "committed", "session_id",
             "attempt_id", "reset_epoch", "record_count", "provenance", "files",
             "manifest_sha256"}
     if not isinstance(document, dict) or set(document) != keys:
         raise ValueError("EPISODE_SEAL_SCHEMA")
+    if source_bytes != _canonical(document) + b"\n":
+        raise ValueError("EPISODE_SEAL_NONCANONICAL")
     digest = document["manifest_sha256"]
     sha256(digest)
     if digest != _hash(_canonical({key: value for key, value in document.items()
