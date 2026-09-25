@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: defa40815b608fb6b88523e94e55a0ee732c9ca9
+current_commit: 642d55d557232c9734bb5a4b99a412d6c5fc7a54
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -16,8 +16,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: CP-258
-next_experiment: EXP-259 admitted-child physical-source provisioning and stop dispatch
+latest_checkpoint: CP-259
+next_experiment: EXP-260 admitted-child physical-source provisioning and stop dispatch
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1945,3 +1945,14 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 
 - Last valid experiment: EXP-258. The compiled model and activated geometry drive same-step readback sources, and world/contact/scene hazards enter a nonblocking queue.
 - Next dependency: provision this source set inside the admitted child with a trusted stop dispatcher and then implement physical Task8Port methods. `ACT_TASK8_PORT_NOT_PROVISIONED`, `FULL_RESTART_PROOF_UNAVAILABLE` and `CALIBRATION_REQUIRED` remain enforced. No live Task8 case, W8 or formal episode; Train/Val/Test 0/0/0.
+
+## EXP-259 — Refuse reset arm after strict world-evidence loss
+
+- **PLANNED:** Source HEAD `642d55d557232c9734bb5a4b99a412d6c5fc7a54`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. In the EXP-258 source composition, `arm()` uses an ordinary fresh atomic snapshot while Task8 readback uses strict history. A publisher sequence gap can therefore be latched before arm but ignored by reset admission. Add an intended RED using a new reset epoch followed by a same-epoch sequence gap, then make arm use the strict fresh world receipt and deny before resetting scene/contact observers. Run targeted and full ordinary/package Demo gates on unique verified NVMe scratch. No ROS stack or motion; retain evidence, archive none, scratch trees deletion candidates only, delete nothing.
+
+- **VALID as a fail-closed reset-admission correction:** Intended RED `scratch/exp259-red.U4m8EWsU` exited1 at the exact `DID NOT RAISE` assertion: after a valid new reset and a same-epoch publisher sequence gap, `arm("SEARCH")` accepted the ordinary latest snapshot despite the strict observer hazard. `arm()` now uses the latest strict fresh world receipt; targeted `scratch/exp259-green.tgvZAVB5` exited0, 23/23 in9 s. Ordinary Demo eight-worker full `scratch/exp259-demo-full.FsqsTNAH` exited0 in45 s, 4215 passed/162 skipped. Overlay build `scratch/exp259-demo-build.ymvNqnXD` exited0 in2 s. Package `scratch/exp259-demo-colcon.ERgNSJPT` used exact task Python and unique proved NVMe TMPDIR/TMP/TEMP, exited0 in173 s with 4215 passed/162 skipped/12 benchmark deselected; `test-result --verbose` exited0, aggregate 5767 tests/0 errors/0 failures/205 skipped. Installed module resolves through the task overlay build tree; source `task8_sources.py` SHA256 `96bb32c05bf947c15bd581da89b0d35a43b44314c234b6651e0d05545278ea7c`. `git diff --check` clean; no task-owned MuJoCo/MoveIt/ACT child process. No ROS motion, Task8 phase PASS, W8 or formal episode; Train/Val/Test 0/0/0. Retain all runs; archive none; scratch trees deletion candidates only; delete nothing.
+
+## CP-259 — Reset admission shares the strict world-loss fence
+
+- Last valid experiment: EXP-259. A lost atomic publisher sequence now denies reset arm before source observers can be reset or any phase starts.
+- Next dependency: provision physical evidence and stop dispatch in the admitted child, then implement the actual physical Task8Port and per-case full-stack lifecycle. `ACT_TASK8_PORT_NOT_PROVISIONED`, `FULL_RESTART_PROOF_UNAVAILABLE` and `CALIBRATION_REQUIRED` remain enforced. No live Task8 case, W8 or formal episode; Train/Val/Test 0/0/0.
