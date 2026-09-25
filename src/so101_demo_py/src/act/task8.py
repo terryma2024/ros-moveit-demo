@@ -72,10 +72,10 @@ class Task8Runner:
             if request["stop_after"] is not None or request["lifecycle"] != "FULL_RESTART":
                 raise Task8Error("FULL_RESTART_REQUIRED")
         elif mode == "phase_prefix":
-            if request["stop_after"] not in self.PHASES or request["lifecycle"] not in (
-                "FULL_RESTART", "RESET_WORLD",
-            ):
+            if request["stop_after"] not in self.PHASES:
                 raise Task8Error("TASK8_PREFIX_INVALID")
+            if request["lifecycle"] != "FULL_RESTART":
+                raise Task8Error("FULL_RESTART_REQUIRED")
         else:
             raise Task8Error("TASK8_MODE_INVALID")
 
@@ -166,7 +166,7 @@ class Task8Runner:
                     or beginning["reset_epoch"] < 0 or beginning["release_epoch"] < 0
                     or type(beginning["full_restart"]) is not bool):
                 raise Task8Error("BEGIN_EVIDENCE_INVALID")
-            if request["mode"] == "full" and not beginning["full_restart"]:
+            if not beginning["full_restart"]:
                 raise Task8Error("FULL_RESTART_NOT_PROVED")
             reset_epoch = beginning["reset_epoch"]
             release_epoch = beginning["release_epoch"]
