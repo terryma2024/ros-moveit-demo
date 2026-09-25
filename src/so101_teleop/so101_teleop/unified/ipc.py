@@ -53,11 +53,28 @@ class _ActPayload(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+class _StackOwner(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    pid: int = Field(gt=0, strict=True)
+    pgid: int = Field(gt=0, strict=True)
+    started_ticks: int = Field(gt=0, strict=True)
+    argv_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    environment_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def _isolated(self):
+        if self.pgid != self.pid:
+            raise ValueError("IPC_STACK_OWNER_GROUP_INVALID")
+        return self
+
+
 class _Task8Base(_ActPayload):
     scenario_id: str = Field(min_length=1)
     manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     runtime_config_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     contact_policy_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    stack_owner: _StackOwner
 
 
 class _Task8Phase(_Task8Base):

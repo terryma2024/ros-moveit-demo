@@ -12,11 +12,12 @@ import contextlib
 import hashlib
 import json
 import os
+import re
 import secrets
 import subprocess
 import threading
 import time
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from .arbiter import GlobalMutationArbiter
@@ -193,6 +194,18 @@ class ActWorkerPort:
         self.context = context
         self.launch = launch
         self.client = client
+        self._startup_stack_owner: OwnerKey | None = None
+
+    def bind_startup_owner(self, owner: OwnerKey) -> None:
+        if (self._startup_stack_owner is not None or not isinstance(owner, OwnerKey)
+                or type(owner.pid) is not int or type(owner.pgid) is not int
+                or owner.pid <= 0 or owner.pgid != owner.pid
+                or type(owner.started_ticks) is not int or owner.started_ticks <= 0
+                or any(not isinstance(value, str)
+                       or re.fullmatch(r"[0-9a-f]{64}", value) is None
+                       for value in (owner.argv_sha256, owner.environment_sha256))):
+            raise MutationError("ACT_TASK8_STARTUP_OWNER_INVALID")
+        self._startup_stack_owner = owner
 
     def _base(self, request: dict, *, fields: frozenset[str], cancel: bool = False) -> tuple[str, str, int]:
         if not isinstance(request, dict) or set(request) != fields:
@@ -255,6 +268,8 @@ class ActWorkerPort:
         session_id, attempt_id, deadline_ns = self._base(request, fields=fields)
         if request["contact_policy_fingerprint"] != self.context.contact_policy_fingerprint:
             raise MutationError("ACT_POLICY_MISMATCH")
+        if self._startup_stack_owner is None:
+            raise MutationError("ACT_TASK8_STARTUP_OWNER_UNBOUND")
         mode = request["mode"]
         if mode == "phase_prefix" and isinstance(request["stop_after"], str):
             operation = "task8_phase"
@@ -267,6 +282,7 @@ class ActWorkerPort:
             "manifest_sha256": self.context.manifest_sha256,
             "runtime_config_sha256": self.context.runtime_config_sha256,
             "contact_policy_fingerprint": self.context.contact_policy_fingerprint,
+            "stack_owner": asdict(self._startup_stack_owner),
         }
         if operation == "task8_phase":
             payload["stop_after"] = request["stop_after"]
@@ -360,6 +376,8 @@ class ActCampaignChildOwner:
                 "SO101_CHILD_SERVICE_TOKEN": token,
                 "SO101_CHILD_WEB_PID": str(os.getpid()),
                 "SO101_ACT_OPERATION_ID": context.operation_id,
+                "SO101_ACT_EVIDENCE_ROOT": context.evidence_root,
+                "SO101_ACT_SOURCE_SHA256": context.source_sha256,
                 "SO101_ACT_MANIFEST_SHA256": context.manifest_sha256,
                 "SO101_ACT_RUNTIME_CONFIG_SHA256": context.runtime_config_sha256,
                 "SO101_ACT_COLLECTION_CONFIG_SHA256": context.collection_config_sha256,
