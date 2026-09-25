@@ -48,13 +48,16 @@ class InstalledActStackReadinessProbe:
 
     def __init__(self, launch: ActStackLaunch, executable: Path, *,
                  run=subprocess.run, clock_ns=time.monotonic_ns,
-                 timeout_s: float = 60.0) -> None:
+                 timeout_s: float = 60.0,
+                 process_timeout_s: float | None = None) -> None:
         binary = Path(executable)
+        process_timeout_s = timeout_s + 10.0 if process_timeout_s is None else process_timeout_s
         if (not isinstance(launch, ActStackLaunch) or not binary.is_absolute()
                 or ".." in binary.parts or binary.is_symlink()
                 or not binary.is_file() or not os.access(binary, os.X_OK)
                 or not callable(run) or not callable(clock_ns)
                 or not 0 < timeout_s <= 60
+                or not timeout_s < process_timeout_s <= 75
                 or not launch.environment.get("GZ_PARTITION")):
             raise ValueError("ACT_STACK_READINESS_PROBE_CONFIG_INVALID")
         self.launch = launch
@@ -62,6 +65,7 @@ class InstalledActStackReadinessProbe:
         self.run = run
         self.clock_ns = clock_ns
         self.timeout_s = timeout_s
+        self.process_timeout_s = process_timeout_s
         self.readiness_bytes: bytes | None = None
         self._attempted = False
 
@@ -76,7 +80,7 @@ class InstalledActStackReadinessProbe:
             result = self.run(
                 argv, env=self.launch.process_environment(), shell=False,
                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE, timeout=self.timeout_s + 10.0,
+                stderr=subprocess.PIPE, timeout=self.process_timeout_s,
                 check=False,
             )
         except (OSError, subprocess.TimeoutExpired) as error:

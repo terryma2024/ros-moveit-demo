@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 39652b32ddf032d61c1478214ceae459453fb2d9
+current_commit: 084beb27eacc97fee41b035bbf6a0049ad0cfab5
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -19,8 +19,8 @@ disproven_routes:
 open_hypotheses:
   - An owner-created readiness artifact and startup receipt can bind this observed seven-axis verdict to a Task8 case without opening the Task6 or phase gates.
   - The physical phase port can support measured Task6 TASK8_READY and Task8 live qualification.
-latest_checkpoint: CP-289
-next_experiment: EXP-290 bounded physical-stop and ROS graph-clear owner probes
+latest_checkpoint: CP-290
+next_experiment: EXP-291 isolated no-motion owner lifecycle
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -2282,3 +2282,13 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-289 — Owner-side startup proof is installed; stop and graph probes remain
 
 - Last valid experiment: EXP-289. The source and installed owner can issue and consume one fresh startup proof, but no real Task8 case has used it. Next add bounded physical-stop and ROS graph-clear probes to the exact stack owner, then verify an isolated no-motion owner lifecycle before any physical phase port or Task6 promotion. Preserve `FULL_RESTART_PROOF_UNAVAILABLE`, `ACT_TASK8_PORT_NOT_PROVISIONED` and `CALIBRATION_REQUIRED`; accepted Train/Val/Test 0/0/0. Retain registered root and all runs, archive none; scratch/IPC roots deletion candidates only, delete nothing.
+
+## EXP-290 — Bind physical-stop and graph-clear probes to an exact stack factory
+
+- **PLANNED:** Frozen source HEAD `084beb27eacc97fee41b035bbf6a0049ad0cfab5`, submodule `54463fce3bfa6192976e74113f5ed7152f708a3f`, registered root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`, exact overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, task test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, installed observer `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i/so101_demo_py/lib/so101_demo_py/act_stack_ready`, runtime launch `/opt/ros/jazzy/bin/ros2`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. EXP-289 can sign startup proof, but `ActStackProcessOwner` still requires injected stop and graph-clear probes. Build a fixed factory for a single admitted child that creates unique stack scope, uses independent bounded installed readiness observations at startup and after child cancellation for physical stop, and checks the exact domain for empty ROS graph after owned group retirement. Tests must show wrong scope, stale motion/readiness, failed graph command and nonempty graph cannot retire the owner; timeout must remain shorter than the owner deadline. Run focused RED/GREEN, Teleop full ordinary xdist8 and package gate with fresh verified NVMe scratch. No live stack, motion, reset, Task8 phase PASS, W8 or formal collection here. All production fences and accepted 0/0/0 remain unchanged; retain evidence, archive none, delete nothing.
+
+- **VALID as source and installed owner probes, not a live owner outcome:** Missing-module RED `scratch/exp290-red.kr5LqOvt` exited2 at the intended import. Retry-state RED `scratch/exp290-retry-red.XPBwkQcU` exited1 because a previously stopped/exited stack was queried again after graph-clear failure. The owner now retains a physical-stop confirmation through an exited-parent retry but always re-observes if still live; exact process identity is checked before either route. A second repeatability RED `scratch/exp290-repeat-red.Rq0lQ4mV` reached the absent repeatable stop probe; it now creates a fresh bounded installed observer on each live retry. `make_task8_act_stack` binds a unique admitted campaign/domain/session partition, separate startup and stop observers, and a `ros2 node list --no-daemon` graph-clear probe; wrong generation, linked/existing scope, nonempty graph and failed graph command reject. The current installed ROS CLI advertises `--no-daemon`. Final focused `scratch/exp290-repeat-green.jOtGxEfU` passed14/14; prior focused `scratch/exp290-focused-retry.Zxu7S6po` passed20/20. Initial full Teleop ordinary `scratch/exp290-teleop-full.NreBUtNX` exited0, 1208 passed/43 skipped. After repeatability fix, exact task-Python xdist8 ordinary `scratch/exp290-teleop-final-full.U9grAvLh` exited0 in76 s, 1209 passed/43 skipped, CPU32/workers8 and JUnit retained. Final overlay build `scratch/exp290-teleop-final-build.lhzIbugw` exited0 in2 s with exact task Python in CMakeCache; earlier clean configured build `scratch/exp290-teleop-build.ix5jBvUN` exited0 in55 s. Final tmux package gate `scratch/exp290-teleop-final-colcon.Ud4vhz5C` exited0 in306 s, 106 Teleop XML/0 errors/0 failures; an earlier package run before the repeatability change `scratch/exp290-teleop-colcon.1MUGYMWJ` also exited0 in306 s. Aggregate `colcon test-result --verbose` exited0: 5888 tests/0 errors/0 failures/205 skipped. Each pytest/colcon attempt used new previously nonexistent NVMe TMPDIR/TMP/TEMP, verified by exact task Python; IPC roots were short and task-owned. Installed probe resolves to this overlay and source/install SHA256 both `d0336134c25d58f38f63c8db1d2a094709f235ceb0b96d7ce7d4a6a5556ead9e`; `git diff --check` clean. No live stack or motion, Task8 phase, W8, formal data or training; accepted Train/Val/Test 0/0/0. Retain all runs, archive none; scratch/IPC roots deletion candidates only, delete nothing.
+
+## CP-290 — Bounded stack lifecycle probes are installed, pending real-stack verdict
+
+- Last valid experiment: EXP-290. Source and installed owner can start from one fresh seven-axis observer, require a second fresh stop observation and check the exact domain graph after group retirement. Next run one isolated no-motion ACT stack through the installed factory/owner in a fresh domain, retain process identity and proof/retirement receipts, and require empty graph. Do not call it a Task8 phase or FULL_RESTART proof. Keep `FULL_RESTART_PROOF_UNAVAILABLE`, `ACT_TASK8_PORT_NOT_PROVISIONED`, `CALIBRATION_REQUIRED` and accepted Train/Val/Test 0/0/0. Retain evidence, archive none; scratch/IPC roots deletion candidates only, delete nothing.
