@@ -103,6 +103,36 @@ class ActArtifactBinding:
                        for name, digest in self.hashes})
         return result
 
+    def read_hashed_json(self, name: str) -> dict:
+        """Read one admitted JSON artifact through a single no-follow open."""
+        if name not in _HASHED:
+            raise ValueError("ACT_ARTIFACT_BINDING_INVALID")
+        paths, hashes = dict(self.paths), dict(self.hashes)
+        if name not in paths or name not in hashes:
+            raise ValueError("ACT_ARTIFACT_BINDING_INVALID")
+        path = paths[name]
+        if not path.is_absolute() or ".." in path.parts:
+            raise ValueError("ACT_ARTIFACT_BINDING_INVALID")
+        try:
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+            with os.fdopen(fd, "rb") as stream:
+                if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                    raise ValueError("ACT_ARTIFACT_NOT_REGULAR")
+                raw = stream.read((1 << 20) + 1)
+        except OSError as error:
+            raise ValueError("ACT_ARTIFACT_UNAVAILABLE") from error
+        if len(raw) > (1 << 20):
+            raise ValueError("ACT_ARTIFACT_TOO_LARGE")
+        if hashlib.sha256(raw).hexdigest() != hashes[name]:
+            raise ValueError("ACT_ARTIFACT_HASH_MISMATCH")
+        try:
+            value = json.loads(raw)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError("ACT_ARTIFACT_INVALID") from error
+        if not isinstance(value, dict):
+            raise ValueError("ACT_ARTIFACT_INVALID")
+        return value
+
     def verify(self) -> None:
         if (not self.evidence_root.is_absolute() or ".." in self.evidence_root.parts
                 or not self.evidence_root.is_dir()
