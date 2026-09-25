@@ -236,3 +236,30 @@ def test_campaign_owner_stops_all_started_children_after_one_child_crashes(tmp_p
         asyncio.run(manager.start(context, launches))
     assert len(started) == len(stopped) == 4
     assert stopped == list(reversed(started))
+
+
+def test_campaign_owner_never_spawns_after_context_deadline(tmp_path):
+    launch = _launch()
+    digest = hashlib.sha256(json.dumps([launch.__dict__], sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    expired = replace(_context(), worker_count=1, domain_session_map_sha256=digest,
+                      admitted_at_monotonic_s=1.0, deadline_monotonic_s=2.0)
+    base = BridgeLaunch(Path(sys.executable), tmp_path, "runtime", {}, tmp_path / "base")
+    started = []
+
+    class FakeOwner:
+        def __init__(self, launch, arbiter, safety):
+            started.append(launch)
+
+        async def start(self):
+            return object()
+
+        def socket_paths(self):
+            return tmp_path / "normal.sock", tmp_path / "safety.sock"
+
+        async def stop_owned(self):
+            pass
+
+    manager = ActCampaignChildOwner(base, object(), object(), owner_factory=FakeOwner)
+    with pytest.raises(MutationError, match="ACT_CAMPAIGN_DEADLINE_EXPIRED"):
+        asyncio.run(manager.start(expired, (launch,)))
+    assert started == []

@@ -8,6 +8,7 @@ is reported unavailable with a reason instead of the service guessing another ru
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Mapping
 
@@ -203,9 +204,17 @@ class _DeferredBridgeOwner:
         self._client_factory = None
 
     def bind(self, arbiter, safety) -> None:
+        import os
         import secrets
 
         self.service_token = secrets.token_urlsafe(24)
+        environment = dict(self.launch.environment)
+        environment.update({
+            "SO101_CHILD_SERVICE_EPOCH": environment.get("SO101_UNIFIED_SERVICE_EPOCH", "unified"),
+            "SO101_CHILD_SERVICE_TOKEN": self.service_token,
+            "SO101_CHILD_WEB_PID": str(os.getpid()),
+        })
+        self.launch = replace(self.launch, environment=environment)
         self._owner = BridgeProcessOwner(self.launch, arbiter, safety)
 
     def bind_client_factory(self, factory) -> None:
