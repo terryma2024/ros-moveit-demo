@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 10fc80e8dcaf187876ac589ddce23501dd06c12c
+current_commit: a462e5ac
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -13,14 +13,14 @@ confirmed_conclusions:
   - EXP-176 confirms current schema-v3 collector and analyzer are absent from source and installed overlay.
   - CP-177 rebased this branch onto the independently reviewed ACT Task 8 design and plan at approved-main 1e4664517fecc34a01ef6b8959e4a0f7316cda6e.
   - EXP-213 activated the independently reviewed canonical contact-policy fingerprint 0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11 under the user's exact authorization.
-  - CP-280 confirms one-shot Task8CaseOwner binds its stack evidence root to the admitted campaign path; live Task 8 remains fenced.
+  - CP-281 confirms a source-only single-use startup proof consumer with fixed path, process identity, artifact hashes and fresh readiness; live Task 8 remains fenced.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
-  - An exact campaign-scoped stack evidence path can support a trusted, one-use startup receipt without changing admission identity.
-  - Concrete bounded readiness probes and the physical phase port can support measured Task6 TASK8_READY and Task8 live qualification.
-latest_checkpoint: CP-280
-next_experiment: EXP-281 startup proof consumer contract
+  - Concrete bounded readiness probes and an owner-created receipt can support the single-use consumer without changing admission identity.
+  - The physical phase port can support measured Task6 TASK8_READY and Task8 live qualification.
+latest_checkpoint: CP-281
+next_experiment: EXP-282 concrete stack readiness probes
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -2192,3 +2192,13 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-280 — Stack evidence path is fixed by admitted campaign identity
 
 - Last valid experiment: EXP-280. A future child startup-proof consumer can derive the stack receipt path from the admitted campaign root and ID. No startup receipt producer or consumer has been enabled. `FULL_RESTART_PROOF_UNAVAILABLE`, `ACT_TASK8_PORT_NOT_PROVISIONED`, and `CALIBRATION_REQUIRED` remain enforced. Accepted Train/Val/Test 0/0/0. Retain registered root and all runs, archive none; scratch/IPC roots are deletion candidates only, delete nothing.
+
+## EXP-281 — Consume one fresh, owner-bound Task8 startup proof
+
+- **PLANNED:** Source HEAD `a462e5ac`, registered root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, runtime executable `NOT_STARTED`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. Implement only a strict consumer for a future owner-created startup receipt at `<admitted evidence_root>/task8-live/<campaign_id>/stack/startup-receipt.json`. Bind operation, artifact hashes, child and stack process identities, domain/session, a SHA256-checked readiness artifact and monotonic freshness. Create and fsync a unique consumed marker before accepting any proof, so failed validation cannot replay. Reject symlinks and unreadable/oversize/nonregular evidence. Test missing proof, valid single use, tampering, replay after invalid proof and path drift with focused RED/GREEN, then Teleop ordinary/package gates with new verified NVMe scratch and short IPC roots. No producer or live wiring until concrete bounded readiness probes are verified; retain `FULL_RESTART_PROOF_UNAVAILABLE`, `ACT_TASK8_PORT_NOT_PROVISIONED`, and `CALIBRATION_REQUIRED`. No live stack/motion; retain evidence, archive none; scratch/IPC deletion candidates only, delete nothing.
+
+- **VALID as source-only consumer, not a live startup proof:** Missing-module TDD RED `scratch/exp281-red.BfNo3ASO` reached the intended import boundary. Initial GREEN `scratch/exp281-green.6kuu0yfx` passed5/5. A separate identity-type RED `scratch/exp281-type-red.YAGj5jcS` showed that a float `started_ticks` could compare equal to the expected integer; after typed nested-owner validation, focused `scratch/exp281-final-green.tad132TH` passed22/22. The consumer derives one fixed receipt/readiness directory from admitted context, rejects symlinked path components or proof files, checks exact operation/campaign/worker/generation/domain/session, all five artifact fingerprints, exact process owner records and live process identity, the readiness SHA256 and seven required readiness axes, and monotonic freshness. It creates and fsyncs an exclusive consumed marker before validating the files; malformed proof cannot be replayed. No producer or production caller exists, so no FULL_RESTART claim is made. Exact task-Python eight-worker Teleop ordinary `scratch/exp281-teleop-full.1goIHLCG` exited0 in75 s, 1194 passed/43 skipped. Overlay build `scratch/exp281-build.1Ivj0aLZ` exited0 in53 s using pinned Bun1.4.2; serial package CTest `scratch/exp281-teleop-colcon.PCCZy7SD` exited0 in303 s, with 104 Teleop XMLs and no errors/failures. Aggregate `colcon test-result --verbose` exited0: 5864 tests/0 errors/0 failures/205 skipped. Each pytest/colcon test used unique previously nonexistent NVMe TMPDIR/TMP/TEMP verified by exact task Python and a unique short IPC root. CMakeCache `_Python3_EXECUTABLE` is the exact task Python; installed consumer resolves to current source and both SHA256 values are `8ddbee7e81799083e90e0002ff53df6159d1ae47ef064dd970ea7162e297c5e2`; `git diff --check` clean. No live Task8 stack, phase PASS, W8, formal episode or training; accepted Train/Val/Test 0/0/0. Retain registered root and all runs, archive none; scratch/IPC roots deletion candidates only, delete nothing.
+
+## CP-281 — Startup proof may be consumed only once after strict validation
+
+- Last valid experiment: EXP-281. The consumer contract is tested and installed, but no concrete readiness producer has been built and the live entry remains closed. Next implement bounded stack readiness and physical-stop probes from real ROS/MuJoCo sources, then owner-created receipt issuance and child wiring. `FULL_RESTART_PROOF_UNAVAILABLE`, `ACT_TASK8_PORT_NOT_PROVISIONED`, and `CALIBRATION_REQUIRED` remain enforced. Accepted Train/Val/Test 0/0/0. Retain registered root and all runs, archive none; scratch/IPC roots deletion candidates only, delete nothing.
