@@ -11,10 +11,12 @@ import asyncio
 import contextlib
 import hashlib
 import json
+import os
+import secrets
 import subprocess
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .arbiter import GlobalMutationArbiter
@@ -82,7 +84,8 @@ class BridgeLaunch:
         return BridgeLaunch(
             ros_python=self.ros_python,
             install_prefix=self.install_prefix,
-            runtime_id=f"{self.runtime_id}-{child.worker_id}-g{child.execution_generation}",
+            runtime_id=(f"{self.runtime_id}-{hashlib.sha256(child.campaign_id.encode()).hexdigest()}"
+                        f"-{child.worker_id}-g{child.execution_generation}"),
             environment=environment,
             socket_root=Path(child.socket_root),
         )
@@ -292,6 +295,83 @@ class ActWorkerPort:
         )
 
 
+class ActCampaignChildOwner:
+    """Spawn and retain exactly the child map frozen by campaign admission."""
+
+    def __init__(self, base_launch: BridgeLaunch, arbiter, safety, *, owner_factory=None) -> None:
+        self.base_launch = base_launch
+        self.arbiter = arbiter
+        self.safety = safety
+        self.owner_factory = owner_factory or BridgeProcessOwner
+        self._owners: list[BridgeProcessOwner] = []
+        self._clients: list[BridgeClient] = []
+        self._ports: tuple[ActWorkerPort, ...] = ()
+
+    async def start(
+        self, context: AdmittedCampaignContext, launches: tuple[ActChildLaunch, ...]
+    ) -> tuple[ActWorkerPort, ...]:
+        if self._owners:
+            raise MutationError("ACT_CHILDREN_ALREADY_STARTED")
+        if len(launches) != context.worker_count:
+            raise MutationError("ACT_CHILD_MAP_MISMATCH")
+        registry = ActChildRegistry()
+        for child in launches:
+            if child.campaign_id != context.campaign_id or child.execution_generation != context.execution_generation:
+                raise MutationError("ACT_CHILD_MAP_MISMATCH")
+            registry.register(child)
+        document = [item.__dict__ for item in launches]
+        digest = hashlib.sha256(json.dumps(document, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+        if digest != context.domain_session_map_sha256:
+            raise MutationError("ACT_CHILD_MAP_MISMATCH")
+        prepared: list[tuple[ActChildLaunch, BridgeLaunch, str]] = []
+        for child in launches:
+            token = secrets.token_urlsafe(32)
+            launch = self.base_launch.for_act_worker(child)
+            environment = dict(launch.environment)
+            environment.update({
+                "SO101_CHILD_SERVICE_EPOCH": context.service_epoch,
+                "SO101_CHILD_SERVICE_TOKEN": token,
+                "SO101_CHILD_WEB_PID": str(os.getpid()),
+                "SO101_ACT_OPERATION_ID": context.operation_id,
+                "CUDA_VISIBLE_DEVICES": context.physical_gpu_uuid,
+            })
+            prepared.append((child, replace(launch, environment=environment), token))
+        try:
+            ports = []
+            for child, launch, token in prepared:
+                owner = self.owner_factory(launch, self.arbiter, self.safety)
+                self._owners.append(owner)
+                owner_key = await owner.start()
+                normal, safety = owner.socket_paths()
+                client = BridgeClient(
+                    normal_socket=normal, safety_socket=safety,
+                    service_epoch=context.service_epoch, runtime_id=launch.runtime_id,
+                    service_token=token, owner=owner_key,
+                )
+                self._clients.append(client)
+                ports.append(ActWorkerPort(context, child, client))
+            self._ports = tuple(ports)
+            return self._ports
+        except BaseException:
+            await self.stop_owned()
+            raise
+
+    async def stop_owned(self) -> None:
+        for client in self._clients:
+            client.close()
+        self._clients.clear()
+        failures = []
+        for owner in reversed(self._owners):
+            try:
+                await owner.stop_owned()
+            except BaseException as error:
+                failures.append(error)
+        if failures:
+            raise MutationError("ACT_CHILD_CLEANUP_NOT_CONFIRMED") from failures[0]
+        self._owners.clear()
+        self._ports = ()
+
+
 def _hash_environment(environment: dict[str, str]) -> str:
     return hashlib.sha256(
         json.dumps(environment, sort_keys=True).encode()
@@ -382,7 +462,7 @@ class BridgeProcessOwner:
                 document = json.loads(ready_path.read_text())
                 if document.get("pid") == self.process.pid and document.get(
                     "runtime_id"
-                ) == self.launch.runtime_id:
+                ) == self.launch.runtime_id and self._ready_matches(document):
                     self._ready_document = document
                     return self.owner
             await asyncio.sleep(0.02)
@@ -393,7 +473,28 @@ class BridgeProcessOwner:
             return False
         if self._ready_document is None:
             return False
-        return self._ready_document.get("service_epoch") is not None
+        return self._ready_matches(self._ready_document)
+
+    def _ready_matches(self, document: dict) -> bool:
+        expected_epoch = self.launch.environment.get("SO101_CHILD_SERVICE_EPOCH")
+        if expected_epoch is not None and document.get("service_epoch") != expected_epoch:
+            return False
+        if document.get("service_epoch") is None or document.get("runtime_id") != self.launch.runtime_id:
+            return False
+        campaign_id = self.launch.environment.get("SO101_ACT_CAMPAIGN_ID")
+        if campaign_id is None:
+            return True
+        generation = self.launch.environment.get("SO101_ACT_GENERATION")
+        if not isinstance(generation, str) or not generation.isdecimal():
+            return False
+        expected = {
+            "campaign_id": campaign_id,
+            "worker_id": self.launch.environment.get("SO101_ACT_WORKER_ID"),
+            "execution_generation": int(generation),
+            "normal_socket": str(Path(self.launch.socket_root) / NORMAL_SOCKET_NAME),
+            "safety_socket": str(Path(self.launch.socket_root) / SAFETY_SOCKET_NAME),
+        }
+        return all(document.get(key) == value for key, value in expected.items())
 
     async def stop_owned(self, *, timeout_s: float = 5.0) -> None:
         """Stop the exact group this service started, after re-proving the owner's identity.

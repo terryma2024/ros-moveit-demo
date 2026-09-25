@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import json
 import asyncio
+from dataclasses import replace
+import hashlib
+from pathlib import Path
 import sys
 import time
 
 import pytest
 
 from so101_teleop.unified.ipc import IpcProtocolError, decode_request
-from so101_teleop.unified.bridge import ActChildLaunch, ActWorkerPort, BridgeLaunch
+from so101_teleop.unified.bridge import ActCampaignChildOwner, ActChildLaunch, ActWorkerPort, BridgeLaunch
 from so101_teleop.unified.contracts import AdmittedCampaignContext, MutationError
 from so101_teleop.unified.ipc import IpcReply
 
@@ -160,3 +163,76 @@ def test_bridge_launch_derives_distinct_worker_runtime_environment(tmp_path):
     assert second.environment["ROS_DOMAIN_ID"] == "41"
     assert first.environment["SO101_ACT_WORKER_ID"] == "w00"
     assert second.environment["SO101_SIMULATION_SESSION_ID"] == "session-w01"
+
+
+def test_campaign_owner_starts_exactly_eight_isolated_children_and_cleans_up(tmp_path):
+    launches = tuple(_launch(f"w{index:02d}", 40 + index) for index in range(8))
+    mapping = [item.__dict__ for item in launches]
+    mapping_sha = hashlib.sha256(json.dumps(mapping, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    context = replace(_context(), worker_count=8, domain_session_map_sha256=mapping_sha)
+    base = BridgeLaunch(Path(sys.executable), tmp_path, "runtime", {}, tmp_path / "base")
+    started = []
+    stopped = []
+
+    class FakeOwner:
+        def __init__(self, launch, arbiter, safety):
+            self.launch = launch
+
+        async def start(self):
+            started.append(self.launch)
+            return object()
+
+        def socket_paths(self):
+            return self.launch.socket_root / "normal.sock", self.launch.socket_root / "safety.sock"
+
+        async def stop_owned(self):
+            stopped.append(self.launch.runtime_id)
+
+    manager = ActCampaignChildOwner(base, object(), object(), owner_factory=FakeOwner)
+    ports = asyncio.run(manager.start(context, launches))
+    assert len(ports) == 8
+    assert {port.launch.ros_domain_id for port in ports} == set(range(40, 48))
+    assert {port.launch.mujoco_session_id for port in ports} == {f"session-w{index:02d}" for index in range(8)}
+    assert all(item.environment["SO101_CHILD_SERVICE_EPOCH"] == "epoch-1" for item in started)
+    assert all(item.environment["CUDA_VISIBLE_DEVICES"] == "GPU-physical-a" for item in started)
+    assert len({item.environment["SO101_CHILD_SERVICE_TOKEN"] for item in started}) == 8
+    asyncio.run(manager.stop_owned())
+    assert len(stopped) == 8
+
+
+def test_campaign_owner_rejects_map_tamper_before_spawning(tmp_path):
+    base = BridgeLaunch(Path(sys.executable), tmp_path, "runtime", {}, tmp_path / "base")
+    manager = ActCampaignChildOwner(base, object(), object())
+    with pytest.raises(MutationError, match="ACT_CHILD_MAP_MISMATCH"):
+        asyncio.run(manager.start(_context(), (_launch(),)))
+
+
+def test_campaign_owner_stops_all_started_children_after_one_child_crashes(tmp_path):
+    launches = tuple(_launch(f"w{index:02d}", 40 + index) for index in range(8))
+    document = [item.__dict__ for item in launches]
+    digest = hashlib.sha256(json.dumps(document, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    context = replace(_context(), worker_count=8, domain_session_map_sha256=digest)
+    base = BridgeLaunch(Path(sys.executable), tmp_path, "runtime", {}, tmp_path / "base")
+    started, stopped = [], []
+
+    class FailingOwner:
+        def __init__(self, launch, arbiter, safety):
+            self.launch = launch
+
+        async def start(self):
+            started.append(self.launch.runtime_id)
+            if self.launch.environment["SO101_ACT_WORKER_ID"] == "w03":
+                raise RuntimeError("child crashed")
+            return object()
+
+        def socket_paths(self):
+            return self.launch.socket_root / "normal.sock", self.launch.socket_root / "safety.sock"
+
+        async def stop_owned(self):
+            stopped.append(self.launch.runtime_id)
+
+    manager = ActCampaignChildOwner(base, object(), object(), owner_factory=FailingOwner)
+    with pytest.raises(RuntimeError, match="child crashed"):
+        asyncio.run(manager.start(context, launches))
+    assert len(started) == len(stopped) == 4
+    assert stopped == list(reversed(started))

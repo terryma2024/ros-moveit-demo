@@ -87,13 +87,19 @@ class RclpyActionDriver:
 def local_owner(runtime_id: str) -> OwnerKey:
     import hashlib
     import json
+    from ..process_identity import ProcessIdentityError, read_identity
 
-    argv = list(os.environ.get("SO101_CHILD_ARGV", "").split("\0"))
+    try:
+        identity = read_identity(os.getpid())
+    except ProcessIdentityError as error:
+        raise MutationError("ACT_CHILD_OWNER_UNREADABLE") from error
+    if not identity.live:
+        raise MutationError("ACT_CHILD_OWNER_NOT_LIVE")
     return OwnerKey(
-        pid=os.getpid(),
-        pgid=os.getpgid(0),
-        started_ticks=int(time.monotonic_ns()),
-        argv_sha256=hashlib.sha256("\0".join(argv).encode()).hexdigest(),
+        pid=identity.pid,
+        pgid=identity.pgid,
+        started_ticks=identity.start_marker,
+        argv_sha256=identity.command_sha256,
         environment_sha256=hashlib.sha256(json.dumps(dict(os.environ), sort_keys=True).encode()).hexdigest(),
     )
 
