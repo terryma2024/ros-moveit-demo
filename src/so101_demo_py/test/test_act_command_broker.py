@@ -501,6 +501,32 @@ def test_initial_pair_binding_cannot_clear_unconfirmed_prelease_stop():
     assert paired._ticket is None and driver.sent==[]
 
 
+def test_pair_status_refreshes_physical_stop_only_after_both_controllers_succeed():
+    from so101_demo.adapters.act.broker_execution import BrokerPairedExecution
+    driver=Driver();driver.refreshes=0
+    driver.refresh_idle=lambda:setattr(driver,'refreshes',driver.refreshes+1)
+    states={'arm':dict(accepted=True,status=4,result={'error_code':0}),
+            'gripper':dict(accepted=True,status=None,result=None)}
+    driver.goal_state=lambda gid:states[gid]
+    broker=CommandBroker(driver,ownership=Ownership())
+    paired=BrokerPairedExecution(broker,snapshot_port=lambda ticket:None,
+        check_port=lambda p,s:True,reference_port=lambda t:(0.,)*6,sim_clock=lambda:1.,
+        submit_lead_s=.04,accept_timeout_s=.03,stop_timeout_s=1.,permit_ttl_s=.1)
+    paired._pairs['pair']=('arm','gripper')
+    assert paired.goal_state('pair')['segment_stop_confirmed'] is False
+    assert driver.refreshes==0
+    states['gripper']=dict(accepted=True,status=4,result={'error_code':0})
+    driver.stationary=False
+    assert paired.goal_state('pair')['segment_stop_confirmed'] is False
+    assert driver.refreshes==1
+    driver.stationary=True
+    assert paired.goal_state('pair')['segment_stop_confirmed'] is True
+    assert driver.refreshes==2
+    states['gripper']=dict(accepted=True,status=5,result={'error_code':-4})
+    assert paired.goal_state('pair')['segment_stop_confirmed'] is False
+    assert driver.refreshes==2
+
+
 def test_inherited_rpc_reads_large_response_in_bounded_chunks_without_stealing_next_reply(monkeypatch):
     import json,socket
     from so101_demo.adapters.act.leased_action_client import BrokerConnection

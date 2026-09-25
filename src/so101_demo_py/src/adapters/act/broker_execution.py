@@ -75,10 +75,17 @@ class BrokerPairedExecution:
         states=[self.broker.driver.goal_state(item) for item in ids]
         accepted=all(state['accepted'] is True for state in states)
         terminal=all(state['status'] in (4,5,6) for state in states)
-        status=None;result=None
+        status=None;result=None;segment_stop_confirmed=False
         if terminal:
             success=all(state['status']==4 and state['result']['error_code']==0 for state in states)
             status=4 if success else 6
             result={'arm':states[0]['result'],'gripper':states[1]['result']}
+            if success:
+                # A successful action result can precede physical settling.
+                # Keep refreshing the driver's negative cancellation baseline
+                # while this ACT lease is RUNNING, then check fresh feedback.
+                self.broker.driver.refresh_idle()
+                segment_stop_confirmed=self.broker.driver.stopped()
         return dict(accepted=accepted,status=status,result=result,
-                    goal_ids=ids,controllers=states,audit=self.adapter.audit)
+                    goal_ids=ids,controllers=states,audit=self.adapter.audit,
+                    segment_stop_confirmed=segment_stop_confirmed)
