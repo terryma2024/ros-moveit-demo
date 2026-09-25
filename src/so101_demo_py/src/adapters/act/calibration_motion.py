@@ -97,6 +97,7 @@ class RosCalibrationMotionGuard:
             stem='contact-diagnostic' if self.contact_mode else 'motion-calibration'
             self._record=(root/(stem+'-robot-contacts.jsonl')).open('x',encoding='utf-8')
             self._scene_record=(root/(stem+'-scene-state.jsonl')).open('x',encoding='utf-8')
+            self._audit_record=(root/(stem+'-guard-rejections.jsonl')).open('x',encoding='utf-8')
             self.scene_observer=SceneStateObserver(model_sha256=self.path.model_sha256,
                 nq=self.model.nq,nv=self.model.nv,max_age_s=config['max_age_s'],monotonic=self.monotonic)
             self.scene_adapter=RosSceneStateAdapter(node,self.scene_observer,on_hazard=self._fail,
@@ -109,6 +110,7 @@ class RosCalibrationMotionGuard:
             self.path.close()
             if hasattr(self,'_record'):self._record.close()
             if hasattr(self,'_scene_record'):self._scene_record.close()
+            if hasattr(self,'_audit_record'):self._audit_record.close()
             raise
 
     def _start_safe(self,positions,neck_yaw):
@@ -330,21 +332,37 @@ class RosCalibrationMotionGuard:
             controller_start_time_s=start,controller_start_positions=reference,controller_start_velocities=reference_velocity,
             cup_in_gripper_transform=None)
 
+    def _record_rejection(self,row):
+        import json,os
+        self.audit.append(row)
+        self._audit_record.write(json.dumps(row,allow_nan=False,separators=(',',':'))+'\n')
+        self._audit_record.flush()
+        os.fsync(self._audit_record.fileno())
+
     def check_prefix(self,prefix,snapshot):
         began=self.monotonic()
         try:
-            if not self._live_ready():return False
+            if not self._live_ready():
+                self._record_rejection(dict(boundary='approve',safe=False,reason='LIVE_NOT_READY',
+                    snapshot_sim_time_s=snapshot.get('sim_time_s')))
+                return False
             start=snapshot['sim_time_s']+self.manifest['submit_lead_s']
             reference=self.driver.reference_state(start)
             full=self._snapshot(snapshot,start=start,reference=reference['positions'],reference_velocity=reference['velocities'])
-            if not self._within(prefix,reference['positions'],self._joints[0][6]):return False
+            if not self._within(prefix,reference['positions'],self._joints[0][6]):
+                self._record_rejection(dict(boundary='approve',safe=False,reason='PREFIX_WITHIN_INVALID',
+                    snapshot_sim_time_s=snapshot['sim_time_s']))
+                return False
             safe=self.path.check_path(prefix,full)
-            self.audit.append(dict(boundary='approve',safe=safe,path=dict(self.path.last_check),
-                elapsed_wall_s=self.monotonic()-began,snapshot_sim_time_s=snapshot['sim_time_s']))
+            row=dict(boundary='approve',safe=safe,path=dict(self.path.last_check),
+                elapsed_wall_s=self.monotonic()-began,snapshot_sim_time_s=snapshot['sim_time_s'])
+            if safe:self.audit.append(row)
+            else:self._record_rejection(row)
             return safe
         except (KeyError,TypeError,ValueError,RuntimeError) as error:
-            self.audit.append(dict(boundary='approve',safe=False,error=repr(error),
-                elapsed_wall_s=self.monotonic()-began,snapshot_sim_time_s=snapshot.get('sim_time_s')));return False
+            self._record_rejection(dict(boundary='approve',safe=False,error=repr(error),
+                elapsed_wall_s=self.monotonic()-began,snapshot_sim_time_s=snapshot.get('sim_time_s')))
+            return False
 
     def check_exact_goals(self,goals,prefix):
         try:
@@ -397,6 +415,6 @@ class RosCalibrationMotionGuard:
             with self._lock:
                 self._closed=True
                 if self.live_adapter is not None:self.live_adapter.close()
-                for stream in (self._record,self._scene_record):
+                for stream in (self._record,self._scene_record,self._audit_record):
                     stream.flush();os.fsync(stream.fileno());stream.close()
         finally:self.path.close()

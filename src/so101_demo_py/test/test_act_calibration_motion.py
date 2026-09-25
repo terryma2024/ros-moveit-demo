@@ -70,6 +70,12 @@ def test_contact_diagnostic_guard_uses_single_existing_broker_and_live_physics(t
     altered['positions'][0][5]+=.001
     assert not guard._within(altered,contact['joint_start_rad'],contact['neck_start_rad'])
     assert not guard._live_ready()  # reset alone cannot authorize a trajectory
+    assert not guard.check_prefix(prefix, {'sim_time_s': 0.})
+    import json
+    refusals = [json.loads(line) for line in
+                (tmp_path/'contact-diagnostic-guard-rejections.jsonl').read_text().splitlines()]
+    assert refusals[-1]['boundary'] == 'approve'
+    assert refusals[-1]['reason'] == 'LIVE_NOT_READY'
     import mujoco
     driver._reset_initial=NS(simulation_session_id='contact-one',reset_epoch=0)
     driver._reset_target=NS(name=reset.joint_names,position=reset.positions_rad,
@@ -179,6 +185,29 @@ def test_live_contact_staleness_waits_while_reset_is_paused():
     guard.scene_observer.last['paused']=False
     RosCalibrationMotionGuard.poll(guard)
     assert calls == ['suspend', 'start', 'poll']
+
+
+def test_motion_guard_persists_actual_path_refusal_detail(tmp_path):
+    import json
+    from collections import deque
+    from types import SimpleNamespace as NS
+    from so101_demo.adapters.act.calibration_motion import RosCalibrationMotionGuard
+    output = (tmp_path/'guard-rejections.jsonl').open('x', encoding='utf-8')
+    guard = NS(monotonic=lambda: 10., audit=deque(maxlen=8), _audit_record=output,
+               _joints=((0.,)*7,),
+               _live_ready=lambda: True, manifest={'submit_lead_s': .05},
+               driver=NS(reference_state=lambda _: {'positions': (0.,)*6,
+                                                     'velocities': (0.,)*6}),
+               _snapshot=lambda *args, **kwargs: {}, _within=lambda *args: True,
+               path=NS(check_path=lambda *args: False,
+                       last_check={'safe': False, 'reason': 'PATH_CHECK_TIMEOUT'}))
+    guard._record_rejection = lambda row: RosCalibrationMotionGuard._record_rejection(guard, row)
+    assert not RosCalibrationMotionGuard.check_prefix(guard, {}, {'sim_time_s': 1.})
+    output.close()
+    row = json.loads((tmp_path/'guard-rejections.jsonl').read_text())
+    assert row['boundary'] == 'approve'
+    assert row['path']['reason'] == 'PATH_CHECK_TIMEOUT'
+    assert row['safe'] is False
 
 
 def test_contact_exact_goals_use_fresh_sim_time_and_reject_old_observation():
