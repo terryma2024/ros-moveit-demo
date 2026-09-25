@@ -446,7 +446,7 @@ class UnifiedWorkloadService:
         physical_uuid = resolve_physical_gpu(self.gpu_selector, current_visible)
         return payload, children, physical_uuid
 
-    def start(self, spec: OperationSpec) -> AdmittedCampaignContext:
+    def start(self, spec: OperationSpec, *, allow_existing: bool = True) -> AdmittedCampaignContext:
         """Validate everything, acquire resources and persist one context atomically."""
         with self._start_lock:
             payload, children, physical_uuid = self._validate_start(spec)
@@ -454,6 +454,8 @@ class UnifiedWorkloadService:
             with store.immediate_transaction():
                 repeated = store.repeat(spec.command_id, store.fingerprint(spec))
                 if repeated is not None:
+                    if not allow_existing:
+                        raise ValueError("CAMPAIGN_ALREADY_ADMITTED")
                     row = store._query_one(
                         "SELECT context_json FROM act_campaign_contexts WHERE operation_id=?",
                         (repeated.operation_id,),

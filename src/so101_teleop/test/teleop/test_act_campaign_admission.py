@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError, replace
+import asyncio
 import hashlib
 import json
 import os
+from pathlib import Path
+import sys
 import time
 
 import pytest
 
 from so101_teleop.unified.contracts import AdmittedCampaignContext
+import so101_teleop.unified.bridge as bridge_module
 from so101_teleop.unified.bridge import ActChildLaunch, ActChildRegistry
 from so101_teleop.unified.admission import UnifiedWorkloadService
 from so101_teleop.unified.arbiter import GlobalMutationArbiter
@@ -478,5 +482,124 @@ def test_finish_keeps_gpu_and_children_when_action_terminal_is_unknown(tmp_path)
         assert service.child_registry.launches()
         assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
         assert service.arbiter.is_blocked()
+    finally:
+        store.close()
+
+
+def test_campaign_lifecycle_starts_only_after_admission_and_settles_after_cleanup(tmp_path):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        seen = []
+
+        class ChildOwner:
+            async def start(self, context, launches):
+                assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
+                assert not service.arbiter.is_idle()
+                seen.append((context, launches))
+                return ("worker-port",)
+
+            async def stop_owned(self):
+                seen.append("stopped")
+
+        lifecycle = bridge_module.ActCampaignLifecycle(service, ChildOwner())
+        spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+        context, ports = asyncio.run(lifecycle.start(spec))
+        assert ports == ("worker-port",)
+        assert seen[0][1] == (launch("w00", 40, "session-0"),)
+        assert lifecycle.context == context
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
+        projection = asyncio.run(lifecycle.finish(context))
+        assert projection.operation_id == context.operation_id
+        assert seen[-1] == "stopped"
+        assert lifecycle.context is None
+        assert service.child_registry.launches() == ()
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+        with pytest.raises(ValueError, match="CAMPAIGN_ALREADY_ADMITTED"):
+            asyncio.run(lifecycle.start(spec))
+        assert seen[-1] == "stopped"
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("cleanup_fails", (False, True))
+def test_campaign_lifecycle_start_failure_settles_only_after_owned_cleanup(tmp_path, cleanup_fails):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        seen = []
+
+        class FailingChildOwner:
+            async def start(self, context, launches):
+                seen.append("start")
+                raise RuntimeError("child startup failed")
+
+            async def stop_owned(self):
+                seen.append("cleanup")
+                if cleanup_fails:
+                    raise RuntimeError("owned process still live")
+
+        lifecycle = bridge_module.ActCampaignLifecycle(service, FailingChildOwner())
+        spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+        expected = "ACT_CHILD_CLEANUP_NOT_CONFIRMED" if cleanup_fails else "child startup failed"
+        with pytest.raises((RuntimeError, ValueError), match=expected):
+            asyncio.run(lifecycle.start(spec))
+        assert seen == ["start", "cleanup"]
+        assert bool(service.child_registry.launches()) is cleanup_fails
+        assert (store._query_one("SELECT * FROM gpu_workload_leases") is not None) is cleanup_fails
+        assert (not service.arbiter.is_idle()) is cleanup_fails
+    finally:
+        store.close()
+
+
+def test_campaign_lifecycle_composes_exact_eight_admitted_children(tmp_path):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        base = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+        children = [launch(f"w{index:02d}", 40 + index, f"session-{index}").__dict__
+                    for index in range(8)]
+        spec = replace(base, kind="task8_full", payload={**base.payload,
+            "worker_count": 8, "children": children})
+        started, stopped = [], []
+
+        class FakeOwner:
+            def __init__(self, child_launch, arbiter, safety):
+                self.launch = child_launch
+
+            async def start(self):
+                started.append(self.launch)
+                return object()
+
+            def socket_paths(self):
+                root = self.launch.socket_root
+                return root / "normal.sock", root / "safety.sock"
+
+            async def stop_owned(self):
+                stopped.append(self.launch.runtime_id)
+
+        base_launch = bridge_module.BridgeLaunch(Path(sys.executable), tmp_path,
+            "runtime", {}, tmp_path / "base")
+        child_owner = bridge_module.ActCampaignChildOwner(base_launch, service.arbiter,
+            object(), owner_factory=FakeOwner)
+        lifecycle = bridge_module.ActCampaignLifecycle(service, child_owner)
+        context, ports = asyncio.run(lifecycle.start(spec))
+        assert len(ports) == len(started) == 8
+        assert {port.launch.ros_domain_id for port in ports} == set(range(40, 48))
+        assert {port.launch.mujoco_session_id for port in ports} == {
+            f"session-{index}" for index in range(8)}
+        assert {item.environment["SO101_ACT_OPERATION_ID"] for item in started} == {
+            context.operation_id}
+        asyncio.run(lifecycle.finish(context))
+        assert stopped == [item.runtime_id for item in reversed(started)]
+        assert service.child_registry.launches() == ()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
     finally:
         store.close()

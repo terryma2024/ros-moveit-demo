@@ -398,6 +398,46 @@ class ActCampaignChildOwner:
         self._ports = ()
 
 
+class ActCampaignLifecycle:
+    """Join the single admission decision to exact child ownership and cleanup."""
+
+    def __init__(self, workload_service, child_owner: ActCampaignChildOwner) -> None:
+        self.workload_service = workload_service
+        self.child_owner = child_owner
+        self.context: AdmittedCampaignContext | None = None
+
+    async def start(self, spec) -> tuple[AdmittedCampaignContext, tuple[ActWorkerPort, ...]]:
+        if self.context is not None:
+            raise MutationError("ACT_CAMPAIGN_ALREADY_STARTED")
+        # A repeated command may be read back through admission, but only a
+        # freshly reserved campaign may launch children. Recovery has its own path.
+        context = self.workload_service.start(spec, allow_existing=False)
+        self.context = context
+        try:
+            launches = tuple(ActChildLaunch(**item) for item in spec.payload["children"])
+            ports = await self.child_owner.start(context, launches)
+        except BaseException:
+            try:
+                await self.child_owner.stop_owned()
+            except BaseException as error:
+                raise MutationError("ACT_CHILD_CLEANUP_NOT_CONFIRMED") from error
+            try:
+                self.workload_service.finish(context, cleanup_confirmed=True)
+            except BaseException as error:
+                raise MutationError("ACT_CAMPAIGN_SETTLEMENT_UNCONFIRMED") from error
+            self.context = None
+            raise
+        return context, ports
+
+    async def finish(self, context: AdmittedCampaignContext):
+        if self.context != context:
+            raise MutationError("ACT_CAMPAIGN_CONTEXT_MISMATCH")
+        await self.child_owner.stop_owned()
+        projection = self.workload_service.finish(context, cleanup_confirmed=True)
+        self.context = None
+        return projection
+
+
 def _hash_environment(environment: dict[str, str]) -> str:
     return hashlib.sha256(
         json.dumps(environment, sort_keys=True).encode()
