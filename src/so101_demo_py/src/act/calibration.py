@@ -1,8 +1,10 @@
 """Measured, content-bound calibration is required before data collection."""
 
 import hashlib
+import json
 from pathlib import Path
 import re
+import subprocess
 
 from .contracts import fields, finite, integer, sha256, vector
 
@@ -40,6 +42,38 @@ CHECK_MEASUREMENTS = {
     "retreat": frozenset(("retreat_distance_m", "placement_stable_s")),
 }
 TASK8_READY_CHECKS = frozenset(("fov", "collision", "search", "synchronization", "execution"))
+
+
+def installed_calibration_identity(source_root: Path | None = None) -> tuple[str, str]:
+    """Return the source commit and installed ACT profile used by preflight."""
+    from ament_index_python.packages import get_package_share_directory
+
+    share = Path(get_package_share_directory("so101_demo_py"))
+    roots = (share / "assets/mujoco/act", share / "config/mujoco/act")
+    if any(not root.is_dir() for root in roots):
+        raise ValueError("ACT_PROFILE_UNAVAILABLE")
+    files = {str(path.relative_to(share)): hashlib.sha256(path.read_bytes()).hexdigest()
+             for root in roots for path in sorted(root.rglob("*")) if path.is_file()}
+    if not files:
+        raise ValueError("ACT_PROFILE_UNAVAILABLE")
+    config_hash = hashlib.sha256(json.dumps(files, sort_keys=True,
+        separators=(",", ":")).encode()).hexdigest()
+    source = Path(source_root) if source_root is not None else Path(__file__).resolve().parent
+    try:
+        source_commit = subprocess.check_output(
+            ["git", "-C", str(source), "rev-parse", "HEAD"],
+            text=True, stderr=subprocess.DEVNULL).strip()
+        if source_root is not None:
+            observed_root = subprocess.check_output(
+                ["git", "-C", str(source), "rev-parse", "--show-toplevel"],
+                text=True, stderr=subprocess.DEVNULL).strip()
+            if Path(observed_root).resolve() != source.resolve():
+                raise ValueError("CALIBRATION_SOURCE_ROOT_INVALID")
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise ValueError("CALIBRATION_SOURCE_UNAVAILABLE") from error
+    if re.fullmatch(r"[0-9a-f]{40}", source_commit) is None:
+        raise ValueError("CALIBRATION_SOURCE_INVALID")
+    return source_commit, config_hash
 
 
 def _validate_measurements(measurements, *, complete):

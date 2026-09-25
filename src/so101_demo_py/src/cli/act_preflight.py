@@ -1,13 +1,11 @@
 """Emit current ACT calibration status; unmeasured checks never pass."""
 
 import argparse
-import hashlib
 import json
 from pathlib import Path
-import re
-import subprocess
 
-from so101_demo.act.calibration import REQUIRED_CHECKS, require_gate, validate_partial
+from so101_demo.act.calibration import (REQUIRED_CHECKS, installed_calibration_identity,
+                                        require_gate, validate_partial)
 
 
 def main(arguments=None):
@@ -16,29 +14,7 @@ def main(arguments=None):
     parser.add_argument("--measured-report", type=Path)
     parser.add_argument("--source-root", type=Path)
     options = parser.parse_args(arguments)
-    from ament_index_python.packages import get_package_share_directory
-    share = Path(get_package_share_directory("so101_demo_py"))
-    roots = (share / "assets/mujoco/act", share / "config/mujoco/act")
-    files = {str(path.relative_to(share)): hashlib.sha256(path.read_bytes()).hexdigest()
-             for root in roots for path in sorted(root.rglob("*")) if path.is_file()}
-    if not files or any(not root.is_dir() for root in roots):
-        raise ValueError("ACT_PROFILE_UNAVAILABLE")
-    config_hash = hashlib.sha256(json.dumps(files,sort_keys=True,separators=(",",":")).encode()).hexdigest()
-    source_root = options.source_root or Path(__file__).resolve().parent
-    try:
-        source_commit = subprocess.check_output(
-            ["git", "-C", str(source_root), "rev-parse", "HEAD"],
-            text=True, stderr=subprocess.DEVNULL).strip()
-        if options.source_root is not None:
-            observed_root = subprocess.check_output(
-                ["git", "-C", str(source_root), "rev-parse", "--show-toplevel"],
-                text=True, stderr=subprocess.DEVNULL).strip()
-            if Path(observed_root).resolve() != source_root.resolve():
-                raise ValueError("CALIBRATION_SOURCE_ROOT_INVALID")
-    except (OSError, subprocess.CalledProcessError) as error:
-        raise ValueError("CALIBRATION_SOURCE_UNAVAILABLE") from error
-    if re.fullmatch(r"[0-9a-f]{40}", source_commit) is None:
-        raise ValueError("CALIBRATION_SOURCE_INVALID")
+    source_commit, config_hash = installed_calibration_identity(options.source_root)
     report = dict(schema_version=1,status="CALIBRATION_REQUIRED",source_commit=source_commit,
                   config_sha256=config_hash, measurements={},
                   checks={key:"UNMEASURED" for key in sorted(REQUIRED_CHECKS)})

@@ -132,6 +132,7 @@ def _service(store):
         visible_physical_uuids=("GPU-physical-a",), resource_binding_id="binding-1",
         owner_pid=os.getpid(), owner_started_ticks=1,
         owner_identity_valid=lambda pid, start: pid == os.getpid() and start == 1,
+        calibration_identity_probe=lambda: ("a" * 40, "b" * 64),
         clock_ns=clock,
     )
 
@@ -246,6 +247,30 @@ def test_task8_start_rejects_unverified_calibration_before_resources(tmp_path, m
     try:
         service = _service(store)
         with pytest.raises(ValueError, match="CALIBRATION_REQUIRED"):
+            service.start(spec)
+        assert service.child_registry.launches() == ()
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("field,stale", (("source_commit", "c" * 40),
+                                          ("config_sha256", "d" * 64)))
+def test_task8_start_rejects_stale_calibration_identity_before_resources(tmp_path, field, stale):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+    calibration_path = tmp_path / "calibration-TASK8_READY.json"
+    report = json.loads(calibration_path.read_text())
+    report[field] = stale
+    calibration_path.write_text(json.dumps(report))
+    spec = replace(spec, payload={**spec.payload,
+        "calibration_report_sha256": hashlib.sha256(calibration_path.read_bytes()).hexdigest()})
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        with pytest.raises(ValueError, match="CALIBRATION_SOURCE_CONFIG_MISMATCH"):
             service.start(spec)
         assert service.child_registry.launches() == ()
         assert service.arbiter.is_idle()
