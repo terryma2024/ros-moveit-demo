@@ -232,4 +232,4 @@ def test_act_contact_diagnostic_launch_uses_receipt_safe_speed_for_paired_path_c
     monkeypatch.setattr(launch,'_mujoco_stack_actions',stack)
     opaque=next(action for action in description.entities if isinstance(action,OpaqueFunction))
     with pytest.raises(Capture):opaque.execute(context)
-    assert captured==[.65]
+    assert captured==[.60]
