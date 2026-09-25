@@ -70,11 +70,14 @@ class Task8PhysicalReadback:
                self.cup_position_tolerance, self.cup_orientation_tolerance) <= 0:
             raise ValueError("TASK8_READBACK_CONFIG_INVALID")
 
-    def capture(self, session_id: str, attempt_id: str, reset_epoch: int) -> dict:
+    def capture(self, session_id: str, attempt_id: str, reset_epoch: int, *,
+                after_step: int | None = None) -> dict:
         identifier(session_id)
         identifier(attempt_id)
         if type(reset_epoch) is not int or reset_epoch < 1:
             raise Task8ReadbackError("SOURCE_SCOPE_MISMATCH")
+        if after_step is not None and (type(after_step) is not int or after_step < 0):
+            raise Task8ReadbackError("SOURCE_STEP_CURSOR_INVALID")
         try:
             received = self.world.recent_with_receipts()
             now = finite(self.monotonic(), nonnegative=True)
@@ -107,6 +110,10 @@ class Task8PhysicalReadback:
         common = worlds.keys() & scenes.keys() & contacts.keys()
         if not common:
             raise Task8ReadbackError("SOURCE_STEP_MISMATCH")
+        if after_step is not None:
+            common = {step for step in common if step > after_step}
+            if not common:
+                raise Task8ReadbackError("SOURCE_STEP_NOT_ADVANCED")
         step = max(common)
         world, scene, contact = worlds[step], scenes[step], contacts[step]
         if world.paused != scene["paused"]:
