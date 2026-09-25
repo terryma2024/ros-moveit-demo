@@ -176,7 +176,8 @@ def compose_domain_services(
             if (not selector or selector != selector.strip()
                     or not binding or binding != binding.strip()):
                 raise CompositionBlocked("ACT_CONFIG_INVALID")
-            visible = tuple((act_inventory or (lambda: _physical_gpu_inventory(environment)))())
+            inventory_probe = act_inventory or (lambda: _physical_gpu_inventory(environment))
+            visible = tuple(inventory_probe())
             # Validate inventory before exposing admission, even if no campaign starts.
             from .gpu_workload import resolve_physical_gpu
 
@@ -193,7 +194,7 @@ def compose_domain_services(
                 runtime_id=runtime_id, stable_host_id=host_id, gpu_selector=selector,
                 visible_physical_uuids=visible, resource_binding_id=binding,
                 owner_pid=owner_pid, owner_started_ticks=owner_started_ticks,
-                clock_ns=clock,
+                clock_ns=clock, gpu_inventory_probe=inventory_probe,
             )
         except Exception as error:  # noqa: BLE001 - ACT remains unavailable without physical proof
             act_error = f"{type(error).__name__}: {error}"
