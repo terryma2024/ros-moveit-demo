@@ -151,6 +151,7 @@ class RclpyActionDriver:
         self._act_sources = None
         self._act_hazard_dispatcher = None
         self._act_command_broker = None
+        self._act_reset_connection = None
         if os.environ.get("SO101_ACT_CAMPAIGN_ID"):
             from .act_artifacts import ActArtifactBinding
             self._act_artifacts = ActArtifactBinding.verify_environment(os.environ)
@@ -187,7 +188,7 @@ class RclpyActionDriver:
         from rclpy.executors import SingleThreadedExecutor
         from rclpy.parameter import Parameter
         from so101_demo.act.ownership import Ownership
-        from so101_demo.adapters.act.command_broker import CommandBroker
+        from so101_demo.adapters.act.command_broker import CommandBroker, LocalBrokerConnection
         from so101_demo.adapters.act.ros_broker import RosBrokerDriver
         from so101_demo.adapters.act.task8_sources import Task8RosEvidence, Task8HazardDispatcher
 
@@ -199,6 +200,7 @@ class RclpyActionDriver:
             self._act_command_broker = CommandBroker(
                 broker, ownership=Ownership(), simulation_session_id=session_id,
             )
+            self._act_reset_connection = LocalBrokerConnection(self._act_command_broker)
             self._act_sources = Task8RosEvidence(
                 self._node, broker, model=self._act_model,
                 contact_pairs=self._act_contact_pairs, session_id=session_id,
@@ -215,6 +217,9 @@ class RclpyActionDriver:
             self._act_hazard_dispatcher.start()
             return broker
         except BaseException:
+            if self._act_reset_connection is not None:
+                self._act_reset_connection.close()
+                self._act_reset_connection = None
             self._act_command_broker = None
             if self._act_hazard_dispatcher is not None:
                 self._act_hazard_dispatcher.close()
@@ -404,6 +409,9 @@ class RclpyActionDriver:
             if self._act_hazard_dispatcher is not None:
                 self._act_hazard_dispatcher.close()
         finally:
+            if self._act_reset_connection is not None:
+                self._act_reset_connection.close()
+                self._act_reset_connection = None
             if self._executor is not None:
                 self._executor.shutdown(timeout_sec=2.0)
             if self._thread is not None:

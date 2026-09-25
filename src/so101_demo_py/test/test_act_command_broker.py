@@ -3,7 +3,7 @@ import threading
 import uuid
 import pytest
 from so101_demo.act.ownership import Ownership
-from so101_demo.adapters.act.command_broker import CommandBroker, endpoint_bytes
+from so101_demo.adapters.act.command_broker import CommandBroker, LocalBrokerConnection, endpoint_bytes
 
 class Driver:
     def __init__(self):self.sent=[];self.cancels=[];self.stops=[];self.stationary=True
@@ -33,6 +33,24 @@ def test_cross_client_attempts_never_reach_bottom_driver():
     out=broker.handle(request('submit',owner='act',token=token,action_kind='arm',goal={'trajectory':{}}),'connection-act')
     assert not out['accepted'] and out['error']=='ACT_PREFIX_REQUIRED'
     assert driver.sent==[]
+
+
+def test_local_connection_uses_same_broker_and_fences_scope_and_generation():
+    driver=Driver();broker=CommandBroker(driver,ownership=Ownership(),simulation_session_id='s')
+    connection=LocalBrokerConnection(broker)
+    recovery=connection.acquire('recovery','s','reset-a')
+    assert broker.ownership.state=='RUNNING'
+    with pytest.raises(PermissionError,match='SESSION_MISMATCH'):
+        connection.request('renew',dict(recovery,session_id='foreign'))
+    assert connection.request('release',recovery)['accepted']
+    act=connection.acquire('act','s','phase-a')
+    with pytest.raises(PermissionError,match='LEASE_INVALID|LEASE_GENERATION_INVALID'):
+        connection.request('renew',recovery)
+    assert broker.ownership.ticket(act['lease_token'],'act','s','phase-a')[0] == broker.ownership.generation
+    connection.close()
+    assert broker.ownership.state in ('STOPPING','IDLE')
+    with pytest.raises(RuntimeError,match='BROKER_DISCONNECTED'):
+        connection.request('status',act)
 
 
 def test_disconnect_expiry_and_stop_barrier():

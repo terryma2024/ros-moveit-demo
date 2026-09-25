@@ -195,6 +195,40 @@ def test_broker_reset_prepares_stop_barrier_before_initial_pause(monkeypatch) ->
     assert calls == ['prepare_reset']
 
 
+def test_reset_uses_service_local_broker_preparation_without_socket(monkeypatch) -> None:
+    from so101_demo.adapters.act import leased_action_client
+
+    calls = []
+
+    class LocalServices(Services):
+        control_context = {'owner': 'recovery'}
+
+        def prepare_reset(self):
+            calls.append('prepare_reset')
+            return True
+
+        def pause(self, paused):
+            assert calls == ['prepare_reset']
+            return super().pause(paused)
+
+        def finish_reset(self):
+            assert calls == ['prepare_reset']
+            return True
+
+    monkeypatch.setattr(leased_action_client, 'connection_for',
+                        lambda context: (_ for _ in ()).throw(AssertionError('socket opened')))
+    services = LocalServices()
+    resetter = MujocoResetClient(
+        services, Observer(), simulation_session_id='session',
+        controller_names=('arm_controller', 'gripper_controller'),
+        expected_joint_positions=(0.,) * 6, expected_object_position=(.1, .2, .3),
+        progress=lambda: setattr(services, 'joint_callback_count', services.joint_callback_count + 1),
+    )
+
+    assert resetter.reset('task_start').new_epoch == 4
+    assert calls == ['prepare_reset']
+
+
 def test_reset_resumes_before_switch_even_if_cached_snapshot_says_running() -> None:
     """A just paused world can still expose its last running observer frame."""
     initial = _snapshot(epoch=3, sequence=100)

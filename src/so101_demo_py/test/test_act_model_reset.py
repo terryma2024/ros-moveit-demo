@@ -90,6 +90,63 @@ def test_actual_physics_reset_feedback_and_full_request(monkeypatch):
     assert snapshot["reset_epoch"]==3 and snapshot["paused"] and snapshot["simulation_session_id"]=="s"
 
 
+def test_local_reset_client_routes_all_writes_through_injected_broker(monkeypatch):
+    from types import SimpleNamespace
+    from so101_demo.backends.mujoco.client import MujocoRosClient
+
+    class Node:
+        def create_client(self, kind, topic):
+            assert topic == "/controller_manager/list_controllers"
+            return topic
+
+        def create_subscription(self, kind, topic, callback, qos):
+            return topic
+
+    class Connection:
+        def __init__(self):
+            self.operations = []
+
+        def request(self, operation, context, **values):
+            self.operations.append((operation, context, values))
+            return {
+                "pause_result": {"success": True},
+                "reset_result": {"success": True},
+                "switch_result": {"ok": True},
+                "finish_result": {"success": True},
+            }
+
+    context = {"owner": "recovery", "session_id": "s", "attempt_id": "a", "lease_token": "t"}
+    connection = Connection()
+    client = MujocoRosClient(Node(), Node(), control_context=context,
+                             broker_connection=connection)
+    monkeypatch.setattr(client, "_controller_states", lambda: {
+        name: "active" for name in ("arm_controller", "gripper_controller", "neck_controller")})
+    assert client.prepare_reset()
+    assert client.pause(True)
+    assert client.reset_world("task_start", joint_overrides=tuple(
+        JointResetOverride(name, 0.) for name in ACT_JOINTS))
+    assert client.switch_controllers(activate=("arm_controller", "gripper_controller", "neck_controller"),
+                                     deactivate=())
+    assert client.finish_reset()
+    assert [operation for operation, _, _ in connection.operations] == [
+        "prepare_reset", "pause", "reset_world", "switch_controllers", "finish_reset"]
+    assert all(actual is context for _, actual, _ in connection.operations)
+
+
+def test_local_reset_client_rejects_unpaired_context_or_connection():
+    from so101_demo.backends.mujoco.client import MujocoRosClient
+
+    class Node:
+        def create_client(self, kind, topic): return topic
+        def create_subscription(self, kind, topic, callback, qos): return topic
+
+    with pytest.raises(ValueError, match="CONTROL_CONTEXT_REQUIRED"):
+        MujocoRosClient(Node(), Node(), broker_connection=object())
+    with pytest.raises(ValueError, match="BROKER_CONNECTION_REQUIRED"):
+        MujocoRosClient(Node(), Node(), control_context={
+            "owner": "recovery", "session_id": "s", "attempt_id": "a", "lease_token": "t"})
+
+
 def test_act_launcher_checks_complete_broker_path_before_constructing_stack(monkeypatch):
     from launch import LaunchContext
     from launch.utilities import perform_substitutions

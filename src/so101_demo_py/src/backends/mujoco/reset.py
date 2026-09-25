@@ -222,8 +222,12 @@ class MujocoResetClient:
             # is RUNNING and idle proof refresh is suspended.
             context = getattr(self._services, "control_context", None)
             if context is not None:
-                from so101_demo.adapters.act.leased_action_client import connection_for
-                connection_for(context).request("prepare_reset", context)
+                prepare = getattr(self._services, "prepare_reset", None)
+                if prepare is not None:
+                    self._require(prepare(), "broker reset preparation")
+                else:
+                    from so101_demo.adapters.act.leased_action_client import connection_for
+                    connection_for(context).request("prepare_reset", context)
             old = self._wait_for_initial_snapshot(deadline=deadline)
             expected_epoch = old.reset_epoch + 1
             # The observer may still hold its last running frame after another

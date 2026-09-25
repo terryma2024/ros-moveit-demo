@@ -199,6 +199,7 @@ def test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8(tmp
     assert isinstance(broker, Broker)
     authority = driver._act_command_broker
     assert authority.driver is broker
+    assert driver._act_reset_connection.broker is authority
     assert authority.simulation_session_id == "session-1"
     assert authority.ownership.state == "IDLE"
     foreign = {"protocol_version": 1, "request_id": "r", "owner": "act",
