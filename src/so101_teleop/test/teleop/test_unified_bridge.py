@@ -230,6 +230,22 @@ def test_identity_is_recomputed_from_the_live_process(tmp_path):
     asyncio.run(run())
 
 
+def test_live_child_without_verified_owner_cannot_claim_cleanup(tmp_path):
+    async def run():
+        rig = Rig(tmp_path)
+        try:
+            owner = await rig.owner_process.start()
+            assert owner.pid > 0 and rig.owner_process.process.poll() is None
+            rig.owner_process.owner = None
+            with pytest.raises(MutationError, match="OWNER_IDENTITY_UNVERIFIED"):
+                await rig.owner_process.stop_owned()
+            assert rig.owner_process.process.poll() is None
+        finally:
+            await rig.close()
+
+    asyncio.run(run())
+
+
 def test_child_crash_makes_the_bridge_unready(tmp_path):
     async def run():
         rig = Rig(tmp_path)

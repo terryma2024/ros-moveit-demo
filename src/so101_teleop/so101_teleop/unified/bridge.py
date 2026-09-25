@@ -530,8 +530,10 @@ class BridgeProcessOwner:
         behind while reporting a failure. Both are now the same call: terminate the group, escalate
         once, and confirm from a fresh platform scan before this owner forgets the process.
         """
-        if self.process is None or self.owner is None:
+        if self.process is None:
             return
+        if self.owner is None:
+            raise MutationError("OWNER_IDENTITY_UNVERIFIED: child process exists without a trusted owner")
         if not identity_matches(self.owner):
             raise MutationError(
                 f"OWNER_IDENTITY_DRIFT: pid {self.owner.pid} no longer matches the recorded start marker"
