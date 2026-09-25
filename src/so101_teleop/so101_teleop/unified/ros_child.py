@@ -13,6 +13,7 @@ import argparse
 import asyncio
 import contextlib
 import os
+import re
 import signal
 import threading
 import time
@@ -39,6 +40,35 @@ CHILD_HEARTBEAT_TIMEOUT_ENV = "SO101_CHILD_HEARTBEAT_TIMEOUT_S"
 CHILD_NORMAL_QUEUE_ENV = "SO101_CHILD_NORMAL_QUEUE_LIMIT"
 DEFAULT_HEARTBEAT_TIMEOUT_S = 5.0
 
+_ACT_HASH_ENV = {
+    "manifest_sha256": "SO101_ACT_MANIFEST_SHA256",
+    "runtime_config_sha256": "SO101_ACT_RUNTIME_CONFIG_SHA256",
+    "contact_policy_fingerprint": "SO101_ACT_POLICY_FINGERPRINT",
+}
+
+
+class _FencedTask8Port:
+    """Prevent a cancelled Task 8 thread from starting its next physical phase."""
+
+    def __init__(self, port, cancelled: threading.Event) -> None:
+        self._port = port
+        self._cancelled = cancelled
+
+    def __getattr__(self, name):
+        method = getattr(self._port, name)
+        if name == "safe_stop" or not callable(method):
+            return method
+
+        def guarded(*args, **kwargs):
+            if self._cancelled.is_set():
+                raise MutationError("ACT_TASK8_CANCELLED")
+            result = method(*args, **kwargs)
+            if self._cancelled.is_set():
+                raise MutationError("ACT_TASK8_CANCELLED")
+            return result
+
+        return guarded
+
 
 def act_identity_from_environment(environment) -> tuple[str | None, str | None, int | None]:
     values = (
@@ -64,7 +94,8 @@ class RclpyActionDriver:
     """
 
     def __init__(self, *, broker=None, owner: OwnerKey | None = None,
-                 stop_timeout_s: float | None = None, accept_timeout_s: float | None = None) -> None:
+                 stop_timeout_s: float | None = None, accept_timeout_s: float | None = None,
+                 task8_port=None, act_hashes: dict[str, str] | None = None) -> None:
         self._node = None
         self._executor = None
         self._thread = None
@@ -77,6 +108,10 @@ class RclpyActionDriver:
         if not (0 < self._stop_timeout_s <= 30 and 0 < self._accept_timeout_s <= 30):
             raise MutationError("ROS_DRIVER_TIMEOUT_INVALID")
         self._goals: dict[str, dict] = {}
+        self._task8_port = task8_port
+        self._act_cancelled = threading.Event()
+        self._act_hashes = (act_hashes if act_hashes is not None else
+                            {key: os.environ.get(name) for key, name in _ACT_HASH_ENV.items()})
         if self._broker is None and os.environ.get("SO101_ACT_CAMPAIGN_ID"):
             self._broker = self._start_ros_broker()
 
@@ -219,6 +254,68 @@ class RclpyActionDriver:
                 return True
             await asyncio.sleep(0.005)
         return False
+
+    async def _task8(self, request, *, mode: str) -> dict:
+        if self._task8_port is None:
+            raise MutationError("ACT_TASK8_PORT_NOT_PROVISIONED")
+        if self._act_cancelled.is_set():
+            raise MutationError("ACT_TASK8_CANCELLED")
+        if (not isinstance(self._act_hashes, dict)
+                or set(self._act_hashes) != set(_ACT_HASH_ENV)
+                or any(not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None
+                       for value in self._act_hashes.values())):
+            raise MutationError("ACT_TASK8_HASHES_NOT_BOUND")
+        if any(request.payload.get(key) != value for key, value in self._act_hashes.items()):
+            raise MutationError("ACT_TASK8_HASH_MISMATCH")
+        if request.deadline_ns <= time.monotonic_ns():
+            raise MutationError("ACT_DEADLINE_EXPIRED")
+        from so101_demo.act.task8 import Task8Runner
+
+        task = {
+            "mode": mode,
+            "stop_after": request.payload.get("stop_after") if mode == "phase_prefix" else None,
+            "lifecycle": "FULL_RESTART",
+            "scenario_id": request.payload["scenario_id"],
+            "session_id": request.session_id,
+            "attempt_id": request.attempt_id,
+            "deadline_ns": request.deadline_ns,
+        }
+        try:
+            result = await asyncio.to_thread(
+                Task8Runner(_FencedTask8Port(self._task8_port, self._act_cancelled)).run,
+                task,
+            )
+        except BaseException as error:
+            if await self.stop_act("TASK8_FAILED") is not True:
+                raise MutationError("ACT_TASK8_STOP_NOT_CONFIRMED") from error
+            raise MutationError("ACT_TASK8_FAILED") from error
+        if await self.stop_act("TASK8_COMPLETED") is not True:
+            raise MutationError("ACT_TASK8_STOP_NOT_CONFIRMED")
+        if result.get("stopped_confirmed") is not True:
+            raise MutationError("ACT_TASK8_STOP_NOT_CONFIRMED")
+        return result
+
+    async def task8_phase(self, request) -> dict:
+        if request.operation != "task8_phase":
+            raise MutationError("ACT_TASK8_OPERATION_MISMATCH")
+        return await self._task8(request, mode="phase_prefix")
+
+    async def task8_full(self, request) -> dict:
+        if request.operation != "task8_full":
+            raise MutationError("ACT_TASK8_OPERATION_MISMATCH")
+        return await self._task8(request, mode="full")
+
+    async def cancel_act(self, request) -> dict:
+        self._act_cancelled.set()
+        reason = request.payload["reason"]
+        confirmed = await self.stop_act(reason)
+        return {"stopped_confirmed": confirmed is True, "reason": reason}
+
+    async def act_collection_start(self, request) -> dict:
+        raise MutationError("ACT_COLLECTION_NOT_PROVISIONED")
+
+    async def act_collection_resume(self, request) -> dict:
+        raise MutationError("ACT_COLLECTION_NOT_PROVISIONED")
 
     def close(self) -> None:
         if self._executor is not None:

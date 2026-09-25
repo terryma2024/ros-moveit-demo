@@ -348,6 +348,10 @@ class ActCampaignChildOwner:
                 "SO101_CHILD_SERVICE_TOKEN": token,
                 "SO101_CHILD_WEB_PID": str(os.getpid()),
                 "SO101_ACT_OPERATION_ID": context.operation_id,
+                "SO101_ACT_MANIFEST_SHA256": context.manifest_sha256,
+                "SO101_ACT_RUNTIME_CONFIG_SHA256": context.runtime_config_sha256,
+                "SO101_ACT_COLLECTION_CONFIG_SHA256": context.collection_config_sha256,
+                "SO101_ACT_POLICY_FINGERPRINT": context.contact_policy_fingerprint,
                 "CUDA_VISIBLE_DEVICES": context.physical_gpu_uuid,
             })
             prepared.append((child, replace(launch, environment=environment), token))
