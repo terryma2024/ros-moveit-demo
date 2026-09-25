@@ -14,9 +14,10 @@ import math
 import os
 from pathlib import Path
 from typing import Mapping
+import uuid
 
 from .recorder import verify_episode_seal
-from so101_demo.parallel_batch.contracts import LeaseIdentity, RunMode
+from so101_demo.parallel_batch.contracts import AttemptStatus, LeaseIdentity, RunMode
 
 
 class ResultInfraError(RuntimeError):
@@ -128,6 +129,93 @@ class ActCollectionResultStore:
             return sealed
         except OSError as error:
             raise ResultInfraError("RESULT_SEAL_FAILED") from error
+
+    def seal_attempt(self, lease: LeaseIdentity, decision) -> str:
+        if _identity(lease) != self.identity:
+            raise ValueError("LEASE_IDENTITY_MISMATCH")
+        status = getattr(decision, "status", None)
+        if status not in (AttemptStatus.PASSED, AttemptStatus.FAILED):
+            raise ValueError("RESULT_TERMINAL_INVALID")
+        episode_path = getattr(decision, "episode_seal_path", None)
+        if episode_path is None or _safe(Path(episode_path)) != self.episode_root / "seal.json":
+            raise ValueError("EPISODE_LOCATION_MISMATCH")
+        try:
+            episode = verify_episode_seal(episode_path)
+        except (OSError, ValueError, TypeError) as error:
+            raise ResultInfraError("RESULT_EPISODE_INVALID") from error
+        if episode["status"] != status.value:
+            raise ValueError("RESULT_TERMINAL_MISMATCH")
+        return str(self.seal(episode_path))
+
+    def write_recovery_receipt(self, lease: LeaseIdentity, *, succeeded: bool,
+                               generation: int, deadline_monotonic_s: float, clock) -> Path:
+        if _identity(lease) != self.identity or generation != lease.worker_generation:
+            raise ValueError("RECOVERY_IDENTITY_MISMATCH")
+        if type(succeeded) is not bool or not callable(clock):
+            raise ValueError("RECOVERY_RECEIPT_INVALID")
+        now = clock()
+        if (isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(now)
+                or isinstance(deadline_monotonic_s, bool)
+                or not isinstance(deadline_monotonic_s, (int, float))
+                or not math.isfinite(deadline_monotonic_s)
+                or not lease.lease_issued_monotonic_s < now < deadline_monotonic_s):
+            raise ValueError("RECOVERY_DEADLINE_INVALID")
+        worker_root = self.workspace.parents[2]
+        receipt_parent = _safe(worker_root / "recoveries" / lease.point_id / lease.attempt_id)
+        receipt_parent.mkdir(parents=True, exist_ok=True)
+        destination = receipt_parent / uuid.uuid4().hex
+        destination.mkdir(exist_ok=False)
+        path = destination / "recovery_receipt.json"
+        document = {"kind": "ACT_RECOVERY_RECEIPT", "schema_version": 1,
+                    "lease_identity": self.identity, "succeeded": succeeded,
+                    "generation": generation, "completed_monotonic_s": float(now),
+                    "deadline_monotonic_s": float(deadline_monotonic_s)}
+        try:
+            with path.open("xb") as stream:
+                stream.write(_canonical(document))
+                stream.flush()
+                os.fsync(stream.fileno())
+            for directory in (destination, receipt_parent, receipt_parent.parent,
+                              receipt_parent.parent.parent, worker_root):
+                _fsync_dir(directory)
+            return path
+        except OSError as error:
+            raise ResultInfraError("RECOVERY_RECEIPT_WRITE_FAILED") from error
+
+    def verify_recovery_receipt(self, location, lease: LeaseIdentity, *, succeeded: bool,
+                                generation: int, deadline_monotonic_s: float, clock) -> bool:
+        try:
+            if _identity(lease) != self.identity or generation != lease.worker_generation:
+                return False
+            if type(succeeded) is not bool or not callable(clock):
+                return False
+            worker_root = self.workspace.parents[2]
+            receipt_parent = worker_root / "recoveries" / lease.point_id / lease.attempt_id
+            path = _safe(Path(location))
+            if (path.name != "recovery_receipt.json" or path.parent.parent != receipt_parent
+                    or len(path.parent.name) != 32
+                    or not all(char in "0123456789abcdef" for char in path.parent.name)):
+                return False
+            data = _read_regular(path)
+            document = json.loads(data)
+            if not isinstance(document, dict) or data != _canonical(document):
+                return False
+            if (set(document) != {"kind", "schema_version", "lease_identity", "succeeded",
+                                  "generation", "completed_monotonic_s", "deadline_monotonic_s"}
+                    or document["kind"] != "ACT_RECOVERY_RECEIPT" or document["schema_version"] != 1
+                    or document["lease_identity"] != self.identity or document["succeeded"] is not succeeded
+                    or document["generation"] != generation
+                    or document["deadline_monotonic_s"] != deadline_monotonic_s):
+                return False
+            completed = document["completed_monotonic_s"]
+            current = clock()
+            return (isinstance(completed, (int, float)) and not isinstance(completed, bool)
+                    and math.isfinite(completed)
+                    and lease.lease_issued_monotonic_s < completed < deadline_monotonic_s
+                    and isinstance(current, (int, float)) and not isinstance(current, bool)
+                    and math.isfinite(current) and completed <= current < deadline_monotonic_s)
+        except (OSError, ValueError, TypeError, KeyError):
+            return False
 
 
 class ActCollectionResultVerifier:
