@@ -194,6 +194,38 @@ def test_async_latest_frames_join_the_previous_common_physics_step():
     assert proof["world"].simulation_step == proof["scene"]["simulation_step"] == proof["contact"]["physics_step"] == 1
 
 
+def test_step_cursor_waits_for_a_new_common_step_without_consuming_rgb():
+    readback, scene, contacts, _ = sources()
+    assert readback.capture("s", "attempt-1", 1)["world"].simulation_step == 1
+    with pytest.raises(Task8ReadbackError, match="SOURCE_STEP_NOT_ADVANCED"):
+        readback.capture("s", "attempt-1", 1, after_step=1)
+
+    latest = readback.world.entries[-1]
+    readback.world.entries.append(ReceivedSimulationEvidence(
+        replace(latest.evidence, simulation_step=2, publisher_sequence=2,
+                simulation_time_s=1.02), 10.0,
+    ))
+    next_scene = scene.snapshot()
+    assert scene.accept({**next_scene, "simulation_step": 2, "simulation_time_s": 1.02})
+    contacts.accept(dict(
+        simulation_session_id="s", reset_epoch=1, physics_step=2,
+        simulation_time_s=1.02, geom_a=[], geom_b=[], signed_distance_m=[],
+        normal_force_n=[], truncated=False, evidence_loss=False,
+    ))
+    pixels = np.zeros((480, 640, 3), dtype=np.uint8)
+    for stream, value in (("head", pixels), ("wrist", pixels),
+                          ("arm", (0.1,) * 6), ("neck", 0.05)):
+        readback.rgb.push(stream, "s", 1.02, value)
+    assert readback.capture("s", "attempt-1", 1, after_step=1)["world"].simulation_step == 2
+
+
+@pytest.mark.parametrize("cursor", [-1, True, 1.0])
+def test_step_cursor_refuses_noninteger_or_negative_values(cursor):
+    readback, _, _, _ = sources()
+    with pytest.raises(Task8ReadbackError, match="SOURCE_STEP_CURSOR_INVALID"):
+        readback.capture("s", "attempt-1", 1, after_step=cursor)
+
+
 def test_failed_broker_lookup_does_not_consume_rgb_decision_time():
     readback, _, _, _ = sources()
     readback.broker.enabled = False
