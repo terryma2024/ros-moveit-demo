@@ -9,34 +9,58 @@ from __future__ import annotations
 import math
 import time
 
-from so101_demo.act.contracts import finite, identifier
+from so101_demo.act.contracts import finite, identifier, sha256
 
 
 class Task8ReadbackError(RuntimeError):
     """A required physical source is missing or disagrees with another."""
 
 
-def _indices(value, length):
-    if (not isinstance(value, tuple) or len(value) != length
-            or any(type(index) is not int or index < 0 for index in value)
-            or len(set(value)) != length):
-        raise ValueError("TASK8_QPOS_INDICES_INVALID")
-    return value
+def compiled_qpos_mapping(model, *, expected_model_sha256: str,
+                          expected_mujoco_version: str) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    """Resolve ACT joints from a verified compiled model, never numeric config."""
+    import mujoco
+    from so101_demo.act.joints import ACT_JOINTS
+    from .physics import model_sha256
+
+    sha256(expected_model_sha256)
+    if (not isinstance(model, mujoco.MjModel)
+            or not isinstance(expected_mujoco_version, str)
+            or mujoco.mj_versionString() != expected_mujoco_version):
+        raise ValueError("TASK8_MUJOCO_VERSION_MISMATCH")
+    if model_sha256(model) != expected_model_sha256:
+        raise ValueError("TASK8_MODEL_HASH_MISMATCH")
+    joints = []
+    for name in ACT_JOINTS:
+        joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
+        if joint_id < 0 or model.jnt_type[joint_id] != mujoco.mjtJoint.mjJNT_HINGE:
+            raise ValueError("TASK8_MODEL_JOINT_INVALID")
+        joints.append(int(model.jnt_qposadr[joint_id]))
+    cup_joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "cup_free_joint")
+    if cup_joint_id < 0 or model.jnt_type[cup_joint_id] != mujoco.mjtJoint.mjJNT_FREE:
+        raise ValueError("TASK8_MODEL_CUP_INVALID")
+    cup_start = int(model.jnt_qposadr[cup_joint_id])
+    cup = tuple(range(cup_start, cup_start + 7))
+    if (len(set(joints)) != 7 or min(joints) < 0 or max(joints) >= model.nq
+            or cup_start < 0 or cup[-1] >= model.nq or set(joints) & set(cup)):
+        raise ValueError("TASK8_MODEL_QPOS_INVALID")
+    return tuple(joints), cup
 
 
 class Task8PhysicalReadback:
     def __init__(
-        self, world, scene, contacts, rgb, broker, *, model_qpos_joint_indices,
-        model_qpos_cup_indices, max_source_skew_s, max_wall_age_s,
+        self, world, scene, contacts, rgb, broker, *, model,
+        expected_model_sha256, expected_mujoco_version,
+        max_source_skew_s, max_wall_age_s,
         joint_tolerance_rad, cup_pose_tolerance_m, cup_orientation_tolerance,
         monotonic=time.monotonic,
     ) -> None:
         self.world, self.scene, self.contacts = world, scene, contacts
         self.rgb, self.broker, self.monotonic = rgb, broker, monotonic
-        self.joints = _indices(model_qpos_joint_indices, 7)
-        self.cup = _indices(model_qpos_cup_indices, 7)
-        if set(self.joints) & set(self.cup):
-            raise ValueError("TASK8_QPOS_INDICES_INVALID")
+        self.joints, self.cup = compiled_qpos_mapping(
+            model, expected_model_sha256=expected_model_sha256,
+            expected_mujoco_version=expected_mujoco_version,
+        )
         self.max_skew = finite(max_source_skew_s)
         self.max_wall_age = finite(max_wall_age_s)
         self.joint_tolerance = finite(joint_tolerance_rad)

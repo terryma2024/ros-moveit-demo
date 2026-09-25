@@ -2,6 +2,10 @@
 
 import numpy as np
 import pytest
+import mujoco
+from functools import lru_cache
+from pathlib import Path
+from ament_index_python.packages import get_package_share_directory
 
 from so101_demo.act.synchronizer import RgbObservationSynchronizer
 from so101_demo.adapters.act.contact_evidence import RobotContactObserver
@@ -9,10 +13,46 @@ from so101_demo.adapters.act.scene_state import SceneStateObserver
 from so101_demo.core.simulation.types import (
     ObjectState, ReceivedSimulationEvidence, SimulationEvidence,
 )
-from so101_demo.adapters.act.task8_readback import Task8PhysicalReadback, Task8ReadbackError
+from so101_demo.adapters.act.task8_readback import (
+    Task8PhysicalReadback, Task8ReadbackError, compiled_qpos_mapping,
+)
 
 
-def sources(*, cup_shift=0.0, scene_step=1, world_epoch=1, rgb_stamp=1.01):
+MODEL_SHA256 = "3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78"
+
+
+@lru_cache(maxsize=1)
+def loaded_model():
+    path = Path(get_package_share_directory("so101_demo_py")) / "assets/mujoco/act/scene.xml"
+    return mujoco.MjModel.from_xml_path(str(path))
+
+
+@pytest.fixture(scope="module")
+def compiled_model():
+    return loaded_model()
+
+
+def test_compiled_act_model_derives_seven_hinges_and_cup_free_joint(compiled_model):
+    assert compiled_qpos_mapping(compiled_model, expected_model_sha256=MODEL_SHA256,
+                                 expected_mujoco_version="3.12.0") == (
+        (0, 1, 2, 3, 4, 5, 6), (7, 8, 9, 10, 11, 12, 13),
+    )
+
+
+def test_compiled_mapping_refuses_wrong_model_hash(compiled_model):
+    with pytest.raises(ValueError, match="TASK8_MODEL_HASH_MISMATCH"):
+        compiled_qpos_mapping(compiled_model, expected_model_sha256="2" * 64,
+                               expected_mujoco_version="3.12.0")
+
+
+def test_compiled_mapping_refuses_wrong_mujoco_version(compiled_model):
+    with pytest.raises(ValueError, match="TASK8_MUJOCO_VERSION_MISMATCH"):
+        compiled_qpos_mapping(compiled_model, expected_model_sha256=MODEL_SHA256,
+                               expected_mujoco_version="3.4.0")
+
+
+def sources(*, cup_shift=0.0, scene_step=1, world_epoch=1, rgb_stamp=1.01,
+            expected_model_sha256=MODEL_SHA256):
     now = [10.0]
     object_state = ObjectState(
         body_id=1, body="cup", position_world=(0.1, -0.2, 0.15),
@@ -67,13 +107,18 @@ def sources(*, cup_shift=0.0, scene_step=1, world_epoch=1, rgb_stamp=1.01):
 
     readback = Task8PhysicalReadback(
         World(), scene, contacts, rgb, Broker(),
-        model_qpos_joint_indices=tuple(range(7)),
-        model_qpos_cup_indices=tuple(range(7, 14)),
+        model=loaded_model(), expected_model_sha256=expected_model_sha256,
+        expected_mujoco_version="3.12.0",
         max_source_skew_s=0.005, max_wall_age_s=0.15,
         joint_tolerance_rad=0.001, cup_pose_tolerance_m=0.001,
         cup_orientation_tolerance=0.001, monotonic=lambda: now[0],
     )
     return readback, scene, contacts, now
+
+
+def test_readback_constructor_rejects_a_model_outside_activated_policy():
+    with pytest.raises(ValueError, match="TASK8_MODEL_HASH_MISMATCH"):
+        sources(expected_model_sha256="2" * 64)
 
 
 def test_one_physics_step_joins_cup_pose_qpos_rgb_contact_and_reference():
