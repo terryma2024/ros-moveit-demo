@@ -1,6 +1,7 @@
 """A Task 8 case cannot release admission before both owned processes retire."""
 
 import asyncio
+from dataclasses import replace
 import json
 import os
 from pathlib import Path
@@ -28,8 +29,6 @@ def receipt(owner, **extra):
 
 def prepared(tmp_path, *, fail=None):
     events = []
-    stack_root = tmp_path / "stack"
-    stack_root.mkdir()
     ipc_base = Path(os.environ.get("SO101_IPC_SOCKET_BASE", "/tmp"))
     ipc_root = ipc_base / f"c{uuid.uuid4().hex[:8]}"
     ipc_root.mkdir()
@@ -38,6 +37,8 @@ def prepared(tmp_path, *, fail=None):
         ros_domain_id=179, namespace="/act/w1", controller_name="arm_controller_w1",
         mujoco_session_id="session-271", socket_root=str(ipc_root),
     )
+    stack_root = tmp_path / "task8-live" / child.campaign_id / "stack"
+    stack_root.mkdir(parents=True)
     context = SimpleNamespace(
         campaign_id=child.campaign_id, execution_generation=1,
         workload_kind="task8_full", worker_count=1, evidence_root=str(tmp_path),
@@ -169,6 +170,35 @@ def test_finished_case_owner_cannot_start_a_second_case(tmp_path):
         assert tuple(events) == completed
 
     asyncio.run(run())
+
+
+def test_alternative_in_root_stack_path_is_rejected_before_stack_start(tmp_path):
+    owner, spec, _, events = prepared(tmp_path)
+    alternate_root = tmp_path / "alternate-stack"
+    alternate_root.mkdir()
+    original_factory = owner.stack_factory
+
+    def wrong_factory(context, child):
+        stack = original_factory(context, child)
+        stack.launch = replace(stack.launch, evidence_root=alternate_root)
+        return stack
+
+    owner.stack_factory = wrong_factory
+    with pytest.raises(MutationError, match="TASK8_CASE_STACK_SCOPE_INVALID"):
+        asyncio.run(owner.start(spec))
+    assert events == ["admit", "child.start", "child.stop", "release"]
+
+
+def test_symlinked_stack_parent_is_rejected_before_stack_start(tmp_path):
+    owner, spec, _, events = prepared(tmp_path)
+    scope = tmp_path / "task8-live"
+    relocated = tmp_path / "relocated"
+    scope.rename(relocated)
+    scope.symlink_to(relocated, target_is_directory=True)
+
+    with pytest.raises(MutationError, match="TASK8_CASE_STACK_SCOPE_INVALID"):
+        asyncio.run(owner.start(spec))
+    assert events == ["admit", "child.start", "child.stop", "release"]
 
 
 def test_admission_failure_spawns_nothing(tmp_path):
