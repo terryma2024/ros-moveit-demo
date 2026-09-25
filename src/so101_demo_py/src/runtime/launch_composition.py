@@ -2496,3 +2496,55 @@ def build_task_station_launch_description(*, act_profile: bool = False) -> Launc
             OpaqueFunction(function=_configured_task_station_actions),
         ]
     )
+
+
+def _configured_act_execution_stack_actions(context):
+    """ACT simulation only; the admitted unified child owns command authority."""
+    if platform.system() != "Linux" or LaunchConfiguration("headless").perform(context) != "true":
+        raise RuntimeError("ACT_STACK_HEADLESS_REQUIRED")
+    if LaunchConfiguration("sensor_rendering").perform(context) != "true":
+        raise RuntimeError("ACT_STACK_RGB_REQUIRED")
+    if LaunchConfiguration("act_profile").perform(context) != "true":
+        raise RuntimeError("ACT_STACK_PROFILE_REQUIRED")
+    session_id = LaunchConfiguration("session_id").perform(context)
+    if not _SESSION_ID_PATTERN.fullmatch(session_id):
+        raise RuntimeError("ACT_STACK_SESSION_INVALID")
+    evidence_root = Path(LaunchConfiguration("task_evidence_root").perform(context))
+    if not evidence_root.is_absolute() or ".." in evidence_root.parts:
+        raise RuntimeError("ACT_STACK_ROOT_INVALID")
+    scene = Path(LaunchConfiguration("mujoco_scene").perform(context))
+    if not scene.is_absolute() or not scene.is_file():
+        raise RuntimeError("ACT_STACK_SCENE_INVALID")
+    share = Path(get_package_share_directory("so101_demo_py"))
+    stack = _mujoco_stack_actions(context, share, session_id, sim_speed_factor=1.0)
+    return [
+        SetEnvironmentVariable("SO101_ACT_PROFILE", "1"),
+        SetEnvironmentVariable("SO101_TASK_EVIDENCE_ROOT", str(evidence_root)),
+        *camera_static_transform_nodes(),
+        *stack.actions,
+        RegisterEventHandler(OnProcessExit(
+            target_action=stack.simulator,
+            on_exit=[Shutdown(reason="ACT execution simulator exited")],
+        )),
+    ]
+
+
+def build_act_execution_stack_launch_description() -> LaunchDescription:
+    """Create one headless ACT simulator stack with no command broker or UI."""
+    share = Path(get_package_share_directory("so101_demo_py"))
+    return LaunchDescription([
+        DeclareLaunchArgument("headless", default_value="true", choices=("true",)),
+        DeclareLaunchArgument("sensor_rendering", default_value="true", choices=("true",)),
+        DeclareLaunchArgument("act_profile", default_value="true", choices=("true",)),
+        DeclareLaunchArgument("session_id"),
+        DeclareLaunchArgument("task_evidence_root"),
+        DeclareLaunchArgument("readiness_timeout_s", default_value="90.0"),
+        DeclareLaunchArgument(
+            "mujoco_scene", default_value=str(share / "assets/mujoco/act/scene.xml"),
+        ),
+        DeclareLaunchArgument(
+            "mujoco_initial_keyframe", default_value="task_start",
+            choices=MUJOCO_CUP_KEYFRAMES[:4],
+        ),
+        OpaqueFunction(function=_configured_act_execution_stack_actions),
+    ])
