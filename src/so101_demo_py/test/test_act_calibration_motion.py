@@ -76,6 +76,8 @@ def test_contact_diagnostic_guard_uses_single_existing_broker_and_live_physics(t
                 (tmp_path/'contact-diagnostic-guard-rejections.jsonl').read_text().splitlines()]
     assert refusals[-1]['boundary'] == 'approve'
     assert refusals[-1]['reason'] == 'LIVE_NOT_READY'
+    assert refusals[-1]['live_state']['cup_reset_verified'] is False
+    assert refusals[-1]['live_state']['recorded_steps'] == 0
     import mujoco
     driver._reset_initial=NS(simulation_session_id='contact-one',reset_epoch=0)
     driver._reset_target=NS(name=reset.joint_names,position=reset.positions_rad,
@@ -88,6 +90,15 @@ def test_contact_diagnostic_guard_uses_single_existing_broker_and_live_physics(t
     qpos[guard.path.cup_address:guard.path.cup_address+3]=contact['cup_start_m']
     frame=dict(simulation_session_id='contact-one',reset_epoch=1,paused=True,
                qpos=qpos,qvel=[0.]*guard.model.nv)
+    from so101_mujoco_support.msg import SceneStateEvidence
+    scene_message=SceneStateEvidence(simulation_session_id='contact-one',reset_epoch=1,
+        simulation_step=0,paused=True,model_sha256=contact['model_sha256'],
+        qpos=qpos,qvel=[0.]*guard.model.nv)
+    guard.scene_adapter.accept_message(scene_message)
+    assert guard.scene_observer.last is not None
+    assert guard._cup_reset_verified is False
+    guard.poll()
+    assert guard._cup_reset_verified is True
     assert guard._pending_scene_reset(frame)
     bad=copy.deepcopy(frame);bad['qpos'][guard.path.cup_address+1]+=.001
     assert not guard._pending_scene_reset(bad)
@@ -175,7 +186,8 @@ def test_live_contact_staleness_waits_while_reset_is_paused():
     from types import SimpleNamespace as NS
     from so101_demo.adapters.act.calibration_motion import RosCalibrationMotionGuard
     calls=[]
-    guard=NS(live_observer=NS(poll=lambda:calls.append('poll'),
+    guard=NS(contact_mode=False,
+             live_observer=NS(poll=lambda:calls.append('poll'),
                               suspend=lambda:calls.append('suspend'),
                               start=lambda:calls.append('start')),
              scene_observer=NS(_lock=threading.RLock(),last={'paused':True}),

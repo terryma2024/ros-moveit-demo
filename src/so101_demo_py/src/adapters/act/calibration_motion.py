@@ -163,6 +163,13 @@ class RosCalibrationMotionGuard:
         except ValueError:return False
         return observer.hazard is None and observer.recorder.recorded_steps>0
 
+    def _live_state(self):
+        observer=self.live_observer
+        return dict(cup_reset_verified=self._cup_reset_verified,
+            observer_present=observer is not None,adapter_present=self.live_adapter is not None,
+            observer_hazard=None if observer is None else observer.hazard,
+            recorded_steps=0 if observer is None else observer.recorder.recorded_steps)
+
     def _record_scene(self,frame):
         import json
         with self._lock:
@@ -344,7 +351,7 @@ class RosCalibrationMotionGuard:
         try:
             if not self._live_ready():
                 self._record_rejection(dict(boundary='approve',safe=False,reason='LIVE_NOT_READY',
-                    snapshot_sim_time_s=snapshot.get('sim_time_s')))
+                    snapshot_sim_time_s=snapshot.get('sim_time_s'),live_state=self._live_state()))
                 return False
             start=snapshot['sim_time_s']+self.manifest['submit_lead_s']
             reference=self.driver.reference_state(start)
@@ -393,6 +400,9 @@ class RosCalibrationMotionGuard:
         with self.scene_observer._lock:
             scene=self.scene_observer.last
             running=scene is not None and scene['paused'] is False
+        if (self.contact_mode and not self._cup_reset_verified and scene is not None
+                and scene['paused'] is True and scene['simulation_step']==0):
+            self._pending_scene_reset(scene)
         if self.live_observer is not None:
             if running and getattr(self.live_observer, 'hazard', None) is None:
                 self.live_observer.start()
