@@ -136,7 +136,8 @@ def test_head_model_factory_preserves_generic_adapters_bgr_source(monkeypatch, t
     assert rgb[0,0].tolist()==[250,20,10]
 
 
-def adapter_fixture(monkeypatch,*,with_inputs=False,tf_missing=False,stop_confirmed=True):
+def adapter_fixture(monkeypatch,*,with_inputs=False,tf_missing=False,stop_confirmed=True,
+                    operation_guard=None):
     from types import SimpleNamespace
     from sensor_msgs.msg import Image,CameraInfo,JointState
     from so101_demo.adapters.act import ros_search
@@ -152,7 +153,9 @@ def adapter_fixture(monkeypatch,*,with_inputs=False,tf_missing=False,stop_confir
             return SimpleNamespace(transform=SimpleNamespace(rotation=SimpleNamespace(x=0.,y=0.,z=0.,w=1.)))
     runtime=SimpleNamespace(reset=lambda:None)
     search=HeadSearchController(config(search_timeout_s=1.))
-    adapter=ros_search.RosSearchAdapter(Node(),search,runtime,Neck(),tf_buffer=TF(),monotonic=lambda:clock[0])
+    guard_args = {} if operation_guard is None else {"operation_guard": operation_guard}
+    adapter=ros_search.RosSearchAdapter(Node(),search,runtime,Neck(),tf_buffer=TF(),
+                                        monotonic=lambda:clock[0], **guard_args)
     adapter.reset(config(search_timeout_s=1.),source_floor_s=0.)
     if with_inputs:
         image=Image(width=640,height=480,step=1920,encoding='rgb8',data=bytes(640*480*3))
@@ -221,6 +224,41 @@ def test_moving_neck_does_not_require_camera_tf_before_settle(monkeypatch):
     decision=adapter.tick(safe_observe=True)
     assert decision['stop'] is False and decision['neck_target_rad']==.1
     assert calls==['command']
+
+
+def test_search_cancellation_before_neck_submission_proves_stop(monkeypatch):
+    checks = []
+
+    def guard():
+        checks.append(True)
+        if len(checks) == 2:
+            raise RuntimeError("ACT_TASK8_CANCELLED")
+
+    adapter, _, calls, _ = adapter_fixture(
+        monkeypatch, with_inputs=True, operation_guard=guard)
+    adapter.search.target = .1
+    with pytest.raises(RuntimeError, match="ACT_TASK8_CANCELLED"):
+        adapter.tick(safe_observe=True)
+    assert len(checks) >= 2
+    assert calls == ['stop']
+
+
+def test_detector_provenance_failure_is_terminal_and_proves_stop(monkeypatch):
+    import time
+
+    adapter, _, calls, module = adapter_fixture(monkeypatch, with_inputs=True)
+    monkeypatch.setattr(module, 'detect_head', lambda *args: (_ for _ in ()).throw(
+        ValueError('DETECTOR_PROVENANCE_CHANGED')))
+    assert adapter.tick(safe_observe=True)['status'] == 'INPUT_PENDING'
+    job = adapter._pending_detection
+    until = time.monotonic() + .5
+    while not job['future'].done() and time.monotonic() < until:
+        time.sleep(.001)
+    assert job['future'].done()
+    decision = adapter.tick(safe_observe=True)
+    assert decision['status'] == 'DETECTOR_FAILED'
+    assert adapter.search.terminal['status'] == 'DETECTOR_FAILED'
+    assert 'command' not in calls
 
 
 @pytest.mark.parametrize('tf_missing',(False,True))

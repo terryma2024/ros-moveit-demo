@@ -18,6 +18,10 @@ from so101_demo.act.synchronizer import causal_sample
 from .detector import detect_head
 
 
+class HeadDetectorFailure(RuntimeError):
+    """One admitted detector job failed; the attempt must stop."""
+
+
 def stamp_s(message):
     return message.header.stamp.sec + message.header.stamp.nanosec * 1e-9
 
@@ -33,9 +37,12 @@ def rotation_matrix(quaternion):
 
 class RosSearchAdapter:
     def __init__(self, node, search, detector_runtime, neck_port, *, tf_buffer=None,
-                 monotonic=time.monotonic):
+                 monotonic=time.monotonic, operation_guard=None):
+        if operation_guard is not None and not callable(operation_guard):
+            raise ValueError("SEARCH_GUARD_INVALID")
         self.search, self.detector_runtime, self.neck_port = search, detector_runtime, neck_port
         self.monotonic = monotonic
+        self.operation_guard = operation_guard
         self._lock = threading.RLock()
         self._generation=0;self.input_errors=deque(maxlen=32)
         self._pending_detection=None;self._detector_reset_required=False
@@ -99,6 +106,15 @@ class RosSearchAdapter:
             if self._generation!=generation:raise RuntimeError("SEARCH_RESET_DURING_TICK")
             self.last_command=None
 
+    def _guard_or_stop(self, generation):
+        if self.operation_guard is None:
+            return
+        try:
+            self.operation_guard()
+        except BaseException:
+            self._stop_and_confirm(generation)
+            raise
+
     def _queue_detection(self,generation,image,frame,feedback,info_received):
         with self._lock:
             if self._generation!=generation:raise RuntimeError("SEARCH_RESET_DURING_TICK")
@@ -123,7 +139,11 @@ class RosSearchAdapter:
         started=self.monotonic()
         now=finite(started if now_wall_s is None else now_wall_s,nonnegative=True)
         with self._lock:
-            generation=self._generation;config=dict(self.search.config)
+            generation=self._generation
+        self._guard_or_stop(generation)
+        with self._lock:
+            if self._generation!=generation:raise RuntimeError("SEARCH_RESET_DURING_TICK")
+            config=dict(self.search.config)
             decision=self.search.advance_deadline(now)
             if decision is None and safe_observe is not True:decision=self.search.fail("SEARCH_UNSAFE")
             images,infos,feedback_buffer=(tuple(value) for value in (self.images,self.infos,self.feedback))
@@ -139,7 +159,11 @@ class RosSearchAdapter:
                     if not pending['future'].done():
                         decision=dict(neck_target_rad=None,stop=True,status="INPUT_PENDING")
                     elif pending['generation']==generation:
-                        frame=dict(pending['frame'],detections=pending['future'].result())
+                        try:
+                            detections=pending['future'].result()
+                        except Exception as error:
+                            raise HeadDetectorFailure("DETECTOR_FAILED") from error
+                        frame=dict(pending['frame'],detections=detections)
                         feedback=dict(pending['feedback'],safe_observe=safe_observe)
                         info_received=pending['info_received']
                         with self._lock:
@@ -202,13 +226,17 @@ class RosSearchAdapter:
                     self.input_errors.append(dict(error=repr(error),wall_s=self.monotonic()))
                     elapsed=self.monotonic()-started
                     if elapsed<0:self.search.fail('SEARCH_CLOCK_INVALID');raise ValueError('SEARCH_CLOCK_INVALID') from error
-                    decision=self.search.advance_deadline(now+elapsed) or dict(neck_target_rad=None,stop=True,status='INPUT_STALE')
+                    if isinstance(error, HeadDetectorFailure):
+                        decision=self.search.fail('DETECTOR_FAILED')
+                    else:
+                        decision=self.search.advance_deadline(now+elapsed) or dict(neck_target_rad=None,stop=True,status='INPUT_STALE')
         if 'found' in decision or decision['stop']:
             self._stop_and_confirm(generation)
         else:
             with self._lock:
                 if self._generation!=generation:raise RuntimeError('SEARCH_RESET_DURING_TICK')
                 if decision['neck_target_rad']!=self.last_command:
+                    self._guard_or_stop(generation)
                     self.neck_port.command_neck(decision['neck_target_rad'],session_id=config['session_id'],
                         attempt_id=config['attempt_id'],observation_time_s=frame['sim_time_s'])
                     self.last_command=decision['neck_target_rad']
