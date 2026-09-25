@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: bd480dd22a54cb5495cb896a623093b093aa9257
+current_commit: f37d0c0a4bf170646edd98d93919577e541da6a6
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -16,8 +16,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: CP-252
-next_experiment: EXP-253 bounded same-step Task8 readback across asynchronous sources
+latest_checkpoint: CP-253
+next_experiment: EXP-254 exact ACT child and stack retirement proof
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1879,3 +1879,14 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 
 - Last valid experiment: EXP-252. Current approved fingerprint, receipt, scene and compiled model derive deterministic phase-specific named geom pairs; all other contacts remain hazards.
 - Remaining gates: feed these pairs only through the admitted child, bound common-step physical readbacks, actual Task8Port, per-case fresh stack and clean-retirement proof, measured Task6 preflight, then live Task8 and W8/formal. No live case is admitted by this primitive.
+
+## EXP-253 — Bounded common-step physical readback
+
+- **PLANNED:** Source HEAD `f37d0c0a4bf170646edd98d93919577e541da6a6`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. Independent Astra review found the current Task8 readback's three unrelated latest snapshots can disagree in healthy asynchronous ROS delivery. Add bounded, reset-scoped histories for atomic world, scene and per-step contact sources and choose the newest common fresh physics step; deny missing, stale, hazardous or cross-epoch data. Check broker reference before consuming a monotonic RGB sample. TDD includes out-of-order arrival, missing intersection, history eviction and latest contact hazard. Run ordinary Demo/package gates on fresh verified NVMe scratch. No ROS process or live motion; retain all evidence, archive none, scratch trees deletion candidates only, delete nothing.
+
+- **VALID as an offline common-step readback:** Intended RED `scratch/exp253-red.IuI4CPqT` exited1 with two real failures: newer world/contact frames reached the reader before scene and were rejected despite a healthy prior common step; a failed broker reference lookup consumed the RGB decision time. First targeted GREEN `scratch/exp253-green.6QNn1Uku` passed58/58. A new capacity test in `scratch/exp253-green2.23YM2LT2` exposed a test-only timestamp earlier than the fixture's initial frame, not a source regression; corrected targeted `scratch/exp253-green3.TXDRTvXT` passed60/60. After adding strict atomic world rejection/sequence-gap latching, targeted `scratch/exp253-green4.C29TLhkn` passed61/61. World keeps 256 immutable atomic receipts, scene 256 deep-copied states and contact 512 deep-copied contiguous frames, all bounded and reset-scoped. Task8 chooses the newest common fresh `(session, epoch, step)`, denies stale/missing intersection or any current contact hazard, and resolves broker reference before the RGB synchronizer commits a monotonic sample. A rejected or missing low-rate atomic world frame latches only the strict Task8 history until a new reset epoch; ordinary world snapshot behavior is unchanged. Overlay build `scratch/exp253-demo-build.PLWaITOx` exited0 in3 s. Eight-worker Python `scratch/exp253-python-full.3VuhbzCh` exited0 in45 s, 4212 passed/162 skipped. Package `scratch/exp253-demo-colcon.EHrT2VMe` exited0 in172 s, 4212 passed/162 skipped/12 deselected; `test-result --verbose` exited0, aggregate 5748 tests/0 errors/0 failures/205 skipped. All tests used exact task Python with unique proved NVMe TMPDIR/TMP/TEMP. Installed task overlay resolves to current source for `task8_readback.py` SHA256 `33078fb8a4dcb14a52ccd8667ffc342f2d8500934abe5f0bcdece15452caf0f8`, `scene_state.py` `031f1dc3f046766c2df31851aff880abc0e2b183b918524c55618edac0ce5ce1`, `contact_evidence.py` `89e619a8b34b6efb47858e51c6e168cb6041553bad49c0234c07b5b3945764c4`, and `observer.py` `e4ada5284b51121ce5fd1d803d480a93a3dc075706fd610e51a531dd5bb473da`. `git diff --check` clean. No ROS process, motion, Task8 phase PASS, W8 or formal episode; Train/Val/Test 0/0/0. Retain all registered evidence, archive none, scratch trees deletion candidates only, delete nothing.
+
+## CP-253 — Same-step source join boundary
+
+- Last valid experiment: EXP-253. Asynchronous ROS delivery can now yield a valid latest common physics step without overlooking newer contact hazard or world evidence loss.
+- Remaining gates: wire these sources and contact pairs to one admitted child, actual physical Task8Port, exact per-case stack spawn and clean-retirement proof, measured Task6 preflight, then live Task8 and W8/formal. No live case is admitted by this read-only primitive.

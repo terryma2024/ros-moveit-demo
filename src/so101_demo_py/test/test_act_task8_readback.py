@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 import mujoco
+from dataclasses import replace
 from functools import lru_cache
 from pathlib import Path
 from ament_index_python.packages import get_package_share_directory
@@ -70,8 +71,14 @@ def sources(*, cup_shift=0.0, scene_step=1, world_epoch=1, rgb_stamp=1.01,
     )
 
     class World:
+        def __init__(self):
+            self.entries = [ReceivedSimulationEvidence(world_evidence, 10.0)]
+
         def snapshot_with_receipt(self):
-            return ReceivedSimulationEvidence(world_evidence, 10.0)
+            return self.entries[-1]
+
+        def recent_with_receipts(self):
+            return tuple(self.entries)
 
     scene = SceneStateObserver(model_sha256="1" * 64, nq=14, nv=12,
                                max_age_s=0.15, monotonic=lambda: now[0])
@@ -101,7 +108,11 @@ def sources(*, cup_shift=0.0, scene_step=1, world_epoch=1, rgb_stamp=1.01,
     rgb.push("neck", "s", 1.01, 0.05)
 
     class Broker:
+        enabled = True
+
         def reference_state(self, when):
+            if not self.enabled:
+                raise RuntimeError("reference temporarily unavailable")
             return dict(positions=(0.1,) * 6, velocities=(0.0,) * 6,
                         accelerations=(0.0,) * 6, requested_sim_time_s=when)
 
@@ -159,3 +170,106 @@ def test_contact_gap_or_wall_staleness_denies_phase_readback():
     now[0] = 10.2
     with pytest.raises(Task8ReadbackError, match="WORLD_READBACK_UNAVAILABLE"):
         readback.capture("s", "attempt-1", 1)
+
+
+def test_async_latest_frames_join_the_previous_common_physics_step():
+    readback, _, contacts, _ = sources()
+    newest = readback.world.entries[-1]
+    readback.world.entries.append(ReceivedSimulationEvidence(
+        replace(newest.evidence, simulation_step=2, publisher_sequence=2,
+                simulation_time_s=1.02), 10.0,
+    ))
+    contacts.accept(dict(
+        simulation_session_id="s", reset_epoch=1, physics_step=2,
+        simulation_time_s=1.02, geom_a=[], geom_b=[], signed_distance_m=[],
+        normal_force_n=[], truncated=False, evidence_loss=False,
+    ))
+    proof = readback.capture("s", "attempt-1", 1)
+    assert proof["world"].simulation_step == proof["scene"]["simulation_step"] == proof["contact"]["physics_step"] == 1
+
+
+def test_failed_broker_lookup_does_not_consume_rgb_decision_time():
+    readback, _, _, _ = sources()
+    readback.broker.enabled = False
+    with pytest.raises(Task8ReadbackError, match="REFERENCE_READBACK_UNAVAILABLE"):
+        readback.capture("s", "attempt-1", 1)
+    readback.broker.enabled = True
+    assert readback.capture("s", "attempt-1", 1)["observation"]["sim_time_s"] == 1.01
+
+
+def test_world_history_is_bounded_and_cleared_on_reset(monkeypatch):
+    from so101_demo.backends.mujoco import observer as world_module
+
+    readback, _, _, now = sources()
+    example = readback.world.entries[0].evidence
+    monkeypatch.setattr(world_module, "convert_message", lambda value: value)
+
+    class Node:
+        def create_subscription(self, *_args):
+            return None
+
+    world = world_module.MujocoWorldObserver(Node(), "s", max_age_s=0.15,
+                                              monotonic=lambda: now[0])
+    for step in range(1, 301):
+        world.accept(replace(example, simulation_step=step, publisher_sequence=step,
+                             simulation_time_s=1.0 + step * 0.01), received_at_s=10.0)
+    recent = world.recent_with_receipts()
+    assert len(recent) == 256
+    assert recent[0].evidence.simulation_step == 45
+    world.accept(replace(example, reset_epoch=2, simulation_step=0,
+                         publisher_sequence=301, paused=True,
+                         simulation_time_s=4.1), received_at_s=10.0)
+    assert [entry.evidence.reset_epoch for entry in world.recent_with_receipts()] == [2]
+
+
+def test_task8_world_history_latches_rejected_or_missing_atomic_frames(monkeypatch):
+    from so101_demo.backends.mujoco import observer as world_module
+
+    readback, _, _, now = sources()
+    example = readback.world.entries[0].evidence
+    monkeypatch.setattr(world_module, "convert_message", lambda value: value)
+
+    class Node:
+        def create_subscription(self, *_args):
+            return None
+
+    world = world_module.MujocoWorldObserver(Node(), "s", monotonic=lambda: now[0])
+    world._callback(example)
+    world._callback(replace(example, publisher_sequence=2, simulation_step=2,
+                            simulation_time_s=1.02, truncated=True))
+    with pytest.raises(world_module.EvidenceRejected, match="truncated"):
+        world.recent_with_receipts()
+    world.accept(replace(example, reset_epoch=2, simulation_step=0, paused=True,
+                         publisher_sequence=3), received_at_s=10.0)
+    assert len(world.recent_with_receipts()) == 1
+    world.accept(replace(example, reset_epoch=2, simulation_step=1,
+                         publisher_sequence=5), received_at_s=10.0)
+    with pytest.raises(world_module.EvidenceRejected, match="sequence gap"):
+        world.recent_with_receipts()
+
+
+def test_scene_and_contact_histories_are_bounded_reset_scoped_and_hazard_fenced():
+    readback, scene, contacts, _ = sources()
+    scene_seed = scene.snapshot()
+    contact_seed = contacts.snapshot()
+    for step in range(2, 515):
+        scene.accept({**scene_seed, "simulation_step": step,
+                      "simulation_time_s": 1.01 + (step - 1) * 0.001})
+        contacts.accept({**contact_seed, "physics_step": step,
+                         "simulation_time_s": 1.01 + (step - 1) * 0.001})
+    assert len(scene.recent_frames()) == 256
+    assert len(contacts.recent_frames()) == 512
+    assert scene.recent_frames()[0]["simulation_step"] == 259
+    assert contacts.recent_frames()[0]["physics_step"] == 3
+    contacts.accept({**contact_seed, "physics_step": 515,
+                     "simulation_time_s": 1.524, "geom_a": ["arm"],
+                     "geom_b": ["table"], "signed_distance_m": [-0.001],
+                     "normal_force_n": [1.0]})
+    with pytest.raises(ValueError, match="ROBOT_CONTACT_HAZARD"):
+        contacts.recent_frames()
+    scene.reset("s", 2, source_floor_s=2.0)
+    contacts.reset("s", 2, source_floor_s=2.0)
+    with pytest.raises(ValueError, match="SCENE_STATE_UNAVAILABLE"):
+        scene.recent_frames()
+    with pytest.raises(ValueError, match="CONTACT_UNAVAILABLE"):
+        contacts.recent_frames()

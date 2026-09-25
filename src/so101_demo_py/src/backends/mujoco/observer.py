@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import threading
 import time
+from collections import deque
 from collections.abc import Callable
 from typing import Any
 
@@ -123,6 +124,8 @@ class MujocoWorldObserver:
         self._lock = threading.Lock()
         self._latest: SimulationEvidence | None = None
         self._received_at_s: float | None = None
+        self._history: deque[ReceivedSimulationEvidence] = deque(maxlen=256)
+        self._strict_hazard: str | None = None
         self._callback_count = 0
         self._rejected_count = 0
         self._last_rejection = ""
@@ -140,6 +143,7 @@ class MujocoWorldObserver:
             with self._lock:
                 self._rejected_count += 1
                 self._last_rejection = str(error)
+                self._strict_hazard = str(error)
 
     @property
     def callback_count(self) -> int:
@@ -189,6 +193,12 @@ class MujocoWorldObserver:
                     raise EvidenceRejected("new reset epoch must begin at simulation step zero")
             self._latest = evidence
             self._received_at_s = receipt
+            if previous is not None and evidence.reset_epoch != previous.reset_epoch:
+                self._history.clear()
+                self._strict_hazard = None
+            elif previous is not None and evidence.publisher_sequence != previous.publisher_sequence + 1:
+                self._strict_hazard = "atomic evidence publisher sequence gap"
+            self._history.append(ReceivedSimulationEvidence(evidence, receipt))
 
     def snapshot(self) -> SimulationEvidence:
         return self.snapshot_with_receipt().evidence
@@ -204,3 +214,21 @@ class MujocoWorldObserver:
         if not math.isfinite(age) or age < 0.0 or age > self._max_age_s:
             raise EvidenceStale(f"atomic evidence age {age:.3f}s exceeds {self._max_age_s:.3f}s")
         return ReceivedSimulationEvidence(evidence, received_at_s)
+
+    def recent_with_receipts(self) -> tuple[ReceivedSimulationEvidence, ...]:
+        """Fresh bounded history for a common physics-step join."""
+        with self._lock:
+            values = tuple(self._history)
+            hazard = self._strict_hazard
+        if hazard is not None:
+            raise EvidenceRejected(hazard)
+        if not values:
+            raise EvidenceStale("no atomic evidence has been accepted")
+        now = self._monotonic()
+        if not math.isfinite(now) or now < values[-1].received_monotonic_s:
+            raise EvidenceStale("atomic evidence receipt is in the future")
+        fresh = tuple(value for value in values
+                      if 0 <= now - value.received_monotonic_s <= self._max_age_s)
+        if not fresh:
+            raise EvidenceStale("no fresh atomic evidence remains")
+        return fresh

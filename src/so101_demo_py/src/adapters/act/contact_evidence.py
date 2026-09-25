@@ -41,6 +41,7 @@ class RobotContactObserver:
         self.max_age=finite(max_age_s);self.max_gap=finite(max_sim_gap_s)
         if self.max_age<=0 or self.max_gap<=0:raise ValueError('CONTACT_CONFIG_INVALID')
         self.monotonic=monotonic;self.session=None;self.epoch=None;self.last=None;self.received=None;self.hazard=None
+        self._history=deque(maxlen=512)
 
     def replace_allowed_pairs(self, pairs):
         """Atomically replace the active phase policy and recheck the last frame.
@@ -68,6 +69,7 @@ class RobotContactObserver:
                 raise ValueError('CONTACT_RESET_EPOCH_INVALID')
             self.session,self.epoch,self.floor=session_id,reset_epoch,floor
             self.last=self.received=self.hazard=None
+            self._history.clear()
 
     def accept(self,frame):
         with self._lock:
@@ -85,6 +87,7 @@ class RobotContactObserver:
                 if contact_hazard(frame,self.allowed):self.hazard=self.hazard or 'ROBOT_CONTACT_HAZARD'
                 self.last={key:list(value) if isinstance(value,(list,tuple)) else value for key,value in frame.items()}
                 self.received=finite(self.monotonic(),nonnegative=True)
+                self._history.append((copy.deepcopy(self.last),self.received))
             except (KeyError,TypeError,ValueError) as error:self.hazard=self.hazard or str(error)
 
     def latch(self, reason):
@@ -105,6 +108,16 @@ class RobotContactObserver:
             now=finite(self.monotonic(),nonnegative=True)
             if not 0<=now-self.received<=self.max_age:raise ValueError('CONTACT_STALE')
             return copy.deepcopy(self.last)
+
+    def recent_frames(self):
+        """Return fresh contiguous accepted steps from the current safe epoch."""
+        with self._lock:
+            if self.hazard:raise ValueError(self.hazard)
+            if self.last is None or self.received is None:raise ValueError('CONTACT_UNAVAILABLE')
+            now=finite(self.monotonic(),nonnegative=True)
+            if not 0<=now-self.received<=self.max_age:raise ValueError('CONTACT_STALE')
+            return tuple(copy.deepcopy(frame) for frame,received in self._history
+                         if 0<=now-received<=self.max_age)
 
 
 class RosRobotContactAdapter:

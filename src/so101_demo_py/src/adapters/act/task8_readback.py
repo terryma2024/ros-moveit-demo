@@ -76,31 +76,40 @@ class Task8PhysicalReadback:
         if type(reset_epoch) is not int or reset_epoch < 1:
             raise Task8ReadbackError("SOURCE_SCOPE_MISMATCH")
         try:
-            received = self.world.snapshot_with_receipt()
-            world = received.evidence
+            received = self.world.recent_with_receipts()
             now = finite(self.monotonic(), nonnegative=True)
-            if not 0 <= now - received.received_monotonic_s <= self.max_wall_age or world.truncated:
+            fresh = tuple(item for item in received
+                          if 0 <= now - item.received_monotonic_s <= self.max_wall_age
+                          and not item.evidence.truncated)
+            if not fresh:
                 raise ValueError("world stale or truncated")
+            worlds = {item.evidence.simulation_step: item.evidence for item in fresh
+                      if (item.evidence.simulation_session_id, item.evidence.reset_epoch)
+                      == (session_id, reset_epoch)}
         except (AttributeError, TypeError, ValueError, RuntimeError) as error:
             raise Task8ReadbackError("WORLD_READBACK_UNAVAILABLE") from error
         try:
-            scene = self.scene.snapshot()
+            scene_frames = self.scene.recent_frames()
         except (AttributeError, TypeError, ValueError, RuntimeError) as error:
             raise Task8ReadbackError("SCENE_READBACK_UNAVAILABLE") from error
         try:
-            contact = self.contacts.snapshot()
+            contact_frames = self.contacts.recent_frames()
         except (AttributeError, TypeError, ValueError, RuntimeError) as error:
             raise Task8ReadbackError("CONTACT_READBACK_UNAVAILABLE") from error
-        expected = (session_id, reset_epoch)
-        if any(actual != expected for actual in (
-            (world.simulation_session_id, world.reset_epoch),
-            (scene["simulation_session_id"], scene["reset_epoch"]),
-            (contact["simulation_session_id"], contact["reset_epoch"]),
-        )):
+        scenes = {frame["simulation_step"]: frame for frame in scene_frames
+                  if (frame["simulation_session_id"], frame["reset_epoch"])
+                  == (session_id, reset_epoch)}
+        contacts = {frame["physics_step"]: frame for frame in contact_frames
+                    if (frame["simulation_session_id"], frame["reset_epoch"])
+                    == (session_id, reset_epoch)}
+        if not worlds or not scenes or not contacts:
             raise Task8ReadbackError("SOURCE_SCOPE_MISMATCH")
-        if (world.simulation_step != scene["simulation_step"]
-                or world.simulation_step != contact["physics_step"]
-                or world.paused != scene["paused"]):
+        common = worlds.keys() & scenes.keys() & contacts.keys()
+        if not common:
+            raise Task8ReadbackError("SOURCE_STEP_MISMATCH")
+        step = max(common)
+        world, scene, contact = worlds[step], scenes[step], contacts[step]
+        if world.paused != scene["paused"]:
             raise Task8ReadbackError("SOURCE_STEP_MISMATCH")
         at_s = world.simulation_time_s
         if any(abs(stamp - at_s) > self.max_skew for stamp in (
@@ -123,6 +132,16 @@ class Task8PhysicalReadback:
         ) > self.cup_orientation_tolerance:
             raise Task8ReadbackError("CUP_QPOS_DIVERGED")
         try:
+            reference = self.broker.reference_state(at_s)
+            if (not isinstance(reference, dict)
+                    or set(reference) != {"positions", "velocities", "accelerations", "requested_sim_time_s"}
+                    or reference["requested_sim_time_s"] != at_s
+                    or any(len(reference[key]) != 6 or any(not math.isfinite(value) for value in reference[key])
+                           for key in ("positions", "velocities", "accelerations"))):
+                raise ValueError("reference invalid")
+        except (AttributeError, KeyError, TypeError, ValueError, RuntimeError) as error:
+            raise Task8ReadbackError("REFERENCE_READBACK_UNAVAILABLE") from error
+        try:
             observation = self.rgb.sample(session_id, attempt_id, at_s)
             audit = self.rgb.last_audit
             if any(abs(stamp - at_s) > self.max_skew for stamp in audit["source_stamps"].values()):
@@ -133,16 +152,6 @@ class Task8PhysicalReadback:
         if any(abs(measured[index] - qpos[address]) > self.joint_tolerance
                for index, address in enumerate(self.joints)):
             raise Task8ReadbackError("JOINT_QPOS_DIVERGED")
-        try:
-            reference = self.broker.reference_state(at_s)
-            if (not isinstance(reference, dict)
-                    or set(reference) != {"positions", "velocities", "accelerations", "requested_sim_time_s"}
-                    or reference["requested_sim_time_s"] != at_s
-                    or any(len(reference[key]) != 6 or any(not math.isfinite(value) for value in reference[key])
-                           for key in ("positions", "velocities", "accelerations"))):
-                raise ValueError("reference invalid")
-        except (AttributeError, KeyError, TypeError, ValueError, RuntimeError) as error:
-            raise Task8ReadbackError("REFERENCE_READBACK_UNAVAILABLE") from error
         return {"world": world, "scene": scene, "contact": contact,
                 "observation": observation, "reference": reference,
                 "source_stamps_s": dict(audit["source_stamps"])}
