@@ -22,6 +22,7 @@ from so101_teleop.unified.contracts import Domain, OperationSpec
 from so101_teleop.unified.gpu_workload import ActGpuWorkloadArbiter
 from so101_teleop.unified.intent_store import IntentStore
 from so101_demo.act.calibration import REQUIRED_MEASUREMENTS
+from so101_demo.act.task8_manifest import build_task8_live_manifest
 
 
 def _canonical(value):
@@ -100,12 +101,28 @@ def _calibration(tmp_path, *, status):
 def _start_spec(tmp_path, fingerprint, proposal_path, receipt_path, *, backend="mujoco",
                 calibration_status="TASK8_READY"):
     artifacts = {}
-    for name in ("source", "manifest", "runtime_config", "collection_config"):
+    for name in ("source", "runtime_config", "collection_config"):
         path = tmp_path / f"{name}.json"
         if not path.exists():
             path.write_bytes(_canonical({"artifact": name, "campaign_id": "campaign-1"}))
         artifacts[f"{name}_path"] = str(path)
         artifacts[f"{name}_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    manifest_path = tmp_path / "manifest.json"
+    if not manifest_path.exists():
+        manifest = build_task8_live_manifest(
+            {
+                "default": {"cup_start_m": [0.02, -0.28, 0.165], "neck_start_rad": 0.1},
+                "left": {"cup_start_m": [-0.08, -0.28, 0.165], "neck_start_rad": 0.0},
+                "forward": {"cup_start_m": [0.02, -0.36, 0.165], "neck_start_rad": 0.0},
+            },
+            source_sha256=artifacts["source_sha256"],
+            runtime_config_sha256=artifacts["runtime_config_sha256"],
+            collection_config_sha256=artifacts["collection_config_sha256"],
+            contact_policy_fingerprint=fingerprint,
+        )
+        manifest_path.write_bytes(_canonical(manifest))
+    artifacts["manifest_path"] = str(manifest_path)
+    artifacts["manifest_sha256"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     calibration_path, calibration_sha = _calibration(tmp_path, status=calibration_status)
     return OperationSpec(
         command_id="start-1", domain=Domain.VALIDATION, kind="task8_phase",
@@ -340,6 +357,37 @@ def test_start_rejects_changed_artifact_bytes_before_any_resource(tmp_path, name
     try:
         service = _service(store)
         with pytest.raises(ValueError, match="CAMPAIGN_ARTIFACT_HASH_MISMATCH"):
+            service.start(spec)
+        assert service.child_registry.launches() == ()
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("mutation", ("missing_prefix", "stale_source"))
+def test_task8_start_rejects_semantically_invalid_manifest_before_resources(tmp_path, mutation):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+    manifest_path = tmp_path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    if mutation == "missing_prefix":
+        manifest["prefix_cases"].pop()
+        expected = "TASK8_MANIFEST_INVALID"
+    else:
+        manifest["source_sha256"] = "f" * 64
+        expected = "TASK8_MANIFEST_BINDING_MISMATCH"
+    manifest["manifest_sha256"] = hashlib.sha256(_canonical({
+        key: value for key, value in manifest.items() if key != "manifest_sha256"
+    })).hexdigest()
+    manifest_path.write_bytes(_canonical(manifest))
+    spec = replace(spec, payload={**spec.payload,
+        "manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest()})
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        with pytest.raises(ValueError, match=expected):
             service.start(spec)
         assert service.child_registry.launches() == ()
         assert service.arbiter.is_idle()
