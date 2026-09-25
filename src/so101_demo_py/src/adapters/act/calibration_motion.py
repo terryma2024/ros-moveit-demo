@@ -140,7 +140,9 @@ class RosCalibrationMotionGuard:
                        state['result'] is not None and state['result']['error_code']==0
                        for state in states):
                 return False
-            self.driver.refresh_idle()
+            # The paired goal status has already refreshed the negative
+            # baseline. Starting another asynchronous refresh here would
+            # clear that proof immediately before this synchronous check.
             return self.driver.stopped()
         except (AttributeError,KeyError,TypeError,ValueError,RuntimeError):return False
 
@@ -372,29 +374,37 @@ class RosCalibrationMotionGuard:
             return False
 
     def check_exact_goals(self,goals,prefix):
+        def reject(reason):
+            self._record_rejection(dict(boundary='exact_goals',safe=False,reason=reason))
+            return False
         try:
-            if not self._live_ready():return False
+            if not self._live_ready():return reject('LIVE_NOT_READY')
             if len(goals)!=2 or goals[0]['header_stamp_s']!=goals[1]['header_stamp_s'] or goals[0]['time_from_start_s']!=goals[1]['time_from_start_s']:
-                return False
+                return reject('GOAL_PAIR_MISMATCH')
             observation_time=finite(prefix['observation_time_s'],nonnegative=True)
             sample_time=observation_time
             if self.contact_mode:
                 sample_time=finite(self.node.get_clock().now().nanoseconds*1e-9,nonnegative=True)
                 if not 0<=sample_time-observation_time<=min(.1,self.manifest['max_age_s']):
-                    return False
+                    return reject('OBSERVATION_STALE')
             base=dict(session_id=prefix['session_id'],attempt_id=prefix['attempt_id'],reset_epoch=self.contact_observer.epoch,
                 sim_time_s=sample_time)
             start=goals[0]['header_stamp_s'];held=goals[0]['positions'][0]+goals[1]['positions'][0]
             reference=self.driver.reference_state(start)
-            if any(abs(a-b)>1e-9 for a,b in zip(reference['positions'],held,strict=True)):return False
+            if any(abs(a-b)>1e-9 for a,b in zip(reference['positions'],held,strict=True)):
+                return reject('REFERENCE_MISMATCH')
             full=self._snapshot(base,start=start,reference=held,reference_velocity=reference['velocities'])
-            if not self._within(prefix,held,self._joints[0][6]):return False
+            if not self._within(prefix,held,self._joints[0][6]):
+                return reject('PREFIX_WITHIN_INVALID')
             safe=self.path.check_path(prefix,full)
-            self.audit.append(dict(boundary='exact_goals',safe=safe,path=dict(self.path.last_check)))
+            row=dict(boundary='exact_goals',safe=safe,path=dict(self.path.last_check))
+            if safe:self.audit.append(row)
+            else:self._record_rejection(row)
             if safe and self.contact_mode:self._next_segment+=1
             return safe
         except (KeyError,TypeError,ValueError,RuntimeError) as error:
-            self.audit.append(dict(boundary='exact_goals',safe=False,error=repr(error)));return False
+            self._record_rejection(dict(boundary='exact_goals',safe=False,error=repr(error)))
+            return False
 
     def poll(self):
         with self.scene_observer._lock:
