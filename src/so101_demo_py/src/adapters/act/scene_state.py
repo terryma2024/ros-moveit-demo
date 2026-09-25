@@ -121,6 +121,13 @@ class RosSceneStateAdapter:
                         and self.pending_reset_port is not None
                         and self.pending_reset_port(frame) is True):
                     self._pending=(copy.deepcopy(frame),copy.deepcopy(frame))
+                elif (self.observer.epoch is not None
+                        and identity==(self.observer.session,self.observer.epoch)
+                        and frame['paused'] and frame['simulation_step']==0
+                        and self.pending_reset_port is not None):
+                    if self.pending_reset_port(frame) is not True:
+                        raise ValueError('SCENE_RESET_PROOF_INVALID')
+                    self.observer.accept(frame)
                 else:self.observer.accept(frame)
             except (KeyError,TypeError,ValueError,RuntimeError) as error:
                 self.observer.hazard=self.observer.hazard or str(error)

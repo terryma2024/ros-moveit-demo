@@ -96,7 +96,7 @@ def test_contact_diagnostic_guard_uses_single_existing_broker_and_live_physics(t
         qpos=qpos,qvel=[0.]*guard.model.nv)
     guard.scene_adapter.accept_message(scene_message)
     assert guard.scene_observer.last is not None
-    assert guard._cup_reset_verified is False
+    assert guard._cup_reset_verified is True
     guard.poll()
     assert guard._cup_reset_verified is True
     assert guard._pending_scene_reset(frame)
