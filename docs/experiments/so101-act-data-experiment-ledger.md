@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: c89973bc7025928e9bc36fae225bc93e6163b45a
+current_commit: 5d67906f4c0bee5ec7d0a5b1c095c67e9d8fe857
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -13,14 +13,14 @@ confirmed_conclusions:
   - EXP-176 confirms current schema-v3 collector and analyzer are absent from source and installed overlay.
   - CP-177 rebased this branch onto the independently reviewed ACT Task 8 design and plan at approved-main 1e4664517fecc34a01ef6b8959e4a0f7316cda6e.
   - EXP-213 activated the independently reviewed canonical contact-policy fingerprint 0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11 under the user's exact authorization.
-  - CP-283 confirms an installed bounded ACT stack readiness observer and all Demo gates; live Task 8 remains fenced.
+  - CP-285 fixes the real controller-future state error with RED/GREEN and full Demo/package gates; live Task 8 remains fenced.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
-  - The installed dedicated observer can produce a fresh seven-axis startup artifact on a new isolated ACT stack, allowing later owner-created receipt issuance.
+  - The corrected installed observer can proceed to the physical/RGB axes on a new isolated stack and produce a startup artifact.
   - The physical phase port can support measured Task6 TASK8_READY and Task8 live qualification.
-latest_checkpoint: CP-283
-next_experiment: EXP-284 isolated installed readiness CLI validation
+latest_checkpoint: CP-285
+next_experiment: EXP-286 isolated installed readiness rerun
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -2222,3 +2222,23 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-283 — Dedicated readiness observer installed; real-stack verdict pending
 
 - Last valid experiment: EXP-283. The source observer is bounded and installed but has not yet been exercised against live ACT world/joint/RGB timing. Next launch a new isolated no-motion stack, run the installed CLI exactly once within it, record the returned artifact or first failed axis, then prove process/graph retirement. Keep receipt producer and `FULL_RESTART` campaign closed. Retain registered root and all runs, archive none; scratch roots are deletion candidates only, delete nothing.
+
+## EXP-284 — Validate the installed readiness CLI on a new isolated stack
+
+- **PLANNED:** Frozen source HEAD `5d67906f4c0bee5ec7d0a5b1c095c67e9d8fe857`, submodule `54463fce3bfa6192976e74113f5ed7152f708a3f`, registered root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`, exact installed overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, runtime launch `/opt/ros/jazzy/bin/ros2`, installed CLI `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i/so101_demo_py/lib/so101_demo_py/act_stack_ready`, `ROS_DOMAIN_ID=229`, `GZ_PARTITION=act-data-exp284-229`, MuJoCo session `act-data-exp284-229`, lifecycle `ISOLATED_STACK`, headless, no broker, no motion target or reset. Preflight found domain 229 empty and no task stack; installed CLI executable exists; `diagnostics/exp284-stack-001` is unused. Start one owned ACT process group, wait for the expected graph, invoke the installed CLI exactly once with a 60 s internal deadline and a bounded outer timeout, retain its exact stdout/stderr and process identity, then stop and prove graph/process retirement. The single changed variable from EXP-282 is the dedicated same-process subscriber instead of separate `ros2 topic echo` invocations. Success for this diagnostic is a complete seven-axis artifact with exact session/domain and fresh monotonic timestamp plus cleanup; failure is a reported first axis, timeout, wrong identity, or uncertain retirement. No Task8 phase PASS or FULL_RESTART qualification follows from either result. Keep `FULL_RESTART_PROOF_UNAVAILABLE`, `ACT_TASK8_PORT_NOT_PROVISIONED`, and `CALIBRATION_REQUIRED`; accepted Train/Val/Test stays 0/0/0. Retain all logs, archive none, deletion candidates only after readback; delete nothing.
+
+- **VALID as a runtime failure diagnostic:** `diagnostics/exp284-stack-001` retains the exact launch and installed CLI argv, process owner, launch and CLI logs, and final result. The new domain-229 stack exposed `/move_group` and `/controller_manager`; the installed CLI exited1 after 1.871 s with `AttributeError: 'NoneType' object has no attribute 'done'` at the controller-query loop. The service had become ready and the code had already settled its pending future, then the next iteration evaluated `pending.done()` while `pending` was `None`. No readiness artifact was emitted and no Task8 case was submitted. Wrapper exited1 in14 s as expected for the failed diagnostic; launch exited0 after owned SIGINT, `graph_after` and a fresh domain-229 graph were empty, and no task process remained. No motion/reset/contact diagnostic occurred. This is an observer implementation failure, not evidence of missing controller, MuJoCo, or RGB source. Retain the run and registered root, archive none; delete nothing.
+
+## CP-284 — Controller future idle branch aborts readiness before source verdict
+
+- Last valid experiment: EXP-284. Fix the concrete `pending is None` branch with a test covering an already-active controller map and no overlapping request, then rebuild and rerun Demo gates. Only after a new tested commit, start a fresh isolated readiness run. `FULL_RESTART_PROOF_UNAVAILABLE`, `ACT_TASK8_PORT_NOT_PROVISIONED`, `CALIBRATION_REQUIRED`; accepted Train/Val/Test 0/0/0. Retain all evidence, archive none, scratch roots deletion candidates only, delete nothing.
+
+## EXP-285 — Keep the controller-query state machine idle after readiness
+
+- **PLANNED:** Source HEAD `5d67906f4c0bee5ec7d0a5b1c095c67e9d8fe857`, registered root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`, overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, runtime executable `NOT_STARTED`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. EXP-284 reproduced an `AttributeError` after the controller service response had settled: the next iteration tested `pending.done()` even though `pending` was `None` and all four controller states were active. Add a regression that cycles service-ready/pending/active states without sending a duplicate request, then fix only this polling boundary. Run focused RED/GREEN and full Demo ordinary/package gates with exact Python, unique verified NVMe scratch and installed provenance. No live stack in this experiment, no proof issuance, no Task8 phase or data; retain all evidence, archive none, scratch deletion candidates only, delete nothing.
+
+- **VALID as a controller-query regression fix:** Intended RED `scratch/exp285-red.1iIj9tbm` failed when the new controller state-machine boundary was absent; focused GREEN `scratch/exp285-green.afVjXjxT` passed6/6. `advance_controller_query` now keeps at most one pending request, settles it before the idle/active decision, and does not dereference a missing future or issue another request once all four controllers are active. Exact task-Python eight-worker Demo ordinary `scratch/exp285-demo-full.qgvUxN46` exited0 in50 s, 4288 passed/162 skipped, CPU32/workers8, JUnit retained. Overlay build `scratch/exp285-build.jxqoLvD4` exited0 in3 s. Package gate `scratch/exp285-demo-colcon.gijIL1Qp` exited0 in50 s with actual 8/8 workers and XML 4450 tests/0 errors/0 failures/162 skipped. Aggregate `colcon test-result --verbose` exited0: 5870 tests/0 errors/0 failures/205 skipped. Each pytest/colcon run used a unique previously nonexistent NVMe TMPDIR/TMP/TEMP verified by the exact task Python; no benchmark was collected. Installed CLI module resolves through task build tree to current source; SHA256 both `bdd404a434d69f9c52837d9adbd2ff6687c20643f8e16c573848522d77814b2f`. `git diff --check` clean. No live Task8 case, W8, formal episode or training; accepted Train/Val/Test 0/0/0. Retain registered root and all runs, archive none; scratch deletion candidates only, delete nothing.
+
+## CP-285 — Controller query settles before idle readiness polling
+
+- Last valid experiment: EXP-285. EXP-284's exact runtime exception has a tested source fix and installed provenance. The next step is a new isolated no-motion stack and one invocation of the corrected installed readiness CLI, followed by process and graph retirement proof. Receipt producer and `FULL_RESTART` campaign remain closed. Retain registered root and all runs, archive none; scratch roots deletion candidates only, delete nothing.

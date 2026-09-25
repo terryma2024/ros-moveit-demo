@@ -90,3 +90,43 @@ def test_neck_controller_and_action_are_required():
     value = deepcopy(observations())
     value["actions"]["/neck_controller/follow_joint_trajectory"] = False
     assert evaluate_act_stack_readiness(**value).failure_code == "ACT_STACK_GRAPH_INCOMPLETE"
+
+
+def test_controller_query_settles_once_then_stays_idle():
+    from so101_demo.cli.act_stack_ready import advance_controller_query
+
+    class Future:
+        def done(self):
+            return True
+
+        def result(self):
+            controller = [type("State", (), {"name": name, "state": "active"})()
+                          for name in observations()["controllers"]]
+            return type("Response", (), {"controller": controller})()
+
+    class Client:
+        calls = 0
+
+        def service_is_ready(self):
+            return True
+
+        def call_async(self, _request):
+            self.calls += 1
+            return Future()
+
+    client = Client()
+    pending, states, next_query = advance_controller_query(
+        client, None, {}, now_s=1.0, next_query_s=0.0,
+        request_factory=lambda: object(),
+    )
+    assert pending is not None and client.calls == 1
+    pending, states, next_query = advance_controller_query(
+        client, pending, states, now_s=1.1, next_query_s=next_query,
+        request_factory=lambda: object(),
+    )
+    assert pending is None and all(state == "active" for state in states.values())
+    pending, states, _ = advance_controller_query(
+        client, pending, states, now_s=2.0, next_query_s=next_query,
+        request_factory=lambda: object(),
+    )
+    assert pending is None and client.calls == 1
