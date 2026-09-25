@@ -113,6 +113,21 @@ def select_live_window(frames: list[dict], regime: str) -> list[dict]:
     return candidates[0]
 
 
+def select_session_window(frames: list[dict], regime: str, *,
+                          first_motion_time: float, final_pause_step: int) -> list[dict]:
+    """Keep the measured reset transient for the initial unilateral control."""
+
+    if regime == "left_only":
+        initial = frames[:WINDOW_LENGTHS[regime]]
+        if (final_pause_step < WINDOW_LENGTHS[regime] or
+                [row["physics_step"] for row in initial] != [1, 2] or
+                not all(_qualifies(row, regime) for row in initial)):
+            raise ValueError("live left-only initial reset contact is missing")
+        return select_live_window(initial, regime)
+    return select_live_window(
+        [row for row in frames if row["simulation_time_s"] >= first_motion_time], regime)
+
+
 def _read_json(path: Path) -> dict:
     if path.is_symlink() or not path.is_file():
         raise ValueError(f"live evidence file is missing or linked: {path.name}")
@@ -272,8 +287,9 @@ def build_live_sample(
     result, epoch, pause, resume_start = _verify_execution(run, manifest)
     frames = _read_physics(run, manifest, epoch, pause, resume_start)
     first_motion_time = result["segments"][0]["clock"]["sim_time_s"]
-    window = select_live_window(
-        [row for row in frames if row["simulation_time_s"] >= first_motion_time], regime)
+    window = select_session_window(
+        frames, regime, first_motion_time=first_motion_time,
+        final_pause_step=pause["physics_step"])
     projected = [{key: row[key] for key in _FRAME_KEYS} for row in window]
     policy = yaml.safe_load(Path(manifest["motion_policy_path"]).read_bytes())
     close = -.049 if regime == "over_compression" else float(
