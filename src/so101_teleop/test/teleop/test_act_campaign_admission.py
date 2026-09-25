@@ -71,12 +71,18 @@ def _write_policy(tmp_path):
 
 
 def _start_spec(tmp_path, fingerprint, proposal_path, receipt_path, *, backend="mujoco"):
+    artifacts = {}
+    for name in ("source", "manifest", "runtime_config", "collection_config"):
+        path = tmp_path / f"{name}.json"
+        if not path.exists():
+            path.write_bytes(_canonical({"artifact": name, "campaign_id": "campaign-1"}))
+        artifacts[f"{name}_path"] = str(path)
+        artifacts[f"{name}_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
     return OperationSpec(
         command_id="start-1", domain=Domain.VALIDATION, kind="task8_phase",
         payload={
             "campaign_id": "campaign-1", "backend": backend, "worker_count": 1,
-            "source_sha256": "9" * 64, "manifest_sha256": "a" * 64,
-            "runtime_config_sha256": "b" * 64, "collection_config_sha256": "c" * 64,
+            **artifacts,
             "contact_policy_fingerprint": fingerprint, "proposal_path": str(proposal_path),
             "activation_receipt_path": str(receipt_path), "evidence_root": str(tmp_path),
             "service_epoch": "epoch-1", "resource_binding_id": "binding-1",
@@ -202,6 +208,49 @@ def test_start_persists_exact_context_and_reserves_gpu_and_validation(tmp_path):
         assert len(service.child_registry.launches()) == 1
         assert not service.arbiter.is_idle()
         assert json.loads(store._query_one("SELECT context_json FROM act_campaign_contexts")[0]) == admitted.to_dict()
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("name", ("source", "manifest", "runtime_config", "collection_config"))
+def test_start_rejects_changed_artifact_bytes_before_any_resource(tmp_path, name):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+    (tmp_path / f"{name}.json").write_text("tampered")
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        with pytest.raises(ValueError, match="CAMPAIGN_ARTIFACT_HASH_MISMATCH"):
+            service.start(spec)
+        assert service.child_registry.launches() == ()
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+    finally:
+        store.close()
+
+
+def test_start_registry_race_does_not_commit_parent_or_gpu_lease(tmp_path):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        original_validate = service._validate_start
+        foreign = launch("w00", 40, "session-0")
+
+        def competing_registration(spec):
+            result = original_validate(spec)
+            service.child_registry.register(foreign)
+            return result
+
+        service._validate_start = competing_registration
+        with pytest.raises(ValueError, match="DUPLICATE_CHILD"):
+            service.start(_start_spec(tmp_path, fingerprint, proposal_path, receipt_path))
+        assert service.child_registry.launches() == (foreign,)
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+        assert store._query_one("SELECT * FROM act_campaign_contexts") is None
     finally:
         store.close()
 

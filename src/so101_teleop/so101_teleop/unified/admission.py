@@ -14,6 +14,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
+import stat
 import threading
 import uuid
 
@@ -233,8 +235,9 @@ class AdmissionGateway:
 
 _ACT_START_KINDS = frozenset({"task8_phase", "task8_full", "act_collection_start", "act_collection_resume"})
 _ACT_PAYLOAD_KEYS = frozenset({
-    "campaign_id", "backend", "worker_count", "source_sha256", "manifest_sha256",
-    "runtime_config_sha256", "collection_config_sha256", "contact_policy_fingerprint",
+    "campaign_id", "backend", "worker_count", "source_path", "source_sha256",
+    "manifest_path", "manifest_sha256", "runtime_config_path", "runtime_config_sha256",
+    "collection_config_path", "collection_config_sha256", "contact_policy_fingerprint",
     "proposal_path", "activation_receipt_path", "evidence_root", "service_epoch",
     "resource_binding_id", "qualification_mode", "qualification_receipt_path", "children",
 })
@@ -290,6 +293,28 @@ class UnifiedWorkloadService:
             raise ValueError("POLICY_NOT_ACTIVATED")
         return document
 
+    @staticmethod
+    def _verify_artifact(path_value: str, expected_sha256: str) -> None:
+        """Read the exact artifact bytes once before acquiring campaign resources."""
+        if (
+            not isinstance(path_value, str)
+            or not Path(path_value).is_absolute()
+            or ".." in Path(path_value).parts
+            or not isinstance(expected_sha256, str)
+            or re.fullmatch(r"[0-9a-f]{64}", expected_sha256) is None
+        ):
+            raise ValueError("CAMPAIGN_ARTIFACT_INVALID")
+        try:
+            fd = os.open(path_value, os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(fd, "rb") as stream:
+                if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                    raise ValueError("CAMPAIGN_ARTIFACT_INVALID")
+                digest = hashlib.file_digest(stream, "sha256").hexdigest()
+        except OSError as error:
+            raise ValueError("CAMPAIGN_ARTIFACT_INVALID") from error
+        if digest != expected_sha256:
+            raise ValueError("CAMPAIGN_ARTIFACT_HASH_MISMATCH")
+
     def _validate_start(self, spec: OperationSpec) -> tuple[dict, tuple[ActChildLaunch, ...], str]:
         if spec.domain is not Domain.VALIDATION or spec.kind not in _ACT_START_KINDS:
             raise ValueError("UNKNOWN_OPERATION")
@@ -317,6 +342,8 @@ class UnifiedWorkloadService:
         root = Path(payload["evidence_root"])
         if not root.is_absolute() or ".." in root.parts or not root.is_dir():
             raise ValueError("CAMPAIGN_EVIDENCE_ROOT_INVALID")
+        for name in ("source", "manifest", "runtime_config", "collection_config"):
+            self._verify_artifact(payload[f"{name}_path"], payload[f"{name}_sha256"])
         proposal = self._read_json(payload["proposal_path"], root)
         receipt = self._read_json(payload["activation_receipt_path"], root)
         try:
@@ -383,46 +410,48 @@ class UnifiedWorkloadService:
                     if row is None:
                         raise ValueError("CAMPAIGN_CONTEXT_MISSING")
                     return AdmittedCampaignContext.from_dict(json.loads(row[0]))
-            operation_id = uuid.uuid4().hex
-            lease = GpuLeaseRequest(
-                stable_host_id=self.stable_host_id, physical_gpu_uuid=physical_uuid,
-                operation_id=operation_id, service_epoch=self.service_epoch,
-                owner_pid=self.owner_pid, owner_started_ticks=self.owner_started_ticks,
-                workload=spec.kind, execution_generation=spec.execution_generation,
-                deadline_ns=spec.deadline_ns,
-            )
-            self.gpu_arbiter.acquire(lease)
-            try:
-                with store.immediate_transaction():
-                    store.require_idle()
-                    reservation = store.insert_parent(spec, operation_id=operation_id)
-                    child_map = [item.__dict__ for item in children]
-                    child_map_sha256 = hashlib.sha256(json.dumps(
-                        child_map, sort_keys=True, separators=(",", ":"), allow_nan=False,
-                    ).encode()).hexdigest()
-                    context = AdmittedCampaignContext(
-                        campaign_id=payload["campaign_id"], operation_id=reservation.operation_id,
-                        workload_kind=spec.kind, service_epoch=self.service_epoch,
-                        execution_generation=spec.execution_generation,
-                        stable_host_id=self.stable_host_id, physical_gpu_uuid=physical_uuid,
-                        worker_count=payload["worker_count"], source_sha256=payload["source_sha256"],
-                        manifest_sha256=payload["manifest_sha256"],
-                        runtime_config_sha256=payload["runtime_config_sha256"],
-                        collection_config_sha256=payload["collection_config_sha256"],
-                        contact_policy_fingerprint=payload["contact_policy_fingerprint"],
-                        domain_session_map_sha256=child_map_sha256,
-                        resource_binding_id=self.resource_binding_id,
-                        evidence_root=str(Path(payload["evidence_root"])),
-                        admitted_at_monotonic_s=self.clock_ns() / 1e9,
-                        deadline_monotonic_s=spec.deadline_ns / 1e9,
-                    )
-                    store._connection.execute(
-                        "INSERT INTO act_campaign_contexts VALUES (?,?,?)",
-                        (operation_id, context.campaign_id, json.dumps(context.to_dict(), sort_keys=True)),
-                    )
-            except BaseException:
-                self.gpu_arbiter.release(lease)
-                raise
-            for child in children:
-                self.child_registry.register(child)
-            return context
+            # Reserve the complete child map before taking either durable resource.
+            # Another registry user cannot create a collision between validation and
+            # persistence, and a failed database/lease step rolls this map back.
+            with self.child_registry.reserve_many(children):
+                operation_id = uuid.uuid4().hex
+                lease = GpuLeaseRequest(
+                    stable_host_id=self.stable_host_id, physical_gpu_uuid=physical_uuid,
+                    operation_id=operation_id, service_epoch=self.service_epoch,
+                    owner_pid=self.owner_pid, owner_started_ticks=self.owner_started_ticks,
+                    workload=spec.kind, execution_generation=spec.execution_generation,
+                    deadline_ns=spec.deadline_ns,
+                )
+                self.gpu_arbiter.acquire(lease)
+                try:
+                    with store.immediate_transaction():
+                        store.require_idle()
+                        reservation = store.insert_parent(spec, operation_id=operation_id)
+                        child_map = [item.__dict__ for item in children]
+                        child_map_sha256 = hashlib.sha256(json.dumps(
+                            child_map, sort_keys=True, separators=(",", ":"), allow_nan=False,
+                        ).encode()).hexdigest()
+                        context = AdmittedCampaignContext(
+                            campaign_id=payload["campaign_id"], operation_id=reservation.operation_id,
+                            workload_kind=spec.kind, service_epoch=self.service_epoch,
+                            execution_generation=spec.execution_generation,
+                            stable_host_id=self.stable_host_id, physical_gpu_uuid=physical_uuid,
+                            worker_count=payload["worker_count"], source_sha256=payload["source_sha256"],
+                            manifest_sha256=payload["manifest_sha256"],
+                            runtime_config_sha256=payload["runtime_config_sha256"],
+                            collection_config_sha256=payload["collection_config_sha256"],
+                            contact_policy_fingerprint=payload["contact_policy_fingerprint"],
+                            domain_session_map_sha256=child_map_sha256,
+                            resource_binding_id=self.resource_binding_id,
+                            evidence_root=str(Path(payload["evidence_root"])),
+                            admitted_at_monotonic_s=self.clock_ns() / 1e9,
+                            deadline_monotonic_s=spec.deadline_ns / 1e9,
+                        )
+                        store._connection.execute(
+                            "INSERT INTO act_campaign_contexts VALUES (?,?,?)",
+                            (operation_id, context.campaign_id, json.dumps(context.to_dict(), sort_keys=True)),
+                        )
+                except BaseException:
+                    self.gpu_arbiter.release(lease)
+                    raise
+                return context
