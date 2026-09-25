@@ -1,5 +1,6 @@
 """All broker submissions share scope, generation fencing and physical stop."""
 import threading
+import uuid
 import pytest
 from so101_demo.act.ownership import Ownership
 from so101_demo.adapters.act.command_broker import CommandBroker, endpoint_bytes
@@ -222,6 +223,34 @@ def test_ros_stop_requires_real_negative_baseline_when_no_status_events():
     assert not driver.stopped()
     driver._statuses={};driver._velocity=(.003,0.,0.,0.,0.,0.)
     assert not driver.stopped()
+
+
+def test_ros_driver_submits_the_preallocated_real_goal_uuid():
+    from concurrent.futures import Future
+    from types import SimpleNamespace
+    from so101_demo.adapters.act.ros_broker import RosBrokerDriver
+
+    captured = []
+
+    class Client:
+        def server_is_ready(self):
+            return True
+
+        def send_goal_async(self, goal, *, feedback_callback, goal_uuid):
+            captured.append(goal_uuid)
+            return Future()
+
+    driver = object.__new__(RosBrokerDriver)
+    driver._lock = threading.RLock()
+    driver._records = {}
+    driver._pending_writes = []
+    driver.hazard_reason = None
+    driver.clients = {'arm': Client()}
+    driver.node = SimpleNamespace(get_clock=lambda: SimpleNamespace(now=lambda: SimpleNamespace(nanoseconds=0)))
+    expected = str(uuid.uuid4())
+    goal_id = driver.submit('arm', object(), goal_uuid=expected)
+    assert list(captured[0].uuid) == list(uuid.UUID(expected).bytes)
+    assert driver.goal_state(goal_id)['ros_goal_uuid'] == uuid.UUID(expected).hex
 
 
 def test_act_raw_goal_requires_paired_supervised_prefix():

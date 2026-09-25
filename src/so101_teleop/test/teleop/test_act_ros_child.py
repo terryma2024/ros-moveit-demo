@@ -13,9 +13,9 @@ from types import SimpleNamespace
 import pytest
 
 from so101_teleop.unified.child_runtime import ChildRuntime
-from so101_teleop.unified.contracts import MutationError, OwnerKey
+from so101_teleop.unified.contracts import DispatchToken, MutationError, OwnerKey, PendingChildKey
 from so101_teleop.unified.ipc import decode_request
-from so101_teleop.unified.ros_child import act_identity_from_environment, local_owner
+from so101_teleop.unified.ros_child import RclpyActionDriver, act_identity_from_environment, local_owner
 from so101_teleop.process_identity import read_identity
 from so101_teleop.unified.bridge import BridgeLaunch, BridgeProcessOwner
 
@@ -89,6 +89,36 @@ def test_child_crash_fences_following_work_but_cancel_remains_available():
     assert driver.seen == []
 
 
+def test_child_fences_action_uncertainty_even_when_driver_raises_mutation_error():
+    class UncertainDriver(ActDriver):
+        async def task8_phase(self, request):
+            raise MutationError("ROS_GOAL_RESPONSE_UNKNOWN")
+
+    child = runtime(UncertainDriver())
+    with pytest.raises(MutationError, match="ROS_GOAL_RESPONSE_UNKNOWN"):
+        asyncio.run(child.dispatch_act(request()))
+    with pytest.raises(MutationError, match="ACT_CHILD_FENCED"):
+        asyncio.run(child.dispatch_act(request()))
+
+
+def test_web_death_asks_act_driver_to_stop_all_owned_goals():
+    class StopDriver(ActDriver):
+        def __init__(self):
+            super().__init__()
+            self.stop_reasons = []
+
+        async def stop_act(self, reason):
+            self.stop_reasons.append(reason)
+            return True
+
+    driver = StopDriver()
+    child = runtime(driver)
+    asyncio.run(child.mark_web_dead("web owner lost"))
+    assert driver.stop_reasons == ["web owner lost"]
+    with pytest.raises(MutationError, match="ACT_CHILD_FENCED"):
+        asyncio.run(child.dispatch_act(request()))
+
+
 def test_ros_child_requires_complete_admitted_act_identity():
     environment = {
         "SO101_ACT_CAMPAIGN_ID": "campaign-1",
@@ -128,3 +158,98 @@ def test_act_bridge_ready_rejects_wrong_epoch_and_worker_identity(tmp_path):
     owner._ready_document["service_epoch"] = "epoch-1"
     owner._ready_document["worker_id"] = "w01"
     assert not owner.ready()
+
+
+def test_ros_action_driver_preserves_real_acceptance_terminal_and_stop():
+    owner = OwnerKey(1, 1, 1, "a" * 64, "b" * 64)
+    deadline = time.monotonic_ns() + 10**9
+    token = DispatchToken("operation-1", "w00", "runtime-w00", 3, deadline, 0)
+
+    class Broker:
+        def __init__(self):
+            self.goal_uuid = None
+            self.cancelled = []
+
+        def submit(self, kind, goal, *, goal_uuid):
+            assert kind == "arm" and goal == {"trajectory": "test-goal"}
+            self.goal_uuid = goal_uuid
+            return "internal-1"
+
+        def goal_state(self, gid):
+            assert gid == "internal-1"
+            return {"accepted": True, "status": 4, "result": {"error_code": 0},
+                    "driver_error": None, "ros_goal_uuid": self.goal_uuid.replace("-", "")}
+
+        def refresh_idle(self):
+            pass
+
+        def stopped(self):
+            return True
+
+        def cancel(self, gid):
+            self.cancelled.append(gid)
+
+        def refresh_stop(self):
+            pass
+
+    broker = Broker()
+    driver = RclpyActionDriver(broker=broker, owner=owner, stop_timeout_s=0.05)
+    goal_uuid = driver.allocate_goal_uuid(PendingChildKey("operation-1", "w00", "runtime-w00", 3))
+    driver.register_action(token, goal_uuid, "arm", {"trajectory": "test-goal"})
+    ack = asyncio.run(driver.submit(token, goal_uuid))
+    assert ack.accepted and ack.key.goal_uuid == goal_uuid
+    terminal = asyncio.run(driver.terminal(goal_uuid))
+    assert terminal.succeeded and terminal.stopped_confirmed and terminal.cleanup_confirmed
+    assert asyncio.run(driver.cancel(goal_uuid)) is True
+    assert broker.cancelled == ["internal-1"]
+
+
+def test_ros_action_driver_requests_physical_stop_on_unknown_acceptance():
+    owner = OwnerKey(1, 1, 1, "a" * 64, "b" * 64)
+    token = DispatchToken("operation-1", "w00", "runtime-w00", 3,
+                          time.monotonic_ns() + 10**9, 0)
+
+    class Broker:
+        def __init__(self):
+            self.stop_reasons = []
+
+        def submit(self, kind, goal, *, goal_uuid):
+            return "internal-1"
+
+        def goal_state(self, gid):
+            return {"accepted": None, "driver_error": "GOAL_RESPONSE_LOST"}
+
+        def stop_all(self, reason):
+            self.stop_reasons.append(reason)
+
+    broker = Broker()
+    driver = RclpyActionDriver(broker=broker, owner=owner)
+    goal_uuid = driver.allocate_goal_uuid(PendingChildKey("operation-1", "w00", "runtime-w00", 3))
+    driver.register_action(token, goal_uuid, "arm", object())
+    with pytest.raises(MutationError, match="ROS_GOAL_RESPONSE_UNKNOWN"):
+        asyncio.run(driver.submit(token, goal_uuid))
+    assert broker.stop_reasons == ["ROS_GOAL_RESPONSE_UNKNOWN"]
+
+
+def test_ros_action_driver_requests_stop_when_send_result_is_unknown():
+    owner = OwnerKey(1, 1, 1, "a" * 64, "b" * 64)
+    token = DispatchToken("operation-1", "w00", "runtime-w00", 3,
+                          time.monotonic_ns() + 10**9, 0)
+
+    class Broker:
+        def __init__(self):
+            self.stop_reasons = []
+
+        def submit(self, kind, goal, *, goal_uuid):
+            raise RuntimeError("goal send uncertain")
+
+        def stop_all(self, reason):
+            self.stop_reasons.append(reason)
+
+    broker = Broker()
+    driver = RclpyActionDriver(broker=broker, owner=owner)
+    goal_uuid = driver.allocate_goal_uuid(PendingChildKey("operation-1", "w00", "runtime-w00", 3))
+    driver.register_action(token, goal_uuid, "arm", object())
+    with pytest.raises(MutationError, match="ROS_GOAL_SEND_UNKNOWN"):
+        asyncio.run(driver.submit(token, goal_uuid))
+    assert broker.stop_reasons == ["ROS_GOAL_SEND_UNKNOWN"]

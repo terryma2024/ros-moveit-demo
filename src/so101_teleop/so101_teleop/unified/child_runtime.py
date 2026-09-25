@@ -173,6 +173,7 @@ class ChildRuntime:
                     raise MutationError("ACT_OPERATION_UNKNOWN")
                 result = await method(request)
             except MutationError:
+                self.act_failed = True
                 raise
             except Exception as error:
                 self.act_failed = True
@@ -268,6 +269,19 @@ class ChildRuntime:
             pending.cancel_requested = True
             with contextlib.suppress(Exception):
                 await self.driver.cancel(pending.goal_uuid)
+        if self.act_campaign_id is not None:
+            stop_act = getattr(self.driver, "stop_act", None)
+            if not callable(stop_act):
+                self.act_failed = True
+                raise MutationError("ACT_STOP_NOT_PROVISIONED")
+            try:
+                confirmed = await stop_act(reason)
+            except BaseException as error:
+                self.act_failed = True
+                raise MutationError("ACT_STOP_UNKNOWN") from error
+            if confirmed is not True:
+                self.act_failed = True
+                raise MutationError("ACT_STOP_NOT_CONFIRMED")
 
     async def stats(self) -> ChildStats:
         journal = getattr(self.driver, "journal", None)

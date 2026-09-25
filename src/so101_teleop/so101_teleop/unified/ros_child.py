@@ -14,7 +14,9 @@ import asyncio
 import contextlib
 import os
 import signal
+import threading
 import time
+import uuid
 from pathlib import Path
 
 from .child_runtime import ChildIpcServer, ChildRuntime
@@ -54,34 +56,181 @@ def act_identity_from_environment(environment) -> tuple[str | None, str | None, 
 
 
 class RclpyActionDriver:
-    """Adapter over the existing Teleop ROS worker.
+    """One child-owned ROS action adapter with real goal and stop evidence.
 
-    Imported lazily so that importing this module never pulls ROS into the web process.
+    ROS imports and node creation remain inside this process. The trusted ACT
+    supervisor must register a validated goal before the normal dispatch path
+    can submit it; a bare token never creates motion.
     """
 
-    def __init__(self) -> None:
-        from so101_teleop import server as ros_server  # noqa: F401  (ROS import boundary)
+    def __init__(self, *, broker=None, owner: OwnerKey | None = None,
+                 stop_timeout_s: float | None = None, accept_timeout_s: float | None = None) -> None:
+        self._node = None
+        self._executor = None
+        self._thread = None
+        self._broker = broker
+        self._owner = owner or local_owner(os.environ.get("SO101_ACT_WORKER_ID", "child"))
+        self._stop_timeout_s = float(stop_timeout_s if stop_timeout_s is not None else
+                                     os.environ.get("SO101_ACT_STOP_TIMEOUT_S", "2.0"))
+        self._accept_timeout_s = float(accept_timeout_s if accept_timeout_s is not None else
+                                       os.environ.get("SO101_ACT_ACCEPT_TIMEOUT_S", "2.0"))
+        if not (0 < self._stop_timeout_s <= 30 and 0 < self._accept_timeout_s <= 30):
+            raise MutationError("ROS_DRIVER_TIMEOUT_INVALID")
+        self._goals: dict[str, dict] = {}
+        if self._broker is None and os.environ.get("SO101_ACT_CAMPAIGN_ID"):
+            self._broker = self._start_ros_broker()
 
-        self._server_module = ros_server
-        self._worker = None
+    def _start_ros_broker(self):
+        """Provision the existing ACT ROS driver inside this isolated child."""
+        try:
+            speed = float(os.environ["SO101_ACT_STOP_VELOCITY_RAD_S"])
+            max_age = float(os.environ["SO101_ACT_EVIDENCE_MAX_AGE_S"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise MutationError("ROS_DRIVER_CONFIG_MISSING") from error
+        if not (0 <= speed < 1 and 0 < max_age <= 10):
+            raise MutationError("ROS_DRIVER_CONFIG_INVALID")
+        import rclpy
+        from rclpy.executors import SingleThreadedExecutor
+        from rclpy.parameter import Parameter
+        from so101_demo.adapters.act.ros_broker import RosBrokerDriver
+
+        rclpy.init()
+        try:
+            name = f"act_worker_{os.environ['SO101_ACT_WORKER_ID']}_{os.environ['SO101_ACT_GENERATION']}"
+            self._node = rclpy.create_node(name, parameter_overrides=[Parameter("use_sim_time", value=True)])
+            broker = RosBrokerDriver(self._node, stop_velocity_rad_s=speed, max_age_s=max_age)
+            self._executor = SingleThreadedExecutor()
+            self._executor.add_node(self._node)
+            self._thread = threading.Thread(target=self._executor.spin, name="act-child-rclpy", daemon=True)
+            self._thread.start()
+            return broker
+        except BaseException:
+            if self._node is not None:
+                self._node.destroy_node()
+            rclpy.shutdown()
+            raise
 
     def allocate_goal_uuid(self, key: PendingChildKey) -> str:
-        import uuid
-
-        # The real ROS goal UUID is pre-allocated and registered before send; a proxy
-        # identity is never substituted for it.
         return str(uuid.uuid4())
 
+    def register_action(self, token: DispatchToken, goal_uuid: str, kind: str, goal) -> None:
+        if self._broker is None:
+            raise MutationError("ROS_DRIVER_NOT_PROVISIONED")
+        if kind not in ("arm", "gripper", "execute_trajectory"):
+            raise MutationError("ROS_ACTION_KIND_INVALID")
+        try:
+            parsed = uuid.UUID(goal_uuid)
+        except (TypeError, ValueError) as error:
+            raise MutationError("ROS_GOAL_UUID_INVALID") from error
+        if str(parsed) != goal_uuid or goal_uuid in self._goals or token.deadline_ns <= time.monotonic_ns():
+            raise MutationError("ROS_GOAL_REGISTRATION_INVALID")
+        self._goals[goal_uuid] = {"token": token, "kind": kind, "goal": goal,
+                                  "internal_id": None, "cancel_requested": False}
+
+    def _record(self, goal_uuid: str) -> dict:
+        record = self._goals.get(goal_uuid)
+        if record is None:
+            raise MutationError("ROS_GOAL_NOT_REGISTERED")
+        return record
+
+    def _key(self, token: DispatchToken, goal_uuid: str) -> ActionKey:
+        return ActionKey(token.operation_id, token.child_id, goal_uuid, self._owner,
+                         token.runtime_id, token.execution_generation)
+
+    def _stop_unknown(self, reason: str) -> None:
+        if self._broker is None:
+            raise MutationError("ROS_DRIVER_NOT_PROVISIONED")
+        try:
+            self._broker.stop_all(reason)
+        except Exception as error:
+            raise MutationError("ROS_STOP_REQUEST_FAILED") from error
+
     async def submit(self, token: DispatchToken, goal_uuid: str) -> DispatchAck:
-        raise MutationError(
-            "ROS_DRIVER_NOT_PROVISIONED: this host has no verified ROS worker wiring"
-        )
+        record = self._record(goal_uuid)
+        if record["token"] != token or self._broker is None or token.deadline_ns <= time.monotonic_ns():
+            raise MutationError("ROS_GOAL_TOKEN_INVALID")
+        if record["internal_id"] is None:
+            if record["cancel_requested"]:
+                raise MutationError("ROS_GOAL_REVOKED")
+            try:
+                record["internal_id"] = self._broker.submit(
+                    record["kind"], record["goal"], goal_uuid=goal_uuid
+                )
+            except Exception as error:
+                self._stop_unknown("ROS_GOAL_SEND_UNKNOWN")
+                raise MutationError("ROS_GOAL_SEND_UNKNOWN") from error
+        deadline_ns = min(token.deadline_ns, time.monotonic_ns() + int(self._accept_timeout_s * 1e9))
+        while time.monotonic_ns() < deadline_ns:
+            state = self._broker.goal_state(record["internal_id"])
+            if state.get("driver_error"):
+                self._stop_unknown("ROS_GOAL_RESPONSE_UNKNOWN")
+                raise MutationError("ROS_GOAL_RESPONSE_UNKNOWN")
+            if state.get("accepted") is not None:
+                if state["accepted"] is True and state.get("ros_goal_uuid") != uuid.UUID(goal_uuid).hex:
+                    self._stop_unknown("ROS_GOAL_UUID_MISMATCH")
+                    raise MutationError("ROS_GOAL_UUID_MISMATCH")
+                return DispatchAck(self._key(token, goal_uuid), state["accepted"] is True)
+            await asyncio.sleep(0.005)
+        self._stop_unknown("ROS_GOAL_ACCEPT_TIMEOUT")
+        raise MutationError("ROS_GOAL_ACCEPT_TIMEOUT")
 
     async def cancel(self, goal_uuid: str) -> bool:
-        raise MutationError("ROS_DRIVER_NOT_PROVISIONED: cannot cancel without a ROS worker")
+        record = self._record(goal_uuid)
+        record["cancel_requested"] = True
+        if self._broker is None:
+            raise MutationError("ROS_DRIVER_NOT_PROVISIONED")
+        if record["internal_id"] is not None:
+            self._broker.cancel(record["internal_id"])
+        deadline_ns = time.monotonic_ns() + int(self._stop_timeout_s * 1e9)
+        while time.monotonic_ns() < deadline_ns:
+            self._broker.refresh_stop()
+            if self._broker.stopped():
+                return True
+            await asyncio.sleep(0.005)
+        self._stop_unknown("ROS_STOP_NOT_CONFIRMED")
+        return False
 
     async def terminal(self, goal_uuid: str) -> ActionTerminal:
-        raise MutationError("ROS_DRIVER_NOT_PROVISIONED: cannot observe without a ROS worker")
+        record = self._record(goal_uuid)
+        if self._broker is None or record["internal_id"] is None:
+            raise MutationError("ROS_GOAL_NOT_SUBMITTED")
+        token = record["token"]
+        while time.monotonic_ns() < token.deadline_ns:
+            state = self._broker.goal_state(record["internal_id"])
+            if state.get("driver_error"):
+                self._stop_unknown("ROS_GOAL_RESULT_UNKNOWN")
+                raise MutationError("ROS_GOAL_RESULT_UNKNOWN")
+            if state.get("status") in (4, 5, 6):
+                self._broker.refresh_idle()
+                if self._broker.stopped():
+                    result = state.get("result") or {}
+                    succeeded = state["status"] == 4 and result.get("error_code") == 0
+                    return ActionTerminal(self._key(token, goal_uuid), succeeded, True, True)
+            await asyncio.sleep(0.005)
+        self._stop_unknown("ROS_GOAL_TERMINAL_TIMEOUT")
+        raise MutationError("ROS_GOAL_TERMINAL_TIMEOUT")
+
+    async def stop_act(self, reason: str) -> bool:
+        self._stop_unknown(reason)
+        deadline_ns = time.monotonic_ns() + int(self._stop_timeout_s * 1e9)
+        while time.monotonic_ns() < deadline_ns:
+            self._broker.refresh_stop()
+            if self._broker.stopped():
+                return True
+            await asyncio.sleep(0.005)
+        return False
+
+    def close(self) -> None:
+        if self._executor is not None:
+            self._executor.shutdown(timeout_sec=2.0)
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+        if self._node is not None:
+            self._node.destroy_node()
+        if self._node is not None:
+            import rclpy
+            if rclpy.ok():
+                rclpy.shutdown()
 
 
 def local_owner(runtime_id: str) -> OwnerKey:
@@ -137,6 +286,9 @@ async def serve(server: ChildIpcServer, runtime: ChildRuntime, watchdog_task: as
     with contextlib.suppress(asyncio.CancelledError):
         await watchdog_task
     await server.close()
+    close_driver = getattr(runtime.driver, "close", None)
+    if callable(close_driver):
+        close_driver()
     del runtime
 
 
