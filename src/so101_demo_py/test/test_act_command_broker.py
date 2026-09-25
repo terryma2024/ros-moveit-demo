@@ -211,7 +211,8 @@ def test_ros_stop_requires_real_negative_baseline_when_no_status_events():
     driver=object.__new__(RosBrokerDriver)
     driver.monotonic=lambda:10.;driver.max_age=1.5;driver.stop_velocity=.002
     driver._lock=threading.RLock();driver._records={};driver._pending_writes=[]
-    driver._received=10.;driver._velocity=(0.,)*6;driver._statuses={};driver._status_received={}
+    driver._received=10.;driver._velocity=(0.,)*6;driver._neck_velocity=0.
+    driver._statuses={};driver._status_received={}
     driver._cancel_all=[];driver._stop_confirmed_at=None
     driver.clients={k:SimpleNamespace(server_is_ready=lambda:True) for k in ACTION_TYPES}
     assert not driver.stopped()

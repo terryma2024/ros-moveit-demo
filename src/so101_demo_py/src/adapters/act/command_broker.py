@@ -195,7 +195,8 @@ class CommandBroker:
                     response['reset_in_progress']=self._reset_ticket is not None
                     response['hazard_reason']=self._fault_reason
                     if hasattr(self.driver,'ready'):
-                        response['action_servers']={kind:self.driver.ready(kind) for kind in ('arm','gripper','execute_trajectory')}
+                        response['action_servers']={kind:self.driver.ready(kind)
+                                                    for kind in ('arm','gripper','neck','execute_trajectory')}
                 elif operation=='goal_status':
                     gid=identifier(request['goal_id'])
                     ticket=self._goal_tickets.get(gid)
