@@ -327,6 +327,9 @@ class ChildIpcServer:
             "pid": os.getpid(),
             "service_epoch": self.service_epoch,
             "runtime_id": self.runtime.runtime_id,
+            "campaign_id": self.runtime.act_campaign_id,
+            "worker_id": self.runtime.act_worker_id,
+            "execution_generation": self.runtime.act_generation,
             "normal_socket": str(self.normal_socket),
             "safety_socket": str(self.safety_socket),
             "owner": {

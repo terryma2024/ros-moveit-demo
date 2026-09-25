@@ -4,14 +4,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+from pathlib import Path
+import sys
 import time
+from types import SimpleNamespace
 
 import pytest
 
 from so101_teleop.unified.child_runtime import ChildRuntime
 from so101_teleop.unified.contracts import MutationError, OwnerKey
 from so101_teleop.unified.ipc import decode_request
-from so101_teleop.unified.ros_child import act_identity_from_environment
+from so101_teleop.unified.ros_child import act_identity_from_environment, local_owner
+from so101_teleop.process_identity import read_identity
+from so101_teleop.unified.bridge import BridgeLaunch, BridgeProcessOwner
 
 
 class ActDriver:
@@ -95,3 +101,30 @@ def test_ros_child_requires_complete_admitted_act_identity():
         act_identity_from_environment({"SO101_ACT_WORKER_ID": "w00"})
     with pytest.raises(MutationError, match="ACT_CHILD_GENERATION_INVALID"):
         act_identity_from_environment(dict(environment, SO101_ACT_GENERATION="-1"))
+
+
+def test_ros_child_reports_exact_kernel_owner_for_safety_channel():
+    observed = read_identity(os.getpid())
+    owner = local_owner("runtime-test")
+    assert owner.pid == observed.pid
+    assert owner.pgid == observed.pgid
+    assert owner.started_ticks == observed.start_marker
+    assert owner.argv_sha256 == observed.command_sha256
+
+
+def test_act_bridge_ready_rejects_wrong_epoch_and_worker_identity(tmp_path):
+    launch = BridgeLaunch(
+        Path(sys.executable), tmp_path, "runtime-w00",
+        {"SO101_CHILD_SERVICE_EPOCH": "epoch-1", "SO101_ACT_CAMPAIGN_ID": "campaign-1",
+         "SO101_ACT_WORKER_ID": "w00", "SO101_ACT_GENERATION": "3"},
+        tmp_path / "socket",
+    )
+    owner = BridgeProcessOwner(launch, object(), object())
+    owner.process = SimpleNamespace(poll=lambda: None)
+    owner._ready_document = {"service_epoch": "epoch-old", "runtime_id": "runtime-w00",
+                             "campaign_id": "campaign-1", "worker_id": "w00",
+                             "execution_generation": 3}
+    assert not owner.ready()
+    owner._ready_document["service_epoch"] = "epoch-1"
+    owner._ready_document["worker_id"] = "w01"
+    assert not owner.ready()
