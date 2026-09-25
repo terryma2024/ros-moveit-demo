@@ -257,8 +257,14 @@ def _proc_group_members(pgid: int) -> dict[int, str]:
             tail = document[document.rfind(")") + 2 :].split()
             if int(tail[2]) == pgid:
                 members[pid] = tail[0]
-        except (FileNotFoundError, ProcessLookupError, PermissionError, OSError, ValueError):
+        except (FileNotFoundError, ProcessLookupError):
             continue
+        except OSError as error:
+            if error.errno == errno.ESRCH:
+                continue
+            raise ProcessIdentityError("process-group scan unreadable") from error
+        except ValueError as error:
+            raise ProcessIdentityError("process-group scan malformed") from error
     return members
 
 

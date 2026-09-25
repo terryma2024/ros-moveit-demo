@@ -373,3 +373,17 @@ def test_a_rewritten_launcher_does_not_change_the_durable_fingerprint():
     assert before.command_sha256 == after.command_sha256, "the identity must not"
     assert argv_matches(before, requested) and argv_matches(after, requested)
     assert identity_alive.__doc__, "the fingerprint contract is what identity_alive documents"
+
+
+def test_unreadable_proc_entry_cannot_prove_a_group_empty(monkeypatch):
+    class Stat:
+        def read_text(self, **_kwargs):
+            raise PermissionError("/proc entry denied")
+
+    class Proc:
+        def glob(self, _pattern):
+            return [Stat()]
+
+    monkeypatch.setattr(process_identity, "Path", lambda _value: Proc())
+    with pytest.raises(ProcessIdentityError, match="scan unreadable"):
+        process_identity._proc_group_members(424242)
