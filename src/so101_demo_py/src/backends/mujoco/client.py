@@ -125,6 +125,7 @@ class MujocoRosClient:
     def __init__(
         self, service_node: Any, joint_state_node: Any, *, service_timeout_s: float = 5.0,
         control_context: dict | None = None, broker_connection: Any = None,
+        operation_guard: Any = None,
     ) -> None:
         if not math.isfinite(service_timeout_s) or service_timeout_s <= 0.0:
             raise ValueError("service_timeout_s must be finite and positive")
@@ -134,11 +135,14 @@ class MujocoRosClient:
         if (control_context is not None and broker_connection is None
                 and "broker_socket" not in control_context):
             raise ValueError("BROKER_CONNECTION_REQUIRED")
+        if operation_guard is not None and not callable(operation_guard):
+            raise ValueError("CONTROL_GUARD_INVALID")
         self.control_context = (control_context if control_context is not None
                                 else context_from_environment())
         if os.environ.get("SO101_ACT_PROFILE") in ("1", "true") and self.control_context is None:
             raise PermissionError("CONTROL_CONTEXT_REQUIRED")
         self._broker_connection = broker_connection
+        self._operation_guard = operation_guard or (lambda: None)
         self._service_node = service_node
         self._joint_state_node = joint_state_node
         self._timeout_s = service_timeout_s
@@ -233,10 +237,24 @@ class MujocoRosClient:
             return self._joint_callback_count
 
     def _call(self, client: Any, request: Any, operation: str) -> Any:
-        if not client.wait_for_service(timeout_sec=self._timeout_s):
-            raise MujocoServiceError(f"{operation} service unavailable")
+        deadline = time.monotonic() + self._timeout_s
+        while True:
+            self._operation_guard()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise MujocoServiceError(f"{operation} service unavailable")
+            if client.wait_for_service(timeout_sec=min(0.01, remaining)):
+                break
+        self._operation_guard()
         future = client.call_async(request)
-        rclpy.spin_until_future_complete(self._service_node, future, timeout_sec=self._timeout_s)
+        while not future.done():
+            self._operation_guard()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise MujocoServiceError(f"{operation} service timeout")
+            rclpy.spin_until_future_complete(
+                self._service_node, future, timeout_sec=min(0.01, remaining))
+        self._operation_guard()
         if not future.done():
             raise MujocoServiceError(f"{operation} service timeout")
         error = future.exception()
@@ -248,6 +266,7 @@ class MujocoRosClient:
         return response
 
     def pause(self, paused: bool) -> bool:
+        self._operation_guard()
         if self.control_context is not None:
             result=self._control_connection().request("pause",self.control_context,paused=paused)
             return bool(result["pause_result"]["success"])
@@ -262,6 +281,7 @@ class MujocoRosClient:
         *,
         joint_overrides: tuple[JointResetOverride, ...] = (),
     ) -> bool:
+        self._operation_guard()
         names = tuple(value.name for value in free_joint_overrides)
         if len(set(names)) != len(names):
             raise ValueError("duplicate free joint override names are not allowed")
@@ -279,6 +299,7 @@ class MujocoRosClient:
         return bool(self._call(self._reset, request, "reset").success)
 
     def finish_reset(self) -> bool:
+        self._operation_guard()
         if self.control_context is None:return True
         self._control_connection().request("finish_reset",self.control_context)
         return True
@@ -290,20 +311,24 @@ class MujocoRosClient:
         return connection_for(self.control_context)
 
     def prepare_reset(self) -> bool:
+        self._operation_guard()
         if self.control_context is None:
             return True
         self._control_connection().request("prepare_reset", self.control_context)
         return True
 
     def switch_controllers(self, *, activate, deactivate) -> bool:
+        self._operation_guard()
         if self.control_context is not None:
             result=self._control_connection().request("switch_controllers",self.control_context,
                 activate=list(activate),deactivate=list(deactivate))
             if not result["switch_result"]["ok"]:return False
             deadline=time.monotonic()+self._timeout_s
             while time.monotonic()<deadline:
+                self._operation_guard()
                 states=self._controller_states()
                 if all(states.get(name)=="active" for name in activate) and all(states.get(name)=="inactive" for name in deactivate):return True
+                time.sleep(0.005)
             raise MujocoServiceError("controller state transition timeout")
         request = SwitchController.Request()
         request.activate_controllers = list(activate)
