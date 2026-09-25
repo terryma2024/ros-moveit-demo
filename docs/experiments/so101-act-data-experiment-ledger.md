@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: a462e5ac
+current_commit: 6f89dec7504bce60a1a9e9f418e0a272b9f2eb68
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -13,14 +13,14 @@ confirmed_conclusions:
   - EXP-176 confirms current schema-v3 collector and analyzer are absent from source and installed overlay.
   - CP-177 rebased this branch onto the independently reviewed ACT Task 8 design and plan at approved-main 1e4664517fecc34a01ef6b8959e4a0f7316cda6e.
   - EXP-213 activated the independently reviewed canonical contact-policy fingerprint 0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11 under the user's exact authorization.
-  - CP-281 confirms a source-only single-use startup proof consumer with fixed path, process identity, artifact hashes and fresh readiness; live Task 8 remains fenced.
+  - CP-282 confirms a fresh isolated ACT stack exposes active controllers, MoveIt graph, advancing MuJoCo session and dual RGB, then retires cleanly; live Task 8 remains fenced.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
-  - Concrete bounded readiness probes and an owner-created receipt can support the single-use consumer without changing admission identity.
+  - A dedicated bounded ROS subscriber can replace lossy one-shot CLI samples and feed a concrete owner-created readiness receipt.
   - The physical phase port can support measured Task6 TASK8_READY and Task8 live qualification.
-latest_checkpoint: CP-281
-next_experiment: EXP-282 concrete stack readiness probes
+latest_checkpoint: CP-282
+next_experiment: EXP-283 dedicated ACT stack readiness observer
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -2202,3 +2202,13 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-281 — Startup proof may be consumed only once after strict validation
 
 - Last valid experiment: EXP-281. The consumer contract is tested and installed, but no concrete readiness producer has been built and the live entry remains closed. Next implement bounded stack readiness and physical-stop probes from real ROS/MuJoCo sources, then owner-created receipt issuance and child wiring. `FULL_RESTART_PROOF_UNAVAILABLE`, `ACT_TASK8_PORT_NOT_PROVISIONED`, and `CALIBRATION_REQUIRED` remain enforced. Accepted Train/Val/Test 0/0/0. Retain registered root and all runs, archive none; scratch/IPC roots deletion candidates only, delete nothing.
+
+## EXP-282 — Observe a fresh ACT stack before implementing its readiness probe
+
+- **PLANNED:** Source HEAD `6f89dec7504bce60a1a9e9f418e0a272b9f2eb68`, submodule `54463fce3bfa6192976e74113f5ed7152f708a3f`, registered root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`, exact installed overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, runtime executable `/opt/ros/jazzy/bin/ros2`, `ROS_DOMAIN_ID=230`, `GZ_PARTITION=act-data-exp282-230`, unique MuJoCo session `act-data-exp282-230`, lifecycle `ISOLATED_STACK`, headless, no command broker, no motion target or reset. Preflight found no active SO-101 stack/child and domain 230 empty; task evidence root and executable exist; CPU32, available memory27GiB and NVMe1.5TiB. Use a fresh task-owned `diagnostics/exp282-stack-001` directory and a process-group-owned ACT execution stack, then sample only bounded ROS graph, active controller states, atomic MuJoCo session/physics progression, seven joint feedback and both RGB streams. A new stack is the single changed variable relative to source-only contract tests. Success for this diagnostic is identity-bound startup observations and confirmed process-group/graph retirement, not Task8 readiness or phase PASS. If a layer does not appear or is stale, record the first failure and stop; timeout, launch error, process exit, or uncertain cleanup are terminal for this experiment. Keep `FULL_RESTART_PROOF_UNAVAILABLE`, `ACT_TASK8_PORT_NOT_PROVISIONED`, `CALIBRATION_REQUIRED`; no W8, formal episode or training. Retain all logs/evidence, archive none; generated scratch only a deletion candidate, delete nothing.
+
+- **VALID as an isolated read-only diagnostic, not Task8 qualification:** The exact installed ACT stack launch ran headless in domain 230 with session `act-data-exp282-230` under an owned process group. Evidence `diagnostics/exp282-stack-001/` includes the immutable launch argv, owner PID1841906/PGID1841906/start ticks45095547, the bounded observation commands and readbacks, launch log and retirement record. The graph exposed `/controller_manager`, `/move_group`, MuJoCo, arm/gripper/neck controllers and camera nodes. `ListControllers` returned active `arm_controller`, `gripper_controller`, `neck_controller`, and `joint_state_broadcaster`; expected MoveIt services and trajectory actions appeared. Atomic world samples named the exact session, were unpaused, and physics step advanced 9358→10114. `/joint_states` listed all six arm/gripper joints plus `neck_yaw_joint`; a velocity sample was near zero, but one sample cannot prove stable physical stop. Head and wrist RGB each produced stamped 640-pixel-wide samples. The existing `scene_setup` printed `READ_BACK success=true` with cup/table/pedestal in the world scene. `ros2 topic echo` reported lost high-frequency messages on several commands, so its separate samples are insufficient for a coherent startup receipt or full freshness/loss gate. Observer wrapper exited0 in35 s; launch exited0 after owned SIGINT; readback `nodes-after-stop` and a fresh domain-230 node list were empty and no task process remained. This run did not send a motion goal, reset, phase request, or contact-producing action. `FULL_RESTART_PROOF_UNAVAILABLE`, `ACT_TASK8_PORT_NOT_PROVISIONED`, and `CALIBRATION_REQUIRED` remain closed; accepted Train/Val/Test 0/0/0. Retain the run and registered root, archive none; no evidence deleted.
+
+## CP-282 — Real startup sources exist, but CLI samples are not a proof
+
+- Last valid experiment: EXP-282. A fresh no-motion stack reaches the expected graph, controllers, MuJoCo session and dual RGB and retires cleanly. The next smallest boundary is a dedicated bounded subscriber that collects ordered atomic MuJoCo evidence, joint velocities and both camera frames in one observer; then add service/action checks and owner-created proof issuance. No Task8 phase or formal data is accepted. Retain registered root and all runs, archive none; scratch/IPC roots are deletion candidates only, delete nothing.
