@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 0b6f4db8fbc65ee0289f28dd5f61860736c1e335
+current_commit: 4205dbd33e425f3dc46c0320a4387f42569cae56
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -16,8 +16,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: CP-250
-next_experiment: EXP-251 dedicated ACT simulator stack without legacy broker
+latest_checkpoint: CP-251
+next_experiment: EXP-252 source-bound phase contact pairs and child evidence adapters
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1857,3 +1857,14 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 
 - Last valid experiment: EXP-250. Same-step cup and joint readbacks cannot be configured with arbitrary qpos offsets; they require the exact compiled model and version.
 - Remaining gates: dedicated stack-only ACT launch, source-bound phase contact pairs and child evidence adapters, physical command/plan/reset/release/retreat, per-case fresh stack and clean-retirement proof, measured Task6 preflight, then live Task8 and W8/formal. No live case is admitted by this source primitive.
+
+## EXP-251 — Dedicated ACT execution stack launch graph
+
+- **PLANNED:** Source HEAD `4205dbd33e425f3dc46c0320a4387f42569cae56`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. Independent Astra review found that `so101_mujoco_act.launch.py` always starts the legacy `act_command_broker`, which would conflict with the admitted typed child’s `RosBrokerDriver`. Add a dedicated ACT execution-stack launch entry that reuses the ACT simulator/MoveIt/controller/camera/TF graph with headless RGB rendering, but contains zero broker, Web, Teleop or business executor. It must reject macOS, a visible/disabled-RGB launch, invalid session/root and non-ACT profile before graph construction. This source graph does not itself own processes or authorize live motion; per-case admission and exact cleanup remain open. TDD graph tests and ordinary Demo/package gates use fresh verified NVMe scratch. Retain all evidence, archive none, scratch deletion candidates only, delete nothing.
+
+- **VALID as an offline launch graph:** Intended RED `scratch/exp251-red.6HkrZrSJ` exited1 with seven missing launcher/builder failures. First GREEN `scratch/exp251-green.zAzrzvd7` failed in the test fixture on a required launch argument with no default; the corrected fixture's second GREEN `scratch/exp251-green2.bHdNp9Ij` exposed a test-only wrong `Path(...param_file)` assumption, with 14 other checks passing. That wrapper also accidentally left `TMP` empty; its proved `TMPDIR` was valid, but it is not counted as a gate. Third run `scratch/exp251-green3.OgittaQj` passed the seven new graph checks and failed only the installed-provenance check because the overlay had not yet been rebuilt. Overlay build `scratch/exp251-demo-build.CjPVb6UE` exited0 in 3 s and installed the new launcher symlink. Final targeted `scratch/exp251-targeted.wWWy4GPJ` passed 12/12 in 8 s with all three TMP variables set and the exact Python proving `/data` NVMe temp resolution. Ordinary eight-worker Python `scratch/exp251-python-full.dcyi9rhv` exited0 in 45 s, 4203 passed/162 skipped. Package `scratch/exp251-demo-colcon.wQYql3Bc` exited0 in 168 s, 4203 passed/162 skipped/12 deselected; `test-result --verbose` exited0, aggregate 5739 tests/0 errors/0 failures/205 skipped. Installed launcher resolves to this source worktree, SHA256 `18089953f483e4135d7707d72f772d09a3616dbd9423075695f2eed546b72d05`; loaded installed `launch_composition.py` resolves through the task overlay build tree, SHA256 `2b79a1746bb95b2905a91254e86dc20c6f1f2794cd3605fa45b4eef65e888932`, matching source. `git diff --check` clean. This did not launch a ROS stack or child; it proves neither Task8 per-case ownership nor full restart. Task6 preflight remains CALIBRATION_REQUIRED, and no Task8 phase, W8 or formal episode has run; Train/Val/Test 0/0/0. Retain all registered evidence, archive none, all scratch trees deletion candidates only, delete nothing.
+
+## CP-251 — Dedicated ACT graph without legacy broker
+
+- Last valid experiment: EXP-251. The dedicated headless RGB ACT graph contains the simulator, MoveIt, controllers, TF and scene setup but no legacy broker, Teleop or business process.
+- Remaining gates: source-bound contact pairs and child evidence adapters, actual physical Task8Port, per-case fresh stack and clean-retirement proof, measured Task6 preflight, then live Task8 and W8/formal. No live case is admitted by this graph alone.
