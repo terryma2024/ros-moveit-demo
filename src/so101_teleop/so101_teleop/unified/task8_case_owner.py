@@ -12,6 +12,7 @@ import inspect
 import json
 import os
 from pathlib import Path
+import re
 import stat
 import time
 
@@ -122,11 +123,20 @@ class Task8CaseOwner:
             stack_root = Path(stack_launch.evidence_root)
             campaign_root = Path(context.evidence_root)
             child_root = Path(child.socket_root)
+            campaign_id = context.campaign_id
+            if (not isinstance(campaign_id, str)
+                    or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", campaign_id) is None):
+                raise MutationError("TASK8_CASE_STACK_SCOPE_INVALID")
+            expected_stack_root = campaign_root / "task8-live" / campaign_id / "stack"
             if (stack_launch.session_id != child.mujoco_session_id
                     or stack_launch.ros_domain_id != child.ros_domain_id
-                    or stack_root.is_symlink()
-                    or not stack_root.resolve().is_relative_to(campaign_root.resolve())
-                    or stack_root.resolve() in (campaign_root.resolve(), child_root.resolve())
+                    or stack_root != expected_stack_root
+                    or any(path.is_symlink() for path in (
+                        campaign_root, expected_stack_root.parent.parent,
+                        expected_stack_root.parent, expected_stack_root,
+                    ))
+                    or not stack_root.is_dir()
+                    or stack_root.resolve() == child_root.resolve()
                     or (stack_root / "cleanup-receipt.json").exists()
                     or (child_root / "cleanup-receipt.json").exists()):
                 raise MutationError("TASK8_CASE_STACK_SCOPE_INVALID")

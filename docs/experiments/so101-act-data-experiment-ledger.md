@@ -1,23 +1,26 @@
 ---
 task_id: so101-act-data-0917a
-goal: Implement and qualify expert data collection; select 50 Train, 10 Validation, 10 Offline Test successful episodes and verify correctness.
-success_contract: Frozen isolated candidates, qualified control/reference/RGB/physical/replay gates, deterministic sealed manifest; Task 12 onward NOT_STARTED.
+goal: Complete the approved SO-101 ACT path through Task 12 training with qualified, independently verified formal data.
+success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full passes, exact-W8 qualification and collection, 50 Train/10 Validation/10 Offline Test accepted sealed episodes, and verified Task 12 training artifacts.
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 836d2310c083640003ca0688d2c1feed75141ebe
+current_commit: 10fc80e8dcaf187876ac589ddce23501dd06c12c
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
   - CP-001 verifies dispatch baseline and reviewed document hashes.
   - EXP-176 confirms current schema-v3 collector and analyzer are absent from source and installed overlay.
   - CP-177 rebased this branch onto the independently reviewed ACT Task 8 design and plan at approved-main 1e4664517fecc34a01ef6b8959e4a0f7316cda6e.
+  - EXP-213 activated the independently reviewed canonical contact-policy fingerprint 0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11 under the user's exact authorization.
+  - CP-280 confirms one-shot Task8CaseOwner binds its stack evidence root to the admitted campaign path; live Task 8 remains fenced.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
-  - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: CP-261
-next_experiment: EXP-262 physical Task8Port boundary and dynamic Task6 measurements
+  - An exact campaign-scoped stack evidence path can support a trusted, one-use startup receipt without changing admission identity.
+  - Concrete bounded readiness probes and the physical phase port can support measured Task6 TASK8_READY and Task8 live qualification.
+latest_checkpoint: CP-280
+next_experiment: EXP-281 startup proof consumer contract
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -2179,3 +2182,13 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-279 — One owner instance can admit at most one Task8 case
 
 - Last valid experiment: EXP-279. Independent approach review accepted a one-use owner startup capability, subject to a fixed trusted receipt path, complete case/artifact/process identity, fresh hash-checked readiness artifact, atomic consumption before the first reset side effect and no replay after failure. The receipt producer remains disabled until concrete bounded readiness probes exist; `FULL_RESTART_PROOF_UNAVAILABLE`, `ACT_TASK8_PORT_NOT_PROVISIONED`, and `CALIBRATION_REQUIRED` remain enforced. Accepted Train/Val/Test 0/0/0. Retain registered root, archive none; scratch/IPC deletion candidates only, no deletion.
+
+## EXP-280 — Pin each Task8 stack root to the admitted campaign identity
+
+- **PLANNED:** Source HEAD `10fc80e8dcaf187876ac589ddce23501dd06c12c`, registered root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, runtime executable `NOT_STARTED`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. Bind the owner-created stack directory to the lexical path `<admitted evidence_root>/task8-live/<validated campaign_id>/stack`, with no symlinked intermediate component. This permits the future child proof verifier to derive one exact startup receipt path from trusted admission rather than a caller-supplied path and avoids collisions across independently admitted cases. Add intended RED for an alternative in-root stack directory being accepted, then GREEN the exact-root and symlink/path checks. Keep the receipt producer, Task8 live campaign, phase port and Task6 gates closed. Run focused and full Teleop ordinary/package gates with exact Python, verified unique NVMe scratch and short IPC roots. No live stack or motion; retain evidence, archive none; scratch/IPC deletion candidates only, delete nothing.
+
+- **VALID as source-only path binding:** Intended RED `scratch/exp280-red.fbCcJaRh` exited1 at the exact boundary: the old owner accepted an alternate in-root stack path. The owner now validates the campaign ID as one path component and requires `task8-live/<campaign_id>/stack` below the admitted root, with no symlink at the admitted root or any newly appended component; a mismatched or symlinked path is rejected before stack spawn. Focused GREEN `scratch/exp280-green.baxq9Wxl` passed14/14, including the alternate-path and symlinked-parent rejection cases. Exact task-Python eight-worker Teleop ordinary `scratch/exp280-teleop-full.clLJGJng` exited0 in74 s, 1186 passed/43 skipped. Overlay build `scratch/exp280-build.WRirz64Y` exited0 in1 s using pinned Bun1.4.2; serial package CTest `scratch/exp280-teleop-colcon.oU28ZCqr` exited0 in302 s and 103 Teleop XMLs had no errors or failures. Initial aggregate invocation used the wrong `--result-base` option and exited2 before inspecting results; corrected `--test-result-base` exited0, 5855 tests/0 errors/0 failures/205 skipped. Every pytest/colcon test had a new previously nonexistent NVMe TMPDIR/TMP/TEMP checked with the exact task Python, and Teleop tests used unique short IPC roots. CMakeCache `_Python3_EXECUTABLE` equals the exact task Python; installed owner module resolves to source and both SHA256 values are `d2297206ce81c6cbc85dba07f7844b3850b2453d7fa89f3d689d9ac108870289`. `git diff --check` clean. No live Task8 stack, phase PASS, W8, formal episode or training; accepted Train/Val/Test 0/0/0. Retain registered root and all runs, archive none; scratch/IPC roots are deletion candidates only, delete nothing.
+
+## CP-280 — Stack evidence path is fixed by admitted campaign identity
+
+- Last valid experiment: EXP-280. A future child startup-proof consumer can derive the stack receipt path from the admitted campaign root and ID. No startup receipt producer or consumer has been enabled. `FULL_RESTART_PROOF_UNAVAILABLE`, `ACT_TASK8_PORT_NOT_PROVISIONED`, and `CALIBRATION_REQUIRED` remain enforced. Accepted Train/Val/Test 0/0/0. Retain registered root and all runs, archive none; scratch/IPC roots are deletion candidates only, delete nothing.
