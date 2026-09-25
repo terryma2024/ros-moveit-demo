@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 66528da5b394a0ba50218a36e5dcc46eb038f686
+current_commit: 836d2310c083640003ca0688d2c1feed75141ebe
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -16,8 +16,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: CP-260
-next_experiment: EXP-261 admitted-child physical-source provisioning
+latest_checkpoint: CP-261
+next_experiment: EXP-262 physical Task8Port boundary and dynamic Task6 measurements
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1967,3 +1967,14 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 
 - Last valid experiment: EXP-260. Callback hazards enter a queue; a separate dispatcher can latch cancellation and wait for owned broker stop proof without blocking the ROS executor.
 - Next dependency: instantiate the sources and dispatcher in the admitted child using bound calibration and model data; implement physical Task8Port and full-stack per-case lifecycle. `ACT_TASK8_PORT_NOT_PROVISIONED`, `FULL_RESTART_PROOF_UNAVAILABLE` and `CALIBRATION_REQUIRED` remain enforced. No live Task8 case, W8 or formal episode; Train/Val/Test 0/0/0.
+
+## EXP-261 — Provision bound sources and hazard stop in the admitted child
+
+- **PLANNED:** Source HEAD `836d2310c083640003ca0688d2c1feed75141ebe`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. Read the admitted calibration report through one no-follow, content-hash-checked open; reject unmeasured or malformed Task8/formal gates before ROS init. Derive broker stop velocity and source freshness/skew limits from measured calibration, and derive contact time gap from the bound compiled model timestep. Provision `Task8RosEvidence` and `Task8HazardDispatcher` inside the isolated ROS child before any Task8 request. Close the dispatcher before ROS teardown, retaining unconfirmed stop errors. Test tampered artifact readback and injected child ROS dependencies without actual node launch, then targeted/full Teleop and Demo ordinary/package gates using unique verified NVMe scratch and short owned IPC roots. This does not implement `Task8Port` or allow Task8 live; retain evidence, archive none, scratch trees deletion candidates only, delete nothing.
+
+- **VALID as admitted-child source startup wiring:** Intended RED `scratch/exp261-red.JP3rly0A` exited1 with the two expected missing `read_hashed_json`/`bound_act_source_settings` failures; targeted GREEN `scratch/exp261-green1.MPUkf4mD` passed2/2. Wiring RED `scratch/exp261-wiring-red.qFbK5Hjn` exited1 at old unbound `SO101_ACT_STOP_VELOCITY_RAD_S` lookup before node init; targeted GREEN `scratch/exp261-green2.d4H3Ummn` passed3/3. The child now reads one hash-bound, no-follow calibration file, requires `TASK8_READY` or `QUALIFIED` measured gate, derives stop velocity and source age/skew from it, derives contact-gap bound from the compiled model timestep, and creates world/scene/contact/RGB sources plus a separate hazard dispatcher before returning its ROS broker. Child close stops the dispatcher before ROS teardown. `test/teleop/` subset `scratch/exp261-teleop-full.tyRdwKN2` passed1006/42 in38 s and is not counted as the full module gate; full `test/` eight-worker `scratch/exp261-teleop-full2.QU5C17CB` exited0 in74 s, 1169 passed/43 skipped. Teleop overlay build `scratch/exp261-teleop-build.lhAF20I7` exited0 in1 s; package `scratch/exp261-teleop-colcon.m7Y9TsXA` used exact task Python, unique proved NVMe TMPDIR/TMP/TEMP and short owned IPC root, exited0 in298 s, 102/102 CTest entries, aggregate 5772 tests/0 errors/0 failures/205 skipped. Initial Demo full `scratch/exp261-demo-full.132GqrEz` exited1 with one `PATH_WORKER_START_TIMEOUT` in an unchanged 2 s multiprocessing path-check worker startup test; its exception path disposed the worker and process inventory showed no survivor. Independent repeat `scratch/exp261-demo-full2.KiZNbP5I` exited0 in45 s, 4217 passed/162 skipped. Demo package `scratch/exp261-demo-colcon.MI1uibC8` exited0 in174 s, 4217 passed/162 skipped/12 benchmark deselected; `test-result --verbose` exited0 with the same aggregate 5772/0/0/205. All test runs used unique proved NVMe scratch. Installed/source Teleop SHA256 match: `act_artifacts.py` `85f2adfbd8f39b9dd58e3d26b8c75383f50812c0bc71ab0944fdf33c925da28a`, `ros_child.py` `f36b0ddb95147862ab193e14594c16e32c0f91f9b6f820af58a5a84eeb4ac1a5`; `git diff --check` clean. Existing retained `experiments/exp236-installed-preflight/current-partial.json` readback remains `CALIBRATION_REQUIRED` with all seven checks `UNMEASURED`. No task-owned MuJoCo/MoveIt/ACT child process, ROS motion, Task8 phase PASS, W8 or formal episode; Train/Val/Test 0/0/0. Retain all runs; archive none; scratch/short IPC roots deletion candidates only; delete nothing.
+
+## CP-261 — Admitted child owns physical-source subscriptions but no phase motion
+
+- Last valid experiment: EXP-261. The child now refuses unmeasured calibration before ROS initialization and, once qualified, would create source subscriptions and a separate owned-broker hazard stop dispatcher.
+- Next dependency: implement the actual physical Task8Port methods, measure Task6 dynamically to `TASK8_READY`, and prove each Task8 case has a fresh full simulator/ROS stack plus physical stop and clean retirement. `ACT_TASK8_PORT_NOT_PROVISIONED`, `FULL_RESTART_PROOF_UNAVAILABLE` and `CALIBRATION_REQUIRED` remain enforced. No live Task8 case, W8 or formal episode; Train/Val/Test 0/0/0.

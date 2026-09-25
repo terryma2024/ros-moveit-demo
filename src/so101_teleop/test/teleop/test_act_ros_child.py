@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -19,6 +20,7 @@ from so101_teleop.unified.ipc import decode_request
 from so101_teleop.unified.ros_child import RclpyActionDriver, act_identity_from_environment, local_owner
 from so101_teleop.process_identity import read_identity
 from so101_teleop.unified.bridge import BridgeLaunch, BridgeProcessOwner
+from so101_teleop.unified.act_artifacts import ActArtifactBinding
 
 
 class ActDriver:
@@ -62,6 +64,141 @@ def runtime(driver):
         service_epoch="epoch-1", runtime_id="runtime-w00", normal_queue_limit=2,
         act_campaign_id="campaign-1", act_worker_id="w00", act_generation=3,
     )
+
+
+def test_act_child_reads_calibration_from_one_hash_bound_no_follow_open(tmp_path):
+    path = tmp_path / "calibration.json"
+    path.write_text('{"status":"TASK8_READY"}')
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    binding = ActArtifactBinding(
+        tmp_path, (("calibration_report", path),),
+        (("calibration_report", digest),), "a" * 64,
+    )
+    assert binding.read_hashed_json("calibration_report") == {"status": "TASK8_READY"}
+    path.write_text('{"status":"CALIBRATION_REQUIRED"}')
+    with pytest.raises(ValueError, match="ACT_ARTIFACT_HASH_MISMATCH"):
+        binding.read_hashed_json("calibration_report")
+    path.unlink()
+    path.symlink_to(tmp_path / "elsewhere.json")
+    with pytest.raises(ValueError, match="ACT_ARTIFACT_UNAVAILABLE"):
+        binding.read_hashed_json("calibration_report")
+
+
+def qualified_report(tmp_path):
+    from so101_demo.act.calibration import REQUIRED_MEASUREMENTS
+
+    sample = tmp_path / "sample.json"
+    sample.write_text("measured\n")
+    digest = hashlib.sha256(sample.read_bytes()).hexdigest()
+    measurements = {}
+    for name, (unit, size) in REQUIRED_MEASUREMENTS.items():
+        value = [1.0] * size if size > 1 else 1.0
+        if name == "max_fine_corrections":
+            value = 3
+        measurements[name] = {
+            "value": value, "unit": unit, "sample_path": str(sample),
+            "sample_sha256": digest,
+        }
+    measurements["max_age_s"]["value"] = 0.1
+    measurements["max_skew_s"]["value"] = 0.005
+    measurements["stop_velocity_rad_s"]["value"] = 0.01
+    return {
+        "schema_version": 1, "status": "QUALIFIED", "source_commit": "a" * 40,
+        "config_sha256": "b" * 64, "measurements": measurements,
+        "checks": {name: "PASS" for name in
+                   ("fov", "collision", "search", "synchronization", "execution", "release", "retreat")},
+    }
+
+
+def test_act_child_source_limits_require_measured_calibration(tmp_path):
+    from so101_teleop.unified.ros_child import bound_act_source_settings
+
+    report = qualified_report(tmp_path)
+    settings = bound_act_source_settings(report, timestep_s=0.002)
+    assert settings["stop_velocity_rad_s"] == 0.01
+    assert settings["max_wall_age_s"] == 0.1
+    assert settings["max_source_skew_s"] == 0.005
+    assert settings["max_sim_gap_s"] == pytest.approx(0.003)
+    report["status"] = "CALIBRATION_REQUIRED"
+    with pytest.raises(ValueError, match="CALIBRATION_REQUIRED"):
+        bound_act_source_settings(report, timestep_s=0.002)
+
+
+def test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8(tmp_path, monkeypatch):
+    import rclpy
+    from rclpy import executors
+    from so101_demo.adapters.act import ros_broker, task8_sources
+
+    report = qualified_report(tmp_path)
+    path = tmp_path / "calibration.json"
+    path.write_text(json.dumps(report))
+    binding = ActArtifactBinding(
+        tmp_path, (("calibration_report", path),),
+        (("calibration_report", hashlib.sha256(path.read_bytes()).hexdigest()),), "a" * 64,
+    )
+    seen = []
+
+    class Node:
+        def destroy_node(self):
+            seen.append("destroy")
+
+    class Executor:
+        def add_node(self, node):
+            seen.append("add_node")
+
+        def spin(self):
+            seen.append("spin")
+
+        def shutdown(self, timeout_sec):
+            seen.append("shutdown")
+
+    class Broker:
+        def __init__(self, node, *, stop_velocity_rad_s, max_age_s):
+            seen.append(("broker", stop_velocity_rad_s, max_age_s))
+
+    class Sources:
+        def __init__(self, node, broker, **kwargs):
+            seen.append(("sources", kwargs))
+
+    class Dispatcher:
+        def __init__(self, sources, broker, cancelled):
+            seen.append("dispatcher")
+
+        def start(self):
+            seen.append("start_dispatcher")
+
+        def close(self):
+            seen.append("close_dispatcher")
+
+    monkeypatch.delenv("SO101_ACT_STOP_VELOCITY_RAD_S", raising=False)
+    monkeypatch.delenv("SO101_ACT_EVIDENCE_MAX_AGE_S", raising=False)
+    monkeypatch.setenv("SO101_ACT_WORKER_ID", "w00")
+    monkeypatch.setenv("SO101_ACT_GENERATION", "1")
+    monkeypatch.setenv("SO101_SIMULATION_SESSION_ID", "session-1")
+    monkeypatch.setattr(rclpy, "init", lambda: seen.append("init"))
+    monkeypatch.setattr(rclpy, "create_node", lambda *args, **kwargs: Node())
+    monkeypatch.setattr(rclpy, "ok", lambda: True)
+    monkeypatch.setattr(rclpy, "shutdown", lambda: seen.append("rclpy_shutdown"))
+    monkeypatch.setattr(executors, "SingleThreadedExecutor", Executor)
+    monkeypatch.setattr(ros_broker, "RosBrokerDriver", Broker)
+    monkeypatch.setattr(task8_sources, "Task8RosEvidence", Sources)
+    monkeypatch.setattr(task8_sources, "Task8HazardDispatcher", Dispatcher)
+    driver = object.__new__(RclpyActionDriver)
+    driver._node = driver._executor = driver._thread = None
+    driver._act_artifacts = binding
+    driver._act_model = SimpleNamespace(opt=SimpleNamespace(timestep=0.002))
+    driver._act_contact_pairs = object()
+    driver._act_cancelled = threading.Event()
+    driver._act_sources = driver._act_hazard_dispatcher = None
+    broker = driver._start_ros_broker()
+    assert isinstance(broker, Broker)
+    assert ("broker", 0.01, 0.1) in seen
+    source = next(item for item in seen if isinstance(item, tuple) and item[0] == "sources")[1]
+    assert source["session_id"] == "session-1"
+    assert source["max_source_skew_s"] == 0.005
+    assert seen.index("dispatcher") < seen.index("start_dispatcher")
+    driver.close()
+    assert seen.index("close_dispatcher") < seen.index("shutdown")
 
 
 def test_child_routes_only_its_own_worker_and_generation():

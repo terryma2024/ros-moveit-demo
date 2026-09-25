@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import math
 import os
 import re
 import signal
@@ -45,6 +46,38 @@ _ACT_HASH_ENV = {
     "runtime_config_sha256": "SO101_ACT_RUNTIME_CONFIG_SHA256",
     "contact_policy_fingerprint": "SO101_ACT_POLICY_FINGERPRINT",
 }
+
+
+def bound_act_source_settings(report: dict, *, timestep_s: float) -> dict[str, float]:
+    """Use only measured calibration and the admitted compiled-model timestep."""
+    from so101_demo.act.calibration import require_gate
+
+    if not isinstance(report, dict):
+        raise ValueError("CALIBRATION_REQUIRED")
+    gate = "formal_collection" if report.get("status") == "QUALIFIED" else "task8_live"
+    require_gate(report, gate)
+    try:
+        measured = report["measurements"]
+        age = float(measured["max_age_s"]["value"])
+        skew = float(measured["max_skew_s"]["value"])
+        speed = float(measured["stop_velocity_rad_s"]["value"])
+        timestep = float(timestep_s)
+    except (KeyError, TypeError, ValueError, OverflowError) as error:
+        raise ValueError("CALIBRATION_REQUIRED") from error
+    if (not all(math.isfinite(value) for value in (age, skew, speed, timestep))
+            or not 0 < age <= 10 or not 0 < skew <= age
+            or not 0 <= speed < 1 or not 0 < timestep <= 0.01
+            or timestep * 1.5 >= age):
+        raise ValueError("CALIBRATION_REQUIRED")
+    return {
+        "stop_velocity_rad_s": speed,
+        "max_wall_age_s": age,
+        "max_source_skew_s": skew,
+        "max_sim_gap_s": timestep * 1.5,
+        "joint_tolerance_rad": 0.002,
+        "cup_pose_tolerance_m": 1e-8,
+        "cup_orientation_tolerance": 1e-6,
+    }
 
 
 class _FencedTask8Port:
@@ -115,6 +148,8 @@ class RclpyActionDriver:
         self._act_artifacts = None
         self._act_model = None
         self._act_contact_pairs = None
+        self._act_sources = None
+        self._act_hazard_dispatcher = None
         if os.environ.get("SO101_ACT_CAMPAIGN_ID"):
             from .act_artifacts import ActArtifactBinding
             self._act_artifacts = ActArtifactBinding.verify_environment(os.environ)
@@ -138,29 +173,47 @@ class RclpyActionDriver:
 
     def _start_ros_broker(self):
         """Provision the existing ACT ROS driver inside this isolated child."""
-        try:
-            speed = float(os.environ["SO101_ACT_STOP_VELOCITY_RAD_S"])
-            max_age = float(os.environ["SO101_ACT_EVIDENCE_MAX_AGE_S"])
-        except (KeyError, TypeError, ValueError) as error:
-            raise MutationError("ROS_DRIVER_CONFIG_MISSING") from error
-        if not (0 <= speed < 1 and 0 < max_age <= 10):
-            raise MutationError("ROS_DRIVER_CONFIG_INVALID")
+        if self._act_artifacts is None or self._act_model is None or self._act_contact_pairs is None:
+            raise MutationError("ACT_ARTIFACT_BINDING_INVALID")
+        report = self._act_artifacts.read_hashed_json("calibration_report")
+        settings = bound_act_source_settings(report, timestep_s=self._act_model.opt.timestep)
+        speed = settings.pop("stop_velocity_rad_s")
+        max_age = settings["max_wall_age_s"]
+        session_id = os.environ.get("SO101_SIMULATION_SESSION_ID")
+        if not isinstance(session_id, str) or not session_id:
+            raise MutationError("ACT_CHILD_IDENTITY_INCOMPLETE")
         import rclpy
         from rclpy.executors import SingleThreadedExecutor
         from rclpy.parameter import Parameter
         from so101_demo.adapters.act.ros_broker import RosBrokerDriver
+        from so101_demo.adapters.act.task8_sources import Task8RosEvidence, Task8HazardDispatcher
 
         rclpy.init()
         try:
             name = f"act_worker_{os.environ['SO101_ACT_WORKER_ID']}_{os.environ['SO101_ACT_GENERATION']}"
             self._node = rclpy.create_node(name, parameter_overrides=[Parameter("use_sim_time", value=True)])
             broker = RosBrokerDriver(self._node, stop_velocity_rad_s=speed, max_age_s=max_age)
+            self._act_sources = Task8RosEvidence(
+                self._node, broker, model=self._act_model,
+                contact_pairs=self._act_contact_pairs, session_id=session_id,
+                **settings,
+            )
+            self._act_hazard_dispatcher = Task8HazardDispatcher(
+                self._act_sources, broker, self._act_cancelled,
+            )
             self._executor = SingleThreadedExecutor()
             self._executor.add_node(self._node)
             self._thread = threading.Thread(target=self._executor.spin, name="act-child-rclpy", daemon=True)
             self._thread.start()
+            self._act_hazard_dispatcher.start()
             return broker
         except BaseException:
+            if self._act_hazard_dispatcher is not None:
+                self._act_hazard_dispatcher.close()
+            if self._executor is not None:
+                self._executor.shutdown(timeout_sec=2.0)
+            if self._thread is not None:
+                self._thread.join(timeout=2.0)
             if self._node is not None:
                 self._node.destroy_node()
             rclpy.shutdown()
@@ -339,16 +392,20 @@ class RclpyActionDriver:
         raise MutationError("ACT_COLLECTION_NOT_PROVISIONED")
 
     def close(self) -> None:
-        if self._executor is not None:
-            self._executor.shutdown(timeout_sec=2.0)
-        if self._thread is not None:
-            self._thread.join(timeout=2.0)
-        if self._node is not None:
-            self._node.destroy_node()
-        if self._node is not None:
-            import rclpy
-            if rclpy.ok():
-                rclpy.shutdown()
+        try:
+            if self._act_hazard_dispatcher is not None:
+                self._act_hazard_dispatcher.close()
+        finally:
+            if self._executor is not None:
+                self._executor.shutdown(timeout_sec=2.0)
+            if self._thread is not None:
+                self._thread.join(timeout=2.0)
+            if self._node is not None:
+                self._node.destroy_node()
+            if self._node is not None:
+                import rclpy
+                if rclpy.ok():
+                    rclpy.shutdown()
 
 
 def local_owner(runtime_id: str) -> OwnerKey:
