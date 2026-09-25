@@ -118,6 +118,7 @@ setup(
             "scene_setup = so101_demo.cli.scene_setup:main",
             "gazebo_execute = so101_demo.backends.gazebo.execute:main",
             "motion_stack_ready = so101_demo.cli.motion_stack_ready:main",
+            "act_stack_ready = so101_demo.cli.act_stack_ready:main",
             "so101_diagnose_macos_station = "
             "so101_demo.cli.diagnose_macos_station:main",
             "cup_pose_subscriber = so101_demo.cli.cup_pose_subscriber:main",

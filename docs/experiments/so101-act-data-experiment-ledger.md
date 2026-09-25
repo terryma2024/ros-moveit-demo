@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 6f89dec7504bce60a1a9e9f418e0a272b9f2eb68
+current_commit: c89973bc7025928e9bc36fae225bc93e6163b45a
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -13,14 +13,14 @@ confirmed_conclusions:
   - EXP-176 confirms current schema-v3 collector and analyzer are absent from source and installed overlay.
   - CP-177 rebased this branch onto the independently reviewed ACT Task 8 design and plan at approved-main 1e4664517fecc34a01ef6b8959e4a0f7316cda6e.
   - EXP-213 activated the independently reviewed canonical contact-policy fingerprint 0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11 under the user's exact authorization.
-  - CP-282 confirms a fresh isolated ACT stack exposes active controllers, MoveIt graph, advancing MuJoCo session and dual RGB, then retires cleanly; live Task 8 remains fenced.
+  - CP-283 confirms an installed bounded ACT stack readiness observer and all Demo gates; live Task 8 remains fenced.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
-  - A dedicated bounded ROS subscriber can replace lossy one-shot CLI samples and feed a concrete owner-created readiness receipt.
+  - The installed dedicated observer can produce a fresh seven-axis startup artifact on a new isolated ACT stack, allowing later owner-created receipt issuance.
   - The physical phase port can support measured Task6 TASK8_READY and Task8 live qualification.
-latest_checkpoint: CP-282
-next_experiment: EXP-283 dedicated ACT stack readiness observer
+latest_checkpoint: CP-283
+next_experiment: EXP-284 isolated installed readiness CLI validation
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -2212,3 +2212,13 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-282 — Real startup sources exist, but CLI samples are not a proof
 
 - Last valid experiment: EXP-282. A fresh no-motion stack reaches the expected graph, controllers, MuJoCo session and dual RGB and retires cleanly. The next smallest boundary is a dedicated bounded subscriber that collects ordered atomic MuJoCo evidence, joint velocities and both camera frames in one observer; then add service/action checks and owner-created proof issuance. No Task8 phase or formal data is accepted. Retain registered root and all runs, archive none; scratch/IPC roots are deletion candidates only, delete nothing.
+
+## EXP-283 — Implement a coherent bounded ACT stack readiness observer
+
+- **PLANNED:** Source HEAD `c89973bc7025928e9bc36fae225bc93e6163b45a`, registered root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`, overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, intended installed CLI `so101_demo_py act_stack_ready`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED` for source tests, lifecycle `SOURCE_ONLY`. EXP-282 demonstrated active control/MoveIt/world/RGB but separate `ros2 topic echo` invocations reported high-frequency loss and could not establish one bounded, coherent startup sample. Add a dedicated ROS-side observer that returns the exact seven-axis readiness artifact consumed by EXP-281 only after an identity-matched advancing atomic MuJoCo world, three ordered near-zero seven-joint samples, fresh correctly shaped head/wrist RGB, four active controllers and required MoveIt/controller services/actions agree within a fixed deadline. Use the existing MuJoCo observer and exact installed ROS types; no motion commands, resets or proof issuance. Test RED/GREEN for session drift, nonadvancing physics, unstable joints, stale/malformed RGB and missing controller/action. Run Demo ordinary/package gates with new verified NVMe scratch; retain evidence, archive none, scratch deletion candidates only, delete nothing. A later new isolated live run will test the installed CLI before enabling the owner receipt producer; `FULL_RESTART_PROOF_UNAVAILABLE`, `ACT_TASK8_PORT_NOT_PROVISIONED` and `CALIBRATION_REQUIRED` remain closed.
+
+- **VALID as a source and installed observer, not yet live-qualified:** Missing-module RED `scratch/exp283-red.VxL5676p` reached the intended import boundary; focused GREEN `scratch/exp283-final-focused.3O4aRaPB` passed5/5 after source review added joint-to-world timestamp agreement. The new `act_stack_ready` CLI uses one ROS node and bounded deadline, existing session-bound MuJoCo observer, ordered seven-joint position/velocity samples, both RGB subscriptions, a direct controller service readback and explicit MoveIt/controller service/action clients. Its pure evaluator emits the exact EXP-281 seven-axis readiness schema only when all axes agree; it sends no motion or reset request. Exact task-Python eight-worker Demo ordinary `scratch/exp283-demo-full.Jdjjrfvk` exited0 in53 s with 4287 passed/162 skipped, CPU32/workers8, JUnit retained. Demo build `scratch/exp283-build.URcwd1mM` exited0 in3 s. First package invocation `scratch/exp283-demo-colcon.XOvXirSz` exited2 during collection because its shell omitted the repository `PYTHONPATH` and could not import `tools`; no testcase ran, so it is an invalid runner attempt, not source RED. Corrected package `scratch/exp283-demo-colcon-retry.gAQZq41a` exited0 in183 s, XML 4449 tests/0 errors/0 failures/162 skipped. Aggregate `colcon test-result --verbose` exited0: 5869 tests/0 errors/0 failures/205 skipped. All pytest/colcon test runs used new previously nonexistent NVMe TMPDIR/TMP/TEMP verified by exact task Python; no benchmark was collected. Installed console script exists; imported runtime module resolves to the task build tree and SHA256 matches source `324b967633664391ecefe1fb5cf628adbbc7bb77fe7cc199180b0473ea96459b`. `ros2 run so101_demo_py act_stack_ready --help` exited0; `git diff --check` clean. No new live stack, motion, reset, Task8 phase PASS, W8, formal episode or training; accepted Train/Val/Test 0/0/0. Retain registered root and all runs, archive none; scratch deletion candidates only, delete nothing.
+
+## CP-283 — Dedicated readiness observer installed; real-stack verdict pending
+
+- Last valid experiment: EXP-283. The source observer is bounded and installed but has not yet been exercised against live ACT world/joint/RGB timing. Next launch a new isolated no-motion stack, run the installed CLI exactly once within it, record the returned artifact or first failed axis, then prove process/graph retirement. Keep receipt producer and `FULL_RESTART` campaign closed. Retain registered root and all runs, archive none; scratch roots are deletion candidates only, delete nothing.
