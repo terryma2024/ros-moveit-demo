@@ -265,6 +265,7 @@ class UnifiedWorkloadService:
         stable_host_id: str, gpu_selector: str, visible_physical_uuids: tuple[str, ...],
         resource_binding_id: str, owner_pid: int, owner_started_ticks: int,
         clock_ns, owner_identity_valid=_real_owner, gpu_inventory_probe=None,
+        calibration_identity_probe=None,
     ) -> None:
         if gpu_arbiter.store is not arbiter.store:
             raise ValueError("WORKLOAD_STORE_MISMATCH")
@@ -277,6 +278,7 @@ class UnifiedWorkloadService:
         self.gpu_selector = gpu_selector
         self.visible_physical_uuids = tuple(visible_physical_uuids)
         self.gpu_inventory_probe = gpu_inventory_probe or (lambda: self.visible_physical_uuids)
+        self.calibration_identity_probe = calibration_identity_probe
         self.resource_binding_id = resource_binding_id
         self.owner_pid = owner_pid
         self.owner_started_ticks = owner_started_ticks
@@ -362,12 +364,17 @@ class UnifiedWorkloadService:
             if hashlib.sha256(calibration_bytes).hexdigest() != payload["calibration_report_sha256"]:
                 raise ValueError("CALIBRATION_REQUIRED")
             calibration = json.loads(calibration_bytes)
-            from so101_demo.act.calibration import require_gate
+            from so101_demo.act.calibration import installed_calibration_identity, require_gate
 
             require_gate(calibration, "formal_collection" if spec.kind.startswith("act_collection")
                          else "task8_live")
+            current_source, current_config = (
+                self.calibration_identity_probe or installed_calibration_identity)()
         except (OSError, TypeError, json.JSONDecodeError, ValueError) as error:
             raise ValueError("CALIBRATION_REQUIRED") from error
+        if (calibration["source_commit"] != current_source
+                or calibration["config_sha256"] != current_config):
+            raise ValueError("CALIBRATION_SOURCE_CONFIG_MISMATCH")
         proposal = self._read_json(payload["proposal_path"], root)
         receipt = self._read_json(payload["activation_receipt_path"], root)
         try:
