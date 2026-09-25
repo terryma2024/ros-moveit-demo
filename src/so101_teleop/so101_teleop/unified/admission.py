@@ -263,7 +263,7 @@ class UnifiedWorkloadService:
         child_registry: ActChildRegistry, service_epoch: str, runtime_id: str,
         stable_host_id: str, gpu_selector: str, visible_physical_uuids: tuple[str, ...],
         resource_binding_id: str, owner_pid: int, owner_started_ticks: int,
-        clock_ns, owner_identity_valid=_real_owner,
+        clock_ns, owner_identity_valid=_real_owner, gpu_inventory_probe=None,
     ) -> None:
         if gpu_arbiter.store is not arbiter.store:
             raise ValueError("WORKLOAD_STORE_MISMATCH")
@@ -275,6 +275,7 @@ class UnifiedWorkloadService:
         self.stable_host_id = stable_host_id
         self.gpu_selector = gpu_selector
         self.visible_physical_uuids = tuple(visible_physical_uuids)
+        self.gpu_inventory_probe = gpu_inventory_probe or (lambda: self.visible_physical_uuids)
         self.resource_binding_id = resource_binding_id
         self.owner_pid = owner_pid
         self.owner_started_ticks = owner_started_ticks
@@ -408,7 +409,13 @@ class UnifiedWorkloadService:
                 raise ValueError("CHILD_CAMPAIGN_MISMATCH")
             proposed.register(child)
         children = tuple(ActChildLaunch(**item) for item in payload["children"])
-        physical_uuid = resolve_physical_gpu(self.gpu_selector, self.visible_physical_uuids)
+        try:
+            current_visible = tuple(self.gpu_inventory_probe())
+        except Exception as error:
+            raise ValueError("GPU_MAPPING_UNVERIFIABLE") from error
+        if current_visible != self.visible_physical_uuids:
+            raise ValueError("GPU_MAPPING_DRIFT")
+        physical_uuid = resolve_physical_gpu(self.gpu_selector, current_visible)
         return payload, children, physical_uuid
 
     def start(self, spec: OperationSpec) -> AdmittedCampaignContext:

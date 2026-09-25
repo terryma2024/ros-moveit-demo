@@ -212,6 +212,22 @@ def test_start_persists_exact_context_and_reserves_gpu_and_validation(tmp_path):
         store.close()
 
 
+def test_start_refuses_visible_gpu_mapping_drift_before_any_resource(tmp_path):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        service.gpu_inventory_probe = lambda: ("GPU-other",)
+        with pytest.raises(ValueError, match="GPU_MAPPING_DRIFT"):
+            service.start(_start_spec(tmp_path, fingerprint, proposal_path, receipt_path))
+        assert service.child_registry.launches() == ()
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+    finally:
+        store.close()
+
+
 @pytest.mark.parametrize("name", ("source", "manifest", "runtime_config", "collection_config"))
 def test_start_rejects_changed_artifact_bytes_before_any_resource(tmp_path, name):
     fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
