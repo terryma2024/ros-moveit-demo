@@ -300,7 +300,7 @@ class UnifiedWorkloadService:
         return document
 
     @staticmethod
-    def _verify_artifact(path_value: str, expected_sha256: str) -> None:
+    def _verify_artifact(path_value: str, expected_sha256: str, *, read_bytes: bool = False) -> bytes | None:
         """Read the exact artifact bytes once before acquiring campaign resources."""
         if (
             not isinstance(path_value, str)
@@ -315,11 +315,19 @@ class UnifiedWorkloadService:
             with os.fdopen(fd, "rb") as stream:
                 if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
                     raise ValueError("CAMPAIGN_ARTIFACT_INVALID")
-                digest = hashlib.file_digest(stream, "sha256").hexdigest()
+                if read_bytes:
+                    data = stream.read((1 << 20) + 1)
+                    if len(data) > (1 << 20):
+                        raise ValueError("CAMPAIGN_ARTIFACT_TOO_LARGE")
+                    digest = hashlib.sha256(data).hexdigest()
+                else:
+                    data = None
+                    digest = hashlib.file_digest(stream, "sha256").hexdigest()
         except OSError as error:
             raise ValueError("CAMPAIGN_ARTIFACT_INVALID") from error
         if digest != expected_sha256:
             raise ValueError("CAMPAIGN_ARTIFACT_HASH_MISMATCH")
+        return data
 
     def _validate_start(self, spec: OperationSpec) -> tuple[dict, tuple[ActChildLaunch, ...], str]:
         if spec.domain is not Domain.VALIDATION or spec.kind not in _ACT_START_KINDS:
@@ -352,8 +360,24 @@ class UnifiedWorkloadService:
         root = Path(payload["evidence_root"])
         if not root.is_absolute() or ".." in root.parts or not root.is_dir():
             raise ValueError("CAMPAIGN_EVIDENCE_ROOT_INVALID")
-        for name in ("source", "manifest", "runtime_config", "collection_config"):
+        for name in ("source", "runtime_config", "collection_config"):
             self._verify_artifact(payload[f"{name}_path"], payload[f"{name}_sha256"])
+        manifest_bytes = self._verify_artifact(
+            payload["manifest_path"], payload["manifest_sha256"],
+            read_bytes=spec.kind in ("task8_phase", "task8_full"),
+        )
+        if spec.kind in ("task8_phase", "task8_full"):
+            from so101_demo.act.task8_manifest import require_task8_live_manifest
+
+            try:
+                manifest = require_task8_live_manifest(json.loads(manifest_bytes))
+            except (TypeError, ValueError, UnicodeDecodeError) as error:
+                raise ValueError("TASK8_MANIFEST_INVALID") from error
+            if any(manifest[name] != payload[name] for name in (
+                "source_sha256", "runtime_config_sha256", "collection_config_sha256",
+                "contact_policy_fingerprint",
+            )):
+                raise ValueError("TASK8_MANIFEST_BINDING_MISMATCH")
         try:
             calibration_path = Path(payload["calibration_report_path"])
             if (not calibration_path.is_absolute() or ".." in calibration_path.parts
