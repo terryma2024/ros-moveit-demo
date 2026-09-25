@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 4205dbd33e425f3dc46c0320a4387f42569cae56
+current_commit: bd480dd22a54cb5495cb896a623093b093aa9257
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -16,8 +16,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: CP-251
-next_experiment: EXP-252 source-bound phase contact pairs and child evidence adapters
+latest_checkpoint: CP-252
+next_experiment: EXP-253 bounded same-step Task8 readback across asynchronous sources
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1868,3 +1868,14 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 
 - Last valid experiment: EXP-251. The dedicated headless RGB ACT graph contains the simulator, MoveIt, controllers, TF and scene setup but no legacy broker, Teleop or business process.
 - Remaining gates: source-bound contact pairs and child evidence adapters, actual physical Task8Port, per-case fresh stack and clean-retirement proof, measured Task6 preflight, then live Task8 and W8/formal. No live case is admitted by this graph alone.
+
+## EXP-252 — Activated policy and compiled-model contact pair binding
+
+- **PLANNED:** Source HEAD `bd480dd22a54cb5495cb896a623093b093aa9257`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. Build an offline binding from the actual disabled proposal, separate user activation receipt, source scene bytes and compiled MuJoCo model. It must match the admitted fingerprint and model/scene/version, derive exact named collidable fingertip/cup/table geom pairs, and expose a narrower pair set for each Task8 phase. No arbitrary caller-supplied pairs, no live stack or motion. TDD on actual model and ordinary Demo/package gates use fresh verified NVMe scratch. Retain all evidence, archive none, scratch trees deletion candidates only, delete nothing.
+
+- **VALID as an offline artifact/model binding:** Intended RED `scratch/exp252-red.v2sm9n2J` exited2 on missing `Task8ContactPairs` import. Targeted GREEN `scratch/exp252-green.CgztEKdD` exited0, 4/4 on the real compiled ACT model with synthetic test-only proposal/receipt; it checks phase narrowing and denies admitted fingerprint, model, scene, version, body-list and receipt drift. Separate read-only probe loaded the actual EXP-213 `proposal-pass1.json` and user-authorized `activation-receipt.json`, current installed ACT scene and compiled MuJoCo 3.12.0 model; exact fingerprint `0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11` bound successfully. Pair counts were SEARCH/APPROACH 13, CLOSE/MICRO_LIFT/RELEASE 377, TRANSPORT/ALIGN 364, RADIAL_RETREAT/FINAL_CHECK 13. These are exact named collidable geom pairs, not a force or holding-state pass. Overlay build `scratch/exp252-demo-build.JsvaxAeu` exited0 in3 s. Ordinary eight-worker Python `scratch/exp252-python-full.Bl1906LG` exited0 in42 s, 4207 passed/162 skipped. Package `scratch/exp252-demo-colcon.I9S0iyex` exited0 in170 s, 4207 passed/162 skipped/12 deselected; `test-result --verbose` exited0, aggregate 5743 tests/0 errors/0 failures/205 skipped. All test runs used the exact task Python and unique proved NVMe TMPDIR/TMP/TEMP. Loaded installed `task8_contact_pairs.py` resolves through the task overlay build tree, SHA256 `30cfe4bf17cc66ca9d39978195ae8fc8344ac74bf310736b5d5496624273f5b1`, matching source; `git diff --check` clean. No child wiring, ROS process, motion, Task8 phase PASS, W8 or formal episode; Train/Val/Test 0/0/0. Retain all registered evidence, archive none, scratch trees deletion candidates only, delete nothing.
+
+## CP-252 — Contact allowlist remains a source-bound primitive
+
+- Last valid experiment: EXP-252. Current approved fingerprint, receipt, scene and compiled model derive deterministic phase-specific named geom pairs; all other contacts remain hazards.
+- Remaining gates: feed these pairs only through the admitted child, bound common-step physical readbacks, actual Task8Port, per-case fresh stack and clean-retirement proof, measured Task6 preflight, then live Task8 and W8/formal. No live case is admitted by this primitive.
