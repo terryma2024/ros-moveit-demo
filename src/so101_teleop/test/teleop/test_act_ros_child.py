@@ -156,6 +156,10 @@ def test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8(tmp
         def __init__(self, node, *, stop_velocity_rad_s, max_age_s):
             seen.append(("broker", stop_velocity_rad_s, max_age_s))
 
+        def submit(self, kind, goal):
+            seen.append(("submit", kind))
+            return "goal"
+
     class Sources:
         def __init__(self, node, broker, **kwargs):
             seen.append(("sources", kwargs))
@@ -192,6 +196,20 @@ def test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8(tmp
     driver._act_sources = driver._act_hazard_dispatcher = None
     broker = driver._start_ros_broker()
     assert isinstance(broker, Broker)
+    authority = driver._act_command_broker
+    assert authority.driver is broker
+    assert authority.simulation_session_id == "session-1"
+    assert authority.ownership.state == "IDLE"
+    foreign = {"protocol_version": 1, "request_id": "r", "owner": "act",
+               "session_id": "foreign", "attempt_id": "a", "lease_token": "",
+               "operation": "acquire"}
+    assert authority.handle(foreign, "child")["error"] == "SESSION_MISMATCH"
+    token = authority.ownership.acquire("act", "session-1", "a")
+    old_ticket = authority.ownership.ticket(token, "act", "session-1", "a")
+    authority.ownership.revoke("TEST_REVOKE")
+    with pytest.raises(PermissionError):
+        authority.dispatch(old_ticket, "neck", object())
+    assert not any(isinstance(item, tuple) and item[0] == "submit" for item in seen)
     assert ("broker", 0.01, 0.1) in seen
     source = next(item for item in seen if isinstance(item, tuple) and item[0] == "sources")[1]
     assert source["session_id"] == "session-1"

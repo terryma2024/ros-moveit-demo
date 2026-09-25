@@ -150,6 +150,7 @@ class RclpyActionDriver:
         self._act_contact_pairs = None
         self._act_sources = None
         self._act_hazard_dispatcher = None
+        self._act_command_broker = None
         if os.environ.get("SO101_ACT_CAMPAIGN_ID"):
             from .act_artifacts import ActArtifactBinding
             self._act_artifacts = ActArtifactBinding.verify_environment(os.environ)
@@ -185,6 +186,8 @@ class RclpyActionDriver:
         import rclpy
         from rclpy.executors import SingleThreadedExecutor
         from rclpy.parameter import Parameter
+        from so101_demo.act.ownership import Ownership
+        from so101_demo.adapters.act.command_broker import CommandBroker
         from so101_demo.adapters.act.ros_broker import RosBrokerDriver
         from so101_demo.adapters.act.task8_sources import Task8RosEvidence, Task8HazardDispatcher
 
@@ -193,6 +196,9 @@ class RclpyActionDriver:
             name = f"act_worker_{os.environ['SO101_ACT_WORKER_ID']}_{os.environ['SO101_ACT_GENERATION']}"
             self._node = rclpy.create_node(name, parameter_overrides=[Parameter("use_sim_time", value=True)])
             broker = RosBrokerDriver(self._node, stop_velocity_rad_s=speed, max_age_s=max_age)
+            self._act_command_broker = CommandBroker(
+                broker, ownership=Ownership(), simulation_session_id=session_id,
+            )
             self._act_sources = Task8RosEvidence(
                 self._node, broker, model=self._act_model,
                 contact_pairs=self._act_contact_pairs, session_id=session_id,
@@ -208,6 +214,7 @@ class RclpyActionDriver:
             self._act_hazard_dispatcher.start()
             return broker
         except BaseException:
+            self._act_command_broker = None
             if self._act_hazard_dispatcher is not None:
                 self._act_hazard_dispatcher.close()
             if self._executor is not None:
