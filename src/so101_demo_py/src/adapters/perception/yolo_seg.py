@@ -234,7 +234,7 @@ class YoloSegDetector:
     def _predict(self, source: np.ndarray) -> list[Any]:
         try:
             results = self._model.predict(
-                source=source,
+                source=np.ascontiguousarray(source[:, :, ::-1]),
                 imgsz=self._imgsz,
                 device=self.runtime_device,
                 conf=0.25,
