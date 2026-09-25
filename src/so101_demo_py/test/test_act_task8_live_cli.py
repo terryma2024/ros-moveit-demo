@@ -89,39 +89,28 @@ def prepared(tmp_path):
     return spec, context
 
 
-def test_admitted_campaign_runs_exact_cases_then_settles(tmp_path):
+def test_missing_full_restart_owner_refuses_before_admission(tmp_path):
     spec, context = prepared(tmp_path)
     worker = Worker(context)
     lifecycle = Lifecycle(context, worker)
     journal = tmp_path / "task8-live" / "cases.jsonl"
     journal.parent.mkdir()
-    result = asyncio.run(run_admitted_campaign(spec, lifecycle, journal))
-    assert result["status"] == "PASSED"
-    assert len(worker.requests) == 14
-    assert lifecycle.starts == lifecycle.finishes == 1
-    assert len(journal.read_text().splitlines()) == 14
+    with pytest.raises(RuntimeError, match="FULL_RESTART_PROOF_UNAVAILABLE"):
+        asyncio.run(run_admitted_campaign(spec, lifecycle, journal))
+    assert worker.requests == []
+    assert lifecycle.starts == lifecycle.finishes == 0
+    assert not journal.exists()
 
 
-def test_admission_refusal_creates_no_journal_or_worker_call(tmp_path):
+def test_fence_precedes_even_a_refusing_admission(tmp_path):
     spec, context = prepared(tmp_path)
     worker = Worker(context)
     lifecycle = Lifecycle(context, worker, refuse=True)
     journal = tmp_path / "cases.jsonl"
-    with pytest.raises(ValueError, match="CALIBRATION_REQUIRED"):
+    with pytest.raises(RuntimeError, match="FULL_RESTART_PROOF_UNAVAILABLE"):
         asyncio.run(run_admitted_campaign(spec, lifecycle, journal))
-    assert lifecycle.starts == 1 and lifecycle.finishes == 0
+    assert lifecycle.starts == 0 and lifecycle.finishes == 0
     assert worker.requests == [] and not journal.exists()
-
-
-def test_case_failure_still_settles_and_refuses_next_case(tmp_path):
-    spec, context = prepared(tmp_path)
-    worker = Worker(context, bad=True)
-    lifecycle = Lifecycle(context, worker)
-    journal = tmp_path / "cases.jsonl"
-    with pytest.raises(RuntimeError, match="TASK8_CASE_RESULT_INVALID"):
-        asyncio.run(run_admitted_campaign(spec, lifecycle, journal))
-    assert len(worker.requests) == 1
-    assert lifecycle.starts == lifecycle.finishes == 1
 
 
 def test_spec_loader_refuses_extra_fields_and_symlink(tmp_path):
