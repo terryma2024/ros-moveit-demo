@@ -168,15 +168,17 @@ def test_live_contact_staleness_waits_while_reset_is_paused():
     import threading
     from types import SimpleNamespace as NS
     from so101_demo.adapters.act.calibration_motion import RosCalibrationMotionGuard
-    polled=[]
-    guard=NS(live_observer=NS(poll=lambda:polled.append(True)),
+    calls=[]
+    guard=NS(live_observer=NS(poll=lambda:calls.append('poll'),
+                              suspend=lambda:calls.append('suspend'),
+                              start=lambda:calls.append('start')),
              scene_observer=NS(_lock=threading.RLock(),last={'paused':True}),
              broker=NS(prefix_executor=None))
     RosCalibrationMotionGuard.poll(guard)
-    assert polled == []
+    assert calls == ['suspend']
     guard.scene_observer.last['paused']=False
     RosCalibrationMotionGuard.poll(guard)
-    assert polled == [True]
+    assert calls == ['suspend', 'start', 'poll']
 
 
 def test_contact_exact_goals_use_fresh_sim_time_and_reject_old_observation():

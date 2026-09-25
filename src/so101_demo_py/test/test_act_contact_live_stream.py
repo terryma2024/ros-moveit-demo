@@ -228,6 +228,58 @@ def test_live_observer_hazard_latch_and_stale_stream_abort(tmp_path):
     stale.close()
 
 
+def test_live_observer_rearms_receipt_deadline_after_authoritative_pause(tmp_path):
+    observer, now, aborts = _observer(tmp_path)
+    observer.accept_chunk(_ros_chunk())
+    observer.suspend()
+    now[0] += 5.
+    observer.poll()
+    assert aborts == []
+    observer.start()
+    now[0] += .199
+    observer.poll()
+    assert aborts == []
+    now[0] += .002
+    observer.poll()
+    assert aborts == ["LIVE_CONTACT_EVIDENCE_STALE"]
+    observer.close()
+
+
+def test_live_observer_accepts_first_contiguous_chunk_after_paused_gap(tmp_path):
+    observer, now, aborts = _observer(tmp_path)
+    observer.accept_chunk(_ros_chunk())
+    observer.suspend()
+    now[0] += 5.
+    observer.start()
+    now[0] += .01
+    next_chunk = _ros_chunk()
+    next_chunk.chunk_sequence = 1
+    next_chunk.samples[0].physics_step = 2
+    next_chunk.samples[0].simulation_time_s = .004
+    next_chunk.first_physics_step = next_chunk.last_physics_step = 2
+    next_chunk.first_simulation_time_s = next_chunk.last_simulation_time_s = .004
+    observer.accept_chunk(next_chunk)
+    assert aborts == []
+    assert observer.recorder.recorded_steps == 2
+    observer.close()
+
+
+def test_live_observer_keeps_running_receipt_gap_fail_closed(tmp_path):
+    observer, now, aborts = _observer(tmp_path)
+    observer.accept_chunk(_ros_chunk())
+    now[0] += .201
+    next_chunk = _ros_chunk()
+    next_chunk.chunk_sequence = 1
+    next_chunk.samples[0].physics_step = 2
+    next_chunk.samples[0].simulation_time_s = .004
+    next_chunk.first_physics_step = next_chunk.last_physics_step = 2
+    next_chunk.first_simulation_time_s = next_chunk.last_simulation_time_s = .004
+    observer.accept_chunk(next_chunk)
+    assert aborts == ["LIVE_CONTACT_EVIDENCE_INVALID:live physics evidence is stale"]
+    assert observer.recorder.recorded_steps == 1
+    observer.close()
+
+
 def test_ros_adapter_subscribes_once_and_closes_owned_handles(tmp_path):
     observer, _, aborts = _observer(tmp_path)
 
@@ -235,6 +287,7 @@ def test_ros_adapter_subscribes_once_and_closes_owned_handles(tmp_path):
         def __init__(self):
             self.subscriptions = []
             self.destroyed = []
+            self.timer = None
 
         def create_subscription(self, kind, topic, callback, qos):
             handle = (kind, topic, callback, qos)
@@ -256,11 +309,11 @@ def test_ros_adapter_subscribes_once_and_closes_owned_handles(tmp_path):
     assert [part[1] for part in node.subscriptions] == [
         "/so101/simulation/physics_step_chunks", "/so101/simulation/physics_hazard"
     ]
-    assert node.timer[0] <= .01
+    assert node.timer is None
     node.subscriptions[0][2](_ros_chunk())
     node.subscriptions[1][2](NS(simulation_session_id="session-live-a", reset_epoch=1,
                                 physics_step=1, force_n=12.0, threshold_n=11.6,
                                 evidence_loss=False))
     assert len(aborts) == 1
     adapter.close()
-    assert len(node.destroyed) == 3
+    assert len(node.destroyed) == 2
