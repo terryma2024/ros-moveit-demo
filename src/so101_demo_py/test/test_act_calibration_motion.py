@@ -147,10 +147,10 @@ def test_contact_segments_require_prior_terminal_controller_success(tmp_path):
         def create_subscription(self,*args):return args
         def create_timer(self,*args):return args
     outcome={'status':6}
-    baseline={'refreshed':False}
+    baseline={'confirmed':False,'refreshes':0}
     driver=NS(_lock=threading.RLock(),hazard_reason=None,
-              refresh_idle=lambda:baseline.update(refreshed=True),
-              stopped=lambda:baseline['refreshed'],
+              refresh_idle=lambda:baseline.update(confirmed=False,refreshes=baseline['refreshes']+1),
+              stopped=lambda:baseline['confirmed'],
               goal_state=lambda gid:dict(accepted=True,status=outcome['status'],
                                           result={'error_code':0}))
     pair=NS(adapter=NS(current_goal_ids=('arm-goal','gripper-goal')))
@@ -163,10 +163,13 @@ def test_contact_segments_require_prior_terminal_controller_success(tmp_path):
                 sequence=1,observation_time_s=1.,
                 target_times_s=[1.+.1*(i+1) for i in range(len(rows))],positions=rows)
     assert not guard._within(prefix,prior,0.)
-    assert baseline['refreshed'] is False
+    assert baseline['refreshes']==0
     outcome['status']=4
+    baseline['confirmed']=True
     assert guard._within(prefix,prior,0.)
-    assert baseline['refreshed'] is True
+    assert baseline['refreshes']==0
+    baseline['confirmed']=False
+    assert not guard._within(prefix,prior,0.)
     assert not guard._within(dict(prefix,sequence=2),prior,0.)
     guard.close()
 
@@ -236,6 +239,7 @@ def test_contact_exact_goals_use_fresh_sim_time_and_reject_old_observation():
              _live_ready=lambda:True,_within=lambda *_:True,
              _snapshot=lambda base,**_:snapshots.append(base) or {'sim_time_s':base['sim_time_s']},
              path=NS(check_path=lambda *_:True,last_check={}))
+    guard._record_rejection=lambda row:guard.audit.append(row)
     goals=[{'header_stamp_s':1.08,'time_from_start_s':(0.,.1),
             'positions':(held[:5],)},
            {'header_stamp_s':1.08,'time_from_start_s':(0.,.1),
@@ -245,6 +249,7 @@ def test_contact_exact_goals_use_fresh_sim_time_and_reject_old_observation():
     assert snapshots[-1]['sim_time_s']==1.03
     now[0]=1.21
     assert not RosCalibrationMotionGuard.check_exact_goals(guard,goals,prefix)
+    assert guard.audit[-1]['reason']=='OBSERVATION_STALE'
 
 
 def manifest():
