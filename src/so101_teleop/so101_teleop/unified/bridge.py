@@ -328,7 +328,8 @@ class ActCampaignChildOwner:
         self._ports: tuple[ActWorkerPort, ...] = ()
 
     async def start(
-        self, context: AdmittedCampaignContext, launches: tuple[ActChildLaunch, ...]
+        self, context: AdmittedCampaignContext, launches: tuple[ActChildLaunch, ...],
+        *, artifacts=None,
     ) -> tuple[ActWorkerPort, ...]:
         if self._owners:
             raise MutationError("ACT_CHILDREN_ALREADY_STARTED")
@@ -346,6 +347,11 @@ class ActCampaignChildOwner:
         if digest != context.domain_session_map_sha256:
             raise MutationError("ACT_CHILD_MAP_MISMATCH")
         prepared: list[tuple[ActChildLaunch, BridgeLaunch, str]] = []
+        if artifacts is not None:
+            from .act_artifacts import ActArtifactBinding
+            if not isinstance(artifacts, ActArtifactBinding):
+                raise MutationError("ACT_ARTIFACT_BINDING_INVALID")
+            artifacts.verify()
         for child in launches:
             token = secrets.token_urlsafe(32)
             launch = self.base_launch.for_act_worker(child)
@@ -361,6 +367,8 @@ class ActCampaignChildOwner:
                 "SO101_ACT_POLICY_FINGERPRINT": context.contact_policy_fingerprint,
                 "CUDA_VISIBLE_DEVICES": context.physical_gpu_uuid,
             })
+            if artifacts is not None:
+                environment.update(artifacts.environment())
             prepared.append((child, replace(launch, environment=environment), token))
         try:
             ports = []
@@ -416,8 +424,10 @@ class ActCampaignLifecycle:
         context = self.workload_service.start(spec, allow_existing=False)
         self.context = context
         try:
+            from .act_artifacts import ActArtifactBinding
+            artifacts = ActArtifactBinding.from_admission(spec.payload, context)
             launches = tuple(ActChildLaunch(**item) for item in spec.payload["children"])
-            ports = await self.child_owner.start(context, launches)
+            ports = await self.child_owner.start(context, launches, artifacts=artifacts)
         except BaseException:
             try:
                 await self.child_owner.stop_owned()

@@ -545,6 +545,24 @@ def _spawn_sleeper():
     )
 
 
+def _ready_sleeper_identity(child):
+    from so101_teleop.process_identity import ProcessIdentityError, read_identity
+
+    # Popen can return before exec has replaced the child image. Record only
+    # the sleeper's final argv; an empty pre-exec cmdline is a different owner.
+    deadline = time.monotonic() + 3.0
+    while time.monotonic() < deadline and child.poll() is None:
+        try:
+            identity = read_identity(child.pid)
+        except ProcessIdentityError:
+            time.sleep(0.02)
+            continue
+        if identity.argv[1:] == ("-c", "import time; time.sleep(60)"):
+            return identity
+        time.sleep(0.02)
+    pytest.fail(f"sleeper {child.pid} did not expose its stable process identity")
+
+
 def _cleanup_pids(pids):
     for pid in pids:
         try:
@@ -559,23 +577,6 @@ def _cleanup_pids(pids):
 
 def test_real_sigkill_of_the_owning_campaign_leaves_sessions_that_recovery_reclaims(tmp_path):
     module = _owner_tree()
-    from so101_teleop.process_identity import ProcessIdentityError, read_identity
-
-    def ready_identity(child):
-        # Popen can return while macOS is still replacing the child image. During that brief
-        # window KERN_PROCARGS2's size query and read can disagree, so wait for the sleeper's
-        # actual argv before using its identity in this owner-recovery test.
-        deadline = time.monotonic() + 3.0
-        while time.monotonic() < deadline and child.poll() is None:
-            try:
-                identity = read_identity(child.pid)
-            except ProcessIdentityError:
-                time.sleep(0.02)
-                continue
-            if identity.argv[1:] == ("-c", "import time; time.sleep(60)"):
-                return identity
-            time.sleep(0.02)
-        pytest.fail(f"sleeper {child.pid} did not expose its stable process identity")
 
     store = _store(tmp_path)
     children = []
@@ -601,7 +602,7 @@ def test_real_sigkill_of_the_owning_campaign_leaves_sessions_that_recovery_recla
                 argv=(sys.executable, "-c", "import time; time.sleep(60)"),
             )
             store.record_owner_intent(intent)
-            identity = ready_identity(child)
+            identity = _ready_sleeper_identity(child)
             store.confirm_owner_process(
                 module.ConfirmedOwnerProcess(
                     spawn_token=intent.spawn_token,
@@ -1203,12 +1204,11 @@ def test_directory_recovery_writes_the_unresolved_document_and_keeps_the_fence(t
 
 def test_real_process_recorded_in_the_directory_tree_is_reclaimed(tmp_path):
     module = _owner_tree()
-    from so101_teleop.process_identity import read_identity
 
     root = _owner_root(tmp_path)
     child = _spawn_sleeper()
     try:
-        identity = read_identity(child.pid)
+        identity = _ready_sleeper_identity(child)
         _write_tree_record(
             root,
             intent=_intent_document(
