@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import queue
+import threading
 
 import mujoco
 
@@ -106,3 +107,52 @@ class Task8RosEvidence:
         if self.reset_epoch is None:
             raise ValueError("TASK8_RESET_UNAVAILABLE")
         return self.readback.capture(self.session_id, attempt_id, self.reset_epoch)
+
+
+class Task8HazardDispatcher:
+    """Cancel owned action goals away from the single-threaded ROS executor."""
+
+    def __init__(self, sources: Task8RosEvidence, broker, cancelled: threading.Event) -> None:
+        self._sources = sources
+        self._broker = broker
+        self._cancelled = cancelled
+        self._closing = threading.Event()
+        self.finished = threading.Event()
+        self.reason: str | None = None
+        self.error: BaseException | None = None
+        self.confirmed = False
+        self._thread = threading.Thread(
+            target=self._run, name="act-task8-hazard-stop", daemon=True,
+        )
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def _run(self) -> None:
+        try:
+            while not self._closing.is_set():
+                reason = self._sources.take_hazard()
+                if reason is None:
+                    self._closing.wait(0.005)
+                    continue
+                self.reason = reason
+                self._cancelled.set()
+                self._broker.stop_all("TASK8_EVIDENCE_HAZARD")
+                while not self._closing.is_set():
+                    self._broker.refresh_stop()
+                    if self._broker.stopped():
+                        self.confirmed = True
+                        return
+                    self._closing.wait(0.005)
+                return
+        except BaseException as error:
+            self.error = error
+        finally:
+            self.finished.set()
+
+    def close(self) -> None:
+        self._closing.set()
+        if self._thread.ident is not None:
+            self._thread.join(timeout=2.0)
+            if self._thread.is_alive():
+                raise RuntimeError("TASK8_HAZARD_DISPATCHER_NOT_STOPPED")
