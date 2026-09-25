@@ -43,6 +43,16 @@ class StubbornLaunch(HelperLaunch):
         return [*super().argv(), "--ignore-term"]
 
 
+class EarlyExitLaunch(HelperLaunch):
+    def argv(self) -> list[str]:
+        return [*super().argv(), "--exit-after-s", "0.2"]
+
+
+class OrphanLaunch(HelperLaunch):
+    def argv(self) -> list[str]:
+        return [*super().argv(), "--fork-descendant", "--exit-after-s", "0.2"]
+
+
 def _group_members(pgid: int, *, live_only: bool = False) -> list[int]:
     out = subprocess.run(
         ["ps", "-A", "-o", "pid=", "-o", "pgid=", "-o", "state="],
@@ -152,6 +162,98 @@ def test_stop_owned_still_refuses_a_drifted_owner_without_signalling(tmp_path):
             handle = rig.owner_process.process
             if handle is not None and handle.poll() is None:
                 handle.wait(timeout=5)
+            await rig.close()
+
+    asyncio.run(run())
+
+
+def test_clean_parent_exit_requires_fsynced_terminal_receipt(tmp_path):
+    async def run():
+        rig = Rig(tmp_path, launch_class=EarlyExitLaunch)
+        try:
+            owner = await rig.owner_process.start()
+            assert rig.owner_process.process.wait(timeout=5) == 0
+            await rig.owner_process.stop_owned()
+            receipt = json.loads((rig.root / "cleanup-receipt.json").read_text())
+            assert receipt["leader_pid"] == owner.pid
+            assert receipt["pgid"] == owner.pgid
+            assert receipt["group_clear"] is True
+            assert receipt["parent_exited"] is True
+            assert not (rig.root / "normal.sock").exists()
+            assert not (rig.root / "safety.sock").exists()
+        finally:
+            await rig.close()
+
+    asyncio.run(run())
+
+
+def test_parent_exit_with_live_descendant_keeps_owner_fenced(tmp_path):
+    async def run():
+        rig = Rig(tmp_path, launch_class=OrphanLaunch)
+        child_pid = None
+        try:
+            owner = await rig.owner_process.start()
+            child_pid = _descendant_pid(rig)
+            assert rig.owner_process.process.wait(timeout=5) == 0
+            assert child_pid in _group_members(owner.pgid, live_only=True)
+            with pytest.raises(Exception, match="STOP_NOT_CONFIRMED"):
+                await rig.owner_process.stop_owned()
+            assert child_pid in _group_members(owner.pgid, live_only=True)
+            assert rig.owner_process.owner == owner
+            assert not (rig.root / "cleanup-receipt.json").exists()
+        finally:
+            if child_pid is not None:
+                try:
+                    os.kill(child_pid, 9)
+                except ProcessLookupError:
+                    pass
+            await rig.close()
+
+    asyncio.run(run())
+
+
+def test_unreadable_group_scan_cannot_retire_exited_parent(tmp_path, monkeypatch):
+    from so101_teleop import process_identity
+    from so101_teleop.unified import bridge
+
+    async def run():
+        rig = Rig(tmp_path, launch_class=EarlyExitLaunch)
+        try:
+            owner = await rig.owner_process.start()
+            assert rig.owner_process.process.wait(timeout=5) == 0
+
+            def unreadable(_pgid):
+                raise process_identity.ProcessIdentityError("unreadable")
+
+            monkeypatch.setattr(bridge, "group_members", unreadable)
+            with pytest.raises(Exception, match="STOP_NOT_CONFIRMED"):
+                await rig.owner_process.stop_owned()
+            assert rig.owner_process.owner == owner
+            assert not (rig.root / "cleanup-receipt.json").exists()
+        finally:
+            await rig.close()
+
+    asyncio.run(run())
+
+
+def test_receipt_fsync_failure_preserves_retirement_fence(tmp_path, monkeypatch):
+    from so101_teleop.unified import bridge
+
+    async def run():
+        rig = Rig(tmp_path, launch_class=EarlyExitLaunch)
+        try:
+            owner = await rig.owner_process.start()
+            assert rig.owner_process.process.wait(timeout=5) == 0
+
+            def fails(_root, _document):
+                raise OSError("fsync failed")
+
+            monkeypatch.setattr(bridge, "_write_retirement_receipt", fails)
+            with pytest.raises(Exception, match="ACT_RETIREMENT_RECEIPT_FAILED"):
+                await rig.owner_process.stop_owned()
+            assert rig.owner_process.owner == owner
+            assert not (rig.root / "cleanup-receipt.json").exists()
+        finally:
             await rig.close()
 
     asyncio.run(run())

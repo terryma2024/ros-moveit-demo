@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: f37d0c0a4bf170646edd98d93919577e541da6a6
+current_commit: 2c4ad24d382cb7fc3c7e6535e0f7fd423d5064f9
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -16,8 +16,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: CP-253
-next_experiment: EXP-254 exact ACT child and stack retirement proof
+latest_checkpoint: CP-254
+next_experiment: EXP-255 dedicated ACT stack ownership and retirement proof
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1890,3 +1890,14 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 
 - Last valid experiment: EXP-253. Asynchronous ROS delivery can now yield a valid latest common physics step without overlooking newer contact hazard or world evidence loss.
 - Remaining gates: wire these sources and contact pairs to one admitted child, actual physical Task8Port, exact per-case stack spawn and clean-retirement proof, measured Task6 preflight, then live Task8 and W8/formal. No live case is admitted by this read-only primitive.
+
+## EXP-254 — Exact unified-child retirement proof
+
+- **PLANNED:** Source HEAD `2c4ad24d382cb7fc3c7e6535e0f7fd423d5064f9`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. Reviewer found a parent-exited/descendant-live gap and process group clearance without socket/terminal receipt proof. Tighten the unified child owner: a stopped parent is accepted only after a fresh exact group scan proves no live descendant; an unreadable or reused identity remains fenced, and a successful retirement cleans only owned IPC endpoints and fsyncs a terminal receipt before `finish(cleanup_confirmed=True)` can proceed. TDD includes actual parent-exited with and without a stubborn descendant, existing SIGTERM survivor and PID drift, unreadable scan and receipt write failure. Run Teleop targeted/full and package gates with verified NVMe scratch, then ordinary Demo regression if shared behavior changes. No ROS process or live motion; retain evidence, archive none, scratch trees deletion candidates only, delete nothing.
+
+- **VALID for the unified child owner, not the simulator stack:** Initial `scratch/exp254-red.TIkhKgrF` was a test harness error: the long NVMe `tmp_path` exceeded AF_UNIX path length before the intended test boundary. `scratch/exp254-red2.e7pGaTiJ`, `scratch/exp254-red3.xdxiGcFN` and `scratch/exp254-red4.Qg05fyDo` reached the old `OWNER_IDENTITY_DRIFT` behavior, but their outer shells exited143: Teleop's autouse cleanup fixture matched the literal short IPC root in the shell argv and signaled that group. The complete `red4` pytest log records the intended source failure; none of those interrupted wrappers is counted as a gate. The same misclassification interrupted `scratch/exp254-green.OF3TGvjz` after a passing test marker. Reconstructing the short IPC root at shell runtime kept the exact marker out of the shell argv while the actual UNIX sockets stayed under the registered `/tmp/so101-debug-act-data-66c42e4c/ipc/` root. Valid targeted `scratch/exp254-green2.pUOLJlVk` passed5/5, and extended targeted `scratch/exp254-green3.WfG1ggj3` passed30/30. The owner now distinguishes proven exit from unreadable/reused identity; a proven exited leader still requires a fresh process-group scan, and live descendants or unreadable `/proc` keep the owner fenced. After group clearance it removes only its owned runtime IPC endpoints, writes an exclusive `cleanup-receipt.json`, fsyncs the file and directory, then releases owner state; fsync failure preserves the fence. The Linux group scan now raises rather than hiding permission or malformed metadata errors. Eight-worker Teleop Python `scratch/exp254-teleop-full.SMQrqKVv` exited0 in73 s, 1156 passed/43 skipped. Overlay build `scratch/exp254-teleop-build.z1UkEF2l` exited0 in1 s. Teleop package `scratch/exp254-teleop-colcon.PwhwaV8x` used exact task Python and proved NVMe scratch, exited0 in295 s with 101/101 CTest entries passed; `test-result --verbose` exited0, aggregate 5753 tests/0 errors/0 failures/205 skipped. Ordinary eight-worker Demo regression `scratch/exp254-demo-full.wnDPzy91` exited0 in44 s, 4212 passed/162 skipped. Installed/source `process_identity.py` SHA256 `cebd520f87fca76f331644c0a0c3c4c6df7fa44e6e5c534b449f35eb2a80aabd` and `bridge.py` `b922b3ccc750a715d055c8a5ca72784009a06fa6c9e56bf4c7c170ef241979c2` match; late `noros_child_helper`/`stubborn_helper` process inventory empty; `git diff --check` clean. No ACT stack, child, robot motion, Task8 phase PASS, W8 or formal episode; Train/Val/Test 0/0/0. Retain all registered evidence, archive none, scratch trees deletion candidates only, delete nothing.
+
+## CP-254 — Unified child retirement remains distinct from stack retirement
+
+- Last valid experiment: EXP-254. An exited unified child parent cannot make a live descendant look clean, and a successful child retirement now has an fsynced terminal receipt.
+- Remaining gates: dedicated ACT simulator stack owner and exact retirement, physical stop and pending-write proof before campaign finish, child wiring and Task8Port, measured Task6 preflight, then live Task8 and W8/formal. No live case is admitted by child cleanup alone.

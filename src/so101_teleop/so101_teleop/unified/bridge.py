@@ -34,9 +34,11 @@ from .ipc import DEFAULT_MAX_BYTES, IpcReply, IpcRequest, SafetyPacket
 from .safety import SafetyLane
 from ..owned_group import terminate_group
 from ..process_identity import (
+    ProcessAbsent,
     ProcessIdentityError,
     argv_matches,
     command_fingerprint,
+    group_members,
     read_identity,
 )
 
@@ -483,6 +485,54 @@ def identity_matches(owner: OwnerKey) -> bool:
     )
 
 
+def _retirement_owner_state(owner: OwnerKey) -> str:
+    """Distinguish a proven exit from drift or unreadable process metadata."""
+    try:
+        identity = read_identity(owner.pid)
+    except ProcessAbsent:
+        return "exited"
+    except ProcessIdentityError:
+        return "unknown"
+    if identity.start_marker != owner.started_ticks or identity.pgid != owner.pgid:
+        return "drifted"
+    if identity.command_sha256 != owner.argv_sha256:
+        return "unknown"
+    return "live" if identity.live else "exited"
+
+
+def _require_group_clear(pgid: int) -> None:
+    """Prove no executable member remains, including after leader exit."""
+    try:
+        members = group_members(pgid)
+    except ProcessIdentityError as error:
+        raise MutationError("STOP_NOT_CONFIRMED: group scan unreadable") from error
+    if any(state != "Z" for state in members.values()):
+        raise MutationError("STOP_NOT_CONFIRMED: live group member")
+    if not members:
+        try:
+            os.killpg(pgid, 0)
+        except ProcessLookupError:
+            return
+        except PermissionError as error:
+            raise MutationError("STOP_NOT_CONFIRMED: group existence unreadable") from error
+        raise MutationError("STOP_NOT_CONFIRMED: group exists without readable members")
+
+
+def _write_retirement_receipt(root: Path, document: dict) -> None:
+    path = root / "cleanup-receipt.json"
+    raw = (json.dumps(document, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode()
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600)
+    with os.fdopen(fd, "wb") as stream:
+        stream.write(raw)
+        stream.flush()
+        os.fsync(stream.fileno())
+    directory_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
 class BridgeProcessOwner:
     def __init__(self, launch: BridgeLaunch, arbiter: GlobalMutationArbiter, safety: SafetyLane) -> None:
         self.launch = launch
@@ -574,17 +624,51 @@ class BridgeProcessOwner:
             return
         if self.owner is None:
             raise MutationError("OWNER_IDENTITY_UNVERIFIED: child process exists without a trusted owner")
-        if not identity_matches(self.owner):
-            raise MutationError(
-                f"OWNER_IDENTITY_DRIFT: pid {self.owner.pid} no longer matches the recorded start marker"
-            )
         owner = self.owner
-        receipt = terminate_group(
-            pgid=owner.pgid, leader_pid=owner.pid, timeout_s=timeout_s
-        )
+        state = _retirement_owner_state(owner)
+        if state not in ("live", "exited"):
+            raise MutationError(
+                f"OWNER_IDENTITY_DRIFT: pid {owner.pid} no longer matches the recorded start marker"
+            )
+        receipt = None
+        if state == "live":
+            receipt = terminate_group(
+                pgid=owner.pgid, leader_pid=owner.pid, timeout_s=timeout_s
+            )
+            if not receipt.clear:
+                raise MutationError(f"STOP_NOT_CONFIRMED: {receipt.describe()}")
         self._reap_owned(owner.pid)
-        if not receipt.clear:
-            raise MutationError(f"STOP_NOT_CONFIRMED: {receipt.describe()}")
+        _require_group_clear(owner.pgid)
+        root = Path(self.launch.socket_root)
+        try:
+            ready = root / READY_FILE_NAME
+            ready_raw = ready.read_bytes() if ready.is_file() and not ready.is_symlink() else b""
+            if len(ready_raw) > (1 << 20):
+                raise ValueError("ready document too large")
+            removed = []
+            for name in (NORMAL_SOCKET_NAME, SAFETY_SOCKET_NAME, READY_FILE_NAME):
+                path = root / name
+                try:
+                    path.unlink()
+                    removed.append(name)
+                except FileNotFoundError:
+                    pass
+            _write_retirement_receipt(root, {
+                "schema_version": 1,
+                "leader_pid": owner.pid,
+                "pgid": owner.pgid,
+                "started_ticks": owner.started_ticks,
+                "argv_sha256": owner.argv_sha256,
+                "group_clear": True,
+                "parent_exited": state == "exited",
+                "term_sent": receipt.term_sent if receipt else False,
+                "kill_sent": receipt.kill_sent if receipt else False,
+                "ready_sha256": hashlib.sha256(ready_raw).hexdigest() if ready_raw else None,
+                "removed_endpoints": removed,
+                "finished_at_monotonic_ns": time.monotonic_ns(),
+            })
+        except (OSError, TypeError, ValueError) as error:
+            raise MutationError("ACT_RETIREMENT_RECEIPT_FAILED") from error
         self.process = None
         self.owner = None
 
