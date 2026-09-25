@@ -69,6 +69,7 @@ def _validate_local_paths(spec, journal_path: Path) -> None:
 async def run_admitted_campaign(spec, lifecycle, journal_path: Path) -> dict:
     """Start one admitted child, run exact cases, then settle its owned resources."""
     _validate_local_paths(spec, journal_path)
+    Task8LiveCampaign.require_full_restart_lifecycle()
     context, ports = await lifecycle.start(spec)
     try:
         if (context.workload_kind != "task8_full" or context.worker_count != 1
@@ -89,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     spec = load_spec_file(args.spec)
     _validate_local_paths(spec, args.journal)
+    Task8LiveCampaign.require_full_restart_lifecycle()
 
     from so101_teleop.unified.bridge import ActCampaignChildOwner, ActCampaignLifecycle
     from so101_teleop.unified.compose import compose_services

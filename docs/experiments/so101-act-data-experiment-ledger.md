@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 06813a96147a88cbec0a3420d0b4ff785714318c
+current_commit: d371bc1671dd812fdbbec476d516763edbce64c4
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -16,8 +16,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: CP-245
-next_experiment: EXP-246 Task 8 unified CLI composition
+latest_checkpoint: CP-247
+next_experiment: EXP-248 per-case full-stack lifecycle owner and physical readback design
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1813,3 +1813,14 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 
 - Last valid experiment: EXP-246. CLI and source-level owner now reach the existing single campaign admission/child lifecycle and produce a hash-bound, exclusive case journal. No second resource authority was added in the Worker or child.
 - Next unmet dependency: genuine physical `Task8Port` provisioned in the admitted ROS child, including MoveIt plan and Planning Scene, paired controller reference/feedback, whole-robot contact, independent MuJoCo path, dual RGB readback and release/retreat; then new dynamic Task6 measurements for five-check `TASK8_READY`. Until both pass, the unified gate refuses live Task8 and formal collection remains 0/0/0.
+
+## EXP-247 — FULL_RESTART lifecycle proof fence
+
+- **PLANNED:** Source HEAD `d371bc1671dd812fdbbec476d516763edbce64c4`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. Independent Astra review found that EXP-245/246's 14-case owner reuses one ROS child while claiming each frozen case's `FULL_RESTART`; project guide defines that lifecycle as a newly created and destroyed complete simulator/ROS stack per run. Add intended RED proving the campaign can presently report 5/5 without a lifecycle owner. Fence `Task8LiveCampaign` and CLI before the first Worker action until a genuine per-case stack owner supplies unique start/clean-retirement receipts; fake tests may prove source contract only, not physical qualification. Preserve the existing fail-closed Task6/PhasePort gates. Targeted/full ordinary/package gates use unique verified NVMe scratch. No ROS motion; retain evidence, archive none, scratch deletion candidates only, delete nothing.
+
+- **VALID as a safety correction:** Intended RED `scratch/exp247-red.wHJpROUy` exited1 because the prior campaign accepted a reused child as 14 successful `FULL_RESTART` cases. `scratch/exp247-green.p2XvXldB` exited4 before collection due to a nonexistent test filename; corrected targeted `scratch/exp247-green2.Cy4iOs60` passed25/25. `Task8LiveCampaign` now permits only hash-bound, read-only 9+5 case preview and raises `FULL_RESTART_PROOF_UNAVAILABLE` before any Worker action. The CLI raises the same error before unified admission, child launch or journal creation. Ordinary Demo Python eight-worker gate `scratch/exp247-python-full.syqY01QR` exited0 in41 s, 4182 passed/162 skipped. Overlay build `scratch/exp247-demo-build.0KH12ZM4` exited0 in3 s. Package `scratch/exp247-demo-colcon.JD6hiA9J` used the exact task Python and a fresh NVMe scratch proved by `tempfile.gettempdir()`, exited0 in166 s with 4182 passed/162 skipped/12 deselected; `test-result --verbose` exited0, aggregate 5718 tests/0 errors/0 failures/205 skipped. Installed campaign and CLI resolve to this source tree, SHA256 `d9efbc1df334309fe5aab2f291bc6c7a66ba126ba28d0d3c219e39d5de5e05d7` and `b78056b52c6026b157c11a55492354a8f338e01f2d6d04c7f4bf6d4f881bd37d`; `git diff --check` clean. Earlier EXP-245/246 fake 14-case success and CP-245/246 positive lifecycle claims are superseded: they did not prove per-case stack restart. No ROS stack, Task8 live case, W8 or formal episode; Train/Val/Test 0/0/0. Retain all registered run logs/XML and historical evidence, archive none, scratch trees deletion candidates only, delete nothing.
+
+## CP-247 — Task 8 lifecycle boundary
+
+- Last valid experiment: EXP-247. The installed Task8 CLI and campaign fail closed until each frozen case has a fresh complete simulator/ROS stack and independent clean-retirement receipt. Previous single-child case journal logic cannot qualify `FULL_RESTART`.
+- Remaining gates: implement the per-case stack owner and production physical Task8 phase port, measure all five current-source Task6 checks to `TASK8_READY`, then run nine prefixes and five full cases with actual readbacks. W8 qualification and exact-W8 formal collection remain unstarted; Train/Val/Test 0/0/0.
