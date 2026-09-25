@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 066e1ad258a609b5fdbbf8f0cbc4490bbd2a62b1
+current_commit: defa40815b608fb6b88523e94e55a0ee732c9ca9
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -16,8 +16,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: CP-257
-next_experiment: EXP-258 physical Task 8 port and common-step observer wiring
+latest_checkpoint: CP-258
+next_experiment: EXP-259 admitted-child physical-source provisioning and stop dispatch
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1934,3 +1934,14 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 
 - Last valid experiment: EXP-257. The admitted child now refuses scene/model/version/receipt drift before creating a ROS node and holds exact nine-phase contact pairs for a future physical port.
 - Remaining gates: wire common-step world/scene/contact/RGB/controller and actual motion/Planning Scene methods into `Task8Port`; prove per-case full stack restart and cleanup, dynamically measure Task6 to `TASK8_READY`, then Task8 live, W8 and formal collection. `FULL_RESTART_PROOF_UNAVAILABLE` and `CALIBRATION_REQUIRED` remain enforced; Train/Val/Test 0/0/0.
+
+## EXP-258 — ROS physical-source wiring and nonblocking hazard queue
+
+- **PLANNED:** Source HEAD `defa40815b608fb6b88523e94e55a0ee732c9ca9`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. Compose existing MuJoCo world, full scene, whole-robot contact, dual RGB/joints and broker reference observers under one installed compiled model and phase contact policy. Arm only from a fresh paused step-zero atomic reset receipt; switching phase must immediately recheck the last contact frame. ROS callbacks enqueue a hazard without blocking the executor. Test real model/activated synthetic policy and a legal support contact becoming illegal at TRANSPORT. This is evidence wiring only; no physical motion or `Task8Port` phase implementation and no live claim. Run Demo ordinary/package gates with unique proved NVMe scratch. Retain evidence, archive none, scratch trees deletion candidates only, delete nothing.
+
+- **VALID as a source-only evidence composition:** Missing-module RED `scratch/exp258-red.ROej4Rn1` exited2 at `Task8RosEvidence`; first GREEN `scratch/exp258-green.3rrtpwsn` reached a test-fixture mismatch between core and ROS atomic message types, corrected by publishing the ROS wire type. Targeted `scratch/exp258-green2.3OsdnWZh` passed7/7. A new truncated-world callback RED `scratch/exp258-red2.boVCROSB` failed because no hazard was enqueued; after adding `MujocoWorldObserver.on_hazard`, targeted `scratch/exp258-green3.M0vI0D8b` exited0, 23/23 across contact, world-observer and readback tests in9 s. `Task8RosEvidence` now composes six subscribed sources, checks one bound compiled model, arms only from a fresh paused reset step zero, switches contact allowlists through immediate old-frame recheck, and queues callback hazards without waiting on controller stop. Ordinary Demo eight-worker full `scratch/exp258-demo-full.H6alFK4P` exited0 in45 s, 4215 passed/162 skipped. Demo overlay build `scratch/exp258-demo-build.Tb1WWjBB` exited0 in2 s. Demo package `scratch/exp258-demo-colcon.RVrDKYSW` used exact task Python and fresh verified NVMe TMPDIR/TMP/TEMP, exited0 in174 s with 4215 passed/162 skipped/12 benchmark deselected; `test-result --verbose` exited0, aggregate 5767 tests/0 errors/0 failures/205 skipped. Installed modules resolve through the task overlay build tree; source SHA256 `task8_sources.py` `46e4ced452de9697be16bb0fa7267399ddb7f8128d9789cd1e980f50b976312f`, `observer.py` `4db0eb46b602439b7117b14c5148ae3adaa108c9c1f156d29052666f38da139f`. `git diff --check` clean. No ROS child, stack, motion, Task8 phase PASS, W8 or formal episode; Train/Val/Test 0/0/0. Retain all runs; archive none; scratch trees deletion candidates only; delete nothing.
+
+## CP-258 — Physical sources are composed but not yet a phase port
+
+- Last valid experiment: EXP-258. The compiled model and activated geometry drive same-step readback sources, and world/contact/scene hazards enter a nonblocking queue.
+- Next dependency: provision this source set inside the admitted child with a trusted stop dispatcher and then implement physical Task8Port methods. `ACT_TASK8_PORT_NOT_PROVISIONED`, `FULL_RESTART_PROOF_UNAVAILABLE` and `CALIBRATION_REQUIRED` remain enforced. No live Task8 case, W8 or formal episode; Train/Val/Test 0/0/0.

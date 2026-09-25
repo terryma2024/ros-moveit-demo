@@ -2,7 +2,10 @@
 
 import hashlib
 import json
+import copy
 from pathlib import Path
+import time
+from types import SimpleNamespace
 
 import mujoco
 import pytest
@@ -166,3 +169,66 @@ def test_act_child_retains_compiled_phase_pairs_before_ros_init(tmp_path, monkey
     driver = RclpyActionDriver()
     assert model_sha256(driver._act_model) == model_sha256(expected_model)
     assert driver._act_contact_pairs.for_phase("SEARCH") != driver._act_contact_pairs.for_phase("CLOSE")
+
+
+def test_ros_sources_arm_only_from_reset_and_enqueue_phase_contact_hazard(tmp_path):
+    from so101_demo.adapters.act.task8_sources import Task8RosEvidence
+    from so101_mujoco_support.msg import RobotContactEvidence
+    from so101_mujoco_support.msg import SimulationEvidence as RosSimulationEvidence
+
+    model, scene, proposal, receipt, fingerprint = artifacts(tmp_path)
+    pairs = Task8ContactPairs(model=model, scene_path=scene, proposal_path=proposal,
+                              receipt_path=receipt, expected_fingerprint=fingerprint)
+
+    class Node:
+        def __init__(self):
+            self.topics = []
+
+        def create_subscription(self, _kind, topic, _callback, _qos):
+            self.topics.append(topic)
+            return SimpleNamespace(get_publisher_count=lambda: 1)
+
+    node = Node()
+    sources = Task8RosEvidence(
+        node, object(), model=model, contact_pairs=pairs, session_id="s",
+        max_wall_age_s=0.2, max_source_skew_s=0.005, max_sim_gap_s=0.003,
+        joint_tolerance_rad=0.001, cup_pose_tolerance_m=0.001,
+        cup_orientation_tolerance=0.001,
+    )
+    assert {"/so101/simulation/evidence", "/so101/simulation/scene_state",
+            "/so101/simulation/robot_contacts", "/head_camera/color",
+            "/wrist_camera/color", "/joint_states"} <= set(node.topics)
+    with pytest.raises(ValueError, match="TASK8_RESET_UNAVAILABLE"):
+        sources.arm("SEARCH")
+    reset = RosSimulationEvidence()
+    reset.header.frame_id = "world"
+    reset.publisher_sequence = 1
+    reset.simulation_step = 0
+    reset.reset_epoch = 1
+    reset.simulation_session_id = "s"
+    reset.paused = True
+    reset.object_body_id = 1
+    reset.object_body = "cup"
+    reset.object_pose_world.position.x = 0.1
+    reset.object_pose_world.position.y = -0.2
+    reset.object_pose_world.position.z = 0.15
+    reset.object_pose_world.orientation.w = 1.0
+    sources.world.accept(reset, received_at_s=time.monotonic())
+    assert sources.arm("SEARCH") == 1
+    sources.contact_adapter.accept_message(RobotContactEvidence(
+        simulation_session_id="s", reset_epoch=1, physics_step=1,
+        simulation_time_s=0.002, geom_a=["bottom_collision"],
+        geom_b=["table_collision"], signed_distance_m=[-0.001],
+        normal_force_n=[1.0], truncated=False, evidence_loss=False,
+    ))
+    assert sources.contacts.safe()
+    sources.set_phase("TRANSPORT")
+    assert sources.take_hazard() == "ROBOT_CONTACT_HAZARD"
+    assert sources.take_hazard() is None
+    truncated = copy.deepcopy(reset)
+    truncated.publisher_sequence = 2
+    truncated.simulation_step = 1
+    truncated.paused = False
+    truncated.truncated = True
+    sources.world._callback(truncated)
+    assert "truncated" in sources.take_hazard()
