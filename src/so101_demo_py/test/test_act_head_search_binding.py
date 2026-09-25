@@ -74,6 +74,31 @@ def test_head_search_binding_builds_attempt_config_from_reset_neck(tmp_path):
     assert config["attempt_id"] == "try-1"
 
 
+def test_head_search_binding_neck_guard_uses_measured_interval(tmp_path):
+    runtime, report, _, _ = _inputs(tmp_path)
+    bound = validate_head_search_binding(runtime, report)
+    assert bound.neck_motion_allowed(-3.14, 3.14) is True
+    assert bound.neck_motion_allowed(0.0, 3.141) is False
+    assert bound.neck_motion_allowed(-3.141, 0.0) is False
+    assert bound.neck_motion_allowed(float("nan"), 0.0) is False
+    assert bound.neck_motion_allowed(0.0, True) is False
+    with pytest.raises(ValueError, match="HEAD_SEARCH_NECK_OUT_OF_RANGE"):
+        bound.search_config(session_id="sim-1", attempt_id="try-1", search_start_rad=3.141)
+
+
+def test_head_search_binding_rejects_reversed_measured_neck_interval(tmp_path):
+    runtime, report, _, sample_path = _inputs(tmp_path)
+    document = json.loads(sample_path.read_text())
+    document["measurements"]["lock_valid_neck_rad"] = [3.14, -3.14]
+    sample_path.write_text(json.dumps(document))
+    digest = hashlib.sha256(sample_path.read_bytes()).hexdigest()
+    for item in report["measurements"].values():
+        item["sample_sha256"] = digest
+    report["measurements"]["lock_valid_neck_rad"]["value"] = [3.14, -3.14]
+    with pytest.raises(ValueError, match="HEAD_SEARCH_MEASUREMENT_INVALID"):
+        validate_head_search_binding(runtime, report)
+
+
 def test_head_search_detector_builder_uses_bound_model_and_thread_count(tmp_path):
     from so101_demo.adapters.act.detector import build_bound_head_detector
 

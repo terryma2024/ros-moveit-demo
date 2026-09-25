@@ -35,9 +35,23 @@ class HeadSearchBinding:
     motion: dict
     search_values: dict
 
+    def neck_motion_allowed(self, current_rad: float, target_rad: float) -> bool:
+        """Use the measured lock interval as the neck command guard."""
+        interval = self.search_values.get("lock_valid_neck_rad")
+        if not _valid_neck_interval(interval):
+            return False
+        if any(type(value) not in (int, float) or not math.isfinite(value)
+               for value in (current_rad, target_rad)):
+            return False
+        return all(interval[0] <= value <= interval[1]
+                   for value in (current_rad, target_rad))
+
     def search_config(self, *, session_id: str, attempt_id: str,
                       search_start_rad: float) -> dict:
         from .search import HeadSearchController
+
+        if not self.neck_motion_allowed(search_start_rad, search_start_rad):
+            raise ValueError("HEAD_SEARCH_NECK_OUT_OF_RANGE")
 
         names = ("horizontal_fov_rad", "coarse_step_rad", "search_timeout_s",
                  "max_age_s", "max_skew_s", "center_deadband_px",
@@ -56,6 +70,12 @@ class HeadSearchBinding:
 
 def _finite_positive(value):
     return type(value) in (int, float) and math.isfinite(value) and value > 0
+
+
+def _valid_neck_interval(value) -> bool:
+    return (type(value) in (list, tuple) and len(value) == 2
+            and all(type(item) in (int, float) and math.isfinite(item) for item in value)
+            and value[0] < value[1])
 
 
 def _regular_bytes(path: Path, code: str) -> bytes:
@@ -173,6 +193,7 @@ def validate_head_search_binding(runtime: dict, calibration: dict) -> HeadSearch
         if (values["min_confidence"] < 0.25 or
                 not 0 < values["tracking_iou"] <= 1 or
                 not _finite_positive(values["min_bbox_aspect"]) or
+                not _valid_neck_interval(values["lock_valid_neck_rad"]) or
                 not 0 < values["max_skew_s"] <= values["max_age_s"] or
                 not 0 < values["submit_lead_s"] <= 5 or
                 not 0 < values["stop_latency_s"] <= 30 or
