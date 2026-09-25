@@ -198,7 +198,7 @@ def test_act_contact_diagnostic_launch_rejects_bad_manifest_before_stack(tmp_pat
     assert constructed==[]
 
 
-def test_act_contact_diagnostic_launch_uses_half_speed_for_paired_path_checks(tmp_path,monkeypatch):
+def test_act_contact_diagnostic_launch_uses_receipt_safe_speed_for_paired_path_checks(tmp_path,monkeypatch):
     import json
     from launch import LaunchContext
     from launch.utilities import perform_substitutions
@@ -232,4 +232,4 @@ def test_act_contact_diagnostic_launch_uses_half_speed_for_paired_path_checks(tm
     monkeypatch.setattr(launch,'_mujoco_stack_actions',stack)
     opaque=next(action for action in description.entities if isinstance(action,OpaqueFunction))
     with pytest.raises(Capture):opaque.execute(context)
-    assert captured==[.5]
+    assert captured==[.65]
