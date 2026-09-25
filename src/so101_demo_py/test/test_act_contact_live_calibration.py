@@ -7,6 +7,7 @@ import pytest
 
 from so101_demo.act.contact_live_calibration import (
     build_live_sample, live_collector_sha256, select_live_window,
+    select_session_window,
 )
 
 
@@ -55,6 +56,19 @@ def test_live_window_rejects_step_gaps_and_wrong_side():
     frames = [_frame(1, left=True), _frame(2, left=True, right=True)]
     with pytest.raises(ValueError):
         select_live_window(frames, "left_only")
+
+
+def test_live_left_only_control_uses_measured_reset_transient():
+    frames = [_frame(1, left=True), _frame(2, left=True)]
+    frames += [_frame(step, table=True) for step in range(3, 12)]
+    for row in frames:
+        row["simulation_time_s"] = row["physics_step"] * .002
+    selected = select_session_window(
+        frames, "left_only", first_motion_time=.02, final_pause_step=5)
+    assert [row["physics_step"] for row in selected] == [1, 2]
+    with pytest.raises(ValueError, match="initial reset contact"):
+        select_session_window(
+            frames[1:], "left_only", first_motion_time=.02, final_pause_step=5)
 
 
 def test_live_sample_requires_completed_pair_stop_and_lossless_physics(tmp_path):
