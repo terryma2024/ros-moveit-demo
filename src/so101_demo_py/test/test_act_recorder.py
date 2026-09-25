@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from so101_demo.act.expert import MoveItExpertActionTap
+from so101_demo.act.expert import MoveItExpertActionTap, CausalEpisodeCapture
 from so101_demo.act.recorder import EpisodeRecorder, RecorderInfraError, require_grid, verify_episode_seal
 
 
@@ -69,6 +69,46 @@ def test_expert_label_reads_future_controller_reference_not_measured_state():
         "positions": (1., 2., 3., 4., 5., 6.), "source": "MEASURED_JOINTS"}
     with pytest.raises(ValueError, match="EXPERT_REFERENCE_SOURCE_INVALID"):
         MoveItExpertActionTap(source).label(1.0)
+
+
+def test_capture_binds_action_and_audit_to_one_verified_reference_query(tmp_path):
+    class Reference:
+        def __init__(self):
+            self.calls = []
+
+        def reference_state(self, at_s):
+            self.calls.append(at_s)
+            return {"requested_sim_time_s": at_s, "positions": (0.3,) * 6,
+                    "source": "CONTROLLER_REFERENCE"}
+
+    source = Reference()
+    recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
+                               attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
+    capture = CausalEpisodeCapture(recorder, MoveItExpertActionTap(source))
+    physical_audit = {key: value for key, value in audit(1.0).items()
+                      if key not in {"reference_time_s", "reference_source", "reference_positions"}}
+    assert capture.append(observation(1.0), physical_audit) == (0.3,) * 6
+    assert source.calls == [1.1]
+    row = json.loads((tmp_path / "episode/records.jsonl").read_text().splitlines()[0])
+    assert row["action"] == [0.3] * 6
+    assert row["audit"]["reference_positions"] == [0.3] * 6
+    assert row["audit"]["reference_time_s"] == 1.1
+
+
+def test_missing_reference_emits_no_training_row_or_image(tmp_path):
+    class Missing:
+        def reference_state(self, at_s):
+            raise RuntimeError("cancelled interval")
+
+    recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
+                               attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
+    capture = CausalEpisodeCapture(recorder, MoveItExpertActionTap(Missing()))
+    physical_audit = {key: value for key, value in audit(1.0).items()
+                      if key not in {"reference_time_s", "reference_source", "reference_positions"}}
+    with pytest.raises(ValueError, match="EXPERT_REFERENCE_UNAVAILABLE"):
+        capture.append(observation(1.0), physical_audit)
+    assert list((tmp_path / "episode/frames").iterdir()) == []
+    assert verify_episode_seal(recorder.finish(outcome("FAILED")))["record_count"] == 0
 
 
 def test_recorder_seals_lossless_rgb_and_keeps_audit_out_of_observation(tmp_path):
