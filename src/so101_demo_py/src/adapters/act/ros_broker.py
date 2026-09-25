@@ -6,6 +6,7 @@ import math
 import secrets
 import threading
 import time
+import uuid as _uuid
 
 from action_msgs.msg import GoalStatusArray
 from action_msgs.srv import CancelGoal
@@ -19,6 +20,7 @@ from mujoco_ros2_control_msgs.srv import ResetWorld,SetPause
 from rclpy.action import ActionClient
 from rclpy.qos import qos_profile_action_status_default, qos_profile_sensor_data
 from sensor_msgs.msg import JointState
+from unique_identifier_msgs.msg import UUID as RosGoalUUID
 
 from so101_demo.act.contracts import finite, fields
 from so101_demo.act.joints import ARM_JOINTS, ACT_JOINTS, JOINT_LIMITS
@@ -274,18 +276,28 @@ class RosBrokerDriver:
 
     def validate(self,kind,goal):return validated_goal(kind,goal)
 
-    def submit(self,kind,goal):
+    def submit(self,kind,goal,*,goal_uuid=None):
         if self.hazard_reason:raise RuntimeError(self.hazard_reason)
         if any(not future.done() for future in self._pending_writes):raise RuntimeError('RESET_PENDING')
         if not self.ready(kind):raise RuntimeError('ACTION_SERVER_UNAVAILABLE')
+        prepared_uuid=None
+        if goal_uuid is not None:
+            try:
+                parsed=_uuid.UUID(goal_uuid)
+                if str(parsed)!=goal_uuid:raise ValueError('GOAL_UUID_INVALID')
+                prepared_uuid=RosGoalUUID(uuid=list(parsed.bytes))
+            except (TypeError,ValueError,AttributeError) as error:
+                raise ValueError('GOAL_UUID_INVALID') from error
         gid=secrets.token_hex(16)
         record=dict(kind=kind,accepted=None,handle=None,result=None,feedback=None,
                     cancel_requested=False,cancel_response=None,error=None,submitted_goal=copy.deepcopy(goal),
                     submitted_sim_s=self.node.get_clock().now().nanoseconds*1e-9)
+        if prepared_uuid is not None:record['ros_goal_id']=parsed.hex
         with self._lock:self._records[gid]=record
         try:
-            future=self.clients[kind].send_goal_async(goal,
-                feedback_callback=lambda message:self._feedback(gid,message))
+            options=dict(feedback_callback=lambda message:self._feedback(gid,message))
+            if prepared_uuid is not None:options['goal_uuid']=prepared_uuid
+            future=self.clients[kind].send_goal_async(goal,**options)
             future.add_done_callback(lambda response:self._accepted(gid,response))
         except Exception as error:
             with self._lock:record['accepted']=None;record['error']=repr(error);self.hazard_reason='GOAL_SEND_UNCERTAIN'
@@ -302,7 +314,10 @@ class RosBrokerDriver:
                 handle=future.result();record['handle']=handle;record['accepted']=bool(handle.accepted)
                 if hasattr(self,'node'):record['accepted_sim_s']=self.node.get_clock().now().nanoseconds*1e-9
                 if handle.accepted:
-                    record['ros_goal_id']=bytes(handle.goal_id.uuid).hex()
+                    actual_goal_id=bytes(handle.goal_id.uuid).hex()
+                    if record.get('ros_goal_id') is not None and record['ros_goal_id']!=actual_goal_id:
+                        record['error']='GOAL_UUID_MISMATCH';self.hazard_reason='GOAL_UUID_MISMATCH';return
+                    record['ros_goal_id']=actual_goal_id
                     handle.get_result_async().add_done_callback(lambda result:self._result(gid,result))
                     if record['cancel_requested']:self._cancel(gid)
             except Exception as error:record['error']=repr(error);self.hazard_reason='GOAL_RESPONSE_LOST'
