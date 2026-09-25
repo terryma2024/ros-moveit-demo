@@ -52,6 +52,9 @@ def test_live_window_rejects_step_gaps_and_wrong_side():
     frames = [_frame(1, left=True), _frame(3, left=True)]
     with pytest.raises(ValueError):
         select_live_window(frames, "left_only")
+    frames = [_frame(1, left=True), _frame(2, left=True, right=True)]
+    with pytest.raises(ValueError):
+        select_live_window(frames, "left_only")
 
 
 def test_live_sample_requires_completed_pair_stop_and_lossless_physics(tmp_path):
@@ -129,6 +132,39 @@ def test_live_sample_requires_completed_pair_stop_and_lossless_physics(tmp_path)
     with pytest.raises(ValueError, match="gap"):
         build_live_sample(
             run, regime="no_contact", seed=0, sample_id="live-no_contact-000", metadata=metadata)
-    frames = [_frame(1, left=True), _frame(2, left=True, right=True)]
-    with pytest.raises(ValueError):
-        select_live_window(frames, "left_only")
+
+
+def test_live_process_inventory_reads_only_current_user_processes(tmp_path, monkeypatch):
+    import os
+    from so101_demo.act import contact_live_session
+    process = tmp_path / "12345"
+    process.mkdir()
+    (process / "environ").write_bytes(b"ROS_DOMAIN_ID=208\0")
+    (process / "cmdline").write_bytes(b"python3\0worker\0")
+    uid = os.getuid()
+    monkeypatch.setattr(contact_live_session.os, "getuid", lambda: uid + 1)
+    assert contact_live_session._task_processes(208, proc_root=tmp_path) == []
+    monkeypatch.setattr(contact_live_session.os, "getuid", lambda: uid)
+    assert contact_live_session._task_processes(208, proc_root=tmp_path) == [
+        (12345, "python3 worker ")]
+
+
+def test_live_process_inventory_skips_known_inaccessible_daemon_but_fails_on_unknown(tmp_path, monkeypatch):
+    from so101_demo.act import contact_live_session
+    process = tmp_path / "12345"
+    process.mkdir()
+    (process / "environ").write_bytes(b"")
+    (process / "cmdline").write_bytes(b"/usr/lib/systemd/systemd\0--user\0")
+    (process / "status").write_text("Name:\tsystemd\nState:\tS (sleeping)\n")
+    original = Path.read_bytes
+
+    def denied(path):
+        if path == process / "environ":
+            raise PermissionError("host denies unrelated daemon environ")
+        return original(path)
+
+    monkeypatch.setattr(Path, "read_bytes", denied)
+    assert contact_live_session._task_processes(208, proc_root=tmp_path) == []
+    (process / "cmdline").write_bytes(b"ros2_control_node\0")
+    with pytest.raises(RuntimeError, match="PROC_ENV_UNVERIFIABLE"):
+        contact_live_session._task_processes(208, proc_root=tmp_path)

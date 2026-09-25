@@ -28,19 +28,39 @@ def _fsync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
-def _task_processes(domain_id: int) -> list[tuple[int, str]]:
+def _task_processes(domain_id: int, *, proc_root: Path = Path("/proc")) -> list[tuple[int, str]]:
     token = f"ROS_DOMAIN_ID={domain_id}".encode()
     records = []
-    for path in Path("/proc").iterdir():
+    for path in proc_root.iterdir():
         if not path.name.isdigit() or int(path.name) == os.getpid():
             continue
         try:
+            # This collector launches as the current user. Other owners'
+            # /proc environments can be unreadable and cannot be our child.
+            if path.stat().st_uid != os.getuid():
+                continue
             environment = (path / "environ").read_bytes().split(b"\0")
             if token not in environment:
                 continue
             command = (path / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")
         except FileNotFoundError:
             continue
+        except PermissionError as error:
+            # Same-user login managers can be nondumpable. Inspect their
+            # readable process identity; all other denials stay fail-closed.
+            try:
+                status = (path / "status").read_text()
+                command_bytes = (path / "cmdline").read_bytes()
+            except FileNotFoundError:
+                continue
+            if any(line.startswith("State:") and line.split()[1] == "Z"
+                   for line in status.splitlines()):
+                continue
+            if (command_bytes.startswith(b"/usr/lib/systemd/systemd\0--user\0") or
+                    command_bytes.startswith(b"(sd-pam)\0") or
+                    command_bytes.startswith(b"sshd: ")):
+                continue
+            raise RuntimeError(f"PROC_ENV_UNVERIFIABLE: {path.name}") from error
         records.append((int(path.name), command))
     return records
 
@@ -53,7 +73,7 @@ def _domain_graph(domain_id: int, environment: dict[str, str]) -> str:
         raise RuntimeError("ROS domain graph read failed: " + result.stderr)
     subprocess.run(["/opt/ros/jazzy/bin/ros2", "daemon", "stop"],
                    env=scoped, capture_output=True, text=True, timeout=15)
-    time.sleep(1.)
+    time.sleep(2.)
     return result.stdout
 
 
