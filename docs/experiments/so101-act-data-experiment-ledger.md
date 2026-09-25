@@ -5,7 +5,7 @@ success_contract: Frozen isolated candidates, qualified control/reference/RGB/ph
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 642d55d557232c9734bb5a4b99a412d6c5fc7a54
+current_commit: 66528da5b394a0ba50218a36e5dcc46eb038f686
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -16,8 +16,8 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - New ACT camera and execution profile can preserve the existing expert behavior.
-latest_checkpoint: CP-259
-next_experiment: EXP-260 admitted-child physical-source provisioning and stop dispatch
+latest_checkpoint: CP-260
+next_experiment: EXP-261 admitted-child physical-source provisioning
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1956,3 +1956,14 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 
 - Last valid experiment: EXP-259. A lost atomic publisher sequence now denies reset arm before source observers can be reset or any phase starts.
 - Next dependency: provision physical evidence and stop dispatch in the admitted child, then implement the actual physical Task8Port and per-case full-stack lifecycle. `ACT_TASK8_PORT_NOT_PROVISIONED`, `FULL_RESTART_PROOF_UNAVAILABLE` and `CALIBRATION_REQUIRED` remain enforced. No live Task8 case, W8 or formal episode; Train/Val/Test 0/0/0.
+
+## EXP-260 — Dispatch source hazards outside ROS callbacks
+
+- **PLANNED:** Source HEAD `66528da5b394a0ba50218a36e5dcc46eb038f686`, task overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. Build a bounded-poll dispatcher for `Task8RosEvidence`'s nonblocking hazard queue. Its own thread must set the Task8 cancellation fence before asking the owned broker to cancel and prove stop; broker error or unavailable stop proof remains latched and never reports success. A test must prove enqueue returns before blocked broker stop, and another test must prove stop uncertainty stays unconfirmed. Do not provision the production child or unlock Task8Port in this slice; child wiring follows as a separate dependency. Run ordinary Demo/package gates with unique proved NVMe scratch. No ROS stack or motion; retain evidence, archive none, scratch trees deletion candidates only, delete nothing.
+
+- **VALID as a source-only hazard dispatcher:** Missing-class RED `scratch/exp260-red.tQmw05vf` exited2 at the intended `Task8HazardDispatcher` import. Targeted GREEN `scratch/exp260-green.KGaq3CTL` exited0, 25/25; after reducing the adapter surface to `take_hazard()`, targeted `scratch/exp260-green2.dMjrwUWp` exited0, 9/9. A test holds the broker stop call blocked while hazard enqueue returns and cancellation is already set, then proves `refresh_stop` and `stopped()` before confirming; a second test makes `stop_all` raise and checks the terminal state remains unconfirmed with the error retained. The dispatcher polls the queue at 5 ms, sets the Task8 cancellation fence before invoking the broker, and never reports stop success without the owned broker's readback. Ordinary Demo eight-worker full `scratch/exp260-demo-full.4yEYYCbt` exited0 in45 s, 4217 passed/162 skipped. Overlay build `scratch/exp260-demo-build.y0LEmdyd` exited0 in2 s. Package `scratch/exp260-demo-colcon.cRXAfbi6` used exact task Python and a unique proved NVMe TMPDIR/TMP/TEMP, exited0 in174 s with 4217 passed/162 skipped/12 benchmark deselected; `test-result --verbose` exited0, aggregate 5769 tests/0 errors/0 failures/205 skipped. Installed module resolves through the task overlay build tree; source `task8_sources.py` SHA256 `f2060b78ac9e06c951db7e5618ca0c8e1254cff092700c92dba8095680621aaf`. `git diff --check` clean; no task-owned MuJoCo/MoveIt/ACT child process. The dispatcher is not yet instantiated by the admitted child, so this is not a live physical-stop claim. No ROS motion, Task8 phase PASS, W8 or formal episode; Train/Val/Test 0/0/0. Retain all runs; archive none; scratch trees deletion candidates only; delete nothing.
+
+## CP-260 — Callback path cannot wait for broker cancellation
+
+- Last valid experiment: EXP-260. Callback hazards enter a queue; a separate dispatcher can latch cancellation and wait for owned broker stop proof without blocking the ROS executor.
+- Next dependency: instantiate the sources and dispatcher in the admitted child using bound calibration and model data; implement physical Task8Port and full-stack per-case lifecycle. `ACT_TASK8_PORT_NOT_PROVISIONED`, `FULL_RESTART_PROOF_UNAVAILABLE` and `CALIBRATION_REQUIRED` remain enforced. No live Task8 case, W8 or formal episode; Train/Val/Test 0/0/0.
