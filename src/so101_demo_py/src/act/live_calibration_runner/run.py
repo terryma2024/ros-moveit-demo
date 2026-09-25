@@ -106,6 +106,7 @@ try:
     control = acquire_after_stop(
         connection, owner="recovery", session=session, attempt="live-resume",
         status_context=status_context, status_records=result["status"])
+    result["resume_request_monotonic_s"] = time.monotonic()
     resume = connection.request("pause", control, paused=False)
     result["resume"] = resume
     assert resume["pause_result"]["success"]

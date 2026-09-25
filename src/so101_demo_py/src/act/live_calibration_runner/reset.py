@@ -97,6 +97,19 @@ try:
     receipt = resetter.reset("task_start", free_overrides, joint_overrides=joint_overrides)
     result["receipt"] = dataclasses.asdict(receipt)
     result["scalar"] = resetter.last_reset_joint_snapshot
+    final_pause = observer.snapshot_with_receipt()
+    evidence = final_pause.evidence
+    assert (evidence.paused and evidence.simulation_session_id == session and
+            evidence.reset_epoch == receipt.new_epoch and evidence.simulation_step > 0), \
+        "FINAL_RESET_PAUSE_EVIDENCE_MISSING"
+    result["final_pause"] = {
+        "simulation_session_id": evidence.simulation_session_id,
+        "reset_epoch": evidence.reset_epoch,
+        "physics_step": evidence.simulation_step,
+        "simulation_time_s": evidence.simulation_time_s,
+        "received_monotonic_s": final_pause.received_monotonic_s,
+        "paused": evidence.paused,
+    }
     require_stop_proof(connection, control, result["status"])
     result["release"] = connection.request("release", control)
     control = None
