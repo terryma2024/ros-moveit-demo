@@ -24,7 +24,8 @@ class Task8SearchBoundary:
     """Run one reset and one SEARCH using the admitted child's broker."""
 
     def __init__(self, reset_boundary, *, binding, geometry: TaskGeometry,
-                 snapshot_root: Path, scene_node_factory, scene_port_factory=None,
+                 snapshot_root: Path, scene_node_factory, neck_sweep_checker,
+                 scene_port_factory=None,
                  adapter_factory=build_task8_search_adapter,
                  segment_factory=Task8SearchSegment,
                  scene_timeout_s=2.0, max_source_wait_s=0.2,
@@ -38,12 +39,14 @@ class Task8SearchBoundary:
                 or not all(callable(value) for value in (
                     scene_node_factory, adapter_factory, segment_factory, monotonic, sleep,
                 ))
+                or not callable(getattr(neck_sweep_checker, "check", None))
                 or scene_port_factory is not None and not callable(scene_port_factory)
                 or min(waits) <= 0 or poll_interval_s > max_source_wait_s
                 or stop_timeout_s > 30):
             raise ValueError("TASK8_SEARCH_BOUNDARY_CONFIG_INVALID")
         self.reset, self.binding, self.geometry = reset_boundary, binding, geometry
         self.snapshot_root = snapshot_root
+        self.neck_sweep_checker = neck_sweep_checker
         self.scene_node_factory = scene_node_factory
         self.scene_port_factory = scene_port_factory or (
             lambda node: _scene_port(node, scene_timeout_s)
@@ -97,6 +100,7 @@ class Task8SearchBoundary:
             adapter = self.adapter_factory(
                 self.reset.node, boundary=self.reset, binding=self.binding,
                 request=request, snapshot_root=self.snapshot_root,
+                neck_sweep_checker=self.neck_sweep_checker,
             )
             operation_guard = getattr(adapter, "operation_guard", None)
             if not callable(operation_guard):
