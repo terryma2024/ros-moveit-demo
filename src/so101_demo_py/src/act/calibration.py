@@ -39,6 +39,7 @@ CHECK_MEASUREMENTS = {
     "release": frozenset(("grasp_occlusion_window_s", "support_distance_m", "release_stable_s")),
     "retreat": frozenset(("retreat_distance_m", "placement_stable_s")),
 }
+TASK8_READY_CHECKS = frozenset(("fov", "collision", "search", "synchronization", "execution"))
 
 
 def _validate_measurements(measurements, *, complete):
@@ -101,3 +102,29 @@ def require_qualified(report):
     if any(value != "PASS" for value in report["checks"].values()):
         raise ValueError("CALIBRATION_REQUIRED")
     _validate_measurements(report["measurements"], complete=True)
+
+
+def require_gate(report: dict, gate: str) -> None:
+    """Require measured preflight for Task 8 or the later complete formal gate."""
+    if gate == "formal_collection":
+        require_qualified(report)
+        return
+    if gate != "task8_live":
+        raise ValueError("CALIBRATION_GATE_INVALID")
+    fields(report, ("schema_version", "status", "source_commit", "config_sha256",
+                    "measurements", "checks"))
+    if (report["schema_version"] != 1 or isinstance(report["schema_version"], bool)
+            or report["status"] != "TASK8_READY"
+            or not isinstance(report["source_commit"], str)
+            or re.fullmatch(r"[0-9a-f]{40}", report["source_commit"]) is None):
+        raise ValueError("CALIBRATION_REQUIRED")
+    sha256(report["config_sha256"])
+    fields(report["checks"], REQUIRED_CHECKS)
+    if (any(report["checks"][name] != "PASS" for name in TASK8_READY_CHECKS)
+            or any(report["checks"][name] != "UNMEASURED"
+                   for name in REQUIRED_CHECKS - TASK8_READY_CHECKS)):
+        raise ValueError("CALIBRATION_REQUIRED")
+    _validate_measurements(report["measurements"], complete=False)
+    for check in TASK8_READY_CHECKS:
+        if not CHECK_MEASUREMENTS[check] <= set(report["measurements"]):
+            raise ValueError("CALIBRATION_CHECK_EVIDENCE_MISSING")

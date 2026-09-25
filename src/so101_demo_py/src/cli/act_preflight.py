@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import subprocess
 
-from so101_demo.act.calibration import REQUIRED_CHECKS, require_qualified, validate_partial
+from so101_demo.act.calibration import REQUIRED_CHECKS, require_gate, validate_partial
 
 
 def main(arguments=None):
@@ -47,7 +47,9 @@ def main(arguments=None):
         if measured["source_commit"] != source_commit or measured["config_sha256"] != config_hash:
             raise ValueError("CALIBRATION_SOURCE_CONFIG_MISMATCH")
         if measured.get("status") == "QUALIFIED":
-            require_qualified(measured)
+            require_gate(measured, "formal_collection")
+        elif measured.get("status") == "TASK8_READY":
+            require_gate(measured, "task8_live")
         else:
             validate_partial(measured)
         report = measured
@@ -56,7 +58,7 @@ def main(arguments=None):
     with options.output.open("x") as stream:
         json.dump(report,stream,indent=2); stream.write("\n")
     print(report["status"])
-    return 0 if report["status"] == "QUALIFIED" else 2
+    return 0 if report["status"] in ("TASK8_READY", "QUALIFIED") else 2
 
 
 if __name__ == "__main__":
