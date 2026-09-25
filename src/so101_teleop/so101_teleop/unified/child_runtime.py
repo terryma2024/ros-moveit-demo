@@ -142,6 +142,9 @@ class ChildRuntime:
         if request.deadline_ns <= time.monotonic_ns():
             raise MutationError("ACT_DEADLINE_EXPIRED")
         if request.operation == "cancel":
+            # Freeze new business operations before awaiting the stop driver.
+            # Repeated cancel remains available to prove eventual physical stop.
+            self.act_failed = True
             if not callable(getattr(self.driver, "cancel_act", None)):
                 raise MutationError("ACT_DRIVER_NOT_PROVISIONED")
             try:
@@ -178,6 +181,8 @@ class ChildRuntime:
             except Exception as error:
                 self.act_failed = True
                 raise MutationError("ACT_CHILD_FAILED") from error
+            if self.web_dead or self.act_failed:
+                raise MutationError("ACT_CHILD_FENCED")
             if not isinstance(result, dict):
                 self.act_failed = True
                 raise MutationError("ACT_RESULT_INVALID")

@@ -90,6 +90,58 @@ def test_child_crash_fences_following_work_but_cancel_remains_available():
     assert driver.seen == []
 
 
+def test_child_cancel_fences_new_work_before_stop_ack_and_after_success():
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    class SlowStopDriver(ActDriver):
+        async def cancel_act(self, request):
+            entered.set()
+            await release.wait()
+            return await super().cancel_act(request)
+
+    driver = SlowStopDriver()
+    child = runtime(driver)
+
+    async def exercise():
+        stopping = asyncio.create_task(child.dispatch_act(request(operation="cancel")))
+        await entered.wait()
+        with pytest.raises(MutationError, match="ACT_CHILD_FENCED"):
+            await child.dispatch_act(request())
+        release.set()
+        assert (await stopping)["stopped_confirmed"] is True
+        with pytest.raises(MutationError, match="ACT_CHILD_FENCED"):
+            await child.dispatch_act(request())
+        assert (await child.dispatch_act(request(operation="cancel")))["stopped_confirmed"] is True
+
+    asyncio.run(exercise())
+    assert driver.seen == []
+
+
+def test_child_cancel_cannot_publish_success_from_an_inflight_phase():
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    class SlowPhaseDriver(ActDriver):
+        async def task8_phase(self, item):
+            entered.set()
+            await release.wait()
+            return await super().task8_phase(item)
+
+    driver = SlowPhaseDriver()
+    child = runtime(driver)
+
+    async def exercise():
+        running = asyncio.create_task(child.dispatch_act(request()))
+        await entered.wait()
+        assert (await child.dispatch_act(request(operation="cancel")))["stopped_confirmed"] is True
+        release.set()
+        with pytest.raises(MutationError, match="ACT_CHILD_FENCED"):
+            await running
+
+    asyncio.run(exercise())
+
+
 def test_child_fences_action_uncertainty_even_when_driver_raises_mutation_error():
     class UncertainDriver(ActDriver):
         async def task8_phase(self, request):
