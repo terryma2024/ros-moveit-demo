@@ -20,6 +20,7 @@ from .act_artifacts import ActArtifactBinding
 from .bridge import ActChildLaunch
 from .child_runtime import NORMAL_SOCKET_NAME, READY_FILE_NAME, SAFETY_SOCKET_NAME
 from .contracts import MutationError, OwnerKey
+from .task8_startup_issuer import InstalledActStackReadinessProbe, Task8StartupProofIssuer
 
 
 def _retirement_receipt(root: Path, owner: OwnerKey, *, stack: bool,
@@ -64,9 +65,12 @@ class Task8CaseOwner:
 
     def __init__(self, workload_service, child_owner, *, stack_factory,
                  final_clear_probe, artifact_binding=ActArtifactBinding.from_admission,
+                 startup_proof_issuer=Task8StartupProofIssuer,
+                 require_startup_proof: bool = True,
                  final_clear_timeout_s: float = 5.0) -> None:
         if (not callable(stack_factory) or not inspect.iscoroutinefunction(final_clear_probe)
-                or not callable(artifact_binding)
+                or not callable(artifact_binding) or not callable(startup_proof_issuer)
+                or type(require_startup_proof) is not bool
                 or not 0 < final_clear_timeout_s <= 30):
             raise ValueError("TASK8_CASE_OWNER_CONFIG_INVALID")
         self.workload_service = workload_service
@@ -74,6 +78,8 @@ class Task8CaseOwner:
         self.stack_factory = stack_factory
         self.final_clear_probe = final_clear_probe
         self.artifact_binding = artifact_binding
+        self.startup_proof_issuer = startup_proof_issuer
+        self.require_startup_proof = require_startup_proof
         self.final_clear_timeout_s = final_clear_timeout_s
         self.context = None
         self.worker = None
@@ -144,6 +150,14 @@ class Task8CaseOwner:
             if not isinstance(owner_key, OwnerKey) or stack.owner != owner_key:
                 raise MutationError("TASK8_CASE_STACK_OWNER_INVALID")
             self.stack_owner_key = owner_key
+            if self.require_startup_proof:
+                probe = getattr(stack, "ready_probe", None)
+                if (not isinstance(probe, InstalledActStackReadinessProbe)
+                        or probe.readiness_bytes is None):
+                    raise MutationError("TASK8_STARTUP_PROOF_UNAVAILABLE")
+                self.startup_proof_issuer(
+                    context, child, owner_key, self.child_owner_key,
+                ).issue(probe.readiness_bytes)
             self._ready = True
             return context, self.worker
         except BaseException:

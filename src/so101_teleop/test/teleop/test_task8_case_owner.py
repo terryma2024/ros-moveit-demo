@@ -5,7 +5,9 @@ from dataclasses import replace
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
+import time
 from types import SimpleNamespace
 import uuid
 
@@ -15,6 +17,10 @@ from so101_teleop.unified.act_stack import ActStackLaunch
 from so101_teleop.unified.bridge import ActChildLaunch
 from so101_teleop.unified.contracts import MutationError, OwnerKey
 from so101_teleop.unified.task8_case_owner import Task8CaseOwner
+from so101_teleop.unified.task8_startup_issuer import (
+    InstalledActStackReadinessProbe, Task8StartupProofIssuer,
+)
+from so101_teleop.unified.task8_startup_proof import Task8StartupProofConsumer
 
 
 OWNER = OwnerKey(12345, 12345, 101, "a" * 64, "b" * 64)
@@ -140,6 +146,7 @@ def prepared(tmp_path, *, fail=None):
         Workload(), ChildOwner(), stack_factory=stack_factory,
         final_clear_probe=final_clear,
         artifact_binding=lambda _payload, _context: "bound-artifacts",
+        require_startup_proof=False,
     )
     return owner, spec, context, events
 
@@ -222,6 +229,79 @@ def test_failed_stack_start_after_spawn_keeps_child_and_admission_owned(tmp_path
         asyncio.run(owner.start(spec))
     assert owner.context is context
     assert events == ["admit", "child.start", "stack.start"]
+
+
+def test_live_case_cannot_be_ready_without_installed_startup_proof(tmp_path):
+    owner, spec, context, events = prepared(tmp_path)
+    owner.require_startup_proof = True
+    with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_UNAVAILABLE"):
+        asyncio.run(owner.start(spec))
+    assert owner.context is context
+    assert events == ["admit", "child.start", "stack.start"]
+
+
+def test_case_owner_issues_bound_proof_before_returning_ready(tmp_path):
+    owner, spec, context, events = prepared(tmp_path)
+    context.operation_id = "operation-289"
+    for key, digit in (
+        ("source_sha256", "1"), ("manifest_sha256", "2"),
+        ("runtime_config_sha256", "3"), ("collection_config_sha256", "4"),
+        ("contact_policy_fingerprint", "5"),
+    ):
+        setattr(context, key, digit * 64)
+    binary = tmp_path / "act_stack_ready"
+    binary.write_text("#!/usr/bin/env python3\n")
+    binary.chmod(0o700)
+    original_factory = owner.stack_factory
+    child = ActChildLaunch(**spec.payload["children"][0])
+
+    def factory(value, launch):
+        stack = original_factory(value, launch)
+        stack.launch = replace(stack.launch,
+                               environment={"GZ_PARTITION": "act-data-exp289-179"})
+        artifact = {
+            "schema_version": 1, "session_id": child.mujoco_session_id,
+            "ros_domain_id": child.ros_domain_id,
+            "captured_monotonic_ns": time.monotonic_ns(),
+            "checks": {name: True for name in (
+                "mujoco_session", "advancing_physics", "controller_states",
+                "moveit_graph", "physical_stop", "head_rgb", "wrist_rgb",
+            )},
+        }
+
+        def runner(argv, **_kwargs):
+            return subprocess.CompletedProcess(argv, 0,
+                                               (json.dumps(artifact) + "\n").encode(), b"")
+
+        stack.ready_probe = InstalledActStackReadinessProbe(
+            stack.launch, binary, run=runner,
+        )
+        original_start = stack.start
+
+        async def start():
+            assert stack.ready_probe() is True
+            return await original_start()
+
+        stack.start = start
+        return stack
+
+    owner.stack_factory = factory
+    owner.require_startup_proof = True
+    owner.startup_proof_issuer = lambda *args: Task8StartupProofIssuer(
+        *args, live_probe=lambda _owner: True,
+    )
+
+    async def run():
+        await owner.start(spec)
+        receipt = Task8StartupProofConsumer(
+            context, child, stack_owner=OWNER, child_owner=CHILD_OWNER,
+            live_probe=lambda _owner: True,
+        ).consume()
+        assert receipt["operation_id"] == context.operation_id
+        assert events == ["admit", "child.start", "stack.start"]
+        await owner.finish(attempt_id="attempt-271")
+
+    asyncio.run(run())
 
 
 @pytest.mark.parametrize("failure", ["cancel", "stack.stop", "stack.receipt",
