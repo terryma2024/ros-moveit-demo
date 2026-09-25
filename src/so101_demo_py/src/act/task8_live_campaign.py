@@ -140,11 +140,6 @@ class Task8LiveCampaign:
                 try:
                     result = await self.worker.task8(request)
                     self._verify_result(result, case)
-                    self._record(journal, {
-                        "case_id": case["case_id"], "anchor": case["anchor"],
-                        "attempt_id": request["attempt_id"], "status": "PASSED",
-                        "result": result,
-                    })
                 except BaseException as error:
                     stopped = await self._cancel(request)
                     try:
@@ -161,5 +156,17 @@ class Task8LiveCampaign:
                     if isinstance(error, Task8LiveError):
                         raise
                     raise Task8LiveError("TASK8_CASE_EXECUTION_UNCERTAIN") from error
+                try:
+                    self._record(journal, {
+                        "case_id": case["case_id"], "anchor": case["anchor"],
+                        "attempt_id": request["attempt_id"], "status": "PASSED",
+                        "result": result,
+                    })
+                except BaseException as error:
+                    # A failed fsync can leave bytes in the file. Never append a
+                    # contradictory second terminal for this same case.
+                    if not await self._cancel(request):
+                        raise Task8LiveError("TASK8_STOP_NOT_CONFIRMED") from error
+                    raise Task8LiveError("TASK8_JOURNAL_WRITE_FAILED") from error
         return {"status": "PASSED", "prefix_passes": 9, "full_passes": 5,
                 "journal_path": str(self.journal_path)}
