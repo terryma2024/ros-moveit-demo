@@ -312,6 +312,8 @@ class ActCampaignChildOwner:
     ) -> tuple[ActWorkerPort, ...]:
         if self._owners:
             raise MutationError("ACT_CHILDREN_ALREADY_STARTED")
+        if time.monotonic() >= context.deadline_monotonic_s:
+            raise MutationError("ACT_CAMPAIGN_DEADLINE_EXPIRED")
         if len(launches) != context.worker_count:
             raise MutationError("ACT_CHILD_MAP_MISMATCH")
         registry = ActChildRegistry()
@@ -339,6 +341,8 @@ class ActCampaignChildOwner:
         try:
             ports = []
             for child, launch, token in prepared:
+                if time.monotonic() >= context.deadline_monotonic_s:
+                    raise MutationError("ACT_CAMPAIGN_DEADLINE_EXPIRED")
                 owner = self.owner_factory(launch, self.arbiter, self.safety)
                 self._owners.append(owner)
                 owner_key = await owner.start()

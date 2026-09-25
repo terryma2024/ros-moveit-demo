@@ -13,7 +13,8 @@ from fastapi.testclient import TestClient
 
 from so101_teleop.unified.app import create_unified_app, schema_services
 from so101_teleop.unified.arbiter import GlobalMutationArbiter
-from so101_teleop.unified.compose import compose_domain_services
+from so101_teleop.unified.bridge import BridgeLaunch
+from so101_teleop.unified.compose import _DeferredBridgeOwner, compose_domain_services
 from so101_teleop.unified.contracts import MutationError, QualificationView
 from so101_teleop.unified.intent_store import IntentStore
 from so101_teleop.unified.lifecycle import UnifiedLifecycle
@@ -57,6 +58,17 @@ def services(**overrides) -> UnifiedServices:
     base = dict(teleop=None, tasks=None, validation=None, arbiter=None, instances=None)
     base.update(overrides)
     return UnifiedServices(**base)
+
+
+def test_composed_child_receives_the_same_epoch_and_private_token_as_client(tmp_path):
+    launch = BridgeLaunch(Path(sys.executable), tmp_path, "runtime-1",
+                          {"SO101_UNIFIED_SERVICE_EPOCH": "epoch-1"}, tmp_path / "socket")
+    deferred = _DeferredBridgeOwner(launch)
+    deferred.bind(object(), object())
+    assert deferred._owner is not None
+    child_environment = deferred._owner.launch.environment
+    assert child_environment["SO101_CHILD_SERVICE_EPOCH"] == "epoch-1"
+    assert child_environment["SO101_CHILD_SERVICE_TOKEN"] == deferred.service_token
 
 
 def test_startup_marks_teleop_unavailable_when_the_bridge_fails():
