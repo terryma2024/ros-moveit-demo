@@ -224,7 +224,9 @@ def test_real_client_cancel_reaches_the_upstream_durable_coordinator(tmp_path):
 
     # A short root, with the endpoint directly inside it: the server binds its own path here, and
     # Darwin's sun_path is 104 bytes including the NUL, so nesting it deeper would not fit.
-    root = _short_private_root("u").resolve()
+    # Linux addresses long batch-root sockets through /proc/self/fd; keep its
+    # fsync-heavy journal in pytest's registered NVMe scratch.
+    root = (tmp_path if sys.platform != "darwin" else _short_private_root("u")).resolve()
     journal = CoordinatorJournal.create(root / "coordinator", "batch-a")
     try:
         request = BatchRequest("batch-a", RunMode.EXECUTE, ("p1", "p2"), 2, 2, root)
@@ -400,6 +402,7 @@ def _serve_one_control_reply(peer: socket.socket, observed: dict, errors: list) 
     return thread
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="Darwin short AF_UNIX path contract")
 def test_real_control_transport_works_from_a_short_private_directory(tmp_path):
     """The client must reach a real control socket on this host, not only where ``/proc`` exists.
 

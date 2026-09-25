@@ -175,6 +175,34 @@ def test_owner_starts_a_real_child_serves_observe_then_stops_it(tmp_path):
     asyncio.run(run())
 
 
+def test_owner_waits_for_child_argv_to_become_readable_after_spawn(tmp_path, monkeypatch):
+    """A transient pre-exec argv view must not orphan the process we just started."""
+    import so101_teleop.unified.bridge as bridge_module
+
+    real_identity_for = bridge_module.identity_for
+    reads = 0
+
+    def transient_identity(pid, argv, environment):
+        nonlocal reads
+        reads += 1
+        if reads == 1:
+            raise MutationError("PROCESS_ARGV_MISMATCH: transient pre-exec view")
+        return real_identity_for(pid, argv, environment)
+
+    monkeypatch.setattr(bridge_module, "identity_for", transient_identity)
+
+    async def run():
+        rig = Rig(tmp_path)
+        try:
+            owner = await rig.owner_process.start()
+            assert owner.pid > 0 and rig.owner_process.ready()
+            await rig.owner_process.stop_owned()
+        finally:
+            await rig.close()
+
+    asyncio.run(run())
+
+
 def test_identity_is_recomputed_from_the_live_process(tmp_path):
     async def run():
         rig = Rig(tmp_path)

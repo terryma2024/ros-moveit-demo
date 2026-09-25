@@ -30,6 +30,7 @@ from .contracts import (
     RevokeTarget,
 )
 from .ipc import (
+    ACT_OPERATIONS,
     DEFAULT_MAX_BYTES,
     IpcProtocolError,
     IpcReply,
@@ -105,12 +106,20 @@ class ChildRuntime:
         service_epoch: str,
         runtime_id: str,
         normal_queue_limit: int,
+        act_campaign_id: str | None = None,
+        act_worker_id: str | None = None,
+        act_generation: int | None = None,
     ) -> None:
         self.driver = driver
         self.owner = owner
         self.service_epoch = service_epoch
         self.runtime_id = runtime_id
         self.normal_queue_limit = normal_queue_limit
+        self.act_campaign_id = act_campaign_id
+        self.act_worker_id = act_worker_id
+        self.act_generation = act_generation
+        self.act_failed = False
+        self.act_lock = asyncio.Lock()
         self.pending: dict[PendingChildKey, PendingSubmission] = {}
         self.tombstones: dict[PendingChildKey, int] = {}
         self.transition_lock = asyncio.Lock()
@@ -119,6 +128,59 @@ class ChildRuntime:
         self.web_dead_latch = asyncio.Event()
 
     # -- normal channel ----------------------------------------------------------
+
+    async def dispatch_act(self, request: IpcRequest) -> dict:
+        """Route one closed ACT operation; no resource authority is rechecked here."""
+        if request.operation not in ACT_OPERATIONS:
+            raise MutationError("ACT_OPERATION_UNKNOWN")
+        if request.service_epoch != self.service_epoch or request.runtime_id != self.runtime_id:
+            raise MutationError("ACT_RUNTIME_MISMATCH")
+        if request.campaign_id != self.act_campaign_id or request.worker_id != self.act_worker_id:
+            raise MutationError("ACT_WORKER_MISMATCH")
+        if request.execution_generation != self.act_generation:
+            raise MutationError("ACT_GENERATION_STALE")
+        if request.deadline_ns <= time.monotonic_ns():
+            raise MutationError("ACT_DEADLINE_EXPIRED")
+        if request.operation == "cancel":
+            if not callable(getattr(self.driver, "cancel_act", None)):
+                raise MutationError("ACT_DRIVER_NOT_PROVISIONED")
+            try:
+                result = await self.driver.cancel_act(request)
+            except Exception as error:
+                self.act_failed = True
+                raise MutationError("ACT_CANCEL_UNKNOWN") from error
+            if not isinstance(result, dict) or result.get("stopped_confirmed") is not True:
+                self.act_failed = True
+                raise MutationError("ACT_STOP_NOT_CONFIRMED")
+            return result
+        if self.web_dead or self.act_failed:
+            raise MutationError("ACT_CHILD_FENCED")
+        async with self.act_lock:
+            if self.web_dead or self.act_failed:
+                raise MutationError("ACT_CHILD_FENCED")
+            if request.deadline_ns <= time.monotonic_ns():
+                raise MutationError("ACT_DEADLINE_EXPIRED")
+            try:
+                if request.operation == "task8_phase":
+                    method = self.driver.task8_phase
+                elif request.operation == "task8_full":
+                    method = self.driver.task8_full
+                elif request.operation == "act_collection_start":
+                    method = self.driver.act_collection_start
+                elif request.operation == "act_collection_resume":
+                    method = self.driver.act_collection_resume
+                else:
+                    raise MutationError("ACT_OPERATION_UNKNOWN")
+                result = await method(request)
+            except MutationError:
+                raise
+            except Exception as error:
+                self.act_failed = True
+                raise MutationError("ACT_CHILD_FAILED") from error
+            if not isinstance(result, dict):
+                self.act_failed = True
+                raise MutationError("ACT_RESULT_INVALID")
+            return result
 
     async def submit(self, token: DispatchToken) -> DispatchAck:
         if token.runtime_id != self.runtime_id:
@@ -317,6 +379,18 @@ class ChildIpcServer:
             return rejection
         if request.operation in ("observe", "plan_joints", "plan_tcp"):
             return IpcReply(accepted=True, code="OK", result=await self.runtime.observe())
+        if request.operation in ACT_OPERATIONS:
+            try:
+                result = await self.runtime.dispatch_act(request)
+            except MutationError as error:
+                return IpcReply(accepted=False, code=error.code)
+            return IpcReply(accepted=True, code="OK", result={
+                "operation_id": request.token.operation_id,
+                "campaign_id": request.campaign_id,
+                "worker_id": request.worker_id,
+                "execution_generation": request.execution_generation,
+                "body": result,
+            })
         assert request.token is not None
         token = DispatchToken(
             operation_id=request.token.operation_id,

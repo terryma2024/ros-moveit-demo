@@ -124,6 +124,11 @@ def test_ipc_allowlist_is_exactly_the_reviewed_operation_set():
         "camera_preset",
         "parameters",
         "workflow",
+        "task8_phase",
+        "task8_full",
+        "act_collection_start",
+        "act_collection_resume",
+        "cancel",
     }
     schema = IpcRequest.model_json_schema()
     assert schema["additionalProperties"] is False
