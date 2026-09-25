@@ -274,3 +274,65 @@ def test_formal_w8_without_exact_qualification_has_no_resources(tmp_path):
         assert store._query_one("SELECT * FROM gpu_workload_leases") is None
     finally:
         store.close()
+
+
+def test_finish_requires_cleanup_proof_and_releases_exact_owned_resources(tmp_path):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        context = service.start(_start_spec(tmp_path, fingerprint, proposal_path, receipt_path))
+        with pytest.raises(ValueError, match="ACT_CHILD_CLEANUP_NOT_CONFIRMED"):
+            service.finish(context, cleanup_confirmed=False)
+        assert service.child_registry.launches()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
+        assert not service.arbiter.is_idle()
+
+        with pytest.raises(ValueError, match="CAMPAIGN_CONTEXT_MISMATCH"):
+            service.finish(replace(context, physical_gpu_uuid="GPU-foreign"), cleanup_confirmed=True)
+        assert service.child_registry.launches()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
+        assert not service.arbiter.is_idle()
+
+        projection = service.finish(context, cleanup_confirmed=True)
+        assert projection.operation_id == context.operation_id
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+        assert service.child_registry.launches() == ()
+        assert store._query_one("SELECT * FROM act_campaign_contexts") is not None
+        assert service.finish(context, cleanup_confirmed=True) == projection
+    finally:
+        store.close()
+
+
+def test_registry_release_many_never_drops_foreign_child_on_mismatch():
+    registry = ActChildRegistry()
+    first = launch("w00", 40, "session-0")
+    second = launch("w01", 41, "session-1")
+    registry.register(first)
+    registry.register(second)
+    with pytest.raises(ValueError, match="CHILD_RELEASE_MISMATCH"):
+        registry.release_many((first, replace(second, mujoco_session_id="foreign")))
+    assert registry.launches() == (first, second)
+    registry.release_many((first, second))
+    assert registry.launches() == ()
+
+
+def test_finish_keeps_gpu_and_children_when_action_terminal_is_unknown(tmp_path):
+    from so101_teleop.unified.contracts import MutationError
+
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        context = service.start(_start_spec(tmp_path, fingerprint, proposal_path, receipt_path))
+        service.arbiter.prepare_child(context.operation_id, "w00")
+        with pytest.raises(MutationError, match="UNCONVERGED_CHILD"):
+            service.finish(context, cleanup_confirmed=True)
+        assert service.child_registry.launches()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
+        assert service.arbiter.is_blocked()
+    finally:
+        store.close()

@@ -321,7 +321,16 @@ def test_a_stopped_process_keeps_its_identity():
     """Only the operating system's own liveness signal may invalidate an identity."""
     process = _sleep_child()
     try:
-        recorded = read_identity(process.pid)
+        # Popen returns before execve. A first /proc read can see the temporary
+        # empty argv of the forked child, which is not the identity this test
+        # intends to freeze across SIGSTOP.
+        deadline = time.monotonic() + 5.0
+        while True:
+            recorded = read_identity(process.pid)
+            if argv_matches(recorded, (sys.executable, "-c", "import time; time.sleep(120)")):
+                break
+            assert process.poll() is None and time.monotonic() < deadline
+            time.sleep(0.01)
         assert identity_alive(process.pid, recorded.start_marker, recorded.command_sha256)
         os.kill(process.pid, signal.SIGSTOP)
         time.sleep(0.05)
