@@ -94,8 +94,8 @@ def evaluate_act_stack_readiness(*, session_id: str, ros_domain_id: int, now_s: 
     graph = (all(services.get(name) is True for name in _SERVICES)
              and all(actions.get(name) is True for name in _ACTIONS))
     try:
-        samples = joints[-3:]
-        stop = (len(samples) == 3
+        samples = joints[-8:]
+        stop = (len(samples) >= 3
                 and 0 <= now_s - samples[-1]["received_s"] <= 0.5
                 and samples[-1]["received_s"] > samples[0]["received_s"]
                 and samples[-1]["received_s"] - samples[0]["received_s"] >= 0.04
@@ -270,10 +270,23 @@ def main(arguments: list[str] | None = None) -> int:
         failure = latest.failure_code
         if bad_input or world.rejected_count:
             failure = "ACT_STACK_SOURCE_REJECTED"
+        recent_joints = tuple(joints)[-8:]
+        joint_window = {
+            "count": len(recent_joints),
+            "span_s": (recent_joints[-1]["received_s"] - recent_joints[0]["received_s"]
+                       if recent_joints else None),
+            "latest_age_s": (time.monotonic() - recent_joints[-1]["received_s"]
+                             if recent_joints else None),
+            "max_abs_velocity_rad_s": (
+                max(abs(speed) for sample in recent_joints for speed in sample["velocity"])
+                if recent_joints else None
+            ),
+        }
         print(json.dumps({"ready": False, "failure_code": failure,
                           "checks": latest.checks, "world_rejected": world.rejected_count,
                           "world_rejection": world.last_rejection,
-                          "bad_input": bad_input}, sort_keys=True), file=sys.stderr)
+                          "bad_input": bad_input, "joint_window": joint_window},
+                         sort_keys=True), file=sys.stderr)
         return 1
     finally:
         node.destroy_node()
