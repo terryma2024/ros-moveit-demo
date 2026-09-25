@@ -103,6 +103,30 @@ def _await_startup(run: Path, session_id: str) -> dict:
     raise RuntimeError("live startup stop proof is missing: " + repr(last_error))
 
 
+def _await_final_stop(run: Path, session_id: str) -> dict:
+    """Require three fresh stopped reads after the final runner exits."""
+
+    deadline = time.monotonic() + 5.
+    readbacks = []
+    consecutive = 0
+    try:
+        while time.monotonic() < deadline:
+            state = _status(run / "ipc/a", session_id, "live-post-success")
+            readbacks.append(state)
+            if state["hazard_reason"] is not None:
+                raise RuntimeError("live final broker hazard: " + str(state["hazard_reason"]))
+            consecutive = consecutive + 1 if (
+                state["state"] == "IDLE" and state["stop_confirmed"] is True
+            ) else 0
+            if consecutive >= 3:
+                return state
+            time.sleep(.02)
+        raise RuntimeError("live final stop proof is missing")
+    finally:
+        _write_exclusive(run / "broker-post-success-readbacks.json",
+                         _canonical(readbacks) + b"\n")
+
+
 def _verify_plugin_and_speed(run: Path, domain_id: int) -> None:
     deadline = time.monotonic() + 10.
     while time.monotonic() < deadline:
@@ -215,7 +239,7 @@ def run_live_session(
         _verify_plugin_and_speed(run, domain_id)
         _run_script(run, "reset.py", environment, 70.)
         _run_script(run, "run.py", environment, 120.)
-        final = _status(run / "ipc/a", session_id, "live-post-success")
+        final = _await_final_stop(run, session_id)
         _write_exclusive(run / "broker-post-success.json", _canonical(final) + b"\n")
         if (final["state"] != "IDLE" or final["stop_confirmed"] is not True or
                 final["hazard_reason"] is not None):

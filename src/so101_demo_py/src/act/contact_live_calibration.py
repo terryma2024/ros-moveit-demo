@@ -187,6 +187,11 @@ def _verify_execution(run: Path, manifest: dict) -> tuple[dict, int, dict, float
     if (broker["state"] != "IDLE" or broker["stop_confirmed"] is not True or
             broker["hazard_reason"] is not None):
         raise ValueError("live broker final stop proof is invalid")
+    readbacks = _read_json(run / "broker-post-success-readbacks.json")
+    if (not isinstance(readbacks, list) or len(readbacks) < 3 or
+            any(item["state"] != "IDLE" or item["stop_confirmed"] is not True or
+                item["hazard_reason"] is not None for item in readbacks[-3:])):
+        raise ValueError("live broker final three-read stop proof is invalid")
     rejection_path = run / "ipc/contact-diagnostic-guard-rejections.jsonl"
     if rejection_path.is_symlink() or rejection_path.read_bytes():
         raise ValueError("live guard has a rejection")
