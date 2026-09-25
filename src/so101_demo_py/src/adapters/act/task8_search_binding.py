@@ -16,9 +16,13 @@ from .task8_reset import task8_reset_targets
 
 
 def build_task8_search_adapter(node, *, boundary, binding: HeadSearchBinding,
-                               request: dict, snapshot_root: Path, tf_buffer=None) -> RosSearchAdapter:
+                               request: dict, snapshot_root: Path, neck_sweep_checker,
+                               tf_buffer=None) -> RosSearchAdapter:
     """Use the reset epoch, frozen anchor and sole current broker ticket."""
-    if not isinstance(binding, HeadSearchBinding):
+    if (not isinstance(binding, HeadSearchBinding)
+            or not callable(getattr(neck_sweep_checker, "check", None))
+            or getattr(neck_sweep_checker, "model_sha256", None) !=
+               boundary.sources.contact_pairs.model_sha256):
         raise ValueError("TASK8_SEARCH_BINDING_INVALID")
 
     def guard():
@@ -58,6 +62,31 @@ def build_task8_search_adapter(node, *, boundary, binding: HeadSearchBinding,
         raise RuntimeError("TASK8_SEARCH_RESET_FLOOR_INVALID")
     detector = build_bound_head_detector(binding, snapshot_root=snapshot_root)
     guard()
+
+    def neck_motion_allowed(current_rad, target_rad):
+        guard()
+        if not binding.neck_motion_allowed(current_rad, target_rad):
+            return False
+        try:
+            raw = sources.capture(request["attempt_id"])
+            world, scene = raw["world"], raw["scene"]
+            if (world.simulation_session_id != request["session_id"]
+                    or world.reset_epoch != boundary.receipt.new_epoch
+                    or world.paused is not False
+                    or type(world.simulation_step) is not int
+                    or world.simulation_step < 1
+                    or scene["simulation_session_id"] != request["session_id"]
+                    or scene["reset_epoch"] != world.reset_epoch
+                    or scene["simulation_step"] != world.simulation_step
+                    or scene["paused"] is not False):
+                return False
+            return neck_sweep_checker.check(
+                scene["qpos"], current_rad=current_rad, target_rad=target_rad,
+                duration_s=binding.motion["neck_goal_duration_s"],
+            ) is True
+        except (AttributeError, KeyError, TypeError, ValueError, RuntimeError):
+            return False
+
     neck = RosNeckSearchPort(
         node, session_id=request["session_id"], attempt_id=request["attempt_id"],
         goal_duration_s=binding.motion["neck_goal_duration_s"],
@@ -65,7 +94,7 @@ def build_task8_search_adapter(node, *, boundary, binding: HeadSearchBinding,
         stop_timeout_s=binding.search_values["stop_latency_s"],
         stop_velocity_rad_s=binding.search_values["stop_velocity_rad_s"],
         max_age_s=binding.search_values["max_age_s"],
-        command_guard=binding.neck_motion_allowed,
+        command_guard=neck_motion_allowed,
         broker=boundary.broker, ticket_port=guard,
     )
     adapter = RosSearchAdapter(

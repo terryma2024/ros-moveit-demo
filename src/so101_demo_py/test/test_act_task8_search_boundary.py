@@ -83,6 +83,7 @@ def _boundary(*, fail_segment=False, fail_scene=False, stops=True):
 
     def adapter_factory(node, **kwargs):
         assert node is reset.node and kwargs["boundary"] is reset
+        assert callable(kwargs["neck_sweep_checker"].check)
         adapter = SimpleNamespace(operation_guard=lambda: reset._guard(_request()))
         adapters.append(adapter)
         return adapter
@@ -101,6 +102,7 @@ def _boundary(*, fail_segment=False, fail_scene=False, stops=True):
     boundary = Task8SearchBoundary(
         reset, binding=object(), geometry=_geometry(), snapshot_root=Path("/owned/snapshot"),
         scene_node_factory=node_factory, scene_port_factory=scene_factory,
+        neck_sweep_checker=SimpleNamespace(check=lambda *_a, **_k: True),
         adapter_factory=adapter_factory, segment_factory=segment_factory,
         max_source_wait_s=0.1, poll_interval_s=0.01, stop_timeout_s=0.05,
         monotonic=lambda: clock[0], sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),

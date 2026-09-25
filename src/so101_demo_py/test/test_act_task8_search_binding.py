@@ -34,6 +34,13 @@ def _binding():
     return HeadSearchBinding({}, camera, motion, measured)
 
 
+def _sweep(boundary, check=None):
+    return SimpleNamespace(
+        model_sha256=model_sha256(boundary.model),
+        check=check or (lambda *_args, **_kwargs: True),
+    )
+
+
 def _fixture(monkeypatch, *, epoch=1):
     import mujoco
     from pathlib import Path
@@ -76,6 +83,13 @@ def _fixture(monkeypatch, *, epoch=1):
         session_id="session-1", reset_epoch=1, phase="SEARCH",
         scene=SimpleNamespace(floor=1.0), world=world,
         contact_pairs=SimpleNamespace(model_sha256=model_sha256(model)),
+        capture=lambda _attempt_id: {
+            "world": SimpleNamespace(simulation_session_id="session-1",
+                                     reset_epoch=1, simulation_step=2, paused=False),
+            "scene": {"simulation_session_id": "session-1", "reset_epoch": 1,
+                      "simulation_step": 2, "paused": False,
+                      "qpos": tuple(model.key_qpos[0])},
+        },
     )
     class Boundary:
         def __init__(self):
@@ -107,6 +121,7 @@ def test_search_neck_uses_current_broker_ticket_and_measured_interval(monkeypatc
     adapter = build_task8_search_adapter(
         node, boundary=boundary, binding=_binding(), request=request,
         snapshot_root=tmp_path, tf_buffer=object(),
+        neck_sweep_checker=_sweep(boundary),
     )
     assert built and adapter.source_floor_s == 1.0
     joint = JointState(name=["neck_yaw_joint"], position=[0.1], velocity=[0.0])
@@ -131,11 +146,83 @@ def test_search_neck_uses_current_broker_ticket_and_measured_interval(monkeypatc
     connection.close()
 
 
+def test_search_neck_refuses_colliding_same_step_sweep_before_goal(monkeypatch, tmp_path):
+    node, boundary, request, sent, _, connection = _fixture(monkeypatch)
+    checks = []
+
+    def reject(qpos, **kwargs):
+        checks.append((qpos, kwargs))
+        return False
+
+    adapter = build_task8_search_adapter(
+        node, boundary=boundary, binding=_binding(), request=request,
+        snapshot_root=tmp_path, tf_buffer=object(),
+        neck_sweep_checker=_sweep(boundary, reject),
+    )
+    joint = JointState(name=["neck_yaw_joint"], position=[0.1], velocity=[0.0])
+    joint.header.stamp.sec = 1
+    adapter.neck_port._joint(joint)
+    with pytest.raises(PermissionError, match="SEARCH_UNSAFE_MOTION"):
+        adapter.neck_port.command_neck(
+            0.2, session_id="session-1", attempt_id="attempt-1",
+            observation_time_s=1.0,
+        )
+    assert len(checks) == 1 and checks[0][1]["target_rad"] == 0.2
+    assert checks[0][0] == tuple(boundary.model.key_qpos[0])
+    assert sent == []
+    connection.close()
+
+
+@pytest.mark.parametrize("source_failure", ["stale_step", "unavailable"])
+def test_search_neck_refuses_missing_same_step_qpos(monkeypatch, tmp_path, source_failure):
+    node, boundary, request, sent, _, connection = _fixture(monkeypatch)
+    original_capture = boundary.sources.capture
+    if source_failure == "stale_step":
+        def capture(attempt_id):
+            raw = original_capture(attempt_id)
+            raw["scene"]["simulation_step"] -= 1
+            return raw
+    else:
+        def capture(_attempt_id):
+            raise RuntimeError("SOURCE_STEP_MISMATCH")
+    boundary.sources.capture = capture
+    checks = []
+    adapter = build_task8_search_adapter(
+        node, boundary=boundary, binding=_binding(), request=request,
+        snapshot_root=tmp_path, tf_buffer=object(),
+        neck_sweep_checker=_sweep(boundary, lambda *_a, **_k: checks.append(True)),
+    )
+    joint = JointState(name=["neck_yaw_joint"], position=[0.1], velocity=[0.0])
+    joint.header.stamp.sec = 1
+    adapter.neck_port._joint(joint)
+    with pytest.raises(PermissionError, match="SEARCH_UNSAFE_MOTION"):
+        adapter.neck_port.command_neck(
+            0.2, session_id="session-1", attempt_id="attempt-1",
+            observation_time_s=1.0,
+        )
+    assert sent == [] and checks == []
+    connection.close()
+
+
 def test_search_binding_rejects_wrong_running_epoch_before_detector_load(monkeypatch, tmp_path):
     node, boundary, request, sent, built, connection = _fixture(monkeypatch, epoch=2)
     with pytest.raises(RuntimeError, match="TASK8_SEARCH_EPOCH_MISMATCH"):
         build_task8_search_adapter(node, boundary=boundary, binding=_binding(),
-                                   request=request, snapshot_root=tmp_path, tf_buffer=object())
+                                   request=request, snapshot_root=tmp_path, tf_buffer=object(),
+                                   neck_sweep_checker=_sweep(boundary))
+    assert not built and not sent
+    connection.close()
+
+
+def test_search_binding_refuses_wrong_sweep_model_before_detector_load(monkeypatch, tmp_path):
+    node, boundary, request, sent, built, connection = _fixture(monkeypatch)
+    sweep = _sweep(boundary)
+    sweep.model_sha256 = "0" * 64
+    with pytest.raises(ValueError, match="TASK8_SEARCH_BINDING_INVALID"):
+        build_task8_search_adapter(
+            node, boundary=boundary, binding=_binding(), request=request,
+            snapshot_root=tmp_path, tf_buffer=object(), neck_sweep_checker=sweep,
+        )
     assert not built and not sent
     connection.close()
 
@@ -145,7 +232,8 @@ def test_search_binding_rejects_nonfinite_reset_floor_before_detector_load(monke
     boundary.sources.scene.floor = float("nan")
     with pytest.raises(RuntimeError, match="TASK8_SEARCH_RESET_FLOOR_INVALID"):
         build_task8_search_adapter(node, boundary=boundary, binding=_binding(),
-                                   request=request, snapshot_root=tmp_path, tf_buffer=object())
+                                   request=request, snapshot_root=tmp_path, tf_buffer=object(),
+                                   neck_sweep_checker=_sweep(boundary))
     assert not built and not sent
     connection.close()
 
@@ -155,6 +243,7 @@ def test_search_tick_cancellation_stops_before_new_neck_goal(monkeypatch, tmp_pa
     adapter = build_task8_search_adapter(
         node, boundary=boundary, binding=_binding(), request=request,
         snapshot_root=tmp_path, tf_buffer=object(),
+        neck_sweep_checker=_sweep(boundary),
     )
     boundary.cancelled.set()
     with pytest.raises(RuntimeError, match="ACT_TASK8_CANCELLED"):
