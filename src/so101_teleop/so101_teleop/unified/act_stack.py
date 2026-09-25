@@ -81,6 +81,8 @@ class ActStackProcessOwner:
         self.popen = popen
         self.process: subprocess.Popen | None = None
         self.owner: OwnerKey | None = None
+        self.stop_timeout_s = 15.0
+        self._stop_confirmed = False
 
     async def start(self, *, timeout_s: float = 90.0) -> OwnerKey:
         if self.process is not None:
@@ -117,23 +119,26 @@ class ActStackProcessOwner:
             await asyncio.sleep(0.02)
         raise MutationError("ACT_STACK_READINESS_UNPROVED")
 
-    async def stop(self, *, timeout_s: float = 5.0) -> None:
+    async def stop(self, *, timeout_s: float | None = None) -> None:
         if self.process is None:
             return
         if self.owner is None:
             raise MutationError("ACT_STACK_OWNER_UNVERIFIED")
+        timeout_s = self.stop_timeout_s if timeout_s is None else timeout_s
         if not 0 < timeout_s <= 30:
             raise MutationError("ACT_STACK_TIMEOUT_INVALID")
-        try:
-            stopped = await asyncio.wait_for(asyncio.to_thread(self.stop_probe), timeout_s)
-        except (OSError, ValueError, asyncio.TimeoutError) as error:
-            raise MutationError("STOP_NOT_CONFIRMED") from error
-        if stopped is not True:
-            raise MutationError("STOP_NOT_CONFIRMED")
         owner = self.owner
         state = _retirement_owner_state(owner)
         if state not in ("live", "exited"):
             raise MutationError("ACT_STACK_OWNER_IDENTITY_DRIFT")
+        if state == "live" or not self._stop_confirmed:
+            try:
+                stopped = await asyncio.wait_for(asyncio.to_thread(self.stop_probe), timeout_s)
+            except (OSError, ValueError, asyncio.TimeoutError) as error:
+                raise MutationError("STOP_NOT_CONFIRMED") from error
+            if stopped is not True:
+                raise MutationError("STOP_NOT_CONFIRMED")
+            self._stop_confirmed = True
         receipt = None
         if state == "live":
             receipt = terminate_group(
@@ -173,3 +178,4 @@ class ActStackProcessOwner:
             raise MutationError("ACT_STACK_RECEIPT_FAILED") from error
         self.process = None
         self.owner = None
+        self._stop_confirmed = False

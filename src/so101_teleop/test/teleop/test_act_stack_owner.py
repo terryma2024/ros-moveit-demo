@@ -182,3 +182,34 @@ def test_owner_pid_drift_or_receipt_failure_keeps_fence(tmp_path, monkeypatch):
             terminate_group(pgid=owner.pgid, leader_pid=owner.pid, timeout_s=0.2)
 
     asyncio.run(run())
+
+
+def test_graph_clear_retry_does_not_requery_stopped_exited_stack(tmp_path):
+    calls = {"stop": 0, "graph": 0}
+
+    def physical_stop():
+        calls["stop"] += 1
+        if calls["stop"] > 1:
+            raise ValueError("observer cannot run after stack exit")
+        return True
+
+    def graph_clear():
+        calls["graph"] += 1
+        return calls["graph"] > 1
+
+    async def run():
+        item = ActStackProcessOwner(
+            launch(tmp_path, "import time; time.sleep(120)"),
+            ready_probe=lambda: True, stop_probe=physical_stop,
+            graph_clear_probe=graph_clear,
+        )
+        owner = await item.start(timeout_s=3)
+        with pytest.raises(Exception, match="GRAPH_NOT_CLEARED"):
+            await item.stop(timeout_s=0.2)
+        assert item.owner == owner
+        assert item.process.poll() is not None
+        await item.stop(timeout_s=0.2)
+        assert calls == {"stop": 1, "graph": 2}
+        assert (tmp_path / "cleanup-receipt.json").exists()
+
+    asyncio.run(run())
