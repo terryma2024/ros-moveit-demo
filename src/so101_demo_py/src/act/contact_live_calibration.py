@@ -119,7 +119,7 @@ def _read_json(path: Path) -> dict:
     return json.loads(path.read_bytes())
 
 
-def _verify_execution(run: Path, manifest: dict) -> tuple[dict, int]:
+def _verify_execution(run: Path, manifest: dict) -> tuple[dict, int, dict, float]:
     reset = _read_json(run / "reset-result.json")
     receipt = reset["receipt"]
     if (reset.get("success") is not True or receipt["old_epoch"] != 0 or
@@ -127,11 +127,25 @@ def _verify_execution(run: Path, manifest: dict) -> tuple[dict, int]:
             receipt["simulation_session_id"] != manifest["session_id"] or
             reset["status"][-1]["stop_confirmed"] is not True):
         raise ValueError("live reset or stop proof is invalid")
+    pause = reset.get("final_pause")
+    if (not isinstance(pause, dict) or pause.get("paused") is not True or
+            pause.get("simulation_session_id") != manifest["session_id"] or
+            pause.get("reset_epoch") != receipt["new_epoch"] or
+            type(pause.get("physics_step")) is not int or pause["physics_step"] <= 0 or
+            any(not isinstance(pause.get(key), (int, float)) or
+                not math.isfinite(pause[key]) or pause[key] < 0.
+                for key in ("simulation_time_s", "received_monotonic_s"))):
+        raise ValueError("live final reset pause proof is invalid")
     result = _read_json(run / "prefix-result.json")
     if (result.get("success") is not True or result.get("final_stop") is not True or
             result.get("manifest_sha256") != manifest["manifest_sha256"] or
             result.get("session_id") != manifest["session_id"]):
         raise ValueError("live paired route did not complete and stop")
+    resume_start = result.get("resume_request_monotonic_s")
+    if (not isinstance(resume_start, (int, float)) or
+            not math.isfinite(resume_start) or
+            resume_start <= pause["received_monotonic_s"]):
+        raise ValueError("live resume clock proof is invalid")
     expected_segments = math.ceil(len(manifest["target_positions"]) / manifest["segment_rows"])
     if len(result["segments"]) != expected_segments:
         raise ValueError("live route segment count mismatch")
@@ -165,10 +179,13 @@ def _verify_execution(run: Path, manifest: dict) -> tuple[dict, int]:
     from so101_demo.act.contact_live_session import EVIDENCE_PLUGIN_SHA256
     if plugin_sha != EVIDENCE_PLUGIN_SHA256:
         raise ValueError("live mapped evidence plugin provenance mismatch")
-    return result, receipt["new_epoch"]
+    if pause["simulation_time_s"] >= result["segments"][0]["clock"]["sim_time_s"]:
+        raise ValueError("live final reset pause overlaps the first motion")
+    return result, receipt["new_epoch"], pause, resume_start
 
 
-def _read_physics(run: Path, manifest: dict, epoch: int) -> list[dict]:
+def _read_physics(run: Path, manifest: dict, epoch: int,
+                  pause: dict, resume_start: float) -> list[dict]:
     path = run / "ipc/contact-live-physics.ndjson"
     if path.is_symlink() or not path.is_file():
         raise ValueError("live physics evidence is missing or linked")
@@ -176,6 +193,8 @@ def _read_physics(run: Path, manifest: dict, epoch: int) -> list[dict]:
     frames = []
     initial = None
     previous = None
+    pause_row_seen = False
+    approved_pause_gap = False
     for line in path.open("rb"):
         row = json.loads(line)
         if ((row["simulation_session_id"], row["reset_epoch"], row["model_sha256"]) !=
@@ -191,15 +210,28 @@ def _read_physics(run: Path, manifest: dict, epoch: int) -> list[dict]:
                     row["received_monotonic_s"] <= previous["received_monotonic_s"]):
                 raise ValueError("live physics stream has a gap or stale step")
             wall_gap = row["received_monotonic_s"] - previous["received_monotonic_s"]
-            if wall_gap > limits["maximum_receipt_age_s"] and previous["physics_step"] != 50:
-                raise ValueError("live physics receipt exceeded the hard deadline")
+            if wall_gap > limits["maximum_receipt_age_s"]:
+                reset_pause_gap = (
+                    not approved_pause_gap and
+                    previous["physics_step"] == pause["physics_step"] and
+                    abs(previous["simulation_time_s"] - pause["simulation_time_s"]) <= .002 and
+                    previous["received_monotonic_s"] <= pause["received_monotonic_s"] + .02 and
+                    pause["received_monotonic_s"] < resume_start <= row["received_monotonic_s"]
+                )
+                if not reset_pause_gap:
+                    raise ValueError("live physics receipt exceeded the hard deadline")
+                approved_pause_gap = True
         if (abs(row["ros_time_s"] - row["simulation_time_s"]) > limits["maximum_ros_skew_s"] or
                 math.dist(row["cup_position_m"], initial) > limits["maximum_displacement_m"] or
                 _force(row) > limits["maximum_force_n"]):
             raise ValueError("live physics hard limit exceeded")
         frames.append(row)
+        if row["physics_step"] == pause["physics_step"]:
+            if abs(row["simulation_time_s"] - pause["simulation_time_s"]) > .002:
+                raise ValueError("live reset pause step has mismatched simulation time")
+            pause_row_seen = True
         previous = row
-    if len(frames) < 51:
+    if len(frames) < 51 or not pause_row_seen:
         raise ValueError("live physics stream is incomplete")
     return frames
 
@@ -221,8 +253,8 @@ def build_live_sample(
             manifest["motion_policy_sha256"] != metadata["motion_policy_sha256"] or
             manifest["diagnostic_limits"] != metadata["diagnostic_limits"]):
         raise ValueError("live collector or model provenance mismatch")
-    result, epoch = _verify_execution(run, manifest)
-    frames = _read_physics(run, manifest, epoch)
+    result, epoch, pause, resume_start = _verify_execution(run, manifest)
+    frames = _read_physics(run, manifest, epoch, pause, resume_start)
     first_motion_time = result["segments"][0]["clock"]["sim_time_s"]
     window = select_live_window(
         [row for row in frames if row["simulation_time_s"] >= first_motion_time], regime)

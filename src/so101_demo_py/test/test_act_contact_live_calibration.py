@@ -74,21 +74,26 @@ def test_live_sample_requires_completed_pair_stop_and_lossless_physics(tmp_path)
         "success": True, "receipt": {"old_epoch": 0, "new_epoch": 1,
                                       "simulation_step": 0,
                                       "simulation_session_id": manifest["session_id"]},
+        "final_pause": {"simulation_session_id": manifest["session_id"],
+                        "reset_epoch": 1, "physics_step": 200,
+                        "simulation_time_s": .4,
+                        "received_monotonic_s": 1000.201, "paused": True},
         "status": [{"stop_confirmed": True}],
     }))
     positions = [manifest["joint_start_rad"]] + manifest["target_positions"]
     prefix = {"session_id": manifest["session_id"], "attempt_id": manifest["attempt_id"],
-              "sequence": 0, "observation_time_s": .05,
-              "target_times_s": [.05 + .1 * (i + 1) for i in range(len(positions))],
+              "sequence": 0, "observation_time_s": .45,
+              "target_times_s": [.45 + .1 * (i + 1) for i in range(len(positions))],
               "positions": positions}
     stop = {"pair": {"segment_stop_confirmed": True},
             "broker": {"state": "RUNNING", "stop_confirmed": True, "hazard_reason": None}}
     result = {"success": True, "final_stop": True,
               "manifest_sha256": manifest["manifest_sha256"],
               "session_id": manifest["session_id"],
+              "resume_request_monotonic_s": 1001.5,
               "segments": [{"sequence": 0, "prefix": prefix,
                             "permit": {"accepted": True}, "submit": {"accepted": True},
-                            "clock": {"sim_time_s": .05},
+                            "clock": {"sim_time_s": .45},
                             "goal_status": [{"status": 4, "action_accepted": True,
                                              "controllers": [{"status": 4, "result": {"error_code": 0}}] * 2}],
                             "stop_readbacks": [stop] * 3}]}
@@ -98,11 +103,11 @@ def test_live_sample_requires_completed_pair_stop_and_lossless_physics(tmp_path)
     (run / "plugin-sha256.txt").write_text(EVIDENCE_PLUGIN_SHA256 + "\n")
     (run / "ipc/contact-diagnostic-guard-rejections.jsonl").write_text("")
     rows = []
-    for step in range(1, 52):
+    for step in range(1, 252):
         rows.append({"simulation_session_id": manifest["session_id"], "reset_epoch": 1,
                      "model_sha256": manifest["model_sha256"], "physics_step": step,
                      "simulation_time_s": step * .002, "ros_time_s": step * .002,
-                     "received_monotonic_s": 1000. + step * .001,
+                     "received_monotonic_s": 1000. + step * .001 + (2. if step > 200 else 0.),
                      "left_contacts": [], "right_contacts": [],
                      "other_contacts": [{"robot_geom": "table_collision",
                                          "object_body": "plastic_cup", "normal_force_n": .1,
@@ -127,6 +132,14 @@ def test_live_sample_requires_completed_pair_stop_and_lossless_physics(tmp_path)
     sample = build_live_sample(
         run, regime="no_contact", seed=0, sample_id="live-no_contact-000", metadata=metadata)
     assert sample["source"] == "live" and len(sample["frames"]) == 6
+    reset = json.loads((run / "reset-result.json").read_text())
+    reset["final_pause"]["physics_step"] = 199
+    (run / "reset-result.json").write_text(json.dumps(reset))
+    with pytest.raises(ValueError, match="reset pause step|receipt exceeded"):
+        build_live_sample(
+            run, regime="no_contact", seed=0, sample_id="live-no_contact-000", metadata=metadata)
+    reset["final_pause"]["physics_step"] = 200
+    (run / "reset-result.json").write_text(json.dumps(reset))
     rows[30]["physics_step"] += 1
     raw.write_text("".join(json.dumps(row) + "\n" for row in rows))
     with pytest.raises(ValueError, match="gap"):
