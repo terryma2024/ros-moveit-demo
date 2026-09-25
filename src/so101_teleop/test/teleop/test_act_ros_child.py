@@ -592,3 +592,43 @@ def test_act_cancel_interrupts_next_phase_while_runner_thread_is_busy():
     assert port.phases == ["SEARCH"]
     assert port.stops == ["TASK8_ABORT"]
     assert broker.reasons == ["operator", "TASK8_FAILED"]
+
+
+def test_act_cancel_revokes_current_broker_ticket_before_driver_stop():
+    from so101_demo.act.ownership import Ownership
+    from so101_demo.adapters.act.command_broker import CommandBroker
+
+    class BrokerDriver:
+        hazard_reason = None
+
+        def __init__(self):
+            self.authority = None
+            self.stop_states = []
+            self.submissions = []
+
+        def stopped(self): return True
+        def refresh_stop(self): pass
+        def refresh_idle(self): pass
+        def stop_all(self, reason):
+            self.stop_states.append((reason, self.authority.ownership.state))
+        def submit(self, kind, goal):
+            self.submissions.append(kind)
+            return "neck-goal"
+
+    physical = BrokerDriver()
+    authority = CommandBroker(physical, ownership=Ownership(),
+                              simulation_session_id="session-0")
+    physical.authority = authority
+    token = authority.ownership.acquire("act", "session-0", "attempt-0")
+    old_ticket = authority.ownership.ticket(token, "act", "session-0", "attempt-0")
+    driver = RclpyActionDriver(broker=physical, stop_timeout_s=0.02)
+    driver._act_command_broker = authority
+
+    assert asyncio.run(driver.cancel_act(request(operation="cancel"))) == {
+        "stopped_confirmed": True, "reason": "operator",
+    }
+    assert physical.stop_states == [("operator", "STOPPING")]
+    assert authority.ownership.state == "IDLE"
+    with pytest.raises(PermissionError, match="LEASE"):
+        authority.dispatch(old_ticket, "neck", object())
+    assert not physical.submissions

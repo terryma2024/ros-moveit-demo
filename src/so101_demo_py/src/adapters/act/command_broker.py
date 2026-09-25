@@ -45,6 +45,16 @@ class CommandBroker:
                                    session_id=ticket[3],attempt_id=ticket[4],goal_id=gid))
             return gid
 
+    def stop_attempt(self, reason, *, cancelled_event=None):
+        """Close dispatch and signal cancellation under the same broker lock."""
+        identifier(reason)
+        if cancelled_event is not None and not isinstance(cancelled_event, threading.Event):
+            raise TypeError('CANCEL_EVENT_INVALID')
+        with self._lock:
+            if cancelled_event is not None:cancelled_event.set()
+            self.ownership.revoke(reason)
+            self._stop_if_revoked()
+
     def _stop_if_revoked(self):
         if self.ownership.state=='STOPPING':
             generation=self.ownership.generation

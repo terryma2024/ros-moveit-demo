@@ -338,11 +338,24 @@ class RclpyActionDriver:
         raise MutationError("ROS_GOAL_TERMINAL_TIMEOUT")
 
     async def stop_act(self, reason: str) -> bool:
-        self._stop_unknown(reason)
+        authority = self._act_command_broker
+        if authority is None:
+            self._act_cancelled.set()
+            self._stop_unknown(reason)
+        else:
+            if authority.driver is not self._broker:
+                raise MutationError("ACT_BROKER_DRIVER_MISMATCH")
+            try:
+                authority.stop_attempt(reason, cancelled_event=self._act_cancelled)
+            except Exception as error:
+                raise MutationError("ROS_STOP_REQUEST_FAILED") from error
         deadline_ns = time.monotonic_ns() + int(self._stop_timeout_s * 1e9)
         while time.monotonic_ns() < deadline_ns:
-            self._broker.refresh_stop()
-            if self._broker.stopped():
+            if authority is None:
+                self._broker.refresh_stop()
+            else:
+                authority.tick()
+            if self._broker.stopped() and (authority is None or authority.ownership.state == "IDLE"):
                 return True
             await asyncio.sleep(0.005)
         return False
@@ -398,7 +411,6 @@ class RclpyActionDriver:
         return await self._task8(request, mode="full")
 
     async def cancel_act(self, request) -> dict:
-        self._act_cancelled.set()
         reason = request.payload["reason"]
         confirmed = await self.stop_act(reason)
         return {"stopped_confirmed": confirmed is True, "reason": reason}
