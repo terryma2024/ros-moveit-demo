@@ -76,15 +76,35 @@ def _write_policy(tmp_path):
     return fingerprint, proposal_path, receipt_path, receipt
 
 
-def _calibration(tmp_path, *, status):
+def _calibration(tmp_path, *, status, head_search):
     sample = tmp_path / "calibration-sample.json"
+    measured_values = {
+        "horizontal_fov_rad": 1.0, "coarse_step_rad": 0.2, "search_timeout_s": 15.0,
+        "max_fine_corrections": 3, "max_fine_total_rad": 0.5,
+        "min_confidence": 0.5, "tracking_iou": 0.5, "min_bbox_aspect": 0.2,
+        "center_deadband_px": 15.0, "vertical_bounds_px": [100.0, 380.0],
+        "min_area_px2": 100.0, "max_age_s": 0.5, "max_skew_s": 0.1,
+        "lock_valid_neck_rad": [-3.14, 3.14], "submit_lead_s": 0.05,
+        "stop_velocity_rad_s": 0.01, "stop_latency_s": 0.5,
+    }
+    camera_values = {
+        "head_intrinsics_px": [400.0, 400.0, 320.0, 240.0],
+        "head_translation_m": [0.0, 0.0, 0.1],
+        "head_rpy_rad": [0.0, 0.0, 0.0],
+        "yaw_zero_bearing_rad": 0.0,
+    }
     if not sample.exists():
-        sample.write_text("synthetic test sample\n")
+        sample.write_text(json.dumps({
+            "schema_version": 1, "kind": "head_search_qualification", "status": "PASS",
+            "head_search": head_search, "observed_lock_frames": 3,
+            "measurements": measured_values,
+            "camera_measurements": camera_values,
+            "source_commit": "a" * 40, "config_sha256": "b" * 64,
+        }))
     sample_sha = hashlib.sha256(sample.read_bytes()).hexdigest()
     measurements = {name: {
-        "value": 3 if name == "max_fine_corrections" else
-                 [1.0] * size if size > 1 else
-                 0.5 if name in ("min_confidence", "tracking_iou") else 1.0,
+        "value": (measured_values | camera_values).get(name,
+                 [1.0] * size if size > 1 else 1.0),
         "unit": unit, "sample_path": str(sample), "sample_sha256": sample_sha,
     } for name, (unit, size) in REQUIRED_MEASUREMENTS.items()}
     checks = {name: "PASS" for name in (
@@ -99,12 +119,31 @@ def _calibration(tmp_path, *, status):
 
 
 def _start_spec(tmp_path, fingerprint, proposal_path, receipt_path, *, backend="mujoco",
-                calibration_status="TASK8_READY"):
+                calibration_status="TASK8_READY", valid_head_search=True):
+    weights = tmp_path / "head-best.pt"
+    if not weights.exists():
+        weights.write_bytes(b"synthetic-local-head-weights")
+    head_search = {
+        "schema_version": 1,
+        "detector": {"backend": "yolo_seg", "weights_path": str(weights),
+                     "weights_sha256": hashlib.sha256(weights.read_bytes()).hexdigest(),
+                     "model_id": "plastic-cup-test", "image_size_px": 640,
+                     "requested_device": "cuda", "allow_cpu_fallback": False,
+                     "torch_threads": 4, "torch_interop_threads": 2,
+                     "torch_version": "2.0-test", "ultralytics_version": "8.0-test"},
+        "camera": {"frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame",
+                   "width_px": 640, "height_px": 480},
+        "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01,
+                   "neck_goal_duration_s": 0.5},
+    }
     artifacts = {}
     for name in ("source", "runtime_config", "collection_config"):
         path = tmp_path / f"{name}.json"
         if not path.exists():
-            path.write_bytes(_canonical({"artifact": name, "campaign_id": "campaign-1"}))
+            value = ({"schema_version": 1, "head_search": head_search}
+                     if name == "runtime_config" and valid_head_search else
+                     {"artifact": name, "campaign_id": "campaign-1"})
+            path.write_bytes(_canonical(value))
         artifacts[f"{name}_path"] = str(path)
         artifacts[f"{name}_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
     manifest_path = tmp_path / "manifest.json"
@@ -123,7 +162,8 @@ def _start_spec(tmp_path, fingerprint, proposal_path, receipt_path, *, backend="
         manifest_path.write_bytes(_canonical(manifest))
     artifacts["manifest_path"] = str(manifest_path)
     artifacts["manifest_sha256"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
-    calibration_path, calibration_sha = _calibration(tmp_path, status=calibration_status)
+    calibration_path, calibration_sha = _calibration(tmp_path, status=calibration_status,
+                                                    head_search=head_search)
     return OperationSpec(
         command_id="start-1", domain=Domain.VALIDATION, kind="task8_phase",
         payload={
@@ -156,6 +196,19 @@ def _service(store):
         calibration_identity_probe=lambda: ("a" * 40, "b" * 64),
         clock_ns=clock,
     )
+
+
+def test_task8_admission_rejects_runtime_without_qualified_head_search(tmp_path):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path,
+                       valid_head_search=False)
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        with pytest.raises(ValueError, match="HEAD_SEARCH_CONFIG_INVALID"):
+            _service(store).start(spec)
+    finally:
+        store.close()
 
 
 def test_child_artifact_binding_refuses_config_replaced_after_admission(tmp_path):
@@ -200,6 +253,35 @@ def test_act_ros_child_refuses_replaced_artifact_before_ros_node(tmp_path, monke
         Path(spec.payload["runtime_config_path"]).write_text("replaced after admission")
         with pytest.raises(ValueError, match="ACT_ARTIFACT_HASH_MISMATCH"):
             RclpyActionDriver(broker=object())
+    finally:
+        store.close()
+
+
+def test_act_ros_child_refuses_weights_changed_after_admission(tmp_path, monkeypatch):
+    from so101_teleop.unified.act_artifacts import ActArtifactBinding
+    from so101_teleop.unified.ros_child import RclpyActionDriver
+    from so101_demo.adapters.act import task8_contact_pairs
+
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        context = _service(store).start(spec)
+        binding = ActArtifactBinding.from_admission(spec.payload, context)
+        for name, value in binding.environment().items():
+            monkeypatch.setenv(name, value)
+        monkeypatch.setenv("SO101_ACT_CAMPAIGN_ID", context.campaign_id)
+        monkeypatch.setenv("SO101_ACT_MANIFEST_SHA256", context.manifest_sha256)
+        monkeypatch.setenv("SO101_ACT_RUNTIME_CONFIG_SHA256", context.runtime_config_sha256)
+        monkeypatch.setenv("SO101_ACT_POLICY_FINGERPRINT", fingerprint)
+        monkeypatch.setattr(task8_contact_pairs, "load_installed_act_contact_pairs",
+                            lambda **kwargs: pytest.fail("model loaded before weight check"))
+        monkeypatch.setattr(RclpyActionDriver, "_start_ros_broker",
+                            lambda self: pytest.fail("ROS started before weight check"))
+        (tmp_path / "head-best.pt").write_bytes(b"changed-after-admission")
+        with pytest.raises(ValueError, match="HEAD_SEARCH_WEIGHTS_INVALID"):
+            RclpyActionDriver()
     finally:
         store.close()
 
