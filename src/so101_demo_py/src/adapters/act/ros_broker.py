@@ -27,8 +27,11 @@ from so101_demo.act.joints import ARM_JOINTS, ACT_JOINTS, JOINT_LIMITS
 from so101_demo.act.trajectory import controller_point, interpolate_segment
 from .leased_action_client import ACTIONS, message_dict, decoded
 
-ACTION_TYPES={'arm':FollowJointTrajectory,'gripper':FollowJointTrajectory,'execute_trajectory':ExecuteTrajectory}
-NAMES={'arm':ARM_JOINTS[:5],'gripper':ARM_JOINTS[5:],'execute_trajectory':ARM_JOINTS[:5]}
+ACTION_TYPES={'arm':FollowJointTrajectory,'gripper':FollowJointTrajectory,
+              'neck':FollowJointTrajectory,'execute_trajectory':ExecuteTrajectory}
+NAMES={'arm':ARM_JOINTS[:5],'gripper':ARM_JOINTS[5:],
+       'neck':('neck_yaw_joint',),'execute_trajectory':ARM_JOINTS[:5]}
+NECK_SEARCH_COMMAND_BOUNDS=(-2*math.pi,2*math.pi)
 
 
 def direct_goal_reference(record,kind,when):
@@ -98,7 +101,8 @@ def validated_goal(kind,values):
         previous=when
         if len(point.positions)!=len(NAMES[kind]):raise ValueError('GOAL_POSITIONS_INVALID')
         for name,value in zip(NAMES[kind],point.positions,strict=True):
-            if not JOINT_LIMITS[name][0]<=finite(value)<=JOINT_LIMITS[name][1]:raise ValueError('JOINT_LIMIT_INVALID')
+            bounds=NECK_SEARCH_COMMAND_BOUNDS if kind=='neck' else JOINT_LIMITS[name]
+            if not bounds[0]<=finite(value)<=bounds[1]:raise ValueError('JOINT_LIMIT_INVALID')
         for values in (point.velocities,point.accelerations,point.effort):
             if values and len(values)!=len(NAMES[kind]):raise ValueError('GOAL_VECTOR_INVALID')
             for value in values:finite(value)
@@ -111,7 +115,7 @@ def validated_goal(kind,values):
 
 
 class RosBrokerDriver:
-    """Owns all three underlying action clients; status covers MoveIt downstream goals."""
+    """Owns controller and MoveIt actions; stop covers all seven ACT joints."""
 
     def __init__(self,node,*,stop_velocity_rad_s,max_age_s,monotonic=time.monotonic):
         self.node,self.monotonic=node,monotonic
@@ -152,13 +156,14 @@ class RosBrokerDriver:
         if len(set(message.name))!=len(message.name) or len(message.velocity)!=len(message.name):return
         try:
             values=dict(zip(message.name,message.velocity,strict=True));ordered=tuple(finite(values[name]) for name in ARM_JOINTS)
+            neck_velocity=finite(values['neck_yaw_joint'])
         except (KeyError,ValueError):return
         try:
             positions=dict(zip(message.name,message.position,strict=True));positions=tuple(finite(positions[name]) for name in ARM_JOINTS)
         except (KeyError,ValueError):return
         with self._lock:
             self._velocity=ordered;self._positions=positions;self._received=self.monotonic()
-            self._neck_velocity=values.get('neck_yaw_joint')
+            self._neck_velocity=neck_velocity
 
     def _scalar_joints(self,message):
         with self._lock:self._scalar=(message,self.monotonic())
@@ -412,6 +417,7 @@ class RosBrokerDriver:
                 try:future.result()
                 except Exception:return False
             velocities=self._velocity if self._received is not None and 0<=now-self._received<=self.max_age else None
+            neck_velocity=getattr(self,'_neck_velocity',None) if velocities is not None else None
             scalar=getattr(self,'_scalar',None)
             if scalar is not None:
                 message,received=scalar
@@ -420,9 +426,12 @@ class RosBrokerDriver:
                     if message.reset_epoch==epoch.reset_epoch and message.simulation_session_id==epoch.simulation_session_id:
                         if len(message.joint_names)==7 and set(message.joint_names)==set(ACT_JOINTS) and len(message.velocities_rad_s)==7:
                             named=dict(zip(message.joint_names,message.velocities_rad_s,strict=True))
-                            try:velocities=tuple(finite(named[name]) for name in ARM_JOINTS)
+                            try:
+                                velocities=tuple(finite(named[name]) for name in ARM_JOINTS)
+                                neck_velocity=finite(named['neck_yaw_joint'])
                             except ValueError:return False
-            if velocities is None or any(abs(value)>self.stop_velocity for value in velocities):return False
+            if (velocities is None or neck_velocity is None
+                    or any(abs(value)>self.stop_velocity for value in (*velocities,neck_velocity))):return False
             if any(not future.done() for future in self._cancel_all):return False
             for future in self._cancel_all:
                 try:future.result()
@@ -456,7 +465,8 @@ class RosBrokerDriver:
                     except Exception as error:row['error']=repr(error)
                 cancel.append(row)
             return dict(wall_monotonic_s=self.monotonic(),positions_rad=self._positions,
-                velocities_rad_s=self._velocity,joint_received_wall_s=self._received,
+                velocities_rad_s=self._velocity,neck_velocity_rad_s=self._neck_velocity,
+                joint_received_wall_s=self._received,
                 active_statuses=self._statuses,status_received_wall_s=self._status_received,
                 stop_confirmed_at_wall_s=self._stop_confirmed_at,cancel_confirmations=cancel,
                 goals={gid:self.goal_state(gid) for gid in self._records},

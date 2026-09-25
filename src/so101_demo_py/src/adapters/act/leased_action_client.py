@@ -15,7 +15,8 @@ from .command_broker import endpoint_bytes, MAX_REQUEST_BYTES
 
 ACTIONS={'/execute_trajectory':'execute_trajectory',
          '/arm_controller/follow_joint_trajectory':'arm',
-         '/gripper_controller/follow_joint_trajectory':'gripper'}
+         '/gripper_controller/follow_joint_trajectory':'gripper',
+         '/neck_controller/follow_joint_trajectory':'neck'}
 _CONNECTIONS={};_POOL_LOCK=threading.RLock()
 
 
