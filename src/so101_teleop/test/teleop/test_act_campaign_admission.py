@@ -276,6 +276,34 @@ def test_formal_w8_without_exact_qualification_has_no_resources(tmp_path):
         store.close()
 
 
+def test_formal_w8_rejects_a_self_declared_passed_json_without_independent_verifier(tmp_path):
+    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
+    receipt_path.write_text(json.dumps(receipt))
+    base = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
+    fake_path = tmp_path / "qualification.json"
+    fake_path.write_text(json.dumps({
+        "status": "PASSED", "worker_count": 8,
+        "source_sha256": base.payload["source_sha256"],
+        "runtime_config_sha256": base.payload["runtime_config_sha256"],
+        "collection_config_sha256": base.payload["collection_config_sha256"],
+        "contact_policy_fingerprint": fingerprint,
+    }))
+    payload = dict(base.payload, worker_count=8, qualification_receipt_path=str(fake_path),
+                   children=[launch(f"w{index:02d}", 40 + index, f"session-{index}").__dict__
+                             for index in range(8)])
+    formal = replace(base, kind="act_collection_start", payload=payload)
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        with pytest.raises(ValueError, match="W8_QUALIFICATION_VERIFIER_UNAVAILABLE"):
+            service.start(formal)
+        assert service.child_registry.launches() == ()
+        assert service.arbiter.is_idle()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+    finally:
+        store.close()
+
+
 def test_finish_requires_cleanup_proof_and_releases_exact_owned_resources(tmp_path):
     fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
     receipt_path.write_text(json.dumps(receipt))
