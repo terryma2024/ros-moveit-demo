@@ -8,7 +8,7 @@ import pytest
 
 from so101_demo.act.contact_calibration import (
     analyze_evidence, analyze_manifests, seal_cohort, verify_disabled_proposal,
-    make_activation_receipt,
+    make_activation_receipt, _classify, _validated_sample,
 )
 from so101_demo.act.contact_policy import policy_fingerprint, verify_activation
 
@@ -116,6 +116,21 @@ def test_20_offline_and_independent_5_live_produce_disabled_proposal():
     assert result["policy_fingerprint"] == policy_fingerprint(result["payload"])
     assert result["proposal_sha256"] != result["policy_fingerprint"]
     assert result["payload"]["live_collector_sha256"] == _metadata()["live_collector_sha256"]
+
+
+def test_table_supported_bilateral_touch_precedes_off_table_slip_speed():
+    sample = _sample("bilateral_touch", "offline", 0)
+    for frame in sample["frames"]:
+        frame["cup_velocity_m_s"] = [0.0146, 0.0, 0.0]
+    observed = _validated_sample(sample, "offline", _metadata()["diagnostic_limits"], _metadata())
+    thresholds = {
+        "maximum_compression_distance_m": 0.001,
+        "maximum_safe_force_n": 3.21,
+        "maximum_hold_linear_speed_m_s": 0.0038,
+        "minimum_stable_hold_duration_s": 0.011,
+    }
+    assert observed["table_supported"] is True
+    assert _classify(observed, thresholds) == "bilateral_touch"
 
 
 def test_live_collector_provenance_cannot_impersonate_offline_source():

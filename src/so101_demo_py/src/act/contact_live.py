@@ -155,7 +155,11 @@ class LivePhysicsStream:
         self, *, session_id: str, reset_epoch: int, model_sha256: str,
         model_nq: int, model_nv: int, cup_qpos_address: int,
         cup_qvel_address: int, diagnostic_limits: dict,
-        output_path: Path, monotonic: Callable[[], float] = time.monotonic,
+        output_path: Path, release_qpos_address: int | None = None,
+        release_qvel_address: int | None = None,
+        release_open_q6: float | None = None,
+        release_stop_velocity_rad_s: float = .002,
+        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         if not isinstance(session_id, str) or not session_id:
             raise ValueError("live session identity is missing")
@@ -169,6 +173,21 @@ class LivePhysicsStream:
         self.cup_qvel_address = _integer(cup_qvel_address, "cup_qvel_address")
         if self.cup_qpos_address + 3 > model_nq or self.cup_qvel_address + 3 > model_nv:
             raise ValueError("cup state addresses exceed model")
+        release_values = (release_qpos_address, release_qvel_address, release_open_q6)
+        if any(value is not None for value in release_values):
+            if any(value is None for value in release_values):
+                raise ValueError("release state binding is incomplete")
+            if (_integer(release_qpos_address, "release_qpos_address") >= model_nq or
+                    _integer(release_qvel_address, "release_qvel_address") >= model_nv):
+                raise ValueError("release state address exceeds model")
+            _finite(release_open_q6, "release_open_q6")
+        self.release_qpos_address = release_qpos_address
+        self.release_qvel_address = release_qvel_address
+        self.release_open_q6 = release_open_q6
+        self.release_stop_velocity = _finite(
+            release_stop_velocity_rad_s, "release_stop_velocity_rad_s", 0)
+        if self.release_stop_velocity == 0:
+            raise ValueError("release stop velocity must be positive")
         limits = _exact(diagnostic_limits, _LIMIT_KEYS, "diagnostic limits")
         self.limits = {key: _finite(value, key, 0) for key, value in limits.items()}
         if any(value == 0 for value in self.limits.values()):
@@ -189,6 +208,7 @@ class LivePhysicsStream:
         self._receipt_age_anchor = -math.inf
         self._receipt_deadline_suspended = False
         self._initial_cup: list[float] | None = None
+        self._seen_bilateral = False
         directory = os.open(self.output_path.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(directory)
@@ -310,11 +330,20 @@ class LivePhysicsStream:
             parsed = []
             previous_time = self._last_time
             initial_cup = self._initial_cup
+            seen_bilateral = self._seen_bilateral
             for index, sample in enumerate(samples):
                 row = self._validated_step(
                     sample, first + index, previous_time, initial_cup,
                     ros_time_s - (last_simulation_time - sample["simulation_time_s"]),
                 )
+                if row["left_contacts"] and row["right_contacts"]:
+                    seen_bilateral = True
+                if (self.release_qpos_address is not None and seen_bilateral and
+                        row["table_supported"] and not row["left_contacts"] and
+                        not row["right_contacts"] and
+                        abs(row["model_qpos"][self.release_qpos_address] - self.release_open_q6) <= .002 and
+                        abs(row["model_qvel"][self.release_qvel_address]) <= self.release_stop_velocity):
+                    row["released"] = True
                 if row["received_monotonic_s"] <= self._last_receipt or (
                     parsed and row["received_monotonic_s"] <= parsed[-1]["received_monotonic_s"]
                 ):
@@ -342,6 +371,7 @@ class LivePhysicsStream:
             self._last_receipt = parsed[-1]["received_monotonic_s"]
             self._receipt_age_anchor = self._last_receipt
             self._initial_cup = self._initial_cup or parsed[0]["cup_position_m"]
+            self._seen_bilateral = seen_bilateral
             self.recorded_steps += len(parsed)
         except (OSError, TypeError, ValueError) as error:
             self.hazard = str(error)

@@ -64,6 +64,40 @@ def test_live_chunk_stream_persists_contiguous_raw_state(tmp_path):
     assert recorder.recorded_steps == 3
 
 
+def test_live_release_requires_prior_bilateral_contact_and_measured_open_stop(tmp_path):
+    ticks = iter((1000.0 + index * .001 for index in range(100)))
+    recorder = LivePhysicsStream(
+        session_id="session-live-a", reset_epoch=1, model_sha256="a" * 64,
+        model_nq=4, model_nv=4, cup_qpos_address=0, cup_qvel_address=0,
+        release_qpos_address=3, release_qvel_address=3, release_open_q6=.465,
+        diagnostic_limits=LIMITS, output_path=tmp_path / "release.ndjson",
+        monotonic=lambda: next(ticks),
+    )
+    first = _step(1)
+    first["model_qpos"].append(.1)
+    first["model_qvel"].append(0.)
+    first["other_contacts"] = [{"robot_geom": "table_collision", "object_body": "plastic_cup",
+                                "normal_force_n": .1, "signed_distance_m": -.0001}]
+    second = _step(2, force=.4)
+    second["model_qpos"].append(.1)
+    second["model_qvel"].append(0.)
+    second["right_contacts"] = [{"robot_geom": "moving_fingertip_pad_collision_000",
+                                 "object_body": "plastic_cup", "normal_force_n": .4,
+                                 "signed_distance_m": -.0001}]
+    third = _step(3)
+    third["model_qpos"].append(.465)
+    third["model_qvel"].append(.01)
+    third["other_contacts"] = first["other_contacts"]
+    fourth = _step(4)
+    fourth["model_qpos"].append(.465)
+    fourth["model_qvel"].append(0.)
+    fourth["other_contacts"] = first["other_contacts"]
+    recorder.accept_chunk(_chunk(1, first, second, third, fourth), ros_time_s=.008)
+    recorder.close()
+    rows = [json.loads(line) for line in (tmp_path / "release.ndjson").read_text().splitlines()]
+    assert [row["released"] for row in rows] == [False, False, False, True]
+
+
 @pytest.mark.parametrize("damage", ["gap", "session", "loss", "truncated", "force", "state"])
 def test_live_chunk_stream_latches_damage_and_retains_prefix(tmp_path, damage):
     recorder = _stream(tmp_path)

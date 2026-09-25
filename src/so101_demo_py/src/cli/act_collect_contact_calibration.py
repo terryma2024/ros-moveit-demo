@@ -38,9 +38,57 @@ def main(arguments=None):
     parser.add_argument("--scene", type=Path, required=True)
     parser.add_argument("--motion-policy", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument("--plugin", type=Path)
+    parser.add_argument("--metadata", type=Path)
+    parser.add_argument("--run-root", type=Path)
+    parser.add_argument("--regime", choices=(*_REGIMES, *_CONTROLS))
+    parser.add_argument("--seed", type=int)
+    parser.add_argument("--session-id")
+    parser.add_argument("--attempt-id")
+    parser.add_argument("--ros-domain-id", type=int)
+    parser.add_argument("--gz-partition")
+    parser.add_argument("--tmux-name")
+    parser.add_argument("--install-base", type=Path)
+    parser.add_argument("--venv-python", type=Path)
+    parser.add_argument("--source-commit")
     options = parser.parse_args(arguments)
-    if options.mode != "offline":
-        raise ValueError("live collector is not provisioned; no session started")
+    if options.mode == "live":
+        from so101_demo.act.contact_live_calibration import (
+            build_live_sample, live_collector_sha256,
+        )
+        from so101_demo.act.contact_live_session import run_live_session
+        required = ("plugin", "metadata", "run_root", "regime", "seed", "session_id",
+                    "attempt_id", "ros_domain_id", "gz_partition", "tmux_name",
+                    "install_base", "venv_python", "source_commit")
+        if any(getattr(options, name) is None for name in required):
+            raise ValueError("live collector has missing session parameters")
+        if not options.output_root.is_dir() or not (options.output_root / "samples").is_dir():
+            raise ValueError("live campaign root and samples directory must already exist")
+        sample_id = f"live-{options.regime}-{options.seed:03d}"
+        sample_path = options.output_root / "samples" / f"{sample_id}.json"
+        if sample_path.exists():
+            raise FileExistsError(sample_path)
+        metadata = json.loads(options.metadata.read_bytes())
+        if metadata.get("live_collector_sha256") != live_collector_sha256():
+            raise ValueError("live collector metadata hash does not match source")
+        run = run_live_session(
+            options.run_root, scene_path=options.scene,
+            motion_policy_path=options.motion_policy, plugin_path=options.plugin,
+            regime=options.regime, seed=options.seed,
+            session_id=options.session_id, attempt_id=options.attempt_id,
+            domain_id=options.ros_domain_id, partition=options.gz_partition,
+            tmux_name=options.tmux_name, install_base=options.install_base,
+            venv_python=options.venv_python, source_commit=options.source_commit,
+        )
+        sample = build_live_sample(
+            run, regime=options.regime, seed=options.seed,
+            sample_id=sample_id, metadata=metadata)
+        payload = _canonical(sample) + b"\n"
+        _write_exclusive(sample_path, payload)
+        print(json.dumps({"status": "SEALED_SAMPLE", "sample": str(sample_path),
+                          "run": str(run), "sample_sha256": hashlib.sha256(payload).hexdigest()},
+                         sort_keys=True))
+        return 0
     root = options.output_root
     root.mkdir(mode=0o750)
     _fsync_directory(root.parent)
