@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from so101_demo.act.recorder import EpisodeRecorder
 from so101_demo.act.result_store import ActCollectionResultStore, ActCollectionResultVerifier, ResultInfraError
-from so101_demo.parallel_batch.contracts import LeaseIdentity, RunMode
+from so101_demo.parallel_batch.contracts import AttemptStatus, LeaseIdentity, RunMode
 from so101_demo.parallel_batch.contracts import BatchKindV2, BatchRequestV2, load_parallel_runtime_config_v2
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
@@ -98,6 +99,40 @@ def test_corrupt_episode_never_becomes_business_failed_result(tmp_path):
     with pytest.raises(ResultInfraError, match="RESULT_EPISODE_INVALID"):
         store.seal(episode_path)
     assert not (workspace / "sealed").exists()
+
+
+def test_worker_result_port_requires_decision_to_match_episode(tmp_path):
+    current = lease()
+    workspace = tmp_path / "w00/attempts" / current.point_id / current.attempt_id
+    store = ActCollectionResultStore(workspace, current, clock=lambda: 15.)
+    episode_path = failed_episode(store)
+    wrong = SimpleNamespace(status=AttemptStatus.PASSED, episode_seal_path=episode_path)
+    with pytest.raises(ValueError, match="RESULT_TERMINAL_MISMATCH"):
+        store.seal_attempt(current, wrong)
+    right = SimpleNamespace(status=AttemptStatus.FAILED, episode_seal_path=episode_path)
+    sealed = store.seal_attempt(current, right)
+    assert ActCollectionResultVerifier({"w00": tmp_path / "w00"}).verify(
+        current, sealed, RunMode.EXECUTE)["status"] == "FAILED"
+
+
+def test_worker_recovery_receipt_is_exact_lease_and_durable(tmp_path):
+    current = lease()
+    workspace = tmp_path / "w00/attempts" / current.point_id / current.attempt_id
+    store = ActCollectionResultStore(workspace, current, clock=lambda: 15.)
+    path = store.write_recovery_receipt(current, succeeded=True, generation=1,
+                                        deadline_monotonic_s=30., clock=lambda: 16.)
+    assert store.verify_recovery_receipt(path, current, succeeded=True, generation=1,
+                                         deadline_monotonic_s=30., clock=lambda: 17.) is True
+    assert store.verify_recovery_receipt(path, replace(current, worker_generation=2),
+                                         succeeded=True, generation=2,
+                                         deadline_monotonic_s=30., clock=lambda: 17.) is False
+    assert store.verify_recovery_receipt(path, current, succeeded=False, generation=1,
+                                         deadline_monotonic_s=30., clock=lambda: 17.) is False
+    assert store.verify_recovery_receipt(path, current, succeeded=True, generation=1,
+                                         deadline_monotonic_s=30., clock=lambda: 14.) is False
+    path.write_text(path.read_text() + " ")
+    assert store.verify_recovery_receipt(path, current, succeeded=True, generation=1,
+                                         deadline_monotonic_s=30., clock=lambda: 17.) is False
 
 
 def test_coordinator_journals_business_failed_only_after_verifier(tmp_path):
