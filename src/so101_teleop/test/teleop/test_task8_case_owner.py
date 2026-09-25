@@ -157,6 +157,20 @@ def test_case_retirement_precedes_admission_release(tmp_path):
     assert owner.context is None
 
 
+def test_finished_case_owner_cannot_start_a_second_case(tmp_path):
+    owner, spec, _, events = prepared(tmp_path)
+
+    async def run():
+        await owner.start(spec)
+        await owner.finish(attempt_id="attempt-271")
+        completed = tuple(events)
+        with pytest.raises(MutationError, match="TASK8_CASE_OWNER_REUSED"):
+            await owner.start(spec)
+        assert tuple(events) == completed
+
+    asyncio.run(run())
+
+
 def test_admission_failure_spawns_nothing(tmp_path):
     owner, spec, _, events = prepared(tmp_path, fail="admission")
     with pytest.raises(MutationError, match="CALIBRATION_REQUIRED"):

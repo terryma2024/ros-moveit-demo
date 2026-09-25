@@ -85,10 +85,14 @@ class Task8CaseOwner:
         self._stack_retired = False
         self._child_retired = False
         self._final_clear = False
+        self._ever_started = False
 
     async def start(self, spec):
+        if self._ever_started:
+            raise MutationError("TASK8_CASE_OWNER_REUSED")
         if self.context is not None:
             raise MutationError("TASK8_CASE_ALREADY_ADMITTED")
+        self._ever_started = True
         context = self.workload_service.start(spec, allow_existing=False)
         self.context = context
         try:
