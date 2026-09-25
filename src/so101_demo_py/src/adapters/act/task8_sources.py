@@ -80,7 +80,7 @@ class Task8RosEvidence:
 
     def arm(self, phase: str) -> int:
         try:
-            reset = self.world.snapshot()
+            reset = self.world.recent_with_receipts()[-1].evidence
         except Exception as error:
             raise ValueError("TASK8_RESET_UNAVAILABLE") from error
         if (reset.simulation_session_id != self.session_id or reset.paused is not True

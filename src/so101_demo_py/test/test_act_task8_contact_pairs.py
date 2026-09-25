@@ -232,3 +232,13 @@ def test_ros_sources_arm_only_from_reset_and_enqueue_phase_contact_hazard(tmp_pa
     truncated.truncated = True
     sources.world._callback(truncated)
     assert "truncated" in sources.take_hazard()
+    next_reset = copy.deepcopy(reset)
+    next_reset.publisher_sequence = 3
+    next_reset.reset_epoch = 2
+    sources.world._callback(next_reset)
+    gap = copy.deepcopy(next_reset)
+    gap.publisher_sequence = 5
+    sources.world._callback(gap)
+    assert "sequence gap" in sources.take_hazard()
+    with pytest.raises(ValueError, match="TASK8_RESET_UNAVAILABLE"):
+        sources.arm("SEARCH")
