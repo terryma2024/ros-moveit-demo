@@ -38,6 +38,21 @@ CHILD_NORMAL_QUEUE_ENV = "SO101_CHILD_NORMAL_QUEUE_LIMIT"
 DEFAULT_HEARTBEAT_TIMEOUT_S = 5.0
 
 
+def act_identity_from_environment(environment) -> tuple[str | None, str | None, int | None]:
+    values = (
+        environment.get("SO101_ACT_CAMPAIGN_ID"),
+        environment.get("SO101_ACT_WORKER_ID"),
+        environment.get("SO101_ACT_GENERATION"),
+    )
+    if all(value is None for value in values):
+        return None, None, None
+    if any(not isinstance(value, str) or not value for value in values):
+        raise MutationError("ACT_CHILD_IDENTITY_INCOMPLETE")
+    if not values[2].isdecimal() or str(int(values[2])) != values[2]:
+        raise MutationError("ACT_CHILD_GENERATION_INVALID")
+    return values[0], values[1], int(values[2])
+
+
 class RclpyActionDriver:
     """Adapter over the existing Teleop ROS worker.
 
@@ -134,6 +149,7 @@ def main(argv: list[str] | None = None) -> int:
     web_pid = os.environ.get(CHILD_WEB_PID_ENV)
     heartbeat = os.environ.get(CHILD_HEARTBEAT_ENV)
     timeout_s = float(os.environ.get(CHILD_HEARTBEAT_TIMEOUT_ENV, DEFAULT_HEARTBEAT_TIMEOUT_S))
+    campaign_id, worker_id, generation = act_identity_from_environment(os.environ)
 
     runtime = ChildRuntime(
         RclpyActionDriver(),
@@ -141,6 +157,9 @@ def main(argv: list[str] | None = None) -> int:
         service_epoch=service_epoch,
         runtime_id=args.runtime_id,
         normal_queue_limit=normal_queue_limit,
+        act_campaign_id=campaign_id,
+        act_worker_id=worker_id,
+        act_generation=generation,
     )
     server = ChildIpcServer(
         runtime,

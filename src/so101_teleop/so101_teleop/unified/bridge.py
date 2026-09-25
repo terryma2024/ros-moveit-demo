@@ -19,6 +19,7 @@ from pathlib import Path
 from .arbiter import GlobalMutationArbiter
 from .child_runtime import READY_FILE_NAME, NORMAL_SOCKET_NAME, SAFETY_SOCKET_NAME
 from .contracts import (
+    AdmittedCampaignContext,
     CancelReceipt,
     IntentCancelReceipt,
     MutationError,
@@ -64,6 +65,205 @@ class BridgeLaunch:
             "--runtime-id",
             self.runtime_id,
         ]
+
+    def for_act_worker(self, child: "ActChildLaunch") -> "BridgeLaunch":
+        """Freeze a distinct process environment for one admitted ACT Worker."""
+        environment = dict(self.environment)
+        environment.update({
+            "ROS_DOMAIN_ID": str(child.ros_domain_id),
+            "ROS_NAMESPACE": child.namespace,
+            "SO101_ACT_CONTROLLER_NAME": child.controller_name,
+            "SO101_SIMULATION_SESSION_ID": child.mujoco_session_id,
+            "SO101_ACT_CAMPAIGN_ID": child.campaign_id,
+            "SO101_ACT_WORKER_ID": child.worker_id,
+            "SO101_ACT_GENERATION": str(child.execution_generation),
+        })
+        return BridgeLaunch(
+            ros_python=self.ros_python,
+            install_prefix=self.install_prefix,
+            runtime_id=f"{self.runtime_id}-{child.worker_id}-g{child.execution_generation}",
+            environment=environment,
+            socket_root=Path(child.socket_root),
+        )
+
+
+@dataclass(frozen=True)
+class ActChildLaunch:
+    """One frozen ROS/MuJoCo execution identity for one ACT Worker."""
+
+    campaign_id: str
+    worker_id: str
+    execution_generation: int
+    ros_domain_id: int
+    namespace: str
+    controller_name: str
+    mujoco_session_id: str
+    socket_root: str
+
+    def __post_init__(self) -> None:
+        if not self.campaign_id or not self.worker_id or not self.mujoco_session_id:
+            raise ValueError("CHILD_IDENTITY_INVALID")
+        if type(self.execution_generation) is not int or self.execution_generation < 0:
+            raise ValueError("CHILD_GENERATION_INVALID")
+        if type(self.ros_domain_id) is not int or not 0 <= self.ros_domain_id <= 232:
+            raise ValueError("ROS_DOMAIN_INVALID")
+        if not self.namespace.startswith("/") or not self.controller_name:
+            raise ValueError("CHILD_NAMESPACE_INVALID")
+        if not Path(self.socket_root).is_absolute() or len((self.socket_root + "/safety.sock").encode()) > 103:
+            raise ValueError("IPC_SOCKET_PATH_TOO_LONG")
+
+
+class ActChildRegistry:
+    """Reserve child identities and isolated resources before launching any process."""
+
+    def __init__(self) -> None:
+        self._launches: dict[tuple[str, str, int], ActChildLaunch] = {}
+
+    def register(self, launch: ActChildLaunch) -> None:
+        key = (launch.campaign_id, launch.worker_id, launch.execution_generation)
+        if key in self._launches:
+            raise ValueError("DUPLICATE_CHILD")
+        for existing in self._launches.values():
+            if existing.ros_domain_id == launch.ros_domain_id:
+                raise ValueError("ROS_DOMAIN_SHARED")
+            if existing.mujoco_session_id == launch.mujoco_session_id:
+                raise ValueError("MUJOCO_SESSION_SHARED")
+            if existing.socket_root == launch.socket_root:
+                raise ValueError("IPC_SOCKET_SHARED")
+        self._launches[key] = launch
+
+    def launches(self) -> tuple[ActChildLaunch, ...]:
+        return tuple(self._launches.values())
+
+
+class ActWorkerPort:
+    """Typed Web/CLI transport for one admitted campaign Worker."""
+
+    def __init__(self, context: AdmittedCampaignContext, launch: ActChildLaunch, client: "BridgeClient") -> None:
+        if (
+            launch.campaign_id != context.campaign_id
+            or launch.execution_generation != context.execution_generation
+        ):
+            raise MutationError("ACT_WORKER_CONTEXT_MISMATCH")
+        if client.service_epoch != context.service_epoch:
+            raise MutationError("ACT_WORKER_EPOCH_MISMATCH")
+        self.context = context
+        self.launch = launch
+        self.client = client
+
+    def _base(self, request: dict, *, fields: frozenset[str]) -> tuple[str, str, int]:
+        if not isinstance(request, dict) or set(request) != fields:
+            raise MutationError("ACT_WORKER_REQUEST_SCHEMA")
+        session_id = request["session_id"]
+        attempt_id = request["attempt_id"]
+        deadline_ns = request["deadline_ns"]
+        if session_id != self.launch.mujoco_session_id or not isinstance(attempt_id, str) or not attempt_id:
+            raise MutationError("ACT_WORKER_SESSION_MISMATCH")
+        if type(deadline_ns) is not int or not time.monotonic_ns() < deadline_ns <= int(self.context.deadline_monotonic_s * 1e9):
+            raise MutationError("ACT_WORKER_DEADLINE_INVALID")
+        return session_id, attempt_id, deadline_ns
+
+    async def _call(self, operation: str, *, session_id: str, attempt_id: str, deadline_ns: int, payload: dict) -> dict:
+        from .ipc import IpcRequest
+
+        token = {
+            "operation_id": self.context.operation_id,
+            "child_id": self.launch.worker_id,
+            "runtime_id": self.client.runtime_id,
+            "execution_generation": self.context.execution_generation,
+            "deadline_ns": deadline_ns,
+            "revocation_revision": 0,
+        }
+        packet = IpcRequest(
+            version=1, operation=operation,
+            command_id=hashlib.sha256(
+                f"{self.context.operation_id}:{self.launch.worker_id}:{attempt_id}:{operation}".encode()
+            ).hexdigest(),
+            deadline_ns=deadline_ns, service_epoch=self.context.service_epoch,
+            runtime_id=self.client.runtime_id, service_token=self.client.service_token,
+            campaign_id=self.context.campaign_id, worker_id=self.launch.worker_id,
+            session_id=session_id, attempt_id=attempt_id,
+            execution_generation=self.context.execution_generation,
+            token=token, payload=payload,
+        )
+        reply = await self.client.call(packet)
+        if not reply.accepted:
+            raise MutationError(f"ACT_CHILD_REJECTED: {reply.code}")
+        result = reply.result
+        expected = {
+            "operation_id": self.context.operation_id,
+            "campaign_id": self.context.campaign_id,
+            "worker_id": self.launch.worker_id,
+            "execution_generation": self.context.execution_generation,
+        }
+        if not isinstance(result, dict) or any(result.get(key) != value for key, value in expected.items()) or not isinstance(result.get("body"), dict):
+            raise MutationError("ACT_REPLY_IDENTITY_MISMATCH")
+        return result["body"]
+
+    async def task8(self, request: dict) -> dict:
+        fields = frozenset({
+            "session_id", "attempt_id", "scenario_id", "mode", "stop_after",
+            "contact_policy_fingerprint", "deadline_ns",
+        })
+        session_id, attempt_id, deadline_ns = self._base(request, fields=fields)
+        if request["contact_policy_fingerprint"] != self.context.contact_policy_fingerprint:
+            raise MutationError("ACT_POLICY_MISMATCH")
+        mode = request["mode"]
+        if mode == "phase_prefix" and isinstance(request["stop_after"], str):
+            operation = "task8_phase"
+        elif mode == "full" and request["stop_after"] is None:
+            operation = "task8_full"
+        else:
+            raise MutationError("ACT_TASK8_MODE_INVALID")
+        payload = {
+            "scenario_id": request["scenario_id"],
+            "manifest_sha256": self.context.manifest_sha256,
+            "runtime_config_sha256": self.context.runtime_config_sha256,
+            "contact_policy_fingerprint": self.context.contact_policy_fingerprint,
+        }
+        if operation == "task8_phase":
+            payload["stop_after"] = request["stop_after"]
+        return await self._call(
+            operation, session_id=session_id, attempt_id=attempt_id,
+            deadline_ns=deadline_ns, payload=payload,
+        )
+
+    async def act_collection(self, request: dict) -> dict:
+        fields = frozenset({
+            "session_id", "attempt_id", "scenario_id", "mode", "checkpoint_sha256",
+            "contact_policy_fingerprint", "deadline_ns",
+        })
+        session_id, attempt_id, deadline_ns = self._base(request, fields=fields)
+        if request["contact_policy_fingerprint"] != self.context.contact_policy_fingerprint:
+            raise MutationError("ACT_POLICY_MISMATCH")
+        if request["mode"] == "start" and request["checkpoint_sha256"] is None:
+            operation = "act_collection_start"
+        elif request["mode"] == "resume" and isinstance(request["checkpoint_sha256"], str):
+            operation = "act_collection_resume"
+        else:
+            raise MutationError("ACT_COLLECTION_MODE_INVALID")
+        payload = {
+            "scenario_id": request["scenario_id"],
+            "manifest_sha256": self.context.manifest_sha256,
+            "runtime_config_sha256": self.context.runtime_config_sha256,
+            "contact_policy_fingerprint": self.context.contact_policy_fingerprint,
+            "collection_config_sha256": self.context.collection_config_sha256,
+        }
+        if operation == "act_collection_resume":
+            payload["checkpoint_sha256"] = request["checkpoint_sha256"]
+        return await self._call(
+            operation, session_id=session_id, attempt_id=attempt_id,
+            deadline_ns=deadline_ns, payload=payload,
+        )
+
+    async def cancel(self, request: dict) -> dict:
+        session_id, attempt_id, deadline_ns = self._base(
+            request, fields=frozenset({"session_id", "attempt_id", "reason", "deadline_ns"}),
+        )
+        return await self._call(
+            "cancel", session_id=session_id, attempt_id=attempt_id,
+            deadline_ns=deadline_ns, payload={"reason": request["reason"]},
+        )
 
 
 def _hash_environment(environment: dict[str, str]) -> str:
@@ -132,8 +332,22 @@ class BridgeProcessOwner:
             start_new_session=True,
             stdin=subprocess.DEVNULL,
         )
-        self.owner = identity_for(self.process.pid, argv, environment)
-        deadline = time.monotonic() + timeout_s
+        started = time.monotonic()
+        identity_deadline = started + min(timeout_s, 1.0)
+        while True:
+            try:
+                self.owner = identity_for(self.process.pid, argv, environment)
+                break
+            except MutationError as error:
+                if self.process.poll() is not None:
+                    raise MutationError(f"BRIDGE_CHILD_EXITED: {self.process.returncode}") from error
+                code = str(error).split(":", 1)[0]
+                if code not in ("PROCESS_ARGV_MISMATCH", "PROCESS_IDENTITY_UNREADABLE") or time.monotonic() >= identity_deadline:
+                    raise
+                # The just-spawned interpreter can briefly expose an incomplete argv.
+                # No signal is sent until exact kernel identity has been established.
+                await asyncio.sleep(0.01)
+        deadline = started + timeout_s
         ready_path = Path(self.launch.socket_root) / READY_FILE_NAME
         while time.monotonic() < deadline:
             if self.process.poll() is not None:

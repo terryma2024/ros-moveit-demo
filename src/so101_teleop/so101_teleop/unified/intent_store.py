@@ -125,6 +125,23 @@ CREATE TABLE IF NOT EXISTS children (
   cleanup_confirmed INTEGER,
   UNIQUE (operation_id, child_id)
 );
+CREATE TABLE IF NOT EXISTS gpu_workload_leases (
+  stable_host_id TEXT NOT NULL,
+  physical_gpu_uuid TEXT NOT NULL,
+  operation_id TEXT NOT NULL,
+  service_epoch TEXT NOT NULL,
+  owner_pid INTEGER NOT NULL,
+  owner_started_ticks INTEGER NOT NULL,
+  workload TEXT NOT NULL,
+  execution_generation INTEGER NOT NULL,
+  deadline_ns INTEGER NOT NULL,
+  PRIMARY KEY (stable_host_id, physical_gpu_uuid)
+);
+CREATE TABLE IF NOT EXISTS act_campaign_contexts (
+  operation_id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL UNIQUE,
+  context_json TEXT NOT NULL
+);
 """
 
 
@@ -307,8 +324,8 @@ class IntentStore:
         if fences:
             raise MutationError(f"LEASE_FENCE_OPEN: {', '.join(fences)}")
 
-    def insert_parent(self, spec: OperationSpec) -> Reservation:
-        operation_id = uuid.uuid4().hex
+    def insert_parent(self, spec: OperationSpec, *, operation_id: str | None = None) -> Reservation:
+        operation_id = operation_id or uuid.uuid4().hex
         now = self._now_ns()
         self._connection.execute(
             "INSERT INTO parents (operation_id, command_id, fingerprint, domain, kind, payload_json,"
