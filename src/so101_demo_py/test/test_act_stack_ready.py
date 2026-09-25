@@ -130,3 +130,17 @@ def test_controller_query_settles_once_then_stays_idle():
         request_factory=lambda: object(),
     )
     assert pending is None and client.calls == 1
+
+
+def test_eight_recent_100hz_samples_prove_a_stable_stop():
+    value = deepcopy(observations())
+    value["joints"] = tuple({
+        "stamp_s": 10.0 + n * 0.01,
+        "received_s": NOW - 0.08 + n * 0.01,
+        "velocity": (0.0,) * 7,
+    } for n in range(8))
+    assert evaluate_act_stack_readiness(**value).ready is True
+
+    moving = deepcopy(value)
+    moving["joints"][3]["velocity"] = (0.0, 0.0, 0.0, 0.02, 0.0, 0.0, 0.0)
+    assert evaluate_act_stack_readiness(**moving).failure_code == "ACT_STACK_NOT_PHYSICALLY_STOPPED"

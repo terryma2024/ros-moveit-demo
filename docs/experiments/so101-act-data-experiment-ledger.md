@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 5d67906f4c0bee5ec7d0a5b1c095c67e9d8fe857
+current_commit: d28f1553e47fd2acdf6b229c3e34dcd679b4be76
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -13,14 +13,14 @@ confirmed_conclusions:
   - EXP-176 confirms current schema-v3 collector and analyzer are absent from source and installed overlay.
   - CP-177 rebased this branch onto the independently reviewed ACT Task 8 design and plan at approved-main 1e4664517fecc34a01ef6b8959e4a0f7316cda6e.
   - EXP-213 activated the independently reviewed canonical contact-policy fingerprint 0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11 under the user's exact authorization.
-  - CP-285 fixes the real controller-future state error with RED/GREEN and full Demo/package gates; live Task 8 remains fenced.
+  - CP-287 fixes the physically impossible 100 Hz stop sample window with RED/GREEN and full Demo/package gates; live Task 8 remains fenced.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
-  - The corrected installed observer can proceed to the physical/RGB axes on a new isolated stack and produce a startup artifact.
+  - A new isolated installed-CLI run will determine whether the widened 100 Hz sample window proves physical stop or whether measured velocity/time skew still fails.
   - The physical phase port can support measured Task6 TASK8_READY and Task8 live qualification.
-latest_checkpoint: CP-285
-next_experiment: EXP-286 isolated installed readiness rerun
+latest_checkpoint: CP-287
+next_experiment: EXP-288 isolated installed readiness rerun
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -2242,3 +2242,23 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-285 — Controller query settles before idle readiness polling
 
 - Last valid experiment: EXP-285. EXP-284's exact runtime exception has a tested source fix and installed provenance. The next step is a new isolated no-motion stack and one invocation of the corrected installed readiness CLI, followed by process and graph retirement proof. Receipt producer and `FULL_RESTART` campaign remain closed. Retain registered root and all runs, archive none; scratch roots deletion candidates only, delete nothing.
+
+## EXP-286 — Recheck the corrected installed readiness CLI in isolation
+
+- **PLANNED:** Frozen source HEAD `d28f1553e47fd2acdf6b229c3e34dcd679b4be76`, submodule `54463fce3bfa6192976e74113f5ed7152f708a3f`, registered root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`, exact installed overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, runtime launch `/opt/ros/jazzy/bin/ros2`, installed CLI `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i/so101_demo_py/lib/so101_demo_py/act_stack_ready`, `ROS_DOMAIN_ID=228`, `GZ_PARTITION=act-data-exp286-228`, MuJoCo session `act-data-exp286-228`, lifecycle `ISOLATED_STACK`, headless, no broker, no motion target or reset. Preflight found domain 228 empty and no task stack; installed CLI exists and `diagnostics/exp286-stack-001` is unused. Relative to EXP-284 change only the tested controller-query state machine, then launch one owned process group, invoke the installed readiness CLI exactly once after graph startup with its 60 s deadline, retain stdout/stderr and exact identity, and prove process/graph retirement. A complete seven-axis artifact with current session/domain is a diagnostic success; a reported first failed source, timeout or cleanup uncertainty is diagnostic failure. Neither result counts as Task8 phase PASS or `FULL_RESTART` qualification. `FULL_RESTART_PROOF_UNAVAILABLE`, `ACT_TASK8_PORT_NOT_PROVISIONED`, and `CALIBRATION_REQUIRED` remain enforced; accepted Train/Val/Test 0/0/0. Retain all evidence, archive none; deletion candidates only after readback, delete nothing.
+
+- **VALID as a six-axis readiness diagnostic with one failed axis:** `diagnostics/exp286-stack-001` retains the unique domain/session, exact argv, PID1878346/PGID1878346/start ticks45211092, installed CLI stdout/stderr, launch and retirement readback. The installed CLI ran its full 60 s and exited1 after61.792 s with `mujoco_session=true`, `advancing_physics=true`, `controller_states=true`, `moveit_graph=true`, `head_rgb=true`, `wrist_rgb=true`, `physical_stop=false`, failure `ACT_STACK_NOT_PHYSICALLY_STOPPED`, and zero rejected world messages or malformed input. This is a real observer verdict, not a controller state readback; no startup artifact was emitted. The preceding EXP-282 service readback showed `joint_state_broadcaster` update_rate100 Hz while the evaluator requires a 40 ms span from only its latest three joint samples; that mismatch is a specific testable explanation, not yet confirmed as the sole cause of the live verdict. Wrapper exited1 in74 s; owned launch exited0 after SIGINT, `graph_after` and fresh domain-228 node list were empty and no task process remained. No motion goal or reset was sent. Do not count this as Task8 readiness, phase PASS, W8 or formal data. Retain all evidence, archive none; delete nothing.
+
+## CP-286 — Physical-stop observer needs a measurable recent time window
+
+- Last valid experiment: EXP-286. Six of seven live startup axes pass, but physical stop times out. Add a 100 Hz sample-window RED, inspect all recent velocities and sample span, and preserve measured diagnostics on failure before another isolated run. `FULL_RESTART_PROOF_UNAVAILABLE`, `ACT_TASK8_PORT_NOT_PROVISIONED`, `CALIBRATION_REQUIRED`; accepted Train/Val/Test 0/0/0. Retain registered root and all runs, archive none; scratch roots deletion candidates only, delete nothing.
+
+## EXP-287 — Check physical stop over a real 100 Hz sample window
+
+- **PLANNED:** Source HEAD `d28f1553e47fd2acdf6b229c3e34dcd679b4be76`, registered root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`, overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, runtime executable `NOT_STARTED`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. EXP-286 reports only physical stop false; existing source slices the latest three 100 Hz joint frames, whose span is about 20 ms, then requires at least 40 ms. Add an intended RED for eight stable 100 Hz frames that should prove a 40 ms interval, retain a negative case where one recent frame moves, and evaluate the full bounded recent window. On timeout, report sample count, span and maximum absolute speed without dumping image data. Run focused RED/GREEN and Demo ordinary/package gates with unique verified NVMe scratch. No live stack or motion in this experiment; keep all Task8/Task6 fences and accepted data 0/0/0. Retain evidence, archive none; scratch deletion candidates only, delete nothing.
+
+- **VALID as a source-level stop-window correction:** Intended RED `scratch/exp287-red.jEUmTWeF` failed on eight stationary 100 Hz samples because the old evaluator kept only the last three and thus could not satisfy its 40 ms span. Focused GREEN `scratch/exp287-green.3MRYACPv` passed7/7 after the evaluator checked all eight recent frames; a moving frame anywhere in the window still fails. Timeout output now includes count, received-time span, latest age and maximum absolute joint velocity to separate sample geometry from actual motion. Exact task-Python eight-worker Demo ordinary `scratch/exp287-demo-full.qO8HWQiq` exited0 in51 s, 4289 passed/162 skipped, CPU32/workers8, JUnit retained. Overlay build `scratch/exp287-build.3Y6kMCOI` exited0 in3 s. Package gate `scratch/exp287-demo-colcon.mCAKolOc` exited0 in51 s with actual 8/8 workers, XML 4451 tests/0 errors/0 failures/162 skipped. Aggregate `colcon test-result --verbose` exited0: 5871 tests/0 errors/0 failures/205 skipped. Each pytest/colcon run used a unique previously nonexistent NVMe TMPDIR/TMP/TEMP verified by exact task Python; no benchmark was collected. Installed runtime module resolves through task build tree to current source; SHA256 both `7a4fa393d7f75eaebb9f3542705f0a4e952e34bbf2c468364cf8d5973c7511c8`. `git diff --check` clean. No live Task8 case, W8, formal episode or training; accepted Train/Val/Test 0/0/0. Retain registered root and all runs, archive none; scratch deletion candidates only, delete nothing.
+
+## CP-287 — Stop observer covers enough actual 100 Hz samples
+
+- Last valid experiment: EXP-287. The impossible last-three-sample span is corrected and installed. A new isolated no-motion stack must now produce either a seven-axis artifact or a measured physical-stop failure with sample count/span/speed. Receipt producer and `FULL_RESTART` campaign remain closed. Retain registered root and all runs, archive none; scratch roots deletion candidates only, delete nothing.
