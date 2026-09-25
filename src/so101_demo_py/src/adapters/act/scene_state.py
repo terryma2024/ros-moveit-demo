@@ -2,6 +2,7 @@
 import copy
 import threading
 import time
+from collections import deque
 from so101_demo.act.contracts import fields,finite,identifier,integer,sha256,vector
 
 SCENE_KEYS=frozenset(('simulation_session_id','reset_epoch','simulation_step','paused',
@@ -16,6 +17,7 @@ class SceneStateObserver:
         if self.max_age<=0:raise ValueError('SCENE_STATE_CONFIG_INVALID')
         self.monotonic=monotonic;self._lock=threading.RLock()
         self.session=self.epoch=self.last=self.received=self.hazard=None
+        self._history=deque(maxlen=256)
 
     def reset(self,session_id,reset_epoch,*,source_floor_s):
         identifier(session_id);integer(reset_epoch,minimum=1);floor=finite(source_floor_s,nonnegative=True)
@@ -24,6 +26,7 @@ class SceneStateObserver:
                 raise ValueError('SCENE_STATE_RESET_INVALID')
             self.session,self.epoch,self.floor=session_id,reset_epoch,floor
             self.last=self.received=self.hazard=None
+            self._history.clear()
 
     def accept(self,frame):
         with self._lock:
@@ -40,6 +43,7 @@ class SceneStateObserver:
                         or frame['simulation_step']<self.last['simulation_step']):
                     raise ValueError('SCENE_STATE_REORDERED')
                 self.last=copy.deepcopy(frame);self.received=finite(self.monotonic(),nonnegative=True)
+                self._history.append((copy.deepcopy(self.last),self.received))
                 return True
             except (KeyError,TypeError,ValueError) as error:
                 self.hazard=str(error);return False
@@ -60,6 +64,16 @@ class SceneStateObserver:
             if self.last is None:raise ValueError('SCENE_STATE_UNAVAILABLE')
             if not 0<=self.monotonic()-self.received<=self.max_age:raise ValueError('SCENE_STATE_STALE')
             return copy.deepcopy(self.last)
+
+    def recent_frames(self):
+        """Return fresh bounded frames without exposing mutable history."""
+        with self._lock:
+            if self.hazard:raise ValueError(self.hazard)
+            if self.last is None:raise ValueError('SCENE_STATE_UNAVAILABLE')
+            now=finite(self.monotonic(),nonnegative=True)
+            if not 0<=now-self.received<=self.max_age:raise ValueError('SCENE_STATE_STALE')
+            return tuple(copy.deepcopy(frame) for frame,received in self._history
+                         if 0<=now-received<=self.max_age)
 
 
 class RosSceneStateAdapter:
