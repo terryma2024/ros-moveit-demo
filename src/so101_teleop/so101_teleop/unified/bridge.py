@@ -12,6 +12,7 @@ import contextlib
 import hashlib
 import json
 import subprocess
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -118,22 +119,47 @@ class ActChildRegistry:
 
     def __init__(self) -> None:
         self._launches: dict[tuple[str, str, int], ActChildLaunch] = {}
+        self._lock = threading.RLock()
 
-    def register(self, launch: ActChildLaunch) -> None:
+    def _register_locked(self, launch: ActChildLaunch) -> None:
         key = (launch.campaign_id, launch.worker_id, launch.execution_generation)
         if key in self._launches:
             raise ValueError("DUPLICATE_CHILD")
         for existing in self._launches.values():
             if existing.ros_domain_id == launch.ros_domain_id:
                 raise ValueError("ROS_DOMAIN_SHARED")
+            if existing.namespace == launch.namespace:
+                raise ValueError("ROS_NAMESPACE_SHARED")
+            if existing.controller_name == launch.controller_name:
+                raise ValueError("ROS_CONTROLLER_SHARED")
             if existing.mujoco_session_id == launch.mujoco_session_id:
                 raise ValueError("MUJOCO_SESSION_SHARED")
             if existing.socket_root == launch.socket_root:
                 raise ValueError("IPC_SOCKET_SHARED")
         self._launches[key] = launch
 
+    def register(self, launch: ActChildLaunch) -> None:
+        with self._lock:
+            self._register_locked(launch)
+
+    @contextlib.contextmanager
+    def reserve_many(self, launches: tuple[ActChildLaunch, ...]):
+        """Hold child identities through admission; roll back only this batch on failure."""
+        with self._lock:
+            added = []
+            try:
+                for launch in launches:
+                    self._register_locked(launch)
+                    added.append((launch.campaign_id, launch.worker_id, launch.execution_generation))
+                yield
+            except BaseException:
+                for key in reversed(added):
+                    del self._launches[key]
+                raise
+
     def launches(self) -> tuple[ActChildLaunch, ...]:
-        return tuple(self._launches.values())
+        with self._lock:
+            return tuple(self._launches.values())
 
 
 class ActWorkerPort:
