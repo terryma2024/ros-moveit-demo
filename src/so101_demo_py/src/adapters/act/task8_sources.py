@@ -112,9 +112,11 @@ class Task8RosEvidence:
 class Task8HazardDispatcher:
     """Cancel owned action goals away from the single-threaded ROS executor."""
 
-    def __init__(self, sources: Task8RosEvidence, broker, cancelled: threading.Event) -> None:
+    def __init__(self, sources: Task8RosEvidence, broker, cancelled: threading.Event,
+                 *, command_broker=None) -> None:
         self._sources = sources
         self._broker = broker
+        self._command_broker = command_broker
         self._cancelled = cancelled
         self._closing = threading.Event()
         self.finished = threading.Event()
@@ -137,9 +139,16 @@ class Task8HazardDispatcher:
                     continue
                 self.reason = reason
                 self._cancelled.set()
-                self._broker.stop_all("TASK8_EVIDENCE_HAZARD")
+                if self._command_broker is None:
+                    self._broker.stop_all("TASK8_EVIDENCE_HAZARD")
+                else:
+                    self._command_broker.ownership.revoke("TASK8_EVIDENCE_HAZARD")
+                    self._command_broker.tick()
                 while not self._closing.is_set():
-                    self._broker.refresh_stop()
+                    if self._command_broker is None:
+                        self._broker.refresh_stop()
+                    else:
+                        self._command_broker.tick()
                     if self._broker.stopped():
                         self.confirmed = True
                         return
