@@ -283,6 +283,36 @@ def test_detector_loads_local_weights_warms_up_and_records_actual_device(
     assert predict_calls[1]["source"].shape == (4, 6, 3)
 
 
+def test_detector_sends_bgr_numpy_to_model_for_public_rgb_frame(tmp_path: Path) -> None:
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights-v1")
+    inputs = []
+
+    class RecordingModel:
+        names = {0: "plastic_cup"}
+
+        def predict(self, **kwargs):
+            inputs.append(np.array(kwargs["source"], copy=True))
+            return [_result()]
+
+    detector = YoloSegDetector(
+        weights_path=weights,
+        expected_sha256=hashlib.sha256(weights.read_bytes()).hexdigest(),
+        requested_device="cpu", allow_cpu_fallback=False,
+        model_id="plastic-cup-yolo11n-seg-v1", imgsz=640,
+        torch_api=_torch_api(cuda=False, mps=False),
+        model_factory=lambda _: RecordingModel(),
+    )
+    rgb = np.zeros((4, 6, 3), dtype=np.uint8)
+    rgb[0, 0] = [10, 20, 30]
+    frame = DetectionFrame(rgb, 7, "task_camera_frame")
+    detector.detect(frame, DetectionQuery("plastic_cup"))
+
+    assert inputs[-1][0, 0].tolist() == [30, 20, 10]
+    assert inputs[-1].flags.c_contiguous
+    assert frame.rgb8[0, 0].tolist() == [10, 20, 30]
+
+
 def test_detector_sets_a_candidate_floor_on_every_model_prediction(
     tmp_path: Path,
 ) -> None:

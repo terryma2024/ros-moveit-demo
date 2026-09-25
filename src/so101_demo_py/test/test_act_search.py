@@ -111,18 +111,28 @@ def test_detector_spatial_identity_and_rgb_shape_filter_are_attempt_scoped():
     with pytest.raises(ValueError): detect_head(pixels,bundle)
 
 
-def test_head_rgb_boundary_converts_ultralytics_array_channel_order():
-    from so101_demo.adapters.act.detector import RgbHeadModel
+def test_head_model_factory_preserves_generic_adapters_bgr_source(monkeypatch, tmp_path):
+    import hashlib
+    import sys
+    from types import SimpleNamespace
+    from so101_demo.adapters.act.detector import head_model_factory
+    from so101_demo.adapters.perception.yolo_seg import YoloSegDetector
+
+    received=[]
     class Model:
         names={0:"plastic_cup"}
         def predict(self, *, source, **kwargs):
-            assert source[0,0].tolist()==[10,20,250]
-            assert kwargs=={"verbose":False}
-            return ["real-result"]
-    wrapper=RgbHeadModel(Model())
-    rgb=np.zeros((480,640,3),np.uint8); rgb[0,0]=[250,20,10]
-    assert wrapper.names=={0:"plastic_cup"}
-    assert wrapper.predict(source=rgb,verbose=False)==["real-result"]
+            received.append(np.array(source,copy=True))
+            return [object()]
+    monkeypatch.setitem(sys.modules,"ultralytics",SimpleNamespace(YOLO=lambda _: Model()))
+    weights=tmp_path / "best.pt"; weights.write_bytes(b"head-weights")
+    detector=YoloSegDetector(weights_path=weights,
+        expected_sha256=hashlib.sha256(weights.read_bytes()).hexdigest(),
+        requested_device="cpu",allow_cpu_fallback=False,model_id="head",imgsz=4,
+        torch_api=object(),model_factory=head_model_factory)
+    rgb=np.zeros((4,4,3),np.uint8); rgb[0,0]=[250,20,10]
+    detector._predict(rgb)
+    assert received[-1][0,0].tolist()==[10,20,250]
     assert rgb[0,0].tolist()==[250,20,10]
 
 

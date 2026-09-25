@@ -4,23 +4,10 @@ from so101_demo.act.contracts import fields, finite, identifier, integer, sha256
 from so101_demo.core.detection import DetectionFrame, DetectionQuery
 
 
-class RgbHeadModel:
-    """Ultralytics accepts BGR numpy sources; public head input stays RGB."""
-
-    def __init__(self, model):
-        self.model = model
-        self.names = model.names
-
-    def predict(self, *, source, **kwargs):
-        import numpy as np
-        if not isinstance(source, np.ndarray) or source.ndim != 3 or source.shape[2] != 3:
-            raise ValueError("HEAD_RGB_INVALID")
-        return self.model.predict(source=np.ascontiguousarray(source[:, :, ::-1]), **kwargs)
-
-
 def head_model_factory(path):
+    """Create the model; YoloSegDetector owns RGB-to-BGR conversion."""
     from ultralytics import YOLO
-    return RgbHeadModel(YOLO(path))
+    return YOLO(path)
 
 
 def overlap(a, b):
