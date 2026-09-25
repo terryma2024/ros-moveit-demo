@@ -137,6 +137,25 @@ def evaluate_act_stack_readiness(*, session_id: str, ros_domain_id: int, now_s: 
     return ActStackReadiness(True, None, artifact, checks)
 
 
+def advance_controller_query(client, pending, controllers, *, now_s: float,
+                             next_query_s: float, request_factory):
+    """Keep one service future alive, then stop querying after all four are active."""
+    if not client.service_is_ready():
+        return pending, controllers, next_query_s
+    if pending is not None:
+        if pending.done():
+            response = pending.result()
+            if response is not None:
+                controllers = {item.name: item.state for item in response.controller}
+            pending = None
+        return pending, controllers, next_query_s
+    if (not all(controllers.get(name) == "active" for name in _CONTROLLERS)
+            and now_s >= next_query_s):
+        pending = client.call_async(request_factory())
+        next_query_s = now_s + 0.5
+    return pending, controllers, next_query_s
+
+
 def main(arguments: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="act_stack_ready")
     parser.add_argument("--session-id", required=True)
@@ -218,17 +237,11 @@ def main(arguments: list[str] | None = None) -> int:
     try:
         while rclpy.ok() and time.monotonic() < deadline:
             rclpy.spin_once(node, timeout_sec=0.01)
-            if controller_client.service_is_ready():
-                if (pending is None and not all(controllers.get(name) == "active"
-                                                for name in _CONTROLLERS)
-                        and time.monotonic() >= next_controller_query_s):
-                    pending = controller_client.call_async(ListControllers.Request())
-                    next_controller_query_s = time.monotonic() + 0.5
-                elif pending.done():
-                    response = pending.result()
-                    if response is not None:
-                        controllers = {item.name: item.state for item in response.controller}
-                    pending = None
+            pending, controllers, next_controller_query_s = advance_controller_query(
+                controller_client, pending, controllers, now_s=time.monotonic(),
+                next_query_s=next_controller_query_s,
+                request_factory=ListControllers.Request,
+            )
             try:
                 current = world.snapshot_with_receipt()
                 sample = current.evidence
