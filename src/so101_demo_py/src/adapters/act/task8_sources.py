@@ -103,10 +103,12 @@ class Task8RosEvidence:
         self.contact_adapter.replace_allowed_pairs(self.contact_pairs.for_phase(phase))
         self.phase = phase
 
-    def capture(self, attempt_id: str) -> dict:
+    def capture(self, attempt_id: str, *, after_step: int | None = None) -> dict:
         if self.reset_epoch is None:
             raise ValueError("TASK8_RESET_UNAVAILABLE")
-        return self.readback.capture(self.session_id, attempt_id, self.reset_epoch)
+        return self.readback.capture(
+            self.session_id, attempt_id, self.reset_epoch, after_step=after_step,
+        )
 
 
 class Task8HazardDispatcher:
