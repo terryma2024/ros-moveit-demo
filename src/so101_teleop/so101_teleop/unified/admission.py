@@ -27,6 +27,8 @@ from .contracts import (
     LeaseIdentity,
     MutationError,
     OperationSpec,
+    PHASE_CANCELLED,
+    PHASE_COMPLETE,
     Reservation,
     RequestAuthority,
 )
@@ -455,3 +457,68 @@ class UnifiedWorkloadService:
                     self.gpu_arbiter.release(lease)
                     raise
                 return context
+
+    def finish(self, context: AdmittedCampaignContext, *, cleanup_confirmed: bool):
+        """Settle only this admitted campaign after its child owner proves cleanup.
+
+        The context and physical lease are matched to durable rows before any
+        resource is released. An unconverged action keeps the global fence and
+        GPU lease. The context record remains for readback and replay audit.
+        """
+        if cleanup_confirmed is not True:
+            raise ValueError("ACT_CHILD_CLEANUP_NOT_CONFIRMED")
+        if not isinstance(context, AdmittedCampaignContext):
+            raise ValueError("CAMPAIGN_CONTEXT_MISMATCH")
+        with self._start_lock:
+            if not self.owner_identity_valid(self.owner_pid, self.owner_started_ticks):
+                raise ValueError("CAMPAIGN_OWNER_IDENTITY_DRIFT")
+            store = self.arbiter.store
+            row = store._query_one(
+                "SELECT context_json FROM act_campaign_contexts WHERE operation_id=?",
+                (context.operation_id,),
+            )
+            if row is None or AdmittedCampaignContext.from_dict(json.loads(row[0])) != context:
+                raise ValueError("CAMPAIGN_CONTEXT_MISMATCH")
+            launches = tuple(item for item in self.child_registry.launches()
+                             if item.campaign_id == context.campaign_id
+                             and item.execution_generation == context.execution_generation)
+            if not launches:
+                lease_row = store._query_one(
+                    "SELECT * FROM gpu_workload_leases WHERE stable_host_id=? AND physical_gpu_uuid=?",
+                    (context.stable_host_id, context.physical_gpu_uuid),
+                )
+                projection = store.projection(context.operation_id)
+                if (lease_row is None and projection.phase in (PHASE_COMPLETE, PHASE_CANCELLED)
+                        and self.arbiter.is_idle()):
+                    return projection
+            child_map = [item.__dict__ for item in launches]
+            child_map_sha256 = hashlib.sha256(json.dumps(
+                child_map, sort_keys=True, separators=(",", ":"), allow_nan=False,
+            ).encode()).hexdigest()
+            if len(launches) != context.worker_count or child_map_sha256 != context.domain_session_map_sha256:
+                raise ValueError("CHILD_RELEASE_MISMATCH")
+            with store.immediate_transaction():
+                gpu_row = store._query_one(
+                    "SELECT * FROM gpu_workload_leases WHERE stable_host_id=? AND physical_gpu_uuid=?",
+                    (context.stable_host_id, context.physical_gpu_uuid),
+                )
+                if gpu_row is None:
+                    raise ValueError("GPU_LEASE_OWNER_MISMATCH")
+                lease = GpuLeaseRequest(*tuple(gpu_row))
+                if (lease.operation_id != context.operation_id
+                        or lease.service_epoch != context.service_epoch
+                        or lease.owner_pid != self.owner_pid
+                        or lease.owner_started_ticks != self.owner_started_ticks
+                        or lease.workload != context.workload_kind
+                        or lease.execution_generation != context.execution_generation):
+                    raise ValueError("GPU_LEASE_OWNER_MISMATCH")
+                outcome = store.settle_locked(context.operation_id, cleanup_confirmed=True)
+                if outcome.code is None:
+                    store._connection.execute(
+                        "DELETE FROM gpu_workload_leases WHERE stable_host_id=? AND physical_gpu_uuid=?",
+                        (context.stable_host_id, context.physical_gpu_uuid),
+                    )
+            if outcome.code:
+                raise MutationError(outcome.code)
+            self.child_registry.release_many(launches)
+            return outcome.projection

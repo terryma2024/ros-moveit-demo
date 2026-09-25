@@ -164,6 +164,19 @@ class ActChildRegistry:
         with self._lock:
             return tuple(self._launches.values())
 
+    def release_many(self, launches: tuple[ActChildLaunch, ...]) -> None:
+        """Remove an exact stopped batch; never release a reused or foreign identity."""
+        with self._lock:
+            keys = [(item.campaign_id, item.worker_id, item.execution_generation)
+                    for item in launches]
+            if len(set(keys)) != len(keys) or any(
+                self._launches.get(key) != launch
+                for key, launch in zip(keys, launches, strict=True)
+            ):
+                raise ValueError("CHILD_RELEASE_MISMATCH")
+            for key in keys:
+                del self._launches[key]
+
 
 class ActWorkerPort:
     """Typed Web/CLI transport for one admitted campaign Worker."""
