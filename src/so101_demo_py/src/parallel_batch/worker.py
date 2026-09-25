@@ -198,7 +198,7 @@ class ParallelWorker:
             "coordinator", "broker", "runtime", "results", "clock", "config",
             "worker_id", "generation",
         }
-        optional = {"fault_hook", "adaptive_workers"}
+        optional = {"fault_hook", "adaptive_workers", "workload"}
         if (
             not isinstance(ports, Mapping)
             or not required.issubset(ports)
@@ -232,6 +232,12 @@ class ParallelWorker:
         self._mode = getattr(self._coordinator, "mode", getattr(request, "run_mode", None))
         if not isinstance(self._mode, RunMode):
             raise WorkerError("RUN_MODE_REQUIRED")
+        self._workload = ports.get("workload")
+        if self._workload is not None:
+            from so101_demo.act.collection import ActCollectionWorkload
+
+            if type(self._workload) is not ActCollectionWorkload or self._mode is not RunMode.EXECUTE:
+                raise WorkerError("WORKLOAD_PORT_INVALID")
         self._run_lock = threading.Lock()
         self._execution_lock = threading.RLock()
         self._stop_requested = threading.Event()
@@ -885,6 +891,15 @@ class ParallelWorker:
         action_may_have_started = False
         failure_boundary = "scheduler_trace"
         try:
+            if self._workload is not None:
+                action_may_have_started = True
+                failure_boundary = "act_collection"
+                decision = self._workload.run_authorized(
+                    lease, runtime=self._runtime, broker=self._broker,
+                    boundary=self._boundary, start_event_id=start_event_id,
+                    start_event_type=start_event_type, reset_epoch=reset_epoch,
+                )
+                return decision, True, None
             if self._mode is RunMode.DRY_RUN:
                 decision = self._boundary(
                     lambda current: self._runtime.scheduler_trace(current))

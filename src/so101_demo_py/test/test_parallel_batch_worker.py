@@ -21,6 +21,7 @@ from so101_demo.parallel_batch.contracts import (
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.parallel_batch.worker import ParallelWorker
+from so101_demo.act.collection import ActCollectionWorkload
 
 
 CONFIG = load_parallel_runtime_config(
@@ -518,6 +519,34 @@ class Fake:
 
 def event_names(fake):
     return [entry[0] for entry in fake.coordinator.calls if entry[0] != "HEARTBEAT"]
+
+
+def test_act_workload_uses_existing_worker_lease_seal_and_commit_path():
+    fake = Fake()
+
+    def collect(lease, *, broker, boundary, start_event_id, start_event_type, reset_epoch):
+        fake.runtime.calls.append("collect_authorized_scenario")
+        assert broker is fake.broker
+        assert start_event_type == "ATTEMPT_STARTED"
+        assert reset_epoch == "reset-1"
+        return boundary(lambda current: Decision(AttemptStatus.FAILED, "search_failed"))
+
+    fake.runtime.collect_authorized_scenario = collect
+    ports = fake.ports()
+    ports["workload"] = ActCollectionWorkload()
+    result = ParallelWorker(ports).run_one()
+    assert result.terminal_status is AttemptStatus.FAILED
+    assert "collect_authorized_scenario" in fake.runtime.calls
+    assert not any(call[0] == "request_model" for call in fake.broker.calls)
+    assert "RESULT_COMMITTED" in event_names(fake)
+
+
+def test_worker_rejects_unregistered_workload_object():
+    fake = Fake()
+    ports = fake.ports()
+    ports["workload"] = object()
+    with pytest.raises(Exception, match="WORKLOAD_PORT_INVALID"):
+        ParallelWorker(ports)
 
 
 def test_prepare_for_start_is_idempotent_and_never_requests_a_lease():
