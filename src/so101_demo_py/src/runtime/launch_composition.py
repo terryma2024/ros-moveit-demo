@@ -2314,6 +2314,7 @@ def _configured_task_station_actions(context):
     act_profile = context.launch_configurations.get("act_profile", "false") == "true"
     broker_options = []
     environment_actions = []
+    contact_path = ""
     if act_profile:
         from ..adapters.act.command_broker import endpoint_bytes
         endpoint = LaunchConfiguration("act_broker_socket").perform(context)
@@ -2376,7 +2377,7 @@ def _configured_task_station_actions(context):
     share = Path(get_package_share_directory("so101_demo_py"))
     stack = _mujoco_stack_actions(
         context, share, session_id,
-        sim_speed_factor=1.0 if act_profile else -1.0,
+        sim_speed_factor=0.5 if contact_path else 1.0 if act_profile else -1.0,
     )
     teleop_actions = []
     if act_profile:

@@ -196,3 +196,40 @@ def test_act_contact_diagnostic_launch_rejects_bad_manifest_before_stack(tmp_pat
     opaque=next(a for a in description.entities if isinstance(a,OpaqueFunction))
     with pytest.raises(ValueError):opaque.execute(context)
     assert constructed==[]
+
+
+def test_act_contact_diagnostic_launch_uses_half_speed_for_paired_path_checks(tmp_path,monkeypatch):
+    import json
+    from launch import LaunchContext
+    from launch.utilities import perform_substitutions
+    from launch.actions import DeclareLaunchArgument,OpaqueFunction
+    from so101_demo.act.contact_diagnostic import build_contact_diagnostic_manifest
+    from so101_demo.runtime import launch_composition as launch
+
+    source=Path(__file__).parents[1]
+    manifest=build_contact_diagnostic_manifest(
+        scene_path=source/'assets/mujoco/act/scene.xml',
+        motion_policy_path=source/'config/policies/light_cup_wall_pick/v1/mujoco.yaml',
+        plugin_path=source/'config/mujoco/act/mujoco_plugins.yaml',
+        regime='no_contact',seed=0,session_id='contact-half-speed',
+        attempt_id='contact-half-speed-attempt')
+    path=tmp_path/'contact.json';path.write_text(json.dumps(manifest))
+    description=launch.build_task_station_launch_description(act_profile=True)
+    context=LaunchContext()
+    for argument in description.entities:
+        if isinstance(argument,DeclareLaunchArgument):
+            context.launch_configurations[argument.name]=perform_substitutions(context,argument.default_value)
+    context.launch_configurations.update(
+        session_id=manifest['session_id'],mujoco_scene=manifest['scene_path'],
+        act_contact_diagnostic_manifest=str(path),act_stop_velocity_rad_s='.002',
+        act_max_age_s='.2',act_submit_lead_s='.05',act_accept_timeout_s='.03',
+        act_stop_timeout_s='1',act_permit_ttl_s='.1')
+    captured=[]
+    class Capture(Exception):pass
+    def stack(*args,**kwargs):
+        captured.append(kwargs['sim_speed_factor'])
+        raise Capture
+    monkeypatch.setattr(launch,'_mujoco_stack_actions',stack)
+    opaque=next(action for action in description.entities if isinstance(action,OpaqueFunction))
+    with pytest.raises(Capture):opaque.execute(context)
+    assert captured==[.5]
