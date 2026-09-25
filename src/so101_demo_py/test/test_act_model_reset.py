@@ -147,6 +147,46 @@ def test_local_reset_client_rejects_unpaired_context_or_connection():
             "owner": "recovery", "session_id": "s", "attempt_id": "a", "lease_token": "t"})
 
 
+def test_local_reset_checks_cancel_before_write_and_during_controller_wait(monkeypatch):
+    from so101_demo.backends.mujoco.client import MujocoRosClient
+
+    class Node:
+        def create_client(self, kind, topic): return topic
+        def create_subscription(self, kind, topic, callback, qos): return topic
+
+    class Connection:
+        def __init__(self): self.operations = []
+        def request(self, operation, context, **values):
+            self.operations.append(operation)
+            return {"pause_result": {"success": True}, "switch_result": {"ok": True}}
+
+    connection = Connection()
+    cancelled = [True]
+
+    def guard():
+        if cancelled[0]:
+            raise RuntimeError("ACT_TASK8_CANCELLED")
+
+    client = MujocoRosClient(Node(), Node(), control_context={
+        "owner": "recovery", "session_id": "s", "attempt_id": "a", "lease_token": "t"},
+        broker_connection=connection, operation_guard=guard, service_timeout_s=0.1)
+    with pytest.raises(RuntimeError, match="ACT_TASK8_CANCELLED"):
+        client.pause(False)
+    assert connection.operations == []
+    cancelled[0] = False
+    calls = [0]
+
+    def states():
+        calls[0] += 1
+        cancelled[0] = True
+        return {"arm_controller": "inactive"}
+
+    monkeypatch.setattr(client, "_controller_states", states)
+    with pytest.raises(RuntimeError, match="ACT_TASK8_CANCELLED"):
+        client.switch_controllers(activate=("arm_controller",), deactivate=())
+    assert connection.operations == ["switch_controllers"] and calls == [1]
+
+
 def test_act_launcher_checks_complete_broker_path_before_constructing_stack(monkeypatch):
     from launch import LaunchContext
     from launch.utilities import perform_substitutions
