@@ -186,12 +186,22 @@ class LivePhysicsStream:
         self._last_step = 0
         self._last_time = 0.0
         self._last_receipt = -math.inf
+        self._receipt_age_anchor = -math.inf
+        self._receipt_deadline_suspended = False
         self._initial_cup: list[float] | None = None
         directory = os.open(self.output_path.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(directory)
         finally:
             os.close(directory)
+
+    def suspend_receipt_deadline(self) -> None:
+        self._receipt_deadline_suspended = True
+
+    def resume_receipt_deadline(self) -> None:
+        if self._receipt_deadline_suspended:
+            self._receipt_age_anchor = _finite(self.monotonic(), "receipt resume", 0)
+            self._receipt_deadline_suspended = False
 
 
     def _validated_step(
@@ -293,8 +303,8 @@ class LivePhysicsStream:
             )
             if abs(ros_time_s - last_simulation_time) > self.limits["maximum_ros_skew_s"]:
                 raise ValueError("live ROS/MuJoCo clock skew")
-            if self._last_receipt != -math.inf and (
-                self.monotonic() - self._last_receipt > self.limits["maximum_receipt_age_s"]
+            if not self._receipt_deadline_suspended and self._receipt_age_anchor != -math.inf and (
+                self.monotonic() - self._receipt_age_anchor > self.limits["maximum_receipt_age_s"]
             ):
                 raise ValueError("live physics evidence is stale")
             parsed = []
@@ -330,6 +340,7 @@ class LivePhysicsStream:
             self._last_step = last
             self._last_time = previous_time
             self._last_receipt = parsed[-1]["received_monotonic_s"]
+            self._receipt_age_anchor = self._last_receipt
             self._initial_cup = self._initial_cup or parsed[0]["cup_position_m"]
             self.recorded_steps += len(parsed)
         except (OSError, TypeError, ValueError) as error:
@@ -364,13 +375,24 @@ class LiveContactObserver:
         self.hazard: str | None = None
         self._last_received = _finite(monotonic(), "observer start", 0)
         self.active = False
+        self._suspended = False
 
     def start(self) -> None:
         if self.hazard is not None:
             raise ValueError(self.hazard)
-        if not self.active:
+        if self._suspended:
+            self.recorder.resume_receipt_deadline()
+            self._suspended = False
             self._last_received = _finite(self.monotonic(), "observer start", 0)
             self.active = True
+        elif not self.active:
+            self._last_received = _finite(self.monotonic(), "observer start", 0)
+            self.active = True
+
+    def suspend(self) -> None:
+        self.recorder.suspend_receipt_deadline()
+        self._suspended = True
+        self.active = False
 
     def _abort(self, reason: str) -> None:
         if self.hazard is None:
@@ -442,7 +464,6 @@ class RosLiveContactAdapter:
                 PhysicsHazardLatch, "/so101/simulation/physics_hazard",
                 observer.accept_hazard, hazards,
             ))
-            self.timer = node.create_timer(.01, observer.poll)
         except BaseException:
             self.close()
             raise

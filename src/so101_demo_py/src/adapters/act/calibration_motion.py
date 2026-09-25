@@ -375,7 +375,12 @@ class RosCalibrationMotionGuard:
         with self.scene_observer._lock:
             scene=self.scene_observer.last
             running=scene is not None and scene['paused'] is False
-        if self.live_observer is not None and running:self.live_observer.poll()
+        if self.live_observer is not None:
+            if running and getattr(self.live_observer, 'hazard', None) is None:
+                self.live_observer.start()
+                self.live_observer.poll()
+            else:
+                self.live_observer.suspend()
         pair=self.broker.prefix_executor
         ticket=None if pair is None else pair._ticket
         if ticket is None:return
