@@ -43,7 +43,9 @@ def request(*, worker_id="w00", generation=3, operation="task8_phase"):
     payload = (
         {"reason": "operator"} if operation == "cancel" else
         {"scenario_id": "scene-1", "stop_after": "MICRO_LIFT", "manifest_sha256": "a" * 64,
-         "runtime_config_sha256": "b" * 64, "contact_policy_fingerprint": "c" * 64}
+         "runtime_config_sha256": "b" * 64, "contact_policy_fingerprint": "c" * 64,
+         "stack_owner": {"pid": 12345, "pgid": 12345, "started_ticks": 101,
+                         "argv_sha256": "1" * 64, "environment_sha256": "2" * 64}}
     )
     document = {
         "version": 1, "operation": operation, "command_id": "command-1",
@@ -471,6 +473,36 @@ def test_act_task8_child_refuses_missing_phase_port_before_motion():
         asyncio.run(driver.task8_phase(request()))
 
 
+def test_act_task8_child_rejects_failed_startup_proof_before_reset_and_replay():
+    class Port:
+        def __init__(self):
+            self.begins = 0
+
+        def begin(self, _request):
+            self.begins += 1
+            raise AssertionError("reset must not begin")
+
+    port = Port()
+    attempts = []
+
+    def reject(_request):
+        attempts.append("consumed")
+        raise MutationError("TASK8_STARTUP_PROOF_INVALID")
+
+    driver = RclpyActionDriver(
+        broker=object(), task8_port=port, startup_proof_consumer=reject,
+        act_hashes={"manifest_sha256": "a" * 64, "runtime_config_sha256": "b" * 64,
+                    "contact_policy_fingerprint": "c" * 64},
+    )
+    child_request = request()
+    with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_INVALID"):
+        asyncio.run(driver.task8_phase(child_request))
+    assert port.begins == 0 and attempts == ["consumed"]
+    with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_ALREADY_CONSUMED"):
+        asyncio.run(driver.task8_phase(child_request))
+    assert port.begins == 0 and attempts == ["consumed"]
+
+
 def test_act_task8_child_routes_closed_hashes_to_runner_and_confirms_stop():
     class Broker:
         def __init__(self):
@@ -516,6 +548,7 @@ def test_act_task8_child_routes_closed_hashes_to_runner_and_confirms_stop():
     broker, port = Broker(), Port()
     driver = RclpyActionDriver(
         broker=broker, task8_port=port,
+        startup_proof_consumer=lambda _request: {"schema_version": 1},
         act_hashes={"manifest_sha256": "a" * 64, "runtime_config_sha256": "b" * 64,
                     "contact_policy_fingerprint": "c" * 64},
     )
@@ -575,6 +608,7 @@ def test_act_cancel_interrupts_next_phase_while_runner_thread_is_busy():
     broker, port = Broker(), BlockingPort()
     driver = RclpyActionDriver(
         broker=broker, task8_port=port,
+        startup_proof_consumer=lambda _request: {"schema_version": 1},
         act_hashes={"manifest_sha256": "a" * 64, "runtime_config_sha256": "b" * 64,
                     "contact_policy_fingerprint": "c" * 64},
     )

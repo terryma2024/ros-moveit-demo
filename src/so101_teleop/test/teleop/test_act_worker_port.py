@@ -14,8 +14,12 @@ import pytest
 
 from so101_teleop.unified.ipc import IpcProtocolError, decode_request
 from so101_teleop.unified.bridge import ActCampaignChildOwner, ActChildLaunch, ActWorkerPort, BridgeLaunch
-from so101_teleop.unified.contracts import AdmittedCampaignContext, MutationError
+from so101_teleop.unified.contracts import AdmittedCampaignContext, MutationError, OwnerKey
 from so101_teleop.unified.ipc import IpcReply
+
+
+STACK_OWNER = {"pid": 12345, "pgid": 12345, "started_ticks": 101,
+               "argv_sha256": "1" * 64, "environment_sha256": "2" * 64}
 
 
 def packet(operation: str = "task8_phase", **overrides) -> dict:
@@ -46,6 +50,7 @@ def packet(operation: str = "task8_phase", **overrides) -> dict:
             "manifest_sha256": "a" * 64,
             "runtime_config_sha256": "b" * 64,
             "contact_policy_fingerprint": "c" * 64,
+            "stack_owner": STACK_OWNER,
         },
     }
     base.update(overrides)
@@ -83,6 +88,7 @@ def test_task8_full_has_no_phase_override_and_cancel_has_closed_reason():
     full = packet("task8_full", payload={
         "scenario_id": "scene-1", "manifest_sha256": "a" * 64,
         "runtime_config_sha256": "b" * 64, "contact_policy_fingerprint": "c" * 64,
+        "stack_owner": STACK_OWNER,
     })
     assert decode(full).operation == "task8_full"
     with pytest.raises(IpcProtocolError, match="IPC_SCHEMA_REJECTED"):
@@ -135,6 +141,7 @@ class _Client:
 def test_worker_port_binds_task8_packet_and_rejects_foreign_reply():
     client = _Client()
     port = ActWorkerPort(_context(), _launch(), client)
+    port.bind_startup_owner(OwnerKey(12345, 12345, 101, "1" * 64, "2" * 64))
     request = {
         "session_id": "session-w00", "attempt_id": "attempt-1", "scenario_id": "scene-1",
         "mode": "phase_prefix", "stop_after": "MICRO_LIFT",
@@ -144,10 +151,25 @@ def test_worker_port_binds_task8_packet_and_rejects_foreign_reply():
     sent = client.packets[-1]
     assert sent.operation == "task8_phase" and sent.worker_id == "w00"
     assert sent.token.operation_id == "operation-1"
+    assert sent.payload["stack_owner"]["pid"] == 12345
     assert "physical_gpu_uuid" not in sent.payload and "resource_binding_id" not in sent.payload
     client.worker_id = "w01"
     with pytest.raises(MutationError, match="ACT_REPLY_IDENTITY_MISMATCH"):
         asyncio.run(port.task8(request))
+
+
+def test_task8_worker_refuses_to_dispatch_before_owner_proof_is_bound():
+    client = _Client()
+    port = ActWorkerPort(_context(), _launch(), client)
+    request = {
+        "session_id": "session-w00", "attempt_id": "attempt-1", "scenario_id": "scene-1",
+        "mode": "phase_prefix", "stop_after": "MICRO_LIFT",
+        "contact_policy_fingerprint": "d" * 64,
+        "deadline_ns": time.monotonic_ns() + 10**9,
+    }
+    with pytest.raises(MutationError, match="ACT_TASK8_STARTUP_OWNER_UNBOUND"):
+        asyncio.run(port.task8(request))
+    assert client.packets == []
 
 
 def test_worker_port_can_cancel_after_campaign_deadline_with_fresh_bounded_stop_deadline():

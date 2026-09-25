@@ -69,6 +69,10 @@ def prepared(tmp_path, *, fail=None):
             self.client = SimpleNamespace(owner=CHILD_OWNER)
             self.launch = child
 
+        def bind_startup_owner(self, owner):
+            assert owner == OWNER
+            events.append("startup.bind")
+
         async def cancel(self, request):
             events.append("cancel")
             assert request["session_id"] == child.mujoco_session_id
@@ -298,7 +302,7 @@ def test_case_owner_issues_bound_proof_before_returning_ready(tmp_path):
             live_probe=lambda _owner: True,
         ).consume()
         assert receipt["operation_id"] == context.operation_id
-        assert events == ["admit", "child.start", "stack.start"]
+        assert events == ["admit", "child.start", "stack.start", "startup.bind"]
         await owner.finish(attempt_id="attempt-271")
 
     asyncio.run(run())

@@ -158,6 +158,7 @@ class Task8CaseOwner:
                 self.startup_proof_issuer(
                     context, child, owner_key, self.child_owner_key,
                 ).issue(probe.readiness_bytes)
+                self.worker.bind_startup_owner(owner_key)
             self._ready = True
             return context, self.worker
         except BaseException:

@@ -128,7 +128,8 @@ class RclpyActionDriver:
 
     def __init__(self, *, broker=None, owner: OwnerKey | None = None,
                  stop_timeout_s: float | None = None, accept_timeout_s: float | None = None,
-                 task8_port=None, act_hashes: dict[str, str] | None = None) -> None:
+                 task8_port=None, act_hashes: dict[str, str] | None = None,
+                 startup_proof_consumer=None) -> None:
         self._node = None
         self._executor = None
         self._thread = None
@@ -142,6 +143,10 @@ class RclpyActionDriver:
             raise MutationError("ROS_DRIVER_TIMEOUT_INVALID")
         self._goals: dict[str, dict] = {}
         self._task8_port = task8_port
+        if startup_proof_consumer is not None and not callable(startup_proof_consumer):
+            raise MutationError("TASK8_STARTUP_CONSUMER_INVALID")
+        self._startup_proof_consumer = startup_proof_consumer
+        self._task8_startup_used = False
         self._act_cancelled = threading.Event()
         self._act_hashes = (act_hashes if act_hashes is not None else
                             {key: os.environ.get(name) for key, name in _ACT_HASH_ENV.items()})
@@ -374,6 +379,14 @@ class RclpyActionDriver:
             raise MutationError("ACT_TASK8_HASH_MISMATCH")
         if request.deadline_ns <= time.monotonic_ns():
             raise MutationError("ACT_DEADLINE_EXPIRED")
+        if self._task8_startup_used:
+            raise MutationError("TASK8_STARTUP_PROOF_ALREADY_CONSUMED")
+        self._task8_startup_used = True
+        if self._startup_proof_consumer is None:
+            from .task8_child_startup import consume_child_task8_startup
+            consume_child_task8_startup(request, self._owner, os.environ)
+        else:
+            self._startup_proof_consumer(request)
         from so101_demo.act.task8 import Task8Runner
 
         task = {
