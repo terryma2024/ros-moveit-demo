@@ -153,6 +153,8 @@ class UnifiedServices:
     bridge: Any = None
     budget_source: BudgetSource = field(default_factory=UnknownBudgetSource)
     lifecycle: Any = None
+    act_workload: Any = None
+    act_error: str | None = None
     #: True for the schema-only composition used by OpenAPI export and route tests.
     schema_only: bool = False
 
