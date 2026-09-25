@@ -379,6 +379,20 @@ class UnifiedWorkloadService:
             }
             if any(qualification.get(key) != value for key, value in required.items()):
                 raise ValueError("W8_QUALIFICATION_MISMATCH")
+            # A self-declared PASSED document is not physical qualification.
+            # Task 11A must provide an independent verifier of the frozen
+            # contract, two committed 20-scene waves and actual per-Worker
+            # terminal leases before formal admission can become reachable.
+            try:
+                from so101_demo.act.w8_qualification import verify_w8_qualification
+            except ImportError as error:
+                raise ValueError("W8_QUALIFICATION_VERIFIER_UNAVAILABLE") from error
+            try:
+                verified = verify_w8_qualification(Path(qualified_path), payload)
+            except (OSError, KeyError, TypeError, ValueError) as error:
+                raise ValueError("W8_QUALIFICATION_EVIDENCE_INVALID") from error
+            if verified is not True:
+                raise ValueError("W8_QUALIFICATION_EVIDENCE_INVALID")
         elif payload["qualification_receipt_path"] is not None:
             raise ValueError("QUALIFICATION_RECEIPT_UNEXPECTED")
         if not isinstance(payload["children"], list) or len(payload["children"]) != payload["worker_count"]:
