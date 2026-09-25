@@ -100,6 +100,27 @@ def test_full_requires_fresh_restart_before_any_phase():
     assert port.calls == []
 
 
+def test_prefix_rejects_world_reset_before_begin():
+    port = FakePort()
+    with pytest.raises(Task8Error, match="FULL_RESTART_REQUIRED"):
+        Task8Runner(port).run(request("phase_prefix", "SEARCH", "RESET_WORLD"))
+    assert port.calls == []
+
+
+def test_prefix_rejects_unproved_restart_before_search_and_stops():
+    class UnprovedRestart(FakePort):
+        def begin(self, req):
+            result = super().begin(req)
+            result["full_restart"] = False
+            return result
+
+    port = UnprovedRestart()
+    with pytest.raises(Task8Error, match="FULL_RESTART_NOT_PROVED"):
+        Task8Runner(port).run(request("phase_prefix", "SEARCH"))
+    assert not any(call[0] == "phase" for call in port.calls)
+    assert port.calls[-1] == ("safe_stop", "TASK8_ABORT")
+
+
 def test_release_detaches_before_opening_and_retreat_has_two_ordered_segments():
     port = FakePort()
     result = Task8Runner(port).run(request("full", None))
