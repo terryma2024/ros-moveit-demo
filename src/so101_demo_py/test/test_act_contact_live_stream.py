@@ -144,6 +144,17 @@ def test_ros_chunk_converter_checks_same_step_state_and_contact_identity(tmp_pat
     assert row["left_contacts"][0]["robot_geom"] == "fixed_fingertip_pad_collision_006"
 
 
+def test_ros_chunk_converter_accepts_post_step_pose_and_rejects_stale_derived_pose():
+    message = _ros_chunk()
+    sample = message.samples[0]
+    sample.model_qpos[2] = .165 - .00000981
+    with pytest.raises(ValueError, match="live object pose disagrees with MuJoCo state"):
+        chunk_from_ros(message, cup_qpos_address=0, cup_qvel_address=0)
+    sample.object_pose_world.position.z = sample.model_qpos[2]
+    converted = chunk_from_ros(message, cup_qpos_address=0, cup_qvel_address=0)
+    assert converted["samples"][0]["cup_position_m"][2] == sample.model_qpos[2]
+
+
 @pytest.mark.parametrize("damage", ["body", "category", "force", "total", "pose", "state"])
 def test_ros_chunk_converter_rejects_misbound_evidence(damage):
     message = _ros_chunk()

@@ -408,6 +408,22 @@ msg::PhysicsStepEvidence EvidenceBuilder::build_step(
   {
     throw std::invalid_argument("physics step has non-finite MuJoCo state");
   }
+  const int joint = model->body_jntadr[object_body_id_];
+  if (model->body_jntnum[object_body_id_] != 1 || joint < 0 ||
+    model->jnt_type[joint] != mjJNT_FREE)
+  {
+    throw std::invalid_argument("physics-step object must have a free joint");
+  }
+  const int address = model->jnt_qposadr[joint];
+  // mj_step integrates qpos after updating xpos/xquat. Publish the object pose from
+  // the same post-integration state as model_qpos, without changing live mjData.
+  output.object_pose_world.position.x = output.model_qpos[address];
+  output.object_pose_world.position.y = output.model_qpos[address + 1];
+  output.object_pose_world.position.z = output.model_qpos[address + 2];
+  output.object_pose_world.orientation.w = output.model_qpos[address + 3];
+  output.object_pose_world.orientation.x = output.model_qpos[address + 4];
+  output.object_pose_world.orientation.y = output.model_qpos[address + 5];
+  output.object_pose_world.orientation.z = output.model_qpos[address + 6];
   return output;
 }
 
