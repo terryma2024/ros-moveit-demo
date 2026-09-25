@@ -9,7 +9,9 @@ from types import SimpleNamespace
 import pytest
 
 from so101_demo.act.recorder import EpisodeRecorder
-from so101_demo.act.result_store import ActCollectionResultStore, ActCollectionResultVerifier, ResultInfraError
+from so101_demo.act.result_store import (
+    ActCollectionResultStore, ActCollectionResultVerifier, ActCollectionResults, ResultInfraError,
+)
 from so101_demo.parallel_batch.contracts import AttemptStatus, LeaseIdentity, RunMode
 from so101_demo.parallel_batch.contracts import BatchKindV2, BatchRequestV2, load_parallel_runtime_config_v2
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
@@ -133,6 +135,49 @@ def test_worker_recovery_receipt_is_exact_lease_and_durable(tmp_path):
     path.write_text(path.read_text() + " ")
     assert store.verify_recovery_receipt(path, current, succeeded=True, generation=1,
                                          deadline_monotonic_s=30., clock=lambda: 17.) is False
+
+
+def reset_receipt(current, *, reset_epoch=2, session_id="session-1"):
+    return {"lease_identity": {name: getattr(current, name) for name in (
+        "batch_id", "coordinator_epoch", "worker_id", "worker_generation",
+        "point_id", "attempt_id", "lease_generation")},
+        "session_id": session_id, "reset_epoch": reset_epoch,
+        "joint_positions": (0.,) * 7, "reset_completed_monotonic_s": 12.}
+
+
+def test_worker_factory_reserves_private_episode_only_after_closed_reset(tmp_path):
+    current = lease()
+    root = tmp_path / "w00"
+    results = ActCollectionResults({"w00": root}, clock=lambda: 15.)
+    foreign = reset_receipt(current)
+    foreign["lease_identity"]["worker_generation"] = 2
+    with pytest.raises(ValueError, match="ACT_RESET_IDENTITY_MISMATCH"):
+        results.reserve_workspace(current, foreign)
+    assert not root.exists()
+    invalid = reset_receipt(current)
+    invalid["joint_positions"] = (0.,) * 6
+    with pytest.raises(ValueError, match="ACT_RESET_JOINTS_INVALID"):
+        results.reserve_workspace(current, invalid)
+    assert not root.exists()
+    assert results.reserve_workspace(current, reset_receipt(current)) is True
+    episode_root = results.episode_root(current)
+    assert episode_root == root / "attempts" / current.point_id / current.attempt_id / "working/episode"
+    with pytest.raises(ValueError, match="ACT_WORKSPACE_ALREADY_RESERVED"):
+        results.reserve_workspace(current, reset_receipt(current))
+
+
+def test_worker_factory_requires_episode_scope_to_match_reset_receipt(tmp_path):
+    current = lease()
+    results = ActCollectionResults({"w00": tmp_path / "w00"}, clock=lambda: 15.)
+    results.reserve_workspace(current, reset_receipt(current))
+    recorder = EpisodeRecorder(results.episode_root(current), session_id="wrong-session",
+                               attempt_id=current.attempt_id, reset_epoch=2,
+                               provenance=PROVENANCE)
+    path = recorder.finish({"status": "FAILED", "reason": "search_failed",
+                            "task8_success": False, "stopped_confirmed": True})
+    decision = SimpleNamespace(status=AttemptStatus.FAILED, episode_seal_path=path)
+    with pytest.raises(ResultInfraError, match="RESULT_EPISODE_INVALID"):
+        results.seal_attempt(current, decision)
 
 
 def test_coordinator_journals_business_failed_only_after_verifier(tmp_path):
