@@ -116,6 +116,30 @@ TEST_F(AtomicEvidenceTest, ZeroContactSnapshotIsAtomicAndFinite)
   EXPECT_TRUE(std::isfinite(message.object_pose_world.position.z));
 }
 
+TEST_F(AtomicEvidenceTest, PhysicsStepPoseMatchesPostIntegrationFreeJointState)
+{
+  place_free_body("cup_joint", 0, 0, .2);
+  place_free_body("left_joint", -.3, 0, .2);
+  place_free_body("right_joint", .3, 0, .2);
+  mj_forward(model_.get(), data_.get());
+  const int cup_joint = mj_name2id(model_.get(), mjOBJ_JOINT, "cup_joint");
+  const int cup_body = mj_name2id(model_.get(), mjOBJ_BODY, "cup");
+  const int address = model_->jnt_qposadr[cup_joint];
+  mj_step(model_.get(), data_.get());
+  ASSERT_GT(std::abs(data_->qpos[address + 2] - data_->xpos[3 * cup_body + 2]), 1e-8)
+    << "this test must exercise MuJoCo's post-step derived-state lag";
+
+  const auto step = builder_.build_step(model_.get(), data_.get(), false, state_, 0, 1.0, 10.0);
+  ASSERT_EQ(step.model_qpos.size(), static_cast<std::size_t>(model_->nq));
+  EXPECT_DOUBLE_EQ(step.object_pose_world.position.x, step.model_qpos[address]);
+  EXPECT_DOUBLE_EQ(step.object_pose_world.position.y, step.model_qpos[address + 1]);
+  EXPECT_DOUBLE_EQ(step.object_pose_world.position.z, step.model_qpos[address + 2]);
+  EXPECT_DOUBLE_EQ(step.object_pose_world.orientation.w, step.model_qpos[address + 3]);
+  EXPECT_DOUBLE_EQ(step.object_pose_world.orientation.x, step.model_qpos[address + 4]);
+  EXPECT_DOUBLE_EQ(step.object_pose_world.orientation.y, step.model_qpos[address + 5]);
+  EXPECT_DOUBLE_EQ(step.object_pose_world.orientation.z, step.model_qpos[address + 6]);
+}
+
 TEST_F(AtomicEvidenceTest, ResetGenerationIsTheOnlyEpochAuthority)
 {
   mj_forward(model_.get(), data_.get());
