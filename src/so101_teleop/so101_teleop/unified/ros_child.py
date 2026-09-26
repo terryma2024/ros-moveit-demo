@@ -80,6 +80,41 @@ def bound_act_source_settings(report: dict, *, timestep_s: float) -> dict[str, f
     }
 
 
+def maybe_provision_task8_port(driver):
+    """Compose SEARCH only for the admitted, hash-bound Task 8 manifest."""
+    manifest = driver._act_artifacts.read_hashed_json("manifest")
+    if manifest.get("kind") != "ACT_TASK8_LIVE":
+        return None
+    from so101_demo.act.task8_manifest import require_task8_live_manifest
+    from so101_demo.adapters.act.task8_child_port import build_task8_child_search_port
+    from rclpy.parameter import Parameter
+    import rclpy
+
+    require_task8_live_manifest(manifest)
+    report = driver._act_artifacts.read_hashed_json("calibration_report")
+    worker_id = os.environ["SO101_ACT_WORKER_ID"]
+    generation = int(os.environ["SO101_ACT_GENERATION"])
+
+    def service_node_factory():
+        return rclpy.create_node(
+            f"act_task8_io_{worker_id}_{generation}",
+            parameter_overrides=[Parameter("use_sim_time", value=True)],
+        )
+
+    return build_task8_child_search_port(
+        node=driver._node, model=driver._act_model,
+        contact_pairs=driver._act_contact_pairs, manifest=manifest,
+        report=report, sources=driver._act_sources,
+        command_broker=driver._act_command_broker,
+        connection=driver._act_reset_connection,
+        cancelled=driver._act_cancelled, binding=driver._act_head_search,
+        evidence_root=driver._act_artifacts.evidence_root,
+        campaign_id=os.environ["SO101_ACT_CAMPAIGN_ID"],
+        worker_id=worker_id, generation=generation,
+        scene_node_factory=service_node_factory,
+    )
+
+
 class _FencedTask8Port:
     """Prevent a cancelled Task 8 thread from starting its next physical phase."""
 
@@ -225,6 +260,7 @@ class RclpyActionDriver:
             self._thread = threading.Thread(target=self._executor.spin, name="act-child-rclpy", daemon=True)
             self._thread.start()
             self._act_hazard_dispatcher.start()
+            self._task8_port = maybe_provision_task8_port(self)
             return broker
         except BaseException:
             if self._act_reset_connection is not None:
