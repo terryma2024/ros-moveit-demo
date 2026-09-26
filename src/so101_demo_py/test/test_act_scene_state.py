@@ -57,11 +57,13 @@ def test_reordered_sample_or_unknown_future_receipt_time_cannot_be_used():
     with pytest.raises(ValueError,match='SCENE_STATE_STALE'):port.snapshot()
 
 
-def adapter(port,proof,events):
+def adapter(port,proof,events,*,on_state=None):
     from so101_demo.adapters.act.scene_state import RosSceneStateAdapter
     class Node:
         def create_subscription(self,*args):return None
-    return RosSceneStateAdapter(Node(),port,on_hazard=events.append,pending_reset_port=proof)
+    options={} if on_state is None else {'on_state':on_state}
+    return RosSceneStateAdapter(Node(),port,on_hazard=events.append,
+                                pending_reset_port=proof,**options)
 
 
 def message(value):
@@ -85,6 +87,22 @@ def test_only_authorized_pending_paused_reset_is_buffered_until_atomic_reset_arm
     ros.arm(SimpleNamespace(simulation_session_id='s',reset_epoch=3,simulation_time_s=1.02,
         simulation_step=0,paused=True))
     assert port.snapshot()['reset_epoch']==3 and port.snapshot()['simulation_step']==5
+
+
+def test_only_accepted_current_scene_updates_pause_deadline_state():
+    port,now=observer();events=[];states=[]
+    ros=adapter(port,lambda value:True,events,
+                on_state=lambda value:states.append((value['reset_epoch'],value['paused'])))
+    paused=frame();paused.update(paused=True)
+    ros.accept_message(message(paused))
+    assert states==[(2,True)]
+    future=frame();future.update(reset_epoch=3,paused=True,simulation_step=0,
+                                 simulation_time_s=1.02)
+    ros.accept_message(message(future))
+    assert states==[(2,True)]
+    running=frame();running.update(simulation_step=6,simulation_time_s=1.03)
+    ros.accept_message(message(running))
+    assert states==[(2,True),(2,False)] and not events
 
 
 @pytest.mark.parametrize('proof_valid', [True, False])
