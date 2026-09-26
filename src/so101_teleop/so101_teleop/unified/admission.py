@@ -373,10 +373,10 @@ class UnifiedWorkloadService:
             read_bytes=spec.kind in ("task8_phase", "task8_full"),
         )
         if spec.kind in ("task8_phase", "task8_full"):
-            from so101_demo.act.task8_manifest import require_task8_live_manifest
+            from so101_demo.act.pick_place_validation_manifest import require_pick_place_validation_manifest
 
             try:
-                manifest = require_task8_live_manifest(json.loads(manifest_bytes))
+                manifest = require_pick_place_validation_manifest(json.loads(manifest_bytes))
             except (TypeError, ValueError, UnicodeDecodeError) as error:
                 raise ValueError("TASK8_MANIFEST_INVALID") from error
             if any(manifest[name] != payload[name] for name in (

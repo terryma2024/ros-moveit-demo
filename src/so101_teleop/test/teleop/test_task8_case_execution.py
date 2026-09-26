@@ -12,7 +12,7 @@ import pytest
 from so101_demo.act.task8 import Task8Runner
 from so101_demo.act.task8_manifest import build_task8_live_manifest, write_new_manifest
 from so101_teleop.unified.contracts import OwnerKey
-from so101_teleop.unified.task8_case_execution import run_task8_case
+from so101_teleop.unified.pick_place_case_execution import run_pick_place_case
 
 
 STACK_OWNER = OwnerKey(12345, 12345, 101, "a" * 64, "b" * 64)
@@ -61,7 +61,7 @@ def _prepared(tmp_path, *, case_id="prefix-01", result=None, cleanup_fails=False
             self.launch = SimpleNamespace(mujoco_session_id="session-298", socket_root=str(child_root),
                                           ros_domain_id=198)
 
-        async def task8(self, request):
+        async def run_pick_place(self, request):
             events.append("execute")
             assert request["attempt_id"] == case_id
             assert request["session_id"] == self.launch.mujoco_session_id
@@ -117,7 +117,7 @@ def _prepared(tmp_path, *, case_id="prefix-01", result=None, cleanup_fails=False
 
 def test_case_result_is_written_only_after_own_stack_and_child_retire(tmp_path):
     spec, owner, journal, events = _prepared(tmp_path)
-    row = asyncio.run(run_task8_case(spec, "prefix-01", owner, journal))
+    row = asyncio.run(run_pick_place_case(spec, "prefix-01", owner, journal))
     assert events == ["start", "execute", "finish"]
     assert json.loads(journal.read_text()) == row
     assert row["status"] == "PASSED"
@@ -130,7 +130,7 @@ def test_full_case_stays_ineligible_for_formal_collection(tmp_path):
     full = {"status": "PASSED", "completed_phases": list(Task8Runner.PHASES),
             "stopped_confirmed": True, "formal_episode_eligible": True}
     spec, owner, journal, events = _prepared(tmp_path, case_id="full-01", result=full)
-    row = asyncio.run(run_task8_case(spec, "full-01", owner, journal))
+    row = asyncio.run(run_pick_place_case(spec, "full-01", owner, journal))
     assert events == ["start", "execute", "finish"]
     assert row["completed_phases"] == list(Task8Runner.PHASES)
     assert row["eligible_for_formal_collection"] is False
@@ -141,7 +141,7 @@ def test_case_rejects_forged_phase_result_after_retiring(tmp_path):
               "stopped_confirmed": True, "formal_episode_eligible": False}
     spec, owner, journal, events = _prepared(tmp_path, result=forged)
     with pytest.raises(ValueError, match="TASK8_CASE_RESULT_INVALID"):
-        asyncio.run(run_task8_case(spec, "prefix-01", owner, journal))
+        asyncio.run(run_pick_place_case(spec, "prefix-01", owner, journal))
     assert events == ["start", "execute", "finish"]
     assert not journal.exists()
 
@@ -149,7 +149,7 @@ def test_case_rejects_forged_phase_result_after_retiring(tmp_path):
 def test_case_cleanup_failure_retains_admission_and_refuses_success_record(tmp_path):
     spec, owner, journal, events = _prepared(tmp_path, cleanup_fails=True)
     with pytest.raises(RuntimeError, match="stop unconfirmed"):
-        asyncio.run(run_task8_case(spec, "prefix-01", owner, journal))
+        asyncio.run(run_pick_place_case(spec, "prefix-01", owner, journal))
     assert events == ["start", "execute", "finish"]
     assert owner.context is not None and not journal.exists()
 
@@ -159,7 +159,7 @@ def test_missing_child_retirement_receipt_refuses_success_record(tmp_path):
 
     spec, owner, journal, events = _prepared(tmp_path, omit_child_receipt=True)
     with pytest.raises(MutationError, match="TASK8_RETIREMENT_RECEIPT_INVALID"):
-        asyncio.run(run_task8_case(spec, "prefix-01", owner, journal))
+        asyncio.run(run_pick_place_case(spec, "prefix-01", owner, journal))
     assert events == ["start", "execute", "finish"]
     assert not journal.exists()
 
@@ -167,12 +167,12 @@ def test_missing_child_retirement_receipt_refuses_success_record(tmp_path):
 def test_unknown_case_and_replaced_manifest_refuse_before_admission(tmp_path):
     spec, owner, journal, events = _prepared(tmp_path)
     with pytest.raises(ValueError, match="TASK8_CASE_NOT_FROZEN"):
-        asyncio.run(run_task8_case(spec, "prefix-99", owner, journal))
+        asyncio.run(run_pick_place_case(spec, "prefix-99", owner, journal))
     assert events == [] and not journal.exists()
     path = Path(spec.payload["manifest_path"])
     path.write_bytes(path.read_bytes() + b" ")
     with pytest.raises(ValueError, match="TASK8_MANIFEST_BINDING_INVALID"):
-        asyncio.run(run_task8_case(spec, "prefix-01", owner, journal))
+        asyncio.run(run_pick_place_case(spec, "prefix-01", owner, journal))
     assert events == [] and not journal.exists()
 
 
@@ -183,5 +183,5 @@ def test_linked_journal_parent_refuses_before_starting_a_stack(tmp_path):
     alias = tmp_path / "linked-journal"
     alias.symlink_to(real_parent, target_is_directory=True)
     with pytest.raises(ValueError, match="TASK8_MANIFEST_BINDING_INVALID"):
-        asyncio.run(run_task8_case(spec, "prefix-01", owner, alias / "result.json"))
+        asyncio.run(run_pick_place_case(spec, "prefix-01", owner, alias / "result.json"))
     assert events == [] and not (real_parent / "result.json").exists()

@@ -260,7 +260,7 @@ class ActWorkerPort:
             raise MutationError("ACT_REPLY_IDENTITY_MISMATCH")
         return result["body"]
 
-    async def task8(self, request: dict) -> dict:
+    async def run_pick_place(self, request: dict) -> dict:
         fields = frozenset({
             "session_id", "attempt_id", "scenario_id", "mode", "stop_after",
             "contact_policy_fingerprint", "deadline_ns",
@@ -290,6 +290,10 @@ class ActWorkerPort:
             operation, session_id=session_id, attempt_id=attempt_id,
             deadline_ns=deadline_ns, payload=payload,
         )
+
+    async def task8(self, request: dict) -> dict:
+        """Compatibility entry point for version-one callers."""
+        return await self.run_pick_place(request)
 
     async def act_collection(self, request: dict) -> dict:
         fields = frozenset({

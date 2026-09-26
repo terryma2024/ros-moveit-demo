@@ -13,7 +13,7 @@ from so101_teleop.unified.act_stack import ActStackProcessOwner
 from so101_teleop.unified.bridge import ActChildLaunch
 from so101_teleop.unified.task8_startup_issuer import InstalledActStackReadinessProbe
 from so101_teleop.unified.act_stack_probes import (
-    RepeatableActStackStopProbe, RosGraphClearProbe, make_task8_act_stack,
+    RepeatableActStackStopProbe, RosGraphClearProbe, make_pick_place_act_stack,
 )
 
 
@@ -42,7 +42,7 @@ def test_factory_binds_distinct_start_and_stop_observers_to_one_domain(tmp_path)
     context, child = scope(tmp_path)
     ros2 = executable(tmp_path, "ros2")
     observer = executable(tmp_path, "act_stack_ready")
-    stack = make_task8_act_stack(
+    stack = make_pick_place_act_stack(
         context, child, ros2_executable=ros2, readiness_executable=observer,
         base_environment={"AMENT_PREFIX_PATH": "/task/overlay"},
     )
@@ -92,7 +92,7 @@ def test_factory_rejects_wrong_generation_before_creating_stack_scope(tmp_path):
     context, child = scope(tmp_path)
     child = ActChildLaunch(**{**child.__dict__, "execution_generation": 4})
     with pytest.raises(ValueError, match="ACT_STACK_FACTORY_SCOPE_INVALID"):
-        make_task8_act_stack(
+        make_pick_place_act_stack(
             context, child, ros2_executable=executable(tmp_path, "ros2"),
             readiness_executable=executable(tmp_path, "act_stack_ready"),
             base_environment={},

@@ -165,9 +165,13 @@ class ChildRuntime:
                 raise MutationError("ACT_DEADLINE_EXPIRED")
             try:
                 if request.operation == "task8_phase":
-                    method = self.driver.task8_phase
+                    method = getattr(self.driver, "pick_place_phase", None)
+                    if method is None:
+                        method = self.driver.task8_phase
                 elif request.operation == "task8_full":
-                    method = self.driver.task8_full
+                    method = getattr(self.driver, "pick_place_full", None)
+                    if method is None:
+                        method = self.driver.task8_full
                 elif request.operation == "act_collection_start":
                     method = self.driver.act_collection_start
                 elif request.operation == "act_collection_resume":

@@ -147,7 +147,7 @@ def test_worker_port_binds_task8_packet_and_rejects_foreign_reply():
         "mode": "phase_prefix", "stop_after": "MICRO_LIFT",
         "contact_policy_fingerprint": "d" * 64, "deadline_ns": time.monotonic_ns() + 10**9,
     }
-    assert asyncio.run(port.task8(request)) == {"status": "ACCEPTED"}
+    assert asyncio.run(port.run_pick_place(request)) == {"status": "ACCEPTED"}
     sent = client.packets[-1]
     assert sent.operation == "task8_phase" and sent.worker_id == "w00"
     assert sent.token.operation_id == "operation-1"
@@ -155,7 +155,7 @@ def test_worker_port_binds_task8_packet_and_rejects_foreign_reply():
     assert "physical_gpu_uuid" not in sent.payload and "resource_binding_id" not in sent.payload
     client.worker_id = "w01"
     with pytest.raises(MutationError, match="ACT_REPLY_IDENTITY_MISMATCH"):
-        asyncio.run(port.task8(request))
+        asyncio.run(port.run_pick_place(request))
 
 
 def test_task8_worker_refuses_to_dispatch_before_owner_proof_is_bound():
@@ -168,7 +168,7 @@ def test_task8_worker_refuses_to_dispatch_before_owner_proof_is_bound():
         "deadline_ns": time.monotonic_ns() + 10**9,
     }
     with pytest.raises(MutationError, match="ACT_TASK8_STARTUP_OWNER_UNBOUND"):
-        asyncio.run(port.task8(request))
+        asyncio.run(port.run_pick_place(request))
     assert client.packets == []
 
 

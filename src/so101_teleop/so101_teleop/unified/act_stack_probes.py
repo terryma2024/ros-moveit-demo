@@ -11,7 +11,7 @@ from typing import Mapping
 
 from .act_stack import ActStackLaunch, ActStackProcessOwner
 from .bridge import ActChildLaunch
-from .task8_startup_issuer import InstalledActStackReadinessProbe
+from .pick_place_startup_issuer import InstalledActStackReadinessProbe
 
 
 class RepeatableActStackStopProbe:
@@ -59,7 +59,7 @@ class RosGraphClearProbe:
                 and not result.stdout.strip())
 
 
-def make_task8_act_stack(context, child: ActChildLaunch, *,
+def make_pick_place_act_stack(context, child: ActChildLaunch, *,
                          ros2_executable: Path, readiness_executable: Path,
                          base_environment: Mapping[str, str]) -> ActStackProcessOwner:
     """Create the only stack scope allowed for one admitted full Task 8 case."""
@@ -103,3 +103,7 @@ def make_task8_act_stack(context, child: ActChildLaunch, *,
         )
     except (AttributeError, OSError, TypeError, ValueError) as error:
         raise ValueError("ACT_STACK_FACTORY_SCOPE_INVALID") from error
+
+
+# Legacy API for version-one stack ownership.
+make_task8_act_stack = make_pick_place_act_stack
