@@ -11,6 +11,25 @@ import time
 from so101_demo.adapters.act.task6_capture import Task6FrameRecorder
 
 
+def _capture_best_world(recorder: Task6FrameRecorder, observer) -> dict:
+    """Join the newest compatible fresh physics step to buffered camera sources."""
+    history = observer.recent_with_receipts()
+    try:
+        return recorder.capture(history[-1].evidence)
+    except ValueError as latest_error:
+        first_error = latest_error
+        if str(first_error) not in {
+                "TASK6_SOURCE_STALE", "TASK6_SOURCE_SKEW",
+                "TASK6_CAMERA_INFO_MISSING"}:
+            raise
+    for received in reversed(history[:-1]):
+        try:
+            return recorder.capture(received.evidence)
+        except ValueError:
+            continue
+    raise first_error
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Record unqualified ACT Task 6 RGB evidence")
     parser.add_argument("--evidence-root", type=Path, required=True)
@@ -122,8 +141,7 @@ def main(argv: list[str] | None = None) -> int:
                 recorder.record_rejection("TASK6_SAMPLE_TIMER_GAP")
                 next_sample = now + .1
             try:
-                world = observer.recent_with_receipts()[-1].evidence
-                recorder.capture(world)
+                _capture_best_world(recorder, observer)
             except EvidenceRejected as error:
                 recorder.record_rejection(f"TASK6_ATOMIC_HAZARD: {error}")
                 atomic_hazard = True
