@@ -80,7 +80,11 @@ def route_motion_configuration(manifest):
 
 def transition_motion_configuration(manifest):
     """Replay activated sources and retain separate no-contact/contact phases."""
-    if isinstance(manifest,dict) and manifest.get('kind')=='ACT_TASK6_FULL_CONTACT_DIAGNOSTIC':
+    if isinstance(manifest,dict) and manifest.get('kind')=='ACT_TASK6_ALT_FULL_CONTACT_DIAGNOSTIC':
+        from so101_demo.act.task6_alt_full_contact_diagnostic import require_alt_sources
+        source=require_alt_sources(manifest)
+        phase_start=source['contact_phase_start']
+    elif isinstance(manifest,dict) and manifest.get('kind')=='ACT_TASK6_FULL_CONTACT_DIAGNOSTIC':
         from so101_demo.act.task6_full_contact_diagnostic import require_full_sources
         source=require_full_sources(manifest)
         phase_start=source['contact_phase_start']
@@ -120,7 +124,10 @@ class RosCalibrationMotionGuard:
         from .scene_state import SceneStateObserver,RosSceneStateAdapter
         from .physics import MujocoPathProcess
         self.route_mode=isinstance(manifest,dict) and manifest.get('kind')=='ACT_TASK6_ROUTE_DIAGNOSTIC'
-        self.full_mode=isinstance(manifest,dict) and manifest.get('kind')=='ACT_TASK6_FULL_CONTACT_DIAGNOSTIC'
+        self.alt_full_mode=(isinstance(manifest,dict) and
+            manifest.get('kind')=='ACT_TASK6_ALT_FULL_CONTACT_DIAGNOSTIC')
+        self.full_mode=(isinstance(manifest,dict) and
+            manifest.get('kind')=='ACT_TASK6_FULL_CONTACT_DIAGNOSTIC') or self.alt_full_mode
         self.transition_mode=(isinstance(manifest,dict) and
             manifest.get('kind')=='ACT_TASK6_CONTACT_TRANSITION_DIAGNOSTIC') or self.full_mode
         self.contact_mode=isinstance(manifest,dict) and manifest.get('kind')=='ACT_CONTACT_DIAGNOSTIC'
@@ -153,7 +160,8 @@ class RosCalibrationMotionGuard:
             self.contact_observer=RobotContactObserver(known_geoms=known,allowed_pairs=allowed,
                 max_age_s=config['max_age_s'],max_sim_gap_s=float(self.model.opt.timestep)*1.01,monotonic=self.monotonic)
             root=Path(evidence_root);root.mkdir(parents=True,exist_ok=True);self.evidence_root=root
-            stem=('task6-full-contact' if self.full_mode else
+            stem=('task6-alt-full-contact' if self.alt_full_mode else
+                  'task6-full-contact' if self.full_mode else
                   'task6-contact-transition' if self.transition_mode else
                   'task6-route-diagnostic' if self.route_mode else
                   'contact-diagnostic' if self.contact_mode else 'motion-calibration')
@@ -215,6 +223,9 @@ class RosCalibrationMotionGuard:
         if getattr(self,'route_mode',False):
             from so101_demo.act.task6_route_diagnostic import route_prefix_matches
             matches=route_prefix_matches(prefix,self.contact_manifest)
+        elif getattr(self,'alt_full_mode',False):
+            from so101_demo.act.task6_alt_full_contact_diagnostic import alt_prefix_matches
+            matches=alt_prefix_matches(prefix,self.contact_manifest)
         elif getattr(self,'full_mode',False):
             from so101_demo.act.task6_full_contact_diagnostic import full_prefix_matches
             matches=full_prefix_matches(prefix,self.contact_manifest)
