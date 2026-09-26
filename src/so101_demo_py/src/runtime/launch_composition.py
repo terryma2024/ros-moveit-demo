@@ -2315,6 +2315,7 @@ def _configured_task_station_actions(context):
     broker_options = []
     environment_actions = []
     contact_path = ""
+    route_path = ""
     if act_profile:
         from ..adapters.act.command_broker import endpoint_bytes
         endpoint = LaunchConfiguration("act_broker_socket").perform(context)
@@ -2347,7 +2348,9 @@ def _configured_task_station_actions(context):
                 broker_options += ["--"+key.removeprefix("act_").replace("_","-"),value]
         motion_path=context.launch_configurations.get("act_motion_calibration_manifest", "")
         contact_path=context.launch_configurations.get("act_contact_diagnostic_manifest", "")
-        if motion_path and contact_path:raise ValueError("DIAGNOSTIC_MANIFESTS_MUTUALLY_EXCLUSIVE")
+        route_path=context.launch_configurations.get("act_task6_route_manifest", "")
+        if sum(bool(path) for path in (motion_path,contact_path,route_path))>1:
+            raise ValueError("DIAGNOSTIC_MANIFESTS_MUTUALLY_EXCLUSIVE")
         if motion_path:
             from ..adapters.act.calibration_motion import require_motion_manifest
             if mode!="true" or not all(timing):raise ValueError("MOTION_CALIBRATION_MODE_REQUIRED")
@@ -2372,6 +2375,24 @@ def _configured_task_station_actions(context):
             if hashlib.sha256(installed_plugins.read_bytes()).hexdigest()!=contact["plugin_sha256"]:
                 raise ValueError("CONTACT_DIAGNOSTIC_PLUGIN_DRIFT")
             broker_options += ["--contact-diagnostic-manifest",contact_path]
+        if route_path:
+            import hashlib
+            from ..adapters.act.calibration_motion import route_motion_configuration
+            if mode!="true" or not all(timing):
+                raise ValueError("TASK6_ROUTE_DIAGNOSTIC_MODE_REQUIRED")
+            route=json.loads(Path(route_path).read_text())
+            diagnostic=route_motion_configuration(route)
+            if (diagnostic["session_id"]!=session_id or
+                diagnostic["submit_lead_s"]!=float(timing[0]) or
+                diagnostic["stop_velocity_rad_s"]!=float(speed) or
+                diagnostic["max_age_s"]!=float(age) or
+                Path(LaunchConfiguration("mujoco_scene").perform(context)).resolve()!=Path(route["scene_path"]).resolve()):
+                raise ValueError("TASK6_ROUTE_DIAGNOSTIC_CONFIG_MISMATCH")
+            installed_plugins=(Path(get_package_share_directory("so101_demo_py")) /
+                               "config/mujoco/act/mujoco_plugins.yaml")
+            if hashlib.sha256(installed_plugins.read_bytes()).hexdigest()!=route["plugin_sha256"]:
+                raise ValueError("TASK6_ROUTE_DIAGNOSTIC_PLUGIN_DRIFT")
+            broker_options += ["--task6-route-manifest",route_path]
         environment_actions = [SetEnvironmentVariable("SO101_ACT_PROFILE", "1"),
                                SetEnvironmentVariable("SO101_ACT_BROKER_SOCKET", endpoint)]
     share = Path(get_package_share_directory("so101_demo_py"))
@@ -2489,6 +2510,7 @@ def build_task_station_launch_description(*, act_profile: bool = False) -> Launc
                DeclareLaunchArgument("act_calibration_report", default_value=""),
                DeclareLaunchArgument("act_motion_calibration_manifest", default_value=""),
                DeclareLaunchArgument("act_contact_diagnostic_manifest", default_value=""),
+               DeclareLaunchArgument("act_task6_route_manifest", default_value=""),
                DeclareLaunchArgument("act_stop_velocity_rad_s", default_value=""),
                DeclareLaunchArgument("act_max_age_s", default_value=""),
                *[DeclareLaunchArgument(key,default_value="") for key in ("act_submit_lead_s","act_accept_timeout_s","act_stop_timeout_s","act_permit_ttl_s")]]

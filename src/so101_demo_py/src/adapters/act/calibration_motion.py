@@ -58,6 +58,25 @@ def diagnostic_motion_configuration(manifest):
         manifest_sha256=source['manifest_sha256'])
 
 
+def route_motion_configuration(manifest):
+    """Replay the pinned, no-contact Task 6 route before broker admission."""
+    from so101_demo.act.task6_route_diagnostic import require_route_sources
+    source = require_route_sources(manifest)
+    return dict(kind='ACT_TASK6_ROUTE_DIAGNOSTIC', eligible_for_collection=False,
+        session_id=source['session_id'], attempt_id=source['attempt_id'],
+        model_path=source['scene_path'], model_sha256=source['model_sha256'],
+        arm_center=tuple(source['joint_start_rad']), neck_center_rad=source['neck_start_rad'],
+        max_neck_drift_rad=.002, max_rows=source['segment_rows']+1,
+        path_step_s=source['path_step_s'], path_clearance_m=source['path_clearance_m'],
+        velocity_limit_rad_s=tuple(source['velocity_limit_rad_s']),
+        acceleration_limit_rad_s2=tuple(source['acceleration_limit_rad_s2']),
+        max_age_s=source['max_age_s'], max_skew_s=source['max_skew_s'],
+        stop_velocity_rad_s=source['stop_velocity_rad_s'],
+        submit_lead_s=source['submit_lead_s'], allowed_pairs=frozenset(),
+        diagnostic_limits=source['diagnostic_limits'].copy(),
+        manifest_sha256=source['manifest_sha256'])
+
+
 class RosCalibrationMotionGuard:
     """Sole broker-local calibration gate, armed by actual paused reset evidence."""
     def __init__(self,node,driver,broker,manifest,*,evidence_root,monotonic=None):
@@ -70,9 +89,12 @@ class RosCalibrationMotionGuard:
         from .contact_evidence import RobotContactObserver,RosRobotContactAdapter
         from .scene_state import SceneStateObserver,RosSceneStateAdapter
         from .physics import MujocoPathProcess
+        self.route_mode=isinstance(manifest,dict) and manifest.get('kind')=='ACT_TASK6_ROUTE_DIAGNOSTIC'
         self.contact_mode=isinstance(manifest,dict) and manifest.get('kind')=='ACT_CONTACT_DIAGNOSTIC'
+        self.contact_mode=self.contact_mode or self.route_mode
         self.contact_manifest=manifest if self.contact_mode else None
-        self.manifest=(diagnostic_motion_configuration(manifest) if self.contact_mode
+        self.manifest=(route_motion_configuration(manifest) if self.route_mode else
+                       diagnostic_motion_configuration(manifest) if self.contact_mode
                        else require_motion_manifest(manifest))
         config=self.manifest
         self.node=node;self.driver,self.broker=driver,broker
@@ -94,7 +116,8 @@ class RosCalibrationMotionGuard:
             self.contact_observer=RobotContactObserver(known_geoms=known,allowed_pairs=allowed,
                 max_age_s=config['max_age_s'],max_sim_gap_s=float(self.model.opt.timestep)*1.01,monotonic=self.monotonic)
             root=Path(evidence_root);root.mkdir(parents=True,exist_ok=True);self.evidence_root=root
-            stem='contact-diagnostic' if self.contact_mode else 'motion-calibration'
+            stem=('task6-route-diagnostic' if self.route_mode else
+                  'contact-diagnostic' if self.contact_mode else 'motion-calibration')
             self._record=(root/(stem+'-robot-contacts.jsonl')).open('x',encoding='utf-8')
             self._scene_record=(root/(stem+'-scene-state.jsonl')).open('x',encoding='utf-8')
             self._audit_record=(root/(stem+'-guard-rejections.jsonl')).open('x',encoding='utf-8')
@@ -149,11 +172,15 @@ class RosCalibrationMotionGuard:
     def _within(self,prefix,reference,neck_yaw):
         if not self.contact_mode:
             return within_calibration_envelope(prefix,reference,neck_yaw,self.manifest)
-        from so101_demo.act.contact_diagnostic import prefix_matches_diagnostic
+        if getattr(self,'route_mode',False):
+            from so101_demo.act.task6_route_diagnostic import route_prefix_matches
+            matches=route_prefix_matches(prefix,self.contact_manifest)
+        else:
+            from so101_demo.act.contact_diagnostic import prefix_matches_diagnostic
+            matches=prefix_matches_diagnostic(prefix,self.contact_manifest)
         return (prefix['sequence']==self._next_segment and
             self._previous_segment_complete() and self._start_safe(reference,neck_yaw)
-            and prefix_matches_diagnostic(
-            prefix,self.contact_manifest)
+            and matches
         )
 
     def _live_ready(self):
