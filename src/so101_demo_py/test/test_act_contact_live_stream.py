@@ -28,6 +28,15 @@ def _step(number, *, force=0.0):
     }
 
 
+def _held_step(number):
+    step = _step(number, force=.2)
+    step["left_contacts"][0]["signed_distance_m"] = -.00008
+    step["right_contacts"] = [{"robot_geom": "moving_fingertip_pad_collision_000",
+                                "object_body": "plastic_cup", "normal_force_n": .2,
+                                "signed_distance_m": -.00008}]
+    return step
+
+
 def _chunk(sequence, *steps):
     return {
         "chunk_sequence": sequence, "simulation_session_id": "session-live-a",
@@ -67,26 +76,27 @@ def test_live_chunk_stream_persists_contiguous_raw_state(tmp_path):
 def test_held_cup_monitor_requires_prior_evidence_and_latches_contact_loss(tmp_path):
     recorder = _stream(tmp_path)
     with pytest.raises(ValueError, match="HOLDING_ARM_EVIDENCE_REQUIRED"):
-        recorder.arm_holding(minimum_bilateral_force_n=.1,
+        recorder.arm_holding(proof_physics_step=1, minimum_bilateral_force_n=.1,
                              maximum_compression_distance_m=.0001)
     recorder.accept_chunk(_chunk(1, _step(1)), ros_time_s=.002)
-    recorder.arm_holding(minimum_bilateral_force_n=.1,
+    with pytest.raises(ValueError, match="HOLDING_ARM_BILATERAL_FORCE_LOW"):
+        recorder.arm_holding(proof_physics_step=1, minimum_bilateral_force_n=.1,
+                             maximum_compression_distance_m=.0001)
+    recorder.accept_chunk(_chunk(2, _held_step(2)), ros_time_s=.004)
+    recorder.arm_holding(proof_physics_step=2, minimum_bilateral_force_n=.1,
                          maximum_compression_distance_m=.0001)
     with pytest.raises(ValueError, match="HOLDING_ALREADY_ARMED"):
-        recorder.arm_holding(minimum_bilateral_force_n=.1,
+        recorder.arm_holding(proof_physics_step=2, minimum_bilateral_force_n=.1,
                              maximum_compression_distance_m=.0001)
-    valid = _step(2, force=.2)
-    valid["right_contacts"] = [{"robot_geom": "moving_fingertip_pad_collision_000",
-                                "object_body": "plastic_cup", "normal_force_n": .2,
-                                "signed_distance_m": -.00008}]
-    recorder.accept_chunk(_chunk(2, valid), ros_time_s=.004)
-    lost = _step(3, force=.2)
+    valid = _held_step(3)
+    recorder.accept_chunk(_chunk(3, valid), ros_time_s=.006)
+    lost = _step(4, force=.2)
     with pytest.raises(ValueError, match="held cup bilateral force below minimum"):
-        recorder.accept_chunk(_chunk(3, lost), ros_time_s=.006)
+        recorder.accept_chunk(_chunk(4, lost), ros_time_s=.008)
     assert recorder.hazard is not None
     recorder.close()
     rows = [json.loads(line) for line in (tmp_path / "physics.ndjson").read_text().splitlines()]
-    assert [row["physics_step"] for row in rows] == [1, 2]
+    assert [row["physics_step"] for row in rows] == [1, 2, 3]
 
 
 def test_held_cup_monitor_rejects_compression_and_bad_thresholds(tmp_path):
@@ -94,17 +104,46 @@ def test_held_cup_monitor_rejects_compression_and_bad_thresholds(tmp_path):
     recorder.accept_chunk(_chunk(1, _step(1)), ros_time_s=.002)
     for minimum, compression in ((0., .0001), (.1, 0.), (.1, float("nan"))):
         with pytest.raises(ValueError):
-            recorder.arm_holding(minimum_bilateral_force_n=minimum,
+            recorder.arm_holding(proof_physics_step=1, minimum_bilateral_force_n=minimum,
                                  maximum_compression_distance_m=compression)
-    recorder.arm_holding(minimum_bilateral_force_n=.1,
+    with pytest.raises(ValueError, match="HOLDING_ARM_BILATERAL_FORCE_LOW"):
+        recorder.arm_holding(proof_physics_step=1, minimum_bilateral_force_n=.1,
+                             maximum_compression_distance_m=.0001)
+    compressed = _held_step(2)
+    compressed["left_contacts"][0]["signed_distance_m"] = -.0002
+    recorder.accept_chunk(_chunk(2, compressed), ros_time_s=.004)
+    with pytest.raises(ValueError, match="HOLDING_ARM_COMPRESSION_EXCEEDED"):
+        recorder.arm_holding(proof_physics_step=2, minimum_bilateral_force_n=.1,
+                             maximum_compression_distance_m=.0001)
+    recorder.accept_chunk(_chunk(3, _held_step(3)), ros_time_s=.006)
+    recorder.arm_holding(proof_physics_step=3, minimum_bilateral_force_n=.1,
                          maximum_compression_distance_m=.0001)
-    excessive = _step(2, force=.2)
+    excessive = _step(4, force=.2)
     excessive["right_contacts"] = [{"robot_geom": "moving_fingertip_pad_collision_000",
                                     "object_body": "plastic_cup", "normal_force_n": .2,
                                     "signed_distance_m": -.0002}]
     with pytest.raises(ValueError, match="held cup compression exceeded"):
-        recorder.accept_chunk(_chunk(2, excessive), ros_time_s=.004)
+        recorder.accept_chunk(_chunk(4, excessive), ros_time_s=.008)
     assert recorder.hazard is not None
+    recorder.close()
+
+
+def test_holding_arm_checks_every_step_since_the_exact_proof(tmp_path):
+    recorder = _stream(tmp_path)
+    recorder.accept_chunk(_chunk(1, _held_step(1)), ros_time_s=.002)
+    recorder.accept_chunk(_chunk(2, _step(2)), ros_time_s=.004)
+    recorder.accept_chunk(_chunk(3, _held_step(3)), ros_time_s=.006)
+    with pytest.raises(ValueError, match="HOLDING_ARM_BILATERAL_FORCE_LOW"):
+        recorder.arm_holding(proof_physics_step=1,
+                             minimum_bilateral_force_n=.1,
+                             maximum_compression_distance_m=.0001)
+    with pytest.raises(ValueError, match="HOLDING_ARM_PROOF_STEP_UNAVAILABLE"):
+        recorder.arm_holding(proof_physics_step=4,
+                             minimum_bilateral_force_n=.1,
+                             maximum_compression_distance_m=.0001)
+    recorder.arm_holding(proof_physics_step=3,
+                         minimum_bilateral_force_n=.1,
+                         maximum_compression_distance_m=.0001)
     recorder.close()
 
 

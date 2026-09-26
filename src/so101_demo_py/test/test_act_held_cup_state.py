@@ -45,7 +45,8 @@ def test_held_attachment_is_rigid_and_scope_bound():
     model, scene, step = evidence()
     transform = held_cup_attachment(model, scene, step, scene_received_monotonic_s=100.,
                                     now_monotonic_s=100.05,
-                                    max_age_s=.2, minimum_bilateral_force_n=.1)
+                                    max_age_s=.2, minimum_bilateral_force_n=.1,
+                                    maximum_compression_distance_m=.0001)
     assert len(transform) == 4 and all(len(row) == 4 for row in transform)
     assert transform[3] == [0., 0., 0., 1.]
 
@@ -61,7 +62,8 @@ def test_held_attachment_rejects_wrong_physics_identity(field, changed):
     with pytest.raises(ValueError):
         held_cup_attachment(model, scene, step, scene_received_monotonic_s=100.,
                             now_monotonic_s=100.05,
-                            max_age_s=.2, minimum_bilateral_force_n=.1)
+                            max_age_s=.2, minimum_bilateral_force_n=.1,
+                            maximum_compression_distance_m=.0001)
 
 
 def test_held_attachment_rejects_stale_weak_or_inconsistent_state():
@@ -76,6 +78,9 @@ def test_held_attachment_rejects_stale_weak_or_inconsistent_state():
     changed = copy.deepcopy(step)
     changed["model_qvel"][0] += .001
     cases.append((scene, changed, 100.05))
+    changed = copy.deepcopy(step)
+    changed["left_contacts"][0]["signed_distance_m"] = -.00011
+    cases.append((scene, changed, 100.05))
     changed = copy.deepcopy(scene)
     changed["paused"] = True
     cases.append((changed, step, 100.05))
@@ -84,7 +89,8 @@ def test_held_attachment_rejects_stale_weak_or_inconsistent_state():
         with pytest.raises(ValueError):
             held_cup_attachment(model, frame, physics, scene_received_monotonic_s=100.,
                                 now_monotonic_s=now,
-                                max_age_s=.2, minimum_bilateral_force_n=.1)
+                                max_age_s=.2, minimum_bilateral_force_n=.1,
+                                maximum_compression_distance_m=.0001)
 
 
 def test_lossless_step_lookup_is_bounded_immutable_and_fails_closed(tmp_path):
