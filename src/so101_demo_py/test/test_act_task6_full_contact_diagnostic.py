@@ -8,7 +8,7 @@ from types import SimpleNamespace as NS
 
 import pytest
 
-from so101_demo.act.task6_full_contact_diagnostic import (
+from so101_demo.act.approach_grasp_contact_diagnostic import (
     build_full_manifest, full_prefix_matches, require_full_sources,
 )
 

@@ -10,7 +10,7 @@ from PIL import Image as PillowImage
 import pytest
 
 from so101_demo.act.joints import ACT_JOINTS
-from so101_demo.adapters.act.task6_capture import Task6FrameRecorder
+from so101_demo.adapters.act.synchronized_frame_capture import SynchronizedFrameRecorder
 
 
 def stamp(value):
@@ -48,7 +48,7 @@ def world(value=1., *, epoch=2, session="task6-299", step=500):
 
 
 def prepared(tmp_path, *, include_info=True, image_time=.99, joint_time=.985):
-    recorder = Task6FrameRecorder(
+    recorder = SynchronizedFrameRecorder(
         tmp_path / "capture", session_id="task6-299", reset_epoch=2,
         source_floor_s=.5, max_age_s=.05, max_skew_s=.03,
     )
@@ -149,7 +149,7 @@ def test_real_ros_camera_info_numpy_intrinsics_join_a_causal_sample(tmp_path):
 
 
 def test_nonfinite_and_boolean_metadata_values_still_refuse(tmp_path):
-    from so101_demo.adapters.act.task6_capture import _finite
+    from so101_demo.adapters.act.synchronized_frame_capture import _finite
 
     for value in (True, False, "1", float("nan"), float("inf")):
         with pytest.raises(ValueError, match="TASK6_SOURCE_INVALID"):
@@ -163,7 +163,7 @@ def test_nonfinite_and_boolean_metadata_values_still_refuse(tmp_path):
 
 
 def test_cli_chooses_fresh_earlier_physics_step_for_current_camera_frame(tmp_path):
-    from so101_demo.cli.act_capture_task6 import _capture_best_world
+    from so101_demo.cli.act_capture_synchronized_rgb import _capture_best_world
 
     recorder = prepared(tmp_path)
     earlier = world(1., step=500)
@@ -179,7 +179,7 @@ def test_cli_chooses_fresh_earlier_physics_step_for_current_camera_frame(tmp_pat
 
 @pytest.mark.parametrize("invalid_latest", ("paused", "new_epoch"))
 def test_cli_never_bypasses_latest_world_scope_with_older_history(tmp_path, invalid_latest):
-    from so101_demo.cli.act_capture_task6 import _capture_best_world
+    from so101_demo.cli.act_capture_synchronized_rgb import _capture_best_world
 
     recorder = prepared(tmp_path)
     earlier = world(1., step=500)
@@ -210,7 +210,7 @@ def test_paused_or_truncated_physics_never_becomes_a_camera_sample(tmp_path):
 
 
 def test_cli_rejects_unscoped_output_before_ros_initialization(tmp_path):
-    from so101_demo.cli.act_capture_task6 import main
+    from so101_demo.cli.act_capture_synchronized_rgb import main
 
     with pytest.raises(ValueError, match="TASK6_CAPTURE_SCOPE_INVALID"):
         main(["--evidence-root", str(tmp_path), "--run-id", "../outside",
@@ -224,7 +224,7 @@ def test_cli_drains_atomic_callbacks_during_a_slow_png_write(tmp_path, monkeypat
     import rclpy
     from rclpy import executors
     from so101_demo.backends.mujoco import observer as world_module
-    from so101_demo.cli import act_capture_task6 as cli
+    from so101_demo.cli import act_capture_synchronized_rgb as cli
 
     (tmp_path / "experiments").mkdir()
     ticks = [0]
@@ -293,7 +293,7 @@ def test_cli_drains_atomic_callbacks_during_a_slow_png_write(tmp_path, monkeypat
     monkeypatch.setattr(rclpy, "create_node", lambda name, **_kwargs: Node(name))
     monkeypatch.setattr(executors, "SingleThreadedExecutor", Executor)
     monkeypatch.setattr(world_module, "MujocoWorldObserver", Observer)
-    monkeypatch.setattr(cli, "Task6FrameRecorder", Recorder)
+    monkeypatch.setattr(cli, "SynchronizedFrameRecorder", Recorder)
     result = cli.main([
         "--evidence-root", str(tmp_path), "--run-id", "capture",
         "--session-id", "task6-302", "--reset-epoch", "1",

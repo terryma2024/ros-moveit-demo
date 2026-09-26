@@ -11,10 +11,10 @@ import numpy as np
 
 from so101_demo.act.contracts import validate_action_prefix
 from so101_demo.act.execution import bounded_positions
-from so101_demo.act.task6_full_contact_diagnostic import require_full_sources
-from so101_demo.act.task6_alt_full_contact_diagnostic import require_alt_sources
+from so101_demo.act.approach_grasp_contact_diagnostic import require_full_sources
+from so101_demo.act.alternate_anchor_grasp_contact_diagnostic import require_alt_sources
 from so101_demo.adapters.act.physics import model_sha256
-from so101_demo.adapters.act.task8_contact_pairs import Task8ContactPairs
+from so101_demo.adapters.act.phase_contact_allowlist import PhaseContactAllowlist
 
 
 _PROFILE_SHA = "c950784be2827025cf8ce203d63a09adf6085f36b7a20cd9f6752837d93462b0"
@@ -82,7 +82,7 @@ def _check_base(base: dict, *, pairs_factory) -> str:
 
 
 def build_lift_candidate_manifest(
-    base_manifest: dict, *, profile_path: Path, pairs_factory=Task8ContactPairs,
+    base_manifest: dict, *, profile_path: Path, pairs_factory=PhaseContactAllowlist,
 ) -> dict:
     """Append one pinned LIFT prefix while explicitly refusing command authority."""
     anchor = _check_base(base_manifest, pairs_factory=pairs_factory)
@@ -207,7 +207,7 @@ def require_lift_candidate_manifest(value: object) -> dict:
     return value
 
 
-def require_lift_candidate_sources(value: dict, *, pairs_factory=Task8ContactPairs) -> dict:
+def require_lift_candidate_sources(value: dict, *, pairs_factory=PhaseContactAllowlist) -> dict:
     require_lift_candidate_manifest(value)
     rebuilt = build_lift_candidate_manifest(
         _base_from_candidate(value), profile_path=Path(value["lift_profile_path"]),

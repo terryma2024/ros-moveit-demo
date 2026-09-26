@@ -14,7 +14,7 @@ from ament_index_python.packages import get_package_share_directory
 from so101_demo.act.contact_calibration import CONTROLS, REGIMES, make_activation_receipt
 from so101_demo.act.contact_policy import policy_fingerprint
 from so101_demo.adapters.act.physics import model_sha256
-from so101_demo.adapters.act.task8_contact_pairs import Task8ContactPairs
+from so101_demo.adapters.act.phase_contact_allowlist import PhaseContactAllowlist
 
 
 def artifacts(tmp_path, *, change=None):
@@ -61,7 +61,7 @@ def artifacts(tmp_path, *, change=None):
 
 def bound(tmp_path, *, change=None, expected=None):
     model, scene, proposal, receipt, fingerprint = artifacts(tmp_path, change=change)
-    return Task8ContactPairs(
+    return PhaseContactAllowlist(
         model=model, scene_path=scene, proposal_path=proposal, receipt_path=receipt,
         expected_fingerprint=fingerprint if expected is None else expected,
     )
@@ -110,15 +110,15 @@ def test_receipt_tamper_is_refused(tmp_path):
     value["policy_fingerprint"] = "a" * 64
     receipt.write_text(json.dumps(value))
     with pytest.raises(ValueError, match="TASK8_CONTACT_POLICY_INVALID"):
-        Task8ContactPairs(model=model, scene_path=scene, proposal_path=proposal,
+        PhaseContactAllowlist(model=model, scene_path=scene, proposal_path=proposal,
                           receipt_path=receipt, expected_fingerprint=fingerprint)
 
 
 def test_child_compiles_only_installed_act_scene_before_using_policy(tmp_path):
-    from so101_demo.adapters.act.task8_contact_pairs import load_installed_act_contact_pairs
+    from so101_demo.adapters.act.phase_contact_allowlist import load_installed_phase_contact_allowlist
 
     expected_model, scene, proposal, receipt, fingerprint = artifacts(tmp_path)
-    model, pairs = load_installed_act_contact_pairs(
+    model, pairs = load_installed_phase_contact_allowlist(
         proposal_path=proposal, receipt_path=receipt, expected_fingerprint=fingerprint,
     )
     assert model_sha256(model) == model_sha256(expected_model)
@@ -131,7 +131,7 @@ def test_child_compiles_only_installed_act_scene_before_using_policy(tmp_path):
         wrong_root, change=lambda payload: payload.update(model_sha256="a" * 64),
     )
     with pytest.raises(ValueError, match="TASK8_CONTACT_POLICY_INVALID"):
-        load_installed_act_contact_pairs(
+        load_installed_phase_contact_allowlist(
             proposal_path=wrong_proposal, receipt_path=wrong_receipt,
             expected_fingerprint=wrong_fingerprint,
         )
@@ -182,7 +182,7 @@ def test_ros_sources_arm_only_from_reset_and_enqueue_phase_contact_hazard(tmp_pa
     from so101_mujoco_support.msg import SimulationEvidence as RosSimulationEvidence
 
     model, scene, proposal, receipt, fingerprint = artifacts(tmp_path)
-    pairs = Task8ContactPairs(model=model, scene_path=scene, proposal_path=proposal,
+    pairs = PhaseContactAllowlist(model=model, scene_path=scene, proposal_path=proposal,
                               receipt_path=receipt, expected_fingerprint=fingerprint)
 
     class Node:

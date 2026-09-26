@@ -13,7 +13,7 @@ from .contact_evidence import RobotContactObserver, RosRobotContactAdapter
 from .physics import model_sha256
 from .ros_observation import RosObservationAdapter
 from .scene_state import SceneStateObserver, RosSceneStateAdapter
-from .task8_contact_pairs import Task8ContactPairs
+from .task8_contact_pairs import PhaseContactAllowlist
 from .task8_readback import Task8PhysicalReadback
 
 
@@ -22,13 +22,13 @@ class Task8RosEvidence:
 
     def __init__(
         self, node, broker, *, model: mujoco.MjModel,
-        contact_pairs: Task8ContactPairs, session_id: str,
+        contact_pairs: PhaseContactAllowlist, session_id: str,
         max_wall_age_s: float, max_source_skew_s: float, max_sim_gap_s: float,
         joint_tolerance_rad: float, cup_pose_tolerance_m: float,
         cup_orientation_tolerance: float,
     ) -> None:
         if (not isinstance(model, mujoco.MjModel)
-                or not isinstance(contact_pairs, Task8ContactPairs)
+                or not isinstance(contact_pairs, PhaseContactAllowlist)
                 or model_sha256(model) != contact_pairs.model_sha256
                 or not isinstance(session_id, str) or not session_id):
             raise ValueError("TASK8_SOURCE_MODEL_INVALID")

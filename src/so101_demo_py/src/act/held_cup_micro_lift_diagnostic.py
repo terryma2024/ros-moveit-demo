@@ -10,7 +10,7 @@ from so101_demo.act.contracts import finite, validate_action_prefix
 from so101_demo.act.held_cup_micro_lift_candidate import (
     require_lift_candidate_manifest, require_lift_candidate_sources,
 )
-from so101_demo.adapters.act.task8_contact_pairs import Task8ContactPairs
+from so101_demo.adapters.act.phase_contact_allowlist import PhaseContactAllowlist
 
 
 _CANDIDATE_KIND = "ACT_HELD_CUP_MICRO_LIFT_CANDIDATE"
@@ -39,7 +39,7 @@ def _candidate_from_diagnostic(value: dict) -> dict:
 
 
 def build_held_cup_diagnostic_manifest(
-    candidate_manifest: dict, *, pairs_factory=Task8ContactPairs,
+    candidate_manifest: dict, *, pairs_factory=PhaseContactAllowlist,
 ) -> dict:
     """Promote only the exact candidate to a noncollecting diagnostic role."""
     require_lift_candidate_sources(candidate_manifest, pairs_factory=pairs_factory)
@@ -107,7 +107,7 @@ def require_held_cup_diagnostic_manifest(value: object) -> dict:
 
 
 def require_held_cup_diagnostic_sources(
-    value: dict, *, pairs_factory=Task8ContactPairs,
+    value: dict, *, pairs_factory=PhaseContactAllowlist,
 ) -> dict:
     require_held_cup_diagnostic_manifest(value)
     rebuilt = build_held_cup_diagnostic_manifest(
