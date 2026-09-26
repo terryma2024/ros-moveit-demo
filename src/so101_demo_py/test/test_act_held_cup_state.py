@@ -51,6 +51,28 @@ def test_held_attachment_is_rigid_and_scope_bound():
     assert transform[3] == [0., 0., 0., 1.]
 
 
+def test_verified_private_attachment_model_reuses_startup_identity(monkeypatch):
+    from so101_demo.adapters.act import held_cup_state
+    from so101_demo.adapters.act.held_cup_state import HeldCupAttachmentModel
+
+    model, scene, step = evidence()
+    digest = model_sha256(model)
+    with pytest.raises(ValueError, match="HELD_CUP_MODEL_HASH_INVALID"):
+        HeldCupAttachmentModel(SCENE, "0" * 64)
+    proof = HeldCupAttachmentModel(SCENE, digest)
+    assert proof.model_sha256 == digest
+    monkeypatch.setattr(held_cup_state, "model_sha256", lambda _: (_ for _ in ()).throw(
+        AssertionError("model must not be serialized during proof")))
+    kwargs = dict(scene_received_monotonic_s=100., now_monotonic_s=100.05,
+                  max_age_s=.2, minimum_bilateral_force_n=.1,
+                  maximum_compression_distance_m=.0001)
+    assert proof.prove(scene, step, **kwargs)[3] == [0., 0., 0., 1.]
+    with pytest.raises(ValueError, match="HELD_CUP_STEP_SCOPE_INVALID"):
+        proof.prove(dict(scene, model_sha256="0" * 64), step, **kwargs)
+    with pytest.raises(AssertionError, match="model must not be serialized"):
+        held_cup_attachment(model, scene, step, **kwargs)
+
+
 @pytest.mark.parametrize("field,changed", [
     ("physics_step", 23), ("reset_epoch", 2),
     ("simulation_time_s", 1.046), ("model_sha256", "0" * 64),
