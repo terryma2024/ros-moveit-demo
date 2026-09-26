@@ -80,8 +80,14 @@ def route_motion_configuration(manifest):
 
 def transition_motion_configuration(manifest):
     """Replay activated sources and retain separate no-contact/contact phases."""
-    from so101_demo.act.task6_contact_transition import require_transition_sources
-    source=require_transition_sources(manifest)
+    if isinstance(manifest,dict) and manifest.get('kind')=='ACT_TASK6_FULL_CONTACT_DIAGNOSTIC':
+        from so101_demo.act.task6_full_contact_diagnostic import require_full_sources
+        source=require_full_sources(manifest)
+        phase_start=source['contact_phase_start']
+    else:
+        from so101_demo.act.task6_contact_transition import require_transition_sources
+        source=require_transition_sources(manifest)
+        phase_start=1
     return dict(kind=source['kind'],eligible_for_collection=False,
         session_id=source['session_id'],attempt_id=source['attempt_id'],
         model_path=source['scene_path'],model_sha256=source['model_sha256'],
@@ -94,6 +100,7 @@ def transition_motion_configuration(manifest):
         stop_max_age_s=source['stop_max_age_s'],
         stop_velocity_rad_s=source['stop_velocity_rad_s'],
         submit_lead_s=source['submit_lead_s'],
+        contact_phase_start=phase_start,
         allowed_pairs_by_phase={phase:frozenset(tuple(pair) for pair in pairs)
             for phase,pairs in source['allowed_contact_pairs_by_phase'].items()},
         diagnostic_limits=source['diagnostic_limits'].copy(),
@@ -113,7 +120,9 @@ class RosCalibrationMotionGuard:
         from .scene_state import SceneStateObserver,RosSceneStateAdapter
         from .physics import MujocoPathProcess
         self.route_mode=isinstance(manifest,dict) and manifest.get('kind')=='ACT_TASK6_ROUTE_DIAGNOSTIC'
-        self.transition_mode=isinstance(manifest,dict) and manifest.get('kind')=='ACT_TASK6_CONTACT_TRANSITION_DIAGNOSTIC'
+        self.full_mode=isinstance(manifest,dict) and manifest.get('kind')=='ACT_TASK6_FULL_CONTACT_DIAGNOSTIC'
+        self.transition_mode=(isinstance(manifest,dict) and
+            manifest.get('kind')=='ACT_TASK6_CONTACT_TRANSITION_DIAGNOSTIC') or self.full_mode
         self.contact_mode=isinstance(manifest,dict) and manifest.get('kind')=='ACT_CONTACT_DIAGNOSTIC'
         self.contact_mode=self.contact_mode or self.route_mode or self.transition_mode
         self.contact_manifest=manifest if self.contact_mode else None
@@ -144,7 +153,8 @@ class RosCalibrationMotionGuard:
             self.contact_observer=RobotContactObserver(known_geoms=known,allowed_pairs=allowed,
                 max_age_s=config['max_age_s'],max_sim_gap_s=float(self.model.opt.timestep)*1.01,monotonic=self.monotonic)
             root=Path(evidence_root);root.mkdir(parents=True,exist_ok=True);self.evidence_root=root
-            stem=('task6-contact-transition' if self.transition_mode else
+            stem=('task6-full-contact' if self.full_mode else
+                  'task6-contact-transition' if self.transition_mode else
                   'task6-route-diagnostic' if self.route_mode else
                   'contact-diagnostic' if self.contact_mode else 'motion-calibration')
             self._record=(root/(stem+'-robot-contacts.jsonl')).open('x',encoding='utf-8')
@@ -205,6 +215,9 @@ class RosCalibrationMotionGuard:
         if getattr(self,'route_mode',False):
             from so101_demo.act.task6_route_diagnostic import route_prefix_matches
             matches=route_prefix_matches(prefix,self.contact_manifest)
+        elif getattr(self,'full_mode',False):
+            from so101_demo.act.task6_full_contact_diagnostic import full_prefix_matches
+            matches=full_prefix_matches(prefix,self.contact_manifest)
         elif getattr(self,'transition_mode',False):
             from so101_demo.act.task6_contact_transition import prefix_matches_transition
             matches=prefix_matches_transition(prefix,self.contact_manifest)
@@ -492,7 +505,8 @@ class RosCalibrationMotionGuard:
             row=dict(boundary='exact_goals',safe=safe,path=dict(self.path.last_check))
             if safe:self.audit.append(row)
             else:self._record_rejection(row)
-            if safe and getattr(self,'transition_mode',False) and prefix['sequence']==1:
+            if (safe and getattr(self,'transition_mode',False)
+                    and prefix['sequence']==self.manifest['contact_phase_start']):
                 self.contact_adapter.replace_allowed_pairs(self.manifest['allowed_pairs_by_phase']['CONTACT'])
                 if not self.contact_observer.safe():return reject('CONTACT_PHASE_SWITCH_HAZARD')
             if safe and self.contact_mode:self._next_segment+=1

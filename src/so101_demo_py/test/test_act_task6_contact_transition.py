@@ -162,7 +162,8 @@ def test_transition_guard_requires_terminal_stop_and_uses_contact_phase(tmp_path
         guard.close()
 
 
-def test_contact_pairs_activate_only_after_exact_contact_goals_pass():
+@pytest.mark.parametrize("phase_start", [1, 248])
+def test_contact_pairs_activate_only_after_exact_contact_goals_pass(phase_start):
     from collections import deque
     from so101_demo.adapters.act.calibration_motion import RosCalibrationMotionGuard
     allowed = frozenset({("cup_collision", "finger_collision")})
@@ -170,9 +171,10 @@ def test_contact_pairs_activate_only_after_exact_contact_goals_pass():
     phases = []
     changes = []
     held = (0.,) * 6
-    guard = NS(transition_mode=True, contact_mode=True, _next_segment=1,
-               contact_manifest={"segment_phases": ["APPROACH", "CONTACT"]},
-               manifest={"max_age_s": .2, "allowed_pairs_by_phase": {"CONTACT": allowed}},
+    guard = NS(transition_mode=True, contact_mode=True, _next_segment=phase_start,
+               contact_manifest={"segment_phases": ["APPROACH"] * phase_start + ["CONTACT"]},
+               manifest={"max_age_s": .2, "contact_phase_start": phase_start,
+                         "allowed_pairs_by_phase": {"CONTACT": allowed}},
                node=NS(get_clock=lambda: NS(now=lambda: NS(nanoseconds=1_030_000_000))),
                contact_observer=NS(epoch=1, safe=lambda: True),
                contact_adapter=NS(replace_allowed_pairs=lambda pairs: changes.append(pairs)),
@@ -183,17 +185,17 @@ def test_contact_pairs_activate_only_after_exact_contact_goals_pass():
                _record_rejection=lambda *_: None,
                path=NS(check_path=lambda *_: state["path_safe"], last_check={"safe": True}))
     prefix = dict(session_id="contact-transition-test", attempt_id="attempt",
-                  sequence=1, observation_time_s=1.)
+                  sequence=phase_start, observation_time_s=1.)
     goals = [dict(header_stamp_s=1.1, time_from_start_s=(.1,),
                   positions=(held[:3],)),
              dict(header_stamp_s=1.1, time_from_start_s=(.1,),
                   positions=(held[3:],))]
     assert not RosCalibrationMotionGuard.check_exact_goals(guard, goals, prefix)
-    assert changes == [] and guard._next_segment == 1
+    assert changes == [] and guard._next_segment == phase_start
     state["path_safe"] = True
     assert RosCalibrationMotionGuard.check_exact_goals(guard, goals, prefix)
     assert phases == ["CONTACT", "CONTACT"]
-    assert changes == [allowed] and guard._next_segment == 2
+    assert changes == [allowed] and guard._next_segment == phase_start + 1
 
 
 def test_transition_broker_rejects_phase_tamper_before_domain_authority(tmp_path, monkeypatch):
