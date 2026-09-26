@@ -216,7 +216,7 @@ def test_transition_broker_rejects_phase_tamper_before_domain_authority(tmp_path
             "--stop-velocity-rad-s", ".002", "--max-age-s", "1.5",
             "--submit-lead-s", ".05", "--accept-timeout-s", ".02",
             "--stop-timeout-s", "4", "--permit-ttl-s", "1.5",
-            "--task6-contact-transition-manifest", str(path)]
+            "--grasp-contact-transition-manifest", str(path)]
     with pytest.raises(ValueError):
         main(args)
 
@@ -240,7 +240,7 @@ def test_transition_launch_pins_route_speed_and_plugin(tmp_path, monkeypatch):
                 context, argument.default_value)
     context.launch_configurations.update(
         session_id=value["session_id"], mujoco_scene=value["scene_path"],
-        act_task6_contact_transition_manifest=str(path), act_stop_velocity_rad_s=".002",
+        act_grasp_contact_transition_manifest=str(path), act_stop_velocity_rad_s=".002",
         act_max_age_s="1.5", act_submit_lead_s=".05",
         act_accept_timeout_s=".02", act_stop_timeout_s="4", act_permit_ttl_s="1.5")
     captured = []
@@ -257,4 +257,4 @@ def test_transition_launch_pins_route_speed_and_plugin(tmp_path, monkeypatch):
                   if isinstance(action, OpaqueFunction))
     with pytest.raises(Capture):
         opaque.execute(context)
-    assert captured == [(.25, "task6_route_plugins.yaml")]
+    assert captured == [(.25, "act_diagnostic_plugins.yaml")]

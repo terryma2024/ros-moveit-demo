@@ -249,7 +249,21 @@ def test_route_broker_rejects_collecting_manifest_before_domain_authority(
               "--calibration-mode", "--stop-velocity-rad-s", ".002",
               "--max-age-s", ".2", "--submit-lead-s", ".05",
               "--accept-timeout-s", ".03", "--stop-timeout-s", "1",
-              "--permit-ttl-s", ".1", "--task6-route-manifest", str(path)])
+              "--permit-ttl-s", ".1", "--visible-approach-manifest", str(path)])
+
+
+def test_route_broker_rejects_mixed_business_and_legacy_manifest_flags(tmp_path):
+    from so101_demo.cli.act_command_broker import main
+
+    path = tmp_path / "route.json"
+    path.write_text("{}")
+    with pytest.raises(ValueError, match="DIAGNOSTIC_MANIFESTS_MUTUALLY_EXCLUSIVE"):
+        main(["--socket", "/tmp/act-route-alias-test.sock",
+              "--session-id", "route-alias-test", "--parent-pid", str(os.getpid()),
+              "--lease-timeout-s", "30", "--calibration-mode",
+              "--stop-velocity-rad-s", ".002", "--max-age-s", "1.5",
+              "--visible-approach-manifest", str(path),
+              "--task6-route-manifest", str(path)])
 
 
 def test_route_broker_rejects_wrong_stop_age_before_domain_authority(
@@ -296,7 +310,7 @@ def test_route_launch_pins_receipt_safe_simulation_speed(tmp_path, monkeypatch):
                 context, argument.default_value)
     context.launch_configurations.update(
         session_id=route["session_id"], mujoco_scene=route["scene_path"],
-        act_task6_route_manifest=str(path), act_stop_velocity_rad_s=".002",
+        act_visible_approach_manifest=str(path), act_stop_velocity_rad_s=".002",
         act_max_age_s="1.5", act_submit_lead_s=".05",
         act_accept_timeout_s=".02", act_stop_timeout_s="4",
         act_permit_ttl_s="1.5")
@@ -314,7 +328,7 @@ def test_route_launch_pins_receipt_safe_simulation_speed(tmp_path, monkeypatch):
                   if isinstance(action, OpaqueFunction))
     with pytest.raises(Capture):
         opaque.execute(context)
-    assert captured == [(.25,"task6_route_plugins.yaml")]
+    assert captured == [(.25,"act_diagnostic_plugins.yaml")]
 
 
 def test_route_plugin_chunk_cadence_fits_the_hard_receipt_deadline():
