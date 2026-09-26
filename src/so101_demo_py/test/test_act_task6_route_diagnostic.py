@@ -46,7 +46,7 @@ def test_route_is_exact_pinned_no_contact_microsegments():
     assert route["max_age_s"] == .2
     assert route["stop_max_age_s"] == 1.5
     assert route["velocity_limit_rad_s"] == [.25] * 6
-    assert route["acceleration_limit_rad_s2"] == [.75] * 6
+    assert route["acceleration_limit_rad_s2"] == [1.2] * 6
     rows = route["target_positions"]
     assert len(rows) % 9 == 0
     assert len(rows) > 900
@@ -93,7 +93,8 @@ def test_route_rejects_collecting_and_self_consistent_target_tamper():
         require_route_sources(altered)
 
 
-def test_every_stopped_microsegment_passes_current_model_path_checker():
+@pytest.mark.parametrize("origin", [1., 98.875999999])
+def test_every_stopped_microsegment_passes_current_model_path_checker(origin):
     route = manifest()
     checker = MujocoPathChecker(
         SCENE, protected_roots=("base",), cup_joint="cup_free_joint",
@@ -113,19 +114,63 @@ def test_every_stopped_microsegment_passes_current_model_path_checker():
         data.qpos[checker.cup_address:checker.cup_address + 3] = route["cup_start_m"]
         data.qpos[checker.cup_address + 3:checker.cup_address + 7] = (1., 0., 0., 0.)
         prefix = dict(session_id=route["session_id"], attempt_id=route["attempt_id"],
-                      sequence=sequence, observation_time_s=1.,
-                      target_times_s=[1. + .1 * (index + 1) for index in range(10)],
+                      sequence=sequence, observation_time_s=origin,
+                      target_times_s=[origin + .1 * (index + 1) for index in range(10)],
                       positions=[prior] + rows)
         snapshot = dict(model_qpos=data.qpos.tolist(),
                         model_sha256=checker.model_sha256, phase="APPROACH",
-                        holding_state="EMPTY", sim_time_s=1.,
-                        controller_bridge=dict(time_s=1., point=dict(
+                        holding_state="EMPTY", sim_time_s=origin,
+                        controller_bridge=dict(time_s=origin, point=dict(
                             positions=prior, velocities=[0.] * 6, accelerations=[])),
-                        controller_start_time_s=1.05,
+                        controller_start_time_s=origin + .05,
                         controller_start_positions=prior,
                         controller_start_velocities=[0.] * 6,
                         cup_in_gripper_transform=None)
         assert checker.check_path(prefix, snapshot), (sequence, checker.last_check)
+        assert checker.last_check["samples"] == 52
+
+
+def test_first_route_segment_checks_measured_settled_start_and_rejects_larger_error():
+    route = manifest()
+    checker = MujocoPathChecker(
+        SCENE, protected_roots=("base",), cup_joint="cup_free_joint",
+        gripper_body="gripper", path_step_s=route["path_step_s"],
+        path_clearance_m=route["path_clearance_m"],
+        velocity_limit_rad_s=route["velocity_limit_rad_s"],
+        acceleration_limit_rad_s2=route["acceleration_limit_rad_s2"],
+        allowed_pairs_by_phase={},
+    )
+    # EXP-318's actual settled joint/scene readback, before the rejected permit.
+    settled = [-.2500333208650234, -.4998717311944051,
+               1.5003345807748143, .00008381385810142793,
+               .000002264418481035381, -.0000001678964049377884]
+    velocity = [6.522744502198619e-9, -1.547625707537602e-7,
+                -2.1595300494385906e-8, -1.4966414120858625e-11,
+                2.8778131429358235e-14, -4.137176767700265e-16]
+    data = checker._data
+    mujoco.mj_resetDataKeyframe(checker.model, data, 0)
+    data.qpos[checker.joints] = settled
+    data.qpos[checker.cup_address:checker.cup_address + 3] = route["cup_start_m"]
+    data.qpos[checker.cup_address + 3:checker.cup_address + 7] = (1., 0., 0., 0.)
+    origin = 98.875999999
+    prefix = dict(session_id=route["session_id"], attempt_id=route["attempt_id"],
+                  sequence=0, observation_time_s=origin,
+                  target_times_s=[origin + .1 * (index + 1) for index in range(10)],
+                  positions=[route["joint_start_rad"]] + route["target_positions"][:9])
+    snapshot = dict(model_qpos=data.qpos.tolist(), model_sha256=checker.model_sha256,
+                    phase="APPROACH", holding_state="EMPTY", sim_time_s=98.899999999,
+                    controller_bridge=dict(time_s=98.898, point=dict(
+                        positions=settled, velocities=velocity, accelerations=[])),
+                    controller_start_time_s=98.949999999,
+                    controller_start_positions=settled,
+                    controller_start_velocities=velocity,
+                    cup_in_gripper_transform=None)
+    assert checker.check_path(prefix, snapshot), checker.last_check
+    farther = settled.copy()
+    farther[2] += .002
+    snapshot["controller_start_positions"] = farther
+    assert not checker.check_path(prefix, snapshot)
+    assert checker.last_check["reason"] == "PATH_ACCELERATION_LIMIT"
 
 
 def test_route_guard_requires_exact_sequence_and_prior_physical_stop(tmp_path):

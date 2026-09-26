@@ -38,7 +38,7 @@ _KEYS = frozenset({
 _PATH_LIMITS = {
     "path_step_s": .02, "path_clearance_m": .002,
     "velocity_limit_rad_s": [.25] * 6,
-    "acceleration_limit_rad_s2": [.75] * 6,
+    "acceleration_limit_rad_s2": [1.2] * 6,
     "max_age_s": .2, "max_skew_s": .05,
     "stop_velocity_rad_s": .002, "submit_lead_s": .05,
 }
