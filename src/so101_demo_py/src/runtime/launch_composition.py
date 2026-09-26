@@ -2398,7 +2398,7 @@ def _configured_task_station_actions(context):
     share = Path(get_package_share_directory("so101_demo_py"))
     stack = _mujoco_stack_actions(
         context, share, session_id,
-        sim_speed_factor=0.60 if contact_path else 1.0 if act_profile else -1.0,
+        sim_speed_factor=0.60 if contact_path else 0.25 if route_path else 1.0 if act_profile else -1.0,
     )
     teleop_actions = []
     if act_profile:

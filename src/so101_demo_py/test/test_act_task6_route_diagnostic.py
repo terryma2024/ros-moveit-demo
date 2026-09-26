@@ -263,3 +263,41 @@ def test_route_broker_rejects_wrong_stop_age_before_domain_authority(
               "--max-age-s", "1.5", "--submit-lead-s", ".05",
               "--accept-timeout-s", ".03", "--stop-timeout-s", "1",
               "--permit-ttl-s", ".1", "--task6-route-manifest", str(path)])
+
+
+def test_route_launch_pins_receipt_safe_simulation_speed(tmp_path, monkeypatch):
+    from launch import LaunchContext
+    from launch.utilities import perform_substitutions
+    from launch.actions import DeclareLaunchArgument, OpaqueFunction
+    from so101_demo.runtime import launch_composition as launch
+
+    route = manifest()
+    path = tmp_path / "route.json"
+    path.write_text(json.dumps(route))
+    description = launch.build_task_station_launch_description(act_profile=True)
+    context = LaunchContext()
+    for argument in description.entities:
+        if isinstance(argument, DeclareLaunchArgument):
+            context.launch_configurations[argument.name] = perform_substitutions(
+                context, argument.default_value)
+    context.launch_configurations.update(
+        session_id=route["session_id"], mujoco_scene=route["scene_path"],
+        act_task6_route_manifest=str(path), act_stop_velocity_rad_s=".002",
+        act_max_age_s="1.5", act_submit_lead_s=".05",
+        act_accept_timeout_s=".02", act_stop_timeout_s="4",
+        act_permit_ttl_s="1.5")
+    captured = []
+
+    class Capture(Exception):
+        pass
+
+    def stack(*args, **kwargs):
+        captured.append(kwargs["sim_speed_factor"])
+        raise Capture
+
+    monkeypatch.setattr(launch, "_mujoco_stack_actions", stack)
+    opaque = next(action for action in description.entities
+                  if isinstance(action, OpaqueFunction))
+    with pytest.raises(Capture):
+        opaque.execute(context)
+    assert captured == [.25]
