@@ -13,6 +13,8 @@ from so101_demo.act.held_cup_micro_lift_diagnostic import (
     build_held_cup_diagnostic_manifest, held_cup_diagnostic_prefix_matches,
     require_held_cup_diagnostic_sources,
 )
+from so101_demo.act.contracts import validate_action_prefix
+import hashlib
 
 
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -80,14 +82,41 @@ def test_diagnostic_binds_every_phase_and_activated_limits(tmp_path, anchor, las
     assert value["command_authority"] == "ISOLATED_CALIBRATION"
     assert value["eligible_for_collection"] is False
     assert value["formal_episode_eligible"] is False
+    assert value["first_target_delay_s"] == .1
     assert value["held_contact_limits"] == {
         "minimum_bilateral_force_n": .1,
         "maximum_compression_distance_m": .0001}
     assert value["segment_phases"][last] == "LIFT"
     for sequence in (0, contact - 1, contact, last - 1, last):
-        assert held_cup_diagnostic_prefix_matches(prefix(value, sequence), value)
+        submitted = prefix(value, sequence)
+        assert submitted["target_times_s"][0] == pytest.approx(1.2)
+        validate_action_prefix(submitted)
+        assert held_cup_diagnostic_prefix_matches(submitted, value)
+        assert not held_cup_diagnostic_prefix_matches(
+            {key: item for key, item in submitted.items()
+             if key != "first_target_delay_s"}, value)
     assert not held_cup_diagnostic_prefix_matches(
         dict(prefix(value, last), sequence=last - 1), value)
+
+
+@pytest.mark.parametrize("anchor", ["default", "left", "forward"])
+def test_diagnostic_delay_preserves_exact_candidate_source(tmp_path, anchor):
+    value = diagnostic(tmp_path, anchor)
+    assert value["first_target_delay_s"] == .1
+    assert value["source_base_manifest_sha256"]
+    assert value["source_candidate_manifest_sha256"]
+    require_held_cup_diagnostic_sources(value, pairs_factory=Pairs)
+    for changed in (None, 0., .2):
+        forged = copy.deepcopy(value)
+        if changed is None:
+            del forged["first_target_delay_s"]
+        else:
+            forged["first_target_delay_s"] = changed
+        forged["manifest_sha256"] = hashlib.sha256(json.dumps(
+            {key: item for key, item in forged.items() if key != "manifest_sha256"},
+            sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+        with pytest.raises(ValueError):
+            require_held_cup_diagnostic_sources(forged, pairs_factory=Pairs)
 
 
 def test_diagnostic_rejects_authority_policy_rows_and_threshold_tamper(tmp_path):

@@ -86,8 +86,14 @@ def test_velocity_acceleration_and_late_start_limits_reject_before_physics(scene
     port=checker(scene);p,s=inputs(port)
     port.velocity_limits=(1.,)*6;assert not port.check_path(p,s)
     assert port.last_check['reason']=='PATH_VELOCITY_LIMIT'
+    assert port.last_check['joint_name']=='1'
+    assert port.last_check['value_rad_s']>port.last_check['limit_rad_s']
+    assert port.last_check['sample_time_s']>1.
     port.velocity_limits=(100.,)*6;port.acceleration_limits=(1.,)*6
     assert not port.check_path(p,s) and port.last_check['reason']=='PATH_ACCELERATION_LIMIT'
+    assert port.last_check['joint_name']=='1'
+    assert port.last_check['value_rad_s2']>port.last_check['limit_rad_s2']
+    assert port.last_check['sample_time_s']>1.
     port.acceleration_limits=(1e6,)*6;s['controller_start_time_s']=1.1
     assert not port.check_path(p,s) and port.last_check['reason']=='PATH_TIMING_INVALID'
 

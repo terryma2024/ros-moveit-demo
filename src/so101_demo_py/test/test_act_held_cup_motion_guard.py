@@ -59,9 +59,11 @@ def manifest(tmp_path):
 def prefix(value, sequence):
     start = sequence * 9
     prior = value["joint_start_rad"] if start == 0 else value["target_positions"][start - 1]
+    delay = value["first_target_delay_s"]
     return dict(session_id=value["session_id"], attempt_id=value["attempt_id"],
                 sequence=sequence, observation_time_s=1.,
-                target_times_s=[1. + .1 * index for index in range(1, 11)],
+                first_target_delay_s=delay,
+                target_times_s=[1. + delay + .1 * index for index in range(1, 11)],
                 positions=[prior] + value["target_positions"][start:start + 9])
 
 
@@ -133,6 +135,17 @@ def test_guard_arms_lossless_holding_before_first_lift_goal(tmp_path, monkeypatc
         assert ("holding", dict(value["held_contact_limits"], proof_physics_step=77)) in calls
         assert ("pairs", guard.manifest["allowed_pairs_by_phase"]["LIFT"]) in calls
         assert guard._next_segment == 282
+        guard._next_segment = value["lift_phase_start"]
+        guard.path.check_path = lambda *args: False
+        guard.path.last_check = dict(safe=False, reason="PATH_ACCELERATION_LIMIT",
+                                     joint_name="3", value_rad_s2=1.3,
+                                     limit_rad_s2=1.2, sample_time_s=1.1)
+        assert not guard.check_exact_goals((goal, jaw), prefix(value, 281))
+        rejection = json.loads(Path(guard._audit_record.name).read_text().splitlines()[-1])
+        assert rejection["path"]["joint_name"] == "3"
+        assert rejection["prefix"]["first_target_delay_s"] == .1
+        assert rejection["controller_goals"] == [goal, jaw]
+        assert rejection["path_snapshot"]["holding_proof_physics_step"] == 77
     finally:
         guard.live_observer = None
         guard.close()

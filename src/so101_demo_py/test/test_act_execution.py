@@ -54,6 +54,17 @@ def test_same_header_and_absolute_grid_with_held_reference():
     assert adapter.current_goal_ids==('1','1')
 
 
+def test_delayed_first_target_reaches_both_controller_goals():
+    adapter,clock,arm,grip,_=setup()
+    route=dict(prefix(),first_target_delay_s=.1,
+               target_times_s=(1.2,1.3))
+    submit(adapter,route)
+    a,g=arm.goals[0],grip.goals[0]
+    assert a['header_stamp_s']==g['header_stamp_s']==pytest.approx(1.03)
+    assert a['time_from_start_s']==g['time_from_start_s']==pytest.approx((0.,.17,.27))
+    assert a['prefix_sha256']==g['prefix_sha256']==prefix_sha256(route)
+
+
 @pytest.mark.parametrize('accepted',(False,None))
 def test_partial_acceptance_or_timeout_cancels_both_and_latches(accepted):
     adapter,clock,arm,grip,_=setup(grip=Port(accepted))
