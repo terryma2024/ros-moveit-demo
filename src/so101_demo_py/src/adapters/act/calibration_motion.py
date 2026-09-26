@@ -307,7 +307,8 @@ class RosCalibrationMotionGuard:
                     monotonic=self.monotonic)
                 self.live_observer=LiveContactObserver(stream,
                     ros_clock=lambda:self.node.get_clock().now().nanoseconds*1e-9,
-                    monotonic=self.monotonic,on_abort=self._fail)
+                    monotonic=self.monotonic,on_abort=self._fail,
+                    startup_receipt_grace_s=1.0 if self.route_mode else None)
                 self.live_adapter=RosLiveContactAdapter(self.node,self.live_observer)
         except (KeyError,TypeError,ValueError,OSError,RuntimeError):self._fail('CONTACT_RESET_SNAPSHOT_INVALID')
 
