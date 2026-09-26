@@ -304,7 +304,8 @@ class RosCalibrationMotionGuard:
                     release_stop_velocity_rad_s=self.manifest['stop_velocity_rad_s'],
                     diagnostic_limits=self.manifest['diagnostic_limits'],
                     output_path=self.evidence_root/'contact-live-physics.ndjson',
-                    monotonic=self.monotonic)
+                    monotonic=self.monotonic,
+                    startup_receipt_grace_s=1.0 if self.route_mode else None)
                 self.live_observer=LiveContactObserver(stream,
                     ros_clock=lambda:self.node.get_clock().now().nanoseconds*1e-9,
                     monotonic=self.monotonic,on_abort=self._fail,
