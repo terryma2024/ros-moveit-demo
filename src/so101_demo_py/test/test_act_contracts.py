@@ -59,6 +59,20 @@ def test_prefix_preserves_causal_grid():
             validate_action_prefix(dict(prefix, **changes))
 
 
+def test_prefix_explicit_first_target_delay_is_closed():
+    prefix = dict(session_id="s", attempt_id="a", sequence=0,
+                  observation_time_s=1., first_target_delay_s=.1,
+                  target_times_s=(1.2, 1.3),
+                  positions=((0.,) * 6, (0.,) * 6))
+    assert validate_action_prefix(prefix)["first_target_delay_s"] == .1
+    for changes in (dict(first_target_delay_s=.05),
+                    dict(first_target_delay_s=True),
+                    dict(target_times_s=(1.1, 1.2)),
+                    dict(target_times_s=(1.2, 1.4))):
+        with pytest.raises(ContractError):
+            validate_action_prefix(dict(prefix, **changes))
+
+
 def test_fixed_deadline_rejects_bad_and_backwards_time():
     budget = Deadline(started_wall_s=10.)
     assert not budget.expired(129.999)

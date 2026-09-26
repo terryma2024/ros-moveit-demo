@@ -53,7 +53,9 @@ def prefix(value, sequence):
     prior = value["joint_start_rad"] if sequence == 0 else value["target_positions"][start - 1]
     return dict(session_id=value["session_id"], attempt_id=value["attempt_id"],
                 sequence=sequence, observation_time_s=1.,
-                target_times_s=[1. + .1 * index for index in range(1, 11)],
+                first_target_delay_s=value["first_target_delay_s"],
+                target_times_s=[1. + value["first_target_delay_s"] + .1 * index
+                                for index in range(1, 11)],
                 positions=[prior] + value["target_positions"][start:start + width])
 
 
@@ -70,10 +72,13 @@ def test_alt_manifest_replays_exact_measured_phases(tmp_path, anchor, total, con
     assert len(value["segment_phases"]) == total
     assert value["contact_phase_start"] == contact_start
     assert value["candidate_segments_sha256"] == segment_sha
+    assert value["first_target_delay_s"] == .1
     assert value["segment_phases"] == ["APPROACH"] * contact_start + ["CONTACT"] * (total - contact_start)
     for sequence in (0, contact_start - 1, contact_start, total - 1):
         assert alt_prefix_matches(prefix(value, sequence), value)
     assert not alt_prefix_matches(dict(prefix(value, total - 1), sequence=total - 2), value)
+    assert not alt_prefix_matches({k: v for k, v in prefix(value, 0).items()
+                                   if k != "first_target_delay_s"}, value)
 
 
 def test_alt_manifest_rejects_tampered_role_phase_and_rows(tmp_path):
@@ -84,6 +89,7 @@ def test_alt_manifest_rejects_tampered_role_phase_and_rows(tmp_path):
         dict(value, segment_phases=["APPROACH"] * len(value["segment_phases"])),
         dict(value, target_positions=[[0.] * 6] + value["target_positions"][1:]),
         dict(value, candidate_segments_sha256="0" * 64),
+        dict(value, first_target_delay_s=0.),
     ):
         with pytest.raises(ValueError):
             require_alt_sources(changed, pairs_factory=Pairs)
