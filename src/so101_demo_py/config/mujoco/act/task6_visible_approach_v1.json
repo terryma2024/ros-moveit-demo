@@ -18,6 +18,14 @@
   "scene_sha256": "4db48e35df9e91fc6868d303725badd0237fb10754d1e298637f5b0e1e55ed4f",
   "schema_version": 1,
   "source_route_sha256": "f3f4d678791992cf219366f8689023d6aa7df67f77ba872545a88b0069ff8f53",
+  "visual_detour": {
+    "joint_index": 3,
+    "begin_segment": 181,
+    "full_segment": 191,
+    "last_full_segment": 201,
+    "end_segment": 211,
+    "peak_offset_rad": 0.1
+  },
   "stages": [
     {
       "end": [
