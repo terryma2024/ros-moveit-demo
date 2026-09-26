@@ -797,6 +797,7 @@ TEST_F(AtomicEvidenceTest, PhysicsHookAdvancesAtFiveHundredHertzNotControllerCad
   (void)subscription;
   SimulationEvidencePlugin plugin;
   ASSERT_TRUE(plugin.init(node, model_.get(), data_.get()));
+  EXPECT_GE(plugin.publisher_->get_actual_qos().get_rmw_qos_profile().depth, 256U);
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node);
   executor.add_node(observer);
