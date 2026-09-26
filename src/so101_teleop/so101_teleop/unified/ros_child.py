@@ -384,9 +384,16 @@ class RclpyActionDriver:
         self._task8_startup_used = True
         if self._startup_proof_consumer is None:
             from .task8_child_startup import consume_child_task8_startup
-            consume_child_task8_startup(request, self._owner, os.environ)
+            receipt = consume_child_task8_startup(request, self._owner, os.environ)
         else:
-            self._startup_proof_consumer(request)
+            receipt = self._startup_proof_consumer(request)
+        bind = getattr(self._task8_port, "bind_startup_receipt", None)
+        if not callable(bind):
+            raise MutationError("ACT_TASK8_PORT_INVALID")
+        try:
+            bind(receipt)
+        except Exception as error:
+            raise MutationError("ACT_TASK8_PORT_INVALID") from error
         from so101_demo.act.task8 import Task8Runner
 
         task = {

@@ -503,6 +503,27 @@ def test_act_task8_child_rejects_failed_startup_proof_before_reset_and_replay():
     assert port.begins == 0 and attempts == ["consumed"]
 
 
+def test_act_task8_child_refuses_port_without_receipt_binding_before_reset():
+    class Port:
+        def __init__(self):
+            self.begins = 0
+
+        def begin(self, _request):
+            self.begins += 1
+            raise AssertionError("reset must not begin")
+
+    port = Port()
+    driver = RclpyActionDriver(
+        broker=object(), task8_port=port,
+        startup_proof_consumer=lambda _request: {"schema_version": 1},
+        act_hashes={"manifest_sha256": "a" * 64, "runtime_config_sha256": "b" * 64,
+                    "contact_policy_fingerprint": "c" * 64},
+    )
+    with pytest.raises(MutationError, match="ACT_TASK8_PORT_INVALID"):
+        asyncio.run(driver.task8_phase(request()))
+    assert port.begins == 0
+
+
 def test_act_task8_child_routes_closed_hashes_to_runner_and_confirms_stop():
     class Broker:
         def __init__(self):
@@ -521,8 +542,13 @@ def test_act_task8_child_routes_closed_hashes_to_runner_and_confirms_stop():
         def __init__(self):
             self.phases = []
             self.stops = []
+            self.startup_receipt = None
+
+        def bind_startup_receipt(self, receipt):
+            self.startup_receipt = receipt
 
         def begin(self, req):
+            assert self.startup_receipt == {"schema_version": 1}
             return {"session_id": req["session_id"], "attempt_id": req["attempt_id"],
                     "reset_epoch": 1, "release_epoch": 0, "full_restart": True}
 
@@ -590,8 +616,13 @@ def test_act_cancel_interrupts_next_phase_while_runner_thread_is_busy():
         def __init__(self):
             self.phases = []
             self.stops = []
+            self.startup_receipt = None
+
+        def bind_startup_receipt(self, receipt):
+            self.startup_receipt = receipt
 
         def begin(self, req):
+            assert self.startup_receipt == {"schema_version": 1}
             return {"session_id": req["session_id"], "attempt_id": req["attempt_id"],
                     "reset_epoch": 1, "release_epoch": 0, "full_restart": True}
 
