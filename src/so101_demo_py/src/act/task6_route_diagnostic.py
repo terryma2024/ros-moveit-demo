@@ -32,6 +32,7 @@ _KEYS = frozenset({
     "allowed_contact_pairs", "diagnostic_limits", "path_step_s",
     "path_clearance_m", "velocity_limit_rad_s", "acceleration_limit_rad_s2",
     "max_age_s", "max_skew_s", "stop_velocity_rad_s", "submit_lead_s",
+    "stop_max_age_s",
     "manifest_sha256",
 })
 _PATH_LIMITS = {
@@ -47,6 +48,7 @@ _PHYSICS_LIMITS = {"maximum_force_n": 11.6,
                    "maximum_receipt_age_s": .2}
 _CHUNK_DELTA_RAD = .016
 _SEGMENT_ROWS = 9
+_STOP_MAX_AGE_S = 1.5
 
 
 def _canonical(value: dict) -> bytes:
@@ -140,6 +142,7 @@ def build_route_manifest(
         neck_start_rad=0., target_positions=rows,
         handoff_positions=rows[-1].copy(), segment_rows=_SEGMENT_ROWS,
         allowed_contact_pairs=[], diagnostic_limits=_PHYSICS_LIMITS.copy(),
+        stop_max_age_s=_STOP_MAX_AGE_S,
         **{key: value.copy() if isinstance(value, list) else value
            for key, value in _PATH_LIMITS.items()},
     )
@@ -161,6 +164,7 @@ def require_route_manifest(value: object) -> dict:
             or value["cup_start_m"] != [.02, -.28, .165]
             or value["neck_start_rad"] != 0.
             or value["segment_rows"] != _SEGMENT_ROWS
+            or value["stop_max_age_s"] != _STOP_MAX_AGE_S
             or value["allowed_contact_pairs"] != []
             or value["diagnostic_limits"] != _PHYSICS_LIMITS
             or any(value[key] != expected for key, expected in _PATH_LIMITS.items())):

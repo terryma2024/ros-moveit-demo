@@ -71,6 +71,7 @@ def route_motion_configuration(manifest):
         velocity_limit_rad_s=tuple(source['velocity_limit_rad_s']),
         acceleration_limit_rad_s2=tuple(source['acceleration_limit_rad_s2']),
         max_age_s=source['max_age_s'], max_skew_s=source['max_skew_s'],
+        stop_max_age_s=source['stop_max_age_s'],
         stop_velocity_rad_s=source['stop_velocity_rad_s'],
         submit_lead_s=source['submit_lead_s'], allowed_pairs=frozenset(),
         diagnostic_limits=source['diagnostic_limits'].copy(),

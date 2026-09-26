@@ -82,7 +82,7 @@ def main(arguments=None):
         if (diagnostic['session_id']!=options.session_id
                 or diagnostic['submit_lead_s']!=options.submit_lead_s
                 or diagnostic['stop_velocity_rad_s']!=speed
-                or diagnostic['max_age_s']!=age):
+                or diagnostic['stop_max_age_s']!=age):
             raise ValueError('TASK6_ROUTE_DIAGNOSTIC_CONFIG_MISMATCH')
     from so101_demo.adapters.act.domain_authority import DomainAuthority
     authority=DomainAuthority(int(os.environ.get('ROS_DOMAIN_ID','0'))).acquire()
