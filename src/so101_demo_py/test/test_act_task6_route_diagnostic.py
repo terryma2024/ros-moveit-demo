@@ -23,7 +23,7 @@ from so101_demo.act.ownership import Ownership
 
 PACKAGE = Path(__file__).resolve().parents[1]
 SCENE = PACKAGE / "assets/mujoco/act/scene.xml"
-PLUGIN = PACKAGE / "config/mujoco/act/mujoco_plugins.yaml"
+PLUGIN = PACKAGE / "config/mujoco/act/task6_route_plugins.yaml"
 PROFILE = PACKAGE / "config/mujoco/act/task6_visible_approach_v1.json"
 
 
@@ -292,7 +292,7 @@ def test_route_launch_pins_receipt_safe_simulation_speed(tmp_path, monkeypatch):
         pass
 
     def stack(*args, **kwargs):
-        captured.append(kwargs["sim_speed_factor"])
+        captured.append((kwargs["sim_speed_factor"],kwargs["plugin_config_filename"]))
         raise Capture
 
     monkeypatch.setattr(launch, "_mujoco_stack_actions", stack)
@@ -300,4 +300,15 @@ def test_route_launch_pins_receipt_safe_simulation_speed(tmp_path, monkeypatch):
                   if isinstance(action, OpaqueFunction))
     with pytest.raises(Capture):
         opaque.execute(context)
-    assert captured == [.25]
+    assert captured == [(.25,"task6_route_plugins.yaml")]
+
+
+def test_route_plugin_chunk_cadence_fits_the_hard_receipt_deadline():
+    import yaml
+    route=yaml.safe_load(PLUGIN.read_bytes())["/**"]["ros__parameters"]
+    ordinary=yaml.safe_load((PLUGIN.parent/"mujoco_plugins.yaml").read_bytes())[
+        "/**"]["ros__parameters"]
+    assert route["physics_step_chunk_size"]==20
+    assert ordinary["physics_step_chunk_size"]==50
+    assert .002*route["physics_step_chunk_size"]/.25<=.16
+    assert .002*route["physics_step_chunk_size"]/.25<.2
