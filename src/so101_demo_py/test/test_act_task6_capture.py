@@ -128,6 +128,40 @@ def test_malformed_rgb_and_source_skew_refuse(tmp_path):
     assert skewed.finish()["samples"] == 0
 
 
+def test_real_ros_camera_info_numpy_intrinsics_join_a_causal_sample(tmp_path):
+    from sensor_msgs.msg import CameraInfo
+
+    recorder = prepared(tmp_path, include_info=False)
+    for label in ("head", "wrist"):
+        message = CameraInfo()
+        message.header.stamp.sec = 0
+        message.header.stamp.nanosec = 990000000
+        message.header.frame_id = f"{label}_camera_frame"
+        message.width, message.height = 640, 480
+        message.k[:] = [400., 0., 320., 0., 400., 240., 0., 0., 1.]
+        message.d = [0.] * 5
+        message.distortion_model = "plumb_bob"
+        assert type(message.k[0]).__module__ == "numpy"
+        recorder.accept_info(label, message)
+    row = recorder.capture(world())
+    assert row["head"]["k"][0] == row["wrist"]["k"][0] == 400.
+    assert recorder.finish()["samples"] == 1
+
+
+def test_nonfinite_and_boolean_metadata_values_still_refuse(tmp_path):
+    from so101_demo.adapters.act.task6_capture import _finite
+
+    for value in (True, False, "1", float("nan"), float("inf")):
+        with pytest.raises(ValueError, match="TASK6_SOURCE_INVALID"):
+            _finite(value)
+    recorder = prepared(tmp_path, include_info=False)
+    bad = info(.99, "head_camera_frame")
+    bad.k[0] = float("nan")
+    with pytest.raises(ValueError, match="TASK6_CAMERA_INFO_INVALID"):
+        recorder.accept_info("head", bad)
+    assert recorder.finish()["samples"] == 0
+
+
 def test_paused_or_truncated_physics_never_becomes_a_camera_sample(tmp_path):
     recorder = prepared(tmp_path)
     paused = world()

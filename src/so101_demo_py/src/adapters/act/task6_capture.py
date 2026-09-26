@@ -6,6 +6,7 @@ from collections import deque
 import hashlib
 import json
 import math
+from numbers import Real
 import os
 from pathlib import Path
 import re
@@ -17,9 +18,15 @@ from so101_demo.act.joints import ACT_JOINTS
 
 
 def _finite(value) -> float:
-    if type(value) not in (int, float) or not math.isfinite(value):
+    if isinstance(value, bool) or not isinstance(value, Real):
         raise ValueError("TASK6_SOURCE_INVALID")
-    return float(value)
+    try:
+        result = float(value)
+    except (OverflowError, TypeError, ValueError) as error:
+        raise ValueError("TASK6_SOURCE_INVALID") from error
+    if not math.isfinite(result):
+        raise ValueError("TASK6_SOURCE_INVALID")
+    return result
 
 
 def _stamp(message) -> float:
