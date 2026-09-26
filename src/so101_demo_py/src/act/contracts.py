@@ -72,8 +72,15 @@ def validate_observation(value):
 
 
 def validate_action_prefix(value):
-    fields(value, ("session_id", "attempt_id", "sequence", "observation_time_s",
-                   "target_times_s", "positions"))
+    names = {"session_id", "attempt_id", "sequence", "observation_time_s",
+             "target_times_s", "positions"}
+    if not isinstance(value, dict) or set(value) not in (names, names | {"first_target_delay_s"}):
+        raise ContractError("FIELDS_INVALID")
+    delay = 0.
+    if "first_target_delay_s" in value:
+        delay = finite(value["first_target_delay_s"], nonnegative=True)
+        if delay != .1:
+            raise ContractError("PREFIX_FIRST_TARGET_DELAY_INVALID")
     identifier(value["session_id"])
     identifier(value["attempt_id"])
     integer(value["sequence"])
@@ -84,7 +91,7 @@ def validate_action_prefix(value):
         raise ContractError("PREFIX_INVALID")
     times = tuple(finite(t, nonnegative=True) for t in times)
     for i, t in enumerate(times):
-        if not math.isclose(t, origin + .1 * (i + 1), rel_tol=0., abs_tol=1e-6):
+        if not math.isclose(t, origin + delay + .1 * (i + 1), rel_tol=0., abs_tol=1e-6):
             raise ContractError("PREFIX_TIME_GRID_INVALID")
     return dict(value, target_times_s=times,
                 positions=tuple(validate_action(row) for row in positions))

@@ -46,6 +46,7 @@ _MANIFEST_KEYS = frozenset({
     "receipt_path", "receipt_sha256", "policy_fingerprint", "model_sha256",
     "cup_start_m", "joint_start_rad", "neck_start_rad", "target_positions",
     "segment_phases", "segment_rows", "route_segment_count", "contact_phase_start",
+    "first_target_delay_s",
     "candidate_segments_sha256", "allowed_contact_pairs_by_phase", "diagnostic_limits",
     *tuple(_PATH_LIMITS), "manifest_sha256",
 })
@@ -256,6 +257,7 @@ def build_alt_manifest(
         segment_phases=[phase for phase, _ in segments], segment_rows=9,
         route_segment_count=_ROUTE_COUNT[anchor],
         contact_phase_start=_ROUTE_COUNT[anchor] + 1,
+        first_target_delay_s=.1,
         candidate_segments_sha256=_CANDIDATE_SHA[anchor],
         allowed_contact_pairs_by_phase={"APPROACH": [], "CONTACT": allowed},
         diagnostic_limits=dict(maximum_force_n=float(threshold),
@@ -291,6 +293,7 @@ def require_alt_manifest(value: object) -> dict:
             or value["contact_phase_start"] != _ROUTE_COUNT[anchor] + 1
             or value["neck_start_rad"] != 0.
             or value["segment_rows"] != 9
+            or value["first_target_delay_s"] != .1
             or value["segment_phases"] != ["APPROACH"] * (_ROUTE_COUNT[anchor] + 1)
                + ["CONTACT"] * (_TOTAL_COUNT[anchor] - _ROUTE_COUNT[anchor] - 1)
             or any(value[key] != expected for key, expected in _PATH_LIMITS.items())):
@@ -365,6 +368,7 @@ def alt_prefix_matches(prefix: object, manifest: dict) -> bool:
         expected = [prior] + manifest["target_positions"][start:start + 9]
         if (checked["session_id"] != manifest["session_id"]
                 or checked["attempt_id"] != manifest["attempt_id"]
+                or checked.get("first_target_delay_s") != manifest["first_target_delay_s"]
                 or start >= len(manifest["target_positions"])
                 or len(checked["positions"]) != len(expected)):
             return False
