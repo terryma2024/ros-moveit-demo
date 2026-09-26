@@ -160,6 +160,7 @@ class LivePhysicsStream:
         release_open_q6: float | None = None,
         release_stop_velocity_rad_s: float = .002,
         monotonic: Callable[[], float] = time.monotonic,
+        startup_receipt_grace_s: float | None = None,
     ) -> None:
         if not isinstance(session_id, str) or not session_id:
             raise ValueError("live session identity is missing")
@@ -192,6 +193,12 @@ class LivePhysicsStream:
         self.limits = {key: _finite(value, key, 0) for key, value in limits.items()}
         if any(value == 0 for value in self.limits.values()):
             raise ValueError("diagnostic limits must be positive")
+        self.startup_receipt_grace_s = (
+            self.limits["maximum_receipt_age_s"] if startup_receipt_grace_s is None
+            else _finite(startup_receipt_grace_s, "startup receipt grace", 0)
+        )
+        if self.startup_receipt_grace_s < self.limits["maximum_receipt_age_s"]:
+            raise ValueError("startup receipt grace is too short")
         self.session_id, self.reset_epoch = session_id, reset_epoch
         self.model_sha256 = model_sha256
         self.monotonic = monotonic
@@ -323,8 +330,10 @@ class LivePhysicsStream:
             )
             if abs(ros_time_s - last_simulation_time) > self.limits["maximum_ros_skew_s"]:
                 raise ValueError("live ROS/MuJoCo clock skew")
+            receipt_limit = (self.startup_receipt_grace_s if self.recorded_steps == 0
+                             else self.limits["maximum_receipt_age_s"])
             if not self._receipt_deadline_suspended and self._receipt_age_anchor != -math.inf and (
-                self.monotonic() - self._receipt_age_anchor > self.limits["maximum_receipt_age_s"]
+                self.monotonic() - self._receipt_age_anchor > receipt_limit
             ):
                 raise ValueError("live physics evidence is stale")
             parsed = []

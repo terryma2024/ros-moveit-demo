@@ -218,6 +218,7 @@ def _observer(tmp_path, *, startup_receipt_grace_s=None):
         model_nq=3, model_nv=3, cup_qpos_address=0, cup_qvel_address=0,
         diagnostic_limits=LIMITS, output_path=tmp_path / "observer.ndjson",
         monotonic=lambda: now[0],
+        startup_receipt_grace_s=startup_receipt_grace_s,
     )
     observer = LiveContactObserver(
         recorder, ros_clock=lambda: .002, monotonic=lambda: now[0],
@@ -265,6 +266,7 @@ def test_live_observer_hazard_latch_and_stale_stream_abort(tmp_path):
 
 def test_route_startup_grace_waits_for_first_chunk_then_uses_strict_age(tmp_path):
     observer, now, aborts = _observer(tmp_path, startup_receipt_grace_s=1.)
+    observer.suspend()
     observer.start()
     now[0] += .5
     observer.poll()
