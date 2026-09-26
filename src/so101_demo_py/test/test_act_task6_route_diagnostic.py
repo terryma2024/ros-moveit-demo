@@ -308,7 +308,7 @@ def test_route_plugin_chunk_cadence_fits_the_hard_receipt_deadline():
     route=yaml.safe_load(PLUGIN.read_bytes())["/**"]["ros__parameters"]
     ordinary=yaml.safe_load((PLUGIN.parent/"mujoco_plugins.yaml").read_bytes())[
         "/**"]["ros__parameters"]
-    assert route["physics_step_chunk_size"]==20
+    assert route["physics_step_chunk_size"]==10
     assert ordinary["physics_step_chunk_size"]==50
-    assert .002*route["physics_step_chunk_size"]/.25<=.16
+    assert .002*route["physics_step_chunk_size"]/.25<=.08
     assert .002*route["physics_step_chunk_size"]/.25<.2
