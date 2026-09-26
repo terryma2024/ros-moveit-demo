@@ -733,7 +733,11 @@ bool SimulationEvidencePlugin::init(
         "/so101/simulation/scene_state", evidence_qos);
       realtime_scene_publisher_ = std::make_unique<realtime_tools::RealtimePublisher<msg::SceneStateEvidence>>(scene_publisher_);
     }
-    publisher_ = node_->create_publisher<Evidence>(topic, evidence_qos);
+    // The strict Task 6 capture consumes every atomic sequence, even while it
+    // fsyncs paired RGB frames. Keep its offered history as deep as its queue.
+    const auto capture_evidence_qos =
+      rclcpp::QoS(rclcpp::KeepLast(256)).reliable().transient_local();
+    publisher_ = node_->create_publisher<Evidence>(topic, capture_evidence_qos);
     realtime_publisher_ = std::make_unique<realtime_tools::RealtimePublisher<Evidence>>(publisher_);
     const auto chunk_qos = rclcpp::QoS(rclcpp::KeepLast(100)).reliable();
     chunk_publisher_ = node_->create_publisher<EvidenceChunk>(chunk_topic, chunk_qos);
