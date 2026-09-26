@@ -9,8 +9,8 @@ import time
 
 import pytest
 
-from so101_demo.adapters.act.task8_readback import Task8ReadbackError
-from so101_demo.adapters.act.task8_search_segment import Task8SearchError, Task8SearchSegment
+from so101_demo.adapters.act.pick_place_readback import PickPlaceReadbackError
+from so101_demo.adapters.act.pick_place_search_segment import PickPlaceSearchError, PickPlaceSearchSegment
 from so101_demo.core.task_geometry import load_task_geometry
 from so101_demo.ports.planning_scene import SceneCommandReceipt
 
@@ -60,7 +60,7 @@ class _Sources:
     def capture(self, attempt_id, *, after_step):
         assert attempt_id == "attempt-1"
         self.cursors.append(after_step)
-        row = self.rows.popleft() if self.rows else Task8ReadbackError("SOURCE_STEP_NOT_ADVANCED")
+        row = self.rows.popleft() if self.rows else PickPlaceReadbackError("SOURCE_STEP_NOT_ADVANCED")
         if isinstance(row, BaseException):
             raise row
         assert row["world"].simulation_step > after_step
@@ -108,7 +108,7 @@ class _Adapter:
 
 def _segment(sources, adapter, scene, *, guard=lambda: None, clock=None):
     clock = [10.0] if clock is None else clock
-    return Task8SearchSegment(
+    return PickPlaceSearchSegment(
         sources, adapter, scene, _geometry(), operation_guard=guard,
         max_source_wait_s=0.05, poll_interval_s=0.01,
         monotonic=lambda: clock[0], sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
@@ -116,7 +116,7 @@ def _segment(sources, adapter, scene, *, guard=lambda: None, clock=None):
 
 
 def test_search_waits_for_new_steps_then_reads_back_final_physical_cup_pose():
-    sources = _Sources(_raw(1), Task8ReadbackError("SOURCE_STEP_NOT_ADVANCED"),
+    sources = _Sources(_raw(1), PickPlaceReadbackError("SOURCE_STEP_NOT_ADVANCED"),
                        _raw(2), _raw(3, x=-0.079))
     adapter = _Adapter({"status": "INPUT_PENDING", "stop": True}, _locked())
     scene = _Scene()
@@ -132,21 +132,21 @@ def test_search_waits_for_new_steps_then_reads_back_final_physical_cup_pose():
 
 def test_search_scene_readback_failure_stops_before_neck_tick():
     adapter, scene = _Adapter(_locked()), _Scene(fail_readback=True)
-    with pytest.raises(Task8SearchError, match="SEARCH_SCENE_READBACK_FAILED"):
+    with pytest.raises(PickPlaceSearchError, match="SEARCH_SCENE_READBACK_FAILED"):
         _segment(_Sources(_raw(1)), adapter, scene).run(_request(), reset_epoch=2)
     assert adapter.ticks == 0 and adapter.stops == 1
 
 
 def test_search_missing_new_step_times_out_and_confirms_stop():
     adapter = _Adapter({"status": "INPUT_PENDING", "stop": True})
-    with pytest.raises(Task8SearchError, match="SEARCH_SOURCE_TIMEOUT"):
+    with pytest.raises(PickPlaceSearchError, match="SEARCH_SOURCE_TIMEOUT"):
         _segment(_Sources(_raw(1)), adapter, _Scene()).run(_request(), reset_epoch=2)
     assert adapter.ticks == 1 and adapter.stops == 1
 
 
 def test_search_fingertip_contact_fails_before_neck_tick():
     adapter = _Adapter(_locked())
-    with pytest.raises(Task8SearchError, match="SEARCH_CONTACT_UNSAFE"):
+    with pytest.raises(PickPlaceSearchError, match="SEARCH_CONTACT_UNSAFE"):
         _segment(_Sources(_raw(1, fingertips=(object(),))), adapter, _Scene()).run(
             _request(), reset_epoch=2,
         )
@@ -155,7 +155,7 @@ def test_search_fingertip_contact_fails_before_neck_tick():
 
 def test_search_stop_uncertainty_overrides_scene_failure():
     adapter = _Adapter(_locked(), stop_confirmed=False)
-    with pytest.raises(Task8SearchError, match="SEARCH_STOP_UNCONFIRMED"):
+    with pytest.raises(PickPlaceSearchError, match="SEARCH_STOP_UNCONFIRMED"):
         _segment(_Sources(_raw(1)), adapter, _Scene(fail_readback=True)).run(
             _request(), reset_epoch=2,
         )

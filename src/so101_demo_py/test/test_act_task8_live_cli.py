@@ -12,7 +12,7 @@ import pytest
 
 from so101_demo.act.task8 import Task8Runner
 from so101_demo.act.task8_manifest import build_task8_live_manifest, write_new_manifest
-from so101_demo.cli.act_task8_live import load_spec_file, run_admitted_campaign
+from so101_demo.cli.act_run_pick_place_validation import load_spec_file, run_admitted_campaign
 from so101_teleop.unified.contracts import Domain, OperationSpec
 
 

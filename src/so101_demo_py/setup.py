@@ -98,6 +98,8 @@ setup(
             "act_analyze_contact_calibration = so101_demo.cli.act_analyze_contact_calibration:main",
             "act_collect_contact_calibration = so101_demo.cli.act_collect_contact_calibration:main",
             "act_activate_contact_policy = so101_demo.cli.act_activate_contact_policy:main",
+            "act_prepare_pick_place_validation = so101_demo.cli.act_prepare_pick_place_validation:main",
+            "act_run_pick_place_validation = so101_demo.cli.act_run_pick_place_validation:main",
             "act_prepare_task8_live = so101_demo.cli.act_prepare_task8_live:main",
             "act_task8_live = so101_demo.cli.act_task8_live:main",
             "so101_parallel_batch = so101_demo.cli.mujoco_parallel_batch:main",

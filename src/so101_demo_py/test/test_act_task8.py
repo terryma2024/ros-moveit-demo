@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from so101_demo.act.task8 import Task8Runner, Task8Error
+from so101_demo.act.pick_place_runner import PickPlaceRunner, PickPlaceError
 
 
 def request(mode="phase_prefix", stop_after="MICRO_LIFT", lifecycle="FULL_RESTART"):
@@ -85,8 +85,8 @@ class FakePort:
 
 def test_prefix_stops_after_exact_phase_and_never_counts_as_formal():
     port = FakePort()
-    result = Task8Runner(port).run(request())
-    assert result["completed_phases"] == list(Task8Runner.PHASES[:4])
+    result = PickPlaceRunner(port).run(request())
+    assert result["completed_phases"] == list(PickPlaceRunner.PHASES[:4])
     assert result["formal_episode_eligible"] is False
     assert result["stopped_confirmed"] is True
     assert port.calls[-1] == ("safe_stop", "PHASE_PREFIX_COMPLETE")
@@ -95,15 +95,15 @@ def test_prefix_stops_after_exact_phase_and_never_counts_as_formal():
 
 def test_full_requires_fresh_restart_before_any_phase():
     port = FakePort()
-    with pytest.raises(Task8Error, match="FULL_RESTART_REQUIRED"):
-        Task8Runner(port).run(request("full", None, "REUSE_STACK"))
+    with pytest.raises(PickPlaceError, match="FULL_RESTART_REQUIRED"):
+        PickPlaceRunner(port).run(request("full", None, "REUSE_STACK"))
     assert port.calls == []
 
 
 def test_prefix_rejects_world_reset_before_begin():
     port = FakePort()
-    with pytest.raises(Task8Error, match="FULL_RESTART_REQUIRED"):
-        Task8Runner(port).run(request("phase_prefix", "SEARCH", "RESET_WORLD"))
+    with pytest.raises(PickPlaceError, match="FULL_RESTART_REQUIRED"):
+        PickPlaceRunner(port).run(request("phase_prefix", "SEARCH", "RESET_WORLD"))
     assert port.calls == []
 
 
@@ -115,16 +115,16 @@ def test_prefix_rejects_unproved_restart_before_search_and_stops():
             return result
 
     port = UnprovedRestart()
-    with pytest.raises(Task8Error, match="FULL_RESTART_NOT_PROVED"):
-        Task8Runner(port).run(request("phase_prefix", "SEARCH"))
+    with pytest.raises(PickPlaceError, match="FULL_RESTART_NOT_PROVED"):
+        PickPlaceRunner(port).run(request("phase_prefix", "SEARCH"))
     assert not any(call[0] == "phase" for call in port.calls)
     assert port.calls[-1] == ("safe_stop", "TASK8_ABORT")
 
 
 def test_release_detaches_before_opening_and_retreat_has_two_ordered_segments():
     port = FakePort()
-    result = Task8Runner(port).run(request("full", None))
-    assert result["completed_phases"] == list(Task8Runner.PHASES)
+    result = PickPlaceRunner(port).run(request("full", None))
+    assert result["completed_phases"] == list(PickPlaceRunner.PHASES)
     assert result["formal_episode_eligible"] is True
     assert port.calls.index(("detach_moveit", None)) < port.calls.index(("phase", "RELEASE"))
     assert port.calls.index(("planning_attached", None)) < port.calls.index(("phase", "RELEASE"))
@@ -135,8 +135,8 @@ def test_release_detaches_before_opening_and_retreat_has_two_ordered_segments():
 def test_unsupported_release_never_sends_detach_or_open():
     port = FakePort()
     port.supported = False
-    with pytest.raises(Task8Error, match="RELEASE_UNSUPPORTED"):
-        Task8Runner(port).run(request("full", None))
+    with pytest.raises(PickPlaceError, match="RELEASE_UNSUPPORTED"):
+        PickPlaceRunner(port).run(request("full", None))
     assert ("detach_moveit", None) not in port.calls
     assert ("phase", "RELEASE") not in port.calls
     assert port.calls[-1][0] == "safe_stop"
@@ -149,16 +149,16 @@ def test_bad_contact_or_human_intervention_stops_and_invalidates_full():
             port.fail_phase = "TRANSPORT"
         else:
             port.intervention = True
-        with pytest.raises(Task8Error, match="PHASE_EVIDENCE_INVALID|HUMAN_OR_RECOVERY_INTERVENTION"):
-            Task8Runner(port).run(request("full", None))
+        with pytest.raises(PickPlaceError, match="PHASE_EVIDENCE_INVALID|HUMAN_OR_RECOVERY_INTERVENTION"):
+            PickPlaceRunner(port).run(request("full", None))
         assert port.calls[-1][0] == "safe_stop"
 
 
 def test_stop_without_physical_confirmation_is_indeterminate():
     port = FakePort()
     port.stop_confirmed = False
-    with pytest.raises(Task8Error, match="STOP_NOT_CONFIRMED"):
-        Task8Runner(port).run(request())
+    with pytest.raises(PickPlaceError, match="STOP_NOT_CONFIRMED"):
+        PickPlaceRunner(port).run(request())
 
 
 def test_begin_failure_still_requests_stop_because_reset_may_have_started():
@@ -169,7 +169,7 @@ def test_begin_failure_still_requests_stop_because_reset_may_have_started():
 
     port = FailingBegin()
     with pytest.raises(RuntimeError, match="reset response lost"):
-        Task8Runner(port).run(request())
+        PickPlaceRunner(port).run(request())
     assert port.calls[-1] == ("safe_stop", "TASK8_ABORT")
 
 
@@ -182,6 +182,6 @@ def test_release_requires_new_epoch_evidence():
             return super().run_phase(phase, req)
 
     port = StaleRelease()
-    with pytest.raises(Task8Error, match="PHASE_EVIDENCE_INVALID"):
-        Task8Runner(port).run(request("full", None))
+    with pytest.raises(PickPlaceError, match="PHASE_EVIDENCE_INVALID"):
+        PickPlaceRunner(port).run(request("full", None))
     assert port.calls[-1][0] == "safe_stop"
