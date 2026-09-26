@@ -62,6 +62,6 @@
     - table_collision
     max_contacts: 128
     physics_step_buffer_capacity: 5000
-    physics_step_chunk_size: 20
+    physics_step_chunk_size: 10
     publish_rate: 100.0
     topic: /so101/simulation/evidence
