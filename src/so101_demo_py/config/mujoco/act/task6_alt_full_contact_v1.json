@@ -65,14 +65,14 @@
       ],
       "contact_q_first5": [
         0.4308777689571706,
-        0.6245536476629973,
+        0.6250536476629972,
         -0.05796215660614223,
         0.9786283962978687,
         0.43001918084607826
       ],
       "visual_detour": null,
-      "candidate_segments_sha256": "cb331e70fba8bdcb3ff37a719b9aac3af5b3f8b0e28c4c4932af0781ee1468a6",
-      "source_evidence_sha256": "9e2da83390780d3513aa08ed1f768c864b4a1dbcedd16a569c3bc95e17a698b6"
+      "candidate_segments_sha256": "4635154f83833542053d24d899f90b890a39fc49a019f81fde9a0fd351781901",
+      "source_evidence_sha256": "fc3bf566e5c61a9c42c4dfa8d2e9b1c0c8e8d8d4fb03d8b2bb1b1d77ba10b4b7"
     },
     "forward": {
       "cup_start_m": [

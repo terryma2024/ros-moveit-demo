@@ -60,7 +60,7 @@ def prefix(value, sequence):
 
 
 @pytest.mark.parametrize("anchor,total,contact_start,segment_sha", [
-    ("left", 168, 135, "cb331e70fba8bdcb3ff37a719b9aac3af5b3f8b0e28c4c4932af0781ee1468a6"),
+    ("left", 168, 135, "4635154f83833542053d24d899f90b890a39fc49a019f81fde9a0fd351781901"),
     ("forward", 235, 198, "5c8128668043cb5b80d47d0fb869d1a2d9c61206b572120c2b50ef4a51d0dae1"),
 ])
 def test_alt_manifest_replays_exact_measured_phases(tmp_path, anchor, total, contact_start, segment_sha):
