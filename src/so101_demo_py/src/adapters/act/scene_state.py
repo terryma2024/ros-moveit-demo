@@ -59,11 +59,15 @@ class SceneStateObserver:
         return stamp
 
     def snapshot(self):
+        return self.snapshot_with_receipt()[0]
+
+    def snapshot_with_receipt(self):
+        """Read one fresh scene frame and its receipt clock atomically."""
         with self._lock:
             if self.hazard:raise ValueError(self.hazard)
             if self.last is None:raise ValueError('SCENE_STATE_UNAVAILABLE')
             if not 0<=self.monotonic()-self.received<=self.max_age:raise ValueError('SCENE_STATE_STALE')
-            return copy.deepcopy(self.last)
+            return copy.deepcopy(self.last),self.received
 
     def recent_frames(self):
         """Return fresh bounded frames without exposing mutable history."""

@@ -6,10 +6,13 @@ chunks here. This module has no ROS imports or authority to move the robot.
 
 from __future__ import annotations
 
+import copy
 import json
 import math
 import os
+import threading
 import time
+from collections import deque
 from pathlib import Path
 from typing import Any, Callable
 
@@ -206,6 +209,8 @@ class LivePhysicsStream:
         descriptor = os.open(self.output_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o640)
         self._stream = os.fdopen(descriptor, "wb")
         self._closed = False
+        self._lock = threading.RLock()
+        self._recent_steps = deque(maxlen=256)
         self.hazard: str | None = None
         self.recorded_steps = 0
         self._last_chunk_sequence: int | None = None
@@ -301,6 +306,10 @@ class LivePhysicsStream:
         }
 
     def accept_chunk(self, value: Any, *, ros_time_s: float | None = None) -> None:
+        with self._lock:
+            self._accept_chunk(value, ros_time_s=ros_time_s)
+
+    def _accept_chunk(self, value: Any, *, ros_time_s: float | None = None) -> None:
         if self._closed or self.hazard is not None:
             raise ValueError(self.hazard or "live physics recorder closed")
         try:
@@ -385,11 +394,35 @@ class LivePhysicsStream:
             self._initial_cup = self._initial_cup or parsed[0]["cup_position_m"]
             self._seen_bilateral = seen_bilateral
             self.recorded_steps += len(parsed)
+            self._recent_steps.extend(copy.deepcopy(parsed))
         except (OSError, TypeError, ValueError) as error:
             self.hazard = str(error)
             raise ValueError(self.hazard) from error
 
+    def validated_step(self, physics_step: int, *, now_monotonic_s: float,
+                       max_age_s: float) -> dict:
+        """Return an immutable copy only after the exact step was durably recorded."""
+        if type(physics_step) is not int or physics_step < 1:
+            raise ValueError("HELD_CUP_STEP_INVALID")
+        now = _finite(now_monotonic_s, "now_monotonic_s", 0)
+        age = _finite(max_age_s, "max_age_s", 0)
+        if age == 0:
+            raise ValueError("HELD_CUP_STEP_AGE_INVALID")
+        with self._lock:
+            if self._closed or self.hazard is not None:
+                raise ValueError("HELD_CUP_STEP_UNAVAILABLE")
+            for row in reversed(self._recent_steps):
+                if row["physics_step"] == physics_step:
+                    if not 0 <= now - row["received_monotonic_s"] <= age:
+                        raise ValueError("HELD_CUP_STEP_STALE")
+                    return copy.deepcopy(row)
+        raise ValueError("HELD_CUP_STEP_UNAVAILABLE")
+
     def close(self) -> None:
+        with self._lock:
+            self._close()
+
+    def _close(self) -> None:
         if self._closed:
             return
         self._closed = True
