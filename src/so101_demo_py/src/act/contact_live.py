@@ -237,18 +237,33 @@ class LivePhysicsStream:
             self._receipt_age_anchor = _finite(self.monotonic(), "receipt resume", 0)
             self._receipt_deadline_suspended = False
 
-    def arm_holding(self, *, minimum_bilateral_force_n: float,
+    def arm_holding(self, *, proof_physics_step: int,
+                    minimum_bilateral_force_n: float,
                     maximum_compression_distance_m: float) -> None:
         """Make bilateral contact a permanent invariant for this recorder epoch."""
         minimum = _finite(minimum_bilateral_force_n, "minimum bilateral force", 0)
         maximum = _finite(maximum_compression_distance_m, "maximum compression", 0)
         if minimum == 0 or maximum == 0:
             raise ValueError("HOLDING_LIMIT_INVALID")
+        proof = _integer(proof_physics_step, "proof_physics_step", 1)
         with self._lock:
             if self._holding_limits is not None:
                 raise ValueError("HOLDING_ALREADY_ARMED")
             if self._closed or self.hazard is not None or self.recorded_steps == 0:
                 raise ValueError("HOLDING_ARM_EVIDENCE_REQUIRED")
+            if (not self._recent_steps or self._recent_steps[0]["physics_step"] > proof
+                    or self._recent_steps[-1]["physics_step"] < proof):
+                raise ValueError("HOLDING_ARM_PROOF_STEP_UNAVAILABLE")
+            for row in self._recent_steps:
+                if row["physics_step"] < proof:
+                    continue
+                if min(sum(item["normal_force_n"] for item in row[side])
+                       for side in ("left_contacts", "right_contacts")) < minimum:
+                    raise ValueError("HOLDING_ARM_BILATERAL_FORCE_LOW")
+                if max((max(0., -item["signed_distance_m"])
+                        for side in ("left_contacts", "right_contacts")
+                        for item in row[side]), default=0.) > maximum:
+                    raise ValueError("HOLDING_ARM_COMPRESSION_EXCEEDED")
             self._holding_limits = minimum, maximum
 
 

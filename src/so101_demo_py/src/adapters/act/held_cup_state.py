@@ -37,6 +37,7 @@ def held_cup_attachment(
     model: mujoco.MjModel, scene: dict, physics_step: dict, *,
     scene_received_monotonic_s: float, now_monotonic_s: float,
     max_age_s: float, minimum_bilateral_force_n: float,
+    maximum_compression_distance_m: float,
 ) -> list[list[float]]:
     """Return the measured gripper-to-cup transform or refuse the held state."""
     if not isinstance(model, mujoco.MjModel) or not isinstance(physics_step, dict):
@@ -45,9 +46,10 @@ def held_cup_attachment(
     now = finite(now_monotonic_s, nonnegative=True)
     maximum_age = finite(max_age_s)
     minimum_force = finite(minimum_bilateral_force_n)
+    maximum_compression = finite(maximum_compression_distance_m)
     scene_received = finite(scene_received_monotonic_s, nonnegative=True)
     physics_received = finite(physics_step["received_monotonic_s"], nonnegative=True)
-    if (not 0 < maximum_age <= .5 or minimum_force <= 0
+    if (not 0 < maximum_age <= .5 or minimum_force <= 0 or maximum_compression <= 0
             or not 0 <= now - scene_received <= maximum_age
             or not 0 <= now - physics_received <= maximum_age):
         raise ValueError("HELD_CUP_EVIDENCE_STALE")
@@ -93,6 +95,10 @@ def held_cup_attachment(
                         prefix=("moving_jaw_", "moving_fingertip_"))
     if min(left, right) < minimum_force:
         raise ValueError("HELD_CUP_BILATERAL_FORCE_LOW")
+    if max((max(0., -finite(item["signed_distance_m"]))
+            for side in ("left_contacts", "right_contacts")
+            for item in physics_step[side]), default=0.) > maximum_compression:
+        raise ValueError("HELD_CUP_COMPRESSION_EXCEEDED")
     data = mujoco.MjData(model)
     data.qpos[:] = qpos
     data.qvel[:] = qvel

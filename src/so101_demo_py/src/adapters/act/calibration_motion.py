@@ -111,6 +111,33 @@ def transition_motion_configuration(manifest):
         manifest_sha256=source['manifest_sha256'])
 
 
+def held_cup_motion_configuration(manifest):
+    """Replay the isolated held-cup source before admitting its path guard."""
+    from so101_demo.act.held_cup_micro_lift_diagnostic import (
+        require_held_cup_diagnostic_sources,
+    )
+    source = require_held_cup_diagnostic_sources(manifest)
+    return dict(kind=source['kind'],eligible_for_collection=False,
+        session_id=source['session_id'],attempt_id=source['attempt_id'],
+        model_path=source['scene_path'],model_sha256=source['model_sha256'],
+        arm_center=tuple(source['joint_start_rad']),neck_center_rad=source['neck_start_rad'],
+        max_neck_drift_rad=.002,max_rows=source['segment_rows']+1,
+        path_step_s=source['path_step_s'],path_clearance_m=source['path_clearance_m'],
+        velocity_limit_rad_s=tuple(source['velocity_limit_rad_s']),
+        acceleration_limit_rad_s2=tuple(source['acceleration_limit_rad_s2']),
+        max_age_s=source['max_age_s'],max_skew_s=source['max_skew_s'],
+        stop_max_age_s=source['stop_max_age_s'],
+        stop_velocity_rad_s=source['stop_velocity_rad_s'],
+        submit_lead_s=source['submit_lead_s'],
+        contact_phase_start=source['contact_phase_start'],
+        lift_phase_start=source['lift_phase_start'],
+        allowed_pairs_by_phase={phase:frozenset(tuple(pair) for pair in pairs)
+            for phase,pairs in source['allowed_contact_pairs_by_phase'].items()},
+        held_contact_limits=source['held_contact_limits'].copy(),
+        diagnostic_limits=source['diagnostic_limits'].copy(),
+        manifest_sha256=source['manifest_sha256'])
+
+
 class RosCalibrationMotionGuard:
     """Sole broker-local calibration gate, armed by actual paused reset evidence."""
     def __init__(self,node,driver,broker,manifest,*,evidence_root,monotonic=None):
@@ -124,16 +151,19 @@ class RosCalibrationMotionGuard:
         from .scene_state import SceneStateObserver,RosSceneStateAdapter
         from .physics import MujocoPathProcess
         self.route_mode=isinstance(manifest,dict) and manifest.get('kind')=='ACT_TASK6_ROUTE_DIAGNOSTIC'
+        self.held_cup_mode=(isinstance(manifest,dict) and
+            manifest.get('kind')=='ACT_HELD_CUP_MICRO_LIFT_DIAGNOSTIC')
         self.alt_full_mode=(isinstance(manifest,dict) and
             manifest.get('kind')=='ACT_TASK6_ALT_FULL_CONTACT_DIAGNOSTIC')
         self.full_mode=(isinstance(manifest,dict) and
             manifest.get('kind')=='ACT_TASK6_FULL_CONTACT_DIAGNOSTIC') or self.alt_full_mode
         self.transition_mode=(isinstance(manifest,dict) and
-            manifest.get('kind')=='ACT_TASK6_CONTACT_TRANSITION_DIAGNOSTIC') or self.full_mode
+            manifest.get('kind')=='ACT_TASK6_CONTACT_TRANSITION_DIAGNOSTIC') or self.full_mode or self.held_cup_mode
         self.contact_mode=isinstance(manifest,dict) and manifest.get('kind')=='ACT_CONTACT_DIAGNOSTIC'
         self.contact_mode=self.contact_mode or self.route_mode or self.transition_mode
         self.contact_manifest=manifest if self.contact_mode else None
-        self.manifest=(route_motion_configuration(manifest) if self.route_mode else
+        self.manifest=(held_cup_motion_configuration(manifest) if self.held_cup_mode else
+                       route_motion_configuration(manifest) if self.route_mode else
                        transition_motion_configuration(manifest) if self.transition_mode else
                        diagnostic_motion_configuration(manifest) if self.contact_mode
                        else require_motion_manifest(manifest))
@@ -160,7 +190,8 @@ class RosCalibrationMotionGuard:
             self.contact_observer=RobotContactObserver(known_geoms=known,allowed_pairs=allowed,
                 max_age_s=config['max_age_s'],max_sim_gap_s=float(self.model.opt.timestep)*1.01,monotonic=self.monotonic)
             root=Path(evidence_root);root.mkdir(parents=True,exist_ok=True);self.evidence_root=root
-            stem=('task6-alt-full-contact' if self.alt_full_mode else
+            stem=('held-cup-micro-lift' if self.held_cup_mode else
+                  'task6-alt-full-contact' if self.alt_full_mode else
                   'task6-full-contact' if self.full_mode else
                   'task6-contact-transition' if self.transition_mode else
                   'task6-route-diagnostic' if self.route_mode else
@@ -223,6 +254,9 @@ class RosCalibrationMotionGuard:
         if getattr(self,'route_mode',False):
             from so101_demo.act.task6_route_diagnostic import route_prefix_matches
             matches=route_prefix_matches(prefix,self.contact_manifest)
+        elif getattr(self,'held_cup_mode',False):
+            from so101_demo.act.held_cup_micro_lift_diagnostic import held_cup_diagnostic_prefix_matches
+            matches=held_cup_diagnostic_prefix_matches(prefix,self.contact_manifest)
         elif getattr(self,'alt_full_mode',False):
             from so101_demo.act.task6_alt_full_contact_diagnostic import alt_prefix_matches
             matches=alt_prefix_matches(prefix,self.contact_manifest)
@@ -414,7 +448,7 @@ class RosCalibrationMotionGuard:
         if fault or joints is None or epoch is None or contact is None or not self.contact_observer.safe():
             raise ValueError('MOTION_EVIDENCE_UNAVAILABLE')
         q,v,joint_stamp,joint_received=joints;cup,cup_received=epoch
-        scene=self.scene_observer.snapshot()
+        scene,scene_received=self.scene_observer.snapshot_with_receipt()
         if (identity!=(self.manifest['session_id'],base['reset_epoch'])
                 or (cup.simulation_session_id,cup.reset_epoch)!=identity or cup.paused
                 or cup.truncated or cup.object_body!='plastic_cup' or base['reset_epoch']<1):
@@ -447,11 +481,26 @@ class RosCalibrationMotionGuard:
         address=self.path.cup_address
         if not math.isclose(sum(x*x for x in qpos[address+3:address+7]),1.,abs_tol=1e-6):
             raise ValueError('MOTION_SCENE_CUP_POSE_INVALID')
-        return dict(model_qpos=tuple(qpos),model_sha256=self.path.model_sha256,phase=phase,holding_state='EMPTY',
+        holding_state='EMPTY';attachment=None;proof_physics_step=None
+        if self.held_cup_mode and phase=='LIFT':
+            from .held_cup_state import held_cup_attachment
+            if self.live_observer is None:
+                raise ValueError('HELD_CUP_PHYSICS_UNAVAILABLE')
+            step=self.live_observer.recorder.validated_step(
+                scene['simulation_step'],now_monotonic_s=now,
+                max_age_s=self.manifest['max_age_s'])
+            attachment=held_cup_attachment(
+                self.model,scene,step,scene_received_monotonic_s=scene_received,
+                now_monotonic_s=now,max_age_s=self.manifest['max_age_s'],
+                **self.manifest['held_contact_limits'])
+            holding_state='HOLDING'
+            proof_physics_step=step['physics_step']
+        return dict(model_qpos=tuple(qpos),model_sha256=self.path.model_sha256,phase=phase,holding_state=holding_state,
             sim_time_s=max(stamps),controller_bridge=dict(time_s=scene['simulation_time_s'],
                 point=dict(positions=tuple(scene_q[:6]),velocities=tuple(scene_v[:6]),accelerations=())),
             controller_start_time_s=start,controller_start_positions=reference,controller_start_velocities=reference_velocity,
-            cup_in_gripper_transform=None)
+            cup_in_gripper_transform=attachment,
+            holding_proof_physics_step=proof_physics_step)
 
     def _record_rejection(self,row):
         import json,os
@@ -520,6 +569,13 @@ class RosCalibrationMotionGuard:
                     and prefix['sequence']==self.manifest['contact_phase_start']):
                 self.contact_adapter.replace_allowed_pairs(self.manifest['allowed_pairs_by_phase']['CONTACT'])
                 if not self.contact_observer.safe():return reject('CONTACT_PHASE_SWITCH_HAZARD')
+            if (safe and getattr(self,'held_cup_mode',False)
+                    and prefix['sequence']==self.manifest['lift_phase_start']):
+                self.live_observer.recorder.arm_holding(
+                    proof_physics_step=full['holding_proof_physics_step'],
+                    **self.manifest['held_contact_limits'])
+                self.contact_adapter.replace_allowed_pairs(self.manifest['allowed_pairs_by_phase']['LIFT'])
+                if not self.contact_observer.safe():return reject('LIFT_PHASE_SWITCH_HAZARD')
             if safe and self.contact_mode:self._next_segment+=1
             return safe
         except (KeyError,TypeError,ValueError,RuntimeError) as error:
