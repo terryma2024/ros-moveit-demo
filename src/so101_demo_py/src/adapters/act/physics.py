@@ -142,11 +142,16 @@ class MujocoPathChecker:
                     or not math.isclose(np.linalg.det(attachment[:3,:3]),1.,abs_tol=1e-6)):
                 return self._reject('PATH_ATTACHMENT_INVALID')
         allowed=self.allowed.get(snapshot['phase'],frozenset())
-        sample_count=1+sum(math.ceil((b-a)/self.step) for a,b in zip(times,times[1:]))
+        # Subtracting large simulation timestamps can put an exact 0.1 s
+        # interval a few ulps above five 0.02 s steps. Keep the sample grid
+        # invariant under a time translation; real overshoots still add a step.
+        intervals_per_leg=[max(1,math.ceil((b-a)/self.step-1e-10))
+                           for a,b in zip(times,times[1:])]
+        sample_count=1+sum(intervals_per_leg)
         if sample_count>self.max_samples:return self._reject('PATH_SAMPLE_BUDGET')
         sample_times=[np.array((before,))];sample_positions=[np.array((positions[0],))]
-        for begin,end,q0,q1 in zip(times,times[1:],positions,positions[1:],strict=False):
-            n=math.ceil((end-begin)/self.step)
+        for begin,end,q0,q1,n in zip(times[:-1],times[1:],positions[:-1],positions[1:],
+                                    intervals_per_leg,strict=True):
             fractions=np.arange(1,n+1,dtype=float)/n
             sample_times.append(begin+(end-begin)*fractions)
             sample_positions.append(np.array(q0)+(np.array(q1)-q0)*fractions[:,None])
