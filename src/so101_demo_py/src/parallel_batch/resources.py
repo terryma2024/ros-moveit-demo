@@ -570,8 +570,8 @@ def _ros_domain_in_use_after_cleanup_quiescence(
     raise AssertionError('unreachable process scan retry loop')
 
 
-class Task14AcceptanceProvider:
-    """Future Task 11 port for a controller-owned Task 14 acceptance identity."""
+class ParallelExecutionAcceptanceProvider:
+    """Read the controller-owned acceptance identity for a parallel execution."""
 
     def __init__(self, *, acceptance_path: Path | None = None) -> None:
         self._acceptance_path = (
@@ -622,12 +622,12 @@ class CurrentRuntimeProvenanceProbe:
         return observed
 
 
-class Task14LiveHeadroomVerifier:
-    """Verify a sealed Task 14 two-Worker execution and every bound artifact."""
+class TwoWorkerHeadroomVerifier:
+    """Verify a sealed two-Worker execution and every bound artifact."""
 
     def __init__(self, *, acceptance_provider=None, provenance_probe=None) -> None:
         self._acceptance_provider = (
-            Task14AcceptanceProvider()
+            ParallelExecutionAcceptanceProvider()
             if acceptance_provider is None
             else acceptance_provider
         )
@@ -986,6 +986,11 @@ class Task14LiveHeadroomVerifier:
             or dict(current_provenance) != provenance
         ):
             raise ValueError('Task14 current provenance mismatch')
+
+
+# Legacy Python API for version-one sealed headroom evidence.
+Task14AcceptanceProvider = ParallelExecutionAcceptanceProvider
+Task14LiveHeadroomVerifier = TwoWorkerHeadroomVerifier
 
 
 class WorkerResourceAllocator:
