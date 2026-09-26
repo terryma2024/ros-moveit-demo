@@ -796,7 +796,10 @@ def _mujoco_stack_actions(
     session_id: str,
     *,
     sim_speed_factor: float = -1.0,
+    plugin_config_filename: str = "mujoco_plugins.yaml",
 ) -> _MujocoStackActions:
+    if plugin_config_filename not in {"mujoco_plugins.yaml", "task6_route_plugins.yaml"}:
+        raise RuntimeError("unsupported MuJoCo plugin configuration")
     scene = LaunchConfiguration("mujoco_scene").perform(context)
     initial_keyframe = LaunchConfiguration("mujoco_initial_keyframe").perform(context)
     headless = LaunchConfiguration("headless").perform(context).lower() == "true"
@@ -826,7 +829,7 @@ def _mujoco_stack_actions(
     parameters = [
         {"use_sim_time": True, "robot_description": robot_description},
         ParameterFile(controllers, allow_substs=False),
-        ParameterFile(str(config / "mujoco_plugins.yaml"), allow_substs=False),
+        ParameterFile(str(config / plugin_config_filename), allow_substs=False),
         {"simulation_session_id": session_id},
     ]
     robot_state_publisher = Node(
@@ -2389,7 +2392,7 @@ def _configured_task_station_actions(context):
                 Path(LaunchConfiguration("mujoco_scene").perform(context)).resolve()!=Path(route["scene_path"]).resolve()):
                 raise ValueError("TASK6_ROUTE_DIAGNOSTIC_CONFIG_MISMATCH")
             installed_plugins=(Path(get_package_share_directory("so101_demo_py")) /
-                               "config/mujoco/act/mujoco_plugins.yaml")
+                               "config/mujoco/act/task6_route_plugins.yaml")
             if hashlib.sha256(installed_plugins.read_bytes()).hexdigest()!=route["plugin_sha256"]:
                 raise ValueError("TASK6_ROUTE_DIAGNOSTIC_PLUGIN_DRIFT")
             broker_options += ["--task6-route-manifest",route_path]
@@ -2399,6 +2402,7 @@ def _configured_task_station_actions(context):
     stack = _mujoco_stack_actions(
         context, share, session_id,
         sim_speed_factor=0.60 if contact_path else 0.25 if route_path else 1.0 if act_profile else -1.0,
+        plugin_config_filename="task6_route_plugins.yaml" if route_path else "mujoco_plugins.yaml",
     )
     teleop_actions = []
     if act_profile:
