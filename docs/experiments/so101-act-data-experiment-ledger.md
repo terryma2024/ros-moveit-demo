@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: a2f0f767896d67cfd05efb15930edd47956133a8
+current_commit: 8c9c542248fc07699489625c81edd5436a1072f7
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -19,8 +19,8 @@ disproven_routes:
 open_hypotheses:
   - An owner-created readiness artifact and startup receipt can bind this observed seven-axis verdict to a Task8 case without opening the Task6 or phase gates.
   - The physical phase port can support measured Task6 TASK8_READY and Task8 live qualification.
-latest_checkpoint: CP-297
-next_experiment: EXP-298 non-collecting dynamic Task6 measurement route
+latest_checkpoint: CP-298
+next_experiment: EXP-299 non-collecting dynamic Task6 measurement route
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -2362,3 +2362,13 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-297 — Production child selects a calibrated SEARCH port
 
 - Last valid experiment: EXP-297. The admitted child can construct the strict first-phase port from its bound artifacts, and refuses unmeasured Task6 input before ROS starts. Task8 cases still require a separate non-collecting dynamic Task6 route to measure five front checks, complete physical phase ports for APPROACH through FINAL_CHECK, and one freshly admitted full-stack lifecycle per case before the campaign fence can open. `CALIBRATION_REQUIRED`, `FULL_RESTART_PROOF_UNAVAILABLE`; accepted Train/Val/Test 0/0/0. Retain all evidence, archive none, scratch/IPC deletion candidates only, delete nothing.
+
+## EXP-298 — Admit, execute and retire one frozen Task 8 case before recording it
+
+- **PLANNED:** Frozen source HEAD `8c9c542248fc07699489625c81edd5436a1072f7`, submodule `54463fce3bfa6192976e74113f5ed7152f708a3f`, registered root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`, task overlay `i`, exact test Python `test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. `Task8CaseOwner` can own and retire one child/stack but the campaign still refuses all cases to avoid reporting one reused child as fourteen full restarts. Add a source-level one-case executor that validates the frozen manifest and exact case against the spec before admission, starts exactly one owner, sends one typed Task8 request, requires exact phase and stop result, then calls the owner retirement sequence. It may durably record a case result only after both receipts and final graph clear are verified; a missing stop/receipt retains the resource fence and no success record. A case is never retried inside that owner. Keep the production CLI `FULL_RESTART_PROOF_UNAVAILABLE`, Task6 `CALIBRATION_REQUIRED`, later-phase port refusal, and no live run. Test intended RED for success-before-retirement, forged phase output and failed cleanup, then Teleop ordinary/package gates using fresh verified NVMe scratch. Retain all evidence; archive none; scratch/IPC roots deletion candidates only, delete nothing.
+
+- **VALID as a source and installed one-case transaction, not Task 8 live:** Missing-module RED `scratch/exp298-red.5QtUxf` exited2 at intended import. Initial focused `scratch/exp298-green.7CJzdG` exited0, 4 passed; subsequent linked-journal-parent RED `scratch/exp298-link-red.d7PqJz` exited1 because validation occurred only after execution. Final focused `scratch/exp298-focused-green2.96JCxH` exited0, 10 passed including CTest registration and early linked-parent refusal. The executor reads the exact frozen case and file hash before admission, starts one `Task8CaseOwner`, sends one typed request, requires exact ordered phase and stop result, then waits for owner stop, both retirement receipts and final graph clear before atomically publishing a single result. A full Task 8 qualification case is explicitly not eligible for formal collection. Forged phase evidence, cleanup failure, missing child receipt, replaced manifest and linked journal parent leave no PASS journal; uncertain cleanup retains the concrete owner's admission fence. Initial Teleop ordinary xdist8 `scratch/exp298-teleop-full.Gr98ZL` exited1 in76 s, 1223 passed/1 failed/43 skipped: the new module was absent from the CMake test list. After adding its registration and early path guard, Teleop overlay build `scratch/exp298-build.bdxCwe` exited0 in69 s; corrected ordinary xdist8 `scratch/exp298-teleop-full2.aE4jTU` exited0 in77 s, 1225 passed/43 skipped. Teleop package `scratch/exp298-teleop-colcon.N3THYP` exited0 in310 s, 108 XML files, 1268 tests/0 errors/0 failures/43 skipped; aggregate test-result exited0 with 5925 tests/0 errors/0 failures/205 skipped, including unchanged Demo. Every pytest/colcon test used unique previously nonexistent NVMe TMPDIR/TMP/TEMP verified by exact task Python. Short IPC roots `/tmp/so101-debug-act-data-66c42e4c/i298.pU3zrM`, `i298b.hJwim1`, and `i298c.faOj3z` are task-owned. Installed Teleop module SHA256 equals source `ee25fb68f64de06fbb8b59e15848ec52277fc8517374c8712feb2aa10621821c`; CTest Python and package prefix point to the task overlay. `git diff --check` clean. No live stack, reset, motion, Task8 phase PASS, W8, formal episode or training; Task6 `CALIBRATION_REQUIRED`, production campaign `FULL_RESTART_PROOF_UNAVAILABLE`, accepted Train/Val/Test 0/0/0. Retain registered root and all runs; archive none; scratch and short IPC roots are deletion candidates only, delete nothing.
+
+## CP-298 — A case PASS waits for its own two-owner retirement
+
+- Last valid experiment: EXP-298. One case has a strict source-level execution and retirement transaction, but the production CLI still cannot run the fourteen-case manifest, and the physical port still supports only SEARCH. Next build the non-collecting dynamic Task6 route and remaining physical phases before opening live qualification. Keep `CALIBRATION_REQUIRED`, `FULL_RESTART_PROOF_UNAVAILABLE` and formal counts 0/0/0. Retain all evidence, archive none; scratch/IPC deletion candidates only, delete nothing.
