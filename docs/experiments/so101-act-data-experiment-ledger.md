@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 515b542875dd0be0b08af71c19e8d74145e5b62a
+current_commit: 45952dff2cdc23ad1df276aee11e82b2440d39c4
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -20,7 +20,7 @@ open_hypotheses:
   - An owner-created readiness artifact and startup receipt can bind this observed seven-axis verdict to a Task8 case without opening the Task6 or phase gates.
   - The physical phase port can support measured Task6 TASK8_READY and Task8 live qualification.
 latest_checkpoint: CP-299
-next_experiment: EXP-305 CameraInfo NumPy scalar acceptance source and installed gates
+next_experiment: EXP-306 isolated Task6 recorder live readback after CameraInfo fix
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -2430,3 +2430,13 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-304 — Rejecting NumPy CameraInfo scalars caused the zero-frame recorder run
 
 - Last valid source EXP-302 and diagnostic EXP-304. The next source change is limited to finite real scalar acceptance in Task6 metadata; all causal epoch/stamp/skew/image/joint guards remain. Keep `CALIBRATION_REQUIRED`, `FULL_RESTART_PROOF_UNAVAILABLE`, formal 0/0/0. Retain all evidence, archive none, delete nothing.
+
+## EXP-305 — Accept finite ROS NumPy CameraInfo scalars without relaxing frame scope
+
+- **PLANNED/RUNNING source gate:** Parent HEAD `45952dff2cdc23ad1df276aee11e82b2440d39c4`, unchanged submodule, task overlay and registered durable root, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. EXP-304's actual current `CameraInfo.k` is an ndarray of NumPy float64; frozen XML/image/info fields and timestamps are valid. Add a regression using a real `sensor_msgs.msg.CameraInfo`, proving both cameras can join a causal world and joint sample, and prove bool, strings, NaN and infinity still refuse. Intended RED `scratch/exp305-red.68uJOz` reached `TASK6_CAMERA_INFO_INVALID` caused by `_finite(numpy.float64(400.0))` and exited1. Change `_finite` to accept finite `numbers.Real` scalars, explicitly excluding bool and failed/overflowed conversion. Focused GREEN `scratch/exp305-focused.9xJDcr` passed10/10 with exact task Python and verified fresh NVMe TMPDIR/TMP/TEMP. Next complete ordinary Demo full, overlay build and package gate, inspect installed hashes and then run a new isolated read-only recorder; no live EXP-305 action. Task6 remains `CALIBRATION_REQUIRED`, Task8 campaign `FULL_RESTART_PROOF_UNAVAILABLE`, formal accepted 0/0/0. Retain evidence, archive none, scratch deletion candidates only, delete nothing.
+
+- **VALID as source and installed metadata repair, not Task6 live:** The real ROS `CameraInfo` RED in `scratch/exp305-red.68uJOz` failed on NumPy float64 K before the patch; focused GREEN `scratch/exp305-focused.9xJDcr` passed10/10, including unchanged refusal of bool, string, NaN and infinity. First complete ordinary gate `scratch/exp305-demo-full.3rAJgo` exited1 with 4317 passed/1 failed/162 skipped: the unrelated resource test hardcodes domain213 and our own EXP-303 `ros2 node list` left a domain213 `ros2-daemon` claiming it. Read-only `SystemResourceProbe.ros_domain_in_use(213)` confirmed true and process argv identified PID2201464. Stopped only this task's domain211–214 daemons, verified domain213 false; exact resource test `scratch/exp305-domain-recheck.fcM1pj` passed1/1. Fresh full ordinary `scratch/exp305-demo-full2.G18PzG` exited0 in51 s, 4318 passed/162 skipped. Overlay build `scratch/exp305-build.XMS9MS` exited0 in3 s; Demo package `scratch/exp305-demo-colcon.0yHAhA` exited0 in52 s, package XML 4480 tests/0 errors/0 failures/162 skipped and zero benchmark suite cases. Aggregate `colcon test-result` exited0 with 5935 tests/0 errors/0 failures/205 skipped, including unchanged Teleop. Every pytest and colcon run used fresh previously nonexistent task NVMe TMPDIR/TMP/TEMP verified by exact task Python. Installed capture adapter SHA256 equals source `4c52b7349f194524c9921b7368becbf7a9fbbdc1cd8c9b23e222a3ff879c1720`; targeted flake8 F401/F821/F841 and `git diff --check` exit0, domain213 remains unclaimed. No live EXP-305 stack, reset, goal, Task6 PASS, Task8 case, W8, formal episode or training. Accepted Train/Validation/Test 0/0/0; retain registered root and all runs, archive none; scratch and prior short daemons/logs deletion candidates only, delete no evidence.
+
+## CP-305 — Task6 accepts finite ROS CameraInfo NumPy intrinsics
+
+- Last valid source EXP-305 and field probe EXP-304. Run a new isolated no-contact installed recorder with separate atomic/image executor and corrected finite CameraInfo parsing. Its result remains `RECORDED_UNQUALIFIED` until dynamic expert FOV and all Task6 front checks are measured. Preserve `CALIBRATION_REQUIRED`, `FULL_RESTART_PROOF_UNAVAILABLE`, formal 0/0/0; retain runs, archive none, delete nothing.
