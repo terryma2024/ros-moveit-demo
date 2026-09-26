@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 95686386a62960f9a5a421f774e97643392627d2
+current_commit: 515b542875dd0be0b08af71c19e8d74145e5b62a
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -20,7 +20,7 @@ open_hypotheses:
   - An owner-created readiness artifact and startup receipt can bind this observed seven-axis verdict to a Task8 case without opening the Task6 or phase gates.
   - The physical phase port can support measured Task6 TASK8_READY and Task8 live qualification.
 latest_checkpoint: CP-299
-next_experiment: EXP-304 isolated CameraInfo source probe
+next_experiment: EXP-305 CameraInfo NumPy scalar acceptance source and installed gates
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -2420,3 +2420,13 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-303 — Atomic drain is fixed, CameraInfo join remains unmeasured
 
 - Last valid source experiment EXP-302. EXP-303 live returned no atomic gap but no accepted camera frame. Preserve `CALIBRATION_REQUIRED` and `FULL_RESTART_PROOF_UNAVAILABLE`. Probe actual current CameraInfo fields before weakening source validation; keep formal 0/0/0, retain runs, archive none, delete nothing.
+
+## EXP-304 — Read exact current CameraInfo and image fields after a paused reset
+
+- **PLANNED:** Source HEAD `515b542875dd0be0b08af71c19e8d74145e5b62a`, unchanged application code, submodule `54463fce3bfa6192976e74113f5ed7152f708a3f`, exact task overlay and compiled model. New `ROS_DOMAIN_ID=214`, `GZ_PARTITION/session_id=act-30a80149-exp304`, socket `/run/user/1000/act304/a`, owned tmux `act-data-live-304` and `act-data-probe-304`, durable `experiments/exp304-camera-info-probe`, ordinary `/tmp/so101-debug-act-data-66c42e4c/ros-exp304`, lifecycle `ISOLATED_STACK`. One stopped broker startup, paused default seven-joint/cup reset; start a read-only ROS subscription probe for head/wrist RGB and CameraInfo, recording exact header stamps, frames, dimensions, RGB encoding/byte lengths, intrinsics, distortion model and coefficients with no raw pixel copy or command. Recovery lease briefly resumes to obtain current frames, then revokes and proves stopped `IDLE`; a fresh recovery cleanup pauses and releases before exact-PID broker retirement. Require field-level evidence distinguishing the EXP-303 `TASK6_CAMERA_INFO_INVALID` cause. No action goal, moving expert, Task6 PASS or formal data. Any stack/control anomaly stops this run; retain all evidence, archive none, delete nothing.
+
+- **VALID read-only root-cause probe, not Task6 qualification:** After one stopped broker startup and paused default reset, the run-local subscription probe recorded 23 head and 23 wrist image messages plus 23 matching CameraInfo messages per camera. Each current pair had the same post-reset stamp (example `24.663999999 s` > reset floor `24.464 s`), expected 640×480 dimensions and camera frame, RGB8 921600 bytes, finite 9-element K, finite five-element D and `plumb_bob`; all 92 metadata rows passed independent field checks. Exact task ROS `sensor_msgs.msg.CameraInfo().k` is `numpy.ndarray` with `numpy.float64` elements, while the recorder's `_finite` used exact `type(value) in (int,float)` and rejected that element as `TASK6_SOURCE_INVALID`. This directly explains EXP-303's 70 `TASK6_CAMERA_INFO_INVALID` and 34 missing-info joins; the camera producer and source stamps are valid. Probe and control exited0; control revoked the running lease after four seconds, separate stopped recovery cleanup paused and released, broker retirement used eight stopped reads and exact PID/parent/argv, final stop `IDLE`/confirmed/no unknown goal, launch exited0 and domain214 graph cleared after discovery settle. `postflight.json`, raw field rows, reset/control/cleanup/stop and ordinary logs retained. Next accept finite `numbers.Real` NumPy scalar values in the Task6 recorder while continuing to refuse bool, strings, NaN and infinity, then repeat full ordinary and installed Demo gates before a new live recorder run. No Task6 PASS, Task8 case, W8, formal episode or training; accepted Train/Validation/Test 0/0/0. Retain all runs, archive none; short socket/log and generated `__pycache__` deletion candidates only, delete nothing.
+
+## CP-304 — Rejecting NumPy CameraInfo scalars caused the zero-frame recorder run
+
+- Last valid source EXP-302 and diagnostic EXP-304. The next source change is limited to finite real scalar acceptance in Task6 metadata; all causal epoch/stamp/skew/image/joint guards remain. Keep `CALIBRATION_REQUIRED`, `FULL_RESTART_PROOF_UNAVAILABLE`, formal 0/0/0. Retain all evidence, archive none, delete nothing.
