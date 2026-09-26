@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 8c9c542248fc07699489625c81edd5436a1072f7
+current_commit: af84c585876ac188fdc85876b2866fb99df82d68
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -19,8 +19,8 @@ disproven_routes:
 open_hypotheses:
   - An owner-created readiness artifact and startup receipt can bind this observed seven-axis verdict to a Task8 case without opening the Task6 or phase gates.
   - The physical phase port can support measured Task6 TASK8_READY and Task8 live qualification.
-latest_checkpoint: CP-298
-next_experiment: EXP-299 non-collecting dynamic Task6 measurement route
+latest_checkpoint: CP-299
+next_experiment: EXP-300 isolated non-collecting expert measurement route
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -2372,3 +2372,13 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-298 — A case PASS waits for its own two-owner retirement
 
 - Last valid experiment: EXP-298. One case has a strict source-level execution and retirement transaction, but the production CLI still cannot run the fourteen-case manifest, and the physical port still supports only SEARCH. Next build the non-collecting dynamic Task6 route and remaining physical phases before opening live qualification. Keep `CALIBRATION_REQUIRED`, `FULL_RESTART_PROOF_UNAVAILABLE` and formal counts 0/0/0. Retain all evidence, archive none; scratch/IPC deletion candidates only, delete nothing.
+
+## EXP-299 — Record dynamic Task6 dual-RGB and seven-joint evidence without issuing commands
+
+- **PLANNED:** Frozen source HEAD `af84c585`, submodule `54463fce3bfa6192976e74113f5ed7152f708a3f`, registered root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`, exact task overlay `i`, test Python `test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED` for source work, lifecycle `SOURCE_ONLY`. Task6 has a hash-bound report parser, static three-anchor search evidence and one offline expert FOV replay, but no reusable live moving-arm dual-camera sample recorder. Build a read-only diagnostic adapter that joins actual atomic MuJoCo session/epoch/step with causal head/wrist RGB, their matching CameraInfo and seven measured joints, writes lossless PNG and fsynced hash-indexed sample rows in an exclusive output directory, and records gaps or rejected frames without issuing any ROS action, reset or broker command. A simple ROS entry reads the exact isolated session/epoch/floor from caller arguments and polls at 10 Hz; it emits `RECORDED_UNQUALIFIED`, never `TASK8_READY`. RED tests first require refusal of stale epoch, reused/future frames, skew, malformed RGB and missing CameraInfo. Run focused/full ordinary and Demo package gates with fresh verified NVMe scratch, and inspect installed entry/module provenance. This experiment creates no live stack or Task6 PASS; collision, execution and moving expert FOV still require later live measurements. Formal Train/Val/Test 0/0/0; retain evidence, archive none, scratch deletion candidates only, delete nothing.
+
+- **VALID as a source and installed read-only recorder, not a Task6 PASS:** Missing-module RED `scratch/exp299-red.vpZRZo` exited2; initial focused `scratch/exp299-green1.QGTCL4` passed4/4. Reused-joint RED `scratch/exp299-joint-red.I4dx74` exited1 at an accepted second image pair with stale joint feedback; final focused `scratch/exp299-focused-green2.r1AeWw` passed7/7 after requiring every recorded image and joint stamp to advance. The recorder requires one current running atomic MuJoCo session/epoch/step, causal fresh 640×480 RGB, exact matching CameraInfo, finite ordered seven-joint position/velocity and bounded source skew; writes two lossless PNGs, SHA256-indexed fsynced rows, rejection rows and `RECORDED_UNQUALIFIED` result in a new exclusive task evidence directory. Installed CLI subscribes read-only to those topics and the atomic world observer at 10 Hz, with no action, reset or broker API. First Demo ordinary xdist8 `scratch/exp299-demo-full.u3VQEY` exited1 in57 s, 4314 passed/1 failed/162 skipped because an unchanged `MujocoPathProcess` child missed its fixed two-second startup handshake under parallel load; process readback found no residual child. Focused exact test `scratch/exp299-timeout-recheck.zPQvOl` passed1/1 in3 s. Fresh complete ordinary gate `scratch/exp299-demo-full2.AVsuLC` exited0 in52 s, 4315 passed/162 skipped. Overlay build `scratch/exp299-build.nqGBKA` exited0 in3 s. Demo package `scratch/exp299-demo-colcon.XCVVpH` exited0 in55 s, XML 4477 tests/0 errors/0 failures/162 skipped and zero benchmark cases; aggregate test-result exited0 with 5932 tests/0 errors/0 failures/205 skipped, using unchanged Teleop CTest. All pytest and colcon tests used unique previously nonexistent NVMe TMPDIR/TMP/TEMP verified by exact task Python. Installed `act_capture_task6 --help` resolved from task overlay, and installed capture/CLI modules resolve via build-tree symlink to source, SHA256 `404ce260f96773e2863835a98b2cfbf15d75193f04605fd4bdb1f80f1fd18d35` / `5c9990b4eab4fd9d353550abfcac3eb567cf92320d9497a5620d9bb80a493970`. Targeted flake8 undefined/unused-name check exited0; optional unconfigured default flake8 reported style warnings and is not the repository's required package gate. `git diff --check` clean. No live stack, motion, dynamic expert FOV, Task6 PASS, Task8 case, W8, formal episode or training; `CALIBRATION_REQUIRED`, `FULL_RESTART_PROOF_UNAVAILABLE`, accepted Train/Val/Test 0/0/0. Retain registered root and all runs; archive none; scratch deletion candidates only, delete nothing.
+
+## CP-299 — Task6 can retain causal dynamic RGB samples without control authority
+
+- Last valid experiment: EXP-299. A read-only recorder and installed entry can capture auditable moving dual RGB/joint/world samples, but they have not been run against a live stack or a complete expert trajectory. Next wire an isolated non-collecting expert measurement route and verify five Task6 front checks from actual current-source evidence before producing `TASK8_READY`; then complete remaining Task8 physical phases and per-case live campaign. Keep formal counts 0/0/0 and all production fences. Retain all evidence, archive none; scratch deletion candidates only, delete nothing.
