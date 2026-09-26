@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 50eb318399a4ee2b3baa1ef3b21fbf3115242389
+current_commit: 4622e59801ab2574a8899277de67d97e01ff5399
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -20,7 +20,7 @@ open_hypotheses:
   - An owner-created readiness artifact and startup receipt can bind this observed seven-axis verdict to a Task8 case without opening the Task6 or phase gates.
   - The physical phase port can support measured Task6 TASK8_READY and Task8 live qualification.
 latest_checkpoint: CP-299
-next_experiment: EXP-308 isolated Task6 fresh-history recorder live readback
+next_experiment: EXP-309 noncollecting moving-expert Task6 measurement route
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -2460,3 +2460,13 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-307 — Task6 selects a compatible step from strict fresh atomic history
 
 - Last valid source EXP-307. Next run one new isolated installed recorder with unchanged 50 ms skew and verify at least three joined, hash-checked dual-camera frames. Still do not count this as dynamic expert FOV or Task6 `TASK8_READY`. Preserve `CALIBRATION_REQUIRED`, `FULL_RESTART_PROOF_UNAVAILABLE`, formal 0/0/0; retain evidence, archive none, delete nothing.
+
+## EXP-308 — Validate strict fresh-history dual-camera capture on an isolated stack
+
+- **PLANNED:** Source HEAD `4622e59801ab2574a8899277de67d97e01ff5399`, unchanged submodule `54463fce3bfa6192976e74113f5ed7152f708a3f`, installed CLI SHA256 `a8bfd3f64ddcee609b40fc5a5eef00ccf24ed4439d7fbc0c7536271466e222eb`. New `ROS_DOMAIN_ID=216`, `GZ_PARTITION/session_id=act-30a80149-exp308`, socket `/run/user/1000/act308/a`, owned tmux `act-data-live-308` and `act-data-capture-308`, durable `experiments/exp308-current-recorder-live` plus exclusive capture sibling, ordinary `/tmp/so101-debug-act-data-66c42e4c/ros-exp308`, lifecycle `ISOLATED_STACK`. Freeze current compiled scene, small noncollecting motion manifest and script hashes. Prove empty graph with `ros2 node list --no-daemon`, absent socket/output/tmux and current installed metadata. Launch one calibration-only collection-ineligible stack, require bounded stable `IDLE`/stopped/all-server startup, one paused default reset and release. Run the installed read-only recorder for a bounded 12 s window with `max_age_s=0.12`, `max_skew_s=0.05`, using fresh strict atomic history and no action goal. On capture exit revoke running recovery lease, prove stopped, use separate recovery cleanup to pause and release, then exact-PID broker retirement and empty graph. Success for this diagnostic requires ≥3 hash-verified lossless same-session/epoch, strictly advancing physics step rows with causal head/wrist RGB, exact CameraInfo and measured joints, and no atomic gap. Any failure ends this stack without in-stack retry. `RECORDED_UNQUALIFIED` is not Task6 dynamic expert qualification; Task6 five-check `TASK8_READY`, Task8 cases, W8 and formal Train/Validation/Test remain absent/0/0/0. Retain all, archive none, delete nothing.
+
+- **VALID installed read-only recorder diagnostic, explicitly unqualified:** Broker startup settled to five stopped `IDLE` reads with all servers, exact calibration-only collection-ineligible session/domain/model, then one paused default seven-joint/cup reset `0→1`. Installed concurrent recorder exited0 in a bounded 12 s window and wrote 32 lossless dual-camera rows plus 64 PNGs at `experiments/exp308-current-recorder-live-capture`, result `RECORDED_UNQUALIFIED`. `verify-capture.json` independently re-read all 32 JSONL rows and PNGs, recomputed frames/rejections/PNG/raw-RGB SHA256, decoded both images per row as 640×480 RGB, checked matching CameraInfo stamps and parameters, seven finite measured joint positions/velocities, causal source stamps, same session/epoch and strictly increasing physics steps 146→1946. Maximum source skew `0.024000001 s` under unchanged 50 ms, maximum held-pose error `0.000334608 rad`, measured joint speed `1.55e-7 rad/s`. First head/wrist PNGs were visually inspected and show the stationary cup and robot from both views. Rejections consisted only of startup paused/stale windows and four reused-source ticks; none were atomic gaps, CameraInfo invalid or source skew. Recovery control revoked after capture, proved stopped, separate cleanup paused and released, exact PID/parent/argv broker retirement showed eight stopped reads and final `IDLE`/stop-confirmed/no unknown goal; launch exited0, owned processes/tmux absent and domain216 graph empty using `--no-daemon`. No action goal, arm/gripper motion, dynamic expert trajectory, Task6 five-check `TASK8_READY`, Task8 phase/case, W8, formal episode or training. Accepted Train/Validation/Test 0/0/0. Retain root, EXP-308 run and all 64 PNGs/logs; archive none; short socket and scratch deletion candidates only, delete nothing.
+
+## CP-308 — Lossless same-step dual-camera recorder works on the current stack
+
+- Last valid source EXP-307 and installed live diagnostic EXP-308. The no-command stationary frame path is proven but Task6 dynamic expert FOV, clearance, stop, timing and contact checks remain unmeasured. Next construct the noncollecting moving-expert measurement route using admitted policy and current installed broker, with separate strict safety gates and source/installed tests before any live action. Keep Task6 `CALIBRATION_REQUIRED`, Task8 `FULL_RESTART_PROOF_UNAVAILABLE`, formal 0/0/0; retain all evidence, archive none, delete nothing.
