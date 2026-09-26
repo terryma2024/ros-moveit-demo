@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import re
+from threading import Thread
 import time
 
 from so101_demo.adapters.act.task6_capture import Task6FrameRecorder
@@ -37,7 +38,9 @@ def main(argv: list[str] | None = None) -> int:
     from sensor_msgs.msg import CameraInfo, Image, JointState
 
     from so101_demo.adapters.act.ros_observation import RGB_QOS
-    from so101_demo.backends.mujoco.observer import EvidenceStale, MujocoWorldObserver
+    from so101_demo.backends.mujoco.observer import (
+        EvidenceRejected, EvidenceStale, MujocoWorldObserver,
+    )
 
     recorder = Task6FrameRecorder(
         experiments / options.run_id,
@@ -45,17 +48,22 @@ def main(argv: list[str] | None = None) -> int:
         source_floor_s=options.source_floor_s,
         max_age_s=options.max_age_s, max_skew_s=options.max_skew_s,
     )
-    node = executor = None
+    frame_node = world_node = frame_executor = world_executor = None
+    threads: list[Thread] = []
+    thread_errors: list[BaseException] = []
     finished = False
     finalizing = False
     try:
         rclpy.init()
         name = "act_task6_capture_" + options.run_id.replace("-", "_")
-        node = rclpy.create_node(
-            name, parameter_overrides=[Parameter("use_sim_time", value=True)],
+        frame_node = rclpy.create_node(
+            name + "_frames", parameter_overrides=[Parameter("use_sim_time", value=True)],
+        )
+        world_node = rclpy.create_node(
+            name + "_world", parameter_overrides=[Parameter("use_sim_time", value=True)],
         )
         observer = MujocoWorldObserver(
-            node, options.session_id, max_age_s=options.max_age_s,
+            world_node, options.session_id, max_age_s=options.max_age_s,
         )
 
         def accept(method, *args):
@@ -65,30 +73,50 @@ def main(argv: list[str] | None = None) -> int:
                 recorder.record_rejection(str(error))
 
         for camera in ("head", "wrist"):
-            node.create_subscription(
+            frame_node.create_subscription(
                 Image, f"/{camera}_camera/color",
                 lambda message, label=camera: accept(recorder.accept_image, label, message),
                 RGB_QOS,
             )
-            node.create_subscription(
+            frame_node.create_subscription(
                 CameraInfo, f"/{camera}_camera/camera_info",
                 lambda message, label=camera: accept(recorder.accept_info, label, message),
                 RGB_QOS,
             )
-        node.create_subscription(
+        frame_node.create_subscription(
             JointState, "/joint_states",
             lambda message: accept(recorder.accept_joints, message),
             qos_profile_sensor_data,
         )
-        executor = SingleThreadedExecutor()
-        executor.add_node(node)
+        frame_executor = SingleThreadedExecutor()
+        world_executor = SingleThreadedExecutor()
+        frame_executor.add_node(frame_node)
+        world_executor.add_node(world_node)
+
+        def spin(executor):
+            try:
+                executor.spin()
+            except BaseException as error:
+                thread_errors.append(error)
+
+        for label, executor in (("frames", frame_executor), ("world", world_executor)):
+            thread = Thread(target=spin, args=(executor,), name=name + "_" + label)
+            thread.start()
+            threads.append(thread)
         deadline = time.monotonic() + options.duration_s
         next_sample = time.monotonic()
+        atomic_hazard = False
         while time.monotonic() < deadline:
-            executor.spin_once(timeout_sec=.01)
             now = time.monotonic()
             if now < next_sample:
+                time.sleep(min(.01, next_sample - now))
                 continue
+            if thread_errors:
+                recorder.record_rejection(
+                    f"TASK6_SUBSCRIBER_ABORT: {type(thread_errors[0]).__name__}: {thread_errors[0]}"
+                )
+                atomic_hazard = True
+                break
             next_sample += .1
             if now > next_sample + .1:
                 recorder.record_rejection("TASK6_SAMPLE_TIMER_GAP")
@@ -96,22 +124,30 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 world = observer.recent_with_receipts()[-1].evidence
                 recorder.capture(world)
+            except EvidenceRejected as error:
+                recorder.record_rejection(f"TASK6_ATOMIC_HAZARD: {error}")
+                atomic_hazard = True
+                break
             except (EvidenceStale, ValueError) as error:
                 recorder.record_rejection(str(error))
         finalizing = True
         summary = recorder.finish()
         finished = True
-        return 0 if summary["samples"] > 0 else 2
+        return 0 if summary["samples"] > 0 and not atomic_hazard else 2
     except BaseException as error:
         if not finished and not finalizing:
             recorder.record_rejection(f"TASK6_CAPTURE_ABORT: {type(error).__name__}: {error}")
         raise
     finally:
         try:
-            if executor is not None:
-                executor.shutdown(timeout_sec=2.)
-            if node is not None:
-                node.destroy_node()
+            for executor in (frame_executor, world_executor):
+                if executor is not None:
+                    executor.shutdown(timeout_sec=2.)
+            for thread in threads:
+                thread.join(timeout=2.)
+            for node in (frame_node, world_node):
+                if node is not None:
+                    node.destroy_node()
             if rclpy.ok():
                 rclpy.shutdown()
         finally:

@@ -2,6 +2,8 @@
 
 import hashlib
 import json
+import threading
+import time
 from types import SimpleNamespace
 
 from PIL import Image as PillowImage
@@ -148,3 +150,86 @@ def test_cli_rejects_unscoped_output_before_ros_initialization(tmp_path):
               "--source-floor-s", ".5", "--max-age-s", ".05",
               "--max-skew-s", ".03", "--duration-s", "1"])
     assert not (tmp_path / "experiments").exists()
+
+
+def test_cli_drains_atomic_callbacks_during_a_slow_png_write(tmp_path, monkeypatch):
+    import rclpy
+    from rclpy import executors
+    from so101_demo.backends.mujoco import observer as world_module
+    from so101_demo.cli import act_capture_task6 as cli
+
+    (tmp_path / "experiments").mkdir()
+    ticks = [0]
+    recorders = []
+
+    class Node:
+        def __init__(self, name):
+            self.name = name
+
+        def create_subscription(self, *_args):
+            return object()
+
+        def destroy_node(self):
+            pass
+
+    class Executor:
+        def __init__(self):
+            self.stop = threading.Event()
+            self.node = None
+
+        def add_node(self, node):
+            self.node = node
+
+        def spin(self):
+            while not self.stop.is_set():
+                if self.node.name.endswith("_world"):
+                    ticks[0] += 1
+                time.sleep(.001)
+
+        def spin_once(self, timeout_sec):
+            if self.node.name.endswith("_world"):
+                ticks[0] += 1
+            time.sleep(timeout_sec)
+
+        def shutdown(self, timeout_sec):
+            self.stop.set()
+
+    class Recorder:
+        def __init__(self, *_args, **_kwargs):
+            self.samples = 0
+            self.rejections = []
+            recorders.append(self)
+
+        def capture(self, _world):
+            before = ticks[0]
+            time.sleep(.03)
+            assert ticks[0] >= before + 2, "atomic callback stalled during PNG write"
+            self.samples += 1
+
+        def record_rejection(self, reason):
+            self.rejections.append(reason)
+
+        def finish(self):
+            return {"samples": self.samples}
+
+    class Observer:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def recent_with_receipts(self):
+            return (SimpleNamespace(evidence=object()),)
+
+    monkeypatch.setattr(rclpy, "init", lambda: None)
+    monkeypatch.setattr(rclpy, "ok", lambda: False)
+    monkeypatch.setattr(rclpy, "create_node", lambda name, **_kwargs: Node(name))
+    monkeypatch.setattr(executors, "SingleThreadedExecutor", Executor)
+    monkeypatch.setattr(world_module, "MujocoWorldObserver", Observer)
+    monkeypatch.setattr(cli, "Task6FrameRecorder", Recorder)
+    result = cli.main([
+        "--evidence-root", str(tmp_path), "--run-id", "capture",
+        "--session-id", "task6-302", "--reset-epoch", "1",
+        "--source-floor-s", "0", "--max-age-s", ".12",
+        "--max-skew-s", ".05", "--duration-s", ".21",
+    ])
+    assert result == 0
+    assert recorders[0].samples >= 2
