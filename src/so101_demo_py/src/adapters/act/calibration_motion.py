@@ -564,7 +564,9 @@ class RosCalibrationMotionGuard:
             safe=self.path.check_path(prefix,full)
             row=dict(boundary='exact_goals',safe=safe,path=dict(self.path.last_check))
             if safe:self.audit.append(row)
-            else:self._record_rejection(row)
+            else:
+                row.update(prefix=prefix,controller_goals=goals,path_snapshot=full)
+                self._record_rejection(row)
             if (safe and getattr(self,'transition_mode',False)
                     and prefix['sequence']==self.manifest['contact_phase_start']):
                 self.contact_adapter.replace_allowed_pairs(self.manifest['allowed_pairs_by_phase']['CONTACT'])

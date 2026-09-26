@@ -159,11 +159,29 @@ class MujocoPathChecker:
         intervals=np.diff(sample_times)
         if np.any(intervals<=0):return self._reject('PATH_TIMING_INVALID')
         velocities=np.diff(sample_positions,axis=0)/intervals[:,None]
-        if np.any(np.abs(velocities)>np.array(self.velocity_limits)+1e-9):return self._reject('PATH_VELOCITY_LIMIT')
+        velocity_excess=np.abs(velocities)-np.array(self.velocity_limits)
+        if np.any(velocity_excess>1e-9):
+            leg,joint=np.unravel_index(int(np.argmax(velocity_excess)),velocity_excess.shape)
+            return self._reject('PATH_VELOCITY_LIMIT',joint_name=ARM_JOINTS[joint],
+                sample_time_s=float(sample_times[leg+1]),
+                value_rad_s=float(abs(velocities[leg,joint])),
+                limit_rad_s=float(self.velocity_limits[joint]))
         accelerations=np.diff(np.vstack((previous_velocity,velocities)),axis=0)/intervals[:,None]
-        if np.any(np.abs(accelerations)>np.array(self.acceleration_limits)+1e-9):return self._reject('PATH_ACCELERATION_LIMIT')
-        if np.any(np.abs(velocities[-1])/self.step>np.array(self.acceleration_limits)+1e-9):
-            return self._reject('PATH_ACCELERATION_LIMIT')
+        acceleration_excess=np.abs(accelerations)-np.array(self.acceleration_limits)
+        if np.any(acceleration_excess>1e-9):
+            leg,joint=np.unravel_index(int(np.argmax(acceleration_excess)),acceleration_excess.shape)
+            return self._reject('PATH_ACCELERATION_LIMIT',joint_name=ARM_JOINTS[joint],
+                sample_time_s=float(sample_times[leg+1]),
+                value_rad_s2=float(abs(accelerations[leg,joint])),
+                limit_rad_s2=float(self.acceleration_limits[joint]))
+        terminal_acceleration=np.abs(velocities[-1])/self.step
+        terminal_excess=terminal_acceleration-np.array(self.acceleration_limits)
+        if np.any(terminal_excess>1e-9):
+            joint=int(np.argmax(terminal_excess))
+            return self._reject('PATH_ACCELERATION_LIMIT',joint_name=ARM_JOINTS[joint],
+                sample_time_s=float(sample_times[-1]),
+                value_rad_s2=float(terminal_acceleration[joint]),
+                limit_rad_s2=float(self.acceleration_limits[joint]),terminal_stop=True)
         mujoco.mj_resetData(self.model,self._data)
         for stamp,q in zip(sample_times,sample_positions,strict=True):
             self._data.qpos[:]=qpos
