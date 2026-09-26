@@ -54,7 +54,7 @@ def bound_act_source_settings(report: dict, *, timestep_s: float) -> dict[str, f
 
     if not isinstance(report, dict):
         raise ValueError("CALIBRATION_REQUIRED")
-    gate = "formal_collection" if report.get("status") == "QUALIFIED" else "task8_live"
+    gate = "formal_collection" if report.get("status") == "QUALIFIED" else "pick_place_validation"
     require_gate(report, gate)
     try:
         measured = report["measurements"]

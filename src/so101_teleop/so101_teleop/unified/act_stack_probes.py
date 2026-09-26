@@ -88,7 +88,7 @@ def make_pick_place_act_stack(context, child: ActChildLaunch, *,
             raise ValueError("linked scope")
         stack_root.mkdir(mode=0o700)
         environment = dict(base_environment)
-        environment["GZ_PARTITION"] = f"act-task8-{child.ros_domain_id}-{campaign}"
+        environment["GZ_PARTITION"] = f"act-pick-place-{child.ros_domain_id}-{campaign}"
         launch = ActStackLaunch(
             ros2_executable=Path(ros2_executable), session_id=child.mujoco_session_id,
             evidence_root=stack_root, ros_domain_id=child.ros_domain_id,
