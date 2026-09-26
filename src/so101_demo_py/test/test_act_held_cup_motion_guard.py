@@ -261,11 +261,16 @@ def test_held_cup_broker_option_replays_source_before_domain_authority(tmp_path,
             "--session-id", value["session_id"], "--parent-pid", str(os.getpid()),
             "--lease-timeout-s", "30", "--calibration-mode",
             "--stop-velocity-rad-s", ".002", "--max-age-s", "1.5",
-            "--submit-lead-s", ".05", "--accept-timeout-s", ".02",
+            "--submit-lead-s", ".1", "--accept-timeout-s", ".08",
             "--stop-timeout-s", "4", "--permit-ttl-s", "1.5",
             "--held-cup-micro-lift-manifest", str(path)]
     with pytest.raises(AssertionError, match="domain authority reached"):
         main(args)
+    mismatched = list(args)
+    mismatched[mismatched.index("--submit-lead-s") + 1] = ".05"
+    mismatched[mismatched.index("--accept-timeout-s") + 1] = ".04"
+    with pytest.raises(ValueError, match="HELD_CUP_MICRO_LIFT_CONFIG_MISMATCH"):
+        main(mismatched)
     changed = dict(value)
     changed["segment_phases"] = list(value["segment_phases"])
     changed["segment_phases"][value["lift_phase_start"]] = "CONTACT"
@@ -298,8 +303,8 @@ def test_held_cup_launch_requires_scene_plugin_and_business_manifest(tmp_path, m
     context.launch_configurations.update(
         session_id=value["session_id"], mujoco_scene=value["scene_path"],
         act_held_cup_micro_lift_manifest=str(path), act_stop_velocity_rad_s=".002",
-        act_max_age_s="1.5", act_submit_lead_s=".05",
-        act_accept_timeout_s=".02", act_stop_timeout_s="4", act_permit_ttl_s="1.5")
+        act_max_age_s="1.5", act_submit_lead_s=".1",
+        act_accept_timeout_s=".08", act_stop_timeout_s="4", act_permit_ttl_s="1.5")
     captured = []
 
     class Capture(Exception):
@@ -316,6 +321,13 @@ def test_held_cup_launch_requires_scene_plugin_and_business_manifest(tmp_path, m
         opaque.execute(context)
     assert captured == [(.25, "task6_route_plugins.yaml")]
     captured.clear()
+    context.launch_configurations["act_submit_lead_s"] = ".05"
+    context.launch_configurations["act_accept_timeout_s"] = ".04"
+    with pytest.raises(ValueError, match="HELD_CUP_MICRO_LIFT_CONFIG_MISMATCH"):
+        opaque.execute(context)
+    assert not captured
+    context.launch_configurations["act_submit_lead_s"] = ".1"
+    context.launch_configurations["act_accept_timeout_s"] = ".08"
     context.launch_configurations["mujoco_scene"] = str(tmp_path / "other.xml")
     with pytest.raises(ValueError, match="HELD_CUP_MICRO_LIFT_CONFIG_MISMATCH"):
         opaque.execute(context)
