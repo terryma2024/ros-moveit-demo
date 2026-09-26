@@ -69,7 +69,7 @@ class _StackOwner(BaseModel):
         return self
 
 
-class _Task8Base(_ActPayload):
+class _PickPlacePayload(_ActPayload):
     scenario_id: str = Field(min_length=1)
     manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     runtime_config_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -77,14 +77,14 @@ class _Task8Base(_ActPayload):
     stack_owner: _StackOwner
 
 
-class _Task8Phase(_Task8Base):
+class _PickPlacePhasePayload(_PickPlacePayload):
     stop_after: Literal[
         "SEARCH", "APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN",
         "RELEASE", "RADIAL_RETREAT", "FINAL_CHECK",
     ]
 
 
-class _CollectionStart(_Task8Base):
+class _CollectionStart(_PickPlacePayload):
     collection_config_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
@@ -97,8 +97,8 @@ class _ActCancel(_ActPayload):
 
 
 ACT_PAYLOADS = {
-    "task8_phase": _Task8Phase,
-    "task8_full": _Task8Base,
+    "task8_phase": _PickPlacePhasePayload,
+    "task8_full": _PickPlacePayload,
     "act_collection_start": _CollectionStart,
     "act_collection_resume": _CollectionResume,
     "cancel": _ActCancel,

@@ -80,28 +80,28 @@ def bound_act_source_settings(report: dict, *, timestep_s: float) -> dict[str, f
     }
 
 
-def maybe_provision_task8_port(driver):
+def maybe_provision_pick_place_port(driver):
     """Compose SEARCH only for the admitted, hash-bound Task 8 manifest."""
     manifest = driver._act_artifacts.read_hashed_json("manifest")
     if manifest.get("kind") != "ACT_TASK8_LIVE":
         return None
-    from so101_demo.act.task8_manifest import require_task8_live_manifest
-    from so101_demo.adapters.act.task8_child_port import build_task8_child_search_port
+    from so101_demo.act.pick_place_validation_manifest import require_pick_place_validation_manifest
+    from so101_demo.adapters.act.pick_place_child_port import build_pick_place_child_search_port
     from rclpy.parameter import Parameter
     import rclpy
 
-    require_task8_live_manifest(manifest)
+    require_pick_place_validation_manifest(manifest)
     report = driver._act_artifacts.read_hashed_json("calibration_report")
     worker_id = os.environ["SO101_ACT_WORKER_ID"]
     generation = int(os.environ["SO101_ACT_GENERATION"])
 
     def service_node_factory():
         return rclpy.create_node(
-            f"act_task8_io_{worker_id}_{generation}",
+            f"act_pick_place_io_{worker_id}_{generation}",
             parameter_overrides=[Parameter("use_sim_time", value=True)],
         )
 
-    return build_task8_child_search_port(
+    return build_pick_place_child_search_port(
         node=driver._node, model=driver._act_model,
         contact_pairs=driver._act_contact_pairs, manifest=manifest,
         report=report, sources=driver._act_sources,
@@ -115,7 +115,7 @@ def maybe_provision_task8_port(driver):
     )
 
 
-class _FencedTask8Port:
+class _FencedPickPlacePort:
     """Prevent a cancelled Task 8 thread from starting its next physical phase."""
 
     def __init__(self, port, cancelled: threading.Event) -> None:
@@ -163,7 +163,8 @@ class RclpyActionDriver:
 
     def __init__(self, *, broker=None, owner: OwnerKey | None = None,
                  stop_timeout_s: float | None = None, accept_timeout_s: float | None = None,
-                 task8_port=None, act_hashes: dict[str, str] | None = None,
+                 pick_place_port=None, task8_port=None,
+                 act_hashes: dict[str, str] | None = None,
                  startup_proof_consumer=None) -> None:
         self._node = None
         self._executor = None
@@ -177,11 +178,13 @@ class RclpyActionDriver:
         if not (0 < self._stop_timeout_s <= 30 and 0 < self._accept_timeout_s <= 30):
             raise MutationError("ROS_DRIVER_TIMEOUT_INVALID")
         self._goals: dict[str, dict] = {}
-        self._task8_port = task8_port
+        if pick_place_port is not None and task8_port is not None:
+            raise MutationError("ACT_PICK_PLACE_PORT_AMBIGUOUS")
+        self._pick_place_port = pick_place_port if pick_place_port is not None else task8_port
         if startup_proof_consumer is not None and not callable(startup_proof_consumer):
             raise MutationError("TASK8_STARTUP_CONSUMER_INVALID")
         self._startup_proof_consumer = startup_proof_consumer
-        self._task8_startup_used = False
+        self._pick_place_startup_used = False
         self._act_cancelled = threading.Event()
         self._act_hashes = (act_hashes if act_hashes is not None else
                             {key: os.environ.get(name) for key, name in _ACT_HASH_ENV.items()})
@@ -208,9 +211,9 @@ class RclpyActionDriver:
                 self._act_artifacts.read_hashed_json("calibration_report"),
             )
             if self._broker is None:
-                from so101_demo.adapters.act.task8_contact_pairs import load_installed_act_contact_pairs
+                from so101_demo.adapters.act.phase_contact_allowlist import load_installed_phase_contact_allowlist
                 paths = dict(self._act_artifacts.paths)
-                self._act_model, self._act_contact_pairs = load_installed_act_contact_pairs(
+                self._act_model, self._act_contact_pairs = load_installed_phase_contact_allowlist(
                     proposal_path=paths["proposal"],
                     receipt_path=paths["activation_receipt"],
                     expected_fingerprint=self._act_artifacts.policy_fingerprint,
@@ -235,7 +238,7 @@ class RclpyActionDriver:
         from so101_demo.act.ownership import Ownership
         from so101_demo.adapters.act.command_broker import CommandBroker, LocalBrokerConnection
         from so101_demo.adapters.act.ros_broker import RosBrokerDriver
-        from so101_demo.adapters.act.task8_sources import Task8RosEvidence, Task8HazardDispatcher
+        from so101_demo.adapters.act.pick_place_sources import PickPlaceRosEvidence, PickPlaceHazardDispatcher
 
         rclpy.init()
         try:
@@ -246,12 +249,12 @@ class RclpyActionDriver:
                 broker, ownership=Ownership(), simulation_session_id=session_id,
             )
             self._act_reset_connection = LocalBrokerConnection(self._act_command_broker)
-            self._act_sources = Task8RosEvidence(
+            self._act_sources = PickPlaceRosEvidence(
                 self._node, broker, model=self._act_model,
                 contact_pairs=self._act_contact_pairs, session_id=session_id,
                 **settings,
             )
-            self._act_hazard_dispatcher = Task8HazardDispatcher(
+            self._act_hazard_dispatcher = PickPlaceHazardDispatcher(
                 self._act_sources, broker, self._act_cancelled,
                 command_broker=self._act_command_broker,
             )
@@ -260,7 +263,7 @@ class RclpyActionDriver:
             self._thread = threading.Thread(target=self._executor.spin, name="act-child-rclpy", daemon=True)
             self._thread.start()
             self._act_hazard_dispatcher.start()
-            self._task8_port = maybe_provision_task8_port(self)
+            self._pick_place_port = maybe_provision_pick_place_port(self)
             return broker
         except BaseException:
             if self._act_reset_connection is not None:
@@ -401,8 +404,17 @@ class RclpyActionDriver:
             await asyncio.sleep(0.005)
         return False
 
-    async def _task8(self, request, *, mode: str) -> dict:
-        if self._task8_port is None:
+    @property
+    def _task8_port(self):
+        """Compatibility attribute for version-one child callers."""
+        return self._pick_place_port
+
+    @_task8_port.setter
+    def _task8_port(self, value) -> None:
+        self._pick_place_port = value
+
+    async def _run_pick_place(self, request, *, mode: str) -> dict:
+        if self._pick_place_port is None:
             raise MutationError("ACT_TASK8_PORT_NOT_PROVISIONED")
         if self._act_cancelled.is_set():
             raise MutationError("ACT_TASK8_CANCELLED")
@@ -415,22 +427,22 @@ class RclpyActionDriver:
             raise MutationError("ACT_TASK8_HASH_MISMATCH")
         if request.deadline_ns <= time.monotonic_ns():
             raise MutationError("ACT_DEADLINE_EXPIRED")
-        if self._task8_startup_used:
+        if self._pick_place_startup_used:
             raise MutationError("TASK8_STARTUP_PROOF_ALREADY_CONSUMED")
-        self._task8_startup_used = True
+        self._pick_place_startup_used = True
         if self._startup_proof_consumer is None:
-            from .task8_child_startup import consume_child_task8_startup
-            receipt = consume_child_task8_startup(request, self._owner, os.environ)
+            from .pick_place_child_startup import consume_child_pick_place_startup
+            receipt = consume_child_pick_place_startup(request, self._owner, os.environ)
         else:
             receipt = self._startup_proof_consumer(request)
-        bind = getattr(self._task8_port, "bind_startup_receipt", None)
+        bind = getattr(self._pick_place_port, "bind_startup_receipt", None)
         if not callable(bind):
             raise MutationError("ACT_TASK8_PORT_INVALID")
         try:
             bind(receipt)
         except Exception as error:
             raise MutationError("ACT_TASK8_PORT_INVALID") from error
-        from so101_demo.act.task8 import Task8Runner
+        from so101_demo.act.pick_place_runner import PickPlaceRunner
 
         task = {
             "mode": mode,
@@ -443,7 +455,7 @@ class RclpyActionDriver:
         }
         try:
             result = await asyncio.to_thread(
-                Task8Runner(_FencedTask8Port(self._task8_port, self._act_cancelled)).run,
+                PickPlaceRunner(_FencedPickPlacePort(self._pick_place_port, self._act_cancelled)).run,
                 task,
             )
         except BaseException as error:
@@ -456,15 +468,23 @@ class RclpyActionDriver:
             raise MutationError("ACT_TASK8_STOP_NOT_CONFIRMED")
         return result
 
-    async def task8_phase(self, request) -> dict:
+    async def pick_place_phase(self, request) -> dict:
         if request.operation != "task8_phase":
             raise MutationError("ACT_TASK8_OPERATION_MISMATCH")
-        return await self._task8(request, mode="phase_prefix")
+        return await self._run_pick_place(request, mode="phase_prefix")
 
-    async def task8_full(self, request) -> dict:
+    async def pick_place_full(self, request) -> dict:
         if request.operation != "task8_full":
             raise MutationError("ACT_TASK8_OPERATION_MISMATCH")
-        return await self._task8(request, mode="full")
+        return await self._run_pick_place(request, mode="full")
+
+    async def task8_phase(self, request) -> dict:
+        """Compatibility entry point for version-one IPC dispatchers."""
+        return await self.pick_place_phase(request)
+
+    async def task8_full(self, request) -> dict:
+        """Compatibility entry point for version-one IPC dispatchers."""
+        return await self.pick_place_full(request)
 
     async def cancel_act(self, request) -> dict:
         reason = request.payload["reason"]
@@ -610,3 +630,7 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+# Legacy Python API for version-one pick-place provisioning.
+maybe_provision_task8_port = maybe_provision_pick_place_port

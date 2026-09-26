@@ -28,7 +28,7 @@ class ActDriver:
         self.seen = []
         self.fail = False
 
-    async def task8_phase(self, request):
+    async def pick_place_phase(self, request):
         if self.fail:
             raise RuntimeError("child crashed")
         self.seen.append((request.worker_id, request.payload["scenario_id"]))
@@ -127,7 +127,7 @@ def test_act_child_source_limits_require_measured_calibration(tmp_path):
 
 
 def test_non_task8_manifest_does_not_construct_a_physical_port():
-    from so101_teleop.unified.ros_child import maybe_provision_task8_port
+    from so101_teleop.unified.ros_child import maybe_provision_pick_place_port
 
     class Artifacts:
         def read_hashed_json(self, name):
@@ -135,13 +135,13 @@ def test_non_task8_manifest_does_not_construct_a_physical_port():
             return {"kind": "ACT_FORMAL_COLLECTION"}
 
     driver = SimpleNamespace(_act_artifacts=Artifacts())
-    assert maybe_provision_task8_port(driver) is None
+    assert maybe_provision_pick_place_port(driver) is None
 
 
 def test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8(tmp_path, monkeypatch):
     import rclpy
     from rclpy import executors
-    from so101_demo.adapters.act import ros_broker, task8_sources
+    from so101_demo.adapters.act import ros_broker, pick_place_sources
     from so101_teleop.unified import ros_child
 
     report = qualified_report(tmp_path)
@@ -201,14 +201,14 @@ def test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8(tmp
     monkeypatch.setattr(rclpy, "shutdown", lambda: seen.append("rclpy_shutdown"))
     monkeypatch.setattr(executors, "SingleThreadedExecutor", Executor)
     monkeypatch.setattr(ros_broker, "RosBrokerDriver", Broker)
-    monkeypatch.setattr(task8_sources, "Task8RosEvidence", Sources)
-    monkeypatch.setattr(task8_sources, "Task8HazardDispatcher", Dispatcher)
+    monkeypatch.setattr(pick_place_sources, "PickPlaceRosEvidence", Sources)
+    monkeypatch.setattr(pick_place_sources, "PickPlaceHazardDispatcher", Dispatcher)
     port = object()
     def provision_port(driver):
         seen.append("provision_port")
         assert driver._act_sources is not None
         return port
-    monkeypatch.setattr(ros_child, "maybe_provision_task8_port", provision_port, raising=False)
+    monkeypatch.setattr(ros_child, "maybe_provision_pick_place_port", provision_port, raising=False)
     driver = object.__new__(RclpyActionDriver)
     driver._node = driver._executor = driver._thread = None
     driver._act_artifacts = binding
@@ -304,10 +304,10 @@ def test_child_cancel_cannot_publish_success_from_an_inflight_phase():
     release = asyncio.Event()
 
     class SlowPhaseDriver(ActDriver):
-        async def task8_phase(self, item):
+        async def pick_place_phase(self, item):
             entered.set()
             await release.wait()
-            return await super().task8_phase(item)
+            return await super().pick_place_phase(item)
 
     driver = SlowPhaseDriver()
     child = runtime(driver)
@@ -325,7 +325,7 @@ def test_child_cancel_cannot_publish_success_from_an_inflight_phase():
 
 def test_child_fences_action_uncertainty_even_when_driver_raises_mutation_error():
     class UncertainDriver(ActDriver):
-        async def task8_phase(self, request):
+        async def pick_place_phase(self, request):
             raise MutationError("ROS_GOAL_RESPONSE_UNKNOWN")
 
     child = runtime(UncertainDriver())
@@ -492,7 +492,7 @@ def test_ros_action_driver_requests_stop_when_send_result_is_unknown():
 def test_act_task8_child_refuses_missing_phase_port_before_motion():
     driver = RclpyActionDriver(broker=object())
     with pytest.raises(MutationError, match="ACT_TASK8_PORT_NOT_PROVISIONED"):
-        asyncio.run(driver.task8_phase(request()))
+        asyncio.run(driver.pick_place_phase(request()))
 
 
 def test_act_task8_child_rejects_failed_startup_proof_before_reset_and_replay():
@@ -518,10 +518,10 @@ def test_act_task8_child_rejects_failed_startup_proof_before_reset_and_replay():
     )
     child_request = request()
     with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_INVALID"):
-        asyncio.run(driver.task8_phase(child_request))
+        asyncio.run(driver.pick_place_phase(child_request))
     assert port.begins == 0 and attempts == ["consumed"]
     with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_ALREADY_CONSUMED"):
-        asyncio.run(driver.task8_phase(child_request))
+        asyncio.run(driver.pick_place_phase(child_request))
     assert port.begins == 0 and attempts == ["consumed"]
 
 
@@ -542,7 +542,7 @@ def test_act_task8_child_refuses_port_without_receipt_binding_before_reset():
                     "contact_policy_fingerprint": "c" * 64},
     )
     with pytest.raises(MutationError, match="ACT_TASK8_PORT_INVALID"):
-        asyncio.run(driver.task8_phase(request()))
+        asyncio.run(driver.pick_place_phase(request()))
     assert port.begins == 0
 
 
@@ -604,12 +604,12 @@ def test_act_task8_child_routes_closed_hashes_to_runner_and_confirms_stop():
     with pytest.raises(MutationError, match="ACT_TASK8_HASH_MISMATCH"):
         bad = child_request.model_copy(update={"payload": {**child_request.payload,
             "contact_policy_fingerprint": "d" * 64}})
-        asyncio.run(driver.task8_phase(bad))
+        asyncio.run(driver.pick_place_phase(bad))
     assert port.phases == []
     # Prefix through CLOSE needs only three phases, then a physical stop.
     close_request = child_request.model_copy(update={"payload": {**child_request.payload,
         "stop_after": "CLOSE"}})
-    result = asyncio.run(driver.task8_phase(close_request))
+    result = asyncio.run(driver.pick_place_phase(close_request))
     assert result["completed_phases"] == ["SEARCH", "APPROACH", "CLOSE"]
     assert result["formal_episode_eligible"] is False
     assert port.stops == ["PHASE_PREFIX_COMPLETE"]
@@ -667,7 +667,7 @@ def test_act_cancel_interrupts_next_phase_while_runner_thread_is_busy():
     )
 
     async def run():
-        pending = asyncio.create_task(driver.task8_phase(request()))
+        pending = asyncio.create_task(driver.pick_place_phase(request()))
         assert await asyncio.to_thread(entered.wait, 1)
         canceled = await driver.cancel_act(request(operation="cancel"))
         release.set()
