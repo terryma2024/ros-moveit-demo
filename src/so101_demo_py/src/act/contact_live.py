@@ -222,6 +222,7 @@ class LivePhysicsStream:
         self._receipt_deadline_suspended = False
         self._initial_cup: list[float] | None = None
         self._seen_bilateral = False
+        self._holding_limits: tuple[float, float] | None = None
         directory = os.open(self.output_path.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(directory)
@@ -235,6 +236,20 @@ class LivePhysicsStream:
         if self._receipt_deadline_suspended:
             self._receipt_age_anchor = _finite(self.monotonic(), "receipt resume", 0)
             self._receipt_deadline_suspended = False
+
+    def arm_holding(self, *, minimum_bilateral_force_n: float,
+                    maximum_compression_distance_m: float) -> None:
+        """Make bilateral contact a permanent invariant for this recorder epoch."""
+        minimum = _finite(minimum_bilateral_force_n, "minimum bilateral force", 0)
+        maximum = _finite(maximum_compression_distance_m, "maximum compression", 0)
+        if minimum == 0 or maximum == 0:
+            raise ValueError("HOLDING_LIMIT_INVALID")
+        with self._lock:
+            if self._holding_limits is not None:
+                raise ValueError("HOLDING_ALREADY_ARMED")
+            if self._closed or self.hazard is not None or self.recorded_steps == 0:
+                raise ValueError("HOLDING_ARM_EVIDENCE_REQUIRED")
+            self._holding_limits = minimum, maximum
 
 
     def _validated_step(
@@ -285,6 +300,15 @@ class LivePhysicsStream:
             contacts[field] = checked
         if total_force > self.limits["maximum_force_n"]:
             raise ValueError("live diagnostic force hard stop")
+        if self._holding_limits is not None:
+            minimum, maximum = self._holding_limits
+            if min(sum(item["normal_force_n"] for item in contacts[side])
+                   for side in ("left_contacts", "right_contacts")) < minimum:
+                raise ValueError("held cup bilateral force below minimum")
+            if max((max(0., -item["signed_distance_m"])
+                    for side in ("left_contacts", "right_contacts")
+                    for item in contacts[side]), default=0.) > maximum:
+                raise ValueError("held cup compression exceeded")
         return {
             "simulation_session_id": self.session_id,
             "reset_epoch": self.reset_epoch,
