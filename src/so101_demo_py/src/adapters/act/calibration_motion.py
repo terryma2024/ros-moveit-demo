@@ -437,7 +437,6 @@ class RosCalibrationMotionGuard:
     def _snapshot(self,base,*,start,reference,reference_velocity,phase='APPROACH'):
         from so101_demo.act.joints import ACT_JOINTS
         import mujoco,numpy as np
-        now=self.monotonic()
         if self.contact_mode and not self._cup_reset_verified:
             raise ValueError('CONTACT_CUP_RESET_UNVERIFIED')
         with self._lock:joints=self._joints
@@ -449,6 +448,29 @@ class RosCalibrationMotionGuard:
             raise ValueError('MOTION_EVIDENCE_UNAVAILABLE')
         q,v,joint_stamp,joint_received=joints;cup,cup_received=epoch
         scene,scene_received=self.scene_observer.snapshot_with_receipt()
+        proof_step=None
+        if self.held_cup_mode and phase=='LIFT':
+            if self.live_observer is None:
+                raise ValueError('HELD_CUP_PHYSICS_UNAVAILABLE')
+            # Scene and physics topics can arrive in either order. Choose the
+            # newest exact pair already received; never splice coordinates
+            # from different simulation steps into a holding proof.
+            candidates=self.scene_observer.recent_frames_with_receipts()
+            now=self.monotonic()
+            for candidate,received in reversed(candidates):
+                try:
+                    proof_step=self.live_observer.recorder.validated_step(
+                        candidate['simulation_step'],now_monotonic_s=now,
+                        max_age_s=self.manifest['max_age_s'])
+                except ValueError as error:
+                    if str(error)!='HELD_CUP_STEP_UNAVAILABLE':raise
+                    continue
+                scene,scene_received=candidate,received
+                break
+            if proof_step is None:
+                raise ValueError('HELD_CUP_STEP_UNAVAILABLE')
+        else:
+            now=self.monotonic()
         if (identity!=(self.manifest['session_id'],base['reset_epoch'])
                 or (cup.simulation_session_id,cup.reset_epoch)!=identity or cup.paused
                 or cup.truncated or cup.object_body!='plastic_cup' or base['reset_epoch']<1):
@@ -484,17 +506,12 @@ class RosCalibrationMotionGuard:
         holding_state='EMPTY';attachment=None;proof_physics_step=None
         if self.held_cup_mode and phase=='LIFT':
             from .held_cup_state import held_cup_attachment
-            if self.live_observer is None:
-                raise ValueError('HELD_CUP_PHYSICS_UNAVAILABLE')
-            step=self.live_observer.recorder.validated_step(
-                scene['simulation_step'],now_monotonic_s=now,
-                max_age_s=self.manifest['max_age_s'])
             attachment=held_cup_attachment(
-                self.model,scene,step,scene_received_monotonic_s=scene_received,
+                self.model,scene,proof_step,scene_received_monotonic_s=scene_received,
                 now_monotonic_s=now,max_age_s=self.manifest['max_age_s'],
                 **self.manifest['held_contact_limits'])
             holding_state='HOLDING'
-            proof_physics_step=step['physics_step']
+            proof_physics_step=proof_step['physics_step']
         return dict(model_qpos=tuple(qpos),model_sha256=self.path.model_sha256,phase=phase,holding_state=holding_state,
             sim_time_s=max(stamps),controller_bridge=dict(time_s=scene['simulation_time_s'],
                 point=dict(positions=tuple(scene_q[:6]),velocities=tuple(scene_v[:6]),accelerations=())),
