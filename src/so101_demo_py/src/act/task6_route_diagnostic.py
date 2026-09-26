@@ -16,12 +16,12 @@ from so101_demo.adapters.act.physics import model_sha256
 
 _SCENE_SHA = "4db48e35df9e91fc6868d303725badd0237fb10754d1e298637f5b0e1e55ed4f"
 _PLUGIN_SHA = "612212d5a61c74c4086c0cf2b229cfb5552e58055f8744ee0e9e4d46db655fae"
-_PROFILE_SHA = "73fa462230b0556b7d552977219e060f9f6c4e2f16944021230af947640462bb"
+_PROFILE_SHA = "25a272abeffbfaa7e6d6710f0e844856adca6bd09d81a40261956ccbd8021abe"
 _MODEL_SHA = "3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78"
 _PROFILE_KEYS = frozenset({
     "schema_version", "kind", "eligible_for_collection", "model_sha256",
     "scene_sha256", "source_route_sha256", "cup_start_m", "joint_start_rad",
-    "stages",
+    "stages", "visual_detour",
 })
 _KEYS = frozenset({
     "schema_version", "kind", "eligible_for_collection", "backend", "session_id",
@@ -71,7 +71,12 @@ def _rows(profile: dict) -> list[list[float]]:
             or len(profile["source_route_sha256"]) != 64
             or profile["cup_start_m"] != [.02, -.28, .165]
             or not isinstance(profile["stages"], list)
-            or len(profile["stages"]) != 15):
+            or len(profile["stages"]) != 15
+            or profile["visual_detour"] != {
+                "joint_index": 3, "begin_segment": 181,
+                "full_segment": 191, "last_full_segment": 201,
+                "end_segment": 211, "peak_offset_rad": .1,
+            }):
         raise ValueError("Task 6 route profile invalid")
     previous = list(bounded_positions(profile["joint_start_rad"]))
     result: list[list[float]] = []
@@ -107,6 +112,32 @@ def _rows(profile: dict) -> list[list[float]]:
         previous = last
     if not result or len(result) > 5000:
         raise ValueError("Task 6 route length invalid")
+    detour = profile["visual_detour"]
+    first = detour["begin_segment"]
+    full = detour["full_segment"]
+    last_full = detour["last_full_segment"]
+    last = detour["end_segment"]
+    peak = detour["peak_offset_rad"]
+    if len(result) < (last + 1) * _SEGMENT_ROWS:
+        raise ValueError("Task 6 visual detour exceeds route")
+
+    def offset(segment: int) -> float:
+        if segment <= first or segment >= last:
+            return 0.
+        if segment < full:
+            return (peak / (full - first)) * (segment - first)
+        if segment <= last_full:
+            return peak
+        return (peak / (last - last_full)) * (last - segment)
+
+    for segment in range(first, last + 1):
+        before, after = offset(segment - 1), offset(segment)
+        for part in range(_SEGMENT_ROWS):
+            fraction = min(part / 7, 1.)
+            ease = fraction * fraction * (3 - 2 * fraction)
+            row = result[segment * _SEGMENT_ROWS + part]
+            row[detour["joint_index"]] += before + (after - before) * ease
+            bounded_positions(row)
     return result
 
 

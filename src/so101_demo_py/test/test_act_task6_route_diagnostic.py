@@ -60,6 +60,20 @@ def test_route_is_exact_pinned_no_contact_microsegments():
         previous = segment[-1]
 
 
+def test_visual_detour_matches_independently_checked_target_rows():
+    route = manifest()
+    profile = json.loads(PROFILE.read_text())
+    assert profile["visual_detour"] == {
+        "joint_index": 3, "begin_segment": 181, "full_segment": 191,
+        "last_full_segment": 201, "end_segment": 211,
+        "peak_offset_rad": .1,
+    }
+    rows = json.dumps(route["target_positions"], separators=(",", ":"),
+                      allow_nan=False).encode() + b"\n"
+    assert hashlib.sha256(rows).hexdigest() == (
+        "6cdb83d3b90afba46c9d57101c27a71264310baf33b9a50cde717852db885a11")
+
+
 def test_route_prefix_is_sequence_and_byte_content_bound():
     route = manifest()
     for sequence in (0, 1, len(route["target_positions"]) // 9 - 1):
