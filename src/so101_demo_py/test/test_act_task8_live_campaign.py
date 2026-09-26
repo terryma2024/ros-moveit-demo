@@ -10,8 +10,8 @@ import time
 import pytest
 
 from so101_demo.act.task8 import Task8Runner
-from so101_demo.act.task8_manifest import build_task8_live_manifest, write_new_manifest
-from so101_demo.act.task8_live_campaign import Task8LiveCampaign, Task8LiveError
+from so101_demo.act.pick_place_validation_manifest import build_pick_place_validation_manifest, write_new_manifest
+from so101_demo.act.pick_place_validation_campaign import PickPlaceValidationCampaign, PickPlaceValidationError
 
 
 ANCHORS = {
@@ -44,7 +44,7 @@ class Worker:
 
 
 def prepared(tmp_path):
-    document = build_task8_live_manifest(
+    document = build_pick_place_validation_manifest(
         ANCHORS, source_sha256="a" * 64, runtime_config_sha256="b" * 64,
         collection_config_sha256="c" * 64, contact_policy_fingerprint="d" * 64,
     )
@@ -58,7 +58,7 @@ def prepared(tmp_path):
 def test_closed_manifest_previews_exact_nine_prefix_and_five_full_cases(tmp_path):
     manifest_path, context = prepared(tmp_path)
     worker = Worker(context)
-    campaign = Task8LiveCampaign(manifest_path, context, worker, tmp_path / "cases.jsonl")
+    campaign = PickPlaceValidationCampaign(manifest_path, context, worker, tmp_path / "cases.jsonl")
     cases = campaign.planned_cases(deadline_ns=time.monotonic_ns() + 60_000_000_000)
     assert [case["stop_after"] for case in cases[:9]] == list(Task8Runner.PHASES)
     assert [case["anchor"] for case in cases[9:]] == [
@@ -72,8 +72,8 @@ def test_full_restart_cannot_be_claimed_from_one_reused_child(tmp_path):
     manifest_path, context = prepared(tmp_path)
     worker = Worker(context)
     journal = tmp_path / "case-results.jsonl"
-    with pytest.raises(Task8LiveError, match="FULL_RESTART_PROOF_UNAVAILABLE"):
-        asyncio.run(Task8LiveCampaign(manifest_path, context, worker, journal).run(
+    with pytest.raises(PickPlaceValidationError, match="FULL_RESTART_PROOF_UNAVAILABLE"):
+        asyncio.run(PickPlaceValidationCampaign(manifest_path, context, worker, journal).run(
             deadline_ns=time.monotonic_ns() + 60_000_000_000))
     assert worker.requests == [] and not journal.exists()
 
@@ -81,14 +81,14 @@ def test_full_restart_cannot_be_claimed_from_one_reused_child(tmp_path):
 def test_manifest_hash_drift_refuses_even_read_only_preview(tmp_path):
     manifest_path, context = prepared(tmp_path)
     manifest_path.write_bytes(manifest_path.read_bytes() + b" ")
-    campaign = Task8LiveCampaign(manifest_path, context, Worker(context), tmp_path / "cases.jsonl")
-    with pytest.raises(Task8LiveError, match="TASK8_MANIFEST_BINDING_INVALID"):
+    campaign = PickPlaceValidationCampaign(manifest_path, context, Worker(context), tmp_path / "cases.jsonl")
+    with pytest.raises(PickPlaceValidationError, match="TASK8_MANIFEST_BINDING_INVALID"):
         campaign.planned_cases(deadline_ns=time.monotonic_ns() + 60_000_000_000)
 
 
 def test_policy_binding_drift_refuses_even_read_only_preview(tmp_path):
     manifest_path, context = prepared(tmp_path)
     wrong = replace(context, contact_policy_fingerprint="e" * 64)
-    campaign = Task8LiveCampaign(manifest_path, wrong, Worker(wrong), tmp_path / "cases.jsonl")
-    with pytest.raises(Task8LiveError, match="TASK8_MANIFEST_BINDING_INVALID"):
+    campaign = PickPlaceValidationCampaign(manifest_path, wrong, Worker(wrong), tmp_path / "cases.jsonl")
+    with pytest.raises(PickPlaceValidationError, match="TASK8_MANIFEST_BINDING_INVALID"):
         campaign.planned_cases(deadline_ns=time.monotonic_ns() + 60_000_000_000)

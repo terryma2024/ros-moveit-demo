@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from so101_demo.act.task8_manifest import (
-    build_task8_live_manifest, require_task8_live_manifest, write_new_manifest,
+from so101_demo.act.pick_place_validation_manifest import (
+    build_pick_place_validation_manifest, require_pick_place_validation_manifest, write_new_manifest,
 )
 
 
@@ -22,7 +22,7 @@ ANCHORS = {
 
 
 def manifest():
-    return build_task8_live_manifest(
+    return build_pick_place_validation_manifest(
         ANCHORS, source_sha256="a" * 64, runtime_config_sha256="b" * 64,
         collection_config_sha256="c" * 64, contact_policy_fingerprint="d" * 64,
     )
@@ -38,7 +38,7 @@ def test_builder_freezes_nine_prefixes_and_five_full_restarts():
     assert len(document["full_cases"]) == 5
     assert {item["anchor"] for item in document["full_cases"]} == set(ANCHORS)
     assert all(item["lifecycle"] == "FULL_RESTART" for item in document["full_cases"])
-    assert require_task8_live_manifest(document) == document
+    assert require_pick_place_validation_manifest(document) == document
 
 
 @pytest.mark.parametrize("change", (
@@ -53,7 +53,7 @@ def test_tampering_or_missing_case_is_refused(change):
     document = deepcopy(manifest())
     change(document)
     with pytest.raises(ValueError):
-        require_task8_live_manifest(document)
+        require_pick_place_validation_manifest(document)
 
 
 def test_writer_never_overwrites_an_existing_manifest(tmp_path):
@@ -67,7 +67,7 @@ def test_writer_never_overwrites_an_existing_manifest(tmp_path):
 
 
 def test_prepare_cli_freezes_file_hashes_and_refuses_overwrite(tmp_path):
-    from so101_demo.cli.act_prepare_task8_live import main
+    from so101_demo.cli.act_prepare_pick_place_validation import main
 
     anchors_path = tmp_path / "anchors.yaml"
     anchors_path.write_text(
@@ -86,7 +86,7 @@ def test_prepare_cli_freezes_file_hashes_and_refuses_overwrite(tmp_path):
             "--runtime-config", str(paths[1]), "--collection-config", str(paths[2]),
             "--policy-fingerprint", "d" * 64, "--output", str(output)]
     assert main(argv) == 0
-    document = require_task8_live_manifest(json.loads(output.read_text()))
+    document = require_pick_place_validation_manifest(json.loads(output.read_text()))
     assert document["source_sha256"] == hashlib.sha256(paths[0].read_bytes()).hexdigest()
     assert document["runtime_config_sha256"] == hashlib.sha256(paths[1].read_bytes()).hexdigest()
     assert document["collection_config_sha256"] == hashlib.sha256(paths[2].read_bytes()).hexdigest()
