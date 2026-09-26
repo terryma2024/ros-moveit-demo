@@ -209,7 +209,7 @@ def test_ros_chunk_converter_rejects_misbound_evidence(damage):
         chunk_from_ros(message, cup_qpos_address=0, cup_qvel_address=0)
 
 
-def _observer(tmp_path):
+def _observer(tmp_path, *, startup_receipt_grace_s=None):
     tmp_path.mkdir(parents=True, exist_ok=True)
     now = [1000.0]
     aborts = []
@@ -222,6 +222,7 @@ def _observer(tmp_path):
     observer = LiveContactObserver(
         recorder, ros_clock=lambda: .002, monotonic=lambda: now[0],
         on_abort=aborts.append,
+        startup_receipt_grace_s=startup_receipt_grace_s,
     )
     return observer, now, aborts
 
@@ -260,6 +261,27 @@ def test_live_observer_hazard_latch_and_stale_stream_abort(tmp_path):
     stale.poll()
     assert aborts == ["LIVE_CONTACT_EVIDENCE_STALE"]
     stale.close()
+
+
+def test_route_startup_grace_waits_for_first_chunk_then_uses_strict_age(tmp_path):
+    observer, now, aborts = _observer(tmp_path, startup_receipt_grace_s=1.)
+    observer.start()
+    now[0] += .5
+    observer.poll()
+    assert aborts == [] and observer.recorder.recorded_steps == 0
+    observer.accept_chunk(_ros_chunk())
+    assert observer.recorder.recorded_steps == 1
+    now[0] += .201
+    observer.poll()
+    assert aborts == ["LIVE_CONTACT_EVIDENCE_STALE"]
+    observer.close()
+
+    missing, now, aborts = _observer(tmp_path / "missing", startup_receipt_grace_s=1.)
+    missing.start()
+    now[0] += 1.001
+    missing.poll()
+    assert aborts == ["LIVE_CONTACT_EVIDENCE_STALE"]
+    missing.close()
 
 
 def test_live_observer_rearms_receipt_deadline_after_authoritative_pause(tmp_path):

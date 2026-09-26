@@ -397,11 +397,18 @@ class LiveContactObserver:
     def __init__(
         self, recorder: LivePhysicsStream, *, ros_clock: Callable[[], float],
         monotonic: Callable[[], float], on_abort: Callable[[str], None],
+        startup_receipt_grace_s: float | None = None,
     ) -> None:
         self.recorder = recorder
         self.ros_clock = ros_clock
         self.monotonic = monotonic
         self.on_abort = on_abort
+        self.startup_receipt_grace_s = (
+            recorder.limits["maximum_receipt_age_s"] if startup_receipt_grace_s is None
+            else _finite(startup_receipt_grace_s, "startup receipt grace", 0)
+        )
+        if self.startup_receipt_grace_s < recorder.limits["maximum_receipt_age_s"]:
+            raise ValueError("startup receipt grace is too short")
         self.hazard: str | None = None
         self._last_received = _finite(monotonic(), "observer start", 0)
         self.active = False
@@ -459,9 +466,10 @@ class LiveContactObserver:
             self._abort(f"LIVE_CONTACT_HAZARD_INVALID:{error}")
 
     def poll(self) -> None:
+        deadline = (self.startup_receipt_grace_s if self.recorder.recorded_steps == 0
+                    else self.recorder.limits["maximum_receipt_age_s"])
         if self.active and self.hazard is None and (
-            self.monotonic() - self._last_received >
-            self.recorder.limits["maximum_receipt_age_s"]
+            self.monotonic() - self._last_received > deadline
         ):
             self._abort("LIVE_CONTACT_EVIDENCE_STALE")
 
