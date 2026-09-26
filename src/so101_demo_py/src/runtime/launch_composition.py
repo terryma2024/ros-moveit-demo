@@ -2385,7 +2385,7 @@ def _configured_task_station_actions(context):
             if (diagnostic["session_id"]!=session_id or
                 diagnostic["submit_lead_s"]!=float(timing[0]) or
                 diagnostic["stop_velocity_rad_s"]!=float(speed) or
-                diagnostic["max_age_s"]!=float(age) or
+                diagnostic["stop_max_age_s"]!=float(age) or
                 Path(LaunchConfiguration("mujoco_scene").perform(context)).resolve()!=Path(route["scene_path"]).resolve()):
                 raise ValueError("TASK6_ROUTE_DIAGNOSTIC_CONFIG_MISMATCH")
             installed_plugins=(Path(get_package_share_directory("so101_demo_py")) /

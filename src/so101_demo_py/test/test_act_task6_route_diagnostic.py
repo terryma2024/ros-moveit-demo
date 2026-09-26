@@ -43,6 +43,8 @@ def test_route_is_exact_pinned_no_contact_microsegments():
     assert route["allowed_contact_pairs"] == []
     assert route["segment_rows"] == 9
     assert route["path_clearance_m"] == .002
+    assert route["max_age_s"] == .2
+    assert route["stop_max_age_s"] == 1.5
     assert route["velocity_limit_rad_s"] == [.25] * 6
     assert route["acceleration_limit_rad_s2"] == [.75] * 6
     rows = route["target_positions"]
@@ -131,6 +133,8 @@ def test_route_guard_requires_exact_sequence_and_prior_physical_stop(tmp_path):
     config = route_motion_configuration(route)
     assert config["allowed_pairs"] == frozenset()
     assert config["eligible_for_collection"] is False
+    assert config["max_age_s"] == .2
+    assert config["stop_max_age_s"] == 1.5
     class Node:
         def create_subscription(self, *args):
             return args
@@ -180,10 +184,37 @@ def test_route_broker_rejects_collecting_manifest_before_domain_authority(
     monkeypatch.setattr(DomainAuthority, "acquire", lambda *_: (_ for _ in ()).throw(
         AssertionError("domain authority acquired before route preflight")))
     with pytest.raises(ValueError):
-        main(["--socket", str(tmp_path / "broker.sock"),
+        main(["--socket", "/tmp/act-route-collect-test.sock",
               "--session-id", route["session_id"],
               "--parent-pid", str(os.getpid()), "--lease-timeout-s", "30",
               "--calibration-mode", "--stop-velocity-rad-s", ".002",
               "--max-age-s", ".2", "--submit-lead-s", ".05",
+              "--accept-timeout-s", ".03", "--stop-timeout-s", "1",
+              "--permit-ttl-s", ".1", "--task6-route-manifest", str(path)])
+
+
+def test_route_broker_rejects_wrong_stop_age_before_domain_authority(
+        tmp_path, monkeypatch):
+    from so101_demo.adapters.act.domain_authority import DomainAuthority
+    from so101_demo.cli.act_command_broker import main
+    route = manifest()
+    path = tmp_path / "route.json"
+    path.write_text(json.dumps(route))
+    monkeypatch.setattr(DomainAuthority, "acquire", lambda *_: (_ for _ in ()).throw(
+        AssertionError("domain authority acquired before stop age check")))
+    with pytest.raises(ValueError, match="TASK6_ROUTE_DIAGNOSTIC_CONFIG_MISMATCH"):
+        main(["--socket", "/tmp/act-route-age-test.sock",
+              "--session-id", route["session_id"],
+              "--parent-pid", str(os.getpid()), "--lease-timeout-s", "30",
+              "--calibration-mode", "--stop-velocity-rad-s", ".002",
+              "--max-age-s", ".2", "--submit-lead-s", ".05",
+              "--accept-timeout-s", ".03", "--stop-timeout-s", "1",
+              "--permit-ttl-s", ".1", "--task6-route-manifest", str(path)])
+    with pytest.raises(AssertionError, match="domain authority acquired before stop age check"):
+        main(["--socket", "/tmp/act-route-age-test.sock",
+              "--session-id", route["session_id"],
+              "--parent-pid", str(os.getpid()), "--lease-timeout-s", "30",
+              "--calibration-mode", "--stop-velocity-rad-s", ".002",
+              "--max-age-s", "1.5", "--submit-lead-s", ".05",
               "--accept-timeout-s", ".03", "--stop-timeout-s", "1",
               "--permit-ttl-s", ".1", "--task6-route-manifest", str(path)])
