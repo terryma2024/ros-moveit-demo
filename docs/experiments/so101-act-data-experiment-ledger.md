@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 833cffaeee251884bb8620aef4d4838443cdd8e1
+current_commit: 95686386a62960f9a5a421f774e97643392627d2
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -20,7 +20,7 @@ open_hypotheses:
   - An owner-created readiness artifact and startup receipt can bind this observed seven-axis verdict to a Task8 case without opening the Task6 or phase gates.
   - The physical phase port can support measured Task6 TASK8_READY and Task8 live qualification.
 latest_checkpoint: CP-299
-next_experiment: EXP-303 isolated concurrent read-only recorder live diagnostic
+next_experiment: EXP-304 isolated CameraInfo source probe
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -2410,3 +2410,13 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-302 — Task6 recorder drains atomic callbacks during fsynced frame writes
 
 - Last valid source experiment EXP-302. EXP-301 live readback remains invalid from an atomic sequence gap under the old single executor; next run exactly one fresh isolated no-contact stack with the installed concurrent recorder and verify real dual-camera/atomic frame joins, then advance toward moving expert Task6 measurements. Keep `CALIBRATION_REQUIRED`, `FULL_RESTART_PROOF_UNAVAILABLE`, formal 0/0/0. Retain all runs; archive none; delete nothing.
+
+## EXP-303 — Verify concurrent Task6 frame capture against one fresh isolated stack
+
+- **PLANNED:** Source HEAD `95686386a62960f9a5a421f774e97643392627d2`, unchanged submodule `54463fce3bfa6192976e74113f5ed7152f708a3f`, installed Demo overlay hash `9cf9cca5ec4e85c6f98909ae2ab376a655701d8888a87831453076afa89a30f8`. New `ROS_DOMAIN_ID=213`, `GZ_PARTITION/session_id=act-30a80149-exp303`, socket `/run/user/1000/act303/a`, task-owned tmux `act-data-live-303` and `act-data-capture-303`, durable `experiments/exp303-current-recorder-live` plus one exclusive capture sibling, ordinary `/tmp/so101-debug-act-data-66c42e4c/ros-exp303`, lifecycle `ISOLATED_STACK`. Freeze exact current compiled model, no-motion manifest, run-local scripts/hashes and installed entry metadata. Verify empty graph, absent socket/tmux/output and no active conflicting process before launch. One paused default seven-joint/cup reset after stopped broker reads, then start installed read-only capture while paused; a recovery lease resumes for at most 12 s, re-pauses, releases and proves stopped `IDLE`. Success requires at least three lossless hash-verified rows with same session/epoch, strictly increasing physics step, causal fresh dual RGB and matching CameraInfo/joints; no atomic gap, contact hazard, goal or arm/gripper motion. Broker and owned stack must retire with exact PID/parent/argv and final empty graph. Any failure ends this stack without in-stack retry. `RECORDED_UNQUALIFIED` is diagnostic only; Task6 dynamic expert FOV and five-check `TASK8_READY`, Task8 full restart cases, W8 and formal Train/Validation/Test remain unmeasured/0/0/0. Retain all evidence, archive none, delete nothing.
+
+- **INVALID for frame join; concurrency fix live readback established:** The installed concurrent recorder ran in domain213 after one stopped broker preflight and paused default reset `0→1`. It exited2 with `RECORDED_UNQUALIFIED`, zero frames and 190 recorded rejections: 70 `TASK6_CAMERA_INFO_INVALID`, 34 `TASK6_CAMERA_INFO_MISSING`, 59 fresh-atomic misses before unpause, 16 paused-world refusals, and one stale source. No atomic sequence gap appeared; the dedicated world executor continued draining the strict stream while the main sampler worked. The 12 s capture window did not yield a causal RGB/CameraInfo/joint/world row. At the end of the running recovery lease, a direct pause was refused `CONTROL_NOT_STOPPED`; the script revoked the lease, then a separate recovery cleanup acquired only after stopped status, paused successfully, released and proved stopped `IDLE`. Broker retirement had eight more stopped reads, exact PID/parent/argv, SIGINT; final broker stop file `IDLE`, confirmed, no unknown goal, launch exited0. Owned active processes and tmux gone; ROS discovery graph cleared after a short settle, no unrelated session touched. `postflight.json`, raw rejections, capture result, reset/control/cleanup/retirement and ordinary logs retained. Installed camera plugin source should stamp image and CameraInfo equally, and EXP-237 archived frames had matching valid stamps; the generic current rejection code lacks the failing field. Next use one new isolated no-command probe to record actual CameraInfo/image metadata at the current epoch, then repair the exact validator or producer boundary offline. No Task6 `TASK8_READY`, Task8 case, W8, formal episode or training; accepted Train/Validation/Test 0/0/0. Retain all evidence, archive none; short socket/log and scratch are deletion candidates only, delete nothing.
+
+## CP-303 — Atomic drain is fixed, CameraInfo join remains unmeasured
+
+- Last valid source experiment EXP-302. EXP-303 live returned no atomic gap but no accepted camera frame. Preserve `CALIBRATION_REQUIRED` and `FULL_RESTART_PROOF_UNAVAILABLE`. Probe actual current CameraInfo fields before weakening source validation; keep formal 0/0/0, retain runs, archive none, delete nothing.
