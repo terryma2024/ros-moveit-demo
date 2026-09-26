@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: e6527bd1edc5ea18c5cba4a2894f919add375fe9
+current_commit: 50eb318399a4ee2b3baa1ef3b21fbf3115242389
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -20,7 +20,7 @@ open_hypotheses:
   - An owner-created readiness artifact and startup receipt can bind this observed seven-axis verdict to a Task8 case without opening the Task6 or phase gates.
   - The physical phase port can support measured Task6 TASK8_READY and Task8 live qualification.
 latest_checkpoint: CP-299
-next_experiment: EXP-307 causal atomic-history frame alignment source and installed gates
+next_experiment: EXP-308 isolated Task6 fresh-history recorder live readback
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -2450,3 +2450,13 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-306 — Strict 50 ms skew remains unmet by newest-world sampling
 
 - Last valid source EXP-305. Keep the 50 ms source skew and all epoch/session/step/atomic-hazard guards; next select the newest *compatible* physics step from the strict fresh atomic history, only while the latest frame is current and running. Test that an older compatible step can join a current image and that a paused or wrong-epoch latest frame cannot be bypassed. Then run ordinary/package gates and one new isolated readback. Preserve `CALIBRATION_REQUIRED`, `FULL_RESTART_PROOF_UNAVAILABLE`, formal 0/0/0; retain all runs, archive none, delete nothing.
+
+## EXP-307 — Select the newest compatible fresh physics step for Task6 RGB
+
+- **PLANNED/RUNNING source gate:** Parent HEAD `50eb318399a4ee2b3baa1ef3b21fbf3115242389`, unchanged submodule, task overlay and registered root, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. EXP-306 showed 43 strict 50 ms skew refusals but no camera-info or atomic-gap defect. Keep the 50 ms bound and all causal/session/epoch checks. At each 10 Hz tick, try the strict observer's newest fresh world first; only on a source-stale/skew/missing-info match failure, traverse its earlier fresh atomic receipts from newest to oldest until the recorder finds a compatible step. A paused or wrong-epoch latest world must fail closed before older history is considered, and accepted physics steps remain strictly increasing through `Task6FrameRecorder`. Intended RED `scratch/exp307-red.y7yFhR` exited1 at three missing-helper import assertions. Focused GREEN `scratch/exp307-focused.lBZ3Fd` passed13/13, including real dual PNG/hash/joint join and no bypass of paused/new-epoch latest world, with exact task Python and fresh verified NVMe TMPDIR/TMP/TEMP. Next run full ordinary Demo, overlay build, Demo package gate and installed hash checks, then one new isolated no-contact readback; no live EXP-307 action. Task6 `CALIBRATION_REQUIRED`, Task8 `FULL_RESTART_PROOF_UNAVAILABLE`, formal Train/Validation/Test 0/0/0; retain evidence, archive none, scratch deletion candidates only, delete nothing.
+
+- **VALID as strict source and installed history alignment, not Task6 live:** Focused GREEN `scratch/exp307-focused.lBZ3Fd` passed13/13. The CLI now first attempts the newest fresh atomic world; it only searches earlier strictly fresh atomic receipts for a source-stale, 50 ms skew or missing CameraInfo join. Paused, wrong epoch, truncated or malformed latest world still refuses before fallback; the recorder retains its advancing-step, same-session/epoch, causal source and lossless hash checks. Full ordinary xdist8 `scratch/exp307-demo-full.ijkG0f` exited0 in53 s, 4321 passed/162 skipped. Overlay build `scratch/exp307-build.pTLLHG` exited0 in3 s. Demo package `scratch/exp307-demo-colcon.m40O1S` exited0 in53 s; package XML 4483 tests/0 errors/0 failures/162 skipped, zero benchmark suite cases. Aggregate `colcon test-result` exited0: 5938 tests/0 errors/0 failures/205 skipped, including unchanged Teleop. All pytest/colcon runs used fresh previously nonexistent exact task-Python-verified NVMe TMPDIR/TMP/TEMP. Installed CLI module SHA256 equals source `a8bfd3f64ddcee609b40fc5a5eef00ccf24ed4439d7fbc0c7536271466e222eb`; targeted flake8 F401/F821/F841 and `git diff --check` exit0. No live EXP-307 stack or motion, no Task6 five-check PASS, Task8 case, W8, formal episode or training. Accepted Train/Validation/Test 0/0/0; retain root and runs, archive none; scratch deletion candidates only, delete nothing.
+
+## CP-307 — Task6 selects a compatible step from strict fresh atomic history
+
+- Last valid source EXP-307. Next run one new isolated installed recorder with unchanged 50 ms skew and verify at least three joined, hash-checked dual-camera frames. Still do not count this as dynamic expert FOV or Task6 `TASK8_READY`. Preserve `CALIBRATION_REQUIRED`, `FULL_RESTART_PROOF_UNAVAILABLE`, formal 0/0/0; retain evidence, archive none, delete nothing.

@@ -162,6 +162,40 @@ def test_nonfinite_and_boolean_metadata_values_still_refuse(tmp_path):
     assert recorder.finish()["samples"] == 0
 
 
+def test_cli_chooses_fresh_earlier_physics_step_for_current_camera_frame(tmp_path):
+    from so101_demo.cli.act_capture_task6 import _capture_best_world
+
+    recorder = prepared(tmp_path)
+    earlier = world(1., step=500)
+    latest = world(1.08, step=540)
+    observer = SimpleNamespace(recent_with_receipts=lambda: (
+        SimpleNamespace(evidence=earlier), SimpleNamespace(evidence=latest),
+    ))
+    row = _capture_best_world(recorder, observer)
+    assert row["simulation_step"] == 500
+    assert row["head"]["image_stamp_s"] == pytest.approx(.99)
+    assert recorder.finish()["samples"] == 1
+
+
+@pytest.mark.parametrize("invalid_latest", ("paused", "new_epoch"))
+def test_cli_never_bypasses_latest_world_scope_with_older_history(tmp_path, invalid_latest):
+    from so101_demo.cli.act_capture_task6 import _capture_best_world
+
+    recorder = prepared(tmp_path)
+    earlier = world(1., step=500)
+    latest = world(1.08, step=540)
+    if invalid_latest == "paused":
+        latest.paused = True
+    else:
+        latest.reset_epoch = 3
+    observer = SimpleNamespace(recent_with_receipts=lambda: (
+        SimpleNamespace(evidence=earlier), SimpleNamespace(evidence=latest),
+    ))
+    with pytest.raises(ValueError, match="TASK6_WORLD_SCOPE_INVALID"):
+        _capture_best_world(recorder, observer)
+    assert recorder.finish()["samples"] == 0
+
+
 def test_paused_or_truncated_physics_never_becomes_a_camera_sample(tmp_path):
     recorder = prepared(tmp_path)
     paused = world()
