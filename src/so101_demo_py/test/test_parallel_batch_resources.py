@@ -47,6 +47,12 @@ CLI_CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v3.yaml'
 V2_CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v2.yaml'
 
 
+def test_two_worker_headroom_verifier_uses_business_named_acceptance_provider():
+    verifier = resources_api.TwoWorkerHeadroomVerifier()
+    assert isinstance(verifier._acceptance_provider,
+                      resources_api.ParallelExecutionAcceptanceProvider)
+
+
 class FakeProbe:
     """Deterministic live-probe boundary for allocator tests."""
 
