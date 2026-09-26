@@ -24,6 +24,7 @@ def main(arguments=None):
     parser.add_argument('--motion-calibration-manifest',type=Path)
     parser.add_argument('--contact-diagnostic-manifest',type=Path)
     parser.add_argument('--task6-route-manifest',type=Path)
+    parser.add_argument('--task6-contact-transition-manifest',type=Path)
     parser.add_argument('--stop-velocity-rad-s',type=float)
     parser.add_argument('--max-age-s',type=float)
     for flag in ('submit-lead-s','accept-timeout-s','stop-timeout-s','permit-ttl-s'):
@@ -54,7 +55,8 @@ def main(arguments=None):
     motion_manifest=None
     if sum(bool(path) for path in (options.motion_calibration_manifest,
                                    options.contact_diagnostic_manifest,
-                                   options.task6_route_manifest))>1:
+                                   options.task6_route_manifest,
+                                   options.task6_contact_transition_manifest))>1:
         raise ValueError('DIAGNOSTIC_MANIFESTS_MUTUALLY_EXCLUSIVE')
     if options.motion_calibration_manifest:
         from so101_demo.adapters.act.calibration_motion import require_motion_manifest
@@ -84,6 +86,17 @@ def main(arguments=None):
                 or diagnostic['stop_velocity_rad_s']!=speed
                 or diagnostic['stop_max_age_s']!=age):
             raise ValueError('TASK6_ROUTE_DIAGNOSTIC_CONFIG_MISMATCH')
+    if options.task6_contact_transition_manifest:
+        from so101_demo.adapters.act.calibration_motion import transition_motion_configuration
+        if not options.calibration_mode or not all(value is not None for value in timing):
+            raise ValueError('TASK6_CONTACT_TRANSITION_MODE_REQUIRED')
+        motion_manifest=json.loads(options.task6_contact_transition_manifest.read_text())
+        diagnostic=transition_motion_configuration(motion_manifest)
+        if (diagnostic['session_id']!=options.session_id
+                or diagnostic['submit_lead_s']!=options.submit_lead_s
+                or diagnostic['stop_velocity_rad_s']!=speed
+                or diagnostic['stop_max_age_s']!=age):
+            raise ValueError('TASK6_CONTACT_TRANSITION_CONFIG_MISMATCH')
     from so101_demo.adapters.act.domain_authority import DomainAuthority
     authority=DomainAuthority(int(os.environ.get('ROS_DOMAIN_ID','0'))).acquire()
     import rclpy
@@ -131,6 +144,7 @@ def main(arguments=None):
         motion_calibration_manifest=str(options.motion_calibration_manifest) if motion_guard is not None else None,
         contact_diagnostic_manifest=str(options.contact_diagnostic_manifest) if options.contact_diagnostic_manifest else None,
         task6_route_manifest=str(options.task6_route_manifest) if options.task6_route_manifest else None,
+        task6_contact_transition_manifest=str(options.task6_contact_transition_manifest) if options.task6_contact_transition_manifest else None,
         motion_calibration_model_sha256=motion_manifest['model_sha256'] if motion_guard is not None else None,
         action_map={'arm':'/arm_controller/follow_joint_trajectory','gripper':'/gripper_controller/follow_joint_trajectory',
                     'execute_trajectory':'/execute_trajectory'}),indent=2)+'\n')

@@ -2319,6 +2319,7 @@ def _configured_task_station_actions(context):
     environment_actions = []
     contact_path = ""
     route_path = ""
+    transition_path = ""
     if act_profile:
         from ..adapters.act.command_broker import endpoint_bytes
         endpoint = LaunchConfiguration("act_broker_socket").perform(context)
@@ -2352,7 +2353,8 @@ def _configured_task_station_actions(context):
         motion_path=context.launch_configurations.get("act_motion_calibration_manifest", "")
         contact_path=context.launch_configurations.get("act_contact_diagnostic_manifest", "")
         route_path=context.launch_configurations.get("act_task6_route_manifest", "")
-        if sum(bool(path) for path in (motion_path,contact_path,route_path))>1:
+        transition_path=context.launch_configurations.get("act_task6_contact_transition_manifest", "")
+        if sum(bool(path) for path in (motion_path,contact_path,route_path,transition_path))>1:
             raise ValueError("DIAGNOSTIC_MANIFESTS_MUTUALLY_EXCLUSIVE")
         if motion_path:
             from ..adapters.act.calibration_motion import require_motion_manifest
@@ -2396,13 +2398,31 @@ def _configured_task_station_actions(context):
             if hashlib.sha256(installed_plugins.read_bytes()).hexdigest()!=route["plugin_sha256"]:
                 raise ValueError("TASK6_ROUTE_DIAGNOSTIC_PLUGIN_DRIFT")
             broker_options += ["--task6-route-manifest",route_path]
+        if transition_path:
+            import hashlib
+            from ..adapters.act.calibration_motion import transition_motion_configuration
+            if mode!="true" or not all(timing):
+                raise ValueError("TASK6_CONTACT_TRANSITION_MODE_REQUIRED")
+            transition=json.loads(Path(transition_path).read_text())
+            diagnostic=transition_motion_configuration(transition)
+            if (diagnostic["session_id"]!=session_id or
+                diagnostic["submit_lead_s"]!=float(timing[0]) or
+                diagnostic["stop_velocity_rad_s"]!=float(speed) or
+                diagnostic["stop_max_age_s"]!=float(age) or
+                Path(LaunchConfiguration("mujoco_scene").perform(context)).resolve()!=Path(transition["scene_path"]).resolve()):
+                raise ValueError("TASK6_CONTACT_TRANSITION_CONFIG_MISMATCH")
+            installed_plugins=(Path(get_package_share_directory("so101_demo_py")) /
+                               "config/mujoco/act/task6_route_plugins.yaml")
+            if hashlib.sha256(installed_plugins.read_bytes()).hexdigest()!=transition["plugin_sha256"]:
+                raise ValueError("TASK6_CONTACT_TRANSITION_PLUGIN_DRIFT")
+            broker_options += ["--task6-contact-transition-manifest",transition_path]
         environment_actions = [SetEnvironmentVariable("SO101_ACT_PROFILE", "1"),
                                SetEnvironmentVariable("SO101_ACT_BROKER_SOCKET", endpoint)]
     share = Path(get_package_share_directory("so101_demo_py"))
     stack = _mujoco_stack_actions(
         context, share, session_id,
-        sim_speed_factor=0.60 if contact_path else 0.25 if route_path else 1.0 if act_profile else -1.0,
-        plugin_config_filename="task6_route_plugins.yaml" if route_path else "mujoco_plugins.yaml",
+        sim_speed_factor=0.60 if contact_path else 0.25 if route_path or transition_path else 1.0 if act_profile else -1.0,
+        plugin_config_filename="task6_route_plugins.yaml" if route_path or transition_path else "mujoco_plugins.yaml",
     )
     teleop_actions = []
     if act_profile:
@@ -2515,6 +2535,7 @@ def build_task_station_launch_description(*, act_profile: bool = False) -> Launc
                DeclareLaunchArgument("act_motion_calibration_manifest", default_value=""),
                DeclareLaunchArgument("act_contact_diagnostic_manifest", default_value=""),
                DeclareLaunchArgument("act_task6_route_manifest", default_value=""),
+               DeclareLaunchArgument("act_task6_contact_transition_manifest", default_value=""),
                DeclareLaunchArgument("act_stop_velocity_rad_s", default_value=""),
                DeclareLaunchArgument("act_max_age_s", default_value=""),
                *[DeclareLaunchArgument(key,default_value="") for key in ("act_submit_lead_s","act_accept_timeout_s","act_stop_timeout_s","act_permit_ttl_s")]]

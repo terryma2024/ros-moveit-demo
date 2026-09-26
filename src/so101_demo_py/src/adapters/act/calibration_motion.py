@@ -78,6 +78,28 @@ def route_motion_configuration(manifest):
         manifest_sha256=source['manifest_sha256'])
 
 
+def transition_motion_configuration(manifest):
+    """Replay activated sources and retain separate no-contact/contact phases."""
+    from so101_demo.act.task6_contact_transition import require_transition_sources
+    source=require_transition_sources(manifest)
+    return dict(kind=source['kind'],eligible_for_collection=False,
+        session_id=source['session_id'],attempt_id=source['attempt_id'],
+        model_path=source['scene_path'],model_sha256=source['model_sha256'],
+        arm_center=tuple(source['joint_start_rad']),neck_center_rad=source['neck_start_rad'],
+        max_neck_drift_rad=.002,max_rows=source['segment_rows']+1,
+        path_step_s=source['path_step_s'],path_clearance_m=source['path_clearance_m'],
+        velocity_limit_rad_s=tuple(source['velocity_limit_rad_s']),
+        acceleration_limit_rad_s2=tuple(source['acceleration_limit_rad_s2']),
+        max_age_s=source['max_age_s'],max_skew_s=source['max_skew_s'],
+        stop_max_age_s=source['stop_max_age_s'],
+        stop_velocity_rad_s=source['stop_velocity_rad_s'],
+        submit_lead_s=source['submit_lead_s'],
+        allowed_pairs_by_phase={phase:frozenset(tuple(pair) for pair in pairs)
+            for phase,pairs in source['allowed_contact_pairs_by_phase'].items()},
+        diagnostic_limits=source['diagnostic_limits'].copy(),
+        manifest_sha256=source['manifest_sha256'])
+
+
 class RosCalibrationMotionGuard:
     """Sole broker-local calibration gate, armed by actual paused reset evidence."""
     def __init__(self,node,driver,broker,manifest,*,evidence_root,monotonic=None):
@@ -91,10 +113,12 @@ class RosCalibrationMotionGuard:
         from .scene_state import SceneStateObserver,RosSceneStateAdapter
         from .physics import MujocoPathProcess
         self.route_mode=isinstance(manifest,dict) and manifest.get('kind')=='ACT_TASK6_ROUTE_DIAGNOSTIC'
+        self.transition_mode=isinstance(manifest,dict) and manifest.get('kind')=='ACT_TASK6_CONTACT_TRANSITION_DIAGNOSTIC'
         self.contact_mode=isinstance(manifest,dict) and manifest.get('kind')=='ACT_CONTACT_DIAGNOSTIC'
-        self.contact_mode=self.contact_mode or self.route_mode
+        self.contact_mode=self.contact_mode or self.route_mode or self.transition_mode
         self.contact_manifest=manifest if self.contact_mode else None
         self.manifest=(route_motion_configuration(manifest) if self.route_mode else
+                       transition_motion_configuration(manifest) if self.transition_mode else
                        diagnostic_motion_configuration(manifest) if self.contact_mode
                        else require_motion_manifest(manifest))
         config=self.manifest
@@ -103,12 +127,15 @@ class RosCalibrationMotionGuard:
         self.audit=deque(maxlen=128);self._closed=False;self.live_observer=None;self.live_adapter=None
         self._cup_reset_verified=False
         self._next_segment=0
-        allowed=config['allowed_pairs'] if self.contact_mode else frozenset()
+        allowed=(frozenset() if self.transition_mode else
+                 config['allowed_pairs'] if self.contact_mode else frozenset())
+        phase_pairs=(config['allowed_pairs_by_phase'] if self.transition_mode else
+                     {'APPROACH':allowed} if self.contact_mode else {})
         self.path=MujocoPathProcess(check_timeout_s=config['submit_lead_s'],start_timeout_s=2.,
             model_path=config['model_path'],protected_roots=('base',),cup_joint='cup_free_joint',
             gripper_body='gripper',path_step_s=config['path_step_s'],path_clearance_m=config['path_clearance_m'],
             velocity_limit_rad_s=config['velocity_limit_rad_s'],acceleration_limit_rad_s2=config['acceleration_limit_rad_s2'],
-            allowed_pairs_by_phase={'APPROACH':allowed} if self.contact_mode else {})
+            allowed_pairs_by_phase=phase_pairs)
         if self.path.model_sha256!=config['model_sha256']:
             self.path.close();raise ValueError('MOTION_MODEL_HASH_INVALID')
         try:
@@ -117,7 +144,8 @@ class RosCalibrationMotionGuard:
             self.contact_observer=RobotContactObserver(known_geoms=known,allowed_pairs=allowed,
                 max_age_s=config['max_age_s'],max_sim_gap_s=float(self.model.opt.timestep)*1.01,monotonic=self.monotonic)
             root=Path(evidence_root);root.mkdir(parents=True,exist_ok=True);self.evidence_root=root
-            stem=('task6-route-diagnostic' if self.route_mode else
+            stem=('task6-contact-transition' if self.transition_mode else
+                  'task6-route-diagnostic' if self.route_mode else
                   'contact-diagnostic' if self.contact_mode else 'motion-calibration')
             self._record=(root/(stem+'-robot-contacts.jsonl')).open('x',encoding='utf-8')
             self._scene_record=(root/(stem+'-scene-state.jsonl')).open('x',encoding='utf-8')
@@ -177,6 +205,9 @@ class RosCalibrationMotionGuard:
         if getattr(self,'route_mode',False):
             from so101_demo.act.task6_route_diagnostic import route_prefix_matches
             matches=route_prefix_matches(prefix,self.contact_manifest)
+        elif getattr(self,'transition_mode',False):
+            from so101_demo.act.task6_contact_transition import prefix_matches_transition
+            matches=prefix_matches_transition(prefix,self.contact_manifest)
         else:
             from so101_demo.act.contact_diagnostic import prefix_matches_diagnostic
             matches=prefix_matches_diagnostic(prefix,self.contact_manifest)
@@ -184,6 +215,13 @@ class RosCalibrationMotionGuard:
             self._previous_segment_complete() and self._start_safe(reference,neck_yaw)
             and matches
         )
+
+    def _phase(self,prefix):
+        if not getattr(self,'transition_mode',False):return 'APPROACH'
+        sequence=prefix['sequence']
+        if type(sequence) is not int or not 0<=sequence<len(self.contact_manifest['segment_phases']):
+            raise ValueError('CONTACT_TRANSITION_SEQUENCE_INVALID')
+        return self.contact_manifest['segment_phases'][sequence]
 
     def _live_ready(self):
         if not self.contact_mode:return True
@@ -319,11 +357,11 @@ class RosCalibrationMotionGuard:
                     diagnostic_limits=self.manifest['diagnostic_limits'],
                     output_path=self.evidence_root/'contact-live-physics.ndjson',
                     monotonic=self.monotonic,
-                    startup_receipt_grace_s=1.0 if self.route_mode else None)
+                    startup_receipt_grace_s=1.0 if self.route_mode or self.transition_mode else None)
                 self.live_observer=LiveContactObserver(stream,
                     ros_clock=lambda:self.node.get_clock().now().nanoseconds*1e-9,
                     monotonic=self.monotonic,on_abort=self._fail,
-                    startup_receipt_grace_s=1.0 if self.route_mode else None)
+                    startup_receipt_grace_s=1.0 if self.route_mode or self.transition_mode else None)
                 self.live_adapter=RosLiveContactAdapter(self.node,self.live_observer)
         except (KeyError,TypeError,ValueError,OSError,RuntimeError):self._fail('CONTACT_RESET_SNAPSHOT_INVALID')
 
@@ -338,7 +376,7 @@ class RosCalibrationMotionGuard:
             with self._lock:self._joints=(q,v,stamp,self.monotonic())
         except (KeyError,TypeError,ValueError):return
 
-    def _snapshot(self,base,*,start,reference,reference_velocity):
+    def _snapshot(self,base,*,start,reference,reference_velocity,phase='APPROACH'):
         from so101_demo.act.joints import ACT_JOINTS
         import mujoco,numpy as np
         now=self.monotonic()
@@ -385,7 +423,7 @@ class RosCalibrationMotionGuard:
         address=self.path.cup_address
         if not math.isclose(sum(x*x for x in qpos[address+3:address+7]),1.,abs_tol=1e-6):
             raise ValueError('MOTION_SCENE_CUP_POSE_INVALID')
-        return dict(model_qpos=tuple(qpos),model_sha256=self.path.model_sha256,phase='APPROACH',holding_state='EMPTY',
+        return dict(model_qpos=tuple(qpos),model_sha256=self.path.model_sha256,phase=phase,holding_state='EMPTY',
             sim_time_s=max(stamps),controller_bridge=dict(time_s=scene['simulation_time_s'],
                 point=dict(positions=tuple(scene_q[:6]),velocities=tuple(scene_v[:6]),accelerations=())),
             controller_start_time_s=start,controller_start_positions=reference,controller_start_velocities=reference_velocity,
@@ -407,7 +445,9 @@ class RosCalibrationMotionGuard:
                 return False
             start=snapshot['sim_time_s']+self.manifest['submit_lead_s']
             reference=self.driver.reference_state(start)
-            full=self._snapshot(snapshot,start=start,reference=reference['positions'],reference_velocity=reference['velocities'])
+            full=self._snapshot(snapshot,start=start,reference=reference['positions'],
+                                reference_velocity=reference['velocities'],
+                                phase=RosCalibrationMotionGuard._phase(self,prefix))
             if not self._within(prefix,reference['positions'],self._joints[0][6]):
                 self._record_rejection(dict(boundary='approve',safe=False,reason='PREFIX_WITHIN_INVALID',
                     snapshot_sim_time_s=snapshot['sim_time_s']))
@@ -443,13 +483,18 @@ class RosCalibrationMotionGuard:
             reference=self.driver.reference_state(start)
             if any(abs(a-b)>1e-9 for a,b in zip(reference['positions'],held,strict=True)):
                 return reject('REFERENCE_MISMATCH')
-            full=self._snapshot(base,start=start,reference=held,reference_velocity=reference['velocities'])
+            full=self._snapshot(base,start=start,reference=held,
+                                reference_velocity=reference['velocities'],
+                                phase=RosCalibrationMotionGuard._phase(self,prefix))
             if not self._within(prefix,held,self._joints[0][6]):
                 return reject('PREFIX_WITHIN_INVALID')
             safe=self.path.check_path(prefix,full)
             row=dict(boundary='exact_goals',safe=safe,path=dict(self.path.last_check))
             if safe:self.audit.append(row)
             else:self._record_rejection(row)
+            if safe and getattr(self,'transition_mode',False) and prefix['sequence']==1:
+                self.contact_adapter.replace_allowed_pairs(self.manifest['allowed_pairs_by_phase']['CONTACT'])
+                if not self.contact_observer.safe():return reject('CONTACT_PHASE_SWITCH_HAZARD')
             if safe and self.contact_mode:self._next_segment+=1
             return safe
         except (KeyError,TypeError,ValueError,RuntimeError) as error:
