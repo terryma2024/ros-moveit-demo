@@ -265,10 +265,10 @@ def test_live_observer_hazard_latch_and_stale_stream_abort(tmp_path):
 
 
 def test_route_startup_grace_waits_for_first_chunk_then_uses_strict_age(tmp_path):
-    observer, now, aborts = _observer(tmp_path, startup_receipt_grace_s=1.)
+    observer, now, aborts = _observer(tmp_path, startup_receipt_grace_s=2.5)
     observer.suspend()
     observer.start()
-    now[0] += .5
+    now[0] += 2.
     observer.poll()
     assert aborts == [] and observer.recorder.recorded_steps == 0
     observer.accept_chunk(_ros_chunk())
@@ -278,9 +278,9 @@ def test_route_startup_grace_waits_for_first_chunk_then_uses_strict_age(tmp_path
     assert aborts == ["LIVE_CONTACT_EVIDENCE_STALE"]
     observer.close()
 
-    missing, now, aborts = _observer(tmp_path / "missing", startup_receipt_grace_s=1.)
+    missing, now, aborts = _observer(tmp_path / "missing", startup_receipt_grace_s=2.5)
     missing.start()
-    now[0] += 1.001
+    now[0] += 2.501
     missing.poll()
     assert aborts == ["LIVE_CONTACT_EVIDENCE_STALE"]
     missing.close()

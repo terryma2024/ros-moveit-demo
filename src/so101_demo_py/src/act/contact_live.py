@@ -213,6 +213,7 @@ class LivePhysicsStream:
         self._last_time = 0.0
         self._last_receipt = -math.inf
         self._receipt_age_anchor = -math.inf
+        self.last_receipt_age_s: float | None = None
         self._receipt_deadline_suspended = False
         self._initial_cup: list[float] | None = None
         self._seen_bilateral = False
@@ -332,8 +333,10 @@ class LivePhysicsStream:
                 raise ValueError("live ROS/MuJoCo clock skew")
             receipt_limit = (self.startup_receipt_grace_s if self.recorded_steps == 0
                              else self.limits["maximum_receipt_age_s"])
+            self.last_receipt_age_s = (None if self._receipt_age_anchor == -math.inf
+                                       else self.monotonic() - self._receipt_age_anchor)
             if not self._receipt_deadline_suspended and self._receipt_age_anchor != -math.inf and (
-                self.monotonic() - self._receipt_age_anchor > receipt_limit
+                self.last_receipt_age_s > receipt_limit
             ):
                 raise ValueError("live physics evidence is stale")
             parsed = []
@@ -420,6 +423,7 @@ class LiveContactObserver:
             raise ValueError("startup receipt grace is too short")
         self.hazard: str | None = None
         self._last_received = _finite(monotonic(), "observer start", 0)
+        self.last_attempt_age_s: float | None = None
         self.active = False
         self._suspended = False
 
@@ -449,6 +453,7 @@ class LiveContactObserver:
         if self.hazard is not None:
             return
         try:
+            self.last_attempt_age_s = self.monotonic() - self._last_received
             converted = chunk_from_ros(
                 message, cup_qpos_address=self.recorder.cup_qpos_address,
                 cup_qvel_address=self.recorder.cup_qvel_address,
