@@ -10,7 +10,7 @@ from types import SimpleNamespace as NS
 import pytest
 import mujoco
 
-from so101_demo.act.task6_route_diagnostic import (
+from so101_demo.act.visible_approach_diagnostic import (
     build_route_manifest, require_route_manifest, require_route_sources,
     route_prefix_matches,
 )

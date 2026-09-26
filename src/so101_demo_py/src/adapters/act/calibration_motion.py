@@ -60,7 +60,7 @@ def diagnostic_motion_configuration(manifest):
 
 def route_motion_configuration(manifest):
     """Replay the pinned, no-contact Task 6 route before broker admission."""
-    from so101_demo.act.task6_route_diagnostic import require_route_sources
+    from so101_demo.act.visible_approach_diagnostic import require_route_sources
     source = require_route_sources(manifest)
     return dict(kind='ACT_TASK6_ROUTE_DIAGNOSTIC', eligible_for_collection=False,
         session_id=source['session_id'], attempt_id=source['attempt_id'],
@@ -81,15 +81,15 @@ def route_motion_configuration(manifest):
 def transition_motion_configuration(manifest):
     """Replay activated sources and retain separate no-contact/contact phases."""
     if isinstance(manifest,dict) and manifest.get('kind')=='ACT_TASK6_ALT_FULL_CONTACT_DIAGNOSTIC':
-        from so101_demo.act.task6_alt_full_contact_diagnostic import require_alt_sources
+        from so101_demo.act.alternate_anchor_grasp_contact_diagnostic import require_alt_sources
         source=require_alt_sources(manifest)
         phase_start=source['contact_phase_start']
     elif isinstance(manifest,dict) and manifest.get('kind')=='ACT_TASK6_FULL_CONTACT_DIAGNOSTIC':
-        from so101_demo.act.task6_full_contact_diagnostic import require_full_sources
+        from so101_demo.act.approach_grasp_contact_diagnostic import require_full_sources
         source=require_full_sources(manifest)
         phase_start=source['contact_phase_start']
     else:
-        from so101_demo.act.task6_contact_transition import require_transition_sources
+        from so101_demo.act.grasp_contact_transition_diagnostic import require_transition_sources
         source=require_transition_sources(manifest)
         phase_start=1
     return dict(kind=source['kind'],eligible_for_collection=False,
@@ -259,19 +259,19 @@ class RosCalibrationMotionGuard:
         if not self.contact_mode:
             return within_calibration_envelope(prefix,reference,neck_yaw,self.manifest)
         if getattr(self,'route_mode',False):
-            from so101_demo.act.task6_route_diagnostic import route_prefix_matches
+            from so101_demo.act.visible_approach_diagnostic import route_prefix_matches
             matches=route_prefix_matches(prefix,self.contact_manifest)
         elif getattr(self,'held_cup_mode',False):
             from so101_demo.act.held_cup_micro_lift_diagnostic import held_cup_diagnostic_prefix_matches
             matches=held_cup_diagnostic_prefix_matches(prefix,self.contact_manifest)
         elif getattr(self,'alt_full_mode',False):
-            from so101_demo.act.task6_alt_full_contact_diagnostic import alt_prefix_matches
+            from so101_demo.act.alternate_anchor_grasp_contact_diagnostic import alt_prefix_matches
             matches=alt_prefix_matches(prefix,self.contact_manifest)
         elif getattr(self,'full_mode',False):
-            from so101_demo.act.task6_full_contact_diagnostic import full_prefix_matches
+            from so101_demo.act.approach_grasp_contact_diagnostic import full_prefix_matches
             matches=full_prefix_matches(prefix,self.contact_manifest)
         elif getattr(self,'transition_mode',False):
-            from so101_demo.act.task6_contact_transition import prefix_matches_transition
+            from so101_demo.act.grasp_contact_transition_diagnostic import prefix_matches_transition
             matches=prefix_matches_transition(prefix,self.contact_manifest)
         else:
             from so101_demo.act.contact_diagnostic import prefix_matches_diagnostic

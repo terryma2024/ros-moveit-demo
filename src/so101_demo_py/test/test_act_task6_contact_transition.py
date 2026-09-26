@@ -9,7 +9,7 @@ from types import SimpleNamespace as NS
 
 import pytest
 
-from so101_demo.act.task6_contact_transition import (
+from so101_demo.act.grasp_contact_transition_diagnostic import (
     build_transition_manifest, build_transition_segments,
     prefix_matches_transition, require_transition_sources,
 )
