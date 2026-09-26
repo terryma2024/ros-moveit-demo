@@ -126,10 +126,23 @@ def test_act_child_source_limits_require_measured_calibration(tmp_path):
         bound_act_source_settings(report, timestep_s=0.002)
 
 
+def test_non_task8_manifest_does_not_construct_a_physical_port():
+    from so101_teleop.unified.ros_child import maybe_provision_task8_port
+
+    class Artifacts:
+        def read_hashed_json(self, name):
+            assert name == "manifest"
+            return {"kind": "ACT_FORMAL_COLLECTION"}
+
+    driver = SimpleNamespace(_act_artifacts=Artifacts())
+    assert maybe_provision_task8_port(driver) is None
+
+
 def test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8(tmp_path, monkeypatch):
     import rclpy
     from rclpy import executors
     from so101_demo.adapters.act import ros_broker, task8_sources
+    from so101_teleop.unified import ros_child
 
     report = qualified_report(tmp_path)
     path = tmp_path / "calibration.json"
@@ -190,6 +203,12 @@ def test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8(tmp
     monkeypatch.setattr(ros_broker, "RosBrokerDriver", Broker)
     monkeypatch.setattr(task8_sources, "Task8RosEvidence", Sources)
     monkeypatch.setattr(task8_sources, "Task8HazardDispatcher", Dispatcher)
+    port = object()
+    def provision_port(driver):
+        seen.append("provision_port")
+        assert driver._act_sources is not None
+        return port
+    monkeypatch.setattr(ros_child, "maybe_provision_task8_port", provision_port, raising=False)
     driver = object.__new__(RclpyActionDriver)
     driver._node = driver._executor = driver._thread = None
     driver._act_artifacts = binding
@@ -197,6 +216,7 @@ def test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8(tmp
     driver._act_contact_pairs = object()
     driver._act_cancelled = threading.Event()
     driver._act_sources = driver._act_hazard_dispatcher = None
+    driver._task8_port = None
     broker = driver._start_ros_broker()
     assert isinstance(broker, Broker)
     authority = driver._act_command_broker
@@ -219,6 +239,8 @@ def test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8(tmp
     assert source["session_id"] == "session-1"
     assert source["max_source_skew_s"] == 0.005
     assert seen.index("dispatcher") < seen.index("start_dispatcher")
+    assert driver._task8_port is port
+    assert seen.index("start_dispatcher") < seen.index("provision_port")
     driver.close()
     assert seen.index("close_dispatcher") < seen.index("shutdown")
 
