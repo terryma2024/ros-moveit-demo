@@ -112,6 +112,7 @@ class MujocoWorldObserver:
         *,
         max_age_s: float = 0.2,
         topic: str = "/so101/simulation/evidence",
+        subscription_depth: int = 1,
         monotonic: Callable[[], float] = time.monotonic,
         on_hazard: Callable[[str], None] | None = None,
     ) -> None:
@@ -121,6 +122,9 @@ class MujocoWorldObserver:
             raise ValueError("max_age_s must be finite and positive")
         if on_hazard is not None and not callable(on_hazard):
             raise ValueError("on_hazard must be callable")
+        if (type(subscription_depth) is not int
+                or not 1 <= subscription_depth <= 256):
+            raise ValueError("subscription depth must be an integer from 1 to 256")
         self._session_id = simulation_session_id
         self._max_age_s = max_age_s
         self._monotonic = monotonic
@@ -133,8 +137,14 @@ class MujocoWorldObserver:
         self._callback_count = 0
         self._rejected_count = 0
         self._last_rejection = ""
+        qos = ATOMIC_EVIDENCE_QOS if subscription_depth == 1 else QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=subscription_depth,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
         self._subscription = node.create_subscription(
-            RosSimulationEvidence, topic, self._callback, ATOMIC_EVIDENCE_QOS
+            RosSimulationEvidence, topic, self._callback, qos
         )
 
     def _callback(self, message: RosSimulationEvidence) -> None:

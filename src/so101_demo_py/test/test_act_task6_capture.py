@@ -229,6 +229,7 @@ def test_cli_drains_atomic_callbacks_during_a_slow_png_write(tmp_path, monkeypat
     (tmp_path / "experiments").mkdir()
     ticks = [0]
     recorders = []
+    observer_options = []
 
     class Node:
         def __init__(self, name):
@@ -282,7 +283,7 @@ def test_cli_drains_atomic_callbacks_during_a_slow_png_write(tmp_path, monkeypat
 
     class Observer:
         def __init__(self, *_args, **_kwargs):
-            pass
+            observer_options.append(_kwargs)
 
         def recent_with_receipts(self):
             return (SimpleNamespace(evidence=object()),)
@@ -301,3 +302,4 @@ def test_cli_drains_atomic_callbacks_during_a_slow_png_write(tmp_path, monkeypat
     ])
     assert result == 0
     assert recorders[0].samples >= 2
+    assert observer_options[0]["subscription_depth"] == 256

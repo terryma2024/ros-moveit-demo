@@ -83,6 +83,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         observer = MujocoWorldObserver(
             world_node, options.session_id, max_age_s=options.max_age_s,
+            subscription_depth=256,
         )
 
         def accept(method, *args):
