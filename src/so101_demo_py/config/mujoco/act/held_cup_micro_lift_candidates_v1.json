@@ -1,0 +1,45 @@
+{
+  "anchors": {
+    "default": {
+      "candidate_rows_sha256": "c785fd11243e1b9442553bbb9982b4f7bb762a9513dae78895f25a6e2a05812c",
+      "delta_q_rad": [
+        5.456966118414419e-06,
+        -0.01564080246199573,
+        0.002619301422206788,
+        0.009785755608787694,
+        3.330459137096804e-05,
+        -1.2076408911140812e-05
+      ]
+    },
+    "forward": {
+      "candidate_rows_sha256": "a3b1b04945f5422fcaa59f03f539f3c5017c396c6b1e87fff15ee84e3ca968bf",
+      "delta_q_rad": [
+        4.473359840721357e-06,
+        -0.010721242599939451,
+        -0.0005316958139982564,
+        0.009767338381035273,
+        4.101290771679392e-05,
+        -1.2445041806148638e-05
+      ]
+    },
+    "left": {
+      "candidate_rows_sha256": "f85ee8d895322c959a9ee10832718214f70ae94ef519828f05ef526da95b15c3",
+      "delta_q_rad": [
+        2.8807560845944824e-05,
+        -0.013975466227264755,
+        0.0019660455716554587,
+        0.009273701518367927,
+        0.000645817907183488,
+        -9.801739391919473e-06
+      ]
+    }
+  },
+  "eligible_for_collection": false,
+  "kind": "ACT_HELD_CUP_MICRO_LIFT_CANDIDATES",
+  "model_sha256": "3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78",
+  "mujoco_version": "3.12.0",
+  "policy_fingerprint": "0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11",
+  "scene_sha256": "4db48e35df9e91fc6868d303725badd0237fb10754d1e298637f5b0e1e55ed4f",
+  "schema_version": 1,
+  "source_result_sha256": "ae9450fe5216eaca3484d70834d6a76f673ccbd83479f8788c9a187cecfae0cf"
+}
