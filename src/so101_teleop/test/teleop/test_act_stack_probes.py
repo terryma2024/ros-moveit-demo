@@ -52,7 +52,7 @@ def test_factory_binds_distinct_start_and_stop_observers_to_one_domain(tmp_path)
     assert stack.ready_probe is not stack.stop_probe
     assert stack.launch.evidence_root == tmp_path / "task8-live" / "campaign-290" / "stack"
     assert stack.launch.process_environment()["ROS_DOMAIN_ID"] == "176"
-    assert stack.launch.process_environment()["GZ_PARTITION"] == "act-task8-176-campaign-290"
+    assert stack.launch.process_environment()["GZ_PARTITION"] == "act-pick-place-176-campaign-290"
     assert stack.stop_probe.timeout_s < stack.stop_timeout_s
     assert stack.graph_clear_probe.launch is stack.launch
 
@@ -64,7 +64,7 @@ def test_stop_probe_reobserves_a_still_live_stack_on_retry(tmp_path):
     observer = executable(tmp_path, "act_stack_ready")
     launch = ActStackLaunch(
         ros2_executable=ros2, session_id="session-290", evidence_root=tmp_path,
-        ros_domain_id=176, environment={"GZ_PARTITION": "act-task8-176-campaign-290"},
+        ros_domain_id=176, environment={"GZ_PARTITION": "act-pick-place-176-campaign-290"},
     )
     calls = []
     artifact = {
@@ -106,7 +106,7 @@ def test_graph_clear_probe_requires_empty_exact_domain(tmp_path):
     ros2 = executable(tmp_path, "ros2")
     launch = ActStackLaunch(
         ros2_executable=ros2, session_id="session-290", evidence_root=tmp_path,
-        ros_domain_id=176, environment={"GZ_PARTITION": "act-task8-176-campaign-290"},
+        ros_domain_id=176, environment={"GZ_PARTITION": "act-pick-place-176-campaign-290"},
     )
     calls = []
     outputs = [b"/move_group\n", b""]
@@ -128,7 +128,7 @@ def test_graph_clear_probe_rejects_failed_command(tmp_path):
     ros2 = executable(tmp_path, "ros2")
     launch = ActStackLaunch(
         ros2_executable=ros2, session_id="session-290", evidence_root=tmp_path,
-        ros_domain_id=176, environment={"GZ_PARTITION": "act-task8-176-campaign-290"},
+        ros_domain_id=176, environment={"GZ_PARTITION": "act-pick-place-176-campaign-290"},
     )
     probe = RosGraphClearProbe(
         launch, run=lambda argv, **kwargs: subprocess.CompletedProcess(argv, 1, b"", b"error"),

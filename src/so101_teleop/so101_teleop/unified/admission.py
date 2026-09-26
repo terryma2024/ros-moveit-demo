@@ -397,7 +397,7 @@ class UnifiedWorkloadService:
             from so101_demo.act.calibration import installed_calibration_identity, require_gate
 
             require_gate(calibration, "formal_collection" if spec.kind.startswith("act_collection")
-                         else "task8_live")
+                         else "pick_place_validation")
             current_source, current_config = (
                 self.calibration_identity_probe or installed_calibration_identity)()
         except (OSError, TypeError, json.JSONDecodeError, ValueError) as error:

@@ -25,7 +25,7 @@ def main(arguments=None):
         if measured.get("status") == "QUALIFIED":
             require_gate(measured, "formal_collection")
         elif measured.get("status") == "TASK8_READY":
-            require_gate(measured, "task8_live")
+            require_gate(measured, "pick_place_validation")
         else:
             validate_partial(measured)
         report = measured

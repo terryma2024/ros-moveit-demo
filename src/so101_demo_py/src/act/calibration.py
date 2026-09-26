@@ -41,7 +41,7 @@ CHECK_MEASUREMENTS = {
     "release": frozenset(("grasp_occlusion_window_s", "support_distance_m", "release_stable_s")),
     "retreat": frozenset(("retreat_distance_m", "placement_stable_s")),
 }
-TASK8_READY_CHECKS = frozenset(("fov", "collision", "search", "synchronization", "execution"))
+PICK_PLACE_READY_CHECKS = frozenset(("fov", "collision", "search", "synchronization", "execution"))
 
 
 def installed_calibration_identity(source_root: Path | None = None) -> tuple[str, str]:
@@ -139,11 +139,11 @@ def require_qualified(report):
 
 
 def require_gate(report: dict, gate: str) -> None:
-    """Require measured preflight for Task 8 or the later complete formal gate."""
+    """Require measured pick-place or complete formal-collection preflight."""
     if gate == "formal_collection":
         require_qualified(report)
         return
-    if gate != "task8_live":
+    if gate not in ("pick_place_validation", "task8_live"):
         raise ValueError("CALIBRATION_GATE_INVALID")
     fields(report, ("schema_version", "status", "source_commit", "config_sha256",
                     "measurements", "checks"))
@@ -154,11 +154,15 @@ def require_gate(report: dict, gate: str) -> None:
         raise ValueError("CALIBRATION_REQUIRED")
     sha256(report["config_sha256"])
     fields(report["checks"], REQUIRED_CHECKS)
-    if (any(report["checks"][name] != "PASS" for name in TASK8_READY_CHECKS)
+    if (any(report["checks"][name] != "PASS" for name in PICK_PLACE_READY_CHECKS)
             or any(report["checks"][name] != "UNMEASURED"
-                   for name in REQUIRED_CHECKS - TASK8_READY_CHECKS)):
+                   for name in REQUIRED_CHECKS - PICK_PLACE_READY_CHECKS)):
         raise ValueError("CALIBRATION_REQUIRED")
     _validate_measurements(report["measurements"], complete=False)
-    for check in TASK8_READY_CHECKS:
+    for check in PICK_PLACE_READY_CHECKS:
         if not CHECK_MEASUREMENTS[check] <= set(report["measurements"]):
             raise ValueError("CALIBRATION_CHECK_EVIDENCE_MISSING")
+
+
+# Legacy Python API and gate label for version-one calibration reports.
+TASK8_READY_CHECKS = PICK_PLACE_READY_CHECKS

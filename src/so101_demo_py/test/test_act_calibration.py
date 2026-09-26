@@ -117,6 +117,7 @@ def test_task8_ready_requires_measured_five_checks_but_refuses_formal(tmp_path):
     del ready["measurements"]["release_stable_s"]
     del ready["measurements"]["retreat_distance_m"]
     del ready["measurements"]["placement_stable_s"]
+    require_gate(ready, "pick_place_validation")
     require_gate(ready, "task8_live")
     with pytest.raises(ValueError, match="CALIBRATION_REQUIRED"):
         require_gate(ready, "formal_collection")

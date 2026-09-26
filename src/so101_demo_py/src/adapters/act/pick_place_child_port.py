@@ -32,7 +32,7 @@ def build_pick_place_child_search_port(
     boundary_factory=PickPlaceSearchBoundary,
 ) -> PickPlaceSearchPhasePort:
     """Build only SEARCH; the consumed startup receipt arms it later."""
-    require_gate(report, "task8_live")
+    require_gate(report, "pick_place_validation")
     require_pick_place_validation_manifest(manifest)
     root = Path(evidence_root)
     if (not root.is_absolute() or ".." in root.parts or not root.is_dir()
