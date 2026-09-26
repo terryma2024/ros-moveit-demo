@@ -1,6 +1,7 @@
 """The sole motion guard must prove holding before an isolated lift goal."""
 
 import json
+import os
 import threading
 from pathlib import Path
 from types import SimpleNamespace as NS
@@ -198,3 +199,81 @@ def test_guard_lift_snapshot_uses_exact_physics_step_or_refuses(monkeypatch):
         RosCalibrationMotionGuard._snapshot(
             guard, dict(reset_epoch=1, sim_time_s=1.048), start=1.1,
             reference=positions[:6], reference_velocity=(0.,) * 6, phase="LIFT")
+
+
+def test_held_cup_broker_option_replays_source_before_domain_authority(tmp_path, monkeypatch):
+    from so101_demo.act import held_cup_micro_lift_diagnostic as source
+    from so101_demo.adapters.act.domain_authority import DomainAuthority
+    from so101_demo.cli.act_command_broker import main
+
+    value = manifest(tmp_path)
+    monkeypatch.setattr(source, "require_held_cup_diagnostic_sources",
+                        lambda item: require_held_cup_diagnostic_sources(
+                            item, pairs_factory=Pairs))
+    monkeypatch.setattr(DomainAuthority, "acquire", lambda *_: (_ for _ in ()).throw(
+        AssertionError("domain authority reached")))
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(value))
+    args = ["--socket", "/tmp/act-held-cup-gate-test.sock",
+            "--session-id", value["session_id"], "--parent-pid", str(os.getpid()),
+            "--lease-timeout-s", "30", "--calibration-mode",
+            "--stop-velocity-rad-s", ".002", "--max-age-s", "1.5",
+            "--submit-lead-s", ".05", "--accept-timeout-s", ".02",
+            "--stop-timeout-s", "4", "--permit-ttl-s", "1.5",
+            "--held-cup-micro-lift-manifest", str(path)]
+    with pytest.raises(AssertionError, match="domain authority reached"):
+        main(args)
+    changed = dict(value)
+    changed["segment_phases"] = list(value["segment_phases"])
+    changed["segment_phases"][value["lift_phase_start"]] = "CONTACT"
+    path.write_text(json.dumps(changed))
+    with pytest.raises(ValueError):
+        main(args)
+    with pytest.raises(ValueError, match="DIAGNOSTIC_MANIFESTS_MUTUALLY_EXCLUSIVE"):
+        main(args + ["--task6-route-manifest", str(path)])
+
+
+def test_held_cup_launch_requires_scene_plugin_and_business_manifest(tmp_path, monkeypatch):
+    from launch import LaunchContext
+    from launch.actions import DeclareLaunchArgument, OpaqueFunction
+    from launch.utilities import perform_substitutions
+    from so101_demo.act import held_cup_micro_lift_diagnostic as source
+    from so101_demo.runtime import launch_composition as launch
+
+    value = manifest(tmp_path)
+    monkeypatch.setattr(source, "require_held_cup_diagnostic_sources",
+                        lambda item: require_held_cup_diagnostic_sources(
+                            item, pairs_factory=Pairs))
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(value))
+    description = launch.build_task_station_launch_description(act_profile=True)
+    context = LaunchContext()
+    for argument in description.entities:
+        if isinstance(argument, DeclareLaunchArgument):
+            context.launch_configurations[argument.name] = perform_substitutions(
+                context, argument.default_value)
+    context.launch_configurations.update(
+        session_id=value["session_id"], mujoco_scene=value["scene_path"],
+        act_held_cup_micro_lift_manifest=str(path), act_stop_velocity_rad_s=".002",
+        act_max_age_s="1.5", act_submit_lead_s=".05",
+        act_accept_timeout_s=".02", act_stop_timeout_s="4", act_permit_ttl_s="1.5")
+    captured = []
+
+    class Capture(Exception):
+        pass
+
+    def stack(*args, **kwargs):
+        captured.append((kwargs["sim_speed_factor"], kwargs["plugin_config_filename"]))
+        raise Capture
+
+    monkeypatch.setattr(launch, "_mujoco_stack_actions", stack)
+    opaque = next(action for action in description.entities
+                  if isinstance(action, OpaqueFunction))
+    with pytest.raises(Capture):
+        opaque.execute(context)
+    assert captured == [(.25, "task6_route_plugins.yaml")]
+    captured.clear()
+    context.launch_configurations["mujoco_scene"] = str(tmp_path / "other.xml")
+    with pytest.raises(ValueError, match="HELD_CUP_MICRO_LIFT_CONFIG_MISMATCH"):
+        opaque.execute(context)
+    assert not captured
