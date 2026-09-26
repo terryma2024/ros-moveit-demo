@@ -65,6 +65,54 @@ def test_delayed_first_target_reaches_both_controller_goals():
     assert a['prefix_sha256']==g['prefix_sha256']==prefix_sha256(route)
 
 
+def test_held_cup_response_window_accepts_delayed_pair_before_common_start():
+    clock = Clock()
+    clock.sim, clock.wall = 1., 10.
+    def progress():
+        clock.wall += .005
+        clock.sim += .00125
+    clock.progress = progress
+    class DelayedPort(Port):
+        def accepted(self, goal_id):
+            return True if clock.wall >= 10.05 else None
+    arm, grip, permits = Port(), DelayedPort(), Permits()
+    adapter = ActExecutionAdapter(arm, grip, permit_port=permits,
+        sim_clock=lambda: clock.sim, monotonic=lambda: clock.wall,
+        progress=clock.progress, submit_lead_s=.1, accept_timeout_s=.08,
+        stop_timeout_s=.03, reference_port=lambda _: (0.,) * 6)
+    adapter.begin_attempt('s', 'a')
+    route = dict(prefix(), first_target_delay_s=.1, target_times_s=(1.2, 1.3))
+    assert submit(adapter, route) == '1:1'
+    assert arm.goals[0]['header_stamp_s'] == grip.goals[0]['header_stamp_s'] == pytest.approx(1.1)
+    assert clock.wall >= 10.05 and clock.sim < 1.1
+    assert arm.cancels == grip.cancels == []
+
+
+def test_held_cup_response_window_still_cancels_at_common_start():
+    clock = Clock()
+    clock.sim, clock.wall = 1., 10.
+    def progress():
+        clock.wall += .005
+        clock.sim += .02
+    clock.progress = progress
+    class DelayedPort(Port):
+        def accepted(self, goal_id):
+            return True if clock.sim >= 1.1 else None
+    arm, grip, permits = Port(), DelayedPort(), Permits()
+    adapter = ActExecutionAdapter(arm, grip, permit_port=permits,
+        sim_clock=lambda: clock.sim, monotonic=lambda: clock.wall,
+        progress=clock.progress, submit_lead_s=.1, accept_timeout_s=.08,
+        stop_timeout_s=.03, reference_port=lambda _: (0.,) * 6)
+    adapter.begin_attempt('s', 'a')
+    route = dict(prefix(), first_target_delay_s=.1, target_times_s=(1.2, 1.3))
+    with pytest.raises(RuntimeError, match='acceptance after common start'):
+        submit(adapter, route)
+    assert arm.cancels == grip.cancels == ['1']
+    assert adapter.state == 'STOPPED'
+    with pytest.raises(RuntimeError):
+        submit(adapter, dict(route, sequence=1))
+
+
 @pytest.mark.parametrize('accepted',(False,None))
 def test_partial_acceptance_or_timeout_cancels_both_and_latches(accepted):
     adapter,clock,arm,grip,_=setup(grip=Port(accepted))

@@ -17,7 +17,8 @@ _CANDIDATE_KIND = "ACT_HELD_CUP_MICRO_LIFT_CANDIDATE"
 _DIAGNOSTIC_KIND = "ACT_HELD_CUP_MICRO_LIFT_DIAGNOSTIC"
 _EXTRA_KEYS = frozenset({
     "formal_episode_eligible", "held_contact_limits",
-    "source_candidate_manifest_sha256", "first_target_delay_s",
+    "source_candidate_manifest_sha256", "source_submit_lead_s",
+    "first_target_delay_s",
 })
 
 
@@ -28,6 +29,7 @@ def _canonical(value: object) -> bytes:
 
 def _candidate_from_diagnostic(value: dict) -> dict:
     candidate = {key: item for key, item in value.items() if key not in _EXTRA_KEYS}
+    candidate["submit_lead_s"] = value["source_submit_lead_s"]
     if value["anchor"] != "default":
         candidate["first_target_delay_s"] = value["first_target_delay_s"]
     candidate["kind"] = _CANDIDATE_KIND
@@ -41,6 +43,8 @@ def build_held_cup_diagnostic_manifest(
 ) -> dict:
     """Promote only the exact candidate to a noncollecting diagnostic role."""
     require_lift_candidate_sources(candidate_manifest, pairs_factory=pairs_factory)
+    if candidate_manifest["submit_lead_s"] != .05:
+        raise ValueError("HELD_CUP_SOURCE_SUBMIT_LEAD_INVALID")
     proposal = json.loads(Path(candidate_manifest["proposal_path"]).read_bytes())
     try:
         thresholds = proposal["payload"]["thresholds"]
@@ -61,6 +65,8 @@ def build_held_cup_diagnostic_manifest(
             "maximum_compression_distance_m": compression,
         },
         source_candidate_manifest_sha256=candidate_manifest["manifest_sha256"],
+        source_submit_lead_s=candidate_manifest["submit_lead_s"],
+        submit_lead_s=.1,
         first_target_delay_s=.1,
     )
     del result["manifest_sha256"]
@@ -76,6 +82,8 @@ def require_held_cup_diagnostic_manifest(value: object) -> dict:
             or value.get("command_authority") != "ISOLATED_CALIBRATION"
             or value.get("eligible_for_collection") is not False
             or value.get("formal_episode_eligible") is not False
+            or value.get("source_submit_lead_s") != .05
+            or value.get("submit_lead_s") != .1
             or value.get("first_target_delay_s") != .1
             or not isinstance(value.get("held_contact_limits"), dict)
             or set(value["held_contact_limits"]) != {

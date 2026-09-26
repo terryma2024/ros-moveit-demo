@@ -119,6 +119,23 @@ def test_diagnostic_delay_preserves_exact_candidate_source(tmp_path, anchor):
             require_held_cup_diagnostic_sources(forged, pairs_factory=Pairs)
 
 
+@pytest.mark.parametrize("anchor", ["default", "left", "forward"])
+def test_diagnostic_binds_longer_controller_response_window_to_source(tmp_path, anchor):
+    value = diagnostic(tmp_path, anchor)
+    assert value["source_submit_lead_s"] == .05
+    assert value["submit_lead_s"] == .1
+    require_held_cup_diagnostic_sources(value, pairs_factory=Pairs)
+    for key, changed in (("source_submit_lead_s", .06),
+                         ("submit_lead_s", .09)):
+        forged = copy.deepcopy(value)
+        forged[key] = changed
+        forged["manifest_sha256"] = hashlib.sha256(json.dumps(
+            {name: item for name, item in forged.items() if name != "manifest_sha256"},
+            sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+        with pytest.raises(ValueError):
+            require_held_cup_diagnostic_sources(forged, pairs_factory=Pairs)
+
+
 def test_diagnostic_rejects_authority_policy_rows_and_threshold_tamper(tmp_path):
     value = diagnostic(tmp_path, "default")
     changes = (
