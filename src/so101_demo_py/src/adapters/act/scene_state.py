@@ -77,11 +77,11 @@ class SceneStateObserver:
 
 
 class RosSceneStateAdapter:
-    def __init__(self,node,observer,*,on_hazard,record_port=None,pending_reset_port=None):
+    def __init__(self,node,observer,*,on_hazard,record_port=None,pending_reset_port=None,on_state=None):
         from so101_mujoco_support.msg import SceneStateEvidence
         from so101_demo.backends.mujoco.observer import ATOMIC_EVIDENCE_QOS
         self.observer,self.on_hazard,self.record_port=observer,on_hazard,record_port
-        self.pending_reset_port=pending_reset_port;self._lock=threading.RLock()
+        self.pending_reset_port=pending_reset_port;self.on_state=on_state;self._lock=threading.RLock()
         self._pending=None;self._stopped=False
         self.subscription=node.create_subscription(SceneStateEvidence,'/so101/simulation/scene_state',
             self.accept_message,ATOMIC_EVIDENCE_QOS)
@@ -117,6 +117,7 @@ class RosSceneStateAdapter:
             except Exception:
                 with self.observer._lock:self.observer.hazard='SCENE_STATE_RECORD_FAILED'
             try:
+                accepted=False
                 self.observer.validate(frame)
                 identity=(frame['simulation_session_id'],frame['reset_epoch'])
                 if self.observer.hazard:pass
@@ -145,8 +146,10 @@ class RosSceneStateAdapter:
                         and self.pending_reset_port is not None):
                     if self.pending_reset_port(frame) is not True:
                         raise ValueError('SCENE_RESET_PROOF_INVALID')
-                    self.observer.accept(frame)
-                else:self.observer.accept(frame)
+                    accepted=self.observer.accept(frame)
+                else:accepted=self.observer.accept(frame)
+                if accepted and self.observer.hazard is None and self.on_state is not None:
+                    self.on_state(copy.deepcopy(frame))
             except (KeyError,TypeError,ValueError,RuntimeError) as error:
                 self.observer.hazard=self.observer.hazard or str(error)
             self._stop_if_hazard()

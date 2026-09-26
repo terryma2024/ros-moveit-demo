@@ -125,7 +125,8 @@ class RosCalibrationMotionGuard:
             self.scene_observer=SceneStateObserver(model_sha256=self.path.model_sha256,
                 nq=self.model.nq,nv=self.model.nv,max_age_s=config['max_age_s'],monotonic=self.monotonic)
             self.scene_adapter=RosSceneStateAdapter(node,self.scene_observer,on_hazard=self._fail,
-                record_port=self._record_scene,pending_reset_port=self._pending_scene_reset)
+                record_port=self._record_scene,pending_reset_port=self._pending_scene_reset,
+                on_state=self._on_scene_state)
             self.contact_adapter=RosRobotContactAdapter(node,self.contact_observer,on_hazard=self._fail,record_port=self._record_frame)
             self.subscriptions=[node.create_subscription(JointState,'/joint_states',self.accept_joints,qos_profile_sensor_data),
                 node.create_subscription(ScalarJointEvidence,'/so101/simulation/joints',self.accept_reset,ATOMIC_EVIDENCE_QOS)]
@@ -205,6 +206,12 @@ class RosCalibrationMotionGuard:
         with self._lock:
             if self._closed:raise OSError('SCENE_RECORDER_CLOSED')
             self._scene_record.write(json.dumps(frame,allow_nan=False,separators=(',',':'))+'\n')
+
+    def _on_scene_state(self,frame):
+        observer=self.live_observer
+        if observer is None:return
+        if frame['paused']:observer.suspend()
+        elif observer.hazard is None:observer.start()
 
     def _pending_scene_reset(self,frame):
         import mujoco
@@ -312,11 +319,11 @@ class RosCalibrationMotionGuard:
                     diagnostic_limits=self.manifest['diagnostic_limits'],
                     output_path=self.evidence_root/'contact-live-physics.ndjson',
                     monotonic=self.monotonic,
-                    startup_receipt_grace_s=2.5 if self.route_mode else None)
+                    startup_receipt_grace_s=1.0 if self.route_mode else None)
                 self.live_observer=LiveContactObserver(stream,
                     ros_clock=lambda:self.node.get_clock().now().nanoseconds*1e-9,
                     monotonic=self.monotonic,on_abort=self._fail,
-                    startup_receipt_grace_s=2.5 if self.route_mode else None)
+                    startup_receipt_grace_s=1.0 if self.route_mode else None)
                 self.live_adapter=RosLiveContactAdapter(self.node,self.live_observer)
         except (KeyError,TypeError,ValueError,OSError,RuntimeError):self._fail('CONTACT_RESET_SNAPSHOT_INVALID')
 

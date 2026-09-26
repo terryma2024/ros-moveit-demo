@@ -202,6 +202,17 @@ def test_live_contact_staleness_waits_while_reset_is_paused():
     assert calls == ['suspend', 'start', 'poll']
 
 
+def test_accepted_scene_pause_rearms_live_deadline_without_timer_poll():
+    from types import SimpleNamespace as NS
+    from so101_demo.adapters.act.calibration_motion import RosCalibrationMotionGuard
+    calls=[]
+    guard=NS(live_observer=NS(hazard=None,
+        suspend=lambda:calls.append('suspend'),start=lambda:calls.append('start')))
+    RosCalibrationMotionGuard._on_scene_state(guard,{'paused':True})
+    RosCalibrationMotionGuard._on_scene_state(guard,{'paused':False})
+    assert calls==['suspend','start']
+
+
 def test_motion_guard_persists_actual_path_refusal_detail(tmp_path):
     import json
     from collections import deque
