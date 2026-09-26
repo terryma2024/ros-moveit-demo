@@ -186,16 +186,13 @@ class RosCalibrationMotionGuard:
             self.path.close();raise ValueError('MOTION_MODEL_HASH_INVALID')
         try:
             self.model=self.path.model
-            self.held_cup_model=None
+            self.held_cup_attachment_model=None
             if self.held_cup_mode:
-                import mujoco
-                from .physics import model_sha256
+                from .held_cup_state import HeldCupAttachmentModel
                 # The path checker inflates collision margins in its private
                 # model. Attachment geometry must use the original scene model.
-                self.held_cup_model=mujoco.MjModel.from_xml_path(
-                    str(Path(config['model_path']).resolve()))
-                if model_sha256(self.held_cup_model)!=config['model_sha256']:
-                    raise ValueError('HELD_CUP_MODEL_HASH_INVALID')
+                self.held_cup_attachment_model=HeldCupAttachmentModel(
+                    config['model_path'],config['model_sha256'])
             known=set(self.path.names.values());known.discard(None)
             self.contact_observer=RobotContactObserver(known_geoms=known,allowed_pairs=allowed,
                 max_age_s=config['max_age_s'],max_sim_gap_s=float(self.model.opt.timestep)*1.01,monotonic=self.monotonic)
@@ -515,9 +512,8 @@ class RosCalibrationMotionGuard:
             raise ValueError('MOTION_SCENE_CUP_POSE_INVALID')
         holding_state='EMPTY';attachment=None;proof_physics_step=None
         if self.held_cup_mode and phase=='LIFT':
-            from .held_cup_state import held_cup_attachment
-            attachment=held_cup_attachment(
-                self.held_cup_model,scene,proof_step,scene_received_monotonic_s=scene_received,
+            attachment=self.held_cup_attachment_model.prove(
+                scene,proof_step,scene_received_monotonic_s=scene_received,
                 now_monotonic_s=now,max_age_s=self.manifest['max_age_s'],
                 **self.manifest['held_contact_limits'])
             holding_state='HOLDING'

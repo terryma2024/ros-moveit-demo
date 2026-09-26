@@ -114,7 +114,7 @@ def test_guard_arms_lossless_holding_before_first_lift_goal(tmp_path, monkeypatc
     calls = []
     try:
         assert guard.held_cup_mode and guard.transition_mode
-        assert model_sha256(guard.held_cup_model) == value["model_sha256"]
+        assert model_sha256(guard.held_cup_attachment_model.model) == value["model_sha256"]
         assert model_sha256(guard.model) != value["model_sha256"]
         assert guard._phase(prefix(value, 280)) == "CONTACT"
         assert guard._phase(prefix(value, 281)) == "LIFT"
@@ -155,11 +155,9 @@ def test_guard_arms_lossless_holding_before_first_lift_goal(tmp_path, monkeypatc
 
 
 def test_guard_lift_snapshot_uses_exact_physics_step_or_refuses(monkeypatch):
-    from so101_demo.adapters.act import held_cup_state
     from so101_demo.act.joints import ACT_JOINTS
 
     model = mujoco.MjModel.from_xml_path(str(SCENE))
-    attachment_model = mujoco.MjModel.from_xml_path(str(SCENE))
     data = mujoco.MjData(model)
     mujoco.mj_resetDataKeyframe(model, data, mujoco.mj_name2id(
         model, mujoco.mjtObj.mjOBJ_KEY, "task_start"))
@@ -181,13 +179,11 @@ def test_guard_lift_snapshot_uses_exact_physics_step_or_refuses(monkeypatch):
     calls = []
     recorder = NS(validated_step=lambda step, **kwargs:
         calls.append(("lookup", step, kwargs)) or {"physics_step": step})
-    monkeypatch.setattr(held_cup_state, "held_cup_attachment",
-                        lambda *args, **kwargs:
-                        calls.append(("proof", args[1]["simulation_step"],
-                                      args[2]["physics_step"], kwargs,
-                                      args[0] is attachment_model)) or
-                        [[1., 0., 0., 0.], [0., 1., 0., 0.],
-                         [0., 0., 1., 0.], [0., 0., 0., 1.]])
+    proof = NS(prove=lambda scene, step, **kwargs:
+        calls.append(("proof", scene["simulation_step"],
+                      step["physics_step"], kwargs)) or
+        [[1., 0., 0., 0.], [0., 1., 0., 0.],
+         [0., 0., 1., 0.], [0., 0., 0., 1.]])
     guard = NS(contact_mode=True, _cup_reset_verified=True,
                monotonic=lambda: 100.05, _lock=threading.RLock(),
                _joints=(positions, (0.,) * 7, 1.048, 100.),
@@ -202,7 +198,7 @@ def test_guard_lift_snapshot_uses_exact_physics_step_or_refuses(monkeypatch):
                    max_age_s=.2, stop_velocity_rad_s=.002,
                    held_contact_limits={"minimum_bilateral_force_n": .1}),
                _start_safe=lambda *args: True, model=model,
-               held_cup_model=attachment_model,
+               held_cup_attachment_model=proof,
                path=NS(cup_address=cup_address, model_sha256="a" * 64),
                held_cup_mode=True, live_observer=NS(recorder=recorder))
     result = RosCalibrationMotionGuard._snapshot(
@@ -213,7 +209,6 @@ def test_guard_lift_snapshot_uses_exact_physics_step_or_refuses(monkeypatch):
     assert result["cup_in_gripper_transform"][3] == [0., 0., 0., 1.]
     assert calls[0][0:2] == ("lookup", 77)
     assert calls[1][0:3] == ("proof", 77, 77)
-    assert calls[1][4] is True
     recorder.validated_step = lambda *args, **kwargs: (_ for _ in ()).throw(
         ValueError("HELD_CUP_STEP_UNAVAILABLE"))
     with pytest.raises(ValueError, match="HELD_CUP_STEP_UNAVAILABLE"):

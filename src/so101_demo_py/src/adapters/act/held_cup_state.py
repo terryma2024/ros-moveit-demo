@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import mujoco
 import numpy as np
 
-from so101_demo.act.contracts import fields, finite, vector
+from so101_demo.act.contracts import fields, finite, sha256, vector
 from .physics import model_sha256
 from .scene_state import SCENE_KEYS
 
@@ -33,8 +34,9 @@ def _side_force(contacts: object, *, prefix: tuple[str, ...]) -> float:
     return force
 
 
-def held_cup_attachment(
+def _held_cup_attachment(
     model: mujoco.MjModel, scene: dict, physics_step: dict, *,
+    model_digest: str,
     scene_received_monotonic_s: float, now_monotonic_s: float,
     max_age_s: float, minimum_bilateral_force_n: float,
     maximum_compression_distance_m: float,
@@ -53,7 +55,7 @@ def held_cup_attachment(
             or not 0 <= now - scene_received <= maximum_age
             or not 0 <= now - physics_received <= maximum_age):
         raise ValueError("HELD_CUP_EVIDENCE_STALE")
-    digest = model_sha256(model)
+    digest = sha256(model_digest)
     if (scene["model_sha256"] != digest
             or physics_step.get("model_sha256") != digest
             or scene["paused"] is not False
@@ -113,3 +115,45 @@ def held_cup_attachment(
                                 rel_tol=0., abs_tol=1e-6)):
         raise ValueError("HELD_CUP_ATTACHMENT_INVALID")
     return relative.tolist()
+
+
+def held_cup_attachment(
+    model: mujoco.MjModel, scene: dict, physics_step: dict, *,
+    scene_received_monotonic_s: float, now_monotonic_s: float,
+    max_age_s: float, minimum_bilateral_force_n: float,
+    maximum_compression_distance_m: float,
+) -> list[list[float]]:
+    """Verify a supplied model's content before proving one held-cup step."""
+    if not isinstance(model, mujoco.MjModel):
+        raise ValueError("HELD_CUP_MODEL_OR_STEP_INVALID")
+    return _held_cup_attachment(model, scene, physics_step,
+        model_digest=model_sha256(model),
+        scene_received_monotonic_s=scene_received_monotonic_s,
+        now_monotonic_s=now_monotonic_s,max_age_s=max_age_s,
+        minimum_bilateral_force_n=minimum_bilateral_force_n,
+        maximum_compression_distance_m=maximum_compression_distance_m)
+
+
+class HeldCupAttachmentModel:
+    """Own a pristine scene model whose identity is checked once at startup."""
+
+    def __init__(self, scene_path: str | Path, expected_model_sha256: str):
+        expected=sha256(expected_model_sha256)
+        model=mujoco.MjModel.from_xml_path(str(Path(scene_path).resolve()))
+        digest=model_sha256(model)
+        if digest!=expected:
+            raise ValueError("HELD_CUP_MODEL_HASH_INVALID")
+        self.model=model
+        self.model_sha256=digest
+
+    def prove(self, scene: dict, physics_step: dict, *,
+              scene_received_monotonic_s: float, now_monotonic_s: float,
+              max_age_s: float, minimum_bilateral_force_n: float,
+              maximum_compression_distance_m: float) -> list[list[float]]:
+        """Use the private, source-verified model for a fresh exact-step proof."""
+        return _held_cup_attachment(self.model,scene,physics_step,
+            model_digest=self.model_sha256,
+            scene_received_monotonic_s=scene_received_monotonic_s,
+            now_monotonic_s=now_monotonic_s,max_age_s=max_age_s,
+            minimum_bilateral_force_n=minimum_bilateral_force_n,
+            maximum_compression_distance_m=maximum_compression_distance_m)
