@@ -71,12 +71,16 @@ class SceneStateObserver:
 
     def recent_frames(self):
         """Return fresh bounded frames without exposing mutable history."""
+        return tuple(frame for frame, _ in self.recent_frames_with_receipts())
+
+    def recent_frames_with_receipts(self):
+        """Return fresh scene steps with the receipt of each exact frame."""
         with self._lock:
             if self.hazard:raise ValueError(self.hazard)
             if self.last is None:raise ValueError('SCENE_STATE_UNAVAILABLE')
             now=finite(self.monotonic(),nonnegative=True)
             if not 0<=now-self.received<=self.max_age:raise ValueError('SCENE_STATE_STALE')
-            return tuple(copy.deepcopy(frame) for frame,received in self._history
+            return tuple((copy.deepcopy(frame),received) for frame,received in self._history
                          if 0<=now-received<=self.max_age)
 
 

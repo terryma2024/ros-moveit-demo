@@ -191,7 +191,8 @@ def test_guard_lift_snapshot_uses_exact_physics_step_or_refuses(monkeypatch):
                contact_observer=NS(_lock=threading.RLock(),
                    last=dict(simulation_time_s=1.048), session="held-guard",
                    epoch=1, safe=lambda: True),
-               scene_observer=NS(snapshot_with_receipt=lambda: (scene, 100.)),
+               scene_observer=NS(snapshot_with_receipt=lambda: (scene, 100.),
+                   recent_frames_with_receipts=lambda: ((scene, 100.),)),
                manifest=dict(session_id="held-guard", max_skew_s=.05,
                    max_age_s=.2, stop_velocity_rad_s=.002,
                    held_contact_limits={"minimum_bilateral_force_n": .1}),
@@ -211,6 +212,33 @@ def test_guard_lift_snapshot_uses_exact_physics_step_or_refuses(monkeypatch):
     with pytest.raises(ValueError, match="HELD_CUP_STEP_UNAVAILABLE"):
         RosCalibrationMotionGuard._snapshot(
             guard, dict(reset_epoch=1, sim_time_s=1.048), start=1.1,
+            reference=positions[:6], reference_velocity=(0.,) * 6, phase="LIFT")
+
+    newer = dict(scene, simulation_step=82, simulation_time_s=1.058)
+    guard.scene_observer = NS(snapshot_with_receipt=lambda: (newer, 100.04),
+        recent_frames_with_receipts=lambda: ((scene, 100.), (newer, 100.04)))
+    def delayed_step(step, **kwargs):
+        calls.append(("lookup", step, kwargs))
+        if step == 82:
+            raise ValueError("HELD_CUP_STEP_UNAVAILABLE")
+        return {"physics_step": step}
+    recorder.validated_step = delayed_step
+    calls.clear()
+    result = RosCalibrationMotionGuard._snapshot(
+        guard, dict(reset_epoch=1, sim_time_s=1.058), start=1.11,
+        reference=positions[:6], reference_velocity=(0.,) * 6, phase="LIFT")
+    assert result["holding_proof_physics_step"] == 77
+    assert result["sim_time_s"] == 1.058
+    assert [call[:2] for call in calls if call[0] == "lookup"] == [
+        ("lookup", 82), ("lookup", 77)]
+    assert ("proof", 77, 77) in [call[:3] for call in calls]
+
+    recorder.validated_step = lambda step, **kwargs: (
+        (_ for _ in ()).throw(ValueError("HELD_CUP_STEP_STALE"))
+        if step == 82 else {"physics_step": step})
+    with pytest.raises(ValueError, match="HELD_CUP_STEP_STALE"):
+        RosCalibrationMotionGuard._snapshot(
+            guard, dict(reset_epoch=1, sim_time_s=1.058), start=1.11,
             reference=positions[:6], reference_velocity=(0.,) * 6, phase="LIFT")
 
 

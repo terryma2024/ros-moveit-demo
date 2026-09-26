@@ -26,6 +26,22 @@ def test_all_dynamic_coordinates_survive_and_caller_cannot_mutate_evidence():
     with pytest.raises(ValueError,match='SCENE_STATE_STALE'):port.snapshot()
 
 
+def test_recent_scene_receipts_preserve_exact_steps_and_freshness():
+    port,now=observer()
+    assert port.accept(frame())
+    now[0]+=.05
+    newer=dict(frame(),simulation_step=10,simulation_time_s=1.02)
+    assert port.accept(newer)
+    recent=port.recent_frames_with_receipts()
+    assert [(item['simulation_step'],receipt) for item,receipt in recent]==[
+        (5,10.),(10,10.05)]
+    recent[0][0]['qpos'][-1]=999.
+    assert port.recent_frames_with_receipts()[0][0]['qpos'][-1]==.2
+    now[0]+=.11
+    assert [item['simulation_step'] for item,_ in
+            port.recent_frames_with_receipts()]==[10]
+
+
 @pytest.mark.parametrize('changes',[
     {'model_sha256':'2'*64},{'simulation_session_id':'foreign'}, {'reset_epoch':3},
     {'qpos':[.2]*13},{'qvel':[.3]*11},{'qpos':[float('nan')]*14},
