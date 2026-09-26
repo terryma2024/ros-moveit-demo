@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 45952dff2cdc23ad1df276aee11e82b2440d39c4
+current_commit: e6527bd1edc5ea18c5cba4a2894f919add375fe9
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -20,7 +20,7 @@ open_hypotheses:
   - An owner-created readiness artifact and startup receipt can bind this observed seven-axis verdict to a Task8 case without opening the Task6 or phase gates.
   - The physical phase port can support measured Task6 TASK8_READY and Task8 live qualification.
 latest_checkpoint: CP-299
-next_experiment: EXP-306 isolated Task6 recorder live readback after CameraInfo fix
+next_experiment: EXP-307 causal atomic-history frame alignment source and installed gates
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -2440,3 +2440,13 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-305 — Task6 accepts finite ROS CameraInfo NumPy intrinsics
 
 - Last valid source EXP-305 and field probe EXP-304. Run a new isolated no-contact installed recorder with separate atomic/image executor and corrected finite CameraInfo parsing. Its result remains `RECORDED_UNQUALIFIED` until dynamic expert FOV and all Task6 front checks are measured. Preserve `CALIBRATION_REQUIRED`, `FULL_RESTART_PROOF_UNAVAILABLE`, formal 0/0/0; retain runs, archive none, delete nothing.
+
+## EXP-306 — Verify causal dual-camera Task6 capture after NumPy metadata repair
+
+- **PLANNED:** Source HEAD `e6527bd1edc5ea18c5cba4a2894f919add375fe9`, unchanged submodule `54463fce3bfa6192976e74113f5ed7152f708a3f`, installed concurrent CLI and repaired capture module SHA256 `4c52b7349f194524c9921b7368becbf7a9fbbdc1cd8c9b23e222a3ff879c1720`. New `ROS_DOMAIN_ID=215`, `GZ_PARTITION/session_id=act-30a80149-exp306`, socket `/run/user/1000/act306/a`, owned tmux `act-data-live-306` and `act-data-capture-306`, durable `experiments/exp306-current-recorder-live` plus exclusive capture sibling, ordinary `/tmp/so101-debug-act-data-66c42e4c/ros-exp306`, lifecycle `ISOLATED_STACK`. Freeze run-local model/manifest/script hashes, prove empty domain graph without leaving a daemon claimant for later tests, absent socket/output/tmux and current installed entry metadata. Launch one calibration-only, collection-ineligible no-motion stack and verify stopped broker/compiled model; perform one paused default reset and release. Start installed read-only capture while paused, acquire recovery lease after stopped reads, resume solely for bounded 12 s capture, then revoke, prove stopped, acquire a new recovery lease to pause and release before exact-PID retirement. Require ≥3 lossless hash-verified rows with same session/epoch, strictly increasing physics step, causal fresh head/wrist RGB, exact CameraInfo and seven measured joints, with no atomic gap, goal or arm/gripper motion. Any failure ends this stack without retry. `RECORDED_UNQUALIFIED` only; Task6 five-check `TASK8_READY`, moving expert FOV, Task8 campaign, W8 and formal Train/Validation/Test remain unmeasured/0/0/0. Retain everything, archive none, delete nothing.
+
+- **INVALID for current frame join, with prior defects absent:** Initial five immediate broker status reads included startup transience before all action servers settled; no reset or capture was attempted at that point. A bounded fresh recheck recorded five consecutive stopped `IDLE` and all servers, then one paused default reset `0→1` succeeded. The installed recorder ran 12 s and exited2 with zero frames, 120 rejections: 43 `TASK6_SOURCE_SKEW`, 63 freshness misses before unpause, 11 paused-world refusals, two no-atomic-yet and one stale-source. There were **no CameraInfo-invalid or atomic-sequence-gap rejections**, confirming EXP-302/305 repairs in this live stack. Current CLI always chooses the newest atomic world frame at a 10 Hz sampling tick, even when a slightly earlier fresh physics step could align to the 10 Hz images and measured joints within the unchanged 50 ms source-skew bound. This is the next source boundary to test; do not widen the bound to manufacture PASS. The recovery control revoked after capture and proved stopped, separate recovery cleanup paused and released, broker retirement used eight stopped reads and exact PID/parent/argv; final broker stop file `IDLE`/confirmed/no unknown goal, launch exited0, owned processes and tmux absent, domain215 graph empty via `ros2 node list --no-daemon`. `postflight.json`, capture rejections, reset/control/cleanup/stop and ordinary logs retained. No Task6 PASS, Task8 case, W8, formal episode or training; accepted Train/Validation/Test 0/0/0. Retain all evidence, archive none; socket/log/scratch deletion candidates only, delete nothing.
+
+## CP-306 — Strict 50 ms skew remains unmet by newest-world sampling
+
+- Last valid source EXP-305. Keep the 50 ms source skew and all epoch/session/step/atomic-hazard guards; next select the newest *compatible* physics step from the strict fresh atomic history, only while the latest frame is current and running. Test that an older compatible step can join a current image and that a paused or wrong-epoch latest frame cannot be bypassed. Then run ordinary/package gates and one new isolated readback. Preserve `CALIBRATION_REQUIRED`, `FULL_RESTART_PROOF_UNAVAILABLE`, formal 0/0/0; retain all runs, archive none, delete nothing.
