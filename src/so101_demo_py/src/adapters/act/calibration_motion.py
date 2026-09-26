@@ -258,6 +258,13 @@ class RosCalibrationMotionGuard:
             self._record.write(json.dumps(frame,allow_nan=False,separators=(',',':'))+'\n')
 
     def _fail(self,reason):
+        if reason.startswith('LIVE_CONTACT_') and self.live_observer is not None:
+            observer=self.live_observer
+            self.audit.append(dict(boundary='live_contact',reason=reason,
+                observer_age_s=observer.last_attempt_age_s,
+                stream_age_s=observer.recorder.last_receipt_age_s,
+                recorded_steps=observer.recorder.recorded_steps,
+                observer_active=observer.active,observer_suspended=observer._suspended))
         with self.driver._lock:
             if self.driver.hazard_reason is None:self.driver.hazard_reason=reason
         self.broker.ownership.revoke(reason);self.broker.tick()
@@ -305,11 +312,11 @@ class RosCalibrationMotionGuard:
                     diagnostic_limits=self.manifest['diagnostic_limits'],
                     output_path=self.evidence_root/'contact-live-physics.ndjson',
                     monotonic=self.monotonic,
-                    startup_receipt_grace_s=1.0 if self.route_mode else None)
+                    startup_receipt_grace_s=2.5 if self.route_mode else None)
                 self.live_observer=LiveContactObserver(stream,
                     ros_clock=lambda:self.node.get_clock().now().nanoseconds*1e-9,
                     monotonic=self.monotonic,on_abort=self._fail,
-                    startup_receipt_grace_s=1.0 if self.route_mode else None)
+                    startup_receipt_grace_s=2.5 if self.route_mode else None)
                 self.live_adapter=RosLiveContactAdapter(self.node,self.live_observer)
         except (KeyError,TypeError,ValueError,OSError,RuntimeError):self._fail('CONTACT_RESET_SNAPSHOT_INVALID')
 
