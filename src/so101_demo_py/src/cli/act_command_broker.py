@@ -23,8 +23,10 @@ def main(arguments=None):
     parser.add_argument('--calibration-mode',action='store_true')
     parser.add_argument('--motion-calibration-manifest',type=Path)
     parser.add_argument('--contact-diagnostic-manifest',type=Path)
-    parser.add_argument('--task6-route-manifest',type=Path)
-    parser.add_argument('--task6-contact-transition-manifest',type=Path)
+    parser.add_argument('--visible-approach-manifest',type=Path)
+    parser.add_argument('--grasp-contact-transition-manifest',type=Path)
+    parser.add_argument('--task6-route-manifest',type=Path,help=argparse.SUPPRESS)
+    parser.add_argument('--task6-contact-transition-manifest',type=Path,help=argparse.SUPPRESS)
     parser.add_argument('--held-cup-micro-lift-manifest',type=Path)
     parser.add_argument('--stop-velocity-rad-s',type=float)
     parser.add_argument('--max-age-s',type=float)
@@ -32,6 +34,12 @@ def main(arguments=None):
         parser.add_argument('--'+flag,type=float)
     from rclpy.utilities import remove_ros_args
     options=parser.parse_args(arguments if arguments is not None else remove_ros_args()[1:])
+    if ((options.visible_approach_manifest and options.task6_route_manifest)
+            or (options.grasp_contact_transition_manifest and options.task6_contact_transition_manifest)):
+        raise ValueError('DIAGNOSTIC_MANIFESTS_MUTUALLY_EXCLUSIVE')
+    options.visible_approach_manifest=(options.visible_approach_manifest or options.task6_route_manifest)
+    options.grasp_contact_transition_manifest=(options.grasp_contact_transition_manifest
+                                                or options.task6_contact_transition_manifest)
     endpoint_bytes(options.socket)
     if options.parent_pid<=0:raise ValueError('PARENT_PID_INVALID')
     os.kill(options.parent_pid,0)
@@ -56,8 +64,8 @@ def main(arguments=None):
     motion_manifest=None
     if sum(bool(path) for path in (options.motion_calibration_manifest,
                                    options.contact_diagnostic_manifest,
-                                   options.task6_route_manifest,
-                                   options.task6_contact_transition_manifest,
+                                   options.visible_approach_manifest,
+                                   options.grasp_contact_transition_manifest,
                                    options.held_cup_micro_lift_manifest))>1:
         raise ValueError('DIAGNOSTIC_MANIFESTS_MUTUALLY_EXCLUSIVE')
     if options.motion_calibration_manifest:
@@ -77,22 +85,22 @@ def main(arguments=None):
                 or diagnostic['stop_velocity_rad_s']!=speed
                 or diagnostic['max_age_s']!=age):
             raise ValueError('CONTACT_DIAGNOSTIC_CONFIG_MISMATCH')
-    if options.task6_route_manifest:
+    if options.visible_approach_manifest:
         from so101_demo.adapters.act.calibration_motion import route_motion_configuration
         if not options.calibration_mode or not all(value is not None for value in timing):
             raise ValueError('TASK6_ROUTE_DIAGNOSTIC_MODE_REQUIRED')
-        motion_manifest=json.loads(options.task6_route_manifest.read_text())
+        motion_manifest=json.loads(options.visible_approach_manifest.read_text())
         diagnostic=route_motion_configuration(motion_manifest)
         if (diagnostic['session_id']!=options.session_id
                 or diagnostic['submit_lead_s']!=options.submit_lead_s
                 or diagnostic['stop_velocity_rad_s']!=speed
                 or diagnostic['stop_max_age_s']!=age):
             raise ValueError('TASK6_ROUTE_DIAGNOSTIC_CONFIG_MISMATCH')
-    if options.task6_contact_transition_manifest:
+    if options.grasp_contact_transition_manifest:
         from so101_demo.adapters.act.calibration_motion import transition_motion_configuration
         if not options.calibration_mode or not all(value is not None for value in timing):
             raise ValueError('TASK6_CONTACT_TRANSITION_MODE_REQUIRED')
-        motion_manifest=json.loads(options.task6_contact_transition_manifest.read_text())
+        motion_manifest=json.loads(options.grasp_contact_transition_manifest.read_text())
         diagnostic=transition_motion_configuration(motion_manifest)
         if (diagnostic['session_id']!=options.session_id
                 or diagnostic['submit_lead_s']!=options.submit_lead_s
@@ -156,8 +164,8 @@ def main(arguments=None):
         paired_calibration_timing=timing if broker.prefix_executor is not None else None,
         motion_calibration_manifest=str(options.motion_calibration_manifest) if motion_guard is not None else None,
         contact_diagnostic_manifest=str(options.contact_diagnostic_manifest) if options.contact_diagnostic_manifest else None,
-        task6_route_manifest=str(options.task6_route_manifest) if options.task6_route_manifest else None,
-        task6_contact_transition_manifest=str(options.task6_contact_transition_manifest) if options.task6_contact_transition_manifest else None,
+        task6_route_manifest=str(options.visible_approach_manifest) if options.visible_approach_manifest else None,
+        task6_contact_transition_manifest=str(options.grasp_contact_transition_manifest) if options.grasp_contact_transition_manifest else None,
         held_cup_micro_lift_manifest=str(options.held_cup_micro_lift_manifest) if options.held_cup_micro_lift_manifest else None,
         motion_calibration_model_sha256=motion_manifest['model_sha256'] if motion_guard is not None else None,
         action_map={'arm':'/arm_controller/follow_joint_trajectory','gripper':'/gripper_controller/follow_joint_trajectory',
