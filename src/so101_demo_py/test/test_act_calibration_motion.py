@@ -93,7 +93,9 @@ def test_contact_diagnostic_guard_uses_single_existing_broker_and_live_physics(t
     from so101_mujoco_support.msg import SceneStateEvidence
     scene_message=SceneStateEvidence(simulation_session_id='contact-one',reset_epoch=1,
         simulation_step=0,paused=True,model_sha256=contact['model_sha256'],
-        qpos=qpos,qvel=[0.]*guard.model.nv)
+        qpos=qpos,qvel=[0.]*guard.model.nv,
+        clock_interval_begin_monotonic_ns=9_999_800_000,
+        clock_interval_end_monotonic_ns=9_999_900_000)
     guard.scene_adapter.accept_message(scene_message)
     assert guard.scene_observer.last is not None
     assert guard._cup_reset_verified is True
@@ -336,7 +338,9 @@ def test_actual_typed_epoch_stream_is_required_and_non_cup_fault_revokes_pair(sc
         qpos[guard.model.jnt_qposadr[jid]]=value
     qpos[guard.path.cup_address:guard.path.cup_address+7]=(4.,0.,1.,1.,0.,0.,0.)
     scene_message=SceneStateEvidence(simulation_session_id='s',reset_epoch=1,simulation_step=1,
-        model_sha256=m['model_sha256'],qpos=list(qpos),qvel=[0.]*guard.model.nv)
+        model_sha256=m['model_sha256'],qpos=list(qpos),qvel=[0.]*guard.model.nv,
+        clock_interval_begin_monotonic_ns=9_999_800_000,
+        clock_interval_end_monotonic_ns=9_999_900_000)
     scene_message.header.stamp.sec=1;scene_message.header.stamp.nanosec=2000000
     guard.scene_adapter.accept_message(scene_message)
     assert guard.check_prefix(p,snap)

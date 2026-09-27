@@ -72,10 +72,10 @@ bool SceneStateBuilder::configure(const mjModel * model)
 
 msg::SceneStateEvidence SceneStateBuilder::build(
   const mjModel * model, const mjData * data, const std::string & session,
-  uint64_t epoch, uint64_t step, bool paused) const
+  uint64_t epoch, uint64_t step, bool paused, int64_t clock_begin_ns) const
 {
   if (!model_ || model != model_ || !data || session.empty() ||
-    !std::isfinite(data->time) || data->time < 0.0)
+    !std::isfinite(data->time) || data->time < 0.0 || clock_begin_ns <= 0)
   {
     throw std::invalid_argument("invalid full-scene snapshot");
   }
@@ -95,6 +95,11 @@ msg::SceneStateEvidence SceneStateBuilder::build(
     !std::all_of(output.qvel.begin(), output.qvel.end(), [](double v) {return std::isfinite(v);}))
   {
     throw std::invalid_argument("non-finite full-scene state");
+  }
+  output.clock_interval_begin_monotonic_ns = clock_begin_ns;
+  output.clock_interval_end_monotonic_ns = steady_nanoseconds();
+  if (output.clock_interval_end_monotonic_ns < clock_begin_ns) {
+    throw std::invalid_argument("invalid full-scene clock interval");
   }
   return output;
 }
@@ -869,6 +874,7 @@ void SimulationEvidencePlugin::try_publish_snapshot(
   if (!realtime_publisher_->trylock()) {
     return;
   }
+  const auto clock_begin_ns = steady_nanoseconds();
   try {
     realtime_publisher_->msg_ =
       builder_.build(model, data, paused, state_, reset_generation, advance_physics_step);
@@ -876,7 +882,8 @@ void SimulationEvidencePlugin::try_publish_snapshot(
     if (realtime_scene_publisher_ && realtime_scene_publisher_->trylock()) {
       try {
         realtime_scene_publisher_->msg_ = scene_builder_.build(model, data,
-          state_.simulation_session_id, state_.reset_epoch, state_.simulation_step, paused);
+          state_.simulation_session_id, state_.reset_epoch, state_.simulation_step,
+          paused, clock_begin_ns);
         realtime_scene_publisher_->unlockAndPublish();
       } catch (...) {
         realtime_scene_publisher_->unlock();

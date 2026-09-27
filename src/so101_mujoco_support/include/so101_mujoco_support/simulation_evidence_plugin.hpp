@@ -38,7 +38,8 @@ public:
   bool configure(const mjModel * model);
   const std::string & model_sha256() const {return model_sha256_;}
   msg::SceneStateEvidence build(const mjModel * model, const mjData * data,
-    const std::string & session, uint64_t epoch, uint64_t step, bool paused) const;
+    const std::string & session, uint64_t epoch, uint64_t step, bool paused,
+    int64_t clock_begin_ns) const;
 private:
   const mjModel * model_{nullptr};
   std::string model_sha256_;

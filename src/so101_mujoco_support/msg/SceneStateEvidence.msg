@@ -6,3 +6,5 @@ bool paused
 string model_sha256
 float64[] qpos
 float64[] qvel
+int64 clock_interval_begin_monotonic_ns
+int64 clock_interval_end_monotonic_ns

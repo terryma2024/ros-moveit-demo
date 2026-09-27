@@ -1051,7 +1051,14 @@ TEST_F(AtomicEvidenceTest, FullSceneStateTracksEveryDynamicBodyAndBindsCompiledM
   ASSERT_EQ(fingerprint.size(), 64U);
   place_free_body("mast_joint", .8, .3, .4);
   data_->time = .25;
-  const auto sample = scene.build(model_.get(), data_.get(), "session-a", 3, 17, false);
+  const auto before = std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+  const auto sample = scene.build(model_.get(), data_.get(), "session-a", 3, 17, false, before);
+  const auto after = std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+  EXPECT_EQ(sample.clock_interval_begin_monotonic_ns, before);
+  EXPECT_LE(before, sample.clock_interval_end_monotonic_ns);
+  EXPECT_LE(sample.clock_interval_end_monotonic_ns, after);
   EXPECT_EQ(sample.model_sha256, fingerprint);
   EXPECT_EQ(sample.qpos.size(), static_cast<std::size_t>(model_->nq));
   EXPECT_EQ(sample.simulation_session_id, "session-a");
@@ -1059,7 +1066,7 @@ TEST_F(AtomicEvidenceTest, FullSceneStateTracksEveryDynamicBodyAndBindsCompiledM
   EXPECT_EQ(sample.simulation_step, 17U);
   EXPECT_FALSE(sample.paused);
   for (int i=0; i<model_->nq; ++i) {EXPECT_DOUBLE_EQ(sample.qpos[i], data_->qpos[i]);}
-  const auto paused = scene.build(model_.get(), data_.get(), "session-a", 4, 0, true);
+  const auto paused = scene.build(model_.get(), data_.get(), "session-a", 4, 0, true, before);
   EXPECT_TRUE(paused.paused);
   EXPECT_EQ(paused.reset_epoch, 4U);
   EXPECT_EQ(paused.simulation_step, 0U);
