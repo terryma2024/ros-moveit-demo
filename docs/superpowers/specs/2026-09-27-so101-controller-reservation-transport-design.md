@@ -26,6 +26,14 @@ broker 在收到预留 ACK 后仍可能遇到动作发送异常。原先只有 `
 
 broker 仍先登记本地票据，再取得当前目标的预留 ACK，最后发送同一 UUID 和 Goal。任何预留、发送或配对失败都关闭当前所有权 generation，取消已发目标并确认物理停止。新前缀还须重新取得其停止起点、完整 PathProof 和 commit window；控制器能接收下一个 UUID 并不授予新路径权限。当前插件没有生产 `arm` 路径，故保持默认关闭，直到两种启动顺序下的身份交付和本地停止证明通过测试。
 
+### EXP-517 每轮身份与 capability 交付
+
+两种启动顺序共用一个文件合同。standalone 先启动 simulator，broker 就绪后写文件；worker 先启动 ROS child，文件可以在 simulator 启动前写好。控制器从本轮私有目录读取，不假定 broker PID 在自身构造时已知。目录路径可以作为非秘密配置传递；32 字节 capability 只存在于 broker 内存和权限受限的文件中，不放入 argv、环境变量、ROS 参数或日志。arm 与 gripper 各有独立文件和 capability，进程身份可相同。文件就绪只能创建仍处于关闭状态的注册服务，不能调用 `ControllerGoalAdmission::arm`。
+
+交付文件使用固定二进制头，按顺序为 `SOPR`、版本 `1`、角色 `arm=1|gripper=2`、session 字节长度、一个零保留字节、网络序 `uint32` UID、网络序 `uint32` PID、网络序 `uint64` `/proc/<pid>/stat` start ticks、32 字节非零 capability，随后是 1–64 字节 ASCII session ID。session ID 只允许字母、数字、`_` 和 `-`，首字节必须是字母或数字。文件总长度必须恰为 `56 + session_length`；额外字节、截断、错误角色或 session 均拒绝。本文件不含 ownership generation；generation 只能经后续独立的停稳与所有权门控进入控制器。
+
+broker 在自己的 PID/start ticks 确定后生成每个角色的随机 capability，把完整文件写入同目录的私有临时文件，再以不覆盖目标的原子方式发布。目录和文件分别要求当前 UID 拥有、权限 `0700`/`0600`；祖先目录不得是符号链接。控制器用 `O_NOFOLLOW` 打开并用 `fstat` 核对常规文件、owner、权限、单链接与长度，读回后再次核对预期 session/角色和本轮进程身份。文件缺失或尚未发布时保持关闭；文件无效、broker 已退出或读取超时则拒绝本轮交付。注册服务关闭时撤销门控并移除自己的 socket；凭据文件在拥有它的 broker 退出时作为运行时秘密清除，只保留非秘密哈希与生命周期证据。单 UID 信任域的限制仍适用。
+
 ## 后续提交顺序
 
 broker 将先确定 UUID、目标和本地 goal ID，并在自己的所有权锁内登记票据；然后请求控制器预留并等待有界 ACK。收到 ACK 后，它才调用 `ActionClient.send_goal_async(goal, goal_uuid=...)`。预留超时、失败或发送结果不确定时，整代关闭并走取消与停止证明，不自动重试。MoveIt 老师目标需要单独的预注册代理，不得靠开放控制器 action 入口完成。
