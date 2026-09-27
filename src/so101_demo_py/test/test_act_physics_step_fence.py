@@ -48,6 +48,8 @@ class _Node:
         sample.reset_epoch = ack.reset_epoch
         sample.physics_step = step
         sample.simulation_time_s = simulation_time_s
+        sample.clock_interval_begin_monotonic_ns = ack.clock_interval_begin_monotonic_ns
+        sample.clock_interval_end_monotonic_ns = ack.clock_interval_end_monotonic_ns
         sample.model_qpos = [.1, .2]
         sample.model_qvel = [.3]
         for field, value in (sample_changes or {}).items():
@@ -80,6 +82,10 @@ def test_fence_accepts_only_matching_ack_after_confirmed_stop():
     assert proof["clock_interval_width_ns"] == (
         proof["clock_interval_end_monotonic_ns"] -
         proof["clock_interval_begin_monotonic_ns"])
+    assert (proof["marked_sample_clock_interval_begin_monotonic_ns"] ==
+            proof["clock_interval_begin_monotonic_ns"])
+    assert (proof["marked_sample_clock_interval_end_monotonic_ns"] <=
+            proof["clock_interval_end_monotonic_ns"])
     assert proof["model_qpos"] == (.1, .2)
     assert proof["model_qvel"] == (.3,)
     assert proof["command_authority"] is False
@@ -138,6 +144,10 @@ def test_fence_rejects_unbounded_or_noncausal_source_clock(interval):
     {"model_qpos": [float("nan")]},
     {"model_qvel": []},
     {"model_qvel": [float("inf")]},
+    {"clock_interval_begin_monotonic_ns": 0},
+    {"clock_interval_begin_monotonic_ns": 1},
+    {"clock_interval_end_monotonic_ns": 0},
+    {"clock_interval_end_monotonic_ns": 2**62},
     {"truncated": True},
     {"diagnostic_hazard_breached": True},
 ])
@@ -200,6 +210,29 @@ def test_failed_followup_closes_the_epoch(change):
     node.on_publish = publish
     first = fence.request_after_stop(2, stopped_wall_s, _deadline())
     with pytest.raises(ValueError, match="PHYSICS_STEP_FENCE_INVALID|PHYSICS_STEP_FENCE_TIMEOUT"):
+        fence.request_followup_after_stop(
+            2, stopped_wall_s, first["marked_physics_step"], _deadline())
+    with pytest.raises(ValueError, match="PHYSICS_STEP_FENCE_CLOSED"):
+        fence.request_followup_after_stop(
+            2, stopped_wall_s, first["marked_physics_step"], _deadline())
+
+
+def test_followup_rejects_changed_marked_sample_clock_and_closes_epoch():
+    node = _Node()
+    fence = RosPhysicsStepFence(node, "session-1")
+    fence.arm(2)
+    stopped_wall_s = time.monotonic() - .001
+
+    def publish(request):
+        if request.request_sequence == 1:
+            node.acknowledge(request)
+        else:
+            node.acknowledge(request, step=101, simulation_time_s=1.102,
+                             sample_changes={"clock_interval_end_monotonic_ns": 0})
+
+    node.on_publish = publish
+    first = fence.request_after_stop(2, stopped_wall_s, _deadline())
+    with pytest.raises(ValueError, match="PHYSICS_STEP_FENCE_INVALID"):
         fence.request_followup_after_stop(
             2, stopped_wall_s, first["marked_physics_step"], _deadline())
     with pytest.raises(ValueError, match="PHYSICS_STEP_FENCE_CLOSED"):

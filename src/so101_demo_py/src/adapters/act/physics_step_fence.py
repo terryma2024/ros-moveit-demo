@@ -87,6 +87,13 @@ class RosPhysicsStepFence:
                        ack.clock_interval_begin_monotonic_ns <=
                        ack.clock_interval_end_monotonic_ns <= received_ns <
                        self._request_deadline_ns
+                    or type(sample.clock_interval_begin_monotonic_ns) is not int
+                    or type(sample.clock_interval_end_monotonic_ns) is not int
+                    or sample.clock_interval_begin_monotonic_ns !=
+                       ack.clock_interval_begin_monotonic_ns
+                    or not sample.clock_interval_begin_monotonic_ns <=
+                       sample.clock_interval_end_monotonic_ns <=
+                       ack.clock_interval_end_monotonic_ns
                     or (self._sequence == 2 and (
                         previous is None
                         or ack.marked_physics_step <= previous["marked_physics_step"]
@@ -115,6 +122,10 @@ class RosPhysicsStepFence:
                     "clock_interval_width_ns": (
                         ack.clock_interval_end_monotonic_ns -
                         ack.clock_interval_begin_monotonic_ns),
+                    "marked_sample_clock_interval_begin_monotonic_ns":
+                        sample.clock_interval_begin_monotonic_ns,
+                    "marked_sample_clock_interval_end_monotonic_ns":
+                        sample.clock_interval_end_monotonic_ns,
                     "model_qpos": tuple(sample.model_qpos),
                     "model_qvel": tuple(sample.model_qvel),
                     "command_authority": False,
