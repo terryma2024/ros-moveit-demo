@@ -24,6 +24,17 @@ uint64_t read_u64(const uint8_t * bytes)
   }
   return value;
 }
+
+bool capability_matches(
+  const std::vector<uint8_t> & frame,
+  const ControllerReservationCapability & expected_capability)
+{
+  uint8_t difference = 0;
+  for (size_t i = 0; i < expected_capability.size(); ++i) {
+    difference |= frame[10 + i] ^ expected_capability[i];
+  }
+  return difference == 0;
+}
 }  // namespace
 
 ControllerReservationRequest parse_controller_reservation_frame(
@@ -46,11 +57,7 @@ ControllerReservationRequest parse_controller_reservation_frame(
     throw std::invalid_argument(invalid);
   }
 
-  uint8_t capability_difference = 0;
-  for (size_t i = 0; i < expected_capability.size(); ++i) {
-    capability_difference |= frame[10 + i] ^ expected_capability[i];
-  }
-  if (capability_difference != 0) {
+  if (!capability_matches(frame, expected_capability)) {
     throw std::invalid_argument(invalid);
   }
 
@@ -79,6 +86,24 @@ ControllerReservationRequest parse_controller_reservation_frame(
     throw std::invalid_argument(invalid);
   }
   return request;
+}
+
+uint64_t parse_controller_reservation_close_frame(
+  const std::vector<uint8_t> & frame,
+  const ControllerReservationCapability & expected_capability)
+{
+  constexpr auto invalid = "CONTROLLER_RESERVATION_CLOSE_FRAME_INVALID";
+  if (frame.size() != prefix_size + request_header_size ||
+    frame[0] != 0 || frame[1] != 0 || frame[2] != 0 || frame[3] != request_header_size ||
+    frame[4] != 'S' || frame[5] != 'O' || frame[6] != 'G' || frame[7] != 'R' ||
+    frame[8] != 1 || frame[9] != 2 || !capability_matches(frame, expected_capability) ||
+    std::any_of(frame.begin() + 50, frame.end(), [](uint8_t value) {return value != 0;}))
+  {
+    throw std::invalid_argument(invalid);
+  }
+  const auto generation = read_u64(frame.data() + 42);
+  if (generation == 0) {throw std::invalid_argument(invalid);}
+  return generation;
 }
 
 std::array<uint8_t, 16> encode_controller_reservation_reply(

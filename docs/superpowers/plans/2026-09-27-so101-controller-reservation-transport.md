@@ -14,7 +14,7 @@
 
 - 当前 worktree、branch 和 evidence root 不变；现有 dirty/untracked batch 不进本轮提交。
 - `SOURCE_ONLY`：不启动 ROS/MuJoCo stack，不发送 action goal，也不操作真实机械臂。
-- `arm` 保持控制器本地操作；socket 只支持 `RESERVE=1`。
+- `arm` 保持控制器本地操作；socket 支持 `RESERVE=1`。EXP-517 按规格中的安全修订增加 `CLOSE_GENERATION=2`，用于撤销已 ACK 的本代预留。
 - 请求最大 `1,048,640` 字节；ACK 是规格中的固定 16 字节，应答只在预留存储后发出。
 - 每次 pytest/CTest 均使用当前 evidence root 下唯一 NVMe scratch，验证实际 Python 的 `tempfile.gettempdir()`；保留所有 RED/GREEN 证据。
 

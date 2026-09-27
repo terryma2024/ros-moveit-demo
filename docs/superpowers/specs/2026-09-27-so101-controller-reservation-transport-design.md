@@ -8,11 +8,15 @@ ACT broker 与轨迹控制器位于不同进程。控制器现在只接受本地
 
 ## 请求与应答
 
-连接使用 Unix stream socket。请求前四字节为网络序 `uint32`，表示后续帧长；帧最长 `1,048,640` 字节。帧依次包含固定魔数 `SOGR`、版本 `1`、操作 `RESERVE=1`、32 字节 capability、网络序 `uint64` generation、16 字节原生 UUID，以及剩余的 CDR payload。空 payload、零 UUID、未知操作、额外版本、长度不符和超过上限都拒绝。应答固定为 16 字节：魔数 `SOGA`、版本 `1`、状态 `ACK=0` 或 `REJECT=1`、两个保留零字节、网络序 `uint64` generation。CDR 只作为跨进程载体；控制器反序列化为 `FollowJointTrajectory.Goal`，由 EXP-512 的字段级准入原语比较目标。原始 CDR 填充字节不参与身份。
+连接使用 Unix stream socket。请求前四字节为网络序 `uint32`，表示后续帧长；帧最长 `1,048,640` 字节。帧依次包含固定魔数 `SOGR`、版本 `1`、操作、32 字节 capability、网络序 `uint64` generation、16 字节原生 UUID，以及按操作要求附加的 CDR payload。`RESERVE=1` 必须带非零 UUID 和完整 `FollowJointTrajectory.Goal` CDR。空 payload、零 UUID、未知操作、额外版本、长度不符和超过上限都拒绝。应答固定为 16 字节：魔数 `SOGA`、版本 `1`、状态 `ACK=0` 或 `REJECT=1`、两个保留零字节、网络序 `uint64` generation。CDR 只作为跨进程载体；控制器反序列化为 `FollowJointTrajectory.Goal`，由 EXP-512 的字段级准入原语比较目标。原始 CDR 填充字节不参与身份。
 
 服务端收到完整且授权的帧后才调用 `ControllerGoalAdmission::reserve`。成功 ACK 必须在预留存储之后发出；失败不返回“已预留”。Linux peer 的 UID、PID 和进程出生标识必须与本轮已配置的 broker 身份一致；只检查 UID 不够。连接、完整读写和服务线程退出都有单调时钟期限，不能靠客户端持续发送小片段延长等待。调用方还要受剩余 commit window 限制，服务端期限不得扩展该窗口；具体时限由后续首次和尾部测量确定。异常和不完整请求关闭本代预留，不进入 action callback。capability 比较采用固定长度且不按首个不等字节提前返回。
 
 本通道不提供 `arm` 操作。控制器必须先由独立的停止与所有权门控进入对应 generation，注册请求才可能成功。EXP-516 只以测试进程预先 arm 的控制器运行；生产启动、broker 发送和老师 MoveIt 路线留给后续实验。
+
+### EXP-517 安全修订：已 ACK 预留的显式关闭
+
+broker 在收到预留 ACK 后仍可能遇到动作发送异常。原先只有 `RESERVE=1`，broker 无法确认控制器已撤销这一代的预留，因此不能把发送异常直接当作已关闭。增加 `CLOSE_GENERATION=2`：请求的帧体恰好 62 字节，UUID 为 16 个零字节，不带 CDR；capability、peer 身份和截止时间沿用预留请求。控制器只在请求的 generation 等于当前代时关闭该代，并在关闭后回 ACK。旧代关闭请求返回 REJECT，不改变新代。格式错误、身份错误和超时仍按既有规则拒绝；broker 收不到关闭 ACK 时必须保留发送结果不确定状态，并等待预留有效期届满及独立停止证明，不能开始下一代动作。
 
 ## 后续提交顺序
 

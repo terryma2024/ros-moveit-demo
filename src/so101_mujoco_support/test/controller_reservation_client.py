@@ -13,12 +13,15 @@ def start_ticks() -> int:
 
 
 def frame_for(mode: str) -> bytes:
+    capability = bytes.fromhex(sys.argv[2])
+    if mode in ("close_generation", "close_stale"):
+        body = b"SOGR\x01\x02" + capability + (5).to_bytes(8, "big") + bytes(16)
+        return len(body).to_bytes(4, "big") + body
     payload = bytes.fromhex(
         (Path(__file__).parent / "fixtures/follow_joint_trajectory_goal.cdr.hex")
         .read_text()
         .strip()
     )
-    capability = bytes.fromhex(sys.argv[2])
     if mode == "wrong_capability":
         capability = bytes([capability[0] ^ 1]) + capability[1:]
     generation = 4 if mode == "stale_generation" else 5

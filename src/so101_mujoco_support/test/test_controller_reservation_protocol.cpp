@@ -17,6 +17,7 @@ using so101_mujoco_support::ControllerReservationCapability;
 using so101_mujoco_support::ReservationReplyStatus;
 using so101_mujoco_support::encode_controller_reservation_reply;
 using so101_mujoco_support::parse_controller_reservation_frame;
+using so101_mujoco_support::parse_controller_reservation_close_frame;
 
 ControllerReservationCapability capability()
 {
@@ -126,4 +127,30 @@ TEST(ControllerReservationProtocol, RejectsMalformedOrUnauthenticatedFrames)
   invalid_cdr[3] = 66;
   EXPECT_THROW(parse_controller_reservation_frame(invalid_cdr, capability()),
     std::invalid_argument);
+}
+
+TEST(ControllerReservationProtocol, CloseFrameCarriesOnlyAnAuthenticatedGeneration)
+{
+  std::vector<uint8_t> frame{0, 0, 0, 62, 'S', 'O', 'G', 'R', 1, 2};
+  const auto key = capability();
+  frame.insert(frame.end(), key.begin(), key.end());
+  frame.insert(frame.end(), {0, 0, 0, 0, 0, 0, 0, 5});
+  frame.insert(frame.end(), 16, 0);
+  ASSERT_EQ(frame.size(), 66u);
+  EXPECT_EQ(parse_controller_reservation_close_frame(frame, key), 5u);
+  auto invalid = frame;
+  invalid[10] ^= 1;
+  EXPECT_THROW(parse_controller_reservation_close_frame(invalid, key), std::invalid_argument);
+  invalid = frame;
+  invalid[50] = 1;
+  EXPECT_THROW(parse_controller_reservation_close_frame(invalid, key), std::invalid_argument);
+  invalid = frame;
+  invalid[9] = 1;
+  EXPECT_THROW(parse_controller_reservation_close_frame(invalid, key), std::invalid_argument);
+  invalid = frame;
+  invalid[49] = 0;
+  EXPECT_THROW(parse_controller_reservation_close_frame(invalid, key), std::invalid_argument);
+  invalid = frame;
+  invalid.push_back(1);
+  EXPECT_THROW(parse_controller_reservation_close_frame(invalid, key), std::invalid_argument);
 }

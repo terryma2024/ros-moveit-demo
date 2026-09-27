@@ -179,3 +179,18 @@ TEST(ControllerGoalAdmission, ConsumedGenerationCannotBeReservedAgain)
   ASSERT_TRUE(gate.arm(6));
   EXPECT_TRUE(gate.reserve(uuid(1), goal, 6));
 }
+
+TEST(ControllerGoalAdmission, CloseGenerationDoesNotRevokeANewerGeneration)
+{
+  int64_t now = 1000;
+  ControllerGoalAdmission gate([&now]() {return now;}, 100, 1024);
+  const auto goal = expected_goal();
+  ASSERT_TRUE(gate.arm(5));
+  ASSERT_TRUE(gate.reserve(uuid(1), goal, 5));
+  EXPECT_FALSE(gate.close_generation(4));
+  EXPECT_EQ(gate.admit(uuid(1), goal, 5), Result::ALLOW);
+  ASSERT_TRUE(gate.arm(6));
+  ASSERT_TRUE(gate.reserve(uuid(1), goal, 6));
+  EXPECT_TRUE(gate.close_generation(6));
+  EXPECT_EQ(gate.admit(uuid(1), goal, 6), Result::DENY_CLOSED);
+}
