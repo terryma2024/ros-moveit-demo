@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 24b60562
+current_commit: 059a3852
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -24,6 +24,7 @@ confirmed_conclusions:
   - EXP-488 verifies source-neutral prefix and original-observation clocks through PathProof, permit and commit-window tests; the production child still has SEARCH only and no admitted prefix producer.
   - EXP-489 freezes the validated SEARCH physical and RGB readback into one versioned source hash while retaining its original seven monotonic receive times; no prefix or goal authority is issued.
   - EXP-490 confirms that one selected SEARCH source can pass through broker-private receipt consumption to one complete 701-sample MuJoCo proof offline; this synthetic hold has no route or motion authority.
+  - EXP-491 through EXP-494 establish a pinned 31-prefix exact-grid visible-approach candidate with all 701-sample checks passing; it remains noncollecting and has no live motion authority.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -31,8 +32,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-490
-next_experiment: EXP-491
+latest_checkpoint: CP-494
+next_experiment: EXP-495
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4154,7 +4155,7 @@ next_experiment: EXP-491
 
 ```yaml
 experiment_id: EXP-491
-status: PLANNED
+status: VALID
 prior_experiment: EXP-490
 hypothesis: The frozen OPEN stage endpoint of the noncollecting visible-approach profile admits a stopped 600-target, 2 ms cubic prefix under the original MuJoCo model and current dynamics/contact limits.
 prediction: A one-third OPEN displacement passes the complete 701-sample checker at 2 mm clearance, 0.25 rad/s velocity and 1.2 rad/s² acceleration; a full unsplit OPEN stage would exceed dynamics.
@@ -4187,7 +4188,7 @@ next_experiment: EXP-492
 
 ```yaml
 experiment_id: EXP-492
-status: PLANNED
+status: VALID
 prior_experiment: EXP-491
 hypothesis: Each stopped endpoint-to-endpoint microsegment in the pinned visible-approach diagnostic can be represented by a 600-target cubic 2 ms prefix while preserving its no-contact path geometry.
 prediction: All segments pass 701 samples under the exact current model, 2 mm clearance and 0.25/1.2 dynamics; any first refusal identifies the earliest segment requiring route redesign.
@@ -4220,7 +4221,7 @@ next_experiment: EXP-493
 
 ```yaml
 experiment_id: EXP-493
-status: PLANNED
+status: VALID
 prior_experiment: EXP-492
 hypothesis: Consecutive exact-grid approach segments can be grouped into fewer stopped prefixes while preserving stage boundaries, the visible-detour control points and every current physics/contact limit.
 prediction: A deterministic bounded longest-safe grouping yields fewer than 246 600-target prefixes; each selected group passes 701 samples and retained anchor endpoints remain exact.
@@ -4248,3 +4249,36 @@ next_experiment: EXP-494
 
 - Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp493-grouped-approach-screen/result.json`. Selected ranges are `(0–11), (12–23), (24–29), (30–41), (42–53), (54–65), (66–77), (78–89), (90–93), (94–105), (106–109), (110–121), (122–133), (134–145), (146–156), (157–168), (169–178), (179–180), (181–181), (182–191), (192–199), (200–201), (202–204), (205–210), (211–211), (212–216), (217–223), (224–227), (228–234), (235–240), (241–245)`.
 - The selected path can differ from the original 20 ms diagnostic geometry between retained endpoints. It needs source-verified profile construction, visual validation and physical expert qualification. There is still no permit, goal or accepted episode. Retained through EXP-493, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
+
+## EXP-494 — Source-verified approach candidate profile
+
+```yaml
+experiment_id: EXP-494
+status: VALID
+prior_experiment: EXP-493
+hypothesis: The 31 selected exact-grid prefixes can be frozen as a distinct, explicitly noncollecting candidate profile that recomputes all route sources, anchor coverage, row hashes and complete MuJoCo checks.
+prediction: Untampered candidate builds deterministically; altered source, skipped anchor, changed row hash or unsafe group refuses before any route identity is issued.
+single_variable: Add a source-verified candidate profile and its offline validator; no child/permit/goal authority.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-493 valid, task-owned stack none, dirty batch preserved]
+success_criteria: [Focused RED then GREEN for deterministic candidate and tamper refusals, full ordinary source and installed gates, no live stack or goal]
+failure_criteria: [Candidate can claim collection eligibility, unsafe group accepted, source or hash tamper accepted]
+invalid_criteria: [Test setup fails before intended boundary, wrong Python/model/overlay, live stack starts]
+provenance:
+  source_commit: 059a3852
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Focused candidate-profile RED/GREEN with unique verified NVMe TMPDIR", "Ordinary source pytest -n 8 in private IPC namespace", "Existing-overlay package build", "Installed colcon test --pytest-args test -n 8 and test-result"]
+observed: ["Focused RED reached missing candidate module at collection (scratch/exp494-red.DSXMoOjx); GREEN scratch/exp494-focused.pZhXgYav passed 3/3 in 3.41 s with candidate replay, authority/hash/anchor tamper refusals and pinned-source drift refusal", "Candidate profile SHA256 4439b255aff32c998c67b0e2b316b2b8cb618b0d00b3621b6557214105fbaefb; validator SHA256 0c2a8fd9487a92a37740a97b375baeb607158e5e3f86639ceea878408d3f648b; test SHA256 6aa1bc9a048472827f1d8d1f51cf533e544b576e24c890c9331c523e51914d99", "Ordinary source xdist8 scratch/exp494-source-full.i9dLgPka exited 0 in 49 s: 4730 collected, 4568 passed, 162 skipped, 4 pre-existing fork warnings; JUnit SHA256 e061a79c26152fdfa68046ceae4bd96fbd6234d7583fa2f2422deef2ce41610f", "Existing-overlay build scratch/exp494-demo-build.biS8b060 exited 0", "Installed xdist8 scratch/exp494-installed-full.kN2DSsE9 colcon test and test-result both exited 0 in 49 s: package 4730 collected/0 failures/162 skips; aggregate 6190 tests/0 errors/0 failures/205 skipped; package JUnit SHA256 31bfb3142937659a27bb28c9c18d4cbed328d8583d933935a60c7497fc8936b6", "Source and installed gates verified exact interpreter and fresh distinct NVMe TMPDIR; ROS_DOMAIN_ID/GZ_PARTITION NOT_ASSIGNED and no task-owned stack or goal"]
+inferred: ["The 31-row candidate profile is reproducible from pinned noncollecting source and actual MuJoCo checks, while still granting neither collection nor motion authority", "Physical selected SEARCH source, camera visibility on the new chords, fresh stopped full-state/reference proof, commit window and contact/grasp route remain outstanding"]
+conclusion: VALID source-only candidate profile and full gates; production submission remains closed.
+decision: Commit only the owned candidate profile, validator, tests and checkpoint; next independently inspect visibility/occlusion along the 31 new chords before physical route qualification.
+next_experiment: EXP-495
+```
+
+## CP-494 — Deterministic candidate profile, no motion authority
+
+- `visible_approach_candidate_v1.json` holds 31 selected segment ends and exact 600-row hashes. `build_candidate_manifest` verifies the pinned source, all stage and detour anchors, every hash, model identity and all 31 independent 701-sample path checks. The resulting manifest explicitly has `eligible_for_collection: false` and supplies no permit or goal port.
+- The focused RED/GREEN and both package-wide 8-worker gates passed at the intended boundaries. All evidence through EXP-494 is retained under the single registered root, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted. Formal accepted Train/Validation/Offline Test remains 0/0/0.
