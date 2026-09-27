@@ -45,6 +45,12 @@ class ClientProcess
 public:
   ClientProcess(const std::filesystem::path & path, const ControllerReservationCapability & key)
   {
+    std::string key_hex;
+    constexpr char digits[] = "0123456789abcdef";
+    for (const auto byte : key) {
+      key_hex += digits[byte >> 4];
+      key_hex += digits[byte & 15];
+    }
     int to_child[2];
     int from_child[2];
     if (pipe(to_child) || pipe(from_child)) {throw std::runtime_error("PIPE_FAILED");}
@@ -57,15 +63,9 @@ public:
       close(to_child[1]);
       close(from_child[0]);
       close(from_child[1]);
-      std::string key_hex;
-      constexpr char digits[] = "0123456789abcdef";
-      for (const auto byte : key) {
-        key_hex += digits[byte >> 4];
-        key_hex += digits[byte & 15];
-      }
       const auto script = std::filesystem::path(__FILE__).parent_path() /
         "controller_reservation_client.py";
-      execl("/usr/bin/python3", "python3", script.c_str(), path.c_str(), key_hex.c_str(),
+      execl("/usr/bin/python3", "python3", script.c_str(), path.c_str(),
         static_cast<char *>(nullptr));
       _exit(127);
     }
@@ -73,6 +73,12 @@ public:
     close(from_child[1]);
     input_ = to_child[1];
     output_ = from_child[0];
+    const auto key_line = key_hex + "\n";
+    if (write(input_, key_line.data(), key_line.size()) !=
+      static_cast<ssize_t>(key_line.size()))
+    {
+      throw std::runtime_error("CLIENT_CAPABILITY_DELIVERY_FAILED");
+    }
     const auto ready = read_line(output_);
     if (ready.rfind("READY ", 0) != 0) {throw std::runtime_error("CLIENT_NOT_READY");}
     const auto separator = ready.find(' ', 6);
@@ -95,6 +101,7 @@ public:
   }
 
   ControllerReservationSocket::ExpectedPeer peer() const {return peer_;}
+  pid_t pid() const {return pid_;}
 
   void start(const std::string & mode)
   {
@@ -163,7 +170,7 @@ TEST(ControllerReservationSocket, AcknowledgesOnlyStoredCrossProcessReservation)
   ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
   ASSERT_TRUE(gate.arm(5));
   ControllerReservationSocket server(path, gate, key, client.peer(),
-    std::chrono::milliseconds(100));
+    std::chrono::milliseconds(1000));
   client.start("valid");
   EXPECT_TRUE(server.serve_one());
   EXPECT_EQ(client.result(), "ACK");
@@ -224,7 +231,7 @@ TEST(ControllerReservationSocket, DuplicateReservationClosesGeneration)
   ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
   ASSERT_TRUE(gate.arm(5));
   ControllerReservationSocket server(path, gate, key, client.peer(),
-    std::chrono::milliseconds(100));
+    std::chrono::milliseconds(1000));
   client.start("valid");
   ASSERT_TRUE(server.serve_one());
   ASSERT_EQ(client.result(), "ACK");
@@ -246,6 +253,17 @@ TEST(ControllerReservationSocket, RefusesExistingPath)
   EXPECT_THROW(
     ControllerReservationSocket(path, gate, key, peer, std::chrono::milliseconds(100)),
     std::runtime_error);
+}
+
+TEST(ControllerReservationSocket, CapabilityNeverAppearsInClientCommandLine)
+{
+  const auto path = socket_path("argv-secret.sock");
+  ClientProcess client(path, capability());
+  std::ifstream command_line("/proc/" + std::to_string(client.pid()) + "/cmdline",
+    std::ios::binary);
+  const std::string arguments(
+    (std::istreambuf_iterator<char>(command_line)), std::istreambuf_iterator<char>());
+  EXPECT_EQ(arguments.find("a5a5a5a5a5a5a5a5"), std::string::npos);
 }
 
 TEST(ControllerReservationSocket, RefusesSymlinkInSocketPath)
@@ -274,7 +292,7 @@ TEST(ControllerReservationSocket, AuthenticatedCloseRevokesAnAcknowledgedReserva
   ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
   ASSERT_TRUE(gate.arm(5));
   ControllerReservationSocket server(path, gate, key, client.peer(),
-    std::chrono::milliseconds(100));
+    std::chrono::milliseconds(1000));
   client.start("valid");
   ASSERT_TRUE(server.serve_one());
   ASSERT_EQ(client.result(), "ACK");

@@ -6,6 +6,17 @@ from pathlib import Path
 import socket
 import sys
 import time
+import uuid
+
+from control_msgs.action import FollowJointTrajectory
+from rclpy.serialization import deserialize_message
+from so101_demo.adapters.act.controller_reservation_client import ControllerReservationClient
+
+
+capability = bytes.fromhex(sys.stdin.readline().strip())
+wire_client = ControllerReservationClient(
+    {"arm": sys.argv[1]}, capability=capability, timeout_s=1.0
+)
 
 
 def start_ticks() -> int:
@@ -13,9 +24,9 @@ def start_ticks() -> int:
 
 
 def frame_for(mode: str) -> bytes:
-    capability = bytes.fromhex(sys.argv[2])
+    key = capability
     if mode in ("close_generation", "close_stale"):
-        body = b"SOGR\x01\x02" + capability + (5).to_bytes(8, "big") + bytes(16)
+        body = b"SOGR\x01\x02" + key + (5).to_bytes(8, "big") + bytes(16)
         return len(body).to_bytes(4, "big") + body
     payload = bytes.fromhex(
         (Path(__file__).parent / "fixtures/follow_joint_trajectory_goal.cdr.hex")
@@ -23,11 +34,11 @@ def frame_for(mode: str) -> bytes:
         .strip()
     )
     if mode == "wrong_capability":
-        capability = bytes([capability[0] ^ 1]) + capability[1:]
+        key = bytes([key[0] ^ 1]) + key[1:]
     generation = 4 if mode == "stale_generation" else 5
     body = (
         b"SOGR\x01\x01"
-        + capability
+        + key
         + generation.to_bytes(8, "big")
         + b"\x11" * 16
         + payload
@@ -40,6 +51,20 @@ def frame_for(mode: str) -> bytes:
 
 
 def request(mode: str) -> str:
+    if mode == "valid":
+        payload = bytes.fromhex(
+            (Path(__file__).parent / "fixtures/follow_joint_trajectory_goal.cdr.hex")
+            .read_text()
+            .strip()
+        )
+        goal = deserialize_message(payload, FollowJointTrajectory.Goal)
+        native_uuid = str(uuid.UUID(bytes=b"\x11" * 16))
+        accepted = wire_client.reserve((5, 0, "act", "session", "attempt"),
+                                       "arm", goal, native_uuid)
+        return "ACK" if accepted else "REJECT"
+    if mode == "close_generation":
+        wire_client.close_generation(5)
+        return "ACK"
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
         conn.settimeout(2.0)
         conn.connect(sys.argv[1])
@@ -73,5 +98,5 @@ for line in sys.stdin:
         break
     try:
         print(request(mode), flush=True)
-    except (OSError, ValueError):
+    except (OSError, ValueError, RuntimeError):
         print("EOF", flush=True)
