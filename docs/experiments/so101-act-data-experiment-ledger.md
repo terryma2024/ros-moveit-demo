@@ -25,7 +25,7 @@ open_hypotheses:
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; this remains unimplemented and unverified.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
 latest_checkpoint: CP-469
-next_experiment: EXP-474
+next_experiment: EXP-475
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -3804,3 +3804,11 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-473 — Goal matching exists; submission window remains open
 
 - Source HEAD before this checkpoint `fa0b07b5`; current branch/worktree and one evidence root unchanged, pre-existing dirty production batch preserved. The live broker still uses the legacy permit/checker/exact-goals chain, and the proof has no source-authorized APPROACH production entry. Next EXP-474 is a fail-closed adapter integration RED for the proof-owned goal pair and commit-window timing/acceptance fences, without stack or goal. No source/full package or installed gate, simulation dynamic qualification, hardware test or data collection has been claimed. Retained all runs including EXP-473, archived none; scratch/runtime/generated caches are deletion candidates, nothing deleted. Formal accepted Train/Validation/Offline Test 0/0/0.
+
+## EXP-474 — Strict commit-window equations and full sample count
+
+- **VALID source-only boundary contract, adapter integration pending:** RED `scratch/exp474-window-red.d5Mu7fNH` failed 7/7 at absent `require_commit_window`; GREEN `scratch/exp474-window-green.DSyJWy7w` passed 44/44 across proof, permit and legacy permit suites. The validator requires policy receipt ≤ proof start ≤ proof completion ≤ fresh state readback ≤ final acceptance, then enforces strict state/policy age, common-start and first-target inequalities with explicit positive bounds, jitter, clock error and continuity. The policy age therefore includes the reported proof duration. A separate RED `scratch/exp474-samples-red.HYVFm9g0` proved a forged 700-sample `SAFE` result could get a permit; GREEN `scratch/exp474-samples-green.Agl6L846` passed 45/45 after fixing proof-mode permit admission to exactly 701 samples. Each run used a unique previously nonexistent verified `/data` TMPDIR/TMP/TEMP, exact task Python/source import, JUnit and elapsed/exit readback. `path_proof.py` SHA256 `d4e235fcc3a4c9f3d3c264b95ba04402d74b92481fa594f1886482f61c246793`; `permits.py` SHA256 `a66867c73ccea8716338479f4040854aeb3b2417d2d86dce8c43a41a281ae9fc`; test SHA256 `648f2f69a7a1a1eb470466548d8b658d7ecffd1c004d71532d0f379003ffd891`. This only checks supplied clock evidence. It does not provide an atomic dual-clock sample, prove continuity, route a proof through the live broker or send/accept goals. Retain all runs; archive none, scratch deletion candidates only, nothing deleted; formal accepted 0/0/0.
+
+## CP-474 — Source contracts complete enough for a guarded integration test
+
+- Source HEAD before this checkpoint `ba87cdbe`; branch/worktree and sole evidence root unchanged, pre-existing dirty production batch preserved. The real `BrokerPairedExecution` and `RosCalibrationMotionGuard` still use the old three-check chain and their physical snapshot lacks full `model_qvel`, policy/profile/checker fingerprints and an atomic wall/sim clock bound. No proof mode is enabled at the production entry. Next EXP-475 must first prove an actual adapter/broker RED at these missing ports and keep goal dispatch disabled until complete source authority, physical/clock binding and ordinary installed gates exist. No stack, goal, real robot, new performance experiment or formal data in this checkpoint. Retained all evidence including EXP-474, archived none; scratch/runtime/generated caches only deletion candidates, nothing deleted. Accepted Train/Validation/Offline Test 0/0/0.

@@ -66,7 +66,7 @@ class PermitAuthority:
         else:
             proof=self.proof_port(checked,snapshot,generation)
             if (not isinstance(proof,PathProof) or proof.status!='SAFE'
-                    or proof.sample_count<2
+                    or proof.sample_count!=701
                     or proof.prefix_sha256!=prefix_sha256(checked)
                     or not self._proof_matches_current(proof,identity,generation)):
                 raise PermissionError('PATH_REJECTED')
