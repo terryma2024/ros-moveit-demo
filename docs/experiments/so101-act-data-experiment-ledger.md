@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 53767e36
+current_commit: b5ca00f8
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -38,6 +38,7 @@ confirmed_conclusions:
   - EXP-505 verifies a source-only three-controller 51-frame reference contract with original joint order, 2 ms stamps and fresh receipts; it explicitly withholds owner/goal and command authority.
   - EXP-506 retains bounded original controller message fields at the broker callback and clears history across reset epochs; this is a callback-scoped source, not a native controller epoch or owner/goal event proof.
   - EXP-507 confirms the remaining action ingress design gap: stock JTC action callbacks remain open, broker tickets register after asynchronous send, and MoveIt teacher execution has downstream controller goals with UUIDs unknown before dispatch.
+  - EXP-508 records ordered local ownership, broker and driver goal events with bounded history and gap/clock rejection; this observation does not close the controller action ingress.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -45,8 +46,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-507
-next_experiment: EXP-508
+latest_checkpoint: CP-508
+next_experiment: EXP-509
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4724,3 +4725,38 @@ next_experiment: EXP-508
 
 - Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp507-action-ingress-audit/audit.txt`. The [official Jazzy controller source](https://raw.githubusercontent.com/ros-controls/ros2_controllers/jazzy/joint_trajectory_controller/src/joint_trajectory_controller.cpp) and installed header support the action callback finding. This audit adds no controller policy or motion test.
 - EXP-500, EXP-505 and EXP-506 provide physical, reference and original callback data contracts, but no combined production PathProof. The broker goal/ownership timeline and controller-side action admission remain absent; no approach goal or formal episode may start. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-507, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
+
+## EXP-508 — Ordered control-event history without admission authority
+
+```yaml
+experiment_id: EXP-508
+status: VALID
+prior_experiment: EXP-507
+hypothesis: A bounded, sequence-checked local timeline can preserve the original broker ownership and driver goal callbacks in one monotonic order, while refusing to certify an interval after loss or overflow.
+prediction: A source-only regression will reject a missing sequence and clock regression, distinguish submit enqueue from action acceptance, and retain revoke/stop transitions without copying lease tokens or granting command authority.
+single_variable: Add a read-only control-event timeline to ownership, broker and driver event boundaries.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-507 valid, no task-owned stack or goal, pre-existing dirty batch preserved]
+success_criteria: [Focused RED/GREEN, ordinary source and installed package gates, ordered immutable records with gap/clock rejection, no action-admission claim]
+failure_criteria: [A lost or reordered callback is accepted as complete history, or instrumentation changes authorization/dispatch semantics]
+invalid_criteria: [ROS/MuJoCo stack or goal started, test scratch outside registered NVMe root, pre-existing dirty code mixed into commit]
+provenance:
+  source_commit: 273af0f6
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Focused timeline, ownership, broker and driver RED/GREEN with separately verified NVMe scratch", "Ordinary source pytest -n 8; first full gate exposed late ownership binding failure, focused correction passed, then same full gate passed", "Existing-overlay so101_demo_py build and installed colcon test --pytest-args test -n 8", "Three-way stage of only new ros_broker.py hunks; readback of pre-existing unstaged diff"]
+observed: ["Focused new/broker set passed 44; first full source gate reached tests and failed 4 existing owner-before-broker fixtures, then focused compatibility set passed 19", "Corrected full source gate collected 4755: 4593 passed, 162 skipped, 0 failed with eight xdist workers in 91 s; installed aggregate 6218 tests, 0 errors, 0 failures, 205 skipped in 44 s", "ControlEventTimeline keeps frozen sequence, original monotonic nanoseconds and a bounded 4096-event ring; an evicted cursor, clock regression or future cursor cannot certify history", "Ownership acquire/revoke/release/stop transitions, broker submit begin/return, driver send/response/result/cancel/status/stop baseline events share one sequence; a lease acquired before binding is labeled owner_history_late_bind", "Native goal UUID mismatch is logged even on its early-return hazard path; action status snapshots include controller kind", "Only new ros_broker.py hunks were committed; the original 58-addition/3-deletion pre-existing diff remains unstaged; no stack or goal", "Result artifact SHA256 82597c6290d86c7ea3f53f8767ced2dfea00d809e4fc723f4b24cc7707fd891f"]
+inferred: ["This is a local callback history, not controller admission. A transient external action unseen by ROS status is still possible, and teacher MoveIt goals cannot be treated as ACT broker goals", "The owner-before-broker case preserves behavior but its earlier generation history cannot be used as a continuous proof interval"]
+conclusion: VALID source-only ordered local event history, explicitly nonauthoritative.
+evidence: [/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp508-control-event-timeline/result.json, /data/work/so101-evidence/act-data/20260924-fbc25063-resume/scratch/exp508-source-full-green.Fcr6QkiC, /data/work/so101-evidence/act-data/20260924-fbc25063-resume/scratch/exp508-installed-full.Jbk5PJyt]
+decision: Design and verify controller-native action admission while preserving teacher/MoveIt mode; keep PathProof and goals closed.
+next_experiment: EXP-509
+```
+
+## CP-508 — Local event ordering passes; external action still unfenced
+
+- Source commit `b5ca00f8`; installed overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`; exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`; `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`. No task-owned stack or goal. The EXP-508 [result artifact](/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp508-control-event-timeline/result.json) binds the RED/GREEN, first failed and corrected full gates, scratch and source hashes.
+- The new timeline cannot authorize a historical bridge, PathProof, permit or exact goals. Native JTC action callbacks still accept external clients, and MoveIt teacher execution has downstream goals that current broker code does not pre-register. EXP-509 must separate teacher and ACT admission semantics at the controller boundary before any live approach motion.
+- Worktree and branch unchanged; all pre-existing dirty/untracked files retained. The pre-existing `ros_broker.py` diff remains 58 additions/3 deletions unstaged after isolating the EXP-508 commit. Retained all EXP-508 and prior evidence; archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted. Formal accepted Train/Validation/Offline Test 0/0/0.
