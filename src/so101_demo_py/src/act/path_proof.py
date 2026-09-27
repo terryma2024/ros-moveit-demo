@@ -1,7 +1,7 @@
 """Immutable relative path input for a later broker-owned path proof."""
 
 import copy
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, replace
 import hashlib
 import json
 import time
@@ -11,6 +11,7 @@ from typing import Mapping
 from .contracts import finite, integer, sha256, validate_action_prefix, vector
 from .execution import prefix_sha256, split_positions
 from .joints import ARM_JOINTS
+from .prefix_source import PrefixSourceReceipt, SOURCE_KEYS, SOURCE_KINDS
 
 
 def _nanoseconds(value):
@@ -22,8 +23,8 @@ class RelativePathRequest:
     session_id: str
     attempt_id: str
     sequence: int
-    policy_observation_time_s: float
-    policy_received_wall_s: float
+    source_observation_time_s: float
+    prefix_issued_wall_s: float
     source_prefix_sha256: str
     source_start_ns: int
     source_bridge_ns: int
@@ -33,6 +34,13 @@ class RelativePathRequest:
     positions: tuple[tuple[float, ...], ...]
     first_target_delay_s: float | None
     target_interval_s: float | None
+    source_receipt: PrefixSourceReceipt | None = None
+
+    @property
+    def oldest_source_wall_s(self):
+        if self.source_receipt is None:
+            raise ValueError('PATH_SOURCE_RECEIPT_REQUIRED')
+        return min(value for _, value in self.source_receipt.source_received_wall_s)
 
     def matches_source(self, prefix):
         """Check every retained source field before a proof gains authority."""
@@ -50,7 +58,7 @@ class RelativePathRequest:
                 self.session_id == checked['session_id']
                 and self.attempt_id == checked['attempt_id']
                 and self.sequence == checked['sequence']
-                and self.policy_observation_time_s == checked['observation_time_s']
+                and self.source_observation_time_s == checked['observation_time_s']
                 and self.source_prefix_sha256 == prefix_sha256(checked)
                 and self.positions == checked['positions']
                 and self.first_target_delay_s == checked.get('first_target_delay_s')
@@ -60,22 +68,51 @@ class RelativePathRequest:
                 and self.target_offsets_ns == tuple(value - start
                                                     for value in targets)
                 and bridge <= observation < start < targets[0]
-                and finite(self.policy_received_wall_s, nonnegative=True)
-                    == self.policy_received_wall_s
+                and finite(self.prefix_issued_wall_s, nonnegative=True)
+                    == self.prefix_issued_wall_s
+                and (self.source_receipt is None or (
+                    self.source_receipt.prefix_sha256 == self.source_prefix_sha256
+                    and self.source_receipt.sequence == self.sequence
+                    and self.source_receipt.owner_ticket[3:] ==
+                        (self.session_id, self.attempt_id)
+                    and self.source_receipt.prefix_issued_wall_s ==
+                        self.prefix_issued_wall_s))
             )
         except (KeyError, TypeError, ValueError):
             return False
 
-    def require_policy_freshness(self, *, now_wall_s, max_age_s, jitter_s):
-        age = finite(now_wall_s, nonnegative=True) - self.policy_received_wall_s
+    def require_prefix_freshness(self, *, now_wall_s, max_age_s, jitter_s):
+        age = finite(now_wall_s, nonnegative=True) - self.prefix_issued_wall_s
         limit = finite(max_age_s)
         jitter = finite(jitter_s, nonnegative=True)
         if limit <= 0 or not 0 <= age or not age + jitter < limit:
-            raise ValueError('POLICY_OBSERVATION_STALE')
+            raise ValueError('PREFIX_SOURCE_STALE')
+
+    def require_source_freshness(self, *, now_wall_s,
+                                 max_observation_age_s, max_prefix_age_s,
+                                 jitter_s):
+        receipt = self.source_receipt
+        if receipt is None:
+            raise ValueError('PATH_SOURCE_RECEIPT_REQUIRED')
+        now = finite(now_wall_s, nonnegative=True)
+        observation_limit = finite(max_observation_age_s)
+        prefix_limit = finite(max_prefix_age_s)
+        jitter = finite(jitter_s, nonnegative=True)
+        received = receipt.source_received_wall_s
+        if (observation_limit <= 0 or prefix_limit <= 0
+                or tuple(key for key, _ in received) != SOURCE_KEYS
+                or any(finite(value, nonnegative=True) > receipt.prefix_issued_wall_s
+                       for _, value in received)
+                or not receipt.prefix_issued_wall_s <= now):
+            raise ValueError('PATH_SOURCE_RECEIPT_INVALID')
+        if not now - min(value for _, value in received) + jitter < observation_limit:
+            raise ValueError('PREFIX_OBSERVATION_STALE')
+        if not now - receipt.prefix_issued_wall_s + jitter < prefix_limit:
+            raise ValueError('PREFIX_SOURCE_STALE')
 
     @classmethod
     def from_prefix(cls, prefix, *, bridge_time_s, start_time_s,
-                    policy_received_wall_s):
+                    prefix_issued_wall_s):
         checked = validate_action_prefix(prefix)
         observation_ns = _nanoseconds(checked['observation_time_s'])
         bridge_ns = _nanoseconds(bridge_time_s)
@@ -86,8 +123,8 @@ class RelativePathRequest:
         return cls(
             session_id=checked['session_id'], attempt_id=checked['attempt_id'],
             sequence=checked['sequence'],
-            policy_observation_time_s=checked['observation_time_s'],
-            policy_received_wall_s=finite(policy_received_wall_s, nonnegative=True),
+            source_observation_time_s=checked['observation_time_s'],
+            prefix_issued_wall_s=finite(prefix_issued_wall_s, nonnegative=True),
             source_prefix_sha256=prefix_sha256(checked),
             source_start_ns=start_ns, source_bridge_ns=bridge_ns,
             observation_offset_ns=observation_ns - start_ns,
@@ -97,6 +134,42 @@ class RelativePathRequest:
             first_target_delay_s=checked.get('first_target_delay_s'),
             target_interval_s=checked.get('target_interval_s'),
         )
+
+    @classmethod
+    def from_source_receipt(cls, prefix, *, receipt, bridge_time_s,
+                            start_time_s):
+        checked = validate_action_prefix(prefix)
+        if (not isinstance(receipt, PrefixSourceReceipt)
+                or receipt.source_kind not in SOURCE_KINDS
+                or receipt.prefix_sha256 != prefix_sha256(checked)
+                or receipt.sequence != checked['sequence']
+                or not isinstance(receipt.owner_ticket, tuple)
+                or len(receipt.owner_ticket) != 5
+                or receipt.owner_ticket[2:] != (
+                    'act', checked['session_id'], checked['attempt_id'])
+                or tuple(key for key, _ in receipt.source_received_wall_s)
+                   != SOURCE_KEYS
+                or receipt.command_authority is not False):
+            raise ValueError('PATH_SOURCE_RECEIPT_INVALID')
+        try:
+            sha256(receipt.source_artifact_sha256)
+            sha256(receipt.contact_policy_fingerprint)
+            sha256(receipt.observation_sha256)
+            integer(receipt.reset_epoch, minimum=1)
+            integer(receipt.physics_step, minimum=1)
+            issue_time = finite(receipt.prefix_issued_wall_s, nonnegative=True)
+            times = tuple(finite(value, nonnegative=True)
+                          for _, value in receipt.source_received_wall_s)
+            if issue_time < max(times):
+                raise ValueError('source order')
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError('PATH_SOURCE_RECEIPT_INVALID') from error
+        request = cls.from_prefix(
+            checked, bridge_time_s=bridge_time_s,
+            start_time_s=start_time_s,
+            prefix_issued_wall_s=issue_time,
+        )
+        return replace(request, source_receipt=receipt)
 
     def checker_inputs(self, snapshot):
         if (_nanoseconds(snapshot['controller_start_time_s']) != self.source_start_ns
@@ -133,11 +206,10 @@ class RelativePathRequest:
         bridge_ns = _nanoseconds(bridge_time_s)
         if bridge_ns - start_ns != self.bridge_offset_ns:
             raise ValueError('BRIDGE_INTERVAL_CHANGED')
-        return {
+        materialized = {
             'session_id': self.session_id, 'attempt_id': self.attempt_id,
             'sequence': self.sequence,
-            'policy_observation_time_s': self.policy_observation_time_s,
-            'policy_received_wall_s': self.policy_received_wall_s,
+            'source_observation_time_s': self.source_observation_time_s,
             'source_prefix_sha256': self.source_prefix_sha256,
             'bridge_time_s': bridge_ns / 1_000_000_000,
             'start_time_s': start_ns / 1_000_000_000,
@@ -145,6 +217,11 @@ class RelativePathRequest:
                                     for offset in self.target_offsets_ns),
             'positions': self.positions,
         }
+        materialized['prefix_issued_wall_s'] = self.prefix_issued_wall_s
+        if self.source_receipt is not None:
+            materialized['source_received_wall_s'] = (
+                self.source_receipt.source_received_wall_s)
+        return materialized
 
 
 def _canonical_bytes(value):
@@ -249,6 +326,17 @@ class PathProver:
         contact = sha256(contact_scope_sha256)
         checker_hash = sha256(checker_sha256)
         model_hash = sha256(self.checker.model_sha256)
+        receipt = request.source_receipt
+        if receipt is not None:
+            received = receipt.source_received_wall_s
+            if (receipt.owner_ticket != ticket or receipt.reset_epoch != epoch
+                    or receipt.contact_policy_fingerprint != policy
+                    or receipt.prefix_sha256 != request.source_prefix_sha256
+                    or receipt.sequence != request.sequence
+                    or tuple(key for key, _ in received) != SOURCE_KEYS
+                    or not max(value for _, value in received)
+                        <= receipt.prefix_issued_wall_s <= started):
+                raise ValueError('PATH_PROOF_SOURCE_INVALID')
         if snapshot['model_sha256'] != model_hash:
             raise ValueError('PATH_PROOF_MODEL_INVALID')
         nq, nv = self.checker.model.nq, self.checker.model.nv
@@ -257,6 +345,8 @@ class PathProver:
         snapshot_bytes = _canonical_bytes(snapshot)
         input_bytes = _canonical_bytes({
             'version': 1, 'source_prefix_sha256': request.source_prefix_sha256,
+            'source_receipt': None if request.source_receipt is None
+                else asdict(request.source_receipt),
             'relative_prefix': relative_prefix,
             'snapshot': snapshot,
             'ticket': ticket, 'reset_epoch': epoch,
@@ -341,10 +431,11 @@ def require_proven_goals(proof, goals, *, bridge_time_s,
 
 
 def require_commit_window(proof, *, state_received_wall_s, accepted_wall_s,
-                          accepted_sim_s, start_sim_s, max_policy_age_s,
-                          max_state_age_s, observation_jitter_s,
+                          accepted_sim_s, start_sim_s, max_state_age_s,
+                          observation_jitter_s,
                           start_jitter_s, first_target_jitter_s,
-                          clock_error_s, clock_continuous):
+                          clock_error_s, clock_continuous,
+                          max_prefix_age_s=None, max_observation_age_s=None):
     """Apply both strict freshness and simulation-time acceptance bounds."""
     try:
         if (not isinstance(proof, PathProof) or proof.status != 'SAFE'
@@ -354,28 +445,52 @@ def require_commit_window(proof, *, state_received_wall_s, accepted_wall_s,
         accepted_wall = finite(accepted_wall_s, nonnegative=True)
         accepted_sim = finite(accepted_sim_s, nonnegative=True)
         start_sim = finite(start_sim_s, nonnegative=True)
-        max_policy = finite(max_policy_age_s)
         max_state = finite(max_state_age_s)
         observation_jitter = finite(observation_jitter_s, nonnegative=True)
         start_jitter = finite(start_jitter_s, nonnegative=True)
         first_jitter = finite(first_target_jitter_s, nonnegative=True)
         clock_error = finite(clock_error_s, nonnegative=True)
-        if (max_policy <= 0 or max_state <= 0
-                or not proof.relative_request.policy_received_wall_s
-                <= proof.started_wall_s <= proof.completed_wall_s
-                <= state_wall <= accepted_wall):
+        request = proof.relative_request
+        receipt = request.source_receipt
+        if max_state <= 0 or not proof.started_wall_s <= proof.completed_wall_s \
+                <= state_wall <= accepted_wall:
             raise ValueError('wall order')
         state_age = accepted_wall - state_wall
-        policy_age = accepted_wall - proof.relative_request.policy_received_wall_s
+        if receipt is None:
+            max_prefix = finite(max_prefix_age_s)
+            if (max_prefix <= 0 or max_observation_age_s is not None
+                    or not request.prefix_issued_wall_s <= proof.started_wall_s):
+                raise ValueError('prefix clock')
+            prefix_age = accepted_wall - request.prefix_issued_wall_s
+            source_ages = dict(prefix_age_s=prefix_age)
+            source_fresh = prefix_age + observation_jitter + clock_error < max_prefix
+        else:
+            max_observation = finite(max_observation_age_s)
+            max_prefix = finite(max_prefix_age_s)
+            received = receipt.source_received_wall_s
+            if (max_observation <= 0
+                    or max_prefix <= 0
+                    or tuple(key for key, _ in received) != SOURCE_KEYS
+                    or not max(value for _, value in received)
+                        <= receipt.prefix_issued_wall_s <= proof.started_wall_s):
+                raise ValueError('source clocks')
+            observation_age = accepted_wall - min(value for _, value in received)
+            prefix_age = accepted_wall - receipt.prefix_issued_wall_s
+            source_ages = dict(observation_age_s=observation_age,
+                               prefix_age_s=prefix_age)
+            source_fresh = (observation_age + observation_jitter + clock_error
+                            < max_observation
+                            and prefix_age + observation_jitter + clock_error
+                            < max_prefix)
         first_target = (start_sim +
                         proof.relative_request.target_offsets_ns[0]
                         / 1_000_000_000)
         if (not state_age + observation_jitter + clock_error < max_state
-                or not policy_age + observation_jitter + clock_error < max_policy
+                or not source_fresh
                 or not accepted_sim + start_jitter + clock_error < start_sim
                 or not accepted_sim + first_jitter + clock_error < first_target):
             raise ValueError('deadline')
-        return dict(policy_age_s=policy_age, state_age_s=state_age,
+        return dict(**source_ages, state_age_s=state_age,
                     commit_latency_s=state_age, first_target_sim_s=first_target,
                     clock_error_s=clock_error)
     except (KeyError, TypeError, ValueError) as error:

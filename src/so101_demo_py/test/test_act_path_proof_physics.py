@@ -27,7 +27,7 @@ def test_time_translation_preserves_all_701_safe_samples(scene):
 
     request = RelativePathRequest.from_prefix(
         prefix, bridge_time_s=.9, start_time_s=1.05,
-        policy_received_wall_s=10.,
+        prefix_issued_wall_s=10.,
     )
     shifted_prefix, shifted_snapshot = request.checker_inputs(snapshot)
     assert port.check_path(shifted_prefix, shifted_snapshot) is True
@@ -56,7 +56,7 @@ def test_time_translation_preserves_first_forbidden_contact(scene):
 
     request = RelativePathRequest.from_prefix(
         prefix, bridge_time_s=.9, start_time_s=1.05,
-        policy_received_wall_s=10.,
+        prefix_issued_wall_s=10.,
     )
     shifted_prefix, shifted_snapshot = request.checker_inputs(snapshot)
     assert port.check_path(shifted_prefix, shifted_snapshot) is False
@@ -86,7 +86,7 @@ def test_full_proof_binds_qvel_and_checks_all_701_once(scene, monkeypatch):
     snapshot['controller_bridge']['time_s'] = .9
     request = RelativePathRequest.from_prefix(
         prefix, bridge_time_s=.9, start_time_s=1.05,
-        policy_received_wall_s=10.,
+        prefix_issued_wall_s=10.,
     )
     checks = [0]
     clock = [10.]
@@ -139,7 +139,7 @@ def test_first_unsafe_sample_is_a_read_only_result(scene):
     snapshot['controller_bridge']['time_s'] = .9
     request = RelativePathRequest.from_prefix(
         prefix, bridge_time_s=.9, start_time_s=1.05,
-        policy_received_wall_s=10.,
+        prefix_issued_wall_s=10.,
     )
     proof = PathProver(port, monotonic=lambda: 10.).prove(
         request, snapshot, ticket=(7, 'lease', 'act', 's', 'a'),
@@ -180,7 +180,7 @@ def test_production_worker_can_return_a_full_relative_proof(scene):
         snapshot['controller_bridge']['time_s'] = .9
         request = RelativePathRequest.from_prefix(
             prefix, bridge_time_s=.9, start_time_s=1.05,
-            policy_received_wall_s=10.,
+            prefix_issued_wall_s=10.,
         )
         proof = PathProver(process).prove(
             request, snapshot, ticket=(7, 'lease', 'act', 's', 'a'),

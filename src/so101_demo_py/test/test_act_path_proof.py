@@ -14,12 +14,12 @@ def test_delayed_goals_keep_policy_source_and_bridge_interval():
     }
     request = RelativePathRequest.from_prefix(
         prefix, bridge_time_s=4.0, start_time_s=4.05,
-        policy_received_wall_s=10.0,
+        prefix_issued_wall_s=10.0,
     )
 
     goal = request.materialize(start_time_s=6.05, bridge_time_s=6.0)
-    assert goal["policy_observation_time_s"] == 4.0
-    assert goal["policy_received_wall_s"] == 10.0
+    assert goal["source_observation_time_s"] == 4.0
+    assert goal["prefix_issued_wall_s"] == 10.0
     assert goal["target_times_s"] == pytest.approx((6.102, 6.104))
     assert goal["positions"] == prefix["positions"]
 
@@ -37,11 +37,11 @@ def test_fresh_physical_readback_does_not_renew_policy_observation():
     }
     request = RelativePathRequest.from_prefix(
         prefix, bridge_time_s=4.0, start_time_s=4.05,
-        policy_received_wall_s=10.0,
+        prefix_issued_wall_s=10.0,
     )
 
-    request.require_policy_freshness(now_wall_s=10.18, max_age_s=.2,
+    request.require_prefix_freshness(now_wall_s=10.18, max_age_s=.2,
                                      jitter_s=.01)
-    with pytest.raises(ValueError, match="POLICY_OBSERVATION_STALE"):
-        request.require_policy_freshness(now_wall_s=10.20, max_age_s=.2,
+    with pytest.raises(ValueError, match="PREFIX_SOURCE_STALE"):
+        request.require_prefix_freshness(now_wall_s=10.20, max_age_s=.2,
                                          jitter_s=.01)

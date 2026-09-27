@@ -7,11 +7,13 @@ import pytest
 
 from so101_demo.act.path_proof import PathProver, RelativePathRequest
 from so101_demo.act.permits import PermitAuthority
+from so101_demo.act.prefix_source import PrefixSourceReceipt, SOURCE_KEYS
+from so101_demo.act.execution import prefix_sha256
 
 from test_act_physics import checker, inputs, scene
 
 
-def proof_authority(scene):
+def proof_authority(scene, *, source_backed=False):
     path = checker(scene, {'CONTACT': {('arm', 'obstacle')}})
     prefix, physical = inputs(path)
     held = physical['controller_start_positions']
@@ -24,19 +26,44 @@ def proof_authority(scene):
                     controller_start_time_s=1.05,
                     model_qvel=(0.,) * path.model.nv)
     physical['controller_bridge']['time_s'] = .9
-    request = RelativePathRequest.from_prefix(
-        prefix, bridge_time_s=.9, start_time_s=1.05,
-        policy_received_wall_s=10.,
-    )
     ticket = (7, 'lease', 'act', 's', 'a')
+    receipt = None
+    if source_backed:
+        receipt = PrefixSourceReceipt(
+            source_kind='EXPERT_ROUTE', source_artifact_sha256='5' * 64,
+            contact_policy_fingerprint='1' * 64,
+            observation_sha256='6' * 64,
+            source_received_wall_s=tuple((key, 9.8 + index * .01)
+                                         for index, key in enumerate(SOURCE_KEYS)),
+            source_phase='SEARCH', physics_step=21, reset_epoch=3,
+            owner_ticket=ticket, prefix_sha256=prefix_sha256(prefix),
+            sequence=prefix['sequence'], prefix_issued_wall_s=9.95,
+        )
+        request = RelativePathRequest.from_source_receipt(
+            prefix, receipt=receipt, bridge_time_s=.9, start_time_s=1.05,
+        )
+    else:
+        request = RelativePathRequest.from_prefix(
+            prefix, bridge_time_s=.9, start_time_s=1.05,
+            prefix_issued_wall_s=10.,
+        )
     fingerprints = dict(
         policy_fingerprint='1' * 64, profile_sha256='2' * 64,
         contact_scope_sha256='3' * 64, checker_sha256='4' * 64,
     )
     current = dict(snapshot=physical, reset_epoch=3, **fingerprints)
+    if source_backed:
+        current.update(
+            source_available=True,
+            source_artifact_sha256=receipt.source_artifact_sha256,
+            observation_sha256=receipt.observation_sha256,
+            source_received_wall_s=receipt.source_received_wall_s,
+            source_phase=receipt.source_phase,
+            source_physics_step=receipt.physics_step,
+        )
     approval = dict(session_id='s', attempt_id='a', reset_epoch=3,
                     sim_time_s=1., positions=held, velocities=(0.,) * 6,
-                    policy_received_wall_s=10.)
+                    prefix_issued_wall_s=10.)
     checks = [0]
     original_check = path.check_path
 
@@ -46,9 +73,11 @@ def proof_authority(scene):
 
     path.check_path = counted_check
 
-    def prove(candidate, _approval, generation):
+    def prove(candidate, _approval, generation, source_receipt=None):
         assert generation == ticket[0]
         assert candidate == prefix
+        if source_backed:
+            assert source_receipt is receipt
         return PathProver(path, monotonic=lambda: 10.).prove(
             request, physical, ticket=ticket, reset_epoch=3,
             expected_samples=701, **fingerprints,
@@ -58,13 +87,75 @@ def proof_authority(scene):
         snapshot_port=lambda: copy.deepcopy(approval),
         check_port=lambda *_: (_ for _ in ()).throw(
             AssertionError('full checker called twice')),
-        proof_port=prove,
+        proof_port=None if source_backed else prove,
+        proof_source_port=prove if source_backed else None,
         proof_state_port=lambda: copy.deepcopy(current),
         proof_ticket_port=lambda: ticket,
+        max_observation_age_s=.4 if source_backed else None,
+        max_prefix_age_s=.2 if source_backed else None,
         generation_port=lambda: ticket[0],
         monotonic=lambda: 10., ttl_s=.2,
     )
+    authority.test_source_receipt = receipt
     return authority, prefix, current, checks
+
+
+def test_source_backed_proof_requires_private_receipt_and_checks_once(scene):
+    authority, prefix, _, checks = proof_authority(scene, source_backed=True)
+    receipt = authority.test_source_receipt
+    with pytest.raises(PermissionError, match='PATH_SOURCE_RECEIPT_REQUIRED'):
+        authority.approve(prefix)
+    with pytest.raises(PermissionError, match='PATH_SOURCE_RECEIPT_INVALID'):
+        authority.approve_with_source(prefix, replace(receipt, prefix_sha256='f' * 64))
+    permit = authority.approve_with_source(prefix, receipt)
+    proof = authority.require(permit, prefix)
+    assert proof.relative_request.source_receipt is receipt
+    assert checks == [1]
+    with pytest.raises(PermissionError, match='PERMIT_INVALID'):
+        authority.require(permit, prefix)
+
+
+def test_source_backed_commit_keeps_observation_and_prefix_ages(scene):
+    from so101_demo.act.path_proof import require_commit_window
+
+    authority, prefix, _, checks = proof_authority(scene, source_backed=True)
+    proof = authority.require(
+        authority.approve_with_source(prefix, authority.test_source_receipt),
+        prefix,
+    )
+    proof = replace(proof, started_wall_s=10., completed_wall_s=10.09,
+                    proof_compute_latency_s=.09)
+    parameters = dict(
+        state_received_wall_s=10.10, accepted_wall_s=10.14,
+        accepted_sim_s=4.9, start_sim_s=5.,
+        max_observation_age_s=.4, max_prefix_age_s=.25,
+        max_state_age_s=.1, observation_jitter_s=.01,
+        start_jitter_s=.02, first_target_jitter_s=.02,
+        clock_error_s=.001, clock_continuous=True,
+    )
+    result = require_commit_window(proof, **parameters)
+    assert result['observation_age_s'] == pytest.approx(.34)
+    assert result['prefix_age_s'] == pytest.approx(.19)
+    for changed in (
+            dict(max_observation_age_s=.3), dict(max_prefix_age_s=.2),
+            dict(max_observation_age_s=None), dict(max_prefix_age_s=None)):
+        with pytest.raises(ValueError, match='COMMIT_WINDOW_INVALID'):
+            require_commit_window(proof, **dict(parameters, **changed))
+    assert checks == [1]
+
+
+@pytest.mark.parametrize('changed', (
+    'source_available', 'source_artifact_sha256', 'observation_sha256',
+    'source_received_wall_s', 'source_phase', 'source_physics_step',
+))
+def test_source_proof_closes_if_selected_source_changes(scene, changed):
+    authority, prefix, current, checks = proof_authority(scene, source_backed=True)
+    permit = authority.approve_with_source(prefix, authority.test_source_receipt)
+    current[changed] = (False if changed == 'source_available'
+                        else 'different')
+    with pytest.raises(PermissionError, match='PERMIT_INVALID'):
+        authority.require(permit, prefix)
+    assert checks == [1]
 
 
 def test_one_full_checker_run_serves_approve_and_single_use_consume(scene):
@@ -151,11 +242,11 @@ def test_proof_request_must_match_approved_prefix_fields(scene, change):
                 request.target_offsets_ns[0] + 1_000_000,
                 *request.target_offsets_ns[1:]))
         elif change == 'observation':
-            request = replace(request, policy_observation_time_s=2.)
+            request = replace(request, source_observation_time_s=2.)
         elif change == 'sequence':
             request = replace(request, sequence=request.sequence + 1)
         elif change == 'policy_receipt':
-            request = replace(request, policy_received_wall_s=10.01)
+            request = replace(request, prefix_issued_wall_s=10.01)
         else:
             request = replace(request, bridge_offset_ns=
                               request.bridge_offset_ns + 1_000_000)
@@ -324,16 +415,16 @@ def test_commit_window_rejects_stale_or_late_acceptance(scene, change):
     parameters = dict(
         state_received_wall_s=10.10, accepted_wall_s=10.14,
         accepted_sim_s=4.9, start_sim_s=5.,
-        max_policy_age_s=.2, max_state_age_s=.1,
+        max_prefix_age_s=.2, max_state_age_s=.1,
         observation_jitter_s=.01, start_jitter_s=.02,
         first_target_jitter_s=.02, clock_error_s=.001,
         clock_continuous=True,
     )
     result = require_commit_window(proof, **parameters)
-    assert result['policy_age_s'] == pytest.approx(.14)
+    assert result['prefix_age_s'] == pytest.approx(.14)
     assert result['state_age_s'] == pytest.approx(.04)
     if change == 'state_age':
-        parameters.update(accepted_wall_s=10.20, max_policy_age_s=.5)
+        parameters.update(accepted_wall_s=10.20, max_prefix_age_s=.5)
     elif change == 'policy_age':
         parameters['accepted_wall_s'] = 10.20
     elif change == 'start_deadline':

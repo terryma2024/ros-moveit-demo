@@ -55,6 +55,10 @@ class BrokerPairedExecution:
         self._bind(ticket)
         return self.permits.approve(prefix)
 
+    def approve_with_source(self,ticket,prefix,receipt):
+        self._bind(ticket)
+        return self.permits.approve_with_source(prefix,receipt)
+
     def submit(self,ticket,prefix,permit):
         self._bind(ticket)
         try:
