@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 #include <chrono>
+#include <hardware_interface/handle.hpp>
+#include <hardware_interface/loaned_command_interface.hpp>
+#include <hardware_interface/loaned_state_interface.hpp>
 #include <pluginlib/class_loader.hpp>
 #include <rclcpp/rclcpp.hpp>
 
@@ -119,5 +122,70 @@ TEST(BrokerOwnedTrajectoryController, ActionIngressConsumesOrClosesReservationBe
   EXPECT_EQ(controller.probe_goal(id, goal, 2), Admission::Result::DENY_FAULT);
   executor.remove_node(client_node);
   executor.remove_node(controller.get_node()->get_node_base_interface());
+  rclcpp::shutdown();
+}
+
+TEST(BrokerOwnedTrajectoryController, LifecycleTransitionsRevokePendingGoals)
+{
+  rclcpp::init(0, nullptr);
+  InspectableController controller;
+  rclcpp::NodeOptions options;
+  options.parameter_overrides({
+    rclcpp::Parameter("joints", std::vector<std::string>{"1", "2", "3", "4", "5"}),
+    rclcpp::Parameter("command_interfaces", std::vector<std::string>{"position"}),
+    rclcpp::Parameter("state_interfaces", std::vector<std::string>{"position", "velocity"}),
+  });
+  ASSERT_EQ(controller.init("lifecycle_controller", "", 500, "", options),
+    controller_interface::return_type::OK);
+  ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+
+  std::vector<hardware_interface::CommandInterface::SharedPtr> command_backing;
+  std::vector<hardware_interface::StateInterface::SharedPtr> state_backing;
+  std::vector<hardware_interface::LoanedCommandInterface> commands;
+  std::vector<hardware_interface::LoanedStateInterface> states;
+  for (const auto & joint : std::vector<std::string>{"1", "2", "3", "4", "5"}) {
+    hardware_interface::InterfaceInfo position;
+    position.name = "position";
+    position.initial_value = "0";
+    hardware_interface::InterfaceInfo velocity;
+    velocity.name = "velocity";
+    velocity.initial_value = "0";
+    auto command = std::make_shared<hardware_interface::CommandInterface>(
+      hardware_interface::InterfaceDescription(joint, position));
+    auto state_position = std::make_shared<hardware_interface::StateInterface>(
+      hardware_interface::InterfaceDescription(joint, position));
+    auto state_velocity = std::make_shared<hardware_interface::StateInterface>(
+      hardware_interface::InterfaceDescription(joint, velocity));
+    command_backing.push_back(command);
+    state_backing.push_back(state_position);
+    state_backing.push_back(state_velocity);
+    commands.emplace_back(command, []() {});
+    states.emplace_back(state_position);
+    states.emplace_back(state_velocity);
+  }
+  controller.assign_interfaces(std::move(commands), std::move(states));
+  ASSERT_EQ(controller.get_node()->activate().id(),
+    lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+
+  const auto goal = stationary_goal();
+  Admission::GoalUUID id{};
+  id.fill(3);
+  ASSERT_TRUE(controller.reserve_goal(id, goal, 1));
+  ASSERT_EQ(controller.get_node()->deactivate().id(),
+    lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  EXPECT_EQ(controller.probe_goal(id, goal, 1), Admission::Result::DENY_CLOSED);
+
+  id.fill(4);
+  ASSERT_TRUE(controller.reserve_goal(id, goal, 2));
+  EXPECT_EQ(controller.on_error(rclcpp_lifecycle::State()),
+    controller_interface::CallbackReturn::SUCCESS);
+  EXPECT_EQ(controller.probe_goal(id, goal, 2), Admission::Result::DENY_CLOSED);
+
+  id.fill(5);
+  ASSERT_TRUE(controller.reserve_goal(id, goal, 3));
+  ASSERT_EQ(controller.get_node()->cleanup().id(),
+    lifecycle_msgs::msg::State::PRIMARY_STATE_UNCONFIGURED);
+  EXPECT_EQ(controller.probe_goal(id, goal, 3), Admission::Result::DENY_CLOSED);
+  controller.release_interfaces();
   rclcpp::shutdown();
 }

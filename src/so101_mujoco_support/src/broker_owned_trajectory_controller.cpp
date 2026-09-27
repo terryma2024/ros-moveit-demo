@@ -70,6 +70,29 @@ controller_interface::CallbackReturn BrokerOwnedTrajectoryController::on_activat
   return result;
 }
 
+controller_interface::CallbackReturn BrokerOwnedTrajectoryController::on_deactivate(
+  const rclcpp_lifecycle::State & previous_state)
+{
+  goal_admission_.close();
+  return joint_trajectory_controller::JointTrajectoryController::on_deactivate(previous_state);
+}
+
+controller_interface::CallbackReturn BrokerOwnedTrajectoryController::on_cleanup(
+  const rclcpp_lifecycle::State & previous_state)
+{
+  goal_admission_.close();
+  action_server_.reset();
+  return joint_trajectory_controller::JointTrajectoryController::on_cleanup(previous_state);
+}
+
+controller_interface::CallbackReturn BrokerOwnedTrajectoryController::on_error(
+  const rclcpp_lifecycle::State & previous_state)
+{
+  goal_admission_.close();
+  action_server_.reset();
+  return joint_trajectory_controller::JointTrajectoryController::on_error(previous_state);
+}
+
 }  // namespace so101_mujoco_support
 
 PLUGINLIB_EXPORT_CLASS(
