@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: c8ea817d
+current_commit: a07e6b72
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -41,6 +41,7 @@ confirmed_conclusions:
   - EXP-508 records ordered local ownership, broker and driver goal events with bounded history and gap/clock rejection; this observation does not close the controller action ingress.
   - EXP-510 verifies an off-path, controller-local one-use UUID plus raw-byte reservation contract; no production action callback or broker registration is wired.
   - EXP-511 disproves raw CDR bytes as a stable goal identity in the installed Python serializer; typed goal fields survive each observed decode, but C++ parity is still unproved.
+  - EXP-512 verifies the fixed Python CDR fixture decodes to the expected full C++ Goal and replaces the off-path reservation's raw-byte identity with typed Goal equality; production callback remains open.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -49,8 +50,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-511
-next_experiment: EXP-512
+latest_checkpoint: CP-512
+next_experiment: EXP-513
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4874,7 +4875,7 @@ next_experiment: EXP-512
 
 ```yaml
 experiment_id: EXP-512
-status: PLANNED
+status: VALID
 prior_experiment: EXP-511
 hypothesis: The installed Jazzy C++ decoder maps the Python CDR fixture to the same typed FollowJointTrajectory.Goal fields, and an off-path controller reservation can compare those fields exactly without relying on unstable CDR bytes.
 prediction: A C++ missing-test or mismatch RED precedes a typed-field decoder GREEN, then targeted reservation tests reject a one-field alteration and replay while accepting one exact typed goal; production callback remains unchanged.
@@ -4890,11 +4891,47 @@ provenance:
   runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i/so101_mujoco_support/lib/libso101_broker_owned_trajectory_controller.so
   ros_domain_id: NOT_ASSIGNED
   gz_partition: NOT_ASSIGNED
+correction: The first compile stopped at an omitted control_msgs include path and was classified as setup, not RED. After adding explicit test dependencies, the next compile reached the intended Goal-versus-GoalBytes type boundary and failed with code 2. CTest used ROS_DOMAIN_ID=183 and GZ_PARTITION=act-data-exp512-cpp; no ROS control stack was started.
+commands: ["Added typed C++ regression and attempted existing-overlay build", "Added explicit control_msgs/rclcpp/trajectory_msgs test dependencies and repeated compile to expected typed API RED", "Changed off-path reservation to typed FollowJointTrajectory.Goal equality with serialized-size bound", "Built so101_mujoco_support in existing overlay", "Verified /usr/bin/python3 and task test Python TMPDIR/TMP/TEMP inside unique NVMe scratch, then ran focused gtest and full colcon C++ package gate", "Ran read-only ament_uncrustify on changed C++ files and compared installed/source header hashes"]
+observed: ["The 256-byte Python fixture decoded under installed Jazzy C++ typesupport to the independently specified complete Goal, including trajectory, tolerances and goal time", "Five focused C++ tests passed; altered typed field or UUID, replay, deadline equality, clock regression, empty trajectory, oversized goal and duplicate registration failed closed", "Package build exit0; full package CTest 3/3 passed; colcon test-result 38 tests, 0 errors, 0 failures, 0 skipped; package test elapsed 1 s", "Read-only uncrustify exit0 and installed header SHA256 matched source; code/spec commit a07e6b72; result artifact SHA256 dd66de1eae12af58172ec1f21b8911aad03782e03a551b932906a6b9faeeface", "Approved design now states exact-goals compares decoded ROS Goal fields; raw CDR padding is outside typed content", "No production callback, broker registration, stack, action goal or formal episode changed"]
+inferred: ["Typed field identity is established for the fixed cross-language fixture and off-path reservation tests, but arbitrary Goal values and live action transport are not covered", "The reservation is still not an action ingress gate until controller callback ownership and broker-before-send order are proven"]
+conclusion: VALID off-path cross-language semantic identity and one-use typed reservation contract; production ingress remains open.
+evidence: [/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp512-typed-controller-goal/result.json, /data/work/so101-evidence/act-data/20260924-fbc25063-resume/scratch/exp512-typed-red-deps2.YYq1WzYP, /data/work/so101-evidence/act-data/20260924-fbc25063-resume/scratch/exp512-typed-focused.Svbkwb2g, /data/work/so101-evidence/act-data/20260924-fbc25063-resume/scratch/exp512-cpp-package.umUizE0G]
+decision: Keep the controller action server unchanged until a fail-closed replacement path rejects unknown goals before delegating to the base callback; then prove broker registration precedes send.
+next_experiment: EXP-513
+```
+
+## CP-512 — Fixed Python goal decodes in C++; reservation compares typed fields
+
+- Commit `a07e6b72` changes only the off-path reservation, its C++ test/dependencies and the exact-goals wording in the reviewed design. The installed C++ test decodes the Python fixture to the full expected `FollowJointTrajectory.Goal`. One-use reservation compares generated typed fields; serialized length is a bound only. This does not close production action ingress.
+- The valid typed-API RED reached C++ compilation after an earlier missing-dependency setup failure. The existing overlay then built successfully; five focused gtests and the complete `so101_mujoco_support` package gate passed. CTest 3/3; `colcon test-result` reports 38 tests, 0 errors, 0 failures, 0 skipped. Exact system/task Python tempfile proofs are in `exp512-cpp-package.umUizE0G`; elapsed 1 s. Read-only `ament_uncrustify` passed and the installed header matches source SHA256 `2c0aa459f5488684b46ff95c2785f0d1635e0e1ed6f896daa0074d134920d550`.
+- Registered root unchanged. Retain all EXP-512 RED/build/focused/package/style artifacts and earlier runs; archived none. Scratch and generated caches are deletion candidates only, nothing deleted. Existing dirty/untracked batch remains outside the commit. Formal accepted Train/Validation/Offline Test 0/0/0; no task-owned stack or goal.
+
+## EXP-513 — Controller action ingress replacement
+
+```yaml
+experiment_id: EXP-513
+status: PLANNED
+prior_experiment: EXP-512
+hypothesis: The action-only JTC subclass can replace the base action server after configuration so every action goal first passes the controller-local closed-by-default reservation, while valid accepted goals still delegate to the original JTC callbacks.
+prediction: A no-motion action-client test distinguishes the installed unguarded server from the replacement, rejects an unknown UUID/Goal before base handling, and proves one action server remains registered; a valid reserved goal path is tested without controller movement.
+single_variable: Replace the production subclass action callback entrypoint with a fail-closed local wrapper; do not connect broker registration or send a physical trajectory.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-512 valid, task-owned stack absent, no live goal, Jazzy rclcpp_action server lifetime and JTC callback semantics inspected]
+success_criteria: [Expected RED/GREEN action callback test, C++ package build and full test gate, exactly one action server, unknown or altered goal denied before base callback, no motion]
+failure_criteria: [Base server remains reachable, unknown goal accepted, goal callback blocks executor, old server waitable remains registered, or valid reservation cannot delegate safely]
+invalid_criteria: [Unowned stack or physical goal starts, test scratch outside registered NVMe root, dirty batch enters commit]
+provenance:
+  source_commit: a07e6b72
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i/so101_mujoco_support/lib/libso101_broker_owned_trajectory_controller.so
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
 commands: []
 observed: []
 inferred: []
 conclusion: PENDING
 evidence: []
 decision: PENDING
-next_experiment: EXP-513
+next_experiment: EXP-514
 ```
