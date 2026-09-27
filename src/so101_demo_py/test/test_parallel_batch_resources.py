@@ -836,6 +836,81 @@ def test_disappearing_proc_candidate_is_not_an_unreadable_live_process(tmp_path,
 
 
 @pytest.mark.skipif(sys.platform != 'linux', reason='requires Linux procfs semantics')
+def test_candidate_exiting_during_environment_read_is_not_live(tmp_path, monkeypatch):
+    proc_root = tmp_path / 'proc'
+    proc_root.mkdir()
+    process = proc_process(
+        proc_root, 4248, comm='python3',
+        argv=('/usr/bin/python3', 'ros2-worker.py'),
+    )
+    environ = process / 'environ'
+    stat_path = process / 'stat'
+    original = Path.read_bytes
+
+    def exit_during_read(path):
+        if path == environ:
+            stat_path.write_text(
+                stat_path.read_text(encoding='ascii').replace(') S ', ') Z '),
+                encoding='ascii',
+            )
+            raise FileNotFoundError(path)
+        return original(path)
+
+    monkeypatch.setattr(Path, 'read_bytes', exit_during_read)
+    probe = SystemResourceProbe(proc_root=proc_root)
+    assert probe.ros_domain_in_use(181) is False
+    assert probe.process_scan_report()['skipped_processes'][0]['skip_reason'] == (
+        'frozen_zombie_non_candidate')
+
+
+@pytest.mark.skipif(sys.platform != 'linux', reason='requires Linux procfs semantics')
+def test_live_candidate_missing_environment_still_fails_closed(tmp_path, monkeypatch):
+    proc_root = tmp_path / 'proc'
+    proc_root.mkdir()
+    process = proc_process(
+        proc_root, 4249, comm='python3',
+        argv=('/usr/bin/python3', 'ros2-worker.py'),
+    )
+    original = Path.read_bytes
+
+    def missing_environment(path):
+        if path == process / 'environ':
+            raise FileNotFoundError(path)
+        return original(path)
+
+    monkeypatch.setattr(Path, 'read_bytes', missing_environment)
+    with pytest.raises(ResourceAllocationError, match='PROC_ENV_UNVERIFIABLE'):
+        SystemResourceProbe(proc_root=proc_root).ros_domain_in_use(181)
+
+
+@pytest.mark.skipif(sys.platform != 'linux', reason='requires Linux procfs semantics')
+def test_candidate_identity_change_after_missing_environment_fails_closed(
+        tmp_path, monkeypatch):
+    proc_root = tmp_path / 'proc'
+    proc_root.mkdir()
+    process = proc_process(
+        proc_root, 4250, comm='python3',
+        argv=('/usr/bin/python3', 'ros2-worker.py'), starttime=100,
+    )
+    stat_path = process / 'stat'
+    original = Path.read_bytes
+
+    def replaced_during_read(path):
+        if path == process / 'environ':
+            stat_path.write_text(
+                stat_path.read_text(encoding='ascii').replace(' 100 0\n',
+                                                              ' 101 0\n'),
+                encoding='ascii',
+            )
+            raise FileNotFoundError(path)
+        return original(path)
+
+    monkeypatch.setattr(Path, 'read_bytes', replaced_during_read)
+    with pytest.raises(ResourceAllocationError, match='PROC_IDENTITY_CHANGED'):
+        SystemResourceProbe(proc_root=proc_root).ros_domain_in_use(181)
+
+
+@pytest.mark.skipif(sys.platform != 'linux', reason='requires Linux procfs semantics')
 def test_unverifiable_proc_identity_fails_closed(tmp_path, monkeypatch):
     proc_root = tmp_path / 'proc'
     process = proc_root / '4244'
