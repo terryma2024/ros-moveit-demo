@@ -113,10 +113,20 @@ class _Adapter:
         return self.stop_confirmed
 
 
-def _segment(sources, adapter, scene, *, guard=lambda: None, clock=None):
+def _segment(sources, adapter, scene, *, guard=lambda: None, clock=None,
+             history_verifier=None):
     clock = [10.0] if clock is None else clock
+    if history_verifier is None:
+        history_verifier = lambda observed, stopped_wall_s: {
+            "selected_physics_step": observed.physical_readback["world"].simulation_step,
+            "stop_confirmed_wall_s": stopped_wall_s,
+            "controller_interval_proof_required": True,
+            "command_authority": False,
+            "eligible_for_collection": False,
+        }
     return PickPlaceSearchSegment(
         sources, adapter, scene, _geometry(), operation_guard=guard,
+        history_verifier=history_verifier,
         max_source_wait_s=0.05, poll_interval_s=0.01,
         monotonic=lambda: clock[0], sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
     )
@@ -140,6 +150,7 @@ def test_search_waits_for_new_steps_then_reads_back_final_physical_cup_pose():
     assert observation.search_result == _locked()
     assert observation.physical_readback["world"].simulation_step == 53
     assert observation.planning_scene.phase == "READ_BACK"
+    assert observation.stationary_physics_proof["command_authority"] is False
 
 
 def test_search_selects_only_after_50_post_stop_steps_and_100ms():
@@ -198,6 +209,23 @@ def test_search_rejects_invalid_post_stop_physics(last, exception, error):
                        _locked(timestamp=1.002))
     with pytest.raises(exception, match=error):
         _segment(sources, adapter, _Scene()).run(_request(), reset_epoch=2)
+    assert adapter.stops == 2
+
+
+def test_search_refuses_when_original_physics_history_is_missing():
+    sources = _Sources(_raw(1, sim_time_s=1.0),
+                       _raw(2, sim_time_s=1.002),
+                       _raw(3, sim_time_s=1.004),
+                       _raw(53, sim_time_s=1.104))
+    adapter = _Adapter({"status": "INPUT_PENDING", "stop": True},
+                       _locked(timestamp=1.002))
+    def missing_history(_observed, _stopped_wall_s):
+        raise ValueError("SEARCH_PHYSICS_HISTORY_INVALID")
+
+    segment = _segment(sources, adapter, _Scene(),
+                       history_verifier=missing_history)
+    with pytest.raises(ValueError, match="SEARCH_PHYSICS_HISTORY_INVALID"):
+        segment.run(_request(), reset_epoch=2)
     assert adapter.stops == 2
 
 
