@@ -238,6 +238,7 @@ class RclpyActionDriver:
         from rclpy.parameter import Parameter
         from so101_demo.act.ownership import Ownership
         from so101_demo.adapters.act.command_broker import CommandBroker, LocalBrokerConnection
+        from so101_demo.adapters.act.controller_reservation_client import ControllerReservationClient
         from so101_demo.adapters.act.controller_reservation_provision import ControllerReservationProvisions
         from so101_demo.adapters.act.ros_broker import RosBrokerDriver
         from so101_demo.adapters.act.pick_place_sources import PickPlaceRosEvidence, PickPlaceHazardDispatcher
@@ -247,11 +248,17 @@ class RclpyActionDriver:
             name = f"act_worker_{os.environ['SO101_ACT_WORKER_ID']}_{os.environ['SO101_ACT_GENERATION']}"
             self._node = rclpy.create_node(name, parameter_overrides=[Parameter("use_sim_time", value=True)])
             broker = RosBrokerDriver(self._node, stop_velocity_rad_s=speed, max_age_s=max_age)
-            self._act_command_broker = CommandBroker(
-                broker, ownership=Ownership(), simulation_session_id=session_id,
-            )
             self._act_reservation_provisions = ControllerReservationProvisions.publish(
                 os.environ, session_id)
+            reservation_port = ControllerReservationClient(
+                {role: self._act_reservation_provisions.directory / f"{role}.sock"
+                 for role in ("arm", "gripper")},
+                capability=self._act_reservation_provisions.capabilities, timeout_s=0.2,
+            )
+            self._act_command_broker = CommandBroker(
+                broker, ownership=Ownership(), simulation_session_id=session_id,
+                reservation_port=reservation_port,
+            )
             self._act_reset_connection = LocalBrokerConnection(self._act_command_broker)
             self._act_sources = PickPlaceRosEvidence(
                 self._node, broker, model=self._act_model,

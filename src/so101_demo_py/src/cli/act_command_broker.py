@@ -124,70 +124,76 @@ def main(arguments=None):
     import rclpy
     from rclpy.executors import SingleThreadedExecutor
     from rclpy.parameter import Parameter
+    from so101_demo.adapters.act.controller_reservation_client import ControllerReservationClient
     from so101_demo.adapters.act.ros_broker import RosBrokerDriver
     rclpy.init();node=rclpy.create_node('act_command_broker',parameter_overrides=[Parameter('use_sim_time',value=True)])
     executor=SingleThreadedExecutor();executor.add_node(node)
     thread=threading.Thread(target=executor.spin,daemon=True);thread.start()
-    driver=RosBrokerDriver(node,stop_velocity_rad_s=speed,max_age_s=age)
-    broker=CommandBroker(driver,ownership=Ownership(lease_timeout_s=options.lease_timeout_s),
-                         simulation_session_id=options.session_id)
-    motion_guard=None
-    if motion_manifest is not None:
-        from so101_demo.adapters.act.calibration_motion import RosCalibrationMotionGuard
-        motion_guard=RosCalibrationMotionGuard(node,driver,broker,motion_manifest,evidence_root=Path(options.socket).parent)
-    timing=(options.submit_lead_s,options.accept_timeout_s,options.stop_timeout_s,options.permit_ttl_s)
-    if any(value is not None for value in timing):
-        if not all(value is not None for value in timing):raise ValueError('PAIRED_TIMING_PARAMETERS_REQUIRED')
-        if not options.calibration_mode:raise ValueError('FULL_SUPERVISOR_REQUIRED')
-        from so101_demo.adapters.act.broker_execution import BrokerPairedExecution
-        def static_calibration_only(prefix,snapshot):
-            # This opt-in calibration authority approves zero-motion holds only.
-            # It cannot grant formal collection or general trajectory safety.
-            return (all(abs(value)<=speed for value in snapshot['velocities'])
-                    and all(all(abs(value-held)<=1e-12 for value,held in zip(row,snapshot['reference'],strict=True))
-                            for row in prefix['positions']))
-        broker.prefix_executor=BrokerPairedExecution(broker,
-            snapshot_port=driver.approval_snapshot,check_port=motion_guard.check_prefix if motion_guard is not None else static_calibration_only,
-            reference_port=driver.current_reference,
-            sim_clock=lambda:node.get_clock().now().nanoseconds*1e-9,
-            submit_lead_s=options.submit_lead_s,accept_timeout_s=options.accept_timeout_s,
-            stop_timeout_s=options.stop_timeout_s,permit_ttl_s=options.permit_ttl_s,
-            path_port=motion_guard.check_exact_goals if motion_guard is not None else None)
-    server=UnixBrokerServer(broker,options.socket,parent_pid=options.parent_pid)
-    shutdown=threading.Event()
-    for signum in (signal.SIGINT,signal.SIGTERM):signal.signal(signum,lambda *_:shutdown.set())
     report_path=Path(options.socket).with_name('broker-runtime.json')
-    report_path.parent.mkdir(parents=True,exist_ok=True)
-    report_path.write_text(json.dumps(dict(pid=os.getpid(),parent_pid=options.parent_pid,
-        socket=options.socket,session_id=options.session_id,calibration_only=options.calibration_mode,
-        control_guard_kernel_name=authority.kernel_name,ros_domain_id=authority.domain,
-        eligible_for_collection=False,stop_velocity_rad_s=speed,max_age_s=age,
-        paired_calibration_timing=timing if broker.prefix_executor is not None else None,
-        motion_calibration_manifest=str(options.motion_calibration_manifest) if motion_guard is not None else None,
-        contact_diagnostic_manifest=str(options.contact_diagnostic_manifest) if options.contact_diagnostic_manifest else None,
-        task6_route_manifest=str(options.visible_approach_manifest) if options.visible_approach_manifest else None,
-        task6_contact_transition_manifest=str(options.grasp_contact_transition_manifest) if options.grasp_contact_transition_manifest else None,
-        held_cup_micro_lift_manifest=str(options.held_cup_micro_lift_manifest) if options.held_cup_micro_lift_manifest else None,
-        motion_calibration_model_sha256=motion_manifest['model_sha256'] if motion_guard is not None else None,
-        action_map={'arm':'/arm_controller/follow_joint_trajectory','gripper':'/gripper_controller/follow_joint_trajectory',
-                    'execute_trajectory':'/execute_trajectory'}),indent=2)+'\n')
-    provisions=None
+    driver=broker=server=provisions=motion_guard=None
+    stop=None
     try:
+        driver=RosBrokerDriver(node,stop_velocity_rad_s=speed,max_age_s=age)
         provisions=ControllerReservationProvisions.publish(os.environ,options.session_id)
+        reservation_port=ControllerReservationClient(
+            {role:provisions.directory/f'{role}.sock' for role in ('arm','gripper')},
+            capability=provisions.capabilities,timeout_s=.2)
+        broker=CommandBroker(driver,ownership=Ownership(lease_timeout_s=options.lease_timeout_s),
+                             simulation_session_id=options.session_id,
+                             reservation_port=reservation_port)
+        if motion_manifest is not None:
+            from so101_demo.adapters.act.calibration_motion import RosCalibrationMotionGuard
+            motion_guard=RosCalibrationMotionGuard(node,driver,broker,motion_manifest,evidence_root=Path(options.socket).parent)
+        timing=(options.submit_lead_s,options.accept_timeout_s,options.stop_timeout_s,options.permit_ttl_s)
+        if any(value is not None for value in timing):
+            if not all(value is not None for value in timing):raise ValueError('PAIRED_TIMING_PARAMETERS_REQUIRED')
+            if not options.calibration_mode:raise ValueError('FULL_SUPERVISOR_REQUIRED')
+            from so101_demo.adapters.act.broker_execution import BrokerPairedExecution
+            def static_calibration_only(prefix,snapshot):
+                # This opt-in calibration authority approves zero-motion holds only.
+                # It cannot grant formal collection or general trajectory safety.
+                return (all(abs(value)<=speed for value in snapshot['velocities'])
+                        and all(all(abs(value-held)<=1e-12 for value,held in zip(row,snapshot['reference'],strict=True))
+                                for row in prefix['positions']))
+            broker.prefix_executor=BrokerPairedExecution(broker,
+                snapshot_port=driver.approval_snapshot,check_port=motion_guard.check_prefix if motion_guard is not None else static_calibration_only,
+                reference_port=driver.current_reference,
+                sim_clock=lambda:node.get_clock().now().nanoseconds*1e-9,
+                submit_lead_s=options.submit_lead_s,accept_timeout_s=options.accept_timeout_s,
+                stop_timeout_s=options.stop_timeout_s,permit_ttl_s=options.permit_ttl_s,
+                path_port=motion_guard.check_exact_goals if motion_guard is not None else None)
+        server=UnixBrokerServer(broker,options.socket,parent_pid=options.parent_pid)
+        shutdown=threading.Event()
+        for signum in (signal.SIGINT,signal.SIGTERM):signal.signal(signum,lambda *_:shutdown.set())
+        report_path.parent.mkdir(parents=True,exist_ok=True)
+        report_path.write_text(json.dumps(dict(pid=os.getpid(),parent_pid=options.parent_pid,
+            socket=options.socket,session_id=options.session_id,calibration_only=options.calibration_mode,
+            control_guard_kernel_name=authority.kernel_name,ros_domain_id=authority.domain,
+            eligible_for_collection=False,stop_velocity_rad_s=speed,max_age_s=age,
+            paired_calibration_timing=timing if broker.prefix_executor is not None else None,
+            motion_calibration_manifest=str(options.motion_calibration_manifest) if motion_guard is not None else None,
+            contact_diagnostic_manifest=str(options.contact_diagnostic_manifest) if options.contact_diagnostic_manifest else None,
+            task6_route_manifest=str(options.visible_approach_manifest) if options.visible_approach_manifest else None,
+            task6_contact_transition_manifest=str(options.grasp_contact_transition_manifest) if options.grasp_contact_transition_manifest else None,
+            held_cup_micro_lift_manifest=str(options.held_cup_micro_lift_manifest) if options.held_cup_micro_lift_manifest else None,
+            motion_calibration_model_sha256=motion_manifest['model_sha256'] if motion_guard is not None else None,
+            action_map={'arm':'/arm_controller/follow_joint_trajectory','gripper':'/gripper_controller/follow_joint_trajectory',
+                        'execute_trajectory':'/execute_trajectory'}),indent=2)+'\n')
         server.start()
         while not shutdown.wait(.1) and not server._stop.is_set():broker.tick()
     finally:
         try:
-            server.close()
+            if server is not None:server.close()
             # No new process may inherit authority merely because the old lease was
             # revoked. Keep the driver alive for the bounded real-stop observation.
-            deadline=time.monotonic()+5.
-            while broker.ownership.state=='STOPPING' and time.monotonic()<deadline:
-                broker.tick();time.sleep(.01)
-            stop=dict(state=broker.ownership.state,unknown_goal_seen=driver.unknown_goal_seen,
-                      audit=broker.audit,stop_confirmed=driver.stopped(),driver=driver.diagnostics(),
-                      motion_calibration_audit=list(motion_guard.audit) if motion_guard is not None else [])
-            report_path.with_name('broker-stop.json').write_text(json.dumps(stop,indent=2)+'\n')
+            if broker is not None:
+                deadline=time.monotonic()+5.
+                while broker.ownership.state=='STOPPING' and time.monotonic()<deadline:
+                    broker.tick();time.sleep(.01)
+                stop=dict(state=broker.ownership.state,unknown_goal_seen=driver.unknown_goal_seen,
+                          audit=broker.audit,stop_confirmed=driver.stopped(),driver=driver.diagnostics(),
+                          motion_calibration_audit=list(motion_guard.audit) if motion_guard is not None else [])
+                report_path.with_name('broker-stop.json').write_text(json.dumps(stop,indent=2)+'\n')
             executor.shutdown();thread.join(3)
             if motion_guard is not None:motion_guard.close()
             node.destroy_node();rclpy.shutdown();authority.close()
