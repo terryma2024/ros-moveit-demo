@@ -3,6 +3,7 @@
 from collections import deque
 import math
 import threading
+import time
 
 from .contracts import finite, identifier, validate_observation, vector
 
@@ -19,7 +20,8 @@ def causal_sample(samples, at_s, max_age_s):
 class RgbObservationSynchronizer:
     STREAMS = ("head", "wrist", "arm", "neck")
 
-    def __init__(self, *, max_age_s, max_skew_s, capacity=32):
+    def __init__(self, *, max_age_s, max_skew_s, capacity=32,
+                 monotonic=time.monotonic):
         self.max_age_s = finite(max_age_s, nonnegative=True)
         self.max_skew_s = finite(max_skew_s, nonnegative=True)
         if type(capacity) is not int or capacity < 2:
@@ -29,6 +31,9 @@ class RgbObservationSynchronizer:
         self._attempt = None
         self._last_sample = None
         self._lock = threading.RLock()
+        if not callable(monotonic):
+            raise ValueError("INPUT_CLOCK_INVALID")
+        self.monotonic = monotonic
 
     def reset(self, session_id):
         identifier(session_id)
@@ -36,8 +41,11 @@ class RgbObservationSynchronizer:
             for buffer in self.buffers.values(): buffer.clear()
             self._session, self._attempt, self._last_sample = session_id, None, None
 
-    def push(self, stream, session_id, sim_time_s, value):
+    def push(self, stream, session_id, sim_time_s, value, *,
+             received_monotonic_s=None):
         finite(sim_time_s, nonnegative=True)
+        received = finite(self.monotonic() if received_monotonic_s is None
+                          else received_monotonic_s, nonnegative=True)
         with self._lock:
             if stream not in self.STREAMS or session_id != self._session:
                 raise ValueError("INPUT_SESSION_INVALID")
@@ -53,7 +61,7 @@ class RgbObservationSynchronizer:
                 value = vector(value, 6)
             else:
                 value = finite(value)
-            buffer.append((sim_time_s, value))
+            buffer.append((sim_time_s, value, received))
 
     def sample(self, session_id, attempt_id, at_s):
         identifier(attempt_id)
@@ -63,7 +71,8 @@ class RgbObservationSynchronizer:
                 raise ValueError("INPUT_SESSION_INVALID")
             if self._last_sample is not None and at_s <= self._last_sample:
                 raise ValueError("INPUT_TIMESTAMP_INVALID")
-            values = {stream: causal_sample([(stamp, (stamp, value)) for stamp, value in buffer],
+            values = {stream: causal_sample([(stamp, (stamp, value, received))
+                                             for stamp, value, received in buffer],
                                             at_s, self.max_age_s)
                       for stream, buffer in self.buffers.items()}
             stamps = [item[0] for item in values.values()]
@@ -76,5 +85,7 @@ class RgbObservationSynchronizer:
             validate_observation(result)
             self._attempt, self._last_sample = attempt_id, at_s
             self.last_audit = dict(source_stamps=dict(zip(values, stamps, strict=True)),
+                                   source_received_wall_s={stream: item[2]
+                                                           for stream, item in values.items()},
                                    neck_yaw_rad=yaw, session_id=session_id, attempt_id=attempt_id)
             return result
