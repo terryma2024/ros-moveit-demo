@@ -305,10 +305,11 @@ def test_standalone_broker_publishes_before_service_and_cleans_on_exit(
             return {}
 
     class Broker:
-        def __init__(self, driver, *, ownership, simulation_session_id):
+        def __init__(self, driver, *, ownership, simulation_session_id, reservation_port):
             self.ownership = SimpleNamespace(state="IDLE")
             self.audit = []
             self.prefix_executor = None
+            self.reservation_port = reservation_port
 
         def tick(self):
             pass
@@ -316,10 +317,16 @@ def test_standalone_broker_publishes_before_service_and_cleans_on_exit(
     class Server:
         def __init__(self, broker, endpoint, *, parent_pid):
             self._stop = threading.Event()
+            self.broker = broker
 
         def start(self):
             assert sorted(path.name for path in directory.iterdir()) == [
                 "arm.provision", "gripper.provision"]
+            assert set(self.broker.reservation_port._paths) == {"arm", "gripper"}
+            for role in ("arm", "gripper"):
+                assert self.broker.reservation_port._paths[role] == directory / f"{role}.sock"
+                assert self.broker.reservation_port._capabilities[role] == (
+                    directory / f"{role}.provision").read_bytes()[24:56]
             seen.append("server_started")
             if start_fails:
                 raise RuntimeError("injected server startup failure")

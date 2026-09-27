@@ -177,6 +177,15 @@ def test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8(tmp
             seen.append(("submit", kind))
             return "goal"
 
+        def prepare_goal(self, kind, goal):
+            raise AssertionError("goal preparation is outside this startup test")
+
+        def send_prepared(self, goal_id, kind, goal, goal_uuid):
+            raise AssertionError("goal send is outside this startup test")
+
+        def discard_prepared(self, goal_id):
+            raise AssertionError("goal discard is outside this startup test")
+
     class Sources:
         def __init__(self, node, broker, **kwargs):
             seen.append(("sources", kwargs))
@@ -252,6 +261,11 @@ def test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8(tmp
         "arm.provision", "gripper.provision"]
     assert driver._act_reservation_provisions.capabilities["arm"] != (
         driver._act_reservation_provisions.capabilities["gripper"])
+    assert set(authority.reservation_port._paths) == {"arm", "gripper"}
+    for role in ("arm", "gripper"):
+        assert authority.reservation_port._paths[role] == reservation_dir / f"{role}.sock"
+        assert authority.reservation_port._capabilities[role] == (
+            reservation_dir / f"{role}.provision").read_bytes()[24:56]
     driver.close()
     assert seen.index("close_dispatcher") < seen.index("shutdown")
     assert list(reservation_dir.iterdir()) == []
