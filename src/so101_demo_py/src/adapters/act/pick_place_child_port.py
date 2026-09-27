@@ -17,6 +17,8 @@ from .pick_place_neck_sweep import MujocoNeckSweepChecker
 from .pick_place_reset import PickPlaceResetBoundary
 from .pick_place_search_boundary import PickPlaceSearchBoundary
 from .pick_place_search_port import PickPlaceSearchPhasePort
+from .selected_approach_candidate import SelectedApproachCandidate
+from .visible_approach_expert_route import VisibleApproachExpertRoute
 
 
 _CHILD_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z")
@@ -98,7 +100,26 @@ def build_pick_place_child_search_port(
         poll_interval_s=min(timestep, max_age),
         stop_timeout_s=stop_timeout,
     )
-    return PickPlaceSearchPhasePort(boundary)
+    def expert_route_factory(request):
+        readback = sources.readback
+        config = share / "config/mujoco/act"
+        candidate = SelectedApproachCandidate(
+            scene_path=scene,
+            plugin_path=config / "task6_route_plugins.yaml",
+            source_profile_path=config / "task6_visible_approach_v1.json",
+            candidate_profile_path=config / "visible_approach_candidate_v1.json",
+            session_id=request["session_id"], attempt_id=request["attempt_id"],
+            max_skew_s=readback.max_skew,
+            max_source_age_s=min(max_age, readback.max_wall_age),
+            joint_tolerance_rad=readback.joint_tolerance,
+            cup_tolerance_m=readback.cup_position_tolerance,
+            stop_velocity_rad_s=command_broker.driver.stop_velocity,
+        )
+        return VisibleApproachExpertRoute(
+            candidate, policy_fingerprint=manifest["contact_policy_fingerprint"])
+
+    return PickPlaceSearchPhasePort(
+        boundary, expert_route_factory=expert_route_factory)
 
 
 # Legacy Python API for version-one pick-place callers.

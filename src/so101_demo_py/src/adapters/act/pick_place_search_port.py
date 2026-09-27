@@ -20,13 +20,17 @@ class PickPlaceSearchPortError(RuntimeError):
 class PickPlaceSearchPhasePort:
     """Expose only SEARCH while later physical phases remain unprovisioned."""
 
-    def __init__(self, boundary) -> None:
+    def __init__(self, boundary, *, expert_route_factory=None) -> None:
         if (not callable(getattr(boundary, "begin", None))
                 or not callable(getattr(boundary, "search", None))
                 or not callable(getattr(boundary, "safe_stop", None))
-                or not callable(getattr(boundary.neck_sweep_checker, "check", None))):
+                or not callable(getattr(boundary.neck_sweep_checker, "check", None))
+                or expert_route_factory is not None
+                and not callable(expert_route_factory)):
             raise ValueError("TASK8_SEARCH_PORT_CONFIG_INVALID")
         self.boundary = boundary
+        self._expert_route_factory = expert_route_factory
+        self._expert_route = None
         self._startup_receipt = None
         self._request = None
         self._begun = False
@@ -77,6 +81,31 @@ class PickPlaceSearchPhasePort:
         self._begun = True
         self._request = dict(request)
         try:
+            if self._expert_route_factory is not None:
+                from .trusted_visible_approach_source import TrustedVisibleApproachSourcePort
+                from .visible_approach_expert_route import VisibleApproachExpertRoute
+
+                reset = self.boundary.reset
+                manifest = reset.manifest
+                cases = (*manifest["prefix_cases"], *manifest["full_cases"])
+                matching = [case for case in cases
+                            if case["case_id"] == request.get("scenario_id")]
+                if (len(matching) != 1
+                        or any(matching[0][key] != request.get(key)
+                               for key in ("mode", "stop_after", "lifecycle"))
+                        or manifest["contact_policy_fingerprint"] !=
+                           reset.sources.contact_pairs.fingerprint):
+                    raise ValueError("expert route scope")
+                if (matching[0]["anchor"] == "default"
+                        and request.get("stop_after") != "SEARCH"):
+                    if not isinstance(reset.broker._prefix_source_port,
+                                      TrustedVisibleApproachSourcePort):
+                        raise ValueError("expert source unavailable")
+                    self._expert_route = self._expert_route_factory(request)
+                    if (not isinstance(self._expert_route, VisibleApproachExpertRoute)
+                            or self._expert_route.manifest["policy_fingerprint"] !=
+                               manifest["contact_policy_fingerprint"]):
+                        raise ValueError("expert route invalid")
             result = self.boundary.begin(request)
             if (type(result) is not dict
                     or set(result) != {"session_id", "attempt_id", "reset_epoch",
@@ -94,6 +123,8 @@ class PickPlaceSearchPhasePort:
             # to verify exact stack and child retirement after this case.
             return {**result, "full_restart": True}
         except BaseException as error:
+            self._request = None
+            self._expert_route = None
             self._stop_or_raise("TASK8_BEGIN_ABORT", request)
             raise PickPlaceSearchPortError("TASK8_BEGIN_EVIDENCE_INVALID") from error
 
@@ -221,8 +252,18 @@ class PickPlaceSearchPhasePort:
             observed = copy.deepcopy(self.boundary.search(request))
             evidence = self._search_evidence(observed, request)
             self._validated_search_observation = observed
+            if self._expert_route is not None:
+                reset = self.boundary.reset
+                context = reset.act_context
+                ticket = reset.broker.ownership.ticket(
+                    context["lease_token"], "act", request["session_id"],
+                    request["attempt_id"])
+                reset.broker._prefix_source_port.register(
+                    reset.broker, self, self._expert_route, ticket,
+                    active_policy_fingerprint=reset.sources.contact_pairs.fingerprint)
             return evidence
         except BaseException as error:
+            self._validated_search_observation = None
             self._stop_or_raise("TASK8_SEARCH_ABORT", request)
             raise PickPlaceSearchPortError("TASK8_SEARCH_EVIDENCE_INVALID") from error
 
