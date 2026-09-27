@@ -1,6 +1,7 @@
 """The unified child must be the only ACT command broker in its ROS domain."""
 
 import importlib.util
+import os
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,12 @@ from launch_ros.utilities import evaluate_parameters
 
 from so101_demo.runtime import launch_composition as launch
 from so101_teleop.unified.controller_reservation_paths import controller_reservation_directory
+
+
+@pytest.fixture(autouse=True)
+def isolated_launch_environment(monkeypatch):
+    """LaunchContext.environment writes must stay inside this test case."""
+    monkeypatch.setattr(os, "environ", os.environ.copy())
 
 
 def configured(tmp_path, *, overrides=None):
