@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <thread>
 
 #include "so101_mujoco_support/controller_reservation_protocol.hpp"
@@ -17,6 +18,8 @@ namespace so101_mujoco_support
 class ControllerReservationSocket final
 {
 public:
+  using StopProof = std::function<bool()>;
+
   struct ExpectedPeer
   {
     uid_t uid;
@@ -27,7 +30,7 @@ public:
   ControllerReservationSocket(
     std::filesystem::path path, ControllerGoalAdmission & gate,
     ControllerReservationCapability capability, ExpectedPeer expected_peer,
-    std::chrono::milliseconds deadline);
+    std::chrono::milliseconds deadline, StopProof stop_proof = {});
   ~ControllerReservationSocket();
 
   ControllerReservationSocket(const ControllerReservationSocket &) = delete;
@@ -44,6 +47,7 @@ private:
   ControllerReservationCapability capability_;
   ExpectedPeer expected_peer_;
   std::chrono::milliseconds deadline_;
+  StopProof stop_proof_;
   int listener_{-1};
   dev_t bound_device_{0};
   ino_t bound_inode_{0};
@@ -56,7 +60,8 @@ public:
     std::filesystem::path path, ControllerGoalAdmission & gate,
     ControllerReservationCapability capability,
     ControllerReservationSocket::ExpectedPeer expected_peer,
-    std::chrono::milliseconds deadline);
+    std::chrono::milliseconds deadline,
+    ControllerReservationSocket::StopProof stop_proof = {});
   ~ControllerReservationService();
 
   ControllerReservationService(const ControllerReservationService &) = delete;

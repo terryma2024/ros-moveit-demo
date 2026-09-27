@@ -25,6 +25,9 @@ def start_ticks() -> int:
 
 def frame_for(mode: str) -> bytes:
     key = capability
+    if mode == "arm_generation":
+        body = b"SOGR\x01\x03" + key + (5).to_bytes(8, "big") + bytes(16)
+        return len(body).to_bytes(4, "big") + body
     if mode in ("close_generation", "close_stale"):
         body = b"SOGR\x01\x02" + key + (5).to_bytes(8, "big") + bytes(16)
         return len(body).to_bytes(4, "big") + body
@@ -64,9 +67,6 @@ def request(mode: str) -> str:
         accepted = wire_client.reserve((5, 0, "act", "session", "attempt"),
                                        "arm", goal, native_uuid)
         return "ACK" if accepted else "REJECT"
-    if mode == "close_generation":
-        wire_client.close_generation(5)
-        return "ACK"
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
         conn.settimeout(2.0)
         conn.connect(sys.argv[1])

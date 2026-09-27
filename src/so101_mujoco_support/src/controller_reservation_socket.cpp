@@ -147,9 +147,9 @@ std::chrono::milliseconds bounded_service_deadline(std::chrono::milliseconds dea
 ControllerReservationSocket::ControllerReservationSocket(
   std::filesystem::path path, ControllerGoalAdmission & gate,
   ControllerReservationCapability capability, ExpectedPeer expected_peer,
-  std::chrono::milliseconds deadline)
+  std::chrono::milliseconds deadline, StopProof stop_proof)
 : path_(std::move(path)), gate_(gate), capability_(capability), expected_peer_(expected_peer),
-  deadline_(deadline)
+  deadline_(deadline), stop_proof_(std::move(stop_proof))
 {
 #ifndef __linux__
   throw std::runtime_error("CONTROLLER_RESERVATION_SOCKET_LINUX_REQUIRED");
@@ -284,7 +284,29 @@ bool ControllerReservationSocket::serve_one()
         closed ? ReservationReplyStatus::ACK : ReservationReplyStatus::REJECT, generation);
       return write_exact(connection.get(), reply.data(), reply.size(), deadline) && closed;
     }
+    if (frame.size() > 9 && frame[9] == 3) {
+      const auto generation = parse_controller_reservation_arm_frame(frame, capability_);
+      if (!stop_proof_ || !stop_proof_() || !gate_.arm(generation) || !stop_proof_()) {
+        gate_.close();
+        const auto reply = encode_controller_reservation_reply(
+          ReservationReplyStatus::REJECT, generation);
+        write_exact(connection.get(), reply.data(), reply.size(), deadline);
+        return false;
+      }
+      const auto reply = encode_controller_reservation_reply(
+        ReservationReplyStatus::ACK, generation);
+      if (write_exact(connection.get(), reply.data(), reply.size(), deadline)) {return true;}
+      gate_.close();
+      return false;
+    }
     const auto request = parse_controller_reservation_frame(frame, capability_);
+    if (stop_proof_ && !stop_proof_()) {
+      gate_.close();
+      const auto reply = encode_controller_reservation_reply(
+        ReservationReplyStatus::REJECT, request.generation);
+      write_exact(connection.get(), reply.data(), reply.size(), deadline);
+      return false;
+    }
     if (!gate_.reserve(request.uuid, request.goal, request.generation)) {
       gate_.close();
       return false;
@@ -304,9 +326,10 @@ ControllerReservationService::ControllerReservationService(
   std::filesystem::path path, ControllerGoalAdmission & gate,
   ControllerReservationCapability capability,
   ControllerReservationSocket::ExpectedPeer expected_peer,
-  std::chrono::milliseconds deadline)
+  std::chrono::milliseconds deadline,
+  ControllerReservationSocket::StopProof stop_proof)
 : gate_(gate), socket_(std::move(path), gate, capability, expected_peer,
-    bounded_service_deadline(deadline))
+    bounded_service_deadline(deadline), std::move(stop_proof))
 {
   try {
     worker_ = std::thread([this]() {
