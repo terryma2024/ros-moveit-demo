@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 139a2b69
+current_commit: 9c2be641
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -47,6 +47,7 @@ confirmed_conclusions:
   - EXP-515 confirms the Python driver accepts caller-supplied native UUIDs, but broker local ticket registration follows asynchronous send and no private broker-to-controller registration transport exists in either launch topology.
   - EXP-516 verifies an off-graph Unix socket can store one typed controller reservation before ACK, rejects mismatched peer identity/capability, stale or duplicate generations, malformed or slow frames and symlinked paths; production broker and controller lifecycle wiring remain open.
   - CP-519 finds that one controller reservation per generation conflicts with sequential ACT prefixes under one ownership lease; production wiring remains disabled pending a per-action generation and independent arming contract.
+  - CP-521 resolves the one-reservation conflict source-only: one owner generation now permits bounded sequential unique UUID/typed Goal admissions, while replay and overlapping reservations close the lease.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -56,8 +57,8 @@ open_hypotheses:
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
-  - A controller-local, stop-proved per-action generation can support sequential prefixes without reusing a consumed reservation; this requires a source-only regression and a reviewed arming contract.
-latest_checkpoint: CP-520
+  - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
+latest_checkpoint: CP-521
 next_experiment: EXP-517
 ---
 
@@ -5118,3 +5119,12 @@ next_experiment: EXP-518
 - Driver artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp517-broker-reservation-transaction/driver-checkpoint.json`, SHA256 `115da5beffbe12c9f4f4c1547dff38b1515411c1b8d9a0d9aae9bdf17a76ee7d`. The commit stages only the driver's new method block from its previously dirty file; the pre-existing user hunks remain unstaged. No stack, action goal or real robot operation.
 - The CP-519 generation mismatch still blocks production wiring. Retain all EXP-517 evidence and earlier runs; archived none. Scratch and generated caches are deletion candidates only, nothing deleted. Formal accepted Train/Validation/Offline Test remains `0/0/0`.
 - Next exact work: add a source-only failing regression for two sequential ACT prefixes under one ownership lease, then specify the per-action controller generation and independent stop-proved arm transaction.
+
+## CP-521 — Bounded sequential goals share one stopped owner lease
+
+- EXP-517 remains `RUNNING`. Ruling: CP-519/520 proposed a new controller generation for every goal, but the existing `CLOSE_GENERATION` closes a whole owner lease. Source inspection and RED tests showed that one owner generation can instead hold sequential one-use UUID/typed Goal reservations. Commit `9c2be641` implements that bounded rule in `ControllerGoalAdmission`: at most 2048 unique UUIDs per generation, one pending reservation at a time, consumed UUID replay and overlap close the lease. The transport wire and authenticated close format stay unchanged. A new generation still requires a separate `arm` with independently proved stop/ownership; the production plugin does not yet provide it.
+- The Python broker RED failed on the second same-lease goal with `CONTROLLER_RESERVATION_REJECTED`; the C++ RED failed at `gate.reserve` for a distinct second UUID/Goal. Focused GREEN covers two sequential same-lease broker tickets, C++ gate consumption, and a real Python process reserving two goals through one C++ socket. The first goal is consumed before the second reservation. No action goal was sent.
+- Final C++ `colcon test` and `test-result`: 60 tests, zero errors/failures/skips, 7.14 s; read-only `ament_uncrustify` found no divergence. Final source Python xdist8: 4609 passed, 162 skipped, 43.62 s. Installed Python `colcon test` and `test-result`: 4771 tests, zero errors/failures, 162 skipped, 41.66 s. Every test run used a fresh registered NVMe scratch with exact Python tempfile proof. Installed controller header SHA256 equals source `578183f24f32c6382cecf52d43a904ed3a0d90e9d7a5ba9bd9885549f85aa6de`.
+- Evidence: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp517-broker-reservation-transaction/sequential-goals-checkpoint.json`, SHA256 `a433644f085e4281cb690db8fb4e6f359daa08cedaefe45f8793c41cb46cb6d1`. Runtime executable was the source-only C++ test binary; `ROS_DOMAIN_ID` was 225 for final C++, 219 for source Python and 221 for installed Python. `GZ_PARTITION` was unassigned for C++, `exp517-sequence-source`/`exp517-sequence-installed` for Python. No task-owned stack, action goal or physical robot operation.
+- Production controller socket/service lifetime, private peer and capability handoff in standalone and worker launch orders, local stop-proved `arm`, and MoveIt teacher proxy remain open. Formal accepted Train/Validation/Offline Test remains `0/0/0`; Task 12 training is not started. Retain all EXP-517 and earlier evidence; archived none. Scratch/generated caches are deletion candidates only, nothing deleted. Pre-existing dirty/untracked work remains unstaged.
+- Next exact work: write a source-only failing lifecycle test that requires the controller plugin to expose an authenticated socket only after a locally verified stopped owner lease, and closes it on deactivate/error/cleanup. Then implement the minimum production service lifetime without starting a stack or sending a goal.
