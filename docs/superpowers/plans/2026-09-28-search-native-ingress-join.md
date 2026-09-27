@@ -37,10 +37,10 @@
 - Consumes: `ControllerReservationClient.snapshot_generation(ticket, kind)`, `freeze_selected_search_source`, and the physics, reference and local owner proofs.
 - Produces: `verify_search_native_controller_ingress(broker, ticket, sources, observed, physical_proof, reference_proof, owner_proof, *, stopped_wall_s) -> dict`.
 
-- [ ] Write tests for a valid three-role join and for the five Review Focus cases owned by this verifier. Assert `command_authority is False`, `eligible_for_collection is False`, exact selected source and owner hashes, generation, and a deterministic snapshot digest.
-- [ ] Run the focused tests and retain the intended RED at the missing verifier import.
-- [ ] Implement the verifier. Require the same selected source hash, stop time and owner generation across inputs. Validate exact snapshot keys and types, each role once, each `last_ingress_monotonic_ns <= stop_ns`, each `observed_monotonic_ns >= max(original source receipts)`, `last <= observed <= received <= now`, and `now - received <= sources.readback.max_wall_age`. Recheck ticket, armed generation, stopped driver, SEARCH scope and selected source after the queries. Hash the validated snapshots with a versioned prefix. Return a neutral proof that explicitly requires commit-window ingress recheck.
-- [ ] Run the focused tests to GREEN and commit the verifier with its tests.
+- [x] Write tests for a valid three-role join and for the five Review Focus cases owned by this verifier. Assert `command_authority is False`, `eligible_for_collection is False`, exact selected source and owner hashes, generation, and a deterministic snapshot digest.
+- [x] Run the focused tests and retain the intended RED at the missing verifier import.
+- [x] Implement the verifier. Require the same selected source hash, stop time and owner generation across inputs. Validate exact snapshot keys and types, each role once, each `last_ingress_monotonic_ns <= stop_ns`, each `observed_monotonic_ns >= max(original source receipts)`, `last <= observed <= received <= now`, and `now - received <= sources.readback.max_wall_age`. Recheck ticket, armed generation, stopped driver, SEARCH scope and selected source after the queries. Hash the validated snapshots with a versioned prefix. Return a neutral proof that explicitly requires commit-window ingress recheck.
+- [x] Run the focused tests to GREEN and commit the verifier with its tests.
 
 ### Task 2: Require the join in production SEARCH
 
@@ -54,7 +54,7 @@
 - Consumes: `verify_search_native_controller_ingress(...)` from Task 1.
 - Produces: `PickPlaceSearchObservation.native_controller_ingress_proof` and a required `native_ingress_verifier` callback in `PickPlaceSearchSegment`.
 
-- [ ] Write tests showing that SEARCH refuses a missing/invalid native proof, confirms stop on failure, and returns the bound proof on success. Test that the production boundary passes its current ticket and the real verifier.
-- [ ] Run those tests to RED at the missing segment constructor argument or proof field.
-- [ ] Call the native verifier after the local owner verifier. Check its selected source, owner event hash, stop time, generation and neutral flags before returning. Have the boundary construct the callback with its current broker ticket.
-- [ ] Run focused tests to GREEN, then the full source and installed ordinary `so101_demo_py` gates. Check package XML, test-result, formatting and installed/source identity; commit source and checkpoint the evidence in the experiment ledger.
+- [x] Write tests showing that SEARCH refuses a missing/invalid native proof, confirms stop on failure, and returns the bound proof on success. Test that the production boundary passes its current ticket and the real verifier.
+- [x] Run those tests to RED at the missing segment constructor argument or proof field.
+- [x] Call the native verifier after the local owner verifier. Check its selected source, owner event hash, stop time, generation and neutral flags before returning. Have the boundary construct the callback with its current broker ticket.
+- [x] Run focused tests to GREEN, then the full source and installed ordinary `so101_demo_py` gates. Check package XML, test-result, formatting and installed/source identity; commit source and checkpoint the evidence in the experiment ledger.

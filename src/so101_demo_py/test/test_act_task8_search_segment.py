@@ -122,7 +122,8 @@ class _Adapter:
 
 
 def _segment(sources, adapter, scene, *, guard=lambda: None, clock=None,
-             history_verifier=None, reference_verifier=None, owner_verifier=None):
+             history_verifier=None, reference_verifier=None, owner_verifier=None,
+             native_ingress_verifier=None):
     clock = [10.0] if clock is None else clock
     if history_verifier is None:
         history_verifier = lambda observed, stopped_wall_s: {
@@ -147,17 +148,30 @@ def _segment(sources, adapter, scene, *, guard=lambda: None, clock=None,
         }
     if owner_verifier is None:
         owner_verifier = lambda observed, physical_proof, references, stopped_wall_s: {
+            "owner_generation": 1,
             "selected_source_sha256": physical_proof["selected_source_sha256"],
             "reference_window_sha256": references["reference_window_sha256"],
+            "control_event_window_sha256": "test-event-window",
             "stop_confirmed_wall_s": stopped_wall_s,
             "controller_native_ingress_proof_required": True,
+            "command_authority": False,
+            "eligible_for_collection": False,
+        }
+    if native_ingress_verifier is None:
+        native_ingress_verifier = lambda observed, physical, references, owner, stopped: {
+            "owner_generation": owner["owner_generation"],
+            "selected_source_sha256": physical["selected_source_sha256"],
+            "reference_window_sha256": references["reference_window_sha256"],
+            "control_event_window_sha256": owner["control_event_window_sha256"],
+            "stop_confirmed_wall_s": stopped,
+            "commit_window_ingress_recheck_required": True,
             "command_authority": False,
             "eligible_for_collection": False,
         }
     return PickPlaceSearchSegment(
         sources, adapter, scene, _geometry(), operation_guard=guard,
         history_verifier=history_verifier, reference_verifier=reference_verifier,
-        owner_verifier=owner_verifier,
+        owner_verifier=owner_verifier, native_ingress_verifier=native_ingress_verifier,
         max_source_wait_s=0.05, poll_interval_s=0.01,
         monotonic=lambda: clock[0], sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
     )
@@ -184,6 +198,7 @@ def test_search_waits_for_new_steps_then_reads_back_final_physical_cup_pose():
     assert observation.stationary_physics_proof["command_authority"] is False
     assert observation.stationary_reference_proof["command_authority"] is False
     assert observation.local_owner_goal_proof["command_authority"] is False
+    assert observation.native_controller_ingress_proof["command_authority"] is False
     assert observation.physics_step_fence["marked_physics_step"] == 2
 
 
@@ -303,6 +318,48 @@ def test_search_refuses_when_owner_goal_interval_is_missing():
 
     segment = _segment(sources, adapter, _Scene(), owner_verifier=missing_owner)
     with pytest.raises(ValueError, match="SEARCH_OWNER_GOAL_INTERVAL_INVALID"):
+        segment.run(_request(), reset_epoch=2)
+    assert adapter.stops == 2
+
+
+def test_search_refuses_missing_native_ingress_proof_and_confirms_stop():
+    sources = _Sources(_raw(1, sim_time_s=1.0), _raw(2, sim_time_s=1.002),
+                       _raw(3, sim_time_s=1.004), _raw(53, sim_time_s=1.104))
+    adapter = _Adapter({"status": "INPUT_PENDING", "stop": True},
+                       _locked(timestamp=1.002))
+
+    def missing_native(_observed, _physical, _references, _owner, _stopped):
+        raise ValueError("SEARCH_NATIVE_CONTROLLER_INGRESS_INVALID")
+
+    segment = _segment(sources, adapter, _Scene(),
+                       native_ingress_verifier=missing_native)
+    with pytest.raises(ValueError, match="SEARCH_NATIVE_CONTROLLER_INGRESS_INVALID"):
+        segment.run(_request(), reset_epoch=2)
+    assert adapter.stops == 2
+
+
+def test_search_refuses_native_proof_for_another_selected_source():
+    sources = _Sources(_raw(1, sim_time_s=1.0), _raw(2, sim_time_s=1.002),
+                       _raw(3, sim_time_s=1.004), _raw(53, sim_time_s=1.104))
+    adapter = _Adapter({"status": "INPUT_PENDING", "stop": True},
+                       _locked(timestamp=1.002))
+
+    def changed_source(_observed, _physical, references, owner, stopped):
+        return {
+            "owner_generation": owner["owner_generation"],
+            "selected_source_sha256": "other-source",
+            "reference_window_sha256": references["reference_window_sha256"],
+            "control_event_window_sha256": owner["control_event_window_sha256"],
+            "stop_confirmed_wall_s": stopped,
+            "commit_window_ingress_recheck_required": True,
+            "command_authority": False,
+            "eligible_for_collection": False,
+        }
+
+    segment = _segment(sources, adapter, _Scene(),
+                       native_ingress_verifier=changed_source)
+    with pytest.raises(PickPlaceSearchError,
+                       match="SEARCH_NATIVE_CONTROLLER_INGRESS_INVALID"):
         segment.run(_request(), reset_epoch=2)
     assert adapter.stops == 2
 

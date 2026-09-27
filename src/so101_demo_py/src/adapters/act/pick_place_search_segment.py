@@ -29,6 +29,7 @@ class PickPlaceSearchObservation:
     stationary_reference_proof: dict | None = None
     local_owner_goal_proof: dict | None = None
     physics_step_fence: dict | None = None
+    native_controller_ingress_proof: dict | None = None
 
 
 class PickPlaceSearchSegment:
@@ -36,7 +37,7 @@ class PickPlaceSearchSegment:
 
     def __init__(self, sources, adapter, scene_port, geometry: TaskGeometry, *,
                  operation_guard, history_verifier, reference_verifier,
-                 owner_verifier,
+                 owner_verifier, native_ingress_verifier,
                  max_source_wait_s: float, poll_interval_s: float,
                  monotonic=time.monotonic, sleep=time.sleep,
                  clock_ns=time.monotonic_ns) -> None:
@@ -44,7 +45,8 @@ class PickPlaceSearchSegment:
                 or not callable(operation_guard)
                 or not callable(history_verifier)
                 or not callable(reference_verifier)
-                or not callable(owner_verifier)):
+                or not callable(owner_verifier)
+                or not callable(native_ingress_verifier)):
             raise ValueError("SEARCH_SEGMENT_CONFIG_INVALID")
         max_wait = finite(max_source_wait_s)
         poll = finite(poll_interval_s)
@@ -55,6 +57,7 @@ class PickPlaceSearchSegment:
         self.history_verifier = history_verifier
         self.reference_verifier = reference_verifier
         self.owner_verifier = owner_verifier
+        self.native_ingress_verifier = native_ingress_verifier
         self.max_wait, self.poll = max_wait, poll
         self.monotonic, self.sleep, self.clock_ns = monotonic, sleep, clock_ns
 
@@ -226,9 +229,24 @@ class PickPlaceSearchSegment:
                         or owner.get("command_authority") is not False
                         or owner.get("eligible_for_collection") is not False):
                     raise PickPlaceSearchError("SEARCH_OWNER_GOAL_INTERVAL_INVALID")
+                native = self.native_ingress_verifier(
+                    observed, proof, references, owner, stopped_wall_s)
+                if (not isinstance(native, dict)
+                        or native.get("selected_source_sha256") !=
+                           proof.get("selected_source_sha256")
+                        or native.get("reference_window_sha256") !=
+                           references.get("reference_window_sha256")
+                        or native.get("control_event_window_sha256") !=
+                           owner.get("control_event_window_sha256")
+                        or native.get("owner_generation") != owner.get("owner_generation")
+                        or native.get("stop_confirmed_wall_s") != stopped_wall_s
+                        or native.get("commit_window_ingress_recheck_required") is not True
+                        or native.get("command_authority") is not False
+                        or native.get("eligible_for_collection") is not False):
+                    raise PickPlaceSearchError("SEARCH_NATIVE_CONTROLLER_INGRESS_INVALID")
                 self._guard(request)
                 return PickPlaceSearchObservation(
-                    result, final_raw, scene_receipt, proof, references, owner, marker)
+                    result, final_raw, scene_receipt, proof, references, owner, marker, native)
         except BaseException as error:
             try:
                 stopped = self.adapter.neck_port.stop_and_confirm()

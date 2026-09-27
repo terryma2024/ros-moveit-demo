@@ -9,6 +9,7 @@ from so101_demo.act.contracts import finite, identifier
 from so101_demo.core.task_geometry import TaskGeometry
 from .pick_place_search_binding import build_pick_place_search_adapter
 from .pick_place_search_history import verify_search_stationary_physics
+from .pick_place_search_native_ingress import verify_search_native_controller_ingress
 from .pick_place_search_owner import verify_search_owner_goal_interval
 from .pick_place_search_reference import verify_search_stationary_references
 from .pick_place_search_segment import PickPlaceSearchSegment
@@ -129,6 +130,16 @@ class PickPlaceSearchBoundary:
                             request["session_id"], request["attempt_id"]),
                         self.reset.sources, observed, physical_proof, references,
                         stopped_wall_s=stopped_wall_s,
+                    ),
+                native_ingress_verifier=lambda observed, physical_proof, references,
+                owner_proof, stopped_wall_s:
+                    verify_search_native_controller_ingress(
+                        self.reset.broker,
+                        self.reset.broker.ownership.ticket(
+                            self.reset.act_context["lease_token"], "act",
+                            request["session_id"], request["attempt_id"]),
+                        self.reset.sources, observed, physical_proof, references,
+                        owner_proof, stopped_wall_s=stopped_wall_s,
                     ),
                 max_source_wait_s=self.max_source_wait_s,
                 poll_interval_s=self.poll_interval_s,

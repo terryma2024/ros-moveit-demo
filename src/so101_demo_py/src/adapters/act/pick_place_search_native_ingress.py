@@ -33,6 +33,7 @@ def verify_search_native_controller_ingress(
             _nanoseconds(value)
             for value in selected["source_received_wall_s"].values())
         generation = ticket[0]
+        reservation_port = broker.reservation_port
         if (not isinstance(ticket, tuple) or len(ticket) != 5
                 or type(generation) is not int or generation < 1
                 or ticket[2:] != ("act", selected["session_id"], selected["attempt_id"])
@@ -54,8 +55,7 @@ def verify_search_native_controller_ingress(
                 or owner_proof.get("controller_native_ingress_proof_required") is not True
                 or not isinstance(owner_proof.get("control_event_window_sha256"), str)
                 or len(owner_proof["control_event_window_sha256"]) != 64
-                or not callable(getattr(broker.reservation_port,
-                                        "snapshot_generation", None))):
+                or not callable(getattr(reservation_port, "snapshot_generation", None))):
             raise ValueError("SEARCH_NATIVE_SCOPE_INVALID")
         broker.ownership.require_ticket(ticket)
         if broker._armed_generation != generation or broker.driver.stopped() is not True:
@@ -63,7 +63,7 @@ def verify_search_native_controller_ingress(
 
         snapshots = {}
         for kind in _CONTROLLERS:
-            snapshot = broker.reservation_port.snapshot_generation(ticket, kind)
+            snapshot = reservation_port.snapshot_generation(ticket, kind)
             if type(snapshot) is not dict or set(snapshot) != _SNAPSHOT_KEYS:
                 raise ValueError("SEARCH_NATIVE_SNAPSHOT_INVALID")
             sequence = snapshot["ingress_sequence"]
@@ -85,7 +85,7 @@ def verify_search_native_controller_ingress(
 
         now_ns = _nanoseconds(sources.readback.monotonic())
         if (broker._armed_generation != generation
-                or broker.reservation_port is None
+                or broker.reservation_port is not reservation_port
                 or broker.driver.stopped() is not True
                 or (sources.session_id, sources.reset_epoch, sources.phase) !=
                    (selected["session_id"], selected["reset_epoch"], "SEARCH")
