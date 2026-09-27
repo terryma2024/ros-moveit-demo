@@ -9,6 +9,7 @@ from so101_demo.act.contracts import finite, identifier
 from so101_demo.core.task_geometry import TaskGeometry
 from .pick_place_search_binding import build_pick_place_search_adapter
 from .pick_place_search_history import verify_search_stationary_physics
+from .pick_place_search_reference import verify_search_stationary_references
 from .pick_place_search_segment import PickPlaceSearchSegment
 
 
@@ -112,6 +113,11 @@ class PickPlaceSearchBoundary:
                 history_verifier=lambda observed, stopped_wall_s:
                     verify_search_stationary_physics(
                         self.reset.sources, observed, model=self.reset.model,
+                        stopped_wall_s=stopped_wall_s,
+                    ),
+                reference_verifier=lambda observed, physical_proof, stopped_wall_s:
+                    verify_search_stationary_references(
+                        self.reset.sources, observed, physical_proof,
                         stopped_wall_s=stopped_wall_s,
                     ),
                 max_source_wait_s=self.max_source_wait_s,

@@ -26,19 +26,21 @@ class PickPlaceSearchObservation:
     physical_readback: dict
     planning_scene: SceneCommandReceipt
     stationary_physics_proof: dict | None = None
+    stationary_reference_proof: dict | None = None
 
 
 class PickPlaceSearchSegment:
     """Drive only SEARCH; the caller decides whether its evidence passes."""
 
     def __init__(self, sources, adapter, scene_port, geometry: TaskGeometry, *,
-                 operation_guard, history_verifier,
+                 operation_guard, history_verifier, reference_verifier,
                  max_source_wait_s: float, poll_interval_s: float,
                  monotonic=time.monotonic, sleep=time.sleep,
                  clock_ns=time.monotonic_ns) -> None:
         if (not isinstance(geometry, TaskGeometry)
                 or not callable(operation_guard)
-                or not callable(history_verifier)):
+                or not callable(history_verifier)
+                or not callable(reference_verifier)):
             raise ValueError("SEARCH_SEGMENT_CONFIG_INVALID")
         max_wait = finite(max_source_wait_s)
         poll = finite(poll_interval_s)
@@ -47,6 +49,7 @@ class PickPlaceSearchSegment:
         self.sources, self.adapter, self.scene_port = sources, adapter, scene_port
         self.geometry, self.guard = geometry, operation_guard
         self.history_verifier = history_verifier
+        self.reference_verifier = reference_verifier
         self.max_wait, self.poll = max_wait, poll
         self.monotonic, self.sleep, self.clock_ns = monotonic, sleep, clock_ns
 
@@ -179,9 +182,21 @@ class PickPlaceSearchSegment:
                         or proof.get("command_authority") is not False
                         or proof.get("eligible_for_collection") is not False):
                     raise PickPlaceSearchError("SEARCH_PHYSICS_HISTORY_INVALID")
+                references = self.reference_verifier(
+                    observed, proof, stopped_wall_s)
+                if (not isinstance(references, dict)
+                        or references.get("selected_sim_time_ns") != round(
+                            final_raw["world"].simulation_time_s * 1_000_000_000)
+                        or references.get("selected_source_sha256") !=
+                           proof.get("selected_source_sha256")
+                        or references.get("stop_confirmed_wall_s") != stopped_wall_s
+                        or references.get("owner_goal_interval_proof_required") is not True
+                        or references.get("command_authority") is not False
+                        or references.get("eligible_for_collection") is not False):
+                    raise PickPlaceSearchError("SEARCH_REFERENCE_HISTORY_INVALID")
                 self._guard(request)
                 return PickPlaceSearchObservation(
-                    result, final_raw, scene_receipt, proof)
+                    result, final_raw, scene_receipt, proof, references)
         except BaseException as error:
             try:
                 stopped = self.adapter.neck_port.stop_and_confirm()
