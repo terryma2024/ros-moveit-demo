@@ -10,6 +10,7 @@ import time
 import uuid
 
 from so101_demo.act.contracts import fields, identifier
+from so101_demo.act.control_event_timeline import ControlEventTimeline
 from so101_demo.act.ownership import OWNERS
 from so101_demo.act.prefix_source import PrefixSourceAuthority
 
@@ -29,7 +30,7 @@ def endpoint_bytes(path):
 
 class CommandBroker:
     def __init__(self,driver,*,ownership,simulation_session_id=None,prefix_executor=None,
-                 prefix_source_authority=None,prefix_source_port=None):
+                 prefix_source_authority=None,prefix_source_port=None,control_events=None):
         if (prefix_source_authority is None) != (prefix_source_port is None):
             raise ValueError('PREFIX_SOURCE_CONFIG_INVALID')
         if prefix_source_authority is not None and (
@@ -41,6 +42,12 @@ class CommandBroker:
         self._prefix_sources=prefix_source_authority
         self._prefix_source_port=prefix_source_port
         self.simulation_session_id=simulation_session_id
+        self.control_events=control_events if control_events is not None else ControlEventTimeline()
+        if not isinstance(self.control_events,ControlEventTimeline):
+            raise TypeError('CONTROL_EVENTS_INVALID')
+        self.ownership.bind_control_events(self.control_events)
+        if hasattr(self.driver,'bind_control_events'):
+            self.driver.bind_control_events(self.control_events)
         self._lock=threading.RLock();self._participants={};self._goal_tickets={}
         self._stopping_generation=None;self.audit=[];self._fault_reason=None
         self._reset_ticket=None;self._reset_applied=False;self._post_reset_ticket=None;self._writes=[]
@@ -68,8 +75,18 @@ class CommandBroker:
         with self._lock,self.ownership.authorized(*ticket[1:]):
             self.ownership.require_ticket(ticket)
             self._post_reset_ticket=None
-            gid=identifier(self.driver.submit(kind,goal))
+            self.control_events.record('submit_begin',generation=ticket[0],owner=ticket[2],
+                                       session_id=ticket[3],attempt_id=ticket[4],detail=kind)
+            try:gid=identifier(self.driver.submit(kind,goal))
+            except Exception:
+                self.control_events.record('submit_uncertain',generation=ticket[0],
+                                           owner=ticket[2],session_id=ticket[3],
+                                           attempt_id=ticket[4],detail=kind)
+                raise
             self._goal_tickets[gid]=ticket
+            self.control_events.record('submit_registered',generation=ticket[0],
+                                       owner=ticket[2],session_id=ticket[3],
+                                       attempt_id=ticket[4],goal_id=gid,detail=kind)
             self.audit.append(dict(operation='submit',generation=ticket[0],owner=ticket[2],
                                    session_id=ticket[3],attempt_id=ticket[4],goal_id=gid))
             return gid

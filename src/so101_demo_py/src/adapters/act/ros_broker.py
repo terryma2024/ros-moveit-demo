@@ -23,6 +23,7 @@ from sensor_msgs.msg import JointState
 from unique_identifier_msgs.msg import UUID as RosGoalUUID
 
 from so101_demo.act.contracts import finite, fields
+from so101_demo.act.control_event_timeline import ControlEventTimeline
 from so101_demo.act.joints import ARM_JOINTS, ACT_JOINTS, JOINT_LIMITS
 from so101_demo.act.trajectory import controller_point, interpolate_segment
 from .leased_action_client import ACTIONS, message_dict, decoded
@@ -123,6 +124,7 @@ class RosBrokerDriver:
         self.stop_velocity=finite(stop_velocity_rad_s);self.max_age=finite(max_age_s)
         if self.stop_velocity<0 or self.max_age<=0:raise ValueError('STOP_CONFIG_INVALID')
         self._lock=threading.RLock();self._records={};self._velocity=None;self._received=None
+        self._control_events=None
         self._statuses={};self._status_received={};self._cancel_all=[]
         self._pending_writes=[]
         self._baseline_futures={};self._stop_confirmed_at=None
@@ -154,6 +156,18 @@ class RosBrokerDriver:
                 lambda message,kind=kind:self._status(kind,message),qos_profile_action_status_default))
 
     def ready(self,kind):return self.clients[kind].server_is_ready()
+
+    def bind_control_events(self,events):
+        with self._lock:
+            if (not isinstance(events,ControlEventTimeline)
+                    or getattr(self,'_control_events',None) is not None
+                    or self._records or any(self._statuses.values())):
+                raise RuntimeError('CONTROL_HISTORY_LATE_BIND')
+            self._control_events=events
+
+    def _control_event(self,kind,**fields):
+        timeline=getattr(self,'_control_events',None)
+        if timeline is not None:timeline.record(kind,**fields)
 
     def _joints(self,message):
         if len(set(message.name))!=len(message.name) or len(message.velocity)!=len(message.name):return
@@ -304,15 +318,21 @@ class RosBrokerDriver:
                     for record in self._records.values())
         if unknown and kind in ('arm','gripper') and teachers:
             chain=teachers[-1].setdefault('downstream_goal_ids',{}).setdefault(kind,{})
-            for goal_id in unknown:chain[goal_id]=dict(status=active[goal_id],seen_wall_s=self.monotonic())
+            for goal_id in unknown:
+                chain[goal_id]=dict(status=active[goal_id],seen_wall_s=self.monotonic())
+                self._control_event('downstream_goal_observed',ros_goal_id=goal_id,detail=kind)
         elif unknown and not pending:
             self.unknown_goal_seen=True;self.hazard_reason='UNKNOWN_ACTIVE_GOAL'
+            for goal_id in unknown:
+                self._control_event('unknown_goal',ros_goal_id=goal_id,detail=kind)
 
     def _status(self,kind,message):
         with self._lock:
             self._statuses[kind]={bytes(item.goal_info.goal_id.uuid).hex():item.status
                     for item in message.status_list if item.status in (1,2,3)}
             self._status_received[kind]=self.monotonic()
+            snapshot=','.join(f'{goal_id}:{value}' for goal_id,value in sorted(self._statuses[kind].items()))
+            self._control_event('action_status',detail=f'{kind}|{snapshot}')
             self._reconcile_status(kind)
 
     def validate(self,kind,goal):return validated_goal(kind,goal)
@@ -335,13 +355,19 @@ class RosBrokerDriver:
                     submitted_sim_s=self.node.get_clock().now().nanoseconds*1e-9)
         if prepared_uuid is not None:record['ros_goal_id']=parsed.hex
         with self._lock:self._records[gid]=record
+        self._control_event('goal_send_begin',goal_id=gid,
+                            ros_goal_id=record.get('ros_goal_id'),detail=kind)
         try:
             options=dict(feedback_callback=lambda message:self._feedback(gid,message))
             if prepared_uuid is not None:options['goal_uuid']=prepared_uuid
             future=self.clients[kind].send_goal_async(goal,**options)
+            self._control_event('goal_send_enqueued',goal_id=gid,
+                                ros_goal_id=record.get('ros_goal_id'),detail=kind)
             future.add_done_callback(lambda response:self._accepted(gid,response))
         except Exception as error:
             with self._lock:record['accepted']=None;record['error']=repr(error);self.hazard_reason='GOAL_SEND_UNCERTAIN'
+            self._control_event('goal_send_failed',goal_id=gid,
+                                ros_goal_id=record.get('ros_goal_id'),detail=kind)
             raise
         return gid
 
@@ -357,17 +383,27 @@ class RosBrokerDriver:
                 if handle.accepted:
                     actual_goal_id=bytes(handle.goal_id.uuid).hex()
                     if record.get('ros_goal_id') is not None and record['ros_goal_id']!=actual_goal_id:
-                        record['error']='GOAL_UUID_MISMATCH';self.hazard_reason='GOAL_UUID_MISMATCH';return
+                        record['error']='GOAL_UUID_MISMATCH';self.hazard_reason='GOAL_UUID_MISMATCH'
+                        self._control_event('goal_response',goal_id=gid,
+                                            ros_goal_id=actual_goal_id,detail='uuid_mismatch')
+                        return
                     record['ros_goal_id']=actual_goal_id
                     handle.get_result_async().add_done_callback(lambda result:self._result(gid,result))
                     if record['cancel_requested']:self._cancel(gid)
             except Exception as error:record['error']=repr(error);self.hazard_reason='GOAL_RESPONSE_LOST'
+            response_state=('accepted' if record['accepted'] is True and not record['error'] else
+                            'rejected' if record['accepted'] is False else 'error')
+            self._control_event('goal_response',goal_id=gid,
+                                ros_goal_id=record.get('ros_goal_id'),detail=response_state)
             for kind in ACTION_TYPES:self._reconcile_status(kind)
 
     def _result(self,gid,future):
         with self._lock:
             try:self._records[gid]['result']=future.result()
             except Exception as error:self._records[gid]['error']=repr(error);self.hazard_reason='GOAL_RESULT_LOST'
+            self._control_event('goal_result',goal_id=gid,
+                                ros_goal_id=self._records[gid].get('ros_goal_id'),
+                                detail='received' if self._records[gid]['result'] is not None else 'error')
             for kind in ACTION_TYPES:self._reconcile_status(kind)
 
     def _cancel(self,gid):
@@ -385,6 +421,8 @@ class RosBrokerDriver:
             record=self._records[gid]
             if record['cancel_requested']:return
             record['cancel_requested']=True
+            self._control_event('goal_cancel_requested',goal_id=gid,
+                                ros_goal_id=record.get('ros_goal_id'),detail=record['kind'])
             if record['accepted'] is True:self._cancel(gid)
             elif record['accepted'] is False:
                 # No actual accepted goal exists. Preserve the real rejected
@@ -393,6 +431,7 @@ class RosBrokerDriver:
 
     def stop_all(self,reason):
         with self._lock:
+            self._control_event('stop_all_requested',detail=reason)
             for gid in self._records:self.cancel(gid)
             # Authorized MoveIt executes send their own downstream controller
             # goals. Cancel those controlled-stack goals too, and observe status
@@ -405,6 +444,7 @@ class RosBrokerDriver:
         self._stop_confirmed_at=None;self._baseline_allow_existing=allow_existing
         self._baseline_futures={kind:client.call_async(CancelGoal.Request())
                                 for kind,client in self.cancel_clients.items()}
+        self._control_event('stop_baseline_requested',detail='allow_existing' if allow_existing else 'negative')
         self._cancel_all.extend(self._baseline_futures.values())
 
     def _read_stop_baseline(self):
@@ -416,6 +456,7 @@ class RosBrokerDriver:
             if not self._baseline_allow_existing and any(response.goals_canceling for response in responses):
                 self.unknown_goal_seen=True;self.hazard_reason='UNKNOWN_ACTIVE_GOAL';return
             self._stop_confirmed_at=self.monotonic()
+            self._control_event('stop_baseline_confirmed')
         except Exception:self.hazard_reason='CANCEL_RESPONSE_LOST'
 
     def refresh_idle(self):
