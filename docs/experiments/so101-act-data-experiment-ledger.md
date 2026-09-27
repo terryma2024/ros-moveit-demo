@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 58649e62
+current_commit: a0963d81
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -34,6 +34,7 @@ confirmed_conclusions:
   - EXP-501 finds that latest-only controller references and action status cannot prove the same 100 ms interval; the installed trajectory-controller header also exposes a topic callback whose exclusivity is unproved.
   - EXP-502 closes the ACT MuJoCo arm/gripper/neck trajectory-topic subscriber in an action-only controller plugin, with C++ plugin and Python gates passing; external action ownership and reference history remain unproved.
   - EXP-503 confirms the installed action-only plugin on a fresh isolated no-motion ACT stack: three active controller types, zero trajectory-topic subscribers, seven-axis readiness and clean owner/domain retirement.
+  - EXP-504 passively captures a common 100 ms/51-frame 2 ms controller-reference window in a no-motion stack; a missing optional graph helper invalidated only that run's repeat topic-subscription check, and controller/ownership provenance is still absent.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -41,8 +42,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-503
-next_experiment: EXP-504
+latest_checkpoint: CP-504
+next_experiment: EXP-505
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4588,3 +4589,36 @@ next_experiment: EXP-504
 
 - Registered run: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp503-controller-identity-no-motion`. The exact launch argv, owner identity, seven-axis stdout, controller list, graph subscriber counts, stop result and empty final graph are retained. This is one isolated no-motion diagnostic, not an accepted phase or episode.
 - The last required 100 ms controller reference and goal/ownership history is still absent. No proof port, permit or goal was enabled. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-503, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
+
+## EXP-504 — Passive controller-reference cadence feasibility
+
+```yaml
+experiment_id: EXP-504
+status: VALID_MEASUREMENT_WITH_INVALID_OPTIONAL_CHECK
+prior_experiment: EXP-503
+hypothesis: The installed ACT controller_state streams can deliver at least one common 51-frame, exact 2 ms stationary-reference window during an isolated no-motion run.
+prediction: Arm, gripper and neck original header stamps overlap for 100 ms in 2 ms steps with fixed reference positions and zero reference velocities.
+single_variable: Six-second passive controller reference subscription on a new no-motion stack; no broker, reset or goal.
+lifecycle: ISOLATED_STACK
+preconditions: [EXP-503 valid, empty domain 182, exact installed overlay]
+success_criteria: [Raw stamped reference frames retained, common exact 51-frame window verified offline, clean stack retirement]
+failure_criteria: [No shared window, nonstationary reference or uncertain retirement]
+invalid_criteria: [Motion command or undocumented frame substitution]
+provenance:
+  source_commit: a0963d81
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /opt/ros/jazzy/bin/ros2
+  ros_domain_id: 182
+  gz_partition: act-data-exp504-182
+commands: ["Fresh-domain no-motion launch and seven-axis readiness", "Passive arm/gripper/neck controller_state capture using the broker's sensor QoS for six wall seconds", "Offline exact-stamp intersection and 51-frame constant-reference analysis", "Owner-scoped stop and empty-domain readback"]
+observed: ["Readiness seven of seven, three correct active controller types and launch owner PID 465840/PGID 465840/start ticks 58667749; stop returned 0 and final graph was empty", "The wrapper exited 1 solely because inspect_graph.py was not copied into this run directory; ingress_rc 2 and this run's optional repeat zero-subscriber check is INVALID, not a passed check; EXP-503 had already established zero subscribers in its own run", "Capture exited 0 and retained 8340 original frames: arm 2781, gripper 2780, neck 2779; every within-stream consecutive header-stamp delta was exactly 2,000,000 ns and each maximum absolute reference velocity was zero", "Offline intersection has 2779 common timestamps and 2729 exact 51-frame windows; first window spans 13,098,000,000 to 13,198,000,000 ns, all three reference positions remain constant and maximum three-stream receipt skew is 301,572 ns", "Raw frames SHA256 b7671c41a8e2e469978b546d678e485a0206299dad81806e3d1e35259f00de32; shared-window result SHA256 791040ee4f5354a30bc21a438b078f1d9ddf9402f087d04634e4f4d3053e478b; no reset, goal or hardware operation"]
+inferred: ["A 500 Hz three-controller publication history is feasible in this one no-motion run, but this does not prove lossless delivery during SEARCH or any later run", "Controller-state headers alone do not bind a broker ticket, goal events, reset epoch or physical history; the 100 ms path bridge is still nonauthoritative"]
+conclusion: VALID passive cadence measurement with an explicitly invalid same-run topic graph subcheck; no formal qualification.
+decision: Do not rerun the same stack for the missing optional graph check; EXP-503 already covers that boundary. Build broker-owned bounded controller-reference history and event/ownership fences, then join only actual same-run frames to EXP-500 physical history.
+next_experiment: EXP-505
+```
+
+## CP-504 — 51-frame controller history is observable, not yet authoritative
+
+- Registered run: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp504-controller-reference-cadence`. Original frame JSONL, capture and offline analysis scripts, failed optional ingress stderr, exact owner/readiness and clean retirement are retained. The missing helper is not repaired by rewriting the historical result or by claiming the repeat graph check passed.
+- The controller reference window was observed without command authority. A broker-owned history with original timestamps, session/epoch, goal-status and ownership-generation fences is still required before any selected SEARCH bridge or PathProof can use it. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-504, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
