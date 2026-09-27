@@ -11,6 +11,7 @@ import uuid
 
 from so101_demo.act.contracts import fields, identifier
 from so101_demo.act.ownership import OWNERS
+from so101_demo.act.prefix_source import PrefixSourceAuthority
 
 BASE=frozenset(('protocol_version','request_id','owner','session_id','attempt_id','lease_token','operation'))
 EXTRA={'acquire':set(),'release':set(),'revoke':set(),'status':set(),'renew':set(),
@@ -27,13 +28,41 @@ def endpoint_bytes(path):
 
 
 class CommandBroker:
-    def __init__(self,driver,*,ownership,simulation_session_id=None,prefix_executor=None):
+    def __init__(self,driver,*,ownership,simulation_session_id=None,prefix_executor=None,
+                 prefix_source_authority=None,prefix_source_port=None):
+        if (prefix_source_authority is None) != (prefix_source_port is None):
+            raise ValueError('PREFIX_SOURCE_CONFIG_INVALID')
+        if prefix_source_authority is not None and (
+                not isinstance(prefix_source_authority,PrefixSourceAuthority)
+                or not callable(prefix_source_port)):
+            raise ValueError('PREFIX_SOURCE_CONFIG_INVALID')
         self.driver,self.ownership=driver,ownership
         self.prefix_executor=prefix_executor;self._pair_goals=set()
+        self._prefix_sources=prefix_source_authority
+        self._prefix_source_port=prefix_source_port
         self.simulation_session_id=simulation_session_id
         self._lock=threading.RLock();self._participants={};self._goal_tickets={}
         self._stopping_generation=None;self.audit=[];self._fault_reason=None
         self._reset_ticket=None;self._reset_applied=False;self._post_reset_ticket=None;self._writes=[]
+
+    def issue_prefix_source(self,*,ticket,prefix,source,source_kind,
+                            source_artifact_sha256,contact_policy_fingerprint,
+                            output_received_wall_s=None):
+        """Register a trusted in-process producer's exact source and prefix."""
+        if self._prefix_sources is None:
+            raise PermissionError('PREFIX_SOURCE_UNAVAILABLE')
+        self.ownership.require_ticket(ticket)
+        if ticket[2]!='act':raise PermissionError('PREFIX_OWNER_INVALID')
+        receipt=self._prefix_sources.issue(
+            ticket=ticket,prefix=prefix,source=source,source_kind=source_kind,
+            source_artifact_sha256=source_artifact_sha256,
+            contact_policy_fingerprint=contact_policy_fingerprint,
+            output_received_wall_s=output_received_wall_s)
+        try:self.ownership.require_ticket(ticket)
+        except PermissionError:
+            self._prefix_sources.revoke()
+            raise
+        return receipt
 
     def dispatch(self,ticket,kind,goal):
         with self._lock,self.ownership.authorized(*ticket[1:]):
@@ -61,6 +90,7 @@ class CommandBroker:
             if generation!=self._stopping_generation:
                 self._stopping_generation=generation
                 self._reset_ticket=None;self._reset_applied=False;self._post_reset_ticket=None
+                if self._prefix_sources is not None:self._prefix_sources.revoke()
                 try:
                     if self.prefix_executor is not None:self.prefix_executor.invalidate(self.ownership.reason or 'REVOKED')
                 except Exception as error:
@@ -180,7 +210,17 @@ class CommandBroker:
                 # Each actual controller send separately rechecks this ticket
                 # inside dispatch's authorization/queue critical section.
                 if operation=='approve_prefix':
-                    response['permit']=self.prefix_executor.approve(ticket,request['prefix'])
+                    if self._prefix_sources is None:
+                        response['permit']=self.prefix_executor.approve(ticket,request['prefix'])
+                    else:
+                        approve=getattr(self.prefix_executor,'approve_with_source',None)
+                        if not callable(approve):
+                            raise PermissionError('PREFIX_SOURCE_PROOF_UNWIRED')
+                        source=self._prefix_source_port(ticket)
+                        receipt=self._prefix_sources.consume(
+                            ticket=ticket,prefix=request['prefix'],source=source)
+                        self.ownership.require_ticket(ticket)
+                        response['permit']=approve(ticket,request['prefix'],receipt)
                 else:
                     gid=self.prefix_executor.submit(ticket,request['prefix'],request['permit'])
                     with self._lock:
@@ -231,6 +271,7 @@ class CommandBroker:
                         elif operation=='release':
                             if self._reset_ticket is not None:raise PermissionError('RESET_IN_PROGRESS')
                             self.ownership.release(scope[0],self.driver.stopped())
+                            if self._prefix_sources is not None:self._prefix_sources.revoke()
                             self._post_reset_ticket=None
                         elif operation=='revoke':self.ownership.revoke('CLIENT_REVOKED')
                     self._stop_if_revoked()
