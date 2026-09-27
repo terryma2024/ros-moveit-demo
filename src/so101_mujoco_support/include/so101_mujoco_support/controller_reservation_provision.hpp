@@ -10,7 +10,7 @@
 namespace so101_mujoco_support
 {
 
-enum class ControllerReservationRole : uint8_t {ARM = 1, GRIPPER = 2};
+enum class ControllerReservationRole : uint8_t {ARM = 1, GRIPPER = 2, NECK = 3};
 
 struct ControllerReservationProvision
 {

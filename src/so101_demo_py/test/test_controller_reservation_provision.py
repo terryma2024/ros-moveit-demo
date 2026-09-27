@@ -40,14 +40,19 @@ def test_provision_has_exact_role_session_peer_and_private_capability(tmp_path):
     parent = _private_directory(tmp_path)
     arm = parent / "arm.provision"
     gripper = parent / "gripper.provision"
+    neck = parent / "neck.provision"
     arm_key = write_controller_reservation_provision(
         arm, role="arm", session_id="session-17")
     gripper_key = write_controller_reservation_provision(
         gripper, role="gripper", session_id="session-17")
+    neck_key = write_controller_reservation_provision(
+        neck, role="neck", session_id="session-17")
 
-    assert len(arm_key) == len(gripper_key) == 32
-    assert any(arm_key) and any(gripper_key) and arm_key != gripper_key
-    for role, file, key in ((1, arm, arm_key), (2, gripper, gripper_key)):
+    assert {len(key) for key in (arm_key, gripper_key, neck_key)} == {32}
+    assert all(any(key) for key in (arm_key, gripper_key, neck_key))
+    assert len({arm_key, gripper_key, neck_key}) == 3
+    for role, file, key in ((1, arm, arm_key), (2, gripper, gripper_key),
+                            (3, neck, neck_key)):
         data = file.read_bytes()
         assert len(data) == 56 + len(b"session-17")
         assert data[:8] == b"SOPR" + bytes((1, role, len(b"session-17"), 0))
@@ -59,7 +64,7 @@ def test_provision_has_exact_role_session_peer_and_private_capability(tmp_path):
         assert stat.S_IMODE(file.stat().st_mode) == 0o600
         assert file.stat().st_nlink == 1
     assert sorted(file.name for file in parent.iterdir()) == [
-        "arm.provision", "gripper.provision"]
+        "arm.provision", "gripper.provision", "neck.provision"]
 
 
 def test_provision_refuses_overwrite_invalid_scope_and_symlink(tmp_path):
@@ -76,7 +81,7 @@ def test_provision_refuses_overwrite_invalid_scope_and_symlink(tmp_path):
     assert file.read_bytes() == original
     with pytest.raises(ValueError):
         write_controller_reservation_provision(parent / "bad.provision",
-                                               role="neck", session_id="session-17")
+                                               role="camera", session_id="session-17")
     with pytest.raises(ValueError):
         write_controller_reservation_provision(parent / "bad.provision",
                                                role="arm", session_id="bad/session")
@@ -176,7 +181,7 @@ def _provision_scope(tmp_path):
     return root, directory, environment
 
 
-def test_broker_provisions_both_roles_and_removes_only_its_files(tmp_path):
+def test_broker_provisions_three_roles_and_removes_only_its_files(tmp_path):
     from so101_demo.adapters.act.controller_reservation_provision import (
         ControllerReservationProvisions,
     )
@@ -184,9 +189,9 @@ def test_broker_provisions_both_roles_and_removes_only_its_files(tmp_path):
     _, directory, environment = _provision_scope(tmp_path)
     provisions = ControllerReservationProvisions.publish(environment, "session-17")
     assert directory.stat().st_mode & 0o777 == 0o700
-    assert set(provisions.capabilities) == {"arm", "gripper"}
-    assert provisions.capabilities["arm"] != provisions.capabilities["gripper"]
-    for role in ("arm", "gripper"):
+    assert set(provisions.capabilities) == {"arm", "gripper", "neck"}
+    assert len(set(provisions.capabilities.values())) == 3
+    for role in ("arm", "gripper", "neck"):
         file = directory / f"{role}.provision"
         assert file.stat().st_mode & 0o777 == 0o600
         assert file.read_bytes()[24:56] == provisions.capabilities[role]
@@ -245,6 +250,23 @@ def test_broker_provision_partial_collision_keeps_existing_file(tmp_path):
     with pytest.raises(FileExistsError):
         ControllerReservationProvisions.publish(environment, "session-17")
     assert sorted(path.name for path in directory.iterdir()) == ["gripper.provision"]
+    assert existing.stat().st_ino == original_inode
+    assert existing.read_bytes() == b"existing"
+
+
+def test_neck_provision_collision_rolls_back_other_new_roles(tmp_path):
+    from so101_demo.adapters.act.controller_reservation_provision import (
+        ControllerReservationProvisions,
+    )
+
+    root, directory, environment = _provision_scope(tmp_path)
+    prepare_controller_reservation_directory(root, "session-17")
+    existing = directory / "neck.provision"
+    existing.write_bytes(b"existing")
+    original_inode = existing.stat().st_ino
+    with pytest.raises(FileExistsError):
+        ControllerReservationProvisions.publish(environment, "session-17")
+    assert sorted(path.name for path in directory.iterdir()) == ["neck.provision"]
     assert existing.stat().st_ino == original_inode
     assert existing.read_bytes() == b"existing"
 
@@ -321,9 +343,9 @@ def test_standalone_broker_publishes_before_service_and_cleans_on_exit(
 
         def start(self):
             assert sorted(path.name for path in directory.iterdir()) == [
-                "arm.provision", "gripper.provision"]
-            assert set(self.broker.reservation_port._paths) == {"arm", "gripper"}
-            for role in ("arm", "gripper"):
+                "arm.provision", "gripper.provision", "neck.provision"]
+            assert set(self.broker.reservation_port._paths) == {"arm", "gripper", "neck"}
+            for role in ("arm", "gripper", "neck"):
                 assert self.broker.reservation_port._paths[role] == directory / f"{role}.sock"
                 assert self.broker.reservation_port._capabilities[role] == (
                     directory / f"{role}.provision").read_bytes()[24:56]

@@ -63,6 +63,7 @@ private:
   std::chrono::steady_clock::time_point reservation_deadline_;
   ControllerStopWitness arm_stop_witness_{5};
   ControllerStopWitness gripper_stop_witness_{1};
+  ControllerStopWitness neck_stop_witness_{1};
   std::atomic<size_t> monitored_joints_{0};
   std::atomic<bool> witness_active_{false};
   std::atomic<uint64_t> update_sequence_{0};

@@ -18,6 +18,9 @@ class BrokerControllerPort:
     def send(self,goal):
         message=FollowJointTrajectory.Goal();message.trajectory=trajectory_message(goal)
         return self.broker.dispatch(self.context_port(),self.kind,message)
+        if self.kind=='neck':
+            return self.broker.dispatch(self.context_port(),self.kind,message,
+                                        trusted_search_neck=True)
 
     def accepted(self,gid):return self.broker.driver.goal_state(gid)['accepted']
     def cancel(self,gid):self.broker.driver.cancel(gid)

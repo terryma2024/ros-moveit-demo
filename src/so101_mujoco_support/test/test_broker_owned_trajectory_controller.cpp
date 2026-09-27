@@ -93,6 +93,16 @@ std::string gripper_urdf()
          "</joint></robot>";
 }
 
+std::string neck_urdf()
+{
+  return "<robot name='neck_stop_test'><link name='base'/>"
+         "<link name='head'/><joint name='neck_yaw_joint' type='revolute'>"
+         "<parent link='base'/><child link='head'/>"
+         "<origin xyz='0 0 0' rpy='0 0 0'/><axis xyz='0 0 1'/>"
+         "<limit lower='-3' upper='3' effort='1' velocity='1'/>"
+         "</joint></robot>";
+}
+
 class ScopedReservationEnvironment
 {
 public:
@@ -625,5 +635,69 @@ TEST(BrokerOwnedTrajectoryController, GripperNativeUpdatesUseOneJointStoppedScop
       std::chrono::duration_cast<std::chrono::nanoseconds>(now).count()).has_value());
   controller.release_interfaces();
   executor.remove_node(controller.get_node()->get_node_base_interface());
+  rclcpp::shutdown();
+}
+
+TEST(BrokerOwnedTrajectoryController, NeckNativeUpdatesArmOnlyItsPrivateRoleService)
+{
+  const auto directory = private_socket_directory();
+  write_self_provision(directory / "neck.provision", 3);
+  const ScopedReservationEnvironment scope(directory, "session-17");
+  const auto socket = directory / "neck.sock";
+  rclcpp::init(0, nullptr);
+  InspectableController controller;
+  rclcpp::NodeOptions options;
+  options.parameter_overrides({
+    rclcpp::Parameter("joints", std::vector<std::string>{"neck_yaw_joint"}),
+    rclcpp::Parameter("command_interfaces", std::vector<std::string>{"position"}),
+    rclcpp::Parameter("state_interfaces", std::vector<std::string>{"position", "velocity"}),
+  });
+  ASSERT_EQ(controller.init("neck_controller", neck_urdf(), 500, "", options),
+    controller_interface::return_type::OK);
+  ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(controller.get_node()->get_node_base_interface());
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (!std::filesystem::exists(socket) && std::chrono::steady_clock::now() < deadline) {
+    executor.spin_some();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  ASSERT_TRUE(std::filesystem::exists(socket));
+  EXPECT_EQ(send_generation_request(socket, 3), 1u);
+  hardware_interface::InterfaceInfo position;
+  position.name = "position";
+  position.initial_value = "0";
+  hardware_interface::InterfaceInfo velocity;
+  velocity.name = "velocity";
+  velocity.initial_value = "0";
+  auto command = std::make_shared<hardware_interface::CommandInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", position));
+  auto state_position = std::make_shared<hardware_interface::StateInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", position));
+  auto state_velocity = std::make_shared<hardware_interface::StateInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", velocity));
+  std::vector<hardware_interface::LoanedCommandInterface> commands;
+  std::vector<hardware_interface::LoanedStateInterface> states;
+  commands.emplace_back(command, []() {});
+  states.emplace_back(state_position);
+  states.emplace_back(state_velocity);
+  controller.assign_interfaces(std::move(commands), std::move(states));
+  ASSERT_EQ(controller.get_node()->activate().id(),
+    lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+  for (int64_t index = 1; index <= 51; ++index) {
+    ASSERT_EQ(controller.update(rclcpp::Time(index * 2000000, RCL_ROS_TIME),
+        rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  }
+  const auto now = std::chrono::steady_clock::now().time_since_epoch();
+  const auto stopped = controller.stopped_state(
+    std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
+  ASSERT_TRUE(stopped.has_value());
+  EXPECT_EQ(stopped->sample_count, 51u);
+  EXPECT_EQ(send_generation_request(socket, 3), 0u);
+  EXPECT_EQ(send_generation_request(socket, 3), 1u);
+  ASSERT_EQ(controller.get_node()->deactivate().id(),
+    lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  EXPECT_FALSE(std::filesystem::exists(socket));
+  controller.release_interfaces();
   rclcpp::shutdown();
 }

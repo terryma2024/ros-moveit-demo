@@ -1,5 +1,7 @@
 """Sequential ACT prefixes keep one owner but need distinct controller admissions."""
 
+import pytest
+
 from so101_demo.act.ownership import Ownership
 from so101_demo.adapters.act.command_broker import CommandBroker
 
@@ -68,3 +70,51 @@ def test_two_stopped_prefixes_under_one_owner_get_distinct_admissions():
     assert len(driver.sent) == 2
     assert ownership.ticket(token, "act", "session", "attempt") == ticket
     assert controller.armed == [ticket]
+
+
+def test_neck_search_goal_is_reserved_before_prepared_send():
+    events = []
+
+    class OrderedDriver(SequentialDriver):
+        def prepare_goal(self, kind, goal):
+            events.append("prepare")
+            return super().prepare_goal(kind, goal)
+
+        def send_prepared(self, goal_id, kind, goal, goal_uuid):
+            events.append("send")
+            return super().send_prepared(goal_id, kind, goal, goal_uuid)
+
+    class OrderedPort(OneUseGoalPort):
+        def reserve(self, ticket, kind, goal, goal_uuid):
+            events.append("reserve")
+            return super().reserve(ticket, kind, goal, goal_uuid)
+
+    driver = OrderedDriver()
+    controller = OrderedPort()
+    ownership = Ownership()
+    broker = CommandBroker(driver, ownership=ownership, reservation_port=controller)
+    response = broker.handle(dict(protocol_version=1, request_id="r", owner="act",
+        session_id="session", attempt_id="attempt", lease_token="", operation="acquire"),
+        "connection")
+    assert response["accepted"]
+    ticket = ownership.ticket(response["lease_token"], "act", "session", "attempt")
+    goal_id = broker.dispatch(ticket, "neck", {"target_rad": .1}, trusted_search_neck=True)
+    assert goal_id == "goal-1"
+    assert events == ["prepare", "reserve", "send"]
+    assert ("neck", ticket[0], driver.sent[0][3]) in controller.reserved
+
+
+def test_generic_neck_dispatch_refuses_before_goal_preparation():
+    driver = SequentialDriver()
+    controller = OneUseGoalPort()
+    ownership = Ownership()
+    broker = CommandBroker(driver, ownership=ownership, reservation_port=controller)
+    response = broker.handle(dict(protocol_version=1, request_id="r", owner="act",
+        session_id="session", attempt_id="attempt", lease_token="", operation="acquire"),
+        "connection")
+    assert response["accepted"]
+    ticket = ownership.ticket(response["lease_token"], "act", "session", "attempt")
+    with pytest.raises(PermissionError, match="NECK_SEARCH_PORT_REQUIRED"):
+        broker.dispatch(ticket, "neck", {"target_rad": .1})
+    assert driver.prepared == 0
+    assert driver.sent == []

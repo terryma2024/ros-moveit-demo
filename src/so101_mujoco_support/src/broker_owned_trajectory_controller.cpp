@@ -18,12 +18,15 @@ controller_interface::return_type BrokerOwnedTrajectoryController::update(
     witness_active_.store(false, std::memory_order_release);
     arm_stop_witness_.invalidate_nonblocking();
     gripper_stop_witness_.invalidate_nonblocking();
+    neck_stop_witness_.invalidate_nonblocking();
     return result;
   }
   if (!witness_active_.load(std::memory_order_acquire)) {return result;}
   const auto joints = monitored_joints_.load(std::memory_order_acquire);
   if (joints != 1 && joints != 5) {return result;}
-  auto & witness = joints == 5 ? arm_stop_witness_ : gripper_stop_witness_;
+  auto & witness = joints == 5 ? arm_stop_witness_ :
+    reservation_role_ == ControllerReservationRole::NECK ? neck_stop_witness_ :
+    gripper_stop_witness_;
   if (state_current_.positions.size() != joints ||
     state_current_.velocities.size() != joints ||
     state_desired_.positions.size() != joints ||
@@ -58,7 +61,10 @@ std::optional<ControllerStopWitness::Proof> BrokerOwnedTrajectoryController::con
   const auto joints = monitored_joints_.load(std::memory_order_acquire);
   ControllerStopWitness * witness = nullptr;
   if (joints == 5) {witness = &arm_stop_witness_;}
-  if (joints == 1) {witness = &gripper_stop_witness_;}
+  if (joints == 1) {
+    witness = reservation_role_ == ControllerReservationRole::NECK ?
+      &neck_stop_witness_ : &gripper_stop_witness_;
+  }
   if (!witness) {return std::nullopt;}
   const auto goal_is_active = [this]() {
       const auto active_goal = rt_active_goal_.readFromRT();
@@ -104,6 +110,7 @@ controller_interface::CallbackReturn BrokerOwnedTrajectoryController::on_configu
       {
         arm_stop_witness_.invalidate_nonblocking();
         gripper_stop_witness_.invalidate_nonblocking();
+        neck_stop_witness_.invalidate_nonblocking();
         if (!goal || goal_admission_.admit_current(uuid, *goal) !=
         ControllerGoalAdmission::Result::ALLOW)
         {
@@ -145,6 +152,7 @@ controller_interface::CallbackReturn BrokerOwnedTrajectoryController::on_activat
   if (result == controller_interface::CallbackReturn::SUCCESS) {
     arm_stop_witness_.reset();
     gripper_stop_witness_.reset();
+    neck_stop_witness_.reset();
     witness_active_.store(true, std::memory_order_release);
     start_reservation_monitor();
   }
@@ -184,10 +192,17 @@ void BrokerOwnedTrajectoryController::configure_reservation_scope()
   }
   const auto name = std::string(get_node()->get_name());
   monitored_joints_.store(name == "arm_controller" ? 5 :
-    name == "gripper_controller" ? 1 : 0, std::memory_order_release);
-  if (name != "arm_controller" && name != "gripper_controller") {
+    name == "gripper_controller" || name == "neck_controller" ? 1 : 0,
+    std::memory_order_release);
+  if (name != "arm_controller" && name != "gripper_controller" &&
+    name != "neck_controller")
+  {
     return;
   }
+  const auto role = name == "arm_controller" ? ControllerReservationRole::ARM :
+    name == "gripper_controller" ? ControllerReservationRole::GRIPPER :
+    ControllerReservationRole::NECK;
+  reservation_role_ = role;
   const auto * directory_text = std::getenv("SO101_ACT_CONTROLLER_RESERVATION_DIR");
   const auto * session_text = std::getenv("SO101_SIMULATION_SESSION_ID");
   if (!directory_text && !session_text) {return;}
@@ -198,9 +213,8 @@ void BrokerOwnedTrajectoryController::configure_reservation_scope()
   if (!directory.is_absolute() || directory != directory.lexically_normal()) {
     throw std::runtime_error("CONTROLLER_RESERVATION_SCOPE_INVALID");
   }
-  const auto role = name == "arm_controller" ? ControllerReservationRole::ARM :
-    ControllerReservationRole::GRIPPER;
-  const auto basename = name == "arm_controller" ? "arm" : "gripper";
+  const auto basename = name == "arm_controller" ? "arm" :
+    name == "gripper_controller" ? "gripper" : "neck";
   const auto socket_path = directory / (std::string(basename) + ".sock");
   if (socket_path.string().size() > 107) {
     throw std::runtime_error("CONTROLLER_RESERVATION_PATH_TOO_LONG");
@@ -266,6 +280,7 @@ void BrokerOwnedTrajectoryController::close_reservation_service()
   witness_active_.store(false, std::memory_order_release);
   arm_stop_witness_.reset();
   gripper_stop_witness_.reset();
+  neck_stop_witness_.reset();
   std::lock_guard<std::mutex> lock(reservation_mutex_);
   if (reservation_timer_) {
     reservation_timer_->cancel();

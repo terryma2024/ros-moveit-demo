@@ -136,7 +136,7 @@ def main(arguments=None):
         driver=RosBrokerDriver(node,stop_velocity_rad_s=speed,max_age_s=age)
         provisions=ControllerReservationProvisions.publish(os.environ,options.session_id)
         reservation_port=ControllerReservationClient(
-            {role:provisions.directory/f'{role}.sock' for role in ('arm','gripper')},
+            {role:provisions.directory/f'{role}.sock' for role in ('arm','gripper','neck')},
             capability=provisions.capabilities,timeout_s=.2)
         broker=CommandBroker(driver,ownership=Ownership(lease_timeout_s=options.lease_timeout_s),
                              simulation_session_id=options.session_id,

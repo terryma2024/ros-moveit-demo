@@ -126,14 +126,16 @@ class ControllerReservationClient:
         return self._request(kind, 1, generation, native_uuid, payload)
 
     def arm_generation(self, ticket):
-        if set(self._paths) != {"arm", "gripper"}:
+        if set(self._paths) not in ({"arm", "gripper"}, {"arm", "gripper", "neck"}):
             raise ValueError("CONTROLLER_RESERVATION_ROLES_INVALID")
         if not isinstance(ticket, tuple) or len(ticket) != 5:
             raise TypeError("CONTROLLER_RESERVATION_TICKET_INVALID")
         generation = ticket[0]
         with self._lock:
             self._attempted.setdefault(generation, set()).update(self._paths)
-            for kind in ("arm", "gripper"):
+            for kind in ("arm", "gripper", "neck"):
+                if kind not in self._paths:
+                    continue
                 if self._request(kind, 3, generation, bytes(16), b"") is not True:
                     return False
             return True
