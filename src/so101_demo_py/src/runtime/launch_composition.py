@@ -2455,6 +2455,7 @@ def _configured_task_station_actions(context):
         environment_actions = [SetEnvironmentVariable("SO101_ACT_PROFILE", "1"),
                                SetEnvironmentVariable("SO101_ACT_BROKER_SOCKET", endpoint),
                                SetEnvironmentVariable("SO101_SIMULATION_SESSION_ID", session_id),
+                               SetEnvironmentVariable("SO101_ACT_RESERVATION_ROOT", str(evidence_root)),
                                SetEnvironmentVariable("SO101_ACT_CONTROLLER_RESERVATION_DIR", str(reservation_dir))]
     share = Path(get_package_share_directory("so101_demo_py"))
     stack = _mujoco_stack_actions(
@@ -2606,13 +2607,28 @@ def _configured_act_execution_stack_actions(context):
     if not scene.is_absolute() or not scene.is_file():
         raise RuntimeError("ACT_STACK_SCENE_INVALID")
     share = Path(get_package_share_directory("so101_demo_py"))
-    from so101_teleop.unified.controller_reservation_paths import controller_reservation_directory
-    reservation_dir = controller_reservation_directory(evidence_root, session_id)
+    from so101_teleop.unified.controller_reservation_paths import (
+        controller_reservation_directory, controller_reservation_root,
+    )
+    reservation_environment = context.environment
+    inherited_root = reservation_environment.get("SO101_ACT_RESERVATION_ROOT")
+    inherited_dir = reservation_environment.get("SO101_ACT_CONTROLLER_RESERVATION_DIR")
+    if bool(inherited_root) != bool(inherited_dir):
+        raise RuntimeError("ACT_STACK_RESERVATION_SCOPE_INVALID")
+    try:
+        reservation_root = controller_reservation_root(
+            evidence_root, reservation_environment if inherited_root else {})
+        reservation_dir = controller_reservation_directory(reservation_root, session_id)
+    except ValueError as error:
+        raise RuntimeError("ACT_STACK_RESERVATION_SCOPE_INVALID") from error
+    if inherited_dir and inherited_dir != str(reservation_dir):
+        raise RuntimeError("ACT_STACK_RESERVATION_SCOPE_INVALID")
     stack = _mujoco_stack_actions(context, share, session_id, sim_speed_factor=1.0)
     return [
         SetEnvironmentVariable("SO101_ACT_PROFILE", "1"),
         SetEnvironmentVariable("SO101_TASK_EVIDENCE_ROOT", str(evidence_root)),
         SetEnvironmentVariable("SO101_SIMULATION_SESSION_ID", session_id),
+        SetEnvironmentVariable("SO101_ACT_RESERVATION_ROOT", str(reservation_root)),
         SetEnvironmentVariable("SO101_ACT_CONTROLLER_RESERVATION_DIR", str(reservation_dir)),
         *camera_static_transform_nodes(),
         *stack.actions,

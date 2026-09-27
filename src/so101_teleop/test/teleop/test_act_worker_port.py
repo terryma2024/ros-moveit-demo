@@ -6,6 +6,7 @@ import json
 import asyncio
 from dataclasses import replace
 import hashlib
+import os
 from pathlib import Path
 import sys
 import time
@@ -254,6 +255,41 @@ def test_campaign_owner_rejects_map_tamper_before_spawning(tmp_path):
     manager = ActCampaignChildOwner(base, object(), object())
     with pytest.raises(MutationError, match="ACT_CHILD_MAP_MISMATCH"):
         asyncio.run(manager.start(_context(), (_launch(),)))
+
+
+def test_campaign_owner_passes_registered_short_reservation_root(tmp_path):
+    task_root = Path(os.environ["TMPDIR"]).parents[2]
+    campaign_root = task_root / "diagnostics" / "nested-campaign"
+    child = _launch()
+    mapping_sha = hashlib.sha256(json.dumps(
+        [child.__dict__], sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    context = replace(_context(), evidence_root=str(campaign_root),
+                      domain_session_map_sha256=mapping_sha)
+    base = BridgeLaunch(
+        Path(sys.executable), tmp_path, "runtime",
+        {"SO101_ACT_RESERVATION_ROOT": str(task_root)}, tmp_path / "base")
+    started = []
+
+    class FakeOwner:
+        def __init__(self, launch, arbiter, safety):
+            self.launch = launch
+
+        async def start(self):
+            started.append(self.launch)
+            return object()
+
+        def socket_paths(self):
+            return self.launch.socket_root / "normal.sock", self.launch.socket_root / "safety.sock"
+
+        async def stop_owned(self):
+            pass
+
+    manager = ActCampaignChildOwner(base, object(), object(), owner_factory=FakeOwner)
+    asyncio.run(manager.start(context, (child,)))
+    assert started[0].environment["SO101_ACT_RESERVATION_ROOT"] == str(task_root)
+    assert started[0].environment["SO101_ACT_CONTROLLER_RESERVATION_DIR"] == str(
+        controller_reservation_directory(task_root, "session-w00"))
+    asyncio.run(manager.stop_owned())
 
 
 def test_campaign_owner_stops_all_started_children_after_one_child_crashes(tmp_path):

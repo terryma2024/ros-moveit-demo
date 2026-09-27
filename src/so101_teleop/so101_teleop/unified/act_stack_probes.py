@@ -12,7 +12,9 @@ from typing import Mapping
 from .act_stack import ActStackLaunch, ActStackProcessOwner
 from .bridge import ActChildLaunch
 from .pick_place_startup_issuer import InstalledActStackReadinessProbe
-from .controller_reservation_paths import controller_reservation_directory
+from .controller_reservation_paths import (
+    controller_reservation_directory, controller_reservation_root,
+)
 
 
 class RepeatableActStackStopProbe:
@@ -90,8 +92,10 @@ def make_pick_place_act_stack(context, child: ActChildLaunch, *,
         stack_root.mkdir(mode=0o700)
         environment = dict(base_environment)
         environment["GZ_PARTITION"] = f"act-pick-place-{child.ros_domain_id}-{campaign}"
+        reservation_root = controller_reservation_root(campaign_root, environment)
+        environment["SO101_ACT_RESERVATION_ROOT"] = str(reservation_root)
         environment["SO101_ACT_CONTROLLER_RESERVATION_DIR"] = str(
-            controller_reservation_directory(campaign_root, child.mujoco_session_id))
+            controller_reservation_directory(reservation_root, child.mujoco_session_id))
         launch = ActStackLaunch(
             ros2_executable=Path(ros2_executable), session_id=child.mujoco_session_id,
             evidence_root=stack_root, ros_domain_id=child.ros_domain_id,
