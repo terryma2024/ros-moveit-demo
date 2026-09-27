@@ -34,7 +34,7 @@ broker 仍先登记本地票据，再取得当前目标的预留 ACK，最后发
 
 broker 在自己的 PID/start ticks 确定后生成每个角色的随机 capability，把完整文件写入同目录的私有临时文件，再以不覆盖目标的原子方式发布。目录和文件分别要求当前 UID 拥有、权限 `0700`/`0600`；祖先目录不得是符号链接。控制器用 `O_NOFOLLOW` 打开并用 `fstat` 核对常规文件、owner、权限、单链接与长度，读回后再次核对预期 session/角色和本轮进程身份。文件缺失或尚未发布时保持关闭；文件无效、broker 已退出或读取超时则拒绝本轮交付。注册服务关闭时撤销门控并移除自己的 socket；凭据文件在拥有它的 broker 退出时作为运行时秘密清除，只保留非秘密哈希与生命周期证据。单 UID 信任域的限制仍适用。
 
-两条启动链用同一目录算法定位文件：`<evidence_root>/ipc/<session_sha256前16个十六进制字符>/`。standalone 的 `evidence_root` 是 task station 根；worker 使用已准入 campaign 根，因为 ROS child 启动时 stack 子目录还不存在。启动方把算出的目录作为非秘密环境变量 `SO101_ACT_CONTROLLER_RESERVATION_DIR` 同时交给 broker 和 simulator，并在启动 simulator 前设置 `SO101_SIMULATION_SESSION_ID`。目录名只是定位符；读方仍须核对文件内完整 session、角色和 broker 进程身份。私有目录由 broker 创建，控制器在文件尚未出现时保持关闭。socket 路径还须满足 Linux `AF_UNIX` 长度限制，超长则拒绝本轮运行。
+两条启动链用同一目录算法定位文件：`<reservation_root>/ipc/<session_sha256前16个十六进制字符>/`。standalone 把 task station 根作为 `reservation_root`。worker 的 campaign 根若路径较深，启动方须通过非秘密环境变量 `SO101_ACT_RESERVATION_ROOT` 指定本任务已登记的短 evidence root；它必须是已准入 campaign 根的绝对、规范化祖先。worker 子进程和随后启动的 stack 使用同一根和同一目录，stack 在构图前拒绝两者不一致的配置。启动方还须把目录作为 `SO101_ACT_CONTROLLER_RESERVATION_DIR` 交给 broker 和 simulator，并在启动 simulator 前设置 `SO101_SIMULATION_SESSION_ID`。目录名只用于定位；读方仍要核对文件内的完整 session、角色和 broker 进程身份。私有目录由 broker 创建。文件尚未发布时，控制器保持关闭；Linux `AF_UNIX` socket 路径超过 107 字节时，本轮运行失败。
 
 ## 后续提交顺序
 
