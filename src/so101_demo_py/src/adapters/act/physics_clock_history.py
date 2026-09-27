@@ -72,12 +72,22 @@ class PhysicsClockHistory:
             self._last_source_begin_ns = 0
             self._last_source_end_ns = 0
 
-    def accept_chunk(self, chunk):
+    def latch(self, reason):
+        if not isinstance(reason, str) or not reason:
+            raise ValueError("PHYSICS_CLOCK_HAZARD_INVALID")
+        with self._lock:
+            self.hazard = self.hazard or reason
+
+    def accept_chunk(self, chunk, *, received_monotonic_ns=None):
         with self._lock:
             if self.epoch is None or self.hazard is not None:
                 raise ValueError(self.hazard or "PHYSICS_CLOCK_UNARMED")
             try:
-                receipt_ns = _integer(self.clock_ns(), "receipt_ns", 1)
+                now_ns = _integer(self.clock_ns(), "readback_ns", 1)
+                receipt_ns = (now_ns if received_monotonic_ns is None else
+                              _integer(received_monotonic_ns, "receipt_ns", 1))
+                if receipt_ns > now_ns:
+                    raise ValueError("PHYSICS_RECEIPT_FUTURE")
                 if not isinstance(chunk, PhysicsStepEvidenceChunk):
                     raise ValueError("PHYSICS_CHUNK_TYPE_INVALID")
                 if (chunk.simulation_session_id != self.session_id
@@ -124,7 +134,8 @@ class PhysicsClockHistory:
                             end - begin > self.max_source_step_gap_ns or
                             begin_previous and
                             begin - begin_previous > self.max_source_step_gap_ns or
-                            not 0 <= receipt_ns - end <= self.max_age_ns):
+                            not 0 <= receipt_ns - end <= self.max_age_ns or
+                            not 0 <= now_ns - end <= self.max_age_ns):
                         raise ValueError("PHYSICS_SOURCE_CLOCK_INVALID")
                     accepted.append({
                         "sample": copy.deepcopy(sample),
