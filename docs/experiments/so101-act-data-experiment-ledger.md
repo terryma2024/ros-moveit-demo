@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 53073d16
+current_commit: 7cf9a27c
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -43,6 +43,7 @@ confirmed_conclusions:
   - EXP-511 disproves raw CDR bytes as a stable goal identity in the installed Python serializer; typed goal fields survive each observed decode, but C++ parity is still unproved.
   - EXP-512 verifies the fixed Python CDR fixture decodes to the expected full C++ Goal and replaces the off-path reservation's raw-byte identity with typed Goal equality; production callback remains open.
   - EXP-513 replaces the configured JTC action entrypoint with a default-closed reservation wrapper; rejected no-motion ROS requests prove field mismatch closes and exact generation consumes before inactive-base rejection. Broker registration and active execution remain unproved.
+  - EXP-514 revokes pending controller reservations on deactivate, error, cleanup and reconfigure in an in-process memory-backed controller test; broker admission and physical stop remain unproved.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -51,8 +52,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-513
-next_experiment: EXP-514
+latest_checkpoint: CP-514
+next_experiment: EXP-515
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4948,7 +4949,7 @@ next_experiment: EXP-514
 
 ```yaml
 experiment_id: EXP-514
-status: PLANNED
+status: VALID
 prior_experiment: EXP-513
 hypothesis: Deactivation, cleanup, error and reconfiguration can revoke every pending reservation before any later action callback, without changing the base controller's stop behavior.
 prediction: A no-motion lifecycle regression demonstrates a reserved goal cannot pass after each transition; a higher generation remains closed until explicitly re-armed. A fresh physical stop baseline is a separate later gate.
@@ -4964,11 +4965,47 @@ provenance:
   runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i/so101_mujoco_support/lib/libso101_broker_owned_trajectory_controller.so
   ros_domain_id: NOT_ASSIGNED
   gz_partition: NOT_ASSIGNED
+correction: The initial compile used lifecycle methods on ControllerInterface instead of its LifecycleNode and was classified as test setup, not RED. A corrected test reached actual lifecycle callbacks. The error callback was invoked directly; deactivate, cleanup and reconfigure used LifecycleNode transitions. Final CTest used ROS_DOMAIN_ID=191/GZ_PARTITION=act-data-exp514-final without an external stack.
+commands: ["Added memory-backed five-joint command/state interfaces and lifecycle regression before changing production callbacks", "Observed RED: old reservation returned ALLOW after deactivate, direct error and cleanup", "Closed admission before base on_deactivate/on_error/on_cleanup and reset action server on error/cleanup", "Built existing overlay; ran focused GREEN, then added and verified reconfigure-after-cleanup assertion", "Verified exact system and task Python TMPDIR/TMP/TEMP under unique NVMe scratch and ran full C++ package CTest", "Ran read-only ament_uncrustify and git diff --check"]
+observed: ["Before the fix, three stale reservations returned ALLOW in a controller with memory-backed interfaces; after the fix all returned DENY_CLOSED", "A higher-generation test reservation made after cleanup was revoked by reconfiguration; controller returned INACTIVE", "Build exit0; focused lifecycle regression exit0; final CTest 3/3 passed; colcon test-result 41 tests, 0 errors, 0 failures, 0 skipped; final package gate elapsed 1 s", "Read-only style exit0; code commits 8b746fb2 and 7cf9a27c; result artifact SHA256 9ecbf423b5beac9363dbbd2d7f18e650e97ce70094bcbe5ace21173a003a1d78", "No accepted action goal, task-owned stack, MuJoCo step, physical hardware or formal episode occurred"]
+inferred: ["Controller-local reservation no longer survives the tested lifecycle boundaries", "A physical stopped reference, broker-scoped registration and active action acceptance remain independent open gates"]
+conclusion: VALID in-process lifecycle revocation with base deactivation/error callbacks retained; no broker or live command authority.
+evidence: [/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp514-controller-lifecycle-revocation/result.json, /data/work/so101-evidence/act-data/20260924-fbc25063-resume/scratch/exp514-lifecycle-red.VaARmhuj, /data/work/so101-evidence/act-data/20260924-fbc25063-resume/scratch/exp514-reconfigure-focused.mE0v8AIr, /data/work/so101-evidence/act-data/20260924-fbc25063-resume/scratch/exp514-final-package.rbt6VbOB]
+decision: Audit the actual broker/controller process, credentials and registration ordering before introducing a callable reservation endpoint; keep live ACT goals fenced.
+next_experiment: EXP-515
+```
+
+## CP-514 — Lifecycle transitions revoke controller reservations
+
+- Commits `8b746fb2` and `7cf9a27c` close the configured action gate before JTC deactivation, error and cleanup callbacks. Reconfiguration already closes the gate and is now covered. The in-process controller used five memory-backed joints; it activated and deactivated without a simulator or hardware. The RED returned `ALLOW` at three stale-reservation boundaries; GREEN returns `DENY_CLOSED` at all four tested boundaries.
+- The final existing-overlay build and `so101_mujoco_support` package gate passed. CTest 3/3; `colcon test-result` 41 tests, zero errors/failures/skips. Unique NVMe scratch `exp514-final-package.rbt6VbOB` contains exact system/task Python tempfile proofs, elapsed 1 s. Read-only C++ style passed. No accepted trajectory or physical stop proof was produced.
+- Registered root unchanged. Retain EXP-514 setup/RED/build/focused/full-package/style artifacts and earlier evidence; archived none. Scratch and generated caches are deletion candidates only, nothing deleted. Pre-existing dirty/untracked batch remains outside the commits. Formal accepted Train/Validation/Offline Test 0/0/0; no task-owned stack or accepted goal.
+
+## EXP-515 — Broker-to-controller reservation boundary audit
+
+```yaml
+experiment_id: EXP-515
+status: PLANNED
+prior_experiment: EXP-514
+hypothesis: The current broker launcher, process identity and driver UUID path permit a broker-scoped registration transaction before action send, while a public unauthenticated ROS service cannot be the reservation authority.
+prediction: Read-only source and installed-boundary tracing identifies the exact broker process, native UUID generation point, first action send point, lifecycle mode handoff and a concrete credential delivery path; any missing secure path is recorded before service implementation.
+single_variable: Read-only broker/controller registration architecture audit; no source edit, stack or goal.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-514 valid, task-owned stack absent, no accepted action goal]
+success_criteria: [Exact source-to-install provenance, process and call ordering, chosen bounded registration transport and credential scope, teacher mode boundary, falsifiable next implementation test]
+failure_criteria: [No broker-scoped transport can be established without exposing registration to arbitrary ROS clients, or caller UUID cannot be set before send]
+invalid_criteria: [Source edit, stack or goal starts, audit lacks immutable source references]
+provenance:
+  source_commit: 7cf9a27c
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i/so101_mujoco_support/lib/libso101_broker_owned_trajectory_controller.so
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
 commands: []
 observed: []
 inferred: []
 conclusion: PENDING
 evidence: []
 decision: PENDING
-next_experiment: EXP-515
+next_experiment: EXP-516
 ```
