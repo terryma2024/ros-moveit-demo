@@ -15,6 +15,7 @@ from .ros_observation import RosObservationAdapter
 from .scene_state import SceneStateObserver, RosSceneStateAdapter
 from .phase_contact_allowlist import PhaseContactAllowlist
 from .pick_place_readback import PickPlacePhysicalReadback
+from .physics_step_fence import RosPhysicsStepFence
 
 
 class PickPlaceRosEvidence:
@@ -60,6 +61,7 @@ class PickPlaceRosEvidence:
             node, self.contacts, on_hazard=self._enqueue_hazard,
         )
         self.rgb_adapter = RosObservationAdapter(node, self.rgb)
+        self.physics_fence = RosPhysicsStepFence(node, session_id)
         self.readback = PickPlacePhysicalReadback(
             self.world, self.scene, self.contacts, self.rgb, broker,
             model=model, expected_model_sha256=contact_pairs.model_sha256,
@@ -94,6 +96,7 @@ class PickPlaceRosEvidence:
         self.contact_adapter.arm(reset)
         self.rgb_adapter.reset(self.session_id, source_floor_s=reset.simulation_time_s)
         self.reset_epoch = reset.reset_epoch
+        self.physics_fence.arm(reset.reset_epoch)
         self.phase = phase
         return reset.reset_epoch
 

@@ -25,6 +25,22 @@ def verify_search_stationary_physics(sources, observed, *, model,
         first_step = end_step - (_HISTORY_STEPS - 1)
         if first_step < 1:
             raise ValueError("SEARCH_HISTORY_TOO_SHORT")
+        marker = observed.physics_step_fence
+        if (not isinstance(marker, dict)
+                or marker.get("session_id") != scope[0]
+                or marker.get("reset_epoch") != scope[1]
+                or type(marker.get("request_sequence")) is not int
+                or marker["request_sequence"] < 1
+                or type(marker.get("marked_physics_step")) is not int
+                or marker["marked_physics_step"] >= first_step
+                or marker.get("command_authority") is not False):
+            raise ValueError("SEARCH_HISTORY_FENCE_INVALID")
+        sent = finite(marker["request_sent_wall_s"], nonnegative=True)
+        received = finite(marker["ack_received_wall_s"], nonnegative=True)
+        marked_ns = round(finite(marker["marked_simulation_time_s"], nonnegative=True)
+                          * 1_000_000_000)
+        if sent < stop_wall or received < sent:
+            raise ValueError("SEARCH_HISTORY_FENCE_INVALID")
 
         def in_scope(frame, step_key):
             return ((frame.get("simulation_session_id"), frame.get("reset_epoch"))
@@ -47,6 +63,12 @@ def verify_search_stationary_physics(sources, observed, *, model,
             if any(finite(receipt, nonnegative=True) < stop_wall for receipt in (
                     world.received_monotonic_s, scene_receipt, contact_receipt)):
                 raise ValueError("SEARCH_HISTORY_BEFORE_STOP")
+            if any(finite(receipt, nonnegative=True) < received for receipt in (
+                    world.received_monotonic_s, scene_receipt, contact_receipt)):
+                raise ValueError("SEARCH_HISTORY_BEFORE_FENCE_ACK")
+        if round(finite(worlds[0].evidence.simulation_time_s, nonnegative=True)
+                 * 1_000_000_000) <= marked_ns:
+            raise ValueError("SEARCH_HISTORY_FENCE_TIME_INVALID")
         proof = verify_stationary_physics_history(
             observed=observed, selected_source=selected,
             world_history=worlds, scene_history=scenes,
@@ -64,7 +86,8 @@ def verify_search_stationary_physics(sources, observed, *, model,
                 or proof["command_authority"] is not False
                 or proof["eligible_for_collection"] is not False):
             raise ValueError("SEARCH_HISTORY_SCOPE_CHANGED")
-        return {**proof, "stop_confirmed_wall_s": stop_wall}
+        return {**proof, "stop_confirmed_wall_s": stop_wall,
+                "physics_step_fence": dict(marker)}
     except (AttributeError, KeyError, TypeError, ValueError, RuntimeError,
             OverflowError) as error:
         raise ValueError("SEARCH_PHYSICS_HISTORY_INVALID") from error

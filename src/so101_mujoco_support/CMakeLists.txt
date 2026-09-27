@@ -29,6 +29,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ContactSample.msg"
   "msg/PhysicsCancellationAck.msg"
   "msg/PhysicsCancellationRequest.msg"
+  "msg/PhysicsStepFenceAck.msg"
+  "msg/PhysicsStepFenceRequest.msg"
   "msg/PhysicsHazardLatch.msg"
   "msg/PhysicsStepEvidence.msg"
   "msg/PhysicsStepEvidenceChunk.msg"
@@ -104,6 +106,13 @@ if(BUILD_TESTING)
   target_compile_features(test_simulation_evidence_plugin PRIVATE cxx_std_17)
   target_include_directories(test_simulation_evidence_plugin PRIVATE include)
   target_link_libraries(test_simulation_evidence_plugin so101_simulation_evidence_plugin)
+
+  ament_add_gtest(test_physics_step_fence
+    test/test_physics_step_fence.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_physics_step_fence PRIVATE cxx_std_17)
+  target_include_directories(test_physics_step_fence PRIVATE include)
+  target_link_libraries(test_physics_step_fence so101_simulation_evidence_plugin)
 
   ament_add_gtest(test_broker_owned_trajectory_controller
     test/test_broker_owned_trajectory_controller.cpp
