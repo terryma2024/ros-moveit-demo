@@ -337,7 +337,36 @@ class RosBrokerDriver:
 
     def validate(self,kind,goal):return validated_goal(kind,goal)
 
+    def prepare_goal(self,kind,goal):
+        """Fix a local ID, native UUID and goal before controller reservation."""
+        if self.hazard_reason:raise RuntimeError(self.hazard_reason)
+        if any(not future.done() for future in self._pending_writes):raise RuntimeError('RESET_PENDING')
+        if not self.ready(kind):raise RuntimeError('ACTION_SERVER_UNAVAILABLE')
+        with self._lock:
+            prepared=self.__dict__.setdefault('_prepared_goals',{})
+            gid=secrets.token_hex(16)
+            while gid in self._records or gid in prepared:gid=secrets.token_hex(16)
+            native_uuid=str(_uuid.uuid4())
+            prepared[gid]=(kind,copy.deepcopy(goal),native_uuid)
+            return gid,native_uuid
+
+    def discard_prepared(self,gid):
+        with self._lock:
+            return self.__dict__.setdefault('_prepared_goals',{}).pop(gid,None) is not None
+
+    def send_prepared(self,gid,kind,goal,goal_uuid):
+        with self._lock:
+            prepared=self.__dict__.setdefault('_prepared_goals',{})
+            expected=prepared.get(gid)
+            if expected is None or expected!=(kind,goal,goal_uuid):
+                raise RuntimeError('PREPARED_GOAL_INVALID')
+            del prepared[gid]
+        return self._send_goal(kind,goal,goal_uuid=goal_uuid,gid=gid)
+
     def submit(self,kind,goal,*,goal_uuid=None):
+        return self._send_goal(kind,goal,goal_uuid=goal_uuid)
+
+    def _send_goal(self,kind,goal,*,goal_uuid=None,gid=None):
         if self.hazard_reason:raise RuntimeError(self.hazard_reason)
         if any(not future.done() for future in self._pending_writes):raise RuntimeError('RESET_PENDING')
         if not self.ready(kind):raise RuntimeError('ACTION_SERVER_UNAVAILABLE')
@@ -349,12 +378,14 @@ class RosBrokerDriver:
                 prepared_uuid=RosGoalUUID(uuid=list(parsed.bytes))
             except (TypeError,ValueError,AttributeError) as error:
                 raise ValueError('GOAL_UUID_INVALID') from error
-        gid=secrets.token_hex(16)
+        if gid is None:gid=secrets.token_hex(16)
         record=dict(kind=kind,accepted=None,handle=None,result=None,feedback=None,
                     cancel_requested=False,cancel_response=None,error=None,submitted_goal=copy.deepcopy(goal),
                     submitted_sim_s=self.node.get_clock().now().nanoseconds*1e-9)
         if prepared_uuid is not None:record['ros_goal_id']=parsed.hex
-        with self._lock:self._records[gid]=record
+        with self._lock:
+            if gid in self._records:raise RuntimeError('GOAL_ID_REUSED')
+            self._records[gid]=record
         self._control_event('goal_send_begin',goal_id=gid,
                             ros_goal_id=record.get('ros_goal_id'),detail=kind)
         try:

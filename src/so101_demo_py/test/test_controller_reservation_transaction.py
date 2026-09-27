@@ -12,6 +12,7 @@ class PreparedDriver:
         self.broker = None
         self.fail_send = False
         self.change_goal_id = False
+        self.discards = []
 
     def prepare_goal(self, kind, goal):
         self.events.append("prepare")
@@ -27,6 +28,9 @@ class PreparedDriver:
 
     def submit(self, kind, goal):
         raise AssertionError("legacy send must not run with a reservation port")
+
+    def discard_prepared(self, goal_id):
+        self.discards.append(goal_id)
 
     def stop_all(self, reason):
         self.events.append("stop")
@@ -73,6 +77,7 @@ def test_ticket_precedes_reservation_ack_and_native_uuid_send():
     assert driver.events == ["prepare", "reserve", "send"]
     assert broker._goal_tickets[goal_id] == ticket
     assert port.closes == []
+    assert driver.discards == []
 
 
 @pytest.mark.parametrize("failure", ["reserve", "send", "goal_id"])
@@ -84,6 +89,7 @@ def test_failed_or_uncertain_reservation_transaction_closes_generation(failure):
     with pytest.raises((PermissionError, RuntimeError)):
         broker.dispatch(ticket, "arm", {"trajectory": "fixed"})
     assert port.closes == [ticket[0]]
+    assert driver.discards == ["local-goal"]
     assert "local-goal" not in broker._goal_tickets
     assert broker.ownership.generation != ticket[0] or broker.ownership.state != "RUNNING"
     assert driver.events[-1] == "stop"
@@ -100,3 +106,4 @@ def test_reused_local_goal_id_does_not_erase_existing_ticket():
     assert broker._goal_tickets["local-goal"] == previous
     assert driver.events == ["prepare", "stop"]
     assert port.closes == [ticket[0]]
+    assert driver.discards == ["local-goal"]

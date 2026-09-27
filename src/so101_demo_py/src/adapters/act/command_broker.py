@@ -43,7 +43,7 @@ class CommandBroker:
                 not all(callable(getattr(reservation_port, name, None))
                         for name in ('reserve', 'close_generation'))
                 or not all(callable(getattr(driver, name, None))
-                           for name in ('prepare_goal', 'send_prepared'))):
+                           for name in ('prepare_goal', 'send_prepared', 'discard_prepared'))):
             raise TypeError('CONTROLLER_RESERVATION_PORT_INVALID')
         self.reservation_port=reservation_port
         self.prefix_executor=prefix_executor;self._pair_goals=set()
@@ -122,10 +122,13 @@ class CommandBroker:
             return gid
         except Exception:
             if registered:self._goal_tickets.pop(gid,None)
-            try:self.reservation_port.close_generation(ticket[0])
+            try:
+                if gid is not None:self.driver.discard_prepared(gid)
             finally:
-                self.ownership.revoke('CONTROLLER_RESERVATION_FAILED')
-                self._stop_if_revoked()
+                try:self.reservation_port.close_generation(ticket[0])
+                finally:
+                    self.ownership.revoke('CONTROLLER_RESERVATION_FAILED')
+                    self._stop_if_revoked()
             raise
 
     def stop_attempt(self, reason, *, cancelled_event=None):
