@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: fdcd245e
+current_commit: d9872a8e
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -45,6 +45,7 @@ confirmed_conclusions:
   - EXP-513 replaces the configured JTC action entrypoint with a default-closed reservation wrapper; rejected no-motion ROS requests prove field mismatch closes and exact generation consumes before inactive-base rejection. Broker registration and active execution remain unproved.
   - EXP-514 revokes pending controller reservations on deactivate, error, cleanup and reconfigure in an in-process memory-backed controller test; broker admission and physical stop remain unproved.
   - EXP-515 confirms the Python driver accepts caller-supplied native UUIDs, but broker local ticket registration follows asynchronous send and no private broker-to-controller registration transport exists in either launch topology.
+  - EXP-516 verifies an off-graph Unix socket can store one typed controller reservation before ACK, rejects mismatched peer identity/capability, stale or duplicate generations, malformed or slow frames and symlinked paths; production broker and controller lifecycle wiring remain open.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -53,8 +54,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-515
-next_experiment: EXP-516
+latest_checkpoint: CP-516
+next_experiment: EXP-517
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -5021,7 +5022,7 @@ next_experiment: EXP-516
 
 ```yaml
 experiment_id: EXP-516
-status: PLANNED
+status: VALID
 prior_experiment: EXP-515
 hypothesis: A bounded private Unix socket can deliver generation, native UUID and typed Goal CDR from a broker process to the controller-local gate, returning ACK only after one reservation is stored, while rejecting missing capability, malformed frames and stale generation.
 prediction: Isolated cross-process tests RED before the port exists, then GREEN for one authorized reservation; forged credential, truncated or oversized frame, duplicate UUID/generation and timeout fail closed without any action send.
@@ -5032,9 +5033,45 @@ success_criteria: [C++/Python protocol RED/GREEN, exact typed Goal decode, peer/
 failure_criteria: [Any arbitrary ROS client can reserve, ACK precedes stored reservation, malformed or stale request succeeds, socket path can be hijacked, or test blocks beyond deadline]
 invalid_criteria: [ROS/MuJoCo stack or action goal starts, scratch lacks exact NVMe tempfile proof, existing dirty batch enters commit]
 provenance:
-  source_commit: fdcd245e
+  source_commit: d9872a8e
   install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
-  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i/so101_mujoco_support/lib/libso101_broker_owned_trajectory_controller.so
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/b/so101_mujoco_support/test_controller_reservation_socket
+  ros_domain_id: 185 for final C++ gate; 179/183 for Python source/installed gates
+  gz_partition: NOT_ASSIGNED for C++; exp516-python-source/exp516-python-installed-fix for Python gates
+commands: ["Protocol and socket missing-header compile RED, then source build GREEN", "Consumed-generation and ancestor-symlink focused RED then GREEN", "Final colcon test --packages-select so101_mujoco_support and colcon test-result --verbose", "Full source pytest src/so101_demo_py/test -n 8", "Installed colcon test --packages-select so101_demo_py --pytest-args test -n 8 and colcon test-result --verbose", "Read-only ament_uncrustify over changed C++ files"]
+observed: ["Python CDR fixture decoded into full typed C++ Goal; fixed 16-byte ACK encoded", "Real Python child connected to C++ Unix socket; only matching UID, PID, start ticks and capability obtained ACK, after which exact gate admission succeeded once", "Wrong peer/capability, truncated/oversized/slow frame, stale/duplicate generation and ancestor symlink rejected and closed gate", "Consumed generation could originally reserve again; RED then changed to one reservation per generation", "Final C++ CTest 5/5 and test-result 52 tests, zero errors/failures/skips, 1.46 s", "Source Python xdist8 4594 passed/162 skipped in 42.42 s; installed gate test-result 4756 tests, zero errors/failures/162 skipped in 42.65 s", "Initial installed collection had eight errors from missing repo-root PYTHONPATH; retained, then corrected same full gate with new NVMe scratch", "Read-only uncrustify zero divergence; installed header SHA256 matched source; no task-owned stack, action request or real robot operation", "Result artifact SHA256 75a44bf3393b2511465549aa1d45af800b0bc8c61154dd80dc079003e3725a15"]
+inferred: ["The source-only registration channel meets the bounded cross-process reservation contract for a locally armed controller gate; it does not establish production broker ticket ordering, per-run credential delivery or active-controller motion authority"]
+conclusion: VALID source-only controller reservation transport and full package gates; production transaction and physical outcome remain unverified.
+evidence: [/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp516-controller-reservation-transport/result.json]
+decision: KEEP off-graph transport; next bind broker ticket-before-reservation-before-send transaction without live goal, with teacher mode separately fenced.
+next_experiment: EXP-517
+```
+
+## CP-516 — Private one-use reservation channel passes source-only gates
+
+- Commits `12896e89` and `d9872a8e` add bounded typed protocol decoding and an off-graph Unix socket. Linux `SO_PEERCRED` UID/PID plus `/proc` start ticks and a 32-byte capability precede frame reading; an ACK follows stored reservation. The gate now permits only one reservation per generation. Existing path and ancestor symlink checks fail closed. Same-UID host processes remain inside the stated trust domain.
+- The final installed-overlay C++ build passed. CTest 5/5 and `colcon test-result` 52 tests with zero errors/failures/skips. Source Python xdist8: 4594 passed, 162 skipped; installed Python xdist8: 4756 total, zero errors/failures, 162 skipped. Each run has its own NVMe scratch and exact tempfile proof; read-only C++ style passed. The initial installed package collection failure is retained and excluded from passing counts.
+- Only source-only tests used the new socket. No ROS/MuJoCo stack, action goal, teacher execution or real robot operation occurred. Production broker ticket ordering, per-run credential delivery, controller lifecycle wiring, physical stop and PathProof commit-window behavior remain open. Formal accepted Train/Validation/Offline Test stays 0/0/0.
+- Registered root unchanged. Retain EXP-516 logs, JUnit, scratch and IPC artifacts and all earlier evidence; archived none. Scratch and generated caches are deletion candidates only; nothing deleted. The pre-existing dirty/untracked batch remains outside both commits.
+
+## EXP-517 — Broker registration transaction order
+
+```yaml
+experiment_id: EXP-517
+status: PLANNED
+prior_experiment: EXP-516
+hypothesis: The broker can register its local goal ticket before requesting a bounded controller reservation and can call send_goal_async with the same native UUID only after a matching ACK, while a failed or uncertain reservation closes the generation without sending.
+prediction: A source-only Python/C++ integration test first catches current send-before-ticket order, then proves ticket-before-ACK-before-send for both standalone and task-worker broker construction paths; failure injection sends no action request.
+single_variable: Wire the existing private reservation transport into broker dispatch ordering and per-run credential delivery without enabling live controller execution or teacher bypass.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-516 valid, no task-owned stack or accepted goal, credential delivery scoped to one run and kept off ROS graph]
+success_criteria: [RED/GREEN broker transaction ordering, same UUID/typed Goal across ticket reservation and send, timeout/failure closes generation, C++ and Python package gates, no live action goal]
+failure_criteria: [Action send precedes ticket or ACK, registration secret appears on ROS graph or logs, or failure leaves a reusable active generation]
+invalid_criteria: [Existing dirty batch enters commit, scratch lacks NVMe proof, stack or physical action starts]
+provenance:
+  source_commit: d9872a8e
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: NOT_STARTED
   ros_domain_id: NOT_ASSIGNED
   gz_partition: NOT_ASSIGNED
 commands: []
@@ -5043,5 +5080,5 @@ inferred: []
 conclusion: PENDING
 evidence: []
 decision: PENDING
-next_experiment: EXP-517
+next_experiment: EXP-518
 ```
