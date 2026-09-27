@@ -31,6 +31,7 @@ confirmed_conclusions:
   - EXP-498 exposes a time-axis conflict: the fixed 600-target/701-sample path needs a bridge 100 ms before the selected observation; a fresh post-observation bridge yields only 641 samples and is rejected by the relative request.
   - EXP-499 confirms observers can retain the needed 50 physics steps, but SEARCH and controller reference ports do not currently prove a continuous 100 ms stopped historical bridge.
   - EXP-500 verifies an exact 51-frame, 100 ms physical-history contract offline; controller interval and ownership proof remain missing, so no command or collection authority exists.
+  - EXP-501 finds that latest-only controller references and action status cannot prove the same 100 ms interval; the installed trajectory-controller header also exposes a topic callback whose exclusivity is unproved.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -38,8 +39,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-500
-next_experiment: EXP-501
+latest_checkpoint: CP-501
+next_experiment: EXP-502
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4486,3 +4487,36 @@ next_experiment: EXP-501
 
 - Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp500-stationary-physics-history/result.json`. Focused and full source/installed gates passed on unique verified NVMe scratch. The invalid first RED, valid RED and all GREEN evidence remain retained.
 - The read-only verifier requires 51 exact 2 ms same-epoch world/scene/contact frames, full qpos/qvel equality, stopped velocities, safe contact, fresh ordered original receipts and identity with the selected SEARCH frame. It does not change SEARCH timing, generate a broker receipt, issue a permit or send a goal. The missing controller interval and ownership fence remain the next boundary. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-500, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
+
+## EXP-501 — Controller interval source and ingress audit
+
+```yaml
+experiment_id: EXP-501
+status: VALID
+prior_experiment: EXP-500
+hypothesis: The current broker proves only a current stopped reference, not an uninterrupted 100 ms controller interval, and controller ingress beyond broker-owned action goals must be fenced before the historical physical bridge can become authoritative.
+prediction: Driver state retains latest arm/gripper reference and latest stop confirmation but no publication interval; installed controller declares a trajectory topic callback as well as an action server.
+single_variable: Read-only source and installed-header audit of controller ingress and stop/reference/ownership provenance.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-500 valid, task-owned stack none]
+success_criteria: [Exact source/header declarations and hashes retained; no claim of live controller rate or topic exclusivity]
+failure_criteria: [Existing broker already records a complete controller interval and exclusive ingress]
+invalid_criteria: [Live stack starts or goal is sent]
+provenance:
+  source_commit: 22de42f6
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Read-only rg and SHA256 audit of installed joint_trajectory_controller header, ACT controller config, broker driver, ownership and SEARCH selection"]
+observed: ["RosBrokerDriver._references retains one value per arm/gripper kind; stationary_reference_proof checks only that latest publication, recent stop confirmation and current action records", "The installed joint_trajectory_controller header declares topic_callback(JointTrajectory) alongside an action server; the ACT controller YAML specifies controller-manager update_rate 500 but contains no proof of actual published interval rate or topic ingress exclusivity", "SEARCH still takes the next physical step immediately after neck.stop_and_confirm; ownership generation changes on acquisition/revocation, but no archived per-step generation or controller-publication sequence is bound to the selected frame", "Audit SHA256 a9c4b4ce1ee2d2618173956cf4bbece18ccb8bfbed96ef7d55933e3ed13b718e; no stack, goal or hardware operation"]
+inferred: ["Action status alone cannot rule out an unobserved topic command; latest-only references cannot establish historical continuity", "Config update_rate is not a measured publication rate or evidence of 51 controller samples; a real ingress fence and source event history must be established before any interval proof"]
+conclusion: VALID provenance gap; combined historical bridge remains nonauthoritative.
+decision: Define a fail-closed controller ingress and publication-interval contract bound to broker ownership, then verify it offline before changing SEARCH timing or motion authority.
+next_experiment: EXP-502
+```
+
+## CP-501 — Controller ingress and interval remain unproved
+
+- Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp501-controller-interval-audit/audit.txt`. Its exact source and installed-header hashes support the narrower claim that the current broker does not retain a controller history and the installed controller declares a topic callback. Actual runtime publisher rate and ingress isolation were not measured.
+- The EXP-500 physical verifier remains offline and noncollecting. No PathProof, permit or goal has been connected to it. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-501, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
