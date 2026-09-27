@@ -104,14 +104,15 @@ def test_factory_requires_explicit_act_context_and_preserves_legacy(monkeypatch)
 
 
 def test_unix_exclusivity_result_status_and_disconnect_real_factory(tmp_path):
-    import time,uuid
+    import os,time,uuid
     from pathlib import Path
     from control_msgs.action import FollowJointTrajectory
     from so101_demo.adapters.act.command_broker import UnixBrokerServer
     from so101_demo.adapters.act.leased_action_client import BrokerConnection,make_action_client
     # Unix path budget is checked for the complete endpoint. NVMe scratch paths
     # are intentionally long; use the registered root's short runtime directory.
-    root=Path('/data/work/so101-evidence/act-data/0917a/r')/uuid.uuid4().hex[:8]
+    root=Path(os.environ.get('SO101_ACT_BROKER_TEST_ROOT',
+                             '/tmp/so101-act-broker-tests'))/uuid.uuid4().hex[:8]
     endpoint=str(root/'a');driver=Driver()
     driver.validate=lambda kind,goal:goal
     driver.ready=lambda kind:True
