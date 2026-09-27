@@ -4215,3 +4215,36 @@ next_experiment: EXP-493
 
 - Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp492-full-approach-screen/result.json`. All 246 exact prefixes were checked separately against synthetic stopped qpos and fixed cup pose; each reports `samples: 701`, `safe: true`, `path_step_s: 0.002`, `path_clearance_m: 0.002`.
 - The source manifest remains `eligible_for_collection: false`. No physical source refresh, permit, exact goals, contact/grasp, episode or training occurred. Retained through EXP-492, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
+
+## EXP-493 — Bounded approach prefix grouping
+
+```yaml
+experiment_id: EXP-493
+status: PLANNED
+prior_experiment: EXP-492
+hypothesis: Consecutive exact-grid approach segments can be grouped into fewer stopped prefixes while preserving stage boundaries, the visible-detour control points and every current physics/contact limit.
+prediction: A deterministic bounded longest-safe grouping yields fewer than 246 600-target prefixes; each selected group passes 701 samples and retained anchor endpoints remain exact.
+single_variable: Candidate group length in the already-screened pinned endpoint chain; model, no-contact policy, 2 ms grid, 2 mm clearance, dynamics and cup pose remain fixed.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-492 valid, pinned route source verified, task-owned stack none]
+success_criteria: [All 246 source segments covered exactly once, all required anchors retained, every selected prefix SAFE at 701 samples, complete candidate/attempt verdict hashes retained]
+failure_criteria: [No candidate at one original segment, an anchor skipped, checker refusal or source drift]
+invalid_criteria: [Wrong runtime/model, live stack or goal]
+provenance:
+  source_commit: 9b5df09f
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Offline deterministic group screen from pinned route endpoints with original checker, retaining every selected exact-row hash and anchor"]
+observed: ["246 pinned segments grouped into 31 selected stopped 600-target prefixes across all 19 required stage/detour anchors; each selected checker verdict is SAFE with 701 samples", "79 candidate checks were retained; 48 longer attempts refused PATH_VELOCITY_LIMIT; no contact or acceleration refusal occurred among attempted groups", "Selected index ranges and exact-row hashes retained; selected-record SHA256 106976f467394fadbf325239e52a2c814504e5a336af35e27ce8c1abd8a7d236", "Run script SHA256 c0d1214f73f7f83ae84cf6bf0a6ae513a9cf42d754a96c35cfd33b90a303b290; result SHA256 a5f877947484f12566dd788a74c0401703c9bdcacc449e35a6bea7b6a446135b"]
+inferred: ["31 candidate prefixes imply 37.2 s minimum scheduled trajectory time before source refresh and physical stops; path geometry is a new straight-line interpolation between preserved anchors, so visual/physical expert qualification remains open"]
+conclusion: VALID offline grouping screen; candidate remains noncollecting.
+decision: Freeze a source-verified candidate profile with the 31 selected ranges and independently recheck exact rows and anchors before any production route authority.
+next_experiment: EXP-494
+```
+
+## CP-493 — 31 bounded stopped approach candidates
+
+- Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp493-grouped-approach-screen/result.json`. Selected ranges are `(0–11), (12–23), (24–29), (30–41), (42–53), (54–65), (66–77), (78–89), (90–93), (94–105), (106–109), (110–121), (122–133), (134–145), (146–156), (157–168), (169–178), (179–180), (181–181), (182–191), (192–199), (200–201), (202–204), (205–210), (211–211), (212–216), (217–223), (224–227), (228–234), (235–240), (241–245)`.
+- The selected path can differ from the original 20 ms diagnostic geometry between retained endpoints. It needs source-verified profile construction, visual validation and physical expert qualification. There is still no permit, goal or accepted episode. Retained through EXP-493, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
