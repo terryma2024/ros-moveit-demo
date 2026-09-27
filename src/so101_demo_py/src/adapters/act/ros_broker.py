@@ -147,9 +147,9 @@ class RosBrokerDriver:
         self.subscriptions=[node.create_subscription(JointState,'/joint_states',self._joints,qos_profile_sensor_data)]
         self.subscriptions.append(node.create_subscription(SimulationEvidence,'/so101/simulation/evidence',self._live_epoch,qos_profile_sensor_data))
         self.subscriptions.append(node.create_subscription(ScalarJointEvidence,'/so101/simulation/joints',self._scalar_joints,ATOMIC_EVIDENCE_QOS))
-        for kind in ('arm','gripper'):
+        for kind in ('arm','gripper','neck'):
             self.subscriptions.append(node.create_subscription(JointTrajectoryControllerState,
-                '/'+('arm_controller' if kind=='arm' else 'gripper_controller')+'/controller_state',
+                '/'+kind+'_controller/controller_state',
                 lambda message,kind=kind:self._reference(kind,message),qos_profile_sensor_data))
         for name,kind in ACTIONS.items():
             self.subscriptions.append(node.create_subscription(GoalStatusArray,name+'/_action/status',

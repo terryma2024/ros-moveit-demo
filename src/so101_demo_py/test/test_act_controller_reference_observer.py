@@ -5,6 +5,7 @@ import threading
 
 import pytest
 
+import so101_demo.adapters.act.ros_broker as ros_broker
 from so101_demo.adapters.act.controller_reference_observer import (
     ControllerReferenceObserver,
 )
@@ -114,3 +115,35 @@ def test_pre_reset_epoch_cannot_crash_or_enter_reference_history():
     driver._reference("arm", frame(1_100_000_000))
     identity, rows = driver.recent_controller_references("arm")
     assert identity == ("session-a", 1) and len(rows) == 1
+
+
+def test_driver_subscribes_to_all_three_reference_streams(monkeypatch):
+    subscriptions = {}
+
+    class Node:
+        def create_client(self, *_args):
+            return object()
+
+        def create_subscription(self, _message_type, topic, callback, _qos):
+            subscriptions[topic] = callback
+            return object()
+
+    monkeypatch.setattr(ros_broker, "ActionClient", lambda *_args: object())
+    driver = RosBrokerDriver(Node(), stop_velocity_rad_s=.002, max_age_s=.2,
+                             monotonic=lambda: 10.1)
+    epoch = SimulationEvidence()
+    epoch.simulation_session_id = "session-a"
+    epoch.reset_epoch = 2
+    epoch.header.stamp.sec = 1
+    driver._live_epoch(epoch)
+    for kind, topic, names in (
+        ("arm", "/arm_controller/controller_state", ("1", "2", "3", "4", "5")),
+        ("gripper", "/gripper_controller/controller_state", ("6",)),
+        ("neck", "/neck_controller/controller_state", ("neck_yaw_joint",)),
+    ):
+        assert topic in subscriptions
+        subscriptions[topic](frame(1_100_000_000, names=names))
+        identity, rows = driver.recent_controller_references(kind)
+        assert identity == ("session-a", 2)
+        assert len(rows) == 1
+        assert rows[0]["joint_names"] == names
