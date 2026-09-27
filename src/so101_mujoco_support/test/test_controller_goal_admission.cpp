@@ -166,7 +166,7 @@ TEST(ControllerGoalAdmission, ExplicitCloseRevokesPendingReservation)
   EXPECT_TRUE(gate.arm(2));
 }
 
-TEST(ControllerGoalAdmission, ConsumedGenerationCannotBeReservedAgain)
+TEST(ControllerGoalAdmission, ConsumedUuidCannotBeReservedAgain)
 {
   int64_t now = 1000;
   ControllerGoalAdmission gate([&now]() {return now;}, 100, 1024);
@@ -178,6 +178,44 @@ TEST(ControllerGoalAdmission, ConsumedGenerationCannotBeReservedAgain)
   EXPECT_EQ(gate.admit(uuid(1), goal, 5), Result::DENY_CLOSED);
   ASSERT_TRUE(gate.arm(6));
   EXPECT_TRUE(gate.reserve(uuid(1), goal, 6));
+}
+
+TEST(ControllerGoalAdmission, DistinctGoalsCanBeReservedSequentiallyInOneOwnerGeneration)
+{
+  int64_t now = 1000;
+  ControllerGoalAdmission gate([&now]() {return now;}, 100, 1024);
+  const auto first = expected_goal();
+  auto second = first;
+  second.trajectory.points[0].positions[0] = 0.25;
+  ASSERT_TRUE(gate.arm(5));
+  ASSERT_TRUE(gate.reserve(uuid(1), first, 5));
+  ASSERT_EQ(gate.admit(uuid(1), first, 5), Result::ALLOW);
+  ASSERT_TRUE(gate.reserve(uuid(2), second, 5));
+  ASSERT_EQ(gate.admit(uuid(2), second, 5), Result::ALLOW);
+  EXPECT_FALSE(gate.reserve(uuid(1), first, 5));
+  EXPECT_EQ(gate.admit(uuid(1), first, 5), Result::DENY_CLOSED);
+}
+
+TEST(ControllerGoalAdmission, OverlappingReservationAndBoundedHistoryCloseTheLease)
+{
+  int64_t now = 1000;
+  const auto goal = expected_goal();
+  ControllerGoalAdmission overlap([&now]() {return now;}, 100, 1024, 2);
+  ASSERT_TRUE(overlap.arm(5));
+  ASSERT_TRUE(overlap.reserve(uuid(1), goal, 5));
+  EXPECT_FALSE(overlap.reserve(uuid(2), goal, 5));
+  EXPECT_EQ(overlap.admit(uuid(1), goal, 5), Result::DENY_CLOSED);
+
+  ControllerGoalAdmission bounded([&now]() {return now;}, 100, 1024, 2);
+  ASSERT_TRUE(bounded.arm(5));
+  ASSERT_TRUE(bounded.reserve(uuid(1), goal, 5));
+  ASSERT_EQ(bounded.admit(uuid(1), goal, 5), Result::ALLOW);
+  ASSERT_TRUE(bounded.reserve(uuid(2), goal, 5));
+  ASSERT_EQ(bounded.admit(uuid(2), goal, 5), Result::ALLOW);
+  EXPECT_FALSE(bounded.reserve(uuid(3), goal, 5));
+  EXPECT_EQ(bounded.admit(uuid(3), goal, 5), Result::DENY_CLOSED);
+  ASSERT_TRUE(bounded.arm(6));
+  EXPECT_TRUE(bounded.reserve(uuid(1), goal, 6));
 }
 
 TEST(ControllerGoalAdmission, CloseGenerationDoesNotRevokeANewerGeneration)
