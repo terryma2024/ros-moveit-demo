@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 7cf9a27c
+current_commit: fdcd245e
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -44,6 +44,7 @@ confirmed_conclusions:
   - EXP-512 verifies the fixed Python CDR fixture decodes to the expected full C++ Goal and replaces the off-path reservation's raw-byte identity with typed Goal equality; production callback remains open.
   - EXP-513 replaces the configured JTC action entrypoint with a default-closed reservation wrapper; rejected no-motion ROS requests prove field mismatch closes and exact generation consumes before inactive-base rejection. Broker registration and active execution remain unproved.
   - EXP-514 revokes pending controller reservations on deactivate, error, cleanup and reconfigure in an in-process memory-backed controller test; broker admission and physical stop remain unproved.
+  - EXP-515 confirms the Python driver accepts caller-supplied native UUIDs, but broker local ticket registration follows asynchronous send and no private broker-to-controller registration transport exists in either launch topology.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -52,8 +53,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-514
-next_experiment: EXP-515
+latest_checkpoint: CP-515
+next_experiment: EXP-516
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4985,7 +4986,7 @@ next_experiment: EXP-515
 
 ```yaml
 experiment_id: EXP-515
-status: PLANNED
+status: VALID
 prior_experiment: EXP-514
 hypothesis: The current broker launcher, process identity and driver UUID path permit a broker-scoped registration transaction before action send, while a public unauthenticated ROS service cannot be the reservation authority.
 prediction: Read-only source and installed-boundary tracing identifies the exact broker process, native UUID generation point, first action send point, lifecycle mode handoff and a concrete credential delivery path; any missing secure path is recorded before service implementation.
@@ -5001,11 +5002,46 @@ provenance:
   runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i/so101_mujoco_support/lib/libso101_broker_owned_trajectory_controller.so
   ros_domain_id: NOT_ASSIGNED
   gz_partition: NOT_ASSIGNED
+commands: ["Read-only current command_broker, RosBrokerDriver, standalone broker CLI, task worker broker and task-station launch source", "Resolved installed so101_demo_py Python imports through build symlinks to current source and SHA256-matched driver/broker modules", "Read installed rclpy ActionClient.send_goal_async goal_uuid parameter and current controller plugin entrypoint", "Checked task-owned host process state without starting a stack"]
+observed: ["RosBrokerDriver.submit accepts a caller UUID and rclpy sends it in the native SendGoal request", "CommandBroker.dispatch calls driver.submit before storing _goal_tickets, so action send is enqueued before the local goal ticket exists", "Standalone ACT broker and task worker broker are both separate processes from the simulator/controller plugin; no broker-to-controller reservation port or credential exists", "Existing broker Unix socket is for clients to broker only and is chmod 0600; controller has no matching private port", "A public unauthenticated ROS registration service would move the unknown-client ingress, while a bearer on an unprotected ROS graph would not be a confidential broker credential", "Audit artifact SHA256 44255ece1c8030940e024c454de290188a88a8512f6262c3a53956cf09cf8015; no edit, stack or goal"]
+inferred: ["A private per-run Unix socket with bounded frames, peer identity and a per-run capability is a concrete off-graph registration transport; local same-UID host code remains a separate trust-boundary concern", "Broker dispatch must allocate UUID/local goal ID and register its ticket before controller reservation ACK and before calling send_goal_async", "MoveIt teacher execution needs its own proxy or equivalent pre-registration route; blanket unknown-goal admission cannot preserve the action gate"]
+conclusion: VALID read-only source/installed audit; caller UUID is available, but current process transport and transaction order cannot admit ACT goals safely.
+evidence: [/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp515-broker-registration-audit/audit.json]
+decision: Implement and test the private controller reservation transport off the live action path, then move broker-local ticket registration before ACK/send and provision both standalone and worker processes; keep teacher mode separate.
+next_experiment: EXP-516
+```
+
+## CP-515 — UUID available; broker ticket and controller registration come too late or not at all
+
+- EXP-515 edited no source. The installed Python package resolves through the existing `build/so101_demo_py` symlink to this worktree. `RosBrokerDriver.submit` can pass a caller UUID into installed Jazzy `ActionClient.send_goal_async`, but `CommandBroker.dispatch` stores its local ticket only after `driver.submit` has enqueued the action request. The configured controller action gate has no broker registration endpoint. Standalone and task worker brokers each run in a process separate from the simulator/controller.
+- Chosen next transport is a private per-run Unix socket under the registered root's `ipc/` directory, with bounded messages and ACK, peer identity and a per-run capability. Its scope and same-UID host limitation must be tested before live use. A public ROS service does not establish broker-only registration, and MoveIt teacher goals require a separate proxy route. No stack, action request or code edit occurred in this audit.
+- Registered root unchanged. Retain EXP-515 audit and all earlier runs; archived none. Scratch and generated caches are deletion candidates only, nothing deleted. Existing dirty/untracked batch remains untouched. Formal accepted Train/Validation/Offline Test 0/0/0.
+
+## EXP-516 — Private controller reservation transport
+
+```yaml
+experiment_id: EXP-516
+status: PLANNED
+prior_experiment: EXP-515
+hypothesis: A bounded private Unix socket can deliver generation, native UUID and typed Goal CDR from a broker process to the controller-local gate, returning ACK only after one reservation is stored, while rejecting missing capability, malformed frames and stale generation.
+prediction: Isolated cross-process tests RED before the port exists, then GREEN for one authorized reservation; forged credential, truncated or oversized frame, duplicate UUID/generation and timeout fail closed without any action send.
+single_variable: Add off-graph broker-to-controller registration transport around the existing controller-local gate; do not yet wire production broker dispatch, teacher proxy or live motion.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-515 valid, task-owned stack absent, no accepted goal, unique task-owned IPC path under registered evidence root]
+success_criteria: [C++/Python protocol RED/GREEN, exact typed Goal decode, peer/capability rejection, bounded ACK and stale/duplicate rejection, C++ and ordinary Python package gates, no action send]
+failure_criteria: [Any arbitrary ROS client can reserve, ACK precedes stored reservation, malformed or stale request succeeds, socket path can be hijacked, or test blocks beyond deadline]
+invalid_criteria: [ROS/MuJoCo stack or action goal starts, scratch lacks exact NVMe tempfile proof, existing dirty batch enters commit]
+provenance:
+  source_commit: fdcd245e
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i/so101_mujoco_support/lib/libso101_broker_owned_trajectory_controller.so
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
 commands: []
 observed: []
 inferred: []
 conclusion: PENDING
 evidence: []
 decision: PENDING
-next_experiment: EXP-516
+next_experiment: EXP-517
 ```
