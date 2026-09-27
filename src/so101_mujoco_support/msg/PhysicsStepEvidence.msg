@@ -2,6 +2,8 @@ string simulation_session_id
 uint64 reset_epoch
 uint64 physics_step
 float64 simulation_time_s
+int64 clock_interval_begin_monotonic_ns
+int64 clock_interval_end_monotonic_ns
 float64[] model_qpos
 float64[] model_qvel
 geometry_msgs/Pose object_pose_world
