@@ -63,6 +63,14 @@ ament_target_dependencies(so101_broker_owned_trajectory_controller PUBLIC
   control_msgs controller_interface joint_trajectory_controller pluginlib rclcpp rclcpp_action)
 pluginlib_export_plugin_description_file(controller_interface so101_trajectory_controllers.xml)
 
+add_library(so101_controller_reservation_protocol STATIC
+  src/controller_reservation_protocol.cpp)
+target_compile_features(so101_controller_reservation_protocol PUBLIC cxx_std_17)
+target_include_directories(so101_controller_reservation_protocol PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+ament_target_dependencies(so101_controller_reservation_protocol PUBLIC control_msgs rclcpp rcutils)
+
 add_executable(graceful_shutdown_move_group src/graceful_shutdown_move_group.cpp)
 target_compile_features(graceful_shutdown_move_group PRIVATE cxx_std_17)
 target_include_directories(graceful_shutdown_move_group PRIVATE ${Boost_INCLUDE_DIRS})
@@ -107,6 +115,15 @@ if(BUILD_TESTING)
   target_include_directories(test_controller_goal_admission PRIVATE include)
   ament_target_dependencies(test_controller_goal_admission
     control_msgs rclcpp trajectory_msgs)
+
+  ament_add_gtest(test_controller_reservation_protocol
+    test/test_controller_reservation_protocol.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_controller_reservation_protocol PRIVATE cxx_std_17)
+  target_include_directories(test_controller_reservation_protocol PRIVATE include)
+  ament_target_dependencies(test_controller_reservation_protocol control_msgs rclcpp)
+  target_link_libraries(test_controller_reservation_protocol
+    so101_controller_reservation_protocol)
 endif()
 
 install(TARGETS so101_simulation_evidence_plugin
