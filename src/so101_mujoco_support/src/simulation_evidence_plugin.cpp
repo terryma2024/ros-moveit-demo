@@ -695,6 +695,10 @@ bool SimulationEvidencePlugin::init(
       "/so101/simulation/physics_cancellation_request");
     const auto cancellation_ack_topic = parameter<std::string>(
       node, "physics_cancellation_ack_topic", "/so101/simulation/physics_cancellation_ack");
+    const auto step_fence_request_topic = parameter<std::string>(
+      node, "physics_step_fence_request_topic", "/so101/simulation/physics_step_fence_request");
+    const auto step_fence_ack_topic = parameter<std::string>(
+      node, "physics_step_fence_ack_topic", "/so101/simulation/physics_step_fence_ack");
     if (max_contacts < 0 || physics_step_buffer_capacity <= 0 || physics_step_chunk_size <= 0 ||
       physics_step_chunk_size > physics_step_buffer_capacity || !std::isfinite(rate) ||
       rate <= 0.0 || !std::isfinite(model->opt.timestep) || model->opt.timestep <= 0.0 ||
@@ -702,7 +706,8 @@ bool SimulationEvidencePlugin::init(
       !std::isfinite(diagnostic_hard_stop_force_n_) ||
       diagnostic_hard_stop_force_n_ <= static_shadow_force_n_ || topic.empty() ||
       chunk_topic.empty() || hazard_topic.empty() || cancellation_request_topic.empty() ||
-      cancellation_ack_topic.empty() ||
+      cancellation_ack_topic.empty() || step_fence_request_topic.empty() ||
+      step_fence_ack_topic.empty() ||
       state_.simulation_session_id.empty() ||
       !builder_.configure(model, object, left, right, other,
         static_cast<std::size_t>(max_contacts)))
@@ -710,6 +715,7 @@ bool SimulationEvidencePlugin::init(
       return false;
     }
     node_ = std::move(node);
+    step_fence_.configure_session(state_.simulation_session_id);
     const auto evidence_qos =
       rclcpp::QoS(rclcpp::KeepLast(1)).reliable().transient_local();
     scalar_joint_names_ = parameter<std::vector<std::string>>(node_, "scalar_joint_audit_names", {});
@@ -755,6 +761,17 @@ bool SimulationEvidencePlugin::init(
       [this](const msg::PhysicsCancellationRequest & request) {
         acknowledge_cancellation_request(request);
         });
+    step_fence_ack_publisher_ = node_->create_publisher<msg::PhysicsStepFenceAck>(
+      step_fence_ack_topic, cancellation_qos);
+    realtime_step_fence_ack_publisher_ =
+      std::make_unique<realtime_tools::RealtimePublisher<msg::PhysicsStepFenceAck>>(
+      step_fence_ack_publisher_);
+    step_fence_request_subscription_ =
+      node_->create_subscription<msg::PhysicsStepFenceRequest>(
+      step_fence_request_topic, cancellation_qos,
+      [this](const msg::PhysicsStepFenceRequest & request) {
+        step_fence_.request(request);
+      });
     physics_step_buffer_ = std::make_unique<PhysicsStepEvidenceBuffer>(
       static_cast<std::size_t>(physics_step_buffer_capacity),
       static_cast<std::size_t>(physics_step_chunk_size), diagnostic_hard_stop_force_n_);
@@ -811,13 +828,26 @@ void SimulationEvidencePlugin::on_physics_step(const mjModel * model, const mjDa
   current_reset_epoch_.store(step.reset_epoch, std::memory_order_release);
   current_physics_step_.store(step.physics_step, std::memory_order_release);
   current_simulation_time_s_.store(step.simulation_time_s, std::memory_order_release);
-  physics_step_buffer_->append(step);
+  const bool recorded = physics_step_buffer_->append(step);
   if (robot_buffer_) {
     robot_buffer_->append(robot_builder_.build(model, data, step.simulation_session_id,
       step.reset_epoch, step.physics_step));
     try_publish_robot_contacts();
   }
   publish_hazard_if_needed();
+  if (recorded && !physics_step_buffer_->evidence_loss_latched() &&
+    realtime_step_fence_ack_publisher_ && realtime_step_fence_ack_publisher_->trylock())
+  {
+    const auto ack = step_fence_.observe(
+      step.simulation_session_id, step.reset_epoch, step.physics_step,
+      step.simulation_time_s, paused);
+    if (ack) {
+      realtime_step_fence_ack_publisher_->msg_ = *ack;
+      realtime_step_fence_ack_publisher_->unlockAndPublish();
+    } else {
+      realtime_step_fence_ack_publisher_->unlock();
+    }
+  }
   if (physics_step_buffer_->ready()) {
     try_publish_chunk();
   }
@@ -957,6 +987,7 @@ void SimulationEvidencePlugin::on_state_snapshot(
     current_reset_epoch_.store(generation, std::memory_order_release);
     current_physics_step_.store(0, std::memory_order_release);
     current_simulation_time_s_.store(data->time, std::memory_order_release);
+    step_fence_.reset(generation);
     hazard_published_ = false;
   }
 }
@@ -972,6 +1003,10 @@ void SimulationEvidencePlugin::cleanup()
   scalar_joint_publisher_.reset();
   scalar_joint_names_.clear();
   physics_step_buffer_.reset();
+  step_fence_request_subscription_.reset();
+  realtime_step_fence_ack_publisher_.reset();
+  step_fence_ack_publisher_.reset();
+  step_fence_.configure_session("");
   cancellation_request_subscription_.reset();
   cancellation_ack_publisher_.reset();
   realtime_chunk_publisher_.reset();

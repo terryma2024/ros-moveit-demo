@@ -28,6 +28,7 @@ class PickPlaceSearchObservation:
     stationary_physics_proof: dict | None = None
     stationary_reference_proof: dict | None = None
     local_owner_goal_proof: dict | None = None
+    physics_step_fence: dict | None = None
 
 
 class PickPlaceSearchSegment:
@@ -106,6 +107,19 @@ class PickPlaceSearchSegment:
     def _post_stop_interval(self, request: dict, reset_epoch: int, cursor: int):
         """Select after a fresh stopped frame and 100 ms of advancing physics."""
         stopped_wall_s = self.monotonic()
+        try:
+            marker = self.sources.physics_fence.request_after_stop(
+                reset_epoch, stopped_wall_s, request["deadline_ns"])
+            if (not isinstance(marker, dict)
+                    or marker.get("session_id") != request["session_id"]
+                    or marker.get("reset_epoch") != reset_epoch
+                    or type(marker.get("marked_physics_step")) is not int
+                    or marker["marked_physics_step"] < 1
+                    or marker.get("command_authority") is not False):
+                raise ValueError("PHYSICS_STEP_FENCE_INVALID")
+            cursor = max(cursor, marker["marked_physics_step"])
+        except (AttributeError, KeyError, TypeError, ValueError) as error:
+            raise PickPlaceSearchError("SEARCH_PHYSICS_STEP_FENCE_INVALID") from error
 
         def received_after_stop(raw):
             try:
@@ -141,7 +155,7 @@ class PickPlaceSearchSegment:
             if elapsed_steps >= _STOP_INTERVAL_STEPS:
                 if elapsed_ns < _STOP_INTERVAL_NS:
                     raise PickPlaceSearchError("SEARCH_STOP_DWELL_TIME_INVALID")
-                return raw, geometry, stopped_wall_s
+                return raw, geometry, stopped_wall_s, marker
 
     def run(self, request: dict, *, reset_epoch: int) -> PickPlaceSearchObservation:
         try:
@@ -171,17 +185,19 @@ class PickPlaceSearchSegment:
                     raise PickPlaceSearchError("SEARCH_NOT_LOCKED")
                 if self.adapter.neck_port.stop_and_confirm() is not True:
                     raise PickPlaceSearchError("SEARCH_STOP_UNCONFIRMED")
-                final_raw, final_geometry, stopped_wall_s = self._post_stop_interval(
+                final_raw, final_geometry, stopped_wall_s, marker = self._post_stop_interval(
                     request, reset_epoch, cursor)
                 if final_raw["world"].simulation_time_s < result["timestamp"]:
                     raise PickPlaceSearchError("SEARCH_POST_LOCK_STEP_INVALID")
                 scene_receipt = self._sync_scene(request, final_geometry)
-                observed = PickPlaceSearchObservation(result, final_raw, scene_receipt)
+                observed = PickPlaceSearchObservation(
+                    result, final_raw, scene_receipt, physics_step_fence=marker)
                 proof = self.history_verifier(observed, stopped_wall_s)
                 if (not isinstance(proof, dict)
                         or proof.get("selected_physics_step") !=
                            final_raw["world"].simulation_step
                         or proof.get("stop_confirmed_wall_s") != stopped_wall_s
+                        or proof.get("physics_step_fence") != marker
                         or proof.get("controller_interval_proof_required") is not True
                         or proof.get("command_authority") is not False
                         or proof.get("eligible_for_collection") is not False):
@@ -212,7 +228,7 @@ class PickPlaceSearchSegment:
                     raise PickPlaceSearchError("SEARCH_OWNER_GOAL_INTERVAL_INVALID")
                 self._guard(request)
                 return PickPlaceSearchObservation(
-                    result, final_raw, scene_receipt, proof, references, owner)
+                    result, final_raw, scene_receipt, proof, references, owner, marker)
         except BaseException as error:
             try:
                 stopped = self.adapter.neck_port.stop_and_confirm()

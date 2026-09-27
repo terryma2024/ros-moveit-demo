@@ -193,6 +193,10 @@ def test_ros_sources_arm_only_from_reset_and_enqueue_phase_contact_hazard(tmp_pa
             self.topics.append(topic)
             return SimpleNamespace(get_publisher_count=lambda: 1)
 
+        def create_publisher(self, _kind, topic, _qos):
+            self.topics.append(topic)
+            return SimpleNamespace(publish=lambda _message: None)
+
     node = Node()
     sources = Task8RosEvidence(
         node, object(), model=model, contact_pairs=pairs, session_id="s",

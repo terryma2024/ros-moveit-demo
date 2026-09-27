@@ -47,9 +47,27 @@ def test_selected_search_binds_all_original_physical_frames():
     assert result["first_physics_step"] == 100
     assert result["selected_physics_step"] == 150
     assert result["stop_confirmed_wall_s"] == 9.99
+    assert result["physics_step_fence"]["marked_physics_step"] == 99
     assert result["controller_interval_proof_required"] is True
     assert result["command_authority"] is False
     assert result["eligible_for_collection"] is False
+
+
+@pytest.mark.parametrize("change", ["step", "epoch", "late_ack", "time"])
+def test_selected_search_rejects_history_not_after_physics_marker(change):
+    model, observed, _, worlds, scenes, contacts = history()
+    marker = dict(observed.physics_step_fence)
+    if change == "step":
+        marker["marked_physics_step"] = 100
+    elif change == "epoch":
+        marker["reset_epoch"] = 3
+    elif change == "late_ack":
+        marker["ack_received_wall_s"] = 10.01
+    elif change == "time":
+        marker["marked_simulation_time_s"] = 1.1
+    observed = replace(observed, physics_step_fence=marker)
+    with pytest.raises(ValueError, match="SEARCH_PHYSICS_HISTORY_INVALID"):
+        _verify(_sources(model, observed, worlds, scenes, contacts), observed, model)
 
 
 @pytest.mark.parametrize("change", ["missing_scene", "wrong_epoch", "pre_stop_receipt"])

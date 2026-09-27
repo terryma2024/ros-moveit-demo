@@ -39,7 +39,16 @@ def history():
         **raw["source_received_wall_s"],
         "world": 10.1, "scene": 10.1, "contact": 10.1,
     }
-    observed = replace(observed, physical_readback=raw)
+    observed = replace(observed, physical_readback=raw, physics_step_fence={
+        "session_id": world.simulation_session_id,
+        "reset_epoch": world.reset_epoch,
+        "request_sequence": 1,
+        "marked_physics_step": 99,
+        "marked_simulation_time_s": 1.098,
+        "request_sent_wall_s": 9.992,
+        "ack_received_wall_s": 9.995,
+        "command_authority": False,
+    })
     source = freeze_selected_search_source(observed, max_skew_s=.02)
     worlds = []
     scenes = []

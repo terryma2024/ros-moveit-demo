@@ -24,6 +24,7 @@
 #include "so101_mujoco_support/msg/physics_cancellation_request.hpp"
 #include "so101_mujoco_support/msg/physics_step_evidence.hpp"
 #include "so101_mujoco_support/msg/physics_step_evidence_chunk.hpp"
+#include "so101_mujoco_support/physics_step_fence.hpp"
 #include "so101_mujoco_support/msg/simulation_evidence.hpp"
 #include "so101_mujoco_support/msg/scalar_joint_evidence.hpp"
 #include "so101_mujoco_support/msg/robot_contact_evidence.hpp"
@@ -191,6 +192,10 @@ private:
   rclcpp::Subscription<msg::PhysicsCancellationRequest>::SharedPtr
     cancellation_request_subscription_;
   rclcpp::Publisher<msg::PhysicsCancellationAck>::SharedPtr cancellation_ack_publisher_;
+  rclcpp::Subscription<msg::PhysicsStepFenceRequest>::SharedPtr step_fence_request_subscription_;
+  rclcpp::Publisher<msg::PhysicsStepFenceAck>::SharedPtr step_fence_ack_publisher_;
+  std::unique_ptr<realtime_tools::RealtimePublisher<msg::PhysicsStepFenceAck>>
+  realtime_step_fence_ack_publisher_;
   rclcpp::Publisher<msg::ScalarJointEvidence>::SharedPtr scalar_joint_publisher_;
   std::vector<std::string> scalar_joint_names_;
   SceneStateBuilder scene_builder_;
@@ -215,6 +220,7 @@ private:
   std::atomic<uint64_t> current_reset_epoch_{0};
   std::atomic<uint64_t> current_physics_step_{0};
   std::atomic<double> current_simulation_time_s_{0.0};
+  PhysicsStepFence step_fence_{"unconfigured-session"};
 };
 }  // namespace so101_mujoco_support
 #endif  // SO101_MUJOCO_SUPPORT__SIMULATION_EVIDENCE_PLUGIN_HPP_

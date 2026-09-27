@@ -1,0 +1,3 @@
+string simulation_session_id
+uint64 reset_epoch
+uint64 request_sequence

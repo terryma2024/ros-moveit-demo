@@ -63,6 +63,14 @@ class _Sources:
     def __init__(self, *rows):
         self.rows = deque(rows)
         self.cursors = []
+        self.physics_fence = SimpleNamespace(request_after_stop=lambda epoch, stopped, deadline: {
+            "session_id": "session-1", "reset_epoch": epoch,
+            "request_sequence": 1, "marked_physics_step": 2,
+            "marked_simulation_time_s": 0.0,
+            "request_sent_wall_s": stopped,
+            "ack_received_wall_s": stopped,
+            "command_authority": False,
+        })
 
     def capture(self, attempt_id, *, after_step):
         assert attempt_id == "attempt-1"
@@ -120,6 +128,7 @@ def _segment(sources, adapter, scene, *, guard=lambda: None, clock=None,
         history_verifier = lambda observed, stopped_wall_s: {
             "selected_physics_step": observed.physical_readback["world"].simulation_step,
             "stop_confirmed_wall_s": stopped_wall_s,
+            "physics_step_fence": observed.physics_step_fence,
             "controller_interval_proof_required": True,
             "selected_source_sha256": "test-selected-source",
             "command_authority": False,
@@ -175,6 +184,18 @@ def test_search_waits_for_new_steps_then_reads_back_final_physical_cup_pose():
     assert observation.stationary_physics_proof["command_authority"] is False
     assert observation.stationary_reference_proof["command_authority"] is False
     assert observation.local_owner_goal_proof["command_authority"] is False
+    assert observation.physics_step_fence["marked_physics_step"] == 2
+
+
+def test_search_refuses_missing_physics_callback_marker_after_stop():
+    sources = _Sources(_raw(1, sim_time_s=1.0), _raw(2, sim_time_s=1.002))
+    sources.physics_fence = SimpleNamespace(request_after_stop=lambda *_args: (_ for _ in ()).throw(
+        ValueError("PHYSICS_STEP_FENCE_TIMEOUT")))
+    adapter = _Adapter({"status": "INPUT_PENDING", "stop": True},
+                       _locked(timestamp=1.002))
+    with pytest.raises(PickPlaceSearchError, match="SEARCH_PHYSICS_STEP_FENCE_INVALID"):
+        _segment(sources, adapter, _Scene()).run(_request(), reset_epoch=2)
+    assert adapter.stops == 2
 
 
 def test_search_selects_only_after_50_post_stop_steps_and_100ms():
