@@ -26,17 +26,40 @@ class BrokerControllerPort:
 
 class BrokerPairedExecution:
     def __init__(self,broker,*,snapshot_port,check_port,reference_port,sim_clock,
-                 submit_lead_s,accept_timeout_s,stop_timeout_s,permit_ttl_s,path_port=None):
+                 submit_lead_s,accept_timeout_s,stop_timeout_s,permit_ttl_s,path_port=None,
+                 proof_source_port=None,proof_state_port=None,
+                 proof_reference_port=None,proof_clock_port=None,
+                 proof_goal_port=None,proof_timing=None,
+                 max_observation_age_s=None,max_prefix_age_s=None):
+        proof_ports=(proof_source_port,proof_state_port,proof_reference_port,
+                     proof_clock_port,proof_goal_port,proof_timing,
+                     max_observation_age_s,max_prefix_age_s)
+        if any(value is not None for value in proof_ports) and (
+                any(value is None for value in proof_ports)
+                or not all(callable(port) for port in proof_ports[:5])):
+            raise ValueError('PATH_PROOF_PORT_INVALID')
         self.broker=broker;self._ticket=None;self._lock=threading.RLock();self._pairs={}
         self.permits=PermitAuthority(snapshot_port=lambda:snapshot_port(self._ticket),
             check_port=check_port,generation_port=lambda:broker.ownership.generation,
-            ttl_s=permit_ttl_s)
+            ttl_s=permit_ttl_s,proof_source_port=proof_source_port,
+            proof_state_port=proof_state_port,
+            proof_ticket_port=(lambda:self._ticket) if proof_source_port is not None else None,
+            max_observation_age_s=max_observation_age_s,
+            max_prefix_age_s=max_prefix_age_s)
         self.adapter=ActExecutionAdapter(
             BrokerControllerPort(broker,'arm',lambda:self._ticket),
             BrokerControllerPort(broker,'gripper',lambda:self._ticket),
             permit_port=self.permits,sim_clock=sim_clock,progress=lambda:time.sleep(.001),
             submit_lead_s=submit_lead_s,accept_timeout_s=accept_timeout_s,
-            stop_timeout_s=stop_timeout_s,reference_port=reference_port,path_port=path_port)
+            stop_timeout_s=stop_timeout_s,reference_port=reference_port,path_port=path_port,
+            proof_reference_port=proof_reference_port,
+            proof_clock_port=proof_clock_port,proof_goal_port=proof_goal_port,
+            proof_timing=proof_timing)
+
+    def _require_source_proof(self):
+        if (self.broker.reservation_port is not None
+                and self.permits.proof_source_port is None):
+            raise PermissionError('PATH_PROOF_SOURCE_UNWIRED')
 
     def _bind(self,ticket):
         self.broker.ownership.require_ticket(ticket)
@@ -52,14 +75,17 @@ class BrokerPairedExecution:
                 self.adapter.begin_attempt(ticket[3],ticket[4]);self._ticket=ticket
 
     def approve(self,ticket,prefix):
+        self._require_source_proof()
         self._bind(ticket)
         return self.permits.approve(prefix)
 
     def approve_with_source(self,ticket,prefix,receipt):
+        self._require_source_proof()
         self._bind(ticket)
         return self.permits.approve_with_source(prefix,receipt)
 
     def submit(self,ticket,prefix,permit):
+        self._require_source_proof()
         self._bind(ticket)
         try:
             gid=self.adapter.submit(prefix,permit)
