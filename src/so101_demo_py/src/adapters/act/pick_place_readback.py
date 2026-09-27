@@ -86,23 +86,26 @@ class PickPlacePhysicalReadback:
                           and not item.evidence.truncated)
             if not fresh:
                 raise ValueError("world stale or truncated")
-            worlds = {item.evidence.simulation_step: item.evidence for item in fresh
-                      if (item.evidence.simulation_session_id, item.evidence.reset_epoch)
-                      == (session_id, reset_epoch)}
+            scoped = tuple(item for item in fresh
+                           if (item.evidence.simulation_session_id,
+                               item.evidence.reset_epoch) == (session_id, reset_epoch))
+            if len({item.evidence.simulation_step for item in scoped}) != len(scoped):
+                raise ValueError("duplicate world step")
+            worlds = {item.evidence.simulation_step: item for item in scoped}
         except (AttributeError, TypeError, ValueError, RuntimeError) as error:
             raise PickPlaceReadbackError("WORLD_READBACK_UNAVAILABLE") from error
         try:
-            scene_frames = self.scene.recent_frames()
+            scene_frames = self.scene.recent_frames_with_receipts()
         except (AttributeError, TypeError, ValueError, RuntimeError) as error:
             raise PickPlaceReadbackError("SCENE_READBACK_UNAVAILABLE") from error
         try:
-            contact_frames = self.contacts.recent_frames()
+            contact_frames = self.contacts.recent_frames_with_receipts()
         except (AttributeError, TypeError, ValueError, RuntimeError) as error:
             raise PickPlaceReadbackError("CONTACT_READBACK_UNAVAILABLE") from error
-        scenes = {frame["simulation_step"]: frame for frame in scene_frames
+        scenes = {frame["simulation_step"]: (frame, received) for frame, received in scene_frames
                   if (frame["simulation_session_id"], frame["reset_epoch"])
                   == (session_id, reset_epoch)}
-        contacts = {frame["physics_step"]: frame for frame in contact_frames
+        contacts = {frame["physics_step"]: (frame, received) for frame, received in contact_frames
                     if (frame["simulation_session_id"], frame["reset_epoch"])
                     == (session_id, reset_epoch)}
         if not worlds or not scenes or not contacts:
@@ -115,7 +118,10 @@ class PickPlacePhysicalReadback:
             if not common:
                 raise PickPlaceReadbackError("SOURCE_STEP_NOT_ADVANCED")
         step = max(common)
-        world, scene, contact = worlds[step], scenes[step], contacts[step]
+        world_entry = worlds[step]
+        world = world_entry.evidence
+        scene, scene_received = scenes[step]
+        contact, contact_received = contacts[step]
         if world.paused != scene["paused"]:
             raise PickPlaceReadbackError("SOURCE_STEP_MISMATCH")
         at_s = world.simulation_time_s
@@ -149,12 +155,23 @@ class PickPlacePhysicalReadback:
         except (AttributeError, KeyError, TypeError, ValueError, RuntimeError) as error:
             raise PickPlaceReadbackError("REFERENCE_READBACK_UNAVAILABLE") from error
         try:
-            observation = self.rgb.sample(session_id, attempt_id, at_s)
-            audit = self.rgb.last_audit
+            observation, audit = self.rgb.sample_with_audit(
+                session_id, attempt_id, at_s)
             if any(abs(stamp - at_s) > self.max_skew for stamp in audit["source_stamps"].values()):
                 raise ValueError("RGB_SOURCE_TIME_SKEW")
         except (AttributeError, KeyError, TypeError, ValueError, RuntimeError) as error:
             raise PickPlaceReadbackError("RGB_READBACK_UNAVAILABLE") from error
+        try:
+            source_received = dict(audit["source_received_wall_s"])
+            if set(source_received) != {"head", "wrist", "arm", "neck"}:
+                raise ValueError("sensor receipt keys")
+            source_received.update(world=world_entry.received_monotonic_s,
+                                   scene=scene_received, contact=contact_received)
+            if any(not 0 <= now - finite(value, nonnegative=True) <= self.max_wall_age
+                   for value in source_received.values()):
+                raise ValueError("source receipt stale")
+        except (AttributeError, KeyError, TypeError, ValueError) as error:
+            raise PickPlaceReadbackError("SOURCE_RECEIPT_INVALID") from error
         measured = (*observation["state"][:6], audit["neck_yaw_rad"])
         if any(abs(measured[index] - qpos[address]) > self.joint_tolerance
                for index, address in enumerate(self.joints)):
@@ -164,7 +181,8 @@ class PickPlacePhysicalReadback:
             raise PickPlaceReadbackError("REFERENCE_JOINT_DIVERGED")
         return {"world": world, "scene": scene, "contact": contact,
                 "observation": observation, "reference": reference,
-                "source_stamps_s": dict(audit["source_stamps"])}
+                "source_stamps_s": dict(audit["source_stamps"]),
+                "source_received_wall_s": source_received}
 
 
 # Legacy Python API for version-one pick-place callers.

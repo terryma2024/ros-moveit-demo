@@ -99,7 +99,8 @@ def sources(*, cup_shift=0.0, scene_step=1, world_epoch=1, rgb_stamp=1.01,
         simulation_time_s=1.01, geom_a=[], geom_b=[], signed_distance_m=[],
         normal_force_n=[], truncated=False, evidence_loss=False,
     ))
-    rgb = RgbObservationSynchronizer(max_age_s=0.03, max_skew_s=0.005)
+    rgb = RgbObservationSynchronizer(max_age_s=0.03, max_skew_s=0.005,
+                                     monotonic=lambda: now[0])
     rgb.reset("s")
     pixels = np.zeros((480, 640, 3), dtype=np.uint8)
     rgb.push("head", "s", rgb_stamp, pixels)
@@ -138,6 +139,41 @@ def test_one_physics_step_joins_cup_pose_qpos_rgb_contact_and_reference():
     assert proof["world"].simulation_step == proof["scene"]["simulation_step"] == proof["contact"]["physics_step"] == 1
     assert proof["observation"]["state"][:6] == (0.1,) * 6
     assert proof["reference"]["requested_sim_time_s"] == 1.01
+    assert proof["source_received_wall_s"] == {
+        key: 10.0 for key in ("world", "scene", "contact", "head", "wrist", "arm", "neck")}
+
+
+def test_old_selected_camera_receipt_cannot_be_relabelled_at_capture():
+    readback, _, _, _ = sources()
+    stamp, pixels, _ = readback.rgb.buffers["head"][-1]
+    readback.rgb.buffers["head"][-1] = (stamp, pixels, 9.0)
+    with pytest.raises(Task8ReadbackError, match="SOURCE_RECEIPT_INVALID"):
+        readback.capture("s", "attempt-1", 1)
+
+
+def test_readback_uses_the_observation_and_receipts_from_one_atomic_sample():
+    readback, _, _, _ = sources()
+    original = readback.rgb
+
+    class AtomicRgb:
+        def sample_with_audit(self, *args):
+            return original.sample_with_audit(*args)
+
+        @property
+        def last_audit(self):
+            raise AssertionError("separate audit lookup")
+
+    readback.rgb = AtomicRgb()
+    assert readback.capture("s", "attempt-1", 1)["source_received_wall_s"]["head"] == 10.0
+
+
+def test_duplicate_world_step_cannot_refresh_an_old_observation_receipt():
+    readback, _, _, now = sources()
+    old = readback.world.entries[-1]
+    readback.world.entries.append(ReceivedSimulationEvidence(old.evidence, 10.01))
+    now[0] = 10.02
+    with pytest.raises(Task8ReadbackError, match="WORLD_READBACK_UNAVAILABLE"):
+        readback.capture("s", "attempt-1", 1)
 
 
 def test_same_step_controller_reference_disagreement_denies_readback():

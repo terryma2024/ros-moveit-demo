@@ -90,8 +90,16 @@ class PickPlaceSearchPhasePort:
         raw = observed.physical_readback
         if (type(raw) is not dict
                 or set(raw) != {"world", "scene", "contact", "observation",
-                                "reference", "source_stamps_s"}):
+                                "reference", "source_stamps_s",
+                                "source_received_wall_s"}):
             raise ValueError("physical readback schema")
+        receipts = raw["source_received_wall_s"]
+        if (type(receipts) is not dict
+                or set(receipts) != {"world", "scene", "contact",
+                                     "head", "wrist", "arm", "neck"}
+                or any(finite(value, nonnegative=True) != value
+                       for value in receipts.values())):
+            raise ValueError("physical receipt schema")
         world, scene, contact = raw["world"], raw["scene"], raw["contact"]
         reset_epoch = self.boundary.reset.receipt.new_epoch
         sources = self.boundary.reset.sources

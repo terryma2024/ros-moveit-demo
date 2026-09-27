@@ -111,12 +111,16 @@ class RobotContactObserver:
 
     def recent_frames(self):
         """Return fresh contiguous accepted steps from the current safe epoch."""
+        return tuple(frame for frame, _ in self.recent_frames_with_receipts())
+
+    def recent_frames_with_receipts(self):
+        """Return each fresh frame with its original monotonic callback receipt."""
         with self._lock:
             if self.hazard:raise ValueError(self.hazard)
             if self.last is None or self.received is None:raise ValueError('CONTACT_UNAVAILABLE')
             now=finite(self.monotonic(),nonnegative=True)
             if not 0<=now-self.received<=self.max_age:raise ValueError('CONTACT_STALE')
-            return tuple(copy.deepcopy(frame) for frame,received in self._history
+            return tuple((copy.deepcopy(frame),received) for frame,received in self._history
                          if 0<=now-received<=self.max_age)
 
 
