@@ -1,6 +1,6 @@
 # SO-101 ACT 路径证明、提交窗口与控制频率规格
 
-状态：待用户书面复核。本文只冻结接口和验收条件，不授权实现、控制目标或真实机械臂试验。项目 ACT 数据与策略保持 10 Hz；正式 accepted Train/Validation/Offline Test 均为 0/0/0。实验事实见[账本](../../experiments/so101-act-data-experiment-ledger.md)。
+状态：用户已于 2026-09-27 书面复核，同意按本规格继续。实现和仿真验证须逐项通过下文门禁；真实机械臂写入仍受独立资格约束。项目 ACT 数据与策略保持 10 Hz；正式 accepted Train/Validation/Offline Test 均为 0/0/0。实验事实见[账本](../../experiments/so101-act-data-experiment-ledger.md)。
 
 ## 现场问题与设计边界
 
@@ -28,7 +28,7 @@ broker 是 `PathProof` 的唯一创建者、保管者和消费者。检查 worke
 
 EXP-485 的源码审计补出一处来源边界：SEARCH 读回已有七路原始 monotonic 接收时间，它们只证明被选中的物理帧和传感器样本何时到达。当前固定诊断路线由 reset 阶段的 manifest 构造，生产 pick-place 子进程没有 prefix 生成器，也没有把生成结果连同 owner ticket 登记到 broker 的私有收据。因此，不能把 SEARCH 完成时间、传感器接收时间或 Unix RPC 到达时间填成 `policy_received_wall_s`。接入 proof 前，实际 prefix 生产者须在同一 session/attempt/reset epoch 内消费那份已验证的 SEARCH 读回，生成并冻结 exact rows 与相对时间，再由 broker 绑定 owner ticket、prefix hash 和原始来源时间；延迟、重放、换路或换 ticket 均须拒绝。固定诊断路线仍只作无命令权限的候选；它若将来用作专家控制源，须另行定义并验证其“产生时刻”，不能借用尚不存在的 policy 推理收据。
 
-### Prefix 来源收据，待书面复核
+### Prefix 来源收据
 
 Task 8 的专家数据先于 Task 12 的 ACT 训练，准入不能要求一个尚不存在的 ACT 模型。来源分为 `EXPERT_ROUTE` 与 `ACT_POLICY`：前者在当前 SEARCH 读回通过后，用已冻结的专家路线模板生成当前 attempt 的 prefix；后者在模型输出到达时冻结 exact prefix。模板可以在 reset 时载入，但载入时间不算 prefix 签发时间。SEARCH→APPROACH 是首个实例；后续阶段须用该阶段的新鲜物理读回签发，不能复用 SEARCH 收据。现有 `eligible_for_collection=False` 的诊断路线仍无控制权限；将来要用于专家执行，须先有独立的路线资格和完整 proof，不能只改这个标志。
 
@@ -89,7 +89,7 @@ SO follower 源码每次 observation 读一次 `sync_read("Present_Position")`�
 
 先只读回设备路径与身份、六个 servo ID、实际 baud rate、driver/SDK 版本、read/write API 和 `max_relative_target` 状态。与冻结配置任一不符，停止。不得通过连接流程隐式写 torque、goal、校准或 EEPROM；若驱动只读连接无法保证这一点，就不连接。使用 `sync_read("Present_Position")`，先测 30 Hz，再测 60 Hz。每档预热 10 s 后至少记录 60 s；预热时也只允许读。monotonic 原始开始/结束戳、实际周期 p50/p95/p99/max、deadline miss、timeout/retry、CRC/通信错误和 CPU 占用全量留证。一个档位未过即停止，不自动降频。
 
-以下是 **proposed acceptance，等待书面复核**，不是厂商保证：对目标周期 `T=1/f`，测量段完整有效读数至少 `60f`，timeout/retry/CRC/通信错误均为 0；`p99(period) ≤ 1.25T`、`max(period) ≤ 2T`、miss（周期 `>1.25T`）比例 `<0.1%`，采样进程 CPU `p95 ≤ 50%` 单逻辑核。所有指标逐档单独判定，不能用 30 Hz 结果外推 60 Hz。60 Hz 只有全部通过后才可申请后续写入资格；30 Hz 不稳定时停下等待人工决定。被动读通过不证明 `sync_read + sync_write` 闭环通过。
+以下是**拟定验收阈值，尚待实测**，不是厂商保证：对目标周期 `T=1/f`，测量段完整有效读数至少 `60f`，timeout/retry/CRC/通信错误均为 0；`p99(period) ≤ 1.25T`、`max(period) ≤ 2T`、miss（周期 `>1.25T`）比例 `<0.1%`，采样进程 CPU `p95 ≤ 50%` 单逻辑核。所有指标逐档单独判定，不能用 30 Hz 结果外推 60 Hz。60 Hz 只有全部通过后才可申请后续写入资格；30 Hz 不稳定时停下等待人工决定。被动读通过不证明 `sync_read + sync_write` 闭环通过。
 
 真正的 goal write/read round trip 只能在以后独立的 torque-disabled 或 bench-fixture 阶段验证。那一阶段须先有急停、限速、限位、净空、明确写入范围和新的用户授权；本规格不启动它。最终真实频率由实测闭环选定并记录对 10 Hz action chunk 的插值/保持方式。硬件或 W8 有资源瓶颈时停止等待人工决定；不改测 W4/W6，也不降低路径采样密度。
 
@@ -105,4 +105,4 @@ SO follower 源码每次 observation 读一次 `sync_read("Present_Position")`�
 | 仿真动态 | 500 Hz physics step/controller update 连续性、wall/sim jitter、missed tick、长时 RTF 和执行期无损安全证据达标 |
 | 真实硬件 | 只按上节做 passive read；结果只决定下一轮是否可申请写入资格，不产生运动授权 |
 
-W2 的独立门禁通过后，直接执行独立 40 场景 W8；本规格不开放 W4/W6 折中。没有 threshold relaxation、sample-rate downgrade、隐藏 fallback，也不把任何 diagnostic PASS 当 production authority。上述验证尚未执行，本文的所有“通过条件”均是待复核的规格，不是当前通过声明。
+W2 的独立门禁通过后，直接执行独立 40 场景 W8；本规格不开放 W4/W6 折中。没有 threshold relaxation、sample-rate downgrade、隐藏 fallback，也不把任何 diagnostic PASS 当 production authority。上述验证尚未执行，本文的所有“通过条件”均尚待实证，不是当前通过声明。
