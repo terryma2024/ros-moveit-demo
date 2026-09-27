@@ -30,6 +30,11 @@ class SequentialDriver:
 class OneUseGoalPort:
     def __init__(self):
         self.reserved = set()
+        self.armed = []
+
+    def arm_generation(self, ticket):
+        self.armed.append(ticket)
+        return True
 
     def reserve(self, ticket, kind, goal, goal_uuid):
         key = (kind, ticket[0], goal_uuid)
@@ -47,7 +52,11 @@ def test_two_stopped_prefixes_under_one_owner_get_distinct_admissions():
     controller = OneUseGoalPort()
     ownership = Ownership()
     broker = CommandBroker(driver, ownership=ownership, reservation_port=controller)
-    token = ownership.acquire("act", "session", "attempt")
+    response = broker.handle(dict(protocol_version=1, request_id="r", owner="act",
+        session_id="session", attempt_id="attempt", lease_token="", operation="acquire"),
+        "connection")
+    assert response["accepted"]
+    token = response["lease_token"]
     ticket = ownership.ticket(token, "act", "session", "attempt")
 
     first = broker.dispatch(ticket, "arm", {"sequence": 0})
@@ -58,3 +67,4 @@ def test_two_stopped_prefixes_under_one_owner_get_distinct_admissions():
     assert len(controller.reserved) == 2
     assert len(driver.sent) == 2
     assert ownership.ticket(token, "act", "session", "attempt") == ticket
+    assert controller.armed == [ticket]

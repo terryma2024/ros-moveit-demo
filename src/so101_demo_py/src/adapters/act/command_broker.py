@@ -41,7 +41,7 @@ class CommandBroker:
         self.driver,self.ownership=driver,ownership
         if reservation_port is not None and (
                 not all(callable(getattr(reservation_port, name, None))
-                        for name in ('reserve', 'close_generation'))
+                        for name in ('arm_generation', 'reserve', 'close_generation'))
                 or not all(callable(getattr(driver, name, None))
                            for name in ('prepare_goal', 'send_prepared', 'discard_prepared'))):
             raise TypeError('CONTROLLER_RESERVATION_PORT_INVALID')
@@ -58,6 +58,7 @@ class CommandBroker:
             self.driver.bind_control_events(self.control_events)
         self._lock=threading.RLock();self._participants={};self._goal_tickets={}
         self._stopping_generation=None;self.audit=[];self._fault_reason=None
+        self._armed_generation=None
         self._reset_ticket=None;self._reset_applied=False;self._post_reset_ticket=None;self._writes=[]
 
     def issue_prefix_source(self,*,ticket,prefix,source,source_kind,
@@ -107,6 +108,8 @@ class CommandBroker:
         gid=None
         registered=False
         try:
+            if self._armed_generation!=ticket[0]:
+                raise PermissionError('CONTROLLER_GENERATION_NOT_ARMED')
             gid,goal_uuid=self.driver.prepare_goal(kind,goal)
             gid=identifier(gid)
             if not isinstance(goal_uuid,str) or str(uuid.UUID(goal_uuid))!=goal_uuid:
@@ -125,11 +128,21 @@ class CommandBroker:
             try:
                 if gid is not None:self.driver.discard_prepared(gid)
             finally:
-                try:self.reservation_port.close_generation(ticket[0])
-                finally:
-                    self.ownership.revoke('CONTROLLER_RESERVATION_FAILED')
-                    self._stop_if_revoked()
+                self.ownership.revoke('CONTROLLER_RESERVATION_FAILED')
+                self._stop_if_revoked()
             raise
+
+    def _close_controller_generation(self,generation):
+        if self.reservation_port is None:return
+        try:
+            if self.reservation_port.close_generation(generation) is False:
+                raise RuntimeError('CONTROLLER_RESERVATION_CLOSE_UNCONFIRMED')
+        except Exception as error:
+            self._fault_reason='CONTROLLER_RESERVATION_CLOSE_UNCONFIRMED'
+            self.audit.append(dict(operation='reservation_close_error',generation=generation,
+                                   error=repr(error)))
+            raise RuntimeError('CONTROLLER_RESERVATION_CLOSE_UNCONFIRMED') from error
+        if self._armed_generation==generation:self._armed_generation=None
 
     def stop_attempt(self, reason, *, cancelled_event=None):
         """Close dispatch and signal cancellation under the same broker lock."""
@@ -148,10 +161,13 @@ class CommandBroker:
                 self._stopping_generation=generation
                 self._reset_ticket=None;self._reset_applied=False;self._post_reset_ticket=None
                 if self._prefix_sources is not None:self._prefix_sources.revoke()
+                if self._armed_generation is not None:
+                    try:self._close_controller_generation(self._armed_generation)
+                    except RuntimeError:pass
                 try:
                     if self.prefix_executor is not None:self.prefix_executor.invalidate(self.ownership.reason or 'REVOKED')
                 except Exception as error:
-                    self._fault_reason=self._fault_reason or 'PAIR_CANCEL_LOST'
+                    if self._fault_reason is None:self._fault_reason='PAIR_CANCEL_LOST'
                     self.audit.append(dict(operation='invalidate_error',error=repr(error)))
                 finally:self.driver.stop_all(self.ownership.reason or 'REVOKED')
             if hasattr(self.driver,'refresh_stop'):self.driver.refresh_stop()
@@ -294,8 +310,29 @@ class CommandBroker:
                     if not self.driver.stopped():
                         self.ownership.revoke('CONTROL_NOT_STOPPED');self._stop_if_revoked()
                         raise PermissionError('CONTROL_NOT_STOPPED')
-                    token=self.ownership.acquire(*scope[1:]);response['lease_token']=token
-                    self._participants[connection_id]=self.ownership.ticket(token,*scope[1:])
+                    token=self.ownership.acquire(*scope[1:])
+                    ticket=self.ownership.ticket(token,*scope[1:])
+                    if self.reservation_port is not None:
+                        try:
+                            with self.ownership.authorized(*ticket[1:]):
+                                if not self.driver.stopped():
+                                    raise PermissionError('CONTROL_NOT_STOPPED')
+                                if self.reservation_port.arm_generation(ticket) is not True:
+                                    raise PermissionError('CONTROLLER_RESERVATION_ARM_REJECTED')
+                                self.ownership.require_ticket(ticket)
+                                if not self.driver.stopped():
+                                    raise PermissionError('CONTROL_NOT_STOPPED')
+                                self._armed_generation=ticket[0]
+                        except Exception:
+                            close_error=None
+                            try:self._close_controller_generation(ticket[0])
+                            except RuntimeError as error:close_error=error
+                            self.ownership.revoke('CONTROLLER_RESERVATION_ARM_FAILED')
+                            self._stop_if_revoked()
+                            if close_error is not None:raise close_error
+                            raise
+                    response['lease_token']=token
+                    self._participants[connection_id]=ticket
                 elif operation=='status':
                     self._stop_if_revoked();response['state']=self.ownership.state
                     response['generation']=self.ownership.generation
@@ -327,7 +364,10 @@ class CommandBroker:
                             else:response.update(self.driver.goal_state(gid));response['goal_id']=gid
                         elif operation=='release':
                             if self._reset_ticket is not None:raise PermissionError('RESET_IN_PROGRESS')
-                            self.ownership.release(scope[0],self.driver.stopped())
+                            if not self.driver.stopped():raise PermissionError('CONTROL_NOT_STOPPED')
+                            if self._armed_generation==ticket[0]:
+                                self._close_controller_generation(ticket[0])
+                            self.ownership.release(scope[0],True)
                             if self._prefix_sources is not None:self._prefix_sources.revoke()
                             self._post_reset_ticket=None
                         elif operation=='revoke':self.ownership.revoke('CLIENT_REVOKED')
@@ -335,7 +375,7 @@ class CommandBroker:
                 # RPC acceptance is permission/forwarding success. Actual action
                 # acceptance/result fields are reported separately by goal_status.
                 response['accepted']=True
-        except (KeyError,TypeError,ValueError,PermissionError,RuntimeError) as error:
+        except (KeyError,TypeError,ValueError,PermissionError,RuntimeError,OSError) as error:
             response['error']=str(error) or type(error).__name__
             try:self.tick()
             except Exception:pass
