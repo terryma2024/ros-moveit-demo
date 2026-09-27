@@ -4182,3 +4182,36 @@ next_experiment: EXP-492
 
 - Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp491-exact-grid-open/result.json`. The 600-row one-third OPEN prefix SHA256 is `c6bcc4cbdb13df6a1281207ec6e2bf0cd124e4499e309721fb28b87b6d8a3663`; the rejected full OPEN rows SHA256 is `cb619fc478c1b9837895f7f9f2a99973e70316bca4f2aa0a420ac33c8c10fc00`.
 - This is an offline geometric/dynamic check with a synthetic stopped snapshot. There is no selected live SEARCH state, fresh physical stop, permit, exact goal or accepted episode. Retained through EXP-491, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
+
+## EXP-492 — Full frozen-geometry exact-grid screen
+
+```yaml
+experiment_id: EXP-492
+status: PLANNED
+prior_experiment: EXP-491
+hypothesis: Each stopped endpoint-to-endpoint microsegment in the pinned visible-approach diagnostic can be represented by a 600-target cubic 2 ms prefix while preserving its no-contact path geometry.
+prediction: All segments pass 701 samples under the exact current model, 2 mm clearance and 0.25/1.2 dynamics; any first refusal identifies the earliest segment requiring route redesign.
+single_variable: Expand each already-frozen diagnostic segment endpoint onto the exact 2 ms stopped-prefix grid; leave scene, cup, policy and endpoints fixed.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-491 valid, task-owned stack none, pinned route source hash verified]
+success_criteria: [Every segment SAFE over 701 samples, all exact rows hashed and saved]
+failure_criteria: [First contact/dynamic/input refusal with original segment index and reason saved]
+invalid_criteria: [Source hash drift, wrong MuJoCo/Python/model, live stack or goal]
+provenance:
+  source_commit: 4b2e53b0
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Offline all-segment screen using pinned route manifest and the original checker; retain per-segment verdict and exact-row hashes under registered root"]
+observed: ["Pinned manifest SHA256 4e2ac944b1e63eb217c792f7a4654ce4d9ab9418dc2299ba3d1492ccd0828cb6 supplied 246 stopped segments", "All 246 segments passed independent 600-target, 2 ms, 701-sample checks under the same model and 2 mm clearance; all exact row hashes and checker verdicts retained", "Run script SHA256 b886649eb6eae60e24d3c38d42fd104e2f0bda4af0dc596ad456314d13a5928f; result SHA256 e16794a3e6c6569d30a7e845065a06aa377634f1372bb73698751e9f4c949405"]
+inferred: ["The pinned endpoint chain has a conservative exact-grid no-contact realization in the current model; this does not qualify source freshness, physical execution, contact/grasp/transfer phases or collection eligibility", "246 stopped prefixes would cost at least 295.2 s of trajectory time before source refresh and stop checks, so a shorter independently checked candidate is useful"]
+conclusion: VALID offline full-route exact-grid screen; no production route authority.
+decision: Preserve 246 per-prefix hashes and checker verdicts; investigate bounded grouping without promoting the diagnostic manifest.
+next_experiment: EXP-493
+```
+
+## CP-492 — Frozen geometry has a conservative exact-grid realization
+
+- Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp492-full-approach-screen/result.json`. All 246 exact prefixes were checked separately against synthetic stopped qpos and fixed cup pose; each reports `samples: 701`, `safe: true`, `path_step_s: 0.002`, `path_clearance_m: 0.002`.
+- The source manifest remains `eligible_for_collection: false`. No physical source refresh, permit, exact goals, contact/grasp, episode or training occurred. Retained through EXP-492, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
