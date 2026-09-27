@@ -10,6 +10,7 @@ from pathlib import Path
 import sys
 import threading
 import time
+import uuid
 from types import SimpleNamespace
 
 import pytest
@@ -143,6 +144,7 @@ def test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8(tmp
     from rclpy import executors
     from so101_demo.adapters.act import ros_broker, pick_place_sources
     from so101_teleop.unified import ros_child
+    from so101_teleop.unified.controller_reservation_paths import controller_reservation_directory
 
     report = qualified_report(tmp_path)
     path = tmp_path / "calibration.json"
@@ -195,6 +197,11 @@ def test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8(tmp
     monkeypatch.setenv("SO101_ACT_WORKER_ID", "w00")
     monkeypatch.setenv("SO101_ACT_GENERATION", "1")
     monkeypatch.setenv("SO101_SIMULATION_SESSION_ID", "session-1")
+    reservation_root = Path(os.environ["TMPDIR"]).parents[2] / f"p{uuid.uuid4().hex[:8]}"
+    reservation_root.mkdir(mode=0o700)
+    reservation_dir = controller_reservation_directory(reservation_root, "session-1")
+    monkeypatch.setenv("SO101_ACT_RESERVATION_ROOT", str(reservation_root))
+    monkeypatch.setenv("SO101_ACT_CONTROLLER_RESERVATION_DIR", str(reservation_dir))
     monkeypatch.setattr(rclpy, "init", lambda: seen.append("init"))
     monkeypatch.setattr(rclpy, "create_node", lambda *args, **kwargs: Node())
     monkeypatch.setattr(rclpy, "ok", lambda: True)
@@ -241,8 +248,13 @@ def test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8(tmp
     assert seen.index("dispatcher") < seen.index("start_dispatcher")
     assert driver._task8_port is port
     assert seen.index("start_dispatcher") < seen.index("provision_port")
+    assert sorted(path.name for path in reservation_dir.iterdir()) == [
+        "arm.provision", "gripper.provision"]
+    assert driver._act_reservation_provisions.capabilities["arm"] != (
+        driver._act_reservation_provisions.capabilities["gripper"])
     driver.close()
     assert seen.index("close_dispatcher") < seen.index("shutdown")
+    assert list(reservation_dir.iterdir()) == []
 
 
 def test_child_routes_only_its_own_worker_and_generation():

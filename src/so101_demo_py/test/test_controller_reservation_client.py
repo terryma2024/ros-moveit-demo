@@ -9,7 +9,7 @@ import uuid
 
 from control_msgs.action import FollowJointTrajectory
 import pytest
-from rclpy.serialization import serialize_message
+from rclpy.serialization import deserialize_message
 from trajectory_msgs.msg import JointTrajectoryPoint
 
 from so101_demo.adapters.act.controller_reservation_client import ControllerReservationClient
@@ -79,7 +79,7 @@ def test_reserve_and_generation_close_use_typed_goal_and_same_capability():
     assert reserve[10:42] == key
     assert reserve[42:50] == (5).to_bytes(8, "big")
     assert reserve[50:66] == uuid.UUID(native_uuid).bytes
-    assert reserve[66:] == serialize_message(message)
+    assert deserialize_message(reserve[66:], FollowJointTrajectory.Goal) == message
     assert frames[1] == (62).to_bytes(4, "big") + b"SOGR\x01\x02" + key + (5).to_bytes(8, "big") + bytes(16)
 
 

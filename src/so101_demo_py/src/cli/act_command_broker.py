@@ -11,6 +11,7 @@ import time
 from so101_demo.act.calibration import require_qualified
 from so101_demo.act.ownership import Ownership
 from so101_demo.adapters.act.command_broker import CommandBroker, UnixBrokerServer, endpoint_bytes
+from so101_demo.adapters.act.controller_reservation_provision import ControllerReservationProvisions
 
 
 def main(arguments=None):
@@ -170,23 +171,28 @@ def main(arguments=None):
         motion_calibration_model_sha256=motion_manifest['model_sha256'] if motion_guard is not None else None,
         action_map={'arm':'/arm_controller/follow_joint_trajectory','gripper':'/gripper_controller/follow_joint_trajectory',
                     'execute_trajectory':'/execute_trajectory'}),indent=2)+'\n')
+    provisions=None
     try:
+        provisions=ControllerReservationProvisions.publish(os.environ,options.session_id)
         server.start()
         while not shutdown.wait(.1) and not server._stop.is_set():broker.tick()
     finally:
-        server.close()
-        # No new process may inherit authority merely because the old lease was
-        # revoked. Keep the driver alive for the bounded real-stop observation.
-        deadline=time.monotonic()+5.
-        while broker.ownership.state=='STOPPING' and time.monotonic()<deadline:
-            broker.tick();time.sleep(.01)
-        stop=dict(state=broker.ownership.state,unknown_goal_seen=driver.unknown_goal_seen,
-                  audit=broker.audit,stop_confirmed=driver.stopped(),driver=driver.diagnostics(),
-                  motion_calibration_audit=list(motion_guard.audit) if motion_guard is not None else [])
-        report_path.with_name('broker-stop.json').write_text(json.dumps(stop,indent=2)+'\n')
-        executor.shutdown();thread.join(3)
-        if motion_guard is not None:motion_guard.close()
-        node.destroy_node();rclpy.shutdown();authority.close()
+        try:
+            server.close()
+            # No new process may inherit authority merely because the old lease was
+            # revoked. Keep the driver alive for the bounded real-stop observation.
+            deadline=time.monotonic()+5.
+            while broker.ownership.state=='STOPPING' and time.monotonic()<deadline:
+                broker.tick();time.sleep(.01)
+            stop=dict(state=broker.ownership.state,unknown_goal_seen=driver.unknown_goal_seen,
+                      audit=broker.audit,stop_confirmed=driver.stopped(),driver=driver.diagnostics(),
+                      motion_calibration_audit=list(motion_guard.audit) if motion_guard is not None else [])
+            report_path.with_name('broker-stop.json').write_text(json.dumps(stop,indent=2)+'\n')
+            executor.shutdown();thread.join(3)
+            if motion_guard is not None:motion_guard.close()
+            node.destroy_node();rclpy.shutdown();authority.close()
+        finally:
+            if provisions is not None:provisions.close()
     return 0 if stop['stop_confirmed'] else 2
 
 
