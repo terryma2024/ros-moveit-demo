@@ -22,7 +22,7 @@ broker 是 `PathProof` 的唯一创建者、保管者和消费者。检查 worke
 | 身份 | scene/model、checker 版本、profile、激活 policy fingerprint、session、attempt、reset epoch、broker ticket 与 ownership generation |
 | 检查规则 | 2 mm clearance、速度/加速度/terminal-stop、phase allowlist、full-robot 及 held-cup 接触判定 |
 
-规范化编码须固定字段顺序、单位、浮点编码、joint order、数组长度、非有限值处理与版本；NaN/Inf 直接拒绝。`canonical_input_hash` 覆盖全部输入，另保存 `prefix_hash`、`snapshot_hash`、`model_hash`、`policy_hash`、`profile_hash`，以及 checker/规则版本。结果包含 generation/epoch、`SAFE` 或第一违规的样本索引和原因、实际处理样本数、monotonic 开始/结束时间和 `proof_compute_latency`。`SAFE` 必须有 701 个完整样本和全局规则通过；worker 崩溃、超时或样本缺失一律没有 proof。哈希用于定位差异，提交时仍逐字段验证现场来源与规范编码，不能靠脱离现场的哈希或 Boolean 放行。
+规范化编码须固定字段顺序、单位、浮点编码、joint order、数组长度、非有限值处理与版本；NaN/Inf 直接拒绝。路径时间在进入相对合同前按 ROS stamp 精度转为整数纳秒，所有偏移以整数纳秒比较；不能让浮点数的大时间戳舍入误差决定是否同一路径。`canonical_input_hash` 覆盖全部输入，另保存 `prefix_hash`、`snapshot_hash`、`model_hash`、`policy_hash`、`profile_hash`，以及 checker/规则版本。结果包含 generation/epoch、`SAFE` 或第一违规的样本索引和原因、实际处理样本数、monotonic 开始/结束时间和 `proof_compute_latency`。`SAFE` 必须有 701 个完整样本和全局规则通过；worker 崩溃、超时或样本缺失一律没有 proof。哈希用于定位差异，提交时仍逐字段验证现场来源与规范编码，不能靠脱离现场的哈希或 Boolean 放行。
 
 证明对相对时间曲线工作。当前 `validate_action_prefix` 把 `target_times_s` 绑定到 policy `observation_time_s`；提交延后后，原合同不能直接用来验证新目标。准备阶段先保留原 prefix 和 policy observation 的哈希，再生成受 broker 管理的相对路径合同：以候选共同起点为零，记录实测 bridge 和每个目标的偏移。完整 checker 消费这些偏移及实测状态，保留 bridge→start→目标的全部时间间隔；policy observation 时间仍是原始采样时间，不能随目标平移。实际提交使用单独验证的 materialized prefix/goal 合同，绑定原 policy observation、positions、相对 grid 和新绝对时间，不能把移动后的绝对目标塞回旧 `validate_action_prefix` 伪装成原输入。它只在机器人已停稳、没有控制目标的准备阶段运行；证明期间的 reset/cancel/ownership 变更使结果作废。证明所用 model、接触规则和外部场景必须对共同起始时间平移不变。若存在随绝对时间变化的障碍、控制参考或约束，这个证明形式不适用，应拒绝。
 
