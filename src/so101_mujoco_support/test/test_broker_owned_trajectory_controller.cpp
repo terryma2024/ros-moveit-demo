@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <chrono>
+#include <cstring>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -12,6 +13,9 @@
 #include <stdexcept>
 #include <string>
 #include <sys/stat.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <sys/un.h>
 #include <thread>
 #include <unistd.h>
 #include <vector>
@@ -168,6 +172,60 @@ void write_self_provision(const std::filesystem::path & path, uint8_t role)
   output.write(reinterpret_cast<const char *>(bytes.data()), bytes.size());
   output.close();
   if (chmod(path.c_str(), 0600) != 0) {throw std::runtime_error("TEST_PROVISION_MODE_FAILED");}
+}
+
+uint8_t send_generation_request(const std::filesystem::path & path, uint8_t operation)
+{
+  std::vector<uint8_t> frame{0, 0, 0, 62, 'S', 'O', 'G', 'R', 1, operation};
+  frame.insert(frame.end(), 32, 0xa5);
+  append_big_endian(frame, 5, 8);
+  frame.insert(frame.end(), 16, 0);
+  sockaddr_un address{};
+  address.sun_family = AF_UNIX;
+  const auto name = path.string();
+  if (name.size() >= sizeof(address.sun_path)) {throw std::runtime_error("TEST_SOCKET_PATH_LONG");}
+  std::memcpy(address.sun_path, name.c_str(), name.size() + 1);
+  const int connection = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+  if (connection < 0) {throw std::runtime_error("TEST_SOCKET_CREATE_FAILED");}
+  timeval timeout{2, 0};
+  if (setsockopt(connection, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) != 0 ||
+    setsockopt(connection, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) != 0)
+  {
+    close(connection);
+    throw std::runtime_error("TEST_SOCKET_TIMEOUT_FAILED");
+  }
+  const auto address_size = static_cast<socklen_t>(offsetof(sockaddr_un,
+      sun_path) + name.size() + 1);
+  if (connect(connection, reinterpret_cast<sockaddr *>(&address), address_size) != 0) {
+    close(connection);
+    throw std::runtime_error("TEST_SOCKET_CONNECT_FAILED");
+  }
+  size_t sent = 0;
+  while (sent < frame.size()) {
+    const auto count = send(connection, frame.data() + sent, frame.size() - sent, MSG_NOSIGNAL);
+    if (count <= 0) {
+      close(connection);
+      throw std::runtime_error("TEST_SOCKET_SEND_FAILED");
+    }
+    sent += static_cast<size_t>(count);
+  }
+  std::array<uint8_t, 16> reply{};
+  size_t received = 0;
+  while (received < reply.size()) {
+    const auto count = recv(connection, reply.data() + received, reply.size() - received, 0);
+    if (count <= 0) {
+      close(connection);
+      throw std::runtime_error("TEST_SOCKET_REPLY_FAILED");
+    }
+    received += static_cast<size_t>(count);
+  }
+  close(connection);
+  if (reply[0] != 'S' || reply[1] != 'O' || reply[2] != 'G' || reply[3] != 'A' ||
+    reply[4] != 1 || reply[15] != 5)
+  {
+    throw std::runtime_error("TEST_SOCKET_REPLY_INVALID");
+  }
+  return reply[5];
 }
 }
 
@@ -501,6 +559,10 @@ TEST(BrokerOwnedTrajectoryController, NativeUpdatesProvideFreshStoppedStateOnlyW
 
 TEST(BrokerOwnedTrajectoryController, GripperNativeUpdatesUseOneJointStoppedScope)
 {
+  const auto directory = private_socket_directory();
+  write_self_provision(directory / "gripper.provision", 2);
+  const ScopedReservationEnvironment scope(directory, "session-17");
+  const auto socket = directory / "gripper.sock";
   rclcpp::init(0, nullptr);
   InspectableController controller;
   rclcpp::NodeOptions options;
@@ -512,6 +574,17 @@ TEST(BrokerOwnedTrajectoryController, GripperNativeUpdatesUseOneJointStoppedScop
   ASSERT_EQ(controller.init("gripper_controller", gripper_urdf(), 500, "", options),
     controller_interface::return_type::OK);
   ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(controller.get_node()->get_node_base_interface());
+  const auto service_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (!std::filesystem::exists(socket) &&
+    std::chrono::steady_clock::now() < service_deadline)
+  {
+    executor.spin_some();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  ASSERT_TRUE(std::filesystem::exists(socket));
+  EXPECT_EQ(send_generation_request(socket, 3), 1u);
   hardware_interface::InterfaceInfo position;
   position.name = "position";
   position.initial_value = "0";
@@ -543,10 +616,14 @@ TEST(BrokerOwnedTrajectoryController, GripperNativeUpdatesUseOneJointStoppedScop
   EXPECT_EQ(stopped->sample_count, 51u);
   EXPECT_EQ(stopped->last_sim_time_ns, 102000000);
   EXPECT_EQ(stopped->measured_positions[0], 0.0);
+  EXPECT_EQ(send_generation_request(socket, 3), 0u);
+  EXPECT_EQ(send_generation_request(socket, 3), 1u);
   ASSERT_EQ(controller.get_node()->deactivate().id(),
     lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  EXPECT_FALSE(std::filesystem::exists(socket));
   EXPECT_FALSE(controller.stopped_state(
       std::chrono::duration_cast<std::chrono::nanoseconds>(now).count()).has_value());
   controller.release_interfaces();
+  executor.remove_node(controller.get_node()->get_node_base_interface());
   rclcpp::shutdown();
 }
