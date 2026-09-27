@@ -207,6 +207,7 @@ class PathProof:
     owner_ticket: tuple
     relative_request: RelativePathRequest
     controller_start_positions: tuple[float, ...]
+    controller_start_velocities: tuple[float, ...]
     generation: int
     reset_epoch: int
     sample_count: int
@@ -286,6 +287,8 @@ class PathProver:
             relative_request=request,
             controller_start_positions=vector(
                 snapshot['controller_start_positions'], 6),
+            controller_start_velocities=vector(
+                snapshot['controller_start_velocities'], 6),
             generation=generation,
             reset_epoch=epoch, sample_count=count,
             first_violation=None if safe else MappingProxyType(details),
