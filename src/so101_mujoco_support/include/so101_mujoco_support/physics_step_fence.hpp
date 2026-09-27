@@ -29,6 +29,7 @@ public:
     session_id_ = std::move(session_id);
     epoch_ = 0;
     last_sequence_ = 0;
+    last_clock_interval_end_ns_ = 0;
     pending_.reset();
   }
 
@@ -37,6 +38,7 @@ public:
     std::lock_guard<std::mutex> lock(mutex_);
     epoch_ = epoch;
     last_sequence_ = 0;
+    last_clock_interval_end_ns_ = 0;
     pending_.reset();
   }
 
@@ -56,12 +58,13 @@ public:
 
   std::optional<msg::PhysicsStepFenceAck> observe(
     const std::string & session_id, uint64_t epoch, uint64_t step,
-    double simulation_time_s, bool paused)
+    double simulation_time_s, bool paused, int64_t clock_begin_ns, int64_t clock_end_ns)
   {
     std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);
     if (!lock.owns_lock() || !pending_ || paused || session_id != session_id_ ||
       epoch != epoch_ || step == 0 || !std::isfinite(simulation_time_s) ||
-      simulation_time_s < 0.0)
+      simulation_time_s < 0.0 || clock_begin_ns <= 0 ||
+      clock_begin_ns < last_clock_interval_end_ns_ || clock_end_ns < clock_begin_ns)
     {
       return std::nullopt;
     }
@@ -71,6 +74,9 @@ public:
     ack.request_sequence = pending_->request_sequence;
     ack.marked_physics_step = step;
     ack.marked_simulation_time_s = simulation_time_s;
+    ack.clock_interval_begin_monotonic_ns = clock_begin_ns;
+    ack.clock_interval_end_monotonic_ns = clock_end_ns;
+    last_clock_interval_end_ns_ = clock_end_ns;
     pending_.reset();
     return ack;
   }
@@ -80,6 +86,7 @@ private:
   std::string session_id_;
   uint64_t epoch_{0};
   uint64_t last_sequence_{0};
+  int64_t last_clock_interval_end_ns_{0};
   std::optional<msg::PhysicsStepFenceRequest> pending_;
 };
 }  // namespace so101_mujoco_support

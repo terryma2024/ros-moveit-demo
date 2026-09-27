@@ -3,6 +3,7 @@
 #include "so101_mujoco_support/simulation_evidence_plugin.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <exception>
 #include <limits>
@@ -18,6 +19,12 @@ namespace so101_mujoco_support
 {
 namespace
 {
+int64_t steady_nanoseconds()
+{
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
 template<typename T>
 T parameter(const rclcpp::Node::SharedPtr & node, const std::string & name, const T & fallback)
 {
@@ -823,12 +830,14 @@ void SimulationEvidencePlugin::on_physics_step(const mjModel * model, const mjDa
     return;
   }
   const bool paused = authoritative_paused_.load(std::memory_order_acquire);
+  const auto clock_begin_ns = steady_nanoseconds();
   const auto step = builder_.build_step(model, data, paused, physics_state_, reset_generation,
                                         static_shadow_force_n_, diagnostic_hard_stop_force_n_);
   current_reset_epoch_.store(step.reset_epoch, std::memory_order_release);
   current_physics_step_.store(step.physics_step, std::memory_order_release);
   current_simulation_time_s_.store(step.simulation_time_s, std::memory_order_release);
   const bool recorded = physics_step_buffer_->append(step);
+  const auto clock_end_ns = steady_nanoseconds();
   if (robot_buffer_) {
     robot_buffer_->append(robot_builder_.build(model, data, step.simulation_session_id,
       step.reset_epoch, step.physics_step));
@@ -840,7 +849,7 @@ void SimulationEvidencePlugin::on_physics_step(const mjModel * model, const mjDa
   {
     const auto ack = step_fence_.observe(
       step.simulation_session_id, step.reset_epoch, step.physics_step,
-      step.simulation_time_s, paused);
+      step.simulation_time_s, paused, clock_begin_ns, clock_end_ns);
     if (ack) {
       realtime_step_fence_ack_publisher_->msg_ = *ack;
       realtime_step_fence_ack_publisher_->unlockAndPublish();

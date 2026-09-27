@@ -3,3 +3,5 @@ uint64 reset_epoch
 uint64 request_sequence
 uint64 marked_physics_step
 float64 marked_simulation_time_s
+int64 clock_interval_begin_monotonic_ns
+int64 clock_interval_end_monotonic_ns
