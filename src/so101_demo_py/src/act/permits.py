@@ -68,6 +68,9 @@ class PermitAuthority:
             if (not isinstance(proof,PathProof) or proof.status!='SAFE'
                     or proof.sample_count!=701
                     or proof.prefix_sha256!=prefix_sha256(checked)
+                    or not proof.relative_request.matches_source(checked)
+                    or proof.relative_request.policy_received_wall_s
+                       !=snapshot.get('policy_received_wall_s')
                     or not self._proof_matches_current(proof,identity,generation)):
                 raise PermissionError('PATH_REJECTED')
         current_identity=self._identity(self.snapshot_port())

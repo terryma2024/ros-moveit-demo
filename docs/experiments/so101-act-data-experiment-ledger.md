@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 7e8417d227cca28adbd0399e51cd665ac8572c36
+current_commit: 985ae615
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -22,10 +22,10 @@ disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
 open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
-  - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; this remains unimplemented and unverified.
+  - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-469
-next_experiment: EXP-475
+latest_checkpoint: CP-474
+next_experiment: EXP-476
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -3812,3 +3812,13 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-474 — Source contracts complete enough for a guarded integration test
 
 - Source HEAD before this checkpoint `ba87cdbe`; branch/worktree and sole evidence root unchanged, pre-existing dirty production batch preserved. The real `BrokerPairedExecution` and `RosCalibrationMotionGuard` still use the old three-check chain and their physical snapshot lacks full `model_qvel`, policy/profile/checker fingerprints and an atomic wall/sim clock bound. No proof mode is enabled at the production entry. Next EXP-475 must first prove an actual adapter/broker RED at these missing ports and keep goal dispatch disabled until complete source authority, physical/clock binding and ordinary installed gates exist. No stack, goal, real robot, new performance experiment or formal data in this checkpoint. Retained all evidence including EXP-474, archived none; scratch/runtime/generated caches only deletion candidates, nothing deleted. Accepted Train/Validation/Offline Test 0/0/0.
+
+## EXP-475 — Bind the proof's materialized rows to the approved source prefix
+
+- **PLANNED, SOURCE_ONLY, no stack:** Resume audit of CP-474 found a prerequisite for adapter integration: `PermitAuthority.approve` compares only `PathProof.prefix_sha256` with the approved prefix; it does not compare the proof's retained `RelativePathRequest.positions`, offsets, source time and identity fields with that prefix. A forged or accidentally replaced request could retain the original hash but generate different goals. First run a RED permit test that substitutes different rows or offsets inside a real SAFE proof while preserving its source hash, then add exact source-field validation before registration. Keep all other proof/state/ticket checks and the legacy calibration path unchanged. After GREEN, proceed to a separate broker/adapter integration experiment. Source HEAD `985ae615`, current worktree/branch and registered evidence root unchanged; installed overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`. No ROS/MuJoCo stack, controller goal, real robot, new performance probe or formal data; accepted 0/0/0. Preserve all evidence, archive none, delete nothing.
+
+- **VALID source-only source binding:** RED `scratch/exp475-source-red.hRMTjOfT` failed 5/5 at the intended permit boundary: forged rows, target offset, observation, sequence or bridge offset retained a real SAFE proof and original hash yet approval did not reject. The sixth policy-receipt case was added before the fix. GREEN `scratch/exp475-source-green.xyr0ITQ6` passed 51/51 including all six mutations and legacy permit/proof suites. `RelativePathRequest.matches_source` now compares the approved prefix's identity, policy observation time, rows, optional timing fields and nanosecond time axis with the retained request; proof-mode approval also requires the original policy receipt in the approval snapshot. Source `path_proof.py` SHA256 `3be4f80abc8d79e54d223815bafff333085e2e98f38b533df3ef211c510a37e8`; `permits.py` SHA256 `19cb55551d83a795b37ba925c2a851c7a7f2e2e45b8931c1d890672e9ee37efc`; test SHA256 `95f1ab409f845a1068258efd3e63259539e31a8cee39e2ad93130b56b3f0b637`. Both pytest runs used unique previously nonexistent verified `/data` TMPDIR/TMP/TEMP, exact task Python/source import, JUnit and elapsed/exit readback. No production broker routing, installed gate or command authority follows. Retain all evidence, archive none; scratch deletion candidates only, nothing deleted. Formal accepted 0/0/0.
+
+## CP-475 — Approved source rows bind the private proof
+
+- Last valid experiment EXP-475 is source-only. Before this checkpoint HEAD `985ae615`; current branch/worktree, registered evidence root and pre-existing dirty batch unchanged. Proof permits can now refuse a changed retained request even when the public prefix hash is unchanged. Next EXP-476 targets a fail-closed adapter integration test: a proof result must force the relative goal path and strict commit window, while a missing proof-specific state/clock/goals port must prevent any fake goal dispatch. Production broker entry remains legacy and is not authorized for APPROACH. No stack, goal, real robot, EXP-469 performance continuation or formal data. Retained all runs through EXP-475; archived none; scratch/runtime/generated caches only deletion candidates, nothing deleted. Accepted Train/Validation/Offline Test 0/0/0.
