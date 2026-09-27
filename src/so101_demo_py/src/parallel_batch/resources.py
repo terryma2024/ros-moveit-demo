@@ -473,6 +473,35 @@ class SystemResourceProbe:
             except (FileNotFoundError, ProcessLookupError) as error:
                 if not os.path.lexists(process):
                     continue
+                try:
+                    after, comm_after, argv_after = _read_process_identity_with_retry(
+                        process
+                    )
+                except (FileNotFoundError, ProcessLookupError):
+                    if not os.path.lexists(process):
+                        continue
+                    raise ResourceAllocationError(
+                        f'PROC_ENV_UNVERIFIABLE: {process.name}'
+                    ) from error
+                except (OSError, UnicodeError, ValueError) as identity_error:
+                    raise ResourceAllocationError(
+                        f'PROC_IDENTITY_CHANGED: {process.name}'
+                    ) from identity_error
+                if before[:2] != after[:2]:
+                    raise ResourceAllocationError(
+                        f'PROC_IDENTITY_CHANGED: {process.name}'
+                    ) from error
+                if after[2] == 'Z':
+                    key = (after[0], after[1])
+                    self._skipped_processes[key] = {
+                        'pid': after[0],
+                        'uid': process_stat.st_uid,
+                        'process_starttime_ticks': after[1],
+                        'comm': comm_after,
+                        'cmdline_summary': ' '.join(argv_after),
+                        'skip_reason': 'frozen_zombie_non_candidate',
+                    }
+                    continue
                 raise ResourceAllocationError(
                     f'PROC_ENV_UNVERIFIABLE: {process.name}'
                 ) from error
