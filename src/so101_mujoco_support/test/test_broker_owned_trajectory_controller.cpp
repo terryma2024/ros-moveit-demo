@@ -79,6 +79,16 @@ std::string five_joint_urdf()
   return urdf + "</robot>";
 }
 
+std::string gripper_urdf()
+{
+  return "<robot name='gripper_stop_test'><link name='base'/>"
+         "<link name='finger'/><joint name='6' type='prismatic'>"
+         "<parent link='base'/><child link='finger'/>"
+         "<origin xyz='0 0 0' rpy='0 0 0'/><axis xyz='0 0 1'/>"
+         "<limit lower='0' upper='1' effort='1' velocity='1'/>"
+         "</joint></robot>";
+}
+
 class ScopedReservationEnvironment
 {
 public:
@@ -481,6 +491,58 @@ TEST(BrokerOwnedTrajectoryController, NativeUpdatesProvideFreshStoppedStateOnlyW
   controller.set_pending_goal_for_test(false);
   EXPECT_FALSE(controller.stopped_state(
       std::chrono::duration_cast<std::chrono::nanoseconds>(now).count()).has_value());
+  ASSERT_EQ(controller.get_node()->deactivate().id(),
+    lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  EXPECT_FALSE(controller.stopped_state(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(now).count()).has_value());
+  controller.release_interfaces();
+  rclcpp::shutdown();
+}
+
+TEST(BrokerOwnedTrajectoryController, GripperNativeUpdatesUseOneJointStoppedScope)
+{
+  rclcpp::init(0, nullptr);
+  InspectableController controller;
+  rclcpp::NodeOptions options;
+  options.parameter_overrides({
+    rclcpp::Parameter("joints", std::vector<std::string>{"6"}),
+    rclcpp::Parameter("command_interfaces", std::vector<std::string>{"position"}),
+    rclcpp::Parameter("state_interfaces", std::vector<std::string>{"position", "velocity"}),
+  });
+  ASSERT_EQ(controller.init("gripper_controller", gripper_urdf(), 500, "", options),
+    controller_interface::return_type::OK);
+  ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  hardware_interface::InterfaceInfo position;
+  position.name = "position";
+  position.initial_value = "0";
+  hardware_interface::InterfaceInfo velocity;
+  velocity.name = "velocity";
+  velocity.initial_value = "0";
+  auto command = std::make_shared<hardware_interface::CommandInterface>(
+    hardware_interface::InterfaceDescription("6", position));
+  auto state_position = std::make_shared<hardware_interface::StateInterface>(
+    hardware_interface::InterfaceDescription("6", position));
+  auto state_velocity = std::make_shared<hardware_interface::StateInterface>(
+    hardware_interface::InterfaceDescription("6", velocity));
+  std::vector<hardware_interface::LoanedCommandInterface> commands;
+  std::vector<hardware_interface::LoanedStateInterface> states;
+  commands.emplace_back(command, []() {});
+  states.emplace_back(state_position);
+  states.emplace_back(state_velocity);
+  controller.assign_interfaces(std::move(commands), std::move(states));
+  ASSERT_EQ(controller.get_node()->activate().id(),
+    lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+  for (int64_t index = 1; index <= 51; ++index) {
+    ASSERT_EQ(controller.update(rclcpp::Time(index * 2000000, RCL_ROS_TIME),
+        rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  }
+  const auto now = std::chrono::steady_clock::now().time_since_epoch();
+  const auto stopped = controller.stopped_state(
+    std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
+  ASSERT_TRUE(stopped.has_value());
+  EXPECT_EQ(stopped->sample_count, 51u);
+  EXPECT_EQ(stopped->last_sim_time_ns, 102000000);
+  EXPECT_EQ(stopped->measured_positions[0], 0.0);
   ASSERT_EQ(controller.get_node()->deactivate().id(),
     lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
   EXPECT_FALSE(controller.stopped_state(
