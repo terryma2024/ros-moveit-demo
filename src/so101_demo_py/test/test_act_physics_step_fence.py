@@ -149,3 +149,72 @@ def test_fence_rejects_mismatched_or_incomplete_marked_sample(change):
         request, sample_changes=change)
     with pytest.raises(ValueError, match="PHYSICS_STEP_FENCE_INVALID"):
         fence.request_after_stop(2, time.monotonic() - .001, _deadline())
+
+
+def test_followup_reuses_the_epoch_and_proves_exact_step_and_clock_progression():
+    node = _Node()
+    fence = RosPhysicsStepFence(node, "session-1")
+    fence.arm(2)
+    stopped_wall_s = time.monotonic() - .001
+    node.on_publish = lambda request: node.acknowledge(
+        request, step=99 if request.request_sequence == 1 else 101,
+        simulation_time_s=1.098 if request.request_sequence == 1 else 1.102)
+    first = fence.request_after_stop(2, stopped_wall_s, _deadline())
+    previous_end = first["clock_interval_end_monotonic_ns"]
+    first["marked_physics_step"] = 1
+    second = fence.request_followup_after_stop(
+        2, stopped_wall_s, 99, _deadline())
+    assert second["request_sequence"] == 2
+    assert second["marked_physics_step"] == 101
+    assert second["marked_simulation_time_s"] == 1.102
+    assert (second["clock_interval_begin_monotonic_ns"] >=
+            previous_end)
+    assert second["command_authority"] is False
+    with pytest.raises(ValueError, match="PHYSICS_STEP_FENCE_CLOSED"):
+        fence.request_followup_after_stop(2, stopped_wall_s, 101, _deadline())
+
+
+@pytest.mark.parametrize("change", [
+    "reused-step", "wrong-grid", "wrong-sequence", "duplicate", "timeout",
+])
+def test_failed_followup_closes_the_epoch(change):
+    node = _Node()
+    fence = RosPhysicsStepFence(node, "session-1")
+    fence.arm(2)
+    stopped_wall_s = time.monotonic() - .001
+
+    def publish(request):
+        if request.request_sequence == 1:
+            node.acknowledge(request)
+        elif change == "reused-step":
+            node.acknowledge(request)
+        elif change == "wrong-grid":
+            node.acknowledge(request, step=101, simulation_time_s=1.104)
+        elif change == "wrong-sequence":
+            node.acknowledge(request, sequence=3, step=101,
+                             simulation_time_s=1.102)
+        elif change == "duplicate":
+            node.acknowledge(request, step=101, simulation_time_s=1.102)
+            node.acknowledge(request, step=101, simulation_time_s=1.102)
+
+    node.on_publish = publish
+    first = fence.request_after_stop(2, stopped_wall_s, _deadline())
+    with pytest.raises(ValueError, match="PHYSICS_STEP_FENCE_INVALID|PHYSICS_STEP_FENCE_TIMEOUT"):
+        fence.request_followup_after_stop(
+            2, stopped_wall_s, first["marked_physics_step"], _deadline())
+    with pytest.raises(ValueError, match="PHYSICS_STEP_FENCE_CLOSED"):
+        fence.request_followup_after_stop(
+            2, stopped_wall_s, first["marked_physics_step"], _deadline())
+
+
+def test_wrong_followup_cursor_closes_the_epoch():
+    node = _Node()
+    fence = RosPhysicsStepFence(node, "session-1")
+    fence.arm(2)
+    stopped_wall_s = time.monotonic() - .001
+    node.on_publish = lambda request: node.acknowledge(request)
+    fence.request_after_stop(2, stopped_wall_s, _deadline())
+    with pytest.raises(ValueError, match="PHYSICS_STEP_FENCE_SCOPE_INVALID"):
+        fence.request_followup_after_stop(2, stopped_wall_s, 98, _deadline())
+    with pytest.raises(ValueError, match="PHYSICS_STEP_FENCE_CLOSED"):
+        fence.request_followup_after_stop(2, stopped_wall_s, 99, _deadline())
