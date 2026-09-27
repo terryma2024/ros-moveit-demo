@@ -194,6 +194,7 @@ class RclpyActionDriver:
         self._act_sources = None
         self._act_hazard_dispatcher = None
         self._act_command_broker = None
+        self._act_visible_source = None
         self._act_reservation_provisions = None
         self._act_reset_connection = None
         if os.environ.get("SO101_ACT_CAMPAIGN_ID"):
@@ -237,10 +238,12 @@ class RclpyActionDriver:
         from rclpy.executors import SingleThreadedExecutor
         from rclpy.parameter import Parameter
         from so101_demo.act.ownership import Ownership
+        from so101_demo.act.prefix_source import PrefixSourceAuthority
         from so101_demo.adapters.act.command_broker import CommandBroker, LocalBrokerConnection
         from so101_demo.adapters.act.controller_reservation_client import ControllerReservationClient
         from so101_demo.adapters.act.controller_reservation_provision import ControllerReservationProvisions
         from so101_demo.adapters.act.ros_broker import RosBrokerDriver
+        from so101_demo.adapters.act.trusted_visible_approach_source import TrustedVisibleApproachSourcePort
         from so101_demo.adapters.act.pick_place_sources import PickPlaceRosEvidence, PickPlaceHazardDispatcher
 
         rclpy.init()
@@ -255,9 +258,17 @@ class RclpyActionDriver:
                  for role in ("arm", "gripper", "neck")},
                 capability=self._act_reservation_provisions.capabilities, timeout_s=0.2,
             )
+            ownership = Ownership()
+            self._act_visible_source = TrustedVisibleApproachSourcePort()
+            source_authority = PrefixSourceAuthority(
+                ticket_guard=ownership.require_ticket,
+                max_observation_age_s=max_age, max_prefix_age_s=max_age,
+            )
             self._act_command_broker = CommandBroker(
-                broker, ownership=Ownership(), simulation_session_id=session_id,
+                broker, ownership=ownership, simulation_session_id=session_id,
                 reservation_port=reservation_port,
+                prefix_source_authority=source_authority,
+                prefix_source_port=self._act_visible_source,
             )
             self._act_reset_connection = LocalBrokerConnection(self._act_command_broker)
             self._act_sources = PickPlaceRosEvidence(
@@ -282,6 +293,7 @@ class RclpyActionDriver:
                     self._act_reset_connection.close()
                     self._act_reset_connection = None
                 self._act_command_broker = None
+                self._act_visible_source = None
                 if self._act_hazard_dispatcher is not None:
                     self._act_hazard_dispatcher.close()
                 if self._executor is not None:

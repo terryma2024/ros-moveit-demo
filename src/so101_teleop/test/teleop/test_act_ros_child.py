@@ -239,6 +239,15 @@ def test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8(tmp
     assert authority.driver is broker
     assert driver._act_reset_connection.broker is authority
     assert authority.simulation_session_id == "session-1"
+    from so101_demo.adapters.act.trusted_visible_approach_source import (
+        TrustedVisibleApproachSourcePort,
+    )
+    from so101_demo.act.prefix_source import PrefixSourceAuthority
+    assert isinstance(driver._act_visible_source, TrustedVisibleApproachSourcePort)
+    assert authority._prefix_source_port is driver._act_visible_source
+    assert isinstance(authority._prefix_sources, PrefixSourceAuthority)
+    assert authority._prefix_sources.max_observation_age_s == 0.1
+    assert authority._prefix_sources.max_prefix_age_s == 0.1
     assert authority.ownership.state == "IDLE"
     foreign = {"protocol_version": 1, "request_id": "r", "owner": "act",
                "session_id": "foreign", "attempt_id": "a", "lease_token": "",
