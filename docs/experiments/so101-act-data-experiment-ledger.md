@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: c6f302e7
+current_commit: a867b463
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -27,6 +27,7 @@ confirmed_conclusions:
   - EXP-491 through EXP-494 establish a pinned 31-prefix exact-grid visible-approach candidate with all 701-sample checks passing; it remains noncollecting and has no live motion authority.
   - EXP-495 finds cup pixels in all sampled task/head/wrist renders of the 31 grouped approach prefixes, but continuous visibility and physical expert qualification are still open.
   - EXP-496 checks all 600 exact target rows of the weakest wrist-view approach chord: wrist/head target pixels remain nonzero in the pinned scene.
+  - EXP-497 binds a validated selected SEARCH hash, original seven-source wall receipts and measured stopped start to a noncollecting exact first approach candidate; broker proof and goals remain unwired.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -34,8 +35,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-496
-next_experiment: EXP-497
+latest_checkpoint: CP-497
+next_experiment: EXP-498
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4350,3 +4351,36 @@ next_experiment: EXP-497
 
 - Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp496-wrist-visibility-grid/result.json`. It contains all 1,200 head/wrist cup-pixel counts for the 600 hashed target poses. The checker and visibility runs are offline and no real controller sent a goal.
 - Remaining production boundary starts with a genuine selected SEARCH source bound to one exact prefix, then fresh stopped full-state/controller-reference proof and the reviewed commit window. Candidate collection eligibility stays false; formal accepted Train/Validation/Offline Test is 0/0/0. Retained through EXP-496, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
+
+## EXP-497 — Selected SEARCH to noncollecting approach candidate
+
+```yaml
+experiment_id: EXP-497
+status: VALID
+prior_experiment: EXP-496
+hypothesis: A single validated SEARCH observation can produce the first exact 600-row approach candidate with original seven-source receive times and measured stopped start, while retaining no command authority.
+prediction: Valid source/model/start/clock yields sequence-zero 2 ms prefix and preserved source hash; stale source, changed image, wrong epoch/qpos or collecting manifest refuses before candidate output.
+single_variable: Add a read-only selected-source-to-candidate producer, without broker receipt issuance, permit or goal.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-496 valid, noncollecting candidate profile pinned, task-owned stack none]
+success_criteria: [Focused RED/GREEN with real selected-source fixture, full ordinary source and installed gates, no live stack or goal]
+failure_criteria: [Source tamper accepted, original wall times rewritten, qpos/epoch drift accepted, candidate grants command authority]
+invalid_criteria: [Test setup fails before intended boundary, wrong Python/overlay/model, live stack starts]
+provenance:
+  source_commit: a867b463
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Focused source-to-candidate RED/GREEN with fresh verified NVMe TMPDIR", "Ordinary source pytest -n 8 in private IPC namespace", "Existing-overlay package build", "Installed colcon test --pytest-args test -n 8 and test-result"]
+observed: ["Focused RED scratch/exp497-red.CgibZ8lq reached missing selected candidate module at collection; final GREEN scratch/exp497-focused-final.p6cJaXTd passed 2/2 in 2.49 s with exact 600-row candidate, original seven receipts, changed-image/start-velocity/reset-epoch and stale-source refusals", "Read-only producer SHA256 220a8b9fc8d72df94ae39904b2834587db8c4ea88c789f25feee27019a54a8aa; test SHA256 ec393b2ceeaba170cee115c8e35d665b023989cb8c1d0c6ebd1d7752588ce72f", "Ordinary source xdist8 scratch/exp497-source-full.0ARvPq6u exited 0 in 49 s: 4732 collected, 4570 passed, 162 skipped, 4 pre-existing fork warnings; JUnit SHA256 f6874dcbe09e2e57fb5c52bb12334813b41dce70d039667c4c6b546aa1db2747", "Existing-overlay build scratch/exp497-demo-build.05dkiAxx exited 0", "First installed xdist8 scratch/exp497-installed-full.B79eve1X had colcon test exit 0 but test-result exit 1: 4732 collected/1 unrelated failure in test_allocator_default_entry_writes_the_v3_guard_composition after PROC_ENV_UNVERIFIABLE: 363181; the PID was gone at readback; package JUnit SHA256 bc0b72c4ea16fab465d6dffb36eb25fbd77e3028d94d656a1af80a71784d251a", "The failing process-scan test alone passed in scratch/exp497-proc-gate-repro.q4oINwhB; exact /proc race cause remains unproven and no guard/policy relaxation was made", "Final installed xdist8 scratch/exp497-installed-full-repro.OQvgQVLS colcon test and test-result both exited 0 in 49 s: package 4732 collected/0 failures/162 skips; aggregate 6192 tests/0 errors/0 failures/205 skipped; JUnit SHA256 2fdf5943fdb8cdb04fe561828cd22cbcf0b8252b014f082a4790baee1daf08e5", "Both final gates verified exact interpreters and unique NVMe TMPDIR; ROS_DOMAIN_ID/GZ_PARTITION NOT_ASSIGNED and no task-owned stack or goal"]
+inferred: ["The first exact candidate retains selected SEARCH source identity and original wall clocks while refusing start/state drift, but cannot issue a broker receipt, permit or controller goal", "The one installed process-scan refusal is consistent with short-lived /proc churn, though its precise cause was not captured; retain both failed and passing full runs"]
+conclusion: VALID source-only candidate preparation and final full gates; production submission remains closed.
+decision: Preserve all source/install outcomes and proceed to the separate fresh stopped full-state/reference proof port; do not promote candidate eligibility or send a goal.
+next_experiment: EXP-498
+```
+
+## CP-497 — Selected source reaches a noncollecting exact prefix
+
+- `SelectedApproachCandidate` validates the pinned candidate before SEARCH. Its `prepare` call freezes the exact selected SEARCH observation again, checks the prior source hash and all seven original receive times, verifies model/qpos/qvel/cup start, and returns sequence 0 with 600 exact rows. It explicitly returns `eligible_for_collection: false` and `command_authority: false`; there is no broker receipt, permit or goal path.
+- The first installed full gate remains a real failed artifact; the targeted process-scan test and a fresh full installed run passed without changing that guard. Retained all evidence through EXP-497, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted. Formal accepted Train/Validation/Offline Test remains 0/0/0.
