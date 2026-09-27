@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 64c5a264
+current_commit: c8ea817d
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -39,16 +39,18 @@ confirmed_conclusions:
   - EXP-506 retains bounded original controller message fields at the broker callback and clears history across reset epochs; this is a callback-scoped source, not a native controller epoch or owner/goal event proof.
   - EXP-507 confirms the remaining action ingress design gap: stock JTC action callbacks remain open, broker tickets register after asynchronous send, and MoveIt teacher execution has downstream controller goals with UUIDs unknown before dispatch.
   - EXP-508 records ordered local ownership, broker and driver goal events with bounded history and gap/clock rejection; this observation does not close the controller action ingress.
-  - EXP-510 verifies an off-path, controller-local one-use UUID plus exact-goal reservation contract; no production action callback or broker registration is wired.
+  - EXP-510 verifies an off-path, controller-local one-use UUID plus raw-byte reservation contract; no production action callback or broker registration is wired.
+  - EXP-511 disproves raw CDR bytes as a stable goal identity in the installed Python serializer; typed goal fields survive each observed decode, but C++ parity is still unproved.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
+  - Bind controller admission to raw serialized CDR byte equality: invalid under EXP-511 observations.
 open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-510
-next_experiment: EXP-511
+latest_checkpoint: CP-511
+next_experiment: EXP-512
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4832,3 +4834,67 @@ next_experiment: EXP-511
 - Commit `64c5a264` adds only `ControllerGoalAdmission`, its C++ regression and CMake registration. The default state denies goals and every malformed, altered, expired, replayed or wrong-generation attempt closes the local reservation. The 250 ms default validity is only a proposed bounded registration window; this experiment did not measure a controller or commit latency.
 - The existing `BrokerOwnedTrajectoryController` still installs the base action server. No service, broker secret, mode transition or cross-language serialization contract is present; this primitive gives no PathProof, permit or goal authority. Next EXP-511 must establish exact CDR parity and safely replace the configured action callback in a no-motion test before considering broker registration.
 - Registered root unchanged; retain EXP-510 RED/build/package/style artifacts and all earlier evidence; archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted. Existing dirty/untracked user batch remains outside the commit. Formal accepted Train/Validation/Offline Test 0/0/0.
+
+## EXP-511 — Exact cross-language controller goal serialization
+
+```yaml
+experiment_id: EXP-511
+status: VALID
+prior_experiment: EXP-510
+hypothesis: The installed Jazzy Python and C++ serializers produce identical CDR bytes for one fully populated FollowJointTrajectory.Goal fixture, allowing a controller reservation to bind the actual action payload by exact bytes.
+prediction: Independent Python and C++ source tests compare their serialized bytes to one immutable fixture; a missing-fixture RED precedes the fixture, and both languages pass without a controller goal or stack.
+single_variable: Add a shared exact-goal CDR fixture and cross-language serialization regressions; do not wire action admission.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-510 valid, no task-owned stack or goal, current installed ROS Jazzy toolchain]
+success_criteria: [Python and C++ byte-exact parity, ordinary source and installed Python package gates, C++ package gate, unchanged production controller]
+failure_criteria: [Any serialized byte differs, either test uses a different goal field set, or installed build does not run the new test]
+invalid_criteria: [ROS/MuJoCo stack or controller goal starts, scratch outside registered NVMe root, dirty batch enters commit]
+provenance:
+  source_commit: 1d5adaa8
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Missing-fixture Python RED reached FileNotFoundError", "Generated one fully populated Python FollowJointTrajectory.Goal CDR fixture", "Byte-exact Python test failed; serialized same goal 16 times and fresh equivalent goals 16 times, then decoded all 32", "Changed the Python regression to typed semantic equality and obtained focused GREEN", "Ran source ordinary pytest with xdist8 and unique verified NVMe scratch", "Built existing so101_demo_py overlay and ran installed ordinary colcon package gate with xdist8 and unique verified NVMe scratch"]
+observed: ["Same typed Python goal produced two distinct 256-byte CDR streams in 16 repeated serializations; all 32 observed streams decoded to equal typed goals", "Raw byte differences occurred at offsets 46,47,80,81,82,83,104,105,106,210,211,248,249,250,251; fixture payload SHA256 19f1e3560e3343fbb70a5423ef616b4636d78fd7181f639fe485d22bc4b7e834", "Focused semantic regression 1 passed; source ordinary suite 4594 passed, 162 skipped, exit0; installed colcon aggregate 6224 tests, 0 errors, 0 failures, 205 skipped, exit0", "Test and fixture commit c8ea817d; result artifact SHA256 4d7d7eb6e63f6c74380c07fa1f157ddf2e8c151b9bbc89a064684e5a991ad5fc", "No C++ parity test, callback replacement, stack or goal occurred"]
+inferred: ["Raw CDR equality is unsuitable as a semantic goal identity for controller admission; variable bytes are consistent with serialization padding but their exact origin is not yet proven", "Typed goal equality is a viable hypothesis for the next cross-language boundary, not yet a proven controller reservation contract"]
+conclusion: VALID negative result for byte-exact serialization hypothesis; original success criteria failed before C++ parity testing.
+evidence: [/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp511-controller-goal-cdr/result.json, /data/work/so101-evidence/act-data/20260924-fbc25063-resume/scratch/exp511-cdr-investigation.ySxLMQj6/result.json, /data/work/so101-evidence/act-data/20260924-fbc25063-resume/scratch/exp511-source-full.e2y1kh0l, /data/work/so101-evidence/act-data/20260924-fbc25063-resume/scratch/exp511-installed-full.0ucwsflG]
+decision: Stop the raw-byte route. EXP-512 must establish C++ decoding of the Python fixture and one exact typed-field comparison before adapting the off-path reservation primitive; production action ingress stays unchanged.
+next_experiment: EXP-512
+```
+
+## CP-511 — Raw CDR equality rejected; typed goal proof remains open
+
+- Commit `c8ea817d` adds a fixed CDR fixture and Python semantic round-trip regression. The intended byte-exact test failed even within Python. In the observed 32 serializations, distinct byte streams decoded to the same typed `FollowJointTrajectory.Goal`; neither C++/Python equality nor controller callback replacement was tested. EXP-510's off-path reservation compares raw bytes and must not be wired to production as a semantic goal gate.
+- EXP-511 source ordinary `pytest src/so101_demo_py/test -n8` passed 4594 tests with 162 skipped. Installed `colcon test --packages-select so101_demo_py --pytest-args test -n8` and `colcon test-result` passed 6224 aggregate tests with 205 skipped. Exact runner `TMPDIR/TMP/TEMP` resolved inside the task's unique NVMe scratch; source scratch `exp511-source-full.e2y1kh0l`, installed scratch `exp511-installed-full.0ucwsflG`, elapsed 38.18 s and 40 s respectively. No benchmark suite was collected.
+- Registered root unchanged. Retain the EXP-511 result, RED, failed byte test, investigation, GREEN, build and full-gate artifacts with all prior runs; archived none. Scratch and generated caches are deletion candidates only; nothing deleted. The pre-existing dirty/untracked batch remains outside the code commit. Formal accepted Train/Validation/Offline Test 0/0/0; no task-owned stack or goal.
+
+## EXP-512 — Cross-language typed controller goal identity
+
+```yaml
+experiment_id: EXP-512
+status: PLANNED
+prior_experiment: EXP-511
+hypothesis: The installed Jazzy C++ decoder maps the Python CDR fixture to the same typed FollowJointTrajectory.Goal fields, and an off-path controller reservation can compare those fields exactly without relying on unstable CDR bytes.
+prediction: A C++ missing-test or mismatch RED precedes a typed-field decoder GREEN, then targeted reservation tests reject a one-field alteration and replay while accepting one exact typed goal; production callback remains unchanged.
+single_variable: Replace raw-byte identity at the off-path reservation boundary with exact typed goal identity after cross-language fixture decoding.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-511 valid negative, no task-owned stack or goal, installed ROS Jazzy C++ typesupport available]
+success_criteria: [C++ fixture decodes to every expected field, typed reservation RED/GREEN, so101_mujoco_support package build and test gate, no production action callback change]
+failure_criteria: [Any decoded typed field differs, altered goal is admitted, replay is admitted, or exact typed goal is rejected]
+invalid_criteria: [Stack or goal starts, test scratch lacks exact Python proof under registered NVMe root, existing dirty batch enters commit]
+provenance:
+  source_commit: c8ea817d
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i/so101_mujoco_support/lib/libso101_broker_owned_trajectory_controller.so
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: []
+observed: []
+inferred: []
+conclusion: PENDING
+evidence: []
+decision: PENDING
+next_experiment: EXP-513
+```
