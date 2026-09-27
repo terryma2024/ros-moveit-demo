@@ -264,6 +264,15 @@ def _state_bytes(snapshot, nq, nv):
         }
         if 'holding_proof_physics_step' in snapshot:
             state['holding_proof_physics_step'] = snapshot['holding_proof_physics_step']
+        # The proof input hashes the whole supplied snapshot. Keep every
+        # supplied physical/source field in the commit comparison too; only
+        # absolute times are translated by the relative path contract.
+        supplied = dict(snapshot)
+        supplied.pop('sim_time_s', None)
+        supplied.pop('controller_start_time_s', None)
+        supplied['controller_bridge'] = dict(bridge)
+        supplied['controller_bridge'].pop('time_s', None)
+        state['supplied_snapshot_state'] = supplied
         return _canonical_bytes(state)
     except (KeyError, TypeError, ValueError) as error:
         raise ValueError('PATH_PROOF_STATE_INVALID') from error
