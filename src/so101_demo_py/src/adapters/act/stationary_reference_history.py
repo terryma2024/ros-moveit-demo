@@ -49,6 +49,7 @@ def verify_stationary_reference_history(
             raise ValueError("REFERENCE_WINDOW_SCOPE_INVALID")
         bridge = selected - _SPAN_NS
         sealed = []
+        endpoints = {}
         for kind, names in _JOINT_NAMES.items():
             frames = reference_frames[kind]
             if not isinstance(frames, (tuple, list)) or len(frames) != _SAMPLES:
@@ -72,13 +73,27 @@ def verify_stationary_reference_history(
                     raise ValueError("REFERENCE_NOT_STATIONARY")
                 previous_receipt = receipt
                 sealed.append((kind, stamp, receipt, names, positions, velocities))
+                if index == 0:
+                    first = (positions, velocities)
+                elif index == _SAMPLES - 1:
+                    endpoints[kind] = (first, (positions, velocities))
         encoded = json.dumps(sealed, separators=(",", ":"), allow_nan=False).encode()
         digest = hashlib.sha256(b"SO101_STATIONARY_REFERENCE_WINDOW_V1\0" + encoded).hexdigest()
+        arm_first, arm_last = endpoints["arm"]
+        gripper_first, gripper_last = endpoints["gripper"]
         return {
             "bridge_sim_time_ns": bridge,
             "selected_sim_time_ns": selected,
             "sample_count_by_controller": {kind: _SAMPLES for kind in _JOINT_NAMES},
             "reference_window_sha256": digest,
+            "bridge_arm_gripper_reference": {
+                "positions": arm_first[0] + gripper_first[0],
+                "velocities": arm_first[1] + gripper_first[1],
+            },
+            "selected_arm_gripper_reference": {
+                "positions": arm_last[0] + gripper_last[0],
+                "velocities": arm_last[1] + gripper_last[1],
+            },
             "owner_goal_interval_proof_required": True,
             "command_authority": False,
             "eligible_for_collection": False,

@@ -52,6 +52,30 @@ def test_exact_three_controller_window_remains_non_authoritative():
     assert result["eligible_for_collection"] is False
 
 
+def test_original_bridge_and_selected_references_survive_window_verification():
+    rows = frames()
+    arm = list(rows["arm"])
+    arm[0] = {**arm[0], "velocities": (0.001, 0., 0., 0., 0.)}
+    arm[-1] = {**arm[-1], "velocities": (-0.001, 0., 0., 0., 0.)}
+    rows["arm"] = tuple(arm)
+    gripper = list(rows["gripper"])
+    gripper[0] = {**gripper[0], "velocities": (0.0005,)}
+    rows["gripper"] = tuple(gripper)
+
+    proof = verify(rows)
+    assert proof["bridge_arm_gripper_reference"] == {
+        "positions": (0.,) * 6,
+        "velocities": (0.001, 0., 0., 0., 0., 0.0005),
+    }
+    assert proof["selected_arm_gripper_reference"] == {
+        "positions": (0.,) * 6,
+        "velocities": (-0.001, 0., 0., 0., 0., 0.),
+    }
+    assert proof["reference_window_sha256"] != verify(frames())[
+        "reference_window_sha256"]
+    assert proof["command_authority"] is False
+
+
 @pytest.mark.parametrize("change", ["gap", "name", "velocity", "position", "receipt"])
 def test_any_missing_or_changed_reference_refuses(change):
     rows = frames()
