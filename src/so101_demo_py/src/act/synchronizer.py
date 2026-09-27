@@ -1,6 +1,7 @@
 """Bounded timestamp joins; simulator time never uses future feedback."""
 
 from collections import deque
+import copy
 import math
 import threading
 import time
@@ -89,3 +90,9 @@ class RgbObservationSynchronizer:
                                                            for stream, item in values.items()},
                                    neck_yaw_rad=yaw, session_id=session_id, attempt_id=attempt_id)
             return result
+
+    def sample_with_audit(self, session_id, attempt_id, at_s):
+        """Return one observation and its selected-source receipts atomically."""
+        with self._lock:
+            observation = self.sample(session_id, attempt_id, at_s)
+            return observation, copy.deepcopy(self.last_audit)

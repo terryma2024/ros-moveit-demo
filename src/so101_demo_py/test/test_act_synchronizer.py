@@ -89,6 +89,15 @@ def test_invalid_wall_receipt_does_not_enter_the_sensor_ring():
     assert len(sync.buffers["head"]) == before
 
 
+def test_observation_and_selected_receipts_are_returned_as_one_copy():
+    sync = filled()
+    observation, audit = sync.sample_with_audit("epoch1", "attempt1", 1.05)
+    expected = audit["source_received_wall_s"]["head"]
+    sync.last_audit["source_received_wall_s"]["head"] = expected + 1.0
+    assert audit["source_received_wall_s"]["head"] == expected
+    assert observation["sim_time_s"] == 1.05
+
+
 def test_ros_callbacks_stamp_before_decoding_and_share_joint_receipt():
     from sensor_msgs.msg import Image, JointState
     from so101_demo.act.joints import ACT_JOINTS

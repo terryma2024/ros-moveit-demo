@@ -67,6 +67,8 @@ def observation():
                       "accelerations": (0.0,) * 6,
                       "requested_sim_time_s": 1.2},
         "source_stamps_s": {key: 1.2 for key in ("arm", "neck", "head", "wrist")},
+        "source_received_wall_s": {key: 10.0 for key in
+                                    ("world", "scene", "contact", "head", "wrist", "arm", "neck")},
     }
     search = {
         "found": True, "status": "TARGET_LOCKED", "bearing_rad": 0.0,
@@ -155,12 +157,14 @@ def test_same_step_scene_and_contact_timestamps_accept_bounded_source_skew():
     assert events == ["begin", "search", "sweep"]
 
 
-@pytest.mark.parametrize("bad", ["missing_rgb", "wrong_step", "unsafe_contact", "bad_scene", "unsafe_sweep"])
+@pytest.mark.parametrize("bad", ["missing_rgb", "missing_receipt", "wrong_step", "unsafe_contact", "bad_scene", "unsafe_sweep"])
 def test_missing_or_unsafe_physical_evidence_cannot_pass_search(bad):
     observed = observation()
     raw = dict(observed.physical_readback)
     if bad == "missing_rgb":
         raw.pop("observation")
+    elif bad == "missing_receipt":
+        raw.pop("source_received_wall_s")
     elif bad == "wrong_step":
         raw["scene"] = {**raw["scene"], "simulation_step": 1}
     elif bad == "bad_scene":
