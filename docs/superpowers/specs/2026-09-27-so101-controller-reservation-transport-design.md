@@ -14,7 +14,7 @@ ACT broker 与轨迹控制器位于不同进程。控制器现在只接受本地
 
 监听器没有收到连接时，单次等待超时只返回空闲。每次空闲返回前还要核对已绑定 broker 的 PID 与进程出生标识；broker 已退出、成为尚未回收的 zombie，或身份无法读取，就关闭门控。broker 存活时不改变当前 generation。接到连接后另起完整读写期限；错误 peer、残帧、慢帧、监听器错误和服务退出也关闭门控。生产服务须以可中断、可 join 的有界循环调用监听器，生命周期结束后先关闭门控，再停止线程并移除自己的 socket。
 
-本通道不提供 `arm` 操作。控制器必须先由独立的停止与所有权门控进入对应 generation，注册请求才可能成功。EXP-516 只以测试进程预先 arm 的控制器运行；生产启动、broker 发送和老师 MoveIt 路线留给后续实验。
+截至 EXP-516，本通道不提供 `arm` 操作。那一轮只用测试进程预先打开的 generation 检查传输；它没有给生产控制器授予动作权限。后续 `arm` 的条件见下文。
 
 ### EXP-517 安全修订：已 ACK 预留的显式关闭
 
@@ -45,3 +45,13 @@ broker 将先确定 UUID、目标和本地 goal ID，并在自己的所有权锁
 EXP-516 使用独立进程做 C++ 服务端与 Python 客户端回归：正确 capability 与预先 arm 的 generation 可取得一次 ACK；错误凭据、错误 peer、截断帧、超长帧、过期 generation、前一预留未消费时的重复请求、变更目标和超时均拒绝。测试断言 ACK 后控制器确有一次预留，且没有 action 发送。完整 C++ 包门禁和普通 Python 测试门禁使用各自唯一的 NVMe scratch。此规格不授予运动或正式采集资格。
 
 EXP-517 追加同代顺序目标回归：第一 UUID/Goal 消费后，第二个不同 UUID/Goal 可预留并消费；旧 UUID 重放、前一预留未消费时重叠预留、超出数量上限均关闭本代。broker 回归使用同一所有权票据发送两段，核对两个本地票据均先于各自的 ACK 和 action send。仍不启动 live 控制器目标。
+
+### EXP-520 停稳代次握手，尚未授予生产目标
+
+增加 `ARM_STOPPED_GENERATION=3`。帧体恰好 62 字节：沿用 `SOGR`、版本、capability 和非零 generation，UUID 为 16 个零字节，没有 CDR。只有交付文件绑定的 broker PID、出生标识和 capability 同时匹配，控制器才处理该请求。控制器还须处于 active/hold、没有待处理或活动目标，并从自身 update 循环读到同一角色的 51 个连续 2 ms 样本；位置、速度、参考值、接收时间和 0.2 s 新鲜度按 `ControllerStopWitness` 核对。通过后才调用本地 `ControllerGoalAdmission::arm(generation)`，随后回 ACK。缺样、丢样、时钟倒退、运动、参考变化、旧代或重复代均拒绝并保持关闭。`CLOSE_GENERATION` 不要求停稳证明，任何时候都能撤销当前代。
+
+每次 `RESERVE` 还要重新取得新鲜本地停稳证明。action 入口一旦收到请求，即使最后拒绝，也清掉旧窗口；下一段前缀须由后续 51 次原生 update 建立新窗口。这个检查只保证控制器本地的关节与参考状态，不能代替 broker 的七关节停机、负向取消、PathProof、现场状态或提交窗口。
+
+所有权代次由同一进程内的 `Ownership` 决定。broker 先确认 `driver.stopped()`，取得当前 ticket，再在该 ticket 的锁内向 arm、gripper 两个私有 socket 分别发 `ARM_STOPPED_GENERATION`。两边都 ACK 后才能保留本代；任何一边拒绝、超时或结果不确定，都向两边发送 `CLOSE_GENERATION`，撤销 ticket，走取消与独立停机。释放、撤销、租约到期和客户端断开也须关闭两边；关闭 ACK 不确定时，不能确认新的运动租约。发 `RESERVE` 前仍要重新核对 ticket。控制器只认证 broker 进程及其代次声明，无法直接读取 Python 内存中的 `Ownership`；因此 broker 的票据检查和撤销关闭是这个信任边界的必需部分，不能把控制器本地样本说成独立验证了 broker 内部租约。
+
+先分别用 C++ socket 与 Python client 测试帧格式、错误 peer/capability、旧代、重复代、局部停稳拒绝、双角色部分 ACK 和撤销关闭。再测 controller 插件 active/hold 的本地 `arm`，以及 broker 两种启动顺序的完整 ticket→双 ACK→预留→发送顺序。老师 MoveIt 仍需单独的预注册代理。以上门禁未通过前，生产构造函数不传可用的 `arm` 回调，也不发送 live goal。
