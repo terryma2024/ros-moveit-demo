@@ -36,6 +36,8 @@ using so101_mujoco_support::make_cancellation_ack;
 using so101_mujoco_support::msg::ContactSample;
 using so101_mujoco_support::msg::PhysicsStepEvidence;
 using so101_mujoco_support::msg::PhysicsStepEvidenceChunk;
+using so101_mujoco_support::msg::PhysicsStepFenceAck;
+using so101_mujoco_support::msg::PhysicsStepFenceRequest;
 using so101_mujoco_support::msg::SimulationEvidence;
 
 struct ModelDeleter
@@ -830,6 +832,78 @@ TEST_F(AtomicEvidenceTest, PhysicsHookAdvancesAtFiveHundredHertzNotControllerCad
   EXPECT_EQ(chunks.front().first_physics_step, 1U);
   EXPECT_EQ(chunks.front().last_physics_step, 5U);
   EXPECT_EQ(chunks.front().simulation_session_id, "physics-step-test");
+  plugin.cleanup();
+  executor.remove_node(observer);
+  executor.remove_node(node);
+  rclcpp::shutdown();
+}
+
+TEST_F(AtomicEvidenceTest, PhysicsFenceAckCarriesClockBoundsFromTheActualStepHook)
+{
+  if (!rclcpp::ok()) {
+    rclcpp::init(0, nullptr);
+  }
+  model_->opt.timestep = .002;
+  const auto ack_topic = "/test/so101/physics_clock_ack";
+  auto options = rclcpp::NodeOptions().parameter_overrides({
+      rclcpp::Parameter("object_body", "cup"),
+      rclcpp::Parameter("left_fingertip_geom", "left_tip"),
+      rclcpp::Parameter("right_fingertip_geom", "right_tip"),
+      rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
+      rclcpp::Parameter("simulation_session_id", "clock-test"),
+      rclcpp::Parameter("physics_step_fence_ack_topic", ack_topic),
+  });
+  auto node = std::make_shared<rclcpp::Node>("physics_clock_plugin", options);
+  auto observer = std::make_shared<rclcpp::Node>("physics_clock_observer");
+  std::vector<PhysicsStepFenceAck> acknowledgements;
+  const auto subscription = observer->create_subscription<PhysicsStepFenceAck>(
+    ack_topic, rclcpp::QoS(rclcpp::KeepLast(5)).reliable(),
+    [&acknowledgements](const PhysicsStepFenceAck & ack) {acknowledgements.push_back(ack);});
+  (void)subscription;
+  SimulationEvidencePlugin plugin;
+  ASSERT_TRUE(plugin.init(node, model_.get(), data_.get()));
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node);
+  executor.add_node(observer);
+  const auto discovery_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (plugin.step_fence_ack_publisher_->get_subscription_count() == 0 &&
+    std::chrono::steady_clock::now() < discovery_deadline)
+  {
+    executor.spin_some();
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  ASSERT_GT(plugin.step_fence_ack_publisher_->get_subscription_count(), 0U);
+
+  plugin.on_reset();
+  plugin.on_pause(true);
+  plugin.on_state_snapshot(model_.get(), data_.get(), true);
+  plugin.on_pause(false);
+  PhysicsStepFenceRequest request;
+  request.simulation_session_id = "clock-test";
+  request.reset_epoch = 1;
+  request.request_sequence = 1;
+  ASSERT_TRUE(plugin.step_fence_.request(request));
+  data_->time = .002;
+  const auto steady_ns = [] {
+      return std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    };
+  const auto outer_begin_ns = steady_ns();
+  plugin.on_physics_step(model_.get(), data_.get());
+  const auto outer_end_ns = steady_ns();
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (acknowledgements.empty() && std::chrono::steady_clock::now() < deadline) {
+    executor.spin_some();
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  ASSERT_EQ(acknowledgements.size(), 1U);
+  const auto & ack = acknowledgements.front();
+  EXPECT_EQ(ack.reset_epoch, 1U);
+  EXPECT_EQ(ack.marked_physics_step, 1U);
+  EXPECT_DOUBLE_EQ(ack.marked_simulation_time_s, .002);
+  EXPECT_LE(outer_begin_ns, ack.clock_interval_begin_monotonic_ns);
+  EXPECT_LE(ack.clock_interval_begin_monotonic_ns, ack.clock_interval_end_monotonic_ns);
+  EXPECT_LE(ack.clock_interval_end_monotonic_ns, outer_end_ns);
   plugin.cleanup();
   executor.remove_node(observer);
   executor.remove_node(node);
