@@ -1,6 +1,7 @@
 """A broker permit consumes one full path proof after fresh state checks."""
 
 import copy
+from dataclasses import replace
 
 import pytest
 
@@ -119,6 +120,16 @@ def test_proof_permit_rejects_same_generation_with_different_lease(scene):
     assert checks == [1]
 
 
+def test_proof_permit_requires_complete_701_sample_result(scene):
+    authority, prefix, _, checks = proof_authority(scene)
+    original = authority.proof_port
+    authority.proof_port = lambda *args: replace(
+        original(*args), sample_count=700)
+    with pytest.raises(PermissionError, match='PATH_REJECTED'):
+        authority.approve(prefix)
+    assert checks == [1]
+
+
 @pytest.mark.parametrize('change', (
     'arm_joint_order', 'gripper_joint_order', 'row', 'offset', 'stamp',
     'prefix_hash', 'extra_field',
@@ -180,4 +191,46 @@ def test_goal_materialization_rejects_changed_bridge_or_reference(scene):
             proof, start_time_s=5., bridge_time_s=4.85,
             reference_positions=changed,
         )
+    assert checks == [1]
+
+
+@pytest.mark.parametrize('change', (
+    'state_age', 'policy_age', 'start_deadline', 'first_deadline',
+    'clock_discontinuity', 'missing_clock_error', 'state_before_proof',
+))
+def test_commit_window_rejects_stale_or_late_acceptance(scene, change):
+    from so101_demo.act.path_proof import require_commit_window
+
+    authority, prefix, _, checks = proof_authority(scene)
+    proof = authority.require(authority.approve(prefix), prefix)
+    proof = replace(proof, started_wall_s=10., completed_wall_s=10.09,
+                    proof_compute_latency_s=.09)
+    parameters = dict(
+        state_received_wall_s=10.10, accepted_wall_s=10.14,
+        accepted_sim_s=4.9, start_sim_s=5.,
+        max_policy_age_s=.2, max_state_age_s=.1,
+        observation_jitter_s=.01, start_jitter_s=.02,
+        first_target_jitter_s=.02, clock_error_s=.001,
+        clock_continuous=True,
+    )
+    result = require_commit_window(proof, **parameters)
+    assert result['policy_age_s'] == pytest.approx(.14)
+    assert result['state_age_s'] == pytest.approx(.04)
+    if change == 'state_age':
+        parameters.update(accepted_wall_s=10.20, max_policy_age_s=.5)
+    elif change == 'policy_age':
+        parameters['accepted_wall_s'] = 10.20
+    elif change == 'start_deadline':
+        parameters['accepted_sim_s'] = 5.
+    elif change == 'first_deadline':
+        parameters.update(accepted_sim_s=4.95,
+                          first_target_jitter_s=.11)
+    elif change == 'clock_discontinuity':
+        parameters['clock_continuous'] = False
+    elif change == 'missing_clock_error':
+        parameters['clock_error_s'] = None
+    else:
+        parameters['state_received_wall_s'] = 10.08
+    with pytest.raises(ValueError, match='COMMIT_WINDOW_INVALID'):
+        require_commit_window(proof, **parameters)
     assert checks == [1]

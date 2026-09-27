@@ -303,3 +303,45 @@ def require_proven_goals(proof, goals, *, bridge_time_s,
     except (KeyError, TypeError, ValueError) as error:
         raise ValueError('PATH_GOALS_MISMATCH') from error
     return True
+
+
+def require_commit_window(proof, *, state_received_wall_s, accepted_wall_s,
+                          accepted_sim_s, start_sim_s, max_policy_age_s,
+                          max_state_age_s, observation_jitter_s,
+                          start_jitter_s, first_target_jitter_s,
+                          clock_error_s, clock_continuous):
+    """Apply both strict freshness and simulation-time acceptance bounds."""
+    try:
+        if (not isinstance(proof, PathProof) or proof.status != 'SAFE'
+                or clock_continuous is not True):
+            raise ValueError('proof or clock')
+        state_wall = finite(state_received_wall_s, nonnegative=True)
+        accepted_wall = finite(accepted_wall_s, nonnegative=True)
+        accepted_sim = finite(accepted_sim_s, nonnegative=True)
+        start_sim = finite(start_sim_s, nonnegative=True)
+        max_policy = finite(max_policy_age_s)
+        max_state = finite(max_state_age_s)
+        observation_jitter = finite(observation_jitter_s, nonnegative=True)
+        start_jitter = finite(start_jitter_s, nonnegative=True)
+        first_jitter = finite(first_target_jitter_s, nonnegative=True)
+        clock_error = finite(clock_error_s, nonnegative=True)
+        if (max_policy <= 0 or max_state <= 0
+                or not proof.relative_request.policy_received_wall_s
+                <= proof.started_wall_s <= proof.completed_wall_s
+                <= state_wall <= accepted_wall):
+            raise ValueError('wall order')
+        state_age = accepted_wall - state_wall
+        policy_age = accepted_wall - proof.relative_request.policy_received_wall_s
+        first_target = (start_sim +
+                        proof.relative_request.target_offsets_ns[0]
+                        / 1_000_000_000)
+        if (not state_age + observation_jitter + clock_error < max_state
+                or not policy_age + observation_jitter + clock_error < max_policy
+                or not accepted_sim + start_jitter + clock_error < start_sim
+                or not accepted_sim + first_jitter + clock_error < first_target):
+            raise ValueError('deadline')
+        return dict(policy_age_s=policy_age, state_age_s=state_age,
+                    commit_latency_s=state_age, first_target_sim_s=first_target,
+                    clock_error_s=clock_error)
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError('COMMIT_WINDOW_INVALID') from error
