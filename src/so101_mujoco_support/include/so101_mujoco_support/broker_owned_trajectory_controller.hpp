@@ -3,7 +3,15 @@
 
 #include <joint_trajectory_controller/joint_trajectory_controller.hpp>
 
+#include <chrono>
+#include <filesystem>
+#include <memory>
+#include <mutex>
+#include <string>
+
 #include "so101_mujoco_support/controller_goal_admission.hpp"
+#include "so101_mujoco_support/controller_reservation_provision.hpp"
+#include "so101_mujoco_support/controller_reservation_socket.hpp"
 
 namespace so101_mujoco_support
 {
@@ -29,6 +37,21 @@ public:
 
 protected:
   ControllerGoalAdmission goal_admission_;
+
+private:
+  void configure_reservation_scope();
+  void start_reservation_monitor();
+  void poll_reservation_provision();
+  void close_reservation_service();
+
+  std::mutex reservation_mutex_;
+  std::unique_ptr<ControllerReservationService> reservation_service_;
+  rclcpp::TimerBase::SharedPtr reservation_timer_;
+  std::filesystem::path reservation_provision_path_;
+  std::filesystem::path reservation_socket_path_;
+  std::string reservation_session_;
+  ControllerReservationRole reservation_role_{ControllerReservationRole::ARM};
+  std::chrono::steady_clock::time_point reservation_deadline_;
 };
 
 }  // namespace so101_mujoco_support
