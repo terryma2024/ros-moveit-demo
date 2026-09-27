@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 44e57cee
+current_commit: 1ad41df1
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -24,8 +24,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-481
-next_experiment: EXP-482
+latest_checkpoint: CP-482
+next_experiment: EXP-483
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -3882,4 +3882,14 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 
 ## CP-481 — Full scene velocity is available; stopped receipt and policy receipt remain
 
-- Last valid experiment EXP-481. The production proof source still cannot be constructed safely because a fresh negative controller stop confirmation and the exact policy receive time are not joined to this full scene snapshot, and the atomic wall/sim clock bound remains absent. `BrokerPairedExecution` and the CLI still use legacy proofless ports; no APPROACH production authority was enabled. Next EXP-482 should isolate the broker-side policy receipt at the Unix RPC ingress and test that a stale or substituted prefix cannot acquire a fresh receipt, without sending goals or granting production proof permits. Current branch/worktree, sole evidence root and preserved dirty batch remain; `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, task-owned stack none, accepted formal Train/Validation/Offline Test 0/0/0. Retained runs through EXP-481, archived none, scratch/runtime/generated caches only deletion candidates, nothing deleted.
+- Last valid experiment EXP-481. The production proof source still cannot be constructed safely because a fresh negative controller stop confirmation and the exact policy receive time are not joined to this full scene snapshot, and the atomic wall/sim clock bound remains absent. `BrokerPairedExecution` and the CLI still use legacy proofless ports; no APPROACH production authority was enabled. Next EXP-482 traces the policy/SEARCH observation receipt to determine where its monotonic receive time can be trusted; a new timestamp at Unix RPC ingress alone could launder a delayed prefix and must not become policy authority. Current branch/worktree, sole evidence root and preserved dirty batch remain; `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, task-owned stack none, accepted formal Train/Validation/Offline Test 0/0/0. Retained runs through EXP-481, archived none, scratch/runtime/generated caches only deletion candidates, nothing deleted.
+
+## EXP-482 — Trace the original observation receipt before granting proof authority
+
+- **PLANNED, READ_ONLY:** Trace a candidate APPROACH prefix from accepted SEARCH physical readback through source binding, Unix broker request and `RosBrokerDriver.approval_snapshot`. Determine whether any producer preserves the first monotonic receive timestamp together with exact simulation step, session/attempt/reset epoch and prefix hash. Compare delayed/replayed-prefix behavior against a timestamp minted at broker RPC ingress; that timestamp is invalid if an old physical/policy observation can be relabeled fresh. Do not change code or issue goals until a trustworthy source boundary is identified. Source HEAD `1ad41df1` plus preserved dirty batch, overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, runtime executable NOT_STARTED, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`; no new performance run, stack, hardware or formal data. Retain all evidence, archive none, delete nothing; accepted 0/0/0.
+
+- **VALID read-only source trace; original receipt is not yet end-to-end:** `PickPlaceReadback.capture` filters `world.recent_with_receipts()` by `received_monotonic_s` and joins an exact simulation step, then returns only the world message and simulation-time source stamps; that first world wall receipt is dropped. `RgbObservationSynchronizer.push` stores only `(sim_time_s, value)` for head, wrist, arm and neck, so the selected image/joint callbacks have no retained wall receipt at all. `PickPlaceSearchObservation` and `PickPlaceApproachSourceBinding.inspect` carry no monotonic receipt; the binding explicitly returns `command_authority=False`. `RosBrokerDriver._live_epoch` retains its own received wall time, but `approval_snapshot` exports only current sim time, positions, velocities, reference and epoch. The Unix broker request has only a caller-supplied prefix and no authenticated source receipt. A timestamp minted when that request arrives cannot distinguish a delayed/replayed old prefix from a new policy observation, so it must not populate `policy_received_wall_s`. No production change, stack, goal, hardware or performance run. Retain source/ledger audit and all earlier runs, archive none, scratch/runtime/generated caches only deletion candidates, nothing deleted; formal accepted 0/0/0.
+
+## CP-482 — Original sensor callback receipts must survive the SEARCH join
+
+- Last valid experiment EXP-482. Next EXP-483 is a source-only RED/GREEN contract for the RGB/arm/neck synchronizer to retain a monotonic receive timestamp per selected callback without changing the observation wire schema. A later readback change must carry the selected receipts and the world receipt together with step/session/attempt/epoch/prefix identity to the broker; only then can policy freshness be asserted. Current branch/worktree, sole evidence root and preserved dirty batch remain; overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact task Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, task-owned stack none. Retained runs through EXP-482, archived none, scratch/runtime/generated caches only deletion candidates, nothing deleted; accepted Train/Validation/Offline Test 0/0/0.
