@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: c3c4bfa0
+current_commit: 62f8c3e0
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -20,6 +20,7 @@ confirmed_conclusions:
   - CP-469 records EXP-469's one completed timing probe with parity incomplete; the user superseded the 16-lane direction with the path-proof/commit-window design review.
   - EXP-485 finds no production prefix receipt producer or broker-private consumer; SEARCH source timestamps cannot substitute for a policy prefix receipt.
   - EXP-486 freezes a source-neutral receipt design for Task8 expert routes and later ACT policy output, with separate observation/prefix/state freshness; production remains disabled.
+  - EXP-487 verifies a broker-private, one-use source receipt authority and a fail-closed proof approval hook; production proof and goals remain unwired.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -27,8 +28,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-486
-next_experiment: EXP-487
+latest_checkpoint: CP-487
+next_experiment: EXP-488
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -109,7 +110,7 @@ Next command: verify ownership and Python/colcon paths, create Task 1 regression
 
 ```yaml
 experiment_id: EXP-002
-status: PLANNED
+status: VALID
 prior_experiment: EXP-001
 hypothesis: Camera-level publish_depth=false eliminates depth endpoints and buffers while both RGB cameras and the default RGB-D teacher preserve synchronized messages.
 prediction: New field RED compile fails, then real mixed-camera rendering passes on Linux.
@@ -4009,3 +4010,37 @@ Evidence: `scratch/exp486-spec-review.HIKWnxNp/` under the registered root; `con
 ## CP-486 — Source-neutral receipt contract awaits written review
 
 - Last valid experiment EXP-486. The pending design now gives Task8 `EXPERT_ROUTE` and later `ACT_POLICY` distinct source artifacts, the same broker-private one-use identity fence, and separate source-observation/prefix/state ages. The production prototype still uses `policy_received_wall_s`, has no Task8 prefix producer or proof ports, and cannot submit a PathProof from the child. Next EXP-487 is implementation only after the handoff's written specification review; do not infer that this design-only checkpoint grants permission. Current worktree/branch and preserved dirty batch remain, overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact task Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, task-owned stack none. Formal accepted Train/Validation/Offline Test 0/0/0. Retained all runs through EXP-486, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
+
+## EXP-487 — Broker-private prefix source receipt authority
+
+```yaml
+experiment_id: EXP-487
+status: PLANNED
+prior_experiment: EXP-486
+hypothesis: A broker-private registry can issue one immutable source-neutral receipt from the selected seven original source times, exact prefix and current ACT owner ticket, then reject stale, substituted, replayed or revoked use without granting goal authority.
+prediction: RED at missing authority; GREEN with fixed expert/policy source kinds, original observation age and prefix issue age, exact ticket/phase/step/sequence/hash binding and one-time consumption; complete source and installed package gates pass.
+single_variable: Pure prefix source receipt authority and its broker-local ownership hook; existing goal submission stays disabled.
+lifecycle: SOURCE_ONLY
+preconditions: [User written review permits implementation of design SHA256 a550e6984b405302ecacf26dfc0d5552f5debdbc8fde97bd60df51728705f550, HEAD 62f8c3e0, dirty batch preserved, task-owned stack none]
+success_criteria: [RED then focused GREEN, full ordinary source xdist8, installed package xdist8, no new goal authority]
+failure_criteria: [Any stale or altered source/ticket/prefix accepted, replay possible, package regression]
+invalid_criteria: [Test collection/setup fails before intended boundary, concurrent writer, runtime stack starts]
+provenance:
+  source_commit: 62f8c3e0
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Exact task-Python focused RED/GREEN with unique verified NVMe TMPDIR", "Exact task-Python ordinary source pytest -n 8 in private IPC mount namespace", "Existing-overlay colcon build --packages-select so101_demo_py --symlink-install", "Installed colcon test --packages-select so101_demo_py --pytest-args test -n 8 in private IPC mount namespace", "colcon test-result --verbose"]
+observed: ["Pure authority RED scratch/exp487-prefix-red.CjevWaVC failed 6/6 at missing module; broker hook RED scratch/exp487-broker-red.iqnIpT6C failed at missing constructor port", "Focused GREEN scratch/exp487-prefix-green-extra.f13zGl2k passed 8/8, including source change, stale/replay/revoke, broker-private approval and proof-unwired refusal", "Source full scratch/exp487-source-full.JNbLJyeA exited 0 in 47 s: 4706 collected, 4544 passed, 162 skipped, 4 pre-existing fork warnings; JUnit SHA256 d49d94069e2c0b7a80494c62777b0cecb45f1c3470c4ebd17c19f6d8cc9201ef", "Existing-overlay build scratch/exp487-demo-build.ShF5zE8m exited 0 in 2 s", "Installed scratch/exp487-installed-full.hxHiRyeF colcon test and test-result both exited 0 in 47 s: package 4706 collected/0 failures/162 skips; aggregate 6166 tests/0 errors/0 failures/205 skipped; package JUnit SHA256 047566aee18b6b970f5df09e35374a545832d2cca5f5a4e6069a2ec3316241a5", "Source and installed child interpreters verified distinct unique NVMe TMPDIR; ROS_DOMAIN_ID/GZ_PARTITION NOT_ASSIGNED, no stack or goal"]
+inferred: ["Private receipt has no command authority; configured broker proof approval refuses an executor without approve_with_source, and legacy production construction remains unchanged", "This does not establish a trusted physical prefix producer, full PathProof, commit window or Task8 production readiness"]
+conclusion: VALID for source receipt authority and broker hook only; production submission remains closed.
+decision: Preserve exact evidence and proceed to source-neutral proof timing migration and trusted producer wiring in EXP-488.
+next_experiment: EXP-488
+```
+
+## CP-487 — Private source authority passes both package gates
+
+- User written review of design commit `62f8c3e0` and SHA256 `a550e6984b405302ecacf26dfc0d5552f5debdbc8fde97bd60df51728705f550` lifted the design-only stop. EXP-487 is source-only. `PrefixSourceReceipt` binds `EXPERT_ROUTE` or `ACT_POLICY`, the seven original source times, selected observation hash, source artifact and contact policy fingerprints, phase/physics step/reset epoch, exact prefix and current owner ticket. The registry consumes once and retains replay keys after revocation. The broker exposes an internal issue method, no Unix issue operation; configured approval requires a proof-aware executor. Existing production executor has no such port, so configured production approval fails closed.
+- Focused RED/GREEN, source xdist8, existing-overlay build and installed xdist8 all ran at the intended boundaries with exact Python and fresh NVMe scratch; results and JUnit hashes are in EXP-487. Source module SHA256 `e8d0da4d7f5c1e13bc334f4dfa53508614a6a16ee47f191dad25b38bbfc723e9`; broker SHA256 `7ca4d71c07ff14e114e130ac9f60431a8ce5d7670edfe49c0f7d66a00db5316d`; focused test SHA256 `213211eedf5e3cc861d5273b900037b2d430c2522ec069db4259a7fe0a186b26`. No new performance experiment or hardware action.
+- Next EXP-488 must migrate the old policy-only `RelativePathRequest` and permit clocks to source-neutral prefix plus original observation ages, bind a trusted producer to the current physical SEARCH source, and prove proof/permit/goal content through the production child before any live qualification. Keep all existing dirty work and current evidence root. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained all runs through EXP-487, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
