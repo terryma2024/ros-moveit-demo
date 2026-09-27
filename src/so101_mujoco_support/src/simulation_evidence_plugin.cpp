@@ -836,8 +836,10 @@ void SimulationEvidencePlugin::on_physics_step(const mjModel * model, const mjDa
   }
   const bool paused = authoritative_paused_.load(std::memory_order_acquire);
   const auto clock_begin_ns = steady_nanoseconds();
-  const auto step = builder_.build_step(model, data, paused, physics_state_, reset_generation,
-                                        static_shadow_force_n_, diagnostic_hard_stop_force_n_);
+  auto step = builder_.build_step(model, data, paused, physics_state_, reset_generation,
+                                  static_shadow_force_n_, diagnostic_hard_stop_force_n_);
+  step.clock_interval_begin_monotonic_ns = clock_begin_ns;
+  step.clock_interval_end_monotonic_ns = steady_nanoseconds();
   current_reset_epoch_.store(step.reset_epoch, std::memory_order_release);
   current_physics_step_.store(step.physics_step, std::memory_order_release);
   current_simulation_time_s_.store(step.simulation_time_s, std::memory_order_release);

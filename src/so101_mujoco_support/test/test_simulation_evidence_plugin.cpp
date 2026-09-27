@@ -819,7 +819,12 @@ TEST_F(AtomicEvidenceTest, PhysicsHookAdvancesAtFiveHundredHertzNotControllerCad
   }
   ASSERT_EQ(chunks.size(), 1U);
   ASSERT_EQ(chunks.front().samples.size(), 5U);
+  int64_t previous_clock_end_ns = 0;
   for (const auto & sample : chunks.front().samples) {
+    EXPECT_GT(sample.clock_interval_begin_monotonic_ns, previous_clock_end_ns);
+    EXPECT_GE(sample.clock_interval_end_monotonic_ns,
+      sample.clock_interval_begin_monotonic_ns);
+    previous_clock_end_ns = sample.clock_interval_end_monotonic_ns;
     EXPECT_EQ(sample.model_qpos.size(), static_cast<std::size_t>(model_->nq));
     EXPECT_EQ(sample.model_qvel.size(), static_cast<std::size_t>(model_->nv));
     for (int i = 0; i < model_->nq; ++i) {
@@ -912,6 +917,12 @@ TEST_F(AtomicEvidenceTest, PhysicsFenceAckCarriesClockBoundsFromTheActualStepHoo
   EXPECT_LE(outer_begin_ns, ack.clock_interval_begin_monotonic_ns);
   EXPECT_LE(ack.clock_interval_begin_monotonic_ns, ack.clock_interval_end_monotonic_ns);
   EXPECT_LE(ack.clock_interval_end_monotonic_ns, outer_end_ns);
+  EXPECT_EQ(ack.marked_sample.clock_interval_begin_monotonic_ns,
+    ack.clock_interval_begin_monotonic_ns);
+  EXPECT_LE(ack.marked_sample.clock_interval_begin_monotonic_ns,
+    ack.marked_sample.clock_interval_end_monotonic_ns);
+  EXPECT_LE(ack.marked_sample.clock_interval_end_monotonic_ns,
+    ack.clock_interval_end_monotonic_ns);
   plugin.cleanup();
   executor.remove_node(observer);
   executor.remove_node(node);
