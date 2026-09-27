@@ -30,7 +30,8 @@ def endpoint_bytes(path):
 
 class CommandBroker:
     def __init__(self,driver,*,ownership,simulation_session_id=None,prefix_executor=None,
-                 prefix_source_authority=None,prefix_source_port=None,control_events=None):
+                 prefix_source_authority=None,prefix_source_port=None,control_events=None,
+                 reservation_port=None):
         if (prefix_source_authority is None) != (prefix_source_port is None):
             raise ValueError('PREFIX_SOURCE_CONFIG_INVALID')
         if prefix_source_authority is not None and (
@@ -38,6 +39,13 @@ class CommandBroker:
                 or not callable(prefix_source_port)):
             raise ValueError('PREFIX_SOURCE_CONFIG_INVALID')
         self.driver,self.ownership=driver,ownership
+        if reservation_port is not None and (
+                not all(callable(getattr(reservation_port, name, None))
+                        for name in ('reserve', 'close_generation'))
+                or not all(callable(getattr(driver, name, None))
+                           for name in ('prepare_goal', 'send_prepared'))):
+            raise TypeError('CONTROLLER_RESERVATION_PORT_INVALID')
+        self.reservation_port=reservation_port
         self.prefix_executor=prefix_executor;self._pair_goals=set()
         self._prefix_sources=prefix_source_authority
         self._prefix_source_port=prefix_source_port
@@ -77,7 +85,11 @@ class CommandBroker:
             self._post_reset_ticket=None
             self.control_events.record('submit_begin',generation=ticket[0],owner=ticket[2],
                                        session_id=ticket[3],attempt_id=ticket[4],detail=kind)
-            try:gid=identifier(self.driver.submit(kind,goal))
+            try:
+                if self.reservation_port is None:
+                    gid=identifier(self.driver.submit(kind,goal))
+                else:
+                    gid=self._dispatch_reserved(ticket,kind,goal)
             except Exception:
                 self.control_events.record('submit_uncertain',generation=ticket[0],
                                            owner=ticket[2],session_id=ticket[3],
@@ -90,6 +102,31 @@ class CommandBroker:
             self.audit.append(dict(operation='submit',generation=ticket[0],owner=ticket[2],
                                    session_id=ticket[3],attempt_id=ticket[4],goal_id=gid))
             return gid
+
+    def _dispatch_reserved(self,ticket,kind,goal):
+        gid=None
+        registered=False
+        try:
+            gid,goal_uuid=self.driver.prepare_goal(kind,goal)
+            gid=identifier(gid)
+            if not isinstance(goal_uuid,str) or str(uuid.UUID(goal_uuid))!=goal_uuid:
+                raise ValueError('GOAL_UUID_INVALID')
+            if gid in self._goal_tickets:raise RuntimeError('GOAL_ID_REUSED')
+            self._goal_tickets[gid]=ticket
+            registered=True
+            if self.reservation_port.reserve(ticket,kind,goal,goal_uuid) is not True:
+                raise PermissionError('CONTROLLER_RESERVATION_REJECTED')
+            self.ownership.require_ticket(ticket)
+            if identifier(self.driver.send_prepared(gid,kind,goal,goal_uuid))!=gid:
+                raise RuntimeError('PREPARED_GOAL_ID_MISMATCH')
+            return gid
+        except Exception:
+            if registered:self._goal_tickets.pop(gid,None)
+            try:self.reservation_port.close_generation(ticket[0])
+            finally:
+                self.ownership.revoke('CONTROLLER_RESERVATION_FAILED')
+                self._stop_if_revoked()
+            raise
 
     def stop_attempt(self, reason, *, cancelled_event=None):
         """Close dispatch and signal cancellation under the same broker lock."""
