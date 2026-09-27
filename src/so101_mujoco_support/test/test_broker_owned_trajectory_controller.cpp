@@ -187,5 +187,9 @@ TEST(BrokerOwnedTrajectoryController, LifecycleTransitionsRevokePendingGoals)
     lifecycle_msgs::msg::State::PRIMARY_STATE_UNCONFIGURED);
   EXPECT_EQ(controller.probe_goal(id, goal, 3), Admission::Result::DENY_CLOSED);
   controller.release_interfaces();
+  id.fill(6);
+  ASSERT_TRUE(controller.reserve_goal(id, goal, 4));
+  ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  EXPECT_EQ(controller.probe_goal(id, goal, 4), Admission::Result::DENY_CLOSED);
   rclcpp::shutdown();
 }
