@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 1210ab46
+current_commit: 58649e62
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -33,6 +33,7 @@ confirmed_conclusions:
   - EXP-500 verifies an exact 51-frame, 100 ms physical-history contract offline; controller interval and ownership proof remain missing, so no command or collection authority exists.
   - EXP-501 finds that latest-only controller references and action status cannot prove the same 100 ms interval; the installed trajectory-controller header also exposes a topic callback whose exclusivity is unproved.
   - EXP-502 closes the ACT MuJoCo arm/gripper/neck trajectory-topic subscriber in an action-only controller plugin, with C++ plugin and Python gates passing; external action ownership and reference history remain unproved.
+  - EXP-503 confirms the installed action-only plugin on a fresh isolated no-motion ACT stack: three active controller types, zero trajectory-topic subscribers, seven-axis readiness and clean owner/domain retirement.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -40,8 +41,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-502
-next_experiment: EXP-503
+latest_checkpoint: CP-503
+next_experiment: EXP-504
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4554,3 +4555,36 @@ next_experiment: EXP-503
 
 - Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp502-topic-ingress-closure/result.json`. The C++ plugin and installed ACT YAML are pinned there with RED/GREEN, build, full source/installed test and style-check hashes.
 - This step did not start a ROS/MuJoCo stack or send a goal. The plugin does not by itself establish exclusive action ownership or the missing 100 ms reference interval; the physical history verifier remains noncollecting. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-502, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
+
+## EXP-503 — Installed controller identity on an isolated no-motion stack
+
+```yaml
+experiment_id: EXP-503
+status: VALID
+prior_experiment: EXP-502
+hypothesis: The new plugin is actually loaded by all three ACT controllers and has no trajectory-topic subscriber in the running graph.
+prediction: Fresh isolated domain shows arm/gripper/neck active as so101_mujoco_support/BrokerOwnedTrajectoryController, all three trajectory-topic subscription counts zero, seven readiness checks true and clean retirement.
+single_variable: Installed runtime controller type and topic-ingress identity after EXP-502; no reset or motion command.
+lifecycle: ISOLATED_STACK
+preconditions: [EXP-502 valid, exact installed overlay, empty fresh domain, no task-owned stack]
+success_criteria: [Readiness seven of seven, installed controller type for all three, zero topic subscribers, exact owner retired and domain graph empty]
+failure_criteria: [Wrong controller type, topic subscriber, readiness failure or uncertain cleanup]
+invalid_criteria: [Goal or reset sent, existing domain activity]
+provenance:
+  source_commit: 58649e62
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /opt/ros/jazzy/bin/ros2
+  ros_domain_id: 181
+  gz_partition: act-data-exp503-181
+commands: ["Empty-domain preflight and owned headless ACT launch with exact installed overlay", "Installed act_stack_ready seven-axis query", "ros2 control list_controllers plus read-only ROS graph subscription inspection", "Owner-scoped SIGINT, launch wait, graph and process retirement readback"]
+observed: ["An initial domain 246 read-only preflight failed because DDS port calculation rejects domains above 232; no stack started there; fresh domain 181 preflight was empty", "Readiness CLI exited 0 with seven checks true, matching session/domain", "arm_controller, gripper_controller and neck_controller were active with so101_mujoco_support/BrokerOwnedTrajectoryController; each corresponding joint_trajectory topic had zero subscribers", "Launch owner PID 464262/PGID 464262/start ticks 58654012 exited 0 after owner-scoped stop; graph_after_rc 0 with empty node list and no retained task stack process", "Result SHA256 2197dee56966e4e2f41d893d7e1899399672146c7d7d35a9c04095a98aa2e53c; launch and graph scripts SHA256 dfd409dc7463b22a0a1382f9019d710c217beeeadd21f9dda26dadea44ee2a24 and 8f5ccd6fc64bbc393da3d3f025024b490dd4264d8fa967c4afe1245efdb149ee; no reset, goal or hardware operation"]
+inferred: ["ACT runtime has removed the specific topic command bypass in this isolated graph", "This single no-motion run does not prove externally exclusive action ingress, lossless 500 Hz reference publication, 100 ms stopped history or collection qualification"]
+conclusion: VALID installed no-motion topic-ingress closure; controller interval remains unproved.
+decision: Build a bounded broker reference-history source with original timestamps and a goal/ownership event fence; verify loss and temporal continuity before joining EXP-500 physical history to PathProof. Keep all motion authority closed.
+next_experiment: EXP-504
+```
+
+## CP-503 — Installed topic ingress closed; reference history next
+
+- Registered run: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp503-controller-identity-no-motion`. The exact launch argv, owner identity, seven-axis stdout, controller list, graph subscriber counts, stop result and empty final graph are retained. This is one isolated no-motion diagnostic, not an accepted phase or episode.
+- The last required 100 ms controller reference and goal/ownership history is still absent. No proof port, permit or goal was enabled. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-503, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
