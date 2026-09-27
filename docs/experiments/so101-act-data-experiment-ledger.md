@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: a867b463
+current_commit: 4b1cfc29
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -28,6 +28,7 @@ confirmed_conclusions:
   - EXP-495 finds cup pixels in all sampled task/head/wrist renders of the 31 grouped approach prefixes, but continuous visibility and physical expert qualification are still open.
   - EXP-496 checks all 600 exact target rows of the weakest wrist-view approach chord: wrist/head target pixels remain nonzero in the pinned scene.
   - EXP-497 binds a validated selected SEARCH hash, original seven-source wall receipts and measured stopped start to a noncollecting exact first approach candidate; broker proof and goals remain unwired.
+  - EXP-498 exposes a time-axis conflict: the fixed 600-target/701-sample path needs a bridge 100 ms before the selected observation; a fresh post-observation bridge yields only 641 samples and is rejected by the relative request.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -35,8 +36,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-497
-next_experiment: EXP-498
+latest_checkpoint: CP-498
+next_experiment: EXP-499
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4384,3 +4385,36 @@ next_experiment: EXP-498
 
 - `SelectedApproachCandidate` validates the pinned candidate before SEARCH. Its `prepare` call freezes the exact selected SEARCH observation again, checks the prior source hash and all seven original receive times, verifies model/qpos/qvel/cup start, and returns sequence 0 with 600 exact rows. It explicitly returns `eligible_for_collection: false` and `command_authority: false`; there is no broker receipt, permit or goal path.
 - The first installed full gate remains a real failed artifact; the targeted process-scan test and a fresh full installed run passed without changing that guard. Retained all evidence through EXP-497, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted. Formal accepted Train/Validation/Offline Test remains 0/0/0.
+
+## EXP-498 — Fresh stopped approach proof-state preparation
+
+```yaml
+experiment_id: EXP-498
+status: VALID
+prior_experiment: EXP-497
+hypothesis: A bridge taken from fresh physical readback after the selected SEARCH observation cannot satisfy both the present relative-time contract and the fixed 701-sample path budget for a 600-target 2 ms prefix.
+prediction: The existing checker reports fewer than 701 samples for an otherwise safe post-observation bridge, while the current RelativePathRequest rejects the same bridge before checking; the original pre-observation synthetic bridge reports 701.
+single_variable: Bridge timestamp relative to the frozen selected observation; exact rows, model, dynamics and first-target grid stay fixed. This read-only discriminator supersedes the planned snapshot constructor because it is the first failing boundary.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-497 valid, task-owned stack none, candidate still ineligible]
+success_criteria: [Actual checker sample counts and request refusal retained for both bridge timings, no source/goal changes]
+failure_criteria: [Post-observation bridge already satisfies 701 and current contract, or baseline pre-observation bridge fails]
+invalid_criteria: [Wrong Python/model/route, live stack or goal]
+provenance:
+  source_commit: 4b1cfc29
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Offline current-checker and RelativePathRequest contrast for unchanged candidate rows under pre/post-observation bridge timestamps; retain exact verdicts"]
+observed: ["Same pinned first candidate prefix with 600 rows and SHA256 56c6e5334f5c7b41ee9f7c5af592aa10738060dbf0b37fcdf83131c739d01498 passes the original checker under both tested bridge times", "Bridge at observation minus 100 ms (9.9 versus 10.0 s) yields 701 checked samples and RelativePathRequest accepted, offsets -150 ms bridge/-50 ms observation relative to start", "Bridge at observation plus 20 ms (10.02 versus 10.0 s) yields only 641 checked samples and RelativePathRequest refuses PATH_TIME_AXIS_INVALID", "Read-only script SHA256 48c58b39bc21db234c83bae29f61e30c2a27123f039374c6a80a5ad676ef57b1; result SHA256 1082dfaae7698a6105f97654fe0d106f0d66a02eae98c0f21d17398229918bdf; no code, stack or goal changed"]
+inferred: ["With 600 targets at 2 ms and last target observation plus 1.3 s, retaining the approved full 701-sample proof requires a bridge at observation minus 0.1 s; a current post-SEARCH readback cannot be substituted without both changing the time axis and losing 60 samples", "A possible safe route is to capture actual pre-observation bridge qpos/qvel and prove full-state/controller stationarity across the historical 50 physics steps through the fresh current readback, but availability and timing have not been established"]
+conclusion: VALID first failing time-axis discriminator; production proof port remains closed.
+decision: Audit bounded historical world/scene/contact buffers and real stopped controller reference for an actual 100 ms pre-observation bridge. Do not relax the 701-sample contract, fabricate a historical state or wire goals.
+next_experiment: EXP-499
+```
+
+## CP-498 — Fresh post-SEARCH bridge cannot satisfy approved 701 samples
+
+- Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp498-bridge-timing-discriminator/result.json`. Both checker verdicts are safe, but only the pre-observation bridge has the required 701 samples. A post-observation bridge also fails `RelativePathRequest` ordering; loosening that ordering alone would still leave 641 samples.
+- The first approach candidate remains offline and noncollecting. Next inspect actual history and stop provenance before building a snapshot constructor. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-498, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
