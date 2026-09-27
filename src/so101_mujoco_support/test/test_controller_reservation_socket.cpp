@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -21,6 +22,7 @@ namespace
 {
 using so101_mujoco_support::ControllerGoalAdmission;
 using so101_mujoco_support::ControllerReservationCapability;
+using so101_mujoco_support::ControllerReservationService;
 using so101_mujoco_support::ControllerReservationSocket;
 
 std::string read_line(int fd)
@@ -205,6 +207,44 @@ TEST(ControllerReservationSocket, SequentialGoalsUseOneAuthenticatedOwnerGenerat
   EXPECT_EQ(gate.admit(second_uuid, second_goal, 5), ControllerGoalAdmission::Result::ALLOW);
 }
 
+TEST(ControllerReservationSocket, IdleListenerDoesNotRevokeAnArmedOwnerLease)
+{
+  const auto path = socket_path("idle-lease.sock");
+  const auto key = capability();
+  ClientProcess client(path, key);
+  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate.arm(5));
+  ControllerReservationSocket server(path, gate, key, client.peer(),
+    std::chrono::milliseconds(500));
+  EXPECT_FALSE(server.serve_one());
+  client.start("valid");
+  ASSERT_TRUE(server.serve_one());
+  ASSERT_EQ(client.result(), "ACK");
+  ControllerGoalAdmission::GoalUUID id{};
+  id.fill(0x11);
+  EXPECT_EQ(gate.admit(id, goal(), 5), ControllerGoalAdmission::Result::ALLOW);
+}
+
+TEST(ControllerReservationSocket, ServiceShutdownClosesGateAndRemovesOwnedSocket)
+{
+  const auto path = socket_path("service-lifetime.sock");
+  const auto key = capability();
+  ClientProcess client(path, key);
+  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
+  auto service = std::make_unique<ControllerReservationService>(
+    path, gate, key, client.peer(), std::chrono::milliseconds(500));
+  ASSERT_TRUE(gate.arm(5));
+  client.start("valid");
+  ASSERT_EQ(client.result(), "ACK");
+  ASSERT_TRUE(std::filesystem::exists(path));
+
+  service.reset();
+  EXPECT_FALSE(std::filesystem::exists(path));
+  ControllerGoalAdmission::GoalUUID id{};
+  id.fill(0x11);
+  EXPECT_EQ(gate.admit(id, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
+}
+
 TEST(ControllerReservationSocket, RejectsWrongPeerBeforeReadingFrame)
 {
   const auto key = capability();
@@ -218,10 +258,10 @@ TEST(ControllerReservationSocket, RejectsWrongPeerBeforeReadingFrame)
     if (std::string(field) == "pid") {++wrong_peer.pid;}
     if (std::string(field) == "start_ticks") {++wrong_peer.start_ticks;}
     ControllerReservationSocket server(path, gate, key, wrong_peer,
-      std::chrono::milliseconds(100));
+      std::chrono::milliseconds(1000));
     client.start("valid");
     EXPECT_FALSE(server.serve_one()) << field;
-    EXPECT_NE(client.result(), "ACK") << field;
+    EXPECT_EQ(client.result(), "EOF") << field;
     ControllerGoalAdmission::GoalUUID uuid{};
     uuid.fill(0x11);
     EXPECT_EQ(gate.admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED) << field;

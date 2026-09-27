@@ -52,6 +52,25 @@ bool wait_for(int fd, short events, Deadline deadline)
   }
 }
 
+enum class ListenerWait {READY, IDLE, ERROR};
+
+ListenerWait wait_for_listener(int fd, Deadline deadline)
+{
+  while (true) {
+    const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+      deadline - std::chrono::steady_clock::now()).count();
+    if (remaining <= 0) {return ListenerWait::IDLE;}
+    pollfd handle{fd, POLLIN, 0};
+    const int result = poll(&handle, 1, static_cast<int>(remaining));
+    if (result > 0) {
+      if (handle.revents & (POLLERR | POLLHUP | POLLNVAL)) {return ListenerWait::ERROR;}
+      return handle.revents & POLLIN ? ListenerWait::READY : ListenerWait::ERROR;
+    }
+    if (result == 0) {return ListenerWait::IDLE;}
+    if (errno != EINTR) {return ListenerWait::ERROR;}
+  }
+}
+
 bool read_exact(int fd, uint8_t * bytes, size_t size, Deadline deadline)
 {
   size_t offset = 0;
@@ -113,6 +132,14 @@ uint64_t process_start_ticks(pid_t pid)
   (void)pid;
   return 0;
 #endif
+}
+
+std::chrono::milliseconds bounded_service_deadline(std::chrono::milliseconds deadline)
+{
+  if (deadline.count() <= 0 || deadline > std::chrono::milliseconds(1000)) {
+    throw std::invalid_argument("CONTROLLER_RESERVATION_SERVICE_DEADLINE_INVALID");
+  }
+  return deadline;
 }
 }  // namespace
 
@@ -212,8 +239,9 @@ bool ControllerReservationSocket::serve_one()
   gate_.close();
   return false;
 #else
-  const auto deadline = std::chrono::steady_clock::now() + deadline_;
-  if (!wait_for(listener_, POLLIN, deadline)) {
+  const auto ready = wait_for_listener(listener_, std::chrono::steady_clock::now() + deadline_);
+  if (ready == ListenerWait::IDLE) {return false;}
+  if (ready != ListenerWait::READY) {
     gate_.close();
     return false;
   }
@@ -222,6 +250,7 @@ bool ControllerReservationSocket::serve_one()
     gate_.close();
     return false;
   }
+  const auto deadline = std::chrono::steady_clock::now() + deadline_;
   std::vector<uint8_t> frame(4);
   if (!read_exact(connection.get(), frame.data(), frame.size(), deadline)) {
     gate_.close();
@@ -263,6 +292,38 @@ bool ControllerReservationSocket::serve_one()
   gate_.close();
   return false;
 #endif
+}
+
+ControllerReservationService::ControllerReservationService(
+  std::filesystem::path path, ControllerGoalAdmission & gate,
+  ControllerReservationCapability capability,
+  ControllerReservationSocket::ExpectedPeer expected_peer,
+  std::chrono::milliseconds deadline)
+: gate_(gate), socket_(std::move(path), gate, capability, expected_peer,
+    bounded_service_deadline(deadline))
+{
+  try {
+    worker_ = std::thread([this]() {
+          while (!stop_.load()) {
+            try {
+              socket_.serve_one();
+            } catch (...) {
+              gate_.close();
+              return;
+            }
+          }
+      });
+  } catch (...) {
+    gate_.close();
+    throw;
+  }
+}
+
+ControllerReservationService::~ControllerReservationService()
+{
+  gate_.close();
+  stop_.store(true);
+  if (worker_.joinable()) {worker_.join();}
 }
 
 }  // namespace so101_mujoco_support

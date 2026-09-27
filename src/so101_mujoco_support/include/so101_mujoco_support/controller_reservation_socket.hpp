@@ -4,8 +4,10 @@
 #include <sys/types.h>
 
 #include <chrono>
+#include <atomic>
 #include <cstdint>
 #include <filesystem>
+#include <thread>
 
 #include "so101_mujoco_support/controller_reservation_protocol.hpp"
 
@@ -45,6 +47,26 @@ private:
   int listener_{-1};
   dev_t bound_device_{0};
   ino_t bound_inode_{0};
+};
+
+class ControllerReservationService final
+{
+public:
+  ControllerReservationService(
+    std::filesystem::path path, ControllerGoalAdmission & gate,
+    ControllerReservationCapability capability,
+    ControllerReservationSocket::ExpectedPeer expected_peer,
+    std::chrono::milliseconds deadline);
+  ~ControllerReservationService();
+
+  ControllerReservationService(const ControllerReservationService &) = delete;
+  ControllerReservationService & operator=(const ControllerReservationService &) = delete;
+
+private:
+  ControllerGoalAdmission & gate_;
+  ControllerReservationSocket socket_;
+  std::atomic<bool> stop_{false};
+  std::thread worker_;
 };
 
 }  // namespace so101_mujoco_support
