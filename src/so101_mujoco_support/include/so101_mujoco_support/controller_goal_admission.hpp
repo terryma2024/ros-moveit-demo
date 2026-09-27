@@ -12,18 +12,21 @@
 #include <optional>
 #include <stdexcept>
 #include <utility>
-#include <vector>
+
+#include "control_msgs/action/follow_joint_trajectory.hpp"
+#include "rclcpp/serialization.hpp"
+#include "rclcpp/serialized_message.hpp"
 
 namespace so101_mujoco_support
 {
 
 // Local admission primitive. The controller must separately prove stop, owner,
-// registration caller and exact ROS serialization before wiring this to actions.
+// registration caller and callback ownership before wiring this to actions.
 class ControllerGoalAdmission final
 {
 public:
   using GoalUUID = std::array<uint8_t, 16>;
-  using GoalBytes = std::vector<uint8_t>;
+  using Goal = control_msgs::action::FollowJointTrajectory::Goal;
   using Clock = std::function<int64_t()>;
 
   enum class Result {ALLOW, DENY_CLOSED, DENY_FAULT};
@@ -51,7 +54,7 @@ public:
     return true;
   }
 
-  bool reserve(const GoalUUID & uuid, const GoalBytes & goal, uint64_t generation)
+  bool reserve(const GoalUUID & uuid, const Goal & goal, uint64_t generation)
   {
     std::lock_guard<std::mutex> lock(mutex_);
     if (mode_ != Mode::EXCLUSIVE) {
@@ -60,17 +63,28 @@ public:
     const auto now = read_clock();
     if (!now || generation != generation_ || reservation_ ||
       std::all_of(uuid.begin(), uuid.end(), [](uint8_t value) {return value == 0;}) ||
-      goal.empty() || goal.size() > max_goal_bytes_ ||
+      goal.trajectory.joint_names.empty() || goal.trajectory.points.empty() ||
       *now > std::numeric_limits<int64_t>::max() - validity_ns_)
     {
       fault_close();
       return false;
     }
-    reservation_ = Reservation{uuid, goal, *now + validity_ns_};
+    try {
+      rclcpp::SerializedMessage serialized;
+      rclcpp::Serialization<Goal>().serialize_message(&goal, &serialized);
+      if (serialized.size() > max_goal_bytes_) {
+        fault_close();
+        return false;
+      }
+      reservation_ = Reservation{uuid, goal, *now + validity_ns_};
+    } catch (...) {
+      fault_close();
+      return false;
+    }
     return true;
   }
 
-  Result admit(const GoalUUID & uuid, const GoalBytes & goal, uint64_t generation)
+  Result admit(const GoalUUID & uuid, const Goal & goal, uint64_t generation)
   {
     std::lock_guard<std::mutex> lock(mutex_);
     if (mode_ != Mode::EXCLUSIVE) {
@@ -93,7 +107,7 @@ private:
   struct Reservation
   {
     GoalUUID uuid;
-    GoalBytes goal;
+    Goal goal;
     int64_t expires_ns;
   };
 

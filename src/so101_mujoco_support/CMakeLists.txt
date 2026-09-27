@@ -3,6 +3,7 @@ project(so101_mujoco_support)
 
 find_package(Boost REQUIRED)
 find_package(ament_cmake REQUIRED)
+find_package(control_msgs REQUIRED)
 find_package(controller_interface REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(joint_trajectory_controller REQUIRED)
@@ -19,6 +20,7 @@ find_package(rcutils REQUIRED)
 find_package(realtime_tools REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(trajectory_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ContactSample.msg"
@@ -100,6 +102,8 @@ if(BUILD_TESTING)
     APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
   target_compile_features(test_controller_goal_admission PRIVATE cxx_std_17)
   target_include_directories(test_controller_goal_admission PRIVATE include)
+  ament_target_dependencies(test_controller_goal_admission
+    control_msgs rclcpp trajectory_msgs)
 endif()
 
 install(TARGETS so101_simulation_evidence_plugin
@@ -108,7 +112,7 @@ install(TARGETS so101_simulation_evidence_plugin
 install(TARGETS graceful_shutdown_move_group RUNTIME DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
-ament_export_dependencies(controller_interface geometry_msgs joint_trajectory_controller
+ament_export_dependencies(control_msgs controller_interface geometry_msgs joint_trajectory_controller
   lifecycle_msgs mujoco_ros2_control_plugins mujoco_vendor pluginlib
-  rclcpp rcutils realtime_tools rosidl_default_runtime std_msgs)
+  rclcpp rcutils realtime_tools rosidl_default_runtime std_msgs trajectory_msgs)
 ament_package()
