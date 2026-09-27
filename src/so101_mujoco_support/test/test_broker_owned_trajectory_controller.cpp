@@ -449,6 +449,32 @@ TEST(BrokerOwnedTrajectoryController, NativeUpdatesProvideFreshStoppedStateOnlyW
     std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
   ASSERT_TRUE(proof.has_value());
   EXPECT_EQ(proof->last_sim_time_ns, 102000000);
+  auto client_node = std::make_shared<rclcpp::Node>("stopped_window_goal_client");
+  auto client = client_node->create_client<SendGoal>(
+    "/arm_controller/follow_joint_trajectory/_action/send_goal");
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(controller.get_node()->get_node_base_interface());
+  executor.add_node(client_node);
+  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(2)));
+  auto request = std::make_shared<SendGoal::Request>();
+  request->goal_id.uuid.fill(9);
+  request->goal = stationary_goal();
+  auto response = client->async_send_request(request);
+  ASSERT_EQ(executor.spin_until_future_complete(response, std::chrono::seconds(2)),
+    rclcpp::FutureReturnCode::SUCCESS);
+  EXPECT_FALSE(response.get()->accepted);
+  now = std::chrono::steady_clock::now().time_since_epoch();
+  EXPECT_FALSE(controller.stopped_state(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(now).count()).has_value());
+  executor.remove_node(client_node);
+  executor.remove_node(controller.get_node()->get_node_base_interface());
+  for (int64_t index = 52; index <= 102; ++index) {
+    ASSERT_EQ(controller.update(rclcpp::Time(index * 2000000, RCL_ROS_TIME),
+        rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  }
+  now = std::chrono::steady_clock::now().time_since_epoch();
+  ASSERT_TRUE(controller.stopped_state(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(now).count()).has_value());
   controller.set_pending_goal_for_test(true);
   EXPECT_FALSE(controller.stopped_state(
       std::chrono::duration_cast<std::chrono::nanoseconds>(now).count()).has_value());

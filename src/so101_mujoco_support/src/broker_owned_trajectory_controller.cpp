@@ -102,6 +102,8 @@ controller_interface::CallbackReturn BrokerOwnedTrajectoryController::on_configu
         const rclcpp_action::GoalUUID & uuid,
         std::shared_ptr<const FollowJTrajAction::Goal> goal)
       {
+        arm_stop_witness_.invalidate_nonblocking();
+        gripper_stop_witness_.invalidate_nonblocking();
         if (!goal || goal_admission_.admit_current(uuid, *goal) !=
         ControllerGoalAdmission::Result::ALLOW)
         {
