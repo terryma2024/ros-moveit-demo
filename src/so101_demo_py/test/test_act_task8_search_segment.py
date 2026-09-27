@@ -114,7 +114,7 @@ class _Adapter:
 
 
 def _segment(sources, adapter, scene, *, guard=lambda: None, clock=None,
-             history_verifier=None, reference_verifier=None):
+             history_verifier=None, reference_verifier=None, owner_verifier=None):
     clock = [10.0] if clock is None else clock
     if history_verifier is None:
         history_verifier = lambda observed, stopped_wall_s: {
@@ -132,12 +132,23 @@ def _segment(sources, adapter, scene, *, guard=lambda: None, clock=None,
             "selected_source_sha256": physical_proof["selected_source_sha256"],
             "stop_confirmed_wall_s": stopped_wall_s,
             "owner_goal_interval_proof_required": True,
+            "reference_window_sha256": "test-reference-window",
+            "command_authority": False,
+            "eligible_for_collection": False,
+        }
+    if owner_verifier is None:
+        owner_verifier = lambda observed, physical_proof, references, stopped_wall_s: {
+            "selected_source_sha256": physical_proof["selected_source_sha256"],
+            "reference_window_sha256": references["reference_window_sha256"],
+            "stop_confirmed_wall_s": stopped_wall_s,
+            "controller_native_ingress_proof_required": True,
             "command_authority": False,
             "eligible_for_collection": False,
         }
     return PickPlaceSearchSegment(
         sources, adapter, scene, _geometry(), operation_guard=guard,
         history_verifier=history_verifier, reference_verifier=reference_verifier,
+        owner_verifier=owner_verifier,
         max_source_wait_s=0.05, poll_interval_s=0.01,
         monotonic=lambda: clock[0], sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
     )
@@ -163,6 +174,7 @@ def test_search_waits_for_new_steps_then_reads_back_final_physical_cup_pose():
     assert observation.planning_scene.phase == "READ_BACK"
     assert observation.stationary_physics_proof["command_authority"] is False
     assert observation.stationary_reference_proof["command_authority"] is False
+    assert observation.local_owner_goal_proof["command_authority"] is False
 
 
 def test_search_selects_only_after_50_post_stop_steps_and_100ms():
@@ -254,6 +266,22 @@ def test_search_refuses_when_controller_reference_history_is_missing():
     segment = _segment(sources, adapter, _Scene(),
                        reference_verifier=missing_references)
     with pytest.raises(ValueError, match="SEARCH_REFERENCE_HISTORY_INVALID"):
+        segment.run(_request(), reset_epoch=2)
+    assert adapter.stops == 2
+
+
+def test_search_refuses_when_owner_goal_interval_is_missing():
+    sources = _Sources(_raw(1, sim_time_s=1.0),
+                       _raw(2, sim_time_s=1.002),
+                       _raw(3, sim_time_s=1.004),
+                       _raw(53, sim_time_s=1.104))
+    adapter = _Adapter({"status": "INPUT_PENDING", "stop": True},
+                       _locked(timestamp=1.002))
+    def missing_owner(_observed, _physical, _references, _stopped_wall):
+        raise ValueError("SEARCH_OWNER_GOAL_INTERVAL_INVALID")
+
+    segment = _segment(sources, adapter, _Scene(), owner_verifier=missing_owner)
+    with pytest.raises(ValueError, match="SEARCH_OWNER_GOAL_INTERVAL_INVALID"):
         segment.run(_request(), reset_epoch=2)
     assert adapter.stops == 2
 
