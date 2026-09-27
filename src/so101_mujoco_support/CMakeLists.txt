@@ -68,12 +68,15 @@ add_library(so101_controller_reservation_protocol STATIC
   src/controller_reservation_protocol.cpp
   src/controller_reservation_provision.cpp
   src/controller_reservation_socket.cpp)
+set_target_properties(so101_controller_reservation_protocol PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_features(so101_controller_reservation_protocol PUBLIC cxx_std_17)
 target_include_directories(so101_controller_reservation_protocol PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 ament_target_dependencies(so101_controller_reservation_protocol PUBLIC control_msgs rclcpp rcutils)
 target_link_libraries(so101_controller_reservation_protocol PUBLIC Threads::Threads)
+target_link_libraries(so101_broker_owned_trajectory_controller PRIVATE
+  so101_controller_reservation_protocol)
 
 add_executable(graceful_shutdown_move_group src/graceful_shutdown_move_group.cpp)
 target_compile_features(graceful_shutdown_move_group PRIVATE cxx_std_17)
