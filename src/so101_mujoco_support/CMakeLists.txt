@@ -94,6 +94,12 @@ if(BUILD_TESTING)
     controller_interface lifecycle_msgs pluginlib rclcpp)
   target_link_libraries(test_broker_owned_trajectory_controller
     so101_broker_owned_trajectory_controller)
+
+  ament_add_gtest(test_controller_goal_admission
+    test/test_controller_goal_admission.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_controller_goal_admission PRIVATE cxx_std_17)
+  target_include_directories(test_controller_goal_admission PRIVATE include)
 endif()
 
 install(TARGETS so101_simulation_evidence_plugin
