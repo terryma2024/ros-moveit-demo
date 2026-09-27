@@ -29,6 +29,10 @@ uint64_t parse_controller_reservation_close_frame(
   const std::vector<uint8_t> & frame,
   const ControllerReservationCapability & expected_capability);
 
+uint64_t parse_controller_reservation_arm_frame(
+  const std::vector<uint8_t> & frame,
+  const ControllerReservationCapability & expected_capability);
+
 std::array<uint8_t, 16> encode_controller_reservation_reply(
   ReservationReplyStatus status, uint64_t generation);
 
