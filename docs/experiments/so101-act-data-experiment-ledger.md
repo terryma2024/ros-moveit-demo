@@ -46,8 +46,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-508
-next_experiment: EXP-509
+latest_checkpoint: CP-509
+next_experiment: EXP-510
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4760,3 +4760,38 @@ next_experiment: EXP-509
 - Source commit `b5ca00f8`; installed overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`; exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`; `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`. No task-owned stack or goal. The EXP-508 [result artifact](/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp508-control-event-timeline/result.json) binds the RED/GREEN, first failed and corrected full gates, scratch and source hashes.
 - The new timeline cannot authorize a historical bridge, PathProof, permit or exact goals. Native JTC action callbacks still accept external clients, and MoveIt teacher execution has downstream goals that current broker code does not pre-register. EXP-509 must separate teacher and ACT admission semantics at the controller boundary before any live approach motion.
 - Worktree and branch unchanged; all pre-existing dirty/untracked files retained. The pre-existing `ros_broker.py` diff remains 58 additions/3 deletions unstaged after isolating the EXP-508 commit. Retained all EXP-508 and prior evidence; archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted. Formal accepted Train/Validation/Offline Test 0/0/0.
+
+## EXP-509 — Controller action admission feasibility audit
+
+```yaml
+experiment_id: EXP-509
+status: VALID
+prior_experiment: EXP-508
+hypothesis: The installed Jazzy JTC permits this subclass to replace the action server after configure and invoke its protected base callbacks behind a bounded UUID gate, while ACT and MoveIt teacher modes need distinct entry contracts.
+prediction: Installed headers and binary exports will show protected action_server_ and callable base callbacks; rclcpp_action server teardown removes the old waitable; current broker/driver ordering and teacher downstream IDs prevent immediate use of a universal pre-registered-UUID rule.
+single_variable: Read-only installed API and production entrypoint audit; no controller or broker implementation.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-508 valid, task-owned stack none, no goal]
+success_criteria: [Exact installed API/source references and ordering captured, feasible gate contract and unresolved credential/race boundaries stated without claiming ingress closure]
+failure_criteria: [Action server inaccessible from subclass or base goal callbacks unavailable, or teacher downstream IDs are already broker reserved]
+invalid_criteria: [Any code edit, ROS/MuJoCo stack or goal]
+provenance:
+  source_commit: afed253d
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /opt/ros/jazzy/lib/libjoint_trajectory_controller.so
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Read-only installed JTC header, rclcpp_action create_server header, ELF exports, version, source entrypoints and SHA256 capture"]
+observed: ["Installed JTC header exposes protected action_server_ and protected base goal/cancel/accepted callbacks, and its ELF exports those callbacks", "Installed rclcpp_action create_server deleter removes its waitable when the shared pointer is released; callbacks must be nonblocking", "Current subclass removes trajectory-topic subscription only; broker registers local ticket after asynchronous driver send, while driver already supports caller-supplied native UUID", "MoveIt ExecuteTrajectory downstream controller UUIDs are learned after status, and ACT neck SEARCH uses broker dispatch", "Standalone broker CLI starts executor before driver/broker construction, so EXP-508 callback history can begin after early status; the local journal is not a historical authority", "Audit SHA256 8c39958115e251a44264ff97755e6a5c97a8954d66a66e96c83a30906bf3adf3; no stack, goal or code edit"]
+inferred: ["Controller-local one-use reservation before delegating to base callbacks is feasible enough for an off-path compile/graph test, but exact goal content and credential scoping remain unproved", "ACT exclusive mode must precede SEARCH and be followed by a fresh stop baseline; teacher MoveIt needs a separate mode or proxy path", "ROS service registration without a broker-scoped capability merely relocates the unknown-client entrance"]
+conclusion: VALID read-only API and ordering feasibility audit; no action ingress closure.
+evidence: [/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp509-action-admission-feasibility/audit.json]
+decision: Build a controller-local fail-closed reservation state machine off the production action path, then test service/action integration and broker-before-send registration before enabling it.
+next_experiment: EXP-510
+```
+
+## CP-509 — Action callback API is reachable; reservation protocol is unproved
+
+- Installed Jazzy JTC `4.42.1-1noble.20260905.073033` has the protected callbacks required for a subclass gate. The [official Jazzy source](https://raw.githubusercontent.com/ros-controls/ros2_controllers/jazzy/joint_trajectory_controller/src/joint_trajectory_controller.cpp) shows the base server is created during configure. This is feasibility evidence, not a compiled or runtime admission proof.
+- EXP-510 first tests a pure controller-local, one-use UUID plus exact-goal reservation contract without wiring action ingress. Production remains on the EXP-502 action-only controller until service authentication, lifecycle mode transition, teacher path and broker-before-send order are independently proven. No PathProof, goal or formal episode is admitted. `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`; no task-owned stack.
+- Current branch/worktree and one evidence root unchanged; pre-existing dirty/untracked batch retained. Retained EXP-509 audit and all earlier runs; archived none; scratch/runtime/generated caches remain deletion candidates, nothing deleted. Formal accepted Train/Validation/Offline Test 0/0/0.
