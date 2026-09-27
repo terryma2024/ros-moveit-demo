@@ -37,10 +37,10 @@
 - Consumes: `SelectedApproachCandidate.prepare(observed, selected_source=...)` and the four SEARCH proofs.
 - Produces: `VisibleApproachExpertRoute(candidate, *, policy_fingerprint, monotonic)` with `prepare(observed, *, selected_source, owner_ticket, active_policy_fingerprint) -> dict` and a read-only `manifest` property.
 
-- [ ] Write tests for a valid first prefix and all Task 1 Review Focus mismatches. Require a new `VISIBLE_APPROACH_EXPERT_TEMPLATE` digest that pins source candidate, compiled model, scene, activated policy, first-group rows and 2 ms/2 mm limits. Assert preparation has no command or collection authority.
-- [ ] Run focused tests to RED at the missing new module.
-- [ ] Implement the template and proof-chain validator. Recheck the selected source after candidate preparation and reject stale or changed ticket, policy, source, row hash or proof fields. Preserve the original candidate flags.
-- [ ] Run focused tests to GREEN and commit source plus tests.
+- [x] Write tests for a valid first prefix and all Task 1 Review Focus mismatches. Require a new `VISIBLE_APPROACH_EXPERT_TEMPLATE` digest that pins source candidate, compiled model, scene, activated policy, first-group rows and 2 ms/2 mm limits. Assert preparation has no command or collection authority.
+- [x] Run focused tests to RED at the missing new module.
+- [x] Implement the template and proof-chain validator. Recheck the selected source after candidate preparation and reject stale or changed ticket, policy, source, row hash or proof fields. Preserve the original candidate flags.
+- [x] Run focused tests to GREEN and commit source plus tests.
 
 ### Task 2: Require one complete PathProof before route qualification
 
@@ -52,7 +52,7 @@
 - Consumes: the prepared template, `PrefixSourceReceipt` and `PathProof`.
 - Produces: `VisibleApproachExpertRoute.qualify(prepared, proof, *, current_snapshot) -> dict`.
 
-- [ ] Write tests using the real `MujocoPathChecker` and `PathProver`. One exact SAFE 701-sample first prefix qualifies; changed rows, receipt, generation, policy, state, a 700-sample result or `VIOLATION` refuses. Assert one full checker call per qualification.
-- [ ] Run focused tests to RED at the missing `qualify` method.
-- [ ] Implement exact receipt, prefix, manifest and state comparisons. Return a separate `route_qualified=True` result with `command_authority=False` and `permit_required=True`; do not mutate the prepared candidate or issue a goal.
-- [ ] Run focused tests to GREEN. Run complete ordinary `so101_demo_py` source and installed gates, check JUnit/test-result and source/build hashes, then commit code and checkpoint the ledger.
+- [x] Write tests using the real `MujocoPathChecker` and `PathProver`. One exact SAFE 701-sample first prefix qualifies; changed rows, receipt, generation, policy, state, a 700-sample result or `VIOLATION` refuses. Assert one full checker call per qualification.
+- [x] Run focused tests to RED at the missing `qualify` method.
+- [x] Implement exact receipt, prefix, manifest and state comparisons. Return a separate `route_qualified=True` result with `command_authority=False` and `permit_required=True`; do not mutate the prepared candidate or issue a goal.
+- [x] Run focused tests to GREEN. Run complete ordinary `so101_demo_py` source and installed gates, check JUnit/test-result and source/build hashes, then commit code and checkpoint the ledger.

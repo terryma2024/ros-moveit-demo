@@ -3,10 +3,13 @@
 import copy
 import hashlib
 import json
+from pathlib import Path
 import time
 
 from so101_demo.act.contracts import finite, sha256, validate_action_prefix
 from so101_demo.act.execution import prefix_sha256
+from so101_demo.act.path_proof import PathProof
+from so101_demo.act.prefix_source import PrefixSourceReceipt, SOURCE_KEYS
 
 from .pick_place_search_segment import PickPlaceSearchObservation
 from .selected_approach_candidate import SelectedApproachCandidate
@@ -56,6 +59,12 @@ class VisibleApproachExpertRoute:
             "first_prefix_rows_sha256": first["rows_sha256"],
             "path_step_s": .002,
             "path_clearance_m": .002,
+            "phase": "APPROACH",
+            "holding_state": "EMPTY",
+            "contact_scope_sha256": _digest({
+                "phase": "APPROACH", "allowed_contact_pairs": []}),
+            "checker_sha256": hashlib.sha256(
+                Path(__file__).with_name("physics.py").read_bytes()).hexdigest(),
             "expected_samples": 701,
             "eligible_for_collection": False,
             "command_authority": False,
@@ -155,7 +164,7 @@ class VisibleApproachExpertRoute:
                     or freeze_selected_search_source(
                         observed, max_skew_s=self.candidate.max_skew) != source):
                 raise ValueError("candidate")
-            return {
+            prepared = {
                 "kind": "VISIBLE_APPROACH_EXPERT_PREPARATION",
                 "selected_source": copy.deepcopy(source),
                 "prefix": copy.deepcopy(prefix),
@@ -167,5 +176,109 @@ class VisibleApproachExpertRoute:
                 "command_authority": False,
                 "eligible_for_collection": False,
             }
+            prepared["preparation_sha256"] = _digest(prepared)
+            return prepared
         except (AttributeError, KeyError, TypeError, ValueError, OverflowError) as error:
             raise ValueError("VISIBLE_APPROACH_EXPERT_ROUTE_INVALID") from error
+
+    def qualify(self, prepared, proof, *, current_snapshot) -> dict:
+        """Accept only one complete broker source-backed proof for the template."""
+        try:
+            if (type(prepared) is not dict
+                    or prepared.get("kind") != "VISIBLE_APPROACH_EXPERT_PREPARATION"
+                    or prepared.get("command_authority") is not False
+                    or prepared.get("eligible_for_collection") is not False
+                    or prepared.get("source_artifact_sha256") !=
+                       self._manifest["manifest_sha256"]
+                    or prepared.get("policy_fingerprint") !=
+                       self._manifest["policy_fingerprint"]
+                    or prepared.get("preparation_sha256") != _digest({
+                        key: value for key, value in prepared.items()
+                        if key != "preparation_sha256"})
+                    or not isinstance(proof, PathProof)
+                    or proof.status != "SAFE"
+                    or proof.sample_count != self._manifest["expected_samples"]
+                    or proof.first_violation is not None):
+                raise ValueError("route or proof")
+            prefix = validate_action_prefix(prepared["prefix"])
+            source = prepared["selected_source"]
+            ticket = prepared["owner_ticket"]
+            request = proof.relative_request
+            receipt = request.source_receipt
+            if (type(source) is not dict
+                    or not isinstance(ticket, tuple) or len(ticket) != 5
+                    or type(ticket[0]) is not int or ticket[0] < 1
+                    or ticket[2:] != ("act", source["session_id"], source["attempt_id"])
+                    or prefix["session_id"] != source["session_id"]
+                    or prefix["attempt_id"] != source["attempt_id"]
+                    or prefix["observation_time_s"] != source["simulation_time_s"]
+                    or prefix["sequence"] != 0
+                    or prefix.get("target_interval_s") != .002
+                    or len(prefix["positions"]) != 600
+                    or _digest(prefix["positions"]) !=
+                       self._manifest["first_prefix_rows_sha256"]
+                    or prefix_sha256(prefix) != prepared.get("prefix_sha256")
+                    or not isinstance(receipt, PrefixSourceReceipt)
+                    or receipt.source_kind != "EXPERT_ROUTE"
+                    or receipt.command_authority is not False
+                    or receipt.source_artifact_sha256 !=
+                       self._manifest["manifest_sha256"]
+                    or receipt.contact_policy_fingerprint !=
+                       self._manifest["policy_fingerprint"]
+                    or receipt.observation_sha256 != source["observation_sha256"]
+                    or receipt.source_received_wall_s != tuple(
+                        (kind, source["source_received_wall_s"][kind])
+                        for kind in SOURCE_KEYS)
+                    or (receipt.source_phase, receipt.physics_step,
+                        receipt.reset_epoch, receipt.owner_ticket, receipt.sequence) != (
+                            "SEARCH", source["physics_step"], source["reset_epoch"],
+                            ticket, 0)
+                    or not request.matches_source(prefix)
+                    or proof.owner_ticket != ticket
+                    or proof.generation != ticket[0]
+                    or proof.reset_epoch != source["reset_epoch"]
+                    or proof.prefix_sha256 != prefix_sha256(prefix)
+                    or proof.model_sha256 != self._manifest["model_sha256"]
+                    or proof.policy_fingerprint != self._manifest["policy_fingerprint"]
+                    or proof.profile_sha256 != self._manifest["candidate_profile_sha256"]
+                    or proof.contact_scope_sha256 !=
+                       self._manifest["contact_scope_sha256"]
+                    or proof.checker_sha256 != self._manifest["checker_sha256"]):
+                raise ValueError("proof binding")
+            now = finite(self.monotonic(), nonnegative=True)
+            if (not proof.started_wall_s <= proof.completed_wall_s <= now
+                    or not 0 <= now - min(source["source_received_wall_s"].values())
+                       < self.candidate.max_age
+                    or not 0 <= now - receipt.prefix_issued_wall_s
+                       < self.candidate.max_age):
+                raise ValueError("source timing")
+            if (type(current_snapshot) is not dict
+                    or current_snapshot.get("phase") != self._manifest["phase"]
+                    or current_snapshot.get("holding_state") !=
+                       self._manifest["holding_state"]
+                    or current_snapshot.get("cup_in_gripper_transform") is not None
+                    or current_snapshot.get("model_sha256") !=
+                       self._manifest["model_sha256"]
+                    or current_snapshot.get("sim_time_s") !=
+                       source["simulation_time_s"]
+                    or proof.snapshot_sha256 != _digest(current_snapshot)
+                    or proof.matches_state(current_snapshot) is not True
+                    or request.source_bridge_ns !=
+                       round((source["simulation_time_s"] - .1) * 1_000_000_000)
+                    or request.source_start_ns !=
+                       round((source["simulation_time_s"] + .05) * 1_000_000_000)):
+                raise ValueError("physical state")
+            return {
+                "kind": "VISIBLE_APPROACH_EXPERT_QUALIFICATION",
+                "route_qualified": True,
+                "permit_required": True,
+                "command_authority": False,
+                "source_artifact_sha256": self._manifest["manifest_sha256"],
+                "selected_source_sha256": source["observation_sha256"],
+                "path_proof_sha256": proof.canonical_input_sha256,
+                "owner_generation": ticket[0],
+                "reset_epoch": source["reset_epoch"],
+                "sample_count": proof.sample_count,
+            }
+        except (AttributeError, KeyError, TypeError, ValueError, OverflowError) as error:
+            raise ValueError("VISIBLE_APPROACH_EXPERT_PROOF_INVALID") from error

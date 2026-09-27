@@ -1,10 +1,14 @@
 """The expert approach template needs a proved SEARCH source."""
 
+from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+from so101_demo.act.path_proof import PathProver, RelativePathRequest
+from so101_demo.act.prefix_source import PrefixSourceAuthority
+from so101_demo.adapters.act.physics import MujocoPathChecker
 from so101_demo.adapters.act.selected_approach_candidate import SelectedApproachCandidate
 from so101_demo.adapters.act.selected_search_source import freeze_selected_search_source
 from so101_demo.adapters.act.visible_approach_expert_route import VisibleApproachExpertRoute
@@ -20,6 +24,7 @@ TICKET = (7, "lease", "act", "session-296", "attempt-296")
 
 @pytest.fixture(scope="module")
 def route():
+    clock = [10.1]
     candidate = SelectedApproachCandidate(
         scene_path=PACKAGE / "assets/mujoco/act/scene.xml",
         plugin_path=CONFIG / "task6_route_plugins.yaml",
@@ -30,8 +35,10 @@ def route():
         joint_tolerance_rad=.002, cup_tolerance_m=.002,
         stop_velocity_rad_s=.002, monotonic=lambda: 10.1,
     )
-    return VisibleApproachExpertRoute(candidate, policy_fingerprint=POLICY,
-                                      monotonic=lambda: 10.1)
+    expert = VisibleApproachExpertRoute(candidate, policy_fingerprint=POLICY,
+                                        monotonic=lambda: clock[0])
+    expert._test_clock = clock
+    return expert
 
 
 def proved_search(route):
@@ -152,3 +159,129 @@ def test_expert_template_refuses_unbound_search_or_route(route, change):
     finally:
         if change == "candidate_positive":
             route.candidate._manifest["eligible_for_collection"] = False
+
+
+@pytest.fixture(scope="module")
+def proven_prefix(route):
+    observed, source = proved_search(route)
+    prepared = route.prepare(observed, selected_source=source,
+                             owner_ticket=TICKET, active_policy_fingerprint=POLICY)
+    authority = PrefixSourceAuthority(
+        ticket_guard=lambda ticket: None if ticket == TICKET else (_ for _ in ()).throw(
+            PermissionError("WRONG_TICKET")),
+        max_observation_age_s=.2, max_prefix_age_s=.2,
+        monotonic=lambda: 10.1,
+    )
+    receipt = authority.issue(
+        ticket=TICKET, prefix=prepared["prefix"], source=source,
+        source_kind="EXPERT_ROUTE",
+        source_artifact_sha256=prepared["source_artifact_sha256"],
+        contact_policy_fingerprint=POLICY,
+    )
+    checker = MujocoPathChecker(
+        PACKAGE / "assets/mujoco/act/scene.xml",
+        protected_roots=("base",), cup_joint="cup_free_joint",
+        gripper_body="gripper", path_step_s=.002, path_clearance_m=.002,
+        velocity_limit_rad_s=[.25] * 6,
+        acceleration_limit_rad_s2=[1.2] * 6,
+        allowed_pairs_by_phase={},
+    )
+    raw = observed.physical_readback
+    start = tuple(route.candidate.manifest["segments"][0]["prior"])
+    snapshot = {
+        "model_qpos": tuple(raw["scene"]["qpos"]),
+        "model_qvel": tuple(raw["scene"]["qvel"]),
+        "model_sha256": checker.model_sha256,
+        "phase": "APPROACH", "holding_state": "EMPTY",
+        "sim_time_s": source["simulation_time_s"],
+        "controller_bridge": {"time_s": 1.1, "point": {
+            "positions": start, "velocities": (0.,) * 6,
+            "accelerations": (),
+        }},
+        "controller_start_time_s": 1.25,
+        "controller_start_positions": start,
+        "controller_start_velocities": (0.,) * 6,
+        "cup_in_gripper_transform": None,
+    }
+    request = RelativePathRequest.from_source_receipt(
+        prepared["prefix"], receipt=receipt,
+        bridge_time_s=1.1, start_time_s=1.25,
+    )
+    calls = [0]
+    original = checker.check_path
+
+    def counted(prefix, physical):
+        calls[0] += 1
+        return original(prefix, physical)
+
+    checker.check_path = counted
+    proof = PathProver(checker, monotonic=lambda: 10.11).prove(
+        request, snapshot, ticket=TICKET, reset_epoch=source["reset_epoch"],
+        policy_fingerprint=POLICY,
+        profile_sha256=route.manifest["candidate_profile_sha256"],
+        contact_scope_sha256=route.manifest["contact_scope_sha256"],
+        checker_sha256=route.manifest["checker_sha256"],
+        expected_samples=701,
+    )
+    assert proof.status == "SAFE" and proof.sample_count == 701
+    route._test_clock[0] = 10.12
+    return prepared, proof, snapshot, calls
+
+
+def test_one_complete_path_proof_qualifies_route_without_sending(proven_prefix, route):
+    prepared, proof, snapshot, calls = proven_prefix
+    qualified = route.qualify(prepared, proof, current_snapshot=snapshot)
+    assert calls == [1]
+    assert qualified["route_qualified"] is True
+    assert qualified["permit_required"] is True
+    assert qualified["command_authority"] is False
+    assert qualified["path_proof_sha256"] == proof.canonical_input_sha256
+
+
+@pytest.mark.parametrize("change", [
+    "rows", "receipt", "generation", "policy", "state", "sample_count",
+    "violation", "source", "profile", "model", "contact_scope", "checker",
+    "native_digest", "stale_time",
+])
+def test_expert_route_refuses_changed_or_incomplete_path_proof(proven_prefix, route, change):
+    prepared, proof, snapshot, _ = proven_prefix
+    prepared = deepcopy(prepared)
+    snapshot = deepcopy(snapshot)
+    if change == "rows":
+        rows = list(prepared["prefix"]["positions"])
+        rows[0] = tuple(value + .001 for value in rows[0])
+        prepared["prefix"]["positions"] = tuple(rows)
+    elif change == "receipt":
+        receipt = replace(proof.relative_request.source_receipt,
+                          source_artifact_sha256="0" * 64)
+        proof = replace(proof, relative_request=replace(
+            proof.relative_request, source_receipt=receipt))
+    elif change == "generation":
+        proof = replace(proof, generation=TICKET[0] + 1)
+    elif change == "policy":
+        proof = replace(proof, policy_fingerprint="0" * 64)
+    elif change == "state":
+        snapshot["model_qvel"] = (.001,) + snapshot["model_qvel"][1:]
+    elif change == "sample_count":
+        proof = replace(proof, sample_count=700)
+    elif change == "violation":
+        proof = replace(proof, status="VIOLATION")
+    elif change == "source":
+        prepared["selected_source"]["observation_sha256"] = "0" * 64
+    elif change == "profile":
+        proof = replace(proof, profile_sha256="0" * 64)
+    elif change == "model":
+        proof = replace(proof, model_sha256="0" * 64)
+    elif change == "contact_scope":
+        proof = replace(proof, contact_scope_sha256="0" * 64)
+    elif change == "checker":
+        proof = replace(proof, checker_sha256="0" * 64)
+    elif change == "native_digest":
+        prepared["native_ingress_window_sha256"] = "0" * 64
+    elif change == "stale_time":
+        route._test_clock[0] = 10.3
+    try:
+        with pytest.raises(ValueError, match="VISIBLE_APPROACH_EXPERT_PROOF_INVALID"):
+            route.qualify(prepared, proof, current_snapshot=snapshot)
+    finally:
+        route._test_clock[0] = 10.12
