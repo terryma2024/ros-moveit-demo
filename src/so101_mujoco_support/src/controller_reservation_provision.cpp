@@ -108,7 +108,8 @@ ControllerReservationProvision read_controller_reservation_provision(
 #else
   if (!valid_session(expected_session) ||
     (expected_role != ControllerReservationRole::ARM &&
-    expected_role != ControllerReservationRole::GRIPPER))
+    expected_role != ControllerReservationRole::GRIPPER &&
+    expected_role != ControllerReservationRole::NECK))
   {
     throw std::runtime_error("CONTROLLER_RESERVATION_PROVISION_INVALID");
   }

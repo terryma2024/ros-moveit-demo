@@ -41,8 +41,8 @@ def test_neck_search_can_use_only_the_existing_broker_client(monkeypatch):
     client=SimpleNamespace(server_is_ready=lambda:True)
     driver=SimpleNamespace(clients={'neck':client},cancel=lambda gid:cancelled.append(gid),
                            stopped=lambda:True,refresh_stop=lambda:None)
-    broker=SimpleNamespace(driver=driver,dispatch=lambda ticket,kind,goal:
-                           (sent.append((ticket,kind,goal)) or 'neck-goal'))
+    broker=SimpleNamespace(driver=driver,dispatch=lambda ticket,kind,goal,**options:
+                           (sent.append((ticket,kind,goal,options)) or 'neck-goal'))
     node=SimpleNamespace(create_subscription=lambda *args:None,
         get_clock=lambda:SimpleNamespace(now=lambda:SimpleNamespace(nanoseconds=1000000000)))
     ticket=[(1,'lease','act','s','a')]
@@ -56,6 +56,7 @@ def test_neck_search_can_use_only_the_existing_broker_client(monkeypatch):
     assert port.command_neck(.7,session_id='s',attempt_id='a',observation_time_s=1.)=='neck-goal'
     assert sent[0][0]==(1,'lease','act','s','a') and sent[0][1]=='neck'
     assert list(sent[0][2].trajectory.joint_names)==['neck_yaw_joint']
+    assert sent[0][3]=={'trusted_search_neck':True}
     ticket[0]=(1,'lease','act','other','a')
     with pytest.raises(PermissionError,match='NECK_SCOPE_INVALID'):
         port.command_neck(.6,session_id='s',attempt_id='a',observation_time_s=1.)

@@ -135,6 +135,24 @@ TEST(ControllerReservationProvision, ReadsLivePythonWriterWithoutExposingTheCapa
       path, ControllerReservationRole::ARM, "session-17"), std::runtime_error);
 }
 
+TEST(ControllerReservationProvision, ReadsNeckOnlyFromItsOwnLiveBrokerProvision)
+{
+  const auto parent = private_directory("neck-live");
+  const auto path = parent / "neck.provision";
+  ProvisionWriter writer(path, "neck", "session-17");
+  const auto provision = read_controller_reservation_provision(
+    path, ControllerReservationRole::NECK, "session-17");
+  EXPECT_EQ(provision.peer.pid, writer.pid());
+  EXPECT_EQ(provision.capability, writer.key());
+  EXPECT_THROW(read_controller_reservation_provision(
+      path, ControllerReservationRole::ARM, "session-17"), std::runtime_error);
+  EXPECT_THROW(read_controller_reservation_provision(
+      path, ControllerReservationRole::GRIPPER, "session-17"), std::runtime_error);
+  writer.stop();
+  EXPECT_THROW(read_controller_reservation_provision(
+      path, ControllerReservationRole::NECK, "session-17"), std::runtime_error);
+}
+
 TEST(ControllerReservationProvision, RejectsWrongScopeAndUnsafeFileMetadata)
 {
   const auto parent = private_directory("invalid");

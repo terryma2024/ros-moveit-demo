@@ -80,7 +80,7 @@ class CommandBroker:
             raise
         return receipt
 
-    def dispatch(self,ticket,kind,goal):
+    def dispatch(self,ticket,kind,goal,*,trusted_search_neck=False):
         with self._lock,self.ownership.authorized(*ticket[1:]):
             self.ownership.require_ticket(ticket)
             self._post_reset_ticket=None
@@ -90,7 +90,8 @@ class CommandBroker:
                 if self.reservation_port is None:
                     gid=identifier(self.driver.submit(kind,goal))
                 else:
-                    gid=self._dispatch_reserved(ticket,kind,goal)
+                    gid=self._dispatch_reserved(ticket,kind,goal,
+                                                trusted_search_neck=trusted_search_neck)
             except Exception:
                 self.control_events.record('submit_uncertain',generation=ticket[0],
                                            owner=ticket[2],session_id=ticket[3],
@@ -104,14 +105,16 @@ class CommandBroker:
                                    session_id=ticket[3],attempt_id=ticket[4],goal_id=gid))
             return gid
 
-    def _dispatch_reserved(self,ticket,kind,goal):
+    def _dispatch_reserved(self,ticket,kind,goal,*,trusted_search_neck=False):
         gid=None
         registered=False
         try:
             if self._armed_generation!=ticket[0]:
                 raise PermissionError('CONTROLLER_GENERATION_NOT_ARMED')
-            if kind not in ('arm','gripper'):
+            if kind not in ('arm','gripper','neck'):
                 raise PermissionError('CONTROLLER_RESERVATION_ROUTE_UNAVAILABLE')
+            if kind=='neck' and (trusted_search_neck is not True or ticket[2]!='act'):
+                raise PermissionError('NECK_SEARCH_PORT_REQUIRED')
             gid,goal_uuid=self.driver.prepare_goal(kind,goal)
             gid=identifier(gid)
             if not isinstance(goal_uuid,str) or str(uuid.UUID(goal_uuid))!=goal_uuid:

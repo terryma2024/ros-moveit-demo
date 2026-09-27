@@ -252,7 +252,7 @@ class RclpyActionDriver:
                 os.environ, session_id)
             reservation_port = ControllerReservationClient(
                 {role: self._act_reservation_provisions.directory / f"{role}.sock"
-                 for role in ("arm", "gripper")},
+                 for role in ("arm", "gripper", "neck")},
                 capability=self._act_reservation_provisions.capabilities, timeout_s=0.2,
             )
             self._act_command_broker = CommandBroker(

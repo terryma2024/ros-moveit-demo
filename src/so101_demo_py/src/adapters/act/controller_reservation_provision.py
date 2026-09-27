@@ -12,7 +12,7 @@ from so101_teleop.unified.controller_reservation_paths import (
 )
 
 
-_ROLE_CODES = {"arm": 1, "gripper": 2}
+_ROLE_CODES = {"arm": 1, "gripper": 2, "neck": 3}
 _SESSION = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z", re.ASCII)
 
 
@@ -164,7 +164,7 @@ class ControllerReservationProvisions:
         capabilities: dict[str, bytes] = {}
         identities: dict[str, tuple[int, int]] = {}
         try:
-            for role in ("arm", "gripper"):
+            for role in ("arm", "gripper", "neck"):
                 name = f"{role}.provision"
                 path = directory / name
                 capabilities[role] = write_controller_reservation_provision(

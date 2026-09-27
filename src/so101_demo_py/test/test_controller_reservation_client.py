@@ -134,6 +134,52 @@ def test_stopped_generation_arms_both_roles_before_any_goal_and_closes_both():
         assert frame[50:] == bytes(16)
 
 
+def test_stopped_generation_arms_and_closes_all_three_controller_roles():
+    global ready
+    ready = threading.Event()
+    path = socket_path()
+    frames = []
+    ack = b"SOGA\x01\x00\x00\x00" + (5).to_bytes(8, "big")
+    worker = threading.Thread(target=serve, args=(path, [ack] * 6, frames), daemon=True)
+    worker.start()
+    assert ready.wait(1)
+    keys = {"arm": bytes([0xA5]) * 32, "gripper": bytes([0x5A]) * 32,
+            "neck": bytes([0x3C]) * 32}
+    client = ControllerReservationClient(
+        {role: path for role in keys}, capability=keys, timeout_s=0.1,
+    )
+    assert client.arm_generation((5, "token", "act", "session", "attempt"))
+    client.close_generation(5)
+    worker.join(1)
+    assert not worker.is_alive()
+    assert [frame[9] for frame in frames] == [3, 3, 3, 2, 2, 2]
+    assert [frame[10:42] for frame in frames] == [
+        keys[role] for role in ("arm", "gripper", "neck", "arm", "gripper", "neck")]
+
+
+def test_neck_arm_refusal_still_closes_every_attempted_controller():
+    global ready
+    ready = threading.Event()
+    path = socket_path()
+    frames = []
+    ack = b"SOGA\x01\x00\x00\x00" + (5).to_bytes(8, "big")
+    reject = b"SOGA\x01\x01\x00\x00" + (5).to_bytes(8, "big")
+    worker = threading.Thread(target=serve, args=(path, [ack, ack, reject, ack, ack, ack], frames),
+                              daemon=True)
+    worker.start()
+    assert ready.wait(1)
+    keys = {"arm": bytes([0xA5]) * 32, "gripper": bytes([0x5A]) * 32,
+            "neck": bytes([0x3C]) * 32}
+    client = ControllerReservationClient(
+        {role: path for role in keys}, capability=keys, timeout_s=0.1,
+    )
+    assert not client.arm_generation((5, "token", "act", "session", "attempt"))
+    client.close_generation(5)
+    worker.join(1)
+    assert not worker.is_alive()
+    assert [frame[9] for frame in frames] == [3, 3, 3, 2, 2, 2]
+
+
 def test_partial_stopped_generation_ack_still_closes_both_attempted_roles():
     global ready
     ready = threading.Event()

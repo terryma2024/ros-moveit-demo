@@ -258,11 +258,11 @@ def test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8(tmp
     assert driver._task8_port is port
     assert seen.index("start_dispatcher") < seen.index("provision_port")
     assert sorted(path.name for path in reservation_dir.iterdir()) == [
-        "arm.provision", "gripper.provision"]
+        "arm.provision", "gripper.provision", "neck.provision"]
     assert driver._act_reservation_provisions.capabilities["arm"] != (
         driver._act_reservation_provisions.capabilities["gripper"])
-    assert set(authority.reservation_port._paths) == {"arm", "gripper"}
-    for role in ("arm", "gripper"):
+    assert set(authority.reservation_port._paths) == {"arm", "gripper", "neck"}
+    for role in ("arm", "gripper", "neck"):
         assert authority.reservation_port._paths[role] == reservation_dir / f"{role}.sock"
         assert authority.reservation_port._capabilities[role] == (
             reservation_dir / f"{role}.provision").read_bytes()[24:56]
