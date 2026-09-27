@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import math
 
 from so101_demo.act.contracts import finite, validate_observation, validate_search_result
@@ -30,6 +31,20 @@ class PickPlaceSearchPhasePort:
         self._request = None
         self._begun = False
         self._searched = False
+        self._validated_search_observation = None
+
+    def validated_search_observation(self) -> PickPlaceSearchObservation:
+        """Return isolated physical SEARCH evidence only after full validation."""
+        if self._validated_search_observation is None:
+            raise PickPlaceSearchPortError("PICK_PLACE_SEARCH_OBSERVATION_UNAVAILABLE")
+        return copy.deepcopy(self._validated_search_observation)
+
+    def selected_prefix_source(self, *, max_skew_s: float) -> dict:
+        """Freeze only the previously validated physical SEARCH sample."""
+        from .selected_search_source import freeze_selected_search_source
+
+        return freeze_selected_search_source(
+            self.validated_search_observation(), max_skew_s=max_skew_s)
 
     def bind_startup_receipt(self, receipt: dict) -> None:
         if (self._startup_receipt is not None or self._begun
@@ -177,7 +192,8 @@ class PickPlaceSearchPhasePort:
         return {
             "phase": "SEARCH", "session_id": request["session_id"],
             "attempt_id": request["attempt_id"], "reset_epoch": reset_epoch,
-            "release_epoch": 0, "planning_ok": True,
+            "release_epoch": 0, "physics_step": world.simulation_step,
+            "planning_ok": True,
             "controller_reference_ok": True, "joint_feedback_ok": True,
             "contact_ok": True, "mujoco_ok": True,
             "planning_scene_ok": True, "head_rgb_ok": True,
@@ -202,7 +218,10 @@ class PickPlaceSearchPhasePort:
             raise PickPlaceSearchPortError("TASK8_SEARCH_ALREADY_STARTED")
         self._searched = True
         try:
-            return self._search_evidence(self.boundary.search(request), request)
+            observed = copy.deepcopy(self.boundary.search(request))
+            evidence = self._search_evidence(observed, request)
+            self._validated_search_observation = observed
+            return evidence
         except BaseException as error:
             self._stop_or_raise("TASK8_SEARCH_ABORT", request)
             raise PickPlaceSearchPortError("TASK8_SEARCH_EVIDENCE_INVALID") from error

@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: fad45064
+current_commit: d11a955d
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -22,6 +22,7 @@ confirmed_conclusions:
   - EXP-486 freezes a source-neutral receipt design for Task8 expert routes and later ACT policy output, with separate observation/prefix/state freshness; production remains disabled.
   - EXP-487 verifies a broker-private, one-use source receipt authority and a fail-closed proof approval hook; production proof and goals remain unwired.
   - EXP-488 verifies source-neutral prefix and original-observation clocks through PathProof, permit and commit-window tests; the production child still has SEARCH only and no admitted prefix producer.
+  - EXP-489 freezes the validated SEARCH physical and RGB readback into one versioned source hash while retaining its original seven monotonic receive times; no prefix or goal authority is issued.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -29,8 +30,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-488
-next_experiment: EXP-489
+latest_checkpoint: CP-489
+next_experiment: EXP-490
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -526,7 +527,7 @@ next_experiment: EXP032
 
 ```yaml
 experiment_id: EXP-053
-status: PLANNED
+status: VALID
 prior_experiment: EXP052
 hypothesis: A future `Trajectory.sample` call with its default monotonic search mutates the native segment cursor, so a later earlier-time query can return the terminal segment; a nonmonotonic query or independent reconstruction does not.
 prediction: The installed native library's default future-then-earlier sample differs from an independent fresh trajectory at the earlier time, while `search_monotonically_increasing=false` matches it.
@@ -4079,3 +4080,37 @@ next_experiment: EXP-489
 - `RelativePathRequest` now carries `prefix_issued_wall_s` and, for the source-backed path, the immutable `PrefixSourceReceipt` with all seven original receive times. `PathProver` binds that receipt into its canonical input and rejects ticket, epoch or contact-policy changes. The proof-aware permit path requires that exact private receipt, verifies selected source availability/artifact/observation/timestamps/phase/physics step again before consume, and refuses missing source proof ports. The commit window applies separate observation, prefix and state ages, plus both simulation acceptance deadlines. A source-less legacy test path still exists for the calibration prototype; it is not a production Task8 proof port.
 - The final ordinary source and installed gates passed with exact Python/overlay provenance after the last change; result directories and hashes are in EXP-488. Earlier incomplete ROS setup and missing fixture qvel runs remain retained as INVALID setup attempts, not RED source regressions. Current `path_proof.py` SHA256 `05fa54f3660e05bb0febe64a2885ddf17bec3c50449211b144157508e1c23104`, `permits.py` SHA256 `cbb202442d8d5a3a65d225ae8fbf9f04bbc371e2f479fe3c9dd1d951dee6a332`.
 - Next EXP-489 must create a trusted expert prefix producer from the selected SEARCH physical readback, qualify its frozen route independently, provide stopped full-state/reference/clock proof inputs, and connect the same source-backed proof/permit/exact-goal route through the actual child. Current child builds SEARCH only, and diagnostic routes have `eligible_for_collection=False`; neither condition is altered here. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained all runs through EXP-488, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
+
+## EXP-489 — Freeze the selected physical SEARCH source
+
+```yaml
+experiment_id: EXP-489
+status: PLANNED
+prior_experiment: EXP-488
+hypothesis: The already validated SEARCH readback can be frozen into one canonical observation hash and exact seven-source receipt record without re-timestamping or changing the selected physics step.
+prediction: Mutating either RGB image or full measured state changes the hash; session/epoch/step or source-window mismatch refuses; the existing diagnostic route remains unable to issue a qualified prefix.
+single_variable: Read-only selected-source freeze at the SEARCH boundary; no prefix or goal issue.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-488 valid, current branch and dirty batch preserved, task-owned stack none]
+success_criteria: [Focused RED/GREEN, full ordinary source and installed package gates, no live stack or goal]
+failure_criteria: [Altered image/state produces same source hash, mismatched step/epoch accepted, source receipts re-timestamped]
+invalid_criteria: [Test collection/setup fails before intended boundary, concurrent writer, runtime stack starts]
+provenance:
+  source_commit: d11a955d
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Exact task-Python focused RED/GREEN with unique verified NVMe TMPDIR", "Exact task-Python ordinary source pytest -n 8 in private IPC mount namespace", "Existing-overlay colcon build --packages-select so101_demo_py --symlink-install", "Installed colcon test --packages-select so101_demo_py --pytest-args test -n 8 in private IPC mount namespace", "colcon test-result --verbose"]
+observed: ["Missing selected-search freeze module and port API RED scratch/exp489-source-freeze-red.OWJILvK2 failed 5/5 at intended boundaries", "Focused GREEN scratch/exp489-source-freeze-green-final.RQ8kXQ5Q passed 6/6, including head/wrist pixel and qpos/qvel hash changes, scope and Planning Scene refusal, and validated-port availability", "Ordinary source xdist8 scratch/exp489-source-full.aQka1Jni exited 0 in 47 s: 4725 collected, 4563 passed, 162 skipped, 4 pre-existing fork warnings; JUnit SHA256 15afef02109b299b1876906e76dd9bc6dc66fd3e731bd936f149c2f37c4be140", "Existing-overlay build scratch/exp489-demo-build.LtJUIsKy exited 0 in 2 s", "Installed xdist8 scratch/exp489-installed-full.pQsoH6pB colcon test and test-result both exited 0 in 47 s: package 4725 collected/0 failures/162 skips; aggregate 6185 tests/0 errors/0 failures/205 skipped; package JUnit SHA256 aa9226c9e07d4b0ef6e5cbd453d45e001fc0dc26846d79d853d8808062c707dd", "Both full gates verified exact child interpreters and distinct unique NVMe TMPDIR; ROS_DOMAIN_ID/GZ_PARTITION NOT_ASSIGNED and no task-owned stack or goal"]
+inferred: ["The source hash binds the selected complete world/scene/contact/reference/search/Planning Scene metadata and exact head/wrist pixels; the returned wall receipts are unchanged from the selected validated readback", "No route qualification, prefix issue, PathProof production port or command authority follows from this hash"]
+conclusion: VALID for read-only selected SEARCH source identity only.
+decision: Preserve exact evidence and proceed to an independently qualified expert-route prefix producer in EXP-490; diagnostic manifests remain ineligible.
+next_experiment: EXP-490
+```
+
+## CP-489 — Selected SEARCH source identity passes both package gates
+
+- `PickPlaceSearchPhasePort` now exposes `selected_prefix_source` only after its validated SEARCH result; it freezes the selected world/scene/contact, both RGB byte arrays, full measured qpos/qvel, controller reference, source stamps, original seven wall receipts and Planning Scene readback into a versioned SHA256. Step, epoch, session, causal stamp or scene readback changes reject. This source record matches the private `PrefixSourceAuthority` input schema but is only a candidate; no prefix is issued in this experiment.
+- The final source xdist8, existing-overlay build and installed xdist8 pass with exact Python and scratch provenance in EXP-489. Source freeze module SHA256 `796eeae171c3c71a8b87c7956c8ec82183761632010c1bbdc69d45d274e81469`; SEARCH port full file SHA256 `e6d53b90dc8feca57a7a604e7dc58ad1c92374ae8045ae4b065539fec39d1d3e` includes prior preserved uncommitted validated-readback work now committed with this interface. No stack, goal or hardware action.
+- Next EXP-490 needs an expert route qualification separate from existing noncollecting diagnostic manifests, then a prefix producer that freezes exact rows from this source and issues the broker-private receipt under the current owner ticket. Full stopped snapshot, commit ports and physical phases remain absent. Formal accepted Train/Validation/Offline Test stays 0/0/0. Retained all runs through EXP-489, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
