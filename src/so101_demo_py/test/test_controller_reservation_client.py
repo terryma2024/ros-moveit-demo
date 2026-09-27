@@ -1,0 +1,133 @@
+"""The broker's private controller registration client speaks the fixed wire format."""
+
+import os
+from pathlib import Path
+import socket
+import threading
+import time
+import uuid
+
+from control_msgs.action import FollowJointTrajectory
+import pytest
+from rclpy.serialization import serialize_message
+from trajectory_msgs.msg import JointTrajectoryPoint
+
+from so101_demo.adapters.act.controller_reservation_client import ControllerReservationClient
+
+
+def socket_path():
+    task_root = Path(os.environ["TMPDIR"]).parents[2]
+    parent = task_root / "ipc" / Path(os.environ["TMPDIR"]).parent.name[-8:]
+    parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(parent, 0o700)
+    return parent / f"p{uuid.uuid4().hex[:8]}.sock"
+
+
+def goal():
+    message = FollowJointTrajectory.Goal()
+    message.trajectory.joint_names = ["1"]
+    point = JointTrajectoryPoint()
+    point.positions = [0.125]
+    message.trajectory.points = [point]
+    return message
+
+
+def serve(path, replies, frames):
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+        listener.bind(str(path))
+        os.chmod(path, 0o600)
+        listener.listen(2)
+        ready.set()
+        for reply in replies:
+            with listener.accept()[0] as connection:
+                prefix = connection.recv(4)
+                body_size = int.from_bytes(prefix, "big")
+                body = bytearray()
+                while len(body) < body_size:
+                    chunk = connection.recv(body_size - len(body))
+                    if not chunk:
+                        break
+                    body.extend(chunk)
+                frames.append(prefix + body)
+                if reply == "timeout":
+                    time.sleep(0.2)
+                else:
+                    connection.sendall(reply)
+
+
+def test_reserve_and_generation_close_use_typed_goal_and_same_capability():
+    global ready
+    ready = threading.Event()
+    path = socket_path()
+    frames = []
+    ack = b"SOGA\x01\x00\x00\x00" + (5).to_bytes(8, "big")
+    worker = threading.Thread(target=serve, args=(path, [ack, ack], frames), daemon=True)
+    worker.start()
+    assert ready.wait(1)
+    key = bytes([0xA5]) * 32
+    client = ControllerReservationClient({"arm": path}, capability=key, timeout_s=0.1)
+    message = goal()
+    native_uuid = "11111111-1111-1111-1111-111111111111"
+    assert client.reserve((5, 0, "act", "session", "attempt"), "arm", message, native_uuid)
+    client.close_generation(5)
+    worker.join(1)
+    assert not worker.is_alive()
+    assert len(frames) == 2
+    reserve = frames[0]
+    assert int.from_bytes(reserve[:4], "big") == len(reserve) - 4
+    assert reserve[4:10] == b"SOGR\x01\x01"
+    assert reserve[10:42] == key
+    assert reserve[42:50] == (5).to_bytes(8, "big")
+    assert reserve[50:66] == uuid.UUID(native_uuid).bytes
+    assert reserve[66:] == serialize_message(message)
+    assert frames[1] == (62).to_bytes(4, "big") + b"SOGR\x01\x02" + key + (5).to_bytes(8, "big") + bytes(16)
+
+
+@pytest.mark.parametrize("reply", [b"SOGA\x01\x00\x00\x00" + (4).to_bytes(8, "big"), "timeout"])
+def test_stale_ack_or_timeout_never_reports_a_reservation(reply):
+    global ready
+    ready = threading.Event()
+    path = socket_path()
+    frames = []
+    worker = threading.Thread(target=serve, args=(path, [reply], frames), daemon=True)
+    worker.start()
+    assert ready.wait(1)
+    client = ControllerReservationClient({"arm": path}, capability=bytes([0xA5]) * 32,
+                                         timeout_s=0.05)
+    with pytest.raises((RuntimeError, TimeoutError, OSError)):
+        client.reserve((5, 0, "act", "session", "attempt"), "arm", goal(),
+                       "11111111-1111-1111-1111-111111111111")
+    worker.join(1)
+    assert not worker.is_alive()
+
+
+def test_client_rejects_symlinked_ancestor_before_connecting():
+    parent = socket_path().parent
+    real = parent / "real"
+    nested = real / "nested"
+    nested.mkdir(mode=0o700, parents=True)
+    alias = parent / "alias"
+    alias.symlink_to(real, target_is_directory=True)
+    endpoint = nested / "goal.sock"
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+        listener.bind(str(endpoint))
+        os.chmod(endpoint, 0o600)
+        client = ControllerReservationClient({"arm": alias / "nested" / "goal.sock"},
+                                             capability=bytes([0xA5]) * 32, timeout_s=0.05)
+        with pytest.raises(PermissionError, match="CONTROLLER_RESERVATION_PATH_INVALID"):
+            client.reserve((5, 0, "act", "session", "attempt"), "arm", goal(),
+                           "11111111-1111-1111-1111-111111111111")
+
+
+def test_expired_commit_window_stops_before_connecting():
+    path = socket_path()
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+        listener.bind(str(path))
+        os.chmod(path, 0o600)
+        client = ControllerReservationClient({"arm": path},
+                                             capability=bytes([0xA5]) * 32,
+                                             timeout_s=0.1,
+                                             deadline_port=lambda: time.monotonic() - 0.001)
+        with pytest.raises(TimeoutError, match="CONTROLLER_RESERVATION_WINDOW_EXPIRED"):
+            client.reserve((5, 0, "act", "session", "attempt"), "arm", goal(),
+                           "11111111-1111-1111-1111-111111111111")
