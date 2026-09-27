@@ -244,6 +244,26 @@ TEST(ControllerReservationSocket, DeadRegisteredPeerRevokesOwnerLeaseOnIdle)
   EXPECT_EQ(gate.admit(id, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
 }
 
+TEST(ControllerReservationSocket, UnreapedRegisteredPeerRevokesOwnerLeaseOnIdle)
+{
+  const auto path = socket_path("zombie-peer.sock");
+  const auto key = capability();
+  ClientProcess client(path, key);
+  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate.arm(5));
+  ControllerReservationSocket server(path, gate, key, client.peer(),
+    std::chrono::milliseconds(50));
+
+  ASSERT_EQ(kill(client.pid(), SIGTERM), 0);
+  siginfo_t child_info{};
+  ASSERT_EQ(waitid(P_PID, client.pid(), &child_info, WEXITED | WNOWAIT), 0);
+  ASSERT_EQ(child_info.si_pid, client.pid());
+  EXPECT_FALSE(server.serve_one());
+  ControllerGoalAdmission::GoalUUID id{};
+  id.fill(0x11);
+  EXPECT_EQ(gate.admit(id, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
+}
+
 TEST(ControllerReservationSocket, ServiceShutdownClosesGateAndRemovesOwnedSocket)
 {
   const auto path = socket_path("service-lifetime.sock");
