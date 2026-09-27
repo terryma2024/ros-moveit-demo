@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 4dd49ebe58a0a94b4212ca3289d8fa39434a5ae3
+current_commit: 2333e6a0329a179e2349499c110ebb44837d9db9
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -60,8 +60,8 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-571
-next_experiment: EXP-547
+latest_checkpoint: CP-572
+next_experiment: EXP-548
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -5725,3 +5725,18 @@ status: PLANNED_SOURCE_ONLY
 - Source/installed `PhysicsStepEvidence.msg` SHA256 both `2193271924fbf4101f1dd08a8df3568ebf0567faacfba3574738633e4d8384a7`; installed generated Python message exposes both new fields. Built/installed plugin ELF Build ID both `672d18b06407ffec5152dce64cb7a782da355636`; ROS package prefixes resolve to registered `i`. `git diff --check` passed. Read-only `ament_uncrustify` exited 1 on two C++ files at retained pre-existing style locations; no reformat was run. All pytest/colcon tests used unique registered NVMe scratch and exact-child-interpreter tempfile readback. The valid full C++/Python source/Python installed domains were 173/172/166 with matching partitions. No benchmark or EXP-469 performance program ran.
 - Durable checkpoint: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp546-physics-source-clock/checkpoint.json`, SHA256 `8dd838bc4325c15e3d369b63b9f8be435e7e8aeae993bd336420b5a9f7f51d6f`. Readback verified 36 indexed evidence files and eight scratch trees. Retain EXP-546 and all earlier registered runs; archived none. Those eight scratch trees and `/tmp/so101-debug-act-data-66c42e4c/exp546-cpp-full` are deletion candidates only; nothing was deleted. Pre-existing dirty/untracked work remains unstaged. No task-owned stack, reset, goal, hardware motion or formal episode ran. Formal accepted Train/Validation/Offline Test remains `0/0/0`; Task 12 training is `NOT_STARTED`.
 - Next discriminator: validate every original physics sample's source-clock and exact 2 ms simulation-step continuity across bounded chunks, then join selected 100 Hz world/scene and 500 Hz contact/physical state by exact session, epoch and step. A source field alone cannot supply continuous rate bounds or a broker PathProof permit.
+
+## EXP-547 — Bind the marked physics sample's own interval to its fence receipt
+
+status: PLANNED_SOURCE_ONLY
+
+- Prior EXP-546 / CP-571, source HEAD `591fa832`; branch `codex/so101-act-data-0917a`; registered evidence root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`; installed overlay `i`; exact test Python `test-venv/bin/python`; `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED` until tests. Preserve all dirty/untracked work. No task-owned stack or goal.
+- Observation: the installed C++ ack now carries a marked `PhysicsStepEvidence` with its own original callback clock interval, but the Python fence validates only the wider ack interval. An altered nested sample interval would pass its current neutral receipt. The C++ source provides equality at begin and containment at end, and the Python consumer must check that relationship before retaining this source as proof data.
+- One variable: require the marked sample's typed, positive, ordered clock interval to start exactly at the ack begin and end no later than the ack end; retain both original nested endpoints in the neutral Python receipt. Reject missing, changed, reversed or out-of-ack sample intervals, including follow-up requests, without granting command authority. Prove focused RED→GREEN, run the complete ordinary Python source/installed xdist8 gates with fresh registered NVMe scratch and installed provenance. No stack, reset, goal, hardware motion, formal episode or performance program.
+
+## CP-572 — Python fence rejects a changed marked-sample clock
+
+- EXP-547 is `VALID_SOURCE_AND_INSTALLED_NO_MOTION`. Code commit `2333e6a0` requires the marked `PhysicsStepEvidence` interval to be integer typed, begin exactly at the ack's original source begin, and end within the ack interval. The neutral receipt retains both original nested endpoints. Four altered sample intervals and a missing receipt field caused the intended focused RED: 5 failures, 26 passes. Corrected focused tests passed 32/32, including a changed follow-up sample interval that closes the epoch. No command or collection authority was added.
+- Complete ordinary `so101_demo_py` source xdist8 passed 4,828 and skipped 162 in 44 s; JUnit 4,990 tests, zero errors/failures. Existing-overlay build passed in 1 s. Installed `colcon test --pytest-args test -n 8` passed in 44 s with the same 4,990-test XML result. `colcon test-result` exited 0: 6,532 aggregate tests, zero errors/failures and 205 skipped. Source/build runtime module SHA256 both `a1c382518b8b2a9c182cf6e74d60e86ce28e410b3e7e4478582abcd867810a37`; installed import and ROS package prefix resolve to registered overlay `i`. `git diff --check` passed. All tests used fresh registered NVMe scratch and exact-interpreter tempfile readback. Source and installed test domains were 162 and 161 with matching partitions. No benchmark or EXP-469 performance program ran.
+- Durable checkpoint: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp547-marked-sample-clock/checkpoint.json`, SHA256 `3cf0c529b6319d6523532f753939e6101bc37ec5913682cc4e847157b9393053`. Readback verified 18 indexed files and five scratch trees. Retain EXP-547 and all earlier registered runs; archived none. The five scratch trees are deletion candidates only; nothing was deleted. Pre-existing dirty/untracked work remains unstaged. No task-owned stack, reset, goal, hardware motion or formal episode ran. Formal accepted Train/Validation/Offline Test remains `0/0/0`; Task 12 training is `NOT_STARTED`.
+- Next discriminator: validate and retain every lossless 500 Hz chunk sample's original clock/step continuity with bounded wall/simulation progression, then join a selected 100 Hz world/scene frame to its exact 500 Hz physical/contact sample. One marked fence sample remains insufficient for a continuous dual-clock proof or production PathProof permit.
