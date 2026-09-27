@@ -25,7 +25,7 @@ open_hypotheses:
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; this remains unimplemented and unverified.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
 latest_checkpoint: CP-469
-next_experiment: EXP-473
+next_experiment: EXP-474
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -3796,3 +3796,11 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-472 — Private proof permit ready for broker integration
 
 - Last valid experiment EXP-472 is source-only. Existing `BrokerPairedExecution` still constructs legacy `PermitAuthority`, and `ActExecutionAdapter` still calls `check_exact_goals` after consume; no claim of single full check at the real broker entry. Next discriminator is a RED broker/adapter integration test for one checker call, fresh physical state and exact goals, followed by source and installed gates. `MujocoPathProcess` still uses the old manifest timeout, and Task 8 dynamic readiness is unproven. Source HEAD before this checkpoint `7e8417d227cca28adbd0399e51cd665ac8572c36`; branch/worktree and single evidence root unchanged, pre-existing dirty production batch preserved. No stack, controller goal, real robot or new performance experiment. Retained: all prior runs including EXP-472 scratch/logs. Archived: none. Deletion candidates: scratch/runtime/generated caches only; nothing deleted. Formal accepted Train/Validation/Offline Test 0/0/0.
+
+## EXP-473 — Exact dual-goal content from a relative path proof
+
+- **VALID source-only goal contract, no adapter or production routing:** A real 701-sample safe proof is the fixture. RED `scratch/exp473-goals-red.9jfDH0fa` failed 8/8 at missing `goal_pair_from_proof`; GREEN `scratch/exp473-goals-green.onmw4YzX` passed 37/37 across proof permits, legacy permits and proof source tests. The contract materializes both arm/gripper goals from one immutable relative request and exact frozen controller start positions. It rejects changed bridge interval/reference before materialization, then compares complete prepared goal dictionaries and rejects changed arm/gripper joint names, row, target offset, common stamp, source hash or an extra field. No second path checker call occurs in this fixture. Source `path_proof.py` SHA256 `df321e21b5f20c17fd6a9cf470ef634ebf4b711a398b2d16295d4bfcb4ceeb9f`; test SHA256 `437cfffce15b44cef1a36a46e48b3df981d505a130875d37f0b2b2af92cc8ff3`. Runs used distinct previously nonexistent verified `/data` TMPDIR/TMP/TEMP, exact task Python, source import, elapsed/exit and JUnit; no scratch removed. This is a pure goal-content contract. It does not measure policy age, state age, clock mapping, action acceptance, installed behavior or production command authority. Retain all evidence, archive none, scratch deletion candidates only, delete nothing; formal accepted 0/0/0.
+
+## CP-473 — Goal matching exists; submission window remains open
+
+- Source HEAD before this checkpoint `fa0b07b5`; current branch/worktree and one evidence root unchanged, pre-existing dirty production batch preserved. The live broker still uses the legacy permit/checker/exact-goals chain, and the proof has no source-authorized APPROACH production entry. Next EXP-474 is a fail-closed adapter integration RED for the proof-owned goal pair and commit-window timing/acceptance fences, without stack or goal. No source/full package or installed gate, simulation dynamic qualification, hardware test or data collection has been claimed. Retained all runs including EXP-473, archived none; scratch/runtime/generated caches are deletion candidates, nothing deleted. Formal accepted Train/Validation/Offline Test 0/0/0.
