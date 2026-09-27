@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: b5ca00f8
+current_commit: 64c5a264
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -39,6 +39,7 @@ confirmed_conclusions:
   - EXP-506 retains bounded original controller message fields at the broker callback and clears history across reset epochs; this is a callback-scoped source, not a native controller epoch or owner/goal event proof.
   - EXP-507 confirms the remaining action ingress design gap: stock JTC action callbacks remain open, broker tickets register after asynchronous send, and MoveIt teacher execution has downstream controller goals with UUIDs unknown before dispatch.
   - EXP-508 records ordered local ownership, broker and driver goal events with bounded history and gap/clock rejection; this observation does not close the controller action ingress.
+  - EXP-510 verifies an off-path, controller-local one-use UUID plus exact-goal reservation contract; no production action callback or broker registration is wired.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -46,8 +47,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-509
-next_experiment: EXP-510
+latest_checkpoint: CP-510
+next_experiment: EXP-511
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4795,3 +4796,39 @@ next_experiment: EXP-510
 - Installed Jazzy JTC `4.42.1-1noble.20260905.073033` has the protected callbacks required for a subclass gate. The [official Jazzy source](https://raw.githubusercontent.com/ros-controls/ros2_controllers/jazzy/joint_trajectory_controller/src/joint_trajectory_controller.cpp) shows the base server is created during configure. This is feasibility evidence, not a compiled or runtime admission proof.
 - EXP-510 first tests a pure controller-local, one-use UUID plus exact-goal reservation contract without wiring action ingress. Production remains on the EXP-502 action-only controller until service authentication, lifecycle mode transition, teacher path and broker-before-send order are independently proven. No PathProof, goal or formal episode is admitted. `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`; no task-owned stack.
 - Current branch/worktree and one evidence root unchanged; pre-existing dirty/untracked batch retained. Retained EXP-509 audit and all earlier runs; archived none; scratch/runtime/generated caches remain deletion candidates, nothing deleted. Formal accepted Train/Validation/Offline Test 0/0/0.
+
+## EXP-510 — Controller-local exact-goal reservation contract
+
+```yaml
+experiment_id: EXP-510
+status: VALID
+prior_experiment: EXP-509
+hypothesis: A controller-local state machine can consume exactly one pre-registered native UUID and exact goal bytes within a bounded steady-clock window, latching all unknown, altered, expired or replayed attempts closed without adding command authority to the current plugin.
+prediction: A missing-header RED and C++ GREEN will prove one-use exact admission, generation invalidation, fail-closed rejection and bounded input; the current action server will remain unwired.
+single_variable: Add a pure, off-path C++ reservation contract and its tests, without replacing the plugin action server.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-509 valid, no task-owned stack or goal, existing plugin remains active only in prior installed overlay]
+success_criteria: [C++ RED/GREEN, so101_mujoco_support package build and test gate, no action callback or configuration change in production plugin]
+failure_criteria: [Unknown, altered, expired, replayed or wrong-generation goal is admitted, or a rejected attempt leaves a pending reservation usable]
+invalid_criteria: [ROS/MuJoCo stack or goal starts, tests lack verified unique NVMe scratch, existing dirty batch enters commit]
+provenance:
+  source_commit: f21141c2
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i/so101_mujoco_support/lib/libso101_broker_owned_trajectory_controller.so
+  ros_domain_id: 183
+  gz_partition: act-data-exp510-final
+correction: The planned SOURCE_ONLY provenance left ROS_DOMAIN_ID/GZ_PARTITION unassigned; isolated package CTest used 183/act-data-exp510-final without starting a control stack.
+commands: ["CMake-registered missing-header RED reached C++ compiler and failed with code 2", "Added off-path ControllerGoalAdmission header and ran so101_mujoco_support build", "Verified unique NVMe TMPDIR/TMP/TEMP with actual /usr/bin/python3 CTest runner and task Python; isolated domain 183 colcon package test and colcon test-result", "Read-only ament_uncrustify check of new C++ files"]
+observed: ["Missing-header RED reached intended compile boundary; build exit2", "Final existing-overlay build exit0; 3 CTest cases pass, including 4 new reservation gtests; colcon test-result aggregate 6223 tests, 0 errors, 0 failures, 205 skipped; final build/test/result elapsed 2283562046 ns", "Off-path class starts closed; one native UUID plus exact goal bytes can be consumed once within 100 ns injected-test validity; unknown UUID, changed goal bytes, replay, deadline equality, clock regression, malformed and duplicate reservations reject and close generation", "Read-only ament_uncrustify exit0; installed header symlink resolves to new source; result artifact SHA256 c092a50a6c6db22616c8da2d231860017ee72de337be63c8a38a3cd50e8512ec", "No controller callback, config, broker service, stack or goal changed"]
+inferred: ["The state machine is only an off-path admission primitive; CDR equivalence, registration credential, teacher mode, real callback replacement, service latency and broker-before-send ordering remain unproved"]
+conclusion: VALID pure C++ reservation contract, with production ingress still open.
+evidence: [/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp510-controller-goal-reservation/result.json, /data/work/so101-evidence/act-data/20260924-fbc25063-resume/scratch/exp510-final-package.ao4pqmxn]
+decision: Keep production action server unchanged; next prove C++/Python serialization parity and callback replacement with no motion before any broker mode/service integration.
+next_experiment: EXP-511
+```
+
+## CP-510 — Exact reservation primitive passes, production ingress unchanged
+
+- Commit `64c5a264` adds only `ControllerGoalAdmission`, its C++ regression and CMake registration. The default state denies goals and every malformed, altered, expired, replayed or wrong-generation attempt closes the local reservation. The 250 ms default validity is only a proposed bounded registration window; this experiment did not measure a controller or commit latency.
+- The existing `BrokerOwnedTrajectoryController` still installs the base action server. No service, broker secret, mode transition or cross-language serialization contract is present; this primitive gives no PathProof, permit or goal authority. Next EXP-511 must establish exact CDR parity and safely replace the configured action callback in a no-motion test before considering broker registration.
+- Registered root unchanged; retain EXP-510 RED/build/package/style artifacts and all earlier evidence; archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted. Existing dirty/untracked user batch remains outside the commit. Formal accepted Train/Validation/Offline Test 0/0/0.
