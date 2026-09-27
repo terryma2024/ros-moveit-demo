@@ -35,6 +35,25 @@ bool capability_matches(
   }
   return difference == 0;
 }
+
+uint64_t parse_generation_control_frame(
+  const std::vector<uint8_t> & frame,
+  const ControllerReservationCapability & expected_capability,
+  uint8_t operation, const char * invalid)
+{
+  if (frame.size() != prefix_size + request_header_size ||
+    frame[0] != 0 || frame[1] != 0 || frame[2] != 0 || frame[3] != request_header_size ||
+    frame[4] != 'S' || frame[5] != 'O' || frame[6] != 'G' || frame[7] != 'R' ||
+    frame[8] != 1 || frame[9] != operation ||
+    !capability_matches(frame, expected_capability) ||
+    std::any_of(frame.begin() + 50, frame.end(), [](uint8_t value) {return value != 0;}))
+  {
+    throw std::invalid_argument(invalid);
+  }
+  const auto generation = read_u64(frame.data() + 42);
+  if (generation == 0) {throw std::invalid_argument(invalid);}
+  return generation;
+}
 }  // namespace
 
 ControllerReservationRequest parse_controller_reservation_frame(
@@ -92,18 +111,16 @@ uint64_t parse_controller_reservation_close_frame(
   const std::vector<uint8_t> & frame,
   const ControllerReservationCapability & expected_capability)
 {
-  constexpr auto invalid = "CONTROLLER_RESERVATION_CLOSE_FRAME_INVALID";
-  if (frame.size() != prefix_size + request_header_size ||
-    frame[0] != 0 || frame[1] != 0 || frame[2] != 0 || frame[3] != request_header_size ||
-    frame[4] != 'S' || frame[5] != 'O' || frame[6] != 'G' || frame[7] != 'R' ||
-    frame[8] != 1 || frame[9] != 2 || !capability_matches(frame, expected_capability) ||
-    std::any_of(frame.begin() + 50, frame.end(), [](uint8_t value) {return value != 0;}))
-  {
-    throw std::invalid_argument(invalid);
-  }
-  const auto generation = read_u64(frame.data() + 42);
-  if (generation == 0) {throw std::invalid_argument(invalid);}
-  return generation;
+  return parse_generation_control_frame(
+    frame, expected_capability, 2, "CONTROLLER_RESERVATION_CLOSE_FRAME_INVALID");
+}
+
+uint64_t parse_controller_reservation_arm_frame(
+  const std::vector<uint8_t> & frame,
+  const ControllerReservationCapability & expected_capability)
+{
+  return parse_generation_control_frame(
+    frame, expected_capability, 3, "CONTROLLER_RESERVATION_ARM_FRAME_INVALID");
 }
 
 std::array<uint8_t, 16> encode_controller_reservation_reply(
