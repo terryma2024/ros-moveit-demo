@@ -22,6 +22,7 @@ find_package(rcutils REQUIRED)
 find_package(realtime_tools REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(Threads REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
@@ -71,6 +72,7 @@ target_include_directories(so101_controller_reservation_protocol PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 ament_target_dependencies(so101_controller_reservation_protocol PUBLIC control_msgs rclcpp rcutils)
+target_link_libraries(so101_controller_reservation_protocol PUBLIC Threads::Threads)
 
 add_executable(graceful_shutdown_move_group src/graceful_shutdown_move_group.cpp)
 target_compile_features(graceful_shutdown_move_group PRIVATE cxx_std_17)
