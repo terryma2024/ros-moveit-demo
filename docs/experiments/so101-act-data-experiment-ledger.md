@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 9c2be641
+current_commit: 674130611fdb4a3dab5ee28001cab0165bc66d89
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -48,6 +48,7 @@ confirmed_conclusions:
   - EXP-516 verifies an off-graph Unix socket can store one typed controller reservation before ACK, rejects mismatched peer identity/capability, stale or duplicate generations, malformed or slow frames and symlinked paths; production broker and controller lifecycle wiring remain open.
   - CP-519 finds that one controller reservation per generation conflicts with sequential ACT prefixes under one ownership lease; production wiring remains disabled pending a per-action generation and independent arming contract.
   - CP-521 resolves the one-reservation conflict source-only: one owner generation now permits bounded sequential unique UUID/typed Goal admissions, while replay and overlapping reservations close the lease.
+  - CP-552 binds the selected SEARCH frame to 51 original arm, gripper and neck controller publications in the same stopped physical interval; broker owner and goal events still need an interval fence.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -58,8 +59,8 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-521
-next_experiment: EXP-517
+latest_checkpoint: CP-552
+next_experiment: EXP-529
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -5428,3 +5429,18 @@ status: VALID_SOURCE_AND_INSTALLED_NO_MOTION
 - Existing-overlay `so101_demo_py` build exited 0; `mujoco_vendor` was resolved from `/opt/ros/jazzy`. The final installed `colcon test --pytest-args test -n 8`, launched with the verified `test-venv/bin/python`, passed: package XML 4818 tests, zero errors/failures, 162 skipped. `colcon test-result` exited 0: 6346 aggregate tests, zero errors/failures, 205 skipped. Source and installed SHA256 match for all three runtime files; the new history module is `8a65d09715c19ecd251a9d73b301a8ac0eded569fb54df3376e480a646e70153`. Every pytest/colcon test used a previously nonexistent registered NVMe scratch and exact-Python tempfile readback; `git diff --check` passed.
 - Evidence: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp527-selected-search-history/checkpoint.json`, SHA256 `7510769418630e80a7632eb9b8dde544c2661c89f5960c3eee5c0f388e223d8e`. It indexes RED/GREEN, invalid gate, final source/build/installed results, JUnit, per-file hashes, exact scratch and elapsed times. Source final `ROS_DOMAIN_ID=226`, `GZ_PARTITION=exp527-source-full-final`; build domain 227; installed final `ROS_DOMAIN_ID=228`, `GZ_PARTITION=exp527-installed-final`. Only five history files and one test-isolation file entered the two code commits; pre-existing dirty/untracked work remains unstaged.
 - This source-only join does not yet prove matching arm/gripper/neck controller publications or uninterrupted broker ownership/no-goal events. A receipt after stop also cannot alone rule out a queued pre-stop physics frame. No stack, controller goal, reset or hardware motion ran. Formal accepted Train/Validation/Offline Test remains `0/0/0`, Task 12 training `NOT_STARTED`. Retain EXP-527 and all prior evidence; archived none. Read-back scratch, old private IPC and generated test sockets are deletion candidates only; nothing deleted. Next discriminator: bind the three original controller reference histories to this selected 51-frame physical window, then add the owner/goal event fence before any positive route authority.
+
+## EXP-528 — Bind three controller publications to selected SEARCH physics
+
+status: PLANNED_SOURCE_ONLY
+
+- Source HEAD `8fbb5e15`; branch `codex/so101-act-data-0917a`; registered root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`; installed overlay `i`; exact test Python `test-venv/bin/python`. `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED` until test runs. Preserve the existing dirty/untracked batch; no task-owned stack or goal is running.
+- Observation: `RosBrokerDriver.recent_controller_references(kind)` retains original, epoch-scoped arm/gripper/neck publications, and EXP-505 verifies an exact 51-frame three-controller window. CP-551 returns the matching physical window but does not call that controller verifier. A physical-only interval cannot establish the commanded reference was unchanged.
+- One variable: before returning SEARCH, select exactly the three 51-frame publication histories at the physical proof's same simulation stamps and reset epoch. All original receipts must follow stop confirmation. Verify exact joint order, constant positions, stopped velocities, 2 ms cadence and age with EXP-505. Bind arm/gripper final publications to selected physical readback's original controller reference; bind neck to the selected measured joint within the already configured joint tolerance. A missing/stale/wrong-epoch reference or changed physical proof closes the attempt. Return separate physical and reference evidence with `command_authority=False`; owner/goal event fence remains required. First prove RED, then GREEN and full source/installed package gates. No stack, goal, reset, hardware action or formal episode.
+
+## CP-552 — Selected SEARCH physics has matching controller publications
+
+- EXP-528 is `VALID_SOURCE_AND_INSTALLED_NO_MOTION`. Code commit `67413061` adds `pick_place_search_reference.py` and makes the production SEARCH segment require its reference verifier after the physical-history verifier. The join checks the same session/reset epoch, selected source hash, physical steps and simulation times, full qpos/qvel, 51 original 2 ms publications for arm/gripper/neck, post-stop original receipts, freshness, joint order, constant references, stopped velocities, final arm/gripper reference equality and neck qpos tolerance. It returns a separate proof with `command_authority=False`, `eligible_for_collection=False`, and `owner_goal_interval_proof_required=True`; failures stop the neck and close SEARCH.
+- RED reached the intended boundaries: seven missing verifier-module failures and one segment bypass, exit 1. Focused GREEN: 31 passed. The final production-boundary wiring regression ran in the full source gate: 4665 passed, 162 skipped, four pre-existing fork warnings on 32 logical CPUs with xdist8. Installed `so101_demo_py` build exited 0; its 4827-test package XML has zero errors/failures and 162 skipped. `colcon test-result` exited 0: 6355 aggregate tests, zero errors/failures, 205 skipped. The first build invocation exited 2 because `--log-base` was placed after the `build` subcommand; the corrected build passed. That invocation ran no compiler or test boundary and is not a source regression. `ros2 pkg prefix so101_demo_py` resolves to the registered `i` overlay; source and installed-build SHA256 match for the three runtime files. `git diff --check` passed.
+- Durable evidence: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp528-search-controller-history/checkpoint.json`, SHA256 `eae2d65c2457e3c1741c03ce14ba61551f4e75ac8dd05879041f6eac0b443300`. It indexes RED/GREEN, full source/build/installed results, JUnit, file hashes, exact scratch directories and elapsed times. Source full used `ROS_DOMAIN_ID=133`, `GZ_PARTITION=exp528-source-full`; installed used domain 135, partition `exp528-installed`. Every pytest/colcon test had a new registered NVMe scratch and exact-interpreter tempfile readback. No task-owned stack, goal, reset or hardware motion ran. Pre-existing dirty/untracked work remains unstaged.
+- The controller publication join still lacks an uninterrupted broker owner and no-goal event fence. Receipt-after-stop alone also cannot prove a queued pre-stop physics frame was generated after stop. Formal accepted Train/Validation/Offline Test remains `0/0/0`; Task 12 training is `NOT_STARTED`. Retain EXP-528 and prior evidence; archived none. Its six read-back scratch trees are deletion candidates only; nothing was deleted. Next discriminator: inspect EXP-508's owner/goal event history and bind it to the selected SEARCH interval before any command authority.
