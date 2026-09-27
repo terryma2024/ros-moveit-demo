@@ -225,6 +225,25 @@ TEST(ControllerReservationSocket, IdleListenerDoesNotRevokeAnArmedOwnerLease)
   EXPECT_EQ(gate.admit(id, goal(), 5), ControllerGoalAdmission::Result::ALLOW);
 }
 
+TEST(ControllerReservationSocket, DeadRegisteredPeerRevokesOwnerLeaseOnIdle)
+{
+  const auto path = socket_path("dead-peer.sock");
+  const auto key = capability();
+  ClientProcess client(path, key);
+  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate.arm(5));
+  ControllerReservationSocket server(path, gate, key, client.peer(),
+    std::chrono::milliseconds(50));
+
+  ASSERT_EQ(kill(client.pid(), SIGTERM), 0);
+  int child_status = 0;
+  ASSERT_EQ(waitpid(client.pid(), &child_status, 0), client.pid());
+  EXPECT_FALSE(server.serve_one());
+  ControllerGoalAdmission::GoalUUID id{};
+  id.fill(0x11);
+  EXPECT_EQ(gate.admit(id, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
+}
+
 TEST(ControllerReservationSocket, ServiceShutdownClosesGateAndRemovesOwnedSocket)
 {
   const auto path = socket_path("service-lifetime.sock");
