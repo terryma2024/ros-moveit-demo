@@ -275,6 +275,33 @@ def test_consumed_proof_fresh_readback_closes_on_state_change_or_revoke(scene):
     assert checks == [1]
 
 
+@pytest.mark.parametrize('field', (
+    'robot_state', 'cup_state', 'scene_state', 'attachment_state',
+    'contact_scope', 'controller_reference', 'controller_feedback',
+    'controller_stop_proof',
+))
+def test_current_proof_rejects_changed_supplied_physical_state(scene, field):
+    authority, prefix, current, checks = proof_authority(scene)
+    current['snapshot'][field] = {'physics_step': 21}
+    proof = authority.require(authority.approve(prefix), prefix)
+    assert authority.current_proof_state(proof)['snapshot'][field] == {
+        'physics_step': 21}
+    current['snapshot'][field]['physics_step'] = 22
+    with pytest.raises(PermissionError, match='PATH_PROOF_CURRENT_INVALID'):
+        authority.current_proof_state(proof)
+    assert checks == [1]
+
+
+def test_current_proof_rejects_removed_supplied_state(scene):
+    authority, prefix, current, checks = proof_authority(scene)
+    current['snapshot']['scene_state'] = {'physics_step': 21}
+    proof = authority.require(authority.approve(prefix), prefix)
+    del current['snapshot']['scene_state']
+    with pytest.raises(PermissionError, match='PATH_PROOF_CURRENT_INVALID'):
+        authority.current_proof_state(proof)
+    assert checks == [1]
+
+
 def test_unconsumed_or_closed_proof_cannot_get_commit_readback(scene):
     authority, prefix, _, checks = proof_authority(scene)
     captured = []
