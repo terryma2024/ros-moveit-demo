@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: c1f33255
+current_commit: 06dc80b0
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -46,6 +46,7 @@ confirmed_conclusions:
   - EXP-514 revokes pending controller reservations on deactivate, error, cleanup and reconfigure in an in-process memory-backed controller test; broker admission and physical stop remain unproved.
   - EXP-515 confirms the Python driver accepts caller-supplied native UUIDs, but broker local ticket registration follows asynchronous send and no private broker-to-controller registration transport exists in either launch topology.
   - EXP-516 verifies an off-graph Unix socket can store one typed controller reservation before ACK, rejects mismatched peer identity/capability, stale or duplicate generations, malformed or slow frames and symlinked paths; production broker and controller lifecycle wiring remain open.
+  - CP-519 finds that one controller reservation per generation conflicts with sequential ACT prefixes under one ownership lease; production wiring remains disabled pending a per-action generation and independent arming contract.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -55,7 +56,8 @@ open_hypotheses:
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
-latest_checkpoint: CP-518
+  - A controller-local, stop-proved per-action generation can support sequential prefixes without reusing a consumed reservation; this requires a source-only regression and a reviewed arming contract.
+latest_checkpoint: CP-519
 next_experiment: EXP-517
 ---
 
@@ -5099,3 +5101,12 @@ next_experiment: EXP-518
 - Controller plugin service lifetime, secure per-run capability and broker PID/start-ticks delivery, actual `RosBrokerDriver` prepare/send split, standalone/task-worker provisioning and MoveIt teacher proxy remain open. No stack or action goal was started. Formal accepted Train/Validation/Offline Test remains 0/0/0.
 - Retain EXP-517 and prior evidence; archived none. Scratch and generated caches are deletion candidates only. Nothing deleted, and the pre-existing dirty/untracked batch remains unstaged.
 - Next exact work: audit the current simulator/controller and both broker launch orders, then write the smallest source-only RED for identity/capability provisioning without placing the secret on ROS parameters, argv or logs.
+
+## CP-519 — Launch order and reservation generation mismatch
+
+- EXP-517 remains `RUNNING`. Read-only source audit under HEAD `06dc80b0` found two launch orders: standalone task station starts the broker after simulator process start, whereas the full pick-place owner starts its ROS child before the broker-free simulator stack. The two paths cannot share an assumed broker-PID-at-controller-construction handoff.
+- `Ownership` keeps one generation across multiple ACT prefix submissions. `BrokerPairedExecution` sends one arm/gripper pair for each prefix, and `ActExecutionAdapter` accepts increasing sequences in the same attempt. `ControllerGoalAdmission` accepts only one reservation for each controller generation. Passing the ownership ticket generation directly, as the current optional broker branch does, would reject the second prefix. This is an observed source contract conflict; no live failure is claimed.
+- The controller plugin still has no production socket instance or independently stop-proved `arm` call. Both broker constructors omit the optional reservation port. Do not provision credentials, activate the gate or send a live action until per-action generation and arming are specified and tested. Ruling: replace the one-lease-generation assumption before completing EXP-517; retain the one-use admission invariant and fail-closed defaults.
+- Immutable audit artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp517-broker-reservation-transaction/launch-order-audit.json`, SHA256 `7b909d055b4bf71f160d378f1e21cd36e347754850cf254bf2c6fd403e84f377`. It records exact source hashes, overlay, `ROS_DOMAIN_ID=NOT_ASSIGNED`, `GZ_PARTITION=NOT_ASSIGNED`, and no runtime executable. No task-owned stack, goal or real robot operation.
+- Registered root unchanged. Retain this audit and all previous runs; archived none. Scratch and generated caches are deletion candidates only; nothing deleted. Pre-existing dirty/untracked batch remains unstaged. Formal accepted Train/Validation/Offline Test is `0/0/0`.
+- Next exact work: add a source-only failing regression for two sequential prefixes under one ownership lease, then specify and implement per-action controller generations with independent stop proof before production wiring.
