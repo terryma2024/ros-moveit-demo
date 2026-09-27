@@ -122,6 +122,7 @@ uint64_t process_start_ticks(pid_t pid)
   std::string token;
   for (size_t field = 3; field <= 22; ++field) {
     if (!(fields >> token)) {return 0;}
+    if (field == 3 && token == "Z") {return 0;}
   }
   try {
     return std::stoull(token);
