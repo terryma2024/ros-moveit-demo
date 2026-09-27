@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 674130611fdb4a3dab5ee28001cab0165bc66d89
+current_commit: 7f87ae5513e28599feeb417eedad6e74687c6875
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -49,6 +49,7 @@ confirmed_conclusions:
   - CP-519 finds that one controller reservation per generation conflicts with sequential ACT prefixes under one ownership lease; production wiring remains disabled pending a per-action generation and independent arming contract.
   - CP-521 resolves the one-reservation conflict source-only: one owner generation now permits bounded sequential unique UUID/typed Goal admissions, while replay and overlapping reservations close the lease.
   - CP-552 binds the selected SEARCH frame to 51 original arm, gripper and neck controller publications in the same stopped physical interval; broker owner and goal events still need an interval fence.
+  - CP-553 binds the selected SEARCH interval to uninterrupted local ACT ownership and no broker goal events, but still requires independent native controller ingress proof.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -59,8 +60,8 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-552
-next_experiment: EXP-529
+latest_checkpoint: CP-553
+next_experiment: EXP-530
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -5452,3 +5453,10 @@ status: PLANNED_SOURCE_ONLY
 - Source HEAD `a987defa`; branch `codex/so101-act-data-0917a`; registered root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`; installed overlay `i`; exact test Python `test-venv/bin/python`. `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED` until tests run. No task-owned stack or goal is running; preserve all dirty/untracked work.
 - Observation: EXP-508's bounded `ControlEventTimeline` records owner acquire/revoke/release, broker submit, driver send/response/result/cancel/status and stop baseline in one ordered monotonic sequence. It rejects evicted cursors and clock regression. CP-552 binds physical and three-controller reference windows, but SEARCH has no owner/goal event interval proof. The local timeline is not a controller-native action ingress log; EXP-524/525's three private reservation gates require separate runtime provenance.
 - One variable: add a source-only verifier that joins the selected SEARCH interval to an unbroken `act` ownership generation and no new broker/driver goal or unknown status event, with an explicit stop baseline before the physical bridge. It must reject absent/late-bound owner acquisition, changed ticket/generation/epoch, lost or regressed timeline, any submit/goal/cancel/revoke/unknown event in the interval, and a stop event or selected frame outside the event fence. Carry only a local-event proof with `command_authority=False`, `eligible_for_collection=False`, and `controller_native_ingress_proof_required=True` into SEARCH. Prove RED then GREEN and run ordinary source/installed package gates. Do not infer external-action exclusion from a quiet ROS status stream. No stack, goal, reset, hardware motion or formal episode.
+
+## CP-553 — Selected SEARCH interval has a local owner and no-goal fence
+
+- EXP-529 is `VALID_SOURCE_AND_INSTALLED_NO_MOTION`. Code commit `7f87ae55` adds `pick_place_search_owner.py` and makes SEARCH require a separate owner/goal verifier after physical and reference histories. It requires a retained current `act` owner acquisition, valid ticket and armed local generation, a stop baseline before the 100 ms bridge, unbroken monotonic event history, fresh selected source, stopped driver and no submit/goal/unknown or nonempty action status after that baseline. An empty status from arm, gripper, neck or MoveIt is allowed. The result hashes the local event window and carries `controller_native_ingress_proof_required=True`, `command_authority=False` and `eligible_for_collection=False`; it does not claim external action exclusion.
+- Initial RED exited 1 with 16 failures at the missing verifier and segment bypass. A later RED exposed two missing freshness/time guards; another exposed rejection of an ordinary empty MoveIt status. Final focused GREEN passed 41. On 32 logical CPUs, the final ordinary source xdist8 gate passed 4685, skipped 162. Final existing-overlay build exited 0. The first installed run reported one test failure although `colcon test` exited 0: `test_parallel_start_guard_launch` saw `PROC_ENV_UNVERIFIABLE` for transient PID 1405158; host `/proc` readback found that PID absent. Its original failing `streams.log` remains retained, and the run is an invalid test-isolation gate, not product RED. A new full installed xdist8 run on fresh scratch passed: package XML 4847 tests, zero errors/failures, 162 skipped; `colcon test-result` exited 0 with 6375 aggregate tests, zero errors/failures, 205 skipped. `ros2 pkg prefix so101_demo_py` resolves to the registered `i` overlay; source and installed-build SHA256 match for all three runtime files. `git diff --check` passed.
+- Evidence: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp529-search-owner-goal-fence/checkpoint.json`, SHA256 `911f6e913ddd427e061b7c274f58c832a835ee2e93138d2e655d8604eecdc39d`. It indexes all RED/GREEN, source/build/installed runs, the invalid gate and its retained failure stream, JUnit, file hashes, exact scratch and elapsed times. Final source used `ROS_DOMAIN_ID=146`, `GZ_PARTITION=exp529-source-final`; final installed used domain 149, partition `exp529-installed-final-rerun`. Every pytest/colcon test had a new registered NVMe scratch and exact-interpreter tempfile readback. No task-owned stack, goal, reset or hardware motion ran. Pre-existing dirty/untracked work remains unstaged.
+- Local callback history alone cannot prove a transient external action never reached the controller; the three native reservation gates need same-run installed runtime evidence. Original receipt time also cannot rule out a queued pre-stop physics frame. These remain explicit command and collection fences. Formal accepted Train/Validation/Offline Test remains `0/0/0`; Task 12 training is `NOT_STARTED`. Retain EXP-529 and prior evidence; archived none. Its 13 read-back scratch trees are deletion candidates only; nothing was deleted. Next discriminator: verify controller-native ingress and physical frame generation against the selected stopped interval before qualifying the expert route or requesting a PathProof permit.
