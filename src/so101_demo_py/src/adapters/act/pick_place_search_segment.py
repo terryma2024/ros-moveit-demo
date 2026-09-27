@@ -16,6 +16,10 @@ class PickPlaceSearchError(RuntimeError):
     """SEARCH could not produce safe, complete physical evidence."""
 
 
+_STOP_INTERVAL_STEPS = 50
+_STOP_INTERVAL_NS = 100_000_000
+
+
 @dataclass(frozen=True, slots=True)
 class PickPlaceSearchObservation:
     search_result: dict
@@ -53,7 +57,8 @@ class PickPlaceSearchSegment:
             try:
                 raw = self.sources.capture(request["attempt_id"], after_step=after_step)
             except PickPlaceReadbackError as error:
-                if str(error) != "SOURCE_STEP_NOT_ADVANCED":
+                if str(error) not in ("SOURCE_STEP_NOT_ADVANCED",
+                                      "RGB_READBACK_UNAVAILABLE"):
                     raise
                 if self.monotonic() - started >= self.max_wait:
                     raise PickPlaceSearchError("SEARCH_SOURCE_TIMEOUT") from error
@@ -86,6 +91,46 @@ class PickPlaceSearchSegment:
             raise PickPlaceSearchError("SEARCH_SCENE_READBACK_FAILED")
         return observed
 
+    def _post_stop_interval(self, request: dict, reset_epoch: int, cursor: int):
+        """Select after a fresh stopped frame and 100 ms of advancing physics."""
+        stopped_wall_s = self.monotonic()
+
+        def received_after_stop(raw):
+            try:
+                receipts = raw["source_received_wall_s"]
+                return all(finite(receipts[kind], nonnegative=True) >= stopped_wall_s
+                           for kind in ("world", "scene", "contact"))
+            except (KeyError, TypeError, ValueError) as error:
+                raise PickPlaceSearchError("SEARCH_STOP_DWELL_RECEIPT_INVALID") from error
+
+        while True:
+            raw, geometry = self._next(request, reset_epoch, cursor)
+            world = raw["world"]
+            cursor = world.simulation_step
+            if world.paused is not False:
+                raise PickPlaceSearchError("SEARCH_STOP_DWELL_PAUSED")
+            if received_after_stop(raw):
+                break
+        first_step = cursor
+        first_ns = round(finite(world.simulation_time_s, nonnegative=True) * 1_000_000_000)
+        while True:
+            raw, geometry = self._next(request, reset_epoch, cursor)
+            world = raw["world"]
+            cursor = world.simulation_step
+            if world.paused is not False:
+                raise PickPlaceSearchError("SEARCH_STOP_DWELL_PAUSED")
+            if not received_after_stop(raw):
+                raise PickPlaceSearchError("SEARCH_STOP_DWELL_RECEIPT_INVALID")
+            elapsed_steps = cursor - first_step
+            elapsed_ns = round(finite(world.simulation_time_s, nonnegative=True)
+                               * 1_000_000_000) - first_ns
+            if elapsed_ns != elapsed_steps * 2_000_000:
+                raise PickPlaceSearchError("SEARCH_STOP_DWELL_TIME_INVALID")
+            if elapsed_steps >= _STOP_INTERVAL_STEPS:
+                if elapsed_ns < _STOP_INTERVAL_NS:
+                    raise PickPlaceSearchError("SEARCH_STOP_DWELL_TIME_INVALID")
+                return raw, geometry
+
     def run(self, request: dict, *, reset_epoch: int) -> PickPlaceSearchObservation:
         try:
             if (not isinstance(request, dict) or type(reset_epoch) is not int
@@ -114,7 +159,8 @@ class PickPlaceSearchSegment:
                     raise PickPlaceSearchError("SEARCH_NOT_LOCKED")
                 if self.adapter.neck_port.stop_and_confirm() is not True:
                     raise PickPlaceSearchError("SEARCH_STOP_UNCONFIRMED")
-                final_raw, final_geometry = self._next(request, reset_epoch, cursor)
+                final_raw, final_geometry = self._post_stop_interval(
+                    request, reset_epoch, cursor)
                 if final_raw["world"].simulation_time_s < result["timestamp"]:
                     raise PickPlaceSearchError("SEARCH_POST_LOCK_STEP_INVALID")
                 observed = self._sync_scene(request, final_geometry)
