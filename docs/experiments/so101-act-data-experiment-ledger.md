@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: c28757b9
+current_commit: c5c366b3
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -18,14 +18,16 @@ confirmed_conclusions:
   - EXP-456 establishes that retained post-LIFT artifacts do not prove a controller reference at the TRANSPORT handoff; all three anchors require a fresh runtime query and stop proof.
   - EXP-466 verifies the user's performance CPU profile still misses the fixed 25 ms first complete-check deadline: 89.572717 ms for 701 samples.
   - CP-469 records EXP-469's one completed timing probe with parity incomplete; the user superseded the 16-lane direction with the path-proof/commit-window design review.
+  - EXP-485 finds no production prefix receipt producer or broker-private consumer; SEARCH source timestamps cannot substitute for a policy prefix receipt.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
+  - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
 open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-484
-next_experiment: EXP-485
+latest_checkpoint: CP-485
+next_experiment: EXP-486
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -3914,3 +3916,48 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-484 — SEARCH readback has original source times; prefix receipt remains unbound
 
 - Last valid experiment EXP-484. A SEARCH readback now carries the selected seven-source monotonic timestamps through its own closed schema, but `PickPlaceApproachSourceBinding.inspect` still reports only a read-only route match and `command_authority=False`; no owner-ticket-bound receipt has reached `PermitAuthority` or the broker. Next EXP-485 should bind the original SEARCH observation and route prefix to a broker-private source receipt, reject delayed/replayed or substituted prefixes, and keep production proof submission disabled until stopped full-state and clock evidence are complete. Current branch/worktree, sole evidence root and preserved dirty batch remain; overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact task Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, task-owned stack none, formal accepted Train/Validation/Offline Test 0/0/0. Retained runs through EXP-484, archived none, scratch/runtime/generated caches only deletion candidates, nothing deleted.
+
+## EXP-485 — Locate the authoritative prefix receipt producer
+
+```yaml
+experiment_id: EXP-485
+status: VALID
+prior_experiment: EXP-484
+hypothesis: The current pick-place child has a production path that binds the selected SEARCH observation, candidate prefix, and owner ticket to an original monotonic prefix receipt before proof approval.
+prediction: A source/entry-point audit will find the producer and its broker-private consumer, or establish the first missing boundary without substituting the SEARCH sensor receipt or Unix RPC ingress time.
+single_variable: Read-only static trace of prefix production and broker registration; no runtime mutation.
+lifecycle: SOURCE_ONLY
+preconditions: [HEAD c5c366b3, dirty batch preserved, registered evidence root, no task-owned stack]
+success_criteria: [Producer and consumer identified in production call chain with source timestamp provenance]
+failure_criteria: [No production producer or broker-private consumer exists]
+invalid_criteria: [Source snapshot or ownership changes during audit]
+provenance:
+  source_commit: c5c366b3
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python (source-only audit, not executed)
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands:
+  - command: rg -n 'policy_received_wall_s|source_received_wall_s|RelativePathRequest|proof_port|proof_state_port|proof_ticket_port' src/so101_demo_py/src src/so101_teleop/so101_teleop/unified
+    exit_code: 0
+  - command: rg -n 'PickPlaceApproachSourceBinding|PickPlaceApproachPathScreen|BrokerPairedExecution|prefix_executor|approve_prefix|submit_prefix|validated_search_observation' src/so101_demo_py/src src/so101_teleop/so101_teleop/unified
+    exit_code: 0
+  - command: rg -n 'prefix\s*=|prefix=|validate_action_prefix\(' src/so101_demo_py/src/act src/so101_demo_py/src/adapters/act src/so101_teleop/so101_teleop/unified
+    exit_code: 0
+observed:
+  - SEARCH synchronizer/readback retains original selected source times; these are sensor/physics receipts, not a policy or expert prefix production receipt.
+  - Child ros_child constructs CommandBroker with prefix_executor=None; installed CLI provisions BrokerPairedExecution only for calibration mode. No production call site constructs PickPlaceApproachSourceBinding or PickPlaceApproachPathScreen.
+  - CommandBroker approve_prefix accepts only caller prefix; broker-owned PermitAuthority is constructed without proof_port/proof_state_port/proof_ticket_port. Source tree has no production RelativePathRequest.from_prefix caller.
+  - The only explicit prefix literal in ACT runtime is live_calibration_runner/run.py, a calibration diagnostic; Task8's route manifest is constructed during reset, before SEARCH.
+inferred:
+  - Minting policy_received_wall_s at SEARCH readback or Unix RPC ingress would relabel an older or substituted prefix as fresh; the missing boundary is an actual prefix producer and broker-private owner-ticket receipt.
+conclusion: Hypothesis disproved. No trustworthy production prefix receipt exists; proof/goal path remains fail closed.
+decision: KEEP
+next_experiment: EXP-486
+```
+
+Evidence: `scratch/exp485-static-audit.pyzMpByb/receipt-and-proof-refs.txt` SHA256 `e3efaa59520c20ef69aaada7c3b96bd685f0b150827cb23d8411e47fd4aedf5c`, `entry-and-owner-refs.txt` SHA256 `79f33b8167adbdab5c5a360ae56b97ffb94643d7fa9ffd70c56795af62eeaee4`, `prefix-producers.txt` SHA256 `af09cf658dcfbdfa33033a0483f9d0bf08929a2a64b290e35c4e5b04c52e368d`, all under the registered evidence root. No tests or stack were run. The design specification now names this unresolved source boundary without granting authority.
+
+## CP-485 — Prefix source receipt is absent
+
+- Last valid experiment EXP-485. The SEARCH sensor/physics receipt and the route or policy prefix receipt are distinct facts. Task8 has no production prefix producer, no broker-private receipt registration and no proof port wiring; calibration's fixed prefix and route manifests cannot fill the gap. The first later implementation step must create a producer that consumes the validated SEARCH frame in the child, freezes exact rows and relative times, and binds its original receipt to the current owner ticket inside the broker. Test delayed/replayed/substituted prefix and ticket changes before any proof approval. The path-proof design remains marked for written review; no new production code, performance experiment, ROS/MuJoCo stack, goal or hardware action occurred in EXP-485. Current branch/worktree and all pre-existing dirty files remain; overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact task Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, task-owned stack none. Accepted formal Train/Validation/Offline Test 0/0/0. Retained all runs through EXP-485, archived none, scratch/runtime/generated caches are deletion candidates only, nothing deleted. Next EXP-486: freeze the prefix producer/receipt contract at the actual child-to-broker boundary before implementing or enabling it.

@@ -26,6 +26,8 @@ broker 是 `PathProof` 的唯一创建者、保管者和消费者。检查 worke
 
 证明对相对时间曲线工作。当前 `validate_action_prefix` 把 `target_times_s` 绑定到 policy `observation_time_s`；提交延后后，原合同不能直接用来验证新目标。准备阶段先保留原 prefix 和 policy observation 的哈希，再生成受 broker 管理的相对路径合同：以候选共同起点为零，记录实测 bridge 和每个目标的偏移。完整 checker 消费这些偏移及实测状态，保留 bridge→start→目标的全部时间间隔；policy observation 时间仍是原始采样时间，不能随目标平移。实际提交使用单独验证的 materialized prefix/goal 合同，绑定原 policy observation、positions、相对 grid 和新绝对时间，不能把移动后的绝对目标塞回旧 `validate_action_prefix` 伪装成原输入。它只在机器人已停稳、没有控制目标的准备阶段运行；证明期间的 reset/cancel/ownership 变更使结果作废。证明所用 model、接触规则和外部场景必须对共同起始时间平移不变。若存在随绝对时间变化的障碍、控制参考或约束，这个证明形式不适用，应拒绝。
 
+EXP-485 的源码审计补出一处来源边界：SEARCH 读回已有七路原始 monotonic 接收时间，它们只证明被选中的物理帧和传感器样本何时到达。当前固定诊断路线由 reset 阶段的 manifest 构造，生产 pick-place 子进程没有 prefix 生成器，也没有把生成结果连同 owner ticket 登记到 broker 的私有收据。因此，不能把 SEARCH 完成时间、传感器接收时间或 Unix RPC 到达时间填成 `policy_received_wall_s`。接入 proof 前，实际 prefix 生产者须在同一 session/attempt/reset epoch 内消费那份已验证的 SEARCH 读回，生成并冻结 exact rows 与相对时间，再由 broker 绑定 owner ticket、prefix hash 和原始来源时间；延迟、重放、换路或换 ticket 均须拒绝。固定诊断路线仍只作无命令权限的候选；它若将来用作专家控制源，须另行定义并验证其“产生时刻”，不能借用尚不存在的 policy 推理收据。
+
 ## 证明后的 commit window
 
 完整证明返回后，broker 重新读取物理与控制状态，并取得新鲜 monotonic/simulation 双时钟。先校验 ticket、generation、session、attempt、epoch 和唯一 owner，再比较完整 `qpos/qvel`、robot/cup/scene、phase、holding、attachment、cup transform、controller reference/feedback、bridge 与 proof 输入。首版采用规范编码后的 exact equality；不设置经验容差。未来若允许变化，必须先给出覆盖全部路径样本、接触和动态界限的保守 envelope 证明，并另经规格复核。状态微小漂移导致拒绝，也不能在窗口内悄悄重算。
