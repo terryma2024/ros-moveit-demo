@@ -83,6 +83,40 @@ def test_reserve_and_generation_close_use_typed_goal_and_same_capability():
     assert frames[1] == (62).to_bytes(4, "big") + b"SOGR\x01\x02" + key + (5).to_bytes(8, "big") + bytes(16)
 
 
+def test_each_controller_role_uses_its_own_capability():
+    global ready
+    ready = threading.Event()
+    path = socket_path()
+    frames = []
+    ack = b"SOGA\x01\x00\x00\x00" + (5).to_bytes(8, "big")
+    worker = threading.Thread(target=serve, args=(path, [ack, ack], frames), daemon=True)
+    worker.start()
+    assert ready.wait(1)
+    arm_key = bytes([0xA5]) * 32
+    gripper_key = bytes([0x5A]) * 32
+    client = ControllerReservationClient(
+        {"arm": path, "gripper": path},
+        capability={"arm": arm_key, "gripper": gripper_key}, timeout_s=0.1,
+    )
+    ticket = (5, 0, "act", "session", "attempt")
+    assert client.reserve(ticket, "arm", goal(), "11111111-1111-1111-1111-111111111111")
+    assert client.reserve(ticket, "gripper", goal(), "22222222-2222-2222-2222-222222222222")
+    worker.join(1)
+    assert not worker.is_alive()
+    assert [frame[10:42] for frame in frames] == [arm_key, gripper_key]
+
+
+def test_role_capabilities_require_every_endpoint_and_independent_keys():
+    path = socket_path()
+    with pytest.raises(ValueError, match="CONTROLLER_RESERVATION_CAPABILITY_INVALID"):
+        ControllerReservationClient({"arm": path, "gripper": path},
+                                    capability={"arm": bytes([0xA5]) * 32}, timeout_s=0.1)
+    with pytest.raises(ValueError, match="CONTROLLER_RESERVATION_CAPABILITY_INVALID"):
+        ControllerReservationClient({"arm": path, "gripper": path},
+                                    capability={"arm": bytes([0xA5]) * 32,
+                                                "gripper": bytes([0xA5]) * 32}, timeout_s=0.1)
+
+
 @pytest.mark.parametrize("reply", [b"SOGA\x01\x00\x00\x00" + (4).to_bytes(8, "big"), "timeout"])
 def test_stale_ack_or_timeout_never_reports_a_reservation(reply):
     global ready
