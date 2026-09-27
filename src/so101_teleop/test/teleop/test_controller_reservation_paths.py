@@ -8,6 +8,7 @@ import pytest
 
 from so101_teleop.unified.controller_reservation_paths import (
     controller_reservation_directory,
+    controller_reservation_root,
     prepare_controller_reservation_directory,
 )
 
@@ -48,3 +49,18 @@ def test_invalid_root_session_or_directory_fails_closed(tmp_path):
     ipc.mkdir(mode=0o755)
     with pytest.raises(PermissionError):
         prepare_controller_reservation_directory(root, "session_A")
+
+
+def test_nested_campaign_uses_registered_short_root_for_socket_path():
+    task_root = Path(os.environ["TMPDIR"]).parents[2]
+    campaign_root = task_root / "diagnostics" / "deep-campaign" / "admitted"
+    assert len(os.fsencode(controller_reservation_directory(
+        campaign_root, "session_A") / "gripper.sock")) > 107
+    selected = controller_reservation_root(
+        campaign_root, {"SO101_ACT_RESERVATION_ROOT": str(task_root)})
+    assert selected == task_root
+    assert len(os.fsencode(controller_reservation_directory(
+        selected, "session_A") / "gripper.sock")) <= 107
+    with pytest.raises(ValueError, match="CONTROLLER_RESERVATION_ROOT_INVALID"):
+        controller_reservation_root(
+            campaign_root, {"SO101_ACT_RESERVATION_ROOT": "/tmp/outside"})

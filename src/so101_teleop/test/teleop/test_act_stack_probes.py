@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import json
+import os
 import subprocess
 import time
 from types import SimpleNamespace
@@ -58,6 +59,25 @@ def test_factory_binds_distinct_start_and_stop_observers_to_one_domain(tmp_path)
         controller_reservation_directory(tmp_path, child.mujoco_session_id))
     assert stack.stop_probe.timeout_s < stack.stop_timeout_s
     assert stack.graph_clear_probe.launch is stack.launch
+
+
+def test_factory_uses_registered_short_root_for_nested_campaign(tmp_path):
+    context, child = scope(tmp_path)
+    task_root = Path(os.environ["TMPDIR"]).parents[2]
+    campaign_root = task_root / "diagnostics" / f"nested-campaign-{uuid.uuid4().hex[:8]}"
+    campaign_root.mkdir(parents=True)
+    context.evidence_root = str(campaign_root)
+    stack = make_pick_place_act_stack(
+        context, child, ros2_executable=executable(tmp_path, "ros2"),
+        readiness_executable=executable(tmp_path, "act_stack_ready"),
+        base_environment={"SO101_ACT_RESERVATION_ROOT": str(task_root)},
+    )
+    environment = stack.launch.process_environment()
+    assert environment["SO101_ACT_RESERVATION_ROOT"] == str(task_root)
+    assert environment["SO101_ACT_CONTROLLER_RESERVATION_DIR"] == str(
+        controller_reservation_directory(task_root, child.mujoco_session_id))
+    assert len(os.fsencode(Path(environment["SO101_ACT_CONTROLLER_RESERVATION_DIR"])
+                           / "gripper.sock")) <= 107
 
 
 def test_stop_probe_reobserves_a_still_live_stack_on_retry(tmp_path):

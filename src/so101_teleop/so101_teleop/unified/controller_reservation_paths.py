@@ -5,9 +5,23 @@ import os
 from pathlib import Path
 import re
 import stat
+from typing import Mapping
 
 
 _SESSION = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z", re.ASCII)
+RESERVATION_ROOT_ENV = "SO101_ACT_RESERVATION_ROOT"
+
+
+def controller_reservation_root(
+    campaign_root: Path, environment: Mapping[str, str],
+) -> Path:
+    campaign = Path(campaign_root)
+    selected = Path(environment.get(RESERVATION_ROOT_ENV, str(campaign)))
+    if (not campaign.is_absolute() or campaign != Path(os.path.normpath(campaign))
+            or not selected.is_absolute() or selected != Path(os.path.normpath(selected))
+            or not campaign.is_relative_to(selected)):
+        raise ValueError("CONTROLLER_RESERVATION_ROOT_INVALID")
+    return selected
 
 
 def controller_reservation_directory(evidence_root: Path, session_id: str) -> Path:

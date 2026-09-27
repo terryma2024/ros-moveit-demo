@@ -52,6 +52,7 @@ def test_dedicated_act_stack_has_sim_moveit_four_controllers_rgb_and_no_broker(t
             action.execute(context)
     assert context.environment["SO101_ACT_CONTROLLER_RESERVATION_DIR"] == str(
         controller_reservation_directory(tmp_path, "act-task8-case-01"))
+    assert context.environment["SO101_ACT_RESERVATION_ROOT"] == str(tmp_path)
     assert context.environment["SO101_SIMULATION_SESSION_ID"] == "act-task8-case-01"
     parameters = evaluate_parameters(context, simulator._Node__parameters)
     robot_description = parameters[0]["robot_description"]
@@ -61,6 +62,42 @@ def test_dedicated_act_stack_has_sim_moveit_four_controllers_rgb_and_no_broker(t
     assert plugin.name == "mujoco_plugins.yaml" and plugin.parent.name == "act"
     text = plugin.read_text()
     assert "/head_camera/color" in text and "/wrist_camera/color" in text
+
+
+def test_dedicated_stack_preserves_worker_reservation_scope(tmp_path):
+    evidence_root = tmp_path / "diagnostics" / "campaign" / "task8-live" / "stack"
+    _, context, opaque = configured(tmp_path, overrides={"task_evidence_root": str(evidence_root)})
+    reservation_dir = controller_reservation_directory(tmp_path, "act-task8-case-01")
+    context.environment["SO101_ACT_RESERVATION_ROOT"] = str(tmp_path)
+    context.environment["SO101_ACT_CONTROLLER_RESERVATION_DIR"] = str(reservation_dir)
+    actions = opaque.execute(context)
+    for action in actions:
+        if isinstance(action, SetEnvironmentVariable):
+            action.execute(context)
+    assert context.environment["SO101_ACT_CONTROLLER_RESERVATION_DIR"] == str(reservation_dir)
+    assert context.environment["SO101_ACT_RESERVATION_ROOT"] == str(tmp_path)
+
+
+@pytest.mark.parametrize("root, directory", [
+    ("outside", "correct"),
+    ("correct", "wrong"),
+    ("correct", "missing"),
+])
+def test_dedicated_stack_rejects_inconsistent_worker_reservation_scope(
+        tmp_path, monkeypatch, root, directory):
+    evidence_root = tmp_path / "diagnostics" / "campaign" / "stack"
+    _, context, opaque = configured(tmp_path, overrides={"task_evidence_root": str(evidence_root)})
+    reservation_root = tmp_path if root == "correct" else tmp_path.parent / "outside"
+    context.environment["SO101_ACT_RESERVATION_ROOT"] = str(reservation_root)
+    if directory != "missing":
+        context.environment["SO101_ACT_CONTROLLER_RESERVATION_DIR"] = (
+            str(controller_reservation_directory(reservation_root, "act-task8-case-01"))
+            if directory == "correct" else str(tmp_path / "wrong"))
+    made = []
+    monkeypatch.setattr(launch, "_mujoco_stack_actions", lambda *args, **kwargs: made.append(True))
+    with pytest.raises(RuntimeError, match="ACT_STACK_RESERVATION_SCOPE_INVALID"):
+        opaque.execute(context)
+    assert made == []
 
 
 @pytest.mark.parametrize("overrides,reason", [
