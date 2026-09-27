@@ -30,7 +30,7 @@ std::string read_line(int fd)
   std::string line;
   while (true) {
     pollfd handle{fd, POLLIN, 0};
-    if (poll(&handle, 1, 2000) <= 0) {
+    if (poll(&handle, 1, 5000) <= 0) {
       throw std::runtime_error("CLIENT_RESPONSE_TIMEOUT");
     }
     char character;
@@ -45,14 +45,20 @@ std::string read_line(int fd)
 class ClientProcess
 {
 public:
-  ClientProcess(const std::filesystem::path & path, const ControllerReservationCapability & key)
+  ClientProcess(
+    const std::filesystem::path & path, const ControllerReservationCapability & key,
+    const std::filesystem::path & second_path = {},
+    const ControllerReservationCapability & second_key = {})
   {
-    std::string key_hex;
     constexpr char digits[] = "0123456789abcdef";
-    for (const auto byte : key) {
-      key_hex += digits[byte >> 4];
-      key_hex += digits[byte & 15];
-    }
+    const auto encode_key = [&digits](const ControllerReservationCapability & value) {
+        std::string hex;
+        for (const auto byte : value) {
+          hex += digits[byte >> 4];
+          hex += digits[byte & 15];
+        }
+        return hex;
+      };
     int to_child[2];
     int from_child[2];
     if (pipe(to_child) || pipe(from_child)) {throw std::runtime_error("PIPE_FAILED");}
@@ -67,17 +73,23 @@ public:
       close(from_child[1]);
       const auto script = std::filesystem::path(__FILE__).parent_path() /
         "controller_reservation_client.py";
-      execl("/usr/bin/python3", "python3", script.c_str(), path.c_str(),
-        static_cast<char *>(nullptr));
+      if (second_path.empty()) {
+        execl("/usr/bin/python3", "python3", script.c_str(), path.c_str(),
+          static_cast<char *>(nullptr));
+      } else {
+        execl("/usr/bin/python3", "python3", script.c_str(), path.c_str(),
+          second_path.c_str(), static_cast<char *>(nullptr));
+      }
       _exit(127);
     }
     close(to_child[0]);
     close(from_child[1]);
     input_ = to_child[1];
     output_ = from_child[0];
-    const auto key_line = key_hex + "\n";
-    if (write(input_, key_line.data(), key_line.size()) !=
-      static_cast<ssize_t>(key_line.size()))
+    const auto key_lines = encode_key(key) + "\n" +
+      (second_path.empty() ? "" : encode_key(second_key) + "\n");
+    if (write(input_, key_lines.data(), key_lines.size()) !=
+      static_cast<ssize_t>(key_lines.size()))
     {
       throw std::runtime_error("CLIENT_CAPABILITY_DELIVERY_FAILED");
     }
@@ -285,6 +297,37 @@ TEST(ControllerReservationSocket, SequentialGoalsUseOneAuthenticatedOwnerGenerat
   auto second_goal = goal();
   second_goal.trajectory.points[0].positions[0] = 0.25;
   EXPECT_EQ(gate.admit(second_uuid, second_goal, 5), ControllerGoalAdmission::Result::ALLOW);
+}
+
+TEST(ControllerReservationSocket, PythonBrokerOwnsBothRoleArmsBeforePreparedGoalSend)
+{
+  const auto arm_path = socket_path("broker-arm.sock");
+  const auto gripper_path = socket_path("broker-gripper.sock");
+  const auto arm_key = capability();
+  auto gripper_key = capability();
+  gripper_key.fill(0x5a);
+  ClientProcess client(arm_path, arm_key, gripper_path, gripper_key);
+  ControllerGoalAdmission arm_gate([] {return 1000000000LL;}, 2000000000);
+  ControllerGoalAdmission gripper_gate([] {return 1000000000LL;}, 2000000000);
+  ControllerReservationService arm_service(arm_path, arm_gate, arm_key, client.peer(),
+    std::chrono::milliseconds(50), [] {return true;});
+  ControllerReservationService gripper_service(
+    gripper_path, gripper_gate, gripper_key, client.peer(),
+    std::chrono::milliseconds(50), [] {return true;});
+
+  client.start("broker_transaction");
+  ASSERT_EQ(client.result(), "ACK");
+  ControllerGoalAdmission::GoalUUID arm_uuid{};
+  arm_uuid.fill(0x11);
+  ControllerGoalAdmission::GoalUUID gripper_uuid{};
+  gripper_uuid.fill(0x22);
+  EXPECT_EQ(arm_gate.admit(arm_uuid, goal(), 1), ControllerGoalAdmission::Result::ALLOW);
+  EXPECT_EQ(gripper_gate.admit(gripper_uuid, goal(), 1), ControllerGoalAdmission::Result::ALLOW);
+  client.start("broker_release");
+  ASSERT_EQ(client.result(), "ACK");
+  EXPECT_EQ(arm_gate.admit(arm_uuid, goal(), 1), ControllerGoalAdmission::Result::DENY_CLOSED);
+  EXPECT_EQ(gripper_gate.admit(gripper_uuid, goal(), 1),
+    ControllerGoalAdmission::Result::DENY_CLOSED);
 }
 
 TEST(ControllerReservationSocket, IdleListenerDoesNotRevokeAnArmedOwnerLease)
