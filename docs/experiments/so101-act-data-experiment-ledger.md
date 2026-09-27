@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 4b1cfc29
+current_commit: 14ede134
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -29,6 +29,7 @@ confirmed_conclusions:
   - EXP-496 checks all 600 exact target rows of the weakest wrist-view approach chord: wrist/head target pixels remain nonzero in the pinned scene.
   - EXP-497 binds a validated selected SEARCH hash, original seven-source wall receipts and measured stopped start to a noncollecting exact first approach candidate; broker proof and goals remain unwired.
   - EXP-498 exposes a time-axis conflict: the fixed 600-target/701-sample path needs a bridge 100 ms before the selected observation; a fresh post-observation bridge yields only 641 samples and is rejected by the relative request.
+  - EXP-499 confirms observers can retain the needed 50 physics steps, but SEARCH and controller reference ports do not currently prove a continuous 100 ms stopped historical bridge.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -36,8 +37,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-498
-next_experiment: EXP-499
+latest_checkpoint: CP-499
+next_experiment: EXP-500
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4418,3 +4419,36 @@ next_experiment: EXP-499
 
 - Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp498-bridge-timing-discriminator/result.json`. Both checker verdicts are safe, but only the pre-observation bridge has the required 701 samples. A post-observation bridge also fails `RelativePathRequest` ordering; loosening that ordering alone would still leave 641 samples.
 - The first approach candidate remains offline and noncollecting. Next inspect actual history and stop provenance before building a snapshot constructor. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-498, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
+
+## EXP-499 — Historical bridge and SEARCH stop-provenance audit
+
+```yaml
+experiment_id: EXP-499
+status: VALID
+prior_experiment: EXP-498
+hypothesis: The observers retain enough recent 500 Hz world/scene/contact frames for a 50-step pre-observation bridge, but current SEARCH completion does not prove 50 consecutive full-state stationary steps after neck stop before freezing the selected observation.
+prediction: History capacities exceed 50 frames and expose per-frame receipt times; the SEARCH code calls neck stop then takes the next step without a 100 ms stationarity window, so no current live route can claim the historical bridge.
+single_variable: Read-only audit of history retention and SEARCH stop-to-selected-frame ordering against the EXP-498 701-sample requirement.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-498 valid, task-owned stack none]
+success_criteria: [Exact source locations, capacities, freshness limits and missing stationarity assertion recorded]
+failure_criteria: [Existing code already proves a complete 50-step stationary bridge, or buffers cannot retain 50 steps]
+invalid_criteria: [Source/installed version unverified, live stack starts]
+provenance:
+  source_commit: 14ede134
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Read-only source and installed symlink/hash audit of observer buffers, freshness, broker stationary-reference proof and SEARCH stop-to-selected-frame flow"]
+observed: ["World and scene histories each use maxlen 256; contact history uses maxlen 512; each exposes recent frames and original monotonic receipt times, filtered by configured wall-age limits", "SEARCH calls neck.stop_and_confirm then selects the very next physical step and returns it; no 50-step or 100 ms full-qpos/qvel stationarity assertion exists before freezing the selected SEARCH observation", "RosBrokerDriver.stationary_reference_proof reads only current arm/gripper publications and recent stop confirmation; _references stores the latest value per controller, not a 50-step publication history", "The first installed-path guess was invalid because symlink install uses an egg-link; corrected audit resolves the egg-link to build package symlinks back to the current source, with six source/build SHA256 pairs matching", "Corrected read-only audit SHA256 f59f739f2f400477131fcdf7cb0dee04a61ef91abbf6c2391f89dcf07ccb96ed; no stack or goal"]
+inferred: ["Buffer capacity can support a pre-observation bridge in principle, subject to actual 500 Hz delivery and freshness, but current SEARCH and controller-reference evidence cannot establish a continuous stopped full-state interval", "Existing stop proof is a recent point-in-time confirmation; treating it as a 100 ms historical interval would invent evidence"]
+conclusion: VALID read-only history/provenance audit; historical bridge remains unproved.
+decision: Define and test a strict source-only historical-stationarity contract over exact same-epoch physics steps, full qpos/qvel, contact and controller reference/ownership events before changing SEARCH selection or enabling proof.
+next_experiment: EXP-500
+```
+
+## CP-499 — History exists; continuous stopped bridge proof does not
+
+- Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp499-historical-bridge-audit/audit-corrected.txt`. The earlier `audit.txt` failed at a guessed installed module directory before assessing code; both records are retained. The actual install egg-link points to build symlinks, whose bytes match current source for the audited modules.
+- A qualifying bridge requires an actual pre-observation frame and a continuous interval showing the same full state and stationary controller reference through the selected SEARCH frame, with an ownership/epoch/goal fence. Current code does not provide that contract. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-499, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
