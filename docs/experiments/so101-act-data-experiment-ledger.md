@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 7f87ae5513e28599feeb417eedad6e74687c6875
+current_commit: aa54c3f54607128e5fc79435214dac3b57b34b30
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -60,8 +60,8 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-553
-next_experiment: EXP-530
+latest_checkpoint: CP-569
+next_experiment: EXP-545
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -5678,3 +5678,18 @@ status: PLANNED_SOURCE_ONLY
 - Intended focused RED reached the missing method: 1 failure, 20 passes. The first GREEN attempt had an unmatched parenthesis and failed collection; it is invalid setup, not an assertion result. Corrected focused tests passed 21, then final failure/timeout/cursor regressions passed 27. On 32 logical CPUs, the complete unfiltered ordinary `so101_demo_py` source xdist8 gate passed 4,809 and skipped 162 in 49.11 s; JUnit reports 4,971 tests, zero errors/failures. Existing-overlay build passed. Installed `colcon test --pytest-args test -n 8` exited 0 in 43.1 s; copied package XML reports the same 4,971 tests, zero errors/failures and 162 skipped. `colcon test-result` exited 0 with 6,513 aggregate tests, zero errors/failures and 205 skipped. Source/build runtime module SHA256 match, installed import and `ros2 pkg prefix so101_demo_py` resolve to registered overlay, and `git diff --check` passed. No benchmark or EXP-469 performance program ran. Test domains 204/203/202/201/200/198 and build domain 199 used corresponding `exp543-*` GZ partitions. Every pytest/colcon test used fresh registered NVMe scratch with exact-interpreter tempfile readback.
 - Durable checkpoint: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp543-physics-followup/checkpoint.json`, SHA256 `5b7723783aadc3064d861e714493c7b1ee2d3ff1ff62cbc38320551d0dde53ae`. It indexes RED, invalid collection, focused, full source/build/installed logs, copied XML, provenance and seven scratch paths. Retain EXP-543 and all earlier registered runs; archived none. Its seven read-back scratch trees are deletion candidates only; nothing was deleted. Existing dirty/untracked user work remains unstaged. No task-owned stack, reset, goal, hardware motion or formal episode ran. Formal accepted Train/Validation/Offline Test remains `0/0/0`; Task 12 training is `NOT_STARTED`.
 - Next discriminator: join a fresh same-step complete measured state with the original controller reference and bounded dual-clock evidence in a neutral broker input. A second marked endpoint alone cannot prove calibrated rate, current source freshness or commit readiness.
+
+## EXP-544 — Reject changed proof snapshot fields at current-state readback
+
+status: PLANNED_SOURCE_ONLY
+
+- Prior EXP-543 / CP-568, source HEAD `1762bed0`; branch `codex/so101-act-data-0917a`; registered evidence root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`; installed overlay `i`; exact test Python `test-venv/bin/python`; `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED` until tests. Preserve all dirty/untracked work. No task-owned stack or goal.
+- Observation: the proof input hashes the complete supplied snapshot, but `PathProof.matches_state` compares only a fixed subset. A changed supplied robot/cup/scene, attachment or controller feedback field can therefore retain the same permit at its current-state gate. This is a source-code boundary observation, not a claim that a complete authenticated production snapshot already exists.
+- One variable: compare every supplied snapshot field except the three absolute scheduling times that the relative proof contract explicitly translates (`sim_time_s`, `controller_start_time_s`, `controller_bridge.time_s`). Preserve validation of the existing fixed physical fields and exact equality for all other supplied fields, including field presence. Prove RED→GREEN through the real permit current-state gate; run complete ordinary Python source and installed xdist8 gates with registered NVMe scratch. This closes mutation of fields that are present; the later production input must still require and authenticate all mandatory fields, controller/clock continuity, and native goal ingress before any goal. No stack, reset, goal, hardware motion, formal episode or performance program.
+
+## CP-569 — Supplied proof state now remains identical through commit readback
+
+- EXP-544 is `VALID_SOURCE_AND_INSTALLED_NO_MOTION`. Code commit `aa54c3f5` makes `PathProof.matches_state` bind the entire supplied snapshot except the three absolute scheduling times translated by the relative path contract. Existing fixed-field validation remains. The test exercised the real consumed permit readback: eight supplied physical/control-source fields changed and one supplied scene field was removed. All nine cases reached their rejection assertion and failed on the old code; after the change the focused file passed 54/54. This closes a mutation gap for fields present in the proof input. It does not make absent required fields appear or authenticate their producer.
+- Complete ordinary `so101_demo_py` source pytest on 32 logical CPUs with xdist8 exited 0 in 43 s: 4,818 passed, 162 skipped; JUnit 4,980 tests, zero errors/failures. Existing-overlay build exited 0 in 2 s. Installed package `colcon test --pytest-args test -n 8` exited 0 in 43 s with the same 4,980-test XML result. `colcon test-result` exited 0: 6,522 aggregate tests, zero errors/failures, 205 skipped. Source and installed runtime module SHA256 both `932d2ee8021274afe8f1532d0039ef2f36b5aa79870e9f96bf`; installed import and ROS package prefix resolve to the registered overlay. `git diff --check` passed. Tests used fresh registered NVMe scratch and exact-interpreter tempfile readback; test domains 197/196/195/193 and build domain 194 used matching `exp544-*` partitions. No benchmark or EXP-469 performance program ran.
+- Durable checkpoint: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp544-proof-snapshot-state/checkpoint.json`, SHA256 `7546389c375f1bc68a7266fdb6f373c80c9cb3bcf98fbba98633ba093c401549`. It indexes RED/GREEN, full source/build/installed logs, copied XML, aggregate result, provenance and four scratch paths. Retain EXP-544 and all earlier registered runs; archived none. Its four read-back scratch trees are deletion candidates only; nothing was deleted. Existing dirty/untracked user work remains unstaged. No task-owned stack, reset, goal, hardware motion or formal episode ran. Formal accepted Train/Validation/Offline Test remains `0/0/0`; Task 12 training is `NOT_STARTED`.
+- Next discriminator: require a complete authenticated current measured snapshot, original controller reference/feedback and bounded dual-clock mapping at the broker proof input. The present source-only mutation fix does not grant a permit or goal in production.
