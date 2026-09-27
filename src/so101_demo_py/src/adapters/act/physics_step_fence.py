@@ -7,7 +7,9 @@ import threading
 import time
 
 from rclpy.qos import QoSProfile, ReliabilityPolicy
-from so101_mujoco_support.msg import PhysicsStepFenceAck, PhysicsStepFenceRequest
+from so101_mujoco_support.msg import (
+    PhysicsStepEvidence, PhysicsStepFenceAck, PhysicsStepFenceRequest,
+)
 
 
 _QOS = QoSProfile(depth=5, reliability=ReliabilityPolicy.RELIABLE)
@@ -53,6 +55,7 @@ class RosPhysicsStepFence:
         with self._condition:
             if not self._pending:
                 return
+            sample = ack.marked_sample
             if (self._result is not None or ack.simulation_session_id != self.session_id
                     or ack.reset_epoch != self._epoch
                     or ack.request_sequence != self._sequence
@@ -60,6 +63,16 @@ class RosPhysicsStepFence:
                     or ack.marked_physics_step < 1
                     or not math.isfinite(ack.marked_simulation_time_s)
                     or ack.marked_simulation_time_s < 0
+                    or not isinstance(sample, PhysicsStepEvidence)
+                    or sample.simulation_session_id != ack.simulation_session_id
+                    or sample.reset_epoch != ack.reset_epoch
+                    or sample.physics_step != ack.marked_physics_step
+                    or sample.simulation_time_s != ack.marked_simulation_time_s
+                    or sample.truncated is not False
+                    or sample.diagnostic_hazard_breached is not False
+                    or not sample.model_qpos or not sample.model_qvel
+                    or any(not math.isfinite(value) for value in sample.model_qpos)
+                    or any(not math.isfinite(value) for value in sample.model_qvel)
                     or received < self._request_sent_wall_s
                     or type(ack.clock_interval_begin_monotonic_ns) is not int
                     or type(ack.clock_interval_end_monotonic_ns) is not int
@@ -85,6 +98,8 @@ class RosPhysicsStepFence:
                     "clock_interval_width_ns": (
                         ack.clock_interval_end_monotonic_ns -
                         ack.clock_interval_begin_monotonic_ns),
+                    "model_qpos": tuple(sample.model_qpos),
+                    "model_qvel": tuple(sample.model_qvel),
                     "command_authority": False,
                 }
             self._condition.notify_all()
