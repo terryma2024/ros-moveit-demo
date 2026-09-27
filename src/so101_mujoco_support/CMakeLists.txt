@@ -123,6 +123,12 @@ if(BUILD_TESTING)
   ament_target_dependencies(test_controller_goal_admission
     control_msgs rclcpp trajectory_msgs)
 
+  ament_add_gtest(test_controller_stop_witness
+    test/test_controller_stop_witness.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_controller_stop_witness PRIVATE cxx_std_17)
+  target_include_directories(test_controller_stop_witness PRIVATE include)
+
   ament_add_gtest(test_controller_reservation_protocol
     test/test_controller_reservation_protocol.cpp
     APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
