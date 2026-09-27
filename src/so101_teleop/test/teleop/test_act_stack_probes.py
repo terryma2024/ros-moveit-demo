@@ -10,6 +10,7 @@ import uuid
 import pytest
 
 from so101_teleop.unified.act_stack import ActStackProcessOwner
+from so101_teleop.unified.controller_reservation_paths import controller_reservation_directory
 from so101_teleop.unified.bridge import ActChildLaunch
 from so101_teleop.unified.task8_startup_issuer import InstalledActStackReadinessProbe
 from so101_teleop.unified.act_stack_probes import (
@@ -53,6 +54,8 @@ def test_factory_binds_distinct_start_and_stop_observers_to_one_domain(tmp_path)
     assert stack.launch.evidence_root == tmp_path / "task8-live" / "campaign-290" / "stack"
     assert stack.launch.process_environment()["ROS_DOMAIN_ID"] == "176"
     assert stack.launch.process_environment()["GZ_PARTITION"] == "act-pick-place-176-campaign-290"
+    assert stack.launch.process_environment()["SO101_ACT_CONTROLLER_RESERVATION_DIR"] == str(
+        controller_reservation_directory(tmp_path, child.mujoco_session_id))
     assert stack.stop_probe.timeout_s < stack.stop_timeout_s
     assert stack.graph_clear_probe.launch is stack.launch
 

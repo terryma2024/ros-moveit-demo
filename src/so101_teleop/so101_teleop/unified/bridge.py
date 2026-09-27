@@ -21,6 +21,7 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from .arbiter import GlobalMutationArbiter
+from .controller_reservation_paths import controller_reservation_directory
 from .child_runtime import READY_FILE_NAME, NORMAL_SOCKET_NAME, SAFETY_SOCKET_NAME
 from .contracts import (
     AdmittedCampaignContext,
@@ -381,6 +382,9 @@ class ActCampaignChildOwner:
                 "SO101_CHILD_WEB_PID": str(os.getpid()),
                 "SO101_ACT_OPERATION_ID": context.operation_id,
                 "SO101_ACT_EVIDENCE_ROOT": context.evidence_root,
+                "SO101_ACT_CONTROLLER_RESERVATION_DIR": str(
+                    controller_reservation_directory(
+                        Path(context.evidence_root), child.mujoco_session_id)),
                 "SO101_ACT_SOURCE_SHA256": context.source_sha256,
                 "SO101_ACT_MANIFEST_SHA256": context.manifest_sha256,
                 "SO101_ACT_RUNTIME_CONFIG_SHA256": context.runtime_config_sha256,
