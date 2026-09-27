@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 089d0a01
+current_commit: 44e57cee
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -24,8 +24,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-480
-next_experiment: EXP-481
+latest_checkpoint: CP-481
+next_experiment: EXP-482
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -3873,3 +3873,13 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-480 — Source and installed ordinary gates pass; production source authority is missing
 
 - Last valid experiment EXP-480. `BrokerPairedExecution` constructs only legacy permits and the production CLI constructs that executor only in calibration mode. `RosCalibrationMotionGuard._snapshot` has full model qpos but does not export full model qvel, and its `check_prefix` plus `check_exact_goals` both call the complete path checker. `RosBrokerDriver.approval_snapshot` lacks a bound policy receipt; the current ROS node clock plus separate wall monotonic reads do not provide a bounded atomic dual-clock sample. The in-memory proof-specific adapter remains fail closed at production entry. Next EXP-481 should define and test the first trustworthy proof-state producer boundary, with a fresh stopped full-state record and exact policy receipt, before wiring any production APPROACH authority. Host IPC tmpfs still needs isolated test namespaces; do not delete historical evidence. Current branch/worktree and dirty batch remain, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, task-owned stack none, accepted formal Train/Validation/Offline Test 0/0/0. Retained runs through EXP-480, archived none, scratch/runtime/generated caches only deletion candidates, nothing deleted.
+
+## EXP-481 — Full model-velocity source for a future proof state
+
+- **PLANNED, SOURCE_ONLY:** First prove that the current `RosCalibrationMotionGuard._snapshot` drops non-robot qvel from an otherwise exact scene frame. Add a regression with a distinctive cup free-joint velocity; RED must fail because `model_qvel` is absent. Then copy and validate every `model.nv` qvel entry from that same scene frame into the snapshot with no nominal reconstruction or replacement from named-joint feedback. Reject wrong length and nonfinite values at this producer boundary. This is only the first prerequisite for a trustworthy stopped proof state: it does not assert a fresh stop baseline, bind the policy receipt, create dual-clock evidence, or enable a production proof permit. Source HEAD `44e57cee` plus preserved dirty batch, existing overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact task Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`; each pytest gets a new verified NVMe TMPDIR/TMP/TEMP and JUnit. No stack, goal, hardware or performance experiment; retain all, archive none, delete nothing; accepted 0/0/0.
+
+- **VALID source and installed full-qvel snapshot contract:** Intended RED `scratch/exp481-qvel-red.iCR9CjF9` exit1 at `KeyError: 'model_qvel'` after reading the real MuJoCo scene fixture. The guard now copies exactly `model.nv` finite velocities from the same scene frame as full qpos, including a distinctive cup free-joint velocity, and rejects nonfinite or wrong-length scene qvel before any path check. Focused GREEN `scratch/exp481-qvel-green.wBoAQ24Q` exit0 in14 s, 18/18. Complete ordinary source xdist8 `scratch/exp481-source-full.Exk6cvuy` exit0 in38 s, 4690 collected/4528 passed/162 skipped/4 warnings, JUnit SHA256 `daf66aa505ef8e5f8a236873c346109c6333a9331173bc7d0731f2ab9f629721`. Existing-overlay build `scratch/exp481-demo-build.lYLQhrwa` exit0 in1 s. Installed xdist8 `scratch/exp481-demo-full-installed.6DsrfXkv` exit0 in39 s, actual `/usr/bin/python3 -m pytest test -n 8`, JUnit 4690/0 errors/0 failures/162 skips SHA256 `1209d507ff9d5bb8d7e509f09ddd9b8599862a26735c9e438dbb39d3621678e0`; `colcon test-result --verbose` exit0 aggregate6150/0/0/205. Exact source test Python and installed child Python each verified their own new NVMe `TMPDIR/TMP/TEMP`; installed child used pytest7.4.4/xdist3.8.0/Pydantic2.13.5 with recorded module paths. Private IPC mount left the full host `/run/user/1000` untouched. Source/build `calibration_motion.py` SHA256 both `acf2d8a3ea485af21c6a51b516f83d767e2deb1fb4be5c518b5715a9ba2bf58f`; test SHA256 `f73acf9d646c398ed21cdd41fbebe75e46ea8c3b739242aae9e7a99514e0ff39`. This is a source field contract, not a stop receipt, policy observation receipt, production proof entry or motion authority. No stack, goal, hardware, new performance run or formal data. Retain all EXP-481 and prior evidence, archive none, scratch/runtime/generated caches only deletion candidates, delete nothing; accepted Train/Validation/Offline Test 0/0/0.
+
+## CP-481 — Full scene velocity is available; stopped receipt and policy receipt remain
+
+- Last valid experiment EXP-481. The production proof source still cannot be constructed safely because a fresh negative controller stop confirmation and the exact policy receive time are not joined to this full scene snapshot, and the atomic wall/sim clock bound remains absent. `BrokerPairedExecution` and the CLI still use legacy proofless ports; no APPROACH production authority was enabled. Next EXP-482 should isolate the broker-side policy receipt at the Unix RPC ingress and test that a stale or substituted prefix cannot acquire a fresh receipt, without sending goals or granting production proof permits. Current branch/worktree, sole evidence root and preserved dirty batch remain; `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, task-owned stack none, accepted formal Train/Validation/Offline Test 0/0/0. Retained runs through EXP-481, archived none, scratch/runtime/generated caches only deletion candidates, nothing deleted.

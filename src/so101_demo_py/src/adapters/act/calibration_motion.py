@@ -491,12 +491,18 @@ class RosCalibrationMotionGuard:
         if not self._start_safe(q[:6],q[6]) or not self._start_safe(reference,q[6]):
             raise ValueError('MOTION_ENVELOPE_INVALID')
         if abs(v[6])>self.manifest['stop_velocity_rad_s']:raise ValueError('MOTION_NECK_NOT_STOPPED')
+        try:
+            model_qvel=tuple(finite(value) for value in scene['qvel'])
+            if len(model_qvel)!=self.model.nv:
+                raise ValueError('MOTION_SCENE_QVEL_INVALID')
+        except (KeyError,TypeError,ValueError) as error:
+            raise ValueError('MOTION_SCENE_QVEL_INVALID') from error
         qpos=np.array(scene['qpos']);scene_q=[];scene_v=[]
         for name in ACT_JOINTS:
             jid=mujoco.mj_name2id(self.model,mujoco.mjtObj.mjOBJ_JOINT,name)
             if jid<0:raise ValueError('MOTION_MODEL_JOINT_INVALID')
             scene_q.append(float(qpos[self.model.jnt_qposadr[jid]]))
-            scene_v.append(scene['qvel'][self.model.jnt_dofadr[jid]])
+            scene_v.append(model_qvel[self.model.jnt_dofadr[jid]])
         if not self._start_safe(scene_q[:6],scene_q[6]):
             raise ValueError('MOTION_SCENE_ENVELOPE_INVALID')
         if abs(scene_v[6])>self.manifest['stop_velocity_rad_s']:raise ValueError('MOTION_SCENE_NECK_NOT_STOPPED')
@@ -518,7 +524,8 @@ class RosCalibrationMotionGuard:
                 **self.manifest['held_contact_limits'])
             holding_state='HOLDING'
             proof_physics_step=proof_step['physics_step']
-        return dict(model_qpos=tuple(qpos),model_sha256=self.path.model_sha256,phase=phase,holding_state=holding_state,
+        return dict(model_qpos=tuple(qpos),model_qvel=model_qvel,
+            model_sha256=self.path.model_sha256,phase=phase,holding_state=holding_state,
             sim_time_s=max(stamps),controller_bridge=dict(time_s=scene['simulation_time_s'],
                 point=dict(positions=tuple(scene_q[:6]),velocities=tuple(scene_v[:6]),accelerations=())),
             controller_start_time_s=start,controller_start_positions=reference,controller_start_velocities=reference_velocity,
