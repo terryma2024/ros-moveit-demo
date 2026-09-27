@@ -66,6 +66,7 @@ pluginlib_export_plugin_description_file(controller_interface so101_trajectory_c
 
 add_library(so101_controller_reservation_protocol STATIC
   src/controller_reservation_protocol.cpp
+  src/controller_reservation_provision.cpp
   src/controller_reservation_socket.cpp)
 target_compile_features(so101_controller_reservation_protocol PUBLIC cxx_std_17)
 target_include_directories(so101_controller_reservation_protocol PUBLIC
@@ -129,6 +130,15 @@ if(BUILD_TESTING)
     so101_controller_reservation_protocol)
 
   if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    ament_add_gtest(test_controller_reservation_provision
+      test/test_controller_reservation_provision.cpp
+      APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+    target_compile_features(test_controller_reservation_provision PRIVATE cxx_std_17)
+    target_include_directories(test_controller_reservation_provision PRIVATE include)
+    ament_target_dependencies(test_controller_reservation_provision control_msgs rclcpp)
+    target_link_libraries(test_controller_reservation_provision
+      so101_controller_reservation_protocol)
+
     ament_add_gtest(test_controller_reservation_socket
       test/test_controller_reservation_socket.cpp
       APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
