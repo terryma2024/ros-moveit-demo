@@ -56,6 +56,19 @@ public:
     }
   }
 
+  void reset()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    lost_.store(false, std::memory_order_release);
+    count_ = 0;
+    next_ = 0;
+  }
+
+  void invalidate_nonblocking()
+  {
+    lost_.store(true, std::memory_order_release);
+  }
+
   void observe(const Observation & sample)
   {
     if (!mutex_.try_lock()) {
