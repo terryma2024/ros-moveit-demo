@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: ac4cd5e3
+current_commit: 53767e36
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -37,6 +37,7 @@ confirmed_conclusions:
   - EXP-504 passively captures a common 100 ms/51-frame 2 ms controller-reference window in a no-motion stack; a missing optional graph helper invalidated only that run's repeat topic-subscription check, and controller/ownership provenance is still absent.
   - EXP-505 verifies a source-only three-controller 51-frame reference contract with original joint order, 2 ms stamps and fresh receipts; it explicitly withholds owner/goal and command authority.
   - EXP-506 retains bounded original controller message fields at the broker callback and clears history across reset epochs; this is a callback-scoped source, not a native controller epoch or owner/goal event proof.
+  - EXP-507 confirms the remaining action ingress design gap: stock JTC action callbacks remain open, broker tickets register after asynchronous send, and MoveIt teacher execution has downstream controller goals with UUIDs unknown before dispatch.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -44,8 +45,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-506
-next_experiment: EXP-507
+latest_checkpoint: CP-507
+next_experiment: EXP-508
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4690,3 +4691,36 @@ next_experiment: EXP-507
 
 - Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp506-broker-reference-observer/result.json`. Source and installed gates passed with unique verified NVMe scratch. The isolated patch record preserves the exact new broker hunk, while prior uncommitted broker changes remain unstaged and byte-preserved outside that hunk.
 - The physical and controller 51-frame contracts are still separate. A selected real SEARCH readback, a goal/ownership event fence and native epoch alignment remain prerequisites for PathProof or an approach goal. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-506, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
+
+## EXP-507 — Action ingress and broker registration audit
+
+```yaml
+experiment_id: EXP-507
+status: VALID
+prior_experiment: EXP-506
+hypothesis: Removing the trajectory-topic subscriber leaves an action ingress that broker ownership alone cannot prove exclusive across the historical bridge or commit window.
+prediction: Installed JTC still has an action server with base goal callbacks; current broker registers its ticket after asynchronous submit, while MoveIt ExecuteTrajectory may produce downstream controller UUIDs not pre-registered with the broker.
+single_variable: Read-only inspection of installed controller header, official Jazzy source, broker dispatch order and teacher downstream goal bookkeeping.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-506 valid, task-owned stack none]
+success_criteria: [Exact source declarations, installed version and hashes retained; no false claim of runtime action ingress closure]
+failure_criteria: [Action server already filters by broker ticket or all downstream UUIDs pre-registered]
+invalid_criteria: [Stack or goal starts]
+provenance:
+  source_commit: 53767e36
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Read-only hashes and exact source/installed header lines for controller action callbacks and broker goal registration"]
+observed: ["Installed ros-jazzy-joint-trajectory-controller version 4.42.1-1noble.20260905.073033; header exposes protected action_server_ and nonvirtual goal callbacks", "Official Jazzy source constructs the stock action server with its base-class goal callbacks during on_configure; current BrokerOwnedTrajectoryController removes only the topic subscription", "CommandBroker.dispatch calls driver.submit first and then records _goal_tickets[gid]; RosBrokerDriver.submit sends the action asynchronously; ExecuteTrajectory tracks MoveIt downstream goals only after status observation", "Read-only audit SHA256 6593d012f9a1fff7391fea8d6705749bdb08407cb12c69e0c8d10daba6c5d413; no stack or goal"]
+inferred: ["A controller-side one-use action admission gate cannot simply require every current action UUID to be pre-registered without first changing broker submit ordering and preserving MoveIt teacher's downstream controller path", "Latest status and a broker-local event log alone cannot rule out a transient external action accepted between observations; isolated-domain ownership is operational context, not native action admission proof"]
+conclusion: VALID action ingress design gap; no command authority from historical bridge yet.
+decision: First add a source-only ordered broker/driver goal and ownership event timeline with original monotonic times, keeping it nonauthoritative. Then design a controller-side action admission mechanism that preserves teacher/MoveIt and ACT modes, and verify it before enabling PathProof or goals.
+next_experiment: EXP-508
+```
+
+## CP-507 — Topic ingress closed, action ingress still open
+
+- Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp507-action-ingress-audit/audit.txt`. The [official Jazzy controller source](https://raw.githubusercontent.com/ros-controls/ros2_controllers/jazzy/joint_trajectory_controller/src/joint_trajectory_controller.cpp) and installed header support the action callback finding. This audit adds no controller policy or motion test.
+- EXP-500, EXP-505 and EXP-506 provide physical, reference and original callback data contracts, but no combined production PathProof. The broker goal/ownership timeline and controller-side action admission remain absent; no approach goal or formal episode may start. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-507, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
