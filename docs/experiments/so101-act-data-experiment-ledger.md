@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: d11a955d
+current_commit: 24b60562
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -23,6 +23,7 @@ confirmed_conclusions:
   - EXP-487 verifies a broker-private, one-use source receipt authority and a fail-closed proof approval hook; production proof and goals remain unwired.
   - EXP-488 verifies source-neutral prefix and original-observation clocks through PathProof, permit and commit-window tests; the production child still has SEARCH only and no admitted prefix producer.
   - EXP-489 freezes the validated SEARCH physical and RGB readback into one versioned source hash while retaining its original seven monotonic receive times; no prefix or goal authority is issued.
+  - EXP-490 confirms that one selected SEARCH source can pass through broker-private receipt consumption to one complete 701-sample MuJoCo proof offline; this synthetic hold has no route or motion authority.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -30,8 +31,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-489
-next_experiment: EXP-490
+latest_checkpoint: CP-490
+next_experiment: EXP-491
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -1541,7 +1542,7 @@ EXP-178 is an offline physical probe only. No ROS stack, robot command, policy a
 
 ```yaml
 experiment_id: EXP-179
-status: PLANNED
+status: VALID
 prior_experiment: EXP-178
 hypothesis: The same deterministic physical regimes and independent controls remain feasible under the actual plugin-linked MuJoCo 3.12.0, permitting version-consistent offline/live cohorts.
 prediction: Source tests RED on the explicit 3.12.0 boundary, then GREEN after frozen version/model binding, followed by a new 104-session sealed offline cohort and independent replay.
@@ -4114,3 +4115,37 @@ next_experiment: EXP-490
 - `PickPlaceSearchPhasePort` now exposes `selected_prefix_source` only after its validated SEARCH result; it freezes the selected world/scene/contact, both RGB byte arrays, full measured qpos/qvel, controller reference, source stamps, original seven wall receipts and Planning Scene readback into a versioned SHA256. Step, epoch, session, causal stamp or scene readback changes reject. This source record matches the private `PrefixSourceAuthority` input schema but is only a candidate; no prefix is issued in this experiment.
 - The final source xdist8, existing-overlay build and installed xdist8 pass with exact Python and scratch provenance in EXP-489. Source freeze module SHA256 `796eeae171c3c71a8b87c7956c8ec82183761632010c1bbdc69d45d274e81469`; SEARCH port full file SHA256 `e6d53b90dc8feca57a7a604e7dc58ad1c92374ae8045ae4b065539fec39d1d3e` includes prior preserved uncommitted validated-readback work now committed with this interface. No stack, goal or hardware action.
 - Next EXP-490 needs an expert route qualification separate from existing noncollecting diagnostic manifests, then a prefix producer that freezes exact rows from this source and issues the broker-private receipt under the current owner ticket. Full stopped snapshot, commit ports and physical phases remain absent. Formal accepted Train/Validation/Offline Test stays 0/0/0. Retained all runs through EXP-489, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
+
+## EXP-490 — Same-source offline proof integration
+
+```yaml
+experiment_id: EXP-490
+status: PLANNED
+prior_experiment: EXP-489
+hypothesis: One selected SEARCH record can flow through its canonical source hash, private one-use receipt and source-backed relative request into one complete 701-sample MuJoCo proof without changing observation or prefix clocks.
+prediction: A static no-command fixture passes all 701 samples once; changed RGB/state between issue and consume closes the receipt; the result remains evidence only and cannot make a diagnostic route eligible.
+single_variable: Offline integration of previously tested source, receipt and proof boundaries; no production route or controller goal.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-489 valid, current branch and dirty batch preserved, task-owned stack none]
+success_criteria: [Focused integration proof, complete ordinary source and installed package gates, no live stack or goal]
+failure_criteria: [Wrong source passes consume, checker called more than once, proof sample count incomplete]
+invalid_criteria: [Test collection/setup fails before intended boundary, concurrent writer, runtime stack starts]
+provenance:
+  source_commit: 24b60562
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Exact task-Python focused same-source integration with unique verified NVMe TMPDIR", "Exact task-Python ordinary source pytest -n 8 in private IPC mount namespace", "Existing-overlay colcon build --packages-select so101_demo_py --symlink-install", "Installed colcon test --packages-select so101_demo_py --pytest-args test -n 8 in private IPC mount namespace", "colcon test-result --verbose"]
+observed: ["Focused offline integration scratch/exp490-integration-final.szfEGsZm passed 2/2: a broker-private one-use receipt from the selected SEARCH source reached PathProver; a static no-command prefix was checked once over all 701 MuJoCo samples; changed wrist pixels closed consumption", "First ordinary source xdist8 scratch/exp490-source-full.Ne9hAmNx exited 1 in 46 s with 4564 passed/162 skipped and one unrelated real process-scan refusal PROC_ENV_UNVERIFIABLE: 256470 in test_parallel_start_guard_launch; resource scanner and that test were unchanged; PID was gone at readback", "The failed process-scan test alone passed in scratch/exp490-proc-gate-repro.lNmjmC3L; its exact cause under parallel /proc churn remains unproven, so the first full gate is retained as failed rather than relabeled", "Final ordinary source xdist8 scratch/exp490-source-full-repro.R1UlYMZ3 exited 0 in 45 s: 4727 collected, 4565 passed, 162 skipped, 4 pre-existing fork warnings; JUnit SHA256 4a2b64316b7f9931bedc81fc2b4e82d9543355405ee02c83ca19438f17b473f0", "Existing-overlay build scratch/exp490-demo-build.nPdgxyFD exited 0 in 2 s", "Installed xdist8 scratch/exp490-installed-full.saqPAKuG colcon test and test-result both exited 0 in 47 s: package 4727 collected/0 failures/162 skips; aggregate 6187 tests/0 errors/0 failures/205 skipped; package JUnit SHA256 c9ae0ba02e729be98484fe9e0d411c4fe4f70fd1848b6535179f3e8062a66072", "Both final full gates verified exact child interpreters and distinct unique NVMe TMPDIR; ROS_DOMAIN_ID/GZ_PARTITION NOT_ASSIGNED and no task-owned stack or goal"]
+inferred: ["The source-to-receipt-to-proof interfaces agree for one exact physical/image identity and original wall clocks on the offline synthetic fixture", "The static hold does not qualify any expert motion route, prove a production child/permit/goal path, or count as Task8 readiness", "The single process-scan refusal is consistent with transient /proc churn, but its precise root cause was not captured and no guard relaxation was made"]
+conclusion: VALID for no-command offline integration and final source/installed gates; production submission remains closed.
+decision: Preserve both the failed and passing full-gate artifacts; next establish a real qualified 2 ms expert prefix and production proof ports without promoting diagnostic routes.
+next_experiment: EXP-491
+```
+
+## CP-490 — Source to proof integration is offline only
+
+- The integration test freezes a selected SEARCH source, asks the actual `CommandBroker` to register an `EXPERT_ROUTE` receipt under its ACT ticket, consumes the receipt once, and runs `PathProver` against a real MuJoCo checker. A stationary synthetic prefix completes all 701 samples with one checker call; altered wrist pixels refuse before proof. The test has no permit, controller, child stack or accepted episode. Test SHA256 `c7e0f2916460dfd57fab57d4face31799accf41d509e30a0f21a13934e6a09b9`.
+- The first full source gate is retained as FAILED at an unrelated live `/proc` environment read; the focused failing test and the new full source run then passed. No code or policy was changed to mask the refusal. Final source, existing-overlay build and installed full gates are GREEN with exact counts and JUnit hashes in EXP-490. The selected source remains ineligible to produce a motion prefix from the current diagnostic manifests.
+- Next EXP-491 must create and independently qualify an exact 2 ms expert route/profile for physical SEARCH→APPROACH, then bind the real child producer, stopped full-state/reference/dual-clock proof ports, permit and exact-goal checks. No decrease to the 701 samples, 2 mm clearance or original source freshness is allowed. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained all runs through EXP-490, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
