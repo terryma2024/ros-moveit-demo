@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 42a60e0e
+current_commit: 1210ab46
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -32,6 +32,7 @@ confirmed_conclusions:
   - EXP-499 confirms observers can retain the needed 50 physics steps, but SEARCH and controller reference ports do not currently prove a continuous 100 ms stopped historical bridge.
   - EXP-500 verifies an exact 51-frame, 100 ms physical-history contract offline; controller interval and ownership proof remain missing, so no command or collection authority exists.
   - EXP-501 finds that latest-only controller references and action status cannot prove the same 100 ms interval; the installed trajectory-controller header also exposes a topic callback whose exclusivity is unproved.
+  - EXP-502 closes the ACT MuJoCo arm/gripper/neck trajectory-topic subscriber in an action-only controller plugin, with C++ plugin and Python gates passing; external action ownership and reference history remain unproved.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -39,8 +40,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-501
-next_experiment: EXP-502
+latest_checkpoint: CP-502
+next_experiment: EXP-503
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4520,3 +4521,36 @@ next_experiment: EXP-502
 
 - Registered artifacts: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp501-controller-interval-audit/audit.txt` and `official-jazzy-doc-note.txt` in the same directory. Source, installed header and [official Jazzy controller documentation](https://control.ros.org/jazzy/doc/ros2_controllers/joint_trajectory_controller/doc/userdoc.html) establish the topic ingress concern: a topic trajectory can override an action goal without aborting it. Actual runtime publisher rate and ingress isolation were not measured.
 - The EXP-500 physical verifier remains offline and noncollecting. No PathProof, permit or goal has been connected to it. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-501, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
+
+## EXP-502 — Close the ACT trajectory topic ingress
+
+```yaml
+experiment_id: EXP-502
+status: VALID
+prior_experiment: EXP-501
+hypothesis: An ACT-only controller plugin can retain the stock action server while removing the unowned trajectory-topic subscription for arm, gripper and neck.
+prediction: A configured plugin has no trajectory-topic subscriber and still has an action server; controller manager pluginlib can load it; ordinary C++ and Python gates pass.
+single_variable: Replace the ACT MuJoCo controller type with an action-only subclass that drops the stock topic subscriber during configure and refuses activation if it reappears.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-501 valid, task-owned stack none]
+success_criteria: [Missing-header RED, C++ plugin test GREEN, package build/test and full ordinary Python source/installed gates]
+failure_criteria: [Topic subscriber persists, action server disappears, plugin cannot load, gate regression]
+invalid_criteria: [Motion goal or real hardware operation]
+provenance:
+  source_commit: 1210ab46
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["C++ missing-header RED and focused plugin GREEN", "Build so101_mujoco_support and so101_demo_py in existing overlay", "Full C++ colcon gate with verified NVMe TMPDIR", "Ordinary Python source pytest -n 8 and installed colcon test --pytest-args test -n 8 in private IPC namespaces", "Read-only ament_uncrustify check"]
+observed: ["RED build reached the intended missing broker_owned_trajectory_controller.hpp boundary; the implementation configures the stock controller then removes its topic subscription while retaining its action server", "Two focused C++ tests passed: configured topic subscriber absent, action server present, installed pluginlib class load succeeds; final C++ package build and colcon test-result passed with 0 failures", "Python source gate collected 4734: 4572 passed and 162 skipped; installed aggregate 6197 tests, 0 errors, 0 failures and 205 skipped", "ACT arm/gripper/neck installed YAML all use so101_mujoco_support/BrokerOwnedTrajectoryController; ament_uncrustify reports no divergence; result artifact SHA256 6a474314c156aca491485af09793645775eb9de444b27178ef4e44b7acd44980; no stack or goal"]
+inferred: ["The tested ACT plugin removes one topic command path while preserving action command support", "C++ component tests do not prove live action-client exclusivity, 500 Hz lossless controller-state delivery, 100 ms continuous stop, or the future commit window"]
+conclusion: VALID offline ACT trajectory-topic closure; full controller interval still nonauthoritative.
+decision: Verify plugin identity and no-topic ingress on a new isolated no-motion stack, then establish a broker-owned action/ref/feedback interval with generation and goal fences before connecting the physical bridge. Do not send an approach goal.
+next_experiment: EXP-503
+```
+
+## CP-502 — ACT topic command bypass closed offline
+
+- Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp502-topic-ingress-closure/result.json`. The C++ plugin and installed ACT YAML are pinned there with RED/GREEN, build, full source/installed test and style-check hashes.
+- This step did not start a ROS/MuJoCo stack or send a goal. The plugin does not by itself establish exclusive action ownership or the missing 100 ms reference interval; the physical history verifier remains noncollecting. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-502, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
