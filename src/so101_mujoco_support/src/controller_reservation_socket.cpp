@@ -240,7 +240,12 @@ bool ControllerReservationSocket::serve_one()
   return false;
 #else
   const auto ready = wait_for_listener(listener_, std::chrono::steady_clock::now() + deadline_);
-  if (ready == ListenerWait::IDLE) {return false;}
+  if (ready == ListenerWait::IDLE) {
+    if (process_start_ticks(expected_peer_.pid) != expected_peer_.start_ticks) {
+      gate_.close();
+    }
+    return false;
+  }
   if (ready != ListenerWait::READY) {
     gate_.close();
     return false;
