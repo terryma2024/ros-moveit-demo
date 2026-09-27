@@ -4149,3 +4149,36 @@ next_experiment: EXP-491
 - The integration test freezes a selected SEARCH source, asks the actual `CommandBroker` to register an `EXPERT_ROUTE` receipt under its ACT ticket, consumes the receipt once, and runs `PathProver` against a real MuJoCo checker. A stationary synthetic prefix completes all 701 samples with one checker call; altered wrist pixels refuse before proof. The test has no permit, controller, child stack or accepted episode. Test SHA256 `c7e0f2916460dfd57fab57d4face31799accf41d509e30a0f21a13934e6a09b9`.
 - The first full source gate is retained as FAILED at an unrelated live `/proc` environment read; the focused failing test and the new full source run then passed. No code or policy was changed to mask the refusal. Final source, existing-overlay build and installed full gates are GREEN with exact counts and JUnit hashes in EXP-490. The selected source remains ineligible to produce a motion prefix from the current diagnostic manifests.
 - Next EXP-491 must create and independently qualify an exact 2 ms expert route/profile for physical SEARCH→APPROACH, then bind the real child producer, stopped full-state/reference/dual-clock proof ports, permit and exact-goal checks. No decrease to the 701 samples, 2 mm clearance or original source freshness is allowed. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained all runs through EXP-490, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
+
+## EXP-491 — Exact-grid approach route feasibility
+
+```yaml
+experiment_id: EXP-491
+status: PLANNED
+prior_experiment: EXP-490
+hypothesis: The frozen OPEN stage endpoint of the noncollecting visible-approach profile admits a stopped 600-target, 2 ms cubic prefix under the original MuJoCo model and current dynamics/contact limits.
+prediction: A one-third OPEN displacement passes the complete 701-sample checker at 2 mm clearance, 0.25 rad/s velocity and 1.2 rad/s² acceleration; a full unsplit OPEN stage would exceed dynamics.
+single_variable: Reconstruct one OPEN motion on the exact 2 ms grid instead of the existing 20 ms diagnostic grid; no production authority or controller goal.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-490 valid, current dirty worktree preserved, task-owned stack none]
+success_criteria: [Exact 600 rows and 701 checked samples, checker SAFE, endpoint and source hashes retained]
+failure_criteria: [Any checker rejection, incomplete samples, source/profile drift]
+invalid_criteria: [Wrong interpreter or model, runtime stack or goal starts]
+provenance:
+  source_commit: 5632dcb8
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Offline exact-grid OPEN prefix candidate with the task Python and current MuJoCoPathChecker; save source hashes, rows hash and verdict under the registered evidence root"]
+observed: ["Full OPEN endpoint in one 600-target prefix refused PATH_VELOCITY_LIMIT on joint 6 at 10.7 s: 0.5812953470 rad/s > 0.25", "One-third OPEN endpoint passed one complete 701-sample checker call at 2 ms with 2 mm clearance and current dynamic limits", "Offline run script SHA256 6be5465aabed6651a02577f4b2568f75d53acfa9f21201bff9eb7db5e0b92c1e; result SHA256 f48bfb78e271957080cea609d45c2f69b72ee0333529802b74e748d02a8ebf58"]
+inferred: ["The OPEN endpoint is feasible only after splitting under this fixed 1.2 s stopped-prefix construction; the first third does not qualify the whole route or physical submission"]
+conclusion: VALID for one offline exact-grid motion feasibility discriminator; production still closed.
+decision: Retain both paths and test every frozen diagnostic segment at 2 ms before route qualification; preserve its noncollecting role.
+next_experiment: EXP-492
+```
+
+## CP-491 — First moving prefix feasible only after splitting
+
+- Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp491-exact-grid-open/result.json`. The 600-row one-third OPEN prefix SHA256 is `c6bcc4cbdb13df6a1281207ec6e2bf0cd124e4499e309721fb28b87b6d8a3663`; the rejected full OPEN rows SHA256 is `cb619fc478c1b9837895f7f9f2a99973e70316bca4f2aa0a420ac33c8c10fc00`.
+- This is an offline geometric/dynamic check with a synthetic stopped snapshot. There is no selected live SEARCH state, fresh physical stop, permit, exact goal or accepted episode. Retained through EXP-491, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
