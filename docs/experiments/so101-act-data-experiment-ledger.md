@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 14ede134
+current_commit: 42a60e0e
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -30,6 +30,7 @@ confirmed_conclusions:
   - EXP-497 binds a validated selected SEARCH hash, original seven-source wall receipts and measured stopped start to a noncollecting exact first approach candidate; broker proof and goals remain unwired.
   - EXP-498 exposes a time-axis conflict: the fixed 600-target/701-sample path needs a bridge 100 ms before the selected observation; a fresh post-observation bridge yields only 641 samples and is rejected by the relative request.
   - EXP-499 confirms observers can retain the needed 50 physics steps, but SEARCH and controller reference ports do not currently prove a continuous 100 ms stopped historical bridge.
+  - EXP-500 verifies an exact 51-frame, 100 ms physical-history contract offline; controller interval and ownership proof remain missing, so no command or collection authority exists.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -37,8 +38,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-499
-next_experiment: EXP-500
+latest_checkpoint: CP-500
+next_experiment: EXP-501
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4452,3 +4453,36 @@ next_experiment: EXP-500
 
 - Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp499-historical-bridge-audit/audit-corrected.txt`. The earlier `audit.txt` failed at a guessed installed module directory before assessing code; both records are retained. The actual install egg-link points to build symlinks, whose bytes match current source for the audited modules.
 - A qualifying bridge requires an actual pre-observation frame and a continuous interval showing the same full state and stationary controller reference through the selected SEARCH frame, with an ownership/epoch/goal fence. Current code does not provide that contract. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-499, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
+
+## EXP-500 — Physical half of historical stationary bridge
+
+```yaml
+experiment_id: EXP-500
+status: VALID
+prior_experiment: EXP-499
+hypothesis: A strict read-only verifier can establish that 51 same-epoch world/scene/contact physics frames span exactly 100 ms before the selected SEARCH observation and retain the same full qpos/qvel, while explicitly withholding controller and command authority.
+prediction: Complete 51-frame history passes; missing step, wrong selected source, changed full qpos/qvel, unsafe contact or stale receipt refuses. Output states that controller interval proof remains required.
+single_variable: Add a physical-history verifier only; no SEARCH timing change, controller claim, broker receipt, permit or goal.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-499 valid, task-owned stack none]
+success_criteria: [Focused RED/GREEN with 51-frame synthetic evidence and negative controls, full ordinary source and installed gates]
+failure_criteria: [Discontinuous or stale history accepted, physical-only output grants command authority]
+invalid_criteria: [Wrong test interpreter or overlay, live stack or goal]
+provenance:
+  source_commit: 42a60e0e
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Focused historical-physics RED/GREEN with unique verified NVMe TMPDIR", "Ordinary source pytest -n 8 in private IPC namespace", "Existing-overlay package build", "Installed colcon test --pytest-args test -n 8 and test-result"]
+observed: ["An initial focused invocation without the sourced overlay failed before the intended boundary and is retained as invalid; the corrected RED reached ModuleNotFoundError for stationary_bridge_history", "Focused GREEN 2 passed, including gap/state/contact/source/receipt refusals; exact 51-frame positive result reports controller_interval_proof_required=true, command_authority=false and eligible_for_collection=false", "Ordinary source gate collected 4734: 4572 passed, 162 skipped in 47.00 s; existing-overlay build passed in 1.39 s; installed colcon gate and test-result passed with aggregate 6194 tests, 0 errors, 0 failures, 205 skipped", "Result artifact SHA256 632e24793e5918c5fc106f64339f13165aa5c6845c7882d4fae096b9faf31c24; implementation SHA256 d73c0f3a00aabd6e7efad53362d828b6d84fd81c681a59fea83640dc353b3814; regression SHA256 74ae7497e952197ef7420cff7d1c74790c9cf19ab4b805e2c2bac6450c250479; no stack or goal"]
+inferred: ["Physical observer history can establish a true pre-observation 100 ms bridge only when all 51 original frames and their receipts are present and stationary", "This verifier has no historical controller publication, ownership or goal-fence evidence; it is not a PathProof input authorizer and cannot enable the approach candidate"]
+conclusion: VALID source-only physical half of a stationary bridge; production bridge still closed.
+decision: Inspect and define the independent controller-reference and ownership interval source before connecting this physical history to SEARCH or a proof port. Do not infer continuous stop from the existing latest-only reference.
+next_experiment: EXP-501
+```
+
+## CP-500 — Physical history verified; controller interval still missing
+
+- Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp500-stationary-physics-history/result.json`. Focused and full source/installed gates passed on unique verified NVMe scratch. The invalid first RED, valid RED and all GREEN evidence remain retained.
+- The read-only verifier requires 51 exact 2 ms same-epoch world/scene/contact frames, full qpos/qvel equality, stopped velocities, safe contact, fresh ordered original receipts and identity with the selected SEARCH frame. It does not change SEARCH timing, generate a broker receipt, issue a permit or send a goal. The missing controller interval and ownership fence remain the next boundary. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-500, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
