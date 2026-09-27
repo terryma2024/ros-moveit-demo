@@ -13,6 +13,8 @@ from rclpy.serialization import serialize_message
 
 
 MAX_BODY_BYTES = 1_048_640
+_ROLE_CODES = {"arm": 1, "gripper": 2, "neck": 3}
+_MAX_INGRESS_SNAPSHOT_AGE_NS = 200_000_000
 
 
 class ControllerReservationClient:
@@ -111,6 +113,54 @@ class ControllerReservationClient:
                 or response[5] not in (0, 1)):
             raise RuntimeError("CONTROLLER_RESERVATION_REPLY_INVALID")
         return response[5] == 0
+
+    def snapshot_generation(self, ticket, kind: str) -> dict:
+        """Read one authenticated controller ingress cursor without changing admission."""
+        if (not isinstance(ticket, tuple) or len(ticket) != 5
+                or kind not in _ROLE_CODES or kind not in self._paths):
+            raise ValueError("CONTROLLER_INGRESS_SNAPSHOT_SCOPE_INVALID")
+        generation = ticket[0]
+        if type(generation) is not int or not 0 < generation < 2**64:
+            raise ValueError("CONTROLLER_INGRESS_SNAPSHOT_SCOPE_INVALID")
+        role_code = _ROLE_CODES[kind]
+        body = (b"SOGR\x01\x04" + self._capabilities[kind]
+                + generation.to_bytes(8, "big") + bytes([role_code]) + bytes(15))
+        frame = len(body).to_bytes(4, "big") + body
+        with self._lock:
+            path = self._paths[kind]
+            self._check_path(path)
+            deadline = self._deadline()
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+                connection.settimeout(self._remaining(deadline))
+                connection.connect(str(path))
+                connection.settimeout(self._remaining(deadline))
+                connection.sendall(frame)
+                response = bytearray()
+                while len(response) < 40:
+                    connection.settimeout(self._remaining(deadline))
+                    chunk = connection.recv(40 - len(response))
+                    if not chunk:
+                        break
+                    response.extend(chunk)
+            received_ns = time.monotonic_ns()
+        if (len(response) != 40 or response[:6] != b"SOGI\x01\x00"
+                or response[6] != role_code or response[7] != 0
+                or int.from_bytes(response[8:16], "big") != generation):
+            raise RuntimeError("CONTROLLER_INGRESS_SNAPSHOT_INVALID")
+        sequence = int.from_bytes(response[16:24], "big")
+        last_ns = int.from_bytes(response[24:32], "big")
+        observed_ns = int.from_bytes(response[32:40], "big")
+        if (observed_ns <= 0 or last_ns > observed_ns
+                or not 0 <= received_ns - observed_ns <= _MAX_INGRESS_SNAPSHOT_AGE_NS):
+            raise ValueError("CONTROLLER_INGRESS_SNAPSHOT_INVALID")
+        return {
+            "role": kind, "owner_generation": generation,
+            "ingress_sequence": sequence,
+            "last_ingress_monotonic_ns": last_ns,
+            "observed_monotonic_ns": observed_ns,
+            "received_monotonic_ns": received_ns,
+            "command_authority": False,
+        }
 
     def reserve(self, ticket, kind, goal, goal_uuid):
         if (not isinstance(ticket, tuple) or not ticket

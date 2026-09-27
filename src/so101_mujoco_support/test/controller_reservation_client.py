@@ -53,6 +53,12 @@ def start_ticks() -> int:
 
 def frame_for(mode: str) -> bytes:
     key = capability
+    if mode in ("ingress_snapshot", "ingress_wrong_role", "ingress_stale_generation"):
+        generation = 4 if mode == "ingress_stale_generation" else 5
+        role = 3 if mode == "ingress_wrong_role" else 1
+        body = (b"SOGR\x01\x04" + key + generation.to_bytes(8, "big")
+                + bytes([role]) + bytes(15))
+        return len(body).to_bytes(4, "big") + body
     if mode == "arm_generation":
         body = b"SOGR\x01\x03" + key + (5).to_bytes(8, "big") + bytes(16)
         return len(body).to_bytes(4, "big") + body
@@ -83,6 +89,14 @@ def frame_for(mode: str) -> bytes:
 
 def request(mode: str) -> str:
     global broker_state
+    if mode == "ingress_snapshot":
+        snapshot = wire_client.snapshot_generation(
+            (5, 0, "act", "session", "attempt"), "arm")
+        return "SNAPSHOT " + " ".join(map(str, (
+            snapshot["owner_generation"], 1, snapshot["ingress_sequence"],
+            snapshot["last_ingress_monotonic_ns"],
+            snapshot["observed_monotonic_ns"],
+        )))
     if mode == "broker_transaction":
         payload = bytes.fromhex(
             (Path(__file__).parent / "fixtures/follow_joint_trajectory_goal.cdr.hex")
@@ -140,9 +154,25 @@ def request(mode: str) -> str:
         if mode == "truncated":
             conn.shutdown(socket.SHUT_WR)
         try:
-            reply = conn.recv(16)
+            expected = 40 if mode.startswith("ingress_") else 16
+            reply = bytearray()
+            while len(reply) < expected:
+                chunk = conn.recv(expected - len(reply))
+                if not chunk:
+                    break
+                reply.extend(chunk)
         except (ConnectionResetError, BrokenPipeError, TimeoutError):
             return "EOF"
+        if mode.startswith("ingress_"):
+            if len(reply) != 40 or reply[:5] != b"SOGI\x01" or reply[7] != 0:
+                return "EOF"
+            if reply[5] == 1:
+                return "REJECT"
+            if reply[5] != 0:
+                return "EOF"
+            fields = [int.from_bytes(reply[start:start + 8], "big")
+                      for start in (8, 16, 24, 32)]
+            return "SNAPSHOT " + " ".join(map(str, (fields[0], reply[6], *fields[1:])))
         if len(reply) == 16 and reply[:6] == b"SOGA\x01\x00":
             return "ACK"
         if len(reply) == 16 and reply[:6] == b"SOGA\x01\x01":

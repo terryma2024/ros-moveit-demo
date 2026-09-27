@@ -49,6 +49,10 @@ public:
   {
     return controller_stop_proof(now_monotonic_ns);
   }
+  std::optional<so101_mujoco_support::ControllerIngressWitness::Snapshot> native_ingress()
+  {
+    return controller_ingress_snapshot();
+  }
   std::array<size_t, 4> state_shape() const
   {
     return {joints_angle_wraparound_.size(), state_current_.positions.size(),
@@ -356,6 +360,8 @@ TEST(BrokerOwnedTrajectoryController, ActionIngressConsumesOrClosesReservationBe
   ASSERT_EQ(controller.init("arm_controller", "", 500, "", options),
     controller_interface::return_type::OK);
   ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  ASSERT_TRUE(controller.native_ingress().has_value());
+  EXPECT_EQ(controller.native_ingress()->sequence, 0U);
   auto client_node = std::make_shared<rclcpp::Node>("goal_ingress_test_client");
   auto client = client_node->create_client<SendGoal>(
     "/arm_controller/follow_joint_trajectory/_action/send_goal");
@@ -380,6 +386,8 @@ TEST(BrokerOwnedTrajectoryController, ActionIngressConsumesOrClosesReservationBe
     rclcpp::FutureReturnCode::SUCCESS);
   EXPECT_FALSE(response.get()->accepted);
   EXPECT_EQ(controller.probe_goal(id, goal, 1), Admission::Result::DENY_CLOSED);
+  ASSERT_TRUE(controller.native_ingress().has_value());
+  EXPECT_EQ(controller.native_ingress()->sequence, 1U);
 
   id.fill(2);
   ASSERT_TRUE(controller.reserve_goal(id, goal, 2));
@@ -391,6 +399,8 @@ TEST(BrokerOwnedTrajectoryController, ActionIngressConsumesOrClosesReservationBe
     rclcpp::FutureReturnCode::SUCCESS);
   EXPECT_FALSE(response.get()->accepted);
   EXPECT_EQ(controller.probe_goal(id, goal, 2), Admission::Result::DENY_FAULT);
+  ASSERT_TRUE(controller.native_ingress().has_value());
+  EXPECT_EQ(controller.native_ingress()->sequence, 2U);
   executor.remove_node(client_node);
   executor.remove_node(controller.get_node()->get_node_base_interface());
   rclcpp::shutdown();

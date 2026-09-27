@@ -6,11 +6,10 @@
 #include <string>
 
 #include "so101_mujoco_support/controller_reservation_socket.hpp"
+#include "so101_mujoco_support/controller_reservation_role.hpp"
 
 namespace so101_mujoco_support
 {
-
-enum class ControllerReservationRole : uint8_t {ARM = 1, GRIPPER = 2, NECK = 3};
 
 struct ControllerReservationProvision
 {

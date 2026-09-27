@@ -119,6 +119,65 @@ def test_each_controller_role_uses_its_own_capability():
     assert [frame[10:42] for frame in frames] == [arm_key, gripper_key]
 
 
+def test_read_only_native_ingress_snapshot_binds_all_three_private_roles():
+    global ready
+    ready = threading.Event()
+    path = socket_path()
+    frames = []
+    observed_ns = time.monotonic_ns()
+    replies = [
+        b"SOGI\x01\x00" + bytes([role, 0]) + (5).to_bytes(8, "big")
+        + (7).to_bytes(8, "big") + (observed_ns - 1000).to_bytes(8, "big")
+        + observed_ns.to_bytes(8, "big")
+        for role in (1, 2, 3)
+    ]
+    worker = threading.Thread(target=serve, args=(path, replies, frames), daemon=True)
+    worker.start()
+    assert ready.wait(1)
+    keys = {"arm": bytes([0xA5]) * 32, "gripper": bytes([0x5A]) * 32,
+            "neck": bytes([0x3C]) * 32}
+    client = ControllerReservationClient(
+        {role: path for role in keys}, capability=keys, timeout_s=0.1)
+    ticket = (5, "token", "act", "session", "attempt")
+    snapshots = [client.snapshot_generation(ticket, role) for role in keys]
+    worker.join(1)
+    assert not worker.is_alive()
+    assert [item["role"] for item in snapshots] == list(keys)
+    assert all(item["ingress_sequence"] == 7 and item["command_authority"] is False
+               for item in snapshots)
+    assert [frame[9] for frame in frames] == [4, 4, 4]
+    assert [frame[50] for frame in frames] == [1, 2, 3]
+    assert all(frame[51:] == bytes(15) for frame in frames)
+    assert [frame[10:42] for frame in frames] == list(keys.values())
+
+
+@pytest.mark.parametrize("corruption", ["role", "generation", "future", "stale"])
+def test_native_ingress_snapshot_rejects_wrong_or_stale_reply(corruption):
+    global ready
+    ready = threading.Event()
+    path = socket_path()
+    frames = []
+    now = time.monotonic_ns()
+    role = 3 if corruption == "role" else 1
+    generation = 4 if corruption == "generation" else 5
+    observed = now + 1_000_000_000 if corruption == "future" else (
+        now - 1_000_000_000 if corruption == "stale" else now)
+    reply = (b"SOGI\x01\x00" + bytes([role, 0])
+             + generation.to_bytes(8, "big") + (7).to_bytes(8, "big")
+             + (observed - 1000).to_bytes(8, "big")
+             + observed.to_bytes(8, "big"))
+    worker = threading.Thread(target=serve, args=(path, [reply], frames), daemon=True)
+    worker.start()
+    assert ready.wait(1)
+    client = ControllerReservationClient(
+        {"arm": path}, capability=bytes([0xA5]) * 32, timeout_s=0.1)
+    with pytest.raises((ValueError, RuntimeError),
+                       match="CONTROLLER_INGRESS_SNAPSHOT_INVALID"):
+        client.snapshot_generation((5, "token", "act", "session", "attempt"), "arm")
+    worker.join(1)
+    assert not worker.is_alive()
+
+
 def test_stopped_generation_arms_both_roles_before_any_goal_and_closes_both():
     global ready
     ready = threading.Event()
