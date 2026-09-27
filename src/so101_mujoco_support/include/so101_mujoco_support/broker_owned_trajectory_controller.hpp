@@ -45,7 +45,7 @@ public:
 protected:
   ControllerGoalAdmission goal_admission_;
   std::optional<ControllerStopWitness::Proof> controller_stop_proof(
-    int64_t now_monotonic_ns) const;
+    int64_t now_monotonic_ns);
 
 private:
   void configure_reservation_scope();

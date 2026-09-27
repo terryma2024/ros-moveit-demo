@@ -52,13 +52,29 @@ controller_interface::return_type BrokerOwnedTrajectoryController::update(
 }
 
 std::optional<ControllerStopWitness::Proof> BrokerOwnedTrajectoryController::controller_stop_proof(
-  int64_t now_monotonic_ns) const
+  int64_t now_monotonic_ns)
 {
   if (!witness_active_.load(std::memory_order_acquire)) {return std::nullopt;}
   const auto joints = monitored_joints_.load(std::memory_order_acquire);
-  if (joints == 5) {return arm_stop_witness_.proof(now_monotonic_ns);}
-  if (joints == 1) {return gripper_stop_witness_.proof(now_monotonic_ns);}
-  return std::nullopt;
+  ControllerStopWitness * witness = nullptr;
+  if (joints == 5) {witness = &arm_stop_witness_;}
+  if (joints == 1) {witness = &gripper_stop_witness_;}
+  if (!witness) {return std::nullopt;}
+  const auto goal_is_active = [this]() {
+      const auto active_goal = rt_active_goal_.readFromRT();
+      return rt_has_pending_goal_.load() || !rt_is_holding_.load() ||
+             (active_goal && *active_goal);
+    };
+  if (goal_is_active()) {
+    witness->invalidate_nonblocking();
+    return std::nullopt;
+  }
+  const auto stopped = witness->proof(now_monotonic_ns);
+  if (!witness_active_.load(std::memory_order_acquire) || goal_is_active()) {
+    witness->invalidate_nonblocking();
+    return std::nullopt;
+  }
+  return stopped;
 }
 
 controller_interface::CallbackReturn BrokerOwnedTrajectoryController::on_configure(

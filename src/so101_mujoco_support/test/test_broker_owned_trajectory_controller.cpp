@@ -41,7 +41,7 @@ public:
     return goal_admission_.admit(id, goal, generation);
   }
   std::optional<so101_mujoco_support::ControllerStopWitness::Proof> stopped_state(
-    int64_t now_monotonic_ns) const
+    int64_t now_monotonic_ns)
   {
     return controller_stop_proof(now_monotonic_ns);
   }
@@ -50,6 +50,7 @@ public:
     return {joints_angle_wraparound_.size(), state_current_.positions.size(),
       state_desired_.positions.size(), state_error_.positions.size()};
   }
+  void set_pending_goal_for_test(bool value) {rt_has_pending_goal_.store(value);}
 };
 
 Action::Goal stationary_goal()
@@ -448,6 +449,12 @@ TEST(BrokerOwnedTrajectoryController, NativeUpdatesProvideFreshStoppedStateOnlyW
     std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
   ASSERT_TRUE(proof.has_value());
   EXPECT_EQ(proof->last_sim_time_ns, 102000000);
+  controller.set_pending_goal_for_test(true);
+  EXPECT_FALSE(controller.stopped_state(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(now).count()).has_value());
+  controller.set_pending_goal_for_test(false);
+  EXPECT_FALSE(controller.stopped_state(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(now).count()).has_value());
   ASSERT_EQ(controller.get_node()->deactivate().id(),
     lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
   EXPECT_FALSE(controller.stopped_state(
