@@ -51,14 +51,16 @@ def frame_for(mode: str) -> bytes:
 
 
 def request(mode: str) -> str:
-    if mode == "valid":
+    if mode in ("valid", "valid_second"):
         payload = bytes.fromhex(
             (Path(__file__).parent / "fixtures/follow_joint_trajectory_goal.cdr.hex")
             .read_text()
             .strip()
         )
         goal = deserialize_message(payload, FollowJointTrajectory.Goal)
-        native_uuid = str(uuid.UUID(bytes=b"\x11" * 16))
+        if mode == "valid_second":
+            goal.trajectory.points[0].positions[0] = 0.25
+        native_uuid = str(uuid.UUID(bytes=(b"\x22" if mode == "valid_second" else b"\x11") * 16))
         accepted = wire_client.reserve((5, 0, "act", "session", "attempt"),
                                        "arm", goal, native_uuid)
         return "ACK" if accepted else "REJECT"

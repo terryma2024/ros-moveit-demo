@@ -10,6 +10,7 @@
 #include <limits>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <utility>
 
@@ -33,10 +34,11 @@ public:
 
   explicit ControllerGoalAdmission(
     Clock clock = steady_now_ns, int64_t validity_ns = 250000000,
-    size_t max_goal_bytes = 1048576)
-  : clock_(std::move(clock)), validity_ns_(validity_ns), max_goal_bytes_(max_goal_bytes)
+    size_t max_goal_bytes = 1048576, size_t max_goals_per_generation = 2048)
+  : clock_(std::move(clock)), validity_ns_(validity_ns), max_goal_bytes_(max_goal_bytes),
+    max_goals_per_generation_(max_goals_per_generation)
   {
-    if (!clock_ || validity_ns_ <= 0 || max_goal_bytes_ == 0) {
+    if (!clock_ || validity_ns_ <= 0 || max_goal_bytes_ == 0 || max_goals_per_generation_ == 0) {
       throw std::invalid_argument("CONTROLLER_GOAL_ADMISSION_CONFIG_INVALID");
     }
   }
@@ -50,7 +52,7 @@ public:
     }
     generation_ = generation;
     reservation_.reset();
-    reservation_seen_ = false;
+    used_uuids_.clear();
     mode_ = Mode::EXCLUSIVE;
     return true;
   }
@@ -76,7 +78,9 @@ public:
       return false;
     }
     const auto now = read_clock();
-    if (!now || generation != generation_ || reservation_seen_ || reservation_ ||
+    if (!now || generation != generation_ || reservation_ ||
+      used_uuids_.size() >= max_goals_per_generation_ ||
+      used_uuids_.find(uuid) != used_uuids_.end() ||
       std::all_of(uuid.begin(), uuid.end(), [](uint8_t value) {return value == 0;}) ||
       goal.trajectory.joint_names.empty() || goal.trajectory.points.empty() ||
       *now > std::numeric_limits<int64_t>::max() - validity_ns_)
@@ -92,7 +96,7 @@ public:
         return false;
       }
       reservation_ = Reservation{uuid, goal, *now + validity_ns_};
-      reservation_seen_ = true;
+      used_uuids_.insert(uuid);
     } catch (...) {
       fault_close();
       return false;
@@ -173,12 +177,13 @@ private:
   Clock clock_;
   int64_t validity_ns_;
   size_t max_goal_bytes_;
+  size_t max_goals_per_generation_;
   Mode mode_{Mode::CLOSED};
   uint64_t generation_{0};
   std::optional<int64_t> last_now_ns_;
   bool clock_bad_{false};
   std::optional<Reservation> reservation_;
-  bool reservation_seen_{false};
+  std::set<GoalUUID> used_uuids_;
 };
 
 }  // namespace so101_mujoco_support

@@ -179,6 +179,32 @@ TEST(ControllerReservationSocket, AcknowledgesOnlyStoredCrossProcessReservation)
   EXPECT_EQ(gate.admit(uuid, goal(), 5), ControllerGoalAdmission::Result::ALLOW);
 }
 
+TEST(ControllerReservationSocket, SequentialGoalsUseOneAuthenticatedOwnerGeneration)
+{
+  const auto path = socket_path("sequential.sock");
+  const auto key = capability();
+  ClientProcess client(path, key);
+  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate.arm(5));
+  ControllerReservationSocket server(path, gate, key, client.peer(),
+    std::chrono::milliseconds(1000));
+  client.start("valid");
+  ASSERT_TRUE(server.serve_one());
+  ASSERT_EQ(client.result(), "ACK");
+  ControllerGoalAdmission::GoalUUID first_uuid{};
+  first_uuid.fill(0x11);
+  ASSERT_EQ(gate.admit(first_uuid, goal(), 5), ControllerGoalAdmission::Result::ALLOW);
+
+  client.start("valid_second");
+  ASSERT_TRUE(server.serve_one());
+  ASSERT_EQ(client.result(), "ACK");
+  ControllerGoalAdmission::GoalUUID second_uuid{};
+  second_uuid.fill(0x22);
+  auto second_goal = goal();
+  second_goal.trajectory.points[0].positions[0] = 0.25;
+  EXPECT_EQ(gate.admit(second_uuid, second_goal, 5), ControllerGoalAdmission::Result::ALLOW);
+}
+
 TEST(ControllerReservationSocket, RejectsWrongPeerBeforeReadingFrame)
 {
   const auto key = capability();

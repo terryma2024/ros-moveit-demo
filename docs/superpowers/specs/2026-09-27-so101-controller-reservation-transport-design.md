@@ -18,10 +18,18 @@ ACT broker 与轨迹控制器位于不同进程。控制器现在只接受本地
 
 broker 在收到预留 ACK 后仍可能遇到动作发送异常。原先只有 `RESERVE=1`，broker 无法确认控制器已撤销这一代的预留，因此不能把发送异常直接当作已关闭。增加 `CLOSE_GENERATION=2`：请求的帧体恰好 62 字节，UUID 为 16 个零字节，不带 CDR；capability、peer 身份和截止时间沿用预留请求。控制器只在请求的 generation 等于当前代时关闭该代，并在关闭后回 ACK。旧代关闭请求返回 REJECT，不改变新代。格式错误、身份错误和超时仍按既有规则拒绝；broker 收不到关闭 ACK 时必须保留发送结果不确定状态，并等待预留有效期届满及独立停止证明，不能开始下一代动作。
 
+### EXP-517 多目标租约修订
+
+`Ownership` 的 generation 覆盖整个租约。ACT 同一租约可以提交多个前缀；控制器在这个 generation 内接收多个**顺序**预留，每次仍只存一组 UUID/完整 Goal。前一组必须先经 action callback 消费，下一组才可预留。已用 UUID 在本代不可再用，记录数量有固定上限；达到上限就关闭本代，不回绕、不清空记录继续接收。新 generation 只能在独立停止与所有权证明后 `arm`，`RESERVE` 和 `CLOSE_GENERATION` 均不得代替它。
+
+broker 仍先登记本地票据，再取得当前目标的预留 ACK，最后发送同一 UUID 和 Goal。任何预留、发送或配对失败都关闭当前所有权 generation，取消已发目标并确认物理停止。新前缀还须重新取得其停止起点、完整 PathProof 和 commit window；控制器能接收下一个 UUID 并不授予新路径权限。当前插件没有生产 `arm` 路径，故保持默认关闭，直到两种启动顺序下的身份交付和本地停止证明通过测试。
+
 ## 后续提交顺序
 
 broker 将先确定 UUID、目标和本地 goal ID，并在自己的所有权锁内登记票据；然后请求控制器预留并等待有界 ACK。收到 ACK 后，它才调用 `ActionClient.send_goal_async(goal, goal_uuid=...)`。预留超时、失败或发送结果不确定时，整代关闭并走取消与停止证明，不自动重试。MoveIt 老师目标需要单独的预注册代理，不得靠开放控制器 action 入口完成。
 
 ## 验证
 
-EXP-516 使用独立进程做 C++ 服务端与 Python 客户端回归：正确 capability 与预先 arm 的 generation 可取得一次 ACK；错误凭据、错误 peer、截断帧、超长帧、过期或重复 generation、变更目标和超时均拒绝。测试断言 ACK 后控制器确有一次预留，且没有 action 发送。完整 C++ 包门禁和普通 Python 测试门禁使用各自唯一的 NVMe scratch。此规格不授予运动或正式采集资格。
+EXP-516 使用独立进程做 C++ 服务端与 Python 客户端回归：正确 capability 与预先 arm 的 generation 可取得一次 ACK；错误凭据、错误 peer、截断帧、超长帧、过期 generation、前一预留未消费时的重复请求、变更目标和超时均拒绝。测试断言 ACK 后控制器确有一次预留，且没有 action 发送。完整 C++ 包门禁和普通 Python 测试门禁使用各自唯一的 NVMe scratch。此规格不授予运动或正式采集资格。
+
+EXP-517 追加同代顺序目标回归：第一 UUID/Goal 消费后，第二个不同 UUID/Goal 可预留并消费；旧 UUID 重放、前一预留未消费时重叠预留、超出数量上限均关闭本代。broker 回归使用同一所有权票据发送两段，核对两个本地票据均先于各自的 ACK 和 action send。仍不启动 live 控制器目标。
