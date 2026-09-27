@@ -16,7 +16,7 @@ _QOS = QoSProfile(depth=5, reliability=ReliabilityPolicy.RELIABLE)
 
 
 class RosPhysicsStepFence:
-    """Accept one scoped marker per reset epoch; never grant command authority."""
+    """Retain one SEARCH marker and one later sample without command authority."""
 
     def __init__(self, node, session_id: str, *, monotonic=time.monotonic,
                  clock_ns=time.monotonic_ns) -> None:
@@ -33,6 +33,9 @@ class RosPhysicsStepFence:
         self._invalid = False
         self._request_sent_wall_s = None
         self._request_sent_monotonic_ns = None
+        self._request_deadline_ns = None
+        self._last_result = None
+        self._closed = False
         self._publisher = node.create_publisher(
             PhysicsStepFenceRequest, "/so101/simulation/physics_step_fence_request", _QOS)
         self._subscription = node.create_subscription(
@@ -47,6 +50,8 @@ class RosPhysicsStepFence:
                 self._invalid = True
             self._epoch = epoch
             self._sequence = 0
+            self._last_result = None
+            self._closed = False
             self._condition.notify_all()
 
     def _acknowledge(self, ack: PhysicsStepFenceAck) -> None:
@@ -56,6 +61,7 @@ class RosPhysicsStepFence:
             if not self._pending:
                 return
             sample = ack.marked_sample
+            previous = self._last_result
             if (self._result is not None or ack.simulation_session_id != self.session_id
                     or ack.reset_epoch != self._epoch
                     or ack.request_sequence != self._sequence
@@ -63,6 +69,7 @@ class RosPhysicsStepFence:
                     or ack.marked_physics_step < 1
                     or not math.isfinite(ack.marked_simulation_time_s)
                     or ack.marked_simulation_time_s < 0
+                    or not math.isfinite(ack.marked_simulation_time_s * 1_000_000_000)
                     or not isinstance(sample, PhysicsStepEvidence)
                     or sample.simulation_session_id != ack.simulation_session_id
                     or sample.reset_epoch != ack.reset_epoch
@@ -78,7 +85,17 @@ class RosPhysicsStepFence:
                     or type(ack.clock_interval_end_monotonic_ns) is not int
                     or not 0 < self._request_sent_monotonic_ns <=
                        ack.clock_interval_begin_monotonic_ns <=
-                       ack.clock_interval_end_monotonic_ns <= received_ns):
+                       ack.clock_interval_end_monotonic_ns <= received_ns <
+                       self._request_deadline_ns
+                    or (self._sequence == 2 and (
+                        previous is None
+                        or ack.marked_physics_step <= previous["marked_physics_step"]
+                        or ack.clock_interval_begin_monotonic_ns <
+                           previous["clock_interval_end_monotonic_ns"]
+                        or round(ack.marked_simulation_time_s * 1_000_000_000) -
+                           round(previous["marked_simulation_time_s"] * 1_000_000_000) !=
+                           (ack.marked_physics_step - previous["marked_physics_step"])
+                           * 2_000_000))):
                 self._invalid = True
             else:
                 self._result = {
@@ -106,26 +123,55 @@ class RosPhysicsStepFence:
 
     def request_after_stop(self, epoch: int, stopped_wall_s: float,
                            deadline_ns: int) -> dict:
+        return self._request(epoch, stopped_wall_s, deadline_ns, after_step=None)
+
+    def request_followup_after_stop(self, epoch: int, stopped_wall_s: float,
+                                    after_step: int, deadline_ns: int) -> dict:
+        if type(after_step) is not int or after_step < 1:
+            with self._condition:
+                if epoch == self._epoch:
+                    self._closed = True
+            raise ValueError("PHYSICS_STEP_FENCE_SCOPE_INVALID")
+        return self._request(epoch, stopped_wall_s, deadline_ns,
+                             after_step=after_step)
+
+    def _request(self, epoch: int, stopped_wall_s: float,
+                 deadline_ns: int, *, after_step: int | None) -> dict:
         if (type(epoch) is not int or epoch < 1
                 or type(deadline_ns) is not int
                 or not isinstance(stopped_wall_s, (float, int))
                 or not math.isfinite(stopped_wall_s) or stopped_wall_s < 0):
+            with self._condition:
+                if after_step is not None and epoch == self._epoch:
+                    self._closed = True
             raise ValueError("PHYSICS_STEP_FENCE_SCOPE_INVALID")
         with self._condition:
             if epoch != self._epoch:
                 raise ValueError("PHYSICS_STEP_FENCE_SCOPE_INVALID")
-            if self._sequence:
+            if self._closed or self._pending:
+                raise ValueError("PHYSICS_STEP_FENCE_CLOSED")
+            if after_step is None and self._sequence:
                 raise ValueError("PHYSICS_STEP_FENCE_ALREADY_REQUESTED")
+            if (after_step is not None and (self._sequence != 1
+                    or self._last_result is None
+                    or after_step != self._last_result["marked_physics_step"])):
+                self._closed = True
+                raise ValueError("PHYSICS_STEP_FENCE_SCOPE_INVALID")
             sent = self.monotonic()
             sent_ns = self.clock_ns()
-            if sent < stopped_wall_s or sent_ns <= 0 or sent_ns >= deadline_ns:
+            if (sent < stopped_wall_s or sent_ns <= 0 or sent_ns >= deadline_ns
+                    or (after_step is not None and sent_ns <
+                        self._last_result["ack_received_monotonic_ns"])):
+                if after_step is not None:
+                    self._closed = True
                 raise ValueError("PHYSICS_STEP_FENCE_INVALID")
-            self._sequence = 1
+            self._sequence += 1
             self._pending = True
             self._invalid = False
             self._result = None
             self._request_sent_wall_s = sent
             self._request_sent_monotonic_ns = sent_ns
+            self._request_deadline_ns = deadline_ns
             request = PhysicsStepFenceRequest(
                 simulation_session_id=self.session_id, reset_epoch=epoch,
                 request_sequence=self._sequence)
@@ -135,15 +181,25 @@ class RosPhysicsStepFence:
             with self._condition:
                 self._invalid = True
                 self._pending = False
+                if self._epoch == epoch:
+                    self._closed = True
             raise
         with self._condition:
             while self._result is None and not self._invalid:
                 remaining_s = (deadline_ns - self.clock_ns()) / 1_000_000_000
                 if remaining_s <= 0:
                     self._pending = False
+                    if self._epoch == epoch:
+                        self._closed = True
                     raise ValueError("PHYSICS_STEP_FENCE_TIMEOUT")
                 self._condition.wait(timeout=min(remaining_s, .2))
             self._pending = False
             if self._invalid or self._epoch != epoch:
+                if self._epoch == epoch:
+                    self._closed = True
                 raise ValueError("PHYSICS_STEP_FENCE_INVALID")
-            return dict(self._result)
+            result = dict(self._result)
+            self._last_result = result
+            if self._sequence == 2:
+                self._closed = True
+            return dict(result)
