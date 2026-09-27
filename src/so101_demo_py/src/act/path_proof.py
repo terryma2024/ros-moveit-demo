@@ -34,6 +34,38 @@ class RelativePathRequest:
     first_target_delay_s: float | None
     target_interval_s: float | None
 
+    def matches_source(self, prefix):
+        """Check every retained source field before a proof gains authority."""
+        try:
+            checked = validate_action_prefix(prefix)
+            start = self.source_start_ns
+            bridge = self.source_bridge_ns
+            if (type(start) is not int or type(bridge) is not int
+                    or start < 0 or bridge < 0):
+                return False
+            observation = _nanoseconds(checked['observation_time_s'])
+            targets = tuple(_nanoseconds(value)
+                            for value in checked['target_times_s'])
+            return (
+                self.session_id == checked['session_id']
+                and self.attempt_id == checked['attempt_id']
+                and self.sequence == checked['sequence']
+                and self.policy_observation_time_s == checked['observation_time_s']
+                and self.source_prefix_sha256 == prefix_sha256(checked)
+                and self.positions == checked['positions']
+                and self.first_target_delay_s == checked.get('first_target_delay_s')
+                and self.target_interval_s == checked.get('target_interval_s')
+                and self.observation_offset_ns == observation - start
+                and self.bridge_offset_ns == bridge - start
+                and self.target_offsets_ns == tuple(value - start
+                                                    for value in targets)
+                and bridge <= observation < start < targets[0]
+                and finite(self.policy_received_wall_s, nonnegative=True)
+                    == self.policy_received_wall_s
+            )
+        except (KeyError, TypeError, ValueError):
+            return False
+
     def require_policy_freshness(self, *, now_wall_s, max_age_s, jitter_s):
         age = finite(now_wall_s, nonnegative=True) - self.policy_received_wall_s
         limit = finite(max_age_s)

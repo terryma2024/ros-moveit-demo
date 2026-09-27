@@ -35,7 +35,8 @@ def proof_authority(scene):
     )
     current = dict(snapshot=physical, reset_epoch=3, **fingerprints)
     approval = dict(session_id='s', attempt_id='a', reset_epoch=3,
-                    sim_time_s=1., positions=held, velocities=(0.,) * 6)
+                    sim_time_s=1., positions=held, velocities=(0.,) * 6,
+                    policy_received_wall_s=10.)
     checks = [0]
     original_check = path.check_path
 
@@ -125,6 +126,42 @@ def test_proof_permit_requires_complete_701_sample_result(scene):
     original = authority.proof_port
     authority.proof_port = lambda *args: replace(
         original(*args), sample_count=700)
+    with pytest.raises(PermissionError, match='PATH_REJECTED'):
+        authority.approve(prefix)
+    assert checks == [1]
+
+
+@pytest.mark.parametrize('change', (
+    'positions', 'target_offset', 'observation', 'sequence',
+    'bridge_offset', 'policy_receipt',
+))
+def test_proof_request_must_match_approved_prefix_fields(scene, change):
+    authority, prefix, _, checks = proof_authority(scene)
+    original = authority.proof_port
+
+    def altered_proof(*args):
+        proof = original(*args)
+        request = proof.relative_request
+        if change == 'positions':
+            rows = ((request.positions[0][0] + .001,
+                     *request.positions[0][1:]), *request.positions[1:])
+            request = replace(request, positions=rows)
+        elif change == 'target_offset':
+            request = replace(request, target_offsets_ns=(
+                request.target_offsets_ns[0] + 1_000_000,
+                *request.target_offsets_ns[1:]))
+        elif change == 'observation':
+            request = replace(request, policy_observation_time_s=2.)
+        elif change == 'sequence':
+            request = replace(request, sequence=request.sequence + 1)
+        elif change == 'policy_receipt':
+            request = replace(request, policy_received_wall_s=10.01)
+        else:
+            request = replace(request, bridge_offset_ns=
+                              request.bridge_offset_ns + 1_000_000)
+        return replace(proof, relative_request=request)
+
+    authority.proof_port = altered_proof
     with pytest.raises(PermissionError, match='PATH_REJECTED'):
         authority.approve(prefix)
     assert checks == [1]
