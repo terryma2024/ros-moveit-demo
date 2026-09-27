@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import socket
+import tempfile
 import threading
 import time
 import uuid
@@ -17,10 +18,22 @@ from so101_demo.adapters.act.controller_reservation_client import ControllerRese
 
 def socket_path():
     task_root = Path(os.environ["TMPDIR"]).parents[2]
-    parent = task_root / "ipc" / Path(os.environ["TMPDIR"]).parent.name[-8:]
-    parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(parent, 0o700)
+    ipc_root = task_root / "ipc"
+    ipc_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    parent = Path(tempfile.mkdtemp(prefix="res-", dir=ipc_root))
     return parent / f"p{uuid.uuid4().hex[:8]}.sock"
+
+
+def test_distinct_scratch_runs_never_share_private_socket_directory(
+        monkeypatch, tmp_path):
+    first = tmp_path / "first" / "run-0928-001" / "tmp"
+    second = tmp_path / "second" / "run-0928-001" / "tmp"
+    monkeypatch.setenv("TMPDIR", str(first))
+    first_parent = socket_path().parent
+    monkeypatch.setenv("TMPDIR", str(second))
+    second_parent = socket_path().parent
+    assert first_parent != second_parent
+    assert first_parent.parent == second_parent.parent == tmp_path / "ipc"
 
 
 def goal():
