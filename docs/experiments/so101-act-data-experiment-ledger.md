@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: c5c366b3
+current_commit: c3c4bfa0
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -19,6 +19,7 @@ confirmed_conclusions:
   - EXP-466 verifies the user's performance CPU profile still misses the fixed 25 ms first complete-check deadline: 89.572717 ms for 701 samples.
   - CP-469 records EXP-469's one completed timing probe with parity incomplete; the user superseded the 16-lane direction with the path-proof/commit-window design review.
   - EXP-485 finds no production prefix receipt producer or broker-private consumer; SEARCH source timestamps cannot substitute for a policy prefix receipt.
+  - EXP-486 freezes a source-neutral receipt design for Task8 expert routes and later ACT policy output, with separate observation/prefix/state freshness; production remains disabled.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -26,8 +27,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-485
-next_experiment: EXP-486
+latest_checkpoint: CP-486
+next_experiment: EXP-487
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -3961,3 +3962,50 @@ Evidence: `scratch/exp485-static-audit.pyzMpByb/receipt-and-proof-refs.txt` SHA2
 ## CP-485 — Prefix source receipt is absent
 
 - Last valid experiment EXP-485. The SEARCH sensor/physics receipt and the route or policy prefix receipt are distinct facts. Task8 has no production prefix producer, no broker-private receipt registration and no proof port wiring; calibration's fixed prefix and route manifests cannot fill the gap. The first later implementation step must create a producer that consumes the validated SEARCH frame in the child, freezes exact rows and relative times, and binds its original receipt to the current owner ticket inside the broker. Test delayed/replayed/substituted prefix and ticket changes before any proof approval. The path-proof design remains marked for written review; no new production code, performance experiment, ROS/MuJoCo stack, goal or hardware action occurred in EXP-485. Current branch/worktree and all pre-existing dirty files remain; overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact task Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, task-owned stack none. Accepted formal Train/Validation/Offline Test 0/0/0. Retained all runs through EXP-485, archived none, scratch/runtime/generated caches are deletion candidates only, nothing deleted. Next EXP-486: freeze the prefix producer/receipt contract at the actual child-to-broker boundary before implementing or enabling it.
+
+## EXP-486 — Freeze a source-neutral prefix receipt contract
+
+```yaml
+experiment_id: EXP-486
+status: VALID
+prior_experiment: EXP-485
+hypothesis: A source-neutral, broker-private receipt can distinguish a current expert route selected after SEARCH from a later ACT policy output, while preserving original observation age and one-time owner-ticket binding.
+prediction: The design will name both source kinds, both time origins, exact hash/identity fields, issue and invalidation rules, and fail-closed verification cases without treating a reset-time route template as a fresh policy output.
+single_variable: Written source receipt contract in the pending path-proof design; no source or runtime change.
+lifecycle: SOURCE_ONLY
+preconditions: [HEAD c3c4bfa0, CP-485 retained, no task-owned stack, pre-existing dirty batch preserved]
+success_criteria: [No Task8-to-Task12 circular dependency, no timestamp laundering, production proof remains disabled]
+failure_criteria: [Expert route remains impossible before Task12 training, or stale source can appear current]
+invalid_criteria: [Unreviewed production implementation or runtime experiment]
+provenance:
+  source_commit: c3c4bfa0
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: NOT_STARTED (design-only source inspection)
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands:
+  - command: git diff --check
+    exit_code: 0
+  - command: realpath docs/superpowers/specs/../../experiments/so101-act-data-experiment-ledger.md
+    exit_code: 0
+  - command: sha256sum docs/superpowers/specs/2026-09-27-so101-act-path-proof-control-rate-design.md
+    exit_code: 0
+  - command: rg -n 'PrefixSourceReceipt|EXPERT_ROUTE|ACT_POLICY|m_oldest|m_prefix|A_obs|A_prefix|source_artifact_hash' docs/superpowers/specs/2026-09-27-so101-act-path-proof-control-rate-design.md
+    exit_code: 0
+observed:
+  - The pending specification now separates expert route selection after current phase readback from later ACT policy output, so Task8 expert collection does not depend on Task12 training.
+  - A broker-private PrefixSourceReceipt binds source kind/artifact, seven original source times, phase/step, owner ticket/generation, exact prefix hash and issue time; replay, source loss and changes close it without granting diagnostic command authority.
+  - The timing contract separately bounds oldest observation receipt, prefix issue time and fresh state at acceptance; existing code still has policy_received_wall_s/max_policy_age_s and no production source wiring.
+  - Design SHA256 a550e6984b405302ecacf26dfc0d5552f5debdbc8fde97bd60df51728705f550; relative ledger link resolves; placeholder scan empty; diff check exits 0.
+inferred:
+  - The written contract removes the prefix-source ordering ambiguity, but production behavior and acceptance remain unverified until written review and later implementation gates.
+conclusion: Valid design-only clarification; no proof or goal authority enabled.
+decision: KEEP
+next_experiment: EXP-487
+```
+
+Evidence: `scratch/exp486-spec-review.HIKWnxNp/` under the registered root; `contract-refs.txt` SHA256 `2f3cfa962e174c57c4cf834906ac129b9a4f876754c929b86533a4f2fa6bcaae`, `diff-check.txt` SHA256 `5d1b4227f5ef105d9c726b762131ef6edfa10468f311316b616bdb64806ffd3e`, empty `placeholders.txt` SHA256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`. No pytest, performance program, stack, goal or hardware action.
+
+## CP-486 — Source-neutral receipt contract awaits written review
+
+- Last valid experiment EXP-486. The pending design now gives Task8 `EXPERT_ROUTE` and later `ACT_POLICY` distinct source artifacts, the same broker-private one-use identity fence, and separate source-observation/prefix/state ages. The production prototype still uses `policy_received_wall_s`, has no Task8 prefix producer or proof ports, and cannot submit a PathProof from the child. Next EXP-487 is implementation only after the handoff's written specification review; do not infer that this design-only checkpoint grants permission. Current worktree/branch and preserved dirty batch remain, overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact task Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, task-owned stack none. Formal accepted Train/Validation/Offline Test 0/0/0. Retained all runs through EXP-486, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
