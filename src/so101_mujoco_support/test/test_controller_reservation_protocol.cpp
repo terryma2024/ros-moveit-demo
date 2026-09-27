@@ -59,8 +59,8 @@ TEST(ControllerReservationProtocol, PythonGoalFrameDecodesEveryReservedField)
   const auto request = parse_controller_reservation_frame(frame, capability());
   EXPECT_EQ(request.generation, 5u);
   EXPECT_EQ(request.uuid, (std::array<uint8_t, 16>{
-      0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
-      0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}));
+    0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
+    0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}));
   const auto & goal = request.goal;
   EXPECT_EQ(goal.trajectory.header.stamp.sec, 123);
   EXPECT_EQ(goal.trajectory.header.stamp.nanosec, 456u);
@@ -97,7 +97,7 @@ TEST(ControllerReservationProtocol, RejectsMalformedOrUnauthenticatedFrames)
   wrong_key[31] ^= 1;
   EXPECT_THROW(parse_controller_reservation_frame(valid, wrong_key), std::invalid_argument);
   for (const auto [offset, value] : std::vector<std::pair<size_t, uint8_t>>{
-      {0, 1}, {7, 'X'}, {8, 2}, {9, 2}})
+    {0, 1}, {7, 'X'}, {8, 2}, {9, 2}})
   {
     auto frame = valid;
     frame[offset] = value;
@@ -110,15 +110,20 @@ TEST(ControllerReservationProtocol, RejectsMalformedOrUnauthenticatedFrames)
   oversized[0] = 1;
   EXPECT_THROW(parse_controller_reservation_frame(oversized, capability()), std::invalid_argument);
   auto zero_uuid = valid;
-  for (size_t i = 50; i < 66; ++i) {zero_uuid[i] = 0;}
+  for (size_t i = 50; i < 66; ++i) {
+    zero_uuid[i] = 0;
+  }
   EXPECT_THROW(parse_controller_reservation_frame(zero_uuid, capability()), std::invalid_argument);
   auto zero_generation = valid;
-  for (size_t i = 42; i < 50; ++i) {zero_generation[i] = 0;}
+  for (size_t i = 42; i < 50; ++i) {
+    zero_generation[i] = 0;
+  }
   EXPECT_THROW(parse_controller_reservation_frame(zero_generation, capability()),
     std::invalid_argument);
   auto invalid_cdr = valid;
   invalid_cdr.resize(70);
   invalid_cdr[2] = 0;
   invalid_cdr[3] = 66;
-  EXPECT_THROW(parse_controller_reservation_frame(invalid_cdr, capability()), std::invalid_argument);
+  EXPECT_THROW(parse_controller_reservation_frame(invalid_cdr, capability()),
+    std::invalid_argument);
 }

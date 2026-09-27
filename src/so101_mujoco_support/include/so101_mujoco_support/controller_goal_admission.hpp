@@ -50,6 +50,7 @@ public:
     }
     generation_ = generation;
     reservation_.reset();
+    reservation_seen_ = false;
     mode_ = Mode::EXCLUSIVE;
     return true;
   }
@@ -67,7 +68,7 @@ public:
       return false;
     }
     const auto now = read_clock();
-    if (!now || generation != generation_ || reservation_ ||
+    if (!now || generation != generation_ || reservation_seen_ || reservation_ ||
       std::all_of(uuid.begin(), uuid.end(), [](uint8_t value) {return value == 0;}) ||
       goal.trajectory.joint_names.empty() || goal.trajectory.points.empty() ||
       *now > std::numeric_limits<int64_t>::max() - validity_ns_)
@@ -83,6 +84,7 @@ public:
         return false;
       }
       reservation_ = Reservation{uuid, goal, *now + validity_ns_};
+      reservation_seen_ = true;
     } catch (...) {
       fault_close();
       return false;
@@ -168,6 +170,7 @@ private:
   std::optional<int64_t> last_now_ns_;
   bool clock_bad_{false};
   std::optional<Reservation> reservation_;
+  bool reservation_seen_{false};
 };
 
 }  // namespace so101_mujoco_support
