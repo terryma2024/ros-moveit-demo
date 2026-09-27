@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 1ad41df1
+current_commit: 71fe2a1e
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -24,8 +24,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-482
-next_experiment: EXP-483
+latest_checkpoint: CP-483
+next_experiment: EXP-484
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -3893,3 +3893,13 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-482 — Original sensor callback receipts must survive the SEARCH join
 
 - Last valid experiment EXP-482. Next EXP-483 is a source-only RED/GREEN contract for the RGB/arm/neck synchronizer to retain a monotonic receive timestamp per selected callback without changing the observation wire schema. A later readback change must carry the selected receipts and the world receipt together with step/session/attempt/epoch/prefix identity to the broker; only then can policy freshness be asserted. Current branch/worktree, sole evidence root and preserved dirty batch remain; overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact task Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, task-owned stack none. Retained runs through EXP-482, archived none, scratch/runtime/generated caches only deletion candidates, nothing deleted; accepted Train/Validation/Offline Test 0/0/0.
+
+## EXP-483 — Preserve selected sensor callback receive times
+
+- **PLANNED, SOURCE_ONLY:** Freeze four callback receive times for head, wrist, arm and neck, plus a newer future-simulation sample. RED must show that `RgbObservationSynchronizer.sample` cannot report the monotonic time of the selected causal values. Add only internal per-sample receive stamps, captured at ROS callback entry or supplied by the trusted internal caller, and export them through `last_audit` while leaving the validated observation schema unchanged. Reject invalid wall timestamps and ensure the selected past value carries its own receipt rather than a later sample's receipt. This is an input provenance component, not a complete policy receipt or production authority. Source HEAD `71fe2a1e` plus preserved dirty batch, existing overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact task Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`; fresh verified NVMe scratch/JUnit per pytest. No stack, goal, hardware, new performance run or formal data; retain all, archive none, delete nothing; accepted 0/0/0.
+
+- **VALID selected-callback receipt contract:** Intended RED `scratch/exp483-receipt-red.S8S7aRFE` exit1 at absent `source_received_wall_s` after a future head frame was correctly excluded by causal sim-time selection. `RgbObservationSynchronizer` now stores each callback's finite nonnegative monotonic receive time with its own sim stamp/value, exports the selected four times through `last_audit`, and keeps the public observation schema unchanged. `RosObservationAdapter` captures the time at callback entry before RGB decoding; arm and neck from one JointState share its one receipt. Invalid wall input never enters the ring. Focused `scratch/exp483-receipt-green.koNfORZ3` exit0, 43/43 across synchronizer and Task 8 physical readback. Complete ordinary source xdist8 `scratch/exp483-source-full.le6YChnE` exit0 in41 s, 4693 collected/4531 passed/162 skipped/4 warnings; JUnit SHA256 `18bee7d16ec89fa552ee2638c4580018fe48cabe4e496d54b8c486f2166091e2`. Existing-overlay build `scratch/exp483-demo-build.p7neejPT` exit0 in2 s. Installed xdist8 `scratch/exp483-demo-full-installed.xvxE5E4I` exit0 in39 s, actual `/usr/bin/python3 -m pytest test -n 8`, JUnit4693/0 errors/0 failures/162 skips SHA256 `5ff271589941c91ef44b9c190eb81e30bd8766fc1f989a7f56d8c00883995432`; `colcon test-result --verbose` exit0 aggregate6153/0/0/205. Both exact source and installed child interpreters verified fresh NVMe scratch, pytest7.4.4/xdist3.8.0 and dependency paths; source/build module SHA256 pairs match `synchronizer.py` `a8c5d2568b64656fdc1ebd098ab47af14fa5d6829b5ce51d9cddbfefc89089cd` and `ros_observation.py` `91eb0752e883d8325cdbadc83f87fa1b57bb9090ee766a11de3bdc2cbf449703`. Test SHA256 `7d2584205d76837466451e7df738b59602c4ac9c8495a085ae4d0c1330fcc07b`. Host `/run/user/1000` was left untouched by private test namespaces. This does not yet bind the selected times and world receipt into `PickPlaceReadback.capture`, SEARCH, or the broker. No stack, goal, hardware, new performance run or formal episode. Retain all runs, archive none, scratch/runtime/generated caches only deletion candidates, nothing deleted; accepted 0/0/0.
+
+## CP-483 — Original callback timestamps exist internally, not in SEARCH readback
+
+- Last valid experiment EXP-483. Next EXP-484 should bind the exact selected four callback receipts and the selected world's original receipt to one SEARCH physical readback, with session/attempt/reset epoch/step checks and stale replay refusal; this may require a closed-schema readback contract change and corresponding source tests. Only after that can the broker acquire a non-launderable policy observation receipt. Production proof entry remains disabled; `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, task-owned stack none, accepted formal Train/Validation/Offline Test 0/0/0. Current branch/worktree, sole evidence root and preserved dirty batch remain; retained all runs through EXP-483, archived none, scratch/runtime/generated caches only deletion candidates, nothing deleted.

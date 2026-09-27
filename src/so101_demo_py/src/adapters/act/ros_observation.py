@@ -37,30 +37,35 @@ class RosObservationAdapter:
         return stamp
 
     def _image(self, stream, message):
+        received = self.synchronizer.monotonic()
         with self._lock:
-            self._image_locked(stream, message)
+            self._image_locked(stream, message, received_monotonic_s=received)
 
-    def _image_locked(self, stream, message):
+    def _image_locked(self, stream, message, *, received_monotonic_s=None):
         try:
             stamp = self._stamp(message)
             if (message.encoding, message.width, message.height, message.step) != ("rgb8", 640, 480, 1920):
                 raise ValueError("INPUT_RGB_INVALID")
             pixels = np.frombuffer(bytes(message.data), dtype=np.uint8).reshape((480, 640, 3))
-            self.synchronizer.push(stream, self.session_id, stamp, pixels)
+            self.synchronizer.push(stream, self.session_id, stamp, pixels,
+                                   received_monotonic_s=received_monotonic_s)
         except ValueError as error:
             self.rejected.append(str(error)); self.rejected = self.rejected[-64:]
 
     def _joints(self, message):
+        received = self.synchronizer.monotonic()
         with self._lock:
-            self._joints_locked(message)
+            self._joints_locked(message, received_monotonic_s=received)
 
-    def _joints_locked(self, message):
+    def _joints_locked(self, message, *, received_monotonic_s=None):
         try:
             stamp = self._stamp(message)
             if len(message.name) != len(message.position) or len(set(message.name)) != len(message.name):
                 raise ValueError("JOINT_MAPPING_INVALID")
             values = ordered_positions(dict(zip(message.name, message.position, strict=True)), ACT_JOINTS)
-            self.synchronizer.push("arm", self.session_id, stamp, values[:6])
-            self.synchronizer.push("neck", self.session_id, stamp, values[6])
+            self.synchronizer.push("arm", self.session_id, stamp, values[:6],
+                                   received_monotonic_s=received_monotonic_s)
+            self.synchronizer.push("neck", self.session_id, stamp, values[6],
+                                   received_monotonic_s=received_monotonic_s)
         except ValueError as error:
             self.rejected.append(str(error)); self.rejected = self.rejected[-64:]

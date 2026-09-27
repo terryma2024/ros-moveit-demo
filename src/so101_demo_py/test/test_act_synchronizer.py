@@ -59,6 +59,63 @@ def test_ring_and_copy_ownership_are_bounded():
     assert len(sync.buffers["arm"]) == 8
 
 
+def test_selected_causal_sensor_values_keep_their_original_wall_receipts():
+    sync = RgbObservationSynchronizer(max_age_s=.15, max_skew_s=.02)
+    sync.reset("epoch1")
+    received = [10.0]
+    sync.monotonic = lambda: received[0]
+    pixels = np.zeros((480, 640, 3), np.uint8)
+    for stream, value, wall in (("head", pixels, 10.01),
+                                ("wrist", pixels, 10.02),
+                                ("arm", (0.,) * 6, 10.03),
+                                ("neck", .3, 10.04)):
+        received[0] = wall
+        sync.push(stream, "epoch1", 1.0, value)
+    received[0] = 10.05
+    sync.push("head", "epoch1", 1.2, pixels)
+    sync.sample("epoch1", "attempt1", 1.05)
+    assert sync.last_audit["source_received_wall_s"] == {
+        "head": 10.01, "wrist": 10.02, "arm": 10.03, "neck": 10.04}
+    assert sync.last_audit["source_stamps"]["head"] == 1.0
+
+
+def test_invalid_wall_receipt_does_not_enter_the_sensor_ring():
+    sync = filled()
+    before = len(sync.buffers["head"])
+    with pytest.raises(ValueError):
+        sync.push("head", "epoch1", 1.1,
+                  np.zeros((480, 640, 3), np.uint8),
+                  received_monotonic_s=float("nan"))
+    assert len(sync.buffers["head"]) == before
+
+
+def test_ros_callbacks_stamp_before_decoding_and_share_joint_receipt():
+    from sensor_msgs.msg import Image, JointState
+    from so101_demo.act.joints import ACT_JOINTS
+    from so101_demo.adapters.act.ros_observation import RosObservationAdapter
+
+    class Node:
+        def create_subscription(self, kind, topic, callback, qos):
+            return topic
+
+    sync = RgbObservationSynchronizer(max_age_s=.15, max_skew_s=.02)
+    clock = iter((20.0, 21.0))
+    sync.monotonic = lambda: next(clock)
+    adapter = RosObservationAdapter(Node(), sync)
+    adapter.reset("epoch1", source_floor_s=1.0)
+    image = Image(width=640, height=480, step=1920, encoding="rgb8",
+                  data=bytes(640 * 480 * 3))
+    image.header.stamp.sec = 1
+    image.header.stamp.nanosec = 100_000_000
+    adapter._image("head", image)
+    joints = JointState(name=list(ACT_JOINTS), position=[0.] * 7)
+    joints.header.stamp = image.header.stamp
+    adapter._joints(joints)
+    assert sync.buffers["head"][-1][2] == 20.0
+    assert sync.buffers["arm"][-1][2] == 21.0
+    assert sync.buffers["neck"][-1][2] == 21.0
+
+
 def test_ros_adapter_uses_real_stamps_and_excludes_queued_pre_reset_messages():
     from sensor_msgs.msg import Image, JointState
     from so101_demo.act.joints import ACT_JOINTS
