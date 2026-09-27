@@ -27,7 +27,9 @@ def evidence():
     digest = model_sha256(model)
     scene = dict(simulation_session_id="held-source", reset_epoch=3,
                  simulation_step=24, simulation_time_s=1.048, paused=False,
-                 model_sha256=digest, qpos=data.qpos.tolist(), qvel=data.qvel.tolist())
+                 model_sha256=digest, qpos=data.qpos.tolist(), qvel=data.qvel.tolist(),
+                 clock_interval_begin_monotonic_ns=99_999_800_000,
+                 clock_interval_end_monotonic_ns=99_999_900_000)
     left = dict(robot_geom="fixed_fingertip_pad_collision_006", object_body="plastic_cup",
                 normal_force_n=.22, signed_distance_m=-.00003)
     right = dict(robot_geom="moving_fingertip_pad_collision_000", object_body="plastic_cup",

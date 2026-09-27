@@ -6,7 +6,8 @@ from collections import deque
 from so101_demo.act.contracts import fields,finite,identifier,integer,sha256,vector
 
 SCENE_KEYS=frozenset(('simulation_session_id','reset_epoch','simulation_step','paused',
-    'simulation_time_s','model_sha256','qpos','qvel'))
+    'simulation_time_s','model_sha256','qpos','qvel',
+    'clock_interval_begin_monotonic_ns','clock_interval_end_monotonic_ns'))
 
 
 class SceneStateObserver:
@@ -52,6 +53,11 @@ class SceneStateObserver:
         fields(frame,SCENE_KEYS)
         identifier(frame['simulation_session_id']);integer(frame['reset_epoch'])
         integer(frame['simulation_step']);stamp=finite(frame['simulation_time_s'],nonnegative=True)
+        begin=frame['clock_interval_begin_monotonic_ns']
+        end=frame['clock_interval_end_monotonic_ns']
+        if (type(begin) is not int or type(end) is not int
+                or not 0<begin<=end<=round(finite(self.monotonic(),nonnegative=True)*1e9)):
+            raise ValueError('SCENE_SOURCE_CLOCK_INVALID')
         sha256(frame['model_sha256'])
         if frame['model_sha256']!=self.model_sha256:raise ValueError('SCENE_STATE_MODEL_INVALID')
         if type(frame['paused']) is not bool:raise ValueError('SCENE_STATE_INVALID')

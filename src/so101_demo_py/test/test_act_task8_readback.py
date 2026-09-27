@@ -88,6 +88,8 @@ def sources(*, cup_shift=0.0, scene_step=1, world_epoch=1, rgb_stamp=1.01,
         simulation_session_id="s", reset_epoch=1, simulation_step=scene_step,
         paused=False, simulation_time_s=1.01, model_sha256="1" * 64,
         qpos=qpos, qvel=[0.0] * 12,
+        clock_interval_begin_monotonic_ns=9_999_800_000,
+        clock_interval_end_monotonic_ns=9_999_900_000,
     ))
     contacts = RobotContactObserver(
         known_geoms={"arm", "table"}, allowed_pairs=set(), max_age_s=0.15,
@@ -137,6 +139,9 @@ def test_one_physics_step_joins_cup_pose_qpos_rgb_contact_and_reference():
     readback, _, _, _ = sources()
     proof = readback.capture("s", "attempt-1", 1)
     assert proof["world"].simulation_step == proof["scene"]["simulation_step"] == proof["contact"]["physics_step"] == 1
+    assert (proof["scene"]["clock_interval_begin_monotonic_ns"],
+            proof["scene"]["clock_interval_end_monotonic_ns"]) == (
+                9_999_800_000, 9_999_900_000)
     assert proof["observation"]["state"][:6] == (0.1,) * 6
     assert proof["reference"]["requested_sim_time_s"] == 1.01
     assert proof["source_received_wall_s"] == {

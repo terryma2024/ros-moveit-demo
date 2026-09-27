@@ -13,7 +13,9 @@ def observer():
 
 def frame():
     return dict(simulation_session_id='s',reset_epoch=2,simulation_step=5,paused=False,
-        simulation_time_s=1.01,model_sha256='1'*64,qpos=[.2]*14,qvel=[.3]*12)
+        simulation_time_s=1.01,model_sha256='1'*64,qpos=[.2]*14,qvel=[.3]*12,
+        clock_interval_begin_monotonic_ns=9_999_800_000,
+        clock_interval_end_monotonic_ns=9_999_900_000)
 
 
 def test_all_dynamic_coordinates_survive_and_caller_cannot_mutate_evidence():
@@ -24,6 +26,31 @@ def test_all_dynamic_coordinates_survive_and_caller_cannot_mutate_evidence():
     read['qpos'][-1]=998;assert port.snapshot()['qpos'][-1]==.7
     now[0]+=.151
     with pytest.raises(ValueError,match='SCENE_STATE_STALE'):port.snapshot()
+
+
+def test_scene_retains_original_atomic_source_clock_interval():
+    port,now=observer()
+    value=frame()
+    value.update(clock_interval_begin_monotonic_ns=9_999_800_000,
+                 clock_interval_end_monotonic_ns=9_999_900_000)
+    assert port.accept(value)
+    stored=port.snapshot()
+    assert (stored['clock_interval_begin_monotonic_ns'],
+            stored['clock_interval_end_monotonic_ns']) == (
+                9_999_800_000,9_999_900_000)
+    assert port.recent_frames_with_receipts()[0][0] == stored
+
+
+@pytest.mark.parametrize('interval', [
+    (0,9_999_900_000), (9_999_900_000,9_999_800_000),
+    (9_999_800_000,10_000_000_001), (True,9_999_900_000),
+])
+def test_scene_rejects_invalid_source_clock_interval(interval):
+    port,_=observer()
+    value=frame()
+    value.update(clock_interval_begin_monotonic_ns=interval[0],
+                 clock_interval_end_monotonic_ns=interval[1])
+    assert not port.accept(value) and port.hazard
 
 
 def test_recent_scene_receipts_preserve_exact_steps_and_freshness():
