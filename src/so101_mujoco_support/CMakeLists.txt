@@ -3,7 +3,10 @@ project(so101_mujoco_support)
 
 find_package(Boost REQUIRED)
 find_package(ament_cmake REQUIRED)
+find_package(controller_interface REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(joint_trajectory_controller REQUIRED)
+find_package(lifecycle_msgs REQUIRED)
 find_package(moveit_ros_move_group REQUIRED)
 if(NOT APPLE)
   find_package(OpenGL REQUIRED COMPONENTS EGL)
@@ -44,6 +47,18 @@ ament_target_dependencies(so101_simulation_evidence_plugin PUBLIC
   geometry_msgs pluginlib rclcpp rcutils realtime_tools std_msgs)
 pluginlib_export_plugin_description_file(mujoco_ros2_control_plugins so101_mujoco_plugins.xml)
 
+add_library(so101_broker_owned_trajectory_controller SHARED
+  src/broker_owned_trajectory_controller.cpp)
+target_compile_features(so101_broker_owned_trajectory_controller PUBLIC cxx_std_17)
+target_include_directories(so101_broker_owned_trajectory_controller PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_link_libraries(so101_broker_owned_trajectory_controller PUBLIC
+  joint_trajectory_controller::joint_trajectory_controller)
+ament_target_dependencies(so101_broker_owned_trajectory_controller PUBLIC
+  controller_interface joint_trajectory_controller pluginlib rclcpp)
+pluginlib_export_plugin_description_file(controller_interface so101_trajectory_controllers.xml)
+
 add_executable(graceful_shutdown_move_group src/graceful_shutdown_move_group.cpp)
 target_compile_features(graceful_shutdown_move_group PRIVATE cxx_std_17)
 target_include_directories(graceful_shutdown_move_group PRIVATE ${Boost_INCLUDE_DIRS})
@@ -70,13 +85,24 @@ if(BUILD_TESTING)
   target_compile_features(test_simulation_evidence_plugin PRIVATE cxx_std_17)
   target_include_directories(test_simulation_evidence_plugin PRIVATE include)
   target_link_libraries(test_simulation_evidence_plugin so101_simulation_evidence_plugin)
+
+  ament_add_gtest(test_broker_owned_trajectory_controller
+    test/test_broker_owned_trajectory_controller.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_broker_owned_trajectory_controller PRIVATE cxx_std_17)
+  ament_target_dependencies(test_broker_owned_trajectory_controller
+    controller_interface lifecycle_msgs pluginlib rclcpp)
+  target_link_libraries(test_broker_owned_trajectory_controller
+    so101_broker_owned_trajectory_controller)
 endif()
 
-install(TARGETS so101_simulation_evidence_plugin EXPORT export_${PROJECT_NAME}
+install(TARGETS so101_simulation_evidence_plugin
+  so101_broker_owned_trajectory_controller EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 install(TARGETS graceful_shutdown_move_group RUNTIME DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
-ament_export_dependencies(geometry_msgs mujoco_ros2_control_plugins mujoco_vendor pluginlib
+ament_export_dependencies(controller_interface geometry_msgs joint_trajectory_controller
+  lifecycle_msgs mujoco_ros2_control_plugins mujoco_vendor pluginlib
   rclcpp rcutils realtime_tools rosidl_default_runtime std_msgs)
 ament_package()

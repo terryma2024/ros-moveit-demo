@@ -1,0 +1,7 @@
+<library path="so101_broker_owned_trajectory_controller">
+  <class name="so101_mujoco_support/BrokerOwnedTrajectoryController"
+         type="so101_mujoco_support::BrokerOwnedTrajectoryController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>Action-only SO-101 trajectory controller; topic commands are disabled.</description>
+  </class>
+</library>
