@@ -147,15 +147,18 @@ std::chrono::milliseconds bounded_service_deadline(std::chrono::milliseconds dea
 ControllerReservationSocket::ControllerReservationSocket(
   std::filesystem::path path, ControllerGoalAdmission & gate,
   ControllerReservationCapability capability, ExpectedPeer expected_peer,
-  std::chrono::milliseconds deadline, StopProof stop_proof)
+  std::chrono::milliseconds deadline, StopProof stop_proof,
+  ControllerReservationRole role, IngressSnapshot ingress_snapshot)
 : path_(std::move(path)), gate_(gate), capability_(capability), expected_peer_(expected_peer),
-  deadline_(deadline), stop_proof_(std::move(stop_proof))
+  deadline_(deadline), stop_proof_(std::move(stop_proof)), role_(role),
+  ingress_snapshot_(std::move(ingress_snapshot))
 {
 #ifndef __linux__
   throw std::runtime_error("CONTROLLER_RESERVATION_SOCKET_LINUX_REQUIRED");
 #else
   if (!path_.is_absolute() || path_ != path_.lexically_normal() ||
     path_.filename().empty() || deadline_.count() <= 0 ||
+    static_cast<uint8_t>(role_) < 1 || static_cast<uint8_t>(role_) > 3 ||
     expected_peer_.pid <= 0 || expected_peer_.start_ticks == 0 ||
     std::all_of(capability_.begin(), capability_.end(), [](uint8_t byte) {return byte == 0;}))
   {
@@ -299,6 +302,24 @@ bool ControllerReservationSocket::serve_one()
       gate_.close();
       return false;
     }
+    if (frame.size() > 9 && frame[9] == 4) {
+      const auto generation = parse_controller_ingress_query_frame(
+        frame, capability_, role_);
+      std::optional<ControllerIngressWitness::Snapshot> snapshot;
+      if (gate_.is_exclusive_generation(generation) && stop_proof_ &&
+        stop_proof_() && ingress_snapshot_)
+      {
+        snapshot = ingress_snapshot_();
+      }
+      const bool accepted = snapshot.has_value() &&
+        gate_.is_exclusive_generation(generation) && stop_proof_ && stop_proof_();
+      const auto reply = encode_controller_ingress_reply(
+        accepted ? ReservationReplyStatus::ACK : ReservationReplyStatus::REJECT,
+        role_, generation, accepted ? snapshot->sequence : 0,
+        accepted ? snapshot->last_ingress_monotonic_ns : 0,
+        accepted ? snapshot->observed_monotonic_ns : 0);
+      return write_exact(connection.get(), reply.data(), reply.size(), deadline) && accepted;
+    }
     const auto request = parse_controller_reservation_frame(frame, capability_);
     if (stop_proof_ && !stop_proof_()) {
       gate_.close();
@@ -327,9 +348,12 @@ ControllerReservationService::ControllerReservationService(
   ControllerReservationCapability capability,
   ControllerReservationSocket::ExpectedPeer expected_peer,
   std::chrono::milliseconds deadline,
-  ControllerReservationSocket::StopProof stop_proof)
+  ControllerReservationSocket::StopProof stop_proof,
+  ControllerReservationRole role,
+  ControllerReservationSocket::IngressSnapshot ingress_snapshot)
 : gate_(gate), socket_(std::move(path), gate, capability, expected_peer,
-    bounded_service_deadline(deadline), std::move(stop_proof))
+    bounded_service_deadline(deadline), std::move(stop_proof), role,
+    std::move(ingress_snapshot))
 {
   try {
     worker_ = std::thread([this]() {

@@ -10,12 +10,16 @@
 #include <vector>
 
 #include "so101_mujoco_support/controller_reservation_protocol.hpp"
+#include "so101_mujoco_support/controller_reservation_provision.hpp"
 
 namespace
 {
 using so101_mujoco_support::ControllerReservationCapability;
+using so101_mujoco_support::ControllerReservationRole;
 using so101_mujoco_support::ReservationReplyStatus;
+using so101_mujoco_support::encode_controller_ingress_reply;
 using so101_mujoco_support::encode_controller_reservation_reply;
+using so101_mujoco_support::parse_controller_ingress_query_frame;
 using so101_mujoco_support::parse_controller_reservation_frame;
 using so101_mujoco_support::parse_controller_reservation_close_frame;
 using so101_mujoco_support::parse_controller_reservation_arm_frame;
@@ -180,4 +184,45 @@ TEST(ControllerReservationProtocol, ArmFrameCarriesOnlyAnAuthenticatedStoppedGen
   invalid = frame;
   invalid.push_back(1);
   EXPECT_THROW(parse_controller_reservation_arm_frame(invalid, key), std::invalid_argument);
+}
+
+TEST(ControllerReservationProtocol, ReadOnlyIngressQueryBindsRoleAndGeneration)
+{
+  std::vector<uint8_t> frame{0, 0, 0, 62, 'S', 'O', 'G', 'R', 1, 4};
+  const auto key = capability();
+  frame.insert(frame.end(), key.begin(), key.end());
+  frame.insert(frame.end(), {0, 0, 0, 0, 0, 0, 0, 5});
+  frame.push_back(static_cast<uint8_t>(ControllerReservationRole::ARM));
+  frame.insert(frame.end(), 15, 0);
+  ASSERT_EQ(frame.size(), 66u);
+  EXPECT_EQ(parse_controller_ingress_query_frame(frame, key, ControllerReservationRole::ARM), 5u);
+  auto invalid = frame;
+  invalid[50] = static_cast<uint8_t>(ControllerReservationRole::NECK);
+  EXPECT_THROW(parse_controller_ingress_query_frame(invalid, key,
+    ControllerReservationRole::ARM), std::invalid_argument);
+  invalid = frame;
+  invalid[51] = 1;
+  EXPECT_THROW(parse_controller_ingress_query_frame(invalid, key,
+    ControllerReservationRole::ARM), std::invalid_argument);
+  invalid = frame;
+  invalid[10] ^= 1;
+  EXPECT_THROW(parse_controller_ingress_query_frame(invalid, key,
+    ControllerReservationRole::ARM), std::invalid_argument);
+  invalid = frame;
+  invalid[49] = 0;
+  EXPECT_THROW(parse_controller_ingress_query_frame(invalid, key,
+    ControllerReservationRole::ARM), std::invalid_argument);
+
+  const auto reply = encode_controller_ingress_reply(
+    ReservationReplyStatus::ACK, ControllerReservationRole::ARM, 5, 7, 123, 140);
+  ASSERT_EQ(reply.size(), 40u);
+  EXPECT_EQ((std::vector<uint8_t>(reply.begin(), reply.begin() + 8)),
+    (std::vector<uint8_t>{'S', 'O', 'G', 'I', 1, 0, 1, 0}));
+  EXPECT_EQ(reply[15], 5u);
+  EXPECT_EQ(reply[23], 7u);
+  EXPECT_EQ(reply[31], 123u);
+  EXPECT_EQ(reply[39], 140u);
+  EXPECT_THROW(encode_controller_ingress_reply(
+    ReservationReplyStatus::ACK, ControllerReservationRole::ARM, 5, 7, 141, 140),
+    std::invalid_argument);
 }

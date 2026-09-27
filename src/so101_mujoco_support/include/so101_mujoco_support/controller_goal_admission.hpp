@@ -71,6 +71,13 @@ public:
     return true;
   }
 
+  bool is_exclusive_generation(uint64_t generation)
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return generation != 0 && generation == generation_ && mode_ == Mode::EXCLUSIVE &&
+           !clock_bad_;
+  }
+
   bool reserve(const GoalUUID & uuid, const Goal & goal, uint64_t generation)
   {
     std::lock_guard<std::mutex> lock(mutex_);

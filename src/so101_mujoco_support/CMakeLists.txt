@@ -114,6 +114,12 @@ if(BUILD_TESTING)
   target_include_directories(test_physics_step_fence PRIVATE include)
   target_link_libraries(test_physics_step_fence so101_simulation_evidence_plugin)
 
+  ament_add_gtest(test_controller_ingress_witness
+    test/test_controller_ingress_witness.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_controller_ingress_witness PRIVATE cxx_std_17)
+  target_include_directories(test_controller_ingress_witness PRIVATE include)
+
   ament_add_gtest(test_broker_owned_trajectory_controller
     test/test_broker_owned_trajectory_controller.cpp
     APPEND_LIBRARY_DIRS ${so101_test_library_dirs})

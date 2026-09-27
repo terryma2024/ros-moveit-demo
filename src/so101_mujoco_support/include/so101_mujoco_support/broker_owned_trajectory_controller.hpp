@@ -13,6 +13,7 @@
 #include <string>
 
 #include "so101_mujoco_support/controller_goal_admission.hpp"
+#include "so101_mujoco_support/controller_ingress_witness.hpp"
 #include "so101_mujoco_support/controller_reservation_provision.hpp"
 #include "so101_mujoco_support/controller_reservation_socket.hpp"
 #include "so101_mujoco_support/controller_stop_witness.hpp"
@@ -46,6 +47,7 @@ protected:
   ControllerGoalAdmission goal_admission_;
   std::optional<ControllerStopWitness::Proof> controller_stop_proof(
     int64_t now_monotonic_ns);
+  std::optional<ControllerIngressWitness::Snapshot> controller_ingress_snapshot();
 
 private:
   void configure_reservation_scope();
@@ -67,6 +69,7 @@ private:
   std::atomic<size_t> monitored_joints_{0};
   std::atomic<bool> witness_active_{false};
   std::atomic<uint64_t> update_sequence_{0};
+  ControllerIngressWitness ingress_witness_;
 };
 
 }  // namespace so101_mujoco_support

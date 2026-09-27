@@ -83,6 +83,12 @@ std::optional<ControllerStopWitness::Proof> BrokerOwnedTrajectoryController::con
   return stopped;
 }
 
+std::optional<ControllerIngressWitness::Snapshot>
+BrokerOwnedTrajectoryController::controller_ingress_snapshot()
+{
+  return ingress_witness_.snapshot();
+}
+
 controller_interface::CallbackReturn BrokerOwnedTrajectoryController::on_configure(
   const rclcpp_lifecycle::State & previous_state)
 {
@@ -108,6 +114,7 @@ controller_interface::CallbackReturn BrokerOwnedTrajectoryController::on_configu
         const rclcpp_action::GoalUUID & uuid,
         std::shared_ptr<const FollowJTrajAction::Goal> goal)
       {
+        auto ingress = ingress_witness_.enter();
         arm_stop_witness_.invalidate_nonblocking();
         gripper_stop_witness_.invalidate_nonblocking();
         neck_stop_witness_.invalidate_nonblocking();
@@ -122,12 +129,14 @@ controller_interface::CallbackReturn BrokerOwnedTrajectoryController::on_configu
       [this](
         std::shared_ptr<rclcpp_action::ServerGoalHandle<FollowJTrajAction>> goal_handle)
       {
+        auto ingress = ingress_witness_.enter();
         return joint_trajectory_controller::JointTrajectoryController::goal_cancelled_callback(
           goal_handle);
       },
       [this](
         std::shared_ptr<rclcpp_action::ServerGoalHandle<FollowJTrajAction>> goal_handle)
       {
+        auto ingress = ingress_witness_.enter();
         joint_trajectory_controller::JointTrajectoryController::goal_accepted_callback(goal_handle);
       });
     configure_reservation_scope();
@@ -265,7 +274,7 @@ void BrokerOwnedTrajectoryController::poll_reservation_provision()
         const auto now = std::chrono::duration_cast<std::chrono::nanoseconds>(
           std::chrono::steady_clock::now().time_since_epoch()).count();
         return controller_stop_proof(now).has_value();
-      });
+      }, reservation_role_, [this]() {return controller_ingress_snapshot();});
     reservation_timer_->cancel();
   } catch (const std::exception & failure) {
     goal_admission_.close();

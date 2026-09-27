@@ -123,6 +123,28 @@ uint64_t parse_controller_reservation_arm_frame(
     frame, expected_capability, 3, "CONTROLLER_RESERVATION_ARM_FRAME_INVALID");
 }
 
+uint64_t parse_controller_ingress_query_frame(
+  const std::vector<uint8_t> & frame,
+  const ControllerReservationCapability & expected_capability,
+  ControllerReservationRole expected_role)
+{
+  constexpr auto invalid = "CONTROLLER_INGRESS_QUERY_FRAME_INVALID";
+  const auto role = static_cast<uint8_t>(expected_role);
+  if (role < 1 || role > 3 || frame.size() != prefix_size + request_header_size ||
+    frame[0] != 0 || frame[1] != 0 || frame[2] != 0 ||
+    frame[3] != request_header_size ||
+    frame[4] != 'S' || frame[5] != 'O' || frame[6] != 'G' || frame[7] != 'R' ||
+    frame[8] != 1 || frame[9] != 4 ||
+    !capability_matches(frame, expected_capability) || frame[50] != role ||
+    std::any_of(frame.begin() + 51, frame.end(), [](uint8_t value) {return value != 0;}))
+  {
+    throw std::invalid_argument(invalid);
+  }
+  const auto generation = read_u64(frame.data() + 42);
+  if (generation == 0) {throw std::invalid_argument(invalid);}
+  return generation;
+}
+
 std::array<uint8_t, 16> encode_controller_reservation_reply(
   ReservationReplyStatus status, uint64_t generation)
 {
@@ -131,6 +153,37 @@ std::array<uint8_t, 16> encode_controller_reservation_reply(
     reply[15 - i] = static_cast<uint8_t>(generation & 0xff);
     generation >>= 8;
   }
+  return reply;
+}
+
+std::array<uint8_t, 40> encode_controller_ingress_reply(
+  ReservationReplyStatus status, ControllerReservationRole role, uint64_t generation,
+  uint64_t ingress_sequence, int64_t last_ingress_monotonic_ns,
+  int64_t observed_monotonic_ns)
+{
+  const auto role_code = static_cast<uint8_t>(role);
+  if (role_code < 1 || role_code > 3 || generation == 0 ||
+    (status == ReservationReplyStatus::ACK &&
+    (last_ingress_monotonic_ns < 0 || observed_monotonic_ns <= 0 ||
+    last_ingress_monotonic_ns > observed_monotonic_ns)) ||
+    (status == ReservationReplyStatus::REJECT &&
+    (ingress_sequence != 0 || last_ingress_monotonic_ns != 0 ||
+    observed_monotonic_ns != 0)))
+  {
+    throw std::invalid_argument("CONTROLLER_INGRESS_REPLY_INVALID");
+  }
+  std::array<uint8_t, 40> reply{'S', 'O', 'G', 'I', 1, static_cast<uint8_t>(status),
+    role_code, 0};
+  const auto write = [&reply](size_t end, uint64_t value) {
+      for (size_t index = 0; index < 8; ++index) {
+        reply[end - index] = static_cast<uint8_t>(value & 0xff);
+        value >>= 8;
+      }
+    };
+  write(15, generation);
+  write(23, ingress_sequence);
+  write(31, static_cast<uint64_t>(last_ingress_monotonic_ns));
+  write(39, static_cast<uint64_t>(observed_monotonic_ns));
   return reply;
 }
 

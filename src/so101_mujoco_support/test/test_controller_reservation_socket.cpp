@@ -17,11 +17,15 @@
 #include <vector>
 
 #include "so101_mujoco_support/controller_reservation_socket.hpp"
+#include "so101_mujoco_support/controller_ingress_witness.hpp"
+#include "so101_mujoco_support/controller_reservation_role.hpp"
 
 namespace
 {
 using so101_mujoco_support::ControllerGoalAdmission;
+using so101_mujoco_support::ControllerIngressWitness;
 using so101_mujoco_support::ControllerReservationCapability;
+using so101_mujoco_support::ControllerReservationRole;
 using so101_mujoco_support::ControllerReservationService;
 using so101_mujoco_support::ControllerReservationSocket;
 
@@ -548,4 +552,75 @@ TEST(ControllerReservationSocket, StaleCloseCannotRevokeANewerGeneration)
   EXPECT_FALSE(server.serve_one());
   EXPECT_EQ(client.result(), "REJECT");
   EXPECT_EQ(gate.admit(uuid, goal(), 6), ControllerGoalAdmission::Result::ALLOW);
+}
+
+TEST(ControllerReservationSocket, AuthenticatedIngressSnapshotDoesNotMutateArmedGeneration)
+{
+  const auto path = socket_path("ingress-query.sock");
+  const auto key = capability();
+  ClientProcess client(path, key);
+  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate.arm(5));
+  ControllerIngressWitness witness;
+  for (int index = 0; index != 7; ++index) {
+    auto ingress = witness.enter();
+  }
+  ControllerReservationSocket server(path, gate, key, client.peer(),
+    std::chrono::milliseconds(1000), [] {return true;},
+    ControllerReservationRole::ARM, [&witness] {return witness.snapshot();});
+  client.start("ingress_snapshot");
+  EXPECT_TRUE(server.serve_one());
+  EXPECT_EQ(client.result().rfind("SNAPSHOT 5 1 7 ", 0), 0u);
+  ControllerGoalAdmission::GoalUUID id{};
+  id.fill(0x11);
+  ASSERT_TRUE(gate.reserve(id, goal(), 5));
+  EXPECT_EQ(gate.admit(id, goal(), 5), ControllerGoalAdmission::Result::ALLOW);
+}
+
+TEST(ControllerReservationSocket, WrongRoleAndStaleGenerationCannotReadIngress)
+{
+  const auto key = capability();
+  for (const auto mode : {"ingress_wrong_role", "ingress_stale_generation"}) {
+    const auto path = socket_path(std::string(mode) + ".sock");
+    ClientProcess client(path, key);
+    ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
+    ASSERT_TRUE(gate.arm(5));
+    ControllerReservationSocket server(path, gate, key, client.peer(),
+      std::chrono::milliseconds(1000), [] {return true;},
+      ControllerReservationRole::ARM, [] {
+        return std::optional{ControllerIngressWitness::Snapshot{7, 123, 140}};
+      });
+    client.start(mode);
+    EXPECT_FALSE(server.serve_one());
+    EXPECT_NE(client.result(), "SNAPSHOT 5 1 7 123 140");
+  }
+}
+
+TEST(ControllerReservationSocket, InFlightCallbackOrMissingStopCannotProduceIngressSnapshot)
+{
+  const auto key = capability();
+  for (const auto mode : {"missing-stop", "in-flight"}) {
+    const auto path = socket_path(std::string(mode) + ".sock");
+    ClientProcess client(path, key);
+    ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
+    ASSERT_TRUE(gate.arm(5));
+    ControllerIngressWitness witness;
+    ControllerReservationSocket server(path, gate, key, client.peer(),
+      std::chrono::milliseconds(1000),
+      [mode] {return std::string(mode) != "missing-stop";},
+      ControllerReservationRole::ARM, [&witness] {return witness.snapshot();});
+    if (std::string(mode) == "in-flight") {
+      auto ingress = witness.enter();
+      client.start("ingress_snapshot");
+      EXPECT_FALSE(server.serve_one());
+      EXPECT_NE(client.result().rfind("SNAPSHOT", 0), 0u);
+    } else {
+      client.start("ingress_snapshot");
+      EXPECT_FALSE(server.serve_one());
+      EXPECT_NE(client.result().rfind("SNAPSHOT", 0), 0u);
+    }
+    ControllerGoalAdmission::GoalUUID id{};
+    id.fill(0x11);
+    EXPECT_TRUE(gate.reserve(id, goal(), 5));
+  }
 }

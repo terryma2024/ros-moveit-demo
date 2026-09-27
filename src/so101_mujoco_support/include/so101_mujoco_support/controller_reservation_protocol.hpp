@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "so101_mujoco_support/controller_goal_admission.hpp"
+#include "so101_mujoco_support/controller_reservation_role.hpp"
 
 namespace so101_mujoco_support
 {
@@ -33,8 +34,18 @@ uint64_t parse_controller_reservation_arm_frame(
   const std::vector<uint8_t> & frame,
   const ControllerReservationCapability & expected_capability);
 
+uint64_t parse_controller_ingress_query_frame(
+  const std::vector<uint8_t> & frame,
+  const ControllerReservationCapability & expected_capability,
+  ControllerReservationRole expected_role);
+
 std::array<uint8_t, 16> encode_controller_reservation_reply(
   ReservationReplyStatus status, uint64_t generation);
+
+std::array<uint8_t, 40> encode_controller_ingress_reply(
+  ReservationReplyStatus status, ControllerReservationRole role, uint64_t generation,
+  uint64_t ingress_sequence, int64_t last_ingress_monotonic_ns,
+  int64_t observed_monotonic_ns);
 
 }  // namespace so101_mujoco_support
 
