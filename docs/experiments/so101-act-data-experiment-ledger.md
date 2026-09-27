@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 62f8c3e0
+current_commit: fad45064
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -21,6 +21,7 @@ confirmed_conclusions:
   - EXP-485 finds no production prefix receipt producer or broker-private consumer; SEARCH source timestamps cannot substitute for a policy prefix receipt.
   - EXP-486 freezes a source-neutral receipt design for Task8 expert routes and later ACT policy output, with separate observation/prefix/state freshness; production remains disabled.
   - EXP-487 verifies a broker-private, one-use source receipt authority and a fail-closed proof approval hook; production proof and goals remain unwired.
+  - EXP-488 verifies source-neutral prefix and original-observation clocks through PathProof, permit and commit-window tests; the production child still has SEARCH only and no admitted prefix producer.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -28,8 +29,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-487
-next_experiment: EXP-488
+latest_checkpoint: CP-488
+next_experiment: EXP-489
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -385,7 +386,7 @@ next_experiment: EXP-003
 
 ```yaml
 experiment_id: EXP-031
-status: PLANNED
+status: VALID
 prior_experiment: EXP029
 hypothesis: Endpoint-only future-prefix checking omits the current-to-future-header motion, and a complete independent checker can reconstruct installed Jazzy spline interpolation without dynamics solves.
 prediction: An unsafe bridge with clear prefix endpoints fails RED; installed C++ Trajectory oracle validates linear/cubic/quintic and mixed derivative interpolation, and all known collision/held-cup gates remain rejecting.
@@ -4044,3 +4045,37 @@ next_experiment: EXP-488
 - User written review of design commit `62f8c3e0` and SHA256 `a550e6984b405302ecacf26dfc0d5552f5debdbc8fde97bd60df51728705f550` lifted the design-only stop. EXP-487 is source-only. `PrefixSourceReceipt` binds `EXPERT_ROUTE` or `ACT_POLICY`, the seven original source times, selected observation hash, source artifact and contact policy fingerprints, phase/physics step/reset epoch, exact prefix and current owner ticket. The registry consumes once and retains replay keys after revocation. The broker exposes an internal issue method, no Unix issue operation; configured approval requires a proof-aware executor. Existing production executor has no such port, so configured production approval fails closed.
 - Focused RED/GREEN, source xdist8, existing-overlay build and installed xdist8 all ran at the intended boundaries with exact Python and fresh NVMe scratch; results and JUnit hashes are in EXP-487. Source module SHA256 `e8d0da4d7f5c1e13bc334f4dfa53508614a6a16ee47f191dad25b38bbfc723e9`; broker SHA256 `7ca4d71c07ff14e114e130ac9f60431a8ce5d7670edfe49c0f7d66a00db5316d`; focused test SHA256 `213211eedf5e3cc861d5273b900037b2d430c2522ec069db4259a7fe0a186b26`. No new performance experiment or hardware action.
 - Next EXP-488 must migrate the old policy-only `RelativePathRequest` and permit clocks to source-neutral prefix plus original observation ages, bind a trusted producer to the current physical SEARCH source, and prove proof/permit/goal content through the production child before any live qualification. Keep all existing dirty work and current evidence root. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained all runs through EXP-487, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
+
+## EXP-488 — Source-neutral proof timing and receipt binding
+
+```yaml
+experiment_id: EXP-488
+status: PLANNED
+prior_experiment: EXP-487
+hypothesis: A PathProof may consume only a broker-issued prefix receipt and must retain all seven original observation times and the first prefix issue time through permit and commit-window checks.
+prediction: Focused RED at the policy-only proof prototype; GREEN rejects changed receipt, stale original observation, stale prefix, or unconfigured production proof ports, while complete package gates remain green.
+single_variable: Source-neutral PathProof and permit timing contract; no new physical goal authority.
+lifecycle: SOURCE_ONLY
+preconditions: [User written design review, EXP-487 valid, current branch and dirty batch preserved, task-owned stack none]
+success_criteria: [Focused RED/GREEN, source and installed package full gates, no live stack or goal]
+failure_criteria: [Forged or replayed receipt accepted, original observation time laundered, source regression]
+invalid_criteria: [Test collection/setup fails before intended boundary, concurrent writer, runtime stack starts]
+provenance:
+  source_commit: fad45064
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Exact task-Python focused RED/GREEN with unique verified NVMe TMPDIR", "Exact task-Python ordinary source pytest -n 8 in private IPC mount namespace", "Existing-overlay colcon build --packages-select so101_demo_py --symlink-install", "Installed colcon test --packages-select so101_demo_py --pytest-args test -n 8 in private IPC mount namespace", "colcon test-result --verbose"]
+observed: ["Missing from_source_receipt RED scratch/exp488-source-red.9SQjnIgy failed 2/2 at intended API boundary; source request GREEN scratch/exp488-source-green1.azmjBjq4 passed 4/4", "Commit-window dual-age RED scratch/exp488-commit-red.SimjfcAI failed at missing original observation-age argument; GREEN scratch/exp488-commit-green1.3cnpEyVJ passed 41/41", "First proof-scope RED scratch/exp488-proof-scope-red.CI8IgW9G was INVALID because fixture lacked model_qvel and never reached scope check; corrected RED scratch/exp488-proof-scope-red-valid.8LKauAWd failed 3/3 at intended missing owner/epoch/policy fence", "One combined focused scratch/exp488-proof-scope-green.GBHT79Hk was INVALID at missing ROS control_msgs setup, not a source regression; ROS-sourced rerun scratch/exp488-proof-scope-green-ros.mE7BagDm passed 52/52", "Selected-source-state RED scratch/exp488-source-state-red.zgXuMFl4 failed 6/6 at source replacement/loss; GREEN scratch/exp488-source-state-green.ZPQ3u4ew passed 65/65", "Final ordinary source xdist8 scratch/exp488-source-full-final.IMzzHVzb exited 0 in 43 s: 4719 collected, 4557 passed, 162 skipped, 4 pre-existing fork warnings; JUnit SHA256 e4293f690d9d7c85f5214212b8bf6dec482a49fbada56fd9a7ad34bb5c424782", "Existing-overlay build scratch/exp488-demo-build.OZttySQL exited 0 in 2 s", "Installed xdist8 scratch/exp488-installed-full.zX4x9ir8 colcon test and test-result both exited 0 in 44 s: package 4719 collected/0 failures/162 skips; aggregate 6179 tests/0 errors/0 failures/205 skipped; package JUnit SHA256 8b6c237b0d9d4c1fd4b4844176fb264e766be322fd10a0f85df0ad46b47a1d29", "Both full gates verified exact child interpreters and distinct unique NVMe TMPDIR; ROS_DOMAIN_ID/GZ_PARTITION NOT_ASSIGNED and no task-owned stack or goal"]
+inferred: ["Source-backed proof canonical input contains the broker receipt and separately limits the original seven observations, prefix issue, fresh state and acceptance; changed selected source identity closes permit", "The installed child still provisions SEARCH only and has no qualified expert prefix producer or production proof/commit ports; these source tests grant no live motion or collection authority"]
+conclusion: VALID for source-neutral proof/permit/commit-window contract only; production submission remains closed.
+decision: Preserve exact evidence and proceed to trusted SEARCH-to-APPROACH prefix producer and complete production proof wiring in EXP-489; do not promote diagnostic routes by flag change.
+next_experiment: EXP-489
+```
+
+## CP-488 — Source-neutral proof clocks pass complete package gates
+
+- `RelativePathRequest` now carries `prefix_issued_wall_s` and, for the source-backed path, the immutable `PrefixSourceReceipt` with all seven original receive times. `PathProver` binds that receipt into its canonical input and rejects ticket, epoch or contact-policy changes. The proof-aware permit path requires that exact private receipt, verifies selected source availability/artifact/observation/timestamps/phase/physics step again before consume, and refuses missing source proof ports. The commit window applies separate observation, prefix and state ages, plus both simulation acceptance deadlines. A source-less legacy test path still exists for the calibration prototype; it is not a production Task8 proof port.
+- The final ordinary source and installed gates passed with exact Python/overlay provenance after the last change; result directories and hashes are in EXP-488. Earlier incomplete ROS setup and missing fixture qvel runs remain retained as INVALID setup attempts, not RED source regressions. Current `path_proof.py` SHA256 `05fa54f3660e05bb0febe64a2885ddf17bec3c50449211b144157508e1c23104`, `permits.py` SHA256 `cbb202442d8d5a3a65d225ae8fbf9f04bbc371e2f479fe3c9dd1d951dee6a332`.
+- Next EXP-489 must create a trusted expert prefix producer from the selected SEARCH physical readback, qualify its frozen route independently, provide stopped full-state/reference/clock proof inputs, and connect the same source-backed proof/permit/exact-goal route through the actual child. Current child builds SEARCH only, and diagnostic routes have `eligible_for_collection=False`; neither condition is altered here. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained all runs through EXP-488, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.

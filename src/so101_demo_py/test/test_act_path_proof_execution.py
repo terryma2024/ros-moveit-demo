@@ -60,7 +60,7 @@ def proof_adapter(scene, *, arm=None, gripper=None):
         proof_clock_port=lambda: dict(wall_s=clock.wall, sim_s=clock.sim,
                                       error_s=.001, continuous=True),
         proof_goal_port=goal_boundary,
-        proof_timing=dict(max_policy_age_s=.2, max_state_age_s=.1,
+        proof_timing=dict(max_prefix_age_s=.2, max_state_age_s=.1,
                           observation_jitter_s=.01, start_jitter_s=.02,
                           first_target_jitter_s=.02),
     )
