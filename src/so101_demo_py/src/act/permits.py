@@ -1,5 +1,6 @@
 """Broker-local approval registry; clients cannot construct an approved permit."""
 
+import copy
 import hashlib
 import json
 import secrets
@@ -32,15 +33,15 @@ class PermitAuthority:
         self.generation_port,self.monotonic=generation_port,monotonic
         self.ttl_s=finite(ttl_s)
         if self.ttl_s<=0:raise ValueError('PERMIT_TTL_INVALID')
-        self._lock=threading.RLock();self._approved={};self._revision=0
+        self._lock=threading.RLock();self._approved={};self._committing={};self._revision=0
 
     @staticmethod
     def _identity(snapshot):
         return (identifier(snapshot['session_id']),identifier(snapshot['attempt_id']),
                 snapshot['reset_epoch'])
 
-    def _proof_matches_current(self,proof,identity,generation):
-        current=self.proof_state_port()
+    def _proof_matches_current(self,proof,identity,generation,current=None):
+        if current is None:current=self.proof_state_port()
         return (proof.generation==generation
                 and proof.owner_ticket==self.proof_ticket_port()
                 and proof.reset_epoch==identity[2]
@@ -108,11 +109,52 @@ class PermitAuthority:
                 if (revision!=self._revision or self.generation_port()!=permit['lease_generation']
                         or self.monotonic()>=permit['valid_until_wall_s'] or current_identity!=identity):
                     raise ValueError('revoked/expired/reset')
+                if proof is not None:
+                    if len(self._committing)>=32:raise ValueError('proof queue full')
+                    self._committing[id(proof)]=(proof,permit['valid_until_wall_s'],revision)
             return proof
         except (KeyError,TypeError,ValueError) as error:
             raise PermissionError('PERMIT_INVALID') from error
 
+    def current_proof_state(self,proof):
+        """Read fresh state for one consumed proof without rerunning physics."""
+        try:
+            if not isinstance(proof,PathProof) or self.proof_state_port is None:
+                raise ValueError('proof mode')
+            with self._lock:
+                entry=self._committing.get(id(proof))
+                if (entry is None or entry[0] is not proof
+                        or entry[2]!=self._revision):
+                    raise ValueError('proof closed')
+                expiry=entry[1]
+            if self.monotonic()>=expiry:raise ValueError('proof expired')
+            generation=self.generation_port()
+            identity=self._identity(self.snapshot_port())
+            if identity!=(proof.owner_ticket[3],proof.owner_ticket[4],
+                         proof.reset_epoch):
+                raise ValueError('scope')
+            current=copy.deepcopy(self.proof_state_port())
+            if not self._proof_matches_current(proof,identity,generation,current):
+                raise ValueError('state')
+            current_identity=self._identity(self.snapshot_port())
+            with self._lock:
+                if (self._committing.get(id(proof)) is not entry
+                        or entry[2]!=self._revision
+                        or self.generation_port()!=generation
+                        or self.monotonic()>=expiry
+                        or current_identity!=identity):
+                    raise ValueError('changed during readback')
+            return current
+        except (KeyError,TypeError,ValueError) as error:
+            raise PermissionError('PATH_PROOF_CURRENT_INVALID') from error
+
+    def close_proof(self,proof):
+        with self._lock:
+            entry=self._committing.get(id(proof))
+            if entry is not None and entry[0] is proof:
+                self._committing.pop(id(proof))
+
     def revoke(self,reason):
         identifier(reason)
         with self._lock:
-            self._revision+=1;self._approved.clear()
+            self._revision+=1;self._approved.clear();self._committing.clear()
