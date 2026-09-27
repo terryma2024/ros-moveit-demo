@@ -181,6 +181,86 @@ TEST(ControllerReservationSocket, AcknowledgesOnlyStoredCrossProcessReservation)
   EXPECT_EQ(gate.admit(uuid, goal(), 5), ControllerGoalAdmission::Result::ALLOW);
 }
 
+TEST(ControllerReservationSocket, ArmRequestWithoutLocalStopProofCannotOpenGeneration)
+{
+  const auto path = socket_path("arm-no-proof.sock");
+  const auto key = capability();
+  ClientProcess client(path, key);
+  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
+  ControllerReservationSocket server(path, gate, key, client.peer(),
+    std::chrono::milliseconds(1000));
+  client.start("arm_generation");
+  EXPECT_FALSE(server.serve_one());
+  EXPECT_EQ(client.result(), "REJECT");
+  ControllerGoalAdmission::GoalUUID uuid{};
+  uuid.fill(0x11);
+  EXPECT_EQ(gate.admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
+}
+
+TEST(ControllerReservationSocket, ArmAndCloseRequireFreshProofOnlyForOpening)
+{
+  const auto path = socket_path("arm-stopped.sock");
+  const auto key = capability();
+  ClientProcess client(path, key);
+  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
+  bool stopped = false;
+  ControllerReservationSocket server(path, gate, key, client.peer(),
+    std::chrono::milliseconds(1000), [&stopped] {return stopped;});
+  client.start("arm_generation");
+  EXPECT_FALSE(server.serve_one());
+  EXPECT_EQ(client.result(), "REJECT");
+  stopped = true;
+  client.start("arm_generation");
+  EXPECT_TRUE(server.serve_one());
+  EXPECT_EQ(client.result(), "ACK");
+  stopped = false;
+  client.start("close_generation");
+  EXPECT_TRUE(server.serve_one());
+  EXPECT_EQ(client.result(), "ACK");
+  ControllerGoalAdmission::GoalUUID uuid{};
+  uuid.fill(0x11);
+  EXPECT_EQ(gate.admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
+}
+
+TEST(ControllerReservationSocket, ReservationRechecksLocalStopAfterArm)
+{
+  const auto path = socket_path("reserve-stopped.sock");
+  const auto key = capability();
+  ClientProcess client(path, key);
+  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
+  bool stopped = true;
+  ControllerReservationSocket server(path, gate, key, client.peer(),
+    std::chrono::milliseconds(1000), [&stopped] {return stopped;});
+  client.start("arm_generation");
+  ASSERT_TRUE(server.serve_one());
+  ASSERT_EQ(client.result(), "ACK");
+  stopped = false;
+  client.start("valid");
+  EXPECT_FALSE(server.serve_one());
+  EXPECT_EQ(client.result(), "REJECT");
+  ControllerGoalAdmission::GoalUUID uuid{};
+  uuid.fill(0x11);
+  EXPECT_EQ(gate.admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
+}
+
+TEST(ControllerReservationSocket, StopProofLostDuringArmCannotProduceAck)
+{
+  const auto path = socket_path("arm-proof-lost.sock");
+  const auto key = capability();
+  ClientProcess client(path, key);
+  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
+  int proof_reads = 0;
+  ControllerReservationSocket server(path, gate, key, client.peer(),
+    std::chrono::milliseconds(1000), [&proof_reads] {return ++proof_reads == 1;});
+  client.start("arm_generation");
+  EXPECT_FALSE(server.serve_one());
+  EXPECT_EQ(client.result(), "REJECT");
+  EXPECT_EQ(proof_reads, 2);
+  ControllerGoalAdmission::GoalUUID uuid{};
+  uuid.fill(0x11);
+  EXPECT_EQ(gate.admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
+}
+
 TEST(ControllerReservationSocket, SequentialGoalsUseOneAuthenticatedOwnerGeneration)
 {
   const auto path = socket_path("sequential.sock");
