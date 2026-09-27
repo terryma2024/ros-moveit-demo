@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 985ae615
+current_commit: a424431e
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -24,8 +24,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-474
-next_experiment: EXP-479
+latest_checkpoint: CP-479
+next_experiment: EXP-480
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -3852,3 +3852,13 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 ## CP-478 — Proof commit works only with injected in-memory ports
 
 - Last valid experiment EXP-478 is source-only. HEAD before this checkpoint `789d9590`; branch/worktree, sole evidence root and pre-existing dirty production batch preserved. The actual `BrokerPairedExecution` and `RosCalibrationMotionGuard` still select legacy proofless ports and repeat full checker calls. Before production wiring, source authority must provide policy receipt, full qpos/qvel/stop proof, model/profile/checker/contact fingerprints and a real bounded atomic wall/sim clock sample; the proof-specific exact-goals port must replace the old checker path. `MujocoPathProcess` still uses the old submit-lead timeout. Next EXP-479 is a read-only production-port audit and one RED entry-chain test for these missing fields, followed by a single-variable source fix only if the prerequisite source authority exists. No stack, goal, real robot, EXP-469 performance rerun or formal data. Retained all runs through EXP-478; archived none; scratch/runtime/generated caches only deletion candidates, nothing deleted. Formal accepted Train/Validation/Offline Test 0/0/0.
+
+## EXP-479 — Production-port audit and ordinary source gate
+
+- **VALID source gate; production proof entry remains closed:** Source HEAD `a424431e` plus preserved dirty production batch; overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`; exact task Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`; `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`; lifecycle `SOURCE_ONLY`. Read-only audit found `BrokerPairedExecution` still constructs the legacy permit path, `RosCalibrationMotionGuard` still repeats full checker calls, its snapshot lacks full model qvel, driver approval readback lacks a bound policy receipt, and no production atomic wall/sim clock or exact-goal proof port exists. The prerequisite source authority is absent, so this experiment does not enable APPROACH commands or assert one complete check at the production entry.
+- First complete ordinary source test `scratch/exp479-source-full.NQKv0igG` ran 32 logical CPUs with xdist8, exact task Python/source, unique verified NVMe `TMPDIR/TMP/TEMP`, and JUnit; exit1 after 41 s: 4524 pass/162 skip/4 fail. Three failures were `ENOSPC` on the host `/run/user/1000` tmpfs and one was a stale `DIRECTORY_CONFLICT` at `/run/user/1000/so101-t23-broker-call`; this is **INVALID_SETUP**, not proof-code RED. Read-only host `df` showed 3.2 GiB/3.2 GiB and 0 available, with retained historical `act*` IPC evidence occupying most of it. No host IPC artifact was removed or changed.
+- Same complete scope and xdist8 in a private mount namespace `scratch/exp479-source-full-isolated.pyVtIDN3` exited0 after 39 s: 4690 collected, 4528 pass/162 skip/4 warnings; JUnit SHA256 `ab57fa2371c8572de82d1eabbea6c02206e0ddd46565b491bb34ba42fbc4b7b5`. Retained scripts `scratch/exp479-isolated-root.zsh` and `scratch/exp479-isolated-user.zsh` SHA256 `01f1f79cf81dabcbad4d7e1563587c3eacfa14df8f6b6f2269e09b738816da79` and `65a49e7a85487edd7de9fa8339dbd3a050b6de4a221464008745106e69a71f6e` bind a fresh task-owned NVMe directory over `/run/user/1000` **inside that namespace only**. They leave the host's full tmpfs and retained evidence untouched. `tempfile-proof.log` confirms exact Python, pytest7.4.4, xdist3.8.0, source-resolved module and unique NVMe scratch; `ipc-mount-proof.log` confirms namespace backing. A test socket root is now selected from `SO101_ACT_BROKER_TEST_ROOT`, defaulting to `/tmp`, instead of a hard-coded different evidence root; focused `scratch/exp479-socket-green.U9GklWF0` passed1/1. No ROS/MuJoCo stack, controller goal, real robot, performance experiment or formal episode was run. Retain both full runs and scripts; archive none; scratch/runtime/generated caches are deletion candidates only, nothing deleted. Accepted Train/Validation/Offline Test 0/0/0.
+
+## CP-479 — Full source gate passes; installed and production gates remain
+
+- Last valid experiment EXP-479 establishes the ordinary source gate only. The host `/run/user/1000` is still full, so further package tests need the same private namespace or must stop at an honest resource gate. Next EXP-480 verifies the existing overlay dependency closure, rebuilds the affected Python package, and runs its complete installed package gate with exact child interpreter, xdist8 and unique verified NVMe scratch. The production proof entry must remain closed until a full stopped physical state, policy receipt, clock source and exact-goal authority can be established and independently tested. Current branch/worktree, sole evidence root and pre-existing dirty batch remain; retained runs through EXP-479, archived none, scratch/runtime/generated caches only deletion candidates, nothing deleted. Formal accepted Train/Validation/Offline Test 0/0/0.
