@@ -848,8 +848,7 @@ void SimulationEvidencePlugin::on_physics_step(const mjModel * model, const mjDa
     realtime_step_fence_ack_publisher_ && realtime_step_fence_ack_publisher_->trylock())
   {
     const auto ack = step_fence_.observe(
-      step.simulation_session_id, step.reset_epoch, step.physics_step,
-      step.simulation_time_s, paused, clock_begin_ns, clock_end_ns);
+      step, paused, clock_begin_ns, clock_end_ns);
     if (ack) {
       realtime_step_fence_ack_publisher_->msg_ = *ack;
       realtime_step_fence_ack_publisher_->unlockAndPublish();

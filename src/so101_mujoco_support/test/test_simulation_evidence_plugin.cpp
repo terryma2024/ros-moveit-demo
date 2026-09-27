@@ -901,6 +901,14 @@ TEST_F(AtomicEvidenceTest, PhysicsFenceAckCarriesClockBoundsFromTheActualStepHoo
   EXPECT_EQ(ack.reset_epoch, 1U);
   EXPECT_EQ(ack.marked_physics_step, 1U);
   EXPECT_DOUBLE_EQ(ack.marked_simulation_time_s, .002);
+  EXPECT_EQ(ack.marked_sample.simulation_session_id, ack.simulation_session_id);
+  EXPECT_EQ(ack.marked_sample.reset_epoch, ack.reset_epoch);
+  EXPECT_EQ(ack.marked_sample.physics_step, ack.marked_physics_step);
+  EXPECT_DOUBLE_EQ(ack.marked_sample.simulation_time_s, ack.marked_simulation_time_s);
+  EXPECT_EQ(ack.marked_sample.model_qpos,
+    std::vector<double>(data_->qpos, data_->qpos + model_->nq));
+  EXPECT_EQ(ack.marked_sample.model_qvel,
+    std::vector<double>(data_->qvel, data_->qvel + model_->nv));
   EXPECT_LE(outer_begin_ns, ack.clock_interval_begin_monotonic_ns);
   EXPECT_LE(ack.clock_interval_begin_monotonic_ns, ack.clock_interval_end_monotonic_ns);
   EXPECT_LE(ack.clock_interval_end_monotonic_ns, outer_end_ns);

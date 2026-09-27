@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from so101_mujoco_support.msg import PhysicsStepFenceAck
+from so101_mujoco_support.msg import PhysicsStepEvidence, PhysicsStepFenceAck
 
 from so101_demo.adapters.act.physics_step_fence import RosPhysicsStepFence
 
@@ -32,7 +32,7 @@ class _Node:
 
     def acknowledge(self, request, *, epoch=None, sequence=None, step=99,
                     simulation_time_s=1.098, clock_begin_ns=None,
-                    clock_end_ns=None):
+                    clock_end_ns=None, sample_changes=None):
         ack = PhysicsStepFenceAck()
         ack.simulation_session_id = request.simulation_session_id
         ack.reset_epoch = request.reset_epoch if epoch is None else epoch
@@ -43,6 +43,16 @@ class _Node:
             time.monotonic_ns() if clock_begin_ns is None else clock_begin_ns)
         ack.clock_interval_end_monotonic_ns = (
             time.monotonic_ns() if clock_end_ns is None else clock_end_ns)
+        sample = PhysicsStepEvidence()
+        sample.simulation_session_id = ack.simulation_session_id
+        sample.reset_epoch = ack.reset_epoch
+        sample.physics_step = step
+        sample.simulation_time_s = simulation_time_s
+        sample.model_qpos = [.1, .2]
+        sample.model_qvel = [.3]
+        for field, value in (sample_changes or {}).items():
+            setattr(sample, field, value)
+        ack.marked_sample = sample
         self.callback(ack)
 
 
@@ -70,6 +80,8 @@ def test_fence_accepts_only_matching_ack_after_confirmed_stop():
     assert proof["clock_interval_width_ns"] == (
         proof["clock_interval_end_monotonic_ns"] -
         proof["clock_interval_begin_monotonic_ns"])
+    assert proof["model_qpos"] == (.1, .2)
+    assert proof["model_qvel"] == (.3,)
     assert proof["command_authority"] is False
     with pytest.raises(ValueError, match="PHYSICS_STEP_FENCE_ALREADY_REQUESTED"):
         fence.request_after_stop(2, stopped_wall_s, _deadline())
@@ -113,5 +125,27 @@ def test_fence_rejects_unbounded_or_noncausal_source_clock(interval):
     fence.arm(2)
     node.on_publish = lambda request: node.acknowledge(
         request, clock_begin_ns=interval[0], clock_end_ns=interval[1])
+    with pytest.raises(ValueError, match="PHYSICS_STEP_FENCE_INVALID"):
+        fence.request_after_stop(2, time.monotonic() - .001, _deadline())
+
+
+@pytest.mark.parametrize("change", [
+    {"simulation_session_id": "other"},
+    {"reset_epoch": 3},
+    {"physics_step": 100},
+    {"simulation_time_s": 1.1},
+    {"model_qpos": []},
+    {"model_qpos": [float("nan")]},
+    {"model_qvel": []},
+    {"model_qvel": [float("inf")]},
+    {"truncated": True},
+    {"diagnostic_hazard_breached": True},
+])
+def test_fence_rejects_mismatched_or_incomplete_marked_sample(change):
+    node = _Node()
+    fence = RosPhysicsStepFence(node, "session-1")
+    fence.arm(2)
+    node.on_publish = lambda request: node.acknowledge(
+        request, sample_changes=change)
     with pytest.raises(ValueError, match="PHYSICS_STEP_FENCE_INVALID"):
         fence.request_after_stop(2, time.monotonic() - .001, _deadline())
