@@ -247,7 +247,11 @@ void BrokerOwnedTrajectoryController::poll_reservation_provision()
       reservation_provision_path_, reservation_role_, reservation_session_);
     reservation_service_ = std::make_unique<ControllerReservationService>(
       reservation_socket_path_, goal_admission_, provision.capability, provision.peer,
-      std::chrono::milliseconds(50));
+      std::chrono::milliseconds(50), [this]() {
+        const auto now = std::chrono::duration_cast<std::chrono::nanoseconds>(
+          std::chrono::steady_clock::now().time_since_epoch()).count();
+        return controller_stop_proof(now).has_value();
+      });
     reservation_timer_->cancel();
   } catch (const std::exception & failure) {
     goal_admission_.close();
