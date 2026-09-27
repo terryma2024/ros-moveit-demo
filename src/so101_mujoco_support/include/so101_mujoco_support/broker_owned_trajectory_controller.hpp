@@ -3,6 +3,8 @@
 
 #include <joint_trajectory_controller/joint_trajectory_controller.hpp>
 
+#include "so101_mujoco_support/controller_goal_admission.hpp"
+
 namespace so101_mujoco_support
 {
 
@@ -15,6 +17,9 @@ public:
 
   controller_interface::CallbackReturn on_activate(
     const rclcpp_lifecycle::State & previous_state) override;
+
+protected:
+  ControllerGoalAdmission goal_admission_;
 };
 
 }  // namespace so101_mujoco_support

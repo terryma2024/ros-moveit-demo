@@ -54,6 +54,12 @@ public:
     return true;
   }
 
+  void close()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    fault_close();
+  }
+
   bool reserve(const GoalUUID & uuid, const Goal & goal, uint64_t generation)
   {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -87,6 +93,18 @@ public:
   Result admit(const GoalUUID & uuid, const Goal & goal, uint64_t generation)
   {
     std::lock_guard<std::mutex> lock(mutex_);
+    return admit_locked(uuid, goal, generation);
+  }
+
+  Result admit_current(const GoalUUID & uuid, const Goal & goal)
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return admit_locked(uuid, goal, generation_);
+  }
+
+private:
+  Result admit_locked(const GoalUUID & uuid, const Goal & goal, uint64_t generation)
+  {
     if (mode_ != Mode::EXCLUSIVE) {
       return Result::DENY_CLOSED;
     }
@@ -102,7 +120,6 @@ public:
     return Result::ALLOW;
   }
 
-private:
   enum class Mode {CLOSED, EXCLUSIVE};
   struct Reservation
   {
