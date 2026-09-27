@@ -24,14 +24,22 @@ class ControllerReservationClient:
                or "\x00" in str(path) or len(os.fsencode(path)) > 107
                for kind, path in paths.items()):
             raise ValueError("CONTROLLER_RESERVATION_ENDPOINTS_INVALID")
-        if not isinstance(capability, bytes) or len(capability) != 32 or not any(capability):
+        if isinstance(capability, bytes) and len(paths) == 1:
+            capabilities = {next(iter(paths)): capability}
+        elif isinstance(capability, dict) and capability.keys() == paths.keys():
+            capabilities = capability.copy()
+        else:
+            raise ValueError("CONTROLLER_RESERVATION_CAPABILITY_INVALID")
+        if (any(not isinstance(key, bytes) or len(key) != 32 or not any(key)
+                for key in capabilities.values())
+                or len(set(capabilities.values())) != len(capabilities)):
             raise ValueError("CONTROLLER_RESERVATION_CAPABILITY_INVALID")
         if not isinstance(timeout_s, (int, float)) or not 0 < timeout_s <= 1:
             raise ValueError("CONTROLLER_RESERVATION_TIMEOUT_INVALID")
         if deadline_port is not None and not callable(deadline_port):
             raise TypeError("CONTROLLER_RESERVATION_DEADLINE_INVALID")
         self._paths = paths
-        self._capability = capability
+        self._capabilities = capabilities
         self._timeout_s = float(timeout_s)
         self._deadline_port = deadline_port
         self._lock = threading.RLock()
@@ -78,7 +86,7 @@ class ControllerReservationClient:
             raise PermissionError("CONTROLLER_RESERVATION_KIND_INVALID")
         if not isinstance(generation, int) or not 0 < generation < 2**64:
             raise ValueError("CONTROLLER_RESERVATION_GENERATION_INVALID")
-        body = (b"SOGR" + bytes((1, operation)) + self._capability
+        body = (b"SOGR" + bytes((1, operation)) + self._capabilities[kind]
                 + generation.to_bytes(8, "big") + goal_uuid + payload)
         if len(body) > MAX_BODY_BYTES:
             raise ValueError("CONTROLLER_RESERVATION_FRAME_TOO_LARGE")
