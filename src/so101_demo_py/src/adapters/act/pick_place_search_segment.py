@@ -25,16 +25,20 @@ class PickPlaceSearchObservation:
     search_result: dict
     physical_readback: dict
     planning_scene: SceneCommandReceipt
+    stationary_physics_proof: dict | None = None
 
 
 class PickPlaceSearchSegment:
     """Drive only SEARCH; the caller decides whether its evidence passes."""
 
     def __init__(self, sources, adapter, scene_port, geometry: TaskGeometry, *,
-                 operation_guard, max_source_wait_s: float, poll_interval_s: float,
+                 operation_guard, history_verifier,
+                 max_source_wait_s: float, poll_interval_s: float,
                  monotonic=time.monotonic, sleep=time.sleep,
                  clock_ns=time.monotonic_ns) -> None:
-        if not isinstance(geometry, TaskGeometry) or not callable(operation_guard):
+        if (not isinstance(geometry, TaskGeometry)
+                or not callable(operation_guard)
+                or not callable(history_verifier)):
             raise ValueError("SEARCH_SEGMENT_CONFIG_INVALID")
         max_wait = finite(max_source_wait_s)
         poll = finite(poll_interval_s)
@@ -42,6 +46,7 @@ class PickPlaceSearchSegment:
             raise ValueError("SEARCH_SEGMENT_CONFIG_INVALID")
         self.sources, self.adapter, self.scene_port = sources, adapter, scene_port
         self.geometry, self.guard = geometry, operation_guard
+        self.history_verifier = history_verifier
         self.max_wait, self.poll = max_wait, poll
         self.monotonic, self.sleep, self.clock_ns = monotonic, sleep, clock_ns
 
@@ -129,7 +134,7 @@ class PickPlaceSearchSegment:
             if elapsed_steps >= _STOP_INTERVAL_STEPS:
                 if elapsed_ns < _STOP_INTERVAL_NS:
                     raise PickPlaceSearchError("SEARCH_STOP_DWELL_TIME_INVALID")
-                return raw, geometry
+                return raw, geometry, stopped_wall_s
 
     def run(self, request: dict, *, reset_epoch: int) -> PickPlaceSearchObservation:
         try:
@@ -159,13 +164,24 @@ class PickPlaceSearchSegment:
                     raise PickPlaceSearchError("SEARCH_NOT_LOCKED")
                 if self.adapter.neck_port.stop_and_confirm() is not True:
                     raise PickPlaceSearchError("SEARCH_STOP_UNCONFIRMED")
-                final_raw, final_geometry = self._post_stop_interval(
+                final_raw, final_geometry, stopped_wall_s = self._post_stop_interval(
                     request, reset_epoch, cursor)
                 if final_raw["world"].simulation_time_s < result["timestamp"]:
                     raise PickPlaceSearchError("SEARCH_POST_LOCK_STEP_INVALID")
-                observed = self._sync_scene(request, final_geometry)
+                scene_receipt = self._sync_scene(request, final_geometry)
+                observed = PickPlaceSearchObservation(result, final_raw, scene_receipt)
+                proof = self.history_verifier(observed, stopped_wall_s)
+                if (not isinstance(proof, dict)
+                        or proof.get("selected_physics_step") !=
+                           final_raw["world"].simulation_step
+                        or proof.get("stop_confirmed_wall_s") != stopped_wall_s
+                        or proof.get("controller_interval_proof_required") is not True
+                        or proof.get("command_authority") is not False
+                        or proof.get("eligible_for_collection") is not False):
+                    raise PickPlaceSearchError("SEARCH_PHYSICS_HISTORY_INVALID")
                 self._guard(request)
-                return PickPlaceSearchObservation(result, final_raw, observed)
+                return PickPlaceSearchObservation(
+                    result, final_raw, scene_receipt, proof)
         except BaseException as error:
             try:
                 stopped = self.adapter.neck_port.stop_and_confirm()

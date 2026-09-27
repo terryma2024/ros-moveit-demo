@@ -8,6 +8,7 @@ import time
 from so101_demo.act.contracts import finite, identifier
 from so101_demo.core.task_geometry import TaskGeometry
 from .pick_place_search_binding import build_pick_place_search_adapter
+from .pick_place_search_history import verify_search_stationary_physics
 from .pick_place_search_segment import PickPlaceSearchSegment
 
 
@@ -108,6 +109,11 @@ class PickPlaceSearchBoundary:
             segment = self.segment_factory(
                 self.reset.sources, adapter, scene_port, self.geometry,
                 operation_guard=operation_guard,
+                history_verifier=lambda observed, stopped_wall_s:
+                    verify_search_stationary_physics(
+                        self.reset.sources, observed, model=self.reset.model,
+                        stopped_wall_s=stopped_wall_s,
+                    ),
                 max_source_wait_s=self.max_source_wait_s,
                 poll_interval_s=self.poll_interval_s,
             )
