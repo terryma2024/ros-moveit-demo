@@ -117,3 +117,67 @@ def test_proof_permit_rejects_same_generation_with_different_lease(scene):
     with pytest.raises(PermissionError, match='PERMIT_INVALID'):
         authority.require(permit, prefix)
     assert checks == [1]
+
+
+@pytest.mark.parametrize('change', (
+    'arm_joint_order', 'gripper_joint_order', 'row', 'offset', 'stamp',
+    'prefix_hash', 'extra_field',
+))
+def test_exact_goal_pair_is_bound_to_proof(scene, change):
+    from so101_demo.act.path_proof import goal_pair_from_proof, require_proven_goals
+
+    authority, prefix, _, checks = proof_authority(scene)
+    proof = authority.require(authority.approve(prefix), prefix)
+    goals = goal_pair_from_proof(
+        proof, start_time_s=5., bridge_time_s=4.85,
+        reference_positions=proof.controller_start_positions,
+    )
+    assert goals[0]['header_stamp_s'] == goals[1]['header_stamp_s'] == 5.
+    assert goals[0]['time_from_start_s'][:3] == (0., .052, .054)
+    assert len(goals[0]['positions']) == len(goals[1]['positions']) == 601
+    require_proven_goals(
+        proof, goals, bridge_time_s=4.85,
+        reference_positions=proof.controller_start_positions,
+    )
+    changed = copy.deepcopy(goals)
+    if change == 'arm_joint_order':
+        changed[0]['joint_names'] = tuple(reversed(changed[0]['joint_names']))
+    elif change == 'gripper_joint_order':
+        changed[1]['joint_names'] = ('wrong_gripper',)
+    elif change == 'row':
+        changed[0]['positions'] = changed[0]['positions'][:-1] + ((.001,) * 5,)
+    elif change == 'offset':
+        offsets = changed[0]['time_from_start_s']
+        changed[0]['time_from_start_s'] = offsets[:-1] + (offsets[-1] + .002,)
+    elif change == 'stamp':
+        changed[1]['header_stamp_s'] += .002
+    elif change == 'prefix_hash':
+        changed[0]['prefix_sha256'] = '0' * 64
+    else:
+        changed[1]['unapproved'] = True
+    with pytest.raises(ValueError, match='PATH_GOALS_MISMATCH'):
+        require_proven_goals(
+            proof, tuple(changed), bridge_time_s=4.85,
+            reference_positions=proof.controller_start_positions,
+        )
+    assert checks == [1]
+
+
+def test_goal_materialization_rejects_changed_bridge_or_reference(scene):
+    from so101_demo.act.path_proof import goal_pair_from_proof
+
+    authority, prefix, _, checks = proof_authority(scene)
+    proof = authority.require(authority.approve(prefix), prefix)
+    with pytest.raises(ValueError, match='BRIDGE_INTERVAL_CHANGED'):
+        goal_pair_from_proof(
+            proof, start_time_s=5., bridge_time_s=4.851,
+            reference_positions=proof.controller_start_positions,
+        )
+    changed = (proof.controller_start_positions[0] + .001,
+               *proof.controller_start_positions[1:])
+    with pytest.raises(ValueError, match='PATH_REFERENCE_CHANGED'):
+        goal_pair_from_proof(
+            proof, start_time_s=5., bridge_time_s=4.85,
+            reference_positions=changed,
+        )
+    assert checks == [1]

@@ -9,7 +9,8 @@ from types import MappingProxyType
 from typing import Mapping
 
 from .contracts import finite, integer, sha256, validate_action_prefix, vector
-from .execution import prefix_sha256
+from .execution import prefix_sha256, split_positions
+from .joints import ARM_JOINTS
 
 
 def _nanoseconds(value):
@@ -172,6 +173,8 @@ class PathProof:
     contact_scope_sha256: str
     checker_sha256: str
     owner_ticket: tuple
+    relative_request: RelativePathRequest
+    controller_start_positions: tuple[float, ...]
     generation: int
     reset_epoch: int
     sample_count: int
@@ -248,6 +251,9 @@ class PathProver:
             model_sha256=model_hash, policy_fingerprint=policy,
             profile_sha256=profile, contact_scope_sha256=contact,
             checker_sha256=checker_hash, owner_ticket=ticket,
+            relative_request=request,
+            controller_start_positions=vector(
+                snapshot['controller_start_positions'], 6),
             generation=generation,
             reset_epoch=epoch, sample_count=count,
             first_violation=None if safe else MappingProxyType(details),
@@ -255,3 +261,45 @@ class PathProver:
             proof_compute_latency_s=completed - started,
             nq=nq, nv=nv, _state_canonical=state,
         )
+
+
+def goal_pair_from_proof(proof, *, start_time_s, bridge_time_s,
+                         reference_positions):
+    """Build the exact broker-side pair from a proven relative path."""
+    if (not isinstance(proof, PathProof) or proof.status != 'SAFE'
+            or proof.relative_request.source_prefix_sha256 != proof.prefix_sha256):
+        raise ValueError('PATH_PROOF_NOT_SAFE')
+    reference = vector(reference_positions, 6)
+    if reference != proof.controller_start_positions:
+        raise ValueError('PATH_REFERENCE_CHANGED')
+    materialized = proof.relative_request.materialize(
+        start_time_s=start_time_s, bridge_time_s=bridge_time_s)
+    start = materialized['start_time_s']
+    offsets = (0.,) + tuple(
+        value / 1_000_000_000 for value in proof.relative_request.target_offsets_ns)
+    arm, gripper = split_positions((reference,) + materialized['positions'])
+    return tuple(dict(
+        joint_names=names, header_stamp_s=start,
+        time_from_start_s=offsets, positions=rows,
+        session_id=proof.relative_request.session_id,
+        attempt_id=proof.relative_request.attempt_id,
+        sequence=proof.relative_request.sequence,
+        prefix_sha256=proof.prefix_sha256,
+    ) for names, rows in ((ARM_JOINTS[:5], arm), (ARM_JOINTS[5:], gripper)))
+
+
+def require_proven_goals(proof, goals, *, bridge_time_s,
+                         reference_positions):
+    """Compare every field prepared for both action servers."""
+    try:
+        if len(goals) != 2:
+            raise ValueError('goal pair')
+        expected = goal_pair_from_proof(
+            proof, start_time_s=goals[0]['header_stamp_s'],
+            bridge_time_s=bridge_time_s,
+            reference_positions=reference_positions)
+        if tuple(goals) != expected:
+            raise ValueError('goal content')
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError('PATH_GOALS_MISMATCH') from error
+    return True
