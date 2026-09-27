@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: a07e6b72
+current_commit: 53073d16
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -42,6 +42,7 @@ confirmed_conclusions:
   - EXP-510 verifies an off-path, controller-local one-use UUID plus raw-byte reservation contract; no production action callback or broker registration is wired.
   - EXP-511 disproves raw CDR bytes as a stable goal identity in the installed Python serializer; typed goal fields survive each observed decode, but C++ parity is still unproved.
   - EXP-512 verifies the fixed Python CDR fixture decodes to the expected full C++ Goal and replaces the off-path reservation's raw-byte identity with typed Goal equality; production callback remains open.
+  - EXP-513 replaces the configured JTC action entrypoint with a default-closed reservation wrapper; rejected no-motion ROS requests prove field mismatch closes and exact generation consumes before inactive-base rejection. Broker registration and active execution remain unproved.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -50,8 +51,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-512
-next_experiment: EXP-513
+latest_checkpoint: CP-513
+next_experiment: EXP-514
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4911,7 +4912,7 @@ next_experiment: EXP-513
 
 ```yaml
 experiment_id: EXP-513
-status: PLANNED
+status: VALID
 prior_experiment: EXP-512
 hypothesis: The action-only JTC subclass can replace the base action server after configuration so every action goal first passes the controller-local closed-by-default reservation, while valid accepted goals still delegate to the original JTC callbacks.
 prediction: A no-motion action-client test distinguishes the installed unguarded server from the replacement, rejects an unknown UUID/Goal before base handling, and proves one action server remains registered; a valid reserved goal path is tested without controller movement.
@@ -4927,11 +4928,47 @@ provenance:
   runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i/so101_mujoco_support/lib/libso101_broker_owned_trajectory_controller.so
   ros_domain_id: NOT_ASSIGNED
   gz_partition: NOT_ASSIGNED
+correction: The first compiler failure was a missing direct test include, not RED. Adding that include reached the intended missing-gate RED. A later behavioral RED caught a hardcoded generation=1 in the action callback; admit_current now reads generation under the admission lock. The test sent two ROS SendGoal requests to an inactive in-process controller; both were rejected and no trajectory ran.
+commands: ["Inspected installed JTC header/ELF, installed rclcpp_action create_server deleter, and official Jazzy JTC source callback order", "Added real ROS SendGoal service regression before modifying the plugin", "Observed missing-gate C++ RED, explicit-close C++ RED, and second-generation behavior RED", "Replaced base action server after configuration with a reservation-wrapped server on the same name", "Rebuilt existing overlay; verified both /usr/bin/python3 and task Python TMPDIR/TMP/TEMP in unique NVMe scratch; ran focused action test and full so101_mujoco_support package gate", "Ran read-only ament_uncrustify and git diff --check"]
+observed: ["After configure, action SendGoal service count was one; an altered reserved Goal was rejected over ROS and closed the reservation", "A second-generation exact reserved Goal was consumed by the wrapper before base JTC rejected it because the controller was inactive; hardcoded-generation RED failed this assertion before the fix", "Package build exit0; focused test exit0; CTest 3/3 passed; colcon test-result 40 tests, 0 errors, 0 failures, 0 skipped; package test elapsed 1 s", "Read-only C++ style exit0; code commit 53073d16; result artifact SHA256 e66b9d2bfafa2613cbbb9979f05545d82076ede6b02d0791ee806b93fe35889b", "No controller activation, physics step, accepted action goal, task-owned stack or formal episode occurred"]
+inferred: ["Configured production action ingress is default-closed because no broker-facing reservation path exists yet", "The test proves the inactive no-motion callback order, not active controller acceptance or physical stop; lifecycle invalidation remains incomplete"]
+conclusion: VALID source-level and in-process ROS proof of default-closed action ingress replacement; broker registration and live command authority are still absent.
+evidence: [/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp513-controller-action-ingress/result.json, /data/work/so101-evidence/act-data/20260924-fbc25063-resume/scratch/exp513-callback-red2.YT7cdgOi, /data/work/so101-evidence/act-data/20260924-fbc25063-resume/scratch/exp513-callback-behavior-red.hGH6MJa9, /data/work/so101-evidence/act-data/20260924-fbc25063-resume/scratch/exp513-callback-focused.v8V5rXAD, /data/work/so101-evidence/act-data/20260924-fbc25063-resume/scratch/exp513-cpp-package.hiyKvLNe]
+decision: Keep live ACT movement fenced. Close reservations on lifecycle transitions in EXP-514, then prove broker-scoped registration before send and a separate teacher mode before any active goal.
+next_experiment: EXP-514
+```
+
+## CP-513 — Action ingress defaults closed; lifecycle and broker order open
+
+- Commit `53073d16` installs the subclass action server after releasing the base server and removing the trajectory-topic subscriber. The wrapper consumes a matching typed Goal and native UUID once, then delegates to JTC; an unknown or altered request is rejected. No external broker can arm the gate yet, so this installed controller will reject ordinary action goals, including MoveIt teacher goals, until the intended mode and registration path are implemented.
+- The real ROS SendGoal test used an inactive in-process controller and observed one service. Its altered request closed the reservation; its exact second-generation request consumed the reservation before the base inactive check rejected the goal. This proves no-motion callback order only. The complete C++ package gate passed 3 CTest cases and 40 tests, zero errors/failures/skips, with unique NVMe scratch and exact Python tempfile proofs; read-only style check passed.
+- Registered root unchanged. Retain EXP-513 compiler/behavior RED, build, focused, full-package and style artifacts with all prior runs; archived none. Scratch and generated caches are deletion candidates only, nothing deleted. Existing dirty/untracked batch remains outside the code commit. Formal accepted Train/Validation/Offline Test 0/0/0; no task-owned stack or accepted goal.
+
+## EXP-514 — Revoke controller admission across lifecycle transitions
+
+```yaml
+experiment_id: EXP-514
+status: PLANNED
+prior_experiment: EXP-513
+hypothesis: Deactivation, cleanup, error and reconfiguration can revoke every pending reservation before any later action callback, without changing the base controller's stop behavior.
+prediction: A no-motion lifecycle regression demonstrates a reserved goal cannot pass after each transition; a higher generation remains closed until explicitly re-armed. A fresh physical stop baseline is a separate later gate.
+single_variable: Add admission closure at controller lifecycle boundaries; do not add broker service, teacher mode or active motion.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-513 valid, no task-owned stack or accepted goal, JTC lifecycle callback behavior inspected]
+success_criteria: [Lifecycle RED/GREEN, pending reservation denied after transition, C++ package build and full test gate, no accepted action goal]
+failure_criteria: [Stale reservation survives transition, action request can consume a pre-transition reservation, base stop behavior is bypassed]
+invalid_criteria: [Physical goal or task-owned stack starts, scratch outside registered NVMe root, dirty batch enters commit]
+provenance:
+  source_commit: 53073d16
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i/so101_mujoco_support/lib/libso101_broker_owned_trajectory_controller.so
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
 commands: []
 observed: []
 inferred: []
 conclusion: PENDING
 evidence: []
 decision: PENDING
-next_experiment: EXP-514
+next_experiment: EXP-515
 ```
