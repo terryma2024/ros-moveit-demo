@@ -10,13 +10,41 @@ import uuid
 
 from control_msgs.action import FollowJointTrajectory
 from rclpy.serialization import deserialize_message
+from so101_demo.act.ownership import Ownership
+from so101_demo.adapters.act.command_broker import CommandBroker
 from so101_demo.adapters.act.controller_reservation_client import ControllerReservationClient
 
 
 capability = bytes.fromhex(sys.stdin.readline().strip())
-wire_client = ControllerReservationClient(
-    {"arm": sys.argv[1]}, capability=capability, timeout_s=1.0
-)
+if len(sys.argv) == 3:
+    gripper_capability = bytes.fromhex(sys.stdin.readline().strip())
+    wire_client = ControllerReservationClient(
+        {"arm": sys.argv[1], "gripper": sys.argv[2]},
+        capability={"arm": capability, "gripper": gripper_capability}, timeout_s=0.5,
+    )
+else:
+    wire_client = ControllerReservationClient(
+        {"arm": sys.argv[1]}, capability=capability, timeout_s=1.0,
+    )
+broker_state = None
+
+
+class PreparedDriver:
+    def stopped(self):
+        return True
+
+    def prepare_goal(self, kind, goal):
+        native_uuid = b"\x11" if kind == "arm" else b"\x22"
+        return f"{kind}-goal", str(uuid.UUID(bytes=native_uuid * 16))
+
+    def send_prepared(self, goal_id, kind, goal, goal_uuid):
+        return goal_id
+
+    def discard_prepared(self, goal_id):
+        pass
+
+    def stop_all(self, reason):
+        pass
 
 
 def start_ticks() -> int:
@@ -54,6 +82,35 @@ def frame_for(mode: str) -> bytes:
 
 
 def request(mode: str) -> str:
+    global broker_state
+    if mode == "broker_transaction":
+        payload = bytes.fromhex(
+            (Path(__file__).parent / "fixtures/follow_joint_trajectory_goal.cdr.hex")
+            .read_text().strip()
+        )
+        typed_goal = deserialize_message(payload, FollowJointTrajectory.Goal)
+        ownership = Ownership()
+        broker = CommandBroker(
+            PreparedDriver(), ownership=ownership, simulation_session_id="session",
+            reservation_port=wire_client,
+        )
+        scope = dict(protocol_version=1, request_id="r", owner="act",
+                     session_id="session", attempt_id="attempt", lease_token="")
+        response = broker.handle(dict(scope, operation="acquire"), "test-client")
+        if not response["accepted"]:
+            return "REJECT"
+        token = response["lease_token"]
+        ticket = ownership.ticket(token, "act", "session", "attempt")
+        broker.dispatch(ticket, "arm", typed_goal)
+        broker.dispatch(ticket, "gripper", typed_goal)
+        broker_state = broker, dict(scope, lease_token=token)
+        return "ACK"
+    if mode == "broker_release":
+        if broker_state is None:
+            return "REJECT"
+        broker, scope = broker_state
+        response = broker.handle(dict(scope, operation="release"), "test-client")
+        return "ACK" if response["accepted"] else "REJECT"
     if mode in ("valid", "valid_second"):
         payload = bytes.fromhex(
             (Path(__file__).parent / "fixtures/follow_joint_trajectory_goal.cdr.hex")
