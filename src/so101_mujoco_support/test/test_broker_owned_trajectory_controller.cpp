@@ -18,6 +18,7 @@
 
 #include "so101_mujoco_support/broker_owned_trajectory_controller.hpp"
 #include "so101_mujoco_support/controller_goal_admission.hpp"
+#include "so101_mujoco_support/controller_stop_witness.hpp"
 
 namespace
 {
@@ -39,6 +40,16 @@ public:
   {
     return goal_admission_.admit(id, goal, generation);
   }
+  std::optional<so101_mujoco_support::ControllerStopWitness::Proof> stopped_state(
+    int64_t now_monotonic_ns) const
+  {
+    return controller_stop_proof(now_monotonic_ns);
+  }
+  std::array<size_t, 4> state_shape() const
+  {
+    return {joints_angle_wraparound_.size(), state_current_.positions.size(),
+      state_desired_.positions.size(), state_error_.positions.size()};
+  }
 };
 
 Action::Goal stationary_goal()
@@ -50,6 +61,21 @@ Action::Goal stationary_goal()
   point.time_from_start.sec = 1;
   goal.trajectory.points = {point};
   return goal;
+}
+
+std::string five_joint_urdf()
+{
+  std::string urdf = "<robot name='controller_stop_test'><link name='base'/>";
+  for (int joint = 1; joint <= 5; ++joint) {
+    const auto name = std::to_string(joint);
+    const auto parent = joint == 1 ? "base" : "link" + std::to_string(joint - 1);
+    urdf += "<link name='link" + name + "'/>";
+    urdf += "<joint name='" + name + "' type='revolute'><parent link='" + parent +
+      "'/><child link='link" + name + "'/><origin xyz='0 0 0' rpy='0 0 0'/>" +
+      "<axis xyz='0 0 1'/><limit lower='-3' upper='3' effort='1' velocity='1'/>" +
+      "</joint>";
+  }
+  return urdf + "</robot>";
 }
 
 class ScopedReservationEnvironment
@@ -301,7 +327,7 @@ TEST(BrokerOwnedTrajectoryController, LifecycleTransitionsRevokePendingGoals)
     rclcpp::Parameter("command_interfaces", std::vector<std::string>{"position"}),
     rclcpp::Parameter("state_interfaces", std::vector<std::string>{"position", "velocity"}),
   });
-  ASSERT_EQ(controller.init("lifecycle_controller", "", 500, "", options),
+  ASSERT_EQ(controller.init("lifecycle_controller", five_joint_urdf(), 500, "", options),
     controller_interface::return_type::OK);
   ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
 
@@ -357,5 +383,75 @@ TEST(BrokerOwnedTrajectoryController, LifecycleTransitionsRevokePendingGoals)
   ASSERT_TRUE(controller.reserve_goal(id, goal, 4));
   ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
   EXPECT_EQ(controller.probe_goal(id, goal, 4), Admission::Result::DENY_CLOSED);
+  rclcpp::shutdown();
+}
+
+TEST(BrokerOwnedTrajectoryController, NativeUpdatesProvideFreshStoppedStateOnlyWhileActive)
+{
+  rclcpp::init(0, nullptr);
+  InspectableController controller;
+  rclcpp::NodeOptions options;
+  options.parameter_overrides({
+    rclcpp::Parameter("joints", std::vector<std::string>{"1", "2", "3", "4", "5"}),
+    rclcpp::Parameter("command_interfaces", std::vector<std::string>{"position"}),
+    rclcpp::Parameter("state_interfaces", std::vector<std::string>{"position", "velocity"}),
+  });
+  ASSERT_EQ(controller.init("arm_controller", five_joint_urdf(), 500, "", options),
+    controller_interface::return_type::OK);
+  ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  EXPECT_FALSE(controller.stopped_state(0).has_value());
+
+  std::vector<hardware_interface::CommandInterface::SharedPtr> command_backing;
+  std::vector<hardware_interface::StateInterface::SharedPtr> state_backing;
+  std::vector<hardware_interface::LoanedCommandInterface> commands;
+  std::vector<hardware_interface::LoanedStateInterface> states;
+  for (const auto & joint : std::vector<std::string>{"1", "2", "3", "4", "5"}) {
+    hardware_interface::InterfaceInfo position;
+    position.name = "position";
+    position.initial_value = "0";
+    hardware_interface::InterfaceInfo velocity;
+    velocity.name = "velocity";
+    velocity.initial_value = "0";
+    auto command = std::make_shared<hardware_interface::CommandInterface>(
+      hardware_interface::InterfaceDescription(joint, position));
+    auto state_position = std::make_shared<hardware_interface::StateInterface>(
+      hardware_interface::InterfaceDescription(joint, position));
+    auto state_velocity = std::make_shared<hardware_interface::StateInterface>(
+      hardware_interface::InterfaceDescription(joint, velocity));
+    command_backing.push_back(command);
+    state_backing.push_back(state_position);
+    state_backing.push_back(state_velocity);
+    commands.emplace_back(command, []() {});
+    states.emplace_back(state_position);
+    states.emplace_back(state_velocity);
+  }
+  controller.assign_interfaces(std::move(commands), std::move(states));
+  ASSERT_EQ(controller.get_node()->activate().id(),
+    lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+  const auto state_shape = controller.state_shape();
+  ASSERT_EQ(state_shape[0], 5u);
+  ASSERT_EQ(state_shape[1], 5u);
+  ASSERT_EQ(state_shape[2], 5u);
+  ASSERT_EQ(state_shape[3], 5u);
+
+  for (int64_t index = 1; index < 51; ++index) {
+    ASSERT_EQ(controller.update(rclcpp::Time(index * 2000000, RCL_ROS_TIME),
+        rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  }
+  auto now = std::chrono::steady_clock::now().time_since_epoch();
+  EXPECT_FALSE(controller.stopped_state(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(now).count()).has_value());
+  ASSERT_EQ(controller.update(rclcpp::Time(int64_t{51} *2000000, RCL_ROS_TIME),
+      rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  now = std::chrono::steady_clock::now().time_since_epoch();
+  const auto proof = controller.stopped_state(
+    std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
+  ASSERT_TRUE(proof.has_value());
+  EXPECT_EQ(proof->last_sim_time_ns, 102000000);
+  ASSERT_EQ(controller.get_node()->deactivate().id(),
+    lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  EXPECT_FALSE(controller.stopped_state(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(now).count()).has_value());
+  controller.release_interfaces();
   rclcpp::shutdown();
 }

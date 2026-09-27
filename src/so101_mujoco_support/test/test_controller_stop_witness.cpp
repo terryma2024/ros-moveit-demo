@@ -80,3 +80,14 @@ TEST(ControllerStopWitness, RejectsNonfiniteAndWrongJointScope)
   witness.observe(changed);
   EXPECT_FALSE(witness.proof(1106000000).has_value());
 }
+
+TEST(ControllerStopWitness, NonblockingInvalidationImmediatelyRevokesAWindow)
+{
+  ControllerStopWitness witness(5);
+  fill_stopped_window(witness);
+  ASSERT_TRUE(witness.proof(1102000000).has_value());
+  witness.invalidate_nonblocking();
+  EXPECT_FALSE(witness.proof(1102000000).has_value());
+  witness.observe(stopped_sample(52));
+  EXPECT_FALSE(witness.proof(1104000000).has_value());
+}

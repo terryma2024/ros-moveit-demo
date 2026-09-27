@@ -10,6 +10,57 @@
 namespace so101_mujoco_support
 {
 
+controller_interface::return_type BrokerOwnedTrajectoryController::update(
+  const rclcpp::Time & time, const rclcpp::Duration & period)
+{
+  const auto result = joint_trajectory_controller::JointTrajectoryController::update(time, period);
+  if (result != controller_interface::return_type::OK) {
+    witness_active_.store(false, std::memory_order_release);
+    arm_stop_witness_.invalidate_nonblocking();
+    gripper_stop_witness_.invalidate_nonblocking();
+    return result;
+  }
+  if (!witness_active_.load(std::memory_order_acquire)) {return result;}
+  const auto joints = monitored_joints_.load(std::memory_order_acquire);
+  if (joints != 1 && joints != 5) {return result;}
+  auto & witness = joints == 5 ? arm_stop_witness_ : gripper_stop_witness_;
+  if (state_current_.positions.size() != joints ||
+    state_current_.velocities.size() != joints ||
+    state_desired_.positions.size() != joints ||
+    state_desired_.velocities.size() != joints)
+  {
+    witness.invalidate_nonblocking();
+    return result;
+  }
+  ControllerStopWitness::Observation sample{};
+  sample.sequence = update_sequence_.fetch_add(1, std::memory_order_relaxed) + 1;
+  sample.sim_time_ns = time.nanoseconds();
+  sample.received_monotonic_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+  sample.joint_count = joints;
+  sample.holding = rt_is_holding_.load();
+  const auto active_goal = rt_active_goal_.readFromRT();
+  sample.active_goal = rt_has_pending_goal_.load() || (active_goal && *active_goal);
+  for (size_t joint = 0; joint < joints; ++joint) {
+    sample.measured_positions[joint] = state_current_.positions[joint];
+    sample.measured_velocities[joint] = state_current_.velocities[joint];
+    sample.reference_positions[joint] = state_desired_.positions[joint];
+    sample.reference_velocities[joint] = state_desired_.velocities[joint];
+  }
+  witness.observe(sample);
+  return result;
+}
+
+std::optional<ControllerStopWitness::Proof> BrokerOwnedTrajectoryController::controller_stop_proof(
+  int64_t now_monotonic_ns) const
+{
+  if (!witness_active_.load(std::memory_order_acquire)) {return std::nullopt;}
+  const auto joints = monitored_joints_.load(std::memory_order_acquire);
+  if (joints == 5) {return arm_stop_witness_.proof(now_monotonic_ns);}
+  if (joints == 1) {return gripper_stop_witness_.proof(now_monotonic_ns);}
+  return std::nullopt;
+}
+
 controller_interface::CallbackReturn BrokerOwnedTrajectoryController::on_configure(
   const rclcpp_lifecycle::State & previous_state)
 {
@@ -74,6 +125,9 @@ controller_interface::CallbackReturn BrokerOwnedTrajectoryController::on_activat
     previous_state);
   subscriber_is_active_.store(false);
   if (result == controller_interface::CallbackReturn::SUCCESS) {
+    arm_stop_witness_.reset();
+    gripper_stop_witness_.reset();
+    witness_active_.store(true, std::memory_order_release);
     start_reservation_monitor();
   }
   return result;
@@ -111,6 +165,8 @@ void BrokerOwnedTrajectoryController::configure_reservation_scope()
     reservation_session_.clear();
   }
   const auto name = std::string(get_node()->get_name());
+  monitored_joints_.store(name == "arm_controller" ? 5 :
+    name == "gripper_controller" ? 1 : 0, std::memory_order_release);
   if (name != "arm_controller" && name != "gripper_controller") {
     return;
   }
@@ -185,6 +241,9 @@ void BrokerOwnedTrajectoryController::poll_reservation_provision()
 
 void BrokerOwnedTrajectoryController::close_reservation_service()
 {
+  witness_active_.store(false, std::memory_order_release);
+  arm_stop_witness_.reset();
+  gripper_stop_witness_.reset();
   std::lock_guard<std::mutex> lock(reservation_mutex_);
   if (reservation_timer_) {
     reservation_timer_->cancel();
