@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 67861350
+current_commit: c1f33255
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -54,8 +54,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-  - After a reservation ACK, a broker send failure needs a confirmed controller-side close for that generation; the approved RESERVE-only socket contract has no such operation yet.
-latest_checkpoint: CP-517
+  - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
+latest_checkpoint: CP-518
 next_experiment: EXP-517
 ---
 
@@ -5070,16 +5070,16 @@ success_criteria: [RED/GREEN broker transaction ordering, same UUID/typed Goal a
 failure_criteria: [Action send precedes ticket or ACK, registration secret appears on ROS graph or logs, or failure leaves a reusable active generation]
 invalid_criteria: [Existing dirty batch enters commit, scratch lacks NVMe proof, stack or physical action starts]
 provenance:
-  source_commit: 67861350
+  source_commit: c1f33255
   install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
-  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
-  ros_domain_id: 187 source gate; 189 installed gate
-  gz_partition: exp517-python-source; exp517-python-installed
-commands: ["Focused transaction pytest RED for missing port, then GREEN for ticket-before-reservation-before-send and failure stop", "Duplicate local ID RED for erasing a previous ticket, then GREEN with registered-only cleanup", "Full source pytest src/so101_demo_py/test -n 8", "Installed colcon test --packages-select so101_demo_py --pytest-args test -n 8 and colcon test-result --verbose"]
-observed: ["Commit 67861350 adds an optional, otherwise unused broker reservation port; prepared local ID and native UUID precede local ticket registration, reservation ACK and send", "Five focused tests pass, including reservation reject, uncertain send, returned-ID mismatch and duplicate local ID preservation", "Source xdist8 4599 passed/162 skipped in 42.62 s; installed test-result 4761 tests, zero errors/failures and 162 skipped in 45.11 s", "No concrete port or runtime provisioner is installed, so existing production constructors do not enable this branch", "The RESERVE-only C++ socket cannot explicitly close an ACKed generation after an uncertain send; this is a required safety amendment before production wiring", "Partial artifact SHA256 4c37543bb0255115835d258d60a186f8f756050cfa0a833c349c1c952f3c9c0a"]
-inferred: ["Broker transaction ordering is source-level feasible; production cannot claim safe post-ACK failure handling until controller-side generation close is implemented and acknowledged"]
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/b/so101_mujoco_support/test_controller_reservation_socket and /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: 199 final C++ gate; 201/203 final Python source/installed gates
+  gz_partition: NOT_ASSIGNED for C++; exp517-python-final-source/exp517-python-final-installed for Python gates
+commands: ["Focused transaction pytest RED for missing port, then GREEN for ticket-before-reservation-before-send and failure stop", "Duplicate local ID RED for erasing a previous ticket, then GREEN with registered-only cleanup", "Generation-scoped C++ close compile RED, protocol and socket tests GREEN", "Python private client import RED, wire and path tests GREEN", "Full source pytest src/so101_demo_py/test -n 8", "Installed colcon test --packages-select so101_demo_py --pytest-args test -n 8 and colcon test-result --verbose", "C++ colcon test --packages-select so101_mujoco_support and colcon test-result --verbose", "Read-only ament_uncrustify"]
+observed: ["Commit 67861350 adds an optional, otherwise unused broker reservation port; prepared local ID and native UUID precede local ticket registration, reservation ACK and send", "Five transaction tests pass, including reservation reject, uncertain send, returned-ID mismatch and duplicate local ID preservation", "The approved protocol was amended for authenticated CLOSE_GENERATION=2 because ACKed reservations otherwise survive uncertain send until expiry; old-generation close returns REJECT without closing a newer generation", "Production Python client uses typed ROS serialization and bounded socket reads; a real Python process received reserve and close ACK from the C++ test server", "Test capability moved from child argv to a private inherited stdin pipe, and /proc child argv regression passed", "Client and server both reject symlinked socket ancestors", "Final C++ test-result 57 tests with zero errors/failures/skips in 6.85 s; final source Python xdist8 4604 passed/162 skipped in 44.15 s; final installed Python test-result 4766 tests with zero errors/failures/162 skipped in 44.84 s", "Read-only uncrustify zero divergence; installed Python client SHA256 matches source; no stack, action goal or real robot operation", "Earlier partial artifact SHA256 4c37543bb0255115835d258d60a186f8f756050cfa0a833c349c1c952f3c9c0a; new transport checkpoint SHA256 ebfff4fbc232680aac3ac9acddc51ab60ae79ca5c11e8aa34beca19b37cafbba"]
+inferred: ["Source-only broker transaction, wire reservation and generation close agree across C++ and Python; production remains unwired until per-run broker identity/capability provisioning, controller service lifecycle and driver prepare/send split are verified"]
 conclusion: PENDING
-evidence: [/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp517-broker-reservation-transaction/partial.json]
+evidence: [/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp517-broker-reservation-transaction/partial.json, /data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp517-broker-reservation-transaction/transport-checkpoint.json]
 decision: PENDING
 next_experiment: EXP-518
 ```
@@ -5091,3 +5091,11 @@ next_experiment: EXP-518
 - The first required safety amendment is a generation-scoped controller close transaction after ACK and before any production broker wiring. The approved socket currently accepts only `RESERVE=1`; a failed or uncertain action send would otherwise leave its one-use reservation active until expiry. Record this conflict and verify the amended wire contract with an independent C++/Python RED/GREEN before provisioning credentials or sending goals.
 - Registered root unchanged. Retain EXP-517 and prior logs, JUnit, scratch and IPC artifacts; archived none. Scratch and generated caches are deletion candidates only, nothing deleted. The pre-existing dirty/untracked batch remains unstaged. No task-owned stack or action goal; formal accepted Train/Validation/Offline Test 0/0/0.
 - Next exact work: add a source-only generation-scoped close regression to `src/so101_mujoco_support/test/test_controller_reservation_socket.cpp`, run the focused C++ RED with a unique task-root scratch, then amend the protocol specification and implement the minimum authenticated close path.
+
+## CP-518 — Source-only broker/client/controller reservation and close agree
+
+- EXP-517 remains `RUNNING`. `95f3b08f` adds authenticated `CLOSE_GENERATION=2` and a current-generation-only local gate close. `c1f33255` adds the bounded Python client; the C++ cross-process test invokes that client for the successful reserve and close cases. Test-only capability delivery uses a private inherited stdin pipe, not argv. The broker's opt-in reservation branch from `67861350` is still unconfigured in both production constructors.
+- Final C++ CTest 5/5 and `colcon test-result` 57 tests, zero errors/failures/skips. Final ordinary Python source xdist8: 4604 passed, 162 skipped. Installed xdist8: 4766 total, zero errors/failures, 162 skipped. All final runs have unique NVMe scratch, exact tempfile proofs, JUnit, elapsed times and immutable evidence under the registered root. Read-only C++ style passed.
+- Controller plugin service lifetime, secure per-run capability and broker PID/start-ticks delivery, actual `RosBrokerDriver` prepare/send split, standalone/task-worker provisioning and MoveIt teacher proxy remain open. No stack or action goal was started. Formal accepted Train/Validation/Offline Test remains 0/0/0.
+- Retain EXP-517 and prior evidence; archived none. Scratch and generated caches are deletion candidates only. Nothing deleted, and the pre-existing dirty/untracked batch remains unstaged.
+- Next exact work: audit the current simulator/controller and both broker launch orders, then write the smallest source-only RED for identity/capability provisioning without placing the secret on ROS parameters, argv or logs.
