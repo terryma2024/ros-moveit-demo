@@ -163,6 +163,7 @@ def test_guard_lift_snapshot_uses_exact_physics_step_or_refuses(monkeypatch):
         model, mujoco.mjtObj.mjOBJ_KEY, "task_start"))
     cup_joint = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "cup_free_joint")
     cup_address = int(model.jnt_qposadr[cup_joint])
+    cup_velocity_address = int(model.jnt_dofadr[cup_joint])
     qpos = data.qpos.tolist()
     qpos[cup_address:cup_address + 7] = [.02, -.28, .165, 1., 0., 0., 0.]
     positions = tuple(qpos[int(model.jnt_qposadr[mujoco.mj_name2id(
@@ -170,6 +171,7 @@ def test_guard_lift_snapshot_uses_exact_physics_step_or_refuses(monkeypatch):
     scene = dict(simulation_session_id="held-guard", reset_epoch=1,
                  simulation_step=77, simulation_time_s=1.048, paused=False,
                  qpos=qpos, qvel=[0.] * model.nv)
+    scene["qvel"][cup_velocity_address] = .123
     stamp = NS(sec=1, nanosec=48_000_000)
     pose = NS(position=NS(x=.02, y=-.28, z=.165),
               orientation=NS(w=1., x=0., y=0., z=0.))
@@ -206,9 +208,23 @@ def test_guard_lift_snapshot_uses_exact_physics_step_or_refuses(monkeypatch):
         reference=positions[:6], reference_velocity=(0.,) * 6, phase="LIFT")
     assert result["holding_state"] == "HOLDING"
     assert result["holding_proof_physics_step"] == 77
+    assert result["model_qvel"] == tuple(scene["qvel"])
+    assert len(result["model_qvel"]) == model.nv
+    assert result["model_qvel"][cup_velocity_address] == .123
     assert result["cup_in_gripper_transform"][3] == [0., 0., 0., 1.]
     assert calls[0][0:2] == ("lookup", 77)
     assert calls[1][0:3] == ("proof", 77, 77)
+    scene["qvel"][cup_velocity_address] = float("nan")
+    with pytest.raises(ValueError, match="MOTION_SCENE_QVEL_INVALID"):
+        RosCalibrationMotionGuard._snapshot(
+            guard, dict(reset_epoch=1, sim_time_s=1.048), start=1.1,
+            reference=positions[:6], reference_velocity=(0.,) * 6, phase="LIFT")
+    scene["qvel"] = scene["qvel"][:-1]
+    with pytest.raises(ValueError, match="MOTION_SCENE_QVEL_INVALID"):
+        RosCalibrationMotionGuard._snapshot(
+            guard, dict(reset_epoch=1, sim_time_s=1.048), start=1.1,
+            reference=positions[:6], reference_velocity=(0.,) * 6, phase="LIFT")
+    scene["qvel"] = list(data.qvel)
     recorder.validated_step = lambda *args, **kwargs: (_ for _ in ()).throw(
         ValueError("HELD_CUP_STEP_UNAVAILABLE"))
     with pytest.raises(ValueError, match="HELD_CUP_STEP_UNAVAILABLE"):
