@@ -171,6 +171,7 @@ class PathProof:
     profile_sha256: str
     contact_scope_sha256: str
     checker_sha256: str
+    owner_ticket: tuple
     generation: int
     reset_epoch: int
     sample_count: int
@@ -246,7 +247,8 @@ class PathProver:
             snapshot_sha256=_digest(snapshot_bytes), state_sha256=_digest(state),
             model_sha256=model_hash, policy_fingerprint=policy,
             profile_sha256=profile, contact_scope_sha256=contact,
-            checker_sha256=checker_hash, generation=generation,
+            checker_sha256=checker_hash, owner_ticket=ticket,
+            generation=generation,
             reset_epoch=epoch, sample_count=count,
             first_violation=None if safe else MappingProxyType(details),
             started_wall_s=started, completed_wall_s=completed,
