@@ -167,6 +167,85 @@ def test_proof_request_must_match_approved_prefix_fields(scene, change):
     assert checks == [1]
 
 
+def test_consumed_proof_fresh_readback_closes_on_state_change_or_revoke(scene):
+    authority, prefix, current, checks = proof_authority(scene)
+    permit = authority.approve(prefix)
+    proof = authority.require(permit, prefix)
+    readback = authority.current_proof_state(proof)
+    assert readback['reset_epoch'] == proof.reset_epoch
+    assert readback['snapshot']['model_qvel'] == current['snapshot']['model_qvel']
+    current['snapshot']['model_qvel'] = (0.001,) + tuple(
+        current['snapshot']['model_qvel'][1:])
+    with pytest.raises(PermissionError, match='PATH_PROOF_CURRENT_INVALID'):
+        authority.current_proof_state(proof)
+    authority.revoke('hazard')
+    with pytest.raises(PermissionError, match='PATH_PROOF_CURRENT_INVALID'):
+        authority.current_proof_state(proof)
+    assert checks == [1]
+
+
+def test_unconsumed_or_closed_proof_cannot_get_commit_readback(scene):
+    authority, prefix, _, checks = proof_authority(scene)
+    captured = []
+    original = authority.proof_port
+
+    def capture(*args):
+        proof = original(*args)
+        captured.append(proof)
+        return proof
+
+    authority.proof_port = capture
+    permit = authority.approve(prefix)
+    proof = captured[0]
+    with pytest.raises(PermissionError, match='PATH_PROOF_CURRENT_INVALID'):
+        authority.current_proof_state(proof)
+    consumed = authority.require(permit, prefix)
+    authority.close_proof(consumed)
+    with pytest.raises(PermissionError, match='PATH_PROOF_CURRENT_INVALID'):
+        authority.current_proof_state(consumed)
+    assert checks == [1]
+
+
+def test_consumed_proof_expiry_and_revoke_fence_a_delayed_readback(scene):
+    import threading
+
+    authority, prefix, _, checks = proof_authority(scene)
+    proof = authority.require(authority.approve(prefix), prefix)
+    original = authority.proof_state_port
+    entered, release = threading.Event(), threading.Event()
+    outcomes = []
+
+    def delayed():
+        entered.set()
+        release.wait(1.)
+        return original()
+
+    authority.proof_state_port = delayed
+
+    def readback():
+        try:
+            authority.current_proof_state(proof)
+        except PermissionError as error:
+            outcomes.append(str(error))
+
+    worker = threading.Thread(target=readback)
+    worker.start()
+    assert entered.wait(.2)
+    authority.revoke('hazard')
+    release.set()
+    worker.join(.2)
+    assert not worker.is_alive() and outcomes == ['PATH_PROOF_CURRENT_INVALID']
+    assert checks == [1]
+
+    new_authority, new_prefix, _, new_checks = proof_authority(scene)
+    new_proof = new_authority.require(
+        new_authority.approve(new_prefix), new_prefix)
+    new_authority.monotonic = lambda: 10.2
+    with pytest.raises(PermissionError, match='PATH_PROOF_CURRENT_INVALID'):
+        new_authority.current_proof_state(new_proof)
+    assert new_checks == [1]
+
+
 @pytest.mark.parametrize('change', (
     'arm_joint_order', 'gripper_joint_order', 'row', 'offset', 'stamp',
     'prefix_hash', 'extra_field',
