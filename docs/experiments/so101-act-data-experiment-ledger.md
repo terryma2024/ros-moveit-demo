@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 4b030bca
+current_commit: c6f302e7
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -26,6 +26,7 @@ confirmed_conclusions:
   - EXP-490 confirms that one selected SEARCH source can pass through broker-private receipt consumption to one complete 701-sample MuJoCo proof offline; this synthetic hold has no route or motion authority.
   - EXP-491 through EXP-494 establish a pinned 31-prefix exact-grid visible-approach candidate with all 701-sample checks passing; it remains noncollecting and has no live motion authority.
   - EXP-495 finds cup pixels in all sampled task/head/wrist renders of the 31 grouped approach prefixes, but continuous visibility and physical expert qualification are still open.
+  - EXP-496 checks all 600 exact target rows of the weakest wrist-view approach chord: wrist/head target pixels remain nonzero in the pinned scene.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -33,8 +34,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-495
-next_experiment: EXP-496
+latest_checkpoint: CP-496
+next_experiment: EXP-497
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4316,3 +4317,36 @@ next_experiment: EXP-496
 
 - Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp495-visibility-screen/result.json`, plus paired PNGs for prefixes 22 and 25. The initial segmentation-channel probe and corrected probe are both retained; only the corrected interpretation was used.
 - The user-reviewed path-proof and commit-window design still governs all production work. EXP-491–495 add a safer candidate path and sampled visual evidence, not the missing live selected-source, stopped full-state, controller-reference, proof, permit or exact-goal wiring. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-495, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
+
+## EXP-496 — Exact-grid visibility at the weakest approach chord
+
+```yaml
+experiment_id: EXP-496
+status: VALID
+prior_experiment: EXP-495
+hypothesis: The wrist visibility dip at grouped prefix 22 remains partial at every exact 2 ms target row, with the head camera retaining target pixels as the complementary view.
+prediction: All 600 exact rows in prefix 22 have nonzero cup segmentation pixels in both cameras; the minimum and index identify the most occluded pose.
+single_variable: Increase visibility sampling for the weakest grouped chord from start/mid/end to every exact target row; scene, camera and trajectory fixed.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-495 valid, pinned candidate profile, task-owned stack none]
+success_criteria: [600 exact rows from the profile hash screened in both cameras, nonzero pixels at each, minimum/count/index retained]
+failure_criteria: [Zero target pixels at any exact row or profile/source/model drift]
+invalid_criteria: [Renderer error, wrong model or runtime, live stack or goal]
+provenance:
+  source_commit: c6f302e7
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Offline exact 600-row EGL segmentation for prefix 22 head/wrist; verify generated rows SHA256 and retain per-row counts"]
+observed: ["All 600 exact target rows of grouped prefix 22 matched frozen rows SHA256 a8d4532f195d11fd4dca0e99cb6127af150701e488b94fcae8b825e277b01edc and were segmented in wrist and head EGL cameras", "Wrist cup pixel minimum 3036 at row 0, maximum 4255, no zero row; head minimum 8342 at row 560, maximum 8428, no zero row", "Offline script SHA256 30dd6dcdbc77d787c29107d05bf52fdddf807962344122ace3d770137ce94918; result SHA256 166cf1cc14ab9fd3a94eea90fa04c24b91b0ccee38782637069927519d135343; no stack or goal"]
+inferred: ["The previously weakest sampled wrist chord stays partially visible at every exact target row in this model; the other 30 chords have only sparse offline coverage, and real detector/physical observations remain unproved"]
+conclusion: VALID exact-grid offline visibility for prefix 22 only; no collection or motion authority.
+decision: Preserve dense visibility evidence and move to selected SEARCH source-bound prefix production and proof ports; keep candidate ineligible until separate physical expert qualification.
+next_experiment: EXP-497
+```
+
+## CP-496 — Weakest wrist chord stays visible on exact target rows
+
+- Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp496-wrist-visibility-grid/result.json`. It contains all 1,200 head/wrist cup-pixel counts for the 600 hashed target poses. The checker and visibility runs are offline and no real controller sent a goal.
+- Remaining production boundary starts with a genuine selected SEARCH source bound to one exact prefix, then fresh stopped full-state/controller-reference proof and the reviewed commit window. Candidate collection eligibility stays false; formal accepted Train/Validation/Offline Test is 0/0/0. Retained through EXP-496, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
