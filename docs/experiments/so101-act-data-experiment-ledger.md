@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: a0963d81
+current_commit: af09d9eb
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -35,6 +35,7 @@ confirmed_conclusions:
   - EXP-502 closes the ACT MuJoCo arm/gripper/neck trajectory-topic subscriber in an action-only controller plugin, with C++ plugin and Python gates passing; external action ownership and reference history remain unproved.
   - EXP-503 confirms the installed action-only plugin on a fresh isolated no-motion ACT stack: three active controller types, zero trajectory-topic subscribers, seven-axis readiness and clean owner/domain retirement.
   - EXP-504 passively captures a common 100 ms/51-frame 2 ms controller-reference window in a no-motion stack; a missing optional graph helper invalidated only that run's repeat topic-subscription check, and controller/ownership provenance is still absent.
+  - EXP-505 verifies a source-only three-controller 51-frame reference contract with original joint order, 2 ms stamps and fresh receipts; it explicitly withholds owner/goal and command authority.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -42,8 +43,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-504
-next_experiment: EXP-505
+latest_checkpoint: CP-505
+next_experiment: EXP-506
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4622,3 +4623,36 @@ next_experiment: EXP-505
 
 - Registered run: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp504-controller-reference-cadence`. Original frame JSONL, capture and offline analysis scripts, failed optional ingress stderr, exact owner/readiness and clean retirement are retained. The missing helper is not repaired by rewriting the historical result or by claiming the repeat graph check passed.
 - The controller reference window was observed without command authority. A broker-owned history with original timestamps, session/epoch, goal-status and ownership-generation fences is still required before any selected SEARCH bridge or PathProof can use it. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-504, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
+
+## EXP-505 — Source-only stationary controller-reference contract
+
+```yaml
+experiment_id: EXP-505
+status: VALID
+prior_experiment: EXP-504
+hypothesis: A strict nonauthoritative verifier can reject any missing, reordered, moving or stale arm/gripper/neck reference publication in the selected 100 ms window.
+prediction: Three exact 51-frame streams with pinned joint order, unchanged positions, stopped velocities, 2 ms simulation stamps and fresh ordered wall receipts pass; each changed dimension refuses.
+single_variable: Add a pure controller-publication window verifier only; no broker driver, SEARCH, proof, permit or goal wiring.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-504 passive cadence measured, task-owned stack none]
+success_criteria: [Focused missing-module RED and seven GREEN tests, ordinary source and installed Python gates]
+failure_criteria: [Missing/moved/stale frame accepted or output grants authority]
+invalid_criteria: [Wrong test environment or live stack]
+provenance:
+  source_commit: af09d9eb
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Focused RED/GREEN with verified unique NVMe scratch", "Ordinary source pytest -n 8 in private IPC namespace", "Existing-overlay package build", "Installed colcon test --pytest-args test -n 8 and test-result"]
+observed: ["Corrected focused RED reached ModuleNotFoundError for stationary_reference_history; focused GREEN 7 passed across 51-frame positive and gap/joint-order/velocity/position/receipt/stale negatives", "Ordinary source gate collected 4741: 4579 passed, 162 skipped; existing-overlay build passed; installed aggregate 6204 tests, 0 errors, 0 failures, 205 skipped", "Result artifact SHA256 6415f37af5bd1a42c1503daee24556ba9e915748b1b9f00a6feb6425ae4c66b5; implementation SHA256 925a46af1a648800c4ea10eb6bce909bb7dc58269cf5527e909b2c4d3ebd2bfe; regression SHA256 3c2fda97981d08cb1d24996bd4924eac8774ada43d2292e034b614a250a81d0e; no stack or goal"]
+inferred: ["The exact publication grid is now expressible as a fail-closed source contract", "EXP-504 raw capture did not retain joint_names, so it cannot be retroactively promoted through this stricter verifier; broker-owned original message capture and owner/goal event history are still absent"]
+conclusion: VALID source-only reference-history contract, no authority.
+decision: Capture original controller names/frames inside the broker and bind source epoch, ticket generation and all goal/stop events before combining with EXP-500 physical history. Do not infer those missing facts from the passive EXP-504 capture.
+next_experiment: EXP-506
+```
+
+## CP-505 — Both history halves have read-only contracts
+
+- Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp505-stationary-reference-contract/result.json`. Source and installed gates passed with unique verified NVMe scratch; all records are retained.
+- EXP-500 validates historical physical frames and EXP-505 validates historical controller publications, each separately and without command authority. They have not been joined to one real selected SEARCH source or a broker-owned goal/ownership interval. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-505, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
