@@ -153,3 +153,15 @@ TEST(ControllerGoalAdmission, RejectsEmptyOversizedAndDuplicateReservations)
   EXPECT_FALSE(gate.reserve(uuid(1), goal, 3));
   EXPECT_EQ(gate.admit(uuid(1), goal, 3), Result::DENY_CLOSED);
 }
+
+TEST(ControllerGoalAdmission, ExplicitCloseRevokesPendingReservation)
+{
+  int64_t now = 1000;
+  ControllerGoalAdmission gate([&now]() {return now;}, 100, 1024);
+  const auto goal = expected_goal();
+  ASSERT_TRUE(gate.arm(1));
+  ASSERT_TRUE(gate.reserve(uuid(1), goal, 1));
+  gate.close();
+  EXPECT_EQ(gate.admit(uuid(1), goal, 1), Result::DENY_CLOSED);
+  EXPECT_TRUE(gate.arm(2));
+}
