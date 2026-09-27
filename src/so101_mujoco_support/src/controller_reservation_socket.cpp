@@ -242,6 +242,13 @@ bool ControllerReservationSocket::serve_one()
     return false;
   }
   try {
+    if (frame.size() > 9 && frame[9] == 2) {
+      const auto generation = parse_controller_reservation_close_frame(frame, capability_);
+      const auto closed = gate_.close_generation(generation);
+      const auto reply = encode_controller_reservation_reply(
+        closed ? ReservationReplyStatus::ACK : ReservationReplyStatus::REJECT, generation);
+      return write_exact(connection.get(), reply.data(), reply.size(), deadline) && closed;
+    }
     const auto request = parse_controller_reservation_frame(frame, capability_);
     if (!gate_.reserve(request.uuid, request.goal, request.generation)) {
       gate_.close();

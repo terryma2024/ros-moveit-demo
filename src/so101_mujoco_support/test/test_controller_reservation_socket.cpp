@@ -265,3 +265,41 @@ TEST(ControllerReservationSocket, RefusesSymlinkInSocketPath)
       std::chrono::milliseconds(100)),
     std::runtime_error);
 }
+
+TEST(ControllerReservationSocket, AuthenticatedCloseRevokesAnAcknowledgedReservation)
+{
+  const auto path = socket_path("close.sock");
+  const auto key = capability();
+  ClientProcess client(path, key);
+  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate.arm(5));
+  ControllerReservationSocket server(path, gate, key, client.peer(),
+    std::chrono::milliseconds(100));
+  client.start("valid");
+  ASSERT_TRUE(server.serve_one());
+  ASSERT_EQ(client.result(), "ACK");
+  client.start("close_generation");
+  EXPECT_TRUE(server.serve_one());
+  EXPECT_EQ(client.result(), "ACK");
+  ControllerGoalAdmission::GoalUUID uuid{};
+  uuid.fill(0x11);
+  EXPECT_EQ(gate.admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
+}
+
+TEST(ControllerReservationSocket, StaleCloseCannotRevokeANewerGeneration)
+{
+  const auto path = socket_path("stale-close.sock");
+  const auto key = capability();
+  ClientProcess client(path, key);
+  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate.arm(6));
+  ControllerGoalAdmission::GoalUUID uuid{};
+  uuid.fill(0x11);
+  ASSERT_TRUE(gate.reserve(uuid, goal(), 6));
+  ControllerReservationSocket server(path, gate, key, client.peer(),
+    std::chrono::milliseconds(100));
+  client.start("close_stale");
+  EXPECT_FALSE(server.serve_one());
+  EXPECT_EQ(client.result(), "REJECT");
+  EXPECT_EQ(gate.admit(uuid, goal(), 6), ControllerGoalAdmission::Result::ALLOW);
+}

@@ -61,6 +61,14 @@ public:
     fault_close();
   }
 
+  bool close_generation(uint64_t generation)
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (generation == 0 || generation != generation_) {return false;}
+    fault_close();
+    return true;
+  }
+
   bool reserve(const GoalUUID & uuid, const Goal & goal, uint64_t generation)
   {
     std::lock_guard<std::mutex> lock(mutex_);
