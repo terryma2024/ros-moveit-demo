@@ -31,13 +31,18 @@ class _Node:
             self.on_publish(message)
 
     def acknowledge(self, request, *, epoch=None, sequence=None, step=99,
-                    simulation_time_s=1.098):
+                    simulation_time_s=1.098, clock_begin_ns=None,
+                    clock_end_ns=None):
         ack = PhysicsStepFenceAck()
         ack.simulation_session_id = request.simulation_session_id
         ack.reset_epoch = request.reset_epoch if epoch is None else epoch
         ack.request_sequence = request.request_sequence if sequence is None else sequence
         ack.marked_physics_step = step
         ack.marked_simulation_time_s = simulation_time_s
+        ack.clock_interval_begin_monotonic_ns = (
+            time.monotonic_ns() if clock_begin_ns is None else clock_begin_ns)
+        ack.clock_interval_end_monotonic_ns = (
+            time.monotonic_ns() if clock_end_ns is None else clock_end_ns)
         self.callback(ack)
 
 
@@ -58,6 +63,13 @@ def test_fence_accepts_only_matching_ack_after_confirmed_stop():
     assert proof["marked_physics_step"] == 99
     assert proof["marked_simulation_time_s"] == 1.098
     assert stopped_wall_s <= proof["request_sent_wall_s"] <= proof["ack_received_wall_s"]
+    assert (proof["request_sent_monotonic_ns"] <=
+            proof["clock_interval_begin_monotonic_ns"] <=
+            proof["clock_interval_end_monotonic_ns"] <=
+            proof["ack_received_monotonic_ns"])
+    assert proof["clock_interval_width_ns"] == (
+        proof["clock_interval_end_monotonic_ns"] -
+        proof["clock_interval_begin_monotonic_ns"])
     assert proof["command_authority"] is False
     with pytest.raises(ValueError, match="PHYSICS_STEP_FENCE_ALREADY_REQUESTED"):
         fence.request_after_stop(2, stopped_wall_s, _deadline())
@@ -88,5 +100,18 @@ def test_fence_rejects_reset_during_pending_request():
     fence = RosPhysicsStepFence(node, "session-1")
     fence.arm(2)
     node.on_publish = lambda request: fence.arm(3)
+    with pytest.raises(ValueError, match="PHYSICS_STEP_FENCE_INVALID"):
+        fence.request_after_stop(2, time.monotonic() - .001, _deadline())
+
+
+@pytest.mark.parametrize("interval", [
+    (0, 1), (5, 4), (1, 2), (2**62, 2**62 + 1),
+])
+def test_fence_rejects_unbounded_or_noncausal_source_clock(interval):
+    node = _Node()
+    fence = RosPhysicsStepFence(node, "session-1")
+    fence.arm(2)
+    node.on_publish = lambda request: node.acknowledge(
+        request, clock_begin_ns=interval[0], clock_end_ns=interval[1])
     with pytest.raises(ValueError, match="PHYSICS_STEP_FENCE_INVALID"):
         fence.request_after_stop(2, time.monotonic() - .001, _deadline())

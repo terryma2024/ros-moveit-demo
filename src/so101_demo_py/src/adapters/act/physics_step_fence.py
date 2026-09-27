@@ -30,6 +30,7 @@ class RosPhysicsStepFence:
         self._result = None
         self._invalid = False
         self._request_sent_wall_s = None
+        self._request_sent_monotonic_ns = None
         self._publisher = node.create_publisher(
             PhysicsStepFenceRequest, "/so101/simulation/physics_step_fence_request", _QOS)
         self._subscription = node.create_subscription(
@@ -48,6 +49,7 @@ class RosPhysicsStepFence:
 
     def _acknowledge(self, ack: PhysicsStepFenceAck) -> None:
         received = self.monotonic()
+        received_ns = self.clock_ns()
         with self._condition:
             if not self._pending:
                 return
@@ -58,7 +60,12 @@ class RosPhysicsStepFence:
                     or ack.marked_physics_step < 1
                     or not math.isfinite(ack.marked_simulation_time_s)
                     or ack.marked_simulation_time_s < 0
-                    or received < self._request_sent_wall_s):
+                    or received < self._request_sent_wall_s
+                    or type(ack.clock_interval_begin_monotonic_ns) is not int
+                    or type(ack.clock_interval_end_monotonic_ns) is not int
+                    or not 0 < self._request_sent_monotonic_ns <=
+                       ack.clock_interval_begin_monotonic_ns <=
+                       ack.clock_interval_end_monotonic_ns <= received_ns):
                 self._invalid = True
             else:
                 self._result = {
@@ -69,6 +76,15 @@ class RosPhysicsStepFence:
                     "marked_simulation_time_s": ack.marked_simulation_time_s,
                     "request_sent_wall_s": self._request_sent_wall_s,
                     "ack_received_wall_s": received,
+                    "request_sent_monotonic_ns": self._request_sent_monotonic_ns,
+                    "ack_received_monotonic_ns": received_ns,
+                    "clock_interval_begin_monotonic_ns":
+                        ack.clock_interval_begin_monotonic_ns,
+                    "clock_interval_end_monotonic_ns":
+                        ack.clock_interval_end_monotonic_ns,
+                    "clock_interval_width_ns": (
+                        ack.clock_interval_end_monotonic_ns -
+                        ack.clock_interval_begin_monotonic_ns),
                     "command_authority": False,
                 }
             self._condition.notify_all()
@@ -86,13 +102,15 @@ class RosPhysicsStepFence:
             if self._sequence:
                 raise ValueError("PHYSICS_STEP_FENCE_ALREADY_REQUESTED")
             sent = self.monotonic()
-            if sent < stopped_wall_s or self.clock_ns() >= deadline_ns:
+            sent_ns = self.clock_ns()
+            if sent < stopped_wall_s or sent_ns <= 0 or sent_ns >= deadline_ns:
                 raise ValueError("PHYSICS_STEP_FENCE_INVALID")
             self._sequence = 1
             self._pending = True
             self._invalid = False
             self._result = None
             self._request_sent_wall_s = sent
+            self._request_sent_monotonic_ns = sent_ns
             request = PhysicsStepFenceRequest(
                 simulation_session_id=self.session_id, reset_epoch=epoch,
                 request_sequence=self._sequence)
