@@ -89,7 +89,12 @@ class ActExecutionAdapter:
             previous=self.current_goal_ids
         sent=[]
         try:
-            self.permit_port.require(permit,checked)
+            consumed=self.permit_port.require(permit,checked)
+            from .path_proof import PathProof
+            if isinstance(consumed,PathProof):
+                # A proof has a different time axis and must never be sent by
+                # the legacy absolute-prefix route.
+                raise PermissionError('PROOF_COMMIT_PORT_REQUIRED')
             now=finite(self.sim_clock(),nonnegative=True)
             start=now+self.submit_lead_s
             if start>=checked['target_times_s'][0]-1e-6:
