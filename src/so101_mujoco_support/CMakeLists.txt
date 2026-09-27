@@ -6,6 +6,7 @@ find_package(ament_cmake REQUIRED)
 find_package(control_msgs REQUIRED)
 find_package(controller_interface REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(hardware_interface REQUIRED)
 find_package(joint_trajectory_controller REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
 find_package(moveit_ros_move_group REQUIRED)
@@ -94,7 +95,8 @@ if(BUILD_TESTING)
     APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
   target_compile_features(test_broker_owned_trajectory_controller PRIVATE cxx_std_17)
   ament_target_dependencies(test_broker_owned_trajectory_controller
-    control_msgs controller_interface lifecycle_msgs pluginlib rclcpp rclcpp_action)
+    control_msgs controller_interface hardware_interface lifecycle_msgs
+    pluginlib rclcpp rclcpp_action)
   target_link_libraries(test_broker_owned_trajectory_controller
     so101_broker_owned_trajectory_controller)
 
