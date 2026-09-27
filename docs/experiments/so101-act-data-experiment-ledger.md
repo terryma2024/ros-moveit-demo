@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: af09d9eb
+current_commit: ac4cd5e3
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -36,6 +36,7 @@ confirmed_conclusions:
   - EXP-503 confirms the installed action-only plugin on a fresh isolated no-motion ACT stack: three active controller types, zero trajectory-topic subscribers, seven-axis readiness and clean owner/domain retirement.
   - EXP-504 passively captures a common 100 ms/51-frame 2 ms controller-reference window in a no-motion stack; a missing optional graph helper invalidated only that run's repeat topic-subscription check, and controller/ownership provenance is still absent.
   - EXP-505 verifies a source-only three-controller 51-frame reference contract with original joint order, 2 ms stamps and fresh receipts; it explicitly withholds owner/goal and command authority.
+  - EXP-506 retains bounded original controller message fields at the broker callback and clears history across reset epochs; this is a callback-scoped source, not a native controller epoch or owner/goal event proof.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -43,8 +44,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-505
-next_experiment: EXP-506
+latest_checkpoint: CP-506
+next_experiment: EXP-507
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4656,3 +4657,36 @@ next_experiment: EXP-506
 
 - Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp505-stationary-reference-contract/result.json`. Source and installed gates passed with unique verified NVMe scratch; all records are retained.
 - EXP-500 validates historical physical frames and EXP-505 validates historical controller publications, each separately and without command authority. They have not been joined to one real selected SEARCH source or a broker-owned goal/ownership interval. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-505, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
+
+## EXP-506 — Broker callback controller-reference history
+
+```yaml
+experiment_id: EXP-506
+status: VALID
+prior_experiment: EXP-505
+hypothesis: The broker can retain original arm/gripper/neck controller-state names, header stamps and callback receipts in a bounded history that is cleared at reset scope changes, without altering goal dispatch.
+prediction: Fresh same-epoch messages are available read-only; wrong joint order, pre-reset epoch, stale receipt and duplicate stamp refuse; existing broker/controller tests and package gates pass.
+single_variable: Add a 256-frame read-only controller-reference observer and attach it to existing broker callbacks, leaving all command/proof routes unchanged.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-505 valid, task-owned stack none, pre-existing ros_broker.py dirty hunks copied and preserved]
+success_criteria: [Focused source and driver RED/GREEN, full source and installed Python gates, new broker hunk staged separately from pre-existing dirty code]
+failure_criteria: [Pre-reset callback crashes, stale or wrong-order frames accepted, previous broker regressions fail]
+invalid_criteria: [Live stack or goal, staging unrelated dirty changes]
+provenance:
+  source_commit: ac4cd5e3
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Missing-module, missing-driver-boundary and pre-reset-epoch focused REDs with verified unique NVMe scratch", "Focused observer/controller/broker GREEN", "Ordinary source pytest -n 8, existing-overlay build and installed colcon test --pytest-args test -n 8", "Zero-context index patch for only new ros_broker.py hunks; readback of remaining unstaged pre-existing hunks"]
+observed: ["Focused REDs reached the intended import, driver method and pre-reset epoch-0 failures; final focused controller/broker set passed 62", "Ordinary source gate collected 4746: 4584 passed and 162 skipped; build passed; installed aggregate 6209 tests, 0 errors, 0 failures and 205 skipped", "Observer keeps 256 frames per controller, original joint names, header nanoseconds and one callback receipt; pre-reset epoch invalidates its history, same-session epoch changes clear old frames; read-only recent returns only fresh frames from the current broker-observed epoch", "Existing unstaged ros_broker.py file before this change SHA256 eae933ca0f5e24bf9cb7c2e357b760e3f210b5d867e0e5844ae0dd5ddfd27afc; only new hunk patch SHA256 c154542720a3009fa26400c081fec2f086c6147437ece5182ed998ce177bada1; staged diff excludes and worktree retains the pre-existing dirty hunks", "Result artifact SHA256 0cf19fd23dc21da23843687f08ede302cdfb08d8eaf6b2b60ed87d43e26e7c3b; no stack or goal"]
+inferred: ["The callback now exposes enough original controller message data for EXP-505's strict publication-window verifier after a real SEARCH stop", "A controller_state message contains no native session/epoch; the observer's scope comes from the latest broker world callback and cannot independently prove its own epoch at reset boundaries", "No per-goal event journal or ownership-generation interval exists yet; neither EXP-500 nor EXP-505 is wired to a production PathProof"]
+conclusion: VALID read-only broker reference source, still nonauthoritative.
+decision: Establish an explicit broker goal/stop/ownership event timeline and native same-step physical join before taking a historical bridge from real SEARCH. Keep motion authority closed; do not promote the callback-scoped epoch alone.
+next_experiment: EXP-507
+```
+
+## CP-506 — Original controller callbacks retained without goal authority
+
+- Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp506-broker-reference-observer/result.json`. Source and installed gates passed with unique verified NVMe scratch. The isolated patch record preserves the exact new broker hunk, while prior uncommitted broker changes remain unstaged and byte-preserved outside that hunk.
+- The physical and controller 51-frame contracts are still separate. A selected real SEARCH readback, a goal/ownership event fence and native epoch alignment remain prerequisites for PathProof or an approach goal. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-506, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.

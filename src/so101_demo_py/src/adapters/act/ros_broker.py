@@ -26,6 +26,7 @@ from so101_demo.act.contracts import finite, fields
 from so101_demo.act.joints import ARM_JOINTS, ACT_JOINTS, JOINT_LIMITS
 from so101_demo.act.trajectory import controller_point, interpolate_segment
 from .leased_action_client import ACTIONS, message_dict, decoded
+from .controller_reference_observer import ControllerReferenceObserver
 
 ACTION_TYPES={'arm':FollowJointTrajectory,'gripper':FollowJointTrajectory,
               'neck':FollowJointTrajectory,'execute_trajectory':ExecuteTrajectory}
@@ -127,6 +128,8 @@ class RosBrokerDriver:
         self._baseline_futures={};self._stop_confirmed_at=None
         self._baseline_allow_existing=False
         self._positions=None;self._epoch=None;self._references={};self._scalar=None
+        self._reference_epoch_identity=None
+        self._reference_frames=ControllerReferenceObserver(max_frames=256)
         self._disabled_ack=self._paused_ack=self._world_reset_ack=self._activated_ack=False
         self._reset_target=None;self._reset_initial=None;self._verified_reset_epoch=None;self._neck_velocity=None
         self._snapshot_refresh=None;self._write_records=[];self._write_receipts={}
@@ -169,7 +172,19 @@ class RosBrokerDriver:
         with self._lock:self._scalar=(message,self.monotonic())
 
     def _live_epoch(self,message):
-        with self._lock:self._epoch=(message,self.monotonic())
+        with self._lock:
+            identity=(message.simulation_session_id,message.reset_epoch)
+            if getattr(self,'_reference_epoch_identity',None)!=identity:
+                observer=getattr(self,'_reference_frames',None)
+                if observer is not None:
+                    if type(identity[1]) is int and identity[1]>=1 and identity[0]:
+                        stamp=message.header.stamp
+                        observer.reset(*identity,source_floor_ns=(
+                            stamp.sec*1_000_000_000+stamp.nanosec))
+                    else:
+                        observer.invalidate()
+                self._reference_epoch_identity=identity
+            self._epoch=(message,self.monotonic())
 
     def _reference(self,kind,message):
         if tuple(message.joint_names)!=NAMES[kind]:return
@@ -180,7 +195,28 @@ class RosBrokerDriver:
         except ValueError:return
         stamp=message.header.stamp.sec+message.header.stamp.nanosec*1e-9
         if len(velocities)!=len(NAMES[kind]) or not 0<=stamp:return
-        with self._lock:self._references[kind]=(values,velocities,self.monotonic(),stamp)
+        with self._lock:
+            received=self.monotonic()
+            self._references[kind]=(values,velocities,received,stamp)
+            observer=getattr(self,'_reference_frames',None)
+            if observer is not None:
+                observer.accept(kind,message,received_monotonic_s=received)
+
+    def recent_controller_references(self,kind):
+        """Return the original fresh frames for one controller in this epoch."""
+        with self._lock:
+            observer=getattr(self,'_reference_frames',None)
+            if observer is None or self._epoch is None:
+                raise RuntimeError('REFERENCE_HISTORY_UNAVAILABLE')
+            try:
+                identity,frames=observer.recent(kind,now_monotonic_s=self.monotonic(),
+                                                max_wall_age_s=self.max_age)
+            except ValueError as error:
+                raise RuntimeError('REFERENCE_HISTORY_UNAVAILABLE') from error
+            current=self._epoch[0]
+            if identity!=(current.simulation_session_id,current.reset_epoch):
+                raise RuntimeError('REFERENCE_HISTORY_EPOCH_INVALID')
+            return identity,frames
 
     def _reference_interval(self,kind):
         candidates=[]
