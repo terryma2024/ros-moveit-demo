@@ -43,7 +43,17 @@ class ReservationPort:
     def __init__(self, driver):
         self.driver = driver
         self.fail_reserve = False
+        self.fail_arm = False
+        self.arm_error = None
+        self.fail_close = False
+        self.arms = []
         self.closes = []
+
+    def arm_generation(self, ticket):
+        self.arms.append(ticket)
+        if self.arm_error is not None:
+            raise self.arm_error
+        return not self.fail_arm
 
     def reserve(self, ticket, kind, goal, goal_uuid):
         assert self.driver.broker._goal_tickets["local-goal"] == ticket
@@ -56,6 +66,13 @@ class ReservationPort:
 
     def close_generation(self, generation):
         self.closes.append(generation)
+        if self.fail_close:
+            raise RuntimeError("CONTROLLER_RESERVATION_CLOSE_UNCONFIRMED")
+
+
+def acquire_request(token=""):
+    return dict(protocol_version=1, request_id="r", owner="act", session_id="session",
+                attempt_id="attempt", lease_token=token, operation="acquire")
 
 
 def prepared_broker():
@@ -64,7 +81,9 @@ def prepared_broker():
     ownership = Ownership()
     broker = CommandBroker(driver, ownership=ownership, reservation_port=port)
     driver.broker = broker
-    token = ownership.acquire("act", "session", "attempt")
+    response = broker.handle(acquire_request(), "connection")
+    assert response["accepted"]
+    token = response["lease_token"]
     ticket = ownership.ticket(token, "act", "session", "attempt")
     driver.ticket = ticket
     return broker, driver, port, ticket
@@ -77,6 +96,7 @@ def test_ticket_precedes_reservation_ack_and_native_uuid_send():
     assert driver.events == ["prepare", "reserve", "send"]
     assert broker._goal_tickets[goal_id] == ticket
     assert port.closes == []
+    assert port.arms == [ticket]
     assert driver.discards == []
 
 
@@ -107,3 +127,87 @@ def test_reused_local_goal_id_does_not_erase_existing_ticket():
     assert driver.events == ["prepare", "stop"]
     assert port.closes == [ticket[0]]
     assert driver.discards == ["local-goal"]
+
+
+def test_partial_arm_rejection_closes_generation_before_reporting_lease():
+    driver = PreparedDriver()
+    port = ReservationPort(driver)
+    port.fail_arm = True
+    broker = CommandBroker(driver, ownership=Ownership(), reservation_port=port)
+    driver.broker = broker
+    response = broker.handle(acquire_request(), "connection")
+    assert not response["accepted"]
+    assert "lease_token" not in response
+    assert len(port.arms) == 1
+    assert port.closes == [port.arms[0][0]]
+    assert driver.events == ["stop"]
+
+
+def test_arm_timeout_replies_with_rejection_after_close_and_stop():
+    driver = PreparedDriver()
+    port = ReservationPort(driver)
+    port.arm_error = TimeoutError("CONTROLLER_RESERVATION_TIMEOUT")
+    broker = CommandBroker(driver, ownership=Ownership(), reservation_port=port)
+    driver.broker = broker
+    response = broker.handle(acquire_request(), "connection")
+    assert not response["accepted"]
+    assert response["error"] == "CONTROLLER_RESERVATION_TIMEOUT"
+    assert "lease_token" not in response
+    assert port.closes == [port.arms[0][0]]
+    assert driver.events == ["stop"]
+
+
+def test_uncertain_close_blocks_the_next_motion_lease():
+    broker, driver, port, ticket = prepared_broker()
+    invalidations = []
+    broker.prefix_executor = type("PrefixInvalidator", (), {
+        "invalidate": lambda self, reason: invalidations.append(reason),
+    })()
+    port.fail_close = True
+    broker.disconnect("connection")
+    assert port.closes == [ticket[0]]
+    assert driver.events == ["stop"]
+    assert invalidations == ["CLIENT_DISCONNECTED"]
+    response = broker.handle(acquire_request(), "next-connection")
+    assert not response["accepted"]
+    assert response["error"] == "CONTROLLER_RESERVATION_CLOSE_UNCONFIRMED"
+
+
+def test_direct_ownership_acquire_cannot_bypass_controller_arm():
+    driver = PreparedDriver()
+    port = ReservationPort(driver)
+    ownership = Ownership()
+    broker = CommandBroker(driver, ownership=ownership, reservation_port=port)
+    driver.broker = broker
+    token = ownership.acquire("act", "session", "attempt")
+    ticket = ownership.ticket(token, "act", "session", "attempt")
+    driver.ticket = ticket
+    with pytest.raises(PermissionError, match="CONTROLLER_GENERATION_NOT_ARMED"):
+        broker.dispatch(ticket, "arm", {"trajectory": "fixed"})
+    assert "send" not in driver.events
+
+
+def test_release_closes_armed_generation_before_owner_becomes_idle():
+    broker, driver, port, ticket = prepared_broker()
+    response = broker.handle(dict(acquire_request(ticket[1]), operation="release"),
+                             "connection")
+    assert response["accepted"]
+    assert port.closes == [ticket[0]]
+    assert broker.ownership.state == "IDLE"
+    assert driver.events == []
+
+
+def test_lease_expiry_closes_armed_generation_before_stop():
+    now = [0.]
+    driver = PreparedDriver()
+    port = ReservationPort(driver)
+    ownership = Ownership(monotonic=lambda: now[0], lease_timeout_s=1.)
+    broker = CommandBroker(driver, ownership=ownership, reservation_port=port)
+    driver.broker = broker
+    response = broker.handle(acquire_request(), "connection")
+    assert response["accepted"]
+    ticket = ownership.ticket(response["lease_token"], "act", "session", "attempt")
+    now[0] = 1.
+    broker.tick()
+    assert port.closes == [ticket[0]]
+    assert driver.events == ["stop"]
