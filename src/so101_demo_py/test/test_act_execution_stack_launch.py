@@ -5,12 +5,13 @@ from pathlib import Path
 
 import pytest
 from launch import LaunchContext
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, OpaqueFunction, SetEnvironmentVariable
 from launch.utilities import perform_substitutions
 from launch_ros.actions import Node
 from launch_ros.utilities import evaluate_parameters
 
 from so101_demo.runtime import launch_composition as launch
+from so101_teleop.unified.controller_reservation_paths import controller_reservation_directory
 
 
 def configured(tmp_path, *, overrides=None):
@@ -46,6 +47,12 @@ def test_dedicated_act_stack_has_sim_moveit_four_controllers_rgb_and_no_broker(t
     assert "teleop_workflow" not in names and "dynamic_cup_pick_place" not in names
     assert "fixed_cup_pick_place" not in names and "rgbd_cup_pose" not in names
     simulator = next(node for node in nodes if node.node_executable == "ros2_control_node")
+    for action in actions[:actions.index(simulator)]:
+        if isinstance(action, SetEnvironmentVariable):
+            action.execute(context)
+    assert context.environment["SO101_ACT_CONTROLLER_RESERVATION_DIR"] == str(
+        controller_reservation_directory(tmp_path, "act-task8-case-01"))
+    assert context.environment["SO101_SIMULATION_SESSION_ID"] == "act-task8-case-01"
     parameters = evaluate_parameters(context, simulator._Node__parameters)
     robot_description = parameters[0]["robot_description"]
     assert '<param name="disable_rendering">false</param>' in robot_description

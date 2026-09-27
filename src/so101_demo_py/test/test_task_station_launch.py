@@ -10,13 +10,16 @@ from launch.actions import (
     IncludeLaunchDescription,
     OpaqueFunction,
     RegisterEventHandler,
+    SetEnvironmentVariable,
 )
 from launch.event_handlers import OnProcessStart
 from launch_ros.actions import Node
 
 from launch import LaunchContext
+from launch.utilities import perform_substitutions
 import so101_demo.runtime.launch_composition as launch_composition
 from so101_demo.runtime.launch_composition import build_task_station_launch_description
+from so101_teleop.unified.controller_reservation_paths import controller_reservation_directory
 
 
 PACKAGE = Path(__file__).parents[1]
@@ -161,6 +164,31 @@ def test_linux_headless_task_station_keeps_camera_controllers_and_moveit(
     assert executables.count("static_transform_publisher") == 2
     assert "ros2_control_node" in executables
     assert "graceful_shutdown_move_group" in executables
+
+
+def test_act_task_station_exports_reservation_scope_before_simulator(tmp_path, monkeypatch):
+    description = build_task_station_launch_description(act_profile=True)
+    context = LaunchContext()
+    for action in description.entities:
+        if isinstance(action, DeclareLaunchArgument) and action.default_value is not None:
+            context.launch_configurations[action.name] = perform_substitutions(
+                context, action.default_value)
+    context.launch_configurations.update({
+        "session_id": "session_A", "task_evidence_root": str(tmp_path),
+        "headless": "true", "include_teleop": "false",
+        "act_stop_velocity_rad_s": "0.01", "act_max_age_s": "0.2",
+    })
+    monkeypatch.setattr(platform, "system", lambda: "Linux")
+    opaque = next(action for action in description.entities if isinstance(action, OpaqueFunction))
+    actions = opaque.execute(context)
+    simulator = next(action for action in actions
+                     if isinstance(action, Node) and action.node_executable == "ros2_control_node")
+    for action in actions[:actions.index(simulator)]:
+        if isinstance(action, SetEnvironmentVariable):
+            action.execute(context)
+    assert context.environment["SO101_ACT_CONTROLLER_RESERVATION_DIR"] == str(
+        controller_reservation_directory(tmp_path, "session_A"))
+    assert context.environment["SO101_SIMULATION_SESSION_ID"] == "session_A"
 
 
 @pytest.mark.parametrize(

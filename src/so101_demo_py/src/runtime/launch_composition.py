@@ -2450,8 +2450,12 @@ def _configured_task_station_actions(context):
             if hashlib.sha256(installed_plugins.read_bytes()).hexdigest()!=held_cup["plugin_sha256"]:
                 raise ValueError("HELD_CUP_MICRO_LIFT_PLUGIN_DRIFT")
             broker_options += ["--held-cup-micro-lift-manifest",held_cup_path]
+        from so101_teleop.unified.controller_reservation_paths import controller_reservation_directory
+        reservation_dir = controller_reservation_directory(evidence_root, session_id)
         environment_actions = [SetEnvironmentVariable("SO101_ACT_PROFILE", "1"),
-                               SetEnvironmentVariable("SO101_ACT_BROKER_SOCKET", endpoint)]
+                               SetEnvironmentVariable("SO101_ACT_BROKER_SOCKET", endpoint),
+                               SetEnvironmentVariable("SO101_SIMULATION_SESSION_ID", session_id),
+                               SetEnvironmentVariable("SO101_ACT_CONTROLLER_RESERVATION_DIR", str(reservation_dir))]
     share = Path(get_package_share_directory("so101_demo_py"))
     stack = _mujoco_stack_actions(
         context, share, session_id,
@@ -2483,11 +2487,11 @@ def _configured_task_station_actions(context):
             )
         )
     actions = [
+        SetEnvironmentVariable("SO101_TASK_EVIDENCE_ROOT", str(evidence_root)),
         *environment_actions,
         *teleop_actions,
         *camera_static_transform_nodes(),
         *stack.actions,
-        SetEnvironmentVariable("SO101_TASK_EVIDENCE_ROOT", str(evidence_root)),
         RegisterEventHandler(
             OnProcessExit(
                 target_action=stack.simulator,
@@ -2602,10 +2606,14 @@ def _configured_act_execution_stack_actions(context):
     if not scene.is_absolute() or not scene.is_file():
         raise RuntimeError("ACT_STACK_SCENE_INVALID")
     share = Path(get_package_share_directory("so101_demo_py"))
+    from so101_teleop.unified.controller_reservation_paths import controller_reservation_directory
+    reservation_dir = controller_reservation_directory(evidence_root, session_id)
     stack = _mujoco_stack_actions(context, share, session_id, sim_speed_factor=1.0)
     return [
         SetEnvironmentVariable("SO101_ACT_PROFILE", "1"),
         SetEnvironmentVariable("SO101_TASK_EVIDENCE_ROOT", str(evidence_root)),
+        SetEnvironmentVariable("SO101_SIMULATION_SESSION_ID", session_id),
+        SetEnvironmentVariable("SO101_ACT_CONTROLLER_RESERVATION_DIR", str(reservation_dir)),
         *camera_static_transform_nodes(),
         *stack.actions,
         RegisterEventHandler(OnProcessExit(

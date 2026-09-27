@@ -16,6 +16,7 @@ from so101_teleop.unified.ipc import IpcProtocolError, decode_request
 from so101_teleop.unified.bridge import ActCampaignChildOwner, ActChildLaunch, ActWorkerPort, BridgeLaunch
 from so101_teleop.unified.contracts import AdmittedCampaignContext, MutationError, OwnerKey
 from so101_teleop.unified.ipc import IpcReply
+from so101_teleop.unified.controller_reservation_paths import controller_reservation_directory
 
 
 STACK_OWNER = {"pid": 12345, "pgid": 12345, "started_ticks": 101,
@@ -240,6 +241,9 @@ def test_campaign_owner_starts_exactly_eight_isolated_children_and_cleans_up(tmp
     assert all(item.environment["SO101_ACT_MANIFEST_SHA256"] == "a" * 64 for item in started)
     assert all(item.environment["SO101_ACT_RUNTIME_CONFIG_SHA256"] == "b" * 64 for item in started)
     assert all(item.environment["SO101_ACT_POLICY_FINGERPRINT"] == "d" * 64 for item in started)
+    assert all(item.environment["SO101_ACT_CONTROLLER_RESERVATION_DIR"] == str(
+        controller_reservation_directory(Path(context.evidence_root), item.environment["SO101_SIMULATION_SESSION_ID"]))
+               for item in started)
     assert len({item.environment["SO101_CHILD_SERVICE_TOKEN"] for item in started}) == 8
     asyncio.run(manager.stop_owned())
     assert len(stopped) == 8
