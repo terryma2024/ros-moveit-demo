@@ -183,7 +183,7 @@ class MujocoPathChecker:
                 value_rad_s2=float(terminal_acceleration[joint]),
                 limit_rad_s2=float(self.acceleration_limits[joint]),terminal_stop=True)
         mujoco.mj_resetData(self.model,self._data)
-        for stamp,q in zip(sample_times,sample_positions,strict=True):
+        for sample_index,(stamp,q) in enumerate(zip(sample_times,sample_positions,strict=True)):
             self._data.qpos[:]=qpos
             self._data.qpos[self.joints]=q
             if attachment is not None:
@@ -199,7 +199,9 @@ class MujocoPathChecker:
             violation=self._contact_violation(attachment is not None,allowed)
             if violation is not None:
                 pair,distance=violation
-                return self._reject('ROBOT_PATH_CONTACT',contact_pair=pair,sample_time_s=stamp,signed_distance_m=distance)
+                return self._reject('ROBOT_PATH_CONTACT',contact_pair=pair,
+                    sample_index=sample_index,processed_samples=sample_index+1,
+                    total_samples=sample_count,sample_time_s=stamp,signed_distance_m=distance)
         self.last_check=dict(safe=True,reason=None,samples=sample_count,model_sha256=self.model_sha256,
             path_step_s=self.step,path_clearance_m=self.clearance,start_time_s=start,end_time_s=times[-1])
         return True
@@ -234,6 +236,7 @@ class MujocoPathProcess:
         if min(self.timeout,startup)<=0:raise ValueError('PATH_WORKER_CONFIG_INVALID')
         local=MujocoPathChecker(**configuration)
         self.model,self.model_sha256,self.cup_address=local.model,local.model_sha256,local.cup_address
+        self.step,self.clearance=local.step,local.clearance
         self.names=local.names;self.last_check=None
         self._lock=threading.Lock();self._closed=False
         context=multiprocessing.get_context('spawn')
