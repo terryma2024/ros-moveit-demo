@@ -5,6 +5,11 @@ from pathlib import Path
 import re
 import secrets
 import stat
+from typing import Mapping
+
+from so101_teleop.unified.controller_reservation_paths import (
+    controller_reservation_directory, prepare_controller_reservation_directory,
+)
 
 
 _ROLE_CODES = {"arm": 1, "gripper": 2}
@@ -71,16 +76,31 @@ def write_controller_reservation_provision(
         descriptor = os.open(
             temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
             0o600, dir_fd=directory)
+        linked = False
+        own_identity = None
         try:
             with os.fdopen(descriptor, "wb", closefd=True) as output:
                 os.fchmod(output.fileno(), 0o600)
                 output.write(body)
                 output.flush()
                 os.fsync(output.fileno())
+            own_file = os.stat(temporary, dir_fd=directory, follow_symlinks=False)
+            own_identity = (own_file.st_dev, own_file.st_ino)
             os.link(temporary, destination.name,
                     src_dir_fd=directory, dst_dir_fd=directory, follow_symlinks=False)
+            linked = True
             os.unlink(temporary, dir_fd=directory)
             os.fsync(directory)
+        except BaseException:
+            if linked:
+                try:
+                    current = os.stat(destination.name, dir_fd=directory, follow_symlinks=False)
+                except FileNotFoundError:
+                    pass
+                else:
+                    if (current.st_dev, current.st_ino) == own_identity:
+                        os.unlink(destination.name, dir_fd=directory)
+            raise
         finally:
             try:
                 os.unlink(temporary, dir_fd=directory)
@@ -89,3 +109,76 @@ def write_controller_reservation_provision(
     finally:
         os.close(directory)
     return capability
+
+
+def _remove_owned_provisions(directory: Path, identities: dict[str, tuple[int, int]]) -> None:
+    descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        info = os.fstat(descriptor)
+        if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o700:
+            raise PermissionError("CONTROLLER_RESERVATION_PROVISION_DIRECTORY_INVALID")
+        for name, identity in identities.items():
+            try:
+                current = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            if ((current.st_dev, current.st_ino) != identity or not stat.S_ISREG(current.st_mode)
+                    or current.st_uid != os.geteuid()):
+                raise PermissionError("CONTROLLER_RESERVATION_PROVISION_OWNERSHIP_CHANGED")
+            os.unlink(name, dir_fd=descriptor)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+class ControllerReservationProvisions:
+    """Keep one broker's role capabilities in memory until its owned files close."""
+
+    def __init__(self, directory: Path, capabilities: dict[str, bytes],
+                 identities: dict[str, tuple[int, int]]) -> None:
+        self.directory = directory
+        self._capabilities = capabilities
+        self._identities = identities
+        self._closed = False
+
+    @property
+    def capabilities(self) -> dict[str, bytes]:
+        if self._closed:
+            raise RuntimeError("CONTROLLER_RESERVATION_PROVISIONS_CLOSED")
+        return self._capabilities.copy()
+
+    @classmethod
+    def publish(cls, environment: Mapping[str, str], session_id: str):
+        try:
+            root = Path(environment["SO101_ACT_RESERVATION_ROOT"])
+            configured = Path(environment["SO101_ACT_CONTROLLER_RESERVATION_DIR"])
+            declared_session = environment["SO101_SIMULATION_SESSION_ID"]
+            expected = controller_reservation_directory(root, session_id)
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError("CONTROLLER_RESERVATION_PROVISION_SCOPE_INVALID") from error
+        if declared_session != session_id or configured != expected:
+            raise ValueError("CONTROLLER_RESERVATION_PROVISION_SCOPE_INVALID")
+        if len(os.fsencode(expected / "gripper.sock")) > 107:
+            raise ValueError("CONTROLLER_RESERVATION_SOCKET_PATH_TOO_LONG")
+        directory = prepare_controller_reservation_directory(root, session_id)
+        capabilities: dict[str, bytes] = {}
+        identities: dict[str, tuple[int, int]] = {}
+        try:
+            for role in ("arm", "gripper"):
+                name = f"{role}.provision"
+                path = directory / name
+                capabilities[role] = write_controller_reservation_provision(
+                    path, role=role, session_id=session_id)
+                info = path.lstat()
+                identities[name] = (info.st_dev, info.st_ino)
+        except BaseException:
+            _remove_owned_provisions(directory, identities)
+            raise
+        return cls(directory, capabilities, identities)
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        _remove_owned_provisions(self.directory, self._identities)
+        self._capabilities.clear()
+        self._closed = True

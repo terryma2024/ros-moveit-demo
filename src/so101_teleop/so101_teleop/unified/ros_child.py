@@ -194,6 +194,7 @@ class RclpyActionDriver:
         self._act_sources = None
         self._act_hazard_dispatcher = None
         self._act_command_broker = None
+        self._act_reservation_provisions = None
         self._act_reset_connection = None
         if os.environ.get("SO101_ACT_CAMPAIGN_ID"):
             from .act_artifacts import ActArtifactBinding
@@ -237,6 +238,7 @@ class RclpyActionDriver:
         from rclpy.parameter import Parameter
         from so101_demo.act.ownership import Ownership
         from so101_demo.adapters.act.command_broker import CommandBroker, LocalBrokerConnection
+        from so101_demo.adapters.act.controller_reservation_provision import ControllerReservationProvisions
         from so101_demo.adapters.act.ros_broker import RosBrokerDriver
         from so101_demo.adapters.act.pick_place_sources import PickPlaceRosEvidence, PickPlaceHazardDispatcher
 
@@ -248,6 +250,8 @@ class RclpyActionDriver:
             self._act_command_broker = CommandBroker(
                 broker, ownership=Ownership(), simulation_session_id=session_id,
             )
+            self._act_reservation_provisions = ControllerReservationProvisions.publish(
+                os.environ, session_id)
             self._act_reset_connection = LocalBrokerConnection(self._act_command_broker)
             self._act_sources = PickPlaceRosEvidence(
                 self._node, broker, model=self._act_model,
@@ -266,19 +270,25 @@ class RclpyActionDriver:
             self._pick_place_port = maybe_provision_pick_place_port(self)
             return broker
         except BaseException:
-            if self._act_reset_connection is not None:
-                self._act_reset_connection.close()
-                self._act_reset_connection = None
-            self._act_command_broker = None
-            if self._act_hazard_dispatcher is not None:
-                self._act_hazard_dispatcher.close()
-            if self._executor is not None:
-                self._executor.shutdown(timeout_sec=2.0)
-            if self._thread is not None:
-                self._thread.join(timeout=2.0)
-            if self._node is not None:
-                self._node.destroy_node()
-            rclpy.shutdown()
+            try:
+                if self._act_reset_connection is not None:
+                    self._act_reset_connection.close()
+                    self._act_reset_connection = None
+                self._act_command_broker = None
+                if self._act_hazard_dispatcher is not None:
+                    self._act_hazard_dispatcher.close()
+                if self._executor is not None:
+                    self._executor.shutdown(timeout_sec=2.0)
+                if self._thread is not None:
+                    self._thread.join(timeout=2.0)
+                if self._node is not None:
+                    self._node.destroy_node()
+                rclpy.shutdown()
+            finally:
+                provisions = getattr(self, "_act_reservation_provisions", None)
+                if provisions is not None:
+                    provisions.close()
+                    self._act_reservation_provisions = None
             raise
 
     def allocate_goal_uuid(self, key: PendingChildKey) -> str:
@@ -502,19 +512,25 @@ class RclpyActionDriver:
             if self._act_hazard_dispatcher is not None:
                 self._act_hazard_dispatcher.close()
         finally:
-            if self._act_reset_connection is not None:
-                self._act_reset_connection.close()
-                self._act_reset_connection = None
-            if self._executor is not None:
-                self._executor.shutdown(timeout_sec=2.0)
-            if self._thread is not None:
-                self._thread.join(timeout=2.0)
-            if self._node is not None:
-                self._node.destroy_node()
-            if self._node is not None:
-                import rclpy
-                if rclpy.ok():
-                    rclpy.shutdown()
+            try:
+                if self._act_reset_connection is not None:
+                    self._act_reset_connection.close()
+                    self._act_reset_connection = None
+                if self._executor is not None:
+                    self._executor.shutdown(timeout_sec=2.0)
+                if self._thread is not None:
+                    self._thread.join(timeout=2.0)
+                if self._node is not None:
+                    self._node.destroy_node()
+                if self._node is not None:
+                    import rclpy
+                    if rclpy.ok():
+                        rclpy.shutdown()
+            finally:
+                provisions = getattr(self, "_act_reservation_provisions", None)
+                if provisions is not None:
+                    provisions.close()
+                    self._act_reservation_provisions = None
 
 
 def local_owner(runtime_id: str) -> OwnerKey:
