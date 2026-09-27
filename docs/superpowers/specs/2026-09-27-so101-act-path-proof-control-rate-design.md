@@ -24,7 +24,7 @@ broker 是 `PathProof` 的唯一创建者、保管者和消费者。检查 worke
 
 规范化编码须固定字段顺序、单位、浮点编码、joint order、数组长度、非有限值处理与版本；NaN/Inf 直接拒绝。`canonical_input_hash` 覆盖全部输入，另保存 `prefix_hash`、`snapshot_hash`、`model_hash`、`policy_hash`、`profile_hash`，以及 checker/规则版本。结果包含 generation/epoch、`SAFE` 或第一违规的样本索引和原因、实际处理样本数、monotonic 开始/结束时间和 `proof_compute_latency`。`SAFE` 必须有 701 个完整样本和全局规则通过；worker 崩溃、超时或样本缺失一律没有 proof。哈希用于定位差异，提交时仍逐字段验证现场来源与规范编码，不能靠脱离现场的哈希或 Boolean 放行。
 
-证明对相对时间曲线工作。它只在机器人已停稳、没有控制目标的准备阶段运行；证明期间的 reset/cancel/ownership 变更使结果作废。证明所用 model、接触规则和外部场景必须对共同起始时间平移不变。若存在随绝对时间变化的障碍、控制参考或约束，这个证明形式不适用，应拒绝。
+证明对相对时间曲线工作。当前 `validate_action_prefix` 把 `target_times_s` 绑定到 policy `observation_time_s`；提交延后后，原合同不能直接用来验证新目标。准备阶段先保留原 prefix 和 policy observation 的哈希，再生成受 broker 管理的相对路径合同：以候选共同起点为零，记录实测 bridge 和每个目标的偏移。完整 checker 消费这些偏移及实测状态，保留 bridge→start→目标的全部时间间隔；policy observation 时间仍是原始采样时间，不能随目标平移。实际提交使用单独验证的 materialized prefix/goal 合同，绑定原 policy observation、positions、相对 grid 和新绝对时间，不能把移动后的绝对目标塞回旧 `validate_action_prefix` 伪装成原输入。它只在机器人已停稳、没有控制目标的准备阶段运行；证明期间的 reset/cancel/ownership 变更使结果作废。证明所用 model、接触规则和外部场景必须对共同起始时间平移不变。若存在随绝对时间变化的障碍、控制参考或约束，这个证明形式不适用，应拒绝。
 
 ## 证明后的 commit window
 
@@ -32,24 +32,25 @@ broker 是 `PathProof` 的唯一创建者、保管者和消费者。检查 worke
 
 以下任一事件令 proof 失效：reset、cancel、goal replacement、unknown goal、hazard、source loss、停止证明失效、时钟不连续、epoch/generation 变化。prefix 任一 row、相对时间、joint order、contact scope、model/profile/policy 或 checker 规则变化，同样拒绝。broker 在单个原子状态转移中把 proof 从 `VALIDATED` 消费成 `CONSUMED`；重放、过期或并发消费都失败。失败后的 proof 进入 `CLOSED`，不能恢复。
 
-绝对共同起始时间 `T0` 在上述新鲜状态和时钟读回后确定。第 `i` 个目标时间是 `T0 + τ_i`，其中 `τ_i` 是已证明的相对偏移。不得先证明带旧绝对时间的目标再平移它。生成 arm/gripper 两路目标后，exact-goals 边界比对实际准备发送的规范序列化内容：joint names/order、每一 row、相对偏移、生成的绝对 stamp、共同 `T0`、controller 身份与 reference 起点。只有传输层生成且与运动语义无关的 nonce 可以排除，排除字段必须枚举并测试；未枚举字段不排除。`T0` 时的 controller reference/bridge 必须与 proof 的起点一致，否则拒绝。这样时间平移不改变已证明的相对速度、加速度和 terminal stop；新目标绝对时间仍由提交时的时钟验证。
+绝对共同起始时间 `T0` 在上述新鲜状态和时钟读回后确定。若 proof 中 bridge 相对偏移为 `τ_bridge`，新实测 bridge 时间必须满足 `t_bridge'=T0+τ_bridge`；第 `i` 个目标时间是 `T0+τ_i`。proof 的 positions、bridge→start 间隔和目标间隔逐项相同，才是同一条经证明的曲线。policy observation 原始时间不平移，但到 acceptance 的年龄必须仍满足 freshness 上界；过期则拒绝。若新 bridge 无法同时满足状态、reference 与这个 `T0`，直接拒绝，不选择另一条曲线或在窗口里重算。不得先证明带旧绝对时间的目标再只平移 goal。生成 arm/gripper 两路目标后，exact-goals 边界比对实际准备发送的规范序列化内容：joint names/order、每一 row、相对偏移、生成的绝对 stamp、共同 `T0`、controller 身份与 reference 起点。只有传输层生成且与运动语义无关的 nonce 可以排除，排除字段必须枚举并测试；未枚举字段不排除。`T0` 时的 controller reference/bridge 必须与 proof 的起点一致，否则拒绝。整段 bridge 与目标同幅平移才保持已证明的相对速度、加速度和 terminal stop；新目标绝对时间仍由提交时的时钟验证。
 
 permit consume 和 exact-goals 阶段只做这些身份、状态、内容与时间校验，不再各跑一次 701 点 MuJoCo 检查。提交与 action acceptance 之间仍持续监测 generation、epoch、cancel、stop、unknown goal 与时钟；任一变化停止提交。两路目标须被各自真实 action server 在共同起始时间前接收。若只接收一路，取消已接收目标，验证物理停止并封闭 proof/attempt；不能自动重试另一目标或把部分接收记作成功。
 
 ## 两段时序的验收式
 
-所有 wall duration 由同一 monotonic clock 测量；MuJoCo `sim_time` 用于目标时间、physics step 和共同起始边界。一次原子双时钟读回记录映射及其误差上界 `ε_clock`；若映射不连续或误差界缺失，拒绝。设新鲜状态在 monotonic `m_s` / simulation `s_s` 读回，最后一路接受发生在 `m_a` / 对应 simulation `s_a`，共同起始时间为 `T0`，第一目标为 `T1=T0+τ_1`。已冻结的 observation 最大年龄为 `A_max`，预留抖动余量 `J_obs`、`J_start`、`J_first`，则至少满足：
+所有 wall duration 由同一 monotonic clock 测量；MuJoCo `sim_time` 用于目标时间、physics step 和共同起始边界。一次原子双时钟读回记录映射及其误差上界 `ε_clock`；若映射不连续或误差界缺失，拒绝。设原 policy observation 接收于 monotonic `m_policy`，证明后新鲜物理状态在 `m_s` / simulation `s_s` 读回，最后一路接受发生在 `m_a` / 对应 simulation `s_a`，共同起始时间为 `T0`，第一目标为 `T1=T0+τ_1`。已冻结的 policy/物理状态最大年龄分别为 `A_policy`、`A_state`，预留抖动余量 `J_obs`、`J_start`、`J_first`，则至少满足：
 
 ```text
 proof_compute_latency = m_proof_end - m_proof_start
 commit_latency = m_a - m_s
-commit_latency + J_obs + ε_clock < A_max
+commit_latency + J_obs + ε_clock < A_state
+(m_a - m_policy) + J_obs + ε_clock < A_policy
 s_a + J_start + ε_clock < T0
 s_a + J_first + ε_clock < T1
 T1 = T0 + τ_1;  τ_i 与 (τ_{i+1} - τ_i) 均与 PathProof 输入逐项相同
 ```
 
-`A_max` 与余量必须从已冻结的现场 freshness/调度合同和实测尾延迟得出；缺值不准提交。最后一路 acceptance 到达 `T0` 或之后，即使尚早于第一轨迹点，也失败。提交窗口还需在每个发出目标前重验剩余时间；已过界就走取消/停止路径。proof 的准备时间不偷占 commit window，但 proof 的 wall 有效期和代际 fence 仍独立检查。初版 worker wall timeout 提议为 250 ms，从调用开始计时，超时就关闭 proof/attempt 并确认停止；这只是待复核的 fail-closed 上限，必须再用准备阶段停止保持能力及首次/尾部测量验证，不能沿用 25 ms 当作物理常数。
+`A_policy`、`A_state` 与余量必须从已冻结的现场 freshness/调度合同和实测尾延迟得出；缺值不准提交。policy 年龄包含 proof 的计算时间，不能用新的物理读回重置。最后一路 acceptance 到达 `T0` 或之后，即使尚早于第一轨迹点，也失败。提交窗口还需在每个发出目标前重验剩余时间；已过界就走取消/停止路径。proof 的准备时间不偷占 commit window，但 proof 的 wall 有效期和代际 fence 仍独立检查。初版 worker wall timeout 提议为 250 ms，从调用开始计时，超时就关闭 proof/attempt 并确认停止；这只是待复核的 fail-closed 上限，必须再用准备阶段停止保持能力及首次/尾部测量验证，不能沿用 25 ms 当作物理常数。
 
 测量报告分开列 `proof_compute_latency` 的首次、后续 p50/p95/p99/max，及输入规范化、grid、MuJoCo、聚合各段；`commit_latency` 要分出新鲜采样、身份/状态校验、permit consume、exact-goal 校验、两路 submit 和两路 acceptance 的首次与尾部。超时、拒绝和首次调用进入分母，不能只报平均值或只选 warm cache。对照实验固定同一 immutable fixture：旧三次完整检查链若超过其 25 ms 局部预算如实失败；新链仅允许一次 proof，随后对任意状态或 goal 改动都须拒绝。新架构是否满足上述不等式，留待规格通过后的独立验证，不由 EXP-469 的局部时间推断。
 

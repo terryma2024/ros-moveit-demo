@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 1e6fbd919ed1831404d4873dac17c13247bf671d
+current_commit: 6cb01e448d8f938f46767f13593693e0d0ccb97c
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -25,7 +25,7 @@ open_hypotheses:
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; this remains unimplemented and unverified.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
 latest_checkpoint: CP-469
-next_experiment: NONE
+next_experiment: EXP-470
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -3766,3 +3766,7 @@ The 500 Hz `PhysicsStepEvidenceChunk` contains exact contact and cup state but n
 - Worktree `/home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a`, branch `codex/so101-act-data-0917a`, source HEAD before the design-only commit `1e6fbd919ed1831404d4873dac17c13247bf671d`; dirty source/config/tests and the untracked prior plan remain untouched. Existing overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, runtime test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`. Scoped `pgrep` returned no task-owned ROS/MuJoCo/MoveIt/pick-place process; existing attached `act-data-rebase-20260924` tmux session is preserved. No stack, controller goal, real-arm operation or new performance experiment in this turn.
 - Real serial 30 Hz baseline and 60 Hz candidate are explicit unmeasured assumptions from official LeRobot/Feetech documents, not this machine's hardware proof. The design specifies future passive read-only qualification and separately gated write/read testing. MuJoCo 500 Hz remains a simulation target; dynamic tick continuity has not been validated here.
 - `working_tree_status`: pre-existing dirty production batch preserved; this checkpoint changes only the new specification and this ledger. `owned_processes`: NONE. `preserved_processes`: existing Codex/tmux and unrelated host processes, untouched. `next_command`: NONE; wait for written specification review. Open risks: exact state equality may reject under simulation drift; commit timing/freshness margins are not measured; production source/installed/entry and live safety gates remain open. Historical budgets and 0/0/0 formal accepted counts do not reset. Retained: all prior runs in the sole registered evidence root, including EXP-469 artifacts. Archived: none this turn. Deletion candidates: previously recorded scratch/runtime/generated caches only; delete nothing.
+
+## EXP-470 — Relative path source and proof time-axis contract
+
+- **PLANNED, SOURCE_ONLY:** User's written `继续` resumed work after CP-469. Read-only source tracing found a material ambiguity in the reviewed design: `validate_action_prefix` ties absolute `target_times_s` to the original policy `observation_time_s`, while `MujocoPathChecker` checks the measured bridge→controller start→targets duration. Shifting goals alone would change the checked motion; shifting the policy observation would forge provenance. Correct the written specification first, then add one source-only RED/GREEN contract for a broker-owned relative path that preserves the original policy observation receipt, source prefix hash, positions, bridge→start interval and 2 ms target grid, and materializes new absolute goals only after fresh state/clock readback. This step does not grant command authority or change the installed broker. The test must fail at the missing relative-path contract before production code is written, then reject NaN/Inf, changed offsets, stale policy observation and unmatched bridge timing; the old prefix validator remains the entry check. Source HEAD `6cb01e448d8f938f46767f13593693e0d0ccb97c` plus preserved pre-existing dirty batch, existing overlay `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/i`, exact test Python `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`, `ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`, lifecycle `SOURCE_ONLY`; task-owned stack/processes NONE on scoped readback. Any pytest invocation must first verify a previously nonexistent `/data` NVMe TMPDIR/TMP/TEMP and record elapsed/exit/JUnit in this root. Retain all EXP469 and prior evidence; archive none, delete nothing. Accepted Train/Validation/Offline Test 0/0/0.
