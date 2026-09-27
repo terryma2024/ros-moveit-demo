@@ -211,3 +211,15 @@ def test_lease_expiry_closes_armed_generation_before_stop():
     broker.tick()
     assert port.closes == [ticket[0]]
     assert driver.events == ["stop"]
+
+
+def test_moveit_teacher_goal_stops_before_goal_preparation_without_proxy():
+    broker, driver, port, ticket = prepared_broker()
+
+    with pytest.raises(PermissionError, match="CONTROLLER_RESERVATION_ROUTE_UNAVAILABLE"):
+        broker.dispatch(ticket, "execute_trajectory", {"trajectory": "fixed"})
+
+    assert driver.events == ["stop"]
+    assert port.closes == [ticket[0]]
+    assert driver.discards == []
+    assert broker.ownership.state != "RUNNING"

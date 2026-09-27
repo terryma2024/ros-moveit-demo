@@ -110,6 +110,8 @@ class CommandBroker:
         try:
             if self._armed_generation!=ticket[0]:
                 raise PermissionError('CONTROLLER_GENERATION_NOT_ARMED')
+            if kind not in ('arm','gripper'):
+                raise PermissionError('CONTROLLER_RESERVATION_ROUTE_UNAVAILABLE')
             gid,goal_uuid=self.driver.prepare_goal(kind,goal)
             gid=identifier(gid)
             if not isinstance(goal_uuid,str) or str(uuid.UUID(goal_uuid))!=goal_uuid:
