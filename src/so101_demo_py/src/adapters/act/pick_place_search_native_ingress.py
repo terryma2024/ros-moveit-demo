@@ -16,6 +16,12 @@ _SNAPSHOT_KEYS = frozenset((
 ))
 
 
+def native_ingress_digest(snapshots):
+    encoded = json.dumps(snapshots, sort_keys=True, separators=(",", ":"),
+                         allow_nan=False).encode("utf-8")
+    return hashlib.sha256(b"SO101_SEARCH_NATIVE_INGRESS_V1\0" + encoded).hexdigest()
+
+
 def _nanoseconds(value):
     return round(finite(value, nonnegative=True) * 1_000_000_000)
 
@@ -96,9 +102,7 @@ def verify_search_native_controller_ingress(
                 or not 0 <= now_ns - latest_source_receipt_ns <= max_age_ns):
             raise ValueError("SEARCH_NATIVE_SCOPE_CHANGED")
         broker.ownership.require_ticket(ticket)
-        encoded = json.dumps(snapshots, sort_keys=True, separators=(",", ":"),
-                             allow_nan=False).encode("utf-8")
-        digest = hashlib.sha256(b"SO101_SEARCH_NATIVE_INGRESS_V1\0" + encoded).hexdigest()
+        digest = native_ingress_digest(snapshots)
         return {
             "owner_generation": generation,
             "selected_source_sha256": selected["observation_sha256"],
