@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 059a3852
+current_commit: 4b030bca
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -25,6 +25,7 @@ confirmed_conclusions:
   - EXP-489 freezes the validated SEARCH physical and RGB readback into one versioned source hash while retaining its original seven monotonic receive times; no prefix or goal authority is issued.
   - EXP-490 confirms that one selected SEARCH source can pass through broker-private receipt consumption to one complete 701-sample MuJoCo proof offline; this synthetic hold has no route or motion authority.
   - EXP-491 through EXP-494 establish a pinned 31-prefix exact-grid visible-approach candidate with all 701-sample checks passing; it remains noncollecting and has no live motion authority.
+  - EXP-495 finds cup pixels in all sampled task/head/wrist renders of the 31 grouped approach prefixes, but continuous visibility and physical expert qualification are still open.
 disproven_routes:
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
@@ -32,8 +33,8 @@ open_hypotheses:
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
-latest_checkpoint: CP-494
-next_experiment: EXP-495
+latest_checkpoint: CP-495
+next_experiment: EXP-496
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -4282,3 +4283,36 @@ next_experiment: EXP-495
 
 - `visible_approach_candidate_v1.json` holds 31 selected segment ends and exact 600-row hashes. `build_candidate_manifest` verifies the pinned source, all stage and detour anchors, every hash, model identity and all 31 independent 701-sample path checks. The resulting manifest explicitly has `eligible_for_collection: false` and supplies no permit or goal port.
 - The focused RED/GREEN and both package-wide 8-worker gates passed at the intended boundaries. All evidence through EXP-494 is retained under the single registered root, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted. Formal accepted Train/Validation/Offline Test remains 0/0/0.
+
+## EXP-495 — Offline camera visibility screen for grouped approach
+
+```yaml
+experiment_id: EXP-495
+status: VALID
+prior_experiment: EXP-494
+hypothesis: The 31 new endpoint chords retain observable cup pixels in the pinned task/head and wrist camera scene at their start, midpoint and end samples, with no newly hidden midpoint relative to the original diagnostic segment at the same source index.
+prediction: Segmentation pixel counts at all sampled poses identify any new chord occlusion; if none, the candidate can proceed to denser offline visibility checks but still has no physical qualification.
+single_variable: Camera observation along new grouped chords versus the pinned diagnostic geometry; scene, cup pose, camera and model stay fixed.
+lifecycle: SOURCE_ONLY
+preconditions: [EXP-494 valid, task-owned stack none, no goal]
+success_criteria: [All selected poses and matching source poses rendered or geometrically observed from all available named cameras with per-camera cup visibility recorded and image artifacts retained]
+failure_criteria: [Any new target disappearance or insufficient visible pixels on a grouped chord]
+invalid_criteria: [Renderer unavailable, wrong model or source, scene/runtime drift, live stack starts]
+provenance:
+  source_commit: 4b030bca
+  install_overlay: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/i
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: NOT_ASSIGNED
+  gz_partition: NOT_ASSIGNED
+commands: ["Offline MuJoCo segmentation from task/head/wrist cameras at frozen candidate boundary and midpoint poses; compare corresponding original-route source index and retain evidence"]
+observed: ["Corrected EGL segmentation probe established geom ID in channel 0 and type in channel 1; initial reversed-channel zero values are retained as INVALID probe evidence and were not interpreted as occlusion", "Offline screen checked 124 poses (start/mid/end of each of 31 candidate prefixes plus the corresponding original route midpoint) from task/head/wrist 640x480 cameras; no zero-cup-pixel pose", "Candidate midpoint minimum cup pixels: task 4207, head 6020, wrist 1562; original midpoint minima: task 4207, head 6001, wrist 1562", "Worst wrist candidate/source midpoint ratio was 0.95026 at prefix 22 (3649 versus 3840 pixels); visually inspected retained candidate and source wrist PNGs plus candidate head/task PNGs; the cup was partially visible in wrist and clearly visible in head/task", "Screen script SHA256 ff196c5948129aea2a2f1e7ef8379341f454c43107e193a34e027ad92196f3f2; result SHA256 7dd355cfd68c3b29a635e8abd1899a1c9f90650f6dfa648ed7b86501c6fe0740; no stack or goal"]
+inferred: ["The grouped chords do not create a sampled full disappearance in the pinned scene, but sparse frames cannot establish continuous 2 ms visibility or real-camera detector performance", "The wrist reduction at prefix 22 is small in pixel count but partial gripper occlusion is visible, so it must remain a runtime watch condition"]
+conclusion: VALID for sampled offline camera screen only; collection and motion authority remain closed.
+decision: Preserve source/candidate render evidence and run a denser bounded visibility check at the weakest chord before introducing a route into any live goal path.
+next_experiment: EXP-496
+```
+
+## CP-495 — Three-camera sampled visibility, no live qualification
+
+- Registered artifact: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp495-visibility-screen/result.json`, plus paired PNGs for prefixes 22 and 25. The initial segmentation-channel probe and corrected probe are both retained; only the corrected interpretation was used.
+- The user-reviewed path-proof and commit-window design still governs all production work. EXP-491–495 add a safer candidate path and sampled visual evidence, not the missing live selected-source, stopped full-state, controller-reference, proof, permit or exact-goal wiring. Formal accepted Train/Validation/Offline Test remains 0/0/0. Retained through EXP-495, archived none; scratch/runtime/generated caches are deletion candidates only, nothing deleted.
