@@ -8529,3 +8529,23 @@ test that a shorter gate run root clears.
   8P4 real-composition integration test.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-750 — Journals land under the planned run root (and a corrected scope note)
+
+- **Delivered:** `run_admitted_campaign(..., *, journal_parent=None)` plus the CLI passing
+  `<run-root>/task8-live/cases` when `--journal-run-root` is given. The trusted full-restart composition
+  receives that parent, so case journals can only be created under the root the journal plan was built
+  from — sub-slice C's rule — while the default keeps the historical behaviour.
+- **Correction to CP-749's scope note:** the "run-model switch" I listed as outstanding was not a deep
+  change. The composition's signature (`manifest_path`, journal **parent**, `make_case`) and its
+  docstring ("Run every frozen case through the production full-restart composition") show the fourteen
+  cases already run in one production call; only the routing was missing. CP-749's note overstated the
+  remaining work, and this checkpoint corrects it.
+- **Verification:** bundle suite **13 passed** (`gate6-batch3-py-gate/runroot.{log,junit.xml}`); the test
+  stubs the composition and asserts the parent it receives is the planned run root, not the requested
+  journal's directory.
+- **Remaining on this boundary:** the 8P4 real-composition integration test (real `PickPlaceRunner`,
+  execution-port adapter, `run_pick_place_case()`, trusted campaign, seal/dir-fsync readback, nothing
+  hand-written) and then the combined **8P3/8P4 xdist gate**.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
