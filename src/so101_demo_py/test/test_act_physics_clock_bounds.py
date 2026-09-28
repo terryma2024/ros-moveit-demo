@@ -16,6 +16,7 @@ def test_frozen_bounds_dominate_their_measured_maxima():
         bounds.OBSERVED_AGE_AT_CALLBACK_ENTRY_NS + bounds.OBSERVED_CALLBACK_COST_NS)
     assert bounds.MAX_SILENCE_S * 1e9 >= bounds.OBSERVED_IN_WINDOW_CHUNK_GAP_NS * 2
     assert bounds.MAX_SILENCE_S * 1e9 < bounds.OBSERVED_RESET_CROSSING_GAP_NS * 2
+    assert bounds.OBSERVED_FIRST_CHUNK_FROM_ARM_BEGIN_NS > bounds.OBSERVED_FIRST_CHUNK_NS
     assert bounds.FIRST_CHUNK_TIMEOUT_S * 1e9 >= bounds.OBSERVED_FIRST_CHUNK_NS * 3
     for value in (bounds.MAX_AGE_S, bounds.MAX_SILENCE_S, bounds.FIRST_CHUNK_TIMEOUT_S):
         assert round(value * 1000) % 50 == 0, value
