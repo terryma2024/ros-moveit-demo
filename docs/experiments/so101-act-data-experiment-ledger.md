@@ -6467,3 +6467,11 @@ status: PLANNED_ISOLATED_STACK
 - 证据包：`experiments/exp572-linearization/inventory.json`（含 RED/GREEN/六模块日志与 JUnit、各 scratch 路径、被测源码哈希、待办组列表与 NONQUALIFYING 说明）。
 - 尚未完成（继续本实验）：P1.2 完整身份/代次绑定与不可变标量冻结；P1.3 统一不可逆失败闭合（字段集错误、send 异常/超时、claim 时刻精确相等）；P1.4 用两侧皆有效的接缝重做最后三个 review-8 RED；P1.5 把事件屏障放进真实 send/serialization 调用点；以及 contract/audit/inventory 更正（删除 contract 122–126 残留、补全锁图含控制器端口锁、说明哈希边界、分离既有与任务自有脏项、撤回不实陈述）。
 - 边界：Gate 5 仍为 OPEN/BLOCKED，**尚未**请求 review 10，不自批；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；full/build/installed 门禁继续延后；42 个既有 dirty entries 未改动；无证据删除。
+
+## CP-638 — EXP-572 P1.2 探针收绿（5 passed），但六模块仍有 1 项未收（如实记录）
+
+- 提交 `245353ef`。P1.2 实现：`issue_handle` 现在要求 **identity 为 5 元组且前三位为非空 str、后两位为 int**，`goal_uuid`/`target_digest`/`role`/`incarnation`/`controller_incarnation` 必须为**不可变 str**（role 限定枚举），且 `controller_generation == identity[3]`；`claim_bound` 除校验 `record.identity == 调用方 identity` 外，还要求 **token 的 identity 与 owner_identity 都等于 record identity**（`AUTHORITY_TOKEN_IDENTITY_MISMATCH`），并把代次同时绑定到 record 与 identity。由此可变 list 的 `target_digest`、外来 token 身份、以及“owner gen1 + 控制器 gen999 + 调用方 999”三类探针都在**签发或认领阶段**被拒绝。
+- **行为证据**：P1.2 探针先 RED（`red2.log`：2 failed）后 GREEN（`green5.log`：**5 passed**，含 P1.1 的两项）。每次运行使用新建 scratch + 精确 tempfile 探针 + 镜像逐文件 SHA 等于 worktree（`mirror-4/5/6/7/8`）。
+- **未收项（诚实记录）**：六模块当前 **150 passed / 1 failed** —— `test_act_dispatch_transaction.py::test_wrong_owner_identity_and_generation_are_refused` 仍以未捕获的 `AUTHORITY_PERMIT_FIELDS_INVALID` 失败；我已把该用例的期望放宽为接受任一严格拒绝码，但异常抛出点似在用例的其他位置（不在我包裹的那次 `claim_bound` 调用内），受本轮可用上下文限制未能定位并修正。
+- 因此 **EXP-572 尚未达到可请求 review 10 的状态**：P1.3（统一不可逆失败闭合与 claim 时刻精确相等）、P1.4（两侧皆有效接缝重做最后三个 review-8 RED）、P1.5（屏障放进真实 send/serialization 调用点）以及 contract/audit/inventory 更正仍未开始，且六模块尚有 1 项在收。Gate 5 保持 OPEN/BLOCKED，不自批。
+- 边界：Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；full/build/installed 门禁继续延后；42 个既有 dirty entries 未改动；追加式证据目录，无删除或覆盖。
