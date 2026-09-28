@@ -7691,3 +7691,36 @@ exact-W8 qualification, formal W8 and Task 12. Full detail:
   was staged (1 of 5), recorded in `experiments/gate6-batch3-commit/hunk-filter-round164.txt`.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-712 — Integration boundary re-verification at d360a14e (twelve suites, 146 passed)
+
+Fresh mirror + fresh NVMe scratch with the `tempfile.gettempdir()` probe, twelve Task 8 suites
+collected **together** at HEAD `d360a14e`:
+
+    rc=0, 146 passed   (gate6-batch3-py-gate/verifyHEAD2.{log,junit.xml,result})
+
+Suites: artifact_bundle, live_evidence, manifest, measurement_contract, calibration_aggregator,
+live_cli, live_campaign, task8 (core), **search_port**, **readback**, calibration,
+head_search_binding. This is the boundary that matters after three production files changed since
+the previous whole-surface check (runner sealing, search-port recorder hook, readback sample
+emission): the two suites covering the most recently touched modules run alongside their
+neighbours, so the recent additions are exercised in context rather than in isolation. No
+cross-slice drift was found.
+
+Commits at this point (all hunk-staged, `baseline_pollution=0`): `4e84c07f`, `59513b48`, `b6b9b3ec`,
+`c60da4e4`, `c1626403`, `06edd68f`, `9d1fb451`, `e6244b50`, `f13449ac`, `c6c023ed`, `e033dc9c`;
+ledger CP-699…CP-712.
+
+**Remaining:** the `CLOSE..FINAL_CHECK` capture-path value extraction inside
+`pick_place_readback.py` (in progress; hunk-staged, the file carries 191 lines of pre-existing user
+work), then sub-slice B (closed Task 8 vs collection payload split, receipt verification in
+`UnifiedWorkloadService.start(spec)` before resource acquisition, `ActArtifactBinding` from the
+verified bundle), sub-slice C (canonical live CLI, one production call for nine prefix + five full
+cases, journals under `<run-root>/task8-live/cases/` carrying live evidence and both retirement
+receipts), the combined 8P3/8P4 xdist gate, 8P4, Tasks 9/10/11/11A-5, the single final HEAD freeze,
+Task 8L, W1, W2, the 40-scene exact-W8 qualification, formal W8 collection and Task 12. Resume
+brief: CP-709; hook points: `experiments/gate6-runtime/task8-core/t8p3-remaining-plan.md`.
+
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED; 43 dirty entries and 12 untracked user files
+  preserved; nothing deleted.
