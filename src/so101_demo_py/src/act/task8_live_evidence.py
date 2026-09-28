@@ -362,3 +362,18 @@ def require_campaign_cases(manifest: dict, *, prefix_count: int = 9,
             any(not case_id.startswith("full-") for case_id in ids[prefix_count:]):
         raise ValueError("TASK8_CAMPAIGN_CASE_ORDER_INVALID")
     return tuple(ids)
+
+
+def plan_campaign_journals(bundle_root: Path, manifest: dict) -> tuple[tuple[str, Path], ...]:
+    """Resolve every case's journal path up front, before the single production call starts.
+
+    Runs the frozen case-list rule and the single-legal-path rule together, so a run either has a
+    complete, non-conflicting journal plan for all fourteen cases or it fails before doing anything.
+    """
+
+    bundle_root = Path(bundle_root)
+    if not bundle_root.is_absolute() or ".." in bundle_root.parts \
+            or not bundle_root.is_dir() or bundle_root.is_symlink():
+        raise ValueError("TASK8_CAMPAIGN_BUNDLE_ROOT_INVALID")
+    return tuple((case_id, resolve_case_journal_path(bundle_root, case_id))
+                 for case_id in require_campaign_cases(manifest))
