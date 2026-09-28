@@ -166,28 +166,39 @@ def _compat(callable_obj, *args, **kwargs):
 
 
 def _post_receive(registry, admission, history, port, now):
-    """Claim, reserve and send, then return the controller's real receive record.
+    """Claim, reserve and send one permit, then return the controller's real record.
 
-    Uses only public APIs present on both revisions, so the assertions that follow
-    exercise the same state (post-receive, pre-receipt) everywhere.
+    Mirrors the verified construction exactly: one goal UUID per permit, the recorded
+    claim instant and the permit's own deadline, all through APIs present on both the
+    pre-fix revision and the fixed tree.
     """
 
+    import uuid
+
+    ticket = uuid.uuid4().hex[:8]
+    goal = f"g-{ticket}"
     handle = _compat(registry.issue_handle, identity=admission.identity, stage="route_dispatch",
                      step=1, history_version=history.snapshot()["version"],
                      incarnation=history.incarnation, epoch=admission.identity[4], role="arm",
-                     controller_generation=admission.identity[3], goal_uuid="g-1",
+                     controller_generation=admission.identity[3], goal_uuid=goal,
                      target_digest="d-1", controller_incarnation="i")
     token = {"identity": admission.identity, "owner_identity": admission.identity,
              "stage": "route_dispatch", "history_version": history.snapshot()["version"],
              "incarnation": history.incarnation, "reset_epoch": admission.identity[4],
              "physics_step": 1}
-    _compat(registry.claim_bound, handle, admission=admission, history=history, port=port,
-            identity=admission.identity, controller_generation=admission.identity[3], token=token)
+    claim = _compat(registry.claim_bound, handle, admission=admission, history=history, port=port,
+                    identity=admission.identity,
+                    controller_generation=admission.identity[3], token=token)
     assert registry.state_of(handle) == "IN_FLIGHT"
-    command = {"goal_uuid": "g-1", "role": "arm", "target_digest": "d-1",
+    deadline_ns = getattr(claim, "deadline_ns", None) or (now[0] + 1_000_000_000)
+    claim_instant = getattr(claim, "commit_monotonic_ns", now[0])
+    command = {"goal_uuid": goal, "role": "arm", "target_digest": "d-1",
                "generation": admission.identity[3], "controller_incarnation": "i"}
     _compat(port.reserve, permit_id=handle.permit_id, stage="route_dispatch",
-            deadline_ns=now[0] + 1_000_000_000, session_id=admission.identity[1],
-            broker_incarnation=history.incarnation, claim_monotonic_ns=now[0], **command)
+            deadline_ns=deadline_ns, session_id=admission.identity[1],
+            broker_incarnation=history.incarnation, claim_monotonic_ns=claim_instant,
+            **command)
     _compat(port.send, permit_id=handle.permit_id, **command)
     return handle, dict(port.last_receipt(permit_id=handle.permit_id))
+
+
