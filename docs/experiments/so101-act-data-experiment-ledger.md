@@ -10261,3 +10261,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   plan file now carries the field-level evidence for the review.
 - **No code changed, no gate run, no runtime, no interpreter, no evidence deleted, no push, no gate lowered;**
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-825 — The three mapping questions narrow to two confirmations, each tree-backed
+
+- **Done before asking again:** searched the tree for the vocabulary the 14 gates need, and found all three
+  sources rather than leaving the questions open-ended.
+  - **phase targets:** `core/policy.py:30` defines ten motion states (`MOVE_ABOVE_OBJECT`, `DESCEND`, `LIFT`,
+    `MOVE_ABOVE_PLACE`, `DESCEND_TO_PLACE`, `RETREAT` and four `RECOVER_*`), `policy.py:242` rejects a policy
+    whose states differ, and the offsets are already frozen per policy variant
+    (`pregrasp_offset_m` in `light_cup_wall_pick/v1/{gazebo,mujoco}.yaml`, `pregrasp_world_z_clearance_m:
+    0.059162` in `dynamic_cup_pick/v1/mujoco.yaml`);
+  - **table clearance:** `core/grasp_outcome.py` carries `table_clearance_m` per sample and
+    `minimum_table_clearance_m` in the transport policy, with the comparison at `:439`/`:500`, so the
+    threshold is policy-provided; what a preflight needs additionally is a geometric path evaluation;
+  - **visibility:** an existing subsystem (`act/visible_approach_diagnostic.py`,
+    `adapters/act/trusted_visible_approach_source.py`, `adapters/act/visible_approach_expert_route.py`, wiring
+    at `pick_place_search_port.py:88`, frozen profile `config/task6_visible_approach_v1.json` referenced from
+    `pick_place_child_port.py:96`), so the two visibility gates can bind to the frozen route profile.
+- **So CP-824's three open questions reduce to two confirmations:** (a) reuse those three existing
+  vocabularies for the ACT preflight; (b) whether splitting each phase's IK gate from its plan gate may be done
+  as two `plan()` calls per phase, since no IK-only receipt field exists. Neither requires inventing a number,
+  a threshold or a pose.
+- **No code changed, no gate run, no runtime, no interpreter, no evidence deleted, no push, no gate lowered;**
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
