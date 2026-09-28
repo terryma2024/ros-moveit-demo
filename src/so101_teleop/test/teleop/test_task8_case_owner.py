@@ -105,6 +105,8 @@ def prepared(tmp_path, *, fail=None):
                     (ipc_root / "normal.sock").write_text("leftover")
                 self.started = False
 
+    child_owner = ChildOwner()
+
     class Stack:
         def __init__(self, launch):
             self.launch = launch
@@ -121,6 +123,8 @@ def prepared(tmp_path, *, fail=None):
 
         async def stop(self):
             events.append("stack.stop")
+            if child_owner.started:
+                raise MutationError("GRAPH_NOT_CLEARED")
             if fail == "stack.stop":
                 raise MutationError("STOP_NOT_CONFIRMED")
             proof = receipt(OWNER, physical_stop_confirmed=True, graph_clear=True,
@@ -147,7 +151,7 @@ def prepared(tmp_path, *, fail=None):
         return fail != "final.clear"
 
     owner = Task8CaseOwner(
-        Workload(), ChildOwner(), stack_factory=stack_factory,
+        Workload(), child_owner, stack_factory=stack_factory,
         final_clear_probe=final_clear,
         artifact_binding=lambda _payload, _context: "bound-artifacts",
         require_startup_proof=False,
@@ -164,9 +168,21 @@ def test_case_retirement_precedes_admission_release(tmp_path):
         await owner.finish(attempt_id="attempt-271")
 
     asyncio.run(run())
-    assert events == ["admit", "child.start", "stack.start", "cancel", "stack.stop",
-                      "child.stop", "final.clear", "release"]
+    assert events == ["admit", "child.start", "stack.start", "cancel", "child.stop",
+                      "stack.stop", "final.clear", "release"]
+    # both owned processes retired, the graph cleared, and only then admission released
+    assert owner._child_retired is True
+    assert owner._stack_retired is True
+    assert owner._final_clear is True
     assert owner.context is None
+    # the retirement receipts for both owned processes are on disk
+    child_receipt = Path(spec.payload["children"][0]["socket_root"]) / "cleanup-receipt.json"
+    assert child_receipt.is_file(), "the child retirement receipt is missing"
+    child_document = json.loads(child_receipt.read_text())
+    assert child_document["group_clear"] is True
+    stack_receipts = list((tmp_path / "task8-live").rglob("cleanup-receipt.json"))
+    assert stack_receipts, "the stack retirement receipt is missing"
+    assert all(json.loads(item.read_text())["group_clear"] is True for item in stack_receipts)
 
 
 def test_finished_case_owner_cannot_start_a_second_case(tmp_path):
@@ -231,6 +247,35 @@ def test_failed_stack_start_after_spawn_keeps_child_and_admission_owned(tmp_path
     owner, spec, context, events = prepared(tmp_path, fail="stack.start")
     with pytest.raises(MutationError, match="ACT_STACK_READINESS_UNPROVED"):
         asyncio.run(owner.start(spec))
+    assert owner.context is context
+    assert events == ["admit", "child.start", "stack.start"]
+
+
+def test_failed_stack_start_retires_only_after_stop_and_both_receipts(tmp_path):
+    owner, spec, _, events = prepared(tmp_path, fail="stack.start")
+
+    async def run():
+        with pytest.raises(MutationError, match="ACT_STACK_READINESS_UNPROVED"):
+            await owner.start(spec)
+        await owner.retire_failed_start(attempt_id="attempt-271")
+
+    asyncio.run(run())
+    assert events == ["admit", "child.start", "stack.start", "cancel",
+                      "child.stop", "stack.stop", "final.clear", "release"]
+    assert owner.context is None
+
+
+def test_failed_stack_start_with_unknown_owner_remains_fenced(tmp_path):
+    owner, spec, context, events = prepared(tmp_path, fail="stack.start")
+
+    async def run():
+        with pytest.raises(MutationError, match="ACT_STACK_READINESS_UNPROVED"):
+            await owner.start(spec)
+        owner.stack.owner = None
+        with pytest.raises(MutationError, match="PICK_PLACE_CASE_STACK_OWNER_INVALID"):
+            await owner.retire_failed_start(attempt_id="attempt-271")
+
+    asyncio.run(run())
     assert owner.context is context
     assert events == ["admit", "child.start", "stack.start"]
 

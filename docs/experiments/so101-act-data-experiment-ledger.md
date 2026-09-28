@@ -7172,3 +7172,45 @@ activation_receipt`; env `SO101_ACT_ARTIFACT_*`):
   accepted Train/Validation/Offline Test 0/0/0; Task 12 NOT_STARTED; `collection_*`
   NOT_PROVISIONED; the pre-existing `so101_gazebo_demo_cpp` formatting condition stays recorded
   and out of scope; no evidence deleted.
+
+## CP-693 — Correction to CP-691: the first "RED" was invalid, and one test over-claimed
+
+Monitoring review found two verification defects in CP-691. Both are confirmed and corrected.
+
+1. **The recorded RED was not behavioural.** `ownerRED.log` shows all four failures stopping at
+   `ModuleNotFoundError: No module named 'cli'` — the run never reached the intended
+   `FULL_RESTART` boundary, so it proved nothing about the pre-wiring behaviour. A real RED was
+   produced non-destructively by reverting **only** the two wiring modules inside a task-owned
+   source mirror (current tests, pre-wiring `pick_place_validation_campaign.py` and
+   `cli/act_run_pick_place_validation.py` from the byte copies): `realRED.log` now shows 4 failed
+   with the failures *at the intended boundary* —
+   `PickPlaceValidationError: FULL_RESTART_PROOF_UNAVAILABLE` from the pre-wiring unconditional
+   gate, and the absent static-proof API — and no import errors. Mirror recorded in
+   `gate6-batch3-py-gate/realRED-mirror.txt`.
+2. **`test_each_case_gets_a_fresh_owner_bound_to_the_admitted_spec` did not verify the two
+   retirement receipts** it claimed: it monkeypatched `run_pick_place_case` to a fake and asserted
+   nothing about `_stack_retired`, `_child_retired` or a real `full_restart_retired` row. The
+   docstring now states exactly what it proves (fresh per-case owners bound to the admitted spec),
+   and the receipt verification was moved to the boundary that actually owns it — the production
+   owner suite: `test_task8_case_owner.py::test_case_retirement_precedes_admission_release` now
+   asserts `_child_retired is True`, `_stack_retired is True`, `_final_clear is True`,
+   `context is None`, the child cleanup receipt on disk with `group_clear: True`, and the stack
+   cleanup receipt(s) with `group_clear: True`.
+3. **Verification after the corrections:** demo set `fixGREEN-demo.log` **11 passed** rc=0; the
+   strengthened production owner suite ran via the sanctioned `colcon test --packages-select
+   so101_teleop` (`colcon-teleop-owner.log`) with **zero owner-suite failures**
+   (programmatic xunit scan: `owner-suite failures: 0`).
+4. **Separate finding, recorded rather than fixed:** that same `colcon test` reports **3 failures
+   outside this task's scope** — `test_act_ros_child.py::test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8`
+   (`AttributeError: 'RclpyActionDriver' object has no attribute '_act_reset_connection'`) and
+   `test_act_ros_child.py::test_act_cancel_revokes_current_broker_ticket_before_driver_stop`
+   (`assert [('operator', 'IDLE')] == [('operator', 'STOPPING')]`), both in the pre-existing dirty
+   baseline. An indentation audit of `_start_ros_broker` confirms this task's Task-8 branch does
+   **not** swallow the following `self._act_reset_connection = LocalBrokerConnection(...)`
+   statement, so the attribute error is not attributable to the wiring change on code reading
+   alone; the causal A/B is still outstanding (direct `pytest` runs of `so101_teleop/test/teleop`
+   are terminated by the environment guard, so the A/B must go through `colcon test`). Note also
+   that the official whole-tree gate collects `src/so101_demo_py/test` only, so these teleop tests
+   are not covered by the 5 340-node gate.
+- **Boundaries:** no process, controller goal or motion started; no calibration authored or run;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED; evidence preserved.
