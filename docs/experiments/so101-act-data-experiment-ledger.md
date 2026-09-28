@@ -7977,3 +7977,30 @@ evidence root; none reused another run's directory.
   execution-port adapter, `run_pick_place_case()` and trusted campaign with seal/dir-fsync readback.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-725 — Schema formatting debt closed (33-line reviewable diff restored)
+
+- **Problem created (rounds 194-195):** the `live_campaign` property was added to
+  `config/act/calibration-schema.json` by loading and re-serialising the document, reformatting
+  **581 lines (~140 hunks)** for a semantic-only addition — exactly the reviewability problem this
+  task's commit discipline exists to avoid. Semantic equality was verified at the time (no
+  top-level key added or removed, no existing property changed, `required` identical), and the debt
+  was recorded rather than hidden.
+- **First fix attempt failed (round 195):** a byte-level restoration produced invalid JSON. It was
+  caught immediately and reverted with `git checkout HEAD -- <file>` — safe because the file is this
+  task's own committed change, not user work — and the plan file was updated with the warning to
+  validate *before* writing.
+- **Fixed (rounds 196-197):** the original bytes were taken from `149eb831`, the `"properties": {`
+  anchor located, and the property inserted **textually** with the file's own indentation; the
+  candidate was parsed and asserted **equal to the committed document before writing**, with an
+  explicit abort path. Diff against the pre-change commit is now **33 insertions, 0 deletions** —
+  the property and nothing else.
+- **Verification after the change:** 56 passed across `test_act_calibration.py`,
+  `test_act_task8_live_qualification.py`, `test_act_task8_manifest.py`,
+  `test_act_head_search_binding.py` and `test_act_task8_live_cli.py` under the module xdist gate
+  `-n 8` (`gate6-batch3-py-gate/t8schema7.{log,junit.xml}`), confirming the tightened file behaves
+  identically. Code commit `6575351b`.
+- **Remaining in 8P4:** the plan-mandated integration test driving the real `PickPlaceRunner`,
+  execution-port adapter, `run_pick_place_case()` and trusted campaign with seal/dir-fsync readback.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
