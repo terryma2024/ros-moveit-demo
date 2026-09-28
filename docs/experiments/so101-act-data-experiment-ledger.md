@@ -10112,3 +10112,25 @@ the runtime ladder for authorisation.
   runtime ladder (Task 8L onward), both outside the no-runtime boundary this session has held.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-819 — The gate caught three unregistered test modules of mine
+
+- **Combined gate at HEAD `6684fe99`** (demo `pg12`/`r6`, 8 workers, plus the teleop package):
+  - **demo: 5558 tests, 0 errors, 29 failures** — 28 are the user's `Pairs.fingerprin` typo and 1 the
+    environmental AF_UNIX path-length module, i.e. **nothing attributable to this task**, the same count and
+    causes as at CP-757/758 (collection rose from 5442 because this stretch's tests are collected);
+  - **teleop: 1394 tests, 0 errors, 6 failures, of which four were mine.**
+- **The four failures were a real omission, caught by two meta-tests built for exactly this:**
+  `test_ctest_registration` reported "modules the package gate would never run:
+  (`test_act_gateway.py`, `test_act_routes.py`, `test_unified_act_collection.py`)" and `test_unified_launch`
+  reported `test_unified_act_collection` as unregistered. My three new teleop test modules were **never
+  registered in `src/so101_teleop/CMakeLists.txt`**, so the package gate would never have executed them; they
+  passed only because I invoked pytest on them directly. The other two failures are the known
+  `test_controller_reservation_paths` module (environmental, AF_UNIX).
+- **Fix and verification:** registered all three beside `test_unified_admission`, rebuilt
+  (`build_rc=0`), and re-ran both meta-tests: **11 passed, rc=0**.
+- **Second time this session a repo guard caught something I had reported as verified** (the first was the
+  skipped `pytest.mark.asyncio` tests at CP-810). Both are now fixed; the pattern is that focused runs can
+  pass while the package gate would skip or fail the same code.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
