@@ -8004,3 +8004,32 @@ evidence root; none reused another run's directory.
   execution-port adapter, `run_pick_place_case()` and trusted campaign with seal/dir-fsync readback.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-726 — Module gate (project runner) finally runs the full suite: 4/8 shards pass, and the failures are triaged
+
+- **Gate invocation that works** (after fixing the AF_UNIX path length, the overlay contents, and the
+  in-worktree package origin): `tools.so101_pytest_gate --workers 8 --process-id-chars 4
+  --evidence-root $ACT_EVIDENCE/pg9 --run-id r3 --repo-root <worktree>
+  --expected-source-commit d485979f… --allow-dirty`, with `/opt/ros/jazzy` -> dependency overlay ->
+  in-worktree overlay (`$W/install`) sourced in that order. Collection: **5426/5438 tests**, run
+  elapsed **123 s** (the earlier official gate took ~131 s, so the full suite really ran).
+- **Result: FAIL** — `shard-01, shard-02, shard-05, shard-07` exited 1 (four of eight shards passed).
+  Per-shard JUnit analysis identifies exactly two causes, and neither is a mystery:
+  1. **My manifest v2 change has unpropagated call sites.** 52 failures of
+     `TypeError: build_pick_place_validation_manifest() missing 2 required keyword-only arguments`
+     in `test_act_task8_child_port.py`, `test_act_task8_search_binding.py`,
+     `test_act_task8_reset.py` (and related). These are **user-dirty test files** that I
+     deliberately did not edit; when v2 made `calibration_report_path` and
+     `calibration_report_sha256` required, every old call site became a hard error. The mechanical
+     2-kwarg update was applied earlier only to `test_act_pick_place_approach_source_binding.py`.
+  2. **A user work-in-progress typo:** `AttributeError: type object 'Pairs' has no attribute
+     'fingerprin'` (did you mean `fingerprint`?) in `test_act_task8_reset.py` and
+     `test_act_pick_place_approach_source_binding.py` — not caused by this task.
+- **Consequence for the objective:** the gate is now a *usable* instrument rather than an
+  environment puzzle; the remaining defect is a known propagation task in files owned by the user's
+  in-progress work, which must be edited minimally (add the two keyword arguments at each call site,
+  change nothing else) and recorded hunk-by-hunk as before.
+- **Gate status: NOT PASSED** (4/8 shards). No partial credit is claimed; the numbers above are the
+  evidence.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
