@@ -158,37 +158,6 @@ class PickPlaceRosEvidence:
             self.session_id, attempt_id, self.reset_epoch, after_step=after_step,
         )
 
-    def capture_held_cup_handoff(
-        self, attempt_id: str, *, after_step: int,
-        lift_goal_ids: tuple[str, str], commanded_positions,
-        command_broker, paired_goal_id: str,
-        expected_prefix_sha256: str, expected_sequence: int,
-    ) -> dict:
-        """Join the current child-owned LIFT pair to the active physical epoch."""
-        epoch = self.reset_epoch
-        pair = getattr(command_broker, "prefix_executor", None)
-        if (self.phase != "MICRO_LIFT" or epoch is None
-                or getattr(command_broker, "driver", None) is not self.readback.broker
-                or pair is None or getattr(pair, "broker", None) is not command_broker
-                or not callable(getattr(pair, "current_handoff_state", None))):
-            raise ValueError("PICK_PLACE_HANDOFF_SCOPE_INVALID")
-        result = self.readback.capture_held_cup_handoff(
-            self.session_id, attempt_id, epoch, after_step=after_step,
-            lift_goal_ids=lift_goal_ids, commanded_positions=commanded_positions,
-            paired_execution=pair, paired_goal_id=paired_goal_id,
-            expected_prefix_sha256=expected_prefix_sha256,
-            expected_sequence=expected_sequence,
-        )
-        if (self.phase != "MICRO_LIFT" or self.reset_epoch != epoch
-                or command_broker.prefix_executor is not pair
-                or not isinstance(result, dict)
-                or result.get("session_id") != self.session_id
-                or result.get("attempt_id") != attempt_id
-                or result.get("reset_epoch") != epoch
-                or result.get("command_authority") is not False):
-            raise ValueError("PICK_PLACE_HANDOFF_SCOPE_INVALID")
-        return result
-
 
 class PickPlaceHazardDispatcher:
     """Cancel owned action goals away from the single-threaded ROS executor."""
