@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SO-101 Task 8 live source provenance",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "repository_head",
+    "submodules",
+    "calibration_identity",
+    "runtime_roles"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "kind": {
+      "const": "task8_live_source_provenance"
+    },
+    "repository_head": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "submodules": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{40}$"
+      }
+    },
+    "calibration_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_commit",
+        "config_sha256"
+      ],
+      "properties": {
+        "source_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "config_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "runtime_roles": {
+      "type": "array",
+      "minItems": 10,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "logical_name",
+              "artifact_kind",
+              "source_path",
+              "source_sha256",
+              "installed_path",
+              "installed_sha256"
+            ],
+            "properties": {
+              "logical_name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "artifact_kind": {
+                "const": "verbatim_install"
+              },
+              "source_path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "source_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "installed_path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "installed_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "logical_name",
+              "artifact_kind",
+              "source_path",
+              "installed_path",
+              "installed_sha256",
+              "build_receipt_path",
+              "build_receipt_sha256"
+            ],
+            "properties": {
+              "logical_name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "artifact_kind": {
+                "const": "compiled"
+              },
+              "source_path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "installed_path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "installed_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "build_receipt_path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "build_receipt_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "logical_name",
+              "artifact_kind",
+              "loaded_path",
+              "loaded_sha256",
+              "version"
+            ],
+            "properties": {
+              "logical_name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "artifact_kind": {
+                "const": "external_runtime"
+              },
+              "loaded_path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "loaded_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
