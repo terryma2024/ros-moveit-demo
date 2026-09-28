@@ -10069,3 +10069,24 @@ the runtime ladder for authorisation.
   schema's required list against the receipt the code actually produces, so the two cannot drift apart.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-817 — Task 8P3: the preparation-receipt schema
+
+- **Delivered:** `config/act/task8-preparation-receipt-schema.json` and
+  `test/test_act_task8_preparation_receipt_schema.py`.
+  - the schema is **generated from the module's own constants** (`KIND` = `task8_preparation_receipt`,
+    `SCHEMA_VERSION` = 2, the nine `_ARTIFACTS`, the five `_IDENTITIES`) rather than transcribed by hand, so a
+    transcription slip is not possible;
+  - closed at every level (`additionalProperties: false`), with every digest field constrained to
+    `^[0-9a-f]{64}$` and each artifact entry required to be exactly
+    `{relative_path, sha256, source_sha256}`;
+  - **the drift test is the point:** it compares the schema against those same module tuples, so adding an
+    artifact or identity in code fails the test instead of silently leaving the document describing an older
+    contract — the concern recorded in CP-816, where the finding was that no code loads this file;
+  - it also pins the self-digest property: `receipt_sha256` is computed over the document excluding itself and
+    is stable across that round trip.
+- **Verification:** focused tests **3 passed** (`gate6-batch3-py-gate/task8p3schema.{log,junit.xml}`).
+- **Remaining plan artifacts:** `cli/act_prepare_task8_live_artifacts.py` (Task 8P3) and
+  `adapters/act/lerobot.py` (Task 12, needs a training interpreter), plus the runtime ladder.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
