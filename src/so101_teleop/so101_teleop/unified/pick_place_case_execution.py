@@ -160,6 +160,12 @@ async def run_pick_place_case(spec, case_id: str, owner, journal_path: Path) -> 
             stack_root / "cleanup-receipt.json")).hexdigest(),
         "child_receipt_sha256": hashlib.sha256(_regular_bytes(
             child_root / "cleanup-receipt.json")).hexdigest(),
+        # the row also names what it can be read back from: this case's live evidence (a prefix
+        # case has none, and says so with the zero digest) and both retirement receipts
+        "live_evidence_path": (result["live_evidence_artifact"] or {}).get("path", ""),
+        "live_evidence_sha256": (result["live_evidence_artifact"] or {}).get("sha256", "0" * 64),
+        "stack_retirement_receipt_path": str(stack_root / "cleanup-receipt.json"),
+        "child_retirement_receipt_path": str(child_root / "cleanup-receipt.json"),
     }
     _publish_new(journal_path, row)
     return row
