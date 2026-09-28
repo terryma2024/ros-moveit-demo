@@ -8033,3 +8033,27 @@ evidence root; none reused another run's directory.
   evidence.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-727 — Gate regression fixed: v2 builder kwargs and the mandatory provenance field propagated
+
+- **My regression, found by the project gate and fixed:** moving the live manifest to v2 made
+  `calibration_report_path` and `calibration_report_sha256` required, which produced **52**
+  `TypeError: build_pick_place_validation_manifest() missing 2 required keyword-only arguments`
+  failures in the user-dirty `test_act_task8_child_port.py`, `test_act_task8_search_binding.py` and
+  `test_act_task8_reset.py`. The two keyword arguments are now supplied at each call site
+  (mechanical, nothing else changed), and each file's unrelated in-progress hunks are **excluded**
+  (recorded in `gate6-batch3-commit/hunk-filter-round209.txt`).
+- **Second propagation gap, also mine:** `test_act_task8_child_port.py`'s ready-report fixture
+  omitted `source_provenance_sha256`, mandatory since 8P2, causing 4 further failures. One line added.
+- **Calibration tolerance fix (`aa0e57e7`):** `require_gate` requires the seven base fields to be
+  *present* rather than an exact key set (callers legitimately carry the live-campaign block and
+  audit annotations) and answers the documented `CALIBRATION_REQUIRED` for a report that does not
+  claim `TASK8_READY`, instead of a field-level error.
+- **Verification after the fixes:** 61 passed across `test_act_task8_child_port.py`,
+  `test_act_task8_search_binding.py`, `test_act_task8_reset.py`, `test_act_calibration.py`,
+  `test_act_task8_live_qualification.py` and `test_act_task8_manifest.py` under the real installed
+  overlay; the residual **8 failures are all the user's own work-in-progress typo**
+  (`AttributeError: type object 'Pairs' has no attribute 'fingerprin'`, i.e. `fingerprint`) in
+  `test_act_task8_reset.py`, left exactly as written.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
