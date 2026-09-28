@@ -242,3 +242,33 @@ def test_startup_receipt_must_match_its_payload_digest(tmp_path):
     with pytest.raises(ValueError, match="TASK8_PREPARATION_REQUIRED"):
         verify_task8_startup_receipt(dict(payload,
                                           preparation_receipt_path=str(tmp_path / "absent.json")))
+
+
+def test_live_cli_refuses_a_bad_bundle_before_composing_services(tmp_path, monkeypatch):
+    """The pre-flight runs before any service composition, so nothing can be acquired."""
+
+    from so101_demo.cli import act_run_pick_place_validation as live_cli
+
+    composed = []
+    monkeypatch.setattr(live_cli, "load_spec_file",
+                        lambda path: type("S", (), {"payload": {}})())
+    monkeypatch.setattr(live_cli, "_validate_local_paths", lambda spec, journal: None)
+    monkeypatch.setattr(live_cli, "PickPlaceValidationCampaign", type(
+        "C", (), {"require_full_restart_lifecycle": staticmethod(lambda: None)}))
+    import sys as _sys
+    import types as _types
+    stub = _types.ModuleType("so101_teleop.unified.compose")
+
+    def _compose():
+        composed.append(True)
+        raise AssertionError("services must not be composed for an invalid bundle")
+
+    stub.compose_services = _compose
+    monkeypatch.setitem(_sys.modules, "so101_teleop.unified.compose", stub)
+
+    missing = tmp_path / "absent.json"
+    with pytest.raises(ValueError, match="TASK8_PREPARATION_REQUIRED"):
+        live_cli.main(["--spec", str(tmp_path / "spec.json"),
+                       "--journal", str(tmp_path / "journal.json"),
+                       "--artifact-bundle", str(missing)])
+    assert composed == []                       # zero side effects: no services were built
