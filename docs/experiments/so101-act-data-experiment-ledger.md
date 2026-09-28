@@ -10642,3 +10642,34 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime or motion, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered,
   no ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-839 — LeRobot adapter landed; the tensor path proven in the training interpreter
+
+- **Source:** `src/adapters/act/lerobot.py` and `test/test_act_lerobot_adapter.py`, committed `fbfe601c`.
+  TDD order: RED 4 failed with `No module named 'so101_demo.adapters.act.lerobot'`
+  (`beh-lerobot-adapter-red.log`), then **3 passed, 1 skipped** in the gate interpreter
+  (`beh-lerobot-adapter-green.log`).
+- **Loader boundary:** `policy_loader(root, *, factory=None, device="cuda")` resolves `policy_path` inside the
+  bundle, refuses escapes, hashes the file and refuses a mismatch with `POLICY_HASH_MISMATCH`; the policy
+  factory is injected, so `ACTPolicy.from_pretrained` is used only in production. The returned object satisfies
+  `require_policy_interface` (`infer`, `reset`), and `load_policy(bundle_path, loader=...)` accepts it.
+- **Two real contract discoveries, not test noise:** `load_bundle` requires `model_source` to be a dict
+  `{name, sha256}` (a string is `BUNDLE_INVALID`), and the trainer's entry-point refusal needed its required
+  keyword. Both were fixed in the code and the fixture.
+- **Trainer boundary:** `train_with_lerobot(action, dataset, target, *, requirement_sha256, train=None)` runs the
+  injected entry point and returns a document with **exactly `BUNDLE_KEYS`**, the action semantics verbatim,
+  `normalization.split == "train"`, `policy_path` plus the written policy's `policy_sha256`, and
+  `model_source = {name: lerobot-act, sha256: <requirements digest>}`. A missing entry point raises
+  `LEROBOT_TRAIN_REQUIRED`; a policy the trainer failed to write raises `LEROBOT_POLICY_NOT_WRITTEN`.
+- **The tensor path is now executed, not merely reasoned:** the 4th test is skipped in the gate interpreter
+  (no torch, which is correct - pytest is deliberately not in the lock), so it was run inside the training
+  interpreter: `task12-training/smoke/adapter_batch_check.py` under venv-b returned
+  `{"status": "OK", chunk_shape [16, 6], state_shape [1, 6], image_shape [1, 3, 2, 2], device cuda}` with rc=0
+  (`logs/adapter-batch-check-venv-b.log`). Two earlier attempts failed for reasons worth recording: importing
+  the test module needs `pytest`, which the lock does not carry, and my first script **guessed** the colcon path
+  instead of asking for it. Querying it showed `so101_demo.__file__` resolves under
+  `build/so101_demo_py/so101_demo/__init__.py` with the install overlay adding it to `sys.path`, which is also
+  why the new module was importable without a rebuild.
+- **Boundaries:** no runtime or motion, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered,
+  no ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
