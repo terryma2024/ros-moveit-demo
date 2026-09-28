@@ -83,7 +83,7 @@ class AuthorityTransactionRegistry:
     """Private registry; callers never see a mutable record."""
 
     def __init__(self, *, clock_ns=time.monotonic_ns, permit_ttl_ns=30_000_000_000,
-                 admission=None, selected_max_age_ns=None, history=None):
+                 admission=None, selected_max_age_ns=None, history=None, port=None):
         if type(permit_ttl_ns) is not int or permit_ttl_ns < 1:
             raise AuthorityRefused("AUTHORITY_TTL_INVALID")
         self._clock_ns = clock_ns
@@ -91,9 +91,13 @@ class AuthorityTransactionRegistry:
         self._admission = admission
         self._selected_max_age_ns = selected_max_age_ns
         self._history = history
+        self._admission = admission
+        self._port = port
         self._lock = threading.RLock()
         self._records = {}
         self._states = {}
+        self._terminal_reasons = {}
+        self._claim_boot = {}
         self._revoked = None
 
     # ---------------------------------------------------------------- issuing
@@ -137,9 +141,15 @@ class AuthorityTransactionRegistry:
             return self._states.get(handle.permit_id, "UNKNOWN_PERMIT")
 
     # -------------------------------------------------------------- claiming
-    def claim(self, handle, *, admission=None, history=None):
-        """READY -> IN_FLIGHT in one short critical section, using our own clock."""
+    def claim(self, handle, *, admission=None, history=None):  # pragma: no cover - closed API
+        """Legacy claim API: permanently fail-closed.
 
+        It accepted caller-substituted admission/history and a caller-supplied
+        time, so it may never be used again. The only supported path is
+        ``claim_bound`` with broker-owned dependencies.
+        """
+
+        raise AuthorityRefused("AUTHORITY_LEGACY_CLAIM_REMOVED")
         if not isinstance(handle, PermitHandle):
             raise AuthorityRefused("AUTHORITY_HANDLE_REQUIRED")
         with self._lock:
@@ -171,6 +181,8 @@ class AuthorityTransactionRegistry:
             except ValueError as error:
                 raise AuthorityRefused(f"AUTHORITY_COMMIT_REFUSED:{error}") from error
             self._states[record.permit_id] = IN_FLIGHT
+            if port is not None and hasattr(port, "boot_incarnation"):
+                self._claim_boot[record.permit_id] = port.boot_incarnation()
             return ClaimReceipt(permit_id=record.permit_id, identity=record.identity,
                                 stage=record.stage, step=record.step,
                                 history_version=receipt["version"],
@@ -178,7 +190,7 @@ class AuthorityTransactionRegistry:
                                 commit_monotonic_ns=receipt["commit_monotonic_ns"],
                                 selected_age_ns=receipt["age_ns"], deadline_ns=record.deadline_ns)
 
-    def claim_bound(self, handle, *, admission, identity, controller_generation, token):
+    def claim_bound(self, handle, *, admission=None, identity, controller_generation, token):
         """Broker-internal claim bound to the live owner, generation and history receipt.
 
         The admission/history objects are supplied by the broker itself, never by the
@@ -189,6 +201,8 @@ class AuthorityTransactionRegistry:
 
         if not isinstance(handle, PermitHandle):
             raise AuthorityRefused("AUTHORITY_HANDLE_REQUIRED")
+        if admission is None:
+            admission = self._admission
         if not hasattr(admission, "fence") or not hasattr(admission, "history_commit_receipt"):
             raise AuthorityRefused("AUTHORITY_ADMISSION_DOMAIN_REQUIRED")
         with self._lock:
@@ -205,6 +219,13 @@ class AuthorityTransactionRegistry:
                 raise AuthorityRefused("AUTHORITY_OWNER_IDENTITY_MISMATCH")
             if controller_generation != record.controller_generation:
                 raise AuthorityRefused("AUTHORITY_CONTROLLER_GENERATION_CHANGED")
+            port = self._port
+            if port is not None:
+                # the controller port's *current* armed generation is the authority,
+                # not a caller-provided integer that happens to match
+                current = port.current_generation()
+                if current != record.controller_generation:
+                    raise AuthorityRefused("AUTHORITY_CONTROLLER_GENERATION_CHANGED")
             now_ns = self._clock_ns()
             if now_ns > record.deadline_ns:
                 self._states[record.permit_id] = EXPIRED
@@ -225,6 +246,8 @@ class AuthorityTransactionRegistry:
                 self._states[record.permit_id] = EXPIRED
                 raise AuthorityRefused("AUTHORITY_PERMIT_EXPIRED_AT_COMMIT")
             self._states[record.permit_id] = IN_FLIGHT
+            if port is not None and hasattr(port, "boot_incarnation"):
+                self._claim_boot[record.permit_id] = port.boot_incarnation()
             return ClaimReceipt(permit_id=record.permit_id, identity=record.identity,
                                 stage=record.stage, step=record.step,
                                 history_version=receipt["version"],
@@ -232,6 +255,41 @@ class AuthorityTransactionRegistry:
                                 commit_monotonic_ns=receipt["commit_monotonic_ns"],
                                 selected_age_ns=receipt["age_ns"],
                                 deadline_ns=record.deadline_ns)
+
+    def bind(self, *, admission=None, history=None, port=None):
+        """Broker-only wiring of the claim domain dependencies."""
+
+        if admission is not None:
+            self._admission = admission
+        if history is not None:
+            self._history = history
+        if port is not None:
+            self._port = port
+        return self
+
+    def terminate(self, handle, reason="AUTHORITY_TERMINAL"):
+        """One irreversible terminalization for timeout/reject/exception/invalid receipt.
+
+        Any non-terminal permit becomes UNKNOWN exactly once; later receipts are
+        refused and can never restore authority.
+        """
+
+        if not isinstance(handle, PermitHandle):
+            raise AuthorityRefused("AUTHORITY_HANDLE_REQUIRED")
+        with self._lock:
+            record = self._records.get(handle.permit_id)
+            if record is None:
+                raise AuthorityRefused("AUTHORITY_PERMIT_UNKNOWN")
+            state = self._states[record.permit_id]
+            if state in TERMINAL:
+                return state
+            self._states[record.permit_id] = UNKNOWN
+            self._terminal_reasons[record.permit_id] = reason
+            return UNKNOWN
+
+    def state_of_terminal(self, handle):
+        with self._lock:
+            return self._terminal_reasons.get(handle.permit_id)
 
     def receipt(self, handle, **fields):
         """Strict receipt validation; a receipt never grants authority."""
@@ -253,6 +311,9 @@ class AuthorityTransactionRegistry:
                     or fields["controller_incarnation"] != record.controller_incarnation
                     or not isinstance(fields["controller_boot_incarnation"], str)
                     or not fields["controller_boot_incarnation"]
+                    or (record.permit_id in self._claim_boot
+                        and fields["controller_boot_incarnation"]
+                        != self._claim_boot[record.permit_id])
                     or fields["broker_incarnation"] != record.incarnation
                     or fields["session_id"] != record.identity[1]
                     or fields["deadline_ns"] != record.deadline_ns
@@ -306,6 +367,8 @@ class ReservationFakeControllerPort:
         self._io_blocked = False
         self.accepted_commands = 0
         self._consumed = {}
+        self._received = {}
+        self._sequence = 1
         self.reserve_calls = 0
         self.send_calls = 0
         self.cancel_stop_pending = False
@@ -334,6 +397,14 @@ class ReservationFakeControllerPort:
                                                                     if claim_monotonic_ns is not None
                                                                     else self._clock_ns())}
             return ACCEPTED
+
+    def boot_incarnation(self):
+        with self._lock:
+            return self._boot_incarnation
+
+    def current_generation(self):
+        with self._lock:
+            return self._generation
 
     def arm_generation(self, generation, *, controller_incarnation=None):
         with self._lock:
@@ -402,6 +473,22 @@ class ReservationFakeControllerPort:
             if goal_uuid in self._accepted_uuids:
                 return REJECTED
             self._consumed[permit_id] = dict(reservation)
+            self._received[permit_id] = {
+                "protocol_version": 1, "permit_id": permit_id,
+                "goal_uuid": reservation["goal_uuid"], "role": reservation["role"],
+                "generation": reservation["generation"],
+                "target_digest": reservation["target_digest"],
+                "controller_incarnation": reservation["controller_incarnation"],
+                "controller_boot_incarnation": reservation["boot_incarnation"],
+                "broker_incarnation": reservation["broker_incarnation"],
+                "session_id": reservation["session_id"],
+                "deadline_ns": reservation["deadline_ns"],
+                "clock_domain": "monotonic",
+                "claim_monotonic_ns": reservation["claim_monotonic_ns"],
+                "observed_ns": self._clock_ns(),      # frozen at receive, not later
+                "sequence": self._sequence,
+                "verdict": ACCEPTED}
+            self._sequence += 1
             del self._reservations[permit_id]
             self._accepted_uuids.add(goal_uuid)
             self.accepted_commands += 1
@@ -409,26 +496,16 @@ class ReservationFakeControllerPort:
                 self.cancel_stop_pending = True
             return ACCEPTED
 
-    def last_receipt(self, *, permit_id, verdict=ACCEPTED, sequence=1):
-        """The receipt recorded from the controller's actual consumed reservation."""
+    def last_receipt(self, *, permit_id):
+        """The immutable receive event recorded at the controller receive point."""
+
+        from types import MappingProxyType
 
         with self._lock:
-            consumed = self._consumed.get(permit_id)
-            if consumed is None:
-                raise AuthorityRefused("AUTHORITY_NO_CONSUMED_RESERVATION")
-            return {"protocol_version": 1, "permit_id": permit_id,
-                    "goal_uuid": consumed["goal_uuid"], "role": consumed["role"],
-                    "generation": consumed["generation"],
-                    "target_digest": consumed["target_digest"],
-                    "controller_incarnation": consumed["controller_incarnation"],
-                    "controller_boot_incarnation": consumed["boot_incarnation"],
-                    "broker_incarnation": consumed["broker_incarnation"],
-                    "session_id": consumed["session_id"],
-                    "deadline_ns": consumed["deadline_ns"],
-                    "clock_domain": "monotonic",
-                    "claim_monotonic_ns": consumed["claim_monotonic_ns"],
-                    "verdict": verdict, "sequence": sequence,
-                    "observed_ns": self._clock_ns()}
+            received = self._received.get(permit_id)
+            if received is None:
+                raise AuthorityRefused("AUTHORITY_NO_RECEIVED_COMMAND")
+            return MappingProxyType(dict(received))
 
     def late_receipt_after_timeout(self):
         with self._lock:
