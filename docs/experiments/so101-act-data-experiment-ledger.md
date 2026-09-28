@@ -9965,3 +9965,24 @@ This resolves the design block **without authorizing runtime or motion**.
   `NODE_ENV=test bun run test -- <file>`.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-812 — Task 15: the panel is mounted, and its status is honestly unpopulated
+
+- **Delivered:** `web/src/app.tsx` wiring — `ActPanel` imported beside its siblings, `actStatus` state, an
+  `['act', 'ACT']` entry in the const tab list, and a matching `<TabsContent value="act">`.
+- **Two corrections the plan's file list needed, both found by reading:** the teleop panels are mounted in
+  **`app.tsx`** as `TabsContent` entries (line 253 for the environment panel), not in `task-app.tsx`, which is
+  the *tasks* app; and each panel needs an entry in the const tab tuple as well as its content block.
+- **Verification:** `bun run build` **rc=0** with no type errors ("✓ built in 2.39s"), and
+  `NODE_ENV=test bun run test -- act-panel.test.tsx` **4 passed**; both logs are recorded under the gate6
+  evidence directory.
+- **Limitation recorded rather than papered over:** nothing yet populates `actStatus`, because the telemetry
+  snapshot carries no ACT field and I would not invent a polling path with its own authority handling that
+  cannot be exercised without a live server. The tab therefore renders the panel's no-session state, and
+  populating it needs the server-side field or an authorised poll plus a live check.
+- **Task 15 status:** gateway, routes, regenerated unified schema and TypeScript types, panel, component test
+  and app wiring are all in place. What remains for the plan as a whole is the LeRobot adapter (needs a
+  training interpreter) and the runtime ladder (8L → W1 → W2 → W8 → 40-scene qualification → collection →
+  training → evaluation), both outside the no-runtime boundary this session has held.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
