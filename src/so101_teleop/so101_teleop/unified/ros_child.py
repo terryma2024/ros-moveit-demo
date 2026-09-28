@@ -267,8 +267,13 @@ class RclpyActionDriver:
             )
             # A-prime scope: only the admitted Task-8 profile installs the one-shot bound
             # authority. Every other profile keeps the legacy broker byte-identically.
-            _manifest = self._act_artifacts.read_hashed_json("manifest")
-            if _manifest.get("kind") == "ACT_TASK8_LIVE":
+            try:
+                _manifest = self._act_artifacts.read_hashed_json("manifest")
+            except ValueError:
+                # a child without an admitted manifest cannot be the Task-8 profile, so it
+                # keeps the legacy broker; only the admitted profile installs the authority
+                _manifest = None
+            if isinstance(_manifest, dict) and _manifest.get("kind") == "ACT_TASK8_LIVE":
                 from so101_demo.adapters.act.broker_authority_wiring import (
                     build_bound_act_broker, physics_clock_domain,
                 )
@@ -311,20 +316,28 @@ class RclpyActionDriver:
             self._pick_place_port = maybe_provision_pick_place_port(self)
             return broker
         except BaseException:
+            # A cleanup failure must never mask the error that triggered it: every field is
+            # read defensively, because a partially constructed driver (or a startup failure
+            # before the fields are assigned) must still surface its original exception.
             try:
-                if self._act_reset_connection is not None:
-                    self._act_reset_connection.close()
+                connection = getattr(self, "_act_reset_connection", None)
+                if connection is not None:
+                    connection.close()
                     self._act_reset_connection = None
                 self._act_command_broker = None
                 self._act_visible_source = None
-                if self._act_hazard_dispatcher is not None:
-                    self._act_hazard_dispatcher.close()
-                if self._executor is not None:
-                    self._executor.shutdown(timeout_sec=2.0)
-                if self._thread is not None:
-                    self._thread.join(timeout=2.0)
-                if self._node is not None:
-                    self._node.destroy_node()
+                dispatcher = getattr(self, "_act_hazard_dispatcher", None)
+                if dispatcher is not None:
+                    dispatcher.close()
+                executor = getattr(self, "_executor", None)
+                if executor is not None:
+                    executor.shutdown(timeout_sec=2.0)
+                thread = getattr(self, "_thread", None)
+                if thread is not None:
+                    thread.join(timeout=2.0)
+                node = getattr(self, "_node", None)
+                if node is not None:
+                    node.destroy_node()
                 rclpy.shutdown()
             finally:
                 provisions = getattr(self, "_act_reservation_provisions", None)
