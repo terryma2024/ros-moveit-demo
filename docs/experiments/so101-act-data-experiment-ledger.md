@@ -6294,3 +6294,9 @@ status: PLANNED_ISOLATED_STACK
 - 同时复核 amended RED 快照的**实现同一性**：`exp569-amended-red` 中的 `physics_clock_admission.py` 与 `physics_clock_history.py` 与 `git show 9f1cd77c` 对应文件**逐字节一致**，确认 RED 基线确实运行的是修复前实现。
 - 说明：少数早期实验（如 exp523）的 checkpoint 使用带标签的嵌套 schema，本轮用 schema-aware 遍历复核（无漂移），未将其误报为漂移。巡检结果与同一性结论固化为 `experiments/exp569-authority-protocol/evidence-integrity-sweep.json`。
 - 状态：Gate 5 仍 OPEN，等待第七次本机独立 Astra/High 复核；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`）；42 个既有 dirty entries 未改动；未运行 ordinary full suite；证据未删除。
+
+## CP-617 — 为当前 amended RED 基线补建 durable checkpoint（收尾）
+
+- 复核发现当前 RED 基线快照 `experiments/exp569-amended-red/` 尚无自己的 checkpoint（此前 `exp568-amended-red-baseline` 对应的是 128-case 的旧基线）。现补建：记录修复前提交 `9f1cd77c`、只读物化方式、当前最终测试覆盖、**实现文件与 `git show 9f1cd77c` 的逐字节同一性**、import provenance、143-case 的 amended RED 与 GREEN 结果、严格同集结论（missing/extra 为空）与保留策略（仅在用户明确授权后才成为删除候选）。
+- 复核请求包 `handoff/2026-09-28-review7-request-exp569.md`、EXP-569 checkpoint `c49d3e168ff82191…`、EXP-568 checkpoint（追加重索引后 `b9430ea3ea556b72…`）与 `exp568-amended-red-baseline` checkpoint 均在位且哈希可复核；全量证据巡检 3,581 个文件无漂移。
+- 状态：Gate 5 仍 OPEN；未运行 ordinary full suite；42 个既有 dirty entries 未改动；证据未删除。
