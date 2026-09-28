@@ -6412,3 +6412,12 @@ status: PLANNED_ISOLATED_STACK
 - **结果**（每次 pytest 使用各自新建 scratch + tempfile 探针）：行为模块 GREEN **7 passed**（`scratch/exp571-beh-green5.*`）；六模块 GREEN **151 passed**（`scratch/exp571-six-mirror.*`）；同一行为模块在 `b917ae46` 上 **6 failed / 1 passed** —— 6 项为**可区分**的行为 RED（timeout 终止化、malformed 终止化、错误 boot 化身、冻结 receipt、端口代次权威、legacy claim 移除）。
 - **未完成（如实记录，不计入 RED）**：`test_revoke_at_the_atomic_claim_boundary_has_only_two_legal_serializations` 在 `b917ae46` 上仍**通过**——我加的时钟接缝落在 owner 复检之前，尚未位于“owner 复检之后、READY->IN_FLIGHT 之前”。该项必须改成真正命中该窗口的线程/事件交错后才算达标；契约/audit/ledger/inventory 的更新亦待完成。
 - 结论：**包尚未达到可请求第九次复核的条件**（7 项行为探针中仍有 1 项不可区分）。Gate 5 保持 OPEN；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；未跑 full suite；42 个既有 dirty entries 未改动；无证据被删除或覆盖。
+
+## CP-632 — EXP-571：revoke 探针改为包裹 owner_is_active，RED 7/7 可区分；但同一探针在修复后代码上仍失败 → 原子性缺口确实存在（包未就绪）
+
+- 按用户给出的具体做法替换接缝：包裹**真实的** `admission.owner_is_active`——先调用原方法保存 True 结果、signal `entered`、在**有界等待**（Event，0.3 s）中等待真实 revoker 线程完成、然后返回**保存的**旧结果（不再重读）；所有线程在断言前 join 并有终止断言。未 hook `registry._clock_ns`，也未 mock 锁。
+- **RED（`b917ae46`）**：行为模块 **7 failed**（`beh-red7.log`）——七项探针**全部**可区分，包括 revoke 交错：基线无外层 claim guard，revoke 在 True 观察之后、`READY -> IN_FLIGHT` 之前完成，随后仍被接受，探针据此失败。
+- **GREEN（当前源码 mirror，SHA 相等证明）**：行为模块 **6 passed / 1 failed**（`beh-green9.log`），六模块 **151 passed**（`six-green3.log`，manifest 见 `six-green3-manifest.txt`）。唯一失败者仍是该 revoke 探针，其失败信息为“revoke completed inside the claim boundary yet the transaction returned ACCEPTED with accepted_commands=1”——即在**当前**实现中，撤销仍能在 claim 边界之内完成而事务照样接受，说明 review 8 的 P1.1（owner 复检与 `READY -> IN_FLIGHT` 之间缺少真正的原子串行化）**尚未真正关闭**。
+- 过程如实记录：我曾尝试让 `revoke_current` 获取 admission 锁以串行化（regex 快速改动），结果六模块瞬间变成 23 failed；已用 `git checkout` 回退该文件，复核六模块恢复 **151 passed**。教训与之前一致：这类锁语义改动必须逐点、可验证地进行，不能靠批量替换。
+- 每个 pytest 均使用**各自新建**的 scratch 且带 tempfile 探针；证据目录 `experiments/exp571-recovery/` 为追加式，未删除或覆盖任何既有文件；旧结果仍按先前的 `NONQUALIFYING.md` 标注保留。
+- **结论：包尚未达到可请求第九次复核的条件**（七项行为中有一项在修复后仍然失败，且该项正是 review 8 的核心并发要求）。Gate 5 保持 OPEN；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；未跑 ordinary full suite；42 个既有 dirty entries 未被改动（本轮仅新增/修改本轮范围内文件）；无证据被删除。
