@@ -8204,3 +8204,24 @@ partial credit is claimed.
   incidental).
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-735 — Collection specs strip the Task 8 receipt pair; residual is the W8 group
+
+- **Change:** at the two `replace(base, kind="act_collection_start", …)` sites the derived payload now
+  drops `preparation_receipt_path` / `preparation_receipt_sha256` before the spec is built, because a
+  collection payload's closed key set excludes them. The edit was validated with `ast.parse` **before**
+  writing — after two earlier attempts placed it wrongly, one of which broke the file's syntax and was
+  reverted with `git checkout HEAD -- <file>` (my own committed change; no user work involved).
+- **Admission suite:** **28 passed, 3 failed**, and the residual set changed: the previously observed
+  `CAMPAIGN_START_SCHEMA` cases from collection derivations are gone, leaving
+  `test_formal_w8_without_exact_qualification_has_no_resources`,
+  `test_formal_w8_rejects_a_self_declared_passed_json_without_independent_verifier` and
+  `test_task8_start_rejects_semantically_invalid_manifest_before_resources[stale_source]`.
+- **Open question to decide on its merits (not by editing the test to fit):** the two W8 tests expect
+  `W8_QUALIFICATION_REQUIRED` / `W8_QUALIFICATION_VERIFIER_UNAVAILABLE` while the gate now answers
+  `CALIBRATION_REQUIRED`, which traces to the `require_gate` reordering in `aa0e57e7`. The tests'
+  intent (a self-declared PASSED JSON must be rejected for lacking an independent verifier) is
+  security-relevant, so the more specific code may be the correct behaviour and the reordering the
+  thing to revisit.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
