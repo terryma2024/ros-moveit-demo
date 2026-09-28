@@ -878,6 +878,7 @@ def test_retirement_evidence_expiry_is_mandatory_and_finite():
         admission.retire(identity=identity,
                          stop_evidence={"authoritative": True, "stopped": True,
                                         "identity": identity, "monotonic_ns": now[0]})
+    admission.revoke_current("PHYSICS_CLOCK_SILENT")
     with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_STOP_EVIDENCE_INVALID"):
         admission.confirm_stop(identity=identity, stopped=True,
                                evidence={"authoritative": True, "stopped": True,
@@ -892,7 +893,8 @@ def test_stop_evidence_rejects_stale_and_future_observation_times():
     stale = dict(_stop_evidence(identity, now), monotonic_ns=1)
     with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_STOP_EVIDENCE_STALE"):
         admission.confirm_stop(identity=identity, stopped=True, evidence=stale)
-    future = dict(_stop_evidence(identity, now), monotonic_ns=now[0] + 60_000_000_000)
+    future = dict(_stop_evidence(identity, now), monotonic_ns=now[0] + 60_000_000_000,
+                  valid_until_monotonic_ns=now[0] + 120_000_000_000)
     with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_STOP_EVIDENCE_FUTURE"):
         admission.confirm_stop(identity=identity, stopped=True, evidence=future)
 
