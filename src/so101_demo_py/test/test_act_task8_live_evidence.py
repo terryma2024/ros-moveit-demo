@@ -146,3 +146,49 @@ def test_grid_accepts_a_complete_causal_sequence_and_reports_its_length():
     assert validate_evidence_grid(samples, period_s=0.1, tolerance_s=0.01) == 5
     with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_GRID_EMPTY"):
         validate_evidence_grid([], period_s=0.1, tolerance_s=0.01)
+
+
+def test_sample_builder_cannot_drift_from_the_recorder_shape(recorder):
+    """The builder and the recorder must agree: a built sample is accepted verbatim."""
+
+    from so101_demo.act.task8_live_evidence import build_live_evidence_sample
+
+    rec, root = recorder
+    canonical = sample(root, step=0)
+    built = build_live_evidence_sample(
+        identity={"case_id": "full-01", "session_id": "session-1", "attempt_id": "attempt-1",
+                  "reset_epoch": 4, "release_epoch": 0},
+        phase=canonical["phase"], physics_step=canonical["physics_step"],
+        sim_time_s=canonical["sim_time_s"], source_stamps_s=canonical["source_stamps_s"],
+        source_received_monotonic_s=canonical["source_received_monotonic_s"],
+        raw_records=canonical["raw_records"], holding_state=canonical["holding_state"],
+        frame={"wrist_frame_valid": True, "wrist_target_visible": True},
+        contact={"observation_valid": True, "bilateral_contact": True,
+                 "no_fingertip_contact": False, "cup_supported": True, "released": False,
+                 "placement_stable": True},
+        measurements={"cup_support_distance_m": 0.001,
+                      "end_effector_position_m": [0.0, 0.0, 0.1],
+                      "cup_position_m": [0.0, 0.0, 0.1],
+                      "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0]})
+    assert set(built) == set(canonical)
+    rec.append(built)                       # the recorder accepts it without adaptation
+
+
+def test_sample_builder_refuses_incomplete_readback_inputs(recorder):
+    from so101_demo.act.task8_live_evidence import build_live_evidence_sample
+
+    rec, root = recorder
+    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_SAMPLE_INVALID"):
+        build_live_evidence_sample(
+            identity={"case_id": "full-01", "session_id": "session-1", "attempt_id": "attempt-1",
+                      "reset_epoch": 4, "release_epoch": 0},
+            phase="CLOSE", physics_step=0, sim_time_s=0.0, source_stamps_s={},
+            source_received_monotonic_s={}, raw_records={}, holding_state="HOLDING",
+            frame={"wrist_frame_valid": True},          # missing the visibility flag
+            contact={"observation_valid": True, "bilateral_contact": True,
+                     "no_fingertip_contact": False, "cup_supported": True, "released": False,
+                     "placement_stable": True},
+            measurements={"cup_support_distance_m": 0.001,
+                          "end_effector_position_m": [0.0, 0.0, 0.1],
+                          "cup_position_m": [0.0, 0.0, 0.1],
+                          "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0]})

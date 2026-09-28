@@ -209,3 +209,51 @@ def validate_evidence_grid(samples, *, period_s: float, tolerance_s: float) -> i
                 raise ValueError("TASK8_LIVE_EVIDENCE_GRID_GAP")
         previous = stamp
     return len(samples)
+
+
+def build_live_evidence_sample(*, identity: dict, phase: str, physics_step: int,
+                              sim_time_s: float, source_stamps_s: dict,
+                              source_received_monotonic_s: dict, raw_records: dict,
+                              holding_state: str, frame: dict, contact: dict,
+                              measurements: dict) -> dict:
+    """Assemble one canonical sample from explicit readback inputs.
+
+    The port and readback adapters own the values; this function owns the shape, so both call
+    sites cannot drift apart. ``frame`` carries ``wrist_frame_valid``/``wrist_target_visible``,
+    ``contact`` carries the four contact booleans plus ``observation_valid``, and ``measurements``
+    carries the unit-bearing scalars and vectors.
+    """
+
+    if type(identity) is not dict or set(identity) != {
+            "case_id", "session_id", "attempt_id", "reset_epoch", "release_epoch"}:
+        raise ValueError("TASK8_LIVE_EVIDENCE_IDENTITY_INVALID")
+    if type(frame) is not dict or set(frame) != {"wrist_frame_valid", "wrist_target_visible"}:
+        raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+    if type(contact) is not dict or set(contact) != {
+            "observation_valid", "bilateral_contact", "no_fingertip_contact", "cup_supported",
+            "released", "placement_stable"}:
+        raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+    if type(measurements) is not dict or set(measurements) != {
+            "cup_support_distance_m", "end_effector_position_m", "cup_position_m",
+            "cup_orientation_xyzw"}:
+        raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+    return {
+        "case_id": identity["case_id"], "session_id": identity["session_id"],
+        "attempt_id": identity["attempt_id"], "reset_epoch": identity["reset_epoch"],
+        "release_epoch": identity["release_epoch"], "physics_step": physics_step,
+        "sim_time_s": sim_time_s, "phase": phase,
+        "source_stamps_s": dict(source_stamps_s),
+        "source_received_monotonic_s": dict(source_received_monotonic_s),
+        "raw_records": dict(raw_records), "holding_state": holding_state,
+        "wrist_frame_valid": frame["wrist_frame_valid"],
+        "wrist_target_visible": frame["wrist_target_visible"],
+        "contact_observation_valid": contact["observation_valid"],
+        "bilateral_contact": contact["bilateral_contact"],
+        "no_fingertip_contact": contact["no_fingertip_contact"],
+        "cup_supported": contact["cup_supported"], "released": contact["released"],
+        "placement_stable": contact["placement_stable"],
+        "cup_support_distance_m": measurements["cup_support_distance_m"],
+        "end_effector_position_m": list(measurements["end_effector_position_m"]),
+        "cup_position_m": list(measurements["cup_position_m"]),
+        "cup_orientation_xyzw": list(measurements["cup_orientation_xyzw"]),
+    }
