@@ -8611,3 +8611,25 @@ test that a shorter gate run root clears.
   `validate_case_journals` read the journal back; then the combined **8P3/8P4 xdist gate**.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-754 — Reusable evidence-port factory (deliberate duplication, not a refactor)
+
+- **Delivered:** `_evidence_port(driver, *, session_id, attempt_id)` at module scope in
+  `test_act_task8_live_qualification.py`, implementing the runner's full port contract and emitting
+  per-phase evidence into the driver. It encapsulates the three details that cost debugging in CP-751:
+  RELEASE is observed through `set_down` and RADIAL_RETREAT through `run_retreat_segment` (how the runner
+  actually performs them); sim time advances on a per-observation **10 Hz grid index**, not on
+  `physics_step` (which other calls also advance); and raw records use the recorder's exact
+  `{relative_path, sha256}` contract with matching bytes.
+- **Verification:** qualification suite **17 passed** (`gate6-batch3-py-gate/factory.{log,junit.xml}`),
+  including a smoke test that drives the real `Task8Runner` through the factory to a sealed artifact
+  whose bytes hash to its recorded digest.
+- **Honest note on method:** this is **deliberate duplication** — the factory is a copy of the CP-751
+  test's nested class rather than an extraction from it, so a verified, passing test is not destabilised.
+  The ledger says so rather than presenting it as a clean refactor.
+- **Remaining:** the closing integration test using this factory (owner/worker double per the recorded
+  contract, `run_pick_place` injecting `lifecycle="FULL_RESTART"` and calling the real runner,
+  `run_pick_place_case()` publishing a journal, the CP-753 adapter mapping its row, `validate_case_journals`
+  reading it back), then the combined 8P3/8P4 xdist gate.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
