@@ -7555,3 +7555,24 @@ ancestors; reviewed plan SHA256 verified as
 - **Gate:** after A-C the handoff's combined 8P3/8P4 xdist gate, then Task 8P4.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-706 — Task 8P3 sub-slice A (runner side): live evidence sealed only for a completed full case
+
+- **Delivered:** the runner returns `live_evidence_artifact: None` for a phase prefix and a
+  validated `{path, sha256, schema_version}` artifact for a full case, sealing exactly once through
+  `port.seal_live_evidence()` **after** the `FINAL_CHECK` phase verification and before the
+  `FULL_COMPLETE` stop; a port without the sealer raises `LIVE_EVIDENCE_SEAL_UNAVAILABLE` instead of
+  returning a PASSED result with no evidence. The teleop `_RESULT_KEYS` admits the new field, and
+  the task-8 fake port records seal calls.
+- **Verification:** 21 passed across `test_act_task8.py`, `test_act_task8_live_campaign.py` and
+  `test_act_task8_live_cli.py` (`gate6-batch3-py-gate/t8p3A.{log,junit.xml}`).
+- **Staging discipline:** both touched production files carry pre-existing user hunks, so only this
+  task's hunks were staged (runner: 2 of 8 hunks; case execution: 1 of 2) — recorded in
+  `experiments/gate6-batch3-commit/hunk-filter-round148.txt`.
+- **Remaining sub-slice A:** the readback adapter's `seal_live_evidence` implementation, the
+  `CLOSE`-anchored 10 Hz causal grid with event samples, and the per-case recorder ownership in the
+  search port, with the plan's RED matrix (grid gaps/duplicates/regressions, stale/skewed sources,
+  invalid contact observations, undereferenceable raw records, recorder failures, epoch/time
+  regressions, tampered artifact, missing cleanup receipt) and the positive occlusion assertion.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
