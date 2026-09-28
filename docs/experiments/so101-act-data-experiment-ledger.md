@@ -9484,3 +9484,28 @@ This resolves the design block **without authorizing runtime or motion**.
   runtime ladder.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 IN PROGRESS; `collection_*` NOT_PROVISIONED.
+
+## CP-790 — Task 12: the immutable dataset export
+
+- **Delivered:** `export_dataset(committed, output, *, source_manifest_sha256, campaign_index_sha256)` in
+  `act/bundle.py`, with tests.
+  - **written once, never appended:** an existing output directory is `EXPORT_OUTPUT_EXISTS` — a dataset
+    cannot grow underneath a training run and silently invalidate the metrics computed from it;
+  - **order is the resolved frozen-manifest order**, asserted by the test along with the scene count;
+  - **digest chain:** per-episode `content_sha256` over the exact bytes written and an `export_sha256`
+    over the manifest, both re-hashed from disk by the test, so the manifest cannot claim what the files do
+    not contain; each episode is written atomically with no `.partial` residue;
+  - **refusals:** `EXPORT_EMPTY`, stale `0917a` ids in a scene id or dataset id
+    (`EXPORT_STALE_DATASET_ID`), a Rollout or qualification split (`EXPORT_SPLIT_FORBIDDEN`), a non-`PASSED`
+    episode, a duplicate scene, missing content, and malformed source/index digests — with every refusal
+    asserting the target directory was **not** created.
+- **Two of my own mistakes, both caught:** the heredoc mangled an escape (`b"\n"` became a real newline)
+  and produced an unterminated string literal — the module survived because `ast.parse` runs **before**
+  `write_text`; and a test case passed a dict instead of a tuple of episodes, exercising the sequence check
+  rather than the content check. Both fixed, and the wrong-shaped input is now asserted as its own case.
+- **Verification:** focused tests **10 passed** (`gate6-batch3-py-gate/task12d4.{log,junit.xml}`).
+- **Remaining in Task 12:** `config/act/training.yaml`, `config/act/requirements.lock`, the frozen-config
+  validation the plan names (chunk_size 10, execution prefix 1, temporal ensembling off, explicit tail
+  padding mask), the LeRobot adapter, `train_act` and the `act_train` CLI.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 IN PROGRESS; `collection_*` NOT_PROVISIONED.
