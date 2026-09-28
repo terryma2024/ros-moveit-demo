@@ -185,3 +185,27 @@ class Task8LiveEvidenceRecorder:
         _fsync_dir(self.evidence_root)
         self._sealed = target
         return {"path": str(target), "sha256": _digest(target), "schema_version": SCHEMA_VERSION}
+
+
+def validate_evidence_grid(samples, *, period_s: float, tolerance_s: float) -> int:
+    """Require the frozen causal grid: no missing point, duplicate or time regression.
+
+    A gap is evidence loss, not occlusion, so callers must treat any failure here as INVALID
+    rather than interpolating across it.
+    """
+
+    if not samples:
+        raise ValueError("TASK8_LIVE_EVIDENCE_GRID_EMPTY")
+    previous = None
+    for sample in samples:
+        stamp = sample.get("sim_time_s") if isinstance(sample, dict) else None
+        if not _finite(stamp):
+            raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+        if previous is not None:
+            delta = stamp - previous
+            if delta <= 0:
+                raise ValueError("TASK8_LIVE_EVIDENCE_GRID_REGRESSION")
+            if abs(delta - period_s) > tolerance_s:
+                raise ValueError("TASK8_LIVE_EVIDENCE_GRID_GAP")
+        previous = stamp
+    return len(samples)
