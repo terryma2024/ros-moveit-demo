@@ -184,6 +184,211 @@ class PickPlacePhysicalReadback:
                 "source_stamps_s": dict(audit["source_stamps"]),
                 "source_received_wall_s": source_received}
 
+    def capture_held_cup_handoff(
+        self, session_id: str, attempt_id: str, reset_epoch: int, *,
+        after_step: int, lift_goal_ids: tuple[str, str],
+        commanded_positions, paired_execution, paired_goal_id: str,
+        expected_prefix_sha256: str, expected_sequence: int,
+    ) -> dict:
+        """Capture a stopped LIFT handoff from the live broker without command authority."""
+        if (type(after_step) is not int or after_step < 0
+                or not isinstance(lift_goal_ids, tuple) or len(lift_goal_ids) != 2
+                or lift_goal_ids[0] == lift_goal_ids[1]):
+            raise PickPlaceReadbackError("HANDOFF_LIFT_GOAL_INVALID")
+        try:
+            goal_ids = tuple(identifier(goal_id) for goal_id in lift_goal_ids)
+            commanded = bounded_positions(commanded_positions)
+        except (TypeError, ValueError) as error:
+            raise PickPlaceReadbackError("HANDOFF_LIFT_GOAL_INVALID") from error
+
+        def stopped() -> bool:
+            try:
+                return self.broker.stopped() is True
+            except (AttributeError, RuntimeError, ValueError):
+                return False
+
+        if not stopped():
+            raise PickPlaceReadbackError("HANDOFF_STOP_UNCONFIRMED")
+        try:
+            identifier(paired_goal_id)
+            sha256(expected_prefix_sha256)
+            if (type(expected_sequence) is not int or expected_sequence < 0
+                    or paired_execution.broker.driver is not self.broker):
+                raise ValueError("pair ownership")
+            pair = paired_execution.current_handoff_state(
+                paired_goal_id, session_id, attempt_id)
+            if (not isinstance(pair, dict) or pair.get("current_pair") is not True
+                    or pair.get("pair_goal_id") != paired_goal_id
+                    or pair.get("session_id") != session_id
+                    or pair.get("attempt_id") != attempt_id
+                    or pair.get("reset_epoch") != reset_epoch
+                    or tuple(pair.get("goal_ids", ())) != goal_ids
+                    or pair["epoch"]["session_id"] != session_id
+                    or pair["epoch"]["reset_epoch"] != reset_epoch):
+                raise ValueError("pair scope")
+            audit = pair["audit"]
+            if tuple(audit["goal_ids"]) != goal_ids:
+                raise ValueError("pair audit")
+            accepted_sim_s = finite(audit["accepted_sim_s"], nonnegative=True)
+            if (audit["prefix_sha256"] != expected_prefix_sha256
+                    or len(audit["goals"]) != 2
+                    or any(goal.get("session_id") != session_id
+                           or goal.get("attempt_id") != attempt_id
+                           or goal.get("sequence") != expected_sequence
+                           or goal.get("prefix_sha256") != expected_prefix_sha256
+                           for goal in audit["goals"])):
+                raise ValueError("pair scope")
+            endpoints = []
+            trajectory_ends = []
+            if (audit["goals"][0]["header_stamp_s"] != audit["goals"][1]["header_stamp_s"]
+                    or tuple(audit["goals"][0]["time_from_start_s"])
+                    != tuple(audit["goals"][1]["time_from_start_s"])):
+                raise ValueError("controller schedules disagree")
+            for submitted, names, width in zip(
+                    audit["goals"], (ARM_JOINTS[:5], ARM_JOINTS[5:]), (5, 1), strict=True):
+                if (tuple(submitted["joint_names"]) != names
+                        or len(submitted["positions"]) != len(submitted["time_from_start_s"])
+                        or len(submitted["positions"]) < 2):
+                    raise ValueError("submitted trajectory")
+                endpoint = tuple(finite(value) for value in submitted["positions"][-1])
+                if len(endpoint) != width:
+                    raise ValueError("submitted endpoint")
+                endpoints.extend(endpoint)
+                end_s = finite(submitted["header_stamp_s"], nonnegative=True) + finite(
+                    submitted["time_from_start_s"][-1], nonnegative=True)
+                if end_s <= accepted_sim_s:
+                    raise ValueError("submitted end")
+                trajectory_ends.append(end_s)
+            if tuple(endpoints) != commanded:
+                raise ValueError("command endpoint substitution")
+            goals = tuple(pair["controllers"])
+            if len(goals) != 2:
+                raise ValueError("controller pair")
+        except (AttributeError, KeyError, TypeError, ValueError, RuntimeError, PermissionError) as error:
+            raise PickPlaceReadbackError("HANDOFF_LIFT_PROVENANCE_INVALID") from error
+        try:
+            result_sim_times = []
+            result_wall_times = []
+            for goal, length in zip(goals, (5, 1), strict=True):
+                if (not isinstance(goal, dict) or goal.get("accepted") is not True
+                        or goal.get("status") != 4
+                        or goal.get("driver_error") is not None
+                        or not isinstance(goal.get("result"), dict)
+                        or goal["result"].get("error_code") != 0):
+                    raise ValueError("terminal goal")
+                actual = goal["feedback"]["actual"]["positions"]
+                if len(actual) != length or any(not math.isfinite(finite(value))
+                                                for value in actual):
+                    raise ValueError("goal feedback")
+                result_sim_times.append(finite(goal["result_received_sim_s"], nonnegative=True))
+                result_wall_times.append(finite(goal["result_received_wall_s"], nonnegative=True))
+        except (AttributeError, KeyError, TypeError, ValueError, RuntimeError) as error:
+            raise PickPlaceReadbackError("HANDOFF_LIFT_GOAL_INVALID") from error
+        raw = self.capture(session_id, attempt_id, reset_epoch, after_step=after_step)
+        sample_s = raw["world"].simulation_time_s
+        if max(accepted_sim_s, *trajectory_ends, *result_sim_times) >= sample_s:
+            raise PickPlaceReadbackError("HANDOFF_LIFT_PROVENANCE_INVALID")
+        try:
+            proof = self.broker.stationary_reference_proof(sample_s)
+            if (proof["requested_sim_time_s"] != sample_s
+                    or proof["epoch"]["session_id"] != session_id
+                    or proof["epoch"]["reset_epoch"] != reset_epoch
+                    or finite(proof["stop_confirmed_wall_s"], nonnegative=True)
+                    < max(result_wall_times)):
+                raise ValueError("reference scope or stop")
+            for kind, width, offset in (("arm", 5, 0), ("gripper", 1, 5)):
+                row = proof["references"][kind]
+                publication = finite(row["publication_sim_time_s"], nonnegative=True)
+                if (not max(*trajectory_ends, *result_sim_times) < publication <= sample_s
+                        or sample_s - publication > self.max_skew
+                        or row["received_wall_s"] < proof["stop_confirmed_wall_s"]
+                        or tuple(row["positions"]) != tuple(raw["reference"]["positions"][offset:offset + width])
+                        or tuple(row["velocities"]) != tuple(raw["reference"]["velocities"][offset:offset + width])):
+                    raise ValueError("reference provenance")
+        except (AttributeError, KeyError, TypeError, ValueError, RuntimeError) as error:
+            raise PickPlaceReadbackError("HANDOFF_REFERENCE_PROVENANCE_INVALID") from error
+        try:
+            end_pair = paired_execution.current_handoff_state(
+                paired_goal_id, session_id, attempt_id)
+            if any(end_pair[key] != pair[key] for key in (
+                    "pair_goal_id", "generation", "reset_epoch", "session_id",
+                    "attempt_id", "goal_ids", "audit", "controllers")):
+                raise ValueError("pair changed")
+            if (end_pair["epoch"]["session_id"] != session_id
+                    or end_pair["epoch"]["reset_epoch"] != reset_epoch):
+                raise ValueError("epoch changed")
+        except (AttributeError, KeyError, TypeError, ValueError, RuntimeError, PermissionError) as error:
+            raise PickPlaceReadbackError("HANDOFF_LIFT_PROVENANCE_INVALID") from error
+        if not stopped():
+            raise PickPlaceReadbackError("HANDOFF_STOP_UNCONFIRMED")
+        try:
+            qvel = raw["scene"]["qvel"]
+            stop_velocity = finite(self.broker.stop_velocity)
+            if (stop_velocity < 0 or max(self.joint_dofs) >= len(qvel)
+                    or any(abs(finite(qvel[index])) > stop_velocity
+                           for index in self.joint_dofs)):
+                raise ValueError("moving measured joints")
+        except (KeyError, TypeError, ValueError) as error:
+            raise PickPlaceReadbackError("HANDOFF_MEASURED_MOTION") from error
+        measured = tuple(raw["scene"]["qpos"][address] for address in self.joints[:6])
+        if any(abs(actual - target) > self.joint_tolerance
+               for actual, target in zip(measured, commanded, strict=True)):
+            raise PickPlaceReadbackError("HANDOFF_COMMAND_DRIFT")
+        if any(abs(actual - measured[index]) > self.joint_tolerance
+               for index, actual in enumerate((
+                   *goals[0]["feedback"]["actual"]["positions"],
+                   *goals[1]["feedback"]["actual"]["positions"],
+               ))):
+            raise PickPlaceReadbackError("HANDOFF_FEEDBACK_DIVERGED")
+        try:
+            reference = raw["reference"]
+            if (stop_velocity < 0
+                    or any(abs(finite(value)) > stop_velocity
+                           for value in reference["velocities"])):
+                raise ValueError("moving reference")
+        except (AttributeError, KeyError, TypeError, ValueError) as error:
+            raise PickPlaceReadbackError("HANDOFF_REFERENCE_MOVING") from error
+        return {
+            "session_id": session_id, "attempt_id": attempt_id,
+            "reset_epoch": reset_epoch,
+            "physics_step": raw["world"].simulation_step,
+            "paired_goal_id": paired_goal_id,
+            "lift_goal_ids": goal_ids,
+            "lift_prefix_sha256": expected_prefix_sha256,
+            "lift_sequence": expected_sequence,
+            "lift_accepted_sim_time_s": accepted_sim_s,
+            "pair_audit": copy.deepcopy(audit),
+            "commanded_lift_endpoint_rad": commanded,
+            "measured_positions_rad": measured,
+            "controller_reference": copy.deepcopy(reference),
+            "terminal_goals": copy.deepcopy(goals),
+            "stationary_reference_proof": copy.deepcopy(proof),
+            "physical_readback": raw,
+            "controller_stop_confirmed": True,
+            "command_authority": False,
+        }
+
+
+    def live_evidence_sample(self, *, identity, phase, physics_step, sim_time_s,
+                             source_stamps_s, source_received_monotonic_s, raw_records,
+                             holding_state, frame, contact, measurements):
+        """Emit one canonical live-evidence sample for the frozen 10 Hz grid.
+
+        The readback owns the values; the canonical shape lives in one place so this adapter and
+        the search port cannot drift apart. Extracting the values directly from the capture path
+        for CLOSE..FINAL_CHECK is the remaining wiring step.
+        """
+
+        from so101_demo.act.task8_live_evidence import build_live_evidence_sample
+
+        return build_live_evidence_sample(
+            identity=identity, phase=phase, physics_step=physics_step, sim_time_s=sim_time_s,
+            source_stamps_s=source_stamps_s,
+            source_received_monotonic_s=source_received_monotonic_s,
+            raw_records=raw_records, holding_state=holding_state, frame=frame, contact=contact,
+            measurements=measurements,
+        )
+
 
 # Legacy Python API for version-one pick-place callers.
 Task8ReadbackError = PickPlaceReadbackError

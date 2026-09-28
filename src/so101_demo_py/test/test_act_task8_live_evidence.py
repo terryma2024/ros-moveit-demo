@@ -269,3 +269,35 @@ def test_search_port_forwards_only_complete_samples_and_never_swallows_a_refusal
     assert artifact["sha256"] == "a" * 64
     assert double.sealed == [{"case_id": "full-01", "session_id": "session-1",
                               "attempt_id": "attempt-1", "reset_epoch": 4, "release_epoch": 0}]
+
+
+def test_readback_adapter_emits_canonical_samples_through_one_builder(recorder):
+    """The adapter's entry point must produce the same shape the recorder accepts."""
+
+    from so101_demo.adapters.act.pick_place_readback import PickPlacePhysicalReadback
+
+    rec, root = recorder
+    canonical = sample(root, step=0)
+    adapter = object.__new__(PickPlacePhysicalReadback)      # no model needed for this entry point
+    built = adapter.live_evidence_sample(
+        identity={"case_id": "full-01", "session_id": "session-1", "attempt_id": "attempt-1",
+                  "reset_epoch": 4, "release_epoch": 0},
+        phase=canonical["phase"], physics_step=canonical["physics_step"],
+        sim_time_s=canonical["sim_time_s"], source_stamps_s=canonical["source_stamps_s"],
+        source_received_monotonic_s=canonical["source_received_monotonic_s"],
+        raw_records=canonical["raw_records"], holding_state=canonical["holding_state"],
+        frame={"wrist_frame_valid": True, "wrist_target_visible": True},
+        contact={"observation_valid": True, "bilateral_contact": True,
+                 "no_fingertip_contact": False, "cup_supported": True, "released": False,
+                 "placement_stable": True},
+        measurements={"cup_support_distance_m": 0.001,
+                      "end_effector_position_m": [0.0, 0.0, 0.1],
+                      "cup_position_m": [0.0, 0.0, 0.1],
+                      "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0]})
+    assert set(built) == set(canonical)
+    rec.append(built)
+    with pytest.raises(ValueError):
+        adapter.live_evidence_sample(
+            identity={"case_id": "full-01"}, phase="CLOSE", physics_step=0, sim_time_s=0.0,
+            source_stamps_s={}, source_received_monotonic_s={}, raw_records={},
+            holding_state="HOLDING", frame={}, contact={}, measurements={})
