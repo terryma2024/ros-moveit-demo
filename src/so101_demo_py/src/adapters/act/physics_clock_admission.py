@@ -400,11 +400,66 @@ class PhysicsClockAdmission:
                     expected_epoch=snapshot["epoch"], step=sample.physics_step,
                     max_age_ns=self._selected_max_age_ns)
             except ValueError as error:
-                raise AdmissionRefused(f"CLOCK_ADMISSION_COMMIT_REFUSED:{error}") from error
+                reason = str(error)
+                if "SELECTED_STALE" in reason:
+                    raise AdmissionRefused("CLOCK_ADMISSION_SELECTED_STALE") from error
+                if "VERSION_CHANGED" in reason:
+                    raise AdmissionRefused(
+                        "CLOCK_ADMISSION_HISTORY_VERSION_CHANGED") from error
+                if "INCARNATION_CHANGED" in reason:
+                    raise AdmissionRefused("CLOCK_ADMISSION_IDENTITY_NOT_NEWER") from error
+                if reason in ("PHYSICS_CLOCK_SILENT", "PHYSICS_CLOCK_STALE",
+                              "PHYSICS_CLOCK_FIRST_CHUNK_TIMEOUT"):
+                    raise AdmissionRefused(f"CLOCK_ADMISSION_HAZARD:{reason}") from error
+                raise AdmissionRefused(f"CLOCK_ADMISSION_COMMIT_REFUSED:{reason}") from error
             return {"sample": entry["sample"], "commit_receipt": receipt,
                     "received_monotonic_ns": entry["received_monotonic_ns"],
-                    "identity": identity, "history_version": current["version"],
+                    "identity": identity, "history_version": receipt["version"],
                     "command_authority": False, "stage": "sample"}
+
+    def consume_authority(self, *, ticket, generation, reset_epoch, stage, evidence_token,
+                          controller_generation):
+        """Fixed-semantic authority consume: no callback, no caller time.
+
+        The linearization point is the history-owned commit receipt, evaluated
+        inside the admission critical section; the returned receipt is immutable
+        and the caller may only send after it exists.
+        """
+
+        if type(controller_generation) is not int:
+            raise ValueError("CLOCK_ADMISSION_CONTROLLER_GENERATION_REQUIRED")
+        if (not isinstance(evidence_token, dict)
+                or type(evidence_token.get("physics_step")) is not int
+                or type(evidence_token.get("history_version")) is not int
+                or type(evidence_token.get("reset_epoch")) is not int
+                or not isinstance(evidence_token.get("incarnation"), str)):
+            raise ValueError("CLOCK_ADMISSION_EVIDENCE_TOKEN_REQUIRED")
+        if stage not in STAGES or stage == "sample":
+            raise ValueError("CLOCK_ADMISSION_STAGE_INVALID")
+        identity = self._full_identity(ticket, generation, reset_epoch)
+        history = self._history
+        if history is None:
+            raise AdmissionRefused("CLOCK_ADMISSION_HISTORY_REQUIRED")
+        with self._lock:
+            now_ns = self._clock_ns()
+            self._fence_locked(identity, stage, now_ns)
+            if controller_generation != identity[3]:
+                raise AdmissionRefused("CLOCK_ADMISSION_CONTROLLER_GENERATION_CHANGED")
+            if (evidence_token["incarnation"] != identity[2]
+                    or evidence_token["reset_epoch"] != identity[4]
+                    or evidence_token["history_version"] < 0):
+                raise AdmissionRefused("CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID")
+            try:
+                receipt = history.commit_receipt(
+                    expected_version=evidence_token["history_version"],
+                    expected_incarnation=evidence_token["incarnation"],
+                    expected_epoch=evidence_token["reset_epoch"],
+                    step=evidence_token["physics_step"],
+                    max_age_ns=self._selected_max_age_ns)
+            except ValueError as error:
+                raise AdmissionRefused(f"CLOCK_ADMISSION_EVIDENCE_TOKEN_STALE:{error}") from error
+            return {"stage": stage, "identity": identity, "commit_receipt": receipt,
+                    "command_authority": True, "stage_executed": stage}
 
     def consume_stage(self, *, ticket, generation, reset_epoch, stage, consume,
                       evidence_token, controller_generation, generation_check=None):
