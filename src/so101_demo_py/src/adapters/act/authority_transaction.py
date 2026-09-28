@@ -317,12 +317,12 @@ class AuthorityTransactionRegistry:
             raise AuthorityRefused("AUTHORITY_DOMAIN_UNSEALED")
         return self._admission, self._history, self._port
 
-    def terminate(self, handle, reason="AUTHORITY_TERMINAL", terminal=UNKNOWN):
-        """One irreversible terminalization for timeout/reject/exception/invalid receipt.
+    def terminate(self, handle, reason="AUTHORITY_TERMINAL"):
+        """One single-purpose irreversible terminalization to UNKNOWN.
 
-        Any non-terminal permit becomes the requested terminal state exactly once
-        (`UNKNOWN` by default, `REJECTED` when a valid rejected receipt says so);
-        later receipts are refused and can never restore authority.
+        A non-terminal permit becomes UNKNOWN exactly once.  An already-terminal
+        permit keeps its stored state and its original, authoritative reason: this
+        path never overwrites an earlier cause.
         """
 
         if not isinstance(handle, PermitHandle):
@@ -333,9 +333,10 @@ class AuthorityTransactionRegistry:
                 raise AuthorityRefused("AUTHORITY_PERMIT_UNKNOWN")
             state = self._states[record.permit_id]
             if state in TERMINAL:
+                self._terminal_reasons.setdefault(record.permit_id, reason)
                 return state
-            self._states[record.permit_id] = terminal
-            self._terminal_reasons[record.permit_id] = reason
+            self._states[record.permit_id] = UNKNOWN
+            self._terminal_reasons.setdefault(record.permit_id, reason)
             return UNKNOWN
 
     def state_of_terminal(self, handle):
@@ -389,6 +390,11 @@ class AuthorityTransactionRegistry:
                 self._states[record.permit_id] = UNKNOWN
                 raise AuthorityRefused("AUTHORITY_RECEIPT_INVALID")
             self._states[record.permit_id] = fields["verdict"]
+            if fields["verdict"] != ACCEPTED:
+                # a valid terminal receipt owns its reason; later terminate calls
+                # must not replace it
+                self._terminal_reasons.setdefault(
+                    record.permit_id, f"AUTHORITY_RECEIPT_{fields['verdict']}:{fields['verdict']}")
             return fields["verdict"]
 
     def lock_held_during(self, work):
