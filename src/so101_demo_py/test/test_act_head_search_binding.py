@@ -8,6 +8,9 @@ import pytest
 from so101_demo.act.head_search_binding import validate_head_search_binding
 
 
+PROVENANCE = "a1" * 32
+
+
 def _inputs(tmp_path):
     weights = tmp_path / "best.pt"
     weights.write_bytes(b"local test weights")
@@ -45,9 +48,11 @@ def _inputs(tmp_path):
                                   "observed_lock_frames": 3, "measurements": values,
                                   "camera_measurements": camera_values,
                                   "source_commit": source_commit,
-                                  "config_sha256": config_sha256}))
+                                  "config_sha256": config_sha256,
+                                  "source_provenance_sha256": PROVENANCE}))
     digest = hashlib.sha256(sample.read_bytes()).hexdigest()
     report = {"status": "TASK8_READY", "source_commit": source_commit,
+              "source_provenance_sha256": PROVENANCE,
               "config_sha256": config_sha256, "measurements": {
         key: {"value": value, "sample_path": str(sample), "sample_sha256": digest}
         for key, value in {**values, **camera_values}.items()}}

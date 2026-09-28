@@ -147,6 +147,9 @@ def validate_head_search_binding(runtime: dict, calibration: dict) -> HeadSearch
     try:
         if calibration["status"] not in ("TASK8_READY", "QUALIFIED"):
             raise ValueError("CALIBRATION_REQUIRED")
+        provenance = calibration.get("source_provenance_sha256")
+        if type(provenance) is not str or _SHA.fullmatch(provenance) is None:
+            raise ValueError("CALIBRATION_SOURCE_PROVENANCE_MISSING")
         measurements = calibration["measurements"]
         values = {name: measurements[name]["value"] for name in _MEASURED}
         camera_values = {name: measurements[name]["value"] for name in _CAMERA_MEASURED}
@@ -169,7 +172,9 @@ def validate_head_search_binding(runtime: dict, calibration: dict) -> HeadSearch
         sample = json.loads(sample_bytes)
         if (type(sample) is not dict or set(sample) != {
                 "schema_version", "kind", "status", "head_search", "observed_lock_frames",
-                "measurements", "camera_measurements", "source_commit", "config_sha256"} or
+                "measurements", "camera_measurements", "source_commit", "config_sha256",
+                "source_provenance_sha256"} or
+                sample["source_provenance_sha256"] != provenance or
                 sample["schema_version"] != 1 or sample["kind"] != "head_search_qualification" or
                 sample["status"] != "PASS" or sample["head_search"] != descriptor or
                 sample["measurements"] != values or
