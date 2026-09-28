@@ -358,3 +358,25 @@ def test_prefix_journal_row_may_never_carry_live_evidence():
     leaky = dict(prefix, live_evidence_sha256="b" * 64)
     with pytest.raises(ValueError, match="TASK8_PREFIX_EVIDENCE_FORBIDDEN"):
         require_case_journal_row(leaky, mode="phase_prefix")
+
+
+def _manifest(prefixes=9, fulls=5):
+    return {"prefix_cases": [{"case_id": f"prefix-{index:02d}"} for index in range(1, prefixes + 1)],
+            "full_cases": [{"case_id": f"full-{index:02d}"} for index in range(1, fulls + 1)]}
+
+
+def test_campaign_case_list_is_exactly_nine_prefixes_then_five_fulls():
+    from so101_demo.act.task8_live_evidence import require_campaign_cases
+
+    ids = require_campaign_cases(_manifest())
+    assert ids == tuple([f"prefix-{index:02d}" for index in range(1, 10)]
+                        + [f"full-{index:02d}" for index in range(1, 6)])
+    for broken in ({"prefix_cases": [], "full_cases": [{"case_id": "full-01"}]},
+                   {"prefix_cases": [{"case_id": "prefix-01"}] * 9,
+                    "full_cases": [{"case_id": f"full-{index:02d}"} for index in range(1, 6)]},
+                   {"prefix_cases": [{"case_id": "full-01"}] + [{"case_id": f"prefix-{i:02d}"}
+                                                                for i in range(2, 10)],
+                    "full_cases": [{"case_id": f"full-{index:02d}"} for index in range(1, 6)]},
+                   {"prefix_cases": [{"case_id": "prefix-1"}] * 9, "full_cases": []}):
+        with pytest.raises(ValueError):
+            require_campaign_cases(broken)
