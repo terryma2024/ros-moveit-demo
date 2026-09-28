@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import math
 import threading
+from types import MappingProxyType
 import time
 from collections import deque
 
@@ -68,6 +69,7 @@ class PhysicsClockHistory:
         self.clock_ns = clock_ns
         self._lock = threading.RLock()
         self._history = deque(maxlen=512)
+        self._by_step = {}
         self.epoch = None
         self.hazard = None
         self._last_sequence = -1
@@ -142,18 +144,24 @@ class PhysicsClockHistory:
                 raise ValueError("PHYSICS_COMMIT_VERSION_CHANGED")
             if self.incarnation != expected_incarnation or self.epoch != expected_epoch:
                 raise ValueError("PHYSICS_COMMIT_INCARNATION_CHANGED")
-            for entry in reversed(self._history):
-                sample = entry["sample"]
-                if sample.physics_step == step:
-                    age_ns = now_ns - sample.clock_interval_end_monotonic_ns
-                    if age_ns < 0 or age_ns > max_age_ns:
-                        raise ValueError("PHYSICS_COMMIT_SELECTED_STALE")
-                    return {"version": self.version, "incarnation": self.incarnation,
-                            "epoch": self.epoch, "step": step, "age_ns": age_ns,
-                            "commit_monotonic_ns": now_ns,
-                            "source_end_monotonic_ns":
-                                sample.clock_interval_end_monotonic_ns}
-            raise ValueError("PHYSICS_COMMIT_STEP_UNAVAILABLE")
+            # bounded scan over the retained window (max 512 entries); the
+            # receipt itself is returned as a read-only view, so this is *not*
+            # claimed to be an O(1) lookup.
+            for candidate in reversed(self._history):
+                if candidate["sample"].physics_step == step:
+                    break
+            else:
+                raise ValueError("PHYSICS_COMMIT_STEP_UNAVAILABLE")
+            sample = candidate["sample"]
+            age_ns = now_ns - sample.clock_interval_end_monotonic_ns
+            if age_ns < 0 or age_ns > max_age_ns:
+                raise ValueError("PHYSICS_COMMIT_SELECTED_STALE")
+            # a read-only view: the receipt cannot be mutated by its holder
+            return MappingProxyType({"version": self.version, "incarnation": self.incarnation,
+                                     "epoch": self.epoch, "step": step, "age_ns": age_ns,
+                                     "commit_monotonic_ns": now_ns,
+                                     "source_end_monotonic_ns":
+                                         sample.clock_interval_end_monotonic_ns})
 
     def snapshot(self):
         """Versioned view of the current history state for commit revalidation."""
