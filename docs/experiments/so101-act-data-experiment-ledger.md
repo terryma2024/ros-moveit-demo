@@ -9743,3 +9743,27 @@ This resolves the design block **without authorizing runtime or motion**.
   stays minimal.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-801 — Task 14 complete: the CLI, and a launch file that needed no change
+
+- **Delivered:** `cli/act_session.py` (+ `setup.py` entry) and `test_act_session_cli.py`.
+  - the plan's flags: `--mode dry_run|plan_only|execute`, `--bundle`, `--calibration`, `--policy`,
+    `--activation-receipt`, `--runtime-config`, `--evidence-root`;
+  - **composes first, submits second:** every mode gate and artifact refusal happens before a service
+    exists, so an `execute` run missing its bundle provably submits **nothing** (`built == []`);
+  - it submits only a spec (`{schema_version, kind: act_session, mode, payload}`), and a planning run
+    carries **no frame and no model input** (asserted by searching the serialised spec);
+  - `service_factory=` / `ports_factory=` are injectable; the production path composes the unified service
+    late, as the repo's live CLIs do.
+- **The plan's launch-file modification was already satisfied:** `launch/so101_mujoco_act.launch.py` is a
+  thin, clean wrapper returning `build_task_station_launch_description(act_profile=True)`, so it needed no
+  edit and none was made — recorded rather than changed for its own sake.
+- **One more assumption of mine corrected by the code:** the production factory refuses with **`SystemExit`**
+  from the service bootstrap (it demands `SO101_UNIFIED_EVIDENCE_ROOT`) rather than a `ValueError`; the test
+  now records that behaviour and asserts the refusal names the evidence root.
+- **Verification:** **10 passed** across `test_act_session_cli.py`, `test_act_session.py` and
+  `test_act_composition.py` (`gate6-batch3-py-gate/task14f.{log,junit.xml}`).
+- **Task 14 status:** complete — `retry_allowed`, `ActSession`, `runtime/act_composition.py`,
+  `cli/act_session.py`; the live path is what remains and it needs the runtime ladder.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
