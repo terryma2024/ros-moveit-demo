@@ -10219,3 +10219,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `semantic-audit/e2ec28c3-name-status.txt`, plus the `merge-scratch/` set above.
 - **Boundaries:** no runtime or motion started, no hardware touched, no evidence deleted, no gate lowered, no
   push; formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-823 — The pre-runtime adapter has a seam: `ReachabilityPlannerPort`
+
+- **Work resumed after CP-822 on the item the user designated before any runtime**, namely the production
+  candidate-source and preflight adapter (their instruction: return to it "for review and evidence" before
+  Task 8L/W1). Nothing was started from the training-interpreter or runtime-ladder options.
+- **Found by reading, not assumed:** `src/application/task_reachability.py` (236 lines, clean) already
+  exposes the right seam, a **`ReachabilityPlannerPort` Protocol** (line 73) with `ReachabilityStatus`,
+  `SegmentPlanReceipt`, `ReachabilitySegment`, `ReachabilityReport`, `check_task_reachability(...)` and
+  `prepare_reachability_start_state(...)`; `src/cli/task_reachability.py` is that application's existing CLI
+  with atomic JSON output. So the adapter can **bind to that Protocol** and be tested offline with a fake
+  planner, instead of growing a second MoveIt client.
+- **The two documents it must emit are already specified by CP-765:** the closed candidate-source document that
+  `act/candidate_source.py` validates, and the reachability report that `ReachabilityReportPort` validates,
+  keyed by `candidate_source.candidate_identity` so the two cannot disagree about which point was probed.
+- **One question deliberately left open for the review:** how `ReachabilityReport`/`SegmentPlanReceipt` map onto
+  the **14 ACT gate names**. That mapping is the substantive semantic choice in this adapter, and it belongs in
+  front of the user with the segment fields quoted rather than inferred from their names.
+- **No code changed and no gate run** this round; nothing crossed the runtime or interpreter boundary, no
+  evidence was deleted, no push, no gate lowered; formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
