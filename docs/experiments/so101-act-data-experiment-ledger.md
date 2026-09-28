@@ -7253,3 +7253,39 @@ Monitoring review found two verification defects in CP-691. Both are confirmed a
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED; the runtime artifact
   blocker (no head-search `runtime_config`, no admissible `calibration_report`) is unchanged and
   still awaits the user decision.
+
+## CP-695 — Calibration admissibility settled with numbers (the last non-motion avenue is closed)
+
+`installed_calibration_identity(<worktree>)` at HEAD `c0d58af4` gives:
+
+    current source_commit = c0d58af479b98041e068eeceaf9ec00f85bbdb67
+    current config_sha256 = 0aef56dfaf527e3fa7ffe53e1a073ed417a74d1a690cb18a7c670d7708b8da3f
+
+Comparing every measurement document that exists on this host:
+
+| document | status | source_commit | config_sha256 | matches current |
+|---|---|---|---|---|
+| exp129-partial-calibration/partial.json | **CALIBRATION_REQUIRED** | 4ea251c0… | 1bf43210… | no |
+| exp129-partial-calibration/measured-provenance.json | (none) | 4ea251c0… | 1bf43210… | no |
+| exp228-staged-calibration/current-partial.json | **CALIBRATION_REQUIRED** | d964ec57… | 011eed0e… | no |
+
+Two independent conclusions:
+1. **No measurement document matches the current source/config**, which is exactly why the
+   `act_preflight` attempt refused with `CALIBRATION_SOURCE_CONFIG_MISMATCH` and wrote nothing.
+2. Both documents carry `status = CALIBRATION_REQUIRED`, so even with a matching identity they
+   could not be admitted as a calibration report. Any admissible calibration must therefore come
+   from a **new measurement at the current identity** — i.e. new artefacts plus motion, which is
+   the authorization question that has been open since round 101.
+
+This closes the last avenue that did not require motion. Evidence:
+`experiments/gate6-runtime/calibration-identity.txt` (the probe output above), alongside
+`artifact-enumeration.txt`, `artifact-candidates.txt`, `head-search-inputs.txt`,
+`perception-env-check.txt`, `preflight-attempt.log`, `overlay-refresh4-verify.txt`.
+
+- Software surface at this point: official whole-tree gate **PASS 5344/5344** (pg6/r6), C++ **131/0**,
+  teleop `test_act_ros_child.py` **22/0**, focused **111**, wider **147**; overlay source<->install
+  **MATCH** for all four changed modules; commits `dd2937b5`, `dae161c3`, `664f6342` staged
+  hunk-wise with `baseline_pollution=0`.
+- **Boundaries:** no process, controller goal or motion started; no calibration authored; formal
+  accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED; gazebo formatting condition
+  out of scope; evidence preserved.
