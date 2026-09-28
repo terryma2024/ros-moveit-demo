@@ -6238,3 +6238,8 @@ status: PLANNED_ISOLATED_STACK
 - 证据：`experiments/exp569-authority-protocol/`（GREEN 与 amended RED 的 manifest/JUnit/log/elapsed、same-set 验证、source commit）与新 checkpoint SHA256 `indexed 24 mismatch [] sha d09e7d2916f30e51988c4a711821ce0d1c7789c4326699a93b59073530ac4c1b`；旧证据（exp568、amended-red-baseline、CP-603/604 更正）全部保留未改。
 - **未验证项**：具体 C++ 控制器接收事务、共享控制器 mutex 与 ROS goal 接受集成仍未实现、未验证，是 Gate 6 前置；ordinary full suite 本轮按边界未运行。
 - 边界：Gate 5 仍 OPEN，现停在 Gate 5 请求**第七次**本机独立 Astra/High 复核，不自批；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 全部保持关闭（正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`）；42 个既有 dirty entries 未改动；证据未删除。
+
+### CP-610 补充更正（证据完整性，追加不改写）
+
+- 本轮 GREEN 提交最初以 \`git add -A src/so101_demo_py/src/adapters/act/\` 生成（\`3d031a4d\`），该命令**误将 10 个既有 dirty entries**（\`broker_execution.py\`、\`physics.py\`、\`pick_place_*.py\`、\`ros_broker.py\` 等，以及两个未跟踪的新文件）一并纳入提交。发现后立即用 \`git reset --soft 3d031a4d^\` 加 \`git reset\` 撤销该提交，并只暂存本次范围内的文件重新提交为 \`2ff0403d\`（\`authority_transaction.py\` 早已在前序提交中，无差异）；ledger 提交重建为 \`ea258e5b\`。
+- 影响评估：\`git reset\`（soft/mixed）不触碰工作树，因此那 10 个既有 dirty entries 的**内容自始至终未被修改**；撤销后它们重新回到未提交状态，\`git status --short\` 计数恢复到既有的 **42** 项。该事故与修复过程如实记录在此，不改写任何既有证据。
