@@ -10561,3 +10561,31 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime or motion, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered,
   no ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-836 (f113061c) — Training lock RESOLVED with 61 verified pins
+
+- **The two outstanding pins are now verified twice over.** For `torch==2.11.0+cu128` and
+  `torchvision==0.26.0+cu128` the CUDA index serves
+  `torch-2.11.0+cu128-cp312-cp312-manylinux_2_28_x86_64.whl` (sha256 `d252cf975fb18c94a85336323ad425f473df56dab35a44b00399bd70c7a3b997`)
+  and `torchvision-0.26.0+cu128-cp312-cp312-manylinux_2_28_x86_64.whl` (sha256
+  `ccf26b4b659cfce6f2208cb8326071d51c70219a34856dfdf468d1e19af52c0d`); each hash was also confirmed to be
+  inside uv's own accepted hash set for that version (21 hashes each), so the pin matches the artifact uv
+  actually installed.
+- **Resolver run:** `python -m so101_demo.cli.act_resolve_training_requirements --report
+  task12-training/logs/venv-a-report.json --lock config/act/requirements.lock --python 3.12.3 --index
+  https://download.pytorch.org/whl/cu128 --index https://pypi.tuna.tsinghua.edu.cn/simple` returned 0 and wrote
+  `status: RESOLVED`, `resolver.python 3.12.3`, `resolver.index_sha256 92150f6c720d6d3e8a4d4c0a8ece1c47…`,
+  **61 pinned packages**. `require_resolved_requirements` accepts it, and the torch pin reads back exactly
+  `2.11.0+cu128` with the hash above.
+- **Two tests had to change because their premise became false, and the change preserves their intent:** the
+  shipped lock is no longer the thing that blocks a training run, so
+  `test_act_training_requirements.py` now asserts the shipped lock is **resolved with a complete pin set**
+  (unique names, non-empty versions, 64-hex hashes, torch and lerobot present) while a lock that claims
+  `UNRESOLVED` yet carries packages is still refused, and `test_act_train_cli.py` exercises the
+  `TRAINING_REQUIREMENTS_UNRESOLVED` refusal with a **synthetic** unresolved lock instead of the shipped one,
+  additionally asserting the shipped lock passes the gate.
+- **Focused verification:** 23 passed, rc=0 across the requirements, resolver, train-CLI, training and offline
+  evaluation modules (`beh-lock-resolved.log`) in fresh verified scratch `pg22.FjNv`.
+- **Boundaries:** no runtime or motion, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered,
+  no ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
