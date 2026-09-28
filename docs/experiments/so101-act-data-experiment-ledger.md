@@ -6243,3 +6243,9 @@ status: PLANNED_ISOLATED_STACK
 
 - 本轮 GREEN 提交最初以 \`git add -A src/so101_demo_py/src/adapters/act/\` 生成（\`3d031a4d\`），该命令**误将 10 个既有 dirty entries**（\`broker_execution.py\`、\`physics.py\`、\`pick_place_*.py\`、\`ros_broker.py\` 等，以及两个未跟踪的新文件）一并纳入提交。发现后立即用 \`git reset --soft 3d031a4d^\` 加 \`git reset\` 撤销该提交，并只暂存本次范围内的文件重新提交为 \`2ff0403d\`（\`authority_transaction.py\` 早已在前序提交中，无差异）；ledger 提交重建为 \`ea258e5b\`。
 - 影响评估：\`git reset\`（soft/mixed）不触碰工作树，因此那 10 个既有 dirty entries 的**内容自始至终未被修改**；撤销后它们重新回到未提交状态，\`git status --short\` 计数恢复到既有的 **42** 项。该事故与修复过程如实记录在此，不改写任何既有证据。
+
+### CP-610 第二次补充更正（测试断言完整性，追加不改写）
+
+- 用户指出并本地确认：先前为“适配返回形状”所做的迁移中，我把 5 处具体断言（\`CLOCK_ADMISSION_HISTORY_NOT_READY\`、\`CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID\`）**泛化**为 \`match="CLOCK_ADMISSION_"\`，并删除了用于验证**无副作用**的 \`consumed == []\` 断言。二者都削弱了测试价值，属错误迁移。
+- 现已在提交 \`$(git -C $W rev-parse --short HEAD)\` 中修复（追加更正，不改写历史）：泛化断言数归零，恢复为**具体且稳定**的错误码——\`CLOCK_ADMISSION_HISTORY_NOT_READY\`（结构性未就绪：无 epoch 或无首块）、\`CLOCK_ADMISSION_HISTORY_UNHEALTHY:<hazard>\`（由 commit receipt 在临界区内 latch 的过期/静默/陈旧）、\`CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID\`（负版本或外来 incarnation/epoch）、\`CLOCK_ADMISSION_CONTROLLER_GENERATION_CHANGED\`（控制器代次不符）；实现里把“结构性就绪”与“健康状态”分开，使陈旧/静默不会被误报为 not-ready。恢复 4 处零副作用断言（\`assert executed == []\` / \`assert consumed == []\`，即在拒绝路径上把调用结果 append 进列表并断言其仍为空），返回 receipt 只调整返回形状，行为断言未被删除。
+- 重新核验：五个 clock 模块 **135 passed**（manifest 135 = JUnit 135，名称集合相等，elapsed \`977,372,444 ns\`）；同一 135-name 集合在修复前 snapshot 上的 amended RED 已用**修正后的测试**重跑并重新核验严格同集（\`same-set-verification.json\`）。
