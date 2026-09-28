@@ -6526,3 +6526,11 @@ status: PLANNED_ISOLATED_STACK
 - **仍未达标的一项**：`test_wrong_controller_boot_incarnation_is_refused` 在基线**通过**，即尚未区分出 review 9 指出的“错误 boot 化身被接受”。可能原因是基线的 `RECEIPT_FIELDS` 与基线端口返回的字段集合彼此自洽，使该用例在基线上落到另一条拒绝路径。下一步须改为对该字段做**逐字段**断言（例如先断言真实记录被接受，再仅替换 boot 化身并要求拒绝），并复核基线确为 ACCEPTED。
 - 其余未完成项：P1.5（屏障进真实 send/serialization 调用点）、contract 122–126 行与锁图补全（含控制器端口锁）、inventory 哈希边界与脏项归属、撤回不实陈述。**尚未请求 review 10**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
+
+## CP-644 — EXP-572：P1.4 第二次尝试（control/treatment 版）不合格，已回退；当前状态复核
+
+- 本轮尝试让 `test_wrong_controller_boot_incarnation_is_refused` 具备“control + treatment”结构（先断言未改动的真实接收记录被接受，再只替换 boot 化身并要求拒绝），并为此在测试侧补上 `_post_receive` 使用**真实 claim 时刻**与**真实 permit deadline**、每个 permit 独立 goal UUID。**结果不合格**：frozen `b917ae46` 上确为 **7 failed**（全部可区分），但当前树上仍有 1 项失败，控制断言报 `AUTHORITY_RECEIPT_INVALID`——即由 `_post_receive` 组装的记录在当前树的冻结 schema 下仍不合法（我在本轮内连续四次尝试均未能定位具体字段，属我的定位能力而非被测代码问题）。该尝试已保存为 `experiments/exp572-linearization/p14-attempt2-unqualified-behavior-module.py`（NONQUALIFYING），并已 `git checkout` 回退到已提交版本。
+- **回退后复核**（新建 scratch `exp572-verify-final.*`、tempfile 探针 PASS、镜像 `mirror-23` 逐文件 SHA 等于 worktree）：六模块 **151 passed in 1.06s**；`test_act_exp571_behavior.py` + `test_act_exp572_linearization.py` **16 passed in 0.45s**。
+- **P1.4 结论**：仍未完成，且现状是“GREEN 7/7、baseline RED 6/7（boot 化身一项不可区分）”，与 CP-643 记录一致。明确下一步（供后续轮次直接执行，且不再靠猜测）：在**当前树**上先打印一次真实 `last_receipt` 与 registry 冻结字段的逐字段 diff，找出 `AUTHORITY_RECEIPT_INVALID` 的确切字段后再写 control/treatment；不得再以试错方式修改断言。
+- 其余未完成项不变：P1.5（屏障进真实 send/serialization 调用点）、contract 122–126 行删除与锁图补全（含控制器端口锁）、inventory 哈希边界与脏项归属说明、撤回不实陈述。**尚未请求 review 10**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
