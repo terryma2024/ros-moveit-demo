@@ -436,3 +436,91 @@ def derive_frame_aggregates(evidence, *, support_distance_max_m: float) -> dict:
             "no_fingertip_contact": not (left or right), "cup_supported": supported,
             "cup_support_distance_m": distance, "cup_position_m": position,
             "cup_orientation_xyzw": orientation}
+
+
+class LiveEvidenceWindow:
+    """The CLOSE..FINAL_CHECK evidence window: a frozen 10 Hz grid plus edge events.
+
+    The window opens at CLOSE. Grid samples must advance on the frozen period (gaps, duplicates and
+    regressions are refused); event samples are recorded as additions and can never stand in for a
+    grid point. Sealing requires the window to have reached FINAL_CHECK.
+    """
+
+    REQUIRED_PHASES = ("CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN", "RELEASE", "RADIAL_RETREAT",
+                       "FINAL_CHECK")
+
+    def __init__(self, recorder, *, identity, period_s: float = 0.1,
+                 tolerance_s: float = 0.01) -> None:
+        if not callable(getattr(recorder, "append", None)) or not callable(
+                getattr(recorder, "seal", None)):
+            raise ValueError("TASK8_LIVE_EVIDENCE_RECORDER_INVALID")
+        if not _finite(period_s) or period_s <= 0 or not _finite(tolerance_s) or tolerance_s < 0:
+            raise ValueError("TASK8_LIVE_EVIDENCE_GRID_INVALID")
+        self._recorder = recorder
+        self._identity = dict(identity)
+        self._period_s = period_s
+        self._tolerance_s = tolerance_s
+        self._opened = False
+        self._sealed = False
+        self._last_grid_s = None
+        self._phases_seen = []
+        self._grid_count = 0
+        self._event_count = 0
+
+    @property
+    def grid_count(self) -> int:
+        return self._grid_count
+
+    @property
+    def event_count(self) -> int:
+        return self._event_count
+
+    def add_grid(self, sample: dict) -> None:
+        """Append one grid sample, enforcing the frozen cadence from CLOSE onwards."""
+
+        if self._sealed:
+            raise ValueError("TASK8_LIVE_EVIDENCE_WINDOW_SEALED")
+        phase = sample.get("phase") if isinstance(sample, dict) else None
+        if phase == "CLOSE":
+            self._opened = True
+        elif not self._opened:
+            raise ValueError("TASK8_LIVE_EVIDENCE_WINDOW_NOT_OPEN")
+        stamp = sample.get("sim_time_s") if isinstance(sample, dict) else None
+        if not _finite(stamp):
+            raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+        if self._last_grid_s is not None:
+            delta = stamp - self._last_grid_s
+            if delta <= 0:
+                raise ValueError("TASK8_LIVE_EVIDENCE_GRID_REGRESSION")
+            if abs(delta - self._period_s) > self._tolerance_s:
+                raise ValueError("TASK8_LIVE_EVIDENCE_GRID_GAP")
+        self._last_grid_s = stamp
+        self._grid_count += 1
+        self._note_phase(phase)
+        self._recorder.append(sample)
+
+    def add_event(self, sample: dict) -> None:
+        """Append an edge sample; it never counts as a grid point."""
+
+        if self._sealed:
+            raise ValueError("TASK8_LIVE_EVIDENCE_WINDOW_SEALED")
+        if not self._opened:
+            raise ValueError("TASK8_LIVE_EVIDENCE_WINDOW_NOT_OPEN")
+        if not isinstance(sample, dict) or not _finite(sample.get("sim_time_s")):
+            raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+        self._event_count += 1
+        self._note_phase(sample.get("phase"))
+        self._recorder.append(sample)
+
+    def seal(self) -> dict:
+        if not self._opened:
+            raise ValueError("TASK8_LIVE_EVIDENCE_WINDOW_NOT_OPEN")
+        missing = [phase for phase in self.REQUIRED_PHASES if phase not in self._phases_seen]
+        if missing:
+            raise ValueError("TASK8_LIVE_EVIDENCE_WINDOW_INCOMPLETE")
+        self._sealed = True
+        return self._recorder.seal(self._identity)
+
+    def _note_phase(self, phase) -> None:
+        if phase in self.REQUIRED_PHASES and phase not in self._phases_seen:
+            self._phases_seen.append(phase)
