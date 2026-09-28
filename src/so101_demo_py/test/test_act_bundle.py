@@ -57,3 +57,87 @@ def test_conflicting_receipts_and_unverifiable_entries_are_refused(tmp_path):
         {"scene_id": "001", "journal_sha256": "a" * 64, "verifier_sha256": "short"}]}))
     with pytest.raises(ValueError, match="EPISODE_RECEIPT_INVALID"):
         resolve_committed_episodes(manifest=manifest, campaign_index=index)
+
+
+def _write_bundle(tmp_path, *, policy_bytes=b"model-bytes", normalization=None, **overrides):
+    import hashlib
+
+    (tmp_path / "policy.bin").write_bytes(policy_bytes)
+    document = {"schema_version": 1, "kind": "act_bundle",
+                "model_source": {"name": "act-v1", "sha256": "a" * 64},
+                "dataset_sha256": "b" * 64, "config_sha256": "c" * 64,
+                "policy_path": "policy.bin",
+                "policy_sha256": hashlib.sha256(policy_bytes).hexdigest(),
+                # `normalization or {...}` would repair the deliberately empty normalisation,
+                # so the case would never reach the guard it exists to exercise (as in CP-767)
+                "normalization": ({"split": "train", "mean": [0.0]}
+                                  if normalization is None else normalization)}
+    document.update(overrides)
+    path = tmp_path / "bundle.json"
+    path.write_text(json.dumps(document))
+    return path, document
+
+
+def test_a_bundle_must_carry_the_policy_it_names(tmp_path):
+    from so101_demo.act.bundle import BUNDLE_KEYS, load_bundle
+
+    path, document = _write_bundle(tmp_path)
+    loaded = load_bundle(path)
+    assert set(loaded) == set(BUNDLE_KEYS)
+    # the policy is checked against its bytes, so a swapped file cannot pass as the trained one
+    (tmp_path / "policy.bin").write_bytes(b"tampered")
+    with pytest.raises(ValueError, match="BUNDLE_POLICY_DIGEST_MISMATCH"):
+        load_bundle(path)
+    (tmp_path / "policy.bin").unlink()
+    with pytest.raises(ValueError, match="BUNDLE_POLICY_MISSING"):
+        load_bundle(path)
+    with pytest.raises(ValueError, match="BUNDLE_MISSING"):
+        load_bundle(tmp_path / "absent.json")
+
+
+def test_normalization_must_come_from_the_train_split_alone(tmp_path):
+    from so101_demo.act.bundle import load_bundle
+
+    path, _ = _write_bundle(tmp_path, normalization={"split": "validation", "mean": [1.0]})
+    with pytest.raises(ValueError, match="BUNDLE_NORMALIZATION_NOT_TRAIN_ONLY"):
+        load_bundle(path)
+    path, _ = _write_bundle(tmp_path, normalization={})
+    with pytest.raises(ValueError, match="BUNDLE_NORMALIZATION_NOT_TRAIN_ONLY"):
+        load_bundle(path)
+
+
+def test_a_bundle_document_is_closed_and_its_policy_path_stays_inside(tmp_path):
+    from so101_demo.act.bundle import load_bundle
+
+    for overrides in ({"policy_path": "../outside.bin"}, {"policy_path": "/etc/passwd"},
+                      {"policy_path": ""}, {"extra": 1}, {"model_source": {"name": "act-v1"}},
+                      {"dataset_sha256": "short"}, {"kind": "other"}):
+        path, _ = _write_bundle(tmp_path, **overrides)
+        with pytest.raises(ValueError, match="BUNDLE_INVALID|BUNDLE_POLICY_PATH_INVALID"):
+            load_bundle(path)
+
+
+def test_the_policy_interface_is_required_before_a_runner_may_use_it(tmp_path):
+    from so101_demo.act.bundle import load_policy, require_policy_interface
+
+    path, _ = _write_bundle(tmp_path)
+
+    class Model:
+        def __init__(self):
+            self.resets = 0
+
+        def infer(self, observation):
+            return ((0.0,) * 6,)
+
+        def reset(self):
+            self.resets += 1
+
+    model = load_policy(path, loader=lambda bundle: Model())
+    assert model.infer({"state": [0.0]}) == ((0.0,) * 6,)
+    for bad in (object(), type("NoReset", (), {"infer": lambda self, o: ()})(),
+                type("NoInfer", (), {"reset": lambda self: None})(),
+                {"infer": lambda o: (), "reset": lambda: None}):
+        with pytest.raises(ValueError, match="POLICY_INTERFACE_INVALID"):
+            require_policy_interface(bad)
+    with pytest.raises(ValueError, match="POLICY_LOADER_REQUIRED"):
+        load_policy(path, loader=None)

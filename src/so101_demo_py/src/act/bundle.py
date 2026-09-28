@@ -69,3 +69,73 @@ def resolve_committed_episodes(*, manifest: dict, campaign_index) -> tuple:
                          "journal_sha256": entry["journal_sha256"],
                          "verifier_sha256": entry["verifier_sha256"]})
     return tuple(resolved)
+
+
+BUNDLE_KEYS = frozenset({"schema_version", "kind", "model_source", "dataset_sha256", "config_sha256",
+                         "policy_path", "policy_sha256", "normalization"})
+
+
+def _bundle_digest(value, code: str) -> str:
+    if not isinstance(value, str) or len(value) != 64:
+        raise ValueError(code)
+    return value
+
+
+def load_bundle(path) -> dict:
+    """Load a bundle document and confirm the policy it names is the policy it carries.
+
+    A bundle is the only thing a runner is allowed to trust, so the document has to be closed, its policy
+    has to live inside the bundle directory, and its digest has to match the bytes on disk. The
+    normalisation provenance is checked too: statistics computed from anything but the train split would
+    silently invalidate every later evaluation.
+    """
+
+    import hashlib
+
+    target = Path(path)
+    if not target.is_file() or target.is_symlink():
+        raise ValueError("BUNDLE_MISSING")
+    try:
+        document = json.loads(target.read_bytes())
+    except ValueError as error:
+        raise ValueError("BUNDLE_INVALID") from error
+    if (not isinstance(document, dict) or set(document) != BUNDLE_KEYS
+            or document["schema_version"] != 1 or document["kind"] != "act_bundle"):
+        raise ValueError("BUNDLE_INVALID")
+    model_source = document["model_source"]
+    if (not isinstance(model_source, dict) or set(model_source) != {"name", "sha256"}
+            or not isinstance(model_source["name"], str) or not model_source["name"]):
+        raise ValueError("BUNDLE_INVALID")
+    _bundle_digest(model_source["sha256"], "BUNDLE_INVALID")
+    _bundle_digest(document["dataset_sha256"], "BUNDLE_INVALID")
+    _bundle_digest(document["config_sha256"], "BUNDLE_INVALID")
+    normalization = document["normalization"]
+    if not isinstance(normalization, dict) or normalization.get("split") != "train":
+        raise ValueError("BUNDLE_NORMALIZATION_NOT_TRAIN_ONLY")
+    policy_name = document["policy_path"]
+    if (not isinstance(policy_name, str) or not policy_name or policy_name.startswith("/")
+            or ".." in Path(policy_name).parts):
+        raise ValueError("BUNDLE_POLICY_PATH_INVALID")
+    policy = target.parent / policy_name
+    if not policy.is_file() or policy.is_symlink():
+        raise ValueError("BUNDLE_POLICY_MISSING")
+    if hashlib.sha256(policy.read_bytes()).hexdigest() != document["policy_sha256"]:
+        raise ValueError("BUNDLE_POLICY_DIGEST_MISMATCH")
+    return document
+
+
+def require_policy_interface(model) -> object:
+    """A policy must offer `infer(observation) -> tuple[tuple[float, ...], ...]` and `reset()`."""
+
+    if not callable(getattr(model, "infer", None)) or not callable(getattr(model, "reset", None)):
+        raise ValueError("POLICY_INTERFACE_INVALID")
+    return model
+
+
+def load_policy(bundle_path, *, loader) -> object:
+    """Load the policy a bundle names through an injected loader — never by import path."""
+
+    bundle = load_bundle(bundle_path)
+    if not callable(loader):
+        raise ValueError("POLICY_LOADER_REQUIRED")
+    return require_policy_interface(loader(bundle))
