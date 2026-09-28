@@ -398,3 +398,25 @@ def test_campaign_journal_plan_covers_all_fourteen_cases_before_anything_runs(tm
     # an invalid bundle root is refused outright
     with pytest.raises(ValueError, match="TASK8_CAMPAIGN_BUNDLE_ROOT_INVALID"):
         plan_campaign_journals(tmp_path / "missing", _manifest())
+
+
+def test_journal_row_must_belong_to_the_bundle_that_produced_it():
+    from so101_demo.act.task8_live_evidence import require_case_row_matches_bundle
+
+    identities = {"source_provenance_sha256": "e" * 64, "runtime_config_sha256": "f" * 64,
+                  "contact_policy_fingerprint": "a" * 64}
+    row = _journal_row()
+    assert require_case_row_matches_bundle(
+        row, identities=identities, manifest_document_sha256="9" * 64)["case_id"] == "full-01"
+    for key in ("source_provenance_sha256", "runtime_config_sha256",
+                "contact_policy_fingerprint"):
+        with pytest.raises(ValueError, match="TASK8_JOURNAL_IDENTITY_MISMATCH"):
+            require_case_row_matches_bundle(_journal_row(**{key: "7" * 64}),
+                                            identities=identities,
+                                            manifest_document_sha256="9" * 64)
+    with pytest.raises(ValueError, match="TASK8_JOURNAL_IDENTITY_MISMATCH"):
+        require_case_row_matches_bundle(row, identities=identities,
+                                        manifest_document_sha256="8" * 64)
+    with pytest.raises(ValueError, match="TASK8_JOURNAL_IDENTITY_MISMATCH"):
+        require_case_row_matches_bundle(row, identities={"source_provenance_sha256": "e" * 64},
+                                        manifest_document_sha256="9" * 64)

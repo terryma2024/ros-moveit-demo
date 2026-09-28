@@ -377,3 +377,28 @@ def plan_campaign_journals(bundle_root: Path, manifest: dict) -> tuple[tuple[str
         raise ValueError("TASK8_CAMPAIGN_BUNDLE_ROOT_INVALID")
     return tuple((case_id, resolve_case_journal_path(bundle_root, case_id))
                  for case_id in require_campaign_cases(manifest))
+
+
+_ROW_IDENTITY = {
+    "source_provenance_sha256": "source_provenance_sha256",
+    "runtime_config_sha256": "runtime_config_sha256",
+    "contact_policy_fingerprint": "contact_policy_fingerprint",
+}
+
+
+def require_case_row_matches_bundle(row: dict, *, identities: dict,
+                                    manifest_document_sha256: str) -> dict:
+    """A journal row may only describe the bundle it was produced under.
+
+    Every identity digest in the row must equal the bundle's, so a row from another bundle (or a
+    row written after a controlled identity change) is refused instead of being counted.
+    """
+
+    if type(row) is not dict or type(identities) is not dict:
+        raise ValueError("TASK8_JOURNAL_IDENTITY_MISMATCH")
+    for row_key, identity_key in _ROW_IDENTITY.items():
+        if identity_key not in identities or row.get(row_key) != identities[identity_key]:
+            raise ValueError("TASK8_JOURNAL_IDENTITY_MISMATCH")
+    if row.get("manifest_document_sha256") != manifest_document_sha256:
+        raise ValueError("TASK8_JOURNAL_IDENTITY_MISMATCH")
+    return dict(row)
